@@ -1,0 +1,128 @@
+    {{#if active.people}}
+      <section class="fbls-panel fbls-people-panel">
+        <div class="fbls-people-table-wrap">
+          <div class="fbls-table-toolbar fbls-resident-toolbar stacked-toolbar fbls-toolbar">
+            <div class="fbls-resident-filters fbls-toolbar-group fbls-toolbar-fields">
+              <input type="search" data-resident-filter="search" value="{{residentFilters.search}}" placeholder="Поиск" />
+              <select data-resident-filter="type">
+                {{#each residentFilterOptions.types}}
+                  <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+              <select data-resident-filter="work">
+                {{#each residentFilterOptions.work}}
+                  <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+              <select data-resident-filter="home">
+                {{#each residentFilterOptions.home}}
+                  <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+              <select data-resident-filter="morale">
+                {{#each residentFilterOptions.morale}}
+                  <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            </div>
+            {{#if canManagePeople}}
+              <button type="button" class="fbls-button compact" data-action="add-row" data-collection="holdings.{{holdingIndex}}.people.list">
+                <i class="fa-solid fa-plus"></i> Добавить
+              </button>
+            {{/if}}
+          </div>
+          <table class="fbls-table fbls-resident-list">
+            <thead>
+              <tr>
+                <th>Имя</th>
+                <th>Возраст</th>
+                <th>Раса</th>
+                <th>Тип</th>
+                <th>Работа</th>
+                <th>Жилье</th>
+                <th>Дов.</th>
+                <th>Черты</th>
+                <th></th>
+                {{#if canManagePeople}}<th></th>{{/if}}
+              </tr>
+            </thead>
+            <tbody>
+              {{#each rows.people}}
+                <tr class="fbls-person-row {{deadClass}} {{#if expanded}}expanded{{/if}}" data-action="toggle-person-details" data-id="{{id}}">
+                  <td class="fbls-person-name">{{#if injured}}<span class="fbls-injury-mark {{injuredBadgeClass}}" title="{{injuredTitle}}"><b>{{injuredText}}</b><i class="fa-solid fa-plus"></i></span>{{/if}}<strong>{{name}}</strong>{{#if dead}}<span class="fbls-status-pill fbls-chip dead">Погиб</span>{{/if}}</td>
+                  <td>{{ageLine}}</td>
+                  <td>{{raceLine}}</td>
+                  <td><span class="fbls-worker-badge fbls-chip fbls-note-tip inline-tip" style="{{workerTypeStyle}}" data-fbls-tooltip="{{attributeSummary}}">{{workerTypeLabel}}</span></td>
+                  <td>{{workLabel}}</td>
+                  <td>{{homeLabel}}</td>
+                  <td class="fbls-morale-cell"><span class="fbls-note-tip inline-tip" data-fbls-tooltip="{{moraleTooltip}}"><strong>{{moraleValue}}</strong></span></td>
+                  <td class="fbls-traits-cell">
+                    {{#if hasTraitBadges}}
+                      {{#each traitBadges}}
+                        <span class="fbls-trait-badge fbls-chip fbls-note-tip" data-fbls-tooltip="{{description}}">{{name}}</span>
+                      {{/each}}
+                    {{else}}
+                      <span class="fbls-muted-text">—</span>
+                    {{/if}}
+                  </td>
+                  <td class="fbls-note-cell">
+                    {{#if noteTooltip}}
+                      <span class="fbls-note-tip" data-fbls-tooltip="{{noteTooltip}}"><i class="fa-solid fa-circle-info"></i></span>
+                    {{else}}
+                      <span class="fbls-muted-text">—</span>
+                    {{/if}}
+                  </td>
+                  {{#if ../canManagePeople}}
+                    <td class="fbls-row-actions">
+                      <div class="fbls-row-actions-inner fbls-resident-row-actions">
+                        <button type="button" class="fbls-icon-button" data-action="edit-person" data-id="{{id}}" title="Редактировать"><i class="fa-solid fa-pen"></i></button>
+                        {{#if dead}}
+                          <button type="button" class="fbls-icon-button" data-action="toggle-person-dead" data-id="{{id}}" data-dead="false" title="Вернуть из кладбища"><i class="fa-solid fa-heart-pulse"></i></button>
+                        {{else}}
+                          <button type="button" class="fbls-icon-button danger" data-action="toggle-person-dead" data-id="{{id}}" data-dead="true" title="Отметить погибшим"><i class="fa-solid fa-skull"></i></button>
+                        {{/if}}
+                        <button type="button" class="fbls-icon-button danger" data-action="delete-row" data-collection="holdings.{{../holdingIndex}}.people.list" data-id="{{id}}" title="Удалить"><i class="fa-solid fa-trash"></i></button>
+                      </div>
+                    </td>
+                  {{/if}}
+                </tr>
+                {{#if expanded}}
+                  {{#unless editing}}
+                    {{#if hasDetails}}
+                      <tr class="fbls-person-details-row">
+                        <td colspan="{{../peopleColspan}}">
+                          <div class="fbls-person-details">
+                            {{#each detailsItems}}
+                              <div class="fbls-person-detail-item">
+                                <span>{{label}}</span>
+                                <strong>{{value}}</strong>
+                              </div>
+                            {{/each}}
+                          </div>
+                        </td>
+                      </tr>
+                    {{/if}}
+                  {{/unless}}
+                {{/if}}
+                {{#if editing}}
+                  <tr class="fbls-person-edit-row">
+                    <td colspan="{{../peopleColspan}}">
+                      {{> "modules/fbl-skyhold/templates/parts/skyhold-resident-editor.hbs"}}
+                    </td>
+                  </tr>
+                {{/if}}
+              {{else}}
+                <tr><td colspan="{{peopleColspan}}" class="fbls-empty">Записей пока нет.</td></tr>
+              {{/each}}
+            </tbody>
+          </table>
+        </div>
+        {{#if canManagePeople}}
+          <div class="fbls-resident-drop-zone-bottom" data-resident-drop-zone>
+            <i class="fa-solid fa-user-plus"></i>
+            <strong>Перетащи Actor сюда</strong>
+            <span>Создаст жителя по имени и статам актера. Если статов нет или они нулевые, характеристики будут сгенерированы.</span>
+          </div>
+        {{/if}}
+      </section>
+    {{/if}}

@@ -1,0 +1,232 @@
+<div class="fbls-battle-shell">
+  {{#if hasHolding}}
+    <header class="fbls-battle-head">
+      <div class="fbls-battle-title">
+        <h2><i class="fa-solid fa-shield-halved"></i> Битва за владение</h2>
+        <p>{{holding.name}} · отряды, теги, планы, гарнизоны, Impact и цель.</p>
+      </div>
+      <div class="fbls-battle-statbar fbls-toolbar-group">
+        <span title="Текущий раунд"><i class="fa-solid fa-clock"></i> Р{{state.round}}</span>
+        <span title="Пул защитников"><i class="fa-solid fa-shield"></i> {{calc.defenderPool}}к6</span>
+        <span title="Пул нападающих"><i class="fa-solid fa-sword"></i> {{calc.attackerPool}}к6</span>
+        <span title="Индекс защищенности владения"><i class="fa-solid fa-tower-observation"></i> DR {{defense.total}}</span>
+        <span title="Люди в оборонных зданиях"><i class="fa-solid fa-helmet-safety"></i> Гарн. {{calc.garrisonProfile.activeCount}}</span>
+        <button type="button" class="fbls-battle-weather-pill" data-action="mass-show-weather" title="{{calc.weather.tooltip}}"><i class="fa-solid fa-cloud-sun-rain"></i> {{calc.weather.text}}</button>
+      </div>
+    </header>
+
+    <section class="fbls-battle-grid main">
+      <article class="fbls-battle-card scene fbls-battle-collapsible" data-battle-section="scene" data-battle-collapse-group="main">
+        <h3 data-action="mass-toggle-section"><i class="fa-solid fa-scroll"></i><span>Сцена</span><i class="fa-solid fa-chevron-up fbls-battle-collapse-icon"></i></h3>
+        <div class="fbls-battle-fields scene-fields">
+          <label class="wide"><span>Название</span>{{#if canEdit}}<input type="text" data-mass-field="title" value="{{state.title}}" placeholder="Налет на Лапуту" />{{else}}<strong>{{state.title}}</strong>{{/if}}</label>
+          <label><span>Враг</span>{{#if canEdit}}<input type="text" data-mass-field="enemyName" value="{{state.enemyName}}" placeholder="Нападающие" />{{else}}<strong>{{state.enemyName}}</strong>{{/if}}</label>
+          <label><span>Цель врага</span>{{#if canEdit}}<input type="text" data-mass-field="objective" value="{{state.objective}}" placeholder="Сжечь склад, взять ворота, увести пленника" />{{else}}<strong>{{state.objective}}</strong>{{/if}}</label>
+          <label><span>Угроза</span>{{#if canEdit}}<select data-mass-field="roundThreat">{{#each roundThreatOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}} title="{{hint}}">{{label}}</option>{{/each}}</select>{{else}}<strong>{{calc.roundThreat.label}}</strong>{{/if}}</label>
+          <label><span>Масштаб</span>{{#if canEdit}}<select data-mass-field="scale">{{#each scaleOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}} title="{{hint}}">{{label}}</option>{{/each}}</select>{{else}}<strong>{{calc.scale.label}}</strong>{{/if}}</label>
+          <label><span>Оборона</span>{{#if canEditDefender}}<select data-mass-field="defenseMode">{{#each defenseModeOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}} title="{{hint}}">{{label}}</option>{{/each}}</select>{{else}}<strong>{{calc.defenseMode.label}}</strong>{{/if}}</label>
+          <label><span>Доступ врага</span>{{#if canEdit}}<select data-mass-field="accessMode">{{#each accessModeOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}} title="{{hint}}">{{label}}</option>{{/each}}</select>{{else}}<strong>{{calc.accessMode.label}}</strong>{{/if}}</label>
+          <label><span>Длина раунда</span><strong class="fbls-readonly-value">{{calc.scale.duration}}</strong></label>
+        </div>
+      </article>
+
+      <article class="fbls-battle-card score fbls-battle-collapsible" data-battle-section="score" data-battle-collapse-group="main">
+        <h3 data-action="mass-toggle-section"><i class="fa-solid fa-gauge-high"></i><span>Расчет раунда</span><i class="fa-solid fa-chevron-up fbls-battle-collapse-icon"></i></h3>
+        <div class="fbls-battle-pools">
+          <div class="def" title="Итоговый пул защитников"><span>Защитники</span><strong>{{calc.defenderPool}}к6</strong></div>
+          <div class="atk" title="Итоговый пул нападающих"><span>{{state.enemyName}}</span><strong>{{calc.attackerPool}}к6</strong></div>
+        </div>
+        <div class="fbls-battle-sources">
+          {{#each calc.sourceCards}}
+            <button type="button" class="fbls-battle-source-card {{#if isCounters}}is-clickable{{/if}}" title="{{hint}}" {{#if isCounters}}data-action="mass-show-counters"{{/if}}><i class="{{icon}}"></i><span>{{label}}</span><strong>{{defenderText}} / {{attackerText}}</strong></button>
+          {{/each}}
+        </div>
+        <div class="fbls-battle-actions fbls-action-group">
+          {{#if canEdit}}<button type="button" class="fbls-button primary" data-action="mass-roll-round" title="Бросить текущий раунд и применить последствия."><i class="fa-solid fa-dice"></i> Раунд</button>{{/if}}
+          <button type="button" class="fbls-button compact" data-action="mass-post-summary" title="Отправить краткую сводку в чат."><i class="fa-solid fa-comment"></i> В чат</button>
+          <div class="fbls-battle-tags-anchor">
+            <button type="button" class="fbls-button compact" data-action="mass-toggle-tags" title="Открыть теги сторон"><i class="fa-solid fa-tags"></i> Теги</button>
+            <div class="fbls-battle-tags-popover">
+              <div class="fbls-battle-tags-popover-head"><strong><i class="fa-solid fa-shield"></i></strong><strong><i class="fa-solid fa-sword"></i></strong></div>
+              <div class="fbls-battle-tags-grid">
+                {{#each tagRows}}
+                  <label title="{{tooltip}}"><span><i class="{{icon}}"></i></span>{{#if ../canEditDefender}}<input type="number" data-type="number" data-mass-field="{{defenderField}}" value="{{defenderValue}}" />{{else}}<b>{{defenderValue}}</b>{{/if}}</label>
+                  <label title="{{tooltip}}"><span><i class="{{icon}}"></i></span>{{#if ../canEdit}}<input type="number" data-type="number" data-mass-field="{{attackerField}}" value="{{attackerValue}}" />{{else}}<b>{{attackerValue}}</b>{{/if}}</label>
+                {{/each}}
+              </div>
+            </div>
+          </div>
+          <button type="button" class="fbls-button compact aftermath" data-action="mass-post-aftermath" title="Отправить итог боя в чат."><i class="fa-solid fa-clipboard-check"></i> Итог</button>
+          {{#if canEdit}}<button type="button" class="fbls-button compact aftermath" data-action="mass-start-repairs" title="Перевести поврежденные здания в ремонт."><i class="fa-solid fa-hammer"></i> Ремонт</button>{{/if}}
+          {{#if canEdit}}<button type="button" class="fbls-button compact danger" data-action="mass-reset" title="Сбросить сцену боя."><i class="fa-solid fa-rotate-left"></i> Сброс</button>{{/if}}
+        </div>
+      </article>
+    </section>
+
+    <section class="fbls-battle-grid sides">
+      <article class="fbls-battle-card side defender fbls-battle-collapsible" data-battle-section="defender" data-battle-collapse-group="sides">
+        <h3 data-action="mass-toggle-section"><i class="fa-solid fa-shield"></i><span>Защитники</span><i class="fa-solid fa-chevron-up fbls-battle-collapse-icon"></i></h3>
+        <div class="fbls-battle-fields side-fields defender-fields">
+          <label class="fbls-battle-check"><span>Отряды</span>{{#if canEditDefender}}<input type="checkbox" data-type="checkbox" data-mass-field="useDefenseSquads" {{#if useDefenseSquadsChecked}}checked{{/if}} />{{else}}<strong>{{#if useDefenseSquadsChecked}}да{{else}}нет{{/if}}</strong>{{/if}}</label>
+          <label class="fbls-battle-check"><span>Ополчение</span>{{#if canEditDefender}}<input type="checkbox" data-type="checkbox" data-mass-field="raiseMilitia" {{#if raiseMilitiaChecked}}checked{{/if}} />{{else}}<strong>{{#if raiseMilitiaChecked}}да{{else}}нет{{/if}}</strong>{{/if}}</label>
+          <label><span>Позиция</span>{{#if canEditDefender}}<input type="number" data-type="number" data-mass-field="defenderPosition" value="{{state.defenderPosition}}" min="0" max="3" />{{else}}<strong>{{state.defenderPosition}}</strong>{{/if}}</label>
+          <label><span>Герои</span>{{#if canEditDefender}}<input type="number" data-type="number" data-mass-field="defenderHero" value="{{state.defenderHero}}" />{{else}}<strong>{{state.defenderHero}}</strong>{{/if}}</label>
+          <label><span>Мораль</span>{{#if canEditDefender}}<input type="number" data-type="number" data-mass-field="defenderMorale" value="{{state.defenderMorale}}" />{{else}}<strong>{{state.defenderMorale}}</strong>{{/if}}</label>
+          <label><span>Особое</span>{{#if canEditDefender}}<input type="number" data-type="number" data-mass-field="defenderSpecial" value="{{state.defenderSpecial}}" />{{else}}<strong>{{state.defenderSpecial}}</strong>{{/if}}</label>
+          <label class="wide"><span>План</span>{{#if canEditDefender}}<select data-mass-field="defenderStrategy">{{#each defenderStrategyOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}} title="{{hint}}">{{label}}</option>{{/each}}</select>{{else}}<strong>{{calc.defenderStrategy.label}}</strong>{{/if}}</label>
+        </div>
+        <div class="fbls-battle-strategy"><strong>{{defenderStrategySummary.label}}</strong><span>{{defenderStrategySummary.dice}} · {{defenderStrategySummary.progress}}</span><em>{{defenderStrategySummary.summary}}</em></div>
+        <ul class="fbls-battle-breakdown">
+          {{#each calc.defenderParts}}<li title="{{hint}}"><span>{{label}}</span><strong>{{signed}}</strong></li>{{/each}}
+        </ul>
+      </article>
+
+      <article class="fbls-battle-card side attacker fbls-battle-collapsible" data-battle-section="attacker" data-battle-collapse-group="sides">
+        <h3 data-action="mass-toggle-section"><i class="fa-solid fa-sword"></i><span>Нападающие</span><i class="fa-solid fa-chevron-up fbls-battle-collapse-icon"></i></h3>
+        {{#if canEdit}}
+          <div class="fbls-battle-preset">
+            <label><span>Пресет</span><select data-mass-field="attackerPreset">{{#each attackerPresetOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}} title="{{summary}}">{{label}}</option>{{/each}}</select></label>
+            <button type="button" class="fbls-button compact" data-action="mass-apply-preset" title="Заполнить поля выбранным пресетом"><i class="fa-solid fa-wand-magic-sparkles"></i> Применить</button>
+          </div>
+        {{/if}}
+        <p class="fbls-battle-note">{{selectedAttackerPreset.summary}}</p>
+        <div class="fbls-battle-fields side-fields attacker-fields">
+          <label><span>Отряды</span>{{#if canEdit}}<input type="number" data-type="number" data-mass-field="attackerUnits" value="{{calc.attackerUnits}}" min="0" />{{else}}<strong>{{calc.attackerUnits}}</strong>{{/if}}</label>
+          <label><span>Эффективность</span>{{#if canEdit}}<input type="number" data-type="number" data-mass-field="attackerBS" value="{{state.attackerBS}}" min="0" />{{else}}<strong>{{state.attackerBS}}</strong>{{/if}}</label>
+          <label><span>Командование</span>{{#if canEdit}}<input type="number" data-type="number" data-mass-field="attackerCommand" value="{{state.attackerCommand}}" />{{else}}<strong>{{state.attackerCommand}}</strong>{{/if}}</label>
+          <label><span>Герои/особые</span>{{#if canEdit}}<input type="number" data-type="number" data-mass-field="attackerHero" value="{{state.attackerHero}}" />{{else}}<strong>{{state.attackerHero}}</strong>{{/if}}</label>
+          <label><span>Позиция</span>{{#if canEdit}}<input type="number" data-type="number" data-mass-field="attackerPosition" value="{{state.attackerPosition}}" min="0" max="3" />{{else}}<strong>{{state.attackerPosition}}</strong>{{/if}}</label>
+          <label><span>Особое</span>{{#if canEdit}}<input type="number" data-type="number" data-mass-field="attackerSpecial" value="{{state.attackerSpecial}}" />{{else}}<strong>{{state.attackerSpecial}}</strong>{{/if}}</label>
+          <label class="wide"><span>План</span>{{#if canEdit}}<select data-mass-field="attackerStrategy">{{#each attackerStrategyOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}} title="{{hint}}">{{label}}</option>{{/each}}</select>{{else}}<strong>{{calc.attackerStrategy.label}}</strong>{{/if}}</label>
+        </div>
+        <div class="fbls-battle-strategy"><strong>{{attackerStrategySummary.label}}</strong><span>{{attackerStrategySummary.dice}} · {{attackerStrategySummary.progress}}</span><em>{{attackerStrategySummary.summary}}</em></div>
+        <ul class="fbls-battle-breakdown">
+          {{#each calc.attackerParts}}<li title="{{hint}}"><span>{{label}}</span><strong>{{signed}}</strong></li>{{/each}}
+        </ul>
+      </article>
+    </section>
+
+
+    <section class="fbls-battle-grid details">
+      <article class="fbls-battle-card sources-detail fbls-battle-collapsible" data-battle-section="defender-sources" data-battle-collapse-group="sources">
+        <h3 data-action="mass-toggle-section"><i class="fa-solid fa-list-check"></i><span>Источники защитников</span><i class="fa-solid fa-chevron-up fbls-battle-collapse-icon"></i></h3>
+        <div class="fbls-battle-source-table">
+          <div class="head"><span>Источник</span><span>Теги</span><span>Эфф.</span><span>Вклад</span></div>
+          {{#each calc.defenderSourceRows}}
+            <div class="row {{statusClass}}" title="{{modifierText}}">
+              <span><strong>{{label}}</strong><em>{{typeLabel}} · {{participantCount}} чел. · {{status}}</em></span>
+              <span>{{tagText}}</span>
+              <span>{{baseText}} → {{currentText}} · {{roundedText}}<em>{{thresholdText}}{{#if counterLoss}} · контра {{counterText}}{{/if}}</em></span>
+              <span><b>{{diceText}}</b></span>
+            </div>
+          {{else}}
+            <p class="fbls-empty">Боевых источников защитников нет.</p>
+          {{/each}}
+        </div>
+      </article>
+
+      <article class="fbls-battle-card sources-detail fbls-battle-collapsible" data-battle-section="attacker-sources" data-battle-collapse-group="sources">
+        <h3 data-action="mass-toggle-section"><i class="fa-solid fa-list-check"></i><span>Источники нападающих</span><i class="fa-solid fa-chevron-up fbls-battle-collapse-icon"></i></h3>
+        <div class="fbls-battle-source-table">
+          <div class="head"><span>Источник</span><span>Теги</span><span>Эфф.</span><span>Вклад</span></div>
+          {{#each calc.attackerSourceRows}}
+            <div class="row {{statusClass}}" title="{{modifierText}}">
+              <span><strong>{{label}}</strong><em>{{typeLabel}} · {{status}}</em></span>
+              <span>{{#if ../canEdit}}{{#if tagField}}<select class="fbls-inline-tag-select" data-mass-field="{{tagField}}">{{#each tagOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}{{tagText}}{{/if}}{{else}}{{tagText}}{{/if}}</span>
+              <span>{{baseText}} → {{currentText}} · {{roundedText}}<em>{{thresholdText}}{{#if counterLoss}} · контра {{counterText}}{{/if}}</em></span>
+              <span><b>{{diceText}}</b></span>
+            </div>
+          {{else}}
+            <p class="fbls-empty">Боевых источников нападающих нет.</p>
+          {{/each}}
+        </div>
+      </article>
+    </section>
+
+    <section class="fbls-battle-grid details">
+      <article class="fbls-battle-card calc-detail fbls-battle-collapsible" data-battle-section="calc" data-battle-collapse-group="calc-risk">
+        <h3 data-action="mass-toggle-section"><i class="fa-solid fa-square-root-variable"></i><span>Конвейер расчета</span><i class="fa-solid fa-chevron-up fbls-battle-collapse-icon"></i></h3>
+        <ol class="fbls-battle-calc-steps">
+          {{#each calc.calculationSteps}}
+            <li><strong>{{label}}</strong><span>{{text}}</span></li>
+          {{/each}}
+        </ol>
+      </article>
+
+      <article class="fbls-battle-card calc-detail fbls-battle-collapsible" data-battle-section="risk" data-battle-collapse-group="calc-risk">
+        <h3 data-action="mass-toggle-section"><i class="fa-solid fa-bullseye"></i><span>Контры и риск</span><i class="fa-solid fa-chevron-up fbls-battle-collapse-icon"></i></h3>
+        <div class="fbls-battle-risk-summary">
+          <p><strong>Риск защитников:</strong> {{calc.defenderRiskSummary.text}}. <em>{{calc.defenderRiskSummary.compact}}</em></p>
+          <p><strong>Риск врага:</strong> {{calc.attackerRiskSummary.text}}. <em>{{calc.attackerRiskSummary.compact}}</em></p>
+        </div>
+        <div class="fbls-battle-counter-list">
+          {{#each calc.counterRows}}
+            <div><i class="fa-solid fa-arrow-down-short-wide"></i><span>{{text}}</span></div>
+          {{else}}
+            <p class="fbls-empty">Активных контр тегов нет.</p>
+          {{/each}}
+        </div>
+      </article>
+    </section>
+
+    <section class="fbls-battle-card impact-detail fbls-battle-collapsible" data-battle-section="impact">
+      <h3 data-action="mass-toggle-section"><i class="fa-solid fa-burst"></i><span>Модель Impact</span><i class="fa-solid fa-chevron-up fbls-battle-collapse-icon"></i></h3>
+      <div class="fbls-battle-impact-grid">
+        {{#each calc.impactPreview}}
+          <div><strong>{{label}}</strong><b>{{value}}</b><span>{{text}}</span></div>
+        {{/each}}
+      </div>
+      <div class="fbls-battle-context objective-help"><strong>Важно:</strong> победа в раунде двигает цель и позицию, но Impact от успехов получает каждая сторона. Поэтому малая сила может выиграть раунд и всё равно болезненно пострадать.</div>
+    </section>
+
+    <section class="fbls-battle-card tracks fbls-battle-collapsible" data-battle-section="tracks">
+      <h3 data-action="mass-toggle-section"><i class="fa-solid fa-clipboard-list"></i><span>Треки</span><i class="fa-solid fa-chevron-up fbls-battle-collapse-icon"></i></h3>
+      <div class="fbls-battle-track-grid">
+        <div class="fbls-battle-track {{calc.defenderLossTrack.severity}}" title="Когда оборона дошла до порога, строй сломан."><span>Защитники</span><strong>{{calc.defenderLossTrack.value}} / {{calc.defenderLossTrack.threshold}}</strong><em>{{calc.defenderLossTrack.state}}</em></div>
+        <div class="fbls-battle-track {{calc.attackerLossTrack.severity}}" title="Когда враг дошел до порога, он сломлен."><span>Враг</span><strong>{{calc.attackerLossTrack.value}} / {{calc.attackerLossTrack.threshold}}</strong><em>{{calc.attackerLossTrack.state}}</em></div>
+        <div class="fbls-battle-track {{calc.damageTrack.severity}}" title="Урон владению переводится в повреждения зданий, жителей или ресурсов."><span>Урон</span><strong>{{calc.damageTrack.damage}} / {{calc.damageTrack.threshold}}</strong><em>{{calc.damageTrack.state}}</em></div>
+        <div class="fbls-battle-track" title="Часы задачи врага. Это не просто успехи броска."><span>Часы цели</span><strong>{{calc.objectiveTrack.value}} / {{calc.objectiveTrack.threshold}}</strong><em>{{calc.objectiveTrack.state}}</em></div>
+        <div class="fbls-battle-track" title="Прогресс пробития укреплений."><span>Брешь</span><strong>{{calc.breachProgress}} / {{calc.breachThreshold}}</strong><em>{{#if calc.breachOpen}}открыта{{else}}закрыта{{/if}}</em></div>
+      </div>
+      <div class="fbls-battle-fields tally-fields">
+        <label><span>Раунд</span>{{#if canEdit}}<input type="number" data-type="number" data-mass-field="round" value="{{state.round}}" min="1" />{{else}}<strong>{{state.round}}</strong>{{/if}}</label>
+        <label><span>Потери З.</span>{{#if canEdit}}<input type="number" data-type="number" data-mass-field="defenderLossSteps" value="{{state.defenderLossSteps}}" min="0" />{{else}}<strong>{{state.defenderLossSteps}}</strong>{{/if}}</label>
+        <label><span>Потери В.</span>{{#if canEdit}}<input type="number" data-type="number" data-mass-field="attackerLossSteps" value="{{state.attackerLossSteps}}" min="0" />{{else}}<strong>{{state.attackerLossSteps}}</strong>{{/if}}</label>
+        <label><span>Урон</span>{{#if canEdit}}<input type="number" data-type="number" data-mass-field="settlementDamage" value="{{state.settlementDamage}}" min="0" />{{else}}<strong>{{state.settlementDamage}}</strong>{{/if}}</label>
+        <label><span>Брешь</span>{{#if canEdit}}<input type="number" data-type="number" data-mass-field="breachProgress" value="{{state.breachProgress}}" min="0" />{{else}}<strong>{{state.breachProgress}}</strong>{{/if}}</label>
+        <label><span>Часы цели</span>{{#if canEdit}}<input type="number" data-type="number" data-mass-field="objectiveProgress" value="{{calc.objectiveTrack.value}}" min="0" />{{else}}<strong>{{calc.objectiveTrack.value}}</strong>{{/if}}</label>
+        <label><span>Лимит</span>{{#if canEdit}}<input type="number" data-type="number" data-mass-field="roundLimit" value="{{calc.objectiveTrack.roundLimit}}" min="1" />{{else}}<strong>{{calc.objectiveTrack.roundLimit}}</strong>{{/if}}</label>
+        <label><span>Порог цели</span>{{#if canEdit}}<input type="number" data-type="number" data-mass-field="objectiveThreshold" value="{{calc.objectiveTrack.threshold}}" min="1" />{{else}}<strong>{{calc.objectiveTrack.threshold}}</strong>{{/if}}</label>
+      </div>
+      <div class="fbls-battle-context objective-help"><strong>Как движется цель:</strong> при победе атакующих цель получает 1 + margin, затем метод атаки и план защиты меняют этот прогресс. Рейды и прорывы могут двигать цель без бреши; штурм укреплений чаще сначала копит брешь и урон.</div>
+    </section>
+
+    <section class="fbls-battle-grid lower">
+      <article class="fbls-battle-card notes fbls-battle-collapsible" data-battle-section="notes" data-battle-collapse-group="lower">
+        <h3 data-action="mass-toggle-section"><i class="fa-solid fa-pen"></i><span>Действия</span><i class="fa-solid fa-chevron-up fbls-battle-collapse-icon"></i></h3>
+        <label class="fbls-battle-notes"><span>Заметки / действия персонажей</span>{{#if canEdit}}<textarea rows="3" data-mass-field="notes" placeholder="Кто что делает в раунде, риски, локальные сцены, цена решений.">{{state.notes}}</textarea>{{else}}<p>{{state.notes}}</p>{{/if}}</label>
+      </article>
+
+      <article class="fbls-battle-card log fbls-battle-collapsible" data-battle-section="log" data-battle-collapse-group="lower">
+        <div class="fbls-battle-log-head">
+          <h3 data-action="mass-toggle-section"><i class="fa-solid fa-clock-rotate-left"></i><span>Лог раундов</span><i class="fa-solid fa-chevron-up fbls-battle-collapse-icon"></i></h3>
+          {{#if canEdit}}<button type="button" class="fbls-icon-button danger" data-action="mass-clear-log" title="Очистить лог"><i class="fa-solid fa-trash"></i></button>{{/if}}
+        </div>
+        <div class="fbls-battle-log-list">
+          {{#each logRows}}
+            <div class="fbls-battle-log-row">
+              <span>Р{{round}}</span>
+              <strong title="{{result}}">{{defenderSuccesses}} : {{attackerSuccesses}} / {{marginText}}</strong>
+              <em>{{result}}</em>
+              <small>З+{{defenderLossDelta}}, В+{{attackerLossDelta}}, урон +{{settlementDamageDelta}}, {{breachText}}, {{objectiveText}}{{#if impactText}} · {{impactText}}{{/if}}</small>
+            </div>
+          {{else}}
+            <p class="fbls-empty">Раундов пока нет.</p>
+          {{/each}}
+        </div>
+      </article>
+    </section>
+  {{else}}
+    <article class="fbls-battle-card"><p class="fbls-empty">Владение не найдено.</p></article>
+  {{/if}}
+</div>

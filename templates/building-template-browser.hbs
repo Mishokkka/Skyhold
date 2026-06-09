@@ -1,0 +1,94 @@
+<div class="fbls-template-browser-body">
+  <header class="fbls-template-browser-head fbls-toolbar">
+    <div class="fbls-template-browser-title fbls-toolbar-group">
+      <h2><i class="fa-solid fa-drafting-compass"></i> Шаблоны зданий</h2>
+    </div>
+    {{#if canEdit}}
+      <button type="button" class="fbls-button compact fbls-template-create-button" data-action="create-building-template" data-fbls-tooltip="Создать новый пользовательский шаблон здания."><i class="fa-solid fa-plus"></i> Шаблон</button>
+    {{/if}}
+    <div class="fbls-template-browser-counts fbls-toolbar-group">
+      <span class="fbls-template-current-dev-label">Текущее:</span>
+      {{#each development.labels}}
+        <span class="fbls-template-current-dev fbls-chip {{css}}" data-fbls-tooltip="{{tooltip}}"><i class="{{icon}}"></i> {{value}}</span>
+      {{/each}}
+      <span class="available">Доступно {{availableCount}}</span>
+      <span class="locked">Закрыто {{lockedCount}}</span>
+      {{#if canEdit}}<span class="hidden">Скрыто {{hiddenCount}}</span>{{/if}}
+    </div>
+  </header>
+
+  <nav class="fbls-template-browser-tabs">
+    {{#each tabs}}
+      <button type="button" class="fbls-template-browser-tab {{#if active}}active{{/if}} {{id}}" data-template-category="{{id}}">
+        <i class="{{icon}}"></i><span>{{label}}</span><strong>{{tabCount}}</strong>
+      </button>
+    {{/each}}
+  </nav>
+
+  <div class="fbls-template-browser-tools fbls-toolbar">
+    <nav class="fbls-template-browser-availability fbls-action-group">
+      {{#each availabilityTabs}}
+        <button type="button" class="fbls-button compact {{#if active}}active{{/if}}" data-template-availability="{{id}}">{{label}}</button>
+      {{/each}}
+    </nav>
+    <label class="fbls-template-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-template-search value="{{search}}" placeholder="Поиск по названию" /></label>
+  </div>
+
+  <section class="fbls-template-browser-grid">
+    {{#each rows}}
+      <article class="fbls-template-browser-card {{css}} {{primaryDevCss}}" data-fbls-tooltip="{{reasonText}}">
+        <header class="fbls-template-card-head fbls-card-header">
+          <div class="fbls-template-title-block">
+            <h3><i class="{{icon}}"></i> {{name}}</h3>
+            <p><strong>{{primaryDevLabel}}</strong> · {{type}} · {{#if unlocked}}доступно{{else}}закрыто{{/if}}{{#if duplicateStateText}} · {{duplicateStateText}}{{/if}}{{#unless playerVisible}} · скрыто{{/unless}}</p>
+          </div>
+          {{#if showDevelopmentWarning}}
+            <div class="fbls-template-missing-dev inline" data-fbls-tooltip="{{missingDevelopmentText}}">
+              <span>Не хватает:</span>
+              {{#each missingDevelopmentChips}}
+                <em class="{{css}}" data-fbls-tooltip="{{tooltip}}"><i class="{{icon}}"></i>{{value}}</em>
+              {{/each}}
+            </div>
+          {{/if}}
+          <div class="fbls-template-dev-chip-row fbls-cluster">
+            {{#each bonusChips}}
+              <span class="fbls-template-dev-chip fbls-chip bonus {{css}}" data-fbls-tooltip="{{tooltip}}"><i class="{{icon}}"></i>{{text}}</span>
+            {{/each}}
+            {{#each requirementChips}}
+              <span class="fbls-template-dev-chip fbls-chip requirement {{css}}" data-fbls-tooltip="{{tooltip}}"><i class="{{icon}}"></i>{{text}}</span>
+            {{/each}}
+          </div>
+        </header>
+
+        <p class="fbls-template-description">{{description}}</p>
+
+        <div class="fbls-template-browser-meta two-column">
+          <span><b>Стройка</b> {{buildText}}</span>
+          <span class="{{#unless materialsOk}}missing{{/unless}}"><b>Материалы</b> {{materialCostsText}}</span>
+          <span><b>Развитие</b> {{requirementsText}}</span>
+          <span><b>Зависимости</b> {{dependenciesText}}</span>
+          <span><b>Функции</b> {{functionLabels}}</span>
+          <span><b>Спецнавыки</b> {{specialSkillRequirementsText}}</span>
+          <span><b>Линии</b> {{productionLinesText}}</span>
+        </div>
+
+        {{#if specialRequirements}}<p class="fbls-template-special"><b>Особое:</b> {{specialRequirements}}</p>{{/if}}
+        {{#if sourceRequirement}}<p class="fbls-template-source"><b>Ориг. треб.:</b> {{sourceRequirement}}</p>{{/if}}
+        {{#unless materialsOk}}<p class="fbls-template-material-warning"><i class="fa-solid fa-triangle-exclamation"></i> Не хватает: {{missingMaterialsText}}.</p>{{/unless}}
+
+        <footer class="fbls-action-group">
+          {{#if ../canEdit}}
+            <label class="fbls-template-player-toggle"><input type="checkbox" data-template-visibility="{{id}}" {{#if playerVisible}}checked{{/if}} /> игроки</label>
+            <button type="button" class="fbls-button compact" data-action="edit-building-template" data-template-id="{{id}}"><i class="fa-solid fa-pen-to-square"></i> Редактировать</button>
+            <button type="button" class="fbls-button compact danger" data-action="delete-building-template" data-template-id="{{id}}"><i class="fa-solid fa-trash"></i> Удалить</button>
+          {{/if}}
+          {{#if ../canCreateProject}}
+            <button type="button" class="fbls-button compact primary" data-action="create-building-from-template" data-template-id="{{id}}" {{#unless unlocked}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> В проект</button>
+          {{/if}}
+        </footer>
+      </article>
+    {{else}}
+      <article class="fbls-card"><h3>Ничего не найдено</h3><p>Для выбранного фильтра шаблонов нет.</p></article>
+    {{/each}}
+  </section>
+</div>

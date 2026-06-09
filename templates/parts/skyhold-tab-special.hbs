@@ -1,0 +1,94 @@
+    {{#if active.special}}
+      <section class="fbls-panel fbls-special-panel {{#if activeSpecial.cemetery}}cemetery-only{{/if}}">
+        <div class="fbls-special-subtabs">
+          {{#each specialTabs}}
+            <button type="button" class="fbls-storage-tab {{#if active}}active{{/if}}" data-action="special-subtab" data-special-tab="{{id}}"><i class="{{icon}}"></i> {{label}} <b>{{tabCount}}</b></button>
+          {{/each}}
+        </div>
+
+
+        {{#if activeSpecial.records}}
+          <article class="fbls-card">
+            {{#if canEditSpecial}}
+              <textarea data-field="holdings.{{holdingIndex}}.special.notes" rows="3">{{holding.special.notes}}</textarea>
+            {{else}}
+              <p class="fbls-preline">{{holding.special.notes}}</p>
+            {{/if}}
+          </article>
+
+          <div class="fbls-table-toolbar slim-toolbar">
+            <span class="fbls-muted-text">Особые записи</span>
+            {{#if canEditSpecial}}
+              <button type="button" class="fbls-button compact" data-action="add-row" data-collection="holdings.{{holdingIndex}}.special.list">
+                <i class="fa-solid fa-plus"></i> Добавить
+              </button>
+            {{/if}}
+          </div>
+
+          <table class="fbls-table">
+            <thead>
+              <tr>
+                <th>Название</th>
+                <th>Тип</th>
+                <th>Видимость</th>
+                <th>Заметки</th>
+                {{#if canEditSpecial}}<th></th>{{/if}}
+              </tr>
+            </thead>
+            <tbody>
+              {{#each rows.special}}
+                <tr>
+                  <td>{{#if ../canEditSpecial}}<input type="text" data-field="holdings.{{../holdingIndex}}.special.list.{{_index}}.name" value="{{name}}" />{{else}}{{name}}{{/if}}</td>
+                  <td>{{#if ../canEditSpecial}}<input type="text" data-field="holdings.{{../holdingIndex}}.special.list.{{_index}}.type" value="{{type}}" />{{else}}{{type}}{{/if}}</td>
+                  <td>
+                    {{#if ../canEditSpecial}}
+                      <select data-field="holdings.{{../holdingIndex}}.special.list.{{_index}}.visibility">
+                        <option value="public" {{#unless isGmOnly}}selected{{/unless}}>Игроки</option>
+                        <option value="gm" {{#if isGmOnly}}selected{{/if}}>Только ГМ</option>
+                      </select>
+                    {{else}}
+                      Игроки
+                    {{/if}}
+                  </td>
+                  <td>{{#if ../canEditSpecial}}<textarea data-field="holdings.{{../holdingIndex}}.special.list.{{_index}}.notes" rows="2">{{notes}}</textarea>{{else}}{{notes}}{{/if}}</td>
+                  {{#if ../canEditSpecial}}<td><button type="button" class="fbls-icon-button danger" data-action="delete-row" data-collection="holdings.{{../holdingIndex}}.special.list" data-id="{{id}}"><i class="fa-solid fa-trash"></i></button></td>{{/if}}
+                </tr>
+              {{else}}
+                <tr><td colspan="5" class="fbls-empty">Записей пока нет.</td></tr>
+              {{/each}}
+            </tbody>
+          </table>
+        {{/if}}
+
+        {{#if activeSpecial.cemetery}}
+          <table class="fbls-table fbls-cemetery-table compact full-width">
+            <thead>
+              <tr>
+                <th>Имя</th>
+                <th>Возраст</th>
+                <th>Раса</th>
+                <th>Дата гибели</th>
+                <th>Причина</th>
+                {{#if canEditSpecial}}<th></th>{{/if}}
+              </tr>
+            </thead>
+            <tbody>
+              {{#each rows.cemetery}}
+                <tr class="fbls-person-row dead">
+                  <td><strong>{{name}}</strong></td>
+                  <td>{{ageLine}}</td>
+                  <td>{{raceLine}}</td>
+                  <td>{{#if ../canEdit}}<input type="text" data-field="holdings.{{../holdingIndex}}.people.list.{{_index}}.deathDate" value="{{deathDate}}" placeholder="дата" />{{else}}{{deathDate}}{{/if}}</td>
+                  <td>{{#if ../canEdit}}<input type="text" data-field="holdings.{{../holdingIndex}}.people.list.{{_index}}.deathNote" value="{{deathNote}}" placeholder="причина" />{{else}}{{deathNote}}{{/if}}</td>
+                  {{#if ../canEdit}}
+                    <td><button type="button" class="fbls-icon-button" data-action="toggle-person-dead" data-id="{{id}}" data-dead="false" title="Вернуть из кладбища"><i class="fa-solid fa-heart-pulse"></i></button></td>
+                  {{/if}}
+                </tr>
+              {{else}}
+                <tr><td colspan="{{../cemeteryColspan}}" class="fbls-empty">Кладбище пусто.</td></tr>
+              {{/each}}
+            </tbody>
+          </table>
+        {{/if}}
+      </section>
+    {{/if}}

@@ -1,0 +1,104 @@
+  <div class="fbls-loading-overlay" data-loading-overlay>{{#if loadingImage}}<img src="{{loadingImage}}" alt="" />{{else}}<i class="fa-solid fa-spinner fa-spin"></i>{{/if}}</div>
+  <header class="fbls-hero compact">
+    <div class="fbls-hero-top">
+      {{#if hasHolding}}
+        <div class="fbls-header-control-band {{#if isPlayer}}player-view{{/if}}">
+          <label class="fbls-header-select-main compact-name">
+            <select data-action="select-holding">
+              {{#each holdingOptions}}
+                <option value="{{id}}" {{#if selected}}selected{{/if}}>{{name}}</option>
+              {{/each}}
+            </select>
+          </label>
+          {{#if canEdit}}
+            <button type="button" class="fbls-button icon-only fbls-edit-name-button" data-action="edit-holding-name" title="Переименовать владение"><i class="fa-solid fa-pen-to-square"></i></button>
+          {{/if}}
+
+          <label class="fbls-header-type-select">
+            {{#if canEdit}}
+              <select data-field="holdings.{{holdingIndex}}.type">
+                {{#each typeOptions}}
+                  <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+                {{/each}}
+              </select>
+            {{else}}
+              <strong>{{holdingTypeLabel}}</strong>
+            {{/if}}
+          </label>
+
+          {{#if canEdit}}
+            <button type="button" class="fbls-button icon-only" data-action="create-holding" title="Новое владение">
+              <i class="fa-solid fa-plus"></i>
+            </button>
+            <button type="button" class="fbls-button icon-only danger" data-action="delete-holding" title="Удалить владение">
+              <i class="fa-solid fa-trash"></i>
+            </button>
+          {{/if}}
+
+          {{#if canEdit}}
+            <button type="button" class="fbls-button icon-only fbls-header-visibility-toggle {{#if holdingIsGmOnly}}gm-only{{else}}public{{/if}}" data-action="toggle-holding-visibility" title="{{holdingVisibilityTitle}}" aria-label="{{holdingVisibilityTitle}}">
+              <i class="fa-solid {{#if holdingIsGmOnly}}fa-eye-slash{{else}}fa-eye{{/if}}"></i>
+            </button>
+          {{/if}}
+
+          <div class="fbls-header-calendar-box {{#unless calendarContext.available}}missing{{/unless}}" data-fbls-tooltip="{{calendarContext.currentTitle}}">
+            <i class="fa-solid fa-calendar-day"></i>
+            <strong>{{calendarContext.currentText}}{{#if calendarContext.seasonText}} · {{calendarContext.seasonText}}{{/if}}</strong>
+          </div>
+
+          <label class="fbls-header-calendar-last" data-fbls-tooltip="{{calendarContext.lastTitle}}">
+            <i class="fa-solid fa-clock-rotate-left"></i>
+            {{#if canEdit}}
+              <input type="text" data-calendaria-last-field value="{{calendarContext.lastInput}}" placeholder="ГГГГ-ММ-ДД ЧЧ:ММ" />
+            {{else}}
+              <strong>{{calendarContext.lastText}}</strong>
+            {{/if}}
+          </label>
+
+          <div class="fbls-header-population-box" data-fbls-tooltip="Население считается по списку живых жителей.">
+            <span><i class="fa-solid fa-people-group"></i></span><strong>{{totals.population}}</strong>
+          </div>
+        </div>
+
+        <div class="fbls-header-statline">
+          <button type="button" class="fbls-morale-compact {{moraleState.css}}" data-action="show-morale-help" data-fbls-tooltip="{{moraleState.label}} ({{moraleState.range}}): {{moraleState.notes}}">
+            <i class="{{moraleState.icon}}"></i>
+            <strong>{{moraleState.value}}</strong>
+          </button>
+
+          <div class="fbls-development-strip" aria-label="Характеристики развития">
+            {{#each development.labels}}
+              <label class="fbls-dev-stat {{css}}" title="{{label}}" data-fbls-tooltip="{{tooltip}}">
+                <i class="{{icon}}"></i>
+                <strong>{{value}}</strong>
+              </label>
+            {{/each}}
+          </div>
+
+          <div class="fbls-faith-stat" data-fbls-tooltip="{{beliefSummary.tooltip}}">
+            <i class="fa-solid fa-hands-praying"></i>
+            <span>Вера:</span>
+            <strong>{{beliefSummary.label}}</strong>
+          </div>
+
+          <div class="fbls-right-stats">
+            <label class="fbls-roll-stat reputation" data-fbls-tooltip="{{reputationSummary.tooltip}}">
+              <i class="fa-solid fa-crown"></i>
+              <strong>{{reputationSummary.total}}</strong>
+              <button type="button" data-action="roll-holding-stat" data-stat="reputation" title="Бросить репутацию"><i class="fa-solid fa-dice-six"></i></button>
+            </label>
+            <label class="fbls-roll-stat defense" data-fbls-tooltip="{{defenseSummary.tooltip}}">
+              <i class="fa-solid fa-shield-halved"></i>
+              <strong>{{defenseSummary.total}}</strong>
+              <button type="button" data-action="roll-holding-stat" data-stat="defense" title="Открыть битву за владение"><i class="fa-solid fa-dice-six"></i></button>
+            </label>
+          </div>
+        </div>
+      {{else}}
+        <div class="fbls-empty-head">
+          <h1>Нет доступных владений</h1>
+          <p>У ГМа есть все права, у игроков видны только публичные владения.</p>
+        </div>
+      {{/if}}
+    </div>
+  </header>

@@ -1,0 +1,194 @@
+<div class="fbls-person-editor v2">
+  <fieldset class="main-set compact-resident-main">
+    <legend>Основное</legend>
+    <div class="fbls-resident-main-grid">
+      <label class="person-name">
+        <span>Имя</span>
+        <input type="text" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.name" value="{{name}}" />
+      </label>
+      <label class="person-sex">
+        <span>Пол</span>
+        <input type="text" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.sex" value="{{sex}}" />
+      </label>
+      <label class="num-field person-age">
+        <span>Возраст</span>
+        <input type="number" data-type="number" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.age" value="{{age}}" min="0" />
+      </label>
+      <div class="fbls-derived-mini person-category">
+        <span>Кат.</span>
+        <strong>{{ageGroup}}</strong>
+      </div>
+      <label class="person-culture">
+        <span>Культура</span>
+        <select data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.culture">
+          {{#each cultureOptions}}
+            <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+      <label class="person-belief">
+        <span>Верование</span>
+        <select data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.belief">
+          {{#each beliefOptions}}
+            <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+      <label class="person-race">
+        <span>Раса</span>
+        <input type="text" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.race" value="{{race}}" />
+      </label>
+      <label class="person-subrace">
+        <span>Подвид</span>
+        <input type="text" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.subrace" value="{{subrace}}" />
+      </label>
+      <label class="num-field person-injured">
+        <span>Ранен</span>
+        <input type="number" min="0" data-type="number" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.injuredDays" value="{{injuredDays}}" />
+      </label>
+      <label class="person-appearance">
+        <span>Внешность</span>
+        <textarea data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.appearance" rows="1">{{appearance}}</textarea>
+      </label>
+      {{#if dead}}
+        <label class="person-death-date">
+          <span>Дата гибели</span>
+          <input type="text" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.deathDate" value="{{deathDate}}" />
+        </label>
+        <label class="person-death-note wide">
+          <span>Причина гибели</span>
+          <textarea data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.deathNote" rows="2">{{deathNote}}</textarea>
+        </label>
+      {{/if}}
+    </div>
+  </fieldset>
+
+  <fieldset class="work-set compact-resident-work {{#if isCustomWork}}has-custom-work{{/if}}">
+    <legend>Работа и жилье</legend>
+    <div class="fbls-work-block fbls-work-source-block">
+      <label class="person-work">
+        <span>Работа</span>
+        <select data-work-assignment-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.workAssignment">
+          {{#each workOptions}}
+            <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+      <label class="num-field person-salary">
+        <span>З/П</span>
+        <input type="number" data-type="number" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.salary" value="{{salary}}" />
+      </label>
+      <label class="num-field person-salary-mod">
+        <span>Мод.</span>
+        <input type="number" data-type="number" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.salaryModifier" value="{{salaryModifier}}" title="Добавляется к базовой ставке работы. Отрицательное значение уменьшает плату." />
+      </label>
+      <label class="person-custom-role {{#unless isCustomWork}}is-hidden{{/unless}}">
+        <span>Особая работа</span>
+        <input type="text" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.role" value="{{role}}" />
+      </label>
+    </div>
+    <div class="fbls-work-block fbls-work-home-block">
+      <label class="person-home">
+        <span>Место жительства</span>
+        <select data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.home">
+          {{#each homeOptions}}
+            <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+    </div>
+    <div class="fbls-work-block fbls-work-background-block">
+      <label class="person-background">
+        <span>Социальное прошлое</span>
+        <select data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.background">
+          {{#each backgroundOptions}}
+            <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
+          {{/each}}
+        </select>
+      </label>
+    </div>
+  </fieldset>
+
+  <div class="fbls-resident-midline">
+    <fieldset class="stat-set compact-set">
+      <legend>Характеристики</legend>
+      <label class="num-field">
+        <span>Сила</span>
+        <input type="number" data-type="number" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.attributes.strength" value="{{attributes.strength}}" />
+      </label>
+      <label class="num-field">
+        <span>Ловк.</span>
+        <input type="number" data-type="number" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.attributes.agility" value="{{attributes.agility}}" />
+      </label>
+      <label class="num-field">
+        <span>Разум</span>
+        <input type="number" data-type="number" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.attributes.wits" value="{{attributes.wits}}" />
+      </label>
+      <label class="num-field">
+        <span>Эмп.</span>
+        <input type="number" data-type="number" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.attributes.empathy" value="{{attributes.empathy}}" />
+      </label>
+    </fieldset>
+
+    <fieldset class="morale-set compact-set">
+      <legend>Довольство</legend>
+      <label class="num-field">
+        <span>База</span>
+        <input type="number" data-type="number" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.moraleBase" value="{{moraleBase}}" />
+      </label>
+      <label class="num-field">
+        <span>Раб.</span>
+        <input type="number" data-type="number" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.moraleWork" value="{{moraleWork}}" />
+      </label>
+      <label class="num-field">
+        <span>Дом</span>
+        <input type="number" data-type="number" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.moraleHome" value="{{moraleHome}}" />
+      </label>
+      <label class="num-field">
+        <span>Ручн.</span>
+        <input type="number" data-type="number" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.moraleManual" value="{{moraleManual}}" />
+      </label>
+      <div class="fbls-derived-box">
+        <span>Итог</span>
+        <strong>{{moraleValue}}</strong>
+        <em>{{moraleTooltip}}</em>
+      </div>
+    </fieldset>
+
+    <fieldset class="traits-set compact-set">
+      <legend>Черты</legend>
+      <div class="fbls-trait-editor" data-resident-trait-editor>
+        <input type="hidden" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.traitsText" value="{{traitsText}}" data-resident-traits-value />
+        <div class="fbls-trait-control-row">
+          <div class="fbls-selected-traits" data-resident-trait-list>
+            {{#if hasTraitBadges}}
+              {{#each traitBadges}}
+                <span class="fbls-trait-badge editor-chip fbls-note-tip" data-fbls-tooltip="{{description}}">
+                  {{name}}
+                  <button type="button" class="fbls-chip-remove" data-action="remove-trait" data-traits-field="holdings.{{@root.holdingIndex}}.people.list.{{../_index}}.traitsText" data-trait-name="{{name}}" title="Убрать черту">×</button>
+                </span>
+              {{/each}}
+            {{else}}
+              <span class="fbls-muted-text">Черт нет.</span>
+            {{/if}}
+          </div>
+          <span class="fbls-trait-add-shell" title="Добавить черту">
+            <span class="fbls-trait-add-icon" aria-hidden="true"><i class="fa-solid fa-plus"></i></span>
+            <select class="fbls-trait-picker fbls-trait-add-compact" data-trait-add-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.traitsText" aria-label="Добавить черту">
+              <option value="">+</option>
+              {{#each traitOptions}}
+                <option value="{{name}}" title="{{description}}" {{#if selected}}disabled{{/if}}>{{name}}{{#if selected}} ✓{{/if}}</option>
+              {{/each}}
+            </select>
+          </span>
+        </div>
+      </div>
+    </fieldset>
+  </div>
+
+  <textarea class="fbls-person-notes-field" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.notes" rows="3" placeholder="Заметки">{{notes}}</textarea>
+
+  <div class="resident-actions">
+    <button type="button" class="fbls-button compact" data-action="close-person-editor">Готово</button>
+  </div>
+</div>

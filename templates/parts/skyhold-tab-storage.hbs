@@ -1,0 +1,336 @@
+    {{#if active.storage}}
+      <section class="fbls-panel fbls-storage-panel-modern">
+        <div class="fbls-storage-tabs-row treasury-row fbls-toolbar">
+          <div class="fbls-storage-tabs fbls-toolbar-group">
+            <button type="button" class="fbls-storage-tab {{#if activeStorage.resources}}active{{/if}}" data-action="storage-subtab" data-storage-tab="resources"><i class="fa-solid fa-cubes-stacked"></i> Ресурсы</button>
+            <button type="button" class="fbls-storage-tab {{#if activeStorage.items}}active{{/if}}" data-action="storage-subtab" data-storage-tab="items"><i class="fa-solid fa-suitcase"></i> Предметы</button>
+            <button type="button" class="fbls-storage-tab {{#if activeStorage.accounting}}active{{/if}}" data-action="storage-subtab" data-storage-tab="accounting"><i class="fa-solid fa-scale-balanced"></i> Бухгалтерия</button>
+            <button type="button" class="fbls-storage-tab {{#if activeStorage.log}}active{{/if}}" data-action="storage-subtab" data-storage-tab="log"><i class="fa-solid fa-clock-rotate-left"></i> Лог</button>
+          </div>
+          <div class="fbls-storage-money-counter treasury" data-fbls-tooltip="Казна хранится отдельно от ресурсов. 1 ЗМ = 10 СМ = 100 ММ. В поле можно ввести число для установки или операцию +3 / -2.">
+            <i class="fa-solid fa-coins"></i>
+            {{#if canUseStorage}}
+              <label class="fbls-money-denom gold"><span>ЗМ</span><div class="fbls-money-stepper"><button type="button" data-action="adjust-storage-money" data-money-denom="gold" data-money-op="minus">−</button><input type="text" inputmode="text" data-storage-money-field="gold" value="{{storageContext.money.gold}}" /><button type="button" data-action="adjust-storage-money" data-money-denom="gold" data-money-op="plus">+</button></div></label>
+              <label class="fbls-money-denom silver"><span>СМ</span><div class="fbls-money-stepper"><button type="button" data-action="adjust-storage-money" data-money-denom="silver" data-money-op="minus">−</button><input type="text" inputmode="text" data-storage-money-field="silver" value="{{storageContext.money.silver}}" /><button type="button" data-action="adjust-storage-money" data-money-denom="silver" data-money-op="plus">+</button></div></label>
+              <label class="fbls-money-denom copper"><span>ММ</span><div class="fbls-money-stepper"><button type="button" data-action="adjust-storage-money" data-money-denom="copper" data-money-op="minus">−</button><input type="text" inputmode="text" data-storage-money-field="copper" value="{{storageContext.money.copper}}" /><button type="button" data-action="adjust-storage-money" data-money-denom="copper" data-money-op="plus">+</button></div></label>
+            {{else}}
+              <strong>{{storageContext.money.text}}</strong>
+            {{/if}}
+          </div>
+        </div>
+
+        {{#if activeStorage.resources}}
+          <div class="fbls-storage-resources-layout">
+            {{#if canUseStorage}}
+              <div class="fbls-storage-tools-row">
+                <article class="fbls-card fbls-storage-adjust fbls-storage-tool {{#unless storageContext.adjustToolOpen}}collapsed{{/unless}}">
+                  <div class="fbls-storage-card-head compact-head fbls-card-header">
+                    <button type="button" class="fbls-storage-tool-toggle" data-action="toggle-storage-tool" data-storage-tool="adjust">
+                      <i class="fa-solid fa-sliders"></i><span>Быстрое изменение</span>
+                      <i class="fa-solid {{#if storageContext.adjustToolOpen}}fa-chevron-up{{else}}fa-chevron-down{{/if}}"></i>
+                    </button>
+                    <button type="button" class="fbls-button compact" data-action="add-row" data-collection="holdings.{{holdingIndex}}.storage.resources"><i class="fa-solid fa-plus"></i> Строка</button>
+                  </div>
+                  {{#if storageContext.adjustToolOpen}}
+                    <div class="fbls-storage-adjust-grid with-room compact-tool-grid">
+                      <label><span>Ресурс</span><select data-storage-adjust-resource>{{#each storageContext.resourceOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                      <label><span>Если другое</span><input type="text" data-storage-adjust-custom placeholder="Название" /></label>
+                      <label><span>Кол-во</span><input type="number" data-storage-adjust-qty value="1" /></label>
+                      <label><span>Куда</span><select data-storage-adjust-room>{{#each storageContext.roomOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                      <label class="wide"><span>Причина</span><input type="text" data-storage-adjust-note placeholder="причина" /></label>
+                      <div class="fbls-storage-adjust-actions fbls-action-group">
+                        <button type="button" class="fbls-button compact" data-action="adjust-storage" data-mode="add"><i class="fa-solid fa-plus"></i> Пополнить</button>
+                        <button type="button" class="fbls-button compact danger" data-action="adjust-storage" data-mode="spend"><i class="fa-solid fa-minus"></i> Списать</button>
+                      </div>
+                    </div>
+                  {{/if}}
+                </article>
+
+                <article class="fbls-card fbls-storage-move fbls-storage-tool {{#unless storageContext.moveToolOpen}}collapsed{{/unless}}">
+                  <div class="fbls-storage-card-head compact-head fbls-card-header">
+                    <button type="button" class="fbls-storage-tool-toggle" data-action="toggle-storage-tool" data-storage-tool="move">
+                      <i class="fa-solid fa-right-left"></i><span>Перемещение между складами</span>
+                      <i class="fa-solid {{#if storageContext.moveToolOpen}}fa-chevron-up{{else}}fa-chevron-down{{/if}}"></i>
+                    </button>
+                  </div>
+                  {{#if storageContext.moveToolOpen}}
+                    <div class="fbls-storage-move-grid compact-tool-grid">
+                      <label><span>Ресурс</span><select data-storage-move-resource>{{#each storageContext.resourceOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                      <label><span>Если другое</span><input type="text" data-storage-move-custom placeholder="Название" /></label>
+                      <label><span>Кол-во</span><input type="number" data-storage-move-qty value="1" /></label>
+                      <label><span>Из</span><select data-storage-move-from>{{#each storageContext.moveFromOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                      <label><span>В</span><select data-storage-move-to>{{#each storageContext.moveToOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                      <label class="wide"><span>Причина</span><input type="text" data-storage-move-note placeholder="причина" /></label>
+                      <div class="fbls-storage-move-actions fbls-action-group">
+                        <button type="button" class="fbls-button compact" data-action="move-storage-resource"><i class="fa-solid fa-right-left"></i> Переместить</button>
+                      </div>
+                    </div>
+                  {{/if}}
+                </article>
+              </div>
+            {{/if}}
+
+            <div class="fbls-storage-room-tabs" aria-label="Хранилища">
+              {{#each storageContext.resourceRooms}}
+                <button type="button" class="fbls-storage-room-tab {{fillClass}} {{#if active}}active{{/if}} {{#unless available}}inactive{{/unless}}" data-action="storage-room-tab" data-room-id="{{id}}" data-fbls-tooltip="{{fillTitle}}">
+                  <i class="fa-solid {{#if unlimited}}fa-infinity{{else}}fa-boxes-stacked{{/if}}"></i>
+                  <span>{{label}}</span>
+                  <b>{{itemCount}}</b>
+                </button>
+              {{/each}}
+            </div>
+
+            {{#if storageContext.activeRoom}}
+              <div class="fbls-storage-room-strip {{storageContext.activeRoom.fillClass}}" data-fbls-tooltip="{{storageContext.activeRoom.fillTitle}}">
+                <div class="strip-main"><i class="fa-solid fa-warehouse"></i><strong>{{storageContext.activeRoom.label}}</strong>{{#unless storageContext.activeRoom.unlimited}}<span>{{storageContext.activeRoom.usedText}} / {{storageContext.activeRoom.capacityText}}</span>{{/unless}}</div>
+                {{#unless storageContext.activeRoom.unlimited}}<div class="strip-bar"><span style="width: {{storageContext.activeRoom.fillPercent}}%;"></span></div>{{/unless}}
+                <div class="strip-extra">{{#unless storageContext.activeRoom.unlimited}}<span>Свободно <b>{{storageContext.activeRoom.freeText}}</b></span>{{/unless}}<span>Защита <b>{{storageContext.activeRoom.securityText}}</b></span><span>Хранение <b>{{storageContext.activeRoom.qualityText}}</b></span></div>
+              </div>
+            {{/if}}
+
+            <div class="fbls-storage-resource-grid">
+              {{#each storageContext.activeRoomRows}}
+                <article class="fbls-storage-resource-card {{qtyClass}}">
+                  <div class="fbls-storage-resource-main">
+                    {{#if img}}<img class="fbls-storage-resource-img" src="{{img}}" alt="" />{{else}}<i class="{{icon}}"></i>{{/if}}
+                    <div class="fbls-storage-resource-name">
+                      {{#if ../canUseStorage}}
+                        <select data-field="holdings.{{../holdingIndex}}.storage.resources.{{_index}}.resourceId">{{#each resourceOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+                        {{#if isCustomResource}}<input type="text" data-field="holdings.{{../holdingIndex}}.storage.resources.{{_index}}.name" value="{{name}}" placeholder="свой ресурс" />{{/if}}
+                      {{else}}
+                        <strong>{{label}}</strong>
+                      {{/if}}
+                    </div>
+                    {{#if ../canUseStorage}}<button type="button" class="fbls-icon-button danger" data-action="delete-row" data-collection="holdings.{{../holdingIndex}}.storage.resources" data-id="{{id}}" title="Удалить"><i class="fa-solid fa-trash"></i></button>{{/if}}
+                  </div>
+                  <div class="fbls-storage-resource-qty">
+                    {{#if ../canUseStorage}}<input type="number" data-type="number" data-field="holdings.{{../holdingIndex}}.storage.resources.{{_index}}.qty" value="{{qty}}" />{{else}}<strong>{{qtyText}}</strong>{{/if}}
+                    {{#if ../canUseStorage}}<input class="unit" type="text" data-field="holdings.{{../holdingIndex}}.storage.resources.{{_index}}.unit" value="{{unit}}" />{{else}}<span>{{unit}}</span>{{/if}}
+                  </div>
+                  <div class="fbls-storage-card-control-row">
+                    <div class="fbls-storage-resource-room compact-room">
+                      <i class="fa-solid fa-location-dot"></i>
+                      {{#if ../canUseStorage}}
+                        <select data-field="holdings.{{../holdingIndex}}.storage.resources.{{_index}}.roomId">{{#each roomOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+                      {{else}}
+                        <span>{{roomLabel}}</span>
+                      {{/if}}
+                    </div>
+                    {{#if ../canUseStorage}}
+                      <label class="fbls-sale-flag icon-only {{#unless canMarkForSale}}disabled{{/unless}}" data-fbls-tooltip="{{saleTooltip}}"><input type="checkbox" data-type="checkbox" data-field="holdings.{{../holdingIndex}}.storage.resources.{{_index}}.forSale" {{#if forSale}}checked{{/if}} {{#unless canMarkForSale}}disabled{{/unless}} /><i class="fa-solid fa-coins"></i></label>
+                    {{else}}
+                      {{#if forSale}}<div class="fbls-sale-flag icon-only readonly" data-fbls-tooltip="Помечено к продаже"><i class="fa-solid fa-coins"></i></div>{{/if}}
+                    {{/if}}
+                    {{#if ../canUseStorage}}
+                      <div class="fbls-storage-resource-withdraw compact-withdraw">
+                        <input type="number" min="1" data-storage-withdraw-qty value="1" />
+                        <button type="button" class="fbls-icon-button" data-action="withdraw-storage-resource" data-resource-id="{{resourceId}}" data-resource-name="{{label}}" data-room-id="{{roomId}}" title="Выдать" data-fbls-tooltip="Выдать"><i class="fa-solid fa-upload"></i></button>
+                      </div>
+                    {{/if}}
+                  </div>
+                  <div class="fbls-storage-resource-notes">
+                    {{#if ../canUseStorage}}<input type="text" data-field="holdings.{{../holdingIndex}}.storage.resources.{{_index}}.notes" value="{{notes}}" placeholder="заметка" />{{else}}{{notes}}{{/if}}
+                  </div>
+                </article>
+              {{else}}
+                <article class="fbls-card fbls-empty">В этом хранилище нет ненулевых ресурсов.</article>
+              {{/each}}
+            </div>
+
+            {{#if canUseStorage}}
+              <div class="fbls-storage-foundry-row bottom-drop compact-drop">
+                <div class="fbls-storage-drop-zone" data-storage-drop-zone data-room-id="{{storageContext.activeRoomId}}">
+                  <i class="fa-solid fa-download"></i>
+                  <span>Перетащи сюда Item из листа персонажа. Raw Material станет ресурсом, прочее попадет во вкладку Предметы.</span>
+                </div>
+                <div class="fbls-storage-target-actor static {{#unless storageContext.targetActor.hasActor}}missing{{/unless}}"><span>Получатель</span><strong>{{storageContext.targetActor.name}}</strong><small>привязанный актер игрока</small></div>
+              </div>
+            {{/if}}
+
+
+            <article class="fbls-card fbls-storage-notes-card">
+              <h3>Заметки склада</h3>
+              {{#if canUseStorage}}<textarea data-field="holdings.{{holdingIndex}}.storage.notes" rows="3">{{storageContext.notes}}</textarea>{{else}}<p class="fbls-preline">{{storageContext.notes}}</p>{{/if}}
+            </article>
+          </div>
+        {{/if}}
+
+        {{#if activeStorage.items}}
+          <div class="fbls-storage-resources-layout fbls-storage-items-layout">
+
+            <div class="fbls-storage-room-tabs" aria-label="Хранилища">
+              {{#each storageContext.resourceRooms}}
+                <button type="button" class="fbls-storage-room-tab {{fillClass}} {{#if active}}active{{/if}} {{#unless available}}inactive{{/unless}}" data-action="storage-room-tab" data-room-id="{{id}}" data-fbls-tooltip="{{fillTitle}}">
+                  <i class="fa-solid {{#if unlimited}}fa-infinity{{else}}fa-boxes-stacked{{/if}}"></i>
+                  <span>{{label}}</span>
+                  <b>{{itemCount}}</b>
+                </button>
+              {{/each}}
+            </div>
+
+            {{#if storageContext.activeRoom}}
+              <div class="fbls-storage-room-strip {{storageContext.activeRoom.fillClass}}" data-fbls-tooltip="{{storageContext.activeRoom.fillTitle}}">
+                <div class="strip-main"><i class="fa-solid fa-warehouse"></i><strong>{{storageContext.activeRoom.label}}</strong>{{#unless storageContext.activeRoom.unlimited}}<span>{{storageContext.activeRoom.usedText}} / {{storageContext.activeRoom.capacityText}}</span>{{/unless}}</div>
+                {{#unless storageContext.activeRoom.unlimited}}<div class="strip-bar"><span style="width: {{storageContext.activeRoom.fillPercent}}%;"></span></div>{{/unless}}
+                <div class="strip-extra">{{#unless storageContext.activeRoom.unlimited}}<span>Свободно <b>{{storageContext.activeRoom.freeText}}</b></span>{{/unless}}<span>Защита <b>{{storageContext.activeRoom.securityText}}</b></span><span>Хранение <b>{{storageContext.activeRoom.qualityText}}</b></span></div>
+              </div>
+            {{/if}}
+
+            <div class="fbls-storage-item-grid">
+              {{#each storageContext.activeItemRows}}
+                <article class="fbls-storage-item-card">
+                  <div class="fbls-storage-item-main">
+                    <button type="button" class="fbls-storage-item-open" data-action="open-storage-item" data-index="{{_index}}" title="Открыть карточку предмета"><img src="{{img}}" alt="" /></button>
+                    <div>
+                      <strong><button type="button" class="fbls-link-button" data-action="open-storage-item" data-index="{{_index}}">{{name}}</button></strong>
+                      <small>{{typeLabel}} · {{qtyText}} шт. · вес {{loadText}}</small>
+                    </div>
+                    {{#if ../canUseStorage}}<button type="button" class="fbls-icon-button danger" data-action="delete-row" data-collection="holdings.{{../holdingIndex}}.storage.items" data-id="{{id}}" title="Удалить"><i class="fa-solid fa-trash"></i></button>{{/if}}
+                  </div>
+                  <div class="fbls-storage-card-control-row">
+                    {{#if ../canUseStorage}}
+                      <div class="fbls-storage-item-room compact-room">
+                        <i class="fa-solid fa-location-dot"></i>
+                        <select data-field="holdings.{{../holdingIndex}}.storage.items.{{_index}}.roomId">{{#each roomOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+                      </div>
+                    {{else}}
+                      <div class="fbls-storage-item-room compact-room"><i class="fa-solid fa-location-dot"></i><span>{{roomLabel}}</span></div>
+                    {{/if}}
+                    {{#if ../canUseStorage}}
+                      <label class="fbls-sale-flag icon-only {{#unless canMarkForSale}}disabled{{/unless}}" data-fbls-tooltip="{{saleTooltip}}"><input type="checkbox" data-type="checkbox" data-field="holdings.{{../holdingIndex}}.storage.items.{{_index}}.forSale" {{#if forSale}}checked{{/if}} {{#unless canMarkForSale}}disabled{{/unless}} /><i class="fa-solid fa-coins"></i></label>
+                    {{else}}
+                      {{#if forSale}}<div class="fbls-sale-flag icon-only readonly" data-fbls-tooltip="Помечено к продаже"><i class="fa-solid fa-coins"></i></div>{{/if}}
+                    {{/if}}
+                    {{#if ../canUseStorage}}
+                      <div class="fbls-storage-item-give compact-withdraw">
+                        <input type="number" min="1" data-storage-item-give-qty value="1" />
+                        <button type="button" class="fbls-icon-button" data-action="give-storage-item" data-index="{{_index}}" title="Выдать" data-fbls-tooltip="Выдать"><i class="fa-solid fa-upload"></i></button>
+                      </div>
+                    {{/if}}
+                  </div>
+                  {{#if notes}}<p class="fbls-muted-line">{{notes}}</p>{{/if}}
+                </article>
+              {{else}}
+                <article class="fbls-card fbls-empty">В этом хранилище нет предметов. Перетащи Item из листа персонажа на область выше.</article>
+              {{/each}}
+            </div>
+            {{#if canUseStorage}}
+              <div class="fbls-storage-foundry-row bottom-drop compact-drop">
+                <div class="fbls-storage-drop-zone" data-storage-drop-zone data-room-id="{{storageContext.activeRoomId}}">
+                  <i class="fa-solid fa-download"></i>
+                  <span>Перетащи предмет Forbidden Lands сюда. Raw Material уйдет в ресурсы, остальные Items сохранятся как предметы склада.</span>
+                </div>
+                <div class="fbls-storage-target-actor static {{#unless storageContext.targetActor.hasActor}}missing{{/unless}}"><span>Получатель</span><strong>{{storageContext.targetActor.name}}</strong><small>привязанный актер игрока</small></div>
+              </div>
+            {{/if}}
+
+          </div>
+        {{/if}}
+
+        {{#if activeStorage.warehouses}}
+          <div class="fbls-storage-rooms-layout">
+            <div class="fbls-storage-room-grid">
+              {{#each storageContext.rooms.rows}}
+                <article class="fbls-card fbls-storage-room-card {{fillClass}} {{#if overCapacity}}over-capacity{{/if}} {{#unless available}}inactive{{/unless}}" {{#if buildingId}}data-action="open-building-editor" data-id="{{buildingId}}"{{/if}}>
+                  <header>
+                    <div><i class="fa-solid fa-warehouse"></i><strong>{{label}}</strong></div>
+                    <span class="fbls-status-pill {{statusClass}}">{{statusLabel}}</span>
+                  </header>
+                  <div class="fbls-storage-room-stats">
+                    <div><span>Вместимость</span><strong>{{capacityText}}</strong></div>
+                    <div><span>Занято</span><strong>{{usedText}}</strong></div>
+                    <div><span>Свободно</span><strong>{{freeText}}</strong></div>
+                    <div><span>Защищенность</span><strong>{{securityText}}</strong></div>
+                    <div><span>Качество хранения</span><strong>{{qualityText}}</strong></div>
+                  </div>
+                  {{#if notes}}<p class="fbls-muted-line">{{notes}}</p>{{/if}}
+                </article>
+              {{else}}
+                <article class="fbls-card fbls-empty">Складских помещений пока нет.</article>
+              {{/each}}
+            </div>
+          </div>
+        {{/if}}
+
+        {{#if activeStorage.accounting}}
+          <div class="fbls-storage-accounting-layout modernized">
+            <article class="fbls-card fbls-accounting-card modern summary">
+              <h2><i class="fa-solid fa-scale-balanced"></i> Бухгалтерия</h2>
+              <div class="fbls-accounting-kpi-row">
+                <div><span>Казна</span><strong>{{finance.treasuryText}}</strong></div>
+                <div><span>Итог / 30 дней</span><strong class="{{finance.monthlyNetClass}}">{{finance.monthlyNetText}}</strong></div>
+                <div><span>Запас хода</span><strong>{{finance.runwayText}}</strong></div>
+                <div><span>Товар к продаже</span><strong>{{finance.saleStockText}}</strong></div>
+              </div>
+            </article>
+
+            <article class="fbls-card fbls-accounting-card modern">
+              <h3>Расходы</h3>
+              <div class="fbls-accounting-grid compact">
+                <div><span>Зарплата / день</span><strong>{{finance.salaryText}}</strong></div>
+                <div><span>Зарплата / 10 дней</span><strong>{{finance.salaryTenDayText}}</strong></div>
+                <div><span>Зарплата / 30 дней</span><strong>{{finance.salaryMonthText}}</strong></div>
+                <div><span>Содержание зданий / 30 дней</span><strong>{{finance.upkeepMonthText}}</strong></div>
+              </div>
+            </article>
+
+            <article class="fbls-card fbls-accounting-card modern">
+              <h3>Доходы и торговля</h3>
+              <div class="fbls-accounting-grid compact">
+                <div><span>Доход / 10 дней</span><strong>{{finance.incomeTenDayText}}</strong></div>
+                <div><span>Доход / 30 дней</span><strong>{{finance.incomeMonthText}}</strong></div>
+                <div><span>Ресурсов к продаже</span><strong>{{finance.saleResourceLots}}</strong></div>
+                <div><span>Предметов к продаже</span><strong>{{finance.saleItemLots}}</strong></div>
+              </div>
+            </article>
+
+            <article class="fbls-card fbls-accounting-card modern">
+              <h3>Рабочая сила</h3>
+              <div class="fbls-accounting-grid compact">
+                <div><span>Население</span><strong>{{finance.population}}</strong></div>
+                <div><span>На зарплате</span><strong>{{finance.paidPeopleCount}}</strong></div>
+                <div><span>Без зарплаты</span><strong>{{finance.unpaidPeopleCount}}</strong></div>
+                <div><span>Доходных зданий</span><strong>{{finance.tradeBuildingCount}}</strong></div>
+              </div>
+            </article>
+
+            <article class="fbls-card fbls-accounting-card modern fbls-accounting-wide">
+              <h3>Главные статьи</h3>
+              {{#if finance.hasLedgerRows}}
+                <div class="fbls-accounting-ledger">
+                  {{#each finance.ledgerRows}}
+                    <div class="{{class}}"><span>{{label}}</span><strong>{{text}}</strong></div>
+                  {{/each}}
+                </div>
+              {{else}}
+                <p class="fbls-muted-text">Пока нет денежных статей.</p>
+              {{/if}}
+              <p class="fbls-muted-text">Это прогноз. Он не списывает монеты сам, но показывает, сколько поселение сжигает или зарабатывает за месяц.</p>
+            </article>
+          </div>
+        {{/if}}
+
+        {{#if activeStorage.log}}
+          <article class="fbls-card fbls-storage-log-card">
+            <div class="fbls-storage-card-head fbls-card-header">
+              <h3><i class="fa-solid fa-clock-rotate-left"></i> Лог ресурсов</h3>
+              {{#if canUseStorage}}<button type="button" class="fbls-button compact danger" data-action="clear-storage-log"><i class="fa-solid fa-trash"></i> Очистить</button>{{/if}}
+            </div>
+            <div class="fbls-storage-log-list">
+              {{#each storageContext.logRows}}
+                <div class="fbls-storage-log-row {{qtyClass}}">
+                  <time><span>{{realDateText}}</span>{{#if laputaDateText}}<em>{{laputaDateText}}</em>{{/if}}</time>
+                  <span class="kind">{{kindLabel}}</span>
+                  <span class="resource"><i class="{{icon}}"></i> {{name}}</span>
+                  <strong>{{qtyText}}</strong>
+                  <span class="source">{{source}}</span>
+                  <span class="note">{{note}}</span>
+                </div>
+              {{else}}
+                <p class="fbls-empty">Лог пока пуст.</p>
+              {{/each}}
+            </div>
+          </article>
+        {{/if}}
+      </section>
+    {{/if}}

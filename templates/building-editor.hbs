@@ -1,0 +1,481 @@
+<div class="fbls-building-editor-shell">
+  {{#if hasBuilding}}
+    <header class="fbls-editor-hero compact with-building-image">
+      <button type="button" class="fbls-building-editor-image" data-action="pick-building-image" title="Выбрать картинку здания">
+        {{#if building.img}}<img src="{{building.img}}" alt="" />{{else}}<i class="{{building.icon}}"></i>{{/if}}
+      </button>
+      <div class="fbls-editor-title-wrap">
+        <div class="fbls-editor-title-line">
+          <h1>{{building.name}}</h1>
+          <div class="fbls-editor-impact-strip">
+            <button type="button" class="fbls-editor-dev-gain" data-action="toggle-dev-gain-editor" data-fbls-tooltip="Вклад в развитие: сколько отраслевого развития дает это здание после постройки. Нажмите, чтобы открыть редактирование. Это не производство ресурсов и не зависит от работников.">
+              {{#each building.bonusParts}}
+                <span class="{{css}}"><i class="{{icon}}"></i><strong>{{value}}</strong></span>
+              {{/each}}
+            </button>
+            <label class="fbls-editor-impact morale" data-fbls-tooltip="Довольство здания: общий модификатор довольства поселения от построенного здания."><i class="fa-solid fa-face-smile"></i>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.basePath}}.moraleDelta" value="{{building.moraleDelta}}" />{{else}}<strong>{{building.moraleDelta}}</strong>{{/if}}</label>
+            <label class="fbls-editor-impact reputation" data-fbls-tooltip="Репутация здания: прибавляется к общей Репутации владения, если здание построено."><i class="fa-solid fa-crown"></i>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.basePath}}.reputation" value="{{building.reputation}}" />{{else}}<strong>{{building.reputation}}</strong>{{/if}}</label>
+          </div>
+        </div>
+        <p>{{holding.name}} · {{building.categoryLabel}}</p>
+      </div>
+      <div class="fbls-building-badges">
+        <span class="fbls-status-pill fbls-chip {{building.statusClass}}">{{building.statusLabel}}</span>
+        <span class="fbls-status-pill fbls-chip">Рабочие {{building.assignedCount}}/{{building.workersMax}}</span>
+        {{#if building.defenseSummary.hasDefense}}<span class="fbls-status-pill fbls-chip defense">Защита +{{building.defenseSummary.total}}</span>{{/if}}
+      </div>
+    </header>
+
+    {{#if editDevGain}}
+      <section class="fbls-inline-dev-gain-editor" data-fbls-tooltip="Вклад в развитие редактируется здесь. Эти значения прибавляются к отраслевым характеристикам владения, когда здание построено.">
+        {{#each building.bonusParts}}
+          <label class="{{css}}"><i class="{{icon}}"></i>{{#if ../canEdit}}<input type="number" data-type="number" data-field="{{path}}" value="{{value}}" />{{else}}<strong>{{value}}</strong>{{/if}}</label>
+        {{/each}}
+      </section>
+    {{/if}}
+
+      <nav class="fbls-building-editor-tabs" aria-label="Разделы постройки">
+        {{#each building.editorTabs}}
+          <button type="button" class="fbls-building-editor-tab {{#if active}}active{{/if}}" data-action="building-editor-tab" data-editor-tab="{{id}}">
+            <i class="{{icon}}"></i><span>{{label}}</span>
+          </button>
+        {{/each}}
+      </nav>
+
+    {{#if building.showMedicalEditor}}
+      <section class="fbls-medical-editor-block modern-medical compact-redesign">
+        <header class="fbls-medical-topline compact-redesign">
+          <h2><i class="fa-solid fa-kit-medical"></i> Лечебное</h2>
+          <div class="fbls-medical-stats modern compact">
+            <span><i class="fa-solid fa-user-doctor"></i><b>{{building.medicalSummary.doctors}}/{{building.workersMax}}</b><em>врачи</em></span>
+            <span><i class="fa-solid fa-heart-pulse"></i><b>{{building.medicalSummary.doctorEfficiencyText}}</b><em>эфф.</em></span>
+            <span><i class="fa-solid fa-bed-pulse"></i><b>{{building.medicalSummary.used}}/{{building.medicalSummary.capacity}}</b><em>места</em></span>
+            <span><i class="fa-solid fa-triangle-exclamation"></i><b>{{building.medicalSummary.overflow}}</b><em>без места</em></span>
+          </div>
+        </header>
+
+        <div class="fbls-medical-controls modern compact-grid">
+          <label><span>Макс. мест</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.medicalSummary.maxPatientsPath}}" value="{{building.medicalSummary.maxPatients}}" min="0" />{{else}}<strong>{{building.medicalSummary.maxPatients}}</strong>{{/if}}</label>
+          <label><span>Врачей макс.</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.basePath}}.workersMax" value="{{building.workersMax}}" min="0" />{{else}}<strong>{{building.workersMax}}</strong>{{/if}}</label>
+        </div>
+
+        <section class="fbls-medical-doctor-slots compact-medical-card">
+          <h3><i class="fa-solid fa-user-doctor"></i> Врачи</h3>
+          <div class="fbls-worker-slot-grid compact-slots medical-slots modern">
+            {{#each building.workerSlots}}
+              <label><span>#{{slotNo}}</span>{{#if ../canEdit}}<select data-building-worker-field="{{path}}">{{#each options}}<option value="{{id}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{name}}{{#if hint}} · {{hint}}{{/if}}</option>{{/each}}</select>{{else}}<strong>{{label}}</strong>{{/if}}</label>
+            {{/each}}
+          </div>
+        </section>
+
+        <section class="fbls-medical-patients-grid">
+          <div class="compact-medical-card">
+            <h3><i class="fa-solid fa-bed-pulse"></i> Пациенты</h3>
+            <div class="fbls-medical-patient-list modern-list">
+              {{#each building.medicalSummary.patientRows}}
+                <article class="fbls-medical-patient"><strong>{{name}}</strong><span>{{label}}</span></article>
+              {{else}}
+                <p class="fbls-empty">{{#if building.medicalSummary.active}}Пациентов нет.{{else}}Нет рабочих медицинских мест. Назначь хотя бы одного врача.{{/if}}</p>
+              {{/each}}
+            </div>
+          </div>
+
+          {{#if building.medicalSummary.hasOverflow}}
+            <div class="compact-medical-card warning">
+              <h3><i class="fa-solid fa-triangle-exclamation"></i> Без места</h3>
+              <div class="fbls-medical-overflow modern-overflow">
+                {{#each building.medicalSummary.overflowRows}}<span>{{name}} — {{label}}</span>{{/each}}
+              </div>
+            </div>
+          {{/if}}
+        </section>
+
+        <details class="fbls-medical-advanced-details">
+          <summary>Дополнительно</summary>
+          <div class="fbls-medical-meta-grid compact-hidden-meta">
+            <label><span>Название</span>{{#if canEdit}}<input type="text" data-field="{{building.basePath}}.name" value="{{building.name}}" />{{else}}<strong>{{building.name}}</strong>{{/if}}</label>
+            <label><span>Состояние</span>{{#if canEdit}}<select data-field="{{building.basePath}}.constructionStatus">{{#each building.statusOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{building.statusLabel}}</strong>{{/if}}</label>
+            <label><span>Тип</span><input type="text" value="{{building.categoryLabel}}" disabled /></label>
+            <label><span>Содержание</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.basePath}}.upkeep" value="{{building.upkeep}}" min="0" />{{else}}<strong>{{building.upkeepLine}}</strong>{{/if}}</label>
+            <label class="span-2"><span>Эффект</span>{{#if canEdit}}<textarea rows="2" data-field="{{building.basePath}}.effect">{{building.effect}}</textarea>{{else}}<p class="fbls-preline">{{building.effect}}</p>{{/if}}</label>
+            <label class="span-2"><span>Заметки</span>{{#if canEdit}}<textarea rows="2" data-field="{{building.basePath}}.notes">{{building.notes}}</textarea>{{else}}<p class="fbls-preline">{{building.notes}}</p>{{/if}}</label>
+          </div>
+        </details>
+      </section>
+    {{/if}}
+
+
+    {{#unless building.showMedicalEditor}}
+    <section class="fbls-building-editor-grid compact-v2 tabbed-editor">
+      {{#if building.showEditorMain}}
+        <fieldset class="fbls-building-editor-card main-card wide-card main-tab-card">
+          <legend>Основное</legend>
+          <div class="fbls-building-main-line">
+            <label><span>Название</span>{{#if canEdit}}<input type="text" data-field="{{building.basePath}}.name" value="{{building.name}}" />{{else}}<strong>{{building.name}}</strong>{{/if}}</label>
+            <label><span>Тип</span>{{#if canEdit}}<select data-field="{{building.basePath}}.type">{{#each building.categoryOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{building.categoryLabel}}</strong>{{/if}}</label>
+            <label><span>Состояние</span>{{#if canEdit}}<select data-field="{{building.basePath}}.constructionStatus">{{#each building.statusOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{building.statusLabel}}</strong>{{/if}}</label>
+            <label><span>Место</span>{{#if canEdit}}<input type="text" data-field="{{building.basePath}}.location" value="{{building.location}}" />{{else}}<strong>{{building.location}}</strong>{{/if}}</label>
+            {{#if building.isTemplate}}<label><span data-fbls-tooltip="Основная категория развития: food, technology, culture или war.">Категория Ark</span>{{#if canEdit}}<input type="text" data-field="{{building.basePath}}.primaryDev" value="{{building.primaryDev}}" placeholder="food / technology / culture / war" />{{else}}<strong>{{building.primaryDevLabel}}</strong>{{/if}}</label>{{/if}}
+            {{#if building.isTemplate}}<label class="fbls-template-visibility-toggle"><span data-fbls-tooltip="Если выключено, игроки не увидят этот шаблон в каталоге. Для ГМа он уйдет во вкладку Скрытые.">Видно игрокам</span>{{#if canEdit}}<input type="checkbox" data-type="visibility" data-field="{{building.basePath}}.visibility" {{#if building.playerVisible}}checked{{/if}} />{{else}}<strong>{{building.visibilityText}}</strong>{{/if}}</label>{{/if}}
+            <label><span>Содержание</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.basePath}}.upkeep" value="{{building.upkeep}}" />{{else}}<strong>{{building.upkeepLine}}</strong>{{/if}}</label>
+          </div>
+          {{#if building.showFunctionToggles}}
+            <div class="fbls-function-strip no-title">
+              {{#each building.functionOptions}}
+                <label class="fbls-function-toggle fbls-thin-check-chip" data-fbls-tooltip="{{tooltip}}"><i class="{{icon}}"></i><span>{{label}}</span>{{#if ../canEdit}}<input type="checkbox" data-type="checkbox" data-field="{{path}}" {{#if checked}}checked{{/if}} />{{else}}{{#if checked}}<strong>✓</strong>{{else}}<strong>—</strong>{{/if}}{{/if}}</label>
+              {{/each}}
+            </div>
+          {{/if}}
+          <div class="fbls-main-effects-grid">
+            <label><span>Эффект</span>{{#if canEdit}}<textarea data-field="{{building.basePath}}.effect" rows="2">{{building.effect}}</textarea>{{else}}<p class="fbls-preline">{{building.effect}}</p>{{/if}}</label>
+            <label><span>Заметки</span>{{#if canEdit}}<textarea data-field="{{building.basePath}}.notes" rows="2">{{building.notes}}</textarea>{{else}}<p class="fbls-preline">{{building.notes}}</p>{{/if}}</label>
+          </div>
+          {{#if building.hasPendingProduction}}
+            <div class="fbls-pending-production main-pending-production">
+              <div class="fbls-subhead"><span>Готово к сбору</span></div>
+              {{#each building.pendingProductionRows}}
+                <div class="fbls-pending-production-row"><span>{{resource}}: <strong>{{qty}}</strong></span>{{#if ../canEdit}}<button type="button" class="fbls-button compact" data-action="collect-production-line" data-index="{{lineIndex}}"><i class="fa-solid fa-hand-holding"></i> Собрать</button>{{/if}}</div>
+              {{/each}}
+            </div>
+          {{/if}}
+        </fieldset>
+      {{/if}}
+
+      {{#if building.showEditorWorkers}}
+        <fieldset class="fbls-building-editor-card worker-card wide-card worker-layout-v4">
+          <legend>Работники <i class="fa-regular fa-circle-question fbls-help" data-fbls-tooltip="Рабочие слоты здания. Они влияют на производство, доходность, оборону и довольство работников, но не увеличивают характеристики развития поселения. Эффективность используется производственными и доходными расчетами."></i></legend>
+          <div class="fbls-worker-top-row">
+            <label class="mini"><span>Мин.</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.basePath}}.workersMin" value="{{building.workersMin}}" />{{else}}<strong>{{building.workersMin}}</strong>{{/if}}</label>
+            <label class="mini"><span>Макс.</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.basePath}}.workersMax" value="{{building.workersMax}}" />{{else}}<strong>{{building.workersMax}}</strong>{{/if}}</label>
+            <label class="role"><span data-fbls-tooltip="Как будут называться занятые слоты этого здания: фермеры, врачи, стражники, рабочие. Это подпись, не отдельная профессия жителя.">Название работника</span>{{#if canEdit}}<input type="text" data-field="{{building.basePath}}.workerRole" value="{{building.workerRole}}" placeholder="Фермер, садовник, каменщик..." />{{else}}<strong>{{building.workerRoleLine}}</strong>{{/if}}</label>
+            <label class="mini"><span data-fbls-tooltip="Характеристика, по которой здание оценивает пригодность работников и показывает подсказки эффективности. Не меняет тип жителя сама по себе.">Осн. хар.</span>{{#if canEdit}}<select data-field="{{building.basePath}}.workerPrimaryAttribute">{{#each building.workerPrimaryAttributeOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{building.workerPrimaryAttributeLabel}}</strong>{{/if}}</label>
+            <label class="mini"><span>Мод. ДОВ</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.basePath}}.workerMoraleDelta" value="{{building.workerMoraleDelta}}" />{{else}}<strong>{{building.workerMoraleDelta}}</strong>{{/if}}</label>
+            <div class="fbls-worker-eff-total compact-number">
+              <span data-fbls-tooltip="Итоговая эффективность: 1 за каждого назначенного работника, бонусы эффективных типов, полезные/плохие черты и Лидер при группе из нескольких работников.">Итог эфф.</span>
+              <strong data-fbls-tooltip="{{building.workerEfficiency.detail}}">{{building.workerEfficiency.total}}</strong>
+            </div>
+          </div>
+          <div class="effective-types-box full-line">
+            <span>Эффективные типы</span>
+            <div class="fbls-effective-type-line">
+              {{#if building.hasSuitableTypeBadges}}
+                {{#each building.suitableTypeBadges}}
+                  <span class="fbls-type-effect-chip" style="{{style}}">
+                    <em>{{name}}</em>
+                    {{#if ../canEdit}}<input type="number" step="0.1" data-type="number" data-field="{{modifierPath}}" value="{{modifier}}" data-fbls-tooltip="Бонус эффективности, который этот тип работника получает в этом здании." />{{else}}<strong>{{modifier}}</strong>{{/if}}
+                    {{#if ../canEdit}}<button type="button" class="fbls-chip-remove" data-action="remove-suitable-type" data-suitable-types-field="{{path}}" data-suitable-type="{{name}}">×</button>{{/if}}
+                  </span>
+                {{/each}}
+              {{else}}
+                <span class="fbls-muted-text">Нет.</span>
+              {{/if}}
+              {{#if canEdit}}
+                <select class="fbls-trait-picker inline-add" data-suitable-type-add-field="{{building.basePath}}.suitableWorkerTypes">
+                  <option value="">Добавить тип...</option>
+                  {{#each building.suitableTypeOptions}}<option value="{{name}}" {{#if selected}}disabled{{/if}}>{{name}}{{#if selected}} ✓{{/if}}</option>{{/each}}
+                </select>
+              {{/if}}
+            </div>
+          </div>
+          {{#unless building.isTemplate}}
+          <div class="fbls-assigned-worker-area">
+            <span class="fbls-field-title">Назначенные работники</span>
+            <div class="fbls-worker-slot-grid compact-slots">
+              {{#each building.workerSlots}}
+                <label><span>#{{slotNo}}</span>{{#if ../canEdit}}<select data-building-worker-field="{{path}}">{{#each options}}<option value="{{id}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{name}}{{#if hint}} · {{hint}}{{/if}}</option>{{/each}}</select>{{else}}<strong>{{label}}</strong>{{/if}}</label>
+              {{/each}}
+            </div>
+          </div>
+          {{/unless}}
+        </fieldset>
+      {{/if}}
+
+      {{#if building.showEditorConstruction}}
+        <fieldset class="fbls-building-editor-card build-card wide-card compact-build-card">
+          <legend>Строительство <i class="fa-regular fa-circle-question fbls-help" data-fbls-tooltip="Стройка идет проверками стройбригады. Цель это количество успехов, которое нужно накопить. Сложность меняет пул кубов проверки. Материалы, требования развития и нужные здания являются требованиями проекта."></i></legend>
+          <div class="fbls-build-main-row with-dev-requirements">
+            <label><span>Цель</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.basePath}}.buildTarget" value="{{building.buildTarget}}" />{{else}}<strong>{{building.buildTarget}}</strong>{{/if}}</label>
+            <label><span>Прогресс</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.basePath}}.buildProgress" value="{{building.buildProgress}}" />{{else}}<strong>{{building.buildProgress}}</strong>{{/if}}</label>
+            <label><span>Сложн.</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.basePath}}.buildDifficulty" value="{{building.buildDifficulty}}" />{{else}}<strong>{{building.buildDifficulty}}</strong>{{/if}}</label>
+            <div class="fbls-construction-dev-inline">
+              <span>Требования развития</span>
+              <div class="fbls-dev-line-fields compact-inline-dev">
+                {{#each building.developmentParts}}
+                  <label class="{{css}}" data-fbls-tooltip="{{label}}: требуемый уровень развития отрасли для открытия постройки."><i class="{{icon}}"></i>{{#if ../canEdit}}<input type="number" data-type="number" data-field="{{path}}" value="{{value}}" />{{else}}<strong>{{value}}</strong>{{/if}}</label>
+                {{/each}}
+              </div>
+            </div>
+            {{#if canEdit}}{{#unless building.isTemplate}}<button type="button" class="fbls-button compact" data-action="roll-construction-crew"><i class="fa-solid fa-dice-six"></i> Бригада</button>{{/unless}}{{/if}}
+            {{#if building.canRollConstruction}}<button type="button" class="fbls-button compact" data-action="roll-construction" data-id="{{building.id}}"><i class="fa-solid fa-hammer"></i> Строить</button>{{/if}}
+          </div>
+          <div class="fbls-build-subgrid tighter">
+            <div class="fbls-cost-list">
+              <div class="fbls-subhead"><span>Материалы</span>{{#if canEdit}}<button type="button" class="fbls-icon-button" data-action="add-building-material" title="Добавить материал"><i class="fa-solid fa-plus"></i></button>{{/if}}</div>
+              {{#each building.materialCosts}}
+                <div class="fbls-cost-row">{{#if ../canEdit}}<input type="text" data-field="{{namePath}}" value="{{name}}" placeholder="название" /><input type="text" data-field="{{resourceIdPath}}" value="{{resourceId}}" placeholder="resourceId" /><input type="number" data-type="number" data-field="{{qtyPath}}" value="{{qty}}" /><button type="button" class="fbls-icon-button danger" data-action="delete-building-material" data-index="{{_index}}"><i class="fa-solid fa-trash"></i></button>{{else}}<strong>{{qty}} {{name}}</strong>{{/if}}</div>
+              {{else}}<p class="fbls-muted-line">Материалы не заданы.</p>{{/each}}
+            </div>
+            <div class="fbls-prereq-list">
+              <div class="fbls-subhead"><span>Нужные здания</span>{{#if canEdit}}<button type="button" class="fbls-icon-button" data-action="add-building-prerequisite" title="Добавить требование"><i class="fa-solid fa-plus"></i></button>{{/if}}</div>
+              {{#each building.requiredBuildings}}
+                <div class="fbls-prereq-row {{#if met}}met{{else}}missing{{/if}}">{{#if ../canEdit}}<select data-field="{{path}}">{{#each options}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select><button type="button" class="fbls-icon-button danger" data-action="delete-building-prerequisite" data-index="{{_index}}"><i class="fa-solid fa-trash"></i></button>{{else}}<strong>{{label}}</strong>{{/if}}</div>
+              {{else}}<p class="fbls-muted-line">Здания-требования не заданы.</p>{{/each}}
+            </div>
+          {{#if building.isTemplate}}
+            <div class="fbls-template-source-grid">
+              <label><span>Оригинальные материалы</span>{{#if canEdit}}<input type="text" data-field="{{building.basePath}}.sourceRawMaterials" value="{{building.sourceRawMaterials}}" />{{else}}<strong>{{building.sourceRawMaterials}}</strong>{{/if}}</label>
+              <label><span>Оригинальные требования</span>{{#if canEdit}}<input type="text" data-field="{{building.basePath}}.sourceRequirement" value="{{building.sourceRequirement}}" />{{else}}<strong>{{building.sourceRequirement}}</strong>{{/if}}</label>
+              <label class="fbls-wide-label"><span>Особые требования</span>{{#if canEdit}}<textarea data-field="{{building.basePath}}.specialRequirements" rows="2">{{building.specialRequirements}}</textarea>{{else}}<p class="fbls-preline">{{building.specialRequirements}}</p>{{/if}}</label>
+            </div>
+          {{/if}}
+          </div>
+        </fieldset>
+      {{/if}}
+
+      {{#if building.showEditorProduction}}
+        <fieldset class="fbls-building-editor-card wide-card production-lines-card fbls-production-workspace">
+          <legend>Производство <i class="fa-regular fa-circle-question fbls-help" data-fbls-tooltip="Производство состоит из содержимого здания и производственных линий. Рабочие линии тратят рабочие QD. Временные линии срабатывают сами за период. Линии от содержимого умножают выход на число коров, ульев, деревьев или других единиц внутри здания. Если включен сбор, результат сначала копится в строке 'Готово'."></i></legend>
+
+          <section class="fbls-production-panel fbls-building-contents-panel top-contents-panel" data-fbls-tooltip="Содержимое здания: животные, ульи, деревья, грядки, станки или другие единицы, от которых может зависеть производство с источником 'Содержимое'. Для рабочих линий этот блок не используется.">
+            <div class="fbls-panel-header slim">
+              <div><h3>Содержимое здания</h3></div>
+              {{#if canEdit}}<button type="button" class="fbls-icon-button" data-action="add-building-content" title="Добавить содержимое"><i class="fa-solid fa-plus"></i></button>{{/if}}
+            </div>
+            <div class="fbls-content-list compact-contents">
+              {{#each building.contents}}
+                <div class="fbls-content-row-card">
+                  {{#if ../canEdit}}
+                    <label class="name"><span>Название</span><input type="text" data-field="{{namePath}}" value="{{name}}" placeholder="Коровы, ульи, деревья..." /></label>
+                    <label><span>Кол-во</span><input type="number" data-type="number" data-field="{{qtyPath}}" value="{{qty}}" data-fbls-tooltip="Сколько таких единиц сейчас находится в здании." /></label>
+                    <label><span>Макс.</span><input type="number" data-type="number" data-field="{{capacityPath}}" value="{{capacity}}" data-fbls-tooltip="Вместимость. Ноль означает, что предел не задан." /></label>
+                    <button type="button" class="fbls-icon-button danger" data-action="delete-building-content" data-index="{{_index}}"><i class="fa-solid fa-trash"></i></button>
+                  {{else}}
+                    <strong>{{name}}</strong><span>{{line}}</span>
+                  {{/if}}
+                </div>
+              {{else}}
+                <p class="fbls-muted-line">Содержимое не задано.</p>
+              {{/each}}
+            </div>
+          </section>
+
+          <section class="fbls-production-panel fbls-production-lines-panel full-width-lines">
+            <div class="fbls-panel-header slim">
+              <div><h3>Линии производства</h3></div>
+              {{#if canEdit}}<button type="button" class="fbls-button compact" data-action="add-production-line"><i class="fa-solid fa-plus"></i> Линия</button>{{/if}}
+            </div>
+
+              <div class="fbls-production-card-list">
+                {{#each building.productionLines}}
+                  <article class="fbls-production-card {{#if active}}active{{else}}inactive{{/if}}">
+                    <header class="fbls-production-card-header fbls-card-header">
+                      <div class="fbls-production-title">
+                        {{#if ../canEdit}}<input type="checkbox" data-type="checkbox" data-field="{{activePath}}" {{#if active}}checked{{/if}} data-fbls-tooltip="Включенная линия участвует в экономическом ходе. Выключенная хранится как вариант производства." />{{/if}}
+                        {{#if ../canEdit}}<input type="text" data-field="{{modePath}}" value="{{mode}}" placeholder="Название линии" />{{else}}<h4>{{mode}}</h4>{{/if}}
+                      </div>
+                      <div class="fbls-production-badges">
+                        <span data-fbls-tooltip="Источник производства: кто или что создает ресурс.">{{sourceLabel}}</span>
+                        <span data-fbls-tooltip="Период, за который линия срабатывает для источников Время и Содержимое.">{{periodLabel}}</span>
+                        {{#if requiresCollection}}<span class="warn" data-fbls-tooltip="Ресурс сначала копится в строке Готово и требует ручного сбора.">Сбор</span>{{/if}}
+                      </div>
+                    </header>
+
+                    <div class="fbls-production-card-grid source-{{source}}">
+                      <label><span data-fbls-tooltip="Источник определяет, откуда берется производство: Рабочие тратят рабочие QD; Время срабатывает за период; Содержимое умножает выход на число выбранных единиц здания.">Источник</span>{{#if ../canEdit}}<select data-field="{{sourcePath}}">{{#each sourceOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{sourceLabel}}</strong>{{/if}}</label>
+                      {{#unless isWorkers}}
+                        <label><span data-fbls-tooltip="Период нужен только для источников Время и Содержимое. Рабочие линии считают циклы через рабочие QD.">Период</span>{{#if ../canEdit}}<select data-field="{{periodPath}}">{{#each periodOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{periodLabel}}</strong>{{/if}}</label>
+                      {{/unless}}
+                      {{#if isContent}}
+                        <label><span data-fbls-tooltip="Какая единица из блока 'Содержимое здания' умножает выход линии. Например: Коровы, Ульи, Деревья.">Содержимое</span>{{#if ../canEdit}}<select data-field="{{contentIdPath}}">{{#each contentOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{contentName}}</strong>{{/if}}</label>
+                      {{/if}}
+                      <label><span data-fbls-tooltip="Ресурс, который производит линия. Список берется из каталога ресурсов.">Ресурс</span>
+                        {{#if ../canEdit}}
+                          <select data-field="{{resourceIdPath}}">{{#each resourceOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+                        {{else}}
+                          <strong><i class="{{resourceIcon}}"></i> {{resource}}</strong>
+                        {{/if}}
+                      </label>
+                      {{#if isCustomResource}}
+                        <label class="span-2"><span>Свой ресурс</span>{{#if ../canEdit}}<input type="text" data-field="{{resourcePath}}" value="{{resource}}" placeholder="свой ресурс" />{{else}}<strong>{{resource}}</strong>{{/if}}</label>
+                      {{/if}}
+                      <label><span data-fbls-tooltip="Сколько ресурса дает один цикл линии. Для Рабочих это максимум выхода за цикл; при расходах 'за единицу выхода' линия произведет меньше, если сырья не хватает. Для источника Содержимое это количество за одну единицу содержимого.">Выход</span>{{#if ../canEdit}}<input type="number" data-type="number" data-field="{{outputQtyPath}}" value="{{outputQty}}" />{{else}}<strong>{{outputQty}}</strong>{{/if}}</label>
+                      <label><span data-fbls-tooltip="{{periodCycleTooltip}}">{{periodCycleLabel}}</span>{{#if ../canEdit}}<input type="number" data-type="number" data-field="{{workQdPath}}" value="{{workQd}}" />{{else}}<strong>{{workQd}}</strong>{{/if}}</label>
+                      {{#unless isWorkers}}
+                        <label><span data-fbls-tooltip="Сколько ресурса уже накоплено и ждет сбора. Если сбор выключен, ресурс сразу попадает в хранилище.">Готово</span><strong class="fbls-prod-result">{{pendingQty}}</strong></label>
+                      {{/unless}}
+                    </div>
+
+                    <div class="fbls-production-utility-row {{#if isWorkers}}workers{{else}}nonworkers{{/if}}">
+                      <label><span data-fbls-tooltip="Куда попадет произведенный или собранный ресурс. По умолчанию: Под открытым небом. Построенные здания со свойством Склад появляются в этом списке.">Отгружать в</span>{{#if ../canEdit}}<select data-field="{{storageRoomIdPath}}">{{#each storageRoomOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{storageRoomLabel}}</strong>{{/if}}</label>
+                      <label><span data-fbls-tooltip="Формула выхода за цикл. Поддерживает @eff, @workers, @cycles, @qd, @workqd.">Формула</span>{{#if ../canEdit}}<input type="text" data-field="{{formulaPath}}" value="{{formula}}" placeholder="1d6 + @eff" />{{else}}{{#if formula}}<strong>{{formula}}</strong>{{else}}<strong>—</strong>{{/if}}{{/if}}</label>
+                      <div class="fbls-production-season-box">
+                        <span data-fbls-tooltip="В какие сезоны линия вообще может производить ресурс.">Сезоны</span>
+                        <div class="fbls-production-season-pills">
+                          {{#each seasonOptions}}
+                            <label class="fbls-season-pill {{#if selected}}active{{/if}}" title="{{label}}">{{#if ../../canEdit}}<input type="checkbox" data-type="checkbox" data-field="{{path}}" {{#if selected}}checked{{/if}} />{{/if}}<em>{{short}}</em></label>
+                          {{/each}}
+                        </div>
+                      </div>
+                      {{#if isWorkers}}
+                        <label class="fbls-checkbox-label fbls-icon-check fbls-overtime-toggle" data-fbls-tooltip="Переработка увеличивает дневной лимит работников этого здания с 2 QD до 3 QD. Если у здания отрицательный Мод. ДОВ для работников, он удваивается."><span><i class="fa-solid fa-clock"></i></span>{{#if ../canEdit}}<input type="checkbox" data-type="checkbox" data-field="{{overtimePath}}" {{#if overtime}}checked{{/if}} />{{else}}<strong>{{#if overtime}}Да{{else}}Нет{{/if}}</strong>{{/if}}</label>
+                      {{/if}}
+                    </div>
+
+                    <div class="fbls-production-advanced {{#if isWorkers}}workers-only{{/if}}">
+                      {{#unless isWorkers}}
+                        <label class="fbls-production-collect-toggle"><span data-fbls-tooltip="Сбор нужен для молока, урожая, меда и похожих ресурсов: сначала они копятся, потом работник тратит QD, чтобы перенести их в хранилище.">Сбор</span>{{#if ../canEdit}}<input type="checkbox" data-type="checkbox" data-field="{{requiresCollectionPath}}" {{#if requiresCollection}}checked{{/if}} /><input type="number" data-type="number" data-field="{{collectQdPath}}" value="{{collectQd}}" data-fbls-tooltip="Сколько рабочих QD нужно, чтобы собрать накопленное." />{{else}}<strong>{{#if requiresCollection}}Да, {{collectQd}} QD{{else}}Нет{{/if}}</strong>{{/if}}</label>
+                        {{#if requiresCollection}}<label><span data-fbls-tooltip="Автосбор: работник этого здания собирает ресурс сразу после появления. Работник потребителя может забрать готовый ресурс, если другому зданию он нужен как расход.">Автосбор</span>{{#if ../canEdit}}<select data-field="{{autoCollectPath}}">{{#each autoCollectOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{autoCollectLabel}}</strong>{{/if}}</label>{{/if}}
+                      {{/unless}}
+                      <label><span data-fbls-tooltip="Расходы. В режиме 'за цикл' списываются один раз на цикл. В режиме 'за единицу выхода' списываются за каждую произведенную единицу: например, Молоко 1 при выходе Пища 12 даст до 12 Пищи, но меньше, если молока не хватает.">Расходы</span>{{#if ../canEdit}}<input type="text" data-field="{{expensesPath}}" value="{{expenses}}" placeholder="Уголь 1, Руда 2" />{{else}}{{#if expenses}}<strong>{{expenses}}</strong>{{else}}<strong>—</strong>{{/if}}{{/if}}</label>
+                      <label><span data-fbls-tooltip="Как считать расходы: за цикл или за каждую единицу выхода. Для таверны обычно 'за единицу выхода'; для кузни обычно 'за цикл'.">Расходы считаются</span>{{#if ../canEdit}}<select data-field="{{expenseModePath}}">{{#each expenseModeOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{expenseModeLabel}}</strong>{{/if}}</label>
+                    </div>
+
+                    <footer class="fbls-production-card-footer">
+                      <span>{{cycleText}}</span>
+                      {{#if ../canEdit}}<div class="fbls-line-actions fbls-action-group"><button type="button" class="fbls-icon-button danger" data-action="delete-production-line" data-index="{{_index}}"><i class="fa-solid fa-trash"></i></button></div>{{/if}}
+                    </footer>
+                  </article>
+                {{else}}
+                  <p class="fbls-muted-line">Производственные линии не заданы.</p>
+                {{/each}}
+              </div>
+          </section>
+        </fieldset>
+      {{/if}}
+
+      {{#if building.showEditorIncome}}
+        <fieldset class="fbls-building-editor-card wide-card income-card">
+          <legend>Доходность <i class="fa-regular fa-circle-question fbls-help" data-fbls-tooltip="Доходность пока считается как денежный доход за десятник. Она остается отдельной от производственных линий, чтобы бухгалтерия могла видеть прибыль. Позже ее можно будет перевести на QD-циклы так же, как производство."></i></legend>
+          <div class="fbls-income-grid">
+            <label><span>База</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.basePath}}.income.base" value="{{building.income.base}}" />{{else}}<strong>{{building.income.base}}</strong>{{/if}}</label>
+            <label><span>За эф. работника</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.basePath}}.income.perWorker" value="{{building.income.perWorker}}" />{{else}}<strong>{{building.income.perWorker}}</strong>{{/if}}</label>
+            <label><span>Формула</span>{{#if canEdit}}<input type="text" data-field="{{building.basePath}}.income.formula" value="{{building.income.formula}}" placeholder="1d6+@eff" />{{else}}<strong>{{building.income.formula}}</strong>{{/if}}</label>
+            <label><span>Риск</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.basePath}}.income.risk" value="{{building.income.risk}}" />{{else}}<strong>{{building.income.risk}}</strong>{{/if}}</label>
+            <label class="fbls-checkbox-label fbls-icon-check fbls-income-illegal-toggle" data-fbls-tooltip="Незаконный доход. Используется как пометка для ГМа и будущих происшествий."><span><i class="fa-solid fa-mask"></i></span>{{#if canEdit}}<input type="checkbox" data-type="checkbox" data-field="{{building.basePath}}.income.illegal" {{#if building.income.illegal}}checked{{/if}} />{{else}}<strong>{{#if building.income.illegal}}Да{{else}}Нет{{/if}}</strong>{{/if}}</label>
+            <div class="fbls-result-box fbls-income-total-box" data-fbls-tooltip="Доход = база + (за эффективного работника × итоговая эффективность здания). Формула применяется при экономическом ходе вместо фиксированной суммы."><span>Доход / десятник</span><strong>{{building.incomeSummary.total}}</strong><em>денег · {{building.workerEfficiency.total}} эф.</em></div>
+          </div>
+
+          <div class="fbls-trade-editor-block">
+            <div class="fbls-trade-grid">
+              <label class="fbls-checkbox-label fbls-icon-check fbls-trade-enabled-toggle" data-fbls-tooltip="Продажа отмеченных складских строк через это здание."><span><i class="fa-solid fa-scale-balanced"></i></span>{{#if canEdit}}<input type="checkbox" data-type="checkbox" data-field="{{building.basePath}}.income.trade.enabled" {{#if building.income.trade.enabled}}checked{{/if}} />{{else}}<strong>{{#if building.income.trade.enabled}}Да{{else}}Нет{{/if}}</strong>{{/if}}</label>
+              <label class="fbls-trade-eff-field"><span data-fbls-tooltip="{{building.income.trade.priceEfficiencyTitle}}">Эфф.</span><input type="text" value="{{building.income.trade.priceEfficiencyText}}" readonly /></label>
+              <label><span data-fbls-tooltip="Из какого склада этот магазин может продавать отмеченные товары.">Склад</span>{{#if canEdit}}<select data-field="{{building.basePath}}.income.trade.roomId">{{#each building.income.trade.roomOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{building.income.trade.roomId}}</strong>{{/if}}</label>
+              <label><span data-fbls-tooltip="Какие складские строки магазин может продавать: ресурсы, предметы или всё сразу.">Тип</span>{{#if canEdit}}<select data-field="{{building.basePath}}.income.trade.kind">{{#each building.income.trade.kindOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{building.income.trade.kind}}</strong>{{/if}}</label>
+              <label><span data-fbls-tooltip="Формула бюджета одного покупателя в медных монетах. 2d6*10 = 2d6 серебряных.">Бюджет</span>{{#if canEdit}}<input type="text" data-field="{{building.basePath}}.income.trade.budgetFormula" value="{{building.income.trade.budgetFormula}}" placeholder="2d6*10" />{{else}}<strong>{{building.income.trade.budgetFormula}}</strong>{{/if}}</label>
+              <label><span data-fbls-tooltip="Сколько разных лотов может купить один покупатель за визит. Число торговцев ускоряет продажу через число обработанных лотов, но цену не повышает.">Лоты</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.basePath}}.income.trade.maxLotsPerBuyer" value="{{building.income.trade.maxLotsPerBuyer}}" />{{else}}<strong>{{building.income.trade.maxLotsPerBuyer}}</strong>{{/if}}</label>
+            </div>
+            <p class="fbls-muted-line">Каждый день владение бросает Репутацию. За каждую 6 покупатель приходит в случайный подходящий магазин и пытается купить отмеченное “к продаже”. Цена = 50% цены FL × эффективность случайного торговца. Деньги идут в казну.</p>
+            <label class="fbls-wide-label"><span>Заметки по торговле</span>{{#if canEdit}}<textarea data-field="{{building.basePath}}.income.trade.notes" rows="2">{{building.income.trade.notes}}</textarea>{{else}}<p class="fbls-preline">{{building.income.trade.notes}}</p>{{/if}}</label>
+          </div>
+        </fieldset>
+      {{/if}}
+
+      {{#if building.showEditorDefense}}
+        <fieldset class="fbls-building-editor-card wide-card defense-card">
+          <legend>Оборона <i class="fa-regular fa-circle-question fbls-help" data-fbls-tooltip="Оборона дает реальную Защищенность поселения. Это не развитие Войны. Война открывает здания, а Защищенность бросается кубами против угроз и может зависеть от людей в башнях, стенах и гарнизонах."></i></legend>
+          <div class="fbls-defense-grid">
+            <label><span>База защиты</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.basePath}}.defense.base" value="{{building.defense.base}}" />{{else}}<strong>{{building.defense.base}}</strong>{{/if}}</label>
+            <label><span>+ защиты</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.basePath}}.defense.perStep" value="{{building.defense.perStep}}" />{{else}}<strong>{{building.defense.perStep}}</strong>{{/if}}</label>
+            <label><span>За каждые N работников</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.basePath}}.defense.workerStep" value="{{building.defense.workerStep}}" />{{else}}<strong>{{building.defense.workerStep}}</strong>{{/if}}</label>
+            <div class="fbls-result-box" data-fbls-tooltip="{{building.defenseSummary.detail}}"><span>Итого защиты</span><strong>{{building.defenseSummary.total}}</strong><em>кубов защиты</em></div>
+          </div>
+        </fieldset>
+      {{/if}}
+
+      {{#if building.showEditorHousing}}
+        <fieldset class="fbls-building-editor-card wide-card fbls-housing-building-card">
+          <legend>Жилье</legend>
+          <div class="fbls-housing-building-grid">
+            <label><span data-fbls-tooltip="Сколько живых жителей может нормально жить в этом здании. 0 означает без жесткого лимита.">Вместимость</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.housing.capacityPath}}" value="{{building.housing.capacity}}" />{{else}}<strong>{{building.housing.capacity}}</strong>{{/if}}</label>
+            <label><span data-fbls-tooltip="Влияние жилья на довольство жителей, которые здесь живут. Может быть отрицательным.">Комфорт</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.housing.comfortPath}}" value="{{building.housing.comfort}}" />{{else}}<strong>{{building.housing.comfort}}</strong>{{/if}}</label>
+            <label><span data-fbls-tooltip="Общее качество жилья: сухость, тепло, безопасность, порядок. Пока используется как справочный рейтинг для ГМа.">Качество</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.housing.qualityPath}}" value="{{building.housing.quality}}" />{{else}}<strong>{{building.housing.quality}}</strong>{{/if}}</label>
+          </div>
+          <div class="fbls-housing-building-current {{building.housing.fillClass}}" data-fbls-tooltip="Занятость считается по живым жителям, у которых это здание выбрано как дом.">
+            <span><i class="fa-solid fa-bed"></i> Сейчас живут</span>
+            <strong>{{building.housing.usedText}} / {{building.housing.capacityText}}</strong>
+            <em>свободно: {{building.housing.freeText}}</em>
+          </div>
+          {{#if canEdit}}
+            <div class="fbls-housing-slot-grid">
+              {{#each building.housing.slotRows}}
+                <label>
+                  <span>Место {{slotNo}}</span>
+                  <select data-building-housing-field data-housing-slot="{{slot}}">
+                    {{#each options}}
+                      <option value="{{id}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{name}}{{#if hint}} · {{hint}}{{/if}}</option>
+                    {{/each}}
+                  </select>
+                </label>
+              {{/each}}
+            </div>
+          {{/if}}
+          {{#if building.housing.occupants}}
+            <p class="fbls-muted-line"><strong>Жители:</strong> {{building.housing.occupants}}</p>
+          {{else}}
+            <p class="fbls-muted-line">В этом здании пока никто не живет.</p>
+          {{/if}}
+          <label class="fbls-wide-label"><span>Заметки по жилью</span>{{#if canEdit}}<textarea data-field="{{building.housing.notesPath}}" rows="2">{{building.housing.notes}}</textarea>{{else}}<p class="fbls-preline">{{building.housing.notes}}</p>{{/if}}</label>
+        </fieldset>
+      {{/if}}
+
+      {{#if building.showEditorStorage}}
+        <fieldset class="fbls-building-editor-card wide-card fbls-storage-building-card">
+          <legend>Складское</legend>
+          <div class="fbls-storage-building-grid">
+            <label><span data-fbls-tooltip="Сколько веса предметов и ресурсов можно хранить в этом складском помещении. 0 означает без жесткого лимита.">Вместимость</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.storage.capacityPath}}" value="{{building.storage.capacity}}" />{{else}}<strong>{{building.storage.capacity}}</strong>{{/if}}</label>
+            <label><span data-fbls-tooltip="Насколько трудно этот склад ограбить или вскрыть. Значение используется как справочный рейтинг для ГМа.">Защищенность</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.storage.securityPath}}" value="{{building.storage.security}}" />{{else}}<strong>{{building.storage.security}}</strong>{{/if}}</label>
+            <label><span data-fbls-tooltip="Насколько хорошо склад сохраняет предметы: сухость, порядок, защита от порчи, вредителей и случайной потери.">Качество хранения</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.storage.qualityPath}}" value="{{building.storage.quality}}" />{{else}}<strong>{{building.storage.quality}}</strong>{{/if}}</label>
+          </div>
+          <div class="fbls-storage-building-current {{building.storage.fillClass}}" data-fbls-tooltip="Заполнение считается по весу. Для старых строк ресурсов без веса используется 1 единица заполнения за 1 ресурс.">
+            <span><i class="fa-solid fa-boxes-stacked"></i> Сейчас занято</span>
+            <strong>{{building.storage.usedText}} / {{building.storage.capacityText}}</strong>
+            <em>свободно: {{building.storage.freeText}}</em>
+          </div>
+          <p class="fbls-muted-line">Когда здание построено и помечено как склад, оно появляется во вкладке хранилища как место отгрузки продукции.</p>
+        </fieldset>
+      {{/if}}
+
+      {{#if building.showEditorCulture}}
+        <fieldset class="fbls-building-editor-card wide-card fbls-culture-building-card">
+          <legend>Культура/Религия</legend>
+          <div class="fbls-culture-religion-grid">
+            <label class="fbls-religion-toggle">
+              <span data-fbls-tooltip="Если включено, здание считается религиозным и получает привязку к конкретной вере.">Религиозное?</span>
+              {{#if canEdit}}<input type="checkbox" data-type="checkbox" data-field="{{building.cultureReligion.religiousPath}}" {{#if building.cultureReligion.religious}}checked{{/if}} />{{else}}<strong>{{#if building.cultureReligion.religious}}Да{{else}}Нет{{/if}}</strong>{{/if}}
+            </label>
+            {{#if building.cultureReligion.religious}}
+              <label>
+                <span>Религия</span>
+                {{#if canEdit}}<select data-field="{{building.cultureReligion.faithPath}}">{{#each building.cultureReligion.faithOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{building.cultureReligion.faithLabel}}</strong>{{/if}}
+              </label>
+              {{#if building.cultureReligion.showCustomFaith}}
+                <label class="fbls-religion-custom">
+                  <span>Свое название</span>
+                  {{#if canEdit}}<input type="text" data-field="{{building.cultureReligion.customFaithPath}}" value="{{building.cultureReligion.customFaith}}" placeholder="Название религии или культа" />{{else}}<strong>{{building.cultureReligion.customFaith}}</strong>{{/if}}
+                </label>
+              {{/if}}
+            {{/if}}
+            <label class="wide">
+              <span>Описание</span>
+              {{#if canEdit}}<textarea data-field="{{building.cultureReligion.notesPath}}" rows="3" placeholder="Кому посвящено, кто служит, какие обряды и запреты.">{{building.cultureReligion.notes}}</textarea>{{else}}<p class="fbls-preline">{{building.cultureReligion.notes}}</p>{{/if}}
+            </label>
+          </div>
+          <p class="fbls-muted-line">Механический эффект задается обычными полями здания: довольство, репутация, работники, требования и заметки.</p>
+        </fieldset>
+      {{/if}}
+
+      {{#if building.showEditorText}}
+        <fieldset class="fbls-building-editor-card text-card wide-card compact-text-card">
+          <legend>Эффекты и заметки</legend>
+          <div class="fbls-two-textareas">
+            <label><span>Эффект</span>{{#if canEdit}}<textarea data-field="{{building.basePath}}.effect" rows="2">{{building.effect}}</textarea>{{else}}<p class="fbls-preline">{{building.effect}}</p>{{/if}}</label>
+            <label><span>Заметки</span>{{#if canEdit}}<textarea data-field="{{building.basePath}}.notes" rows="2">{{building.notes}}</textarea>{{else}}<p class="fbls-preline">{{building.notes}}</p>{{/if}}</label>
+          </div>
+        </fieldset>
+      {{/if}}
+    </section>
+    {{/unless}}
+  {{else}}
+    <article class="fbls-card"><h2>Постройка не найдена</h2><p>Запись могла быть удалена или владение сменилось.</p></article>
+  {{/if}}
+</div>

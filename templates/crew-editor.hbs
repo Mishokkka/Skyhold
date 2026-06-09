@@ -1,0 +1,75 @@
+<div class="fbls-crew-editor-shell">
+  {{#if hasHolding}}
+    <header class="fbls-editor-hero compact">
+      <div>
+        <h1>Стройбригады</h1>
+        <p>{{holding.name}}</p>
+      </div>
+      {{#if canEdit}}
+        <button type="button" class="fbls-button compact" data-action="add-crew"><i class="fa-solid fa-plus"></i> Новая бригада</button>
+      {{/if}}
+    </header>
+
+    {{#each crews}}
+      <section class="fbls-building-editor-card compact-crew-editor-card crew-card-v2">
+        <div class="fbls-crew-headline fbls-card-header">
+          <label><span>Название</span>{{#if ../canEdit}}<input type="text" data-field="{{namePath}}" value="{{name}}" />{{else}}<strong>{{name}}</strong>{{/if}}</label>
+          <label><span>Лидер</span>{{#if ../canEdit}}<select data-field="{{leaderPath}}">{{#each leaderOptions}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{name}}</option>{{/each}}</select>{{else}}<strong>{{leaderId}}</strong>{{/if}}</label>
+          <div class="fbls-crew-actions fbls-action-group">
+            {{#if ../canEdit}}<button type="button" class="fbls-button compact" data-action="roll-construction-crew" data-crew-id="{{id}}"><i class="fa-solid fa-dice-six"></i> Бросок</button>{{/if}}
+            {{#if distributed}}
+              {{#if ../canEdit}}<button type="button" class="fbls-button compact" data-action="return-crew" data-crew-id="{{id}}"><i class="fa-solid fa-rotate-left"></i> Вернуть стройбригаду</button>{{/if}}
+            {{else}}
+              {{#if ../canEdit}}<button type="button" class="fbls-button compact" data-action="distribute-crew" data-crew-id="{{id}}"><i class="fa-solid fa-people-arrows"></i> Временно распределить по зданиям</button>{{/if}}
+            {{/if}}
+            {{#if ../canEdit}}<button type="button" class="fbls-icon-button danger" data-action="delete-crew" data-crew-id="{{id}}" title="Удалить бригаду"><i class="fa-solid fa-trash"></i></button>{{/if}}
+          </div>
+        </div>
+
+        <div class="fbls-suitable-editor">
+          <span class="fbls-field-title">Подходящие типы</span>
+          <div class="fbls-selected-traits">
+            {{#if hasSuitableTypeBadges}}
+              {{#each suitableTypeBadges}}
+                <span class="fbls-trait-badge fbls-chip editor-chip">{{name}}<button type="button" class="fbls-chip-remove" data-action="remove-suitable-type" data-suitable-types-field="{{path}}" data-suitable-type="{{name}}">×</button></span>
+              {{/each}}
+            {{else}}<span class="fbls-muted-text">Не заданы.</span>{{/if}}
+          </div>
+          {{#if ../canEdit}}
+            <select class="fbls-trait-picker" data-suitable-type-add-field="{{suitablePath}}">
+              <option value="">Добавить тип...</option>
+              {{#each suitableTypeOptions}}<option value="{{name}}" {{#if selected}}disabled{{/if}}>{{name}}{{#if selected}} ✓{{/if}}</option>{{/each}}
+            </select>
+          {{/if}}
+        </div>
+
+        <div class="fbls-crew-slot-grid compact">
+          {{#each slots}}
+            <label>
+              <span>#{{slotNo}}</span>
+              {{#if ../../canEdit}}
+                <select data-crew-id="{{crewId}}" data-crew-slot="{{slot}}">
+                  {{#each options}}<option value="{{id}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{name}}{{#if hint}} · {{hint}}{{/if}}</option>{{/each}}
+                </select>
+              {{else}}<strong>{{label}}</strong>{{/if}}
+            </label>
+          {{/each}}
+        </div>
+
+        <table class="fbls-table fbls-crew-table">
+          <thead><tr><th>Житель</th><th>Тип</th><th>Характеристики</th><th>Кубы</th><th>Причины</th></tr></thead>
+          <tbody>
+            {{#each members}}
+              <tr><td><strong>{{name}}{{#if isLeader}} ★{{/if}}</strong></td><td>{{type}}</td><td>{{attributes}}</td><td><strong>{{contribution}}</strong></td><td>{{contributionReasons}}</td></tr>
+            {{else}}
+              <tr><td colspan="5" class="fbls-empty">Бригада пуста. Назначь первого жителя в свободный слот.</td></tr>
+            {{/each}}
+          </tbody>
+        </table>
+        <p class="fbls-muted-line">Довольство: {{moraleReason}}. {{#if leaderBonus}}Лидер: +{{leaderBonus}}. {{/if}}Итоговый пул: {{rawDice}} {{#if moraleMod}}{{moraleMod}}{{/if}} = {{dice}}к6.</p>
+      </section>
+    {{/each}}
+  {{else}}
+    <article class="fbls-card"><p>Владение не найдено.</p></article>
+  {{/if}}
+</div>

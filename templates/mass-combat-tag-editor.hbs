@@ -1,0 +1,73 @@
+<div class="fbls-mass-tag-editor-shell">
+  {{#if canEdit}}
+    <header class="fbls-mass-tag-editor-head">
+      <div>
+        <h2><i class="fa-solid fa-circle-nodes"></i> Теги и контры боя</h2>
+        <p>{{editor.tagCount}} тегов, {{editor.relationCount}} активных связей.</p>
+      </div>
+      <div class="fbls-mass-tag-editor-actions">
+        <button type="button" class="fbls-button compact" data-action="add-mass-tag"><i class="fa-solid fa-plus"></i> Тег</button>
+        <button type="button" class="fbls-button compact danger" data-action="reset-mass-tags"><i class="fa-solid fa-rotate-left"></i> Сброс</button>
+        <button type="button" class="fbls-button compact primary" data-action="save-mass-tags"><i class="fa-solid fa-floppy-disk"></i> Сохранить</button>
+      </div>
+    </header>
+
+    <section class="fbls-mass-tag-editor-panel">
+      <h3><i class="fa-solid fa-tags"></i> Теги</h3>
+      <div class="fbls-mass-tag-table-wrap">
+        <table class="fbls-mass-tag-table">
+          <thead>
+            <tr>
+              <th>Вкл.</th>
+              <th>ID</th>
+              <th>Название</th>
+              <th>Кратко</th>
+              <th>Иконка</th>
+              <th>Описание</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{#each editor.tags}}
+              <tr data-tag-key="{{key}}" data-tag-system="{{#if locked}}true{{else}}false{{/if}}" class="{{#if locked}}system{{/if}}">
+                <td class="center"><input type="checkbox" data-tag-field="enabled" {{#if enabledChecked}}checked{{/if}} {{#if locked}}disabled{{/if}} /></td>
+                <td><code>{{key}}</code></td>
+                <td><input type="text" data-tag-field="label" value="{{label}}" /></td>
+                <td><input type="text" data-tag-field="short" value="{{short}}" /></td>
+                <td><input type="text" data-tag-field="icon" value="{{icon}}" /></td>
+                <td><input type="text" data-tag-field="hint" value="{{hint}}" /></td>
+              </tr>
+            {{/each}}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="fbls-mass-tag-editor-panel">
+      <h3><i class="fa-solid fa-table-cells"></i> Матрица контров</h3>
+      <div class="fbls-mass-counter-matrix-wrap">
+        <table class="fbls-mass-counter-matrix">
+          <thead>
+            <tr>
+              <th class="corner">Кто \ Кого</th>
+              {{#each editor.tags}}
+                <th title="{{label}}"><i class="{{icon}}"></i><span>{{short}}</span></th>
+              {{/each}}
+            </tr>
+          </thead>
+          <tbody>
+            {{#each editor.counterRows}}
+              <tr>
+                <th title="{{source.label}}"><i class="{{source.icon}}"></i><span>{{source.short}}</span></th>
+                {{#each cells}}
+                  <td><input type="number" min="0" max="100" step="5" value="{{value}}" data-counter-source="{{sourceKey}}" data-counter-target="{{targetKey}}" {{#if disabled}}disabled{{/if}} /></td>
+                {{/each}}
+              </tr>
+            {{/each}}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  {{else}}
+    <p class="fbls-empty">Редактор тегов доступен только ГМу.</p>
+  {{/if}}
+</div>

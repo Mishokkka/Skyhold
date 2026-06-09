@@ -1,0 +1,50 @@
+{{#if active.defense}}
+  <section class="fbls-panel fbls-special-panel fbls-defense-tab-panel">
+          <article class="fbls-card fbls-defense-control-card">
+            <div class="fbls-card-headline compact-headline">
+              <div>
+                <h2><i class="fa-solid fa-shield-halved"></i> Оборона поселения <i class="fa-regular fa-circle-question fbls-help-icon" data-fbls-tooltip="{{defenseContext.defenseHelpText}}"></i></h2>
+              </div>
+              <div class="fbls-defense-actions">{{#if canManageDefense}}<button type="button" class="fbls-button compact" data-action="add-defense-squad"><i class="fa-solid fa-plus"></i> Отряд</button>{{/if}}</div>
+            </div>
+
+            <div class="fbls-defense-command-row">
+              <label><span>Командир обороны</span>{{#if canManageDefense}}<select data-field="holdings.{{holdingIndex}}.gm.defense.commanderId">{{#each defenseContext.commanderOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{defenseContext.commanderName}}</strong>{{/if}}</label>
+              <div class="fbls-defense-summary fbls-cluster"><span>Солдат доступно: <b>{{defenseContext.soldierCount}}</b></span><span>Эффективно: <b>{{defenseContext.countedEffectiveText}}</b></span><span>Засчитано отрядов: <b>{{defenseContext.effectiveUnits}}</b></span></div>
+            </div>
+
+
+            <div class="fbls-defense-squad-list">
+              {{#each defenseContext.squads}}
+                <section class="fbls-defense-squad modern {{statusClass}}">
+                  <div class="fbls-defense-squad-head modern-head">
+                    <label class="name-field"><span>Название</span>{{#if ../canManageDefense}}<input type="text" data-field="holdings.{{../holdingIndex}}.gm.defense.squads.{{_index}}.name" value="{{name}}" placeholder="{{label}}" />{{else}}<strong>{{label}}</strong>{{/if}}</label>
+                    <label class="type-field" data-fbls-tooltip="{{typeHint}}"><span>Тип</span>{{#if ../canManageDefense}}<select title="{{typeHint}}" data-field="holdings.{{../holdingIndex}}.gm.defense.squads.{{_index}}.type">{{#each typeOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{typeLabel}}</strong>{{/if}}</label>
+                    <div class="fbls-defense-squad-status modern compact-line">
+                      <span class="metric people"><i class="fa-solid fa-users"></i><b>{{memberCount}}</b></span>
+                      <span class="metric effective"><i class="fa-solid fa-bolt"></i><b>{{effectiveText}}</b></span>
+                      <span class="metric tag" data-fbls-tooltip="{{typeTag}}"><b>{{typeTag}}</b><i class="{{typeIcon}}"></i></span>
+                    </div>
+                    <div class="fbls-defense-squad-actions fbls-action-group">
+                      {{#if ../canManageDefense}}<button type="button" class="fbls-button compact fbls-fill-squad" data-action="fill-defense-squad-best" data-squad-id="{{id}}" title="Назначить лучших подходящих солдат в этот отряд, сняв их с других работ"><i class="fa-solid fa-ranking-star"></i> Лучшие</button>{{/if}}
+                      {{#if ../canManageDefense}}<label class="fbls-defense-equipped-toggle gm-only modern compact" title="Отряд вооружен и считается в обороне, если заполнен и достаточно эффективен."><input type="checkbox" data-type="checkbox" data-field="holdings.{{../holdingIndex}}.gm.defense.squads.{{_index}}.equipped" {{#if equipped}}checked{{/if}} /><span>Экипирован</span></label>{{/if}}
+                      {{#if ../canManageDefense}}<button type="button" class="fbls-icon-button danger" data-action="delete-defense-squad" data-squad-id="{{id}}" title="Удалить отряд"><i class="fa-solid fa-trash"></i></button>{{/if}}
+                    </div>
+                  </div>
+                  <div class="fbls-defense-squad-members modern-members">
+                    <label class="sergeant"><span>{{firstSlotRoleLabel}}</span>{{#if ../canManageDefense}}<select data-field="holdings.{{../holdingIndex}}.gm.defense.squads.{{_index}}.sergeantId">{{#each firstSlotOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{firstSlotName}}</strong>{{/if}}</label>
+                    {{#each memberSlots}}
+                      <label><span>#{{slotNo}}</span>{{#if ../../canManageDefense}}<select data-field="holdings.{{../../holdingIndex}}.gm.defense.squads.{{../_index}}.memberIds.{{slot}}">{{#each options}}<option value="{{value}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{personName}}</strong>{{/if}}</label>
+                    {{/each}}
+                  </div>
+                  {{#if ../canManageDefense}}<textarea class="fbls-defense-squad-notes" rows="2" data-field="holdings.{{../holdingIndex}}.gm.defense.squads.{{_index}}.notes" placeholder="Заметки отряда">{{notes}}</textarea>{{/if}}
+                </section>
+              {{else}}
+                <p class="fbls-empty">Отрядов нет. Создай отряд и назначь жителей с военной профессией.</p>
+              {{/each}}
+            </div>
+
+            {{#if canManageDefense}}<textarea class="fbls-defense-notes" rows="3" data-field="holdings.{{holdingIndex}}.gm.defense.notes" placeholder="Оружейная, тренировки, командиры, кто отвечает за ворота, где собирается ополчение.">{{holding.gm.defense.notes}}</textarea>{{else}}<p>{{holding.gm.defense.notes}}</p>{{/if}}
+          </article>
+  </section>
+{{/if}}

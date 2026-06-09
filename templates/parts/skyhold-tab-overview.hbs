@@ -1,0 +1,40 @@
+    {{#if active.overview}}
+      <section class="fbls-panel fbls-overview compact">
+        <article class="fbls-card">
+          <h2>Описание</h2>
+          {{#if canEditOverview}}
+            <textarea data-field="holdings.{{holdingIndex}}.overview.description" rows="4">{{holding.overview.description}}</textarea>
+          {{else}}
+            <p class="fbls-preline">{{holding.overview.description}}</p>
+          {{/if}}
+        </article>
+
+        <div class="fbls-grid two-even compact-grid">
+          <article class="fbls-card">
+            <h2>Навигация / состояние</h2>
+            <div class="fbls-form-grid two-fields compact-fields">
+              <label><span>Высота / район</span>{{#if canEdit}}<input type="text" data-field="holdings.{{holdingIndex}}.overview.altitude" value="{{holding.overview.altitude}}" />{{else}}<strong>{{holding.overview.altitude}}</strong>{{/if}}</label>
+              <label><span>Дрейф / курс</span>{{#if canEdit}}<input type="text" data-field="holdings.{{holdingIndex}}.overview.drift" value="{{holding.overview.drift}}" />{{else}}<strong>{{holding.overview.drift}}</strong>{{/if}}</label>
+              <label><span>Механизмы</span>{{#if canEdit}}<input type="text" data-field="holdings.{{holdingIndex}}.overview.mechanisms" value="{{holding.overview.mechanisms}}" />{{else}}<strong>{{holding.overview.mechanisms}}</strong>{{/if}}</label>
+              <label><span>Погода / маршрут</span>{{#if canEdit}}<input type="text" data-field="holdings.{{holdingIndex}}.overview.weather" value="{{holding.overview.weather}}" />{{else}}<strong>{{holding.overview.weather}}</strong>{{/if}}</label>
+            </div>
+          </article>
+
+          <article class="fbls-card">
+            <h2>Публичные заметки</h2>
+            {{#if canEditOverview}}
+              <textarea data-field="holdings.{{holdingIndex}}.overview.publicNotes" rows="5">{{holding.overview.publicNotes}}</textarea>
+            {{else}}
+              <p class="fbls-preline">{{holding.overview.publicNotes}}</p>
+            {{/if}}
+          </article>
+        </div>
+
+        {{#if canEdit}}
+          <article class="fbls-card slim-card">
+            <h2>Связь со сценой</h2>
+            <input type="text" data-field="holdings.{{holdingIndex}}.linkedSceneId" value="{{holding.linkedSceneId}}" placeholder="Scene ID" />
+          </article>
+        {{/if}}
+      </section>
+    {{/if}}
