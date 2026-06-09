@@ -1,0 +1,114 @@
+/* 1.5.3 — sane building cards: neutral colors, compact header, restored housing/storage strips */
+.fbl-skyhold .fbls-building-cards {
+  column-count: 3;
+  column-width: auto;
+  column-gap: 8px;
+}
+
+@media (max-width: 1180px) {
+  .fbl-skyhold .fbls-building-cards { column-count: 2; }
+}
+
+@media (max-width: 760px) {
+  .fbl-skyhold .fbls-building-cards { column-count: 1; }
+}
+
+.fbl-skyhold .fbls-building-card:not(.medical-building) {
+  min-height: 0;
+  border-color: rgba(255,255,255,.13);
+  background: rgba(255,255,255,.045);
+  box-shadow: none;
+}
+
+.fbl-skyhold .fbls-building-card:not(.medical-building):hover {
+  border-color: rgba(255,255,255,.24);
+  background: rgba(255,255,255,.065);
+}
+
+.fbl-skyhold .fbls-building-card.head-only:not(.medical-building) {
+  background: rgba(255,255,255,.045);
+}
+
+.fbl-skyhold .fbls-building-card.medical-building {
+  background: linear-gradient(180deg, rgba(11,38,28,.95), rgba(7,20,17,.94));
+  border-color: rgba(120,190,150,.42);
+}
+
+.fbl-skyhold .fbls-building-card-head.v2 {
+  grid-template-columns: 46px minmax(0,1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 0;
+  padding: 8px;
+  border-bottom: 1px solid rgba(255,255,255,.075);
+}
+
+.fbl-skyhold .fbls-building-card-head.v2 .fbls-building-card-media {
+  width: 46px;
+  grid-template-rows: 46px;
+}
+
+.fbl-skyhold .fbls-building-card-head.v2 .fbls-building-card-icon {
+  width: 46px;
+  height: 46px;
+  min-width: 46px;
+  border-radius: 10px;
+}
+
+.fbl-skyhold .fbls-building-title-block {
+  gap: 4px;
+}
+
+.fbl-skyhold .fbls-building-title-block h3 {
+  font-size: 1rem;
+  line-height: 1.08;
+  margin: 0;
+}
+
+.fbl-skyhold .fbls-building-subline {
+  gap: 4px;
+  font-size: .72rem;
+}
+
+.fbl-skyhold .fbls-status-pill {
+  min-height: 1.1rem;
+  padding: 0 .34rem;
+}
+
+.fbl-skyhold .fbls-building-stat-chips em {
+  min-height: 18px;
+  padding: 1px 5px;
+  font-size: 10px;
+}
+
+.fbl-skyhold .fbls-building-head-meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-content: center;
+  gap: 4px;
+  max-width: 132px;
+}
+
+.fbl-skyhold .fbls-head-chip {
+  height: 24px;
+  min-height: 24px;
+  padding: 0 7px;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.fbl-skyhold .fbls-building-card-body {
+  padding: 6px 8px 8px !important;
+  gap: 6px !important;
+}
+
+.fbl-skyhold .fbls-building-production-card {
+  padding: 6px 7px;
+  border-radius: 9px;
+}
+
+.fbl-skyhold .fbls-building-production-card > strong {
+  margin-bottom: 3px;
+  font-size: 11px;
+}

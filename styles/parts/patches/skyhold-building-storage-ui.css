@@ -1,0 +1,11 @@
+/* FBL Skyhold late patch index. Split by feature/version section; import order preserves the old cascade. */
+@import url("./building-storage/building-storage-1-4-7-1-4-7-building-storage-second-pass.css");
+@import url("./building-storage/building-storage-1-4-8-1-4-8-building-card-metrics-medical-editor-check.css");
+@import url("./building-storage/building-storage-1-4-9-1-4-9-special-building-framework-medical-control.css");
+@import url("./building-storage/building-storage-1-4-12-1-4-12-resident-injury-badges-building-card-rebu.css");
+@import url("./building-storage/building-storage-1-4-12-1-4-12-compact-equipped-toggle-for-defense-squad.css");
+@import url("./building-storage/building-storage-1-5-0-1-5-0-resident-building-medical-defense-refineme.css");
+@import url("./building-storage/building-storage-1-5-2-1-5-2-compact-buildings-medical-cleanup-context.css");
+@import url("./building-storage/building-storage-1-5-3-1-5-3-sane-building-cards-neutral-colors-compact.css");
+@import url("./building-storage/building-storage-09-restore-the-storage-housing-line-directly-under.css");
+@import url("./building-storage/building-storage-1-5-4-1-5-4-cards-brighter-neutral-blueprint-projects.css");

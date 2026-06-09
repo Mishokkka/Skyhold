@@ -1,0 +1,59 @@
+/* 1.1.10: softer loading overlay, rounded efficiency, building drag and scene marks */
+.fbls-loading-overlay {
+  background: radial-gradient(ellipse at center, rgba(4, 7, 12, .24) 0%, rgba(4, 7, 12, .42) 48%, rgba(4, 7, 12, .76) 100%);
+  backdrop-filter: blur(1.5px);
+}
+.fbls-loading-overlay span { display: none; }
+.fbls-loading-overlay img {
+  width: 142px;
+  height: 142px;
+  max-width: 142px;
+  max-height: 142px;
+  animation: fbls-loader-spin 1.25s linear infinite;
+  filter: drop-shadow(0 0 18px rgba(255,255,255,.22));
+}
+.fbls-loading-overlay i {
+  font-size: 2.65rem;
+  filter: drop-shadow(0 0 14px rgba(255,255,255,.16));
+}
+.fbls-loading-host { position: relative; }
+.fbls-loading-window-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 100000;
+  opacity: 0;
+  pointer-events: all;
+  display: grid;
+  place-items: center;
+  transition: opacity .08s ease;
+}
+.fbls-loading-window-overlay.active { opacity: 1; }
+@keyframes fbls-loader-spin { to { transform: rotate(360deg); } }
+
+.fbls-worker-eff-total strong,
+.fbls-worker-eff-total input,
+.fbls-result-box strong {
+  max-width: 8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fbls-building-card[draggable="true"] { cursor: grab; }
+.fbls-building-card.dragging { opacity: .58; cursor: grabbing; }
+.fbls-building-card.drag-over { outline: 2px solid rgba(210,185,120,.8); outline-offset: -3px; }
+.fbls-building-note-tooltip {
+  position: fixed;
+  z-index: 1000000;
+  max-width: 320px;
+  padding: .65rem .75rem;
+  border: 1px solid rgba(220,205,170,.28);
+  border-radius: .65rem;
+  background: rgba(10, 14, 20, .96);
+  color: #eee6d8;
+  box-shadow: 0 14px 32px rgba(0,0,0,.45);
+  pointer-events: none;
+  font-family: var(--font-primary, serif);
+}
+.fbls-building-note-tooltip h3 { margin: 0 0 .25rem; font-size: 1rem; }
+.fbls-building-note-tooltip p { margin: .18rem 0; color: rgba(238,230,216,.78); }
+.fbls-building-note-tooltip .fbls-note-tags { display:flex; flex-wrap:wrap; gap:.25rem; margin-top:.35rem; }
+.fbls-building-note-tooltip .fbls-note-tags span { border:1px solid rgba(255,255,255,.12); border-radius:999px; padding:.12rem .4rem; background:rgba(255,255,255,.05); font-size:.75rem; }

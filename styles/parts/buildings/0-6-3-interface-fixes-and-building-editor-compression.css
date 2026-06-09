@@ -1,0 +1,248 @@
+/* 0.6.3 interface fixes and building editor compression */
+.fbl-skyhold-building-editor select option,
+.fbl-skyhold-building-editor optgroup,
+.fbl-skyhold-app select option,
+.fbl-skyhold-app optgroup {
+  color: #111 !important;
+  background: #f2f0ea !important;
+}
+
+
+.fbls-building-tab strong {
+  font-size: 0.86rem;
+  color: var(--fbls-text);
+}
+
+.fbls-crew-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.fbls-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 0.65rem 0.45rem;
+}
+
+.fbls-building-card-brief b,
+.fbls-building-editor-card span,
+.fbls-building-editor-head-stats span {
+  letter-spacing: 0.03em;
+}
+
+.fbls-building-card-brief strong,
+.fbls-building-editor-head-stats strong,
+.fbls-building-editor-card input[type="number"],
+.fbls-building-editor-card strong,
+.fbls-dev-inline input,
+.fbls-dev-inline strong,
+.fbls-cost-row input[type="number"] {
+  font-size: 1.08rem;
+  font-weight: 850;
+}
+
+.fbls-building-editor-shell {
+  padding: 0.55rem;
+}
+
+.fbls-building-editor-head.compact-head {
+  padding-bottom: 0.42rem;
+}
+
+.fbls-building-editor-head h2 {
+  font-size: 1.35rem;
+}
+
+.fbls-building-editor-grid.compact-editor-grid {
+  gap: 0.42rem;
+  margin-top: 0.48rem;
+}
+
+.fbls-building-editor-card {
+  gap: 0.32rem;
+  padding: 0.48rem 0.55rem 0.52rem;
+  border-radius: 10px;
+}
+
+.fbls-building-editor-card legend {
+  font-size: 0.72rem;
+}
+
+.fbls-building-editor-card label {
+  gap: 0.1rem;
+  font-size: 0.64rem;
+}
+
+.fbls-building-editor-card input,
+.fbls-building-editor-card select,
+.fbls-building-editor-card textarea,
+.fbls-building-editor-card strong,
+.fbls-building-editor-card p.fbls-preline {
+  min-height: 1.75rem;
+  padding: 0.28rem 0.4rem;
+  border-radius: 7px;
+}
+
+.fbls-building-editor-card textarea {
+  min-height: 3.2rem;
+}
+
+.fbls-building-editor-card.basic-card.compact-basic {
+  grid-template-columns: minmax(12rem, 1.35fr) minmax(8rem, 0.85fr) minmax(8rem, 0.85fr) minmax(9rem, 1fr) 5.4rem;
+  gap: 0.35rem;
+}
+
+.fbls-dev-inline-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(3.8rem, 1fr));
+  gap: 0.28rem;
+}
+
+.fbls-dev-inline {
+  display: grid;
+  grid-template-columns: 1.35rem 3rem;
+  align-items: center;
+  gap: 0.24rem;
+  min-width: 0;
+}
+
+.fbls-dev-inline i {
+  display: inline-grid;
+  place-items: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.24);
+  font-size: 1rem;
+}
+
+.fbls-dev-inline.food i { color: #d6b36a; }
+.fbls-dev-inline.technology i { color: #9fb7d9; }
+.fbls-dev-inline.culture i { color: #caa1df; }
+.fbls-dev-inline.war i { color: #d48686; }
+
+.fbls-dev-inline input,
+.fbls-dev-inline strong {
+  width: 3rem;
+  min-height: 2rem;
+  text-align: center;
+  padding: 0.2rem;
+}
+
+.fbls-worker-editor-top.compact-worker-top {
+  grid-template-columns: 4rem 4rem minmax(12rem, 1fr);
+  gap: 0.34rem;
+}
+
+.fbls-worker-slot-grid.compact-slots {
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.28rem;
+}
+
+.fbls-worker-slot-grid.compact-slots label {
+  grid-template-columns: 2rem minmax(0, 1fr);
+}
+
+.fbls-build-main-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.35rem;
+}
+
+.fbls-build-main-row label {
+  width: 4.6rem;
+}
+
+.fbls-build-main-row .fbls-button {
+  margin-bottom: 0.02rem;
+}
+
+.fbls-build-subgrid {
+  display: grid;
+  grid-template-columns: minmax(14rem, 1fr) minmax(14rem, 1fr);
+  gap: 0.45rem;
+  margin-top: 0.2rem;
+}
+
+.fbls-subhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  margin-bottom: 0.24rem;
+  color: var(--fbls-muted);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.fbls-cost-list,
+.fbls-prereq-list {
+  min-width: 0;
+  padding: 0.35rem;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.14);
+}
+
+.fbls-cost-row,
+.fbls-prereq-row {
+  display: grid;
+  gap: 0.28rem;
+  align-items: center;
+  margin-top: 0.28rem;
+}
+
+.fbls-cost-row {
+  grid-template-columns: minmax(8rem, 1fr) 4.2rem 1.55rem;
+}
+
+.fbls-prereq-row {
+  grid-template-columns: minmax(8rem, 1fr) 1.55rem;
+}
+
+.fbls-prereq-row.met select,
+.fbls-prereq-row.met strong {
+  border-color: rgba(95, 190, 118, 0.35);
+}
+
+.fbls-prereq-row.missing select,
+.fbls-prereq-row.missing strong {
+  border-color: rgba(181, 72, 72, 0.45);
+}
+
+.fbls-building-editor-card.text-card.compact-text-card {
+  grid-template-columns: minmax(12rem, 1fr) minmax(12rem, 1fr) 5rem 5rem;
+  gap: 0.35rem;
+}
+
+.fbls-building-editor-card.text-card.compact-text-card label.wide {
+  grid-column: span 2;
+}
+
+@media (max-width: 920px) {
+  .fbls-building-editor-card.basic-card.compact-basic,
+  .fbls-dev-inline-grid,
+  .fbls-build-subgrid,
+  .fbls-building-editor-card.text-card.compact-text-card {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .fbls-building-editor-card.text-card.compact-text-card label.wide {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 680px) {
+  .fbls-building-editor-card.basic-card.compact-basic,
+  .fbls-dev-inline-grid,
+  .fbls-build-subgrid,
+  .fbls-building-editor-card.text-card.compact-text-card,
+  .fbls-cost-row,
+  .fbls-prereq-row {
+    grid-template-columns: 1fr;
+  }
+}

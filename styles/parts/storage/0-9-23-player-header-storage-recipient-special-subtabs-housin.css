@@ -1,0 +1,50 @@
+.fbls-storage-target-actor.static {
+  align-content: center;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px;
+  background: rgba(0,0,0,0.18);
+  padding: 0.35rem 0.5rem;
+}
+.fbls-storage-target-actor.static strong {
+  font-size: .9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fbls-storage-target-actor.static small {
+  color: var(--fbls-muted);
+  font-size: .7rem;
+}
+.fbls-storage-target-actor.static.missing {
+  border-color: rgba(205,65,75,.55);
+  background: rgba(120,35,45,.18);
+}
+.fbls-special-subtabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+  margin-bottom: .5rem;
+}
+.fbls-table-toolbar.slim-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: .5rem;
+  margin: .35rem 0;
+}
+.fbls-housing-slot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: .35rem;
+  margin: .45rem 0;
+}
+.fbls-housing-slot-grid label {
+  display: grid;
+  gap: .18rem;
+}
+.fbls-housing-slot-grid label span {
+  color: var(--fbls-muted);
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .045em;
+}

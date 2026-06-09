@@ -1,0 +1,577 @@
+/* FBL Skyhold: resident editor v2 component owner.
+   This file is the single source of truth for the expanded resident editor.
+   Do not patch this component from alignment/legacy files unless Foundry forces it. */
+
+.fbl-skyhold .fbls-person-edit-row > td {
+  min-width: 0;
+}
+
+.fbl-skyhold .fbls-person-editor.v2,
+.fbl-skyhold .fbls-person-editor.v2 *,
+.fbl-skyhold .fbls-person-editor.v2 *::before,
+.fbl-skyhold .fbls-person-editor.v2 *::after {
+  box-sizing: border-box;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 {
+  --fbls-person-control-h: var(--fbls-control-height, 36px);
+  --fbls-person-label-gap: var(--fbls-label-gap, 0.18rem);
+  --fbls-person-row-min: calc(var(--fbls-person-control-h) + 1.1rem);
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--fbls-gap-md, 0.56rem);
+}
+
+.fbl-skyhold .fbls-person-editor.v2 fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0.62rem 0.58rem 0.56rem;
+  border-radius: var(--fbls-radius-lg, 12px);
+}
+
+.fbl-skyhold .fbls-person-editor.v2 legend {
+  max-width: 100%;
+  padding: 0 0.35rem;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 label,
+.fbl-skyhold .fbls-person-editor.v2 .fbls-derived-mini,
+.fbl-skyhold .fbls-person-editor.v2 .fbls-derived-box {
+  min-width: 0;
+  max-width: none;
+  width: 100%;
+  margin: 0;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 label > span,
+.fbl-skyhold .fbls-person-editor.v2 .fbls-derived-mini > span,
+.fbl-skyhold .fbls-person-editor.v2 .fbls-derived-box > span {
+  display: block;
+  min-width: 0;
+  margin: 0 0 var(--fbls-person-label-gap);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 input:not([type="checkbox"]),
+.fbl-skyhold .fbls-person-editor.v2 select,
+.fbl-skyhold .fbls-person-editor.v2 textarea {
+  width: 100%;
+  min-width: 0;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 input:not([type="checkbox"]),
+.fbl-skyhold .fbls-person-editor.v2 .fbls-derived-mini strong,
+.fbl-skyhold .fbls-person-editor.v2 .fbls-derived-box strong {
+  height: var(--fbls-person-control-h);
+  min-height: var(--fbls-person-control-h);
+  max-height: var(--fbls-person-control-h);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  text-align: center;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .fbls-derived-mini strong,
+.fbl-skyhold .fbls-person-editor.v2 .fbls-derived-box strong,
+.fbl-skyhold .fbls-person-editor.v2 .fbls-derived-box em {
+  padding: 0.32rem 0.45rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 0.45rem;
+  background: rgba(0, 0, 0, 0.18);
+  color: var(--fbls-text);
+  font-style: normal;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 select {
+  height: var(--fbls-person-control-h);
+  min-height: var(--fbls-person-control-h);
+  max-height: var(--fbls-person-control-h);
+  display: block;
+  line-height: var(--fbls-person-control-h);
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .num-field,
+.fbl-skyhold .fbls-person-editor.v2 .num-field input[type="number"] {
+  max-width: none;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 :is(
+  .main-set.compact-resident-main > label,
+  .main-set.compact-resident-main > .fbls-derived-mini,
+  .main-set.compact-resident-main .fbls-resident-main-grid > label,
+  .main-set.compact-resident-main .fbls-resident-main-grid > .fbls-derived-mini,
+  .work-set.compact-resident-work label,
+  .stat-set.compact-set > label,
+  .morale-set.compact-set > label,
+  .morale-set.compact-set > .fbls-derived-box
+) {
+  display: grid;
+  grid-template-rows: auto var(--fbls-person-control-h);
+  align-content: end;
+  gap: 0;
+  min-height: var(--fbls-person-row-min);
+}
+
+/* Main row: first line holds compact identity fields. Appearance owns the full second line. */
+.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main {
+  display: block;
+  min-width: 0;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .fbls-resident-main-grid {
+  display: grid;
+  grid-template-columns:
+    minmax(168px, 1.35fr)
+    52px
+    62px
+    46px
+    minmax(112px, .92fr)
+    minmax(132px, 1fr)
+    minmax(118px, .92fr)
+    minmax(116px, .9fr)
+    58px;
+  grid-template-areas:
+    "name sex age category culture belief race subrace injured"
+    "appearance appearance appearance appearance appearance appearance appearance appearance appearance";
+  grid-template-rows: auto minmax(var(--fbls-appearance-block-h, 64px), auto);
+  gap: var(--fbls-gap-sm, 0.42rem) 0.46rem;
+  align-items: end;
+  min-width: 0;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-name { grid-area: name; }
+.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-sex { grid-area: sex; }
+.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-age { grid-area: age; }
+.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-category { grid-area: category; }
+.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-culture { grid-area: culture; }
+.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-belief { grid-area: belief; }
+.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-race { grid-area: race; }
+.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-subrace { grid-area: subrace; }
+.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-injured { grid-area: injured; }
+
+.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-appearance {
+  grid-area: appearance;
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: grid;
+  grid-template-rows: auto auto;
+  align-content: stretch;
+  align-self: start;
+  justify-self: stretch;
+  min-width: 0;
+  width: 100%;
+  min-height: 64px;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-appearance textarea {
+  display: block;
+  height: 44px;
+  min-height: 44px;
+  max-height: none;
+  resize: none;
+  overflow: hidden;
+  line-height: 1.2;
+  max-width: 100%;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-category,
+.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-category strong {
+  width: 46px;
+  min-width: 46px;
+  max-width: 46px;
+  justify-self: stretch;
+  padding-left: 0.18rem;
+  padding-right: 0.18rem;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-name input,
+.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-race input,
+.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-subrace input {
+  justify-content: flex-start;
+  text-align: left;
+  padding-left: 0.58rem;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-sex input,
+.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-age input,
+.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-injured input {
+  text-align: center;
+  padding-left: 0.2rem;
+  padding-right: 0.2rem;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-death-date {
+  grid-column: 1 / span 2;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .wide,
+.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-death-note {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-rows: auto minmax(52px, auto);
+}
+
+/* Work and housing: three equal zones. Left is work source, center is housing, right is background. */
+.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-areas: "workSource workHome workBackground";
+  gap: var(--fbls-gap-lg, 0.72rem);
+  align-items: end;
+  min-width: 0;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work > .fbls-work-block {
+  min-width: 0;
+  width: 100%;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .fbls-work-source-block {
+  grid-area: workSource;
+  display: grid;
+  grid-template-columns: minmax(142px, 1fr) 44px 44px;
+  grid-template-areas: "work salary salarymod";
+  gap: var(--fbls-gap-sm, 0.42rem);
+  align-items: end;
+  justify-self: stretch;
+  justify-items: stretch;
+  max-width: 320px;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work.has-custom-work .fbls-work-source-block {
+  grid-template-areas:
+    "work salary salarymod"
+    "custom custom custom";
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .fbls-work-home-block {
+  grid-area: workHome;
+  display: grid;
+  justify-items: center;
+  align-items: end;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .fbls-work-background-block {
+  grid-area: workBackground;
+  display: grid;
+  justify-items: end;
+  align-items: end;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-work { grid-area: work; }
+.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-salary { grid-area: salary; }
+.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-salary-mod { grid-area: salarymod; }
+.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-custom-role { grid-area: custom; }
+
+.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-home {
+  width: 180px;
+  max-width: 100%;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-background {
+  width: 220px;
+  max-width: 100%;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-salary,
+.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-salary-mod,
+.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-salary input,
+.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-salary-mod input {
+  width: 44px;
+  min-width: 44px;
+  max-width: 44px;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-salary input,
+.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-salary-mod input {
+  padding-left: 0.16rem;
+  padding-right: 0.16rem;
+  text-align: center;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-work select,
+.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-home select,
+.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-background select,
+.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-custom-role input {
+  justify-content: flex-start;
+  text-align: left;
+  padding-left: 0.58rem;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-custom-role {
+  width: 100%;
+  min-width: 0;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-custom-role.is-hidden {
+  display: none !important;
+}
+
+/* Stats, morale and traits. */
+.fbl-skyhold .fbls-person-editor.v2 .fbls-resident-midline {
+  display: grid;
+  grid-template-columns: minmax(285px, .92fr) minmax(345px, 1fr) minmax(360px, 1.18fr);
+  gap: var(--fbls-gap-md, 0.56rem);
+  align-items: stretch;
+  min-width: 0;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .stat-set.compact-set,
+.fbl-skyhold .fbls-person-editor.v2 .morale-set.compact-set,
+.fbl-skyhold .fbls-person-editor.v2 .traits-set.compact-set {
+  min-width: 0;
+  height: 100%;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .stat-set.compact-set {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(56px, 72px));
+  justify-content: start;
+  gap: 0.38rem;
+  align-items: end;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .morale-set.compact-set {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(56px, 72px));
+  justify-content: start;
+  gap: 0.38rem;
+  align-items: end;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .stat-set.compact-set legend,
+.fbl-skyhold .fbls-person-editor.v2 .morale-set.compact-set legend,
+.fbl-skyhold .fbls-person-editor.v2 .traits-set.compact-set legend {
+  grid-column: 1 / -1;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .morale-set.compact-set > .fbls-derived-box {
+  margin: 0;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .morale-set.compact-set .fbls-derived-box span {
+  text-align: left;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .morale-set.compact-set .fbls-derived-box strong {
+  width: 100%;
+  margin: 0;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .morale-set.compact-set .fbls-derived-box em {
+  display: none;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .traits-set.compact-set {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  gap: var(--fbls-gap-sm, 0.42rem);
+  align-content: start;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .traits-set.compact-set .fbls-trait-editor {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: 0;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .traits-set.compact-set .fbls-trait-control-row {
+  min-width: 0;
+  width: 100%;
+  min-height: var(--fbls-person-control-h);
+  display: flex;
+  gap: var(--fbls-gap-xs, 0.32rem);
+  align-items: center;
+  padding: 0.12rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 0.45rem;
+  background: rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .traits-set.compact-set .fbls-selected-traits {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: calc(var(--fbls-person-control-h) - 0.24rem);
+  width: auto;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--fbls-gap-xs, 0.32rem);
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  scrollbar-width: thin;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .traits-set.compact-set .fbls-selected-traits .fbls-muted-text {
+  white-space: nowrap;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .traits-set.compact-set .editor-chip {
+  flex: 0 0 auto;
+  max-width: min(12rem, 100%);
+  min-height: calc(var(--fbls-person-control-h) - 0.5rem);
+  width: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  line-height: 1;
+  white-space: nowrap;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .traits-set.compact-set .fbls-chip-remove {
+  flex: 0 0 auto;
+  width: 1.1rem;
+  height: 1.1rem;
+  min-width: 1.1rem;
+  min-height: 1.1rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .traits-set.compact-set .fbls-trait-add-compact {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  padding: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .traits-set.compact-set .fbls-trait-add-shell {
+  flex: 0 0 var(--fbls-person-control-h);
+  width: var(--fbls-person-control-h);
+  height: calc(var(--fbls-person-control-h) - 0.24rem);
+  min-width: var(--fbls-person-control-h);
+  min-height: calc(var(--fbls-person-control-h) - 0.24rem);
+  position: relative;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  border-radius: 0.38rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--fbls-text);
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .traits-set.compact-set .fbls-trait-add-icon {
+  display: grid;
+  place-items: center;
+  margin: 0;
+  line-height: 1;
+  font-size: 0.92rem;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 input[type="hidden"][data-resident-traits-value] {
+  display: none;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .fbls-person-notes-field {
+  width: 100%;
+  min-width: 0;
+  min-height: 70px;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .resident-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--fbls-gap-sm, 0.42rem);
+  min-width: 0;
+}
+
+@media (max-width: 1180px) {
+  .fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .fbls-resident-main-grid {
+    grid-template-columns:
+      minmax(150px, 1.25fr)
+      50px
+      60px
+      46px
+      minmax(108px, .92fr)
+      minmax(128px, 1fr)
+      minmax(112px, .9fr)
+      minmax(110px, .9fr)
+      56px;
+  }
+}
+
+@media (max-width: 980px) {
+  .fbl-skyhold .fbls-person-editor.v2 .fbls-resident-midline {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "workSource"
+      "workHome"
+      "workBackground";
+  }
+
+  .fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .fbls-work-source-block,
+  .fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-home,
+  .fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-background {
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .fbls-work-home-block,
+  .fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .fbls-work-background-block {
+    justify-items: stretch;
+  }
+}
+
+@media (max-width: 760px) {
+  .fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .fbls-resident-main-grid,
+  .fbl-skyhold .fbls-person-editor.v2 .stat-set.compact-set,
+  .fbl-skyhold .fbls-person-editor.v2 .morale-set.compact-set {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: none;
+  }
+
+  .fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .fbls-resident-main-grid > label,
+  .fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .fbls-resident-main-grid > .fbls-derived-mini {
+    grid-area: auto;
+  }
+
+  .fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-appearance,
+  .fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-death-date,
+  .fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .wide,
+  .fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-death-note {
+    grid-column: auto;
+    grid-row: auto;
+  }
+}

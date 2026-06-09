@@ -1,0 +1,123 @@
+/* 0.6.4 layout and economy pass */
+.fbl-skyhold-crew-editor {
+  --fbls-bg: rgba(18, 20, 24, 0.97);
+  --fbls-panel: rgba(255, 255, 255, 0.055);
+  --fbls-border: rgba(255, 255, 255, 0.14);
+  --fbls-text: rgba(255, 255, 255, 0.92);
+  --fbls-muted: rgba(255, 255, 255, 0.64);
+  --fbls-dim: rgba(255, 255, 255, 0.42);
+  color: var(--fbls-text);
+  resize: both;
+  min-width: 520px;
+  min-height: 380px;
+}
+
+.fbl-skyhold-crew-editor .window-content {
+  padding: 0;
+  background: transparent;
+}
+
+.fbls-crew-editor-shell {
+  height: 100%;
+  overflow: auto;
+  padding: 0.65rem;
+  background: linear-gradient(135deg, rgba(28, 32, 38, 0.98), rgba(10, 12, 16, 0.98));
+}
+
+
+
+.fbls-accounting-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.45rem;
+}
+
+.fbls-accounting-grid > div {
+  display: grid;
+  gap: 0.16rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.19);
+}
+
+.fbls-accounting-grid span {
+  color: var(--fbls-muted);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.fbls-accounting-grid strong {
+  font-size: 1.22rem;
+}
+
+.fbls-editor-hero.compact {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.7rem;
+  align-items: center;
+  padding-bottom: 0.55rem;
+  margin-bottom: 0.55rem;
+  border-bottom: 1px solid var(--fbls-border);
+}
+.fbls-editor-hero h1 { margin: 0; font-size: 1.25rem; border: 0; color: var(--fbls-text); }
+.fbls-editor-hero p { margin: 0.15rem 0 0; color: var(--fbls-muted); }
+
+.fbls-crew-slot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.35rem;
+}
+
+.fbls-crew-slot-grid label {
+  display: grid;
+  grid-template-columns: 2.2rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--fbls-muted);
+}
+
+.fbls-crew-slot-grid select,
+.fbl-skyhold-crew-editor input,
+.fbl-skyhold-crew-editor select,
+.fbl-skyhold-crew-editor textarea {
+  min-height: 1.85rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--fbls-text);
+}
+.fbl-skyhold-crew-editor select option { color: #111 !important; background: #f2f0ea !important; }
+
+.fbls-crew-table td,
+.fbls-crew-table th { font-size: 0.86rem; }
+
+.fbls-building-editor-grid.compact-editor-grid {
+  gap: 0.28rem;
+  margin-top: 0.35rem;
+}
+
+.fbls-building-editor-card {
+  gap: 0.22rem;
+  padding: 0.38rem 0.45rem;
+}
+
+.fbls-building-editor-card.basic-card.compact-basic {
+  grid-template-columns: minmax(12rem, 1.4fr) minmax(8rem, 0.9fr) minmax(8rem, 0.9fr) minmax(9rem, 1fr) 5.2rem;
+}
+
+.fbls-building-editor-card.text-card.compact-text-card {
+  grid-template-columns: minmax(8rem, 1fr) 5.5rem 5.5rem minmax(7rem, 1fr) minmax(10rem, 1fr) 5rem 5rem;
+}
+
+.fbls-building-editor-card.text-card.compact-text-card label.wide {
+  grid-column: span 3;
+}
+
+.fbl-skyhold-app input[type="number"],
+.fbl-skyhold-app .fbls-table strong,
+.fbl-skyhold-building-editor input[type="number"],
+.fbl-skyhold-building-editor strong {
+  font-size: 1.08rem;
+}

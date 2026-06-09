@@ -1,0 +1,241 @@
+/* FBL Skyhold template browser: base shell, blueprint theme and shared card language. */
+.fbls-building-card.planned, .fbls-building-card.building { background-image: linear-gradient(135deg, rgba(70,140,210,.18) 0 25%, transparent 25% 50%, rgba(70,140,210,.18) 50% 75%, transparent 75% 100%); background-size: 28px 28px; border-color: rgba(145,205,255,.55); box-shadow: inset 0 0 0 1px rgba(255,255,255,.08), 0 0 0 1px rgba(70,140,210,.18); }
+.fbls-construction-card-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.fbls-compact-select { max-width: 220px; min-width: 150px; }
+
+/* 1.0.1: Ark-style building template browser */
+.fbl-skyhold-template-browser .window-content { padding: 0; }
+.fbls-template-browser-body { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.fbls-template-browser-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.fbls-template-browser-head h2 { margin: 0 0 4px; font-size: 20px; }
+.fbls-template-browser-head p { margin: 0; color: rgba(230,220,205,0.75); max-width: 760px; }
+.fbls-template-browser-counts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.fbls-template-browser-counts span { border: 1px solid rgba(255,255,255,0.14); border-radius: 999px; padding: 4px 8px; background: rgba(0,0,0,0.18); font-size: 12px; }
+.fbls-template-browser-counts .available { color: #c6f1c6; }
+.fbls-template-browser-counts .locked { color: #e6b1a8; }
+.fbls-template-browser-tabs, .fbls-template-browser-availability { display: flex; gap: 6px; flex-wrap: wrap; }
+.fbls-template-browser-tab { display: inline-flex; align-items: center; gap: 7px; border: 1px solid rgba(255,255,255,0.14); border-radius: 8px; padding: 6px 9px; color: #e8ded0; background: rgba(0,0,0,0.22); cursor: pointer; }
+.fbls-template-browser-tab.active { background: rgba(255,255,255,0.10); border-color: rgba(255,255,255,0.30); }
+.fbls-template-browser-tab strong { min-width: 18px; text-align: center; opacity: 0.8; }
+.fbls-template-browser-tab.food i, .fbls-template-browser-card.food h3 i { color: #d8bc62; }
+.fbls-template-browser-tab.technology i, .fbls-template-browser-card.technology h3 i { color: #7db8cf; }
+.fbls-template-browser-tab.culture i, .fbls-template-browser-card.culture h3 i { color: #c18dd6; }
+.fbls-template-browser-tab.war i, .fbls-template-browser-card.war h3 i { color: #d36a5f; }
+.fbls-template-browser-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); gap: 10px; overflow: auto; padding-right: 4px; }
+.fbls-template-browser-card { border: 1px solid rgba(255,255,255,0.14); border-radius: 10px; padding: 10px; background: rgba(20,19,18,0.88); display: flex; flex-direction: column; gap: 8px; min-height: 260px; }
+.fbls-template-browser-card.locked { opacity: 0.74; filter: grayscale(0.18); }
+.fbls-template-browser-card header, .fbls-template-browser-card footer { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+.fbls-template-browser-card h3 { margin: 0; font-size: 16px; line-height: 1.15; }
+.fbls-template-browser-card header p { margin: 3px 0 0; font-size: 12px; color: rgba(230,220,205,0.72); }
+.fbls-template-description { margin: 0; color: rgba(240,232,216,0.86); line-height: 1.25; }
+.fbls-template-browser-meta { display: grid; grid-template-columns: 1fr; gap: 4px; font-size: 12px; color: rgba(230,220,205,0.78); }
+.fbls-template-browser-meta span { border-top: 1px solid rgba(255,255,255,0.07); padding-top: 4px; }
+.fbls-template-browser-meta b { color: rgba(255,255,255,0.85); }
+.fbls-template-special, .fbls-template-source { margin: 0; font-size: 12px; color: rgba(230,220,205,0.75); }
+.fbls-template-browser-card footer { margin-top: auto; align-items: center; }
+.fbls-template-browser-availability .fbls-button.active { filter: brightness(1.18); border-color: rgba(255,255,255,0.32); }
+.fbls-template-source-grid { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(180px,1fr)); gap: 8px; margin-top: 8px; }
+.fbls-template-source-grid .fbls-wide-label { grid-column: 1 / -1; }
+.fbl-skyhold-template-editor .fbls-assigned-worker-area { display: none; }
+
+/* 1.0.2: blueprint template browser, compact cemetery, fixed tab counters */
+.fbl-skyhold-template-browser {
+  --fbls-blueprint-bg: #071524;
+  --fbls-blueprint-panel: rgba(7, 22, 38, 0.94);
+  --fbls-blueprint-card: rgba(10, 32, 55, 0.88);
+  --fbls-blueprint-card-locked: rgba(13, 23, 36, 0.78);
+  --fbls-blueprint-line: rgba(166, 213, 255, 0.22);
+  --fbls-blueprint-strong: rgba(225, 244, 255, 0.96);
+  --fbls-blueprint-text: rgba(224, 239, 250, 0.9);
+  --fbls-blueprint-muted: rgba(195, 220, 240, 0.68);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  color: var(--fbls-blueprint-text);
+  background:
+    linear-gradient(rgba(150, 205, 255, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(150, 205, 255, 0.055) 1px, transparent 1px),
+    radial-gradient(circle at 12% 0%, rgba(91, 166, 245, 0.20), transparent 28rem),
+    linear-gradient(135deg, #08182a 0%, #06101d 58%, #020711 100%);
+  background-size: 22px 22px, 22px 22px, auto, auto;
+}
+
+
+.fbl-skyhold-template-browser .window-content {
+  padding: 0 !important;
+  overflow: hidden !important;
+  background: #06101d !important;
+}
+
+.fbl-skyhold-template-browser .fbls-template-browser-body {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--fbls-blueprint-text);
+  background:
+    linear-gradient(rgba(150, 205, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(150, 205, 255, 0.06) 1px, transparent 1px),
+    radial-gradient(circle at 12% 0%, rgba(80, 155, 230, 0.20), transparent 26rem),
+    linear-gradient(135deg, rgba(7, 19, 35, 0.98), rgba(4, 12, 23, 0.99));
+  background-size: 24px 24px, 24px 24px, auto, auto;
+}
+
+.fbl-skyhold-template-browser .fbls-template-browser-head {
+  border: 1px solid rgba(166, 213, 255, 0.22);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(6, 17, 31, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.035);
+}
+
+.fbl-skyhold-template-browser .fbls-template-browser-head h2 {
+  color: var(--fbls-blueprint-strong);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  text-shadow: 0 0 8px rgba(160, 215, 255, 0.22);
+}
+
+.fbl-skyhold-template-browser .fbls-template-browser-head p,
+.fbl-skyhold-template-browser .fbls-template-description,
+.fbl-skyhold-template-browser .fbls-template-special,
+.fbl-skyhold-template-browser .fbls-template-source,
+.fbl-skyhold-template-browser .fbls-template-browser-card header p,
+.fbl-skyhold-template-browser .fbls-template-browser-meta {
+  color: var(--fbls-blueprint-muted);
+}
+
+.fbl-skyhold-template-browser .fbls-template-browser-counts span,
+.fbl-skyhold-template-browser .fbls-template-browser-tab,
+.fbl-skyhold-template-browser .fbls-template-browser-availability .fbls-button {
+  border-color: rgba(166, 213, 255, 0.26);
+  background: rgba(6, 18, 32, 0.78);
+  color: var(--fbls-blueprint-text);
+}
+
+.fbl-skyhold-template-browser .fbls-template-browser-tab.active,
+.fbl-skyhold-template-browser .fbls-template-browser-availability .fbls-button.active {
+  border-color: rgba(220, 244, 255, 0.76);
+  background: linear-gradient(135deg, rgba(77, 151, 218, 0.34), rgba(6, 20, 36, 0.82));
+  color: white;
+  box-shadow: 0 0 0 1px rgba(166, 213, 255, 0.10), 0 0 14px rgba(110, 184, 255, 0.18);
+}
+
+.fbl-skyhold-template-browser .fbls-template-browser-tab strong {
+  color: var(--fbls-blueprint-strong);
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(166, 213, 255, 0.24);
+  border-radius: 999px;
+  padding: 1px 5px;
+  opacity: 1;
+}
+
+.fbl-skyhold-template-browser .fbls-template-browser-grid {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 2px 6px 16px 2px;
+  scrollbar-color: rgba(166, 213, 255, 0.38) rgba(0, 0, 0, 0.24);
+}
+
+.fbl-skyhold-template-browser .fbls-template-browser-card {
+  border-color: rgba(166, 213, 255, 0.30);
+  background:
+    linear-gradient(rgba(166, 213, 255, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(166, 213, 255, 0.055) 1px, transparent 1px),
+    linear-gradient(135deg, rgba(12, 43, 75, 0.86), rgba(6, 18, 34, 0.94));
+  background-size: 18px 18px, 18px 18px, auto;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.035), 0 8px 18px rgba(0,0,0,0.20);
+}
+
+.fbl-skyhold-template-browser .fbls-template-browser-card.locked {
+  opacity: 0.68;
+  filter: grayscale(0.25);
+  background:
+    linear-gradient(rgba(166, 213, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(166, 213, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(135deg, rgba(12, 29, 48, 0.82), rgba(4, 12, 22, 0.94));
+  background-size: 18px 18px, 18px 18px, auto;
+}
+
+.fbl-skyhold-template-browser .fbls-template-browser-card h3,
+.fbl-skyhold-template-browser .fbls-template-browser-meta b {
+  color: var(--fbls-blueprint-strong);
+}
+
+.fbl-skyhold-template-browser .fbls-template-browser-meta span {
+  border-top-color: rgba(166, 213, 255, 0.16);
+}
+
+.fbl-skyhold-template-browser .fbls-button {
+  border-color: rgba(166, 213, 255, 0.25);
+  background: rgba(6, 18, 32, 0.78);
+  color: var(--fbls-blueprint-text);
+}
+
+.fbl-skyhold-template-browser .fbls-button.primary:not(:disabled) {
+  border-color: rgba(220, 244, 255, 0.65);
+  background: linear-gradient(135deg, rgba(60, 137, 210, 0.42), rgba(11, 44, 78, 0.84));
+  color: white;
+}
+
+.fbl-skyhold-template-browser .fbls-button:disabled {
+  opacity: 0.48;
+}
+
+.fbls-cemetery-card.compact {
+  padding: 0.45rem 0.6rem;
+  margin-bottom: 0.35rem;
+}
+
+.fbls-cemetery-card.compact h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.15rem;
+  font-size: 0.95rem;
+}
+
+.fbls-cemetery-card.compact h3 span {
+  min-width: 1.35rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.10);
+  color: var(--fbls-text);
+  text-align: center;
+  font-size: 0.75rem;
+}
+
+.fbls-cemetery-card.compact p {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.25;
+}
+
+.fbls-cemetery-table.compact {
+  font-size: 0.76rem;
+}
+
+.fbls-cemetery-table.compact th,
+.fbls-cemetery-table.compact td {
+  padding: 0.22rem 0.34rem;
+  vertical-align: middle;
+}
+
+.fbls-cemetery-table.compact input {
+  min-height: 1.45rem;
+  height: 1.45rem;
+  padding: 0 0.32rem;
+  font-size: 0.74rem;
+}
+
+.fbls-cemetery-table.compact .fbls-icon-button {
+  min-width: 1.55rem;
+  width: 1.55rem;
+  min-height: 1.45rem;
+  height: 1.45rem;
+}

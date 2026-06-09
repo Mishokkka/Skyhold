@@ -1,0 +1,107 @@
+/* 0.9.20 Foundry item storage */
+.fbls-storage-foundry-row {
+  display: grid;
+  grid-template-columns: minmax(18rem, 1fr) minmax(12rem, 18rem);
+  gap: 0.5rem;
+  align-items: stretch;
+}
+.fbls-storage-drop-zone {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.25rem;
+  border: 1px dashed rgba(255,255,255,0.18);
+  border-radius: 10px;
+  background: rgba(255,255,255,0.035);
+  color: var(--fbls-muted);
+  padding: 0.38rem 0.55rem;
+  font-size: 0.78rem;
+}
+.fbls-storage-drop-zone.large { min-height: 3rem; }
+.fbls-storage-drop-zone.dragover {
+  border-color: rgba(120,190,255,0.75);
+  background: rgba(90,150,210,0.16);
+  color: var(--fbls-text);
+}
+.fbls-storage-target-actor {
+  display: grid;
+  gap: 0.16rem;
+  min-width: 0;
+}
+.fbls-storage-target-actor span {
+  color: var(--fbls-muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: .045em;
+}
+.fbls-storage-resource-img,
+.fbls-storage-item-main img {
+  width: 1.35rem;
+  height: 1.35rem;
+  object-fit: cover;
+  border-radius: 7px;
+  background: rgba(255,255,255,0.08);
+}
+.fbls-storage-resource-withdraw,
+.fbls-storage-item-give {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 4.2rem auto;
+  gap: 0.28rem;
+  align-items: center;
+  justify-content: start;
+}
+.fbls-storage-resource-withdraw input,
+.fbls-storage-item-give input {
+  min-height: 1.45rem;
+  font-size: 0.76rem;
+  text-align: center;
+}
+.fbls-storage-item-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 0.35rem;
+}
+.fbls-storage-item-card {
+  display: grid;
+  gap: 0.35rem;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.055), rgba(0,0,0,0.16));
+  padding: 0.38rem;
+}
+.fbls-storage-item-main {
+  display: grid;
+  grid-template-columns: 1.55rem minmax(0, 1fr) 1.7rem;
+  gap: 0.35rem;
+  align-items: center;
+  min-width: 0;
+}
+.fbls-storage-item-main strong {
+  display: block;
+  font-size: 0.88rem;
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fbls-storage-item-main small {
+  display: block;
+  color: var(--fbls-muted);
+  font-size: 0.72rem;
+  margin-top: 0.08rem;
+}
+.fbls-storage-item-room {
+  display: grid;
+  grid-template-columns: 1rem minmax(0, 1fr);
+  gap: 0.24rem;
+  align-items: center;
+  color: var(--fbls-muted);
+}
+.fbls-storage-item-room select {
+  min-height: 1.4rem;
+  font-size: 0.74rem;
+}
+@media (max-width: 980px) {
+  .fbls-storage-foundry-row { grid-template-columns: 1fr; }
+}

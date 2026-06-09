@@ -1,0 +1,64 @@
+/* 1.0.17: residents/generator/mass-combat/defense pass */
+
+.fbls-generator-edit-list.compact-selective {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.fbls-generated-person-card.selective {
+  display: block;
+  padding: 0;
+  border-radius: 9px;
+  border: 1px solid rgba(125, 184, 207, 0.16);
+  background: rgba(7,12,18,.52);
+  overflow: hidden;
+}
+.fbls-generated-person-card.selective.editing {
+  border-color: rgba(125,190,255,.42);
+  background: rgba(12,27,42,.72);
+}
+.fbls-generated-person-summary {
+  display: grid;
+  grid-template-columns: 1.6rem minmax(10rem, 1.2fr) minmax(7rem, .8fr) 4.8rem 2rem;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.35rem;
+  padding: 0.28rem 0.45rem;
+  cursor: pointer;
+}
+.fbls-generated-person-summary .identity {
+  display: grid;
+  grid-template-columns: minmax(8rem, .8fr) minmax(12rem, 1fr);
+  gap: 0.35rem;
+  align-items: baseline;
+}
+.fbls-generated-person-summary .identity strong,
+.fbls-generated-person-summary .identity span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fbls-generated-person-editor {
+  padding: 0.45rem;
+  border-top: 1px solid rgba(255,255,255,.10);
+}
+@media (max-width: 760px) {
+  .fbls-generated-person-summary {
+    grid-template-columns: 1.5rem minmax(0,1fr) auto;
+  }
+  .fbls-generated-person-summary .identity { grid-template-columns: 1fr; }
+}
+
+.fbls-defense-control-card,
+.fbls-gm-defense-card {
+  border-color: rgba(105, 155, 230, .26);
+  background: linear-gradient(135deg, rgba(24,48,82,.42), rgba(0,0,0,.16));
+}
+.fbls-defense-check-grid,
+.fbls-gm-toggle-grid.defense-flags {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0.45rem;
+  margin-bottom: 0.5rem;
+}

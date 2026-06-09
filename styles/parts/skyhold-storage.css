@@ -1,0 +1,15 @@
+/* FBL Skyhold storage stylesheet index.
+   Split by section; import order preserves the existing cascade. */
+
+/* FBL Skyhold: Storage, rooms, Foundry item storage, player access and calendar/trade controls. */
+@import url("./storage/0-9-13-storage-overhaul.css");
+@import url("./storage/0-9-14-storage-rooms-and-money-counter.css");
+@import url("./storage/0-9-15-storage-room-subtabs-and-compact-production-utility-ro.css");
+@import url("./storage/0-9-17-storage-logistics-treasury-controls-and-capacity-warni.css");
+@import url("./storage/0-9-18-storage-header-cleanup-collapsible-tools-and-compact-r.css");
+@import url("./storage/0-9-20-foundry-item-storage.css");
+@import url("./storage/0-9-22-player-permissions-cemetery-housing.css");
+@import url("./storage/0-9-23-player-header-storage-recipient-special-subtabs-housin.css");
+@import url("./storage/0-9-24-calendaria-header-and-trade-controls.css");
+@import url("./storage/0-9-25-compact-sale-controls-and-trade-routing.css");
+@import url("./storage/0-9-26-calendar-header-cleanup-sale-availability-economy-repo.css");

@@ -1,0 +1,251 @@
+/* 0.9.5 ergonomic production tab redesign */
+.fbls-production-workspace {
+  padding-bottom: 0.65rem;
+  overflow: visible;
+}
+.fbls-production-workspace .fbls-production-help,
+.fbls-production-workspace .fbls-production-lines.v2,
+.fbls-production-workspace .fbls-production-line,
+.fbls-production-workspace .fbls-production-line-note {
+  all: unset;
+}
+.fbls-production-primer {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(9rem, 1fr));
+  gap: 0.45rem;
+  margin: 0.15rem 0 0.55rem;
+}
+.fbls-production-primer > div {
+  min-width: 0;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid rgba(255,255,255,0.11);
+  border-radius: 10px;
+  background: rgba(0,0,0,0.18);
+}
+.fbls-production-primer strong {
+  display: block;
+  margin-bottom: 0.18rem;
+  color: var(--fbls-text);
+  font-size: 0.88rem;
+}
+.fbls-production-primer span {
+  display: block;
+  color: var(--fbls-muted);
+  font-size: 0.72rem;
+  line-height: 1.28;
+}
+.fbls-production-layout {
+  display: grid;
+  grid-template-columns: minmax(18rem, 0.8fr) minmax(28rem, 1.55fr);
+  gap: 0.55rem;
+  align-items: start;
+}
+.fbls-production-panel {
+  min-width: 0;
+  padding: 0.55rem;
+  border: 1px solid rgba(255,255,255,0.11);
+  border-radius: 12px;
+  background: rgba(0,0,0,0.16);
+}
+.fbls-panel-header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+}
+.fbls-panel-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--fbls-text);
+}
+.fbls-panel-header p {
+  margin: 0.14rem 0 0;
+  color: var(--fbls-muted);
+  font-size: 0.72rem;
+  line-height: 1.25;
+}
+.fbls-content-list,
+.fbls-production-card-list {
+  display: grid;
+  gap: 0.45rem;
+}
+.fbls-content-row-card {
+  display: grid;
+  grid-template-columns: minmax(9rem, 1fr) 4.6rem 4.6rem 2.1rem;
+  gap: 0.35rem;
+  align-items: end;
+  padding: 0.4rem;
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 9px;
+  background: rgba(255,255,255,0.035);
+}
+.fbls-content-row-card label,
+.fbls-production-card label {
+  display: grid;
+  gap: 0.16rem;
+  min-width: 0;
+}
+.fbls-content-row-card label > span,
+.fbls-production-card label > span {
+  color: var(--fbls-muted);
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.055em;
+  line-height: 1;
+}
+.fbls-content-row-card input,
+.fbls-production-card input,
+.fbls-production-card select {
+  width: 100%;
+  min-width: 0;
+  min-height: 1.75rem;
+  font-size: 0.78rem;
+}
+.fbls-production-card {
+  display: grid;
+  gap: 0.46rem;
+  padding: 0.5rem;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.045), rgba(0,0,0,0.16));
+}
+.fbls-production-card.inactive {
+  opacity: 0.68;
+  background: rgba(0,0,0,0.14);
+}
+.fbls-production-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding-bottom: 0.36rem;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.fbls-production-title {
+  display: grid;
+  grid-template-columns: 1.35rem minmax(10rem, 1fr);
+  gap: 0.36rem;
+  align-items: center;
+  min-width: 0;
+  flex: 1;
+}
+.fbls-production-title input[type="checkbox"] {
+  width: 1.05rem;
+  min-height: 1.05rem;
+  padding: 0;
+  margin: 0;
+}
+.fbls-production-title input[type="text"] {
+  min-height: 1.85rem;
+  font-weight: 800;
+  font-size: 0.92rem;
+}
+.fbls-production-title h4 {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fbls-production-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.25rem;
+}
+.fbls-production-badges span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.35rem;
+  padding: 0.08rem 0.45rem;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 999px;
+  background: rgba(255,255,255,0.06);
+  color: var(--fbls-text);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.fbls-production-badges span.warn {
+  border-color: rgba(190, 70, 85, 0.55);
+  background: rgba(160, 40, 50, 0.22);
+}
+.fbls-production-card-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(6.5rem, 1fr));
+  gap: 0.38rem;
+  align-items: end;
+}
+.fbls-production-card-grid .span-2 { grid-column: span 2; }
+.fbls-production-advanced {
+  display: grid;
+  grid-template-columns: minmax(8rem, 0.75fr) minmax(10rem, 1fr) minmax(12rem, 1.15fr);
+  gap: 0.38rem;
+  align-items: end;
+  padding-top: 0.05rem;
+}
+.fbls-production-collect-toggle {
+  grid-template-columns: 1fr;
+}
+.fbls-production-collect-toggle > input[type="checkbox"] {
+  width: 1.15rem;
+  min-height: 1.15rem;
+  padding: 0;
+}
+.fbls-production-collect-toggle {
+  display: grid;
+  grid-template-columns: 3.4rem minmax(3.5rem, 1fr);
+  column-gap: 0.3rem;
+}
+.fbls-production-collect-toggle > span { grid-column: 1 / -1; }
+.fbls-prod-result {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.75rem;
+  padding: 0.1rem 0.35rem;
+  border: 1px solid rgba(255,255,255,0.11);
+  border-radius: 8px;
+  background: rgba(0,0,0,0.22);
+  font-size: 0.95rem;
+}
+.fbls-production-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+  padding-top: 0.36rem;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  color: var(--fbls-muted);
+  font-size: 0.76rem;
+}
+.fbls-production-card-footer > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fbls-production-card .fbls-line-actions {
+  display: flex;
+  gap: 0.24rem;
+  justify-content: flex-end;
+  flex: 0 0 auto;
+}
+.fbls-production-card .fbls-line-actions .fbls-icon-button {
+  width: 1.85rem;
+  height: 1.85rem;
+}
+@media (max-width: 1180px) {
+  .fbls-production-primer { grid-template-columns: repeat(2, minmax(10rem, 1fr)); }
+  .fbls-production-layout { grid-template-columns: 1fr; }
+}
+@media (max-width: 820px) {
+  .fbls-production-card-grid { grid-template-columns: repeat(2, minmax(7rem, 1fr)); }
+  .fbls-production-card-header { align-items: stretch; flex-direction: column; }
+  .fbls-production-badges { justify-content: flex-start; }
+}
+@media (max-width: 560px) {
+  .fbls-production-primer { grid-template-columns: 1fr; }
+  .fbls-content-row-card { grid-template-columns: 1fr 4.4rem 4.4rem 2rem; }
+  .fbls-production-card-grid { grid-template-columns: 1fr; }
+  .fbls-production-card-grid .span-2 { grid-column: span 1; }
+}

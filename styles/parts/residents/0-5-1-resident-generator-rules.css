@@ -1,0 +1,27 @@
+/* 0.5.1 resident generator rules */
+.fbls-worker-badge {
+  display: inline-block;
+  min-width: 5.6rem;
+  max-width: 100%;
+  padding: 0.13rem 0.42rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--fbls-text);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.2;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.45);
+}
+
+.fbls-trait-badge {
+  display: inline-block;
+  margin: 0.05rem 0.12rem 0.05rem 0;
+  padding: 0.08rem 0.32rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--fbls-text);
+  font-size: 0.74rem;
+  white-space: nowrap;
+}

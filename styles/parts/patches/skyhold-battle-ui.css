@@ -1,0 +1,3 @@
+/* FBL Skyhold late battle patches. Current mass-combat UI lives in
+   styles/parts/mass-combat; this layer only keeps scene-note compatibility. */
+@import url("./battle/battle-1-1-12-1-1-12-scene-building-note-fixes.css");

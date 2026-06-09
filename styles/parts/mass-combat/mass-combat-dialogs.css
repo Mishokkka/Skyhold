@@ -1,0 +1,454 @@
+/* FBL Skyhold mass-combat: dark help dialogs, weather cards and tag counter graph. */
+.application.fbl-skyhold-dark-dialog,
+.window-app.fbl-skyhold-dark-dialog,
+.dialog.fbl-skyhold-dark-dialog,
+.window-app:has(.fbls-skyhold-dark-panel),
+.application:has(.fbls-skyhold-dark-panel),
+.dialog:has(.fbls-skyhold-dark-panel) {
+  --fbls-dialog-bg: linear-gradient(180deg, rgba(14, 18, 26, .98), rgba(7, 10, 15, .98));
+  --fbls-dialog-bg-solid: rgba(7, 10, 15, .98);
+  --fbls-dialog-text: rgba(240, 232, 214, .94);
+  --fbls-dialog-muted: rgba(235, 226, 206, .76);
+  --fbls-dialog-border: rgba(212, 185, 126, .16);
+  --fbls-dialog-panel: rgba(255, 255, 255, .045);
+  --fbls-dialog-panel-border: rgba(255, 255, 255, .10);
+  --fbls-dialog-action-bg: rgba(185, 58, 70, .82);
+  --fbls-dialog-action-border: rgba(255, 190, 190, .22);
+  --fbls-dialog-scroll-thumb: var(--fbls-battle-scroll-thumb, #b14a5d);
+  --fbls-dialog-scroll-track: #10131a;
+  color-scheme: dark;
+  background: var(--fbls-dialog-bg) !important;
+  color: var(--fbls-dialog-text) !important;
+}
+
+.fbl-skyhold-dark-dialog .window-content,
+.application.fbl-skyhold-dark-dialog .window-content,
+.dialog.fbl-skyhold-dark-dialog .window-content,
+.window-app:has(.fbls-skyhold-dark-panel) .window-content,
+.application:has(.fbls-skyhold-dark-panel) .window-content,
+.dialog:has(.fbls-skyhold-dark-panel) .window-content,
+.window-content:has(.fbls-skyhold-dark-panel),
+.application-content:has(.fbls-skyhold-dark-panel),
+.standard-form:has(.fbls-skyhold-dark-panel),
+.dialog-content:has(.fbls-skyhold-dark-panel) {
+  padding: 0 !important;
+  background: var(--fbls-dialog-bg) !important;
+  color: var(--fbls-dialog-text) !important;
+  overflow: hidden !important;
+}
+
+.fbl-skyhold-dark-dialog .dialog-content,
+.application.fbl-skyhold-dark-dialog .dialog-content,
+.dialog.fbl-skyhold-dark-dialog .dialog-content,
+.fbl-skyhold-dark-dialog .application-content,
+.application.fbl-skyhold-dark-dialog .application-content,
+.dialog.fbl-skyhold-dark-dialog .application-content,
+.fbl-skyhold-dark-dialog form,
+.application.fbl-skyhold-dark-dialog form,
+.dialog.fbl-skyhold-dark-dialog form,
+.fbl-skyhold-dark-dialog .standard-form,
+.application.fbl-skyhold-dark-dialog .standard-form,
+.dialog.fbl-skyhold-dark-dialog .standard-form {
+  background: transparent !important;
+  color: var(--fbls-dialog-text) !important;
+}
+
+.fbl-skyhold-dark-dialog .dialog-content,
+.application.fbl-skyhold-dark-dialog .dialog-content,
+.dialog.fbl-skyhold-dark-dialog .dialog-content,
+.fbl-skyhold-dark-dialog .application-content,
+.application.fbl-skyhold-dark-dialog .application-content,
+.dialog.fbl-skyhold-dark-dialog .application-content {
+  padding: 14px 16px !important;
+  overflow: auto !important;
+  scrollbar-color: var(--fbls-dialog-scroll-thumb) var(--fbls-dialog-scroll-track);
+}
+
+.fbl-skyhold-dark-dialog .dialog-buttons,
+.application.fbl-skyhold-dark-dialog .dialog-buttons,
+.dialog.fbl-skyhold-dark-dialog .dialog-buttons,
+.fbl-skyhold-dark-dialog .form-footer,
+.application.fbl-skyhold-dark-dialog .form-footer,
+.dialog.fbl-skyhold-dark-dialog .form-footer,
+.window-app:has(.fbls-skyhold-dark-panel) .dialog-buttons,
+.application:has(.fbls-skyhold-dark-panel) .dialog-buttons,
+.dialog:has(.fbls-skyhold-dark-panel) .dialog-buttons,
+.window-content:has(.fbls-skyhold-dark-panel) .dialog-buttons,
+.application:has(.fbls-skyhold-dark-panel) .form-footer,
+.dialog:has(.fbls-skyhold-dark-panel) .form-footer,
+.window-content:has(.fbls-skyhold-dark-panel) .form-footer,
+.standard-form:has(.fbls-skyhold-dark-panel) .form-footer {
+  margin: 0 !important;
+  padding: 10px 16px 16px !important;
+  border: 0 !important;
+  background: var(--fbls-dialog-bg-solid) !important;
+}
+
+.window-app:has(.fbls-skyhold-dark-panel) button,
+.application:has(.fbls-skyhold-dark-panel) button,
+.dialog:has(.fbls-skyhold-dark-panel) button {
+  color: var(--fbls-dialog-text) !important;
+}
+
+.fbl-skyhold-dark-dialog .dialog-buttons button,
+.application.fbl-skyhold-dark-dialog .dialog-buttons button,
+.dialog.fbl-skyhold-dark-dialog .dialog-buttons button,
+.fbl-skyhold-dark-dialog .form-footer button,
+.application.fbl-skyhold-dark-dialog .form-footer button,
+.dialog.fbl-skyhold-dark-dialog .form-footer button,
+.window-app:has(.fbls-skyhold-dark-panel) .dialog-buttons button,
+.application:has(.fbls-skyhold-dark-panel) .dialog-buttons button,
+.dialog:has(.fbls-skyhold-dark-panel) .dialog-buttons button,
+.application:has(.fbls-skyhold-dark-panel) .form-footer button,
+.dialog:has(.fbls-skyhold-dark-panel) .form-footer button,
+.window-content:has(.fbls-skyhold-dark-panel) .form-footer button,
+.standard-form:has(.fbls-skyhold-dark-panel) .form-footer button {
+  min-height: 38px;
+  border: 1px solid var(--fbls-dialog-action-border) !important;
+  border-radius: 10px !important;
+  background: var(--fbls-dialog-action-bg) !important;
+  color: rgba(255, 242, 226, .95) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08);
+}
+
+.fbl-skyhold-counter-dialog .window-content {
+  max-width: 690px;
+}
+
+.fbl-skyhold-weather-dialog .window-content {
+  max-width: 580px;
+}
+
+.fbl-skyhold .fbls-skyhold-dark-panel {
+  background: var(--fbls-dialog-bg, linear-gradient(180deg, rgba(14, 18, 26, .98), rgba(7, 10, 15, .98)));
+  color: var(--fbls-dialog-text, rgba(240, 232, 214, .94));
+}
+
+.fbl-skyhold .fbls-dialog-help.fbls-skyhold-dark-panel {
+  padding: 12px;
+  border: 1px solid var(--fbls-dialog-border, rgba(212, 185, 126, .16));
+  border-radius: 14px;
+}
+
+.fbl-skyhold .fbls-help-lead.compact {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid rgba(212, 185, 126, .18);
+  border-radius: 12px;
+  background: var(--fbls-dialog-panel, rgba(255, 255, 255, .045));
+}
+
+.fbl-skyhold .fbls-help-lead.compact strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #f4e6c8;
+}
+
+.fbl-skyhold .fbls-help-lead.compact span {
+  color: var(--fbls-dialog-muted, rgba(235, 226, 206, .76));
+  font-size: 12px;
+}
+
+.fbl-skyhold .fbls-counter-pentagram {
+  display: grid;
+  gap: 10px;
+  width: 620px;
+  max-width: 84vw;
+  color: var(--fbls-dialog-text, rgba(240, 232, 214, .92));
+}
+
+.fbl-skyhold .fbls-counter-graph-wrap {
+  position: relative;
+  width: min(var(--graph-w), 100%);
+  height: var(--graph-h);
+  justify-self: center;
+  border: 1px solid var(--fbls-dialog-border, rgba(212, 185, 126, .16));
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at center, rgba(60, 78, 94, .34), rgba(13, 18, 26, .96) 62%),
+    linear-gradient(180deg, rgba(18, 24, 34, .98), rgba(8, 11, 16, .98));
+  overflow: hidden;
+}
+
+.fbl-skyhold .counter-edge {
+  --edge-color: rgba(112, 214, 138, .72);
+  position: absolute;
+  z-index: 1;
+  left: var(--edge-x);
+  top: var(--edge-y);
+  width: var(--edge-l);
+  height: 0;
+  border-top: 1.35px solid var(--edge-color);
+  opacity: .35;
+  transform: rotate(var(--edge-a));
+  transform-origin: 0 50%;
+  pointer-events: none;
+  transition: border-color .16s ease, border-width .16s ease, opacity .16s ease;
+}
+
+.fbl-skyhold .counter-edge::after {
+  content: "";
+  position: absolute;
+  right: -1px;
+  top: -4px;
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 7px solid var(--edge-color);
+  filter: drop-shadow(0 0 3px rgba(0, 0, 0, .5));
+}
+
+.fbl-skyhold .counter-edge-label {
+  position: absolute;
+  z-index: 6;
+  transform: translate(-50%, -50%);
+  display: none;
+  min-width: 32px;
+  padding: 2px 6px;
+  border: 1px solid rgba(245, 231, 200, .20);
+  border-radius: 999px;
+  background: rgba(7, 10, 15, .88);
+  color: #f5e7c8;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.fbl-skyhold .fbls-counter-pentagram[data-selected-tag="all"] .counter-edge {
+  opacity: .58;
+}
+
+.fbl-skyhold .fbls-counter-pentagram[data-selected-tag="all"] .counter-edge.tone-red {
+  --edge-color: rgba(224, 113, 113, .48);
+}
+
+.fbl-skyhold .fbls-counter-pentagram[data-selected-tag="all"] .counter-edge.tone-green {
+  --edge-color: rgba(112, 214, 138, .58);
+}
+
+.fbl-skyhold .fbls-counter-pentagram:not([data-selected-tag="all"]) .counter-edge,
+.fbl-skyhold .fbls-counter-pentagram:not([data-selected-tag="all"]) .fbls-counter-node {
+  opacity: .16;
+}
+
+.fbl-skyhold .fbls-counter-pentagram:not([data-selected-tag="all"]) .counter-edge-label {
+  display: none;
+}
+
+.fbl-skyhold .counter-edge.is-related,
+.fbl-skyhold .fbls-counter-node.is-related {
+  opacity: .95;
+}
+
+.fbl-skyhold .counter-edge.is-outgoing {
+  --edge-color: #70d68a;
+  z-index: 3;
+  border-top-width: 1.8px;
+}
+
+.fbl-skyhold .counter-edge.is-incoming {
+  --edge-color: #e07171;
+  z-index: 4;
+  border-top-width: 1.8px;
+}
+
+.fbl-skyhold .counter-edge.is-self {
+  --edge-color: #d6be70;
+  z-index: 5;
+}
+
+.fbl-skyhold .counter-edge-label.is-related {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fbl-skyhold .counter-edge-label.is-outgoing {
+  border-color: rgba(112, 214, 138, .30);
+}
+
+.fbl-skyhold .counter-edge-label.is-incoming {
+  border-color: rgba(224, 113, 113, .30);
+}
+
+.fbl-skyhold .counter-edge-label.is-self {
+  border-color: rgba(214, 190, 112, .38);
+}
+
+.fbl-skyhold .fbls-counter-node {
+  appearance: none;
+  -webkit-appearance: none;
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  width: 74px;
+  min-height: 42px;
+  padding: 5px;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 14px;
+  background: rgba(12, 16, 23, .98);
+  color: rgba(235, 226, 206, .86);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, .30);
+  font-family: inherit;
+  text-align: center;
+  cursor: pointer;
+  transition: transform .16s ease, border-color .16s ease, background .16s ease;
+}
+
+.fbl-skyhold .fbls-counter-node:hover {
+  border-color: rgba(235, 210, 142, .55);
+  background: rgba(235, 210, 142, .10);
+  color: #f5e7c8;
+}
+
+.fbl-skyhold .fbls-counter-node.is-selected {
+  border-color: rgba(235, 210, 142, .76);
+  background: rgba(235, 210, 142, .20);
+  color: #f5e7c8;
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1.06);
+}
+
+.fbl-skyhold .fbls-counter-node.is-source {
+  border-color: rgba(224, 113, 113, .54);
+}
+
+.fbl-skyhold .fbls-counter-node.is-target {
+  border-color: rgba(112, 214, 138, .54);
+}
+
+.fbl-skyhold .fbls-counter-node i {
+  font-size: 15px;
+}
+
+.fbl-skyhold .fbls-counter-node span {
+  max-width: 64px;
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fbl-skyhold .fbls-counter-center {
+  appearance: none;
+  -webkit-appearance: none;
+  position: absolute;
+  z-index: 8;
+  transform: translate(-50%, -50%) scale(.86);
+  display: grid;
+  place-items: center;
+  gap: 3px;
+  width: 94px;
+  min-height: 56px;
+  padding: 8px;
+  border: 1px solid rgba(235, 210, 142, .72);
+  border-radius: 18px;
+  background: rgba(31, 26, 18, .96);
+  color: #f5e7c8;
+  box-shadow: 0 14px 28px rgba(0, 0, 0, .42), inset 0 1px 0 rgba(255, 255, 255, .08);
+  font-family: inherit;
+  text-align: center;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .16s ease, transform .16s ease;
+}
+
+.fbl-skyhold .fbls-counter-center.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.fbl-skyhold .fbls-counter-center i {
+  font-size: 18px;
+}
+
+.fbl-skyhold .fbls-counter-center span {
+  max-width: 78px;
+  overflow: hidden;
+  font-size: 11px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fbl-skyhold .fbls-weather-help-compact {
+  display: grid;
+  gap: 10px;
+  width: 520px;
+  max-width: 78vw;
+  color: var(--fbls-dialog-text, rgba(240, 232, 214, .92));
+}
+
+.fbl-skyhold .fbls-weather-help-list {
+  display: grid;
+  gap: 7px;
+  max-height: 430px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.fbl-skyhold .fbls-weather-help-card {
+  display: grid;
+  gap: 6px;
+  padding: 9px 10px;
+  border: 1px solid var(--fbls-dialog-panel-border, rgba(255, 255, 255, .10));
+  border-radius: 12px;
+  background: var(--fbls-dialog-panel, rgba(255, 255, 255, .045));
+}
+
+.fbl-skyhold .fbls-weather-help-card header {
+  display: grid;
+  gap: 2px;
+}
+
+.fbl-skyhold .fbls-weather-help-card header strong {
+  color: #f4e6c8;
+  font-size: 14px;
+  text-shadow: none;
+}
+
+.fbl-skyhold .fbls-weather-help-card header em {
+  color: rgba(235, 226, 206, .78);
+  font-size: 12px;
+  font-style: normal;
+  text-shadow: none;
+}
+
+.fbl-skyhold .fbls-weather-help-card div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.fbl-skyhold .fbls-weather-help-card b {
+  margin-right: 2px;
+  color: rgba(235, 226, 206, .60);
+  font-size: 11px;
+  letter-spacing: .05em;
+  text-shadow: none;
+  text-transform: uppercase;
+}
+
+.fbl-skyhold .fbls-weather-help-card div span {
+  display: inline-flex;
+  padding: 2px 6px;
+  border: 1px solid rgba(255, 255, 255, .08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .055);
+  font-size: 11px;
+  text-shadow: none;
+}
+
+.fbl-skyhold .fbls-weather-help-card .positive { color: #9ee6a1; }
+.fbl-skyhold .fbls-weather-help-card .negative { color: #ff9a8a; }
+.fbl-skyhold .fbls-weather-help-card .neutral { color: rgba(235, 226, 206, .74); }

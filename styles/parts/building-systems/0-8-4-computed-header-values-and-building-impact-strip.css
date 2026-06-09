@@ -1,0 +1,90 @@
+.fbls-editor-title-line {
+  gap: 0.45rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.fbls-editor-impact-strip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  flex-wrap: wrap;
+}
+.fbls-editor-impact {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.18rem;
+  margin: 0;
+  padding: 0.08rem 0.22rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 999px;
+  background: rgba(0,0,0,0.18);
+  min-height: 1.55rem;
+}
+.fbls-editor-impact i { width: 1rem; text-align: center; }
+.fbls-editor-impact.morale i { color: #d7c88a; }
+.fbls-editor-impact.reputation i { color: #d7b56d; }
+.fbls-editor-impact input,
+.fbls-editor-impact strong {
+  width: 2.55rem;
+  height: 1.32rem;
+  min-height: 1.32rem;
+  padding: 0 0.22rem;
+  text-align: center;
+  color: var(--fbls-text);
+  background: rgba(0,0,0,0.32);
+  border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 5px;
+}
+.fbls-editor-dev-gain {
+  min-height: 1.55rem;
+  padding: 0.08rem 0.24rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
+}
+.fbls-inline-dev-gain-editor input,
+.fbls-inline-dev-gain-editor strong,
+.fbls-construction-dev-inline input,
+.fbls-construction-dev-inline strong,
+.fbls-editor-dev-gain input,
+.fbls-editor-impact input {
+  color: var(--fbls-text);
+  -webkit-text-fill-color: var(--fbls-text);
+}
+.fbls-result-box {
+  display: grid;
+  grid-template-rows: auto 1.9rem auto;
+  align-self: stretch;
+  min-height: 0;
+  padding: 0.18rem 0.34rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 8px;
+  background: rgba(0,0,0,0.14);
+}
+.fbls-result-box span {
+  color: var(--fbls-muted);
+  font-size: 0.64rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.fbls-result-box strong {
+  min-height: 0;
+  height: 1.9rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 1.12rem;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+.fbls-result-box em {
+  color: var(--fbls-muted);
+  font-size: 0.72rem;
+  font-style: normal;
+  white-space: nowrap;
+}
+.fbls-income-grid,
+.fbls-defense-grid {
+  align-items: end;
+}

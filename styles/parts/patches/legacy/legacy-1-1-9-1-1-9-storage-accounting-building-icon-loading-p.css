@@ -1,0 +1,111 @@
+/* 1.1.9: storage/accounting/building-icon/loading polish */
+.fbls-storage-item-main {
+  display: grid;
+  grid-template-columns: 2.75rem minmax(0, 1fr) auto;
+  align-items: start;
+  gap: .55rem;
+}
+.fbls-storage-item-main > div {
+  min-width: 0;
+}
+.fbls-storage-item-main .fbls-link-button {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+.fbls-storage-item-open {
+  width: 2.5rem;
+  height: 2.5rem;
+  flex: 0 0 2.5rem;
+}
+
+.fbls-storage-accounting-layout.modernized {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: .65rem;
+  align-items: start;
+}
+.fbls-accounting-wide {
+  grid-column: 1 / -1;
+}
+.fbls-accounting-kpi-row,
+.fbls-accounting-grid.compact {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: .5rem;
+}
+.fbls-accounting-kpi-row > div,
+.fbls-accounting-grid.compact > div,
+.fbls-accounting-ledger > div {
+  background: rgba(255,255,255,.035);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: .45rem;
+  padding: .45rem .55rem;
+}
+.fbls-accounting-kpi-row span,
+.fbls-accounting-grid.compact span,
+.fbls-accounting-ledger span {
+  display: block;
+  color: rgba(232,226,215,.72);
+  font-size: .76rem;
+  text-transform: uppercase;
+  letter-spacing: .035em;
+}
+.fbls-accounting-kpi-row strong,
+.fbls-accounting-grid.compact strong,
+.fbls-accounting-ledger strong {
+  display: block;
+  margin-top: .18rem;
+  font-size: 1rem;
+}
+.fbls-accounting-ledger {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: .5rem;
+}
+.fbls-accounting-ledger .income strong,
+.fbls-accounting-card .positive { color: #9bdc9b; }
+.fbls-accounting-ledger .expense strong,
+.fbls-accounting-card .negative { color: #e99b9b; }
+.fbls-accounting-card .neutral { color: #e8e2d7; }
+
+.fbls-building-card .fbls-building-card-head {
+  display: grid;
+  grid-template-columns: 2.65rem minmax(0, 1fr) auto;
+  align-items: start;
+  gap: .55rem;
+}
+.fbls-building-card-icon {
+  width: 2.45rem;
+  height: 2.45rem;
+  border-radius: .55rem;
+  display: grid;
+  place-items: center;
+  background: rgba(255,255,255,.055);
+  border: 1px solid rgba(255,255,255,.10);
+  overflow: hidden;
+  color: #d9c7a2;
+}
+.fbls-building-card-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.fbls-building-card-icon i { font-size: 1.18rem; }
+.fbls-building-title-block { min-width: 0; }
+
+.fbls-loading-overlay {
+  z-index: 10000;
+  position: absolute;
+  inset: 0;
+  min-height: 100%;
+}
+.fbls-shell.fbls-loading-active {
+  position: relative;
+}
+.fbls-shell.fbls-loading-active .fbls-loading-overlay {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: all;
+}

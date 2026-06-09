@@ -1,0 +1,6 @@
+/* FBL Skyhold template browser stylesheet index.
+   The old monolith is split into semantic parts so browser/editor styles stay maintainable. */
+@import url("./template-browser/skyhold-template-browser-base.css");
+@import url("./template-browser/skyhold-template-browser-catalog.css");
+@import url("./template-browser/skyhold-template-browser-tools.css");
+@import url("./template-browser/skyhold-template-browser-gm.css");

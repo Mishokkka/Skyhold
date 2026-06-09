@@ -1,0 +1,13 @@
+/* FBL Skyhold main stylesheet index.
+   Domain rules are split into styles/parts to keep overrides local and reviewable. */
+@import url("./parts/skyhold-variables.css");
+@import url("./parts/skyhold-forms.css");
+@import url("./parts/skyhold-ui-kit.css");
+@import url("./parts/skyhold-core.css");
+@import url("./parts/skyhold-layout.css");
+@import url("./parts/skyhold-header.css");
+@import url("./parts/skyhold-residents.css");
+@import url("./parts/skyhold-buildings.css");
+@import url("./parts/skyhold-economy.css");
+@import url("./parts/skyhold-building-systems.css");
+@import url("./parts/skyhold-storage.css");

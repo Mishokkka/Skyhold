@@ -1,0 +1,25 @@
+.fbls-prompt-form label {
+  display: grid;
+  gap: .35rem;
+}
+.fbls-prompt-form input {
+  width: 100%;
+}
+
+.fbls-defense-squad-members {
+  grid-template-columns: repeat(5, minmax(8.5rem, 1fr));
+}
+.fbls-defense-squad-members .sergeant {
+  min-width: 0;
+}
+.fbls-defense-squad-head label > span,
+.fbls-defense-squad-members label > span,
+.fbls-defense-squad-status strong {
+  margin-bottom: .28rem;
+}
+.fbls-defense-squad-status span {
+  margin-top: .18rem;
+}
+@media (max-width: 980px) {
+  .fbls-defense-squad-members { grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
+}

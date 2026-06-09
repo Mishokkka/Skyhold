@@ -1,0 +1,43 @@
+{
+  "id": "fbl-skyhold",
+  "title": "FBL Skyhold Manager",
+  "description": "A lightweight holdings, settlement, ship and flying-island manager for Forbidden Lands worlds in Foundry VTT v13.",
+  "version": "1.5.25",
+  "authors": [
+    {
+      "name": "Mishokkka"
+    }
+  ],
+  "compatibility": {
+    "minimum": "13",
+    "verified": "13.351"
+  },
+  "relationships": {
+    "systems": [
+      {
+        "id": "forbidden-lands",
+        "type": "system",
+        "compatibility": {
+          "minimum": "13.0.0",
+          "verified": "13.0.5"
+        }
+      }
+    ]
+  },
+  "esmodules": [
+    "scripts/main.js"
+  ],
+  "styles": [
+    "styles/skyhold.css",
+    "styles/skyhold-template-browser.css",
+    "styles/skyhold-late-ui.css"
+  ],
+  "languages": [
+    {
+      "lang": "ru",
+      "name": "Русский",
+      "path": "lang/ru.json"
+    }
+  ],
+  "socket": true
+}

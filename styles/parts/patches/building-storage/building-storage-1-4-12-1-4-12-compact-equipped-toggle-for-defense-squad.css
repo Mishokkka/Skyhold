@@ -1,0 +1,29 @@
+/* 1.4.12 — compact equipped toggle for defense squads */
+.fbl-skyhold .fbls-defense-squad-head.strict-line .fbls-defense-equipped-toggle {
+  display: inline-grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  min-width: 118px;
+  padding: 0 8px;
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 10px;
+  background: rgba(0,0,0,.18);
+}
+.fbl-skyhold .fbls-defense-squad-head.strict-line .fbls-defense-equipped-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  justify-self: center;
+  align-self: center;
+}
+.fbl-skyhold .fbls-defense-squad-head.strict-line .fbls-defense-equipped-toggle span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgba(232,220,190,.82);
+  font-size: 12px;
+  font-weight: 800;
+}

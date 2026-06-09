@@ -1,0 +1,74 @@
+.fbls-defense-command-row {
+  display: grid;
+  grid-template-columns: minmax(16rem, 24rem) minmax(0, 1fr);
+  gap: .7rem;
+  align-items: end;
+  margin-bottom: .6rem;
+}
+.fbls-defense-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+}
+.fbls-defense-summary span {
+  border: 1px solid rgba(121,178,255,.2);
+  border-radius: 999px;
+  padding: .25rem .55rem;
+  background: rgba(9,19,32,.45);
+  color: #cdd7e5;
+}
+.fbls-defense-squad-list {
+  display: grid;
+  gap: .65rem;
+  margin: .65rem 0;
+}
+.fbls-defense-squad {
+  border: 1px solid rgba(121,178,255,.24);
+  border-radius: 11px;
+  padding: .65rem;
+  background: linear-gradient(135deg, rgba(10,31,54,.74), rgba(7,12,18,.72));
+}
+.fbls-defense-squad.warning {
+  border-color: rgba(222,168,74,.36);
+  background: linear-gradient(135deg, rgba(58,43,13,.40), rgba(7,12,18,.72));
+}
+.fbls-defense-squad-head {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1.2fr) minmax(10rem, .9fr) minmax(12rem, 1fr) auto auto;
+  gap: .5rem;
+  align-items: end;
+}
+.fbls-defense-squad-status {
+  min-height: 2.8rem;
+  padding: .35rem .5rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,.1);
+  background: rgba(0,0,0,.22);
+}
+.fbls-defense-squad-status strong,
+.fbls-defense-squad-status span {
+  display: block;
+}
+.fbls-defense-squad-status span { color: #c4cedb; font-size: 12px; }
+.fbls-defense-squad-members {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: .45rem;
+  margin-top: .55rem;
+}
+.fbls-defense-squad-members .sergeant {
+  border-color: rgba(184,139,255,.25);
+}
+.fbls-transfer-grid,
+.fbls-gm-sound-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: .5rem;
+  align-items: end;
+}
+@media (max-width: 900px) {
+  .fbls-defense-command-row,
+  .fbls-defense-squad-head {
+    grid-template-columns: 1fr;
+  }
+}

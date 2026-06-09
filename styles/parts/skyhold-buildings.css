@@ -1,0 +1,7 @@
+/* FBL Skyhold building list/editor stylesheet index.
+   Split by section; import order preserves the existing cascade. */
+
+/* FBL Skyhold: Building lists, development, editors and construction basics. */
+@import url("./buildings/0-6-0-buildings-and-development.css");
+@import url("./buildings/0-6-2-layout-and-building-editor-pass.css");
+@import url("./buildings/0-6-3-interface-fixes-and-building-editor-compression.css");

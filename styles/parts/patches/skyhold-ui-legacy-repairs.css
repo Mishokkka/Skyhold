@@ -1,0 +1,10 @@
+/* FBL Skyhold late patch index. Split by feature/version section; import order preserves the old cascade. */
+@import url("./legacy/legacy-1-1-0-1-1-0.css");
+@import url("./legacy/legacy-1-1-1-1-1-1-layout-repair.css");
+@import url("./legacy/legacy-1-1-2-1-1-2-stable-single-stylesheet-header-mass-defen.css");
+@import url("./legacy/legacy-1-1-6-1-1-6-ui-pain-pass-compact-header-template-delet.css");
+@import url("./legacy/legacy-1-1-7-1-1-7-defense-ui-checkbox-alignment-mass-tags-fl.css");
+@import url("./legacy/legacy-1-1-8-1-1-8-ui-fixes-after-defense-pass.css");
+@import url("./legacy/legacy-1-1-9-1-1-9-storage-accounting-building-icon-loading-p.css");
+@import url("./legacy/legacy-1-1-10-1-1-10-softer-loading-overlay-rounded-efficiency.css");
+@import url("./legacy/legacy-1-1-11-1-1-11-compact-battle-tags-building-images-scene.css");

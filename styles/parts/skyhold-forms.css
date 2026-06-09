@@ -1,0 +1,117 @@
+/* FBL Skyhold: shared form controls, field labels and action buttons. */
+.fbls-form-grid label,
+.fbls-battle-fields label,
+.fbls-battle-preset label,
+.fbls-crew-headline label,
+.fbls-suitable-editor label,
+.fbls-storage-adjust-grid label,
+.fbls-storage-move-grid label,
+.fbls-field {
+  min-width: 0;
+  color: var(--fbls-muted);
+  font-size: 0.69rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.fbls-form-grid span,
+.fbls-battle-fields span,
+.fbls-battle-preset span,
+.fbls-crew-headline span,
+.fbls-suitable-editor span,
+.fbls-storage-adjust-grid span,
+.fbls-storage-move-grid span,
+.fbls-field > span {
+  display: block;
+  margin-bottom: 0.2rem;
+}
+
+.fbl-skyhold-app input,
+.fbl-skyhold-app textarea,
+.fbl-skyhold-app select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--fbls-border);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.28);
+  color: var(--fbls-text);
+  padding: 0.38rem 0.45rem;
+  box-shadow: none;
+}
+
+.fbl-skyhold-app select {
+  height: 1.95rem;
+}
+
+.fbl-skyhold-app select option {
+  background: #f2f2f2;
+  color: #111;
+}
+
+.fbl-skyhold-app textarea {
+  resize: vertical;
+  line-height: 1.3;
+}
+
+
+.fbl-skyhold-app input:focus,
+.fbl-skyhold-app textarea:focus,
+.fbl-skyhold-app select:focus {
+  border-color: rgba(255, 255, 255, 0.36);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08);
+  outline: none;
+}
+
+.fbl-skyhold-app input::placeholder,
+.fbl-skyhold-app textarea::placeholder {
+  color: rgba(255, 255, 255, 0.38);
+}
+
+.fbls-form-grid strong,
+.fbls-summary-table strong,
+.fbls-battle-fields strong,
+.fbls-battle-preset strong,
+.fbls-crew-headline strong,
+.fbls-suitable-editor strong,
+.fbls-field > strong {
+  color: var(--fbls-text);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.fbls-button,
+.fbls-icon-button {
+  border: 1px solid var(--fbls-border);
+  border-radius: 9px;
+  background: var(--fbls-panel-strong);
+  color: var(--fbls-text);
+  cursor: pointer;
+}
+
+.fbls-button {
+  padding: 0.5rem 0.75rem;
+  white-space: nowrap;
+}
+
+.fbls-button.compact {
+  height: 1.95rem;
+  padding: 0 0.65rem;
+}
+
+.fbls-button:hover,
+.fbls-icon-button:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.fbls-icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+.fbls-button.danger,
+.fbls-icon-button.danger:hover {
+  border-color: rgba(181, 72, 72, 0.75);
+  background: rgba(181, 72, 72, 0.18);
+}

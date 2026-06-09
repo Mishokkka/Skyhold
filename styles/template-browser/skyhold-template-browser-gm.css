@@ -1,0 +1,412 @@
+/* FBL Skyhold template browser: GM dashboard, generators and compact resident editor styling. */
+/* 1.0.12: compact inline template deficits and GM dashboard rebuild. */
+.fbl-skyhold-template-browser .fbls-template-card-head {
+  display: grid;
+  grid-template-columns: minmax(11rem, 1fr) auto max-content;
+  align-items: start;
+  gap: 0.45rem;
+}
+
+.fbl-skyhold-template-browser .fbls-template-missing-dev.inline {
+  display: inline-flex;
+  align-items: center;
+  align-self: start;
+  justify-self: center;
+  gap: 0.24rem;
+  width: auto;
+  max-width: 15rem;
+  margin: 0.08rem 0 0;
+  padding: 0.14rem 0.34rem;
+  border: 1px solid rgba(220, 96, 84, 0.42);
+  border-radius: 999px;
+  background: rgba(52, 12, 10, 0.46);
+  color: #f0b3a8;
+  font-size: 0.72rem;
+  line-height: 1.05;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fbl-skyhold-template-browser .fbls-template-missing-dev.inline span {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  opacity: 0.9;
+}
+
+.fbl-skyhold-template-browser .fbls-template-missing-dev.inline em {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.12rem;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.fbl-skyhold-template-browser .fbls-template-dev-chip-row {
+  justify-self: end;
+  align-self: start;
+  max-width: 14rem;
+}
+
+.fbl-skyhold-template-browser .fbls-template-browser-card footer {
+  margin-top: auto;
+  padding-top: 0.22rem;
+}
+
+@media (max-width: 980px) {
+  .fbl-skyhold-template-browser .fbls-template-card-head {
+    grid-template-columns: minmax(0, 1fr) max-content;
+  }
+  .fbl-skyhold-template-browser .fbls-template-missing-dev.inline {
+    grid-column: 1 / -1;
+    justify-self: start;
+    max-width: 100%;
+  }
+}
+
+.fbls-gm-panel.compact-gm {
+  padding: 0.55rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.fbls-gm-dashboard {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(21rem, 100%), 1fr));
+  gap: 0.65rem;
+  align-items: start;
+}
+
+.fbls-gm-card,
+.fbls-generator-card.compact-generator,
+.fbls-resource-catalog-card.compact-resource-card,
+.fbls-card.compact-danger {
+  padding: 0.72rem;
+  border-radius: 0.75rem;
+  background: rgba(18, 22, 27, 0.86);
+  border: 1px solid rgba(255,255,255,0.10);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+}
+
+.fbls-gm-card h2,
+.fbls-generator-card.compact-generator h2,
+.fbls-resource-catalog-card.compact-resource-card h2,
+.fbls-card.compact-danger h2 {
+  margin: 0 0 0.45rem;
+  font-size: 1.02rem;
+  line-height: 1.15;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.fbls-gm-card textarea,
+.fbls-generator-card.compact-generator input,
+.fbls-generator-card.compact-generator select,
+.fbls-generator-card.compact-generator textarea,
+.fbls-resource-catalog-card.compact-resource-card input,
+.fbls-resource-catalog-card.compact-resource-card textarea {
+  min-width: 0;
+}
+
+.fbls-gm-toggle-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.4rem;
+}
+
+.fbls-checkbox-label.compact-check {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.42rem 0.55rem;
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: 0.55rem;
+  background: rgba(0,0,0,0.18);
+}
+
+.fbls-gm-mod-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(6.2rem, 1fr));
+  gap: 0.45rem;
+}
+
+.fbls-gm-mod-grid label,
+.fbls-generator-grid.compact-generator-grid label,
+.fbls-generated-person-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
+.fbls-gm-mod-grid label span,
+.fbls-generator-grid.compact-generator-grid label span,
+.fbls-generated-person-card label span {
+  font-size: 0.68rem;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgba(226,226,226,0.68);
+}
+
+.fbls-gm-mod-grid input,
+.fbls-generator-grid.compact-generator-grid input,
+.fbls-generator-grid.compact-generator-grid select,
+.fbls-generated-person-card input,
+.fbls-generated-person-card select,
+.fbls-generated-person-card textarea {
+  width: 100%;
+  height: 2.05rem;
+  padding: 0.32rem 0.45rem;
+}
+
+.fbls-generated-person-card textarea {
+  height: auto;
+  min-height: 2.45rem;
+}
+
+.fbls-muted-text.compact,
+.fbls-resource-catalog-card.compact-resource-card .fbls-muted-text.compact {
+  margin: 0.4rem 0 0;
+  font-size: 0.78rem;
+}
+
+.fbls-gm-roll-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.fbls-last-roll.compact-last-roll {
+  margin-top: 0.45rem;
+  padding: 0.45rem 0.55rem;
+  display: grid;
+  gap: 0.2rem;
+  border-radius: 0.55rem;
+  background: rgba(0,0,0,0.18);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+.fbls-card-headline.compact-headline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  margin-bottom: 0.55rem;
+}
+
+.fbls-card-headline.compact-headline p {
+  margin: 0.12rem 0 0;
+  color: rgba(226,226,226,0.62);
+  font-size: 0.82rem;
+}
+
+.fbls-generator-actions.compact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.35rem;
+}
+
+.fbls-generator-grid.compact-generator-grid {
+  display: grid;
+  grid-template-columns: 5rem repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: 0.45rem;
+  margin-bottom: 0.55rem;
+}
+
+.fbls-generator-edit-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.fbls-generated-person-card {
+  display: grid;
+  grid-template-columns: 5.3rem minmax(11rem, 1.35fr) repeat(auto-fit, minmax(5.7rem, 1fr));
+  gap: 0.42rem;
+  padding: 0.55rem;
+  border: 1px solid rgba(125, 184, 207, 0.16);
+  border-radius: 0.65rem;
+  background: rgba(9, 22, 34, 0.58);
+}
+
+.fbls-generated-person-card.muted {
+  opacity: 0.58;
+  filter: saturate(0.75);
+}
+
+.fbls-generated-person-card .pick {
+  align-self: end;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.32rem;
+}
+
+.fbls-generated-person-card .pick input {
+  width: 1rem;
+  min-width: 1rem;
+  height: 1rem;
+}
+
+.fbls-generated-person-card .pick span {
+  font-size: 0.78rem;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.fbls-generated-person-card .name,
+.fbls-generated-person-card .background,
+.fbls-generated-person-card .traits,
+.fbls-generated-person-card .appearance {
+  grid-column: span 2 !important;
+}
+
+.fbls-generated-person-card .summary {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.38rem;
+  min-width: 0;
+  align-self: end;
+}
+
+.fbls-generated-person-card .summary em {
+  font-size: 0.78rem;
+  color: rgba(226,226,226,0.72);
+  font-style: normal;
+}
+
+.fbls-resource-catalog-card.compact-resource-card {
+  overflow: auto;
+}
+
+.fbls-resource-catalog-table.compact-resource-table {
+  min-width: 78rem;
+  margin-top: 0.4rem;
+}
+
+.fbls-resource-catalog-table.compact-resource-table th,
+.fbls-resource-catalog-table.compact-resource-table td {
+  padding: 0.24rem;
+}
+
+.fbls-resource-catalog-table.compact-resource-table input,
+.fbls-resource-catalog-table.compact-resource-table textarea {
+  font-size: 0.78rem;
+}
+
+.fbls-card.compact-danger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+}
+
+@media (max-width: 900px) {
+  .fbls-card-headline.compact-headline,
+  .fbls-card.compact-danger {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .fbls-generator-actions.compact-actions {
+    justify-content: flex-start;
+  }
+  .fbls-generated-person-card {
+    grid-template-columns: repeat(auto-fit, minmax(6.4rem, 1fr));
+  }
+}
+
+/* 1.0.13: selective generated resident editor */
+.fbls-generator-edit-list.compact-selective {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
+  gap: 8px;
+}
+.fbls-generated-person-card.selective {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(7,12,18,.52);
+}
+.fbls-generated-person-card.selective.muted { opacity: .58; }
+.fbls-generated-person-card.selective.editing {
+  border-color: rgba(125,190,255,.38);
+  background: rgba(12,27,42,.68);
+}
+.fbls-generated-person-summary {
+  display: grid;
+  grid-template-columns: auto minmax(0,1fr) auto auto auto;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  min-height: 34px;
+}
+.fbls-generated-person-summary .pick {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+}
+.fbls-generated-person-summary .identity {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.fbls-generated-person-summary .identity strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fbls-generated-person-summary .identity span,
+.fbls-generated-person-summary em {
+  color: rgba(230,220,205,.70);
+  font-size: 12px;
+  font-style: normal;
+}
+.fbls-generated-person-editor {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(64px, 1fr));
+  gap: 6px;
+}
+.fbls-generated-person-editor label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.fbls-generated-person-editor label.name,
+.fbls-generated-person-editor label.background,
+.fbls-generated-person-editor label.traits,
+.fbls-generated-person-editor label.appearance {
+  grid-column: span 2;
+}
+.fbls-generated-person-editor label.appearance { grid-column: 1 / -1; }
+.fbls-generated-person-editor span {
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  font-size: 10px;
+  color: rgba(230,220,205,.68);
+}
+@media (max-width: 760px) {
+  .fbls-generated-person-editor { grid-template-columns: repeat(2, minmax(80px, 1fr)); }
+  .fbls-generated-person-editor label.name,
+  .fbls-generated-person-editor label.background,
+  .fbls-generated-person-editor label.traits { grid-column: 1 / -1; }
+  .fbls-generated-person-summary { grid-template-columns: auto minmax(0,1fr) auto; }
+  .fbls-generated-person-summary .fbls-worker-badge,
+  .fbls-generated-person-summary em { display: none; }
+}
+

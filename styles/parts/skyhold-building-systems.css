@@ -1,0 +1,13 @@
+/* FBL Skyhold building subsystem stylesheet index.
+   Split by section; import order preserves the existing cascade. */
+
+/* FBL Skyhold: Building subsystem editors, production, contents and template catalog rules. */
+@import url("./building-systems/0-8-0-building-subsystems.css");
+@import url("./building-systems/0-8-1-building-editor-tabs-and-worker-layout.css");
+@import url("./building-systems/0-8-2-building-editor-cleanup.css");
+@import url("./building-systems/0-8-3-manager-header-building-cards-compact-editor.css");
+@import url("./building-systems/0-8-4-computed-header-values-and-building-impact-strip.css");
+@import url("./building-systems/0-9-1-resource-catalog.css");
+@import url("./building-systems/0-9-4-production-sources-contents-and-collection.css");
+@import url("./building-systems/0-9-5-ergonomic-production-tab-redesign.css");
+@import url("./building-systems/0-9-6-production-tab-cleanup.css");

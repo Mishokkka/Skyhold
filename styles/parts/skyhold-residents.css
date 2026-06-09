@@ -1,0 +1,8 @@
+/* FBL Skyhold resident stylesheet index.
+   Split by section; import order preserves the existing cascade. */
+
+/* FBL Skyhold: Resident model, filters, generators and trait UI. */
+@import url("./residents/0-5-0-generators-and-resident-compact-pass.css");
+@import url("./residents/0-5-1-resident-generator-rules.css");
+@import url("./residents/0-5-2-resident-ui-and-trait-picker-pass.css");
+@import url("./residents/0-5-4-fixed-tooltips-resident-details-home-picker.css");

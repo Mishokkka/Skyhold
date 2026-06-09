@@ -1,0 +1,420 @@
+/* FBL Skyhold: settlement header component owner.
+   Owns the holding selector band, Calendaria widgets, population, and top statline. */
+
+.fbls-hero.compact {
+  padding: 0.45rem 0.65rem 0.55rem;
+  border-bottom: 1px solid var(--fbls-border);
+}
+
+.fbls-hero-top {
+  display: grid;
+  gap: 0.38rem;
+}
+
+.fbls-header-control-band {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  margin-bottom: 0.35rem;
+  overflow: visible;
+}
+
+.fbls-header-control-band label {
+  min-width: 0;
+  margin: 0;
+}
+
+.fbls-header-select-main.compact-name {
+  flex: 1 1 14rem;
+  min-width: 10rem;
+  max-width: 20rem;
+}
+
+.fbls-edit-name-button,
+.fbls-header-control-band > .fbls-button.icon-only {
+  flex: 0 0 2.35rem;
+  width: 2.35rem;
+  min-width: 2.35rem;
+  max-width: 2.35rem;
+  height: var(--fbls-header-control-height, 2.2rem);
+  min-height: var(--fbls-header-control-height, 2.2rem);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 3px;
+  font-size: 1.05rem;
+}
+
+.fbls-header-type-select {
+  flex: 0 0 7rem;
+  min-width: 7rem;
+}
+
+.fbls-header-visibility-select {
+  flex: 0 0 12rem;
+  min-width: 0;
+  width: 100%;
+  margin-left: auto;
+}
+
+.fbls-header-visibility-toggle {
+  flex: 0 0 2.35rem;
+  min-width: 2.35rem;
+  max-width: 2.35rem;
+  padding: 0;
+}
+
+.fbls-header-visibility-toggle.public i { color: #a7c8ff; }
+.fbls-header-visibility-toggle.gm-only i { color: #d8a0a0; }
+
+.fbls-header-control-band select,
+.fbls-header-control-band > label > strong {
+  box-sizing: border-box;
+  width: 100%;
+  height: var(--fbls-header-control-height, 2.2rem);
+  min-height: var(--fbls-header-control-height, 2.2rem);
+  display: flex;
+  align-items: center;
+  padding: 0 0.7rem;
+  border-radius: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fbls-header-calendar-box,
+.fbls-header-calendar-last {
+  box-sizing: border-box;
+  height: var(--fbls-header-control-height, 2.2rem);
+  min-height: var(--fbls-header-control-height, 2.2rem);
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.32rem;
+  align-items: center;
+  margin: 0;
+  color: var(--fbls-text);
+}
+
+.fbls-header-calendar-box {
+  flex: 1 1 15rem;
+  min-width: 12rem;
+  max-width: 24rem;
+  padding: 0 0.55rem;
+  overflow: hidden;
+  border: 1px solid var(--fbls-border);
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.fbls-header-calendar-box.missing {
+  border-color: rgba(180, 90, 90, 0.35);
+  background: rgba(95, 30, 35, 0.18);
+}
+
+.fbls-header-calendar-last {
+  flex: 0 1 11.5rem;
+  min-width: 9.5rem;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+}
+
+.fbls-header-calendar-box > i,
+.fbls-header-calendar-last > i {
+  color: var(--fbls-muted);
+  font-size: 0.88rem;
+  line-height: 1;
+}
+
+.fbls-header-calendar-box span,
+.fbls-header-calendar-last span {
+  margin: 0;
+  color: var(--fbls-muted);
+  font-size: 0.68rem;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.045em;
+  white-space: nowrap;
+}
+
+.fbls-header-calendar-box strong,
+.fbls-header-calendar-last strong,
+.fbls-header-calendar-last input {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.78rem;
+}
+
+.fbls-header-calendar-box strong {
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.fbls-header-calendar-last input,
+.fbls-header-calendar-last strong {
+  width: 100%;
+  height: var(--fbls-header-control-height, 2.2rem);
+  min-height: var(--fbls-header-control-height, 2.2rem);
+  padding: 0 0.55rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 3px;
+}
+
+.fbls-header-calendar-last input {
+  background: rgba(0, 0, 0, 0.24);
+}
+
+.fbls-header-calendar-last strong {
+  display: flex;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.fbls-header-population-box {
+  flex: 0 0 4rem;
+  min-width: 4rem;
+  max-width: 4rem;
+  box-sizing: border-box;
+  height: var(--fbls-header-control-height, 2.2rem);
+  min-height: var(--fbls-header-control-height, 2.2rem);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0 0.5rem;
+  overflow: visible;
+  border: 1px solid var(--fbls-border);
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--fbls-text);
+  white-space: nowrap;
+}
+
+.fbls-header-population-box span {
+  flex: 0 0 auto;
+  margin: 0;
+  color: var(--fbls-muted);
+  font-size: 0.92rem;
+}
+
+.fbls-header-population-box strong {
+  flex: 0 0 auto;
+  width: auto;
+  height: auto;
+  min-width: 1.3rem;
+  min-height: 0;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  font-size: 1rem;
+  line-height: 1;
+  text-align: center;
+}
+
+.fbls-header-statline {
+  display: grid;
+  grid-template-columns: 7.2rem minmax(22rem, 1fr) minmax(10rem, 0.85fr) max-content;
+  gap: 0.45rem;
+  align-items: center;
+  margin-top: 0.35rem;
+}
+
+.fbls-header-statline .fbls-morale-compact,
+.fbls-header-statline .fbls-dev-stat,
+.fbls-header-statline .fbls-faith-stat,
+.fbls-header-statline .fbls-roll-stat {
+  box-sizing: border-box;
+  height: var(--fbls-header-stat-height, 2.3rem);
+  min-height: var(--fbls-header-stat-height, 2.3rem);
+  align-items: center;
+  margin: 0;
+  padding: 0.25rem 0.52rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.fbls-morale-compact {
+  display: grid;
+  grid-template-columns: 1.45rem minmax(2rem, 1fr);
+  gap: 0.35rem;
+  appearance: none;
+  color: var(--fbls-text);
+  cursor: pointer;
+  font: inherit;
+}
+
+.fbls-morale-compact:hover {
+  border-color: rgba(232, 202, 138, 0.55);
+  background: rgba(70, 50, 25, 0.22);
+}
+
+.fbls-morale-compact i {
+  font-size: 1.35rem;
+  text-align: center;
+}
+
+.fbls-morale-compact strong {
+  text-align: center;
+}
+
+.fbls-morale-compact.riot i { color: #ff5c5c; }
+.fbls-morale-compact.bad i { color: #d8865a; }
+.fbls-morale-compact.low i { color: #cfc36a; }
+.fbls-morale-compact.neutral i { color: #b7c4d8; }
+.fbls-morale-compact.hope i { color: #7ed891; }
+.fbls-morale-compact.home i { color: #76d6ff; }
+
+.fbls-header-statline .fbls-development-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(4.5rem, 1fr));
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.fbls-header-statline .fbls-dev-stat,
+.fbls-header-statline .fbls-roll-stat {
+  display: grid;
+  grid-template-columns: 1.35rem minmax(2rem, 1fr) auto;
+  gap: 0.36rem;
+}
+
+.fbls-dev-stat i {
+  font-size: 1.05rem;
+  text-align: center;
+  opacity: 0.96;
+}
+
+.fbls-dev-stat.food i { color: var(--fbls-dev-food, #d8b35d); }
+.fbls-dev-stat.technology i { color: var(--fbls-dev-technology, #69b2ff); }
+.fbls-dev-stat.culture i { color: var(--fbls-dev-culture, #c28bf1); }
+.fbls-dev-stat.war i { color: var(--fbls-dev-war, #d86f6f); }
+
+.fbls-header-statline .fbls-dev-stat strong,
+.fbls-header-statline .fbls-roll-stat strong,
+.fbls-header-statline .fbls-morale-compact strong {
+  width: auto;
+  min-width: 1.7rem;
+  height: auto;
+  min-height: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--fbls-text);
+  font-size: 1.22rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.fbls-header-statline .fbls-dev-stat em,
+.fbls-header-statline .fbls-roll-stat em {
+  display: none;
+}
+
+.fbls-header-statline .fbls-faith-stat {
+  display: flex;
+  justify-content: center;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.fbls-faith-stat i {
+  color: #d6b26f;
+  font-size: 1.05rem;
+}
+
+.fbls-faith-stat span {
+  color: var(--fbls-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.7rem;
+}
+
+.fbls-faith-stat strong {
+  color: var(--fbls-text);
+  font-size: 1.02rem;
+}
+
+.fbls-header-statline .fbls-right-stats {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.45rem;
+}
+
+.fbls-roll-stat i {
+  font-size: 1.08rem;
+  text-align: center;
+}
+
+.fbls-roll-stat.reputation > i { color: #d7b56d; }
+.fbls-roll-stat.defense > i { color: #9ab8e6; }
+
+.fbls-header-statline .fbls-roll-stat button {
+  width: 1.65rem;
+  min-width: 1.65rem;
+  height: 1.65rem;
+  min-height: 1.65rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--fbls-border);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--fbls-text);
+}
+
+@media (max-width: 1120px) {
+  .fbls-header-control-band {
+    flex-wrap: wrap;
+  }
+
+  .fbls-header-calendar-box {
+    max-width: none;
+  }
+}
+
+@media (max-width: 1050px) {
+  .fbls-header-statline {
+    grid-template-columns: 1fr;
+  }
+
+  .fbls-header-statline .fbls-development-strip {
+    grid-template-columns: repeat(4, minmax(4.8rem, 1fr));
+  }
+
+  .fbls-header-statline .fbls-right-stats {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 760px) {
+  .fbls-header-select-main.compact-name,
+  .fbls-header-calendar-box,
+  .fbls-header-calendar-last {
+    flex-basis: 100%;
+    max-width: none;
+  }
+
+  .fbls-header-statline .fbls-development-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

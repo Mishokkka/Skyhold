@@ -1,0 +1,115 @@
+/* 1.1.8 — UI fixes after defense pass */
+.fbls-storage-item-main {
+  grid-template-columns: 44px minmax(0, 1fr) 2rem;
+  gap: .45rem;
+  align-items: start;
+}
+.fbls-storage-item-main > div {
+  min-width: 0;
+  padding-left: 0;
+}
+.fbls-storage-item-main strong,
+.fbls-storage-item-main small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fbls-storage-item-main .fbls-icon-button.danger {
+  justify-self: end;
+}
+
+.fbl-skyhold input[type="checkbox"] {
+  position: relative;
+  inset: auto;
+  left: auto;
+  right: auto;
+  top: auto;
+  bottom: auto;
+  translate: none;
+  transform: none;
+  display: inline-block;
+  flex: 0 0 18px;
+  justify-self: end;
+  align-self: center;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  min-height: 18px;
+  max-width: 18px;
+  max-height: 18px;
+  margin: 0;
+}
+.fbls-checkbox-label.compact-check,
+.fbls-sale-flag.icon-only {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20px;
+  align-items: center;
+  justify-items: stretch;
+}
+.fbls-checkbox-label.compact-check > span {
+  min-width: 0;
+}
+.fbls-sale-flag.icon-only {
+  grid-template-columns: 18px auto;
+}
+
+.fbls-gm-panel.compact-gm {
+  overflow: auto;
+}
+.fbls-gm-dashboard {
+  display: block;
+  column-count: 3;
+  column-gap: .5rem;
+}
+.fbls-gm-dashboard > .fbls-card,
+.fbls-gm-dashboard > .fbls-gm-card {
+  display: inline-block;
+  width: 100%;
+  break-inside: avoid;
+  margin: 0 0 .5rem;
+  vertical-align: top;
+}
+@media (max-width: 1180px) {
+  .fbls-gm-dashboard { column-count: 2; }
+}
+@media (max-width: 760px) {
+  .fbls-gm-dashboard { column-count: 1; }
+}
+
+.fbls-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-content: center;
+  gap: .55rem;
+  background: rgba(4, 7, 12, .72);
+  backdrop-filter: blur(2px);
+  color: #f5efe5;
+  font-weight: 800;
+  letter-spacing: .03em;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .08s ease;
+}
+.fbls-shell {
+  position: relative;
+}
+.fbls-shell.fbls-loading-active .fbls-loading-overlay {
+  opacity: 1;
+  pointer-events: all;
+}
+.fbls-loading-overlay i {
+  font-size: 2rem;
+  justify-self: center;
+}
+.fbls-loading-overlay img {
+  max-width: 96px;
+  max-height: 96px;
+  object-fit: contain;
+  justify-self: center;
+  filter: drop-shadow(0 0 14px rgba(255,255,255,.18));
+}

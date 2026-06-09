@@ -1,0 +1,58 @@
+/* 1.5.2 — compact buildings, medical cleanup, context menu, seasons, defense line */
+.fbl-skyhold .fbls-building-card { min-height: 0; }
+.fbl-skyhold .fbls-building-card.head-only { min-height: 0; }
+.fbl-skyhold .fbls-building-card.head-only .fbls-building-card-head.v2 { padding-bottom: 10px; }
+.fbl-skyhold .fbls-building-card-head.v2 { grid-template-columns: 56px minmax(0,1fr) auto; align-items: center; }
+.fbl-skyhold .fbls-building-head-meta { max-width: none; display: grid; grid-auto-flow: row; justify-items: end; gap: 6px; }
+.fbl-skyhold .fbls-building-card-body { padding-top: 8px !important; }
+.fbl-skyhold .fbls-building-card.medical-building:not(.built-project) { background: linear-gradient(180deg, rgba(10,38,28,.92), rgba(7,19,16,.94)); }
+.fbl-skyhold .fbls-building-production-list { display: grid; gap: 6px; }
+.fbl-skyhold .fbls-building-production-row { display: grid; grid-template-columns: minmax(0,1.15fr) minmax(0,1fr) auto; gap: 8px; align-items: center; }
+.fbl-skyhold .fbls-building-production-row .resource { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.fbl-skyhold .fbls-building-production-row .resource b { font-weight: 800; }
+.fbl-skyhold .fbls-building-production-row .output { color: rgba(240,234,220,.88); line-height: 1.25; }
+.fbl-skyhold .fbls-building-production-row .expenses { display: inline-flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; min-height: 20px; }
+.fbl-skyhold .fbls-production-expense-badge,
+.fbl-skyhold .fbls-production-season-mini { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 999px; border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.06); font-style: normal; font-size: 10px; }
+.fbl-skyhold .fbls-production-expense-badge { color: #f1dcc2; }
+.fbl-skyhold .fbls-production-season-mini { color: #b9d9ff; }
+.fbl-skyhold .fbls-head-chip.upkeep i { color: #d88c45; }
+.fbl-skyhold .fbls-head-chip.workers i { color: #f2f6ff; }
+.fbl-skyhold .fbls-building-context-menu { position: fixed; z-index: 9999; min-width: 248px; display: grid; gap: 4px; padding: 8px; border-radius: 12px; border: 1px solid rgba(212,185,126,.22); background: linear-gradient(180deg, rgba(17,22,31,.98), rgba(9,13,18,.98)); box-shadow: 0 20px 40px rgba(0,0,0,.45); }
+.fbl-skyhold .fbls-building-context-menu button,
+.fbls-building-context-menu button { display: grid; grid-template-columns: 18px minmax(0,1fr); gap: 8px; align-items: center; width: 100%; min-height: 32px; border-radius: 9px; border: 1px solid transparent; background: rgba(255,255,255,.03); color: rgba(245,238,222,.92); text-align: left; cursor: pointer; padding: 6px 10px; }
+.fbls-building-context-menu button:hover { background: rgba(255,255,255,.08); border-color: rgba(212,185,126,.18); }
+.fbls-building-context-menu button.danger { color: #ffab9e; }
+.fbl-skyhold .fbls-production-season-box { display: grid; gap: 5px; align-content: start; }
+.fbl-skyhold .fbls-production-season-pills { display: flex; flex-wrap: wrap; gap: 5px; }
+.fbl-skyhold .fbls-season-pill { display: inline-flex; align-items: center; justify-content: center; min-height: 28px; padding: 0 8px; border-radius: 999px; border: 1px solid rgba(255,255,255,.1); background: rgba(255,255,255,.05); color: rgba(235,226,206,.8); position: relative; }
+.fbl-skyhold .fbls-season-pill input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.fbl-skyhold .fbls-season-pill.active { border-color: rgba(110,170,255,.4); background: rgba(70,110,180,.18); color: #dfeeff; }
+.fbl-skyhold .fbls-season-pill em { font-style: normal; font-size: 11px; font-weight: 800; }
+.fbl-skyhold .fbls-medical-editor-block.compact-redesign > header { border-bottom: none; padding-bottom: 4px; }
+.fbl-skyhold .fbls-medical-editor-block.compact-redesign .fbls-medical-controls.compact-grid { grid-template-columns: repeat(2, minmax(0,1fr)); margin-top: 2px; }
+.fbl-skyhold .fbls-medical-advanced-details { margin-top: 6px; border-top: 1px solid rgba(255,255,255,.08); padding-top: 6px; }
+.fbl-skyhold .fbls-medical-advanced-details summary { cursor: pointer; color: rgba(228,239,226,.78); font-weight: 700; }
+.fbl-skyhold .fbls-medical-advanced-details .compact-hidden-meta { margin-top: 8px; }
+.fbl-skyhold .fbls-defense-squad-status.compact-line { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: none; background: transparent; }
+.fbl-skyhold .fbls-defense-squad-status.compact-line .metric { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 0 9px; border-radius: 10px; border: 1px solid rgba(255,255,255,.12); background: rgba(255,255,255,.04); color: #f1ead8; }
+.fbl-skyhold .fbls-defense-squad-status.compact-line .metric.tag { padding: 0 10px; }
+.fbl-skyhold .fbls-defense-equipped-toggle.compact { display: inline-flex; align-items: center; gap: 8px; min-height: 34px; padding: 0 10px; border: 1px solid rgba(255,255,255,.12); border-radius: 10px; background: rgba(255,255,255,.04); }
+.fbl-skyhold .fbls-defense-equipped-toggle.compact input { margin: 0; }
+.fbl-skyhold .fbls-battle-help.modern-help { display: grid; gap: 10px; }
+.fbl-skyhold .fbls-help-lead { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid rgba(255,255,255,.08); border-radius: 10px; background: rgba(255,255,255,.04); }
+.fbl-skyhold .fbls-help-lead strong { color: #f1ead8; font-size: 1rem; }
+.fbl-skyhold .fbls-help-lead span { color: rgba(231,223,205,.82); }
+.fbl-skyhold .fbls-help-table { width: 100%; border-collapse: separate; border-spacing: 0; overflow: hidden; border: 1px solid rgba(255,255,255,.08); border-radius: 12px; }
+.fbl-skyhold .fbls-help-table th, .fbl-skyhold .fbls-help-table td { padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,.06); }
+.fbl-skyhold .fbls-help-table thead th { background: rgba(255,255,255,.06); color: #f1ead8; }
+
+
+.fbls-building-context-menu { position: fixed; z-index: 9999; min-width: 248px; display: grid; gap: 4px; padding: 8px; border-radius: 12px; border: 1px solid rgba(212,185,126,.22); background: linear-gradient(180deg, rgba(17,22,31,.98), rgba(9,13,18,.98)); box-shadow: 0 20px 40px rgba(0,0,0,.45); }
+.fbls-battle-help.modern-help { display: grid; gap: 10px; }
+.fbls-help-lead { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid rgba(255,255,255,.08); border-radius: 10px; background: rgba(255,255,255,.04); }
+.fbls-help-lead strong { color: #f1ead8; font-size: 1rem; }
+.fbls-help-lead span { color: rgba(231,223,205,.82); }
+.fbls-help-table { width: 100%; border-collapse: separate; border-spacing: 0; overflow: hidden; border: 1px solid rgba(255,255,255,.08); border-radius: 12px; }
+.fbls-help-table th, .fbls-help-table td { padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,.06); }
+.fbls-help-table thead th { background: rgba(255,255,255,.06); color: #f1ead8; }

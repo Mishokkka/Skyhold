@@ -1,0 +1,294 @@
+/* 0.6.0 buildings and development */
+.fbls-development-card {
+  padding: 0.6rem 0.65rem;
+}
+
+.fbls-development-card h2 {
+  margin-bottom: 0.45rem;
+}
+
+.fbls-development-table td {
+  vertical-align: top;
+}
+
+.fbls-development-table em {
+  display: block;
+  margin-top: 0.18rem;
+  color: var(--fbls-muted);
+  font-size: 0.68rem;
+  font-style: normal;
+  line-height: 1.15;
+}
+
+.fbls-buildings-panel {
+  gap: 0.55rem;
+}
+
+.fbls-buildings-topline {
+  display: grid;
+  grid-template-columns: minmax(16rem, 0.85fr) minmax(20rem, 1.15fr);
+  gap: 0.55rem;
+}
+
+.fbls-card.mini-card {
+  padding: 0.55rem 0.65rem;
+}
+
+.fbls-card.mini-card h3,
+.fbls-card.inset-card h4 {
+  margin: 0 0 0.35rem;
+  color: var(--fbls-text);
+  font-size: 0.86rem;
+  border: 0;
+}
+
+.fbls-dev-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.fbls-dev-badges span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 1.55rem;
+  padding: 0.18rem 0.45rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--fbls-muted);
+  font-size: 0.74rem;
+}
+
+.fbls-dev-badges strong {
+  color: var(--fbls-text);
+}
+
+.fbls-muted-line {
+  margin-top: 0.25rem;
+  color: var(--fbls-dim);
+  font-size: 0.76rem;
+  line-height: 1.25;
+}
+
+.fbls-building-cards {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.fbls-building-card {
+  border: 1px solid var(--fbls-border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.045);
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.fbls-building-card:hover {
+  border-color: rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.065);
+}
+
+.fbls-building-card.locked {
+  opacity: 0.78;
+}
+
+.fbls-building-card.expanded {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.065);
+}
+
+.fbls-building-card-head {
+  display: grid;
+  grid-template-columns: minmax(16rem, 1fr) max-content max-content;
+  gap: 0.55rem;
+  align-items: center;
+  padding: 0.55rem 0.65rem;
+  border-bottom: 1px solid var(--fbls-border);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.fbls-building-card-head h3 {
+  margin: 0;
+  color: var(--fbls-text);
+  font-size: 0.98rem;
+  border: 0;
+}
+
+.fbls-building-subline,
+.fbls-building-head-stats,
+.fbls-building-card-brief {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.55rem;
+  align-items: center;
+  color: var(--fbls-muted);
+  font-size: 0.74rem;
+}
+
+.fbls-building-head-stats span {
+  white-space: nowrap;
+}
+
+.fbls-status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.25rem;
+  padding: 0.08rem 0.38rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--fbls-text);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.fbls-status-pill.built,
+.fbls-status-pill.ok {
+  background: rgba(72, 145, 88, 0.24);
+  border-color: rgba(95, 190, 118, 0.35);
+}
+
+.fbls-status-pill.building {
+  background: rgba(190, 145, 60, 0.24);
+  border-color: rgba(220, 175, 80, 0.36);
+}
+
+.fbls-status-pill.planned,
+.fbls-status-pill.paused {
+  background: rgba(120, 135, 160, 0.22);
+}
+
+.fbls-status-pill.damaged,
+.fbls-status-pill.bad {
+  background: rgba(181, 72, 72, 0.22);
+  border-color: rgba(210, 86, 86, 0.38);
+}
+
+.fbls-status-pill.heavilyDamaged {
+  background: rgba(180, 92, 44, 0.28);
+  border-color: rgba(230, 120, 70, 0.46);
+}
+
+.fbls-status-pill.destroyed {
+  background: rgba(80, 70, 68, 0.48);
+  border-color: rgba(185, 70, 60, 0.48);
+  color: rgba(245, 220, 205, 0.96);
+}
+
+.fbls-building-card-brief {
+  padding: 0.42rem 0.65rem;
+}
+
+.fbls-building-card-brief span {
+  min-width: 0;
+}
+
+.fbls-progress-bar {
+  height: 0.33rem;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.fbls-progress-bar span {
+  display: block;
+  height: 100%;
+  background: rgba(190, 145, 60, 0.78);
+}
+
+.fbls-building-details {
+  padding: 0.65rem;
+  cursor: default;
+}
+
+.fbls-building-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.fbls-card.inset-card {
+  padding: 0.55rem;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.fbls-card.inset-card label,
+.fbls-building-text-grid label,
+.fbls-worker-limits label,
+.fbls-mini-num-grid label {
+  display: grid;
+  min-width: 0;
+  gap: 0.14rem;
+  color: var(--fbls-muted);
+  font-size: 0.64rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.fbls-card.inset-card label + label {
+  margin-top: 0.35rem;
+}
+
+.fbls-mini-num-grid,
+.fbls-worker-limits {
+  display: grid;
+  gap: 0.3rem;
+  align-items: end;
+}
+
+.fbls-mini-num-grid.four {
+  grid-template-columns: repeat(4, minmax(2.8rem, 1fr));
+}
+
+.fbls-mini-num-grid.three {
+  grid-template-columns: repeat(3, minmax(3.2rem, 1fr));
+}
+
+.fbls-worker-limits {
+  grid-template-columns: repeat(2, 4rem);
+  margin-bottom: 0.35rem;
+}
+
+.fbls-mini-num-grid input,
+.fbls-worker-limits input {
+  text-align: center;
+}
+
+.fbls-worker-slots {
+  display: grid;
+  gap: 0.28rem;
+  margin-top: 0.4rem;
+}
+
+.fbls-building-text-grid {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) minmax(12rem, 1fr) 5rem 5rem;
+  gap: 0.5rem;
+  margin-top: 0.55rem;
+}
+
+.fbls-building-text-grid label.wide {
+  grid-column: span 2;
+}
+
+@media (max-width: 1180px) {
+  .fbls-buildings-topline,
+  .fbls-building-detail-grid,
+  .fbls-building-text-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 860px) {
+  .fbls-buildings-topline,
+  .fbls-building-card-head,
+  .fbls-building-detail-grid,
+  .fbls-building-text-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .fbls-building-text-grid label.wide {
+    grid-column: auto;
+  }
+}

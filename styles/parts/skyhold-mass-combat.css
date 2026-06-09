@@ -1,0 +1,9 @@
+/* FBL Skyhold mass-combat stylesheet index.
+   Split by section; import order preserves the existing cascade. */
+
+@import url("./mass-combat/mass-combat-base.css");
+@import url("./mass-combat/mass-combat-details.css");
+@import url("./mass-combat/mass-combat-interactions.css");
+@import url("./mass-combat/mass-combat-dialogs.css");
+@import url("./mass-combat/mass-combat-tag-editor.css");
+@import url("./mass-combat/1-0-17-residents-generator-mass-combat-defense-pass.css");

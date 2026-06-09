@@ -1,0 +1,56 @@
+/* FBL Skyhold: current owner for income and trade grid rhythm. */
+
+.fbl-skyhold .fbls-income-grid {
+  grid-template-columns: minmax(6rem, 0.7fr) minmax(8rem, 0.75fr) minmax(10rem, 0.8fr) minmax(6rem, 0.7fr) 42px minmax(8rem, 0.72fr);
+  column-gap: 8px;
+  align-items: end;
+}
+
+.fbl-skyhold .fbls-trade-grid {
+  grid-template-columns: 42px minmax(5rem, 0.45fr) minmax(12rem, 1fr) minmax(8rem, 0.62fr) minmax(10rem, 1fr) minmax(5rem, 0.45fr);
+  column-gap: 8px;
+  align-items: end;
+}
+
+.fbl-skyhold .fbls-income-grid .fbls-icon-check,
+.fbl-skyhold .fbls-trade-grid .fbls-icon-check {
+  width: 42px;
+  min-width: 42px;
+  justify-self: center;
+  align-self: end;
+  grid-template-rows: auto 36px;
+  justify-items: center;
+}
+
+.fbl-skyhold .fbls-income-grid .fbls-icon-check input[type="checkbox"],
+.fbl-skyhold .fbls-trade-grid .fbls-icon-check input[type="checkbox"] {
+  justify-self: center;
+  align-self: center;
+  margin: 0;
+}
+
+.fbl-skyhold .fbls-income-total-box {
+  min-height: 58px;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  align-content: end;
+}
+
+.fbl-skyhold .fbls-income-total-box strong {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 1240px) {
+  .fbl-skyhold .fbls-income-grid,
+  .fbl-skyhold .fbls-trade-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .fbl-skyhold .fbls-income-grid .fbls-icon-check,
+  .fbl-skyhold .fbls-trade-grid .fbls-icon-check {
+    justify-self: start;
+  }
+}

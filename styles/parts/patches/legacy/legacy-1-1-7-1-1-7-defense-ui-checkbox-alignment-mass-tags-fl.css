@@ -1,0 +1,120 @@
+/* 1.1.7 — defense UI, checkbox alignment, mass tags flyout, GM compaction */
+.fbl-skyhold input[type="checkbox"] {
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  min-height: 18px;
+  max-width: 18px;
+  max-height: 18px;
+  margin: 0;
+  padding: 0;
+  flex: 0 0 18px;
+  align-self: center;
+  justify-self: center;
+  vertical-align: middle;
+  appearance: auto;
+  -webkit-appearance: checkbox;
+}
+.fbls-checkbox-label,
+.fbls-checkbox-label.compact-check,
+.fbls-sale-flag.icon-only {
+  align-items: center;
+}
+.fbls-checkbox-label input[type="checkbox"],
+.fbls-sale-flag.icon-only input[type="checkbox"] {
+  position: static;
+  transform: none;
+}
+
+.fbls-defense-squad-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: .85rem;
+  overflow: visible;
+}
+.fbls-defense-squad {
+  min-width: 0;
+  overflow: visible;
+}
+.fbls-defense-squad-head {
+  grid-template-columns: minmax(11rem, 1.05fr) minmax(10rem, .85fr) minmax(12rem, 1fr) max-content max-content;
+  align-items: end;
+}
+.fbls-defense-squad-members {
+  grid-template-columns: repeat(5, minmax(8.5rem, 1fr));
+  align-items: end;
+  overflow: visible;
+}
+.fbls-defense-squad select option:disabled {
+  color: #8e96a3 !important;
+  background: #1c1f25 !important;
+}
+.fbls-defense-summary {
+  flex-wrap: wrap;
+}
+@media (max-width: 1120px) {
+  .fbls-defense-squad-head,
+  .fbls-defense-squad-members { grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
+}
+
+.fbls-building-toolbar,
+.fbls-buildings-topline .fbls-crew-card {
+  gap: .45rem;
+  flex-wrap: wrap;
+}
+.fbls-crew-card .fbls-button.compact {
+  white-space: nowrap;
+}
+
+.fbls-storage-item-open {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+}
+.fbls-storage-item-open img {
+  width: 42px;
+  height: 42px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,.14);
+}
+.fbls-link-button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  color: #f7f1e8;
+  font: inherit;
+  font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+}
+.fbls-link-button:hover { text-decoration: underline; }
+
+.fbls-gm-panel.compact-gm {
+  gap: .45rem;
+  padding: .45rem;
+}
+.fbls-gm-dashboard {
+  grid-template-columns: repeat(auto-fit, minmax(min(18rem, 100%), 1fr));
+  gap: .45rem;
+  align-items: start;
+}
+.fbls-gm-card,
+.fbls-generator-card.compact-generator,
+.fbls-resource-catalog-card.compact-resource-card,
+.fbls-card.compact-danger {
+  padding: .55rem;
+}
+.fbls-gm-card textarea { min-height: 4.5rem; }
+.fbls-gm-toggle-grid,
+.fbls-gm-mod-grid,
+.fbls-gm-sound-grid { gap: .35rem; }

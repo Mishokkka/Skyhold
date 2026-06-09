@@ -1,0 +1,74 @@
+/* Restore the storage/housing line directly under the header. */
+.fbl-skyhold .fbls-building-storage-strip.card-strip,
+.fbl-skyhold .fbls-building-housing-strip.card-strip {
+  display: grid;
+  grid-template-columns: auto minmax(72px, 1fr) auto;
+  gap: 7px;
+  align-items: center;
+  min-height: 28px;
+  padding: 5px 8px;
+  margin: 0;
+  border-top: 1px solid rgba(255,255,255,.075);
+  border-bottom: 1px solid rgba(255,255,255,.075);
+  background: rgba(0,0,0,.18);
+}
+
+.fbl-skyhold .fbls-building-storage-strip .strip-main,
+.fbl-skyhold .fbls-building-housing-strip .strip-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: max-content;
+  color: rgba(235,226,206,.86);
+  font-weight: 800;
+  font-size: 12px;
+}
+
+.fbl-skyhold .fbls-building-storage-strip .strip-bar,
+.fbl-skyhold .fbls-building-housing-strip .strip-bar {
+  display: block;
+  width: 100%;
+  height: 7px;
+  min-width: 64px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255,255,255,.11);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.22);
+}
+
+.fbl-skyhold .fbls-building-storage-strip .strip-bar span,
+.fbl-skyhold .fbls-building-housing-strip .strip-bar span {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  border-radius: inherit;
+}
+
+.fbl-skyhold .fbls-building-storage-strip .strip-extra,
+.fbl-skyhold .fbls-building-housing-strip .strip-extra {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  white-space: nowrap;
+  color: rgba(235,226,206,.78);
+  font-size: 11px;
+}
+
+.fbl-skyhold .fbls-building-storage-strip .strip-extra span:not(:first-child),
+.fbl-skyhold .fbls-building-housing-strip .strip-extra span:not(:first-child) {
+  display: none;
+}
+
+.fbl-skyhold .fbls-building-storage-strip .strip-main strong,
+.fbl-skyhold .fbls-building-housing-strip .strip-main strong {
+  display: none;
+}
+
+.fbl-skyhold .fbls-building-card.head-only .fbls-building-card-head.v2 {
+  border-bottom: 0;
+}
+
+.fbl-skyhold .fbls-building-card:not(.medical-building)::before {
+  content: none;
+}

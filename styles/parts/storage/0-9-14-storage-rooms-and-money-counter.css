@@ -1,0 +1,176 @@
+/* 0.9.14 storage rooms and money counter */
+.fbls-storage-topbar.compact-storage-topbar {
+  align-items: center;
+  justify-content: space-between;
+  min-height: 2.2rem;
+}
+.fbls-storage-money-counter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  flex-wrap: wrap;
+  min-height: 2.2rem;
+  padding: 0.28rem 0.48rem;
+  border: 1px solid rgba(255,255,255,0.13);
+  border-radius: 12px;
+  background: rgba(0,0,0,0.18);
+}
+.fbls-storage-money-counter > i {
+  color: rgba(245, 205, 110, 0.95);
+  font-size: 1rem;
+}
+.fbls-storage-money-counter label {
+  display: inline-grid;
+  grid-template-columns: 2.6rem minmax(3.4rem, 4.2rem);
+  align-items: center;
+  gap: 0.22rem;
+  margin: 0;
+  color: var(--fbls-muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: .045em;
+}
+.fbls-storage-money-counter input {
+  text-align: center;
+  min-height: 1.65rem;
+  padding: 0.22rem 0.34rem;
+  font-weight: 850;
+}
+.fbls-storage-money-counter strong {
+  color: var(--fbls-text);
+  font-size: 0.95rem;
+}
+.fbls-storage-adjust-grid.with-room {
+  grid-template-columns: minmax(11rem, 1fr) minmax(10rem, 1fr) 5rem minmax(11rem, 1fr) minmax(12rem, 1.15fr) auto;
+}
+.fbls-storage-adjust-grid.with-room label.wide {
+  grid-column: auto;
+}
+.fbls-storage-resource-card {
+  grid-template-columns: minmax(12rem, 1fr) minmax(7rem, auto);
+  align-items: start;
+}
+.fbls-storage-resource-main {
+  grid-template-columns: 1.55rem minmax(0, 1fr) 2rem;
+  grid-column: 1 / 2;
+}
+.fbls-storage-resource-name {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+.fbls-storage-resource-name select,
+.fbls-storage-resource-name strong {
+  font-size: 0.9rem;
+  font-weight: 850;
+}
+.fbls-storage-resource-main .fbls-icon-button {
+  justify-self: end;
+  align-self: center;
+}
+.fbls-storage-resource-room {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1.2rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.32rem;
+  color: var(--fbls-muted);
+  font-size: 0.78rem;
+}
+.fbls-storage-resource-room select {
+  min-height: 1.55rem;
+  font-size: 0.78rem;
+}
+.fbls-storage-resource-room i {
+  text-align: center;
+  opacity: 0.8;
+}
+.fbls-storage-room-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: 0.55rem;
+}
+.fbls-storage-room-card {
+  display: grid;
+  gap: 0.52rem;
+  cursor: default;
+}
+.fbls-storage-room-card[data-action="open-building-editor"] {
+  cursor: pointer;
+}
+.fbls-storage-room-card[data-action="open-building-editor"]:hover {
+  border-color: rgba(255,255,255,0.24);
+  background: rgba(255,255,255,0.075);
+}
+.fbls-storage-room-card.inactive {
+  opacity: 0.72;
+}
+.fbls-storage-room-card.over-capacity {
+  border-color: rgba(185,70,80,0.55);
+}
+.fbls-storage-room-card header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+.fbls-storage-room-card header > div {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+.fbls-storage-room-card header strong {
+  font-size: 0.98rem;
+}
+.fbls-storage-room-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  gap: 0.36rem;
+}
+.fbls-storage-room-stats > div {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.38rem 0.45rem;
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 9px;
+  background: rgba(0,0,0,0.16);
+}
+.fbls-storage-room-stats span {
+  color: var(--fbls-muted);
+  font-size: 0.72rem;
+}
+.fbls-storage-room-stats strong {
+  font-size: 0.96rem;
+}
+.fbls-storage-building-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(8rem, 1fr));
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+}
+.fbls-storage-building-grid label {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+  color: var(--fbls-muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: .045em;
+}
+.fbls-storage-building-grid input {
+  text-align: center;
+}
+.fbls-production-card-grid label:has(select[data-field$=".storageRoomId"]) {
+  grid-column: span 1;
+}
+@media (max-width: 1050px) {
+  .fbls-storage-adjust-grid.with-room { grid-template-columns: repeat(2, minmax(10rem, 1fr)); }
+  .fbls-storage-adjust-grid.with-room label.wide,
+  .fbls-storage-adjust-grid.with-room .fbls-storage-adjust-actions { grid-column: 1 / -1; }
+  .fbls-storage-building-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 620px) {
+  .fbls-storage-money-counter { width: 100%; }
+  .fbls-storage-money-counter label { grid-template-columns: 2.2rem minmax(0, 1fr); }
+}

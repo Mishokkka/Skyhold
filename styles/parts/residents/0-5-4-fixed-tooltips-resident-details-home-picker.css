@@ -1,0 +1,21 @@
+/* 0.5.4: fixed tooltips, resident details, home picker */
+.fbls-note-tip::after {
+  content: none;
+  display: none;
+}
+
+.fbls-floating-tooltip {
+  position: fixed;
+  z-index: 2147483647;
+  max-width: min(28rem, calc(100vw - 2rem));
+  padding: 0.55rem 0.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 9px;
+  background: rgba(8, 10, 14, 0.98);
+  color: rgba(255, 255, 255, 0.94);
+  font-size: 0.78rem;
+  line-height: 1.3;
+  white-space: pre-line;
+  pointer-events: none;
+  box-shadow: 0 0.6rem 1.6rem rgba(0, 0, 0, 0.5);
+}

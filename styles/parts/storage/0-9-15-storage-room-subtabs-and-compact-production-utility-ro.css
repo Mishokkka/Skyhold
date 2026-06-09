@@ -1,0 +1,93 @@
+/* 0.9.15 storage room subtabs and compact production utility row */
+.fbls-production-utility-row {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) minmax(14rem, 1.35fr) minmax(8rem, 0.65fr);
+  gap: 0.38rem;
+  align-items: end;
+}
+.fbls-production-utility-row.nonworkers {
+  grid-template-columns: minmax(12rem, 1fr) minmax(14rem, 1.35fr);
+}
+.fbls-production-utility-row label {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+}
+.fbls-production-utility-row .fbls-checkbox-label {
+  grid-template-columns: minmax(0, 1fr) 1.35rem;
+  align-items: center;
+}
+.fbls-production-utility-row .fbls-checkbox-label > span {
+  grid-column: 1 / -1;
+}
+.fbls-production-utility-row .fbls-checkbox-label input[type="checkbox"] {
+  width: 1.15rem;
+  min-height: 1.15rem;
+  padding: 0;
+}
+.fbls-storage-room-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.32rem;
+  flex-wrap: wrap;
+}
+.fbls-storage-room-tab {
+  min-height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.36rem;
+  padding: 0.22rem 0.58rem;
+  border: 1px solid rgba(255,255,255,0.13);
+  border-radius: 999px;
+  background: rgba(255,255,255,0.045);
+  color: var(--fbls-muted);
+  font-weight: 800;
+}
+.fbls-storage-room-tab b {
+  min-width: 1.35rem;
+  min-height: 1.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: rgba(0,0,0,0.24);
+  color: var(--fbls-text);
+  font-size: 0.78rem;
+}
+.fbls-storage-room-tab.active {
+  color: var(--fbls-text);
+  border-color: var(--fbls-accent);
+  background: rgba(160,35,55,0.2);
+  box-shadow: 0 0 0 1px rgba(220,55,75,0.18) inset;
+}
+.fbls-storage-room-tab.inactive {
+  opacity: 0.65;
+}
+.fbls-storage-room-current {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.34rem 0.45rem;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px;
+  background: rgba(0,0,0,0.14);
+  color: var(--fbls-muted);
+  font-size: 0.78rem;
+}
+.fbls-storage-room-current span:first-child {
+  color: var(--fbls-text);
+  font-weight: 850;
+}
+.fbls-storage-room-current strong {
+  color: var(--fbls-text);
+}
+@media (max-width: 900px) {
+  .fbls-production-utility-row,
+  .fbls-production-utility-row.nonworkers { grid-template-columns: repeat(2, minmax(8rem, 1fr)); }
+}
+@media (max-width: 560px) {
+  .fbls-production-utility-row,
+  .fbls-production-utility-row.nonworkers { grid-template-columns: 1fr; }
+}

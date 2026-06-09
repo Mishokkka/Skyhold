@@ -1,0 +1,6 @@
+/* FBL Skyhold late UI patch index.
+   Kept as a stable import target; rules are split below by feature area. */
+@import url("./patches/skyhold-ui-legacy-repairs.css");
+@import url("./patches/skyhold-battle-ui.css");
+@import url("./patches/skyhold-resident-editor-ui.css");
+@import url("./patches/skyhold-building-storage-ui.css");

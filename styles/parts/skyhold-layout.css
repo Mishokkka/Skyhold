@@ -1,0 +1,38 @@
+.fbl-skyhold-app textarea[readonly] {
+  opacity: 1;
+  color: var(--fbls-text);
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.fbls-summary-card {
+  padding: 0.6rem 0.65rem;
+}
+
+.fbls-summary-card h2 {
+  margin-bottom: 0.45rem;
+}
+
+.fbls-summary-table th,
+.fbls-summary-table td {
+  padding: 0.34rem 0.45rem;
+}
+
+
+.fbls-table-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  min-height: 2rem;
+}
+
+.fbls-icon-button {
+  width: 1.55rem;
+  height: 1.55rem;
+  line-height: 1;
+  position: relative;
+  z-index: 1;
+}
+
+.fbls-content {
+  min-height: 0;
+}

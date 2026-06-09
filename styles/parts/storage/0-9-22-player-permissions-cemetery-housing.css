@@ -1,0 +1,78 @@
+/* 0.9.22 player permissions, cemetery, housing */
+
+.fbls-people-subtabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+
+.fbls-building-housing-strip,
+.fbls-housing-building-current {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.36rem;
+  margin-top: 0.42rem;
+  padding: 0.34rem 0.42rem;
+  border: 1px solid rgba(255,255,255,0.11);
+  border-radius: 10px;
+  background: rgba(0,0,0,0.16);
+  color: var(--fbls-muted);
+  font-size: 0.78rem;
+}
+
+.fbls-building-housing-strip span:first-child,
+.fbls-housing-building-current span {
+  color: var(--fbls-text);
+  font-weight: 900;
+}
+
+.fbls-building-housing-strip strong,
+.fbls-housing-building-current strong {
+  color: var(--fbls-text);
+}
+
+.fbls-building-housing-strip.near-capacity,
+.fbls-housing-building-current.near-capacity {
+  border-color: rgba(220,145,55,0.65);
+  background: linear-gradient(135deg, rgba(185,105,20,0.22), rgba(0,0,0,0.16));
+}
+
+.fbls-building-housing-strip.full-capacity,
+.fbls-housing-building-current.full-capacity {
+  border-color: rgba(205,65,75,0.75);
+  background: linear-gradient(135deg, rgba(165,35,45,0.28), rgba(0,0,0,0.18));
+}
+
+.fbls-housing-building-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(8rem, 1fr));
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+}
+
+.fbls-housing-building-grid label,
+.fbls-wide-label {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.fbls-housing-building-grid label span,
+.fbls-wide-label span {
+  color: var(--fbls-muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: .045em;
+}
+
+.fbls-player-permissions-card {
+  border-color: rgba(125,170,230,0.22);
+  background: linear-gradient(135deg, rgba(60,90,135,0.14), rgba(0,0,0,0.16));
+}
+
+@media (max-width: 860px) {
+  .fbls-housing-building-grid { grid-template-columns: 1fr; }
+}

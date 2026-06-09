@@ -1,0 +1,483 @@
+/* FBL Skyhold template browser: embedded editor tools, storage/housing helpers and inline forms. */
+.fbl-skyhold-template-browser .fbls-template-browser-head {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: nowrap;
+}
+.fbl-skyhold-template-browser .fbls-template-browser-head > div:first-child {
+  flex: 0 0 auto;
+}
+.fbl-skyhold-template-browser .fbls-template-browser-head h2 {
+  margin: 0;
+  white-space: nowrap;
+}
+.fbl-skyhold-template-browser .fbls-template-browser-counts {
+  flex: 1 1 auto;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  min-width: 0;
+  gap: 0.4rem;
+}
+.fbl-skyhold-template-browser .fbls-template-browser-counts .hidden {
+  color: #ffe08a;
+  border-color: rgba(255, 211, 82, 0.45);
+  background: rgba(255, 196, 40, 0.09);
+}
+.fbl-skyhold-template-browser .fbls-template-browser-card.built {
+  border-color: rgba(255, 205, 70, 0.68);
+  background:
+    repeating-linear-gradient(135deg, rgba(255, 210, 64, 0.18) 0 10px, rgba(0, 0, 0, 0.30) 10px 20px),
+    linear-gradient(rgba(166, 213, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(166, 213, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(135deg, rgba(44, 35, 13, 0.92), rgba(10, 17, 25, 0.96));
+  background-size: auto, 18px 18px, 18px 18px, auto;
+  box-shadow: inset 0 0 0 1px rgba(255, 220, 80, 0.24), 0 0 14px rgba(255, 190, 40, 0.13);
+}
+.fbl-skyhold-template-browser .fbls-template-browser-card.built .fbls-template-title-block p {
+  color: #ffe08a;
+}
+.fbl-skyhold-template-browser .fbls-template-browser-card.hidden-template {
+  opacity: 0.78;
+}
+.fbl-skyhold-building-editor .fbls-template-visibility-toggle input[type="checkbox"] {
+  width: 1.15rem;
+  min-width: 1.15rem;
+  height: 1.15rem;
+  align-self: center;
+}
+
+@media (max-width: 980px) {
+  .fbl-skyhold-template-browser .fbls-template-browser-head,
+  .fbl-skyhold-template-browser .fbls-template-browser-counts {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+}
+.fbl-skyhold-template-browser .fbls-template-player-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.16rem 0.45rem;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 999px;
+  background: rgba(0,0,0,0.18);
+  color: var(--fbls-muted, #aab0b8);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+.fbl-skyhold-template-browser .fbls-template-player-toggle input[type="checkbox"] {
+  width: 1rem;
+  min-width: 1rem;
+  height: 1rem;
+}
+.fbl-skyhold-template-browser .fbls-template-search input,
+.fbls-template-search input[type="search"] {
+  color: #f3ecdf;
+  -webkit-text-fill-color: #f3ecdf;
+  background: rgba(9, 10, 12, .86);
+  border-color: rgba(190, 161, 111, .35);
+  caret-color: #f6dfaa;
+}
+.fbl-skyhold-template-browser .fbls-template-search input::placeholder,
+.fbls-template-search input[type="search"]::placeholder {
+  color: #9f9384;
+  -webkit-text-fill-color: #9f9384;
+}
+
+/* 1.0.7: template grid, materials row, storage/housing categories, worker primary stat */
+.fbl-skyhold-template-browser .fbls-template-browser-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(24rem, 1fr));
+  columns: auto;
+  column-gap: 0;
+  gap: 0.72rem;
+  align-items: start;
+  align-content: start;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.fbl-skyhold-template-browser .fbls-template-browser-card {
+  display: grid;
+  width: auto;
+  break-inside: auto;
+  page-break-inside: auto;
+  margin: 0;
+}
+.fbls-cost-row {
+  grid-template-columns: minmax(5.5rem, 1fr) minmax(4.8rem, 5.2rem) 3rem 1.8rem;
+}
+.fbls-cost-row input[type="text"],
+.fbls-cost-row input[type="number"] {
+  min-width: 0;
+}
+.fbls-cost-row .fbls-icon-button {
+  width: 1.75rem;
+  min-width: 1.75rem;
+}
+.fbls-worker-top-row {
+  grid-template-columns: 4.6rem 4.6rem minmax(12rem, 1fr) 5.4rem 5.2rem 6rem;
+}
+.fbls-worker-top-row .mini select {
+  text-align: center;
+  min-width: 0;
+  width: 100%;
+}
+.fbl-skyhold-template-browser .fbls-template-browser-tab.housing i,
+.fbl-skyhold-template-browser .fbls-template-browser-card.housing h3 i { color: #d9a66d; }
+.fbl-skyhold-template-browser .fbls-template-browser-tab.storage i,
+.fbl-skyhold-template-browser .fbls-template-browser-card.storage h3 i { color: #9cc38c; }
+@media (max-width: 980px) {
+  .fbl-skyhold-template-browser .fbls-template-browser-grid { grid-template-columns: repeat(auto-fit, minmax(21rem, 1fr)); }
+}
+@media (max-width: 720px) {
+  .fbl-skyhold-template-browser .fbls-template-browser-grid { grid-template-columns: 1fr; }
+  .fbls-worker-top-row { grid-template-columns: 1fr 1fr; }
+}
+
+/* 1.0.8: жесткий сброс потока карточек шаблонов после старого masonry/columns. */
+.fbl-skyhold-template-browser .fbls-template-browser-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.fbl-skyhold-template-browser .fbls-template-browser-title {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.fbl-skyhold-template-browser .fbls-template-create-button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.fbl-skyhold-template-browser .fbls-template-browser-counts {
+  margin-left: auto;
+  min-width: 0;
+}
+
+.fbl-skyhold-template-browser .fbls-template-browser-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(27rem, 100%), 1fr));
+  grid-auto-flow: row;
+  grid-auto-rows: auto;
+  align-items: start;
+  align-content: start;
+  gap: 0.75rem;
+  columns: initial;
+  column-count: initial;
+  column-width: initial;
+  column-gap: normal;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.fbl-skyhold-template-browser .fbls-template-browser-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  height: auto;
+  min-height: 0;
+  margin: 0;
+  break-inside: auto;
+  page-break-inside: auto;
+  overflow: hidden;
+  transform: none;
+  isolation: isolate;
+}
+
+.fbl-skyhold-template-browser .fbls-template-browser-card > * {
+  min-width: 0;
+}
+
+/* 1.0.8: блок религии в культурных зданиях. */
+.fbls-culture-religion-grid {
+  display: grid;
+  grid-template-columns: minmax(10rem, 0.45fr) minmax(14rem, 1fr);
+  gap: 0.5rem;
+  align-items: end;
+}
+
+.fbls-culture-religion-grid label {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
+.fbls-culture-religion-grid .wide {
+  grid-column: 1 / -1;
+}
+
+.fbls-culture-religion-grid textarea {
+  min-height: 4.5rem;
+}
+
+
+/* 1.0.9: вместо старой masonry-схемы только обычная предсказуемая сетка. */
+.fbl-skyhold-template-browser .fbls-template-browser-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(26rem, 1fr));
+  grid-auto-flow: row;
+  grid-auto-rows: minmax(15.5rem, auto);
+  gap: 0.85rem;
+  columns: unset;
+  column-count: unset;
+  column-width: unset;
+  column-gap: unset;
+  align-items: stretch;
+  align-content: start;
+  overflow-y: auto;
+  overflow-x: hidden;
+  contain: layout paint;
+  will-change: auto;
+}
+
+.fbl-skyhold-template-browser .fbls-template-browser-card {
+  position: static;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto auto auto auto;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  min-height: 15.5rem;
+  height: auto;
+  margin: 0;
+  transform: none;
+  break-inside: auto;
+  page-break-inside: auto;
+  overflow: hidden;
+  contain: layout paint;
+}
+
+.fbl-skyhold-template-browser .fbls-template-card-head,
+.fbl-skyhold-template-browser .fbls-template-browser-card header,
+.fbl-skyhold-template-browser .fbls-template-browser-card footer {
+  min-width: 0;
+}
+
+.fbl-skyhold-template-browser .fbls-template-browser-card footer {
+  margin-top: 0.35rem;
+  align-self: end;
+}
+
+@media (max-width: 980px) {
+}
+
+/* 1.0.9: религиозный блок без огромной галочки. */
+.fbls-culture-religion-grid {
+  grid-template-columns: minmax(8rem, auto) minmax(13rem, 1fr) minmax(12rem, 1fr);
+  align-items: end;
+}
+
+.fbls-culture-religion-grid .fbls-religion-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.45rem;
+  width: fit-content;
+  max-width: 13rem;
+  padding: 0.32rem 0.48rem;
+  border: 1px solid rgba(255,255,255,0.13);
+  border-radius: 9px;
+  background: rgba(0,0,0,0.16);
+}
+
+.fbls-culture-religion-grid .fbls-religion-toggle span {
+  white-space: nowrap;
+}
+
+.fbls-culture-religion-grid .fbls-religion-toggle input[type="checkbox"] {
+  width: 1.05rem;
+  min-width: 1.05rem;
+  height: 1.05rem;
+  margin: 0;
+}
+
+.fbls-culture-religion-grid .fbls-religion-custom {
+  min-width: 0;
+}
+
+@media (max-width: 880px) {
+  .fbls-culture-religion-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* 1.0.10: гибкая сетка шаблонов без возврата старой masonry-каши. */
+.fbl-skyhold-template-browser .fbls-template-browser-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(32rem, 100%), 1fr));
+  grid-auto-flow: row;
+  grid-auto-rows: auto;
+  gap: 0.85rem;
+  columns: unset;
+  column-count: unset;
+  column-width: unset;
+  column-gap: unset;
+  align-items: start;
+  align-content: start;
+  overflow-y: auto;
+  overflow-x: hidden;
+  contain: layout;
+}
+
+.fbl-skyhold-template-browser .fbls-template-browser-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  min-height: 0;
+  height: auto;
+  margin: 0;
+  transform: none;
+  break-inside: auto;
+  page-break-inside: auto;
+  overflow: hidden;
+  contain: layout paint;
+}
+
+.fbl-skyhold-template-browser .fbls-template-browser-card footer {
+  margin-top: 0.35rem;
+  align-self: auto;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.fbl-skyhold-template-browser .fbls-template-missing-dev {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  margin: 0.05rem 0 0.1rem;
+  padding: 0.28rem 0.45rem;
+  border: 1px solid rgba(255, 196, 90, 0.28);
+  border-radius: 999px;
+  background: rgba(120, 62, 24, 0.18);
+  color: #ffd98b;
+  font-size: 0.82rem;
+  font-weight: 750;
+  justify-self: center;
+}
+
+.fbl-skyhold-template-browser .fbls-template-missing-dev span {
+  color: rgba(255, 232, 181, 0.92);
+  text-transform: uppercase;
+  letter-spacing: 0.035em;
+  font-size: 0.72rem;
+}
+
+.fbl-skyhold-template-browser .fbls-template-missing-dev em {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.18rem;
+  min-width: 2.5rem;
+  justify-content: center;
+  padding: 0.12rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.16);
+  background: rgba(0,0,0,0.22);
+  font-style: normal;
+}
+
+.fbl-skyhold-template-browser .fbls-template-missing-dev em.food i { color: #d8bc62; }
+.fbl-skyhold-template-browser .fbls-template-missing-dev em.technology i { color: #7db8cf; }
+.fbl-skyhold-template-browser .fbls-template-missing-dev em.culture i { color: #c18dd6; }
+.fbl-skyhold-template-browser .fbls-template-missing-dev em.war i { color: #d36a5f; }
+
+/* 1.0.10: стройбригада на вкладке зданий выделена как чертежная карточка. */
+.fbls-crew-card {
+  border-color: rgba(125, 181, 240, 0.36);
+  background:
+    linear-gradient(rgba(166, 213, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(166, 213, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(135deg, rgba(10, 35, 64, 0.92), rgba(4, 16, 31, 0.96));
+  background-size: 18px 18px, 18px 18px, auto;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04), 0 8px 18px rgba(0,0,0,0.16);
+}
+
+.fbls-crew-card h3 {
+  color: rgba(226, 244, 255, 0.96);
+  text-shadow: 0 0 8px rgba(125, 181, 240, 0.22);
+}
+
+/* 1.0.11: adaptive template grid without masonry and without containment side-effects. */
+.fbl-skyhold-template-browser .fbls-template-browser-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(24rem, 100%), 1fr));
+  grid-auto-flow: row;
+  grid-auto-rows: auto;
+  gap: 0.85rem;
+  columns: unset;
+  column-count: unset;
+  column-width: unset;
+  column-gap: unset;
+  align-items: start;
+  align-content: start;
+  overflow-y: auto;
+  overflow-x: hidden;
+  contain: none;
+  content-visibility: visible;
+}
+
+.fbl-skyhold-template-browser .fbls-template-browser-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.42rem;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  min-height: 17.5rem;
+  height: auto;
+  margin: 0;
+  transform: none;
+  break-inside: auto;
+  page-break-inside: auto;
+  overflow: visible;
+  contain: none;
+  content-visibility: visible;
+  isolation: auto;
+}
+
+.fbl-skyhold-template-browser .fbls-template-browser-card > * {
+  flex: 0 0 auto;
+  min-width: 0;
+  position: static;
+}
+
+.fbl-skyhold-template-browser .fbls-template-card-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  align-items: start;
+  gap: 0.5rem;
+}
+
+.fbl-skyhold-template-browser .fbls-template-description {
+  min-height: 0;
+  flex: 0 0 auto;
+}
+
+.fbl-skyhold-template-browser .fbls-template-browser-card footer {
+  margin-top: 0.35rem;
+  align-self: stretch;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  position: static;
+}
+
+.fbl-skyhold-template-browser .fbls-template-player-toggle {
+  margin-right: auto;
+}

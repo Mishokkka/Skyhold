@@ -1,0 +1,64 @@
+/* 1.4.5 - defense squad header and textarea cleanup.
+   The resident editor layout is owned by skyhold-resident-editor-v2.css. */
+.fbl-skyhold textarea {
+  tab-size: 1;
+}
+
+.fbl-skyhold .fbls-defense-squad-head.strict-line {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.25fr) minmax(130px, 1fr) minmax(170px, 1.15fr) auto 112px 34px;
+  gap: 8px;
+  align-items: end;
+}
+
+.fbl-skyhold .fbls-defense-squad-head.strict-line label,
+.fbl-skyhold .fbls-defense-squad-head.strict-line .fbls-defense-squad-status,
+.fbl-skyhold .fbls-defense-squad-head.strict-line .fbls-fill-squad,
+.fbl-skyhold .fbls-defense-squad-head.strict-line .fbls-checkbox-label,
+.fbl-skyhold .fbls-defense-squad-head.strict-line .fbls-icon-button {
+  min-width: 0;
+  height: 52px;
+  align-self: end;
+}
+
+.fbl-skyhold .fbls-defense-squad-head.strict-line label,
+.fbl-skyhold .fbls-defense-squad-head.strict-line .fbls-defense-squad-status,
+.fbl-skyhold .fbls-defense-squad-head.strict-line .fbls-checkbox-label {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 3px;
+}
+
+.fbl-skyhold .fbls-defense-squad-head.strict-line input,
+.fbl-skyhold .fbls-defense-squad-head.strict-line select {
+  height: 30px;
+  min-height: 30px;
+  width: 100%;
+}
+
+.fbl-skyhold .fbls-defense-squad-head.strict-line .fbls-fill-squad,
+.fbl-skyhold .fbls-defense-squad-head.strict-line .fbls-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+}
+
+.fbl-skyhold .fbls-defense-squad-head.strict-line .fbls-checkbox-label {
+  align-items: center;
+  text-align: center;
+}
+
+.fbl-skyhold .fbls-defense-squad-notes,
+.fbl-skyhold .fbls-defense-notes {
+  width: 100%;
+  margin-top: 8px;
+  resize: vertical;
+}
+
+@media (max-width: 1100px) {
+  .fbl-skyhold .fbls-defense-squad-head.strict-line {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

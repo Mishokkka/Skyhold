@@ -1,0 +1,104 @@
+/* FBL Skyhold: current owner for storage controls. */
+
+.fbl-skyhold .fbls-storage-room-strip .strip-main {
+  align-items: center;
+}
+
+.fbl-skyhold .fbls-storage-room-strip .strip-main:not(:has(span)) {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.fbl-skyhold .fbls-storage-room-strip:not(:has(.strip-bar)) {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.fbl-skyhold .fbls-storage-money-counter.treasury {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: nowrap;
+}
+
+.fbl-skyhold .fbls-money-denom {
+  display: grid;
+  grid-template-columns: auto minmax(6.6rem, 1fr);
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  min-width: 0;
+}
+
+.fbl-skyhold .fbls-money-denom > span {
+  margin: 0;
+  min-width: 2.4rem;
+  text-align: right;
+}
+
+.fbl-skyhold .fbls-money-stepper {
+  display: grid;
+  grid-template-columns: 32px minmax(3.2rem, 4.4rem) 32px;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.fbl-skyhold .fbls-money-stepper button,
+.fbl-skyhold .fbls-money-stepper input {
+  height: 34px;
+  min-height: 34px;
+  margin: 0;
+  text-align: center;
+  line-height: 1;
+}
+
+.fbl-skyhold .fbls-money-stepper button {
+  padding: 0;
+}
+
+.fbl-skyhold .fbls-storage-move-grid.compact-tool-grid {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) minmax(8rem, 1fr) minmax(4.2rem, 0.5fr);
+  gap: 0.36rem;
+  align-items: end;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.fbl-skyhold .fbls-storage-move-grid.compact-tool-grid label,
+.fbl-skyhold .fbls-storage-move-grid.compact-tool-grid select,
+.fbl-skyhold .fbls-storage-move-grid.compact-tool-grid input {
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.fbl-skyhold .fbls-storage-move-grid.compact-tool-grid label:nth-of-type(4),
+.fbl-skyhold .fbls-storage-move-grid.compact-tool-grid label:nth-of-type(5) {
+  grid-column: span 1;
+}
+
+.fbl-skyhold .fbls-storage-move-grid.compact-tool-grid label.wide {
+  grid-column: 1 / 3;
+}
+
+.fbl-skyhold .fbls-storage-move-grid.compact-tool-grid .fbls-storage-move-actions {
+  grid-column: 3 / 4;
+  min-width: 0;
+}
+
+.fbl-skyhold .fbls-storage-move-grid.compact-tool-grid .fbls-storage-move-actions .fbls-button {
+  width: 100%;
+  min-width: 0;
+  padding-inline: 0.45rem;
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .fbl-skyhold .fbls-storage-money-counter.treasury {
+    flex-wrap: wrap;
+  }
+
+  .fbl-skyhold .fbls-storage-move-grid.compact-tool-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}

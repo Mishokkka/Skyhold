@@ -1,0 +1,369 @@
+/* FBL Skyhold: resident list component owner.
+   Owns the People tab shell, resident filters, resident table rows, details rows,
+   injury/dead state badges and actor drop zone. The expanded editor is owned by
+   skyhold-resident-editor-v2.css. */
+
+.fbl-skyhold .fbls-people-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.38rem;
+  min-height: 0;
+  padding: 0;
+}
+
+.fbl-skyhold .fbls-content:has(.fbls-people-panel) {
+  padding: 0.55rem 0.65rem;
+}
+
+.fbl-skyhold .fbls-people-table-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 18rem;
+  max-height: calc(100vh - 17rem);
+  overflow: auto;
+  padding-top: 0;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--fbls-radius-lg, 12px);
+  background: var(--fbls-panel);
+}
+
+.fbl-skyhold .fbls-resident-toolbar.stacked-toolbar {
+  position: static;
+  z-index: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0;
+  padding: 0.38rem 0.45rem;
+  border-bottom: 1px solid var(--fbls-border);
+  background: rgba(16, 18, 22, 0.96);
+}
+
+.fbl-skyhold .fbls-resident-filters {
+  display: grid;
+  grid-template-columns: minmax(9rem, 1.15fr) repeat(4, minmax(8rem, 0.9fr));
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.fbl-skyhold .fbls-resident-filters input,
+.fbl-skyhold .fbls-resident-filters select {
+  min-height: 1.75rem;
+  padding: 0.22rem 0.42rem;
+}
+
+.fbl-skyhold .fbls-resident-toolbar.stacked-toolbar > .fbls-button.compact {
+  justify-self: end;
+  flex: 0 0 auto;
+  height: 1.75rem;
+  min-height: 1.75rem;
+  padding: 0 0.55rem;
+  margin-left: auto;
+}
+
+.fbl-skyhold .fbls-table.fbls-resident-list {
+  display: table;
+  clear: both;
+  width: 100%;
+  min-width: 0;
+  margin-top: 0;
+  table-layout: fixed;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.fbl-skyhold .fbls-table.fbls-resident-list thead {
+  position: sticky;
+  top: 0;
+  z-index: 12;
+  display: table-header-group;
+  background: #20242a;
+}
+
+.fbl-skyhold .fbls-table.fbls-resident-list tbody {
+  display: table-row-group;
+}
+
+.fbl-skyhold .fbls-table.fbls-resident-list tr {
+  display: table-row;
+}
+
+.fbl-skyhold .fbls-table.fbls-resident-list th,
+.fbl-skyhold .fbls-table.fbls-resident-list td {
+  display: table-cell;
+  padding: 0.2rem 0.38rem;
+}
+
+.fbl-skyhold .fbls-table.fbls-resident-list thead th {
+  background: #20242a;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.12), 0 4px 10px rgba(0, 0, 0, 0.28);
+}
+
+.fbl-skyhold .fbls-resident-list th:nth-child(1) { width: 16%; }
+.fbl-skyhold .fbls-resident-list th:nth-child(2) { width: 3.5rem; }
+.fbl-skyhold .fbls-resident-list th:nth-child(3) { width: 13%; }
+.fbl-skyhold .fbls-resident-list th:nth-child(4) { width: 12%; }
+.fbl-skyhold .fbls-resident-list th:nth-child(5) { width: 15%; }
+.fbl-skyhold .fbls-resident-list th:nth-child(6) { width: 10%; }
+.fbl-skyhold .fbls-resident-list th:nth-child(7) { width: 3.2rem; }
+.fbl-skyhold .fbls-resident-list th:nth-child(8) { width: 13%; }
+.fbl-skyhold .fbls-resident-list th:nth-child(9) { width: 2.1rem; }
+.fbl-skyhold .fbls-resident-list th:nth-child(10) { width: 5.45rem; }
+
+.fbl-skyhold .fbls-resident-list td {
+  height: 1.7rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fbl-skyhold .fbls-person-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 180px;
+}
+
+.fbl-skyhold .fbls-person-name strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.92rem;
+}
+
+.fbl-skyhold .fbls-person-row {
+  cursor: pointer;
+}
+
+.fbl-skyhold .fbls-person-row:hover td,
+.fbl-skyhold .fbls-person-row.expanded td {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.fbl-skyhold .fbls-person-row.injured td {
+  background: rgba(126, 79, 43, 0.18);
+}
+
+.fbl-skyhold .fbls-person-row.dead td {
+  opacity: 0.74;
+  background: rgba(90, 90, 96, 0.08);
+}
+
+.fbl-skyhold .fbls-injury-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  height: 20px;
+  padding: 0 7px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  background: rgba(120, 28, 28, 0.34);
+  color: #ff8f8f;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.fbl-skyhold .fbls-injury-mark.in-care {
+  border-color: rgba(255, 211, 106, 0.34);
+  background: rgba(142, 104, 30, 0.32);
+  color: #ffd36a;
+}
+
+.fbl-skyhold .fbls-injury-mark b {
+  order: 0;
+}
+
+.fbl-skyhold .fbls-injury-mark i {
+  font-size: 11px;
+}
+
+.fbl-skyhold .fbls-status-pill.injured {
+  margin-left: 0.35rem;
+  padding: 0.08rem 0.38rem;
+  border: 1px solid rgba(232, 160, 91, 0.45);
+  border-radius: 999px;
+  background: rgba(199, 124, 63, 0.28);
+  color: #ffd3ad;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.fbl-skyhold .fbls-status-pill.dead {
+  margin-left: 0.35rem;
+  border-color: rgba(170, 145, 185, 0.34);
+  background: rgba(125, 105, 130, 0.24);
+  color: #d7cfe0;
+}
+
+.fbl-skyhold .fbls-worker-badge.fbls-note-tip,
+.fbl-skyhold .fbls-trait-badge.fbls-note-tip {
+  display: inline-flex;
+  width: auto;
+  height: auto;
+  align-items: center;
+  justify-content: center;
+  cursor: help;
+}
+
+.fbl-skyhold .fbls-worker-badge.fbls-note-tip {
+  min-width: 5.6rem;
+}
+
+.fbl-skyhold .fbls-traits-cell {
+  white-space: normal;
+  overflow: visible;
+}
+
+.fbl-skyhold .fbls-traits-cell .fbls-trait-badge {
+  vertical-align: middle;
+}
+
+.fbl-skyhold .fbls-morale-cell,
+.fbl-skyhold .fbls-note-cell {
+  text-align: center;
+}
+
+.fbl-skyhold .fbls-note-tip.inline-tip {
+  display: inline;
+  width: auto;
+  height: auto;
+  cursor: help;
+}
+
+.fbl-skyhold .fbls-note-tip.inline-tip::after {
+  white-space: pre-line;
+}
+
+.fbl-skyhold .fbls-resident-list td.fbls-row-actions {
+  display: table-cell;
+  width: 5.45rem;
+  min-width: 5.45rem;
+  overflow: visible;
+  white-space: nowrap;
+  text-align: right;
+  border-bottom: 1px solid var(--fbls-border);
+}
+
+.fbl-skyhold .fbls-resident-list .fbls-row-actions-inner {
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1.45rem;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.14rem;
+}
+
+.fbl-skyhold .fbls-resident-list .fbls-row-actions-inner .fbls-icon-button {
+  width: 1.45rem;
+  min-width: 1.45rem;
+  height: 1.45rem;
+  padding: 0;
+  border-radius: 7px;
+}
+
+.fbl-skyhold .fbls-person-edit-row > td {
+  display: table-cell;
+  height: auto;
+  padding: 0.45rem;
+  overflow: visible;
+  white-space: normal;
+  background: #15191f;
+}
+
+.fbl-skyhold .fbls-person-details-row td {
+  height: auto;
+  padding: 0.35rem 0.7rem 0.55rem;
+  overflow: visible;
+  white-space: normal;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.fbl-skyhold .fbls-person-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.7rem;
+  align-items: stretch;
+}
+
+.fbl-skyhold .fbls-person-detail-item {
+  display: grid;
+  min-width: 10rem;
+  max-width: 100%;
+  gap: 0.1rem;
+  padding: 0.32rem 0.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.fbl-skyhold .fbls-person-detail-item span {
+  color: var(--fbls-muted);
+  font-size: 0.64rem;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.fbl-skyhold .fbls-person-detail-item strong {
+  color: var(--fbls-text);
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: pre-wrap;
+}
+
+.fbl-skyhold .fbls-resident-drop-hint,
+.fbl-skyhold .fbls-resident-drop-zone-bottom {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  border: 1px dashed rgba(126, 181, 255, 0.45);
+  border-radius: 10px;
+  background: rgba(8, 24, 42, 0.5);
+  color: #d8e6f6;
+}
+
+.fbl-skyhold .fbls-resident-drop-hint {
+  margin: 0.35rem 0 0.45rem;
+  padding: 0.35rem 0.55rem;
+  font-size: 12px;
+}
+
+.fbl-skyhold .fbls-resident-drop-zone-bottom {
+  min-height: 2.6rem;
+  margin-top: 0.55rem;
+  padding: 0.65rem 0.9rem;
+}
+
+.fbl-skyhold .fbls-people-table-wrap.dragover .fbls-resident-drop-hint,
+.fbl-skyhold .fbls-resident-drop-zone-bottom.dragover {
+  border-color: #89bcff;
+  background: rgba(37, 92, 151, 0.35);
+  color: #fff;
+}
+
+.fbl-skyhold .fbls-resident-drop-zone-bottom span {
+  color: #aeb8c6;
+}
+
+@media (max-width: 950px) {
+  .fbl-skyhold .fbls-resident-filters {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 860px) {
+  .fbl-skyhold .fbls-resident-toolbar.stacked-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .fbl-skyhold .fbls-resident-toolbar.stacked-toolbar > .fbls-button.compact {
+    justify-self: start;
+    margin-left: 0;
+  }
+}
