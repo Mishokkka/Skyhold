@@ -1,0 +1,9 @@
+export const MODULE_ID = "fbl-skyhold";
+export const SETTING_DATA = "skyholdData"; // Legacy combined setting, kept for one-way migration and rollback safety.
+export const SETTING_META = "skyholdMeta";
+export const SETTING_HOLDINGS = "skyholdHoldings";
+export const SETTING_CATALOG = "skyholdCatalog";
+export const SETTING_PLAYERS_CAN_OPEN = "playersCanOpen";
+export const SETTING_MASS_COMBAT_TAGS = "massCombatTags";
+export const SETTING_DEBUG_LOGS = "debugLogs";
+export const SETTING_ROUTE_GRAPH_VIEW = "routeGraphView";

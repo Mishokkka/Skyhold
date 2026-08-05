@@ -8,7 +8,7 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "icon": "fa-solid fa-beer-mug-empty",
     "img": "",
     "unlocked": true,
-    "description": "Постоялый двор, еда, слухи и малый доход.",
+    "description": "Постоялый двор, где каждый назначенный работник организует общий стол для 20 жителей; приготовление еды подразумевается и не создаёт отдельный складской ресурс.",
     "sourceRequirement": "The BUILDER talent",
     "sourceRawMaterials": "250 Wood or 500 Stone",
     "specialRequirements": "Можно строить из 500 Stone вместо 250 Wood.",
@@ -46,68 +46,43 @@ export const BUILDING_TEMPLATES_CULTURE = [
     },
     "workerRole": "",
     "functions": {
-      "production": true,
+      "production": false,
       "income": true,
       "defense": false,
       "housing": true,
       "storage": false,
       "culture": true
     },
-    "productionLines": [
-      {
-        "id": "line",
-        "active": true,
-        "name": "Пища из мяса",
-        "mode": "Пища из мяса",
-        "source": "workers",
-        "period": "qd",
-        "resourceId": "bread",
-        "resource": "Bread",
-        "outputQty": 6,
-        "workQd": 1,
-        "expenseMode": "cycle",
-        "expenses": "Meat 6",
-        "costsText": "Meat 6",
-        "requiresCollection": false,
-        "collectQd": 0,
-        "pendingQty": 0,
-        "storageRoomId": "outdoors",
-        "autoCollect": "none"
-      },
-      {
-        "id": "line",
-        "active": true,
-        "name": "Пища из овощей",
-        "mode": "Пища из овощей",
-        "source": "workers",
-        "period": "qd",
-        "resourceId": "bread",
-        "resource": "Bread",
-        "outputQty": 6,
-        "workQd": 1,
-        "expenseMode": "cycle",
-        "expenses": "Vegetables 6",
-        "costsText": "Vegetables 6",
-        "requiresCollection": false,
-        "collectQd": 0,
-        "pendingQty": 0,
-        "storageRoomId": "outdoors",
-        "autoCollect": "none"
-      }
-    ],
+    "productionLines": [],
     "income": {
-      "base": 1,
-      "perWorker": 1,
+      "base": 0,
+      "perWorker": 0,
       "formula": "",
       "risk": 0,
       "illegal": false,
-      "trade": {
+      "service": {
         "enabled": true,
+        "demandPool": "hospitality",
+        "label": "Питание и ночлег",
+        "localDemandPerResident": 0,
+        "visitorDemandPerReputation": 2,
+        "visitorDemandPerConnection": 2,
+        "servicesPerWorker": 20,
+        "residentMealCapacityPerWorker": 20,
+        "foodPersonDaysPerService": 0.5,
+        "visitorRequiresHousing": true,
+        "inputResourceId": "",
+        "inputQtyPerService": 0,
+        "priceCopper": 8,
+        "notes": "За десятник работник сначала организует общий стол для 20 жителей. Оставшаяся рабочая мощность обслуживает приезжих: 2 визита за Репутацию + 2 визита за УРС."
+      },
+      "trade": {
+        "enabled": false,
         "budgetFormula": "2d6*10",
         "maxLotsPerBuyer": 1,
         "roomId": "all",
         "kind": "all",
-        "notes": "Покупатели трактирных услуг и мелких товаров."
+        "notes": "Торговля складскими товарами отключена по умолчанию: услуги трактира считаются отдельной моделью спроса."
       }
     },
     "defense": {
@@ -127,11 +102,11 @@ export const BUILDING_TEMPLATES_CULTURE = [
       "quality": 0
     },
     "reputation": 1,
-    "moraleDelta": 2,
+    "moraleDelta": 0,
     "workerMoraleDelta": 0,
     "upkeep": 3,
-    "effect": "Meat или Vegetables превращаются в Food.",
-    "notes": "Meat или Vegetables превращаются в Food.",
+    "effect": "Каждый назначенный работник обеспечивает общий стол до 20 жителей за десятник. Жители едят напрямую из съедобных запасов; отдельное производство готовой пищи не требуется. Оставшаяся рабочая мощность может обслуживать приезжих.",
+    "notes": "Сначала общий стол обслуживает жителей. Недостаток мест не вызывает голод, но не позволяет получить поселковый бонус за разнообразное питание; оставшаяся мощность может быть продана как питание и ночлег.",
     "templateVersion": 11,
     "visibility": "public",
     "workerPrimaryAttribute": "wits"
@@ -423,7 +398,7 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "icon": "fa-solid fa-scale-balanced",
     "img": "",
     "unlocked": true,
-    "description": "Торговые ряды и место приезжих купцов.",
+    "description": "Торговые ряды, где жители и приезжие покупают реально выставленные товары в пределах спроса и рабочей мощности.",
     "sourceRequirement": "-",
     "sourceRawMaterials": "60 Wood",
     "specialRequirements": "",
@@ -470,18 +445,23 @@ export const BUILDING_TEMPLATES_CULTURE = [
     },
     "productionLines": [],
     "income": {
-      "base": 1,
-      "perWorker": 1,
+      "base": 0,
+      "perWorker": 0,
       "formula": "",
       "risk": 0,
       "illegal": false,
       "trade": {
         "enabled": true,
+        "demandModel": "settlement",
+        "localDemandPerResident": 0.08,
+        "visitorDemandPerReputation": 1,
+        "visitorDemandPerConnection": 1,
+        "buyersPerWorker": 8,
         "budgetFormula": "3d6*10",
         "maxLotsPerBuyer": 2,
         "roomId": "all",
         "kind": "all",
-        "notes": "Обычная рыночная торговля."
+        "notes": "Спрос за десятник: 0,08 покупателя на жителя + 1 за Репутацию + 1 за УРС. Реальная продажа ограничена товарами, бюджетом и эффективными торговцами."
       }
     },
     "defense": {
@@ -504,8 +484,8 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "moraleDelta": 3,
     "workerMoraleDelta": 0,
     "upkeep": 2,
-    "effect": "Supply как у обычной деревни. Довольство +3.",
-    "notes": "Supply как у обычной деревни. Довольство +3.",
+    "effect": "Рынок обслуживает платёжеспособный спрос жителей и приезжих; каждый эффективный торговец проводит до 8 покупателей за десятник. Довольство +3.",
+    "notes": "Пассивного дохода нет. Деньги возникают только от проданных складских товаров; необслуженный спрос отдельно показывает нехватку работников, товара или доступного бюджета.",
     "templateVersion": 11,
     "visibility": "public",
     "workerPrimaryAttribute": "wits"
@@ -519,7 +499,7 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "icon": "fa-solid fa-hot-tub-person",
     "img": "",
     "unlocked": true,
-    "description": "Гигиена, отдых и довольство.",
+    "description": "Общественная баня с платными помывками для жителей и приезжих; число посетителей ограничено спросом, банщиками и топливом.",
     "sourceRequirement": "Well, BUILDER",
     "sourceRawMaterials": "150 Wood",
     "specialRequirements": "Требуется Колодец и строитель с Builder. Содержание: 2 Silver/день.",
@@ -559,10 +539,10 @@ export const BUILDING_TEMPLATES_CULTURE = [
       "Переговорщик": 1,
       "Силач": 1
     },
-    "workerRole": "",
+    "workerRole": "Банщик",
     "functions": {
       "production": false,
-      "income": false,
+      "income": true,
       "defense": false,
       "housing": false,
       "storage": false,
@@ -575,6 +555,21 @@ export const BUILDING_TEMPLATES_CULTURE = [
       "formula": "",
       "risk": 0,
       "illegal": false,
+      "service": {
+        "enabled": true,
+        "demandPool": "hygiene",
+        "label": "Банные услуги",
+        "localDemandPerResident": 0.3,
+        "visitorDemandPerReputation": 0.5,
+        "visitorDemandPerConnection": 1,
+        "servicesPerWorker": 25,
+        "foodPersonDaysPerService": 0,
+        "visitorRequiresHousing": false,
+        "inputResourceId": "wood",
+        "inputQtyPerService": 0.2,
+        "priceCopper": 5,
+        "notes": "Спрос за десятник: 0,3 посещения на жителя + 0,5 за Репутацию + 1 за УРС. Одна помывка расходует 0,2 связки дров; вода считается инфраструктурой колодца."
+      },
       "trade": {
         "enabled": false,
         "budgetFormula": "2d6*10",
@@ -604,8 +599,8 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "moraleDelta": 4,
     "workerMoraleDelta": 0,
     "upkeep": 2,
-    "effect": "Позволяет пользоваться баней, повышает довольство.",
-    "notes": "Позволяет пользоваться баней, повышает довольство.",
+    "effect": "Обслуживает платёжеспособный спрос жителей и приезжих: до 25 помывок на эффективного банщика за десятник, по 5 медных и 0,2 Wood за услугу. Довольство +4.",
+    "notes": "Баня не печатает пассивный доход: ей нужны банщик, топливо, обеспеченный капитал и реальные посетители. Колодец остаётся обязательной инфраструктурой.",
     "templateVersion": 11,
     "visibility": "public",
     "workerPrimaryAttribute": "strength"
@@ -1149,7 +1144,7 @@ export const BUILDING_TEMPLATES_CULTURE = [
       {
         "id": "mat-cloth",
         "name": "Cloth",
-        "resourceId": "cloth",
+        "resourceId": "cloth-wool",
         "qty": 20
       }
     ],
@@ -1353,7 +1348,7 @@ export const BUILDING_TEMPLATES_CULTURE = [
       {
         "id": "mat-cloth",
         "name": "Cloth",
-        "resourceId": "cloth",
+        "resourceId": "cloth-wool",
         "qty": 30
       }
     ],
@@ -1455,7 +1450,7 @@ export const BUILDING_TEMPLATES_CULTURE = [
       {
         "id": "mat-cloth",
         "name": "Cloth",
-        "resourceId": "cloth",
+        "resourceId": "cloth-wool",
         "qty": 25
       },
       {
@@ -1593,9 +1588,9 @@ export const BUILDING_TEMPLATES_CULTURE = [
       "Умелец": 1,
       "Переговорщик": 1
     },
-    "workerRole": "",
+    "workerRole": "Аптекарь",
     "functions": {
-      "production": true,
+      "production": false,
       "income": true,
       "defense": false,
       "housing": false,
@@ -1609,6 +1604,21 @@ export const BUILDING_TEMPLATES_CULTURE = [
       "formula": "",
       "risk": 0,
       "illegal": false,
+      "service": {
+        "enabled": true,
+        "demandPool": "medicine",
+        "label": "Аптекарские услуги",
+        "localDemandPerResident": 0.04,
+        "visitorDemandPerReputation": 0.5,
+        "visitorDemandPerConnection": 0.5,
+        "servicesPerWorker": 8,
+        "foodPersonDaysPerService": 0,
+        "visitorRequiresHousing": false,
+        "inputResourceId": "herbs",
+        "inputQtyPerService": 0.25,
+        "priceCopper": 24,
+        "notes": "Спрос за десятник: 0,04 обращения на жителя + 0,5 за Репутацию + 0,5 за УРС. Одна услуга расходует 0,25 партии Herbs; сложные лекарства и предметы по-прежнему продаются через рынок."
+      },
       "trade": {
         "enabled": false,
         "budgetFormula": "2d6*10",
@@ -1638,8 +1648,8 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "moraleDelta": 0,
     "workerMoraleDelta": 0,
     "upkeep": 0,
-    "effect": "Медицинская поддержка и доход от лекарств. При наличии трав снижает риск смерти раненых после защиты поселения.",
-    "notes": "В Mass Combat считается медицинской поддержкой. Подходит для аптекарей, лекарей и травников.",
+    "effect": "Медицинская поддержка и до 8 платных обращений на эффективного аптекаря за десятник; каждое расходует 0,25 Herbs и приносит 24 медных.",
+    "notes": "В Mass Combat считается медицинской поддержкой. Денежная выручка возникает только при работнике, травах, обеспеченном капитале и реальном спросе.",
     "templateVersion": 11,
     "visibility": "public",
     "workerPrimaryAttribute": "wits"

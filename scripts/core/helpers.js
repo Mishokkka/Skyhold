@@ -33,6 +33,11 @@ export function fieldValue(field) {
   if (!field) return "";
   if (field.dataset?.type === "visibility") return field.checked ? "public" : "gm";
   if (field.dataset?.type === "checkbox" || field.type === "checkbox") return Boolean(field.checked);
+  if (field.dataset?.type === "optional-number") {
+    if (String(field.value ?? "").trim() === "") return null;
+    const parsed = Number(field.value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
   if (field.dataset?.type === "number" || field.type === "number") {
     const parsed = Number(field.value);
     return Number.isFinite(parsed) ? parsed : 0;
@@ -40,17 +45,4 @@ export function fieldValue(field) {
   return field.value;
 }
 
-export function escapeHtml(value) {
-  const text = String(value ?? "");
-  if (globalThis.document?.createElement) {
-    const div = document.createElement("div");
-    div.innerText = text;
-    return div.innerHTML;
-  }
-  return text
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
+export { createSafeIcon, escapeAttribute, escapeHtml, safeIconClasses, setText } from "../utils/html.js";

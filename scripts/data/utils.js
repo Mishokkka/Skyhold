@@ -41,7 +41,4 @@ export function isPlainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-export function makeId(prefix) {
-  const randomPart = globalThis.foundry?.utils?.randomID?.(10) ?? Math.random().toString(36).slice(2, 12);
-  return `${prefix}-${randomPart}`;
-}
+export { makeId } from "../utils/id.js";

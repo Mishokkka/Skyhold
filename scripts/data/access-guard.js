@@ -9,6 +9,14 @@ export function readableHoldings(data, user = globalThis.game?.user) {
   return holdings.filter((holding) => canReadHolding(holding, user));
 }
 
+export function findHoldingIndex(data, holdingId, { fallback = false } = {}) {
+  const holdings = Array.isArray(data?.holdings) ? data.holdings : [];
+  const id = String(holdingId ?? "");
+  const exact = id ? holdings.findIndex((holding) => String(holding?.id ?? "") === id) : -1;
+  if (exact >= 0) return exact;
+  return fallback && holdings.length ? 0 : -1;
+}
+
 export function findReadableHoldingEntry(data, holdingId, { fallback = false, user = globalThis.game?.user } = {}) {
   const holdings = Array.isArray(data?.holdings) ? data.holdings : [];
   const id = String(holdingId ?? "");
