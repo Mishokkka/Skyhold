@@ -1,11 +1,92 @@
 /* FBL Skyhold mass-combat: actions, tags popover, compact lower row and source cards. */
-.fbl-skyhold-mass-combat .fbls-battle-actions {
-  align-items: center;
-  overflow: visible;
-}
-
 .fbl-skyhold-mass-combat .fbls-battle-actions .aftermath {
   white-space: nowrap;
+}
+
+.fbl-skyhold-mass-combat .fbls-battle-terminal {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border: 1px solid var(--fbls-accent-border);
+  border-radius: 10px;
+  background: var(--fbls-accent-bg);
+  color: var(--fbls-text);
+}
+
+.fbl-skyhold-mass-combat .fbls-battle-terminal > strong {
+  color: var(--fbls-accent);
+}
+
+.fbl-skyhold-mass-combat .fbls-battle-terminal.defender {
+  border-color: var(--fbls-success);
+  background: var(--fbls-success-soft);
+}
+
+.fbl-skyhold-mass-combat .fbls-battle-terminal.attacker {
+  border-color: var(--fbls-danger-border);
+  background: var(--fbls-danger-soft);
+}
+
+.fbl-skyhold-mass-combat .fbls-battle-terminal.contested {
+  border-color: var(--fbls-accent-border);
+  background: var(--fbls-accent-bg);
+}
+
+.fbl-skyhold-mass-combat [data-action="mass-roll-round"]:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.45);
+  opacity: 0.48;
+}
+
+.fbl-skyhold-mass-combat .fbls-battle-pending {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--fbls-accent-border);
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--fbls-accent-bg), var(--fbls-accent-bg));
+}
+
+.fbl-skyhold-mass-combat .fbls-battle-pending-head,
+.fbl-skyhold-mass-combat .fbls-battle-pending-rolls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.fbl-skyhold-mass-combat .fbls-battle-pending-head > div,
+.fbl-skyhold-mass-combat .fbls-battle-pending-rolls > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.fbl-skyhold-mass-combat .fbls-battle-pending-head span,
+.fbl-skyhold-mass-combat .fbls-battle-pending-rolls span,
+.fbl-skyhold-mass-combat .fbls-battle-pending-rolls small {
+  color: var(--fbls-accent);
+}
+
+.fbl-skyhold-mass-combat .fbls-battle-pending-rolls > div {
+  flex: 1 1 0;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: var(--fbls-overlay-soft);
+}
+
+.fbl-skyhold-mass-combat .fbls-battle-pending-actions {
+  justify-content: flex-end;
+}
+
+@media (max-width: 760px) {
+  .fbl-skyhold-mass-combat .fbls-battle-pending-head,
+  .fbl-skyhold-mass-combat .fbls-battle-pending-rolls {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-tags-anchor {
@@ -33,10 +114,10 @@
   min-width: 172px;
   max-width: 280px;
   padding: 8px;
-  border: 1px solid rgba(194,166,112,.42);
+  border: 1px solid var(--fbls-accent-border);
   border-radius: 10px;
-  background: rgba(20,18,15,.97);
-  box-shadow: 0 12px 30px rgba(0,0,0,.55);
+  background: var(--fbls-overlay-strong);
+  box-shadow: 0 12px 30px var(--fbls-overlay-strong);
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-tags-popover.open {
@@ -56,7 +137,7 @@
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-tags-popover-head strong {
-  color: #ead8b6;
+  color: var(--fbls-accent);
   font-size: 14px;
   text-align: center;
 }
@@ -76,7 +157,7 @@
   align-items: center;
   justify-content: center;
   height: 22px;
-  color: #ead8b6;
+  color: var(--fbls-accent);
   font-size: 16px;
 }
 
@@ -95,13 +176,7 @@
   justify-content: center;
   width: 38px;
   height: 22px;
-  color: #fff0ca;
-}
-
-.fbl-skyhold-mass-combat .fbls-battle-grid.lower {
-  grid-template-columns: minmax(340px, .78fr) minmax(420px, 1.22fr);
-  min-height: max-content;
-  align-items: stretch;
+  color: var(--fbls-accent);
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-card.notes,
@@ -132,58 +207,6 @@
   flex-direction: column;
 }
 
-.fbl-skyhold-mass-combat .fbls-battle-log-list {
-  flex: 1 1 auto;
-  min-height: 110px;
-  max-height: 320px;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding-right: 4px;
-}
-
-.fbl-skyhold-mass-combat .fbls-battle-shell input[type="checkbox"],
-.fbl-skyhold-mass-combat .fbls-battle-shell .fbls-battle-check input[type="checkbox"] {
-  position: relative;
-  inset: auto;
-  display: inline-block;
-  width: 18px;
-  min-width: 18px;
-  height: 18px;
-  min-height: 18px;
-  margin: 0;
-  flex: 0 0 18px;
-  transform: none;
-  vertical-align: middle;
-}
-
-.fbl-skyhold-mass-combat .fbls-battle-check,
-.fbl-skyhold-mass-combat .fbls-battle-shell label.fbls-battle-check {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  overflow: visible;
-}
-
-.fbl-skyhold-mass-combat .fbls-battle-check span {
-  flex: 1 1 auto;
-}
-
-.fbl-skyhold-mass-combat .fbls-battle-fields.side-fields {
-  grid-template-columns: repeat(6, minmax(58px, 1fr));
-}
-
-.fbl-skyhold-mass-combat .fbls-battle-fields.side-fields label.wide {
-  grid-column: 1 / -1;
-}
-
-.fbl-skyhold-mass-combat .fbls-battle-fields.side-fields label span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .fbl-skyhold-mass-combat .fbls-battle-context.objective-help {
   margin-top: 8px;
   padding: 7px 9px;
@@ -193,13 +216,12 @@
 
 .fbl-skyhold-mass-combat .fbls-battle-card.score .fbls-battle-sources {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(124px, 1fr));
   gap: 8px;
   align-items: stretch;
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-card.score .fbls-battle-sources > .fbls-battle-source-card {
-  grid-column: span 2;
   display: grid;
   grid-template-columns: auto 1fr;
   grid-template-areas: "icon label" "icon value";
@@ -209,9 +231,9 @@
   height: 100%;
   min-width: 0;
   padding: 10px;
-  border: 1px solid rgba(210, 180, 120, 0.22);
+  border: 1px solid var(--fbls-accent-border);
   border-radius: 10px;
-  background: rgba(0, 0, 0, 0.16);
+  background: var(--fbls-overlay-soft);
   box-shadow: none;
   text-align: left;
   cursor: default;
@@ -222,13 +244,13 @@
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-card.score .fbls-battle-sources > .fbls-battle-source-card.is-clickable:hover {
-  border-color: rgba(232, 202, 138, 0.55);
-  background: rgba(70, 50, 25, 0.22);
+  border-color: var(--fbls-accent-border);
+  background: var(--fbls-accent-bg);
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-sources > .fbls-battle-source-card i {
   grid-area: icon;
-  color: #d8c79d;
+  color: var(--fbls-accent);
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-sources > .fbls-battle-source-card span {
@@ -237,23 +259,8 @@
 
 .fbl-skyhold-mass-combat .fbls-battle-sources > .fbls-battle-source-card strong {
   grid-area: value;
-  color: #efe6d6;
+  color: var(--fbls-text);
   font-size: 13px;
-}
-
-.fbl-skyhold-mass-combat .fbls-battle-card.score .fbls-battle-sources > .fbls-battle-source-card:only-child {
-  grid-column: 1 / -1;
-}
-
-.fbl-skyhold-mass-combat .fbls-battle-card.score .fbls-battle-sources > .fbls-battle-source-card:nth-child(1):nth-last-child(2),
-.fbl-skyhold-mass-combat .fbls-battle-card.score .fbls-battle-sources > .fbls-battle-source-card:nth-child(2):last-child,
-.fbl-skyhold-mass-combat .fbls-battle-card.score .fbls-battle-sources > .fbls-battle-source-card:nth-child(1):nth-last-child(4),
-.fbl-skyhold-mass-combat .fbls-battle-card.score .fbls-battle-sources > .fbls-battle-source-card:nth-child(2):nth-last-child(3),
-.fbl-skyhold-mass-combat .fbls-battle-card.score .fbls-battle-sources > .fbls-battle-source-card:nth-child(3):nth-last-child(2),
-.fbl-skyhold-mass-combat .fbls-battle-card.score .fbls-battle-sources > .fbls-battle-source-card:nth-child(4):last-child,
-.fbl-skyhold-mass-combat .fbls-battle-card.score .fbls-battle-sources > .fbls-battle-source-card:nth-child(4):nth-last-child(2),
-.fbl-skyhold-mass-combat .fbls-battle-card.score .fbls-battle-sources > .fbls-battle-source-card:nth-child(5):last-child {
-  grid-column: span 3;
 }
 
 .fbl-skyhold-mass-combat .fbls-inline-tag-select {
@@ -262,30 +269,46 @@
   font-size: 12px;
 }
 
-.fbls-battle-chat .fbls-battle-chat-pools span {
-  white-space: normal;
+.fbl-skyhold-mass-combat .fbls-battle-card.archive {
+  margin-top: 10px;
 }
 
-@media (max-width: 980px) {
-  .fbl-skyhold-mass-combat .fbls-battle-fields.side-fields {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+.fbl-skyhold-mass-combat .fbls-battle-archive-list {
+  display: grid;
+  gap: 6px;
+}
+
+.fbl-skyhold-mass-combat .fbls-battle-archive-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3px 12px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid var(--fbls-accent-border);
+  border-radius: 8px;
+  background: var(--fbls-overlay-soft);
+}
+
+.fbl-skyhold-mass-combat .fbls-battle-archive-row > div {
+  display: grid;
+  min-width: 0;
+}
+
+.fbl-skyhold-mass-combat .fbls-battle-archive-row > div:nth-child(2) {
+  text-align: right;
+}
+
+.fbl-skyhold-mass-combat .fbls-battle-archive-row span,
+.fbl-skyhold-mass-combat .fbls-battle-archive-row small {
+  color: var(--fbls-muted);
+}
+
+.fbl-skyhold-mass-combat .fbls-battle-archive-row small {
+  grid-column: 1 / -1;
 }
 
 @media (max-width: 720px) {
   .fbl-skyhold-mass-combat .fbls-battle-card.score .fbls-battle-sources {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .fbl-skyhold-mass-combat .fbls-battle-card.score .fbls-battle-sources > .fbls-battle-source-card,
-  .fbl-skyhold-mass-combat .fbls-battle-card.score .fbls-battle-sources > .fbls-battle-source-card:nth-child(1):nth-last-child(2),
-  .fbl-skyhold-mass-combat .fbls-battle-card.score .fbls-battle-sources > .fbls-battle-source-card:nth-child(2):last-child,
-  .fbl-skyhold-mass-combat .fbls-battle-card.score .fbls-battle-sources > .fbls-battle-source-card:nth-child(1):nth-last-child(4),
-  .fbl-skyhold-mass-combat .fbls-battle-card.score .fbls-battle-sources > .fbls-battle-source-card:nth-child(2):nth-last-child(3),
-  .fbl-skyhold-mass-combat .fbls-battle-card.score .fbls-battle-sources > .fbls-battle-source-card:nth-child(3):nth-last-child(2),
-  .fbl-skyhold-mass-combat .fbls-battle-card.score .fbls-battle-sources > .fbls-battle-source-card:nth-child(4):last-child,
-  .fbl-skyhold-mass-combat .fbls-battle-card.score .fbls-battle-sources > .fbls-battle-source-card:nth-child(4):nth-last-child(2),
-  .fbl-skyhold-mass-combat .fbls-battle-card.score .fbls-battle-sources > .fbls-battle-source-card:nth-child(5):last-child {
-    grid-column: span 1;
+    grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
   }
 }

@@ -1,0 +1,446 @@
+/* FBL Skyhold: current owner for building card list, card heads, strips and card production rows. */
+
+.fbl-skyhold .fbls-buildings-panel.compact-buildings {
+  gap: 0.55rem;
+}
+
+.fbl-skyhold .fbls-building-stat-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.fbl-skyhold .fbls-building-stat-chips em {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 18px;
+  padding: 1px 5px;
+  border: 1px solid var(--fbls-border);
+  border-radius: 999px;
+  background: var(--fbls-overlay);
+  color: var(--fbls-accent);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.fbl-skyhold .fbls-building-stat-chips em i {
+  font-size: 0.8rem;
+  opacity: 0.95;
+}
+
+.fbl-skyhold .fbls-building-stat-chips em.food i { color: var(--fbls-dev-food); }
+.fbl-skyhold .fbls-building-stat-chips em.technology i { color: var(--fbls-dev-technology); }
+.fbl-skyhold .fbls-building-stat-chips em.culture i { color: var(--fbls-dev-culture); }
+.fbl-skyhold .fbls-building-stat-chips em.war i { color: var(--fbls-dev-war); }
+.fbl-skyhold .fbls-building-stat-chips em.morale i,
+.fbl-skyhold .fbls-building-stat-chips em.reputation i { color: var(--fbls-dev-morale); }
+
+.fbl-skyhold .fbls-building-stat-chips em b.positive { color: var(--fbls-success); }
+.fbl-skyhold .fbls-building-stat-chips em b.negative { color: var(--fbls-danger); }
+
+.fbl-skyhold .fbls-building-title-block {
+  gap: 4px;
+}
+
+.fbl-skyhold .fbls-building-hover-title {
+  cursor: help;
+}
+
+.fbl-skyhold .fbls-building-title-block h3 {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 0.34rem;
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.08;
+}
+
+.fbl-skyhold .fbls-building-category-icon {
+  flex: 0 0 auto;
+  width: 1rem;
+  color: var(--fbls-accent);
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+.fbl-skyhold .fbls-building-name-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fbl-skyhold .fbls-building-status-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 999px;
+  background: var(--fbls-panel);
+  color: var(--fbls-accent);
+  font-size: 0.66rem;
+  line-height: 1;
+}
+
+.fbl-skyhold .fbls-building-status-icon.built {
+  border-color: var(--fbls-success);
+  background: var(--fbls-success-soft);
+  color: var(--fbls-success);
+}
+
+.fbl-skyhold .fbls-building-status-icon.planned {
+  border-color: var(--fbls-info);
+  background: var(--fbls-info-soft);
+  color: var(--fbls-info);
+}
+
+.fbl-skyhold .fbls-building-status-icon.building {
+  border-color: var(--fbls-accent-border);
+  background: var(--fbls-accent-bg);
+  color: var(--fbls-accent);
+}
+
+.fbl-skyhold .fbls-building-status-icon.paused {
+  border-color: var(--fbls-info);
+  background: var(--fbls-info-soft);
+  color: var(--fbls-text);
+}
+
+.fbl-skyhold .fbls-building-status-icon.damaged {
+  border-color: var(--fbls-accent-border);
+  background: var(--fbls-accent-bg);
+  color: var(--fbls-accent);
+}
+
+.fbl-skyhold .fbls-building-status-icon.heavilyDamaged,
+.fbl-skyhold .fbls-building-status-icon.destroyed {
+  border-color: var(--fbls-danger-border);
+  background: var(--fbls-danger-strong);
+  color: var(--fbls-danger);
+}
+
+.fbl-skyhold .fbls-building-subline {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 0.72rem;
+}
+
+.fbl-skyhold .fbls-status-pill {
+  min-height: 1.1rem;
+  padding: 0 0.34rem;
+}
+
+.fbl-skyhold .fbls-building-head-meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-content: center;
+  gap: 4px;
+  max-width: 132px;
+}
+
+.fbl-skyhold .fbls-head-chip {
+  height: 24px;
+  min-height: 24px;
+  padding: 0 7px;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.fbl-skyhold .fbls-head-chip.upkeep i {
+  color: var(--fbls-accent);
+}
+
+.fbl-skyhold .fbls-head-chip.workers i {
+  color: var(--fbls-info);
+}
+
+.fbl-skyhold .fbls-head-chip.medical {
+  border-color: var(--fbls-success);
+  color: var(--fbls-success);
+}
+
+.fbl-skyhold .fbls-head-chip.medical i {
+  color: var(--fbls-success);
+}
+
+.fbl-skyhold .fbls-building-cards {
+  display: block;
+  /* The Foundry application can be much narrower than the browser viewport.
+     Let multicolumn layout react to its own available width instead of a
+     viewport media query, which otherwise leaves the third column clipped. */
+  column-count: auto;
+  column-width: 21rem;
+  column-gap: 8px;
+}
+
+.fbl-skyhold .fbls-building-card {
+  display: inline-block;
+  position: relative;
+  width: 100%;
+  min-height: 0;
+  margin: 0 0 8px;
+  overflow: hidden;
+  break-inside: avoid;
+  page-break-inside: avoid;
+  vertical-align: top;
+}
+
+.fbl-skyhold .fbls-building-card:not(.medical-building) {
+  border-color: var(--fbls-border);
+  background: var(--fbls-panel);
+  box-shadow: none;
+}
+
+.fbl-skyhold .fbls-building-card:not(.medical-building):hover {
+  border-color: var(--fbls-border-strong);
+  background: var(--fbls-panel);
+}
+
+.fbl-skyhold .fbls-building-card.head-only {
+  min-height: 0;
+}
+
+.fbl-skyhold .fbls-building-card.head-only:not(.medical-building) {
+  background: var(--fbls-surface-soft);
+}
+
+.fbl-skyhold .fbls-building-card.damaged:not(.medical-building) {
+  border-color: var(--fbls-accent-border);
+  background: linear-gradient(135deg, var(--fbls-accent-bg), var(--fbls-overlay-strong));
+  box-shadow: inset 0 0 0 1px var(--fbls-accent-soft);
+}
+
+.fbl-skyhold .fbls-building-card.heavilyDamaged:not(.medical-building) {
+  border-color: var(--fbls-accent-border);
+  background: linear-gradient(135deg, var(--fbls-accent-bg), var(--fbls-overlay-strong));
+  box-shadow: inset 0 0 0 1px var(--fbls-accent-soft);
+}
+
+.fbl-skyhold .fbls-building-card.destroyed:not(.medical-building) {
+  border-color: var(--fbls-danger-border);
+  background: linear-gradient(135deg, var(--fbls-danger-strong), var(--fbls-overlay-strong));
+  box-shadow: inset 0 0 0 1px var(--fbls-danger-soft);
+}
+
+.fbl-skyhold .fbls-building-card.damaged:not(.medical-building) .fbls-building-card-head.v2 {
+  background: var(--fbls-accent-soft);
+}
+
+.fbl-skyhold .fbls-building-card.heavilyDamaged:not(.medical-building) .fbls-building-card-head.v2 {
+  background: var(--fbls-accent-soft);
+}
+
+.fbl-skyhold .fbls-building-card.destroyed:not(.medical-building) .fbls-building-card-head.v2 {
+  background: var(--fbls-danger-soft);
+}
+
+.fbl-skyhold .fbls-building-card.medical-building.damaged {
+  border-color: var(--fbls-accent-border);
+  background:
+    linear-gradient(135deg, var(--fbls-accent-bg), var(--fbls-success-soft)),
+    linear-gradient(180deg, var(--fbls-success-soft), var(--fbls-info-soft));
+}
+
+.fbl-skyhold .fbls-building-card.medical-building.heavilyDamaged {
+  border-color: var(--fbls-accent-border);
+  background:
+    linear-gradient(135deg, var(--fbls-accent-bg), var(--fbls-info-soft)),
+    linear-gradient(180deg, var(--fbls-success-soft), var(--fbls-info-soft));
+}
+
+.fbl-skyhold .fbls-building-card.medical-building.destroyed {
+  border-color: var(--fbls-danger-border);
+  background:
+    linear-gradient(135deg, var(--fbls-danger-strong), var(--fbls-overlay-strong)),
+    linear-gradient(180deg, var(--fbls-success-soft), var(--fbls-info-soft));
+}
+
+.fbl-skyhold .fbls-building-card.medical-building.damaged::before {
+  background: linear-gradient(180deg, var(--fbls-accent-bg), var(--fbls-accent-soft));
+}
+
+.fbl-skyhold .fbls-building-card.medical-building.heavilyDamaged::before {
+  background: linear-gradient(180deg, var(--fbls-accent-bg), var(--fbls-accent-soft));
+}
+
+.fbl-skyhold .fbls-building-card.medical-building.destroyed::before {
+  background: linear-gradient(180deg, var(--fbls-danger-strong), var(--fbls-danger-soft));
+}
+
+.fbl-skyhold .fbls-building-card.medical-building {
+  border-color: var(--fbls-success);
+  background: linear-gradient(180deg, var(--fbls-success-soft), var(--fbls-info-soft));
+  box-shadow: inset 0 0 0 1px var(--fbls-success-soft), 0 10px 26px var(--fbls-overlay);
+}
+
+.fbl-skyhold .fbls-building-card.medical-building::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: linear-gradient(180deg, var(--fbls-success-soft), var(--fbls-success-soft));
+  pointer-events: none;
+}
+
+.fbl-skyhold .fbls-building-card:not(.medical-building)::before {
+  content: none;
+}
+
+.fbl-skyhold .fbls-building-card[draggable="true"] {
+  cursor: grab;
+}
+
+.fbl-skyhold .fbls-building-card.dragging {
+  cursor: grabbing;
+  opacity: 0.58;
+}
+
+.fbl-skyhold .fbls-building-card.drag-over {
+  outline: 2px solid var(--fbls-accent-border);
+  outline-offset: -3px;
+}
+
+.fbl-skyhold .fbls-building-card-head.v2 {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 0;
+  padding: 8px;
+  border-bottom: 1px solid var(--fbls-border);
+}
+
+.fbl-skyhold .fbls-building-card.head-only .fbls-building-card-head.v2 {
+  padding-bottom: 10px;
+  border-bottom: 0;
+}
+
+.fbl-skyhold .fbls-building-card-head.v2 .fbls-building-card-media {
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  grid-template-rows: 46px;
+  width: 46px;
+}
+
+.fbl-skyhold .fbls-building-card-head.v2 .fbls-building-card-icon {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  min-width: 46px;
+  height: 46px;
+  overflow: hidden;
+  border-radius: 10px;
+}
+
+.fbl-skyhold .fbls-building-card-head.v2 .fbls-building-card-icon img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.fbl-skyhold .fbls-building-card-head.v2 .fbls-building-card-icon i {
+  display: block;
+  font-size: 1.55rem;
+  line-height: 1;
+}
+
+.fbl-skyhold .fbls-building-card-brief {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.24rem 0.42rem;
+  font-size: 0.78rem;
+}
+
+.fbl-skyhold .fbls-building-card-brief span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fbl-skyhold .fbls-building-card-brief b {
+  letter-spacing: 0.03em;
+}
+
+.fbl-skyhold .fbls-building-card-brief strong {
+  font-size: 1.08rem;
+  font-weight: 850;
+}
+
+.fbl-skyhold .fbls-building-card.planned,
+.fbl-skyhold .fbls-building-card.building,
+.fbl-skyhold .fbls-building-card.paused {
+  border-color: var(--fbls-blueprint-border);
+  background: var(--fbls-blueprint-bg);
+  background-size: var(--fbls-blueprint-grid), var(--fbls-blueprint-grid), auto;
+  box-shadow: var(--fbls-blueprint-shadow);
+}
+
+.fbl-skyhold .fbls-building-card.planned .fbls-building-card-icon,
+.fbl-skyhold .fbls-building-card.building .fbls-building-card-icon,
+.fbl-skyhold .fbls-building-card.paused .fbls-building-card-icon {
+  background: var(--fbls-blueprint-icon-bg);
+  border-color: var(--fbls-blueprint-icon-border);
+}
+
+.fbl-skyhold .fbls-building-card.planned.medical-building,
+.fbl-skyhold .fbls-building-card.building.medical-building,
+.fbl-skyhold .fbls-building-card.paused.medical-building {
+  border-color: var(--fbls-blueprint-border);
+  box-shadow: var(--fbls-blueprint-shadow);
+}
+
+.fbl-skyhold .fbls-building-card.planned.medical-building::before,
+.fbl-skyhold .fbls-building-card.building.medical-building::before,
+.fbl-skyhold .fbls-building-card.paused.medical-building::before {
+  background: linear-gradient(180deg, var(--fbls-info-soft), var(--fbls-info-soft));
+}
+
+.fbl-skyhold .fbls-building-card.planned:not(.medical-building),
+.fbl-skyhold .fbls-building-card.building:not(.medical-building),
+.fbl-skyhold .fbls-building-card.paused:not(.medical-building) {
+  border-color: var(--fbls-info);
+  box-shadow: inset 0 0 0 1px var(--fbls-info-soft);
+}
+
+.fbl-skyhold .fbls-building-card.planned:not(.medical-building) .fbls-building-card-head.v2,
+.fbl-skyhold .fbls-building-card.building:not(.medical-building) .fbls-building-card-head.v2,
+.fbl-skyhold .fbls-building-card.paused:not(.medical-building) .fbls-building-card-head.v2 {
+  background: linear-gradient(90deg, var(--fbls-info-soft), transparent 72%);
+}
+
+.fbl-skyhold .fbls-building-card-body {
+  display: grid;
+  gap: 6px;
+  padding: 6px 8px 8px;
+}
+
+.fbl-skyhold .fbls-building-card-body:empty {
+  display: none;
+}
+
+.fbl-skyhold .fbls-building-card .fbls-progress-bar {
+  margin-top: auto;
+}
+
+.fbl-skyhold .fbls-building-card-brief.project-info {
+  margin: 0;
+  padding: 0;
+}
+
+.fbl-skyhold .fbls-building-card-brief.project-info span {
+  padding: 5px 7px;
+  border: 1px solid var(--fbls-border);
+  border-radius: 8px;
+  background: var(--fbls-overlay-soft);
+}

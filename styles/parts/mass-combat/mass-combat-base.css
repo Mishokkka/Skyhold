@@ -1,25 +1,25 @@
 /* FBL Skyhold mass-combat: current battle window, cards and form layout. */
 .fbl-skyhold-mass-combat {
-  --fbls-battle-bg: #080706;
-  --fbls-battle-scroll-track: #14110e;
-  --fbls-battle-control-option-bg: #201b16;
-  --fbls-battle-scroll-thumb: #b14a5d;
-  --fbls-battle-text: #f1e8d8;
-  --fbls-battle-text-soft: #efe6d6;
-  --fbls-battle-title: #fff0d1;
-  --fbls-battle-muted: #ded2bf;
-  --fbls-battle-panel: rgba(22, 19, 16, .94);
-  --fbls-battle-panel-border: rgba(205, 174, 116, .30);
-  --fbls-battle-panel-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 10px 24px rgba(0,0,0,.20);
-  --fbls-battle-field-bg: rgba(4, 4, 4, .72);
-  --fbls-battle-field-border: rgba(190, 161, 111, .25);
+  --fbls-battle-bg: var(--fbls-surface-0);
+  --fbls-battle-scroll-track: var(--fbls-surface-0);
+  --fbls-battle-control-option-bg: var(--fbls-surface-1);
+  --fbls-battle-scroll-thumb: var(--fbls-danger-strong);
+  --fbls-battle-text: var(--fbls-text);
+  --fbls-battle-text-soft: var(--fbls-text);
+  --fbls-battle-title: var(--fbls-accent);
+  --fbls-battle-muted: var(--fbls-muted);
+  --fbls-battle-panel: var(--fbls-surface-0);
+  --fbls-battle-panel-border: var(--fbls-accent-border);
+  --fbls-battle-panel-shadow: inset 0 1px 0 var(--fbls-surface-soft), 0 10px 24px var(--fbls-overlay-soft);
+  --fbls-battle-field-bg: var(--fbls-overlay-strong);
+  --fbls-battle-field-border: var(--fbls-accent-border);
   --fbls-battle-shell-bg:
-    radial-gradient(circle at 18% 0%, rgba(166, 116, 52, .10), transparent 30%),
-    linear-gradient(180deg, rgba(16, 14, 12, .99), rgba(7, 7, 7, 1));
+    radial-gradient(circle at 18% 0%, var(--fbls-accent-soft), transparent 30%),
+    linear-gradient(180deg, var(--fbls-overlay-strong), var(--fbls-surface-0));
   color-scheme: dark;
   min-width: 760px;
   min-height: 520px;
-  background: var(--fbls-battle-bg) !important;
+  background-color: var(--fbls-battle-bg);
 }
 
 .fbl-skyhold-mass-combat .window-content {
@@ -27,28 +27,26 @@
   flex-direction: column;
   min-height: 0;
   padding: 0;
-  background: var(--fbls-battle-bg) !important;
-  color: var(--fbls-battle-text) !important;
-  overflow: hidden !important;
-  scrollbar-gutter: stable;
+  background: var(--fbls-battle-bg);
+  scrollbar-gutter: auto;
 }
 
 .fbl-skyhold-mass-combat .application-content {
   flex: 1 1 auto;
-  min-height: 0;
+  min-height: 100%;
   height: 100%;
   padding: 0;
-  background: var(--fbls-battle-bg) !important;
-  color: var(--fbls-battle-text) !important;
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
+  background: var(--fbls-battle-bg);
   scrollbar-color: var(--fbls-battle-scroll-thumb) var(--fbls-battle-scroll-track);
-  scrollbar-gutter: stable;
+  scrollbar-gutter: auto;
 }
 
-.fbl-skyhold-mass-combat .window-content:not(:has(.application-content)) {
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
+.fbl-skyhold-mass-combat .window-content > *,
+.fbl-skyhold-mass-combat .application-content > *,
+.fbl-skyhold-mass-combat [data-application-part],
+.fbl-skyhold-mass-combat form,
+.fbl-skyhold-mass-combat .standard-form {
+  background-color: var(--fbls-battle-bg);
 }
 
 .fbl-skyhold-mass-combat .window-content::-webkit-scrollbar,
@@ -133,10 +131,10 @@
   gap: 5px;
   min-height: 28px;
   padding: 4px 8px;
-  border: 1px solid rgba(194, 166, 112, .24);
+  border: 1px solid var(--fbls-accent-border);
   border-radius: 999px;
-  background: rgba(14, 13, 12, .55);
-  color: #efe3cc;
+  background: var(--fbls-overlay-strong);
+  color: var(--fbls-accent);
   white-space: nowrap;
   font-size: 12px;
 }
@@ -151,7 +149,7 @@
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-grid.main {
-  grid-template-columns: minmax(420px, 1.12fr) minmax(360px, .88fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-grid.sides {
@@ -159,8 +157,9 @@
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-grid.lower {
-  grid-template-columns: minmax(420px, .85fr) minmax(480px, 1.15fr);
-  align-items: start;
+  grid-template-columns: minmax(340px, .78fr) minmax(420px, 1.22fr);
+  min-height: max-content;
+  align-items: stretch;
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-card {
@@ -177,25 +176,42 @@
   letter-spacing: .02em;
 }
 
-.fbl-skyhold-mass-combat .fbls-battle-card h3[data-action="mass-toggle-section"] {
+.fbl-skyhold-mass-combat .fbls-battle-section-toggle {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
   min-height: 24px;
-  margin-bottom: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
   cursor: pointer;
   user-select: none;
 }
 
-.fbl-skyhold-mass-combat .fbls-battle-card h3[data-action="mass-toggle-section"] span {
+.fbl-skyhold-mass-combat .fbls-battle-section-toggle:focus-visible {
+  outline: 2px solid var(--fbls-accent-border);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+.fbl-skyhold-mass-combat .fbls-battle-section-toggle span {
   min-width: 0;
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-collapse-icon {
   margin-left: auto;
-  color: rgba(235, 216, 178, .68);
+  color: var(--fbls-accent);
   font-size: 12px;
   transition: transform .16s ease, color .16s ease;
 }
 
-.fbl-skyhold-mass-combat .fbls-battle-card h3[data-action="mass-toggle-section"]:hover .fbls-battle-collapse-icon {
+.fbl-skyhold-mass-combat .fbls-battle-section-toggle:hover .fbls-battle-collapse-icon {
   color: var(--fbls-battle-title);
 }
 
@@ -214,7 +230,7 @@
 
 .fbl-skyhold-mass-combat .fbls-battle-card.is-collapsed > :not(h3):not(.fbls-battle-log-head),
 .fbl-skyhold-mass-combat .fbls-battle-card.is-collapsed .fbls-battle-log-head > :not(h3) {
-  display: none !important;
+  display: none;
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-fields {
@@ -227,7 +243,7 @@
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-fields.side-fields {
-  grid-template-columns: repeat(4, minmax(74px, 1fr));
+  grid-template-columns: repeat(6, minmax(58px, 1fr));
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-fields.tally-fields {
@@ -247,12 +263,18 @@
   grid-column: 1 / -1;
 }
 
+.fbl-skyhold-mass-combat .fbls-battle-fields.side-fields label span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .fbl-skyhold-mass-combat .fbls-battle-fields span,
 .fbl-skyhold-mass-combat .fbls-battle-notes span,
 .fbl-skyhold-mass-combat .fbls-battle-preset span,
 .fbl-skyhold-mass-combat .fbls-battle-sources span,
 .fbl-skyhold-mass-combat .fbls-battle-log-row small {
-  color: #c7bba7;
+  color: var(--fbls-accent);
   font-size: 10px;
   line-height: 1;
   text-transform: uppercase;
@@ -270,8 +292,8 @@
   border: 1px solid var(--fbls-battle-field-border);
   border-radius: 8px;
   background: var(--fbls-battle-field-bg);
-  color: #f4ecdf;
-  -webkit-text-fill-color: #f4ecdf;
+  color: var(--fbls-text);
+  -webkit-text-fill-color: var(--fbls-text);
   box-sizing: border-box;
 }
 
@@ -281,36 +303,80 @@
   color-scheme: dark;
 }
 
-.fbl-skyhold-mass-combat .fbls-battle-shell select option {
-  background: var(--fbls-battle-control-option-bg) !important;
-  color: var(--fbls-battle-text-soft) !important;
-}
-
 .fbl-skyhold-mass-combat .fbls-battle-shell textarea {
   min-height: 86px;
   resize: vertical;
 }
 
-.fbl-skyhold-mass-combat .fbls-battle-check {
-  flex-direction: row;
+.fbl-skyhold-mass-combat .fbls-battle-check,
+.fbl-skyhold-mass-combat .fbls-battle-shell label.fbls-battle-check {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: 1.25rem 1.75rem;
   align-items: center;
-  justify-content: space-between;
-  min-height: 42px;
-  padding: 5px 8px;
-  border: 1px solid rgba(190, 161, 111, .18);
-  border-radius: 8px;
-  background: rgba(10, 9, 8, .32);
+  justify-content: center;
+  justify-items: center;
+  gap: 2px;
+  min-height: 0;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
-.fbl-skyhold-mass-combat .fbls-battle-check input[type="checkbox"] {
-  position: static;
-  display: inline-block;
-  width: 18px;
-  height: 18px;
-  min-width: 18px;
-  min-height: 18px;
+.fbl-skyhold-mass-combat .fbls-battle-check span {
+  display: grid;
+  place-items: center;
+  width: 100%;
   margin: 0;
-  flex: 0 0 18px;
+  color: var(--fbls-accent);
+  font-size: 16px;
+  line-height: 1;
+}
+
+.fbl-skyhold-mass-combat .fbls-battle-shell input[type="checkbox"],
+.fbl-skyhold-mass-combat .fbls-battle-shell .fbls-battle-check input[type="checkbox"] {
+  --fbls-check-size: 20px;
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  width: var(--fbls-check-size);
+  height: var(--fbls-check-size);
+  min-width: var(--fbls-check-size);
+  min-height: var(--fbls-check-size);
+  max-width: var(--fbls-check-size);
+  max-height: var(--fbls-check-size);
+  position: relative;
+  inset: auto;
+  z-index: 1;
+  opacity: 1;
+  visibility: visible;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--fbls-border-strong);
+  border-radius: 4px;
+  background: var(--fbls-surface-0);
+  box-shadow: inset 0 1px 0 var(--fbls-overlay);
+  appearance: none;
+  -webkit-appearance: none;
+  transform: none;
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+.fbl-skyhold-mass-combat .fbls-battle-shell .fbls-battle-check input[type="checkbox"]:checked {
+  border-color: var(--fbls-accent-border);
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.2 8.2 6.5 11.4 12.8 4.8' fill='none' stroke='%23171a1c' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 72% 72% no-repeat,
+    linear-gradient(180deg, var(--fbls-accent), var(--fbls-accent));
+}
+
+.fbl-skyhold-mass-combat .fbls-battle-shell .fbls-battle-check input[type="checkbox"]::before,
+.fbl-skyhold-mass-combat .fbls-battle-shell .fbls-battle-check input[type="checkbox"]::after {
+  content: none;
+  display: none;
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-pools {
@@ -323,20 +389,20 @@
 .fbl-skyhold-mass-combat .fbls-battle-pools > div {
   min-height: 78px;
   padding: 12px;
-  border: 1px solid rgba(198, 166, 111, .24);
+  border: 1px solid var(--fbls-accent-border);
   border-radius: 12px;
-  background: linear-gradient(180deg, rgba(15,14,13,.75), rgba(9,8,7,.70));
+  background: linear-gradient(180deg, var(--fbls-overlay-strong), var(--fbls-overlay-strong));
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-pools span {
   display: block;
   margin-bottom: 6px;
-  color: #b9ad99;
+  color: var(--fbls-accent);
   font-size: 12px;
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-pools strong {
-  color: #fff1d2;
+  color: var(--fbls-accent);
   font-size: 32px;
   line-height: 1;
 }
@@ -344,8 +410,10 @@
 .fbl-skyhold-mass-combat .fbls-battle-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
   margin-top: 12px;
+  overflow: visible;
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-actions .fbls-button {
@@ -358,28 +426,28 @@
 .fbl-skyhold-mass-combat .fbls-battle-context {
   margin: 8px 0;
   padding: 8px;
-  border: 1px solid rgba(194, 166, 112, .16);
+  border: 1px solid var(--fbls-accent-border);
   border-radius: 9px;
-  background: rgba(12, 11, 10, .36);
-  color: #ded2bf;
+  background: var(--fbls-overlay);
+  color: var(--fbls-text);
   font-size: 12px;
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-strategy strong {
   display: block;
-  color: #f0dfbd;
+  color: var(--fbls-accent);
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-strategy span {
   display: block;
   margin-top: 2px;
-  color: #d4c6ad;
+  color: var(--fbls-accent);
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-strategy em {
   display: block;
   margin-top: 3px;
-  color: #aaa092;
+  color: var(--fbls-muted);
   font-style: normal;
 }
 
@@ -397,21 +465,53 @@
   justify-content: space-between;
   gap: 8px;
   padding: 5px 7px;
-  border: 1px solid rgba(194, 166, 112, .12);
+  border: 1px solid var(--fbls-accent-border);
   border-radius: 7px;
-  background: rgba(9, 8, 7, .32);
+  background: var(--fbls-overlay);
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-breakdown li span {
   min-width: 0;
   overflow: hidden;
-  color: #c6baa7;
+  color: var(--fbls-accent);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-breakdown li strong {
-  color: #f6dfaa;
+  color: var(--fbls-accent);
+}
+
+.fbl-skyhold-mass-combat .fbls-mortality-help {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  margin-top: 8px;
+  padding: 7px 8px;
+  border: 1px solid var(--fbls-accent-border);
+  border-radius: 8px;
+  background: var(--fbls-overlay);
+  color: var(--fbls-text);
+  font-size: 12px;
+  cursor: help;
+}
+
+.fbl-skyhold-mass-combat .fbls-mortality-help i {
+  color: var(--fbls-accent);
+}
+
+.fbl-skyhold-mass-combat .fbls-mortality-help span {
+  flex: 0 0 auto;
+  color: var(--fbls-accent);
+}
+
+.fbl-skyhold-mass-combat .fbls-mortality-help strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--fbls-text);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-preset {
@@ -427,6 +527,15 @@
   gap: 4px;
 }
 
+.fbl-skyhold-mass-combat .fbls-battle-preset-warning {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  margin: 6px 0 2px;
+  color: var(--fbls-accent);
+  font-size: 11px;
+}
+
 .fbl-skyhold-mass-combat .fbls-battle-track-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -436,36 +545,36 @@
 .fbl-skyhold-mass-combat .fbls-battle-track {
   min-height: 72px;
   padding: 9px;
-  border: 1px solid rgba(194, 166, 112, .18);
+  border: 1px solid var(--fbls-accent-border);
   border-radius: 10px;
-  background: rgba(12, 11, 10, .40);
+  background: var(--fbls-overlay-strong);
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-track span {
   display: block;
-  color: #afa391;
+  color: var(--fbls-muted);
   font-size: 11px;
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-track strong {
   display: block;
   margin: 2px 0;
-  color: #fff0ca;
+  color: var(--fbls-accent);
   font-size: 20px;
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-track em {
   display: block;
-  color: #cfc3af;
+  color: var(--fbls-accent);
   font-size: 11px;
   font-style: normal;
 }
 
-.fbl-skyhold-mass-combat .fbls-battle-track.low { border-color: rgba(145, 176, 255, .32); background: rgba(43, 57, 88, .35); }
-.fbl-skyhold-mass-combat .fbls-battle-track.warning { border-color: rgba(216, 194, 127, .38); background: rgba(91, 75, 34, .35); }
-.fbl-skyhold-mass-combat .fbls-battle-track.danger { border-color: rgba(220, 117, 94, .42); background: rgba(91, 45, 39, .38); }
-.fbl-skyhold-mass-combat .fbls-battle-track.critical { border-color: rgba(238, 80, 80, .55); background: rgba(95, 29, 31, .48); }
-.fbl-skyhold-mass-combat .fbls-battle-track.ok { border-color: rgba(113, 188, 137, .30); background: rgba(28, 65, 44, .28); }
+.fbl-skyhold-mass-combat .fbls-battle-track.low { border-color: var(--fbls-info); background: var(--fbls-info-soft); }
+.fbl-skyhold-mass-combat .fbls-battle-track.warning { border-color: var(--fbls-accent-border); background: var(--fbls-accent-bg); }
+.fbl-skyhold-mass-combat .fbls-battle-track.danger { border-color: var(--fbls-danger-border); background: var(--fbls-danger-strong); }
+.fbl-skyhold-mass-combat .fbls-battle-track.critical { border-color: var(--fbls-danger-border); background: var(--fbls-danger-strong); }
+.fbl-skyhold-mass-combat .fbls-battle-track.ok { border-color: var(--fbls-success); background: var(--fbls-overlay); }
 
 .fbl-skyhold-mass-combat .fbls-battle-notes {
   margin: 0;
@@ -481,10 +590,13 @@
 .fbl-skyhold-mass-combat .fbls-battle-log-list {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   gap: 7px;
-  max-height: 360px;
-  overflow: auto;
-  padding-right: 2px;
+  min-height: 110px;
+  max-height: 320px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-log-row {
@@ -493,22 +605,22 @@
   gap: 6px 8px;
   align-items: center;
   padding: 7px;
-  border: 1px solid rgba(194,166,112,.15);
+  border: 1px solid var(--fbls-accent-border);
   border-radius: 8px;
-  background: rgba(10,9,8,.34);
+  background: var(--fbls-overlay);
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-log-row span {
-  color: #e8d6b4;
+  color: var(--fbls-accent);
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-log-row strong {
-  color: #fff0ca;
+  color: var(--fbls-accent);
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-log-row em {
   overflow: hidden;
-  color: #ded2bf;
+  color: var(--fbls-text);
   font-style: normal;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -531,6 +643,7 @@
   }
 
   .fbl-skyhold-mass-combat .fbls-battle-fields.scene-fields,
+  .fbl-skyhold-mass-combat .fbls-battle-fields.side-fields,
   .fbl-skyhold-mass-combat .fbls-battle-track-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

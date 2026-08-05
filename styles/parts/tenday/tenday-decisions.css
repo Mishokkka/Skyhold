@@ -1,0 +1,28 @@
+.fbl-skyhold-tenday-app .fbls-tenday-decision-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+  margin-top: 0.55rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--fbls-border);
+}
+
+.fbl-skyhold-tenday-app .fbls-tenday-decision-status {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
+  margin-right: auto;
+  color: var(--fbls-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.fbl-skyhold-tenday-app .fbls-tenday-decision-status.is-pending,
+.fbl-skyhold-tenday-app .fbls-tenday-decision-status.is-scheduled {
+  color: var(--fbls-accent);
+}
+
+.fbl-skyhold-tenday-app .fbls-tenday-decision-status.is-applied {
+  color: var(--fbls-success);
+}

@@ -1,0 +1,169 @@
+.application.fbl-skyhold-content-pack-importer .window-content,
+.fbl-skyhold-content-pack-importer .window-content {
+  padding: 0;
+  overflow: hidden;
+  color: var(--fbls-text);
+  color-scheme: dark;
+  background: var(--fbls-surface-0);
+}
+
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  height: 100%;
+  min-height: 0;
+  padding: 0.75rem;
+  color: var(--fbls-text);
+  background: var(--fbls-bg);
+}
+
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-head,
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-summary,
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+}
+
+.fbl-skyhold.fbl-skyhold-content-pack-importer h2,
+.fbl-skyhold.fbl-skyhold-content-pack-importer p {
+  margin: 0;
+  color: inherit;
+  -webkit-text-fill-color: currentColor;
+}
+
+.fbl-skyhold.fbl-skyhold-content-pack-importer h2,
+.fbl-skyhold.fbl-skyhold-content-pack-importer h3,
+.fbl-skyhold.fbl-skyhold-content-pack-importer strong,
+.fbl-skyhold.fbl-skyhold-content-pack-importer label { color: var(--fbls-text); }
+
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-head p,
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-actions p,
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-summary span {
+  color: var(--fbls-muted);
+  font-size: 0.78rem;
+}
+
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-file {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  align-items: center;
+  min-height: 3.8rem;
+  margin: 0;
+  padding: 0.62rem 0.7rem;
+  border: 1px dashed var(--fbls-accent-border);
+  border-radius: 0.6rem;
+  color: var(--fbls-text);
+  background: var(--fbls-accent-soft);
+  cursor: pointer;
+}
+
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-file:hover { border-style: solid; background: var(--fbls-accent-soft); }
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-file > i { color: var(--fbls-accent); font-size: 1.15rem; }
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-file > span:not(.fbls-content-pack-file-action) { display: grid; gap: 0.1rem; min-width: 0; }
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-file small { overflow: hidden; color: var(--fbls-muted); font-size: 0.67rem; text-overflow: ellipsis; white-space: nowrap; }
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-native-file { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-file-action { display: inline-flex; align-items: center; gap: 0.35rem; min-height: 2rem; padding: 0.35rem 0.58rem; border: 1px solid var(--fbls-accent-border); border-radius: 7px; color: var(--fbls-accent); background: var(--fbls-accent-soft); font-size: 0.7rem; font-weight: 800; }
+
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-library { display: grid; gap: 0.45rem; padding: 0.55rem; border: 1px solid var(--fbls-accent-border); border-radius: 9px; background: var(--fbls-accent-soft); }
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-library > header { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-library > header strong { color: var(--fbls-text); font-size: 0.8rem; }
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-library > header span { color: var(--fbls-muted); font-size: 0.67rem; }
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-library > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.45rem; }
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-bundled { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; align-content: center; gap: 0.5rem; width: 100%; min-width: 0; min-height: 4.5rem; height: auto; padding: 0.58rem; overflow: hidden; border: 1px solid var(--fbls-border); border-radius: 8px; color: var(--fbls-text); background: var(--fbls-overlay-soft); text-align: left; white-space: normal; }
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-bundled:hover { border-color: var(--fbls-accent-border); background: var(--fbls-accent-soft); }
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-bundled > i:first-child { color: var(--fbls-accent); font-size: 1rem; }
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-bundled > i:last-child { color: var(--fbls-muted); font-size: 0.66rem; }
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-bundled span { display: grid; min-width: 0; gap: 0.12rem; }
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-bundled strong,
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-bundled small { overflow: hidden; text-overflow: ellipsis; overflow-wrap: anywhere; }
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-bundled strong { color: var(--fbls-text); font-size: 0.72rem; line-height: 1.2; }
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-bundled small { color: var(--fbls-muted); font-size: 0.61rem; line-height: 1.25; }
+
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-error {
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--fbls-danger-border);
+  border-radius: 0.5rem;
+  background: var(--fbls-danger-soft);
+}
+
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-summary {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 0.55rem;
+  background: var(--fbls-surface-soft);
+}
+
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-summary > div:first-child {
+  display: grid;
+}
+
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-counts {
+  display: flex;
+  gap: 0.3rem;
+}
+
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-counts span {
+  min-width: 2.2rem;
+  padding: 0.2rem 0.38rem;
+  border-radius: 999px;
+  text-align: center;
+  font-weight: 800;
+  background: var(--fbls-panel);
+}
+
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-preview {
+  display: grid;
+  flex: 1 1 auto;
+  align-content: start;
+  gap: 0.32rem;
+  min-height: 0;
+  overflow: auto;
+}
+
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(9rem, auto) minmax(12rem, auto);
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.42rem 0.5rem;
+  border-left: 3px solid var(--fbls-border-strong);
+  border-radius: 0.45rem;
+  background: var(--fbls-surface-soft);
+}
+
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-row.add { border-left-color: var(--fbls-success); }
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-row.update { border-left-color: var(--fbls-info); }
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-row.remove { border-left-color: var(--fbls-danger-border); }
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-row.reset {
+  border: 1px solid var(--fbls-danger-border);
+  border-left-width: 4px;
+  background: var(--fbls-danger-soft);
+}
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-row.reset strong { color: var(--fbls-danger); }
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-row.conflict { border-left-color: var(--fbls-accent-border); }
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-row.skip { opacity: 0.58; }
+
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-row > div {
+  display: grid;
+  min-width: 0;
+}
+
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-row small,
+.fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-row > span {
+  color: var(--fbls-muted);
+  font-size: 0.72rem;
+}
+
+@media (max-width: 760px) {
+  .fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-row,
+  .fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-file {
+    grid-template-columns: 1fr;
+  }
+  .fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-library > div { grid-template-columns: 1fr; }
+  .fbl-skyhold.fbl-skyhold-content-pack-importer .fbls-content-pack-file-action { justify-content: center; }
+}

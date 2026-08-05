@@ -1,0 +1,150 @@
+/* Storage logistics, treasury controls and capacity warnings. */
+.fbls-storage-tabs-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+  padding: 0.2rem 0 0.45rem;
+  border-bottom: 1px solid var(--fbls-border);
+  flex-wrap: wrap;
+}
+
+.fbls-storage-tabs-row .fbls-storage-tabs {
+  padding: 0;
+  border-bottom: 0;
+}
+
+.fbls-storage-money-counter.treasury {
+  gap: 0.5rem;
+  padding: 0.32rem 0.55rem;
+  border-radius: 14px;
+  background: var(--fbls-overlay);
+}
+
+.fbls-money-denom {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: .045em;
+  font-size: 0.72rem;
+  color: var(--fbls-muted);
+}
+
+.fbls-money-denom > span {
+  min-width: 1.55rem;
+  font-weight: 900;
+  color: var(--fbls-text);
+}
+
+.fbls-money-stepper {
+  display: inline-grid;
+  grid-template-columns: 1.55rem minmax(3.2rem, 4.2rem) 1.55rem;
+  align-items: center;
+  gap: 0.18rem;
+}
+
+.fbls-money-stepper button {
+  width: 1.55rem;
+  min-height: 1.55rem;
+  padding: 0;
+  border-radius: 7px;
+  border: 1px solid var(--fbls-border);
+  background: var(--fbls-panel);
+  color: var(--fbls-text);
+  font-weight: 900;
+  line-height: 1;
+}
+
+.fbls-money-stepper button:hover {
+  background: var(--fbls-panel-strong);
+}
+
+.fbls-money-stepper input {
+  min-height: 1.55rem;
+  text-align: center;
+  font-weight: 900;
+  padding: 0.16rem 0.26rem;
+}
+
+.fbls-money-denom.gold input { border-color: var(--fbls-accent-border); background: var(--fbls-accent-bg); }
+.fbls-money-denom.silver input { border-color: var(--fbls-info); background: var(--fbls-info-soft); }
+.fbls-money-denom.copper input { border-color: var(--fbls-danger-border); background: var(--fbls-accent-soft); }
+
+.fbls-storage-room-tab.near-capacity,
+.fbls-storage-room-card.near-capacity,
+.fbls-building-storage-strip.near-capacity,
+.fbls-storage-building-current.near-capacity {
+  border-color: var(--fbls-accent-border);
+  background: linear-gradient(135deg, var(--fbls-accent-bg), var(--fbls-overlay-soft));
+}
+
+.fbls-storage-room-tab.full-capacity,
+.fbls-storage-room-card.full-capacity,
+.fbls-building-storage-strip.full-capacity,
+.fbls-storage-building-current.full-capacity {
+  border-color: var(--fbls-danger-border);
+  background: linear-gradient(135deg, var(--fbls-danger-strong), var(--fbls-overlay-soft));
+}
+
+.fbls-storage-room-tab.active.near-capacity,
+.fbls-storage-room-tab.active.full-capacity {
+  color: var(--fbls-text);
+  box-shadow: 0 0 0 1px var(--fbls-panel-strong) inset;
+}
+
+.fbls-building-storage-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.36rem;
+  margin-top: 0.42rem;
+  padding: 0.34rem 0.42rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 10px;
+  background: var(--fbls-overlay-soft);
+  color: var(--fbls-muted);
+  font-size: 0.78rem;
+}
+
+.fbls-building-storage-strip span:first-child {
+  color: var(--fbls-text);
+  font-weight: 900;
+}
+
+.fbls-building-storage-strip strong {
+  color: var(--fbls-text);
+}
+
+.fbls-storage-building-current {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 0 0 0.55rem;
+  padding: 0.4rem 0.48rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 10px;
+  background: var(--fbls-overlay-soft);
+  color: var(--fbls-muted);
+}
+
+.fbls-storage-building-current span {
+  color: var(--fbls-text);
+  font-weight: 900;
+}
+
+.fbls-storage-building-current strong {
+  color: var(--fbls-text);
+}
+
+.fbls-storage-building-current em {
+  font-style: normal;
+  color: var(--fbls-muted);
+}
+
+@media (max-width: 720px) {
+  .fbls-storage-tabs-row { align-items: stretch; }
+  .fbls-money-stepper { grid-template-columns: 1.5rem minmax(2.5rem, 1fr) 1.5rem; }
+}

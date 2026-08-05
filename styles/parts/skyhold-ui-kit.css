@@ -9,8 +9,7 @@
 .fbls-cluster,
 .fbls-toolbar,
 .fbls-toolbar-group,
-.fbls-action-group,
-.fbls-inline-actions {
+.fbls-action-group {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -52,13 +51,6 @@
   margin-left: auto;
 }
 
-.fbls-field,
-.fbls-fieldset-grid > label {
-  display: grid;
-  gap: 0.2rem;
-  min-width: 0;
-}
-
 .fbls-field-wide,
 .fbls-field.wide {
   grid-column: 1 / -1;
@@ -70,8 +62,7 @@
 .fbls-trait-badge,
 .fbls-worker-badge,
 .fbls-template-dev-chip,
-.fbls-template-current-dev,
-.fbls-sale-flag {
+.fbls-template-current-dev {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
@@ -84,14 +75,47 @@
   line-height: 1.1;
 }
 
+.fbls-status-pill {
+  min-height: 1.25rem;
+  padding: 0.08rem 0.38rem;
+  border-color: var(--fbls-border);
+  background: var(--fbls-panel);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.fbls-worker-badge {
+  display: inline-block;
+  min-width: 5.6rem;
+  max-width: 100%;
+  padding: 0.13rem 0.42rem;
+  border-color: var(--fbls-border);
+  background: var(--fbls-panel);
+  color: var(--fbls-text);
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.2;
+  text-shadow: 0 1px 1px var(--fbls-overlay-strong);
+}
+
+.fbls-trait-badge {
+  display: inline-block;
+  margin: 0.05rem 0.12rem 0.05rem 0;
+  padding: 0.08rem 0.32rem;
+  border-color: var(--fbls-border);
+  background: var(--fbls-panel);
+  color: var(--fbls-text);
+  font-size: 0.74rem;
+  white-space: nowrap;
+}
+
 .fbls-chip > i,
 .fbls-head-chip > i,
 .fbls-status-pill > i,
 .fbls-trait-badge > i,
 .fbls-worker-badge > i,
 .fbls-template-dev-chip > i,
-.fbls-template-current-dev > i,
-.fbls-sale-flag > i {
+.fbls-template-current-dev > i {
   flex: 0 0 auto;
 }
 
@@ -102,47 +126,42 @@
 .fbls-worker-badge b,
 .fbls-template-dev-chip b,
 .fbls-template-current-dev b,
-.fbls-sale-flag b,
 .fbls-chip strong,
 .fbls-head-chip strong,
 .fbls-status-pill strong,
 .fbls-trait-badge strong,
 .fbls-worker-badge strong,
 .fbls-template-dev-chip strong,
-.fbls-template-current-dev strong,
-.fbls-sale-flag strong {
+.fbls-template-current-dev strong {
   line-height: 1;
 }
 
 .fbls-chip.is-warning,
 .fbls-status-pill.warning,
 .fbls-head-chip.warning {
-  border-color: rgba(213, 153, 58, 0.5);
-  background: rgba(213, 153, 58, 0.14);
+  border-color: var(--fbls-accent-border);
+  background: var(--fbls-accent-soft);
 }
 
 .fbls-chip.is-danger,
 .fbls-status-pill.danger,
 .fbls-head-chip.danger {
-  border-color: rgba(181, 72, 72, 0.62);
-  background: rgba(181, 72, 72, 0.2);
+  border-color: var(--fbls-danger-border);
+  background: var(--fbls-danger-soft);
 }
 
 .fbls-chip.is-success,
 .fbls-status-pill.ok,
 .fbls-head-chip.ok {
-  border-color: rgba(92, 163, 119, 0.45);
-  background: rgba(92, 163, 119, 0.16);
+  border-color: var(--fbls-success);
+  background: var(--fbls-success-soft);
 }
 
 .fbls-table-toolbar,
 .fbls-building-toolbar,
 .fbls-template-browser-tools,
-.fbls-crew-actions,
 .fbls-battle-actions,
-.fbls-storage-card-head,
-.fbls-card-actions,
-.fbls-line-actions {
+.fbls-card-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -151,37 +170,43 @@
 
 .fbls-table-toolbar,
 .fbls-building-toolbar,
-.fbls-template-browser-tools,
-.fbls-storage-card-head {
+.fbls-template-browser-tools {
   justify-content: space-between;
 }
 
-.fbls-storage-card-head > :last-child,
 .fbls-table-toolbar > :last-child,
 .fbls-building-toolbar > :last-child,
 .fbls-template-browser-tools > :last-child {
   margin-left: auto;
 }
+
+.fbls-table-toolbar {
+  min-height: 2rem;
+}
 /* Compact checkbox-with-icon control. Used by production, income and trade rows. */
 .fbl-skyhold .fbls-icon-check {
   display: grid;
-  grid-template-columns: auto;
-  grid-template-rows: auto 28px;
+  grid-template-columns: auto auto;
+  grid-template-rows: 1fr;
+  justify-content: start;
   justify-items: center;
-  align-items: end;
-  min-width: 2.7rem;
-  gap: 0.22rem;
+  align-items: center;
+  min-width: 0;
+  min-height: 1.85rem;
+  gap: 0.35rem;
   margin: 0;
 }
 
 .fbl-skyhold .fbls-icon-check > span {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.2rem;
   margin: 0;
   color: var(--fbls-muted);
   font-size: 0.9rem;
 }
 
 .fbl-skyhold .fbls-icon-check input[type="checkbox"] {
-  width: 22px;
-  height: 22px;
+  --fbls-check-size: 22px;
   margin: 0;
 }

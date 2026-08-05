@@ -1,0 +1,615 @@
+/* FBL Skyhold: current owner for the building editor window layout. */
+
+.fbl-skyhold-building-editor {
+  min-width: 620px;
+  min-height: 460px;
+  color: var(--fbls-text);
+  resize: both;
+}
+
+.fbl-skyhold-building-editor .fbls-editor-impact-strip {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.28rem;
+}
+
+.fbl-skyhold-building-editor .fbls-editor-impact-strip span,
+.fbl-skyhold-building-editor .fbls-editor-impact {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.18rem;
+  margin: 0;
+  min-height: 24px;
+  padding: 0.16rem 0.45rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 999px;
+  background: var(--fbls-overlay-soft);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.fbl-skyhold-building-editor .fbls-editor-impact-strip i {
+  width: 1rem;
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+.fbl-skyhold-building-editor .fbls-editor-impact.morale i { color: var(--fbls-accent); }
+.fbl-skyhold-building-editor .fbls-editor-impact.reputation i { color: var(--fbls-accent); }
+
+.application.fbl-skyhold-building-audio-editor,
+.window-app.fbl-skyhold-building-audio-editor {
+  min-width: 28rem;
+  min-height: 22rem;
+}
+
+.application.fbl-skyhold-building-audio-editor .window-content,
+.window-app.fbl-skyhold-building-audio-editor .window-content {
+  padding: 0;
+  overflow: hidden;
+  background: var(--fbls-bg);
+}
+
+.fbl-skyhold-building-audio-editor .fbls-building-audio-shell {
+  display: grid;
+  align-content: start;
+  gap: 0.6rem;
+  height: 100%;
+  padding: 0.65rem;
+  overflow: auto;
+  color: var(--fbls-text);
+  background: var(--fbls-bg);
+}
+
+.fbl-skyhold-building-audio-editor .fbls-building-audio-head,
+.fbl-skyhold-building-audio-editor .fbls-building-audio-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.fbl-skyhold-building-audio-editor h2 {
+  margin: 0;
+  color: var(--fbls-text);
+  font-size: 1rem;
+  line-height: 1.15;
+}
+
+.fbl-skyhold-building-audio-editor .fbls-building-audio-mode {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+.fbl-skyhold-building-audio-editor .fbls-building-audio-mode label,
+.fbl-skyhold-building-audio-editor .fbls-building-audio-loop {
+  display: flex;
+  align-items: center;
+  gap: 0.38rem;
+  min-width: 0;
+  min-height: 2rem;
+  padding: 0.34rem 0.48rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 7px;
+  background: var(--fbls-surface-soft);
+}
+
+.fbl-skyhold-building-audio-editor .fbls-building-audio-mode label.active {
+  border-color: var(--fbls-accent-border);
+  background: var(--fbls-accent-soft);
+}
+
+.fbl-skyhold-building-audio-editor .fbls-building-audio-mode span,
+.fbl-skyhold-building-audio-editor .fbls-building-audio-loop span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fbl-skyhold-building-audio-editor .fbls-building-audio-panel {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 0.55rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 8px;
+  background: var(--fbls-info-soft);
+}
+
+.fbl-skyhold-building-audio-editor label {
+  display: grid;
+  gap: 0.22rem;
+  min-width: 0;
+  margin: 0;
+}
+
+.fbl-skyhold-building-audio-editor label > span {
+  color: var(--fbls-muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.fbl-skyhold-building-audio-editor input[type="text"],
+.fbl-skyhold-building-audio-editor select {
+  width: 100%;
+  min-width: 0;
+  min-height: 2rem;
+  padding: 0.34rem 0.45rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 7px;
+  background: var(--fbls-overlay);
+  color: var(--fbls-text);
+}
+
+.fbl-skyhold-building-audio-editor select option {
+  background: var(--fbls-surface-0);
+  color: var(--fbls-text);
+}
+
+.fbl-skyhold-building-audio-editor .fbls-building-audio-file > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 2rem;
+  gap: 0.35rem;
+}
+
+.fbl-skyhold-building-audio-editor .fbls-icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  min-width: 2rem;
+  padding: 0;
+  border: 1px solid var(--fbls-border);
+  border-radius: 7px;
+  background: var(--fbls-panel);
+  color: var(--fbls-text);
+}
+
+.fbl-skyhold-building-audio-editor .fbls-icon-button.danger {
+  border-color: var(--fbls-danger-border);
+  background: var(--fbls-danger-soft);
+}
+
+.fbl-skyhold-building-audio-editor .fbls-building-audio-volume strong {
+  color: var(--fbls-text);
+}
+
+.fbl-skyhold-building-editor .fbls-editor-impact input,
+.fbl-skyhold-building-editor .fbls-editor-impact strong {
+  width: 2.55rem;
+  height: 1.32rem;
+  min-height: 1.32rem;
+  padding: 0 0.22rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 5px;
+  background: var(--fbls-overlay);
+  color: var(--fbls-text);
+  text-align: center;
+}
+
+.fbl-skyhold-building-editor .fbls-editor-hero.compact.with-building-image {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) auto;
+  align-items: center;
+  justify-content: stretch;
+  gap: 0.62rem;
+  padding: 0.55rem 0.45rem 0.65rem;
+  margin: 0;
+  border-bottom: 1px solid var(--fbls-border);
+}
+
+.fbl-skyhold-building-editor .fbls-editor-image-stack {
+  display: grid;
+  justify-items: start;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
+.fbl-skyhold-building-editor .fbls-building-editor-image {
+  appearance: none;
+  -webkit-appearance: none;
+  display: grid;
+  place-items: center;
+  align-self: center;
+  justify-self: start;
+  width: 68px;
+  min-width: 68px;
+  height: 58px;
+  min-height: 58px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--fbls-accent-border);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 34% 22%, var(--fbls-accent-bg), transparent 58%),
+    linear-gradient(135deg, var(--fbls-info-soft), var(--fbls-info-soft));
+  color: var(--fbls-accent);
+  box-shadow: inset 0 1px 0 var(--fbls-panel-strong), 0 8px 18px var(--fbls-overlay);
+  cursor: pointer;
+}
+
+.fbl-skyhold-building-editor .fbls-building-image-reset {
+  width: 68px;
+  min-height: 1rem;
+  padding: 0.05rem 0.2rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 5px;
+  background: var(--fbls-overlay);
+  color: var(--fbls-accent);
+  font-size: 0.58rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.fbl-skyhold-building-editor .fbls-building-image-reset:hover:not(:disabled) {
+  border-color: var(--fbls-accent-border);
+  color: var(--fbls-text);
+}
+
+.fbl-skyhold-building-editor .fbls-building-image-reset:disabled {
+  cursor: default;
+  opacity: 0.38;
+}
+
+.fbl-skyhold-building-editor .fbls-building-editor-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: brightness(1.16) contrast(1.08) saturate(1.08);
+}
+
+.fbl-skyhold-building-editor .fbls-building-editor-image i {
+  display: block;
+  color: var(--fbls-accent);
+  font-size: 2rem;
+  line-height: 1;
+  text-shadow: 0 2px 6px var(--fbls-overlay-strong);
+}
+
+.fbl-skyhold-building-editor .fbls-editor-title-wrap {
+  justify-self: start;
+  min-width: 0;
+}
+
+.fbl-skyhold-building-editor .fbls-editor-title-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.fbl-skyhold-building-editor .fbls-editor-title-line h1 {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin: 0;
+  color: var(--fbls-accent);
+  text-shadow: 0 2px 8px var(--fbls-overlay-strong);
+}
+
+.fbl-skyhold-building-editor .fbls-building-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  justify-self: end;
+  gap: 0.28rem;
+  min-width: 0;
+}
+
+.fbl-skyhold-building-editor .fbls-building-editor-shell {
+  container-name: fbls-building-editor;
+  container-type: inline-size;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+  overflow: auto;
+  padding: 0.45rem;
+  background: var(--fbls-bg);
+  color: var(--fbls-text);
+}
+
+.fbl-skyhold-building-editor .fbls-building-editor-shell textarea {
+  overflow: hidden;
+  resize: vertical;
+}
+
+.fbl-skyhold-building-editor .fbls-building-editor-shell .fbls-building-editor-grid.tabbed-editor {
+  align-items: start;
+}
+
+.fbl-skyhold-building-editor .fbls-building-editor-shell .fbls-building-editor-card {
+  align-self: start;
+}
+
+.fbl-skyhold-building-editor .fbls-editor-dev-gain {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
+  min-height: 1.55rem;
+  padding: 0.08rem 0.24rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 999px;
+  background: var(--fbls-overlay-soft);
+  color: var(--fbls-text);
+  cursor: pointer;
+}
+
+.fbl-skyhold-building-editor .fbls-editor-dev-gain span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.18rem;
+  color: var(--fbls-text);
+  font-style: normal;
+}
+
+.fbl-skyhold-building-editor .fbls-editor-dev-gain i {
+  font-size: 0.86rem;
+}
+
+.fbl-skyhold-building-editor .fbls-editor-dev-gain strong {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: 0.88rem;
+}
+
+.fbl-skyhold-building-editor .fbls-editor-dev-gain .food i { color: var(--fbls-accent); }
+.fbl-skyhold-building-editor .fbls-editor-dev-gain .technology i { color: var(--fbls-info); }
+.fbl-skyhold-building-editor .fbls-editor-dev-gain .culture i { color: var(--fbls-culture); }
+.fbl-skyhold-building-editor .fbls-editor-dev-gain .war i { color: var(--fbls-danger); }
+
+.fbl-skyhold-building-editor .fbls-editor-dev-gain:hover {
+  border-color: var(--fbls-border-strong);
+  background: var(--fbls-panel);
+}
+
+.fbl-skyhold-building-editor .fbls-inline-dev-gain-editor {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: fit-content;
+  margin: 0 0 0.3rem;
+  padding: 0.34rem 0.45rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 9px;
+  background: var(--fbls-overlay-soft);
+}
+
+.fbl-skyhold-building-editor .fbls-inline-dev-gain-editor label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin: 0;
+}
+
+.fbl-skyhold-building-editor .fbls-inline-dev-gain-editor input,
+.fbl-skyhold-building-editor .fbls-inline-dev-gain-editor strong {
+  width: 3.2rem;
+  min-height: 1.75rem;
+  text-align: center;
+}
+
+.fbl-skyhold-building-editor .fbls-inline-dev-gain-editor input,
+.fbl-skyhold-building-editor .fbls-inline-dev-gain-editor strong,
+.fbl-skyhold-building-editor .fbls-construction-dev-inline input,
+.fbl-skyhold-building-editor .fbls-construction-dev-inline strong,
+.fbl-skyhold-building-editor .fbls-editor-dev-gain input,
+.fbl-skyhold-building-editor .fbls-editor-impact input {
+  color: var(--fbls-text);
+  -webkit-text-fill-color: var(--fbls-text);
+}
+
+.fbl-skyhold-building-editor .fbls-building-editor-grid.tabbed-editor {
+  display: grid;
+  grid-template-columns: 1fr;
+  padding-top: 0.32rem;
+  gap: 0.32rem;
+}
+
+.fbl-skyhold-building-editor .fbls-building-editor-card {
+  display: grid;
+  gap: 0.28rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0.38rem 0.48rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 12px;
+  background: var(--fbls-panel);
+}
+
+.fbl-skyhold-building-editor .fbls-building-editor-card.wide-card {
+  grid-column: 1 / -1;
+}
+
+.fbl-skyhold-building-editor .fbls-building-editor-card legend {
+  padding: 0 0.35rem;
+  color: var(--fbls-muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.fbl-skyhold-building-editor .fbls-building-editor-card label {
+  display: grid;
+  min-width: 0;
+  gap: 0.1rem;
+  color: var(--fbls-muted);
+  font-size: 0.64rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.fbl-skyhold-building-editor .fbls-building-editor-card span,
+.fbl-skyhold-building-editor .fbls-building-editor-card label span {
+  letter-spacing: 0.03em;
+}
+
+.fbl-skyhold-building-editor .fbls-building-editor-card label span {
+  display: block;
+}
+
+.fbl-skyhold-building-editor .fbls-building-editor-card input,
+.fbl-skyhold-building-editor .fbls-building-editor-card select,
+.fbl-skyhold-building-editor .fbls-building-editor-card textarea,
+.fbl-skyhold-building-editor .fbls-building-editor-card strong,
+.fbl-skyhold-building-editor .fbls-building-editor-card p.fbls-preline {
+  min-height: 1.75rem;
+  padding: 0.28rem 0.4rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 7px;
+  background: var(--fbls-overlay);
+  color: var(--fbls-text);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Shared single-line geometry for every building-editor tab. */
+.fbl-skyhold-building-editor .fbls-building-editor-card input:not([type="checkbox"]),
+.fbl-skyhold-building-editor .fbls-building-editor-card select {
+  box-sizing: border-box;
+  height: var(--fbls-control-height-sm);
+  min-height: var(--fbls-control-height-sm);
+}
+
+.fbl-skyhold-building-editor .fbls-building-editor-card label > strong {
+  display: flex;
+  align-items: center;
+  min-height: var(--fbls-control-height-sm);
+}
+
+.fbl-skyhold-building-editor .fbls-building-editor-card input[type="checkbox"] {
+  --fbls-check-size: 18px;
+  display: grid;
+  place-items: center;
+  width: var(--fbls-check-size);
+  height: var(--fbls-check-size);
+  min-width: var(--fbls-check-size);
+  min-height: var(--fbls-check-size);
+  max-width: var(--fbls-check-size);
+  max-height: var(--fbls-check-size);
+  margin: 0;
+  padding: 0;
+  flex: 0 0 var(--fbls-check-size);
+  align-self: center;
+  justify-self: center;
+}
+
+.fbl-skyhold-building-editor .fbls-building-editor-card input[type="number"],
+.fbl-skyhold-building-editor .fbls-building-editor-card strong,
+.fbl-skyhold-building-editor .fbls-cost-row input[type="number"] {
+  font-size: 1.08rem;
+  font-weight: 850;
+}
+
+.fbl-skyhold-building-editor .fbls-building-editor-card textarea {
+  min-height: 3.2rem;
+}
+
+.fbl-skyhold-building-editor .fbls-building-main-line {
+  grid-template-columns: minmax(12rem, 1.4fr) minmax(8rem, 0.8fr) minmax(8rem, 0.8fr) minmax(9rem, 1fr) 5.3rem;
+}
+
+.fbl-skyhold-building-editor .fbls-building-editor-card.basic-card.compact-basic {
+  grid-template-columns: minmax(12rem, 1.4fr) minmax(8rem, 0.9fr) minmax(8rem, 0.9fr) minmax(9rem, 1fr) 5.2rem;
+}
+
+.fbl-skyhold-building-editor .fbls-building-editor-card.text-card.compact-text-card {
+  grid-template-columns: minmax(8rem, 1fr) 5.5rem 5.5rem minmax(7rem, 1fr) minmax(10rem, 1fr) 5rem 5rem;
+}
+
+.fbl-skyhold-building-editor .fbls-building-editor-card.text-card.compact-text-card label.wide {
+  grid-column: span 3;
+}
+
+.fbl-skyhold-building-editor .fbls-cost-row {
+  grid-template-columns: minmax(10rem, 1fr) 4.2rem 1.8rem;
+}
+
+.fbl-skyhold-building-editor .fbls-cost-row input[type="text"],
+.fbl-skyhold-building-editor .fbls-cost-row input[type="number"] {
+  min-width: 0;
+}
+
+.fbl-skyhold-building-editor .fbls-cost-row .fbls-icon-button {
+  width: 1.75rem;
+  min-width: 1.75rem;
+}
+
+.fbl-skyhold-building-editor .fbls-result-box {
+  display: grid;
+  grid-template-rows: auto minmax(1.75rem, 1fr);
+  align-content: stretch;
+  align-self: stretch;
+  gap: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.fbl-skyhold-building-editor .fbls-result-box span {
+  display: block;
+  margin-bottom: 0.22rem;
+  color: var(--fbls-muted);
+  font-size: 0.64rem;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.fbl-skyhold-building-editor .fbls-result-box strong {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  justify-content: center;
+  width: 100%;
+  min-height: 1.75rem;
+  padding: 0.28rem 0.4rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 7px;
+  background: var(--fbls-overlay);
+  font-size: 1.08rem;
+}
+
+.fbl-skyhold-building-editor .fbls-result-box em {
+  display: none;
+}
+
+.fbl-skyhold-building-editor .fbls-function-strip.no-title {
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0.16rem 0;
+}
+
+@media (max-width: 920px) {
+  .fbl-skyhold-building-editor .fbls-building-editor-card.basic-card.compact-basic,
+  .fbl-skyhold-building-editor .fbls-building-editor-card.text-card.compact-text-card {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .fbl-skyhold-building-editor .fbls-building-editor-card.text-card.compact-text-card label.wide {
+    grid-column: 1 / -1;
+  }
+
+}
+
+@media (max-width: 760px) {
+  .fbl-skyhold-building-editor .fbls-cost-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .fbl-skyhold-building-editor .fbls-building-editor-card.basic-card.compact-basic,
+  .fbl-skyhold-building-editor .fbls-building-editor-card.text-card.compact-text-card {
+    grid-template-columns: 1fr;
+  }
+}

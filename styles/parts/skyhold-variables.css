@@ -1,14 +1,42 @@
 /* FBL Skyhold: shared theme tokens and shell primitives. */
 .fbl-skyhold {
   --fbls-bg: rgba(18, 20, 24, 0.97);
-  --fbls-panel: rgba(255, 255, 255, 0.055);
-  --fbls-panel-strong: rgba(255, 255, 255, 0.09);
+  --fbls-surface-0: #0e1317;
+  --fbls-surface-1: #15191b;
+  --fbls-surface-2: #1b2024;
+  --fbls-surface-3: #23292e;
+  --fbls-panel: rgba(255, 255, 255, 0.08);
+  --fbls-panel-strong: rgba(255, 255, 255, 0.12);
+  --fbls-surface-soft: rgba(255, 255, 255, 0.04);
   --fbls-border: rgba(255, 255, 255, 0.14);
-  --fbls-text: rgba(255, 255, 255, 0.92);
-  --fbls-muted: rgba(255, 255, 255, 0.64);
-  --fbls-dim: rgba(255, 255, 255, 0.42);
-  --fbls-soft: rgba(255, 255, 255, 0.08);
-  --fbls-danger: #b54848;
+  --fbls-border-strong: rgba(255, 255, 255, 0.24);
+  --fbls-text-strong: #f5eee2;
+  --fbls-text: #eee7d9;
+  --fbls-muted: #b8b1a5;
+  --fbls-dim: var(--fbls-muted);
+  --fbls-placeholder: var(--fbls-dim);
+  --fbls-on-accent: #171a1c;
+  --fbls-soft: var(--fbls-panel);
+  --fbls-overlay-soft: rgba(0, 0, 0, 0.18);
+  --fbls-overlay: rgba(0, 0, 0, 0.28);
+  --fbls-overlay-strong: rgba(0, 0, 0, 0.48);
+  --fbls-accent: #d2b575;
+  --fbls-accent-soft: rgba(210, 181, 117, 0.12);
+  --fbls-accent-bg: rgba(210, 181, 117, 0.22);
+  --fbls-accent-border: rgba(210, 181, 117, 0.42);
+  --fbls-accent-dim: var(--fbls-accent-bg);
+  --fbls-success: #7fc893;
+  --fbls-success-soft: rgba(95, 190, 118, 0.16);
+  --fbls-warning: #d8b35d;
+  --fbls-warning-soft: rgba(216, 179, 93, 0.18);
+  --fbls-danger: #ed9a92;
+  --fbls-danger-strong: #b93541;
+  --fbls-danger-soft: rgba(181, 72, 72, 0.16);
+  --fbls-danger-border: rgba(181, 72, 72, 0.42);
+  --fbls-info: #7db8cf;
+  --fbls-info-soft: rgba(125, 184, 207, 0.18);
+  --fbls-culture: #d09af6;
+  --fbls-culture-soft: rgba(194, 139, 241, 0.18);
   --fbls-radius-sm: 8px;
   --fbls-radius-md: 10px;
   --fbls-radius-lg: 12px;
@@ -23,11 +51,11 @@
   --fbls-header-control-height: 2.2rem;
   --fbls-header-stat-height: 2.3rem;
   --fbls-label-gap: 0.18rem;
-  --fbls-dev-food: #d8b35d;
-  --fbls-dev-technology: #69b2ff;
-  --fbls-dev-culture: #c28bf1;
-  --fbls-dev-war: #d86f6f;
-  --fbls-dev-morale: #e0bd68;
+  --fbls-dev-food: var(--fbls-warning);
+  --fbls-dev-technology: var(--fbls-info);
+  --fbls-dev-culture: var(--fbls-culture);
+  --fbls-dev-war: var(--fbls-danger);
+  --fbls-dev-morale: var(--fbls-accent);
   --fbls-blueprint-grid: 22px 22px;
   --fbls-blueprint-border: rgba(125, 190, 255, 0.62);
   --fbls-blueprint-bg:
@@ -45,7 +73,12 @@
   background: transparent;
 }
 
-.fbls-shell,
+.fbl-skyhold-app {
+  min-width: 840px;
+  min-height: 560px;
+  resize: both;
+}
+
 .fbls-shell * {
   box-sizing: border-box;
 }

@@ -1,0 +1,71 @@
+/* Standalone resource catalog and per-resource editor owner. */
+.fbl-skyhold-resource-editor .window-content,
+.fbl-skyhold-resource-row-editor .window-content { padding: 0; color: var(--fbls-text); background: var(--fbls-surface-0); }
+
+.fbl-skyhold-resource-editor .fbls-resource-editor-shell,
+.fbl-skyhold-resource-row-editor .fbls-resource-row-editor-shell {
+  --fbls-resource-text: var(--fbls-text);
+  --fbls-resource-muted: var(--fbls-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  height: 100%;
+  min-height: 0;
+  padding: 0.7rem;
+  overflow: hidden;
+  color: var(--fbls-resource-text);
+  background:
+    radial-gradient(circle at 88% 0%, var(--fbls-info-soft), transparent 32%),
+    linear-gradient(145deg, var(--fbls-surface-0), var(--fbls-surface-1));
+  background-color: var(--fbls-surface-0);
+}
+
+.fbl-skyhold-resource-editor .fbls-resource-editor-toolbar { display: grid; grid-template-columns: minmax(18rem, 1fr) auto auto auto; gap: 0.55rem; align-items: center; }
+.fbl-skyhold-resource-editor .fbls-resource-editor-toolbar label { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.45rem; align-items: center; margin: 0; }
+.fbl-skyhold-resource-editor .fbls-resource-editor-help { margin: 0; color: var(--fbls-resource-muted); font-size: 0.75rem; }
+.fbl-skyhold-resource-editor .fbls-resource-editor-list { display: flex; flex-direction: column; gap: 0.28rem; min-height: 0; overflow: auto; padding-right: 0.2rem; }
+.fbl-skyhold-resource-editor .fbls-resource-editor-row { display: grid; grid-template-columns: 2.15rem minmax(10rem, 1fr) minmax(7rem, 0.55fr) 5rem 5.4rem 2.1rem; gap: 0.5rem; align-items: center; min-height: 2.7rem; padding: 0.28rem 0.38rem; border: 1px solid var(--fbls-border); border-radius: 7px; color: var(--fbls-resource-text); background: var(--fbls-surface-soft); }
+.fbl-skyhold-resource-editor .fbls-resource-editor-row:hover { border-color: var(--fbls-accent-border); background: var(--fbls-panel); }
+.fbl-skyhold-resource-editor .fbls-resource-editor-row.is-selected { border-color: var(--fbls-accent-border); background: var(--fbls-accent-soft); box-shadow: inset 0 0 0 1px var(--fbls-accent-soft); }
+.fbl-skyhold-resource-editor .fbls-resource-editor-row.is-override { border-left: 3px solid var(--fbls-success); }
+.fbl-skyhold-resource-editor .fbls-resource-editor-row.is-builtin { border-left-color: var(--fbls-border); }
+.fbls-resource-editor-preview { display: grid; place-items: center; width: 2.05rem; height: 2.05rem; border: 1px solid var(--fbls-border); border-radius: 6px; overflow: hidden; color: var(--fbls-accent); background: var(--fbls-overlay-soft); }
+.fbls-resource-editor-preview.large { width: 3.6rem; height: 3.6rem; font-size: 1.45rem; }
+.fbls-resource-editor-preview img { width: 100%; height: 100%; object-fit: cover; }
+.fbls-resource-editor-preview [hidden] { display: none; }
+.fbl-skyhold-resource-editor .fbls-resource-editor-identity { display: grid; min-width: 0; }
+.fbl-skyhold-resource-editor .fbls-resource-editor-identity strong,
+.fbl-skyhold-resource-editor .fbls-resource-editor-identity small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fbl-skyhold-resource-editor .fbls-resource-editor-identity strong { color: var(--fbls-text); font-size: 0.82rem; }
+.fbl-skyhold-resource-editor .fbls-resource-editor-identity small,
+.fbl-skyhold-resource-editor .fbls-resource-editor-category,
+.fbl-skyhold-resource-editor .fbls-resource-editor-unit { color: var(--fbls-resource-muted); font-size: 0.7rem; }
+.fbl-skyhold-resource-editor .fbls-resource-editor-state { justify-self: start; padding: 0.14rem 0.36rem; border-radius: 999px; color: var(--fbls-text); background: var(--fbls-panel); font-size: 0.64rem; }
+.fbl-skyhold-resource-editor .fbls-resource-picker-hint { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--fbls-accent); font-size: 0.74rem; white-space: nowrap; }
+.fbl-skyhold-resource-editor .fbls-resource-select-button { border-color: var(--fbls-accent-border); color: var(--fbls-accent); }
+
+.fbl-skyhold-resource-row-editor .fbls-resource-row-editor-shell { overflow: auto; }
+.fbl-skyhold-resource-row-editor .fbls-resource-row-editor-hero { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0.65rem; align-items: center; padding-bottom: 0.6rem; border-bottom: 1px solid var(--fbls-border); }
+.fbl-skyhold-resource-row-editor .fbls-resource-row-editor-hero h2 { margin: 0; color: var(--fbls-text-strong); border: 0; font-size: 1.05rem; }
+.fbl-skyhold-resource-row-editor .fbls-resource-row-editor-hero p { margin: 0.12rem 0 0; color: var(--fbls-resource-muted); font-size: 0.72rem; }
+.fbl-skyhold-resource-row-editor .fbls-resource-row-editor-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
+.fbl-skyhold-resource-row-editor .fbls-resource-row-editor-fields label { display: grid; gap: 0.2rem; margin: 0; color: var(--fbls-resource-text); }
+.fbl-skyhold-resource-row-editor .fbls-resource-row-editor-fields label.wide { grid-column: 1 / -1; }
+.fbl-skyhold-resource-row-editor .fbls-resource-row-editor-fields label > span { color: var(--fbls-resource-muted); font-size: 0.7rem; }
+.fbl-skyhold-resource-row-editor .fbls-resource-row-editor-fields label > small { color: var(--fbls-resource-muted); font-size: 0.66rem; line-height: 1.35; }
+.fbl-skyhold-resource-row-editor input,
+.fbl-skyhold-resource-row-editor textarea,
+.fbl-skyhold-resource-editor input { border-color: var(--fbls-border); color: var(--fbls-text-strong); background: var(--fbls-overlay); }
+.fbl-skyhold-resource-row-editor input:read-only { color: var(--fbls-muted); opacity: 0.78; }
+.fbl-skyhold-resource-row-editor .fbls-resource-editor-inline { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0.4rem; align-items: center; }
+.fbl-skyhold-resource-row-editor .fbls-resource-row-editor-flags { display: flex; flex-wrap: wrap; gap: 1rem; padding: 0.55rem; border: 1px solid var(--fbls-border); border-radius: 7px; color: var(--fbls-text); background: var(--fbls-overlay-soft); }
+
+@media (max-width: 760px) {
+  .fbl-skyhold-resource-editor .fbls-resource-editor-toolbar { grid-template-columns: 1fr; }
+  .fbl-skyhold-resource-editor .fbls-resource-editor-row { grid-template-columns: 2.15rem minmax(0, 1fr) auto; }
+  .fbl-skyhold-resource-editor .fbls-resource-editor-category,
+  .fbl-skyhold-resource-editor .fbls-resource-editor-unit,
+  .fbl-skyhold-resource-editor .fbls-resource-editor-state { display: none; }
+  .fbl-skyhold-resource-row-editor .fbls-resource-row-editor-fields { grid-template-columns: 1fr; }
+  .fbl-skyhold-resource-row-editor .fbls-resource-row-editor-fields label.wide { grid-column: auto; }
+}

@@ -1,0 +1,91 @@
+/* Economy layout refinements. */
+
+.fbls-building-editor-grid.compact-v2 {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.42rem;
+  padding: 0.45rem 0.55rem;
+}
+.fbls-building-editor-grid.compact-v2 .wide-card { grid-column: 1 / -1; }
+.fbls-building-main-line,
+.fbls-build-main-row {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1.5fr) minmax(9rem, 0.8fr) minmax(9rem, 0.8fr) minmax(10rem, 1fr) minmax(5.5rem, 0.5fr);
+  gap: 0.35rem;
+  align-items: end;
+}
+.fbls-dev-line-fields {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(4.6rem, 1fr));
+  gap: 0.3rem;
+}
+.fbls-dev-line-fields label {
+  display: grid;
+  grid-template-columns: 1.5rem 3.4rem;
+  align-items: center;
+  gap: 0.25rem;
+}
+.fbls-dev-line-fields i {
+  width: 1.5rem;
+  height: 1.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--fbls-panel);
+}
+.fbls-dev-line-fields .food i { color: var(--fbls-accent); }
+.fbls-dev-line-fields .technology i { color: var(--fbls-info); }
+.fbls-dev-line-fields .culture i { color: var(--fbls-culture); }
+.fbls-dev-line-fields .war i { color: var(--fbls-danger); }
+.fbls-dev-line-fields input { text-align: center; min-height: 2rem; }
+.fbls-suitable-editor { display: grid; grid-template-columns: 8rem 1fr 12rem; gap: 0.35rem; align-items: center; margin: 0.25rem 0 0.35rem; }
+.fbls-suitable-editor .fbls-field-title { color: var(--fbls-muted); text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.68rem; }
+.fbls-build-subgrid.tighter { gap: 0.45rem; }
+.fbls-cost-row, .fbls-prereq-row { gap: 0.3rem; }
+.fbls-two-textareas { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; grid-column: 1 / -1; }
+.fbls-two-textareas textarea { min-height: 4.2rem; }
+.fbls-worker-slot-grid.compact-slots { grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); max-height: 14rem; overflow: auto; padding-right: 0.2rem; }
+
+.fbl-skyhold-crew-editor .crew-card-v2 { margin-bottom: 0.65rem; padding: 0; overflow: hidden; border-color: var(--fbls-accent-border); background: var(--fbls-info-soft); }
+.fbl-skyhold-crew-editor .fbls-crew-headline { display: grid; grid-template-columns: minmax(13rem, 1fr) auto auto; gap: 0.65rem; align-items: center; padding: 0.55rem 0.65rem; border-bottom: 1px solid var(--fbls-border); background: var(--fbls-surface-soft); }
+.fbl-skyhold-crew-editor .fbls-crew-name { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 0.55rem; margin: 0; }
+.fbl-skyhold-crew-editor .fbls-crew-name > span { color: var(--fbls-muted); font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.fbl-skyhold-crew-editor .fbls-crew-summary { display: flex; gap: 0.3rem; }
+.fbl-skyhold-crew-editor .fbls-crew-summary > span { display: grid; grid-template-columns: auto auto; align-items: center; gap: 0 0.3rem; min-width: 4.7rem; padding: 0.28rem 0.42rem; border: 1px solid var(--fbls-border); border-radius: 7px; background: var(--fbls-overlay-soft); }
+.fbl-skyhold-crew-editor .fbls-crew-summary i { grid-row: 1 / 3; color: var(--fbls-accent); }
+.fbl-skyhold-crew-editor .fbls-crew-summary b { font-size: 0.78rem; }
+.fbl-skyhold-crew-editor .fbls-crew-summary small { color: var(--fbls-muted); font-size: 0.62rem; }
+.fbl-skyhold-crew-editor .fbls-crew-summary .distributed i { color: var(--fbls-info); }
+.fbl-skyhold-crew-editor .fbls-crew-actions { display: flex; gap: 0.3rem; flex-wrap: nowrap; justify-content: flex-end; }
+.fbl-skyhold-crew-editor .fbls-crew-actions .fbls-button { min-height: 2rem; }
+.fbl-skyhold-crew-editor .fbls-crew-editor-body { display: grid; grid-template-columns: minmax(13rem, 0.72fr) minmax(20rem, 1.28fr); gap: 0.65rem; padding: 0.65rem; }
+.fbl-skyhold-crew-editor .fbls-crew-config-panel,
+.fbl-skyhold-crew-editor .fbls-crew-roster-panel { min-width: 0; padding: 0.55rem; border: 1px solid var(--fbls-border); border-radius: 8px; background: var(--fbls-overlay-soft); }
+.fbl-skyhold-crew-editor .fbls-crew-leader { display: grid; gap: 0.25rem; margin: 0; }
+.fbl-skyhold-crew-editor .fbls-crew-leader > span,
+.fbl-skyhold-crew-editor .fbls-crew-roster-panel h3 { margin: 0 0 0.38rem; color: var(--fbls-text); font-size: 0.72rem; letter-spacing: 0.05em; text-transform: uppercase; }
+.fbl-skyhold-crew-editor .fbls-suitable-editor { display: grid; grid-template-columns: 1fr; gap: 0.35rem; margin: 0.6rem 0 0; }
+.fbl-skyhold-crew-editor .fbls-selected-traits { display: flex; flex-wrap: wrap; gap: 0.25rem; min-height: 1.65rem; }
+.fbl-skyhold-crew-editor .fbls-crew-slot-grid.compact { grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); margin: 0; }
+.fbl-skyhold-crew-editor .fbls-crew-slot-grid label > span { display: grid; place-items: center; width: 1.7rem; height: 1.7rem; border-radius: 50%; color: var(--fbls-accent); background: var(--fbls-accent-soft); font-weight: 700; }
+.fbl-skyhold-crew-editor .fbls-crew-member-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.35rem; padding: 0 0.65rem 0.65rem; }
+.fbl-skyhold-crew-editor .fbls-crew-member-strip article { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 0.45rem; padding: 0.42rem 0.5rem; border: 1px solid var(--fbls-border); border-radius: 7px; background: var(--fbls-surface-soft); }
+.fbl-skyhold-crew-editor .fbls-crew-member-strip article > i { color: var(--fbls-accent); }
+.fbl-skyhold-crew-editor .fbls-crew-member-strip span { display: grid; min-width: 0; }
+.fbl-skyhold-crew-editor .fbls-crew-member-strip strong,
+.fbl-skyhold-crew-editor .fbls-crew-member-strip small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fbl-skyhold-crew-editor .fbls-crew-member-strip small { color: var(--fbls-muted); font-size: 0.66rem; }
+.fbl-skyhold-crew-editor .fbls-crew-member-strip article > b { color: var(--fbls-accent); }
+.fbl-skyhold-crew-editor .fbls-crew-member-strip .fbls-empty { grid-column: 1 / -1; margin: 0; }
+.fbl-skyhold-crew-editor .fbls-crew-formula { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.9rem; padding: 0.45rem 0.65rem; border-top: 1px solid var(--fbls-border); color: var(--fbls-muted); font-size: 0.72rem; background: var(--fbls-overlay-soft); }
+.fbl-skyhold-crew-editor .fbls-crew-formula strong { margin-left: auto; color: var(--fbls-accent); font-size: 0.82rem; }
+
+@media (max-width: 950px) {
+  .fbls-building-main-line,
+  .fbls-build-main-row { grid-template-columns: 1fr 1fr; }
+  .fbl-skyhold-crew-editor .fbls-crew-headline { grid-template-columns: 1fr auto; }
+  .fbl-skyhold-crew-editor .fbls-crew-summary { grid-row: 2; }
+  .fbl-skyhold-crew-editor .fbls-crew-editor-body { grid-template-columns: 1fr; }
+  .fbls-two-textareas { grid-template-columns: 1fr; }
+}

@@ -1,0 +1,43 @@
+/* Resident generator compact layout. */
+.fbls-generator-card {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.fbls-generator-grid {
+  display: grid;
+  grid-template-columns: 5rem minmax(10rem, 1fr) minmax(9rem, 0.9fr) minmax(9rem, 0.9fr) minmax(8rem, 0.85fr);
+  gap: 0.45rem;
+  align-items: end;
+}
+
+.fbls-generator-grid label {
+  min-width: 0;
+  color: var(--fbls-muted);
+  font-size: 0.69rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.fbls-generator-grid span {
+  display: block;
+  margin-bottom: 0.2rem;
+}
+
+.fbls-generator-actions {
+  display: flex;
+  gap: 0.45rem;
+  justify-content: flex-start;
+  align-items: center;
+}
+
+.fbls-generator-hint {
+  color: var(--fbls-dim);
+  font-size: 0.78rem;
+}
+
+@media (max-width: 1180px) {
+  .fbls-generator-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}

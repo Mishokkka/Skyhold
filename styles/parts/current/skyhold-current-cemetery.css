@@ -1,0 +1,85 @@
+/* FBL Skyhold: eager owner for the Special-tab cemetery register. */
+
+.fbl-skyhold .fbls-special-panel.cemetery-only {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: calc(100% + 1.6rem);
+  min-height: 0;
+  margin: -0.8rem;
+}
+
+.fbl-skyhold .fbls-special-panel.cemetery-only .fbls-special-subtabs {
+  flex: 0 0 auto;
+  padding: 0.6rem 0.8rem;
+  border-bottom: 1px solid var(--fbls-border);
+}
+
+.fbl-skyhold .fbls-cemetery-register {
+  --fbls-cemetery-columns: minmax(9rem, 1.1fr) minmax(4.5rem, 0.45fr) minmax(7rem, 0.7fr) minmax(8rem, 0.8fr) minmax(12rem, 1.5fr) 2rem;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: var(--fbls-surface-1);
+  font-size: 0.75rem;
+}
+
+.fbl-skyhold .fbls-cemetery-register-head,
+.fbl-skyhold .fbls-cemetery-entry {
+  display: grid;
+  grid-template-columns: var(--fbls-cemetery-columns);
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 48rem;
+}
+
+.fbl-skyhold .fbls-cemetery-register-head {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  min-height: 1.8rem;
+  padding: 0.25rem 0.8rem;
+  border-bottom: 1px solid var(--fbls-border-strong);
+  color: var(--fbls-muted);
+  background: var(--fbls-surface-0);
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.fbl-skyhold .fbls-cemetery-register-body { display: grid; align-content: start; }
+
+.fbl-skyhold .fbls-cemetery-entry {
+  min-height: 2rem;
+  padding: 0.2rem 0.8rem;
+  border-bottom: 1px solid var(--fbls-border);
+  background: var(--fbls-surface-soft);
+}
+
+.fbl-skyhold .fbls-cemetery-entry:nth-child(even) { background: var(--fbls-surface-1); }
+.fbl-skyhold .fbls-cemetery-entry > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fbl-skyhold .fbls-cemetery-entry > strong { color: var(--fbls-text-strong); }
+
+.fbl-skyhold .fbls-cemetery-entry input {
+  width: 100%;
+  min-width: 0;
+  height: 1.5rem;
+  min-height: 1.5rem;
+  padding: 0 0.3rem;
+  font-size: 0.72rem;
+}
+
+.fbl-skyhold .fbls-cemetery-entry .fbls-icon-button {
+  width: 1.5rem;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  min-height: 1.5rem;
+  padding: 0;
+}
+
+.fbl-skyhold .fbls-cemetery-register .fbls-empty { padding: 2rem; }

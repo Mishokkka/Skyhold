@@ -12,32 +12,121 @@
   align-items: end;
 }
 
+.fbl-skyhold .fbls-trade-demand-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.5rem;
+  align-items: end;
+  margin-top: 0.55rem;
+}
+
+.fbl-skyhold .fbls-trade-editor-block {
+  margin-top: 0.55rem;
+  padding-top: 0.55rem;
+}
+
+.fbl-skyhold .fbls-capital-grid,
+.fbl-skyhold .fbls-capital-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.5rem;
+  align-items: end;
+}
+
+.fbl-skyhold .fbls-capital-summary-grid {
+  margin-top: 0.65rem;
+}
+
+.fbl-skyhold .fbls-capital-funding {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: 0.65rem;
+  align-items: end;
+  margin-top: 0.65rem;
+  padding: 0.6rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 8px;
+  background: var(--fbls-overlay);
+}
+
+.fbl-skyhold .fbls-capital-funding > button {
+  align-self: end;
+}
+
+.fbl-skyhold .fbls-capital-funding > div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.fbl-skyhold .fbls-capital-funding > div span,
+.fbl-skyhold .fbls-capital-funding > div em {
+  color: var(--fbls-muted);
+  font-size: 0.72rem;
+  font-style: normal;
+}
+
+.fbl-skyhold .fbls-capital-funding.positive {
+  border-color: var(--fbls-success);
+  background: var(--fbls-success-soft);
+}
+
+.fbl-skyhold .fbls-capital-funding.negative,
+.fbl-skyhold .fbls-capital-warning {
+  border-color: var(--fbls-danger);
+  color: var(--fbls-danger);
+}
+
+@media (max-width: 900px) {
+  .fbl-skyhold .fbls-capital-funding {
+    grid-template-columns: 1fr;
+  }
+}
+
 .fbl-skyhold .fbls-income-grid .fbls-icon-check,
 .fbl-skyhold .fbls-trade-grid .fbls-icon-check {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: 1rem 1.75rem;
+  align-content: end;
+  align-items: center;
   width: 42px;
   min-width: 42px;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  position: static;
   justify-self: center;
   align-self: end;
-  grid-template-rows: auto 36px;
   justify-items: center;
+}
+
+.fbl-skyhold .fbls-income-grid .fbls-icon-check > span,
+.fbl-skyhold .fbls-trade-grid .fbls-icon-check > span {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  width: 100%;
+  font-size: 0.9rem;
+  line-height: 1;
 }
 
 .fbl-skyhold .fbls-income-grid .fbls-icon-check input[type="checkbox"],
 .fbl-skyhold .fbls-trade-grid .fbls-icon-check input[type="checkbox"] {
+  --fbls-check-size: 21px;
   justify-self: center;
   align-self: center;
   margin: 0;
 }
 
 .fbl-skyhold .fbls-income-total-box {
-  min-height: 58px;
+  min-height: 0;
   display: grid;
-  grid-template-rows: auto 1fr auto;
-  align-content: end;
+  grid-template-rows: auto minmax(1.75rem, 1fr);
+  align-content: stretch;
 }
 
 .fbl-skyhold .fbls-income-total-box strong {
-  min-height: 34px;
+  min-height: 1.75rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;

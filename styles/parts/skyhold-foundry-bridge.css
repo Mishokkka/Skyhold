@@ -1,0 +1,542 @@
+/* FBL Skyhold: unlayered bridge for Foundry window chrome and native controls.
+   Keep this file narrow; layered domain files still own the actual app UI. */
+
+/* Foundry themes own the ApplicationV2 root background.  Every Skyhold window
+   must therefore establish its dark canvas at the bridge boundary instead of
+   relying on the active Foundry theme. */
+.application.fbl-skyhold,
+.window-app.fbl-skyhold {
+  color: var(--fbls-text);
+  background: var(--fbls-bg);
+}
+
+.application.fbl-skyhold > .window-content,
+.window-app.fbl-skyhold > .window-content {
+  color: var(--fbls-text);
+  background: var(--fbls-surface-0);
+}
+
+/* Fleet is rendered both inside the main Skyhold app and in its own ApplicationV2
+   window. Forbidden Lands assigns explicit dark colors to headings and native form
+   controls, so inheritance from the dark Skyhold canvas is not sufficient here. */
+.fbl-skyhold .fbls-fleet-overview h3,
+.fbl-skyhold-ship-enterprise .fbls-fleet-manager h2,
+.fbl-skyhold-ship-enterprise .fbls-fleet-manager h3,
+.fbl-skyhold-ship-enterprise .fbls-fleet-manager h4,
+.fbl-skyhold-ship-enterprise .fbls-fleet-section > summary,
+.fbl-skyhold-ship-enterprise .fbls-fleet-profile > summary,
+.fbl-skyhold-ship-enterprise .fbls-fleet-log > summary,
+.fbl-skyhold-ship-enterprise .fbls-fleet-inline-editor > summary,
+.fbl-skyhold-ship-enterprise .fbls-fleet-profile legend {
+  color: var(--fbls-text-strong);
+  -webkit-text-fill-color: var(--fbls-text-strong);
+}
+
+.fbl-skyhold-ship-enterprise .fbls-fleet-profile > summary small,
+.fbl-skyhold-ship-enterprise .fbls-fleet-log > summary small {
+  color: var(--fbls-muted);
+  -webkit-text-fill-color: var(--fbls-muted);
+}
+
+.fbl-skyhold-ship-enterprise input:not([type="checkbox"]),
+.fbl-skyhold-ship-enterprise textarea,
+.fbl-skyhold-ship-enterprise select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--fbls-border-strong);
+  background: var(--fbls-surface-1);
+  color: var(--fbls-text);
+  -webkit-text-fill-color: var(--fbls-text);
+  box-shadow: none;
+}
+
+.fbl-skyhold-ship-enterprise input:not([type="checkbox"]):disabled,
+.fbl-skyhold-ship-enterprise textarea:disabled,
+.fbl-skyhold-ship-enterprise select:disabled {
+  color: var(--fbls-muted);
+  -webkit-text-fill-color: var(--fbls-muted);
+  opacity: 0.72;
+}
+
+.fbl-skyhold-ship-enterprise input::placeholder,
+.fbl-skyhold-ship-enterprise textarea::placeholder {
+  color: var(--fbls-placeholder);
+  -webkit-text-fill-color: var(--fbls-placeholder);
+  opacity: 1;
+}
+
+.fbl-skyhold-ship-enterprise select option,
+.fbl-skyhold-ship-enterprise select optgroup {
+  color: var(--fbls-text);
+  -webkit-text-fill-color: var(--fbls-text);
+  background: var(--fbls-surface-1);
+}
+
+.fbl-skyhold-app select option,
+.fbl-skyhold-app optgroup,
+.fbl-skyhold-building-editor select option,
+.fbl-skyhold-building-editor optgroup,
+.fbl-skyhold-crew-editor select option {
+  background: var(--fbls-surface-1);
+  color: var(--fbls-text);
+  -webkit-text-fill-color: var(--fbls-text);
+}
+
+.fbl-skyhold-route-edge-editor select option,
+.fbl-skyhold-route-edge-editor select optgroup {
+  color: var(--fbls-text);
+  background: var(--fbls-surface-1);
+  -webkit-text-fill-color: var(--fbls-text);
+}
+
+.fbl-skyhold-app .fbls-person-editor.v2 > fieldset,
+.fbl-skyhold-app .fbls-person-editor.v2 > .fbls-resident-midline,
+.fbl-skyhold-app .fbls-person-editor.v2 > .fbls-person-notes-field,
+.fbl-skyhold-app .fbls-person-editor.v2 > .resident-actions {
+  margin: 0;
+  margin-block: 0;
+  margin-inline: 0;
+}
+
+.fbl-skyhold-app .fbls-person-editor.v2 fieldset {
+  min-inline-size: 0;
+  margin: 0;
+  margin-block: 0;
+  margin-inline: 0;
+  padding: 0.08rem 0.34rem 0.1rem;
+}
+
+.fbl-skyhold-app .fbls-person-editor.v2 legend {
+  margin: 0;
+  margin-block: 0;
+  margin-inline: 0;
+  padding: 0 0.22rem;
+  line-height: 1;
+}
+
+.application.fbl-skyhold-template-browser .window-content,
+.window-app.fbl-skyhold-template-browser .window-content {
+  padding: 0;
+  overflow: hidden;
+}
+
+.application.fbl-skyhold-building-editor .window-content,
+.window-app.fbl-skyhold-building-editor .window-content {
+  padding: 0;
+  overflow: hidden;
+  background: var(--fbls-bg);
+}
+
+.application.fbl-skyhold-building-editor .application-content,
+.window-app.fbl-skyhold-building-editor .application-content,
+.application.fbl-skyhold-building-editor .window-content > *,
+.window-app.fbl-skyhold-building-editor .window-content > * {
+  background: var(--fbls-bg);
+}
+
+.application.fbl-skyhold-building-editor .fbls-building-track-button,
+.window-app.fbl-skyhold-building-editor .fbls-building-track-button,
+.application.fbl-skyhold-unique-building .fbls-building-track-button,
+.window-app.fbl-skyhold-unique-building .fbls-building-track-button {
+  display: inline-grid;
+  place-items: center;
+  width: 1.55rem;
+  height: 1.55rem;
+  margin-inline: 0.12rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 5px;
+  color: var(--fbls-text);
+  background: var(--fbls-info-soft);
+  cursor: pointer;
+}
+
+.application.fbl-skyhold-building-editor .fbls-building-track-button:hover,
+.window-app.fbl-skyhold-building-editor .fbls-building-track-button:hover,
+.application.fbl-skyhold-unique-building .fbls-building-track-button:hover,
+.window-app.fbl-skyhold-unique-building .fbls-building-track-button:hover {
+  color: var(--fbls-accent);
+  background: var(--fbls-accent-bg);
+}
+
+.application.fbl-skyhold-building-editor .fbls-building-track-button.active,
+.window-app.fbl-skyhold-building-editor .fbls-building-track-button.active,
+.application.fbl-skyhold-unique-building .fbls-building-track-button.active,
+.window-app.fbl-skyhold-unique-building .fbls-building-track-button.active {
+  border-color: var(--fbls-accent-border);
+  color: var(--fbls-accent);
+  background: var(--fbls-accent-bg);
+}
+
+.application.fbl-skyhold-mass-combat,
+.window-app.fbl-skyhold-mass-combat {
+  background-color: var(--fbls-battle-bg, var(--fbls-surface-0));
+  background: var(--fbls-battle-bg);
+}
+
+.application.fbl-skyhold-mass-combat .window-content,
+.window-app.fbl-skyhold-mass-combat .window-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background-color: var(--fbls-battle-bg, var(--fbls-surface-0));
+  background: var(--fbls-battle-bg);
+  color: var(--fbls-battle-text);
+}
+
+.application.fbl-skyhold-mass-combat .application-content,
+.window-app.fbl-skyhold-mass-combat .application-content {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+  height: 100%;
+  background-color: var(--fbls-battle-bg, var(--fbls-surface-0));
+  background: var(--fbls-battle-bg);
+  color: var(--fbls-battle-text);
+}
+
+.application.fbl-skyhold-mass-combat [data-application-part="body"],
+.window-app.fbl-skyhold-mass-combat [data-application-part="body"] {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: var(--fbls-battle-bg, var(--fbls-surface-0));
+  color: var(--fbls-battle-text, var(--fbls-text));
+  scrollbar-color: var(--fbls-battle-scroll-thumb, var(--fbls-danger)) var(--fbls-battle-scroll-track, var(--fbls-on-accent));
+  scrollbar-gutter: auto;
+}
+
+.application.fbl-skyhold-mass-combat [data-application-part="body"]::-webkit-scrollbar,
+.window-app.fbl-skyhold-mass-combat [data-application-part="body"]::-webkit-scrollbar {
+  width: 10px;
+  background: var(--fbls-battle-scroll-track, var(--fbls-surface-0));
+}
+
+.application.fbl-skyhold-mass-combat [data-application-part="body"]::-webkit-scrollbar-track,
+.window-app.fbl-skyhold-mass-combat [data-application-part="body"]::-webkit-scrollbar-track {
+  background: var(--fbls-battle-scroll-track, var(--fbls-surface-0));
+}
+
+.application.fbl-skyhold-mass-combat [data-application-part="body"]::-webkit-scrollbar-thumb,
+.window-app.fbl-skyhold-mass-combat [data-application-part="body"]::-webkit-scrollbar-thumb {
+  border: 2px solid var(--fbls-battle-scroll-track, var(--fbls-border));
+  border-radius: 999px;
+  background: var(--fbls-battle-scroll-thumb, var(--fbls-danger-strong));
+}
+
+.application.fbl-skyhold-mass-combat .fbls-battle-shell,
+.window-app.fbl-skyhold-mass-combat .fbls-battle-shell {
+  min-height: 100%;
+  background:
+    radial-gradient(circle at 18% 0%, var(--fbls-accent-soft), transparent 30%),
+    linear-gradient(180deg, var(--fbls-surface-0), var(--fbls-surface-0));
+}
+
+.application.fbl-skyhold-mass-combat .window-content > *,
+.window-app.fbl-skyhold-mass-combat .window-content > *,
+.application.fbl-skyhold-mass-combat .application-content > *,
+.window-app.fbl-skyhold-mass-combat .application-content > *,
+.application.fbl-skyhold-mass-combat [data-application-part],
+.window-app.fbl-skyhold-mass-combat [data-application-part],
+.application.fbl-skyhold-mass-combat form,
+.window-app.fbl-skyhold-mass-combat form,
+.application.fbl-skyhold-mass-combat .standard-form,
+.window-app.fbl-skyhold-mass-combat .standard-form {
+  background-color: var(--fbls-battle-bg, var(--fbls-surface-0));
+}
+
+.application.fbl-skyhold-mass-combat .window-content:not(:has(.application-content)),
+.window-app.fbl-skyhold-mass-combat .window-content:not(:has(.application-content)) {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.application.fbl-skyhold-mass-combat .window-content:has([data-application-part="body"]),
+.window-app.fbl-skyhold-mass-combat .window-content:has([data-application-part="body"]) {
+  overflow: hidden;
+  scrollbar-gutter: auto;
+}
+
+.application.fbl-skyhold-mass-combat .fbls-battle-shell select option,
+.window-app.fbl-skyhold-mass-combat .fbls-battle-shell select option {
+  background: var(--fbls-battle-control-option-bg);
+  color: var(--fbls-battle-text-soft);
+}
+
+.application.fbl-skyhold-mass-tag-editor,
+.window-app.fbl-skyhold-mass-tag-editor {
+  background: var(--fbls-battle-bg, var(--fbls-surface-0));
+  color: var(--fbls-battle-text, var(--fbls-text));
+}
+
+.application.fbl-skyhold-mass-tag-editor .window-content,
+.window-app.fbl-skyhold-mass-tag-editor .window-content,
+.application.fbl-skyhold-mass-tag-editor .application-content,
+.window-app.fbl-skyhold-mass-tag-editor .application-content {
+  overflow: hidden;
+  background: var(--fbls-battle-bg, var(--fbls-surface-0));
+  color: var(--fbls-battle-text, var(--fbls-text));
+}
+
+.application.fbl-skyhold-mass-tag-editor .application-content,
+.window-app.fbl-skyhold-mass-tag-editor .application-content,
+.application.fbl-skyhold-mass-tag-editor .window-content:not(:has(.application-content)),
+.window-app.fbl-skyhold-mass-tag-editor .window-content:not(:has(.application-content)) {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.application.fbl-skyhold-mass-reference,
+.window-app.fbl-skyhold-mass-reference {
+  background: var(--fbls-reference-bg, var(--fbls-surface-0));
+  color: var(--fbls-reference-text, var(--fbls-text));
+}
+
+.application.fbl-skyhold-mass-reference .window-content,
+.window-app.fbl-skyhold-mass-reference .window-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  background: var(--fbls-reference-bg, var(--fbls-surface-0));
+  color: var(--fbls-reference-text, var(--fbls-text));
+}
+
+.application.fbl-skyhold-mass-reference [data-application-part="body"],
+.window-app.fbl-skyhold-mass-reference [data-application-part="body"],
+.application.fbl-skyhold-mass-reference .application-content,
+.window-app.fbl-skyhold-mass-reference .application-content {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--fbls-reference-bg, var(--fbls-surface-0));
+  color: var(--fbls-reference-text, var(--fbls-text));
+}
+
+.application.fbl-skyhold-mass-combat,
+.window-app.fbl-skyhold-mass-combat,
+.application.fbl-skyhold-mass-tag-editor,
+.window-app.fbl-skyhold-mass-tag-editor {
+  --fbls-owned-scroll-track: var(--fbls-battle-scroll-track, var(--fbls-surface-0));
+  --fbls-owned-scroll-thumb: var(--fbls-battle-scroll-thumb, var(--fbls-danger-strong));
+}
+
+.application.fbl-skyhold-mass-combat *,
+.window-app.fbl-skyhold-mass-combat *,
+.application.fbl-skyhold-mass-tag-editor *,
+.window-app.fbl-skyhold-mass-tag-editor * {
+  scrollbar-color: var(--fbls-owned-scroll-thumb) var(--fbls-owned-scroll-track);
+}
+
+.application.fbl-skyhold-mass-combat *::-webkit-scrollbar,
+.window-app.fbl-skyhold-mass-combat *::-webkit-scrollbar,
+.application.fbl-skyhold-mass-tag-editor *::-webkit-scrollbar,
+.window-app.fbl-skyhold-mass-tag-editor *::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+  background: var(--fbls-owned-scroll-track);
+}
+
+.application.fbl-skyhold-mass-combat *::-webkit-scrollbar-track,
+.window-app.fbl-skyhold-mass-combat *::-webkit-scrollbar-track,
+.application.fbl-skyhold-mass-tag-editor *::-webkit-scrollbar-track,
+.window-app.fbl-skyhold-mass-tag-editor *::-webkit-scrollbar-track,
+.application.fbl-skyhold-mass-combat *::-webkit-scrollbar-corner,
+.window-app.fbl-skyhold-mass-combat *::-webkit-scrollbar-corner,
+.application.fbl-skyhold-mass-tag-editor *::-webkit-scrollbar-corner,
+.window-app.fbl-skyhold-mass-tag-editor *::-webkit-scrollbar-corner {
+  background: var(--fbls-owned-scroll-track);
+}
+
+.application.fbl-skyhold-mass-combat *::-webkit-scrollbar-thumb,
+.window-app.fbl-skyhold-mass-combat *::-webkit-scrollbar-thumb,
+.application.fbl-skyhold-mass-tag-editor *::-webkit-scrollbar-thumb,
+.window-app.fbl-skyhold-mass-tag-editor *::-webkit-scrollbar-thumb {
+  border: 2px solid var(--fbls-owned-scroll-track);
+  border-radius: 999px;
+  background: var(--fbls-owned-scroll-thumb);
+}
+
+/* Checkbox hard reset.
+   This block is intentionally unlayered. Foundry/system CSS and later domain input rules
+   can otherwise turn checkboxes into full-width text inputs. Keep this narrow and only
+   target Skyhold application windows. */
+:is(
+  .fbl-skyhold-app,
+  .fbl-skyhold-building-editor,
+  .fbl-skyhold-crew-editor,
+  .fbl-skyhold-template-browser,
+  .fbl-skyhold-market-catalog-editor,
+  .fbl-skyhold-region-catalog-editor,
+  .fbl-skyhold-route-graph-editor,
+  .fbl-skyhold-route-edge-editor,
+  .fbl-skyhold-resource-editor,
+  .fbl-skyhold-content-pack-importer,
+  .fbl-skyhold-mass-combat,
+  .fbl-skyhold-mass-tag-editor,
+  .fbl-skyhold-mass-reference
+) input[type="checkbox"] {
+  box-sizing: border-box;
+  appearance: none;
+  -webkit-appearance: none;
+  display: grid;
+  place-items: center;
+  width: var(--fbls-check-size, 20px);
+  height: var(--fbls-check-size, 20px);
+  min-width: var(--fbls-check-size, 20px);
+  min-height: var(--fbls-check-size, 20px);
+  max-width: var(--fbls-check-size, 20px);
+  max-height: var(--fbls-check-size, 20px);
+  flex: 0 0 var(--fbls-check-size, 20px);
+  margin: 0;
+  padding: 0;
+  position: static;
+  inset: auto;
+  align-self: center;
+  justify-self: center;
+  vertical-align: middle;
+  transform: none;
+  border: 1px solid var(--fbls-border-strong);
+  border-radius: var(--fbls-check-radius, 4px);
+  background: var(--fbls-surface-0);
+  box-shadow: inset 0 1px 0 var(--fbls-overlay);
+  color: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+
+:is(
+  .fbl-skyhold-app,
+  .fbl-skyhold-building-editor,
+  .fbl-skyhold-crew-editor,
+  .fbl-skyhold-template-browser,
+  .fbl-skyhold-market-catalog-editor,
+  .fbl-skyhold-region-catalog-editor,
+  .fbl-skyhold-route-graph-editor,
+  .fbl-skyhold-route-edge-editor,
+  .fbl-skyhold-resource-editor,
+  .fbl-skyhold-content-pack-importer,
+  .fbl-skyhold-mass-combat,
+  .fbl-skyhold-mass-tag-editor,
+  .fbl-skyhold-mass-reference
+) input[type="checkbox"]::before,
+:is(
+  .fbl-skyhold-app,
+  .fbl-skyhold-building-editor,
+  .fbl-skyhold-crew-editor,
+  .fbl-skyhold-template-browser,
+  .fbl-skyhold-market-catalog-editor,
+  .fbl-skyhold-region-catalog-editor,
+  .fbl-skyhold-route-graph-editor,
+  .fbl-skyhold-route-edge-editor,
+  .fbl-skyhold-resource-editor,
+  .fbl-skyhold-content-pack-importer,
+  .fbl-skyhold-mass-combat,
+  .fbl-skyhold-mass-tag-editor,
+  .fbl-skyhold-mass-reference
+) input[type="checkbox"]::after {
+  content: none;
+  display: none;
+  position: static;
+  inset: auto;
+  width: 0;
+  height: 0;
+  font-family: initial;
+}
+
+:is(
+  .fbl-skyhold-app,
+  .fbl-skyhold-building-editor,
+  .fbl-skyhold-crew-editor,
+  .fbl-skyhold-template-browser,
+  .fbl-skyhold-market-catalog-editor,
+  .fbl-skyhold-region-catalog-editor,
+  .fbl-skyhold-route-graph-editor,
+  .fbl-skyhold-route-edge-editor,
+  .fbl-skyhold-resource-editor,
+  .fbl-skyhold-content-pack-importer,
+  .fbl-skyhold-mass-combat,
+  .fbl-skyhold-mass-tag-editor,
+  .fbl-skyhold-mass-reference
+) input[type="checkbox"]:checked {
+  border-color: var(--fbls-accent-border);
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.2 8.2 6.5 11.4 12.8 4.8' fill='none' stroke='%23171a1c' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 72% 72% no-repeat,
+    linear-gradient(180deg, var(--fbls-accent), var(--fbls-accent));
+}
+
+:is(
+  .fbl-skyhold-app,
+  .fbl-skyhold-building-editor,
+  .fbl-skyhold-crew-editor,
+  .fbl-skyhold-template-browser,
+  .fbl-skyhold-market-catalog-editor,
+  .fbl-skyhold-region-catalog-editor,
+  .fbl-skyhold-route-graph-editor,
+  .fbl-skyhold-route-edge-editor,
+  .fbl-skyhold-resource-editor,
+  .fbl-skyhold-content-pack-importer,
+  .fbl-skyhold-mass-combat,
+  .fbl-skyhold-mass-tag-editor,
+  .fbl-skyhold-mass-reference
+) input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--fbls-accent-border);
+  outline-offset: 2px;
+}
+
+:is(
+  .fbl-skyhold-app,
+  .fbl-skyhold-building-editor,
+  .fbl-skyhold-crew-editor,
+  .fbl-skyhold-template-browser,
+  .fbl-skyhold-market-catalog-editor,
+  .fbl-skyhold-region-catalog-editor,
+  .fbl-skyhold-route-graph-editor,
+  .fbl-skyhold-route-edge-editor,
+  .fbl-skyhold-resource-editor,
+  .fbl-skyhold-content-pack-importer,
+  .fbl-skyhold-mass-combat,
+  .fbl-skyhold-mass-tag-editor,
+  .fbl-skyhold-mass-reference
+) input[type="checkbox"]:disabled {
+  cursor: default;
+}
+
+/* Mass-combat setup checkboxes are real controls, not icon-only overlays. */
+.fbl-skyhold-mass-combat .fbls-battle-check input[type="checkbox"] {
+  display: grid;
+  position: relative;
+  z-index: 1;
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Pill checkboxes are click targets, not visible checkboxes. Re-apply their overlay
+   behaviour here because the hard reset above is unlayered and deliberately strong. */
+:is(.fbl-skyhold-app, .fbl-skyhold-building-editor) .fbls-season-pill input[type="checkbox"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  box-shadow: none;
+  opacity: 0;
+}
+
+:is(.fbl-skyhold-app, .fbl-skyhold-building-editor) .fbls-season-pill input[type="checkbox"]::after {
+  display: none;
+}
