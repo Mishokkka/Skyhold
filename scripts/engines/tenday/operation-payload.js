@@ -1,0 +1,131 @@
+import { economyLedgerTotals, normalizeEconomyLedger } from "../economy/ledger.js";
+
+function copyValue(value) {
+  if (value === undefined) return undefined;
+  if (typeof globalThis.structuredClone === "function") return globalThis.structuredClone(value);
+  return JSON.parse(JSON.stringify(value));
+}
+
+export function compactTendayRows(rows = [], limit = 80) {
+  const list = Array.isArray(rows) ? rows : [];
+  const safeLimit = Math.max(0, Math.floor(Number(limit) || 0));
+  return {
+    rows: copyValue(list.slice(0, safeLimit)),
+    total: list.length,
+    truncated: list.length > safeLimit
+  };
+}
+
+function compactRows(value = null) {
+  if (Array.isArray(value)) return copyValue(value);
+  return copyValue(Array.isArray(value?.rows) ? value.rows : []);
+}
+
+export function hydrateTendayOperation(operation = {}, { holdingId = "", holdingName = "" } = {}) {
+  const payload = operation?.payload && typeof operation.payload === "object" ? operation.payload : null;
+  if (!payload || !Number.isFinite(Number(payload.schema)) || Number(payload.schema) < 1) return null;
+  const economy = payload.economy ?? {};
+  const changes = payload.changes ?? {};
+  const clock = copyValue(payload.clock ?? null);
+  return {
+    ok: true,
+    historical: true,
+    operationId: String(operation?.operationId ?? operation?.id ?? ""),
+    holdingId: String(holdingId ?? ""),
+    holdingName: String(payload.holdingName ?? holdingName ?? "Владение"),
+    qd: Number(payload.qd) || 40,
+    periodLabel: String(payload.periodLabel ?? economy.periodLabel ?? "десятник"),
+    preparedAt: String(operation?.createdAt ?? ""),
+    clock,
+    warnings: copyValue(payload.warnings ?? []),
+    readiness: { alerts: [] },
+    report: {
+      periodQd: Number(payload.qd) || 40,
+      periodLabel: String(payload.periodLabel ?? economy.periodLabel ?? "десятник"),
+      produced: compactRows(economy.produced),
+      consumed: compactRows(economy.consumed),
+      spoiled: compactRows(economy.spoiled),
+      income: compactRows(economy.income),
+      work: compactRows(economy.work),
+      skipped: compactRows(economy.skipped),
+      formulas: compactRows(economy.formulas),
+      ledger: compactRows(economy.ledger),
+      ledgerTotals: copyValue(economy.ledgerTotals ?? {}),
+      labor: copyValue(economy.labor ?? { ready: true, lines: [] }),
+      payroll: copyValue(economy.payroll ?? { ready: true, rows: [], lines: [] }),
+      food: copyValue(economy.food ?? {}),
+      capital: copyValue(economy.capital ?? {}),
+      services: copyValue(economy.services ?? {}),
+      construction: copyValue(economy.construction ?? {}),
+      trade: copyValue(economy.trade ?? {}),
+      treasury: copyValue(economy.treasury ?? {}),
+      market: copyValue(economy.market ?? null)
+    },
+    changeSet: {
+      totals: copyValue(payload.metrics ?? {}),
+      clock,
+      money: copyValue(payload.money ?? null),
+      debt: copyValue(payload.debt ?? null),
+      food: copyValue(payload.food ?? null),
+      date: copyValue(payload.date ?? null),
+      resources: compactRows(changes.resources),
+      items: compactRows(changes.items),
+      buildings: compactRows(changes.buildings),
+      residents: compactRows(changes.residents),
+      development: compactRows(changes.development),
+      modifiers: compactRows(changes.modifiers),
+      shipments: compactRows(changes.shipments)
+    },
+    events: { periods: Math.max(1, Math.floor((Number(payload.qd) || 40) / 40)), entries: [], events: compactRows(payload.events) },
+    dueEvents: compactRows(payload.dueEvents),
+    spoilage: copyValue(payload.spoilage ?? { rows: [], totalQty: 0, bufferRationPoints: 0, foodPersonDays: 0, hasLosses: false })
+  };
+}
+
+export function buildTendayOperationPayload(prepared = {}) {
+  const report = prepared?.report ?? {};
+  const ledger = normalizeEconomyLedger(report?.ledger ?? [], { limit: 600 });
+  const changeSet = prepared?.changeSet ?? {};
+  const changes = {};
+  for (const key of ["resources", "items", "buildings", "residents", "development", "modifiers", "shipments"]) {
+    changes[key] = compactTendayRows(changeSet?.[key]);
+  }
+  return {
+    schema: 2,
+    holdingName: String(prepared?.holdingName ?? ""),
+    periodLabel: String(prepared?.periodLabel ?? report?.periodLabel ?? "десятник"),
+    qd: Number(prepared?.qd) || 40,
+    clock: copyValue(prepared?.clock ?? {}),
+    warnings: copyValue(prepared?.warnings ?? []),
+    metrics: copyValue(changeSet?.totals ?? {}),
+    money: copyValue(changeSet?.money ?? {}),
+    debt: copyValue(changeSet?.debt ?? {}),
+    food: copyValue(changeSet?.food ?? {}),
+    date: copyValue(changeSet?.date ?? null),
+    changes,
+    economy: {
+      periodLabel: String(report?.periodLabel ?? "десятник"),
+      produced: compactTendayRows(report?.produced, 60),
+      consumed: compactTendayRows(report?.consumed, 60),
+      spoiled: compactTendayRows(report?.spoiled, 40),
+      income: compactTendayRows(report?.income, 40),
+      work: compactTendayRows(report?.work, 40),
+      skipped: compactTendayRows(report?.skipped, 40),
+      formulas: compactTendayRows(report?.formulas, 40),
+      labor: copyValue(report?.labor ?? { ready: true, lines: [] }),
+      payroll: copyValue(report?.payroll ?? { ready: true, rows: [], lines: [] }),
+      food: copyValue(report?.food ?? {}),
+      capital: copyValue(report?.capital ?? {}),
+      services: copyValue(report?.services ?? {}),
+      construction: copyValue(report?.construction ?? {}),
+      trade: copyValue(report?.trade ?? {}),
+      treasury: copyValue(report?.treasury ?? {}),
+      market: copyValue(report?.market ?? null),
+      ledger: compactTendayRows(ledger, 300),
+      ledgerTotals: copyValue(report?.ledgerTotals ?? economyLedgerTotals(ledger))
+    },
+    spoilage: copyValue(prepared?.spoilage ?? { rows: [], totalQty: 0, bufferRationPoints: 0, foodPersonDays: 0, hasLosses: false }),
+    events: compactTendayRows(prepared?.events?.events, 40),
+    dueEvents: compactTendayRows(prepared?.dueEvents, 40)
+  };
+}

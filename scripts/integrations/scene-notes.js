@@ -1,13 +1,14 @@
-import { MODULE_ID } from "../data/store.js";
+import { MODULE_ID } from "../data/constants.js";
 import { HoldingService } from "../data/holding-service.js";
 import { canReadHolding } from "../data/access-guard.js";
-import { SkyholdBuildingEditor } from "../apps/editors.js";
+import { loadBuildingEditorClass } from "../apps/lazy-apps.js";
 
 const BUILDING_NOTE_TOOLTIP_DELAY_MS = 1000;
 const BUILDING_NOTE_ICON_SIZE = 32;
 const BUILDING_NOTE_FONT_FAMILY = "Hans Hand";
 const BUILDING_NOTE_FONT_SIZE = 18;
 let buildingNoteTooltipTimer = null;
+let sceneNotesIntegrationInstalled = false;
 
 function skyholdMarkerAsset(name) {
   return `modules/${MODULE_ID}/assets/markers/${name}.svg`;
@@ -69,15 +70,8 @@ function buildingNoteTexture(building = {}, data = null) {
   return skyholdMarkerAsset("building");
 }
 
-function escapeHtmlLocal(value = "") {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
-
-function skyholdBuildingPayloadFromDrop(event) {
+function skyholdBuildingPayloadFromDrop(data = null, event = null) {
+  if (data?.type === "fbl-skyhold-building" && data?.moduleId === MODULE_ID) return data;
   const raw = event?.dataTransfer?.getData?.(`application/${MODULE_ID}+json`) || event?.dataTransfer?.getData?.("text/plain") || "";
   if (!raw) return null;
   try {
@@ -89,53 +83,52 @@ function skyholdBuildingPayloadFromDrop(event) {
   }
 }
 
-function getBuildingByPayload(payload = {}) {
+function getBuildingByPayload(payload = {}, { user = globalThis.game?.user, includeHidden = false } = {}) {
   const data = HoldingService.getData();
   const holding = (data.holdings ?? []).find((item) => String(item.id) === String(payload.holdingId));
-  if (!canReadHolding(holding)) return { data, holding: null, building: null };
+  if (!canReadHolding(holding, user)) return { data, holding: null, building: null };
   const building = (holding?.buildings?.list ?? []).find((item) => String(item.id) === String(payload.buildingId));
+  if (!building) return { data, holding, building: null };
+  if (!includeHidden && !user?.isGM && isBuildingSceneNoteHidden(holding, building, data)) return { data, holding: null, building: null };
   return { data, holding, building };
 }
 
-function buildingNoteIcon(building = {}) {
-  return buildingNoteTexture(building);
+function isGmOnlyVisibility(value = "") {
+  return String(value ?? "").trim().toLowerCase() === "gm";
 }
 
-function canvasDropPosition(event) {
-  try {
-    if (canvas?.canvasCoordinatesFromClient) return canvas.canvasCoordinatesFromClient(event);
-  } catch (_error) {}
-  const rect = canvas?.app?.view?.getBoundingClientRect?.();
-  const point = { x: (event.clientX ?? 0) - (rect?.left ?? 0), y: (event.clientY ?? 0) - (rect?.top ?? 0) };
-  try {
-    const PIXI = globalThis.PIXI;
-    if (canvas?.stage?.worldTransform?.applyInverse && PIXI?.Point) {
-      return canvas.stage.worldTransform.applyInverse(new PIXI.Point(point.x, point.y));
-    }
-  } catch (_error) {}
-  return point;
+function isBuildingSceneNoteHidden(holding = {}, building = {}, data = null) {
+  const template = templateForBuilding(building, data);
+  return Boolean(
+    isGmOnlyVisibility(holding?.visibility)
+    || isGmOnlyVisibility(building?.visibility)
+    || isGmOnlyVisibility(template?.visibility)
+    || building?.hidden === true
+  );
 }
 
-async function createBuildingSceneNote(payload, event) {
+async function createBuildingSceneNote(payload) {
   if (!game.user?.isGM) return;
   const scene = canvas?.scene;
   if (!scene) return;
-  const { data, holding, building } = getBuildingByPayload(payload);
+  const { data, holding, building } = getBuildingByPayload(payload, { includeHidden: true });
   if (!holding || !building) { ui.notifications.warn("Здание для отметки не найдено."); return; }
-  const pos = canvasDropPosition(event);
+  if (isBuildingSceneNoteHidden(holding, building, data)) {
+    ui.notifications.warn("Скрытое для игроков здание нельзя вынести на сцену: у Foundry Note нет отдельного GM-only visibility поля.");
+    return;
+  }
+  const pos = { x: Number(payload?.x) || 0, y: Number(payload?.y) || 0 };
   const texture = String(payload?.img ?? "").trim() || buildingNoteTexture({ ...building, icon: payload?.icon ?? building?.icon }, data);
   const noteData = {
     x: Math.round(pos.x ?? 0),
     y: Math.round(pos.y ?? 0),
     text: String(building.name ?? "Постройка"),
-    icon: texture,
     iconSize: BUILDING_NOTE_ICON_SIZE,
     fontFamily: BUILDING_NOTE_FONT_FAMILY,
     fontSize: BUILDING_NOTE_FONT_SIZE,
     textColor: "#f2efe6",
     textAnchor: 1,
-    locked: false,
-    hidden: false,
+    global: false,
     texture: { src: texture },
     flags: {
       [MODULE_ID]: {
@@ -147,10 +140,7 @@ async function createBuildingSceneNote(payload, event) {
   };
   try {
     const created = await scene.createEmbeddedDocuments("Note", [noteData]);
-    const note = Array.isArray(created) ? created[0] : null;
-    if (note?.update) {
-      await note.update({ icon: texture, iconSize: BUILDING_NOTE_ICON_SIZE, fontFamily: BUILDING_NOTE_FONT_FAMILY, fontSize: BUILDING_NOTE_FONT_SIZE, textColor: "#f2efe6", locked: false });
-    }
+    if (!Array.isArray(created) || !created.length) throw new Error("Foundry did not return a created Note document.");
     ui.notifications.info(`Отметка «${building.name || "Постройка"}» добавлена на сцену.`);
   } catch (error) {
     console.error("FBL Skyhold | Failed to create building Note", error);
@@ -169,10 +159,16 @@ function buildingFlagsFromNote(note) {
   return data;
 }
 
-function openBuildingNote(note) {
+export async function openBuildingNote(note) {
   const flags = buildingFlagsFromNote(note);
   if (!flags) return false;
-  new SkyholdBuildingEditor({ holdingId: String(flags.holdingId ?? ""), buildingId: String(flags.buildingId ?? "") }).render({ force: true, focus: true });
+  const { holding, building } = getBuildingByPayload(flags);
+  if (!holding || !building) {
+    ui.notifications?.warn?.("Здание недоступно или больше не существует.");
+    return false;
+  }
+  const SkyholdBuildingEditor = await loadBuildingEditorClass();
+  new SkyholdBuildingEditor({ holdingId: String(holding.id ?? ""), buildingId: String(building.id ?? "") }).render({ force: true, focus: true });
   return true;
 }
 
@@ -182,30 +178,49 @@ function hideBuildingNoteTooltip() {
   document.querySelector(".fbls-building-note-tooltip")?.remove();
 }
 
-function renderBuildingNoteTooltip(note, event = null) {
+function renderBuildingNoteTooltip(note) {
   const flags = buildingFlagsFromNote(note);
   if (!flags) return;
   const { holding, building } = getBuildingByPayload(flags);
   if (!holding || !building) return;
   document.querySelector(".fbls-building-note-tooltip")?.remove();
   const el = document.createElement("div");
-  el.className = "fbls-building-note-tooltip";
+  el.className = "fbl-skyhold fbls-building-note-tooltip";
   const functions = building.functions && typeof building.functions === "object" ? Object.entries(building.functions).filter(([, v]) => v).map(([k]) => k) : [];
-  el.innerHTML = `<h3>${escapeHtmlLocal(building.name || "Постройка")}</h3><p>${escapeHtmlLocal(holding.name || "Владение")} · ${escapeHtmlLocal(building.type || "Здание")}</p>${building.effect ? `<p>${escapeHtmlLocal(building.effect).slice(0, 220)}</p>` : ""}<div class="fbls-note-tags"><span>${escapeHtmlLocal(building.constructionStatus || "built")}</span>${functions.map((item) => `<span>${escapeHtmlLocal(item)}</span>`).join("")}</div>`;
+  const title = document.createElement("h3");
+  title.textContent = building.name || "Постройка";
+  const summary = document.createElement("p");
+  summary.textContent = `${holding.name || "Владение"} · ${building.type || "Здание"}`;
+  el.append(title, summary);
+  if (building.effect) {
+    const effect = document.createElement("p");
+    effect.textContent = String(building.effect).slice(0, 220);
+    el.appendChild(effect);
+  }
+  const tags = document.createElement("div");
+  tags.className = "fbls-note-tags";
+  for (const item of [building.constructionStatus || "built", ...functions]) {
+    const tag = document.createElement("span");
+    tag.textContent = item;
+    tags.appendChild(tag);
+  }
+  el.appendChild(tags);
   document.body.appendChild(el);
-  const source = event?.data?.originalEvent ?? event?.originalEvent ?? event;
-  const x = source?.clientX ?? globalThis.event?.clientX ?? 20;
-  const y = source?.clientY ?? globalThis.event?.clientY ?? 20;
+  const noteDocument = note?.document ?? note;
+  const origin = note?.center ?? { x: Number(noteDocument?.x) || 20, y: Number(noteDocument?.y) || 20 };
+  let client = origin;
+  try { client = canvas?.clientCoordinatesFromCanvas?.(origin) ?? origin; } catch (_error) {}
+  const x = Number(client?.x) || 20;
+  const y = Number(client?.y) || 20;
   el.style.left = `${Math.min(window.innerWidth - 340, x + 14)}px`;
   el.style.top = `${Math.min(window.innerHeight - 180, y + 14)}px`;
 }
 
-function showBuildingNoteTooltip(note, event = null) {
+function showBuildingNoteTooltip(note) {
   if (buildingNoteTooltipTimer) window.clearTimeout(buildingNoteTooltipTimer);
-  const savedEvent = event?.data?.originalEvent ?? event?.originalEvent ?? event;
   buildingNoteTooltipTimer = window.setTimeout(() => {
     buildingNoteTooltipTimer = null;
-    renderBuildingNoteTooltip(note, savedEvent);
+    renderBuildingNoteTooltip(note);
   }, BUILDING_NOTE_TOOLTIP_DELAY_MS);
 }
 
@@ -218,92 +233,31 @@ function shouldOpenBuildingNoteFromClick() {
   return !isNotesLayerActive();
 }
 
-function applyBuildingNoteCanvasStyle(note) {
-  const flags = buildingFlagsFromNote(note);
-  if (!flags) return;
-  const { data, building } = getBuildingByPayload(flags);
-  if (!building) return;
-  const texturePath = buildingNoteTexture(building, data);
-  try {
-    const tex = globalThis.PIXI?.Texture?.from?.(texturePath);
-    const sprites = [note?.controlIcon?.icon, note?.icon, note?.controlIcon?._icon].filter(Boolean);
-    for (const sprite of sprites) {
-      if (tex && "texture" in sprite) sprite.texture = tex;
-      // Не трогаем anchor/position/scale: у разных клиентов Foundry может держать
-      // внутренний sprite ControlIcon по-разному. Принудительные scale/anchor
-      // дают смещение вверх-влево на части клиентов.
-      if ("tint" in sprite) sprite.tint = 0xffffff;
-      if ("alpha" in sprite) sprite.alpha = 1;
-    }
-  } catch (_error) {}
-  try {
-    const labels = [note?.tooltip, note?.label, note?.text].filter(Boolean);
-    for (const label of labels) {
-      if (!label?.style) continue;
-      label.style.fontFamily = [BUILDING_NOTE_FONT_FAMILY, "Hans-Hand", "serif"];
-      label.style.fontSize = BUILDING_NOTE_FONT_SIZE;
-      label.style.fill = "#f2efe6";
-      label.style.dropShadow = true;
-      label.style.dropShadowAlpha = 0.85;
-      label.style.dropShadowBlur = 3;
-      label.style.dropShadowDistance = 1;
-      if ("dirty" in label) label.dirty = true;
-    }
-  } catch (_error) {}
-}
-
 function installBuildingNoteInteractions() {
   Hooks.on("activateNote", (note) => {
     if (!shouldOpenBuildingNoteFromClick()) return undefined;
     if (openBuildingNote(note)) return false;
     return undefined;
   });
-  Hooks.on("clickNote", (note) => {
-    if (!shouldOpenBuildingNoteFromClick()) return undefined;
-    if (openBuildingNote(note)) return false;
-    return undefined;
-  });
-  Hooks.on("drawNote", (note) => {
+  Hooks.on("hoverNote", (note, hovered) => {
     if (!buildingFlagsFromNote(note)) return;
-    applyBuildingNoteCanvasStyle(note);
-    window.setTimeout(() => applyBuildingNoteCanvasStyle(note), 100);
-    const targets = [note.controlIcon, note.tooltip, note].filter(Boolean);
-    for (const target of targets) {
-      if (!target?.on || target._fblSkyholdBuildingBound) continue;
-      target._fblSkyholdBuildingBound = true;
-      if ("interactive" in target) target.interactive = true;
-      if ("cursor" in target) target.cursor = "pointer";
-      target.on("pointertap", () => { if (shouldOpenBuildingNoteFromClick()) openBuildingNote(note); });
-      target.on("pointerover", (event) => showBuildingNoteTooltip(note, event));
-      target.on("pointerout", () => hideBuildingNoteTooltip());
-    }
+    if (hovered) showBuildingNoteTooltip(note);
+    else hideBuildingNoteTooltip();
   });
 }
 
 function installCanvasBuildingDrop() {
-  const bind = () => {
-    const view = canvas?.app?.view;
-    if (!view || view._fblSkyholdBuildingDropBound) return;
-    view._fblSkyholdBuildingDropBound = true;
-    view.addEventListener("dragover", (event) => {
-      const payload = skyholdBuildingPayloadFromDrop(event);
-      if (!payload) return;
-      event.preventDefault();
-      if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
-    });
-    view.addEventListener("drop", (event) => {
-      const payload = skyholdBuildingPayloadFromDrop(event);
-      if (!payload) return;
-      event.preventDefault();
-      createBuildingSceneNote(payload, event);
-    });
-  };
-  Hooks.on("canvasReady", bind);
-  bind();
+  Hooks.on("dropCanvasData", (_canvas, data, event) => {
+    const payload = skyholdBuildingPayloadFromDrop(data, event);
+    if (!payload) return;
+    void createBuildingSceneNote(payload);
+  });
 }
 
 
 export function installSceneNotesIntegration() {
+  if (sceneNotesIntegrationInstalled) return;
+  sceneNotesIntegrationInstalled = true;
   installCanvasBuildingDrop();
   installBuildingNoteInteractions();
 }
