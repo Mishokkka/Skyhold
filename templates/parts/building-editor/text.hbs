@@ -1,0 +1,9 @@
+      {{#if building.showEditorText}}
+        <fieldset class="fbls-building-editor-card text-card wide-card compact-text-card">
+          <legend>Эффекты и заметки</legend>
+          <div class="fbls-two-textareas">
+            <label><span>Эффект</span>{{#if canEdit}}<textarea data-field="{{building.basePath}}.effect" rows="2">{{building.effect}}</textarea>{{else}}<p class="fbls-preline">{{building.effect}}</p>{{/if}}</label>
+            <label><span>Заметки</span>{{#if canEdit}}<textarea data-field="{{building.basePath}}.notes" rows="2">{{building.notes}}</textarea>{{else}}<p class="fbls-preline">{{building.notes}}</p>{{/if}}</label>
+          </div>
+        </fieldset>
+      {{/if}}

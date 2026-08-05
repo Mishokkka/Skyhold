@@ -1,0 +1,32 @@
+<form class="fbls-storage-action-form mode-{{mode}}" data-storage-action-form>
+  <header class="fbls-storage-action-heading">
+    <i class="{{icon}}"></i>
+    <div><h2>{{title}}</h2>{{#if description}}<p>{{description}}</p>{{/if}}</div>
+  </header>
+
+  {{#if isMove}}
+    <label class="fbls-field"><span>Хранилище назначения</span>
+      <select name="destination" autofocus>
+        {{#each options}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+      </select>
+    </label>
+  {{/if}}
+
+  {{#if isQuantity}}
+    <label class="fbls-field"><span>Количество, ед.</span>
+      <input type="number" name="quantity" min="1" max="{{max}}" step="1" value="{{value}}" autofocus />
+      {{#if quantityHint}}<small>{{quantityHint}}</small>{{/if}}
+    </label>
+  {{/if}}
+
+  {{#if isNote}}
+    <label class="fbls-field"><span>Заметка к позиции</span>
+      <textarea name="note" rows="5" maxlength="1000" placeholder="Текст появится в подсказке через секунду после наведения" autofocus>{{note}}</textarea>
+    </label>
+  {{/if}}
+
+  <footer class="fbls-storage-action-footer">
+    <button type="button" class="fbls-button ghost" data-action="storage-dialog-cancel">Отмена</button>
+    <button type="button" class="fbls-button {{#if danger}}danger{{else}}primary{{/if}}" data-action="storage-dialog-confirm"><i class="fa-solid fa-check"></i> {{confirmLabel}}</button>
+  </footer>
+</form>

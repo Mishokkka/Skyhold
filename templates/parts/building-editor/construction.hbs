@@ -1,0 +1,46 @@
+      {{#if building.showEditorConstruction}}
+        <fieldset class="fbls-building-editor-card build-card wide-card compact-build-card fbls-editor-tab-workspace tab-construction">
+          <legend class="fbls-editor-tab-legend">Строительство</legend>
+          <header class="fbls-editor-tab-head"><i class="fa-solid fa-hammer"></i><div><span>Проект и готовность</span><h2>Строительство</h2><p>Прогресс, сложность, развитие, материалы и зависимости проекта.</p></div></header>
+          <section class="fbls-editor-tab-panel"><div class="fbls-editor-panel-head"><span><i class="fa-solid fa-list-check"></i> Параметры проекта</span><small>Цель, накопленный прогресс и действия бригады</small></div><div class="fbls-build-main-row with-dev-requirements">
+            <label><span>Цель</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.basePath}}.buildTarget" value="{{building.buildTarget}}" />{{else}}<strong>{{building.buildTarget}}</strong>{{/if}}</label>
+            <label><span>Прогресс</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.basePath}}.buildProgress" value="{{building.buildProgress}}" />{{else}}<strong>{{building.buildProgress}}</strong>{{/if}}</label>
+            <label><span>Сложн.</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.basePath}}.buildDifficulty" value="{{building.buildDifficulty}}" />{{else}}<strong>{{building.buildDifficulty}}</strong>{{/if}}</label>
+            <div class="fbls-construction-dev-inline">
+              <span>Требования развития</span>
+              <div class="fbls-dev-line-fields compact-inline-dev">
+                {{#each building.developmentParts}}
+                  <label class="{{css}}" data-fbls-tooltip="{{label}}: требуемый уровень развития отрасли для открытия постройки."><i class="{{icon}}"></i>{{#if ../canEdit}}<input type="number" data-type="number" data-field="{{path}}" value="{{value}}" />{{else}}<strong>{{value}}</strong>{{/if}}</label>
+                {{/each}}
+              </div>
+            </div>
+            {{#if canEdit}}{{#unless building.isTemplate}}<button type="button" class="fbls-button compact" data-action="roll-construction-crew"><i class="fa-solid fa-dice-six"></i> Бригада</button>{{/unless}}{{/if}}
+            {{#if building.canRollConstruction}}<small class="fbls-muted-line">Прогресс начисляется при расчёте десятника.</small>{{/if}}
+          </div></section>
+          <section class="fbls-editor-tab-panel"><div class="fbls-editor-panel-head"><span><i class="fa-solid fa-diagram-project"></i> Условия строительства</span><small>Материалы и здания-предпосылки</small></div><div class="fbls-build-subgrid tighter">
+            <div class="fbls-cost-list">
+              <div class="fbls-subhead"><span>Материалы</span>{{#if building.canEditMaterialRecipe}}<button type="button" class="fbls-icon-button" data-action="add-building-material" title="Добавить материал" aria-label="Добавить материал"><i class="fa-solid fa-plus"></i></button>{{/if}}</div>
+              {{#each building.materialCosts}}
+                <div class="fbls-cost-row">{{#if ../building.canEditMaterialRecipe}}<button type="button" class="fbls-resource-picker-button" data-action="pick-building-material" data-index="{{_index}}"><i class="fa-solid fa-cubes"></i><span>{{name}}</span><i class="fa-solid fa-chevron-right"></i></button><input type="number" min="0" step="1" data-type="number" data-economy-whole-quantity data-field="{{qtyPath}}" value="{{qty}}" /><button type="button" class="fbls-icon-button danger" data-action="delete-building-material" data-index="{{_index}}" aria-label="Удалить материал {{name}}"><i class="fa-solid fa-trash"></i></button>{{else}}<strong>{{qty}} {{name}}</strong>{{/if}}</div>
+              {{else}}<p class="fbls-muted-line">Материалы не заданы.</p>{{/each}}
+              {{#if building.hasFractionalMaterialRecipe}}<p class="fbls-muted-line"><strong>Рецепт заблокирован:</strong> Economy V2 принимает только целые единицы материалов. Дробные legacy-значения сохранены; ГМ должен исправить их вручную.</p>{{/if}}
+              {{#if building.hasConstructionReservation}}<p class="fbls-muted-line"><strong>Снимок проекта:</strong> {{building.materialAllocationLine}}. Источники: {{building.constructionReservationSourceLine}}.</p>{{/if}}
+              {{#if building.hasLegacyMaterialAllocation}}<p class="fbls-muted-line"><strong>Legacy-резерв:</strong> материалы уже были списаны старой системой; повторная оплата запрещена.</p>{{/if}}
+              {{#if building.hasInvalidConstructionReservation}}<p class="fbls-muted-line"><strong>Ошибка резерва:</strong> снимок повреждён; строительство остановлено до ручного восстановления GM.</p>{{/if}}
+            </div>
+            <div class="fbls-prereq-list">
+              <div class="fbls-subhead"><span>Нужные здания</span>{{#if canEdit}}<button type="button" class="fbls-icon-button" data-action="add-building-prerequisite" title="Добавить требование" aria-label="Добавить требование здания"><i class="fa-solid fa-plus"></i></button>{{/if}}</div>
+              {{#each building.requiredBuildings}}
+                <div class="fbls-prereq-row {{#if met}}met{{else}}missing{{/if}}">{{#if ../canEdit}}<select data-field="{{path}}">{{#each options}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select><button type="button" class="fbls-icon-button danger" data-action="delete-building-prerequisite" data-index="{{_index}}" aria-label="Удалить требование {{label}}"><i class="fa-solid fa-trash"></i></button>{{else}}<strong>{{label}}</strong>{{/if}}</div>
+              {{else}}<p class="fbls-muted-line">Здания-требования не заданы.</p>{{/each}}
+            </div>
+          {{#if building.isTemplate}}
+            <div class="fbls-template-source-grid">
+              <label><span>Оригинальные материалы</span>{{#if canEdit}}<input type="text" data-field="{{building.basePath}}.sourceRawMaterials" value="{{building.sourceRawMaterials}}" />{{else}}<strong>{{building.sourceRawMaterials}}</strong>{{/if}}</label>
+              <label><span>Оригинальные требования</span>{{#if canEdit}}<input type="text" data-field="{{building.basePath}}.sourceRequirement" value="{{building.sourceRequirement}}" />{{else}}<strong>{{building.sourceRequirement}}</strong>{{/if}}</label>
+              <label class="fbls-wide-label"><span>Особые требования</span>{{#if canEdit}}<textarea data-field="{{building.basePath}}.specialRequirements" rows="2">{{building.specialRequirements}}</textarea>{{else}}<p class="fbls-preline">{{building.specialRequirements}}</p>{{/if}}</label>
+            </div>
+          {{/if}}
+          </div></section>
+        </fieldset>
+      {{/if}}

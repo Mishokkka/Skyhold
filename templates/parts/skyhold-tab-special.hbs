@@ -51,7 +51,7 @@
                     {{/if}}
                   </td>
                   <td>{{#if ../canEditSpecial}}<textarea data-field="holdings.{{../holdingIndex}}.special.list.{{_index}}.notes" rows="2">{{notes}}</textarea>{{else}}{{notes}}{{/if}}</td>
-                  {{#if ../canEditSpecial}}<td><button type="button" class="fbls-icon-button danger" data-action="delete-row" data-collection="holdings.{{../holdingIndex}}.special.list" data-id="{{id}}"><i class="fa-solid fa-trash"></i></button></td>{{/if}}
+                  {{#if ../canEditSpecial}}<td><button type="button" class="fbls-icon-button danger" data-action="delete-row" data-collection="holdings.{{../holdingIndex}}.special.list" data-id="{{id}}" aria-label="Удалить особую запись {{name}}"><i class="fa-solid fa-trash"></i></button></td>{{/if}}
                 </tr>
               {{else}}
                 <tr><td colspan="5" class="fbls-empty">Записей пока нет.</td></tr>
@@ -60,35 +60,87 @@
           </table>
         {{/if}}
 
-        {{#if activeSpecial.cemetery}}
-          <table class="fbls-table fbls-cemetery-table compact full-width">
-            <thead>
-              <tr>
-                <th>Имя</th>
-                <th>Возраст</th>
-                <th>Раса</th>
-                <th>Дата гибели</th>
-                <th>Причина</th>
-                {{#if canEditSpecial}}<th></th>{{/if}}
-              </tr>
-            </thead>
-            <tbody>
-              {{#each rows.cemetery}}
-                <tr class="fbls-person-row dead">
-                  <td><strong>{{name}}</strong></td>
-                  <td>{{ageLine}}</td>
-                  <td>{{raceLine}}</td>
-                  <td>{{#if ../canEdit}}<input type="text" data-field="holdings.{{../holdingIndex}}.people.list.{{_index}}.deathDate" value="{{deathDate}}" placeholder="дата" />{{else}}{{deathDate}}{{/if}}</td>
-                  <td>{{#if ../canEdit}}<input type="text" data-field="holdings.{{../holdingIndex}}.people.list.{{_index}}.deathNote" value="{{deathNote}}" placeholder="причина" />{{else}}{{deathNote}}{{/if}}</td>
-                  {{#if ../canEdit}}
-                    <td><button type="button" class="fbls-icon-button" data-action="toggle-person-dead" data-id="{{id}}" data-dead="false" title="Вернуть из кладбища"><i class="fa-solid fa-heart-pulse"></i></button></td>
+        {{#if activeSpecial.fleet}}
+          <section class="fbls-fleet-overview" aria-label="Корабельное предприятие">
+            <header class="fbls-card-header">
+              <div>
+                <h3><i class="fa-solid fa-ship"></i> Корабли поселения</h3>
+                <p class="fbls-muted-text">Касса, резервы и рейсы каждого судна учитываются отдельно от казны.</p>
+              </div>
+              {{#if canEdit}}
+                <button type="button" class="fbls-button compact" data-action="create-fleet-vessel" aria-label="Добавить корабль поселения">
+                  <i class="fa-solid fa-plus"></i> Добавить корабль
+                </button>
+              {{/if}}
+            </header>
+
+            <div class="fbls-fleet-card-grid">
+              {{#each fleetCards}}
+                <article class="fbls-card fbls-fleet-card {{#if active}}is-active{{/if}}">
+                  <header class="fbls-card-header">
+                    <div>
+                      <h3>{{name}}</h3>
+                      <p>{{ownerName}}</p>
+                    </div>
+                    <span class="fbls-chip">{{statusLabel}}</span>
+                  </header>
+                  <dl class="fbls-fleet-summary">
+                    <div><dt>Местоположение</dt><dd>{{location}}</dd></div>
+                    <div><dt>Касса</dt><dd>{{cashText}}</dd></div>
+                    <div><dt>Доступно</dt><dd>{{availableText}}</dd></div>
+                    <div><dt>Состояние</dt><dd>{{condition}}%</dd></div>
+                  </dl>
+                  {{#if hasVoyage}}
+                    <div class="fbls-fleet-voyage-strip">
+                      <strong>{{voyageTitle}}</strong>
+                      <span>{{voyageEta}} · результат после резервов {{voyageResultText}}</span>
+                    </div>
+                  {{else}}
+                    <p class="fbls-muted-text">Активного рейса нет.</p>
                   {{/if}}
-                </tr>
+                  <div class="fbls-action-group">
+                    <button type="button" class="fbls-button" data-action="open-ship-enterprise" data-vessel-id="{{id}}" aria-label="Открыть управление кораблём {{name}}">
+                      <i class="fa-solid fa-route"></i> Управление рейсами
+                    </button>
+                  </div>
+                </article>
               {{else}}
-                <tr><td colspan="{{../cemeteryColspan}}" class="fbls-empty">Кладбище пусто.</td></tr>
+                <article class="fbls-card fbls-fleet-empty">
+                  <i class="fa-solid fa-ship"></i>
+                  <h3>Кораблей пока нет</h3>
+                  <p>GM может добавить «Магнифик» или другое судно к этому поселению.</p>
+                  {{#if canEdit}}
+                    <button type="button" class="fbls-button" data-action="create-fleet-vessel">
+                      <i class="fa-solid fa-plus"></i> Добавить первый корабль
+                    </button>
+                  {{/if}}
+                </article>
               {{/each}}
-            </tbody>
-          </table>
+            </div>
+          </section>
         {{/if}}
+
+        {{#if activeSpecial.cemetery}}
+          <section class="fbls-cemetery-register" aria-label="Кладбище жителей">
+            <header class="fbls-cemetery-register-head" aria-hidden="true">
+              <span>Имя</span><span>Возраст</span><span>Раса</span><span>Дата гибели</span><span>Причина</span>{{#if canEditSpecial}}<span></span>{{/if}}
+            </header>
+            <div class="fbls-cemetery-register-body">
+              {{#each rows.cemetery}}
+                <article class="fbls-cemetery-entry fbls-person-row dead">
+                  <strong>{{name}}</strong>
+                  <span>{{ageLine}}</span>
+                  <span>{{raceLine}}</span>
+                  <span>{{#if ../canEdit}}<input type="text" data-field="holdings.{{../holdingIndex}}.people.list.{{_index}}.deathDate" value="{{deathDate}}" placeholder="дата" aria-label="Дата гибели {{name}}" />{{else}}{{deathDate}}{{/if}}</span>
+                  <span>{{#if ../canEdit}}<input type="text" data-field="holdings.{{../holdingIndex}}.people.list.{{_index}}.deathNote" value="{{deathNote}}" placeholder="причина" aria-label="Причина гибели {{name}}" />{{else}}{{deathNote}}{{/if}}</span>
+                  {{#if ../canEdit}}<button type="button" class="fbls-icon-button" data-action="toggle-person-dead" data-id="{{id}}" data-dead="false" title="Вернуть из кладбища" aria-label="Вернуть {{name}} из кладбища"><i class="fa-solid fa-heart-pulse"></i></button>{{/if}}
+                </article>
+              {{else}}
+                <p class="fbls-empty">Кладбище пусто.</p>
+              {{/each}}
+            </div>
+          </section>
+        {{/if}}
+
       </section>
     {{/if}}

@@ -1,0 +1,93 @@
+<section class="fbls-battle-grid details">
+  <article class="fbls-battle-card sources-detail fbls-battle-collapsible" data-battle-section="defender-sources" data-battle-collapse-group="sources">
+    <h3><button type="button" class="fbls-battle-section-toggle" data-action="mass-toggle-section" aria-expanded="true"><i class="fa-solid fa-list-check"></i><span>Источники защитников</span><i class="fa-solid fa-chevron-up fbls-battle-collapse-icon"></i></button></h3>
+    <div class="fbls-battle-source-table">
+      <div class="head"><span>Источник</span><span>Тег</span><span>Эфф.</span><span>Вклад</span></div>
+      {{#each calc.defenderSourceRows}}
+        <div class="row {{statusClass}}" title="{{modifierText}}">
+          <span><strong>{{label}}</strong><em>{{typeLabel}} · {{participantCount}} чел. · {{status}}</em></span>
+          <span>{{tagText}}</span>
+          <span>{{baseText}} → {{currentText}} · {{roundedText}}<em>{{thresholdText}}{{#if counterLoss}} · контра {{counterText}}{{/if}}</em></span>
+          <span><b>{{diceText}}</b></span>
+        </div>
+      {{else}}
+        <p class="fbls-empty">Боевых источников защитников нет.</p>
+      {{/each}}
+    </div>
+  </article>
+
+  <article class="fbls-battle-card sources-detail fbls-battle-collapsible" data-battle-section="attacker-sources" data-battle-collapse-group="sources">
+    <h3><button type="button" class="fbls-battle-section-toggle" data-action="mass-toggle-section" aria-expanded="true"><i class="fa-solid fa-list-check"></i><span>Источники нападающих</span><i class="fa-solid fa-chevron-up fbls-battle-collapse-icon"></i></button></h3>
+    <div class="fbls-battle-source-table">
+      <div class="head"><span>Источник</span><span>Тег</span><span>Эфф.</span><span>Вклад</span></div>
+      {{#each calc.attackerSourceRows}}
+        <div class="row {{statusClass}}" title="{{modifierText}}">
+          <span><strong>{{label}}</strong><em>{{typeLabel}} · {{status}}</em></span>
+          <span class="fbls-source-tags-cell">
+            <span class="fbls-source-tag-badges" aria-label="Тег отряда">
+              {{#each tagBadges}}<span class="fbls-source-tag-badge {{#if primary}}primary{{/if}} {{#if manual}}manual{{/if}}" title="{{label}}{{#if primary}} · основной{{/if}}"><i class="{{icon}}"></i>{{label}}</span>{{/each}}
+            </span>
+            {{#if ../canEdit}}{{#if tagField}}
+              <span class="fbls-source-type-controls">
+                <select class="fbls-inline-tag-select" data-mass-field="{{tagField}}" data-skip-form-state="true" aria-label="Ручной тег {{label}}">
+                  <option value="" {{#if usesTemplatePrimary}}selected{{/if}}>Тег пресета</option>
+                  {{#each tagOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+                </select>
+                {{#if hasManualPrimary}}<button type="button" class="fbls-source-type-restore" data-action="mass-restore-source-type" data-source-type-field="{{restoreTagField}}" title="Вернуть тег из шаблона" aria-label="Вернуть тег из шаблона"><i class="fa-solid fa-rotate-left"></i></button>{{/if}}
+              </span>
+            {{/if}}{{/if}}
+          </span>
+          <span class="fbls-source-efficiency-cell">
+            {{#if ../canEdit}}{{#if efficiencyField}}
+              <span class="fbls-source-efficiency-controls">
+                <input type="number" data-type="number" data-mass-field="{{efficiencyField}}" data-skip-form-state="true" value="{{base}}" min="0" step="0.1" aria-label="Базовая эффективность {{label}}" title="Базовая эффективность конкретного отряда" />
+                {{#if hasManualEfficiency}}<button type="button" class="fbls-source-type-restore" data-action="mass-restore-source-efficiency" data-source-efficiency-field="{{efficiencyField}}" title="Вернуть автоматическую эффективность {{autoBaseEfficiency}}" aria-label="Вернуть автоматическую эффективность"><i class="fa-solid fa-rotate-left"></i></button>{{/if}}
+              </span>
+            {{else}}{{baseText}}{{/if}}{{else}}{{baseText}}{{/if}}
+            <span>→ {{currentText}} · {{roundedText}}</span>
+            <em>{{#if efficiencyField}}авто {{autoBaseEfficiency}}{{#if hasManualEfficiency}} · задано вручную{{/if}} · {{/if}}{{thresholdText}}{{#if counterLoss}} · контра {{counterText}}{{/if}}</em>
+          </span>
+          <span><b>{{diceText}}</b></span>
+        </div>
+      {{else}}
+        <p class="fbls-empty">Боевых источников нападающих нет.</p>
+      {{/each}}
+    </div>
+  </article>
+</section>
+
+<section class="fbls-battle-grid details">
+  <article class="fbls-battle-card calc-detail fbls-battle-collapsible" data-battle-section="calc" data-battle-collapse-group="calc-risk">
+    <h3><button type="button" class="fbls-battle-section-toggle" data-action="mass-toggle-section" aria-expanded="true"><i class="fa-solid fa-square-root-variable"></i><span>Конвейер расчета</span><i class="fa-solid fa-chevron-up fbls-battle-collapse-icon"></i></button></h3>
+    <ol class="fbls-battle-calc-steps">
+      {{#each calc.calculationSteps}}
+        <li><strong>{{label}}</strong><span>{{text}}</span></li>
+      {{/each}}
+    </ol>
+  </article>
+
+  <article class="fbls-battle-card calc-detail fbls-battle-collapsible" data-battle-section="risk" data-battle-collapse-group="calc-risk">
+    <h3><button type="button" class="fbls-battle-section-toggle" data-action="mass-toggle-section" aria-expanded="true"><i class="fa-solid fa-bullseye"></i><span>Контры и риск</span><i class="fa-solid fa-chevron-up fbls-battle-collapse-icon"></i></button></h3>
+    <div class="fbls-battle-risk-summary">
+      <p><strong>Риск защитников:</strong> {{calc.defenderRiskSummary.text}}. <em>{{calc.defenderRiskSummary.compact}}</em></p>
+      <p><strong>Риск врага:</strong> {{calc.attackerRiskSummary.text}}. <em>{{calc.attackerRiskSummary.compact}}</em></p>
+    </div>
+    <div class="fbls-battle-counter-list">
+      {{#each calc.counterRows}}
+        <div><i class="fa-solid fa-arrow-down-short-wide"></i><span>{{text}}</span></div>
+      {{else}}
+        <p class="fbls-empty">Активных контр тегов нет.</p>
+      {{/each}}
+    </div>
+  </article>
+</section>
+
+<section class="fbls-battle-card impact-detail fbls-battle-collapsible" data-battle-section="impact">
+  <h3><button type="button" class="fbls-battle-section-toggle" data-action="mass-toggle-section" aria-expanded="true"><i class="fa-solid fa-burst"></i><span>Модель Impact</span><i class="fa-solid fa-chevron-up fbls-battle-collapse-icon"></i></button></h3>
+  <div class="fbls-battle-impact-grid">
+    {{#each calc.impactPreview}}
+      <div><strong>{{label}}</strong><b>{{value}}</b><span>{{text}}</span></div>
+    {{/each}}
+  </div>
+  <div class="fbls-battle-context objective-help"><strong>Важно:</strong> победа в раунде двигает цель и позицию, но Impact от успехов получает каждая сторона. Поэтому малая сила может выиграть раунд и всё равно болезненно пострадать.</div>
+</section>

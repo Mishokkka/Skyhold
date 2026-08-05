@@ -1,0 +1,23 @@
+<div class="fbls-fasti-shop-shell">
+  {{#if hasBuilding}}
+    {{> "modules/fbl-skyhold/templates/unique-buildings/parts/tabs.hbs"}}
+
+    {{#if building.showUniqueBuildingBody}}
+      <main class="fbls-fasti-shop">
+        {{#if building.hasImage}}
+          <img class="fbls-fasti-splash-image" src="{{building.img}}" alt="{{building.name}}" />
+        {{else}}
+          <div class="fbls-fasti-splash-placeholder"><i class="fa-solid fa-book-sparkles"></i></div>
+        {{/if}}
+
+        <div class="fbls-fasti-splash-overlay">
+          <p>ЛАВКА РЕДКОСТЕЙ ФАСТИ ДИ ОТО ОТКРОЕТСЯ ПОСЛЕ ВКЛАДА В 3999.9 ЗМ</p>
+        </div>
+      </main>
+    {{/if}}
+
+    {{> "modules/fbl-skyhold/templates/unique-buildings/parts/editor-tabs.hbs"}}
+  {{else}}
+    <p class="fbls-empty">Лавка больше не найдена на Лапуте.</p>
+  {{/if}}
+</div>

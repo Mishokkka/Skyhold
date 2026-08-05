@@ -1,0 +1,30 @@
+{{#if building.showEditorMain}}
+  <main class="fbls-unique-editor-tab fbl-skyhold-building-editor">
+    <div class="fbls-building-editor-shell">
+      <section class="fbls-building-editor-grid compact-v2 tabbed-editor">
+        <section class="fbls-building-editor-card fbls-unique-editor-media">
+          <h3><i class="fa-solid fa-image"></i> Изображение уникального здания</h3>
+          <div class="fbls-unique-editor-media-row">
+            <button type="button" class="fbls-button compact" data-action="pick-unique-building-image"><i class="fa-solid fa-image"></i> Выбрать изображение / фон</button>
+            {{#if building.hasImage}}<button type="button" class="fbls-button compact danger" data-action="clear-unique-building-image"><i class="fa-solid fa-xmark"></i> Убрать</button>{{/if}}
+            <span>{{#if building.hasImage}}{{building.img}}{{else}}Изображение не выбрано.{{/if}}</span>
+          </div>
+        </section>
+        {{> "modules/fbl-skyhold/templates/parts/building-editor/main.hbs"}}
+        {{#if building.isMedicalBuilding}}
+          {{> "modules/fbl-skyhold/templates/unique-buildings/parts/medical-effective-types.hbs"}}
+        {{/if}}
+      </section>
+    </div>
+  </main>
+{{/if}}
+
+{{#if building.showEditorConstruction}}
+  <main class="fbls-unique-editor-tab fbl-skyhold-building-editor">
+    <div class="fbls-building-editor-shell">
+      <section class="fbls-building-editor-grid compact-v2 tabbed-editor">
+        {{> "modules/fbl-skyhold/templates/parts/building-editor/construction.hbs"}}
+      </section>
+    </div>
+  </main>
+{{/if}}

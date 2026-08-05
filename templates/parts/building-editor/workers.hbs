@@ -1,0 +1,45 @@
+      {{#if building.showEditorWorkers}}
+        <fieldset class="fbls-building-editor-card worker-card wide-card worker-layout-v4 fbls-editor-tab-workspace tab-workers">
+          <legend class="fbls-editor-tab-legend">Работники</legend>
+          <header class="fbls-editor-tab-head"><i class="fa-solid fa-users-gear"></i><div><span>Команда здания</span><h2>Работники</h2><p>Слоты, специализация и фактическая эффективность назначенных жителей.</p></div><strong class="fbls-editor-head-metric" data-fbls-tooltip="{{building.workerEfficiency.detail}}"><small>Эффективность</small>{{building.workerEfficiency.total}}</strong></header>
+          <section class="fbls-editor-tab-panel"><div class="fbls-editor-panel-head"><span><i class="fa-solid fa-gauge-high"></i> Штат и роль</span><small>Лимиты, профиль и довольство</small></div><div class="fbls-worker-top-row">
+            <label class="mini"><span>Мин.</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.basePath}}.workersMin" value="{{building.workersMin}}" />{{else}}<strong>{{building.workersMin}}</strong>{{/if}}</label>
+            <label class="mini"><span>Макс.</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.basePath}}.workersMax" value="{{building.workersMax}}" />{{else}}<strong>{{building.workersMax}}</strong>{{/if}}</label>
+            <label class="role"><span data-fbls-tooltip="Как будут называться занятые слоты этого здания: фермеры, врачи, стражники, рабочие. Это подпись, не отдельная профессия жителя.">Название работника</span>{{#if canEdit}}<input type="text" data-field="{{building.basePath}}.workerRole" value="{{building.workerRole}}" placeholder="Фермер, садовник, каменщик..." />{{else}}<strong>{{building.workerRoleLine}}</strong>{{/if}}</label>
+            <label class="mini"><span data-fbls-tooltip="Характеристика, по которой здание оценивает пригодность работников и показывает подсказки эффективности. Не меняет тип жителя сама по себе.">Осн. хар.</span>{{#if canEdit}}<select data-field="{{building.basePath}}.workerPrimaryAttribute">{{#each building.workerPrimaryAttributeOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{building.workerPrimaryAttributeLabel}}</strong>{{/if}}</label>
+            <label class="mini"><span>Мод. ДОВ</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.basePath}}.workerMoraleDelta" value="{{building.workerMoraleDelta}}" />{{else}}<strong>{{building.workerMoraleDelta}}</strong>{{/if}}</label>
+          </div></section>
+          <section class="fbls-editor-tab-panel compact-panel"><div class="fbls-editor-panel-head"><span><i class="fa-solid fa-tags"></i> Эффективные типы</span><small>Модификаторы подходящих работников</small></div><div class="effective-types-box full-line">
+            <span>Эффективные типы</span>
+            <div class="fbls-effective-type-line">
+              {{#if building.hasSuitableTypeBadges}}
+                {{#each building.suitableTypeBadges}}
+                  <span class="fbls-type-effect-chip" style="{{style}}">
+                    <em>{{name}}</em>
+                    {{#if ../canEdit}}<input type="number" step="0.1" data-type="number" data-field="{{modifierPath}}" value="{{modifier}}" data-fbls-tooltip="Бонус эффективности, который этот тип работника получает в этом здании." />{{else}}<strong>{{modifier}}</strong>{{/if}}
+                    {{#if ../canEdit}}<button type="button" class="fbls-chip-remove" data-action="remove-suitable-type" data-suitable-types-field="{{path}}" data-suitable-type="{{name}}" aria-label="Убрать подходящий тип {{name}}">×</button>{{/if}}
+                  </span>
+                {{/each}}
+              {{else}}
+                <span class="fbls-muted-text">Нет.</span>
+              {{/if}}
+              {{#if canEdit}}
+                <select class="fbls-trait-picker inline-add" data-suitable-type-add-field="{{building.basePath}}.suitableWorkerTypes">
+                  <option value="">Добавить тип...</option>
+                  {{#each building.suitableTypeOptions}}<option value="{{name}}" {{#if selected}}disabled{{/if}}>{{name}}{{#if selected}} ✓{{/if}}</option>{{/each}}
+                </select>
+              {{/if}}
+            </div>
+          </div></section>
+          {{#unless building.isTemplate}}
+          <section class="fbls-editor-tab-panel"><div class="fbls-assigned-worker-area">
+            <span class="fbls-field-title">Назначенные работники</span>
+            <div class="fbls-worker-slot-grid compact-slots">
+              {{#each building.workerSlots}}
+                <label><span>#{{slotNo}}</span>{{#if ../canEdit}}<select data-building-worker-field="{{path}}">{{#each options}}<option value="{{id}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{name}}{{#if hint}} · {{hint}}{{/if}}</option>{{/each}}</select>{{else}}<strong>{{label}}</strong>{{/if}}</label>
+              {{/each}}
+            </div>
+          </div></section>
+          {{/unless}}
+        </fieldset>
+      {{/if}}

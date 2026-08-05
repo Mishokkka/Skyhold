@@ -64,7 +64,7 @@
   </fieldset>
 
   <fieldset class="work-set compact-resident-work {{#if isCustomWork}}has-custom-work{{/if}}">
-    <legend>Работа и жилье</legend>
+    <legend>Работа, договор и жильё</legend>
     <div class="fbls-work-block fbls-work-source-block">
       <label class="person-work">
         <span>Работа</span>
@@ -73,14 +73,6 @@
             <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
           {{/each}}
         </select>
-      </label>
-      <label class="num-field person-salary">
-        <span>З/П</span>
-        <input type="number" data-type="number" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.salary" value="{{salary}}" />
-      </label>
-      <label class="num-field person-salary-mod">
-        <span>Мод.</span>
-        <input type="number" data-type="number" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.salaryModifier" value="{{salaryModifier}}" title="Добавляется к базовой ставке работы. Отрицательное значение уменьшает плату." />
       </label>
       <label class="person-custom-role {{#unless isCustomWork}}is-hidden{{/unless}}">
         <span>Особая работа</span>
@@ -106,6 +98,126 @@
           {{/each}}
         </select>
       </label>
+    </div>
+    <div class="fbls-work-block fbls-work-contract-block">
+      <label class="person-compensation-type">
+        <span>Договор</span>
+        <select data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.compensationType">{{#each compensationOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+      </label>
+      <label class="num-field person-cash-wage">
+        <span>Старая ставка / день</span>
+        <input type="number" min="0" step="0.01" data-type="number" data-legacy-wage-alias="true" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.cashWageDaily" value="{{cashWageDaily}}" readonly title="Сохранено для совместимости. Economy V2 начисляет оплату по классу труда за десятник." />
+      </label>
+      <label class="num-field person-base-wage">
+        <span>Расчётная ставка</span>
+        <input type="text" value="{{baseWageDailyText}}" readonly title="Ставка текущей работы с учётом модификатора. Автоматически становится денежной выплатой только для двух наёмных типов договора." />
+      </label>
+      <label class="num-field person-salary-mod">
+        <span>Мод. ставки</span>
+        <input type="number" step="0.01" data-type="number" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.salaryModifier" value="{{salaryModifier}}" title="Добавляется к расчётной ставке работы. Тип договора и ручные условия не меняются." />
+      </label>
+      <label class="person-board-food">
+        <span>Пропитание</span>
+        <select data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.foodProvisionMode" title="Общий склад выдаёт ровно один паёк в день либо житель полностью обеспечивает себя сам.">{{#each foodProvisionOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+      </label>
+      <label class="num-field person-share-rate">
+        <span>Доля результата</span>
+        <input type="number" min="0" max="1" step="0.01" data-type="number" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.shareRate" value="{{shareRate}}" title="0,10 означает 10% денежного дохода назначенного здания." />
+      </label>
+      <label class="person-housing-provided fbls-inline-check"><input type="checkbox" data-type="checkbox" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.housingProvided" {{#if housingProvided}}checked{{/if}} /><span>Жильё входит в договор</span></label>
+      <div class="fbls-employment-v2">
+        <div class="fbls-employment-v2-title">
+          <strong>Оплата труда Economy V2</strong>
+          <span>Индекс {{wageIndexText}} · тариф {{employmentTariffText}} / десятник</span>
+        </div>
+        <label class="person-wage-class">
+          <span>Класс труда</span>
+          <select data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.wageClassId">{{#each wageClassOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+        </label>
+        <label class="person-employment-mode">
+          <span>Режим найма</span>
+          <select data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.employmentMode">{{#each employmentModeOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+        </label>
+        <label class="num-field person-contract-start">
+          <span>Начало, QD</span>
+          <input type="number" min="0" step="1" data-type="optional-number" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.employmentContractStartQd" value="{{employmentContractStartQdValue}}" placeholder="без границы" />
+        </label>
+        <label class="num-field person-contract-end">
+          <span>Конец, QD</span>
+          <input type="number" min="0" step="1" data-type="optional-number" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.employmentContractEndQd" value="{{employmentContractEndQdValue}}" placeholder="без границы" />
+        </label>
+        <fieldset class="fbls-employment-seasons">
+          <legend>Сезоны</legend>
+          <label class="fbls-inline-check"><input type="checkbox" data-type="checkbox" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.employmentSeasonMask.spring" {{#if employmentSeasonMask.spring}}checked{{/if}} /><span>Весна</span></label>
+          <label class="fbls-inline-check"><input type="checkbox" data-type="checkbox" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.employmentSeasonMask.summer" {{#if employmentSeasonMask.summer}}checked{{/if}} /><span>Лето</span></label>
+          <label class="fbls-inline-check"><input type="checkbox" data-type="checkbox" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.employmentSeasonMask.autumn" {{#if employmentSeasonMask.autumn}}checked{{/if}} /><span>Осень</span></label>
+          <label class="fbls-inline-check"><input type="checkbox" data-type="checkbox" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.employmentSeasonMask.winter" {{#if employmentSeasonMask.winter}}checked{{/if}} /><span>Зима</span></label>
+        </fieldset>
+        <div class="fbls-employment-payroll-status {{#if hasPayrollArrears}}has-arrears{{/if}}">
+          <span>Личный долг</span>
+          <strong>{{payrollArrearsText}}</strong>
+          {{#if hasPayrollArrears}}<small>просрочка: {{payrollOverdueTendays}} дес.</small>{{else}}<small>задолженности нет</small>{{/if}}
+        </div>
+        {{#if isVolunteerContract}}
+          <label class="fbls-field-wide person-volunteer-reason">
+            <span>Причина добровольной работы</span>
+            <input type="text" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.volunteerReason" value="{{volunteerReason}}" placeholder="Общий урожай, взаимопомощь, личное обещание…" />
+          </label>
+          <label class="num-field person-volunteer-start">
+            <span>Добровольно с, QD</span>
+            <input type="number" min="0" step="1" data-type="optional-number" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.volunteerTermStartQd" value="{{volunteerTermStartQdValue}}" placeholder="обязательно" />
+          </label>
+          <label class="num-field person-volunteer-end">
+            <span>Добровольно до, QD</span>
+            <input type="number" min="0" step="1" data-type="optional-number" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.volunteerTermEndQd" value="{{volunteerTermEndQdValue}}" placeholder="обязательно" />
+          </label>
+        {{/if}}
+        {{#if isCoercedContract}}
+          <label class="fbls-field-wide person-coercion-basis">
+            <span>Основание принудительного труда</span>
+            <input type="text" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.coercionBasis" value="{{coercionBasis}}" placeholder="Приговор, долговая повинность, военная обязанность…" />
+          </label>
+        {{/if}}
+        <label class="num-field person-hunger-streak">
+          <span>Голод подряд, дес.</span>
+          {{#if @root.canEdit}}
+            <input type="number" min="0" step="1" data-type="number" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.hungerStreakTendays" value="{{hungerStreakTendays}}" title="Текущее сохранённое состояние. Пока автоматическое распределение голода не введено, счётчик изменяет только ГМ." />
+          {{else}}
+            <input type="number" min="0" step="1" value="{{hungerStreakTendays}}" readonly aria-label="Голод подряд, десятников: {{hungerStreakTendays}}" title="Системное состояние, доступное игроку только для чтения." />
+          {{/if}}
+        </label>
+        <div class="fbls-labor-projection fbls-field-wide {{laborProjectionClass}}" aria-label="Прогноз труда на следующий десятник">
+          <div class="fbls-employment-v2-title">
+            <strong>Следующий десятник · QD {{laborProjectionQd}}</strong>
+            <span title="Стабильное состояние: {{laborContractStateId}}">{{laborContractStateText}}</span>
+          </div>
+          <div class="fbls-cluster">
+            <span class="fbls-chip {{laborProjectionBadgeClass}}">Труд {{laborProjectionFactorText}}</span>
+            <span class="fbls-chip">Довольство {{laborProjectionMoraleText}}</span>
+            <span class="fbls-chip">Сезон: {{laborProjectionSeasonText}}</span>
+            <span class="fbls-chip">{{laborAssignmentText}}</span>
+          </div>
+          <p class="fbls-muted-text compact">{{laborArrearsStepText}}</p>
+          <p class="fbls-muted-text compact">{{laborHungerStepText}} Сохранённая серия: {{hungerStreakTendays}} дес.</p>
+          {{#if hasLaborProjectionBlockers}}
+            <ul class="fbls-labor-projection-list blockers">
+              {{#each laborProjectionBlockers}}<li>{{message}}</li>{{/each}}
+            </ul>
+          {{/if}}
+          {{#if hasLaborProjectionRisks}}
+            <ul class="fbls-labor-projection-list risks">
+              {{#each laborProjectionRisks}}<li>{{description}}</li>{{/each}}
+            </ul>
+          {{/if}}
+          <p class="fbls-muted-text compact">Это проекция чистых правил по сохранённому состоянию; события и голод автоматически не создаются.</p>
+        </div>
+        <p class="fbls-muted-text compact">Пустой класс труда сохраняет старый договор, но не создаёт бесплатный труд или обязательство Economy V2.</p>
+      </div>
+      <label class="person-compensation-note">
+        <span>Основание и условия</span>
+        <input type="text" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.compensationNote" value="{{compensationNote}}" placeholder="Почему ставка нулевая, как считается доля, что входит в пансион…" />
+      </label>
+      {{#if hasCompensationWarning}}<p class="fbls-compensation-warning"><i class="fa-solid fa-triangle-exclamation"></i> {{compensationWarning}}</p>{{/if}}
     </div>
   </fieldset>
 
@@ -165,7 +277,7 @@
               {{#each traitBadges}}
                 <span class="fbls-trait-badge editor-chip fbls-note-tip" data-fbls-tooltip="{{description}}">
                   {{name}}
-                  <button type="button" class="fbls-chip-remove" data-action="remove-trait" data-traits-field="holdings.{{@root.holdingIndex}}.people.list.{{../_index}}.traitsText" data-trait-name="{{name}}" title="Убрать черту">×</button>
+            <button type="button" class="fbls-chip-remove" data-action="remove-trait" data-traits-field="holdings.{{@root.holdingIndex}}.people.list.{{../_index}}.traitsText" data-trait-name="{{name}}" title="Убрать черту" aria-label="Убрать черту {{name}}">×</button>
                 </span>
               {{/each}}
             {{else}}

@@ -1,0 +1,90 @@
+<div class="fbls-unique-medical">
+  {{#if hasBuilding}}
+    {{> "modules/fbl-skyhold/templates/unique-buildings/parts/tabs.hbs"}}
+
+    {{#if building.showUniqueBuildingBody}}
+      <main class="fbls-unique-medical-body">
+        <header class="fbls-unique-medical-compact-hero">
+          {{#if canManageEditorTabs}}
+            <button type="button" class="fbls-unique-medical-icon" data-action="pick-unique-building-image" title="Выбрать изображение здания">
+              {{#if building.hasImage}}<img src="{{building.img}}" alt="{{building.name}}" />{{else}}<i class="fa-solid fa-kit-medical"></i>{{/if}}
+            </button>
+          {{else}}
+            <div class="fbls-unique-medical-icon readonly">
+              {{#if building.hasImage}}<img src="{{building.img}}" alt="{{building.name}}" />{{else}}<i class="fa-solid fa-kit-medical"></i>{{/if}}
+            </div>
+          {{/if}}
+          <div class="fbls-unique-medical-heading">
+            <span class="eyebrow">Лечебное здание</span>
+            {{#if canManageEditorTabs}}
+              <input type="text" data-field="{{building.basePath}}.name" value="{{building.name}}" />
+            {{else}}
+              <h2>{{building.name}}</h2>
+            {{/if}}
+            <p>{{#if building.effect}}{{building.effect}}{{else}}Место для врачей, раненых и тех, кому сейчас особенно не повезло.{{/if}}</p>
+          </div>
+          {{#if canManageEditorTabs}}
+            <button type="button" class="fbls-unique-medical-reset-image" data-action="clear-unique-building-image" {{#unless building.hasImage}}disabled{{/unless}}>Сбросить</button>
+          {{/if}}
+        </header>
+
+        <section class="fbls-unique-medical-stats">
+          <span><i class="fa-solid fa-user-doctor"></i><b>{{building.medicalSummary.doctors}}/{{building.workersMax}}</b><em>врачи</em></span>
+          <span><i class="fa-solid fa-heart-pulse"></i><b>{{building.medicalSummary.doctorEfficiencyText}}</b><em>эффективность</em></span>
+          <span><i class="fa-solid fa-bed-pulse"></i><b>{{building.medicalSummary.used}}/{{building.medicalSummary.capacity}}</b><em>койки</em></span>
+          <span class="{{#if building.medicalSummary.hasOverflow}}danger{{/if}}"><i class="fa-solid fa-triangle-exclamation"></i><b>{{building.medicalSummary.overflow}}</b><em>без места</em></span>
+        </section>
+
+        <section class="fbls-unique-medical-grid">
+          <section class="fbls-unique-medical-panel doctors">
+            <header><span class="eyebrow">Персонал</span><h3>Врачи</h3></header>
+            {{#if canManageEditorTabs}}
+              <div class="fbls-unique-medical-settings-line">
+                <label><span>Максимум врачей</span><input type="number" min="0" data-type="number" data-field="{{building.basePath}}.workersMax" value="{{building.workersMax}}" /></label>
+                <label><span>Предельное число пациентов</span><input type="number" min="0" data-type="number" data-field="{{building.medicalSummary.maxPatientsPath}}" value="{{building.medicalSummary.maxPatients}}" /></label>
+              </div>
+            {{/if}}
+            <div class="fbls-unique-medical-slots">
+              {{#each building.workerSlots}}
+                <label>
+                  <span>Врач {{slotNo}}</span>
+                  {{#if ../canManageEditorTabs}}
+                    <select data-building-worker-field="{{path}}">
+                      {{#each options}}<option value="{{id}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{name}}{{#if hint}} · {{hint}}{{/if}}</option>{{/each}}
+                    </select>
+                  {{else}}
+                    <strong>{{label}}</strong>
+                  {{/if}}
+                </label>
+              {{/each}}
+            </div>
+          </section>
+
+          <section class="fbls-unique-medical-panel patients">
+            <header><span class="eyebrow">Палаты</span><h3>Пациенты</h3></header>
+            <div class="fbls-unique-patient-list">
+              {{#if building.medicalSummary.hasPatients}}
+                {{#each building.medicalSummary.patientRows}}
+                  <article><i class="fa-solid fa-bed"></i><div><strong>{{name}}</strong><span>{{label}}</span></div></article>
+                {{/each}}
+              {{else}}
+                <p class="fbls-empty">{{#if building.medicalSummary.active}}Пациентов нет. Редкая и подозрительно хорошая новость.{{else}}Лазарет не принимает пациентов без назначенного врача.{{/if}}</p>
+              {{/if}}
+            </div>
+            {{#if building.medicalSummary.hasOverflow}}
+              <aside class="fbls-unique-medical-overflow">
+                <strong><i class="fa-solid fa-triangle-exclamation"></i> Не хватает мест</strong>
+                {{#each building.medicalSummary.overflowRows}}<span>{{name}} — {{label}}</span>{{/each}}
+              </aside>
+            {{/if}}
+          </section>
+
+        </section>
+      </main>
+    {{/if}}
+
+    {{> "modules/fbl-skyhold/templates/unique-buildings/parts/editor-tabs.hbs"}}
+  {{else}}
+    <p class="fbls-empty">Лазарет больше не найден в этом владении.</p>
+  {{/if}}
+</div>

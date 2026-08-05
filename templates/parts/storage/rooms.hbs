@@ -1,0 +1,24 @@
+        {{#if activeStorage.warehouses}}
+          <div class="fbls-storage-rooms-layout">
+            <div class="fbls-storage-room-grid">
+              {{#each storageContext.rooms.rows}}
+                <article class="fbls-card fbls-storage-room-card {{fillClass}} {{#if overCapacity}}over-capacity{{/if}} {{#unless available}}inactive{{/unless}}" {{#if buildingId}}data-action="open-building-editor" data-id="{{buildingId}}" role="button" tabindex="0" aria-label="Открыть складское здание {{label}}"{{/if}}>
+                  <header>
+                    <div><i class="fa-solid fa-warehouse"></i><strong>{{label}}</strong></div>
+                    <span class="fbls-status-pill {{statusClass}}">{{statusLabel}}</span>
+                  </header>
+                  <div class="fbls-storage-room-stats">
+                    <div><span>Вместимость, cargo points</span><strong>{{capacityText}}</strong></div>
+                    <div><span>Занято, cargo points</span><strong>{{usedText}}</strong></div>
+                    <div><span>Свободно, cargo points</span><strong>{{freeText}}</strong></div>
+                    <div><span>Защищенность</span><strong>{{securityText}}</strong></div>
+                    <div><span>Качество хранения</span><strong>{{qualityText}}</strong></div>
+                  </div>
+                  {{#if notes}}<p class="fbls-muted-line">{{notes}}</p>{{/if}}
+                </article>
+              {{else}}
+                <article class="fbls-card fbls-empty">Складских помещений пока нет.</article>
+              {{/each}}
+            </div>
+          </div>
+        {{/if}}

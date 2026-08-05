@@ -1,0 +1,28 @@
+    <header class="fbls-editor-hero compact with-building-image">
+      <div class="fbls-editor-image-stack">
+        <button type="button" class="fbls-building-editor-image" data-action="pick-building-image" title="Выбрать картинку здания">
+          {{#if building.img}}<img src="{{building.img}}" alt="" />{{else}}<i class="{{building.icon}}"></i>{{/if}}
+        </button>
+        {{#if canEdit}}<button type="button" class="fbls-building-image-reset" data-action="clear-building-image" data-fbls-tooltip="Сбросить картинку здания" {{#unless building.img}}disabled{{/unless}}>Сбросить</button>{{/if}}
+      </div>
+      <div class="fbls-editor-title-wrap">
+        <div class="fbls-editor-title-line">
+          <h1>{{building.name}}</h1>
+          <div class="fbls-editor-impact-strip">
+            <button type="button" class="fbls-editor-dev-gain" data-action="toggle-dev-gain-editor" data-fbls-tooltip="Вклад в развитие: сколько отраслевого развития дает это здание после постройки. Нажмите, чтобы открыть редактирование. Это не производство ресурсов и не зависит от работников.">
+              {{#each building.bonusParts}}
+                <span class="{{css}}"><i class="{{icon}}"></i><strong>{{value}}</strong></span>
+              {{/each}}
+            </button>
+            <label class="fbls-editor-impact morale" data-fbls-tooltip="Общий эффект построенного здания. Существующие значения переводятся в единую шкалу: 10 старых пунктов дают +1 к итоговому довольству."><i class="fa-solid fa-face-smile"></i>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.basePath}}.moraleDelta" value="{{building.moraleDelta}}" />{{else}}<strong>{{building.moraleDelta}}</strong>{{/if}}</label>
+            <label class="fbls-editor-impact reputation" data-fbls-tooltip="Репутация здания: прибавляется к общей Репутации владения, если здание построено."><i class="fa-solid fa-crown"></i>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.basePath}}.reputation" value="{{building.reputation}}" />{{else}}<strong>{{building.reputation}}</strong>{{/if}}</label>
+          </div>
+        </div>
+        <p>{{holding.name}} · {{building.categoryLabel}}</p>
+      </div>
+      <div class="fbls-building-badges">
+        <span class="fbls-status-pill fbls-chip {{building.statusClass}}">{{building.statusLabel}}</span>
+        <span class="fbls-status-pill fbls-chip">Рабочие {{building.assignedCount}}/{{building.workersMax}}</span>
+        {{#if building.defenseSummary.hasDefense}}<span class="fbls-status-pill fbls-chip defense">Защита +{{building.defenseSummary.total}}</span>{{/if}}
+      </div>
+    </header>

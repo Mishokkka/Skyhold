@@ -1,0 +1,306 @@
+{{#if hasHolding}}
+  <div class="fbls-market-shell">
+    <header class="fbls-market-header">
+      <div class="fbls-market-identity">
+        <div class="fbls-market-title-row">
+          <span class="fbls-market-title-icon"><i class="fa-solid fa-store"></i></span>
+          <div>
+            <span class="fbls-market-eyebrow">{{holding.name}}</span>
+            <h2>{{marketLabel}}</h2>
+            {{#if marketDescription}}<small class="fbls-market-description" title="{{marketDescription}}">{{marketDescription}}</small>{{/if}}
+          </div>
+        </div>
+        <div class="fbls-market-facts">
+          <span class="country" title="Страна"><i class="fa-solid fa-flag"></i>{{marketCountryLabel}}</span>
+          <span class="size" title="Размер рынка"><i class="fa-solid fa-chart-simple"></i>{{marketSizeLabel}}</span>
+          <span class="condition" title="Состояние рынка"><i class="fa-solid fa-gauge-high"></i>{{marketConditionLabel}}</span>
+        </div>
+      </div>
+      <div class="fbls-market-treasury">
+        <span><i class="fa-solid fa-coins"></i> Казна</span>
+        <span class="fbls-market-money prominent" aria-label="{{treasuryText}}">{{#each treasuryParts}}<span class="{{tone}}"><b>{{value}}</b><i>{{label}}</i></span>{{/each}}</span>
+      </div>
+    </header>
+
+    {{#unless canPurchase}}
+      <div class="fbls-market-notice"><i class="fa-solid fa-eye"></i> {{readOnlyReason}}</div>
+    {{/unless}}
+    {{#unless logisticsOk}}<div class="fbls-market-notice is-warning"><i class="fa-solid fa-route"></i> {{logisticsReason}}</div>{{/unless}}
+    {{#unless marketIntegrityOk}}<div class="fbls-market-notice is-warning"><i class="fa-solid fa-triangle-exclamation"></i> Торговля приостановлена: {{marketIntegrityMessage}}</div>{{/unless}}
+    {{#unless hasMarket}}<div class="fbls-market-notice"><i class="fa-solid fa-store-slash"></i> Нет рынков в пределах текущего УРС или на связанных маршрутах.</div>{{/unless}}
+    {{#if hiddenOfferCount}}<div class="fbls-market-notice"><i class="fa-solid fa-lock"></i> За текущим пределом УРС скрыто товаров: {{hiddenOfferCount}}.</div>{{/if}}
+
+    <div class="fbls-market-mode-switch fbls-action-group" role="group" aria-label="Режим торговли">
+      <button type="button" class="fbls-button compact {{#if isBuyMode}}is-active{{/if}}" data-action="market-set-trade-mode" data-mode="buy" aria-pressed="{{#if isBuyMode}}true{{else}}false{{/if}}" aria-label="Перейти к покупке товаров"><i class="fa-solid fa-cart-shopping"></i> Покупка</button>
+      <button type="button" class="fbls-button compact {{#if isSellMode}}is-active{{/if}}" data-action="market-set-trade-mode" data-mode="sell" aria-pressed="{{#if isSellMode}}true{{else}}false{{/if}}" aria-label="Перейти к продаже товаров"><i class="fa-solid fa-arrow-up-from-bracket"></i> Продажа</button>
+    </div>
+
+    {{#if isBuyMode}}
+    <div class="fbls-market-toolbar fbls-toolbar">
+      <label>Рынок-локация
+        <select data-market-provider>
+          {{#each marketOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+        </select>
+      </label>
+      <label class="fbls-market-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-market-search value="{{search}}" placeholder="Найти товар" autocomplete="off" /></label>
+      <label>Раздел
+        <select data-market-kind>
+          <option value="all" {{#if kindAll}}selected{{/if}}>Все</option>
+          <option value="material" {{#if kindMaterial}}selected{{/if}}>Материалы</option>
+          <option value="resource" {{#if kindResource}}selected{{/if}}>Ресурсы</option>
+          <option value="consumable" {{#if kindConsumable}}selected{{/if}}>Расходники</option>
+        </select>
+      </label>
+      <span>Показано: <strong data-market-visible-count>{{offers.length}}</strong></span>
+    </div>
+
+    <div class="fbls-market-layout">
+      <main class="fbls-market-offers" data-render-scroll-key="market-offers">
+        <div class="fbls-market-offer-columns" aria-hidden="true">
+          <span></span>
+          <span>Товар</span>
+          <span>Продавцы</span>
+          <span>Наличие</span>
+          <span>Цена</span>
+          <span>Кол-во</span>
+          <span>Сумма</span>
+        </div>
+        {{#each offers}}
+          <article class="fbls-market-offer {{#if selected}}is-selected{{/if}}" data-market-offer data-market-kind="{{kind}}" data-market-search-text="{{searchText}}">
+            <div class="fbls-market-offer-image">
+              {{#if img}}<img src="{{img}}" alt="" data-market-offer-image="{{sourceOfferId}}" data-fbls-persistent-image="market-offer:{{sourceOfferId}}" data-fbls-image-fallback /><i class="{{icon}}" data-fbls-image-fallback-icon hidden></i>{{else}}<i class="{{icon}}"></i>{{/if}}
+            </div>
+            <div class="fbls-market-offer-main">
+              <strong>{{name}}</strong>
+              <small><span class="fbls-market-kind">{{kindLabel}}</span> · УРС {{requiredUrs}}</small>
+            </div>
+            <div class="fbls-market-provider-cell">
+              {{#each providerChips}}
+                <button type="button" class="fbls-market-merchant-chip tone-{{tone}} {{#if active}}is-active{{/if}} {{#if hasQuantity}}has-quantity{{/if}}" data-action="market-select-merchant" data-source-offer-id="{{../sourceOfferId}}" data-provider-id="{{providerId}}" title="{{tooltip}}" aria-label="Выбрать продавца {{providerLabel}} для товара {{../name}}" aria-pressed="{{#if active}}true{{else}}false{{/if}}" {{#unless ../../canOrder}}disabled{{/unless}}><span>{{abbreviation}}</span>{{#if hasQuantity}}<b>×{{quantity}}</b>{{/if}}</button>
+              {{/each}}
+            </div>
+            <span class="fbls-market-stock" title="{{stock}} {{unitFull}}">{{stock}} {{unit}}</span>
+            <div class="fbls-market-price">
+              <span class="fbls-market-money" aria-label="{{priceText}}">{{#each priceParts}}<span class="{{tone}}"><b>{{value}}</b><i>{{label}}</i></span>{{/each}}</span>
+              <span class="fbls-market-movement {{movementClass}}" data-fbls-tooltip="{{movementTooltip}}" aria-label="{{movementTooltip}}">{{movementText}}</span>
+            </div>
+            <div class="fbls-market-quantity">
+              <button type="button" data-action="market-quantity-step" data-offer-id="{{id}}" data-step="-1" data-stock="{{stock}}" title="ЛКМ: −1 · ПКМ: убрать всё" aria-label="Уменьшить количество {{name}}" {{#unless ../canOrder}}disabled{{/unless}}><i class="fa-solid fa-minus"></i></button>
+              <input type="number" min="0" max="{{stock}}" step="1" value="{{qty}}" data-market-quantity data-offer-id="{{id}}" aria-label="Количество {{name}}" {{#unless ../canOrder}}disabled{{/unless}} />
+              <button type="button" data-action="market-quantity-step" data-offer-id="{{id}}" data-step="1" data-stock="{{stock}}" title="ЛКМ: +1 · ПКМ: добавить максимум" aria-label="Увеличить количество {{name}}" {{#unless ../canOrder}}disabled{{/unless}}><i class="fa-solid fa-plus"></i></button>
+            </div>
+            <span class="fbls-market-line-total fbls-market-money" aria-label="{{lineText}}">{{#each lineParts}}<span class="{{tone}}"><b>{{value}}</b><i>{{label}}</i></span>{{/each}}</span>
+          </article>
+        {{else}}
+          <div class="fbls-empty">Рынок пока не предлагает товаров.</div>
+        {{/each}}
+      </main>
+
+      <aside class="fbls-market-cart" data-render-scroll-key="market-cart">
+        <header class="fbls-market-cart-head"><div><i class="fa-solid fa-cart-shopping"></i><span><small>Оформление</small><h3>Заказ</h3></span></div><strong>{{selectedCount}} ед.</strong></header>
+
+        <section class="fbls-market-cart-section delivery">
+          <header><i class="fa-solid fa-truck-fast"></i><div><strong>Доставка</strong><small>{{carrierLabel}}</small></div></header>
+          <div class="fbls-market-cart-controls">
+            <label class="fbls-field"><span>Помещение</span>
+              <select data-market-room {{#unless canOrder}}disabled{{/unless}}>
+                {{#each rooms}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+              </select>
+            </label>
+            <label class="fbls-field"><span>Перевозчик</span>
+              <select data-market-carrier {{#unless canPurchase}}disabled{{/unless}}>
+                {{#each carrierOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{label}}</option>{{/each}}
+              </select>
+            </label>
+            {{#if scheduledDelivery}}{{#unless ownedVesselDelivery}}
+              <label class="fbls-field"><span>Режим</span>
+                <select data-market-service-level {{#unless canOrder}}disabled{{/unless}}>
+                  <option value="standard" {{#if serviceStandard}}selected{{/if}}>Standard · доля одного плеча</option>
+                  <option value="express" {{#if serviceExpress}}selected{{/if}}>Express · ускоренная доля</option>
+                  <option value="charter" {{#if serviceCharter}}selected{{/if}}>Charter · вся машина, два плеча</option>
+                </select>
+              </label>
+            {{/unless}}{{/if}}
+          </div>
+          {{#if scheduledDelivery}}<p class="fbls-market-delivery-note">{{serviceDescription}}</p>{{/if}}
+          {{#if ownedVesselDelivery}}
+            <div class="fbls-market-owned-vessel" aria-label="Расчёт доставки своим кораблём">
+              <header><i class="fa-solid fa-ship"></i><strong>{{ownedVesselName}}</strong><span>собственный рейс</span></header>
+              <dl>
+                <div><dt>Вместимость</dt><dd>{{ownedCapacityText}}</dd></div>
+                <div><dt>До точки забора</dt><dd>{{ownedPickupTimingText}}</dd></div>
+                <div><dt>Погрузка</dt><dd>{{ownedHandlingTimingText}}</dd></div>
+                <div><dt>С грузом</dt><dd>{{ownedCargoTimingText}}</dd></div>
+                <div><dt>Эксплуатация</dt><dd>{{ownedOperatingCostText}}</dd></div>
+                <div><dt>Резерв замены</dt><dd>{{ownedReplacementReserveText}}</dd></div>
+              </dl>
+              {{#if hasExternalComparison}}
+                <p>Внешний Charter корабля той же вместимости ({{externalComparisonCapacityText}}): <strong>{{externalComparisonDeliveryText}}</strong>, ETA {{externalComparisonEtaText}} · разница <strong class="{{#if externalComparisonMoreExpensive}}is-danger{{else}}is-success{{/if}}">{{externalComparisonDifferenceText}}</strong>.</p>
+              {{/if}}
+            </div>
+          {{/if}}
+          {{#if hasCapacityLimit}}
+            <div class="fbls-market-capacity {{#if capacityExceeded}}is-over{{/if}}">
+              <header><span><i class="fa-solid fa-boxes-stacked"></i> Партии</span><strong>{{batchCountText}}</strong></header>
+              <small>Весь заказ: {{totalCargoPointsText}} · лимит рейса: {{bookingCapacityCargoPointsText}} · полная машина: {{physicalCapacityCargoPointsText}}</small>
+              <progress max="{{capacityLoadValue}}" value="{{totalLoadValue}}" aria-label="Загрузка последнего рейса"></progress>
+              {{#if capacityExceeded}}
+                {{#if ownedVesselDelivery}}
+                  <small>Общий груз не помещается в один собственный корабль — уменьшите заказ или выберите внешнего перевозчика.</small>
+                {{else}}
+                  <small>Одна единица товара не помещается в лимит выбранного режима — выберите Charter или другого перевозчика.</small>
+                {{/if}}
+              {{else}}
+                <small>Последний рейс: {{finalBatchCargoPointsText}} · свободно {{capacityRemainingCargoPointsText}}.</small>
+              {{/if}}
+            </div>
+          {{/if}}
+          {{#if hasMultipleShipmentBatches}}
+            <details class="fbls-market-batch-preview" open>
+              <summary><span><i class="fa-solid fa-layer-group"></i> Рейсы заказа</span><strong>{{batchCountText}}</strong></summary>
+              <label><span>Показать</span>
+                <select data-market-batch-preview>
+                  {{#each shipmentBatchPreviews}}<option value="{{index}}" {{#if selected}}selected{{/if}}>{{optionLabel}}</option>{{/each}}
+                </select>
+              </label>
+              {{#with selectedShipmentBatch}}
+                <div class="fbls-market-batch-card">
+                  <header><strong>Рейс {{number}}</strong><span>ETA {{etaText}}</span></header>
+                  <div class="fbls-market-batch-metrics">
+                    <span><small>Грузовые очки</small><b>{{cargoPointsText}}</b></span>
+                    <span><small>Занятая доля</small><b>{{capacityShareText}}</b></span>
+                    <span><small>Оплачиваемые cargo points</small><b>{{billableCargoPointsText}}</b></span>
+                    <span><small>Риск</small><b>{{lossText}} / {{delayText}}</b></span>
+                  </div>
+                  {{#if billsFullCapacity}}<p class="fbls-market-batch-note">Charter оплачивает всю вместимость и два плеча, включая возврат или перегон после доставки.</p>{{/if}}
+                  <ul class="fbls-market-batch-cargo">
+                    {{#each cargo}}<li><span><b>{{name}}</b>{{#if providerLabel}}<small>{{providerLabel}}</small>{{/if}}</span><span>×{{qty}} · {{lineText}}</span></li>{{/each}}
+                  </ul>
+                  <dl class="fbls-market-batch-costs">
+                    <div><dt>Товары</dt><dd>{{subtotalText}}</dd></div>
+                    <div><dt>Фрахт маршрута</dt><dd>{{routeText}}</dd></div>
+                    <div><dt>Погрузка</dt><dd>{{handlingText}}</dd></div>
+                    <div><dt>Страхование</dt><dd>{{insuranceText}}</dd></div>
+                    <div><dt>Пошлина</dt><dd>{{taxText}}</dd></div>
+                    {{#if hasExpress}}<div><dt>Срочность</dt><dd>{{expressText}}</dd></div>{{/if}}
+                    <div class="total"><dt>Доставка рейса</dt><dd>{{deliveryText}}</dd></div>
+                    <div class="total"><dt>Рейс с товаром</dt><dd>{{totalText}}</dd></div>
+                  </dl>
+                </div>
+              {{/with}}
+            </details>
+          {{/if}}
+        </section>
+
+        <section class="fbls-market-cart-section route">
+          <header><i class="fa-solid fa-route"></i><div><strong>Маршрут</strong><small>{{transportLabel}}</small></div></header>
+          <div class="fbls-market-route-metrics">
+            <span><small>Срок</small><strong>{{deliveryTimingText}}</strong></span>
+            <span><small>Дальность</small><strong>{{routeDistanceText}}</strong></span>
+            <span><small>Риск</small><strong>{{routeRiskText}}</strong></span>
+            <span><small>Доступ</small><strong>{{marketAccessText}}</strong></span>
+          </div>
+          <details class="fbls-market-route-details">
+            <summary>Подробнее о маршруте</summary>
+            <dl>
+              <div><dt>Путь</dt><dd>{{routePathText}}</dd></div>
+              <div><dt>Сезон</dt><dd>{{routeSeasonText}}</dd></div>
+              {{#if scheduledDelivery}}<div><dt>Утрата / задержка</dt><dd>{{riskLossChanceText}} / {{riskDelayChanceText}}</dd></div>{{/if}}
+              {{#if scheduledDelivery}}<div><dt>Макс. задержка</dt><dd>{{riskMaxDelayText}}</dd></div>{{/if}}
+              {{#if hasInsurance}}<div><dt>Покрытие</dt><dd>{{insuranceCoverageText}} · до {{insuranceMaximumPayoutText}}</dd></div>{{/if}}
+            </dl>
+          </details>
+        </section>
+
+        <section class="fbls-market-cart-section costs">
+          <header><i class="fa-solid fa-receipt"></i><div><strong>Стоимость</strong><small>Товар и услуги</small></div></header>
+          <dl class="fbls-market-cost-list">
+            <div><dt>Товары</dt><dd><span class="fbls-market-money" aria-label="{{subtotalText}}">{{#each subtotalParts}}<span class="{{tone}}"><b>{{value}}</b><i>{{label}}</i></span>{{/each}}</span></dd></div>
+            <div><dt>Доставка</dt><dd><span class="fbls-market-money" aria-label="{{deliveryText}}">{{#each deliveryParts}}<span class="{{tone}}"><b>{{value}}</b><i>{{label}}</i></span>{{/each}}</span></dd></div>
+            <div><dt>Включая маршрут</dt><dd><span class="fbls-market-money" aria-label="{{routeCostText}}">{{#each routeCostParts}}<span class="{{tone}}"><b>{{value}}</b><i>{{label}}</i></span>{{/each}}</span></dd></div>
+            {{#if hasHandling}}<div><dt>Погрузка</dt><dd><span class="fbls-market-money" aria-label="{{handlingText}}">{{#each handlingParts}}<span class="{{tone}}"><b>{{value}}</b><i>{{label}}</i></span>{{/each}}</span></dd></div>{{/if}}
+            {{#if hasInsurance}}<div><dt>Страхование</dt><dd><span class="fbls-market-money" aria-label="{{insuranceText}}">{{#each insuranceParts}}<span class="{{tone}}"><b>{{value}}</b><i>{{label}}</i></span>{{/each}}</span></dd></div>{{/if}}
+            {{#if hasExpressSurcharge}}<div><dt>Срочность</dt><dd><span class="fbls-market-money" aria-label="{{expressSurchargeText}}">{{#each expressSurchargeParts}}<span class="{{tone}}"><b>{{value}}</b><i>{{label}}</i></span>{{/each}}</span></dd></div>{{/if}}
+            {{#if hasTax}}<div><dt>Пошлины</dt><dd><span class="fbls-market-money" aria-label="{{taxText}}">{{#each taxParts}}<span class="{{tone}}"><b>{{value}}</b><i>{{label}}</i></span>{{/each}}</span></dd></div>{{/if}}
+          </dl>
+          <details class="fbls-market-delivery-help" data-market-delivery-breakdown {{#if deliveryBreakdownOpen}}open{{/if}}>
+            <summary><span><i class="fa-solid fa-calculator"></i> Как рассчитана доставка</span><strong>{{deliveryText}}</strong></summary>
+            <dl class="fbls-market-delivery-breakdown">
+              <div><dt>Маршрут</dt><dd>{{deliveryBreakdown.distanceText}}</dd></div>
+              <div><dt>Выезд транспорта</dt><dd>{{deliveryBreakdown.dispatchText}}</dd></div>
+              <div><dt>Тариф дальности</dt><dd>{{deliveryBreakdown.distanceTariffText}}</dd></div>
+              <div><dt>Множители</dt><dd>{{deliveryBreakdown.factorText}}</dd></div>
+              <div><dt>Подготовка воздушного корабля</dt><dd>{{deliveryBreakdown.airshipHireText}}</dd></div>
+              <div><dt>Экипаж и эксплуатация по времени</dt><dd>{{deliveryBreakdown.operatingTimeText}}</dd></div>
+              <div><dt>Вместимость полной машины</dt><dd>{{deliveryBreakdown.fullCapacityCargoPointsText}}</dd></div>
+              <div><dt>Полная смета одного плеча</dt><dd>{{deliveryBreakdown.fullOneWayOperatingText}}</dd></div>
+              <div><dt>Оплачиваемые плечи</dt><dd>{{deliveryBreakdown.operatingLegsText}}</dd></div>
+              <div><dt>Занятая доля cargo points</dt><dd>{{deliveryBreakdown.capacityShareText}}</dd></div>
+              <div><dt>Операционный фрахт</dt><dd>{{deliveryBreakdown.operationalFormulaText}}</dd></div>
+              <div><dt>Маршрут всего</dt><dd>{{deliveryBreakdown.routeTotalFormulaText}}</dd></div>
+              <div><dt>Погрузка</dt><dd>{{deliveryBreakdown.handlingFormulaText}}</dd></div>
+              <div><dt>Страхование</dt><dd>{{deliveryBreakdown.insuranceFormulaText}}</dd></div>
+              <div><dt>Пошлина</dt><dd>{{deliveryBreakdown.taxFormulaText}}</dd></div>
+              {{#if hasExpressSurcharge}}<div><dt>Срочность</dt><dd>{{deliveryBreakdown.expressText}}</dd></div>{{/if}}
+              <div class="total"><dt>Итого доставка</dt><dd>{{deliveryBreakdown.totalFormulaText}}</dd></div>
+            </dl>
+            <p class="fbls-market-delivery-note">Standard оплачивает занятую долю одного плеча; Charter — всю машину и два плеча. Стоимость товара влияет только на пошлину и выбранную страховку. Слагаемые итога: маршрут + погрузка + страхование + пошлина + срочность.</p>
+          </details>
+        </section>
+
+        {{#if capacityExceeded}}<p class="fbls-market-error"><i class="fa-solid fa-weight-hanging"></i> {{#if ownedVesselDelivery}}Общий груз не помещается в один собственный корабль.{{else}}Одна единица товара не помещается в лимит выбранного режима доставки.{{/if}}</p>{{/if}}
+        {{#if insufficientFunds}}<p class="fbls-market-error"><i class="fa-solid fa-triangle-exclamation"></i> В казне недостаточно денег.</p>{{/if}}
+        <section class="fbls-market-checkout">
+          <div><span><small>Итого</small><span class="fbls-market-money prominent" aria-label="{{totalText}}">{{#each totalParts}}<span class="{{tone}}"><b>{{value}}</b><i>{{label}}</i></span>{{/each}}</span></span><span><small>Останется</small><span class="fbls-market-money" aria-label="{{balanceAfterText}}">{{#each balanceAfterParts}}<span class="{{tone}}"><b>{{value}}</b><i>{{label}}</i></span>{{/each}}</span></span></div>
+          <div class="fbls-action-group">
+            <button type="button" class="fbls-button ghost" data-action="market-clear" {{#unless hasSelection}}disabled{{/unless}}>Очистить</button>
+            <button type="button" class="fbls-button primary" data-action="market-buy" {{#unless canConfirm}}disabled{{/unless}}><i class="fa-solid fa-truck-fast"></i> {{#if scheduledDelivery}}Заказать{{else}}Купить{{/if}}</button>
+          </div>
+        </section>
+        {{#if hasShipments}}
+          <section class="fbls-market-shipments">
+            <h4><i class="fa-solid fa-route"></i> Текущие поставки · {{activeShipmentCount}}</h4>
+            {{#if hasHiddenShipments}}<small>Показаны ближайшие 12 партий; ещё {{hiddenShipmentCount}} появятся по мере их завершения или отмены.</small>{{/if}}
+            {{#each shipments}}
+              <article class="fbls-market-shipment {{status}}">
+                <header><strong>{{marketLabel}}</strong><span>{{statusLabel}}</span></header>
+                <p>{{cargoText}}</p>
+                <p class="fbls-market-shipment-risk">{{riskText}}</p>
+                <footer>
+                  <small>{{batchText}} · {{carrierText}} · ETA: {{remainingText}} · {{serviceText}} · {{totalText}}</small>
+                  <span class="fbls-market-shipment-actions">
+                    {{#if canCancel}}<button type="button" class="fbls-button compact danger" data-action="market-cancel-shipment" data-order-id="{{id}}" title="Вернуть {{cancellationRefundText}}, удержать {{cancellationWithheldText}}"><i class="fa-solid fa-ban"></i> Отменить</button>{{/if}}
+                    {{#if canDeliverNow}}{{#if ../canPurchase}}<button type="button" class="fbls-button compact" data-action="market-deliver-shipment" data-order-id="{{id}}"><i class="fa-solid fa-box-open"></i> Доставить сейчас</button>{{/if}}{{/if}}
+                  </span>
+                </footer>
+              </article>
+            {{/each}}
+          </section>
+        {{/if}}
+        {{#if hasShipmentArchive}}
+          <details class="fbls-market-archive">
+            <summary><span><i class="fa-solid fa-box-archive"></i> Архив поставок</span><b>{{shipmentArchive.length}}</b></summary>
+            <div class="fbls-market-archive-list">
+              {{#each shipmentArchive}}
+                <article class="fbls-market-archive-row {{status}}">
+                  <header><div><strong>{{marketLabel}}</strong><small>{{orderedText}}</small></div><span>{{statusLabel}}</span></header>
+                  <p>{{cargoText}}</p>
+                  <small>{{batchText}} · {{routeText}} · {{carrierText}} · {{totalText}}</small>
+                  <p class="fbls-market-shipment-risk">{{statusText}}</p>
+                  <ol>{{#each timeline}}<li><span>{{label}}</span><time>{{at}}</time></li>{{/each}}</ol>
+                </article>
+              {{/each}}
+            </div>
+          </details>
+        {{/if}}
+      </aside>
+    </div>
+    {{/if}}
+
+    {{#if isSellMode}}
+      {{> "modules/fbl-skyhold/templates/parts/market/sell.hbs"}}
+    {{/if}}
+  </div>
+{{else}}
+  <div class="fbls-empty">Поселение недоступно.</div>
+{{/if}}

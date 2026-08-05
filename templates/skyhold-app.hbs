@@ -1,8 +1,15 @@
 <div class="fbls-shell">
   {{> "modules/fbl-skyhold/templates/parts/skyhold-header.hbs"}}
+  {{#if authorityStatus.show}}
+    <div class="fbls-authority-strip {{authorityStatus.severity}}" role="status" aria-live="polite" title="{{authorityStatus.detail}}">
+      <i class="{{authorityStatus.icon}}"></i>
+      <strong>{{authorityStatus.label}}</strong>
+      <span>{{authorityStatus.detail}}</span>
+    </div>
+  {{/if}}
   {{> "modules/fbl-skyhold/templates/parts/skyhold-tabs.hbs"}}
 
-  <main class="fbls-content">
+  <main class="fbls-content" data-render-scroll-key="manager-content">
     {{> "modules/fbl-skyhold/templates/parts/skyhold-empty.hbs"}}
     {{> "modules/fbl-skyhold/templates/parts/skyhold-tab-overview.hbs"}}
     {{> "modules/fbl-skyhold/templates/parts/skyhold-tab-people.hbs"}}

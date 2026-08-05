@@ -1,0 +1,46 @@
+<div class="fbls-resource-row-editor-shell">
+  {{#if resource}}
+    <header class="fbls-resource-row-editor-hero">
+      <div class="fbls-resource-editor-preview large">{{#if resource.img}}<img src="{{resource.img}}" alt="" data-fbls-image-fallback /><i class="{{resource.icon}}" data-fbls-image-fallback-icon hidden></i>{{else}}<i class="{{resource.icon}}"></i>{{/if}}</div>
+      <div><h2>{{resource.label}}</h2><p>{{resource.id}} · {{resource.category}}</p></div>
+      {{#if resource.isBuiltin}}<button type="button" class="fbls-button compact" data-action="resource-restore"><i class="fa-solid fa-rotate-left"></i> По умолчанию</button>{{else}}<button type="button" class="fbls-button compact danger" data-action="resource-delete"><i class="fa-solid fa-trash"></i> Удалить</button>{{/if}}
+    </header>
+    <main class="fbls-resource-row-editor-fields">
+      <label><span>ID</span><input type="text" data-resource-field="id" value="{{resource.id}}" {{#if resource.isBuiltin}}readonly{{/if}} /></label>
+      <label><span>Название</span><input type="text" data-resource-field="label" value="{{resource.label}}" /></label>
+      <label><span>Название единицы</span><input type="text" data-resource-field="unitLabel" value="{{resource.unitLabel}}" placeholder="мешок, корзина, слиток" /><small>Минимальная товарно-производственная партия, а не универсальный килограмм.</small></label>
+      <label><span>Шаг количества</span><input type="number" min="1" step="1" data-type="number" data-resource-field="quantityStep" value="{{resource.quantityStep}}" {{#if resource.economyCurrent}}readonly{{/if}} /><small>Economy V2 использует только целую партию. Изменение legacy-строки подтверждает шаг 1.</small></label>
+      <label><span>Основа цены</span><input type="text" data-resource-field="priceBasis" value="{{resource.priceBasis}}" placeholder="за мешок" /></label>
+      <label><span>Справочная цена, ММ</span><input type="number" min="0" step="1" data-type="number" data-resource-field="referencePriceCopper" value="{{resource.referencePriceCopper}}" /><small>Единая цена партии до региональных модификаторов.</small></label>
+      <label><span>Строка стоимости FBL</span><input type="text" value="{{resource.cost}}" readonly /><small>Производится из справочной цены и отдельно не редактируется.</small></label>
+      {{#if resource.tradeConfigurationError}}<div class="fbls-notice is-warning wide" role="status"><i class="fa-solid fa-triangle-exclamation"></i> {{resource.tradeConfigurationError}}</div>{{/if}}
+      {{#if resource.economyLegacy}}<div class="fbls-notice is-warning wide" role="status"><i class="fa-solid fa-clock-rotate-left"></i> Строка перенесена через legacy-адаптер. Изменение любого поля Economy V2 явно подтверждает новый контракт для этого ресурса.</div>{{/if}}
+      <label><span>Категория</span><input type="text" data-resource-field="category" value="{{resource.category}}" /></label>
+      <label class="wide"><span>Font Awesome icon</span><div class="fbls-resource-editor-inline"><i class="{{resource.icon}}"></i><input type="text" data-resource-field="icon" value="{{resource.icon}}" /></div></label>
+      <label class="wide"><span>Изображение</span><div class="fbls-resource-editor-inline"><input type="text" data-resource-field="img" value="{{resource.img}}" placeholder="icons/...webp" /><button type="button" class="fbls-icon-button" data-action="resource-pick-image" title="Выбрать изображение" aria-label="Выбрать изображение ресурса"><i class="fa-solid fa-folder-open"></i></button></div></label>
+      <label class="wide"><span>Алиасы</span><textarea rows="2" data-resource-field="aliases">{{resource.aliasesText}}</textarea></label>
+      <label class="wide"><span>Группы материалов</span><textarea rows="2" data-resource-field="materialGroups" placeholder="fuel, edible">{{resource.materialGroupsText}}</textarea><small>Через запятую. Доступны: {{resource.materialGroupHelpText}}. В расходах производства можно писать русское название группы, например «Горючее 2».</small></label>
+      <label class="wide"><span>Рыночные теги</span><textarea rows="2" data-resource-field="marketTags" placeholder="grain, shipbuilding, luxury">{{resource.marketTagsText}}</textarea><small>Специализации рынка используют эти теги, чтобы автоматически добавлять подходящие товары поверх базового ассортимента.</small></label>
+      <label><span>Грузовой класс</span><select data-resource-field="cargoClass"><option value="1" {{#if resource.cargoClass1}}selected{{/if}}>1 — минимальный</option><option value="2" {{#if resource.cargoClass2}}selected{{/if}}>2 — лёгкий</option><option value="5" {{#if resource.cargoClass5}}selected{{/if}}>5 — малый</option><option value="10" {{#if resource.cargoClass10}}selected{{/if}}>10 — обычный</option><option value="20" {{#if resource.cargoClass20}}selected{{/if}}>20 — тяжёлый</option><option value="40" {{#if resource.cargoClass40}}selected{{/if}}>40 — очень тяжёлый</option><option value="livestock" {{#if resource.cargoClassLivestock}}selected{{/if}}>Животное</option><option value="oversized" {{#if resource.cargoClassOversized}}selected{{/if}}>Негабарит</option></select></label>
+      <label><span>Cargo points партии</span><input type="number" min="1" step="1" data-type="number" data-resource-field="cargoPoints" value="{{resource.cargoPoints}}" {{#unless resource.cargoPointsManual}}readonly{{/unless}} /><small>Склад и перевозчик используют одну целую шкалу.</small></label>
+      <label><span>Рационов в партии</span><input type="number" min="0" step="1" data-type="number" data-resource-field="rationPoints" value="{{resource.rationPoints}}" /><small>Один рацион кормит одного жителя один день; 0 — это не пища.</small></label>
+      <label><span>Основная группа питания</span><select data-resource-field="dietGroup"><option value="" {{#if resource.dietGroupNone}}selected{{/if}}>Без группы</option><option value="staple" {{#if resource.dietGroupStaple}}selected{{/if}}>Основа рациона</option><option value="protein" {{#if resource.dietGroupProtein}}selected{{/if}}>Белковая пища</option><option value="dairy" {{#if resource.dietGroupDairy}}selected{{/if}}>Молочная пища</option><option value="produce" {{#if resource.dietGroupProduce}}selected{{/if}}>Овощи и фрукты</option></select><small>Один продукт учитывается только в одной группе разнообразия.</small></label>
+      <label><span>Срок хранения, десятников</span><input type="number" min="0" step="1" data-type="number" data-resource-field="shelfLifeTendays" value="{{resource.shelfLifeTendays}}" /><small>0 — автоматической порчи нет. Старые партии сохраняют собственный срок в днях.</small></label>
+      <label><span>Legacy масса / объём</span><input type="text" value="{{resource.packageMassKg}} кг / {{resource.packageVolumeL}} л" readonly /><small>Справочные данные старого контракта.</small></label>
+      <label><span>Legacy load / срок</span><input type="text" value="{{resource.legacyLoad}} / {{resource.legacyShelfLifeDays}} дн." readonly /><small>Используются только адаптером старых данных.</small></label>
+      <label class="wide"><span>Теги питания</span><input type="text" data-resource-field="nutritionTags" value="{{resource.nutritionTagsText}}" placeholder="staple, protein, fresh" /><small>Теги остаются для описания и совместимости; разнообразие использует одну основную группу.</small></label>
+      <label><span>Уровень качества</span><input type="text" data-resource-field="qualityTier" value="{{resource.qualityTier}}" placeholder="common, quality, luxury" /></label>
+      <label class="wide"><span>Item UUID</span><input type="text" data-resource-field="itemUuid" value="{{resource.itemUuid}}" /></label>
+      <label><span>Item type</span><input type="text" data-resource-field="itemType" value="{{resource.itemType}}" /></label>
+      <label><span>Описание хранения</span><input type="text" data-resource-field="shelfLife" value="{{resource.shelfLife}}" /></label>
+      <label><span data-fbls-tooltip="Сложность доступа именно к этому товару. Итоговое требование равно числу переходов до рынка плюс это значение.">УРС товара</span><input type="number" min="0" max="100" step="1" data-type="number" data-resource-field="marketAccessDifficulty" value="{{resource.marketAccessDifficulty}}" /><small>0 — обычный товар; 4 — стратегический или строго лицензируемый.</small></label>
+      <label class="wide"><span>Примечания и источник</span><textarea rows="4" data-resource-field="notes">{{resource.notes}}</textarea></label>
+    </main>
+    <footer class="fbls-resource-row-editor-flags">
+      <label><input type="checkbox" data-type="checkbox" data-resource-field="useInProduction" {{#if resource.useInProduction}}checked{{/if}} /> Производство</label>
+      <label><input type="checkbox" data-type="checkbox" data-resource-field="useInConstruction" {{#if resource.useInConstruction}}checked{{/if}} /> Строительство</label>
+      <label><input type="checkbox" data-type="checkbox" data-resource-field="tradable" {{#if resource.tradable}}checked{{/if}} /> Можно продавать</label>
+      <label><input type="checkbox" data-type="checkbox" data-resource-field="hidden" {{#if resource.hidden}}checked{{/if}} /> Скрыт</label>
+    </footer>
+  {{else}}<p class="fbls-empty">Ресурс больше не найден.</p>{{/if}}
+</div>

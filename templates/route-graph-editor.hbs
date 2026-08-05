@@ -1,0 +1,98 @@
+<section class="fbls-route-graph-shell">
+  <header class="fbls-route-graph-toolbar">
+    <div class="fbls-route-graph-title">
+      <span>GM · география торговли</span>
+      <h2>Карта торговых маршрутов</h2>
+      <p>{{#if graph.selectedNode}}Выберите второй регион — между узлами будет создана связь.{{else}}Тяните карту для перемещения, колесо меняет масштаб. Двойной клик по региону открывает его карточку, по линии — редактор связи.{{/if}}</p>
+    </div>
+    <div class="fbls-route-graph-actions">
+      <button type="button" class="fbls-button compact" data-action="route-background-pick"><i class="fa-solid fa-image"></i> Фон</button>
+      {{#if graph.map.background}}<button type="button" class="fbls-button compact danger" data-action="route-background-remove" aria-label="Удалить фон карты"><i class="fa-solid fa-image-slash"></i></button>{{/if}}
+      <button type="button" class="fbls-button compact {{#if graph.calibrationDraft.active}}primary{{/if}}" data-action="route-calibration-start"><i class="fa-solid fa-ruler-combined"></i> Масштаб карты</button>
+      <div class="fbls-route-node-mode" aria-label="Вид узлов">
+        <button type="button" class="{{#if graph.cardNodes}}is-active{{/if}}" data-action="route-node-mode" data-node-mode="card" title="Полные карточки"><i class="fa-solid fa-address-card"></i><span>Карточки</span></button>
+        <button type="button" class="{{#if graph.compactNodes}}is-active{{/if}}" data-action="route-node-mode" data-node-mode="compact" title="Метки на карте"><i class="fa-solid fa-location-dot"></i><span>Метки</span></button>
+      </div>
+      {{#if graph.selectedNode}}<button type="button" class="fbls-button compact" data-action="route-selection-clear"><i class="fa-solid fa-xmark"></i> Отмена</button>{{/if}}
+      <button type="button" class="fbls-button compact" data-action="route-layout-reset"><i class="fa-solid fa-wand-magic-sparkles"></i> Разложить</button>
+    </div>
+  </header>
+
+  {{#if graph.hasNodes}}
+    <main class="fbls-route-graph-main">
+      <div class="fbls-route-graph-canvas {{#if graph.pathEdit.active}}is-tool-active{{/if}} {{#if graph.calibrationDraft.active}}is-tool-active{{/if}}" data-route-canvas>
+        <div class="fbls-route-map-controls" data-route-map-controls>
+          <button type="button" data-action="route-zoom-out" title="Уменьшить" aria-label="Уменьшить масштаб"><i class="fa-solid fa-minus"></i></button>
+          <span data-route-zoom-label>{{graph.zoomPercent}}%</span>
+          <button type="button" data-action="route-zoom-in" title="Увеличить" aria-label="Увеличить масштаб"><i class="fa-solid fa-plus"></i></button>
+          <button type="button" data-action="route-zoom-fit" title="Показать карту целиком" aria-label="Показать карту целиком"><i class="fa-solid fa-expand"></i></button>
+        </div>
+        <div class="fbls-route-map-world {{#if graph.compactNodes}}is-compact{{else}}is-card{{/if}}" data-route-world data-world-width="{{graph.map.worldWidth}}" data-world-height="{{graph.map.worldHeight}}" style="width: {{graph.map.worldWidth}}px; height: {{graph.map.worldHeight}}px; --map-opacity: {{graph.map.backgroundOpacity}};">
+          {{#if graph.map.background}}<img class="fbls-route-map-background" src="{{graph.map.background}}" alt="" draggable="false" />{{/if}}
+          <svg viewBox="0 0 {{graph.map.worldWidth}} {{graph.map.worldHeight}}" preserveAspectRatio="none" aria-label="Связи торговых маршрутов">
+            {{#each graph.edges}}
+              <polyline class="fbls-route-edge-path {{#if seasonalEnabled}}is-seasonal{{/if}} {{#if editing}}is-editing{{/if}}" points="{{pointsText}}" data-route-edge-path data-route-from="{{fromId}}" data-route-to="{{toId}}"></polyline>
+              <text x="{{midX}}" y="{{midY}}" data-route-edge-label data-route-from="{{fromId}}" data-route-to="{{toId}}">УРС {{ursCost}} · {{distanceKm}} км{{#if automaticDistance}} · авто{{/if}}{{#if seasonalEnabled}} · {{../graph.selectedSeasonLabel}}{{/if}}</text>
+            {{/each}}
+            {{#if graph.calibrationDraft.active}}
+              {{#if graph.calibrationDraft.ready}}<polyline class="fbls-route-calibration-line" points="{{graph.calibrationDraft.pointsText}}"></polyline>{{/if}}
+              {{#each graph.calibrationDraft.points}}<circle class="fbls-route-calibration-point" cx="{{x}}" cy="{{y}}" r="7"></circle>{{/each}}
+            {{/if}}
+          </svg>
+          {{#each graph.nodes}}
+            <button type="button" class="fbls-route-node {{statusClass}} {{#if selected}}is-selected{{/if}}" style="--node-x: {{x}}px; --node-y: {{y}}px;" data-action="route-node-select" data-route-node data-region-id="{{value}}" title="{{label}} · двойной клик: открыть карточку">
+              {{#if ../graph.compactNodes}}
+                <span class="fbls-route-node-abbreviation">{{abbreviation}}</span>
+              {{else}}
+                <i class="fa-solid {{#if marketAirshipOnly}}fa-cloud{{else}}fa-location-dot{{/if}}"></i><span>{{label}}</span><small>{{value}}</small>
+              {{/if}}
+            </button>
+          {{/each}}
+        </div>
+
+        {{#if graph.pathEdit.active}}
+          <aside class="fbls-route-tool-overlay" data-route-tool-overlay>
+            <i class="fa-solid fa-route"></i>
+            <div><strong>{{graph.pathEdit.fromLabel}} → {{graph.pathEdit.toLabel}}</strong><small>Кликайте по карте в местах поворота. Промежуточных точек: {{graph.pathEdit.pointCount}}. {{#if graph.pathEdit.scaleAvailable}}Расчёт: {{graph.pathEdit.distanceKm}} км.{{else}}Сначала откалибруйте карту для автоматической дальности.{{/if}}</small></div>
+            <button type="button" data-action="route-path-undo" aria-label="Удалить последнюю точку маршрута" {{#unless graph.pathEdit.canUndo}}disabled{{/unless}}><i class="fa-solid fa-rotate-left"></i></button>
+            <button type="button" data-action="route-path-cancel" aria-label="Отменить прокладывание маршрута"><i class="fa-solid fa-xmark"></i></button>
+            <button type="button" class="primary" data-action="route-path-save"><i class="fa-solid fa-check"></i> Сохранить</button>
+          </aside>
+        {{/if}}
+        {{#if graph.calibrationDraft.active}}
+          <aside class="fbls-route-tool-overlay calibration" data-route-tool-overlay>
+            <i class="fa-solid fa-ruler-combined"></i>
+            <div><strong>Калибровка масштаба</strong><small>{{#if graph.calibrationDraft.ready}}Между точками {{graph.calibrationDraft.pixelDistance}} px. Укажите реальное расстояние.{{else}}Поставьте на карте две мерные точки.{{/if}}</small></div>
+            {{#if graph.calibrationDraft.ready}}<label><span>км</span><input type="number" min="0.1" step="0.1" value="{{graph.calibrationDraft.distanceKm}}" data-route-calibration-distance /></label>{{/if}}
+            <button type="button" data-action="route-calibration-undo" aria-label="Удалить последнюю мерную точку" {{#unless graph.calibrationDraft.canUndo}}disabled{{/unless}}><i class="fa-solid fa-rotate-left"></i></button>
+            <button type="button" data-action="route-calibration-cancel" aria-label="Отменить калибровку"><i class="fa-solid fa-xmark"></i></button>
+            {{#if graph.calibrationDraft.ready}}<button type="button" class="primary" data-action="route-calibration-save"><i class="fa-solid fa-check"></i> Применить</button>{{/if}}
+          </aside>
+        {{/if}}
+      </div>
+
+      <aside class="fbls-route-edge-panel">
+        <section class="fbls-route-map-settings">
+          <header><div><h3>Карта</h3><small>{{graph.map.worldWidth}} × {{graph.map.worldHeight}} px</small></div>{{#if graph.map.background}}<i class="fa-solid fa-image"></i>{{else}}<i class="fa-regular fa-image"></i>{{/if}}</header>
+          {{#if graph.map.background}}<label><span>Прозрачность</span><input type="range" min="0.1" max="1" step="0.05" value="{{graph.map.backgroundOpacity}}" data-route-background-opacity /></label>{{/if}}
+          <div class="fbls-route-scale-summary {{#if graph.hasScale}}is-ready{{/if}}"><i class="fa-solid fa-ruler"></i><span><strong>{{graph.scaleLabel}}</strong><small>{{#if graph.hasScale}}Автоматические маршруты используют этот масштаб.{{else}}Дальности вводятся вручную.{{/if}}</small></span><button type="button" data-action="route-calibration-start" title="Калибровать" aria-label="Калибровать масштаб карты"><i class="fa-solid fa-pen"></i></button></div>
+        </section>
+        <header><h3>Связи</h3><span>{{graph.edges.length}}</span></header>
+        <label class="fbls-route-edge-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-route-edge-search placeholder="Найти связь…" autocomplete="off" /></label>
+        <p class="fbls-route-edge-help">Строка открывает отдельный редактор. Двойной клик по линии на карте делает то же самое.</p>
+        <div class="fbls-route-edge-list compact">
+          {{#each graph.edges}}
+            <article class="fbls-route-edge-row" data-route-edge-row data-route-edge-search-text="{{fromLabel}} {{toLabel}} {{fromShort}} {{toShort}} {{modesLabel}}">
+              <button type="button" class="fbls-route-edge-name" data-action="route-edge-open" data-route-from="{{fromId}}" data-route-to="{{toId}}" title="{{fromLabel}} — {{toLabel}}"><strong>{{fromShort}} — {{toShort}}</strong><small>УРС {{ursCost}} · {{distanceKm}} км{{#if pathPointCount}} · {{pathPointCount}} т.{{/if}}</small></button>
+              <span class="fbls-route-edge-modes" title="{{modesLabel}}">{{#if caravan}}<i class="fa-solid fa-cart-flatbed"></i>{{/if}}{{#if rail}}<i class="fa-solid fa-train"></i>{{/if}}{{#if airship}}<i class="fa-solid fa-ship"></i>{{/if}}</span>
+              <button type="button" class="fbls-icon-button" data-action="route-edge-open" data-route-from="{{fromId}}" data-route-to="{{toId}}" title="Редактировать" aria-label="Редактировать связь {{fromLabel}} — {{toLabel}}"><i class="fa-solid fa-pen"></i></button>
+              <button type="button" class="fbls-icon-button danger" data-action="route-edge-delete" data-route-from="{{fromId}}" data-route-to="{{toId}}" title="Удалить" aria-label="Удалить связь {{fromLabel}} — {{toLabel}}"><i class="fa-solid fa-trash"></i></button>
+            </article>
+          {{else}}<p class="fbls-empty">Связей пока нет. Выберите два узла на карте.</p>{{/each}}
+        </div>
+      </aside>
+    </main>
+  {{else}}
+    <p class="fbls-empty">Сначала добавьте регионы в каталоге.</p>
+  {{/if}}
+</section>

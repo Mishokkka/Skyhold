@@ -19,7 +19,7 @@
 
   <nav class="fbls-template-browser-tabs">
     {{#each tabs}}
-      <button type="button" class="fbls-template-browser-tab {{#if active}}active{{/if}} {{id}}" data-template-category="{{id}}">
+      <button type="button" class="fbls-template-browser-tab {{#if active}}active{{/if}} {{id}}" data-action="template-category" data-template-category="{{id}}">
         <i class="{{icon}}"></i><span>{{label}}</span><strong>{{tabCount}}</strong>
       </button>
     {{/each}}
@@ -28,7 +28,7 @@
   <div class="fbls-template-browser-tools fbls-toolbar">
     <nav class="fbls-template-browser-availability fbls-action-group">
       {{#each availabilityTabs}}
-        <button type="button" class="fbls-button compact {{#if active}}active{{/if}}" data-template-availability="{{id}}">{{label}}</button>
+        <button type="button" class="fbls-button compact {{#if active}}active{{/if}}" data-action="template-availability" data-template-availability="{{id}}">{{label}}</button>
       {{/each}}
     </nav>
     <label class="fbls-template-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-template-search value="{{search}}" placeholder="Поиск по названию" /></label>

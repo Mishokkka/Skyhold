@@ -1,0 +1,84 @@
+<section class="fbls-building-audio-shell">
+  <header class="fbls-building-audio-head">
+    <h2>Звук здания</h2>
+    <button type="button" class="fbls-icon-button danger" data-action="building-audio-clear" title="Очистить звук" aria-label="Очистить звук">
+      <i class="fa-solid fa-trash"></i>
+    </button>
+  </header>
+
+  <div class="fbls-building-audio-mode" role="radiogroup" aria-label="Источник звука">
+    {{#each sourceOptions}}
+      <label class="{{#if selected}}active{{/if}}">
+        <input type="radio" name="building-audio-mode" data-building-audio-field="mode" value="{{value}}" {{#if selected}}checked{{/if}} />
+        <span>{{label}}</span>
+      </label>
+    {{/each}}
+  </div>
+
+  {{#if isFile}}
+    <section class="fbls-building-audio-panel">
+      <label class="fbls-building-audio-file">
+        <span>Аудиофайл</span>
+        <div>
+          <input type="text" data-building-audio-field="src" value="{{form.src}}" placeholder="sounds/track.ogg" />
+          <button type="button" class="fbls-icon-button" data-action="building-audio-pick-file" title="Выбрать аудиофайл" aria-label="Выбрать аудиофайл">
+            <i class="fa-solid fa-folder-open"></i>
+          </button>
+        </div>
+      </label>
+
+      <label class="fbls-building-audio-volume">
+        <span>Громкость <strong data-building-audio-volume-label>{{volumePercent}}%</strong></span>
+        <input type="range" min="0" max="1" step="0.01" data-building-audio-field="volume" value="{{form.volume}}" />
+      </label>
+    </section>
+  {{/if}}
+
+  {{#if isPlaylistSound}}
+    <section class="fbls-building-audio-panel">
+      {{#if hasPlaylists}}
+        <label>
+          <span>Плейлист</span>
+          <select data-building-audio-field="playlistId">
+            {{#each playlistOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+          </select>
+        </label>
+        <label>
+          <span>Звук</span>
+          <select data-building-audio-field="soundId" {{#unless hasSounds}}disabled{{/unless}}>
+            {{#each soundOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+          </select>
+        </label>
+      {{else}}
+        <p class="fbls-empty">Плейлистов Foundry пока нет.</p>
+      {{/if}}
+    </section>
+  {{/if}}
+
+  {{#if isPlaylist}}
+    <section class="fbls-building-audio-panel">
+      {{#if hasPlaylists}}
+        <label>
+          <span>Плейлист</span>
+          <select data-building-audio-field="playlistId">
+            {{#each playlistOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+          </select>
+        </label>
+      {{else}}
+        <p class="fbls-empty">Плейлистов Foundry пока нет.</p>
+      {{/if}}
+    </section>
+  {{/if}}
+
+  <label class="fbls-building-audio-loop">
+    <input type="checkbox" data-type="checkbox" data-building-audio-field="loop" {{#if form.loop}}checked{{/if}} />
+    <span>Loop</span>
+  </label>
+
+  <footer class="fbls-building-audio-actions">
+    <button type="button" class="fbls-button compact primary" data-action="building-audio-save" {{#unless canSave}}disabled{{/unless}}>
+      <i class="fa-solid fa-floppy-disk"></i>
+      Сохранить
+    </button>
+  </footer>
+</section>

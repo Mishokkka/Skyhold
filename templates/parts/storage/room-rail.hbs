@@ -1,0 +1,14 @@
+<aside class="fbls-storage-room-rail {{#if storageRoomRailCollapsed}}is-collapsed{{/if}}">
+  <header>
+    <span>Помещения</span><b>{{storageContext.resourceRoomCount}}</b>
+    <button type="button" class="fbls-storage-room-rail-toggle" data-action="toggle-storage-room-rail" aria-pressed="{{#if storageRoomRailCollapsed}}true{{else}}false{{/if}}" aria-label="{{#if storageRoomRailCollapsed}}Развернуть список хранилищ{{else}}Свернуть список хранилищ{{/if}}" data-fbls-tooltip="{{#if storageRoomRailCollapsed}}Развернуть список хранилищ{{else}}Свернуть до иконок{{/if}}"><i class="fa-solid {{#if storageRoomRailCollapsed}}fa-angles-right{{else}}fa-angles-left{{/if}}"></i></button>
+  </header>
+  <nav class="fbls-storage-room-tabs" aria-label="Хранилища">
+    {{#each storageContext.resourceRooms}}
+      <button type="button" class="fbls-storage-room-tab {{fillClass}} {{#if active}}active{{/if}} {{#unless available}}inactive{{/unless}}" data-action="storage-room-tab" data-room-id="{{id}}" data-fbls-tooltip="{{label}} · {{fillTitle}}">
+        <span class="fbls-storage-room-tab-main"><span class="fbls-storage-room-tab-icon">{{#if img}}<img src="{{img}}" alt="" data-fbls-image-fallback /><i class="{{icon}}" data-fbls-image-fallback-icon hidden></i>{{else}}<i class="{{icon}}"></i>{{/if}}</span><span>{{label}}</span><b>{{itemCount}}</b></span>
+        {{#unless unlimited}}<span class="fbls-storage-room-meter"><span style="width: {{fillPercent}}%;"></span></span>{{/unless}}
+      </button>
+    {{/each}}
+  </nav>
+</aside>
