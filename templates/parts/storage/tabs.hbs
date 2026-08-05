@@ -1,0 +1,38 @@
+        <header class="fbls-storage-commandbar">
+          <div class="fbls-storage-tabs-row treasury-row fbls-toolbar">
+            <nav class="fbls-storage-tabs fbls-toolbar-group" aria-label="Разделы хранилища">
+              <button type="button" class="fbls-storage-tab {{#if activeStorage.resources}}active{{/if}}" data-action="storage-subtab" data-storage-tab="resources"><i class="fa-solid fa-cubes-stacked"></i><span>Ресурсы</span><b>{{storageContext.visibleCount}}</b></button>
+              <button type="button" class="fbls-storage-tab {{#if activeStorage.items}}active{{/if}}" data-action="storage-subtab" data-storage-tab="items"><i class="fa-solid fa-suitcase"></i><span>Предметы</span><b>{{storageContext.itemCount}}</b></button>
+              <button type="button" class="fbls-storage-tab {{#if activeStorage.accounting}}active{{/if}}" data-action="storage-subtab" data-storage-tab="accounting"><i class="fa-solid fa-scale-balanced"></i><span>Бухгалтерия</span></button>
+              <button type="button" class="fbls-storage-tab {{#if activeStorage.market}}active{{/if}}" data-action="storage-subtab" data-storage-tab="market"><i class="fa-solid fa-store"></i><span>Рынок</span></button>
+              <button type="button" class="fbls-storage-tab {{#if activeStorage.log}}active{{/if}}" data-action="storage-subtab" data-storage-tab="log"><i class="fa-solid fa-clock-rotate-left"></i><span>История</span></button>
+            </nav>
+
+            <div class="fbls-storage-money-counter treasury" data-fbls-tooltip="Казна хранится отдельно от ресурсов. 1 ЗМ = 10 СМ = 100 ММ. Введите число для установки суммы или операцию +3 / -2.">
+              <i class="fa-solid fa-coins"></i>
+              {{#if canEdit}}
+                <label class="fbls-money-denom gold"><span>ЗМ</span><div class="fbls-money-stepper"><button type="button" data-action="adjust-storage-money" data-money-denom="gold" data-money-op="minus" aria-label="Убавить одну золотую монету">−</button><input type="text" inputmode="text" data-storage-money-field="gold" value="{{storageContext.money.gold}}" aria-label="Золотые монеты" /><button type="button" data-action="adjust-storage-money" data-money-denom="gold" data-money-op="plus" aria-label="Добавить одну золотую монету">+</button></div></label>
+                <label class="fbls-money-denom silver"><span>СМ</span><div class="fbls-money-stepper"><button type="button" data-action="adjust-storage-money" data-money-denom="silver" data-money-op="minus" aria-label="Убавить одну серебряную монету">−</button><input type="text" inputmode="text" data-storage-money-field="silver" value="{{storageContext.money.silver}}" aria-label="Серебряные монеты" /><button type="button" data-action="adjust-storage-money" data-money-denom="silver" data-money-op="plus" aria-label="Добавить одну серебряную монету">+</button></div></label>
+                <label class="fbls-money-denom copper"><span>ММ</span><div class="fbls-money-stepper"><button type="button" data-action="adjust-storage-money" data-money-denom="copper" data-money-op="minus" aria-label="Убавить одну медную монету">−</button><input type="text" inputmode="text" data-storage-money-field="copper" value="{{storageContext.money.copper}}" aria-label="Медные монеты" /><button type="button" data-action="adjust-storage-money" data-money-denom="copper" data-money-op="plus" aria-label="Добавить одну медную монету">+</button></div></label>
+              {{else}}
+                <strong>{{storageContext.money.text}}</strong>
+              {{/if}}
+            </div>
+          </div>
+
+          <div class="fbls-storage-global-search {{#if activeStorage.resources}}with-add-row{{/if}}">
+            <label><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-storage-search value="{{storageContext.searchQuery}}" placeholder="Найти ресурс или предмет во всех помещениях…" autocomplete="off" /></label>
+            {{#if activeStorage.resources}}
+              {{#if canEdit}}<button type="button" class="fbls-button compact fbls-storage-add-row" data-action="add-row" data-collection="holdings.{{holdingIndex}}.storage.resources"><i class="fa-solid fa-plus"></i><span>Строка</span></button>{{/if}}
+            {{/if}}
+            <section class="fbls-storage-search-results" data-storage-search-panel hidden>
+              <header><strong>Найдено: <span data-storage-search-count>0</span></strong><small>по всем помещениям</small></header>
+              <div>
+                {{#each storageContext.searchRows}}
+                  <button type="button" data-action="storage-search-result" data-storage-search-row="{{search}}" data-storage-subtab="{{subtab}}" data-room-id="{{roomId}}" data-storage-target-id="{{id}}" hidden><i class="{{icon}}"></i><span><strong>{{title}}</strong><small>{{roomLabel}} · {{meta}}</small></span><i class="fa-solid fa-arrow-right"></i></button>
+                {{/each}}
+                <p data-storage-search-empty hidden>Совпадений нет.</p>
+              </div>
+            </section>
+          </div>
+        </header>

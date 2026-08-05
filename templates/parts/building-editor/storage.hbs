@@ -1,0 +1,18 @@
+      {{#if building.showEditorStorage}}
+        <fieldset class="fbls-building-editor-card wide-card fbls-storage-building-card fbls-editor-tab-workspace tab-storage">
+          <legend class="fbls-editor-tab-legend">Складское</legend>
+          <header class="fbls-editor-tab-head"><i class="fa-solid fa-box-archive"></i><div><span>Логистика здания</span><h2>Складское</h2><p>Вместимость, безопасность и качество хранения.</p></div><strong class="fbls-editor-head-metric"><small>Занято</small>{{building.storage.usedText}} / {{building.storage.capacityText}}</strong></header>
+          <section class="fbls-editor-tab-panel"><div class="fbls-editor-panel-head"><span><i class="fa-solid fa-warehouse"></i> Параметры склада</span><small>Ёмкость и сохранность запасов</small></div><div class="fbls-storage-building-grid">
+            <label><span data-fbls-tooltip="Сколько веса предметов и ресурсов можно хранить в этом складском помещении. 0 означает без жесткого лимита.">Вместимость</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.storage.capacityPath}}" value="{{building.storage.capacity}}" />{{else}}<strong>{{building.storage.capacity}}</strong>{{/if}}</label>
+            <label><span data-fbls-tooltip="Насколько трудно этот склад ограбить или вскрыть. Значение используется как справочный рейтинг для ГМа.">Защищенность</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.storage.securityPath}}" value="{{building.storage.security}}" />{{else}}<strong>{{building.storage.security}}</strong>{{/if}}</label>
+            <label><span data-fbls-tooltip="Насколько хорошо склад сохраняет предметы: сухость, порядок, защита от порчи, вредителей и случайной потери.">Качество хранения</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.storage.qualityPath}}" value="{{building.storage.quality}}" />{{else}}<strong>{{building.storage.quality}}</strong>{{/if}}</label>
+          </div>
+          <div class="fbls-storage-building-current {{building.storage.fillClass}}" data-fbls-tooltip="Заполнение считается по весу. Для старых строк ресурсов без веса используется 1 единица заполнения за 1 ресурс.">
+            <span><i class="fa-solid fa-boxes-stacked"></i> Сейчас занято</span>
+            <strong>{{building.storage.usedText}} / {{building.storage.capacityText}}</strong>
+            <em>свободно: {{building.storage.freeText}}</em>
+          </div>
+          <p class="fbls-muted-line">Когда здание построено и помечено как склад, оно появляется во вкладке хранилища как место отгрузки продукции.</p>
+          </section>
+        </fieldset>
+      {{/if}}

@@ -1,0 +1,64 @@
+      {{#if building.showEditorCapital}}
+        <fieldset class="fbls-building-editor-card wide-card fbls-enterprise-capital-card fbls-editor-tab-workspace tab-capital">
+          <legend class="fbls-editor-tab-legend">Капитал предприятия</legend>
+          <header class="fbls-editor-tab-head"><i class="fa-solid fa-landmark"></i><div><span>Запуск предприятия</span><h2>Капитал</h2><p>Право на землю, невозвратный ввод оборудования и защищённый оборотный резерв учитываются отдельно.</p></div><strong class="fbls-editor-head-metric"><small>Денежный запуск</small>{{building.enterpriseCapital.requiredText}}</strong></header>
+
+          <section class="fbls-editor-tab-panel">
+            <div class="fbls-editor-panel-head"><span><i class="fa-solid fa-coins"></i> Условия запуска</span><small>Право, разовый платёж и отдельный резерв</small></div>
+            <div class="fbls-capital-grid">
+              <label class="fbls-checkbox-label fbls-icon-check" data-fbls-tooltip="Включает проверку готовности предприятия. Для запуска нужны право на землю, оплаченный ввод оборудования и полный оборотный резерв."><span><i class="fa-solid fa-landmark"></i> Требовать капитал</span>{{#if building.enterpriseCapital.canConfigureCapital}}<input type="checkbox" data-type="checkbox" data-field="{{building.enterpriseCapital.enabledPath}}" {{#if building.enterpriseCapital.enabled}}checked{{/if}} />{{else}}<strong>{{#if building.enterpriseCapital.enabled}}Да{{else}}Нет{{/if}}</strong>{{/if}}</label>
+              <label><span data-fbls-tooltip="Справочная стоимость участка, концессии, лицензии или права пользования. Она не списывается с казны этого здания: фактическое право предоставляется всему поселению настройкой ГМа.">Земля и права — справочно, ММ</span>{{#if building.enterpriseCapital.canConfigureCapital}}<input type="number" min="0" step="1" data-type="number" data-field="{{building.enterpriseCapital.landPath}}" value="{{building.enterpriseCapital.landCopper}}" />{{else}}<strong>{{building.enterpriseCapital.landText}}</strong>{{/if}}</label>
+              <label><span data-fbls-tooltip="Разовый невозвратный платёж за установку, оснастку и ввод долговечных средств работы. После оплаты он не становится активом, который можно вывести обратно в казну.">Ввод оборудования, ММ</span>{{#if building.enterpriseCapital.canConfigureCapital}}<input type="number" min="0" step="1" data-type="number" data-field="{{building.enterpriseCapital.equipmentPath}}" value="{{building.enterpriseCapital.equipmentCopper}}" />{{else}}<strong>{{building.enterpriseCapital.equipmentText}}</strong>{{/if}}</label>
+              <label><span data-fbls-tooltip="Целевой защищённый оборотный резерв предприятия. Переведённые сюда деньги хранятся отдельно от доступной казны и не считаются доходом или расходом предприятия.">Оборотный резерв, ММ</span>{{#if building.enterpriseCapital.canConfigureCapital}}<input type="number" min="0" step="1" data-type="number" data-field="{{building.enterpriseCapital.workingCapitalPath}}" value="{{building.enterpriseCapital.workingCapitalCopper}}" />{{else}}<strong>{{building.enterpriseCapital.workingCapitalText}}</strong>{{/if}}</label>
+              <label><span data-fbls-tooltip="Годовой ориентир замены и ремонта изношенного оборудования. Он входит в оценку ROI, но автоматически из казны не списывается.">Обновление оборудования, %/год</span>{{#if building.enterpriseCapital.canConfigureCapital}}<input type="number" min="0" max="100" step="1" data-type="number" data-field="{{building.enterpriseCapital.renewalPercentPath}}" value="{{building.enterpriseCapital.renewalPercentAnnual}}" />{{else}}<strong>{{building.enterpriseCapital.renewalPercentAnnual}}%</strong>{{/if}}</label>
+            </div>
+          </section>
+
+          <section class="fbls-editor-tab-panel compact-panel">
+            <div class="fbls-editor-panel-head"><span><i class="fa-solid fa-chart-pie"></i> Сводка</span><small>Фактические деньги отделены от справочной оценки права</small></div>
+            <div class="fbls-capital-summary-grid">
+              <div class="fbls-result-box" data-fbls-tooltip="Справочная денежная оценка материалов проекта. Сами материалы выделяются со склада в разделе строительства."><span>Корпус и материалы</span><strong>{{building.enterpriseCapital.structuralText}}</strong><em>через строительство</em></div>
+              <div class="fbls-result-box" data-fbls-tooltip="Справочная стоимость земли или прав. Это требование права, а не платёж из казны предприятия."><span>Земля и права</span><strong>{{building.enterpriseCapital.landText}}</strong><em>справочно, не платёж</em></div>
+              <div class="fbls-result-box" data-fbls-tooltip="Разовый ввод оборудования плюс целевой оборотный резерв. Только эта сумма переводится из казны операцией финансирования."><span>Денежный запуск</span><strong>{{building.enterpriseCapital.requiredText}}</strong><em>ввод + резерв</em></div>
+              <div class="fbls-result-box" data-fbls-tooltip="Материалы строительства плюс денежный запуск без справочной стоимости земли."><span>Корпус + деньги</span><strong>{{building.enterpriseCapital.fullCashCapitalText}}</strong><em>без оценки права</em></div>
+              <div class="fbls-result-box" data-fbls-tooltip="Полная справочная оценка: материалы, земля или права, ввод оборудования и оборотный резерв."><span>Полная оценка</span><strong>{{building.enterpriseCapital.fullReferenceCapitalText}}</strong><em>включая право</em></div>
+              <div class="fbls-result-box" data-fbls-tooltip="Годовой ориентир замены и ремонта изношенного оборудования. Автоматически из казны не списывается."><span>Обновление оборудования</span><strong>{{building.enterpriseCapital.annualRenewalText}}</strong><em>за 240-дневный год</em></div>
+            </div>
+          </section>
+
+          {{#unless building.isTemplate}}
+            <div class="fbls-capital-funding {{building.enterpriseCapital.stateClass}}">
+              <div data-fbls-tooltip="Общая готовность предприятия. Все три условия проверяются отдельно."><span>Готовность</span><strong>{{building.enterpriseCapital.stateLabel}}</strong><em>{{building.enterpriseCapital.fundedPercentText}} денежного запуска</em></div>
+              <div data-fbls-tooltip="Право предоставляется поселению целиком в настройках экономики ГМа; справочная стоимость не переводится из казны."><span>Земля и право</span><strong>{{building.enterpriseCapital.landRightLabel}}</strong><em>оценка {{building.enterpriseCapital.landText}}</em></div>
+              <div data-fbls-tooltip="Оплаченная часть ввода оборудования является разовой и невозвратной."><span>Ввод оборудования</span><strong>{{building.enterpriseCapital.commissioningStatusText}}</strong><em>{{building.enterpriseCapital.commissioningPaidText}} / {{building.enterpriseCapital.equipmentText}}</em></div>
+              <div data-fbls-tooltip="Защищённый резерв хранится отдельно от казны и не считается доходом или расходом."><span>Оборотный резерв</span><strong>{{building.enterpriseCapital.reserveStatusText}}</strong><em>{{building.enterpriseCapital.reserveText}} / {{building.enterpriseCapital.workingCapitalText}}</em></div>
+              {{#if building.enterpriseCapital.canFund}}<button type="button" class="fbls-button compact primary" data-action="fund-enterprise-capital" data-fbls-tooltip="Перевести из казны {{building.enterpriseCapital.fundAmountText}}: сначала закрывается невозвратный ввод, затем защищённый резерв. В казне {{building.enterpriseCapital.treasuryText}}."><i class="fa-solid fa-coins"></i> Перевести {{building.enterpriseCapital.fundAmountText}}</button>{{/if}}
+            </div>
+
+            {{#if building.enterpriseCapital.canChangeFundingMode}}
+              <section class="fbls-editor-tab-panel compact-panel">
+                <div class="fbls-editor-panel-head"><span><i class="fa-solid fa-shield-halved"></i> Источник учёта</span><small>{{building.enterpriseCapital.fundingProvenanceLabel}}</small></div>
+                <div class="fbls-capital-grid">
+                  <label><span data-fbls-tooltip="Режим «Казна» разрешает только атомарную кнопку перевода. Ручные поля появляются лишь после явного выбора ручной или legacy-сверки ГМ.">Режим финансирования</span><select data-field="{{building.enterpriseCapital.fundingProvenancePath}}">{{#each building.enterpriseCapital.fundingProvenanceOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                  {{#if building.enterpriseCapital.manualFundingEditable}}
+                    <label><span data-fbls-tooltip="Явная ручная сверка ГМа. Это поле не списывает и не возвращает деньги в казну; укажите только подтверждённый невозвратный ввод.">Ввод подтверждён вручную, ММ</span><input type="number" min="0" step="1" data-type="number" data-field="{{building.enterpriseCapital.commissioningPaidPath}}" value="{{building.enterpriseCapital.commissioningPaidCopper}}" /></label>
+                    <label><span data-fbls-tooltip="Явная ручная или legacy-сверка ГМа. Это поле не печатает деньги в казне: оно лишь фиксирует подтверждённый защищённый резерв и не создаёт права на возврат.">Резерв подтверждён вручную, ММ</span><input type="number" min="0" step="1" data-type="number" data-field="{{building.enterpriseCapital.reservePath}}" value="{{building.enterpriseCapital.workingCapitalReserveCopper}}" /></label>
+                  {{/if}}
+                  {{#if building.enterpriseCapital.hasLegacyFunded}}<div class="fbls-result-box" data-fbls-tooltip="Старое поле fundedCopper сохранено только как неизменяемое свидетельство миграции. Оно не является казной или выводимым резервом."><span>Старое fundedCopper</span><strong>{{building.enterpriseCapital.legacyFundedText}}</strong><em>только свидетельство</em></div>{{/if}}
+                </div>
+                {{#if building.enterpriseCapital.manualFundingEditable}}<p class="fbls-muted-line"><i class="fa-solid fa-triangle-exclamation"></i> Ручная сверка не меняет казну. Она допустима только для подтверждения внешнего или legacy-финансирования и не создаёт возвратных денег.</p>{{/if}}
+              </section>
+            {{else}}
+              {{#if building.enterpriseCapital.hasLegacyFunded}}<p class="fbls-muted-line"><i class="fa-solid fa-box-archive"></i> Старое fundedCopper {{building.enterpriseCapital.legacyFundedText}} сохранено только как свидетельство миграции.</p>{{/if}}
+            {{/if}}
+
+            {{#if building.enterpriseCapital.grandfathered}}<p class="fbls-muted-line"><i class="fa-solid fa-stamp"></i> Уже введённое legacy-предприятие признано готовым. Миграция не создала выводимый резерв и не вернула деньги в казну.</p>{{/if}}
+            {{#if building.enterpriseCapital.legacyFundingNeedsReview}}<p class="fbls-muted-line fbls-capital-warning"><i class="fa-solid fa-triangle-exclamation"></i> Старое частичное fundedCopper нельзя автоматически разделить между вводом и резервом. ГМ должен выбрать ручную legacy-сверку или начать финансирование из казны заново.</p>{{/if}}
+            {{#unless building.enterpriseCapital.ready}}<p class="fbls-muted-line fbls-capital-warning"><i class="fa-solid fa-triangle-exclamation"></i> Пока не выполнены право, ввод и резерв, производство, фиксированный доход, услуги и торговля этого здания не выполняются.</p>{{/unless}}
+          {{else}}
+            <p class="fbls-muted-line">Новый экземпляр проекта начинает с нулевым оплаченным вводом и нулевым защищённым резервом. Справочная стоимость земли не переводится из казны.</p>
+          {{/unless}}
+
+          <section class="fbls-editor-tab-panel compact-panel"><label class="fbls-wide-label"><span data-fbls-tooltip="Пояснение, какие права, оборудование и оборотный запас скрываются за оценками. Поле справочное и не участвует в формулах.">Состав и допущения</span>{{#if building.enterpriseCapital.canConfigureCapital}}<textarea data-field="{{building.enterpriseCapital.notesPath}}" rows="3">{{building.enterpriseCapital.notes}}</textarea>{{else}}<p class="fbls-preline">{{building.enterpriseCapital.notes}}</p>{{/if}}</label></section>
+        </fieldset>
+      {{/if}}

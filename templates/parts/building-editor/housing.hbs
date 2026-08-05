@@ -1,0 +1,42 @@
+      {{#if building.showEditorHousing}}
+        <fieldset class="fbls-building-editor-card wide-card fbls-housing-building-card fbls-editor-tab-workspace tab-housing">
+          <legend class="fbls-editor-tab-legend">Жильё</legend>
+          <header class="fbls-editor-tab-head"><i class="fa-solid fa-house"></i><div><span>Размещение жителей</span><h2>Жильё</h2><p>Вместимость, качество и персональное распределение мест.</p></div><strong class="fbls-editor-head-metric"><small>Занято</small>{{building.housing.usedText}} / {{building.housing.capacityText}}</strong></header>
+          <section class="fbls-editor-tab-panel"><div class="fbls-editor-panel-head"><span><i class="fa-solid fa-bed"></i> Параметры жилья</span><small>Лимит и влияние на жителей</small></div><div class="fbls-housing-building-grid">
+            <label><span data-fbls-tooltip="Сколько живых жителей может нормально жить в этом здании. 0 означает без жесткого лимита.">Вместимость</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.housing.capacityPath}}" value="{{building.housing.capacity}}" />{{else}}<strong>{{building.housing.capacity}}</strong>{{/if}}</label>
+            <label><span data-fbls-tooltip="Влияние жилья на довольство жителей, которые здесь живут. Может быть отрицательным.">Комфорт</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.housing.comfortPath}}" value="{{building.housing.comfort}}" />{{else}}<strong>{{building.housing.comfort}}</strong>{{/if}}</label>
+            <label><span data-fbls-tooltip="Общее качество жилья: сухость, тепло, безопасность, порядок. Пока используется как справочный рейтинг для ГМа.">Качество</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.housing.qualityPath}}" value="{{building.housing.quality}}" />{{else}}<strong>{{building.housing.quality}}</strong>{{/if}}</label>
+          </div>
+          <div class="fbls-housing-building-current {{building.housing.fillClass}}" data-fbls-tooltip="Занятость считается по живым жителям, у которых это здание выбрано как дом.">
+            <span><i class="fa-solid fa-bed"></i> Сейчас живут</span>
+            <strong>{{building.housing.usedText}} / {{building.housing.capacityText}}</strong>
+            <em>свободно: {{building.housing.freeText}}</em>
+          </div></section>
+          {{#if canEdit}}
+            <section class="fbls-editor-tab-panel"><div class="fbls-editor-panel-head"><span><i class="fa-solid fa-people-roof"></i> Жильцы</span><small>Назначение по местам</small></div><div class="fbls-housing-slot-grid">
+              {{#each building.housing.slotRows}}
+                <label>
+                  <span>Место {{slotNo}}</span>
+                  <select data-building-housing-field data-housing-slot="{{slot}}">
+                    {{#each options}}
+                      <option value="{{id}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{name}}{{#if hint}} · {{hint}}{{/if}}</option>
+                    {{/each}}
+                  </select>
+                </label>
+              {{/each}}
+            </div></section>
+          {{/if}}
+          {{#if building.housing.occupants}}
+            {{#if canEdit}}
+              <p class="fbls-muted-line"><strong>Назначено жильцов:</strong> {{building.housing.usedText}}. Состав редактируется в сетке мест выше.</p>
+            {{else}}
+              <div class="fbls-housing-occupant-grid" aria-label="Жители здания">
+                {{#each building.housing.occupantRows}}<span class="fbls-housing-occupant-chip"><i class="fa-solid fa-user"></i>{{name}}</span>{{/each}}
+              </div>
+            {{/if}}
+          {{else}}
+            <p class="fbls-muted-line">В этом здании пока никто не живет.</p>
+          {{/if}}
+          <section class="fbls-editor-tab-panel compact-panel"><label class="fbls-wide-label"><span>Заметки по жилью</span>{{#if canEdit}}<textarea data-field="{{building.housing.notesPath}}" rows="2">{{building.housing.notes}}</textarea>{{else}}<p class="fbls-preline">{{building.housing.notes}}</p>{{/if}}</label></section>
+        </fieldset>
+      {{/if}}

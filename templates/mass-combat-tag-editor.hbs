@@ -14,6 +14,24 @@
 
     <section class="fbls-mass-tag-editor-panel">
       <h3><i class="fa-solid fa-tags"></i> Теги</h3>
+      <div class="fbls-mass-icon-picker" data-mass-icon-picker hidden>
+        <header>
+          <div class="fbls-mass-icon-picker-current">
+            <span data-mass-icon-picker-preview><i class="fa-solid fa-circle"></i></span>
+            <div><strong>Иконка тега</strong><em data-mass-icon-picker-value>fa-solid fa-circle</em></div>
+          </div>
+          <label><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-mass-icon-search placeholder="Поиск: щит, конница, fa-horse…" /></label>
+          <button type="button" class="fbls-button compact primary" data-action="apply-mass-tag-icon"><i class="fa-solid fa-check"></i> Применить</button>
+          <button type="button" class="fbls-icon-button" data-action="close-mass-tag-icon-picker" title="Закрыть каталог" aria-label="Закрыть каталог иконок"><i class="fa-solid fa-xmark"></i></button>
+        </header>
+        <div class="fbls-mass-icon-grid">
+          {{#each editor.iconOptions}}
+            <button type="button" data-action="select-mass-tag-icon" data-icon-class="{{value}}" data-icon-search="{{search}}" title="{{label}} · {{value}}">
+              <i class="{{value}}"></i><span>{{label}}</span>
+            </button>
+          {{/each}}
+        </div>
+      </div>
       <div class="fbls-mass-tag-table-wrap">
         <table class="fbls-mass-tag-table">
           <thead>
@@ -33,7 +51,12 @@
                 <td><code>{{key}}</code></td>
                 <td><input type="text" data-tag-field="label" value="{{label}}" /></td>
                 <td><input type="text" data-tag-field="short" value="{{short}}" /></td>
-                <td><input type="text" data-tag-field="icon" value="{{icon}}" /></td>
+                <td>
+                  <div class="fbls-mass-icon-field">
+                    <button type="button" data-action="open-mass-tag-icon-picker" data-icon-preview title="Выбрать иконку из каталога" aria-label="Выбрать иконку тега {{label}}"><i class="{{icon}}"></i></button>
+                    <input type="text" data-tag-field="icon" value="{{icon}}" aria-label="Класс Font Awesome" />
+                  </div>
+                </td>
                 <td><input type="text" data-tag-field="hint" value="{{hint}}" /></td>
               </tr>
             {{/each}}

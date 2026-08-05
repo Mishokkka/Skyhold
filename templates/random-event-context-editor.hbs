@@ -1,0 +1,39 @@
+<section class="fbls-event-context-editor-shell">
+  {{#if hasHolding}}
+    <header class="fbls-event-context-editor-head">
+      <div>
+        <h2>Факты событий</h2>
+        <p>{{holdingName}}</p>
+      </div>
+    </header>
+
+    <section class="fbls-event-context-card">
+      <h3><i class="fa-solid fa-sliders"></i> Пороги low/high</h3>
+      <div class="fbls-event-threshold-grid">
+        {{#each thresholdRows}}
+          <label>
+            <span>{{label}} low</span>
+            <input type="number" step="1" data-type="number" data-event-threshold-key="{{key}}" data-event-threshold-field="lowMax" value="{{lowMax}}" />
+          </label>
+          <label>
+            <span>{{label}} high</span>
+            <input type="number" step="1" data-type="number" data-event-threshold-key="{{key}}" data-event-threshold-field="highMin" value="{{highMin}}" />
+          </label>
+        {{/each}}
+      </div>
+    </section>
+
+    <section class="fbls-event-context-card facts">
+      <h3><i class="fa-solid fa-fingerprint"></i> Активные признаки</h3>
+      <div class="fbls-event-fact-list">
+        {{#each factChips}}
+          <span>{{tag}}</span>
+        {{else}}
+          <em>нет активных признаков</em>
+        {{/each}}
+      </div>
+    </section>
+  {{else}}
+    <p class="fbls-empty">Нет выбранного владения для просмотра фактов событий.</p>
+  {{/if}}
+</section>

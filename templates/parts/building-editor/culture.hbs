@@ -1,0 +1,30 @@
+      {{#if building.showEditorCulture}}
+        <fieldset class="fbls-building-editor-card wide-card fbls-culture-building-card fbls-editor-tab-workspace tab-culture">
+          <legend class="fbls-editor-tab-legend">Культура и религия</legend>
+          <header class="fbls-editor-tab-head"><i class="fa-solid fa-place-of-worship"></i><div><span>Идентичность и обряды</span><h2>Культура и религия</h2><p>Религиозная принадлежность и содержательное описание здания.</p></div></header>
+          <section class="fbls-editor-tab-panel"><div class="fbls-editor-panel-head"><span><i class="fa-solid fa-book-open"></i> Культурный профиль</span><small>Вера, культ и практики</small></div><div class="fbls-culture-religion-grid">
+            <label class="fbls-religion-toggle">
+              <span data-fbls-tooltip="Если включено, здание считается религиозным и получает привязку к конкретной вере.">Религиозное?</span>
+              {{#if canEdit}}<input type="checkbox" data-type="checkbox" data-field="{{building.cultureReligion.religiousPath}}" {{#if building.cultureReligion.religious}}checked{{/if}} />{{else}}<strong>{{#if building.cultureReligion.religious}}Да{{else}}Нет{{/if}}</strong>{{/if}}
+            </label>
+            {{#if building.cultureReligion.religious}}
+              <label>
+                <span>Религия</span>
+                {{#if canEdit}}<select data-field="{{building.cultureReligion.faithPath}}">{{#each building.cultureReligion.faithOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{building.cultureReligion.faithLabel}}</strong>{{/if}}
+              </label>
+              {{#if building.cultureReligion.showCustomFaith}}
+                <label class="fbls-religion-custom">
+                  <span>Свое название</span>
+                  {{#if canEdit}}<input type="text" data-field="{{building.cultureReligion.customFaithPath}}" value="{{building.cultureReligion.customFaith}}" placeholder="Название религии или культа" />{{else}}<strong>{{building.cultureReligion.customFaith}}</strong>{{/if}}
+                </label>
+              {{/if}}
+            {{/if}}
+            <label class="wide">
+              <span>Описание</span>
+              {{#if canEdit}}<textarea data-field="{{building.cultureReligion.notesPath}}" rows="3" placeholder="Кому посвящено, кто служит, какие обряды и запреты.">{{building.cultureReligion.notes}}</textarea>{{else}}<p class="fbls-preline">{{building.cultureReligion.notes}}</p>{{/if}}
+            </label>
+          </div>
+          <p class="fbls-muted-line">Механический эффект задается обычными полями здания: довольство, репутация, работники, требования и заметки.</p>
+          </section>
+        </fieldset>
+      {{/if}}

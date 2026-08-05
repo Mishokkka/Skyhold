@@ -1,0 +1,53 @@
+<section class="fbls-content-pack-shell">
+  <header class="fbls-content-pack-head">
+    <div><h2><i class="fa-solid fa-box-open"></i> Content packs</h2><p>Выберите готовый набор или загрузите свой JSON. Все конфликты показываются до записи.</p></div>
+    {{#if hasPlan}}<button type="button" class="fbls-button compact" data-action="content-pack-clear"><i class="fa-solid fa-xmark"></i> Очистить</button>{{/if}}
+  </header>
+
+  {{#unless hasPlan}}
+    <section class="fbls-content-pack-library">
+      <header><strong>Готовые наборы модуля</strong><span>Не нужно искать файлы вручную</span></header>
+      <div>
+        {{#each bundledPacks}}
+          <button type="button" class="fbls-content-pack-bundled" data-action="content-pack-bundled" data-pack-id="{{id}}">
+            <i class="{{icon}}"></i><span><strong>{{label}}</strong><small>{{description}}</small></span><i class="fa-solid fa-chevron-right"></i>
+          </button>
+        {{/each}}
+      </div>
+    </section>
+  {{/unless}}
+
+  <label class="fbls-content-pack-file">
+    <input class="fbls-content-pack-native-file" type="file" accept="application/json,.json" data-content-pack-file />
+    <i class="fa-solid fa-file-code"></i>
+    <span><strong>Свой content pack</strong><small>{{#if fileName}}{{fileName}}{{else}}Выберите JSON-файл с компьютера{{/if}}</small></span>
+    <span class="fbls-content-pack-file-action"><i class="fa-solid fa-folder-open"></i> Выбрать JSON</span>
+  </label>
+  {{#if error}}<p class="fbls-content-pack-error"><i class="fa-solid fa-triangle-exclamation"></i> {{error}}</p>{{/if}}
+  {{#if hasPlan}}
+    <article class="fbls-content-pack-summary">
+      <div><strong>{{pack.name}}</strong><span>{{pack.id}} · source {{pack.source}} · v{{pack.version}}</span></div>
+      <div class="fbls-content-pack-counts"><span class="add">+{{counts.add}}</span><span class="update">↻{{counts.update}}</span><span class="remove">−{{counts.remove}}</span><span class="conflict">!{{counts.conflict}}</span><span class="skip">={{counts.skip}}</span></div>
+    </article>
+    <div class="fbls-content-pack-preview">
+      {{#each changes}}
+        <article class="fbls-content-pack-row {{status}} {{#if isReset}}reset{{/if}}">
+          <div><strong>{{label}}</strong><small>{{#if isReset}}НЕОБРАТИМАЯ ОЧИСТКА ПЕРЕД ИМПОРТОМ{{else}}{{kind}} · {{id}}{{/if}}</small></div>
+          <span>{{statusLabel}} · {{reason}}</span>
+          {{#if isConflict}}
+            <select data-content-pack-resolution="{{key}}" aria-label="Разрешение конфликта {{label}}">
+              <option value="existing" {{#if chooseExisting}}selected{{/if}}>Оставить установленное</option>
+              <option value="incoming" {{#if chooseIncoming}}selected{{/if}}>{{#if isRetirement}}Удалить устаревшее{{else}}Заменить входящим{{/if}}</option>
+            </select>
+          {{/if}}
+        </article>
+      {{else}}
+        <p class="fbls-muted-text">В pack нет поддерживаемого контента.</p>
+      {{/each}}
+    </div>
+    <footer class="fbls-content-pack-actions">
+      <p>{{#if pack.install.replaceMarket}}Этот набор выполняет чистую установку экономики. Перед записью будет показано дополнительное подтверждение; материалы, склады и поселения не удаляются.{{else}}Конфликты по умолчанию сохраняют установленную запись.{{/if}}</p>
+      <button type="button" class="fbls-button primary" data-action="content-pack-import" {{#unless canImport}}disabled{{/unless}}><i class="fa-solid fa-file-import"></i> Импортировать</button>
+    </footer>
+  {{/if}}
+</section>

@@ -1,0 +1,221 @@
+      {{#if building.showEditorProduction}}
+        <fieldset class="fbls-building-editor-card wide-card production-lines-card fbls-production-workspace">
+          <legend>Производство</legend>
+
+          <section class="fbls-production-panel fbls-building-contents-panel" data-fbls-tooltip="Содержимое используется линиями с источником «Содержимое» как множитель выпуска. Рабочим и календарным линиям этот список не нужен.">
+            <div class="fbls-production-section-head">
+              <div>
+                <span class="fbls-production-eyebrow"><i class="fa-solid fa-boxes-stacked"></i> Множители</span>
+                <h3>Содержимое здания</h3>
+                <p>Поголовье, посадки, ульи, станки и другие производственные единицы.</p>
+              </div>
+              {{#if canEdit}}<button type="button" class="fbls-button compact" data-action="add-building-content"><i class="fa-solid fa-plus"></i> Добавить</button>{{/if}}
+            </div>
+
+            <div class="fbls-content-list compact-contents">
+              {{#each building.contents}}
+                <article class="fbls-content-row-card {{#if stockLinked}}is-stock-linked{{/if}}">
+                  {{#if ../canEdit}}
+                    <div class="fbls-content-row-main">
+                      <label class="name"><span>Название</span><input type="text" data-field="{{namePath}}" value="{{name}}" placeholder="Коровы, ульи, деревья..." /></label>
+                      <label class="content-resource"><span data-fbls-tooltip="Связь со складской позицией. Для скота количество меняется перемещением со склада или обратно; ручное содержимое остаётся свободным счётчиком.">Учёт</span>
+                        {{#if resourceLocked}}
+                          <strong data-fbls-tooltip="Тип складской позиции можно изменить только при нулевом количестве. Сначала верните животных на склад или обнулите ручной счётчик.">{{resourceLabel}}</strong>
+                        {{else}}
+                          <select data-field="{{resourceIdPath}}">{{#each resourceOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+                        {{/if}}
+                      </label>
+                      {{#if stockLinked}}
+                        <label class="quantity"><span>В здании</span><strong class="fbls-content-qty" data-fbls-tooltip="Фактическое поголовье внутри здания. Оно умножает выпуск связанных линий.">{{qty}}</strong></label>
+                      {{else}}
+                        <label class="quantity"><span>Количество</span><input type="number" min="0" data-type="number" data-field="{{qtyPath}}" value="{{qty}}" /></label>
+                      {{/if}}
+                      <label class="capacity"><span>Вместимость</span><input type="number" min="0" data-type="number" data-field="{{capacityPath}}" value="{{capacity}}" data-fbls-tooltip="Ноль означает, что предел не задан." /></label>
+                      <button type="button" class="fbls-icon-button danger" data-action="delete-building-content" data-index="{{_index}}" aria-label="Удалить содержимое {{name}}"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                    {{#if stockLinked}}
+                      <div class="fbls-content-transfer" data-fbls-tooltip="Животные прибывают на склад как груз, затем переводятся в здание. Обратное перемещение возвращает их в хранилище «Под открытым небом».">
+                        <span class="fbls-content-stock"><i class="fa-solid fa-warehouse"></i><small>На складе</small><strong>{{storageQtyText}}</strong></span>
+                        <label><span>Переместить</span><input type="number" min="1" step="1" value="1" data-content-transfer-qty aria-label="Количество животных для перемещения" /></label>
+                        <div class="fbls-content-transfer-actions fbls-action-group">
+                          <button type="button" class="fbls-button compact" data-action="take-livestock-from-storage" data-index="{{_index}}" {{#unless canTakeFromStorage}}disabled{{/unless}}><i class="fa-solid fa-arrow-right-to-bracket"></i> В здание</button>
+                          <button type="button" class="fbls-button compact" data-action="return-livestock-to-storage" data-index="{{_index}}" {{#unless canReturnToStorage}}disabled{{/unless}}><i class="fa-solid fa-arrow-right-from-bracket"></i> На склад</button>
+                        </div>
+                      </div>
+                    {{/if}}
+                  {{else}}
+                    <div class="fbls-content-readonly"><strong>{{name}}</strong><span>{{line}}{{#if stockLinked}} · на складе {{storageQtyText}}{{/if}}</span></div>
+                  {{/if}}
+                </article>
+              {{else}}
+                <div class="fbls-production-empty"><i class="fa-regular fa-square-plus"></i><span>Содержимое не задано. Оно понадобится только линиям с источником «Содержимое».</span></div>
+              {{/each}}
+            </div>
+          </section>
+
+          <section class="fbls-production-panel fbls-production-lines-panel">
+            <div class="fbls-production-section-head">
+              <div>
+                <span class="fbls-production-eyebrow"><i class="fa-solid fa-gears"></i> Производственные линии</span>
+                <h3>Настройка выпуска</h3>
+                <p>Сначала задайте основной поток, затем ограничения, сырьё и автоматизацию.</p>
+              </div>
+              <div class="fbls-production-section-actions">
+                <div class="fbls-production-inline-summary" aria-label="Сводка производства">
+                  <span data-fbls-tooltip="Активные линии участвуют в экономическом ходе."><b>{{building.productionOverview.activeLines}}</b> линий</span>
+                  <span data-fbls-tooltip="Суммарная эффективность назначенных работников здания."><b>{{building.productionOverview.workerEfficiencyText}}</b> эфф. раб.</span>
+                  {{#if building.productionOverview.pendingLines}}<span class="is-warning" data-fbls-tooltip="Линии с продукцией, ожидающей сбора."><b>{{building.productionOverview.pendingLines}}</b> к сбору</span>{{/if}}
+                  {{#if building.productionOverview.wipLines}}<span class="is-warning" data-fbls-tooltip="Партии, в которые уже вложено сырьё и часть труда."><b>{{building.productionOverview.wipLines}}</b> в работе</span>{{/if}}
+                </div>
+                {{#if canEdit}}<button type="button" class="fbls-button compact" data-action="add-production-line"><i class="fa-solid fa-plus"></i> Новая линия</button>{{/if}}
+              </div>
+            </div>
+
+            <div class="fbls-production-card-list">
+              {{#each building.productionLines}}
+                <article class="fbls-production-card {{#if active}}active{{else}}inactive{{/if}}">
+                  <header class="fbls-production-card-header">
+                    <label class="fbls-production-power {{#if active}}active{{/if}}" data-fbls-tooltip="Только включённая линия участвует в экономическом ходе.">
+                      {{#if ../canEdit}}<input type="checkbox" data-type="checkbox" data-field="{{activePath}}" {{#if active}}checked{{/if}} />{{/if}}
+                      <span><i class="fa-solid {{#if active}}fa-power-off{{else}}fa-pause{{/if}}"></i>{{#if active}}В работе{{else}}Пауза{{/if}}</span>
+                    </label>
+                    <div class="fbls-production-title">
+                      <span>Название линии</span>
+                      {{#if ../canEdit}}<input type="text" data-field="{{modePath}}" value="{{mode}}" placeholder="Название линии" />{{else}}<h4>{{mode}}</h4>{{/if}}
+                    </div>
+                    <div class="fbls-production-badges" aria-label="Параметры линии">
+                      <span><i class="fa-solid {{#if isWorkers}}fa-user-gear{{else}}{{#if isContent}}fa-boxes-stacked{{else}}fa-clock-rotate-left{{/if}}{{/if}}"></i>{{sourceLabel}}</span>
+                      <span><i class="fa-regular fa-calendar"></i>{{cadenceLabel}}</span>
+                      {{#if requiresCollection}}<span class="warn"><i class="fa-solid fa-hand-holding"></i>Сбор</span>{{/if}}
+                      {{#if hasWorkInProgress}}<span class="warn"><i class="fa-solid fa-hammer"></i>НЗП</span>{{/if}}
+                    </div>
+                  </header>
+
+                  <div class="fbls-production-performance {{#if performanceIsFormula}}uses-formula{{/if}}">
+                    <div class="fbls-production-output-mark">
+                      <i class="{{resourceIcon}}"></i>
+                      <div><b>{{performanceValue}}</b><span>{{performanceLabel}}</span></div>
+                    </div>
+                    <p>{{cycleText}}</p>
+                    <div class="fbls-production-performance-stats">
+                      <span><small>{{driverLabel}}</small><b>{{driverText}}</b></span>
+                      <span><small>Мощность</small><b>{{cadenceProgressText}}</b></span>
+                      <span><small>Отгрузка</small><b><i class="fa-solid fa-warehouse"></i> {{storageRoomLabel}}</b></span>
+                      {{#unless isWorkers}}<span class="{{#if hasPending}}is-warning{{/if}}"><small>Готово к сбору</small><b>{{pendingQty}}</b></span>{{/unless}}
+                      {{#if isWorkers}}{{#if hasWorkInProgress}}<span class="is-warning" data-fbls-tooltip="Сырьё партии уже списано; прогресс переносится между десятниками."><small>Незавершённая партия</small><b>{{wipProgressText}} → {{wipOutputQty}}</b></span>{{/if}}{{/if}}
+                    </div>
+                  </div>
+
+                  <section class="fbls-production-group fbls-production-process-group">
+                    <div class="fbls-production-group-head"><span><i class="fa-solid fa-arrow-right-arrow-left"></i> Основной поток</span><small>Источник → цикл → выпуск</small></div>
+                    <div class="fbls-production-primary-grid source-{{source}}">
+                      <label><span data-fbls-tooltip="Рабочие тратят рабочие QD; Время срабатывает по календарю; Содержимое умножает выпуск на количество выбранных единиц.">Источник</span>{{#if ../canEdit}}<select data-field="{{sourcePath}}">{{#each sourceOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{sourceLabel}}</strong>{{/if}}</label>
+                      {{#if isContent}}
+                        <label><span data-fbls-tooltip="Единица из блока «Содержимое здания», которая умножает выпуск линии.">Множитель</span>{{#if ../canEdit}}<select data-field="{{contentIdPath}}">{{#each contentOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{contentName}}</strong>{{/if}}</label>
+                        <label class="numeric"><span data-fbls-tooltip="Сколько единиц содержимого образуют одну полную производственную когорту. Неполный остаток не даёт выпуска.">Единиц в когорте</span>{{#if ../canEdit}}<input type="number" min="0" step="1" data-type="number" data-field="{{contentUnitsPerBatchPath}}" value="{{contentUnitsPerBatch}}" />{{else}}<strong>{{contentUnitsPerBatch}}</strong>{{/if}}</label>
+                      {{/if}}
+                      <label class="output-resource"><span>Результат</span>
+                        {{#if ../canEdit}}
+                          <button type="button" class="fbls-resource-picker-button" data-action="pick-production-resource" data-index="{{_index}}"><i class="{{resourceIcon}}"></i><span>{{resource}}</span><i class="fa-solid fa-chevron-right"></i></button>
+                        {{else}}
+                          <strong><i class="{{resourceIcon}}"></i> {{resource}}</strong>
+                        {{/if}}
+                      </label>
+                      <label class="numeric"><span data-fbls-tooltip="Базовый выпуск одной партии в целых учётных единицах. Для содержимого — выпуск с одной единицы; формула может заменить итоговое значение.">Выпуск</span>{{#if ../canEdit}}<input type="number" min="0" step="1" data-type="number" data-economy-whole-quantity data-field="{{outputQtyPath}}" value="{{outputQty}}" />{{else}}<strong>{{outputQty}}</strong>{{/if}}</label>
+                      <label><span>Календарное окно</span>{{#if ../canEdit}}<select data-field="{{cadencePath}}">{{#each cadenceOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{cadenceLabel}}</strong>{{/if}}</label>
+                      {{#if isWorkers}}
+                        <label class="numeric"><span data-fbls-tooltip="Рабочие QD на одну партию. Частота и труд ограничивают линию независимо.">Труд QD</span>{{#if ../canEdit}}<input type="number" min="1" data-type="number" data-field="{{laborQdPerBatchPath}}" value="{{laborQdPerBatch}}" />{{else}}<strong>{{laborQdPerBatch}}</strong>{{/if}}</label>
+                      {{else}}
+                        <label class="numeric"><span data-fbls-tooltip="1 — каждый выбранный период, 2 — каждый второй период.">Каждые</span>{{#if ../canEdit}}<input type="number" min="1" step="1" data-type="number" data-field="{{cadenceEveryPath}}" value="{{cadenceEvery}}" />{{else}}<strong>{{cadenceEvery}}</strong>{{/if}}</label>
+                      {{/if}}
+                      <label class="numeric"><span data-fbls-tooltip="Максимум партий внутри календарного окна. Ноль снимает календарный лимит; труд и сырьё продолжают ограничивать выпуск.">Лимит партий</span>{{#if ../canEdit}}<input type="number" min="0" step="1" data-type="number" data-field="{{maxBatchesPerCadencePath}}" value="{{maxBatchesPerCadence}}" />{{else}}<strong>{{#if unlimitedBatches}}∞{{else}}{{maxBatchesPerCadence}}{{/if}}</strong>{{/if}}</label>
+                      {{#if isCustomResource}}<label class="custom-resource"><span>Название своего ресурса</span>{{#if ../canEdit}}<input type="text" data-field="{{resourcePath}}" value="{{resource}}" placeholder="Свой ресурс" />{{else}}<strong>{{resource}}</strong>{{/if}}</label>{{/if}}
+                    </div>
+                  </section>
+
+                  <div class="fbls-production-settings-deck">
+                    <section class="fbls-production-group fbls-production-recipe-group">
+                      <div class="fbls-production-group-head"><span><i class="fa-solid fa-flask"></i> Рецепт</span><small>Сырьё и расчёт</small></div>
+                      <div class="fbls-production-recipe-grid">
+                        <div class="fbls-production-expenses">
+                          <div class="fbls-production-expenses-head">
+                            <div>
+                              <span>Сырьё со склада</span>
+                              <small>Конкретный ресурс или категория списывается при выпуске.</small>
+                            </div>
+                            {{#if ../canEdit}}
+                              <div class="fbls-production-expense-actions fbls-action-group">
+                                <button type="button" class="fbls-button compact" data-action="add-production-expense-resource" data-line-index="{{_index}}"><i class="fa-solid fa-plus"></i> Ресурс</button>
+                                <button type="button" class="fbls-button compact" data-action="add-production-expense-group" data-line-index="{{_index}}"><i class="fa-solid fa-layer-group"></i> Категория</button>
+                              </div>
+                            {{/if}}
+                          </div>
+                          <div class="fbls-production-expense-list">
+                            {{#each expenseItems}}
+                              <div class="fbls-production-expense-row {{#if isGroup}}is-group{{else}}is-resource{{/if}}">
+                                <span class="fbls-production-expense-kind" data-fbls-tooltip="{{#if isGroup}}Будет выбран доступный складской ресурс, подходящий этой категории.{{else}}Со склада будет списан именно этот ресурс.{{/if}}"><i class="{{icon}}"></i>{{#if isGroup}}Категория{{else}}Ресурс{{/if}}</span>
+                                {{#if isGroup}}
+                                  {{#if ../../canEdit}}<select data-production-expense-field="group" data-line-index="{{../_index}}" data-expense-index="{{_index}}" aria-label="Категория сырья">{{#each groupOptions}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong><i class="{{icon}}"></i> {{name}}</strong>{{/if}}
+                                {{else}}
+                                  {{#if ../../canEdit}}<button type="button" class="fbls-resource-picker-button" data-action="pick-production-expense-resource" data-line-index="{{../_index}}" data-expense-index="{{_index}}"><i class="{{icon}}"></i><span>{{name}}</span><i class="fa-solid fa-chevron-right"></i></button>{{else}}<strong><i class="{{icon}}"></i> {{name}}</strong>{{/if}}
+                                {{/if}}
+                                <label class="numeric"><span>Количество</span>{{#if ../../canEdit}}<input type="number" min="1" step="1" data-economy-whole-quantity data-production-expense-field="qty" data-line-index="{{../_index}}" data-expense-index="{{_index}}" value="{{qty}}" />{{else}}<strong>{{qty}}</strong>{{/if}}</label>
+                                {{#if ../../canEdit}}<button type="button" class="fbls-icon-button danger" data-action="delete-production-expense" data-line-index="{{../_index}}" data-expense-index="{{_index}}" aria-label="Удалить расход {{name}}"><i class="fa-solid fa-trash"></i></button>{{/if}}
+                              </div>
+                            {{else}}
+                              <div class="fbls-production-expense-empty"><i class="fa-solid fa-box-open"></i><span>Сырьё не требуется</span></div>
+                            {{/each}}
+                          </div>
+                        </div>
+                        <label class="expense-mode"><span data-fbls-tooltip="За цикл — указанное количество на одну партию. За единицу — количество умножается на фактический выпуск.">Списывать сырьё</span>{{#if ../canEdit}}<select data-field="{{expenseModePath}}">{{#each expenseModeOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{expenseModeLabel}}</strong>{{/if}}</label>
+                        <label class="formula"><span data-fbls-tooltip="Формула заменяет базовый выпуск и фиксируется при старте партии. Доступны @workers, @cycles, @qd, @workqd, @base; @eff равен 1, потому что эффективность ускоряет труд, а не умножает выход.">Формула выпуска</span>{{#if ../canEdit}}<input type="text" data-field="{{formulaPath}}" value="{{formula}}" placeholder="Не задана" />{{else}}{{#if formula}}<strong>{{formula}}</strong>{{else}}<strong>Не задана</strong>{{/if}}{{/if}}</label>
+                      </div>
+                    </section>
+
+                    <section class="fbls-production-group fbls-production-operations-group">
+                      <div class="fbls-production-group-head"><span><i class="fa-solid fa-truck-ramp-box"></i> Режим работы</span><small>Склад, сезоны, автоматизация</small></div>
+                      <div class="fbls-production-operations-grid">
+                        <label class="destination"><span>Отгружать в</span>{{#if ../canEdit}}<select data-field="{{storageRoomIdPath}}">{{#each storageRoomOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{storageRoomLabel}}</strong>{{/if}}</label>
+                        <div class="fbls-production-season-box">
+                          <span data-fbls-tooltip="В какие сезоны линия может выпускать ресурс.">Сезоны</span>
+                          <div class="fbls-production-season-pills">
+                            {{#each seasonOptions}}
+                              <label class="fbls-season-pill {{#if selected}}active{{/if}}" title="{{label}}">{{#if ../../canEdit}}<input type="checkbox" data-type="checkbox" data-field="{{path}}" {{#if selected}}checked{{/if}} />{{/if}}<em>{{short}}</em></label>
+                            {{/each}}
+                          </div>
+                        </div>
+                        <div class="fbls-production-switches">
+                          {{#if isWorkers}}
+                            <label class="fbls-production-switch" data-fbls-tooltip="Переработка увеличивает дневной лимит работников здания с 2 QD до 3 QD; отрицательный модификатор ДОВ удваивается."><span><i class="fa-solid fa-clock"></i> Переработка</span>{{#if ../canEdit}}<input type="checkbox" data-type="checkbox" data-field="{{overtimePath}}" {{#if overtime}}checked{{/if}} />{{else}}<strong>{{#if overtime}}Да{{else}}Нет{{/if}}</strong>{{/if}}</label>
+                            <label class="fbls-production-switch" data-fbls-tooltip="Не выполнять линию на теньдень."><span><i class="fa-solid fa-sun"></i> Только при свете</span>{{#if ../canEdit}}<input type="checkbox" data-type="checkbox" data-field="{{daylightProductionOnlyPath}}" {{#if daylightProductionOnly}}checked{{/if}} />{{else}}<strong>{{#if daylightProductionOnly}}Да{{else}}Нет{{/if}}</strong>{{/if}}</label>
+                          {{else}}
+                            <label class="fbls-production-switch" data-fbls-tooltip="Результат сначала накапливается и только после сбора попадает на склад."><span><i class="fa-solid fa-hand-holding"></i> Требует сбора</span>{{#if ../canEdit}}<input type="checkbox" data-type="checkbox" data-field="{{requiresCollectionPath}}" {{#if requiresCollection}}checked{{/if}} />{{else}}<strong>{{#if requiresCollection}}Да{{else}}Нет{{/if}}</strong>{{/if}}</label>
+                            <label class="fbls-production-switch" data-fbls-tooltip="Явно разрешает календарный выпуск без работников и без операции сбора."><span><i class="fa-solid fa-hourglass-half"></i> Пассивный выпуск</span>{{#if ../canEdit}}<input type="checkbox" data-type="checkbox" data-field="{{passivePath}}" {{#if passive}}checked{{/if}} />{{else}}<strong>{{#if passive}}Да{{else}}Нет{{/if}}</strong>{{/if}}</label>
+                            {{#if requiresCollection}}
+                              <label class="fbls-production-switch collect-cost"><span>QD на сбор</span>{{#if ../canEdit}}<input type="number" min="0" data-type="number" data-field="{{collectQdPath}}" value="{{collectQd}}" />{{else}}<strong>{{collectQd}}</strong>{{/if}}</label>
+                              <label class="fbls-production-switch" data-fbls-tooltip="Не выполнять автоматический сбор на теньдень."><span><i class="fa-solid fa-sun"></i> Сбор при свете</span>{{#if ../canEdit}}<input type="checkbox" data-type="checkbox" data-field="{{daylightCollectionOnlyPath}}" {{#if daylightCollectionOnly}}checked{{/if}} />{{else}}<strong>{{#if daylightCollectionOnly}}Да{{else}}Нет{{/if}}</strong>{{/if}}</label>
+                              <label class="auto-collect"><span data-fbls-tooltip="Работник здания или потребителя может автоматически забрать готовый ресурс.">Автосбор</span>{{#if ../canEdit}}<select data-field="{{autoCollectPath}}">{{#each autoCollectOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{autoCollectLabel}}</strong>{{/if}}</label>
+                            {{/if}}
+                          {{/if}}
+                        </div>
+                      </div>
+                    </section>
+                  </div>
+
+                  <footer class="fbls-production-card-footer">
+                    <span class="{{#if productionConfigurationError}}is-warning{{/if}}"><i class="fa-regular fa-circle-question"></i> {{#if productionConfigurationError}}{{productionConfigurationError}}{{else}}Партия выпускается целиком; нехватка сырья не уменьшает выход, а незавершённый труд переносится.{{/if}}</span>
+                    <div class="fbls-line-actions fbls-action-group">
+                      {{#if ../canEdit}}
+                        {{#if hasPending}}<button type="button" class="fbls-button compact" data-action="collect-production-line" data-index="{{_index}}"><i class="fa-solid fa-hand-holding"></i> Собрать {{pendingQty}}</button>{{/if}}
+                        <button type="button" class="fbls-icon-button danger" data-action="delete-production-line" data-index="{{_index}}" aria-label="Удалить производственную линию {{mode}}"><i class="fa-solid fa-trash"></i></button>
+                      {{/if}}
+                    </div>
+                  </footer>
+                </article>
+              {{else}}
+                <div class="fbls-production-empty"><i class="fa-solid fa-gears"></i><span>Линий пока нет. Добавьте первую линию и задайте источник, выпуск и календарный цикл.</span></div>
+              {{/each}}
+            </div>
+          </section>
+        </fieldset>
+      {{/if}}

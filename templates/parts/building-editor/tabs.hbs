@@ -1,0 +1,7 @@
+      <nav class="fbls-building-editor-tabs" aria-label="Разделы постройки">
+        {{#each building.editorTabs}}
+          <button type="button" class="fbls-building-editor-tab {{#if active}}active{{/if}}" data-action="building-editor-tab" data-editor-tab="{{id}}">
+            <i class="{{icon}}"></i><span>{{label}}</span>
+          </button>
+        {{/each}}
+      </nav>

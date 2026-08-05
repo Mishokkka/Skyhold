@@ -1,0 +1,9 @@
+{{#if building.showUniqueBuildingTabs}}
+  <nav class="fbls-unique-building-tabs">
+    {{#each building.uniqueBuildingTabs}}
+      <button type="button" class="{{#if active}}active{{/if}}" data-action="unique-building-tab" data-unique-building-tab="{{id}}">
+        <i class="{{icon}}"></i><span>{{label}}</span>
+      </button>
+    {{/each}}
+  </nav>
+{{/if}}

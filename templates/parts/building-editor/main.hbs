@@ -1,0 +1,44 @@
+      {{#if building.showEditorMain}}
+        <fieldset class="fbls-building-editor-card main-card wide-card main-tab-card fbls-editor-tab-workspace tab-main">
+          <legend class="fbls-editor-tab-legend">Основное</legend>
+          <header class="fbls-editor-tab-head"><i class="fa-solid fa-sliders"></i><div><span>Профиль здания</span><h2>Основное</h2><p>Идентичность, состояние, содержание и назначение здания.</p></div></header>
+          <section class="fbls-editor-tab-panel">
+            <div class="fbls-editor-panel-head"><span><i class="fa-solid fa-address-card"></i> Карточка здания</span><small>Название, тип и текущее состояние</small></div>
+            <div class="fbls-building-main-line">
+            <label><span>Название</span>{{#if canEdit}}<input type="text" data-field="{{building.basePath}}.name" value="{{building.name}}" />{{else}}<strong>{{building.name}}</strong>{{/if}}</label>
+            <label><span>Тип</span>{{#if canEdit}}<select data-field="{{building.basePath}}.type">{{#each building.categoryOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{building.categoryLabel}}</strong>{{/if}}</label>
+            <label><span>Жизненный цикл</span>{{#if canEdit}}<select data-field="{{building.basePath}}.lifecycle">{{#each building.lifecycleOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{building.lifecycleLabel}}</strong>{{/if}}</label>
+            <label><span>Состояние</span>{{#if canEdit}}<select data-field="{{building.basePath}}.condition">{{#each building.conditionOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{building.conditionLabel}}{{#if building.repairActive}} · ремонт{{/if}}</strong>{{/if}}</label>
+            {{#if building.isTemplate}}<label><span data-fbls-tooltip="Основная категория развития: food, technology, culture или war.">Категория Ark</span>{{#if canEdit}}<input type="text" data-field="{{building.basePath}}.primaryDev" value="{{building.primaryDev}}" placeholder="food / technology / culture / war" />{{else}}<strong>{{building.primaryDevLabel}}</strong>{{/if}}</label>{{/if}}
+            {{#if building.isTemplate}}<label class="fbls-template-visibility-toggle"><span data-fbls-tooltip="Если выключено, игроки не увидят этот шаблон в каталоге. Для ГМа он уйдет во вкладку Скрытые.">Видно игрокам</span>{{#if canEdit}}<input type="checkbox" data-type="visibility" data-field="{{building.basePath}}.visibility" {{#if building.playerVisible}}checked{{/if}} />{{else}}<strong>{{building.visibilityText}}</strong>{{/if}}</label>{{/if}}
+            </div>
+          </section>
+          <section class="fbls-editor-tab-panel compact-panel">
+            <div class="fbls-editor-panel-head"><span><i class="fa-solid fa-screwdriver-wrench"></i> Содержание</span><small>Регулярные расходы за 30 дней</small></div>
+            <div class="fbls-editor-form-grid maintenance-grid">
+              <label><span data-fbls-tooltip="Класс помогает отличить простую постройку от сложной или монументальной инфраструктуры; сам платёж задают две соседние статьи.">Класс содержания</span>{{#if canEdit}}<select data-field="{{building.maintenance.classPath}}">{{#each building.maintenance.classOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{building.maintenance.classLabel}}</strong>{{/if}}</label>
+              <label class="numeric"><span data-fbls-tooltip="Регулярные услуги, топливо, освещение и мелкие расходники здания за 30 дней. Производственное сырьё остаётся в рецептах.">Эксплуатация, ММ</span>{{#if canEdit}}<input type="number" min="0" data-type="number" data-field="{{building.maintenance.operatingPath}}" value="{{building.maintenance.operatingCopperMonthly}}" />{{else}}<strong>{{building.maintenance.operatingCopperMonthly}}</strong>{{/if}}</label>
+              <label class="numeric"><span data-fbls-tooltip="Денежный резерв на текущий ремонт заменяемой части здания за 30 дней. Декоративное золото, земля и уникальные артефакты сюда не входят.">Ремонтный резерв, ММ</span>{{#if canEdit}}<input type="number" min="0" data-type="number" data-field="{{building.maintenance.reservePath}}" value="{{building.maintenance.repairReserveCopperMonthly}}" />{{else}}<strong>{{building.maintenance.repairReserveCopperMonthly}}</strong>{{/if}}</label>
+            </div>
+          </section>
+          {{#if building.showFunctionToggles}}
+            <section class="fbls-editor-tab-panel compact-panel"><div class="fbls-editor-panel-head"><span><i class="fa-solid fa-puzzle-piece"></i> Возможности</span><small>Включённые подсистемы здания</small></div><div class="fbls-function-strip no-title">
+              {{#each building.functionOptions}}
+                <label class="fbls-function-toggle fbls-thin-check-chip" data-fbls-tooltip="{{tooltip}}"><i class="{{icon}}"></i><span>{{label}}</span>{{#if ../canEdit}}<input type="checkbox" data-type="checkbox" data-field="{{path}}" {{#if checked}}checked{{/if}} />{{else}}{{#if checked}}<strong>✓</strong>{{else}}<strong>—</strong>{{/if}}{{/if}}</label>
+              {{/each}}
+            </div></section>
+          {{/if}}
+          <section class="fbls-editor-tab-panel"><div class="fbls-editor-panel-head"><span><i class="fa-solid fa-note-sticky"></i> Описание</span><small>Игровой эффект и заметки владельца</small></div><div class="fbls-main-effects-grid">
+            <label><span>Эффект</span>{{#if canEdit}}<textarea data-field="{{building.basePath}}.effect" rows="2">{{building.effect}}</textarea>{{else}}<p class="fbls-preline">{{building.effect}}</p>{{/if}}</label>
+            <label><span>Заметки</span>{{#if canEdit}}<textarea data-field="{{building.basePath}}.notes" rows="2">{{building.notes}}</textarea>{{else}}<p class="fbls-preline">{{building.notes}}</p>{{/if}}</label>
+          </div></section>
+          {{#if building.hasPendingProduction}}
+            <div class="fbls-pending-production main-pending-production fbls-editor-tab-panel">
+              <div class="fbls-subhead"><span>Готово к сбору</span></div>
+              {{#each building.pendingProductionRows}}
+                <div class="fbls-pending-production-row"><span>{{resource}}: <strong>{{qty}}</strong></span>{{#if ../canEdit}}<button type="button" class="fbls-button compact" data-action="collect-production-line" data-index="{{lineIndex}}"><i class="fa-solid fa-hand-holding"></i> Собрать</button>{{/if}}</div>
+              {{/each}}
+            </div>
+          {{/if}}
+        </fieldset>
+      {{/if}}

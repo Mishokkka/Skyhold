@@ -3,62 +3,79 @@
         <div class="fbls-building-toolbar fbls-toolbar">
           <div class="fbls-building-tabs fbls-toolbar-group">
             {{#each buildingTabs}}
-              <button type="button" class="fbls-building-tab {{#if active}}active{{/if}}" data-action="building-category" data-category="{{id}}">
+              <button type="button" class="fbls-building-tab {{#if active}}active{{/if}} {{id}}" data-action="building-category" data-category="{{id}}" title="{{label}}" data-fbls-tooltip="{{label}}">
                 <i class="{{icon}}"></i>
-                <span>{{label}}</span>
+                <span>{{shortLabel}}</span>
                 <strong>{{tabCount}}</strong>
               </button>
             {{/each}}
           </div>
           {{#if canEdit}}
-            <button type="button" class="fbls-button compact" data-action="add-row" data-collection="holdings.{{holdingIndex}}.buildings.list">
-              <i class="fa-solid fa-plus"></i> Добавить
+            <button type="button" class="fbls-button compact fbls-building-add-button" data-action="add-row" data-collection="holdings.{{holdingIndex}}.buildings.list" title="Добавить здание" data-fbls-tooltip="Добавить здание" aria-label="Добавить здание">
+              <i class="fa-solid fa-plus"></i>
             </button>
           {{/if}}
         </div>
 
+        <p class="fbls-muted-line fbls-building-priority-hint"><i class="fa-solid fa-arrow-down-1-9"></i> Порядок карточек сверху вниз — приоритет десятника: при нехватке сырья, общей бригаде или общем спросе первым обслуживается верхнее здание. Перетащите карточку, чтобы изменить приоритет.</p>
+
         <div class="fbls-buildings-topline compact">
-          <article class="fbls-card mini-card fbls-crew-card">
-            <div>
-              <h3>Стройбригада</h3>
-              <p><strong>{{constructionCrew.count}}</strong> чел. · <strong>{{constructionCrew.dice}}</strong>к6 до сложности</p>
-              
+          {{#if canEditBuildings}}
+            <div class="fbls-building-auto-actions" aria-label="Автораспределение жителей">
+              <button type="button" class="fbls-button compact fbls-building-side-action" data-action="auto-assign-building-workers" data-mode="free" title="Назначить свободных на работу" data-fbls-tooltip="Заполнить свободные слоты свободными гражданскими работниками." aria-label="Назначить свободных жителей на работу"><i class="fa-solid fa-people-arrows"></i></button>
+              <button type="button" class="fbls-button compact fbls-building-side-action" data-action="auto-assign-building-workers" data-mode="all" title="Перераспределить работников" data-fbls-tooltip="Очистить рабочие слоты зданий и заново распределить гражданских работников." aria-label="Перераспределить работников"><i class="fa-solid fa-shuffle"></i></button>
+              <button type="button" class="fbls-button compact fbls-building-side-action" data-action="auto-assign-housing" title="Расселить жителей" data-fbls-tooltip="Расселить жителей без действующего жилья по свободным местам, начиная с наиболее комфортных домов." aria-label="Автоматически расселить жителей"><i class="fa-solid fa-house-user"></i></button>
             </div>
-            <button type="button" class="fbls-button compact" data-action="open-building-template-browser"><i class="fa-solid fa-drafting-compass"></i> Шаблоны</button>
-            {{#if canEditBuildings}}
-              <button type="button" class="fbls-button compact" data-action="auto-assign-building-workers" data-mode="free" title="Заполнить свободные слоты свободными гражданскими работниками."><i class="fa-solid fa-people-arrows"></i> Авто-свободные</button>
-              <button type="button" class="fbls-button compact" data-action="auto-assign-building-workers" data-mode="all" title="Очистить рабочие слоты зданий и заново распределить гражданских работников."><i class="fa-solid fa-shuffle"></i> Перераспределить</button>
-              <button type="button" class="fbls-button compact" data-action="open-crew-editor"><i class="fa-solid fa-users-gear"></i> Состав</button>
-              <button type="button" class="fbls-button compact" data-action="roll-construction-crew"><i class="fa-solid fa-dice-six"></i> Бросок</button>
+          {{/if}}
+          <article class="fbls-card mini-card fbls-crew-card">
+            <div class="fbls-crew-card-main">
+              <h3>Стройбригада</h3>
+              <p><strong>{{constructionCrew.count}}</strong> чел. · <strong>{{constructionCrew.dice}}</strong>к6</p>
+            </div>
+            {{#if constructionCrew.busyLines}}
+              <div class="fbls-crew-card-status">
+                {{#each constructionCrew.busyLines}}
+                  <span class="{{#if busy}}busy{{else}}free{{/if}}" title="{{title}}" data-fbls-tooltip="{{title}}"><b>{{name}}</b><em>{{label}}</em></span>
+                {{/each}}
+              </div>
             {{/if}}
+            <div class="fbls-crew-card-actions">
+              {{#if canEditBuildings}}
+                <button type="button" class="fbls-button compact fbls-crew-action" data-action="roll-construction-crew" title="Бросок" data-fbls-tooltip="Бросок стройбригады" aria-label="Бросить кубы стройбригады"><i class="fa-solid fa-dice-six"></i></button>
+                <button type="button" class="fbls-button compact fbls-crew-action" data-action="open-crew-editor" title="Состав" data-fbls-tooltip="Состав стройбригады" aria-label="Открыть состав стройбригады"><i class="fa-solid fa-users-gear"></i></button>
+              {{/if}}
+              <button type="button" class="fbls-button compact fbls-crew-action" data-action="open-building-template-browser" title="Шаблоны" data-fbls-tooltip="Шаблоны зданий" aria-label="Открыть шаблоны зданий"><i class="fa-solid fa-drafting-compass"></i></button>
+            </div>
           </article>
         </div>
 
         <div class="fbls-building-cards">
           {{#each rows.buildings}}
-            <article class="fbls-building-card {{statusClass}} {{flavorClass}} {{#if headOnly}}head-only{{/if}} {{#unless unlocked}}locked{{/unless}}" data-action="open-building-editor" data-id="{{id}}" data-building-id="{{id}}" data-building-name="{{name}}" data-holding-id="{{../holding.id}}" {{#if ../canEditBuildings}}draggable="true"{{/if}}>
+            <article class="fbls-building-card {{statusClass}} {{flavorClass}} {{#if headOnly}}head-only{{/if}} {{#unless unlocked}}locked{{/unless}}" data-action="open-building-editor" data-id="{{id}}" data-building-id="{{id}}" data-building-name="{{name}}" data-holding-id="{{../holding.id}}" role="button" tabindex="0" aria-label="Открыть здание {{name}}, приоритет {{economyPriority}}" {{#if ../canEditBuildings}}draggable="true"{{/if}}>
               <header class="fbls-building-card-head v2 fbls-card-header">
                 <div class="fbls-building-card-media">
                   <div class="fbls-building-card-icon">{{#if img}}<img src="{{img}}" alt="" />{{else}}<i class="{{icon}}"></i>{{/if}}</div>
                 </div>
 
                 <div class="fbls-building-title-block">
-                  <h3 class="{{#if hasTitleTooltip}}fbls-building-hover-title{{/if}}" {{#if hasTitleTooltip}}data-fbls-tooltip="{{titleTooltip}}" title="{{name}}"{{/if}}>{{name}}</h3>
+                  <h3 class="{{#if hasTitleTooltip}}fbls-building-hover-title{{/if}}" {{#if hasTitleTooltip}}data-fbls-tooltip="{{titleTooltip}}"{{/if}}>
+                    <i class="fbls-building-category-icon {{categoryIcon}}" data-fbls-tooltip="{{categoryLabel}}"></i>
+                    <span class="fbls-building-name-text">{{name}}</span>
+                    <span class="fbls-building-status-icon {{statusClass}}" data-fbls-tooltip="{{statusLabel}}"><i class="{{statusIcon}}"></i></span>
+                  </h3>
+                  {{#if hasCardStatParts}}
                   <div class="fbls-building-subline fbls-cluster">
-                    <span>{{categoryLabel}}</span>
-                    <span class="fbls-status-pill fbls-chip {{statusClass}}">{{statusLabel}}</span>
-                    {{#if hasCardStatParts}}
                       <span class="fbls-building-stat-chips" data-fbls-tooltip="Изменения характеристик поселения от здания.">
                         {{#each cardStatParts}}
                           <em class="{{css}}" title="{{label}}"><i class="{{icon}}"></i><b class="{{tone}}">{{signed}}</b></em>
                         {{/each}}
                       </span>
-                    {{/if}}
-                    
                   </div>
+                  {{/if}}
                 </div>
 
                 <div class="fbls-building-head-meta">
+                  <span class="fbls-head-chip fbls-chip priority" data-fbls-tooltip="Приоритет экономики: {{economyPriority}}. Меньшее число получает дефицитные ресурсы, бригаду и общий спрос раньше."><i class="fa-solid fa-arrow-down-1-9"></i><b>#{{economyPriority}}</b></span>
                   {{#if hasUpkeep}}<span class="fbls-head-chip fbls-chip upkeep" data-fbls-tooltip="Содержание, ММ"><i class="fa-solid fa-coins"></i><b>{{upkeepLine}}</b></span>{{/if}}
                   {{#if hasWorkerCapacity}}<span class="fbls-head-chip fbls-chip workers" data-fbls-tooltip="Работники, занято/максимум"><i class="fa-solid fa-users"></i><b>{{workerCountLine}}</b></span>{{/if}}
                   {{#if isMedicalBuilding}}<span class="fbls-head-chip fbls-chip medical" data-fbls-tooltip="Койкоместа, занято/всего"><i class="fa-solid fa-bed-pulse"></i><b>{{medicalSummary.used}}/{{medicalSummary.capacity}}</b></span>{{/if}}
@@ -85,13 +102,22 @@
                 <div class="fbls-building-card-body">
                   {{#if hasCardProductionRows}}
                     <section class="fbls-building-production-card">
-                      <strong><i class="fa-solid fa-industry"></i> Производство</strong>
+                      <strong class="fbls-building-production-title">
+                        <span><i class="fa-solid fa-industry"></i> Производство</span>
+                        {{#if hasCardProductionSeasonBadges}}
+                          <span class="fbls-production-season-strip">
+                            {{#each cardProductionSeasonBadges}}
+                              <em class="fbls-production-season-mini" data-fbls-tooltip="{{tooltip}}">{{label}}</em>
+                            {{/each}}
+                          </span>
+                        {{/if}}
+                      </strong>
                       <div class="fbls-building-production-list">
                         {{#each cardProductionRows}}
                           <div class="fbls-building-production-row">
-                            <span class="resource">{{#if hasResourceImg}}<img class="fbls-prod-resource-img" src="{{resourceImg}}" alt="" />{{else}}<i class="{{resourceIcon}}"></i>{{/if}}<b>{{resource}}</b>{{#if hasSeasonHint}}<em class="fbls-production-season-mini" data-fbls-tooltip="{{seasonTooltip}}">{{seasonShort}}</em>{{/if}}</span>
+                            <span class="resource">{{#if hasResourceImg}}<img class="fbls-prod-resource-img" src="{{resourceImg}}" alt="" data-fbls-persistent-image="building-production:{{../id}}:{{id}}:output" data-fbls-image-fallback /><i class="{{resourceIcon}}" data-fbls-image-fallback-icon hidden></i>{{else}}<i class="{{resourceIcon}}"></i>{{/if}}<b>{{resource}}</b></span>
                             <span class="output">{{outputText}}</span>
-                            <span class="expenses">{{#if hasExpenses}}{{#each expenseItems}}<em class="fbls-production-expense-badge" title="{{label}}">{{#if img}}<img src="{{img}}" alt="" />{{else}}<i class="{{icon}}"></i>{{/if}}<b>{{qty}}</b></em>{{/each}}{{else}}&nbsp;{{/if}}</span>
+                            <span class="expenses">{{#if hasExpenses}}{{#each expenseItems}}<em class="fbls-production-expense-badge" title="{{label}}">{{#if img}}<img src="{{img}}" alt="" data-fbls-persistent-image="building-production:{{../../id}}:{{../id}}:expense:{{resourceId}}:{{@index}}" data-fbls-image-fallback /><i class="{{icon}}" data-fbls-image-fallback-icon hidden></i>{{else}}<i class="{{icon}}"></i>{{/if}}<b>{{qty}}</b></em>{{/each}}{{else}}&nbsp;{{/if}}</span>
                           </div>
                         {{/each}}
                       </div>
@@ -117,13 +143,13 @@
                   {{#if showBuildProgress}}
                     <div class="fbls-card-actions fbls-construction-card-actions compact-line fbls-action-group">
                       {{#if ../canEditBuildings}}
-                        {{#if canAllocateMaterials}}<button type="button" class="fbls-button compact secondary icon-only-materials" data-action="allocate-building-materials" data-id="{{id}}" title="{{materialAllocationLine}}" data-fbls-tooltip="{{materialAllocationLine}}"><i class="fa-solid fa-box-open"></i></button>{{/if}}
+                  {{#if canAllocateMaterials}}<button type="button" class="fbls-button compact secondary icon-only-materials" data-action="allocate-building-materials" data-id="{{id}}" title="{{materialAllocationLine}}" data-fbls-tooltip="{{materialAllocationLine}}" aria-label="{{materialAllocationLine}}"><i class="fa-solid fa-box-open"></i></button>{{/if}}
                         <select class="fbls-compact-select" data-building-construction-crew data-building-id="{{id}}">
                           {{#each constructionCrewOptions}}
                             <option value="{{id}}" {{#if selected}}selected{{/if}}>{{label}}</option>
                           {{/each}}
                         </select>
-                        <button type="button" class="fbls-button compact" data-action="roll-construction" data-id="{{id}}"><i class="fa-solid fa-hammer"></i> Строить</button>
+                  <span class="fbls-build-remaining" data-fbls-tooltip="Прогресс начисляется при расчёте десятника" aria-label="Осталось успехов: {{remainingBuildSuccesses}}">{{remainingBuildSuccesses}}</span>
                       {{/if}}
                     </div>
                     <div class="fbls-progress-bar"><span style="width: {{progressPercent}}%;"></span></div>

@@ -1,0 +1,42 @@
+        {{#if activeStorage.items}}
+          <div class="fbls-storage-resources-layout fbls-storage-items-layout">
+            <div class="fbls-storage-workspace {{#if storageRoomRailCollapsed}}room-rail-collapsed{{/if}}">
+              {{> "modules/fbl-skyhold/templates/parts/storage/room-rail.hbs"}}
+
+              <section class="fbls-storage-inventory">
+                {{#if storageContext.activeRoom}}
+                  <header class="fbls-storage-room-strip {{storageContext.activeRoom.fillClass}}" data-fbls-tooltip="{{storageContext.activeRoom.fillTitle}}" data-storage-active-room="{{storageContext.activeRoomId}}">
+                    <div class="strip-main"><i class="fa-solid fa-warehouse"></i><span><strong>{{storageContext.activeRoom.label}}</strong><small>{{storageContext.activeItemCount}} предметов</small></span></div>
+                    {{#unless storageContext.activeRoom.unlimited}}<div class="strip-bar"><span style="width: {{storageContext.activeRoom.fillPercent}}%;"></span></div>{{/unless}}
+                    <div class="strip-extra">{{#unless storageContext.activeRoom.unlimited}}<span><small>Занято, cargo points</small><b>{{storageContext.activeRoom.usedText}} / {{storageContext.activeRoom.capacityText}}</b></span><span><small>Свободно, cargo points</small><b>{{storageContext.activeRoom.freeText}}</b></span>{{/unless}}<span><small>Защита</small><b>{{storageContext.activeRoom.securityText}}</b></span><span><small>Хранение</small><b>{{storageContext.activeRoom.qualityText}}</b></span></div>
+                    {{#if storageContext.activeRoom.hasOverflow}}<p class="fbls-storage-overflow-alert"><i class="fa-solid fa-triangle-exclamation"></i><span>{{storageContext.activeRoom.overflowStatusText}}</span></p>{{/if}}
+                  </header>
+                  {{> "modules/fbl-skyhold/templates/parts/storage/batch-controls.hbs"}}
+                {{/if}}
+
+                <div class="fbls-storage-inventory-table items" data-render-scroll-key="storage-items-table">
+                  <div class="fbls-storage-item-grid">
+                    {{#each storageContext.activeItemRows}}
+                      <article class="fbls-storage-item-card {{#if batchSelected}}batch-selected{{/if}}" data-storage-row-type="items" data-storage-row-id="{{id}}" data-storage-row-room-id="{{roomId}}" {{#if notes}}data-fbls-tooltip="{{notes}}" data-fbls-tooltip-delay="1000"{{/if}}>
+                        <div class="fbls-storage-item-main">
+                          {{#if ../canUseStorage}}<label class="fbls-storage-batch-pick"><input type="checkbox" data-type="checkbox" data-storage-batch-select="{{id}}" data-storage-batch-kind="items" aria-label="Выбрать предмет {{name}}" {{#if batchSelected}}checked{{/if}} /></label>{{/if}}
+                          <button type="button" class="fbls-storage-item-open" data-action="open-storage-item" data-index="{{_index}}" title="Открыть карточку предмета" aria-label="Открыть предмет {{name}}"><img src="{{img}}" alt="" data-fbls-image-fallback /><i class="fa-solid fa-suitcase" data-fbls-image-fallback-icon hidden></i></button>
+                          <div><strong><button type="button" class="fbls-link-button" data-action="open-storage-item" data-index="{{_index}}">{{name}}</button></strong><small>{{typeLabel}} · {{qtyText}} ед. · {{cargoPointsText}} грузовых очков (cargo points)</small></div>
+                        </div>
+
+                        {{#if ../canUseStorage}}
+                          <label class="fbls-sale-flag icon-only {{#unless canMarkForSale}}disabled{{/unless}}" data-fbls-tooltip="{{saleTooltip}}"><input type="checkbox" data-type="checkbox" data-field="holdings.{{../holdingIndex}}.storage.items.{{_index}}.forSale" aria-label="Разрешить продажу {{name}}" {{#if forSale}}checked{{/if}} {{#unless canMarkForSale}}disabled{{/unless}} /><i class="fa-solid fa-coins"></i></label>
+                        {{else}}
+                          {{#if forSale}}<div class="fbls-sale-flag icon-only readonly" data-fbls-tooltip="Помечено к продаже"><i class="fa-solid fa-coins"></i></div>{{/if}}
+                        {{/if}}
+
+                      </article>
+                    {{else}}
+                      <article class="fbls-card fbls-empty">В этом помещении нет предметов. Перетащите Item в любую область Хранилища.</article>
+                    {{/each}}
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+        {{/if}}

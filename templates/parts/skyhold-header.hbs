@@ -11,7 +11,7 @@
             </select>
           </label>
           {{#if canEdit}}
-            <button type="button" class="fbls-button icon-only fbls-edit-name-button" data-action="edit-holding-name" title="Переименовать владение"><i class="fa-solid fa-pen-to-square"></i></button>
+            <button type="button" class="fbls-button icon-only fbls-edit-name-button" data-action="edit-holding-name" title="Переименовать владение" aria-label="Переименовать владение"><i class="fa-solid fa-pen-to-square"></i></button>
           {{/if}}
 
           <label class="fbls-header-type-select">
@@ -27,10 +27,10 @@
           </label>
 
           {{#if canEdit}}
-            <button type="button" class="fbls-button icon-only" data-action="create-holding" title="Новое владение">
+            <button type="button" class="fbls-button icon-only" data-action="create-holding" title="Новое владение" aria-label="Создать владение">
               <i class="fa-solid fa-plus"></i>
             </button>
-            <button type="button" class="fbls-button icon-only danger" data-action="delete-holding" title="Удалить владение">
+            <button type="button" class="fbls-button icon-only danger" data-action="delete-holding" title="Удалить владение" aria-label="Удалить владение">
               <i class="fa-solid fa-trash"></i>
             </button>
           {{/if}}
@@ -61,7 +61,7 @@
         </div>
 
         <div class="fbls-header-statline">
-          <button type="button" class="fbls-morale-compact {{moraleState.css}}" data-action="show-morale-help" data-fbls-tooltip="{{moraleState.label}} ({{moraleState.range}}): {{moraleState.notes}}">
+          <button type="button" class="fbls-morale-compact {{moraleState.css}}" data-action="show-morale-help" data-fbls-tooltip="{{moraleState.tooltip}}">
             <i class="{{moraleState.icon}}"></i>
             <strong>{{moraleState.value}}</strong>
           </button>
@@ -85,13 +85,13 @@
             <label class="fbls-roll-stat reputation" data-fbls-tooltip="{{reputationSummary.tooltip}}">
               <i class="fa-solid fa-crown"></i>
               <strong>{{reputationSummary.total}}</strong>
-              <button type="button" data-action="roll-holding-stat" data-stat="reputation" title="Бросить репутацию"><i class="fa-solid fa-dice-six"></i></button>
+              <button type="button" data-action="roll-holding-stat" data-stat="reputation" title="Бросить репутацию" aria-label="Бросить репутацию"><i class="fa-solid fa-dice-six"></i></button>
             </label>
-            <label class="fbls-roll-stat defense" data-fbls-tooltip="{{defenseSummary.tooltip}}">
+            <button type="button" class="fbls-battle-open-button" data-action="roll-holding-stat" data-stat="defense" data-fbls-tooltip="Открыть окно битвы за владение" title="Открыть битву за владение">
               <i class="fa-solid fa-shield-halved"></i>
-              <strong>{{defenseSummary.total}}</strong>
-              <button type="button" data-action="roll-holding-stat" data-stat="defense" title="Открыть битву за владение"><i class="fa-solid fa-dice-six"></i></button>
-            </label>
+              <span>Битва</span>
+              <i class="fa-solid fa-arrow-up-right-from-square"></i>
+            </button>
           </div>
         </div>
       {{else}}

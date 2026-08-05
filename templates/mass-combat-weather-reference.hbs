@@ -1,0 +1,41 @@
+<div class="fbls-mass-reference-shell fbls-weather-reference-shell">
+  <div class="fbls-reference-toolbar weather">
+    <p>Погода изменяет эффективность подходящих отрядов и выбранных планов. Все проценты складываются с прочими модификаторами от базовой эффективности.</p>
+    {{#if currentWeather}}<span class="fbls-current-weather"><i class="fa-solid fa-location-dot"></i> Сейчас: {{currentWeather.label}}</span>{{/if}}
+  </div>
+
+  <div class="fbls-weather-reference-list">
+    {{#each catalog}}
+      <article class="fbls-weather-reference-row {{#if current}}current{{/if}}">
+        <header>
+          <div>
+            <h3>{{label}}{{#if current}}<span>сейчас</span>{{/if}}</h3>
+            <p>{{summary}}</p>
+          </div>
+        </header>
+        <div class="fbls-weather-modifiers">
+          <section>
+            <b>Теги</b>
+            <div>
+              {{#if hasTagRows}}
+                {{#each tagRows}}<span class="{{tone}}">{{text}}</span>{{/each}}
+              {{else}}
+                <span class="neutral">нет</span>
+              {{/if}}
+            </div>
+          </section>
+          <section>
+            <b>Планы</b>
+            <div>
+              {{#if hasPlanRows}}
+                {{#each planRows}}<span class="{{tone}}">{{text}}</span>{{/each}}
+              {{else}}
+                <span class="neutral">нет</span>
+              {{/if}}
+            </div>
+          </section>
+        </div>
+      </article>
+    {{/each}}
+  </div>
+</div>

@@ -1,0 +1,94 @@
+        {{#if activeStorage.accounting}}
+          <div class="fbls-storage-accounting-layout modernized">
+            <article class="fbls-card fbls-accounting-card modern summary">
+              <h2><i class="fa-solid fa-scale-balanced"></i> Бухгалтерия</h2>
+              <div class="fbls-accounting-kpi-row">
+                <div><span>Казна</span><strong>{{finance.treasuryText}}</strong></div>
+                <div><span>Прогноз обязательств / трилуний</span><strong class="{{finance.monthlyNetClass}}">{{finance.monthlyNetText}}</strong></div>
+                <div><span>Запас хода</span><strong>{{finance.runwayText}}</strong></div>
+                <div><span>Задолженность</span><strong>{{finance.totalArrearsText}}</strong></div>
+              </div>
+            </article>
+
+            <article class="fbls-card fbls-accounting-card modern">
+              <h3>Расходы</h3>
+              <div class="fbls-accounting-grid compact">
+                <div><span>Индекс ставок Economy V2</span><strong>{{finance.wageIndexText}}</strong></div>
+                <div><span>Персональный долг payroll</span><strong>{{finance.payrollArrearsText}}</strong></div>
+                <div><span>Фиксированные ставки / следующий десятник</span><strong>{{finance.cashWageTenDayText}}</strong></div>
+                <div><span>Фиксированные ставки / трилуний</span><strong>{{finance.salaryMonthText}}</strong></div>
+                <div><span>Доли результата</span><strong>по фактической ведомости</strong></div>
+                <div><span>Пансион / день</span><strong>{{finance.boardFoodDailyText}} чел.-дн.</strong></div>
+                <div><span>Пансион / 10 дней</span><strong>{{finance.boardFoodTenDayText}} чел.-дн.</strong></div>
+                <div><span>Эксплуатация зданий / 30 дней</span><strong>{{finance.upkeepOperatingMonthText}}</strong></div>
+                <div><span>Ремонтный резерв / 30 дней</span><strong>{{finance.repairReserveMonthText}}</strong></div>
+                <div><span>Всего содержание / 30 дней</span><strong>{{finance.upkeepMonthText}}</strong></div>
+                <div><span>Долг по зарплате</span><strong>{{finance.salaryArrearsText}}</strong></div>
+                <div><span>Долг по содержанию</span><strong>{{finance.upkeepArrearsText}}</strong></div>
+                <div><span>Товар к продаже</span><strong>{{finance.saleStockText}}</strong></div>
+              </div>
+              {{#if finance.hasPayrollForecastBlockers}}
+                <div class="fbls-accounting-ledger">
+                  {{#each finance.payrollForecastBlockers}}
+                    <div class="expense"><span>Прогноз payroll не готов</span><strong>{{message}}</strong></div>
+                  {{/each}}
+                </div>
+              {{/if}}
+            </article>
+
+            <article class="fbls-card fbls-accounting-card modern">
+              <h3>Тарифы и персональные долги</h3>
+              <div class="fbls-accounting-grid compact">
+                {{#each finance.wageTariffRows}}
+                  <div><span>{{label}} / десятник</span><strong>{{text}}</strong></div>
+                {{/each}}
+              </div>
+              {{#if finance.hasPayrollArrearsRows}}
+                <div class="fbls-accounting-ledger">
+                  {{#each finance.payrollArrearsRows}}
+                    <div class="expense"><span>{{name}} · просрочка {{overdueTendays}} дес.</span><strong>−{{arrearsText}}</strong></div>
+                  {{/each}}
+                </div>
+              {{else}}
+                <p class="fbls-muted-text">Персональной задолженности по Economy V2 нет.</p>
+              {{/if}}
+              <p class="fbls-muted-text">Прогноз фиксированных ставок использует тот же договор, индекс, сезон и журнал подённой работы, что и расчёт десятника. Доли начисляются только от фактически полученного чистого результата предприятия.</p>
+            </article>
+
+            <article class="fbls-card fbls-accounting-card modern">
+              <h3>Доходы и торговля</h3>
+              <div class="fbls-accounting-grid compact">
+                <div><span>Ресурсов к продаже</span><strong>{{finance.saleResourceLots}}</strong></div>
+                <div><span>Предметов к продаже</span><strong>{{finance.saleItemLots}}</strong></div>
+              </div>
+              <p class="fbls-muted-text">Условная мощность здания не считается доходом. Выручка появится в бухгалтерии после фактической услуги, продажи или доставки с учётом товара, спроса и прямых расходов.</p>
+            </article>
+
+            <article class="fbls-card fbls-accounting-card modern">
+              <h3>Рабочая сила</h3>
+              <div class="fbls-accounting-grid compact">
+                <div><span>Население</span><strong>{{finance.population}}</strong></div>
+                <div><span>С фиксированной ставкой в прогнозе</span><strong>{{finance.paidPeopleCount}}</strong></div>
+                <div><span>На доле</span><strong>{{finance.sharePeopleCount}}</strong></div>
+                <div><span>С пансионом</span><strong>{{finance.boardPeopleCount}}</strong></div>
+                <div><span>С обещанным жильём</span><strong>{{finance.housingProvidedCount}}</strong></div>
+                <div><span>Жителей с долгом payroll</span><strong>{{finance.payrollDebtorCount}}</strong></div>
+                <div><span>Доходных зданий</span><strong>{{finance.tradeBuildingCount}}</strong></div>
+              </div>
+            </article>
+
+            <article class="fbls-card fbls-accounting-card modern fbls-accounting-wide">
+              <h3>Главные статьи</h3>
+              {{#if finance.hasLedgerRows}}
+                <div class="fbls-accounting-ledger">
+                  {{#each finance.ledgerRows}}
+                    <div class="{{class}}"><span>{{label}}</span><strong>{{text}}</strong></div>
+                  {{/each}}
+                </div>
+              {{else}}
+                <p class="fbls-muted-text">Пока нет денежных статей.</p>
+              {{/if}}
+              <p class="fbls-muted-text">Это прогноз известных обязательств на один 30-дневный трилуний: три расчёта следующего десятника. Условный доход и доли будущего результата в него не входят. Долг сохраняется между десятниками и погашается до содержания после обязательств по зарплате.</p>
+            </article>
+          </div>
+        {{/if}}

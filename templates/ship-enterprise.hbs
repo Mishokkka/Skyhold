@@ -1,0 +1,333 @@
+<form class="fbls-fleet-manager" autocomplete="off" data-render-scroll-key="fleet-manager">
+  {{#if missing}}
+    <section class="fbls-card fbls-fleet-empty">
+      <i class="fa-solid fa-triangle-exclamation"></i>
+      <h2>Поселение недоступно</h2>
+      <p>Открой диспетчер из доступного владения.</p>
+    </section>
+  {{else}}
+    {{#if hasVessel}}
+      <header class="fbls-fleet-cockpit">
+        <div class="fbls-fleet-identity">
+          <span class="fbls-fleet-emblem" aria-hidden="true"><i class="fa-solid fa-ship"></i></span>
+          <div>
+            <span class="fbls-fleet-eyebrow">{{holdingName}} · корабельное предприятие</span>
+            <h2>{{vessel.name}}</h2>
+            <p>{{#if vessel.ownerName}}{{vessel.ownerName}}{{else}}Капитан не указан{{/if}}</p>
+          </div>
+        </div>
+        <div class="fbls-fleet-cockpit-actions">
+          <label class="fbls-field fbls-fleet-vessel-picker">
+            <span>Активное судно</span>
+            <select data-fleet-vessel-select aria-label="Выбрать корабль">
+              {{#each vesselOptions}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{name}}{{#if archived}} · архив{{/if}}</option>{{/each}}
+            </select>
+          </label>
+          {{#if canEdit}}
+            <button type="button" class="fbls-button compact" data-action="fleet-create-vessel" title="Добавить явный сюжетный внешний актив — не бесплатную покупку">
+              <i class="fa-solid fa-plus"></i> Сюжетное судно
+            </button>
+          {{/if}}
+        </div>
+        <div class="fbls-fleet-statusline" aria-label="Статус и местоположение">
+          <span class="fbls-chip"><i class="fa-solid fa-circle-dot"></i> {{vesselStatusLabel}}</span>
+          <span class="fbls-chip"><i class="fa-solid fa-location-dot"></i> {{vesselLocationText}}</span>
+          {{#if dockedHere}}
+            <span class="fbls-chip is-success"><i class="fa-solid fa-anchor"></i> У причала</span>
+          {{else}}
+            <span class="fbls-chip"><i class="fa-solid fa-route"></i> Вне поселения</span>
+          {{/if}}
+        </div>
+      </header>
+
+      <section class="fbls-fleet-instruments" aria-label="Сводка корабля">
+        <article><span><i class="fa-solid fa-coins"></i> Касса</span><strong>{{cashText}}</strong></article>
+        <article><span><i class="fa-solid fa-wallet"></i> Свободно</span><strong>{{availableText}}</strong></article>
+        <article><span><i class="fa-solid fa-shield-halved"></i> Ремонтный резерв</span><strong>{{replacementReserveText}}</strong></article>
+        <article><span><i class="fa-solid fa-landmark"></i> Казна</span><strong>{{treasuryText}}</strong></article>
+        <article><span><i class="fa-solid fa-users"></i> Команда</span><strong class="{{crewClass}}">{{crewText}}</strong></article>
+        <article><span><i class="fa-solid fa-gauge-high"></i> Состояние</span><strong class="{{conditionClass}}">{{conditionScore}}%</strong></article>
+        <article><span><i class="fa-solid fa-clock"></i> Время</span><strong>QD {{currentQd}}</strong></article>
+      </section>
+
+      <details class="fbls-card fbls-fleet-profile" data-fleet-disclosure="profile" {{#if profileOpen}}open{{/if}}>
+        <summary>
+          <span><i class="fa-solid fa-address-card"></i> Паспорт и настройки судна</span>
+          <small>{{crewText}} человек · {{legalCapacityCargoPointsText}}</small>
+        </summary>
+        {{#if acquisitionGrandfatheredStoryAsset}}
+          <p class="fbls-warning-text">Legacy-судно перенесено как сюжетный актив без подтверждённой цены или источника. GM должен явно проверить происхождение; обычное сохранение профиля не снимает эту отметку.</p>
+        {{/if}}
+        {{#if acquisitionStoryAsset}}
+          <p class="fbls-muted-line">«Получено по сюжету» означает явный внешний актив, добавленный решением GM. Это не бесплатная покупка и не способ обойти стоимость постройки.</p>
+        {{/if}}
+        {{#if canEdit}}
+          <div class="fbls-fleet-profile-grid">
+            <fieldset>
+              <legend>Идентификация</legend>
+              <div class="fbls-fleet-form-grid">
+                <label class="fbls-field"><span>Название</span><input type="text" name="name" value="{{vessel.name}}" /></label>
+                <label class="fbls-field"><span>Владелец / капитан</span><input type="text" name="ownerName" value="{{vessel.ownerName}}" /></label>
+                <label class="fbls-field"><span>Статус</span><select name="status">{{#each statusOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                <label class="fbls-field"><span>Класс скорости</span><input type="text" name="speedClass" value="{{vessel.profile.speedClass}}" /></label>
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend>Происхождение судна</legend>
+              <div class="fbls-fleet-form-grid">
+                <label class="fbls-field"><span>Способ приобретения</span><select name="acquisitionMethod">{{#each acquisitionMethodOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                <label class="fbls-field"><span>Дата / отметка приобретения</span><input type="text" name="acquiredAt" value="{{vessel.acquisition.acquiredAt}}" /></label>
+                <label class="fbls-field"><span>Цена, медных</span><input type="number" min="0" name="acquisitionCopper" value="{{vessel.acquisition.acquisitionCopper}}" /></label>
+                <label class="fbls-field"><span>ID покупки / постройки / решения GM</span><input type="text" name="acquisitionSourceId" value="{{vessel.acquisition.sourceId}}" /></label>
+                <label class="fbls-field fbls-field-wide"><span>Пояснение происхождения</span><textarea name="acquisitionNotes" rows="3">{{vessel.acquisition.notes}}</textarea></label>
+              </div>
+              <p class="fbls-muted-line">Для построенного судна источником автоматически становится текущее поселение; для остальных способов внутренний источник поселения очищается. Смена способа снимает legacy-отметку.</p>
+            </fieldset>
+
+            <fieldset>
+              <legend>Позиция</legend>
+              <div class="fbls-fleet-form-grid">
+                <label class="fbls-field"><span>Регион / точка рынка</span>{{#if hasRegionOptions}}<select name="regionId">{{#each regionOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<input type="text" name="regionId" value="{{vessel.position.regionId}}" />{{/if}}</label>
+                <label class="fbls-field"><span>Местоположение</span><input type="text" name="locationLabel" value="{{vessel.position.locationLabel}}" /></label>
+                <label class="fbls-field fbls-field-wide fbls-checkbox-line"><input type="checkbox" name="dockedHere" {{#if dockedHere}}checked{{/if}} /><span>Пришвартован у {{holdingName}}</span></label>
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend>Команда и трюмы</legend>
+              <div class="fbls-fleet-form-grid">
+                <label class="fbls-field"><span>Команда по штату</span><input type="number" min="0" max="500" name="crewTarget" value="{{vessel.profile.crewTarget}}" /></label>
+                <div class="fbls-field"><span>Legacy: абстрактная команда</span><strong>{{vessel.crew.abstractComplement}}</strong><small>Только происхождение старой записи; готовность рейса считают назначенные жители.</small></div>
+                <label class="fbls-field"><span>Легальный трюм, грузовые очки</span><input type="number" min="0" step="1" name="legalCapacityCargoPoints" value="{{vessel.profile.legalCapacityCargoPoints}}" /></label>
+                <label class="fbls-field" title="Зарезервировано для будущего среза контрабанды; обычные контракты используют только легальный трюм."><span>Скрытый трюм, грузовые очки · пока справочно</span><input type="number" min="0" step="1" name="concealedCapacityCargoPoints" value="{{vessel.profile.concealedCapacityCargoPoints}}" disabled /></label>
+                <label class="fbls-field fbls-field-wide"><span>Вооружение</span><input type="text" name="weaponNote" value="{{vessel.profile.weaponNote}}" /></label>
+              </div>
+              <p class="fbls-muted-line">В интерфейсе рынка и склада вместимость выражается только в грузовых очках (cargo points). Старые параметры трюма сохранены внутри профиля для совместимости.</p>
+            </fieldset>
+
+            <fieldset>
+              <legend>Касса и резервы</legend>
+              <div class="fbls-fleet-form-grid">
+                <label class="fbls-field"><span>Касса, медных</span><input type="number" min="0" name="cashCopper" value="{{vessel.finances.cashCopper}}" /></label>
+                <label class="fbls-field"><span>Операционный</span><input type="number" min="0" name="operatingReserveCopper" value="{{vessel.finances.operatingReserveCopper}}" /></label>
+                <label class="fbls-field"><span>Аварийный</span><input type="number" min="0" name="emergencyReserveCopper" value="{{vessel.finances.emergencyReserveCopper}}" /></label>
+                <label class="fbls-field"><span>Ремонт / замена</span><input type="number" min="0" name="replacementReserveCopper" value="{{vessel.finances.replacementReserveCopper}}" /></label>
+              </div>
+              <p class="fbls-muted-line">Стоянка: {{idleCostText}} за десятник · долг стоянки: {{idleArrearsText}}. Резерв ремонта защищён от рейсов, обычных переводов и стояночных расходов.</p>
+            </fieldset>
+
+            <fieldset>
+              <legend>Тарифы эксплуатации</legend>
+              <div class="fbls-fleet-form-grid">
+                <label class="fbls-field"><span>Причал / десятник</span><input type="number" min="0" name="mooringCopperPerTenday" value="{{vessel.profile.financeTerms.mooringCopperPerTenday}}" /></label>
+                <label class="fbls-field"><span>Базовое содержание / десятник</span><input type="number" min="0" name="basicMaintenanceCopperPerTenday" value="{{vessel.profile.financeTerms.basicMaintenanceCopperPerTenday}}" /></label>
+                <label class="fbls-field"><span>Снабжение / QD</span><input type="number" min="0" name="suppliesCopperPerQd" value="{{vessel.profile.financeTerms.suppliesCopperPerQd}}" /></label>
+                <label class="fbls-field"><span>Топливо / QD</span><input type="number" min="0" name="fuelCopperPerQd" value="{{vessel.profile.financeTerms.fuelCopperPerQd}}" /></label>
+                <label class="fbls-field"><span>Ходовое обслуживание / QD</span><input type="number" min="0" name="voyageMaintenanceCopperPerQd" value="{{vessel.profile.financeTerms.voyageMaintenanceCopperPerQd}}" /></label>
+                <label class="fbls-field"><span>Портовый сбор / заход</span><input type="number" min="0" name="portFeeCopper" value="{{vessel.profile.financeTerms.portFeeCopper}}" /></label>
+                <label class="fbls-field"><span>Резерв замены / QD</span><input type="number" min="0" name="replacementCopperPerQd" value="{{vessel.profile.financeTerms.replacementCopperPerQd}}" /></label>
+                <label class="fbls-field"><span>Коммерческий фрахт / 100 груз. очк. / 100 км</span><input type="number" min="0.01" step="0.01" name="freightCopperPer100CargoPoints100Km" value="{{vessel.profile.financeTerms.freightCopperPer100CargoPoints100Km}}" /></label>
+              </div>
+              <p class="fbls-muted-line">Эта ставка определяет выручку коммерческого контракта вместе с конечным спросом, расстоянием, сроком и риском. Доставка собственных заказов оплачивает фактическую эксплуатацию и резерв, а не эту ставку.</p>
+            </fieldset>
+
+            <fieldset>
+              <legend>Состояние, %</legend>
+              <div class="fbls-fleet-condition-grid">
+                <label class="fbls-field"><span>Корпус</span><input type="number" min="0" max="100" name="hull" value="{{vessel.condition.hull}}" /></label>
+                <label class="fbls-field"><span>Подъём</span><input type="number" min="0" max="100" name="lift" value="{{vessel.condition.lift}}" /></label>
+                <label class="fbls-field"><span>Механизмы</span><input type="number" min="0" max="100" name="machinery" value="{{vessel.condition.machinery}}" /></label>
+                <label class="fbls-field"><span>Износ</span><input type="number" min="0" max="100" name="wear" value="{{vessel.condition.wear}}" /></label>
+              </div>
+            </fieldset>
+
+            <fieldset class="fbls-fleet-profile-notes">
+              <legend>Заметки</legend>
+              <label class="fbls-field"><span>Служебная информация и сюжетные детали</span><textarea name="notes" rows="4">{{vessel.notes}}</textarea></label>
+            </fieldset>
+          </div>
+          <footer class="fbls-fleet-profile-actions">
+            <button type="button" class="fbls-button" data-action="fleet-save-vessel" {{#if pending}}disabled{{/if}}><i class="fa-solid fa-floppy-disk"></i> Сохранить</button>
+            <button type="button" class="fbls-button danger" data-action="fleet-archive-vessel" {{#if hasVoyage}}disabled{{else}}{{#if hasActiveRepair}}disabled{{/if}}{{/if}} aria-label="Архивировать корабль {{vessel.name}}"><i class="fa-solid fa-box-archive"></i> Архивировать</button>
+          </footer>
+        {{else}}
+          <dl class="fbls-fleet-summary">
+            <div><dt>Команда</dt><dd>{{crewText}}</dd></div>
+            <div><dt>Легальный трюм</dt><dd>{{legalCapacityCargoPointsText}}</dd></div>
+            <div><dt>Скрытый трюм · справочно</dt><dd>{{concealedCapacityCargoPointsText}}</dd></div>
+            <div><dt>Местоположение</dt><dd>{{vesselLocationText}}</dd></div>
+            <div><dt>Приобретение</dt><dd>{{acquisitionMethodLabel}} · {{acquisitionPriceText}}</dd></div>
+            <div><dt>Источник</dt><dd>{{acquisitionSourceText}}</dd></div>
+            <div><dt>Вооружение</dt><dd>{{vessel.profile.weaponNote}}</dd></div>
+          </dl>
+        {{/if}}
+      </details>
+
+      <div class="fbls-fleet-workspace">
+        <main class="fbls-fleet-operations">
+          <section class="fbls-card fbls-fleet-section fbls-fleet-voyage">
+            <header class="fbls-card-header">
+              <div><span class="fbls-fleet-eyebrow">Операции</span><h3>Текущий рейс</h3></div>
+              {{#if hasVoyage}}<span class="fbls-chip is-warning"><i class="fa-solid fa-route"></i> В пути</span>{{else}}<span class="fbls-chip is-success"><i class="fa-solid fa-anchor"></i> Свободен</span>{{/if}}
+            </header>
+            {{#if hasVoyage}}
+              <div class="fbls-fleet-voyage-head">
+                <div><strong>{{voyage.title}}</strong><span>{{voyage.destinationLabel}}</span></div>
+                <div><span>Прибытие</span><strong>QD {{voyage.etaQd}}</strong><small>осталось {{voyage.remainingQd}} QD</small></div>
+              </div>
+              <div class="fbls-fleet-voyage-detail">
+                <div><span>Выручка</span><strong>{{voyage.revenueText}}</strong></div>
+                <div><span>Расходы</span><strong>{{voyage.costText}}</strong></div>
+                <div><span>Резерв ремонта</span><strong>{{voyage.reserveText}}</strong></div>
+                <div><span>После резервов</span><strong class="{{voyage.resultClass}}">{{voyage.resultText}}</strong></div>
+              </div>
+              {{#if voyage.internalTransfer}}<p class="fbls-muted-line">Внутреннее финансирование поселения: {{voyage.internalTransferText}}. В консолидированном результате это перевод, а не выручка.</p>{{/if}}
+              <p class="fbls-muted-line">Снабжение {{voyage.suppliesText}} · топливо {{voyage.fuelText}} · порт {{voyage.portFeesText}} · внешний экипаж {{voyage.externalCrewText}} · износ +{{voyage.wearSteps}}.</p>
+              <p class="fbls-muted-line">Зарезервировано: {{voyage.cargoText}}.</p>
+              <p class="fbls-muted-line">Рейс продвигается вместе с общим календарём в подтверждённом десятнике.</p>
+            {{else}}
+              <div class="fbls-fleet-inline-empty">
+                <i class="fa-solid fa-compass"></i>
+                <div><strong>Корабль готов к работе</strong><span>Выбери контракт из предложений ниже или используй его для доставки с рынка.</span></div>
+              </div>
+            {{/if}}
+          </section>
+
+          <section class="fbls-card fbls-fleet-section">
+            <header class="fbls-card-header">
+              <div><span class="fbls-fleet-eyebrow">Контракты</span><h3>Предложения в порту</h3><p>Маршруты и цены рассчитаны по текущему периоду рынка.</p></div>
+              {{#if canEdit}}<button type="button" class="fbls-button compact" data-action="fleet-refresh-market-offers" {{#if pending}}disabled{{/if}} title="Обновить предложения с рынка"><i class="fa-solid fa-arrows-rotate"></i> Обновить</button>{{/if}}
+            </header>
+            <div class="fbls-fleet-offer-list">
+              {{#each offers}}
+                <article class="fbls-fleet-offer">
+                  <header>
+                    <div class="fbls-fleet-offer-title">
+                      <div class="fbls-cluster"><span class="fbls-chip">{{kindLabel}}</span>{{#if generatedFromMarket}}<span class="fbls-chip"><i class="fa-solid fa-diagram-project"></i> рынок</span>{{/if}}</div>
+                      <h4>{{title}}</h4>
+                      <p>{{clientName}} · {{destinationLabel}}</p>
+                    </div>
+                    <div class="fbls-fleet-offer-result"><span>Итог рейса</span><strong class="{{#if resultNegative}}is-danger{{else}}is-success{{/if}}">{{resultText}}</strong><small>{{routeText}}</small></div>
+                  </header>
+                  <dl>
+                    <div><dt>Выручка</dt><dd>{{grossText}}</dd></div>
+                    <div><dt>Расходы</dt><dd>{{costText}}</dd></div>
+                    <div><dt>Резерв</dt><dd>{{reserveText}}</dd></div>
+                    <div><dt>Риск</dt><dd><span class="fbls-chip {{riskClass}}">{{riskPercent}}%</span></dd></div>
+                  </dl>
+                  <p class="fbls-muted-line">Снабжение {{suppliesText}} · топливо {{fuelText}} · порт {{portFeesText}} · внешний экипаж {{externalCrewText}} · износ +{{wearSteps}}.</p>
+                  <p class="fbls-muted-line">Трюм: {{cargoText}}.</p>
+                  {{#unless capacityReady}}<p class="fbls-warning-text"><i class="fa-solid fa-triangle-exclamation"></i> Груз превышает текущую вместимость корабля.</p>{{/unless}}
+                  {{#if emptyReturn}}<p class="fbls-warning-text"><i class="fa-solid fa-triangle-exclamation"></i> Нет обратного груза; пустое плечо уже учтено.</p>{{/if}}
+                  {{#if notes}}<p>{{notes}}</p>{{/if}}
+                  <div class="fbls-action-group">
+                    {{#if ../canDecide}}<button type="button" class="fbls-button compact" data-action="fleet-accept-offer" data-offer-id="{{id}}" {{#unless canAccept}}disabled{{/unless}} aria-label="Принять предложение {{title}}"><i class="fa-solid fa-handshake"></i> Принять</button>{{/if}}
+                    {{#if ../canEdit}}<button type="button" class="fbls-icon-button danger" data-action="fleet-delete-offer" data-offer-id="{{id}}" aria-label="Удалить предложение {{title}}" title="Удалить предложение"><i class="fa-solid fa-trash"></i></button>{{/if}}
+                  </div>
+                </article>
+              {{else}}
+                <div class="fbls-fleet-inline-empty"><i class="fa-solid fa-inbox"></i><div><strong>Предложений нет</strong><span>Обнови рынок или подготовь контракт вручную.</span></div></div>
+              {{/each}}
+            </div>
+
+            {{#if canEdit}}
+              <details class="fbls-fleet-inline-editor" data-fleet-disclosure="manual-offer" {{#if manualOfferOpen}}open{{/if}}>
+                <summary><i class="fa-solid fa-plus"></i> Подготовить предложение вручную</summary>
+                <div class="fbls-fleet-form-grid">
+                  <label class="fbls-field"><span>Тип</span><select name="offerKind">{{#each kindOptions}}<option value="{{value}}">{{label}}</option>{{/each}}</select></label>
+                  <label class="fbls-field"><span>Название</span><input type="text" name="offerTitle" value="Регулярный фрахт" /></label>
+                  <label class="fbls-field"><span>Заказчик</span><input type="text" name="offerClient" value="Торговый дом" /></label>
+                  <label class="fbls-field"><span>Пункт назначения</span><input type="text" name="offerDestination" value="Соседний порт" /></label>
+                  <label class="fbls-field"><span>ID региона</span><input type="text" name="offerDestinationId" value="" /></label>
+                  <label class="fbls-field"><span>Срок, QD</span><input type="number" min="1" name="offerDurationQd" value="120" /></label>
+                  <label class="fbls-field"><span>Груз туда, грузовые очки (cargo points)</span><input type="number" min="0" step="1" name="offerCargoPoints" value="240000" /></label>
+                  <label class="fbls-field"><span>Груз обратно, грузовые очки (cargo points)</span><input type="number" min="0" step="1" name="offerReturnCargoPoints" value="80000" /></label>
+                  <label class="fbls-field"><span>Дальность туда, км</span><input type="number" min="0" name="offerOutboundDistanceKm" value="160" /></label>
+                  <label class="fbls-field"><span>Дальность обратно, км</span><input type="number" min="0" name="offerReturnDistanceKm" value="160" /></label>
+                  <label class="fbls-field"><span>Спрос туда, %</span><input type="number" min="25" max="300" name="offerDemandPercent" value="100" /></label>
+                  <label class="fbls-field"><span>Спрос обратно, %</span><input type="number" min="25" max="300" name="offerReturnDemandPercent" value="85" /></label>
+                  <label class="fbls-field"><span>Срочность, %</span><input type="number" min="50" max="250" name="offerUrgencyPercent" value="100" /></label>
+                  <label class="fbls-field"><span>Внешний экипаж, медных</span><input type="number" min="0" name="offerExternalCrewCopper" value="0" title="Только явно нанятые вне поселения люди; назначенные жители оплачиваются общей ведомостью." /></label>
+                  <label class="fbls-field"><span>Риск, %</span><input type="number" min="0" max="100" name="offerRiskPercent" value="5" /></label>
+                  <label class="fbls-field fbls-field-wide"><span>Заметки</span><textarea name="offerNotes" rows="2"></textarea></label>
+                </div>
+                <button type="button" class="fbls-button compact" data-action="fleet-add-offer" {{#if pending}}disabled{{/if}}><i class="fa-solid fa-plus"></i> Добавить</button>
+              </details>
+            {{/if}}
+          </section>
+        </main>
+
+        <aside class="fbls-fleet-rail">
+          <section class="fbls-card fbls-fleet-section">
+            <header class="fbls-card-header"><div><span class="fbls-fleet-eyebrow">Док</span><h3>Ремонт износа</h3></div><i class="fa-solid fa-screwdriver-wrench" aria-hidden="true"></i></header>
+            {{#if hasActiveRepair}}
+              <p><strong>В работе до QD {{activeRepair.completesQd}}</strong></p>
+              <p class="fbls-fleet-context-note">Осталось {{activeRepair.remainingQd}} QD · износ −{{activeRepair.wearSteps}} · {{activeRepair.moneyText}} · {{activeRepair.materialsText}}.</p>
+            {{else}}
+              <label class="fbls-field"><span>Снять шагов износа</span><input type="number" min="1" max="20" name="repairWearSteps" value="{{repairQuote.wearSteps}}" /></label>
+              <p class="fbls-fleet-context-note">Текущий расчёт: {{repairQuote.moneyText}} · {{repairQuote.durationQd}} QD · {{repairQuote.materialsText}}.</p>
+              {{#unless repairQuote.ok}}<p class="fbls-warning-text">{{repairQuote.reasonText}}</p>{{/unless}}
+              {{#if canEdit}}<button type="button" class="fbls-button" data-action="fleet-start-repair" {{#unless repairQuote.ok}}disabled{{/unless}} {{#if pending}}disabled{{/if}}><i class="fa-solid fa-hammer"></i> Поставить в док</button>{{/if}}
+            {{/if}}
+          </section>
+
+          <section class="fbls-card fbls-fleet-section fbls-fleet-transfer">
+            <header class="fbls-card-header"><div><span class="fbls-fleet-eyebrow">Финансы</span><h3>Передача денег</h3></div><i class="fa-solid fa-money-bill-transfer" aria-hidden="true"></i></header>
+            <p class="fbls-fleet-context-note">{{#if dockedHere}}Корабль у причала: физическая передача бесплатна.{{else}}Корабль вне порта: выбери удалённый канал.{{/if}}</p>
+            <div class="fbls-fleet-transfer-form">
+              <label class="fbls-field"><span>Направление</span><select name="transferDirection"><option value="vessel-to-holding">Корабль → поселение</option><option value="holding-to-vessel">Поселение → корабль</option></select></label>
+              <label class="fbls-field"><span>Способ</span><select name="transferMethod">{{#each transferMethodOptions}}<option value="{{id}}" data-fee-percent="{{feePercent}}" data-eta-qd="{{etaQd}}" data-requires-dock="{{requiresDock}}" {{#if selected}}selected{{/if}}>{{optionLabel}}</option>{{/each}}</select></label>
+              <label class="fbls-field"><span>Сумма, медных</span><input type="number" min="1" name="transferAmountCopper" value="{{availableCopper}}" /></label>
+            </div>
+            <p class="fbls-fleet-transfer-preview" data-role="fleet-transfer-preview" data-docked-here="{{dockedHere}}" aria-live="polite"></p>
+            {{#if canTransfer}}<button type="button" class="fbls-button" data-action="fleet-transfer" {{#if pending}}disabled{{/if}}><i class="fa-solid fa-paper-plane"></i> Отправить перевод</button>{{/if}}
+
+            {{#if hasPendingTransfers}}
+              <div class="fbls-fleet-transfer-list">
+                <h4>В обработке</h4>
+                {{#each pendingTransfers}}
+                  <article>
+                    <div><strong>{{directionLabel}}</strong><span>{{methodLabel}} · ETA QD {{etaQd}} · {{remainingQd}} QD</span></div>
+                    <p>{{amountText}} − {{feeText}} = {{netText}}</p>
+                    {{#if ../canTransfer}}<button type="button" class="fbls-button compact danger" data-action="fleet-cancel-transfer" data-transfer-id="{{id}}" title="Отменить перевод; комиссия не возвращается" aria-label="Отменить перевод" {{#if ../pending}}disabled{{/if}}><i class="fa-solid fa-xmark"></i> Отменить</button>{{/if}}
+                  </article>
+                {{/each}}
+              </div>
+            {{/if}}
+
+            {{#if canEdit}}
+              <details class="fbls-fleet-inline-editor" data-fleet-disclosure="transfer-settings" {{#if transferSettingsOpen}}open{{/if}}>
+                <summary><i class="fa-solid fa-sliders"></i> Каналы перевода</summary>
+                <div class="fbls-fleet-transfer-settings">
+                  {{#each transferMethodSettings}}
+                    <article>
+                      <label class="fbls-field fbls-checkbox-line"><input type="checkbox" name="transferMethod-{{id}}-enabled" {{#if enabled}}checked{{/if}} /><span>{{label}}</span></label>
+                      <label class="fbls-field"><span>Комиссия, %</span><input type="number" min="0" max="100" step="0.1" name="transferMethod-{{id}}-feePercent" value="{{feePercent}}" /></label>
+                      <label class="fbls-field"><span>Срок, QD</span><input type="number" min="1" name="transferMethod-{{id}}-etaQd" value="{{etaQd}}" /></label>
+                    </article>
+                  {{/each}}
+                </div>
+                <button type="button" class="fbls-button compact" data-action="fleet-save-transfer-settings" {{#if pending}}disabled{{/if}}><i class="fa-solid fa-floppy-disk"></i> Сохранить</button>
+              </details>
+            {{/if}}
+          </section>
+
+          <details class="fbls-card fbls-fleet-log" data-fleet-disclosure="log" {{#if logOpen}}open{{/if}}>
+            <summary><span><i class="fa-solid fa-clock-rotate-left"></i> Журнал корабля</span><small>последние 30 записей</small></summary>
+            <ol class="fbls-fleet-history">
+              {{#each history}}<li><span>{{atText}}</span><strong>{{title}}</strong><p>{{summary}}</p>{{#if amountText}}<small>{{amountText}}</small>{{/if}}</li>{{else}}<li class="fbls-empty">Записей пока нет.</li>{{/each}}
+            </ol>
+          </details>
+        </aside>
+      </div>
+    {{else}}
+      <section class="fbls-card fbls-fleet-empty">
+        <i class="fa-solid fa-ship"></i>
+        <h2>Кораблей нет</h2>
+        <p>Добавь первое судно к {{holdingName}}.</p>
+        {{#if canEdit}}<button type="button" class="fbls-button" data-action="fleet-create-vessel" title="Добавить явный сюжетный внешний актив — не бесплатную покупку"><i class="fa-solid fa-plus"></i> Добавить сюжетное судно</button>{{/if}}
+      </section>
+    {{/if}}
+  {{/if}}
+</form>

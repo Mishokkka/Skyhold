@@ -1,0 +1,62 @@
+<section class="fbls-battle-card tracks fbls-battle-collapsible" data-battle-section="tracks">
+  <h3><button type="button" class="fbls-battle-section-toggle" data-action="mass-toggle-section" aria-expanded="true"><i class="fa-solid fa-clipboard-list"></i><span>Треки</span><i class="fa-solid fa-chevron-up fbls-battle-collapse-icon"></i></button></h3>
+  <div class="fbls-battle-track-grid">
+    <div class="fbls-battle-track {{calc.defenderLossTrack.severity}}" title="Когда оборона дошла до порога, строй сломан."><span>Защитники</span><strong>{{calc.defenderLossTrack.value}} / {{calc.defenderLossTrack.threshold}}</strong><em>{{calc.defenderLossTrack.state}}</em></div>
+    <div class="fbls-battle-track {{calc.attackerLossTrack.severity}}" title="Когда враг дошел до порога, он сломлен."><span>Враг</span><strong>{{calc.attackerLossTrack.value}} / {{calc.attackerLossTrack.threshold}}</strong><em>{{calc.attackerLossTrack.state}}</em></div>
+    <div class="fbls-battle-track {{calc.damageTrack.severity}}" title="Урон владению переводится в повреждения зданий, жителей или ресурсов."><span>Урон</span><strong>{{calc.damageTrack.damage}} / {{calc.damageTrack.threshold}}</strong><em>{{calc.damageTrack.state}}</em></div>
+    <div class="fbls-battle-track" title="Часы задачи врага. Это не просто успехи броска."><span>Часы цели</span><strong>{{calc.objectiveTrack.value}} / {{calc.objectiveTrack.threshold}}</strong><em>{{calc.objectiveTrack.state}}</em></div>
+    <div class="fbls-battle-track" title="Прогресс пробития укреплений."><span>Брешь</span><strong>{{calc.breachProgress}} / {{calc.breachThreshold}}</strong><em>{{#if calc.breachOpen}}открыта{{else}}закрыта{{/if}}</em></div>
+  </div>
+  <div class="fbls-battle-fields tally-fields">
+    <label><span>Раунд</span>{{#if canEdit}}<input type="number" data-type="number" data-mass-field="round" value="{{state.round}}" min="1" />{{else}}<strong>{{state.round}}</strong>{{/if}}</label>
+    <label><span>Потери З.</span>{{#if canEdit}}<input type="number" data-type="number" data-mass-field="defenderLossSteps" value="{{state.defenderLossSteps}}" min="0" />{{else}}<strong>{{state.defenderLossSteps}}</strong>{{/if}}</label>
+    <label><span>Потери В.</span>{{#if canEdit}}<input type="number" data-type="number" data-mass-field="attackerLossSteps" value="{{state.attackerLossSteps}}" min="0" />{{else}}<strong>{{state.attackerLossSteps}}</strong>{{/if}}</label>
+    <label><span>Урон</span>{{#if canEdit}}<input type="number" data-type="number" data-mass-field="settlementDamage" value="{{state.settlementDamage}}" min="0" />{{else}}<strong>{{state.settlementDamage}}</strong>{{/if}}</label>
+    <label><span>Брешь</span>{{#if canEdit}}<input type="number" data-type="number" data-mass-field="breachProgress" value="{{state.breachProgress}}" min="0" />{{else}}<strong>{{state.breachProgress}}</strong>{{/if}}</label>
+    <label><span>Часы цели</span>{{#if canEdit}}<input type="number" data-type="number" data-mass-field="objectiveProgress" value="{{calc.objectiveTrack.value}}" min="0" />{{else}}<strong>{{calc.objectiveTrack.value}}</strong>{{/if}}</label>
+    <label><span>Лимит</span>{{#if canEdit}}<input type="number" data-type="number" data-mass-field="roundLimit" value="{{calc.objectiveTrack.roundLimit}}" min="1" />{{else}}<strong>{{calc.objectiveTrack.roundLimit}}</strong>{{/if}}</label>
+    <label><span>Порог цели</span>{{#if canEdit}}<input type="number" data-type="number" data-mass-field="objectiveThreshold" value="{{calc.objectiveTrack.threshold}}" min="1" />{{else}}<strong>{{calc.objectiveTrack.threshold}}</strong>{{/if}}</label>
+  </div>
+  <div class="fbls-battle-context objective-help"><strong>Как движется цель:</strong> при победе атакующих цель получает 1 + margin, затем метод атаки и план защиты меняют этот прогресс. Рейды и прорывы могут двигать цель без бреши; штурм укреплений чаще сначала копит брешь и урон.</div>
+</section>
+
+{{#if battleArchive.length}}
+  <section class="fbls-battle-card archive fbls-battle-collapsible" data-battle-section="archive">
+    <h3><button type="button" class="fbls-battle-section-toggle" data-action="mass-toggle-section" aria-expanded="true"><i class="fa-solid fa-box-archive"></i><span>Архив сражений</span><i class="fa-solid fa-chevron-up fbls-battle-collapse-icon"></i></button></h3>
+    <div class="fbls-battle-archive-list">
+      {{#each battleArchive}}
+        <article class="fbls-battle-archive-row">
+          <div><strong>{{title}}</strong><span>{{enemyName}}{{#if objective}} · {{objective}}{{/if}}</span></div>
+          <div><strong>{{outcomeLabel}}</strong><span>{{resolvedText}}</span></div>
+          <small>Раундов: {{roundsPlayed}} · Потери: {{casualtyCount}} · Здания: {{damagedBuildingCount}}</small>
+        </article>
+      {{/each}}
+    </div>
+  </section>
+{{/if}}
+
+<section class="fbls-battle-grid lower">
+  <article class="fbls-battle-card notes fbls-battle-collapsible" data-battle-section="notes" data-battle-collapse-group="lower">
+    <h3><button type="button" class="fbls-battle-section-toggle" data-action="mass-toggle-section" aria-expanded="true"><i class="fa-solid fa-pen"></i><span>Действия</span><i class="fa-solid fa-chevron-up fbls-battle-collapse-icon"></i></button></h3>
+    <label class="fbls-battle-notes"><span>Заметки / действия персонажей</span>{{#if canEdit}}<textarea rows="3" data-mass-field="notes" placeholder="Кто что делает в раунде, риски, локальные сцены, цена решений.">{{state.notes}}</textarea>{{else}}<p>{{state.notes}}</p>{{/if}}</label>
+  </article>
+
+  <article class="fbls-battle-card log fbls-battle-collapsible" data-battle-section="log" data-battle-collapse-group="lower">
+    <div class="fbls-battle-log-head">
+      <h3><button type="button" class="fbls-battle-section-toggle" data-action="mass-toggle-section" aria-expanded="true"><i class="fa-solid fa-clock-rotate-left"></i><span>Лог раундов</span><i class="fa-solid fa-chevron-up fbls-battle-collapse-icon"></i></button></h3>
+      {{#if canEdit}}<button type="button" class="fbls-icon-button danger" data-action="mass-clear-log" title="Очистить лог" aria-label="Очистить лог раундов"><i class="fa-solid fa-trash"></i></button>{{/if}}
+    </div>
+    <div class="fbls-battle-log-list">
+      {{#each logRows}}
+        <div class="fbls-battle-log-row">
+          <span>Р{{round}}</span>
+          <strong title="{{result}}">{{defenderSuccesses}} : {{attackerSuccesses}} / {{marginText}}</strong>
+          <em>{{result}}</em>
+          <small>З+{{defenderLossDelta}}, В+{{attackerLossDelta}}, урон +{{settlementDamageDelta}}, {{breachText}}, {{objectiveText}}{{#if impactText}} · {{impactText}}{{/if}}</small>
+        </div>
+      {{else}}
+        <p class="fbls-empty">Раундов пока нет.</p>
+      {{/each}}
+    </div>
+  </article>
+</section>

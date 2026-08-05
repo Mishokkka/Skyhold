@@ -1,0 +1,215 @@
+<section class="fbls-tenday-shell" data-tenday-phase="{{phase}}">
+  <header class="fbls-tenday-hero">
+    <div class="fbls-tenday-hero-copy">
+      <span class="fbls-tenday-kicker">{{periodLabel}}</span>
+      <h1>{{holdingName}}</h1>
+      {{#if clock}}
+        <p><i class="fa-regular fa-clock"></i> QD {{clock.before}} → {{clock.after}}{{#if dateText}} · расчёт до {{dateText}}{{/if}}</p>
+      {{else}}
+        <p><i class="fa-regular fa-clock"></i> Подготовка изолированного расчёта</p>
+      {{/if}}
+    </div>
+    {{#if hasPrepared}}
+      <div class="fbls-tenday-status {{status.css}}"><i class="{{status.icon}}"></i><span>{{status.label}}</span></div>
+    {{/if}}
+  </header>
+
+  {{#if isLoading}}
+    <div class="fbls-tenday-state-panel is-loading" aria-live="polite">
+      <i class="fa-solid fa-spinner fa-spin"></i>
+      <div><strong>Считаю десятник</strong><span>Производство, питание, стройки, торговля, поставки и события выполняются на клоне владения.</span></div>
+    </div>
+  {{else}}
+    {{#if isStale}}
+      <div class="fbls-tenday-state-panel is-stale" role="alert">
+        <i class="fa-solid fa-rotate"></i>
+        <div><strong>Расчёт устарел</strong><span>Владение или влияющий каталог изменились. Старый snapshot применить нельзя — подготовьте новый.</span></div>
+      </div>
+    {{/if}}
+    {{#if isError}}
+      <div class="fbls-tenday-state-panel is-error" role="alert">
+        <i class="fa-solid fa-circle-exclamation"></i>
+        <div><strong>Не удалось подготовить или применить десятник</strong><span>{{error}}</span></div>
+      </div>
+    {{/if}}
+    {{#if isApplying}}
+      <div class="fbls-tenday-state-panel is-applying" aria-live="polite">
+        <i class="fa-solid fa-spinner fa-spin"></i>
+        <div><strong>Записываю подтверждённый snapshot</strong><span>Повторное применение заблокировано до завершения транзакции.</span></div>
+      </div>
+    {{/if}}
+
+    {{#if hasPrepared}}
+      <nav class="fbls-tenday-tabs" role="tablist" aria-label="Разделы отчёта десятника">
+        {{#each tabs}}
+          <button type="button" class="fbls-tenday-tab {{#if active}}active{{/if}}" data-action="tenday-tab" data-tab="{{id}}" role="tab" aria-selected="{{active}}">
+            <i class="{{icon}}"></i><span>{{label}}</span>
+          </button>
+        {{/each}}
+      </nav>
+
+      <main class="fbls-tenday-content">
+        {{#if activeSummary}}
+          <section class="fbls-tenday-view" role="tabpanel">
+            <div class="fbls-tenday-metrics">
+              <article class="fbls-tenday-metric">
+                <i class="fa-solid fa-clock-rotate-left"></i><span>Время</span><strong>{{metrics.clock}}</strong><small>десятник №{{clock.afterPeriod}}</small>
+              </article>
+              <article class="fbls-tenday-metric {{metrics.moneyClass}}">
+                <i class="fa-solid fa-coins"></i><span>Казна</span><strong>{{metrics.moneyBefore}} → {{metrics.moneyAfter}}</strong><small>{{metrics.moneyDelta}}</small>
+              </article>
+              <article class="fbls-tenday-metric">
+                <i class="fa-solid fa-bowl-food"></i><span>Питание</span><strong>{{metrics.foodText}}</strong><small>{{metrics.hungerText}}</small>
+              </article>
+              <article class="fbls-tenday-metric">
+                <i class="fa-solid fa-person-digging"></i><span>Стройки</span><strong>{{metrics.constructionText}}</strong><small>{{metrics.constructionMeta}}</small>
+              </article>
+              <article class="fbls-tenday-metric">
+                <i class="fa-solid fa-dice"></i><span>События</span><strong>{{metrics.eventsText}}</strong><small>{{metrics.eventsMeta}}</small>
+              </article>
+            </div>
+
+            {{#if hasAttention}}
+              <section class="fbls-tenday-attention" aria-label="Предупреждения десятника">
+                {{#each attention}}
+                  <article class="fbls-tenday-alert {{severity}}"><i class="{{icon}}"></i><div><strong>{{title}}</strong><span>{{text}}</span></div></article>
+                {{/each}}
+              </section>
+            {{else}}
+              <div class="fbls-tenday-calm"><i class="fa-solid fa-circle-check"></i><span>Критических последствий и незавершённых операций в расчёте нет.</span></div>
+            {{/if}}
+
+            {{#if isPreview}}
+              <div class="fbls-tenday-contract-note"><i class="fa-solid fa-shield-halved"></i><span>Мир ещё не изменён. После подтверждения будет записан именно этот snapshot; параллельные изменения сделают его устаревшим.</span></div>
+            {{/if}}
+            {{#if isResult}}
+              <div class="fbls-tenday-contract-note is-complete"><i class="fa-solid fa-fingerprint"></i><span>Операция {{operationId}} записана. Итог ниже соответствует применённому snapshot.</span></div>
+            {{/if}}
+            {{#if isHistory}}
+              <div class="fbls-tenday-contract-note is-complete"><i class="fa-solid fa-box-archive"></i><span>Это неизменяемый отчёт о ранее проведённом десятнике. Операция: {{operationId}}.</span></div>
+            {{/if}}
+            {{#if chatFailed}}
+              <div class="fbls-tenday-contract-note is-warning"><i class="fa-solid fa-comment-slash"></i><span>Десятник проведён, но краткая карточка чата не отправлена. {{chatError}}</span></div>
+            {{/if}}
+          </section>
+        {{/if}}
+
+        {{#if activeEconomy}}
+          <section class="fbls-tenday-view" role="tabpanel">
+            {{#if hasEconomySections}}
+              <div class="fbls-tenday-section-grid">
+                {{#each economySections}}
+                  {{#if technical}}
+                    <details class="fbls-tenday-report-section is-technical">
+                      <summary><i class="{{icon}}"></i><h2>{{title}}</h2><span>{{rows.length}}</span></summary>
+                      <ul>{{#each rows}}<li>{{text}}</li>{{/each}}</ul>
+                    </details>
+                  {{else}}
+                    <article class="fbls-tenday-report-section {{#if warning}}is-warning{{/if}}">
+                      <header><i class="{{icon}}"></i><h2>{{title}}</h2><span>{{rows.length}}</span></header>
+                      <ul>{{#each rows}}<li>{{text}}</li>{{/each}}</ul>
+                    </article>
+                  {{/if}}
+                {{/each}}
+              </div>
+            {{else}}
+              <div class="fbls-tenday-empty"><i class="fa-solid fa-minus"></i><span>Хозяйственных изменений нет.</span></div>
+            {{/if}}
+          </section>
+        {{/if}}
+
+        {{#if activeEvents}}
+          <section class="fbls-tenday-view" role="tabpanel">
+            {{#if dueEvents.length}}
+              <article class="fbls-tenday-due-events">
+                <header><div><i class="fa-solid fa-calendar-check"></i><h2>Подошли по расписанию</h2></div><span>{{dueEvents.length}}</span></header>
+                <div class="fbls-tenday-event-list">
+                  {{#each dueEvents}}
+                    <div class="fbls-tenday-due-row"><div><strong>{{title}}</strong><span>{{dueText}}</span></div>{{#if hasEffects}}<em>есть эффекты</em>{{/if}}</div>
+                  {{/each}}
+                </div>
+              </article>
+            {{/if}}
+
+            {{#if showEventResults}}
+              {{#if eventResults.length}}
+                <div class="fbls-tenday-event-results">
+                  {{#each eventResults}}
+                    <article class="fbls-tenday-event-card">
+                      <header><div><span>{{kindLabel}} · десятник {{period}}</span><h2>{{title}}</h2></div><div class="fbls-tenday-event-badges"><em>{{visibilityLabel}}</em><strong>{{rollText}}</strong></div></header>
+                      <p>{{text}}</p>
+                      {{#if hasGmText}}<div class="fbls-tenday-gm-note"><strong>GM</strong><span>{{gmText}}</span></div>{{/if}}
+                      {{#if isExternal}}<div class="fbls-tenday-newcomer"><i class="fa-solid fa-user-plus"></i><span>Проверка нового жителя: {{newcomerText}} · d100 {{arrivalRoll}}</span></div>{{/if}}
+                      {{#if hasEffects}}
+                        <div class="fbls-tenday-event-effects"><strong>Декларативные эффекты</strong><ul>{{#each effects}}<li>{{text}}</li>{{/each}}</ul></div>
+                      {{/if}}
+                      <div class="fbls-tenday-decision-bar">
+                        <span class="fbls-tenday-decision-status {{decisionStatus.css}}"><i class="{{decisionStatus.icon}}"></i> {{decisionStatus.label}}</span>
+                        {{#if canApplyDecision}}<button type="button" class="fbls-button compact primary" data-action="tenday-event-apply" data-decision-id="{{decisionId}}"><i class="fa-solid fa-wand-magic-sparkles"></i> Применить</button>{{/if}}
+                        {{#if canScheduleDecision}}<button type="button" class="fbls-button compact" data-action="tenday-event-schedule" data-decision-id="{{decisionId}}"><i class="fa-solid fa-calendar-plus"></i> Отложить</button>{{/if}}
+                      </div>
+                    </article>
+                  {{/each}}
+                </div>
+              {{else}}
+                <div class="fbls-tenday-empty"><i class="fa-solid fa-calendar-xmark"></i><span>В активных таблицах не нашлось событий.</span></div>
+              {{/if}}
+            {{else}}
+              <article class="fbls-tenday-event-plan">
+                <header><i class="fa-solid fa-lock"></i><div><h2>Исходы зафиксированы, но пока скрыты</h2><p>Они входят в подготовленный snapshot и раскроются только после успешного commit.</p></div></header>
+                <div class="fbls-tenday-event-list">
+                  {{#each eventPlans}}
+                    <div class="fbls-tenday-plan-row"><strong>Десятник {{index}}</strong><span>Общее событие: {{#if generalAvailable}}1 проверка{{else}}нет активной записи{{/if}}</span><span>Репутация: {{reputationDice}}к6</span></div>
+                  {{/each}}
+                </div>
+              </article>
+            {{/if}}
+          </section>
+        {{/if}}
+
+        {{#if activeChanges}}
+          <section class="fbls-tenday-view" role="tabpanel">
+            {{#if hasChangeGroups}}
+              <div class="fbls-tenday-change-groups">
+                {{#each changeGroups}}
+                  <article class="fbls-tenday-change-group">
+                    <header><div><i class="{{icon}}"></i><h2>{{title}}</h2></div><span>{{rows.length}}</span></header>
+                    {{#if simple}}
+                      <div class="fbls-tenday-change-list">
+                        {{#each rows}}
+                          <div class="fbls-tenday-change-row"><div><strong>{{label}}</strong>{{#if roomLabel}}<small>{{roomLabel}}</small>{{/if}}</div><span>{{beforeText}} <i class="fa-solid fa-arrow-right"></i> {{afterText}}</span>{{#if hasDelta}}<em class="{{directionClass}}">{{deltaText}}</em>{{/if}}</div>
+                        {{/each}}
+                      </div>
+                    {{/if}}
+                    {{#if entities}}
+                      <div class="fbls-tenday-entity-list">
+                        {{#each rows}}
+                          <section class="fbls-tenday-entity-row"><h3>{{name}}</h3><div>{{#each changes}}<span><strong>{{label}}</strong> {{beforeText}} <i class="fa-solid fa-arrow-right"></i> {{afterText}}{{#if hasDelta}} <em class="{{directionClass}}">{{deltaText}}</em>{{/if}}</span>{{/each}}</div></section>
+                        {{/each}}
+                      </div>
+                    {{/if}}
+                  </article>
+                {{/each}}
+              </div>
+            {{else}}
+              <div class="fbls-tenday-empty"><i class="fa-solid fa-equals"></i><span>Кроме продвижения времени значимых изменений состояния нет.</span></div>
+            {{/if}}
+          </section>
+        {{/if}}
+      </main>
+    {{/if}}
+  {{/if}}
+
+  <footer class="fbls-tenday-footer">
+    <button type="button" class="fbls-button" data-action="tenday-close"><i class="fa-solid fa-xmark"></i> Закрыть</button>
+    <div class="fbls-tenday-footer-actions">
+      {{#if isPreview}}
+        <button type="button" class="fbls-button primary" data-action="tenday-apply" {{#unless canApply}}disabled{{/unless}}><i class="fa-solid fa-check"></i> Провести десятник</button>
+      {{/if}}
+      {{#if isStale}}<button type="button" class="fbls-button primary" data-action="tenday-refresh"><i class="fa-solid fa-rotate"></i> Подготовить заново</button>{{/if}}
+      {{#if isError}}<button type="button" class="fbls-button primary" data-action="tenday-refresh"><i class="fa-solid fa-rotate"></i> Повторить расчёт</button>{{/if}}
+      {{#if isResult}}<button type="button" class="fbls-button primary" data-action="tenday-next"><i class="fa-solid fa-forward-step"></i> Следующий десятник</button>{{/if}}
+      {{#if isApplying}}<button type="button" class="fbls-button primary" disabled><i class="fa-solid fa-spinner fa-spin"></i> Запись…</button>{{/if}}
+    </div>
+  </footer>
+</section>

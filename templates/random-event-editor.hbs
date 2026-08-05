@@ -1,0 +1,127 @@
+<section class="fbls-random-event-editor-shell">
+  {{#if hasHolding}}
+    <header class="fbls-event-editor-header">
+      <div class="fbls-event-editor-title">
+        <span class="fbls-event-editor-mark"><i class="fa-solid fa-table-list"></i></span>
+        <div>
+          <h2>Случайные события</h2>
+          <p>{{holdingName}}</p>
+        </div>
+      </div>
+
+      <nav class="fbls-event-editor-tabs" aria-label="Таблицы событий">
+        {{#each tables}}
+          <button type="button" class="fbls-event-tab {{#if active}}active{{/if}}" data-action="event-editor-table" data-event-table-kind="{{kind}}">
+            <i class="{{icon}}"></i>
+            <span>{{rollTitle}}</span>
+            <strong>{{eventCount}}</strong>
+          </button>
+        {{/each}}
+      </nav>
+
+      <div class="fbls-event-editor-actions">
+        <span class="fbls-event-editor-dirty" data-event-dirty-status {{#unless dirty}}hidden{{/unless}}>Несохранено</span>
+        <button type="button" class="fbls-button compact primary" data-action="event-editor-save">
+          <i class="fa-solid fa-floppy-disk"></i>
+          Сохранить
+        </button>
+      </div>
+    </header>
+
+    {{#if currentTable}}
+      <section class="fbls-event-board {{currentTable.kind}}">
+        <div class="fbls-event-table-head">
+          <div class="fbls-event-table-title">
+            <h3><i class="{{currentTable.icon}}"></i> {{currentTable.title}}</h3>
+            <p>{{currentTable.description}}</p>
+          </div>
+
+          <div class="fbls-event-table-actions">
+            <label class="fbls-event-search-field">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input type="search" data-event-search value="{{search}}" placeholder="поиск" />
+            </label>
+            <span class="fbls-event-count">{{currentTable.eventCount}} событий</span>
+            <button type="button" class="fbls-icon-button" data-action="event-editor-add" data-event-table-kind="{{currentTable.kind}}" title="Добавить событие" aria-label="Добавить событие">
+              <i class="fa-solid fa-plus"></i>
+            </button>
+            <button type="button" class="fbls-icon-button danger" data-action="event-editor-reset" data-event-table-kind="{{currentTable.kind}}" title="Сбросить таблицу" aria-label="Сбросить таблицу">
+              <i class="fa-solid fa-rotate-left"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="fbls-event-list">
+          {{#each currentTable.rows}}
+            <article class="fbls-event-card" data-event-search-text="{{searchText}}">
+              <header class="fbls-event-card-head">
+                <span class="fbls-event-index">{{displayIndex}}</span>
+
+                <div class="fbls-event-list-title">
+                  <strong>{{title}}</strong>
+                  <span>{{visibilityLabel}}{{#if combatPresetLabel}} · {{combatPresetLabel}}{{/if}}{{#if chainLine}} · {{chainLine}}{{/if}}</span>
+                </div>
+
+                <div class="fbls-event-stat">
+                  <span>Вес</span>
+                  <strong>{{weight}}</strong>
+                </div>
+
+                <div class="fbls-event-stat">
+                  <span>Повтор</span>
+                  <strong>{{cooldown}}</strong>
+                </div>
+
+                <div class="fbls-event-preview {{#if preview.eligible}}ok{{else}}blocked{{/if}}">
+                  <strong>{{preview.status}}</strong>
+                  <span>вес {{preview.weight}}</span>
+                </div>
+
+                <div class="fbls-event-card-actions">
+                  <button type="button" class="fbls-icon-button" data-action="event-editor-edit-row" data-event-table-kind="{{../currentTable.kind}}" data-event-row-id="{{id}}" title="Редактировать событие" aria-label="Редактировать событие {{title}}">
+                    <i class="fa-solid fa-pen-to-square"></i>
+                  </button>
+                  <button type="button" class="fbls-icon-button danger" data-action="event-editor-delete" data-event-table-kind="{{../currentTable.kind}}" data-event-row-id="{{id}}" title="Удалить" aria-label="Удалить событие {{title}}">
+                    <i class="fa-solid fa-trash"></i>
+                  </button>
+                </div>
+              </header>
+
+              <div class="fbls-event-list-body {{#unless hasRuleSummary}}plain{{/unless}}">
+                <p>{{shortText}}</p>
+                {{#if hasRuleSummary}}
+                <aside class="fbls-event-rule-summary">
+                  {{#if hasRequirements}}
+                  <div>
+                    <span class="fbls-event-rule-kicker">Условия <strong title="{{requirementLogicTitle}}">{{requirementLogicLabel}}</strong></span>
+                    <div class="fbls-event-rule-chips">
+                      {{#each requirementLabels}}
+                        <span>{{label}}</span>
+                      {{/each}}
+                    </div>
+                  </div>
+                  {{/if}}
+                  {{#if hasBoosts}}
+                  <div>
+                    <span class="fbls-event-rule-kicker">Шанс <strong title="{{boostLogicTitle}}">{{boostLogicLabel}}</strong></span>
+                    <div class="fbls-event-rule-chips boost">
+                      {{#each boostLabels}}
+                        <span>{{label}}</span>
+                      {{/each}}
+                    </div>
+                  </div>
+                  {{/if}}
+                </aside>
+                {{/if}}
+              </div>
+            </article>
+          {{else}}
+            <p class="fbls-empty">Событий пока нет.</p>
+          {{/each}}
+        </div>
+      </section>
+    {{/if}}
+  {{else}}
+    <p class="fbls-empty">Нет выбранного владения для редактирования событий.</p>
+  {{/if}}
+</section>
