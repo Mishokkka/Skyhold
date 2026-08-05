@@ -1,6 +1,7 @@
 /* FBL Skyhold template browser stylesheet index.
-   The old monolith is split into semantic parts so browser/editor styles stay maintainable. */
-@import url("./template-browser/skyhold-template-browser-base.css");
-@import url("./template-browser/skyhold-template-browser-catalog.css");
-@import url("./template-browser/skyhold-template-browser-tools.css");
-@import url("./template-browser/skyhold-template-browser-gm.css");
+   Browser/editor styles are split into semantic parts for maintainable ownership. */
+@layer skyhold.base, skyhold.layout, skyhold.components, skyhold.domains, skyhold.tools, skyhold.overrides;
+@import url("./template-browser/skyhold-template-browser-base.css") layer(skyhold.tools);
+@import url("./template-browser/skyhold-template-browser-catalog.css") layer(skyhold.tools);
+@import url("./template-browser/skyhold-template-browser-tools.css") layer(skyhold.tools);
+@import url("./template-browser/skyhold-template-browser-card.css") layer(skyhold.tools);

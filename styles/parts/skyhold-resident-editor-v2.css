@@ -1,10 +1,6 @@
 /* FBL Skyhold: resident editor v2 component owner.
    This file is the single source of truth for the expanded resident editor.
-   Do not patch this component from alignment/legacy files unless Foundry forces it. */
-
-.fbl-skyhold .fbls-person-edit-row > td {
-  min-width: 0;
-}
+   Keep layout changes here unless Foundry chrome requires a narrow bridge rule. */
 
 .fbl-skyhold .fbls-person-editor.v2,
 .fbl-skyhold .fbls-person-editor.v2 *,
@@ -14,26 +10,36 @@
 }
 
 .fbl-skyhold .fbls-person-editor.v2 {
-  --fbls-person-control-h: var(--fbls-control-height, 36px);
-  --fbls-person-label-gap: var(--fbls-label-gap, 0.18rem);
-  --fbls-person-row-min: calc(var(--fbls-person-control-h) + 1.1rem);
+  --fbls-person-control-h: 32px;
+  --fbls-person-label-gap: 0.08rem;
+  --fbls-person-row-min: calc(var(--fbls-person-control-h) + 0.46rem);
   width: 100%;
   min-width: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--fbls-gap-md, 0.56rem);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
 }
 
 .fbl-skyhold .fbls-person-editor.v2 fieldset {
   min-width: 0;
   margin: 0;
-  padding: 0.62rem 0.58rem 0.56rem;
+  padding: 0.08rem 0.34rem 0.1rem;
   border-radius: var(--fbls-radius-lg, 12px);
+}
+
+.fbl-skyhold .fbls-person-editor.v2 > fieldset,
+.fbl-skyhold .fbls-person-editor.v2 > .fbls-resident-midline,
+.fbl-skyhold .fbls-person-editor.v2 > .fbls-person-notes-field,
+.fbl-skyhold .fbls-person-editor.v2 > .resident-actions {
+  margin-block: 0;
 }
 
 .fbl-skyhold .fbls-person-editor.v2 legend {
   max-width: 100%;
-  padding: 0 0.35rem;
+  padding: 0 0.22rem;
+  line-height: 1;
+  margin: 0;
 }
 
 .fbl-skyhold .fbls-person-editor.v2 label,
@@ -82,7 +88,7 @@
   padding: 0.32rem 0.45rem;
   border: 1px solid var(--fbls-border);
   border-radius: 0.45rem;
-  background: rgba(0, 0, 0, 0.18);
+  background: var(--fbls-overlay-soft);
   color: var(--fbls-text);
   font-style: normal;
   text-transform: none;
@@ -118,7 +124,7 @@
   grid-template-rows: auto var(--fbls-person-control-h);
   align-content: end;
   gap: 0;
-  min-height: var(--fbls-person-row-min);
+  min-height: 0;
 }
 
 /* Main row: first line holds compact identity fields. Appearance owns the full second line. */
@@ -142,8 +148,8 @@
   grid-template-areas:
     "name sex age category culture belief race subrace injured"
     "appearance appearance appearance appearance appearance appearance appearance appearance appearance";
-  grid-template-rows: auto minmax(var(--fbls-appearance-block-h, 64px), auto);
-  gap: var(--fbls-gap-sm, 0.42rem) 0.46rem;
+  grid-template-rows: auto auto;
+  gap: 0.04rem 0.3rem;
   align-items: end;
   min-width: 0;
 }
@@ -169,13 +175,13 @@
   justify-self: stretch;
   min-width: 0;
   width: 100%;
-  min-height: 64px;
+  min-height: 0;
 }
 
 .fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-appearance textarea {
   display: block;
-  height: 44px;
-  min-height: 44px;
+  height: 32px;
+  min-height: 32px;
   max-height: none;
   resize: none;
   overflow: hidden;
@@ -220,13 +226,15 @@
   grid-template-rows: auto minmax(52px, auto);
 }
 
-/* Work and housing: three equal zones. Left is work source, center is housing, right is background. */
+/* Work, housing and background stay compact; the explicit contract occupies a full second row. */
 .fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  grid-template-areas: "workSource workHome workBackground";
-  gap: var(--fbls-gap-lg, 0.72rem);
-  align-items: end;
+  grid-template-areas:
+    "workSource workHome workBackground"
+    "workContract workContract workContract";
+  gap: 0.06rem;
+  align-items: start;
   min-width: 0;
 }
 
@@ -238,19 +246,19 @@
 .fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .fbls-work-source-block {
   grid-area: workSource;
   display: grid;
-  grid-template-columns: minmax(142px, 1fr) 44px 44px;
-  grid-template-areas: "work salary salarymod";
-  gap: var(--fbls-gap-sm, 0.42rem);
+  grid-template-columns: minmax(142px, 1fr);
+  grid-template-areas: "work";
+  gap: 0.06rem;
   align-items: end;
   justify-self: stretch;
   justify-items: stretch;
-  max-width: 320px;
+  max-width: 100%;
 }
 
 .fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work.has-custom-work .fbls-work-source-block {
   grid-template-areas:
-    "work salary salarymod"
-    "custom custom custom";
+    "work"
+    "custom";
 }
 
 .fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .fbls-work-home-block {
@@ -267,9 +275,17 @@
   align-items: end;
 }
 
+.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .fbls-work-contract-block {
+  grid-area: workContract;
+  display: grid;
+  grid-template-columns: minmax(190px, 1.4fr) repeat(5, minmax(92px, .72fr));
+  gap: 0.18rem;
+  align-items: end;
+  padding-top: 0.3rem;
+  border-top: 1px solid var(--fbls-border);
+}
+
 .fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-work { grid-area: work; }
-.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-salary { grid-area: salary; }
-.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-salary-mod { grid-area: salarymod; }
 .fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-custom-role { grid-area: custom; }
 
 .fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-home {
@@ -282,25 +298,10 @@
   max-width: 100%;
 }
 
-.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-salary,
-.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-salary-mod,
-.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-salary input,
-.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-salary-mod input {
-  width: 44px;
-  min-width: 44px;
-  max-width: 44px;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-salary input,
-.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-salary-mod input {
-  padding-left: 0.16rem;
-  padding-right: 0.16rem;
-  text-align: center;
-}
-
 .fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-work select,
 .fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-home select,
 .fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-background select,
+.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-compensation-type select,
 .fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-custom-role input {
   justify-content: flex-start;
   text-align: left;
@@ -313,15 +314,114 @@
 }
 
 .fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-custom-role.is-hidden {
-  display: none !important;
+  display: none;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-compensation-note { grid-column: 1 / -1; }
+.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-housing-provided { align-self: center; min-height: 32px; }
+.fbl-skyhold .fbls-person-editor.v2 .fbls-employment-v2 {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.3rem;
+  padding: 0.45rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: var(--fbls-radius-sm);
+  background: var(--fbls-surface-soft);
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .fbls-employment-v2-title,
+.fbl-skyhold .fbls-person-editor.v2 .fbls-employment-v2 > .fbls-muted-text {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .fbls-employment-v2-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  color: var(--fbls-text);
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .fbls-employment-v2-title span {
+  color: var(--fbls-muted);
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .fbls-employment-seasons {
+  grid-column: span 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0.2rem 0.4rem 0.35rem;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .fbls-employment-seasons label {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: var(--fbls-person-control-h);
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .fbls-employment-payroll-status {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-content: center;
+  gap: 0.08rem 0.35rem;
+  min-height: var(--fbls-person-control-h);
+  padding: 0.25rem 0.45rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: var(--fbls-radius-sm);
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .fbls-employment-payroll-status small {
+  grid-column: 1 / -1;
+  color: var(--fbls-muted);
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .fbls-employment-payroll-status.has-arrears strong {
+  color: var(--fbls-warning);
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .fbls-labor-projection {
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.45rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: var(--fbls-radius-sm);
+  background: var(--fbls-surface-2);
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .fbls-labor-projection.has-risk { border-color: var(--fbls-accent-border); }
+.fbl-skyhold .fbls-person-editor.v2 .fbls-labor-projection.is-blocked { border-color: var(--fbls-danger-border); }
+.fbl-skyhold .fbls-person-editor.v2 .fbls-labor-projection.is-ready { border-color: var(--fbls-success); }
+
+.fbl-skyhold .fbls-person-editor.v2 .fbls-labor-projection p,
+.fbl-skyhold .fbls-person-editor.v2 .fbls-labor-projection-list {
+  margin: 0;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .fbls-labor-projection-list {
+  padding-left: 1.1rem;
+  white-space: normal;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .fbls-compensation-warning {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--fbls-warning);
+  font-size: 0.72rem;
 }
 
 /* Stats, morale and traits. */
 .fbl-skyhold .fbls-person-editor.v2 .fbls-resident-midline {
   display: grid;
   grid-template-columns: minmax(285px, .92fr) minmax(345px, 1fr) minmax(360px, 1.18fr);
-  gap: var(--fbls-gap-md, 0.56rem);
-  align-items: stretch;
+  gap: 0.06rem;
+  align-items: start;
   min-width: 0;
 }
 
@@ -329,14 +429,16 @@
 .fbl-skyhold .fbls-person-editor.v2 .morale-set.compact-set,
 .fbl-skyhold .fbls-person-editor.v2 .traits-set.compact-set {
   min-width: 0;
-  height: 100%;
+  min-height: 0;
+  height: auto;
+  align-self: start;
 }
 
 .fbl-skyhold .fbls-person-editor.v2 .stat-set.compact-set {
   display: grid;
   grid-template-columns: repeat(4, minmax(56px, 72px));
   justify-content: start;
-  gap: 0.38rem;
+  gap: 0.06rem;
   align-items: end;
 }
 
@@ -344,7 +446,7 @@
   display: grid;
   grid-template-columns: repeat(5, minmax(56px, 72px));
   justify-content: start;
-  gap: 0.38rem;
+  gap: 0.06rem;
   align-items: end;
 }
 
@@ -374,8 +476,8 @@
 .fbl-skyhold .fbls-person-editor.v2 .traits-set.compact-set {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto 1fr;
-  gap: var(--fbls-gap-sm, 0.42rem);
+  grid-template-rows: auto auto;
+  gap: 0.04rem;
   align-content: start;
 }
 
@@ -394,10 +496,10 @@
   display: flex;
   gap: var(--fbls-gap-xs, 0.32rem);
   align-items: center;
-  padding: 0.12rem;
+  padding: 0.08rem;
   border: 1px solid var(--fbls-border);
   border-radius: 0.45rem;
-  background: rgba(0, 0, 0, 0.18);
+  background: var(--fbls-overlay-soft);
   overflow: hidden;
   text-transform: none;
   letter-spacing: 0;
@@ -479,8 +581,8 @@
   place-items: center;
   margin: 0;
   border-radius: 0.38rem;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--fbls-border);
+  background: var(--fbls-panel);
   color: var(--fbls-text);
   overflow: hidden;
   cursor: pointer;
@@ -499,9 +601,13 @@
 }
 
 .fbl-skyhold .fbls-person-editor.v2 .fbls-person-notes-field {
+  display: block;
   width: 100%;
   min-width: 0;
-  min-height: 70px;
+  height: 38px;
+  min-height: 38px;
+  margin: 0;
+  resize: vertical;
 }
 
 .fbl-skyhold .fbls-person-editor.v2 .resident-actions {
@@ -538,7 +644,8 @@
     grid-template-areas:
       "workSource"
       "workHome"
-      "workBackground";
+      "workBackground"
+      "workContract";
   }
 
   .fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .fbls-work-source-block,
@@ -552,9 +659,17 @@
   .fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .fbls-work-background-block {
     justify-items: stretch;
   }
+
+  .fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .fbls-work-contract-block { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 760px) {
+  .fbl-skyhold .fbls-person-editor.v2 .fbls-employment-v2,
+  .fbl-skyhold .fbls-person-editor.v2 .fbls-employment-seasons {
+    grid-template-columns: minmax(0, 1fr);
+    grid-column: 1 / -1;
+  }
+
   .fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .fbls-resident-main-grid,
   .fbl-skyhold .fbls-person-editor.v2 .stat-set.compact-set,
   .fbl-skyhold .fbls-person-editor.v2 .morale-set.compact-set {

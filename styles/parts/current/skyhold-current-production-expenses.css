@@ -1,0 +1,172 @@
+/* FBL Skyhold: sole owner of structured production expense rows. */
+
+.fbl-skyhold-building-editor .fbls-production-expenses {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 0.36rem;
+  min-width: 0;
+  padding: 0.4rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 9px;
+  background: var(--fbls-surface-1);
+}
+
+.fbl-skyhold-building-editor .fbls-production-expenses-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.fbl-skyhold-building-editor .fbls-production-expenses-head > div:first-child {
+  display: grid;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.fbl-skyhold-building-editor .fbls-production-expenses-head span {
+  color: var(--fbls-text);
+  font-size: 0.67rem;
+  font-weight: 850;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.fbl-skyhold-building-editor .fbls-production-expenses-head small {
+  color: var(--fbls-dim);
+  font-size: 0.61rem;
+  line-height: 1.25;
+}
+
+.fbl-skyhold-building-editor .fbls-production-expense-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.25rem;
+}
+
+.fbl-skyhold-building-editor .fbls-production-expense-actions .fbls-button {
+  min-height: var(--fbls-control-height-sm);
+  padding-inline: 0.48rem;
+}
+
+.fbl-skyhold-building-editor .fbls-production-expense-list {
+  display: grid;
+  gap: 0.28rem;
+  min-width: 0;
+}
+
+.fbl-skyhold-building-editor .fbls-production-expense-row {
+  display: grid;
+  grid-template-columns: 5.4rem minmax(9rem, 1fr) 5.7rem var(--fbls-control-height-sm);
+  align-items: end;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.fbl-skyhold-building-editor .fbls-production-expense-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  min-width: 0;
+  height: var(--fbls-control-height-sm);
+  padding: 0 0.42rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 7px;
+  color: var(--fbls-muted);
+  background: var(--fbls-overlay-soft);
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.fbl-skyhold-building-editor .fbls-production-expense-kind i {
+  color: var(--fbls-accent);
+}
+
+.fbl-skyhold-building-editor .fbls-production-expense-row > select,
+.fbl-skyhold-building-editor .fbls-production-expense-row > strong,
+.fbl-skyhold-building-editor .fbls-production-expense-row > .fbls-resource-picker-button {
+  align-self: end;
+  height: var(--fbls-control-height-sm);
+  min-height: var(--fbls-control-height-sm);
+}
+
+.fbl-skyhold-building-editor .fbls-production-expense-row > strong {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  padding: 0.28rem 0.4rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--fbls-overlay);
+  color: var(--fbls-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fbl-skyhold-building-editor .fbls-production-expense-row > .fbls-icon-button {
+  align-self: end;
+  width: var(--fbls-control-height-sm);
+  min-width: var(--fbls-control-height-sm);
+  height: var(--fbls-control-height-sm);
+  min-height: var(--fbls-control-height-sm);
+}
+
+.fbl-skyhold-building-editor .fbls-production-expense-row .numeric {
+  grid-template-rows: 0.78rem var(--fbls-control-height-sm);
+  align-content: end;
+  width: 5.7rem;
+  max-width: 5.7rem;
+}
+
+.fbl-skyhold-building-editor .fbls-production-expense-row .numeric > span {
+  display: flex;
+  align-items: flex-end;
+  min-height: 0.78rem;
+  margin: 0;
+}
+
+.fbl-skyhold-building-editor .fbls-production-expense-row .numeric input,
+.fbl-skyhold-building-editor .fbls-production-expense-row .numeric strong {
+  text-align: center;
+}
+
+.fbl-skyhold-building-editor .fbls-production-expense-empty {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: var(--fbls-control-height-sm);
+  padding: 0.3rem 0.45rem;
+  border: 1px dashed var(--fbls-border);
+  border-radius: 7px;
+  color: var(--fbls-dim);
+  font-size: 0.66rem;
+}
+
+.fbl-skyhold-building-editor .fbls-production-expense-empty i {
+  color: var(--fbls-accent);
+}
+
+@media (max-width: 680px) {
+  .fbl-skyhold-building-editor .fbls-production-expenses-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .fbl-skyhold-building-editor .fbls-production-expense-actions {
+    flex-wrap: wrap;
+  }
+
+  .fbl-skyhold-building-editor .fbls-production-expense-row {
+    grid-template-columns: 1fr 5.7rem var(--fbls-control-height-sm);
+  }
+
+  .fbl-skyhold-building-editor .fbls-production-expense-kind {
+    grid-column: 1 / -1;
+    width: fit-content;
+  }
+}

@@ -1,0 +1,146 @@
+/* Building list and development basics. */
+.fbls-buildings-panel {
+  gap: 0.55rem;
+}
+
+.fbls-buildings-topline {
+  display: grid;
+  grid-template-columns: minmax(16rem, 0.85fr) minmax(20rem, 1.15fr);
+  gap: 0.55rem;
+}
+
+.fbls-card.mini-card {
+  padding: 0.55rem 0.65rem;
+}
+
+.fbls-card.mini-card h3 {
+  margin: 0 0 0.35rem;
+  color: var(--fbls-text);
+  font-size: 0.86rem;
+  border: 0;
+}
+
+.fbls-muted-line {
+  margin-top: 0.25rem;
+  color: var(--fbls-dim);
+  font-size: 0.76rem;
+  line-height: 1.25;
+}
+
+.fbls-building-cards {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.fbls-building-card {
+  border: 1px solid var(--fbls-border);
+  border-radius: 12px;
+  background: var(--fbls-surface-soft);
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.fbls-building-card:hover {
+  border-color: var(--fbls-border-strong);
+  background: var(--fbls-panel);
+}
+
+.fbls-building-card.locked {
+  opacity: 0.78;
+}
+
+.fbls-building-card.expanded {
+  border-color: var(--fbls-border-strong);
+  background: var(--fbls-panel);
+}
+
+.fbls-building-card-head {
+  display: grid;
+  grid-template-columns: minmax(16rem, 1fr) max-content max-content;
+  gap: 0.55rem;
+  align-items: center;
+  padding: 0.55rem 0.65rem;
+  border-bottom: 1px solid var(--fbls-border);
+  background: var(--fbls-overlay-soft);
+}
+
+.fbls-building-card-head h3 {
+  margin: 0;
+  color: var(--fbls-text);
+  font-size: 0.98rem;
+  border: 0;
+}
+
+.fbls-building-subline,
+.fbls-building-card-brief {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.55rem;
+  align-items: center;
+  color: var(--fbls-muted);
+  font-size: 0.74rem;
+}
+
+.fbls-status-pill.built {
+  background: var(--fbls-success-soft);
+  border-color: var(--fbls-success);
+}
+
+.fbls-status-pill.building {
+  background: var(--fbls-accent-bg);
+  border-color: var(--fbls-accent-border);
+}
+
+.fbls-status-pill.planned,
+.fbls-status-pill.paused {
+  background: var(--fbls-info-soft);
+}
+
+.fbls-status-pill.damaged,
+.fbls-status-pill.bad {
+  background: var(--fbls-danger-soft);
+  border-color: var(--fbls-danger-border);
+}
+
+.fbls-status-pill.heavilyDamaged {
+  background: var(--fbls-accent-bg);
+  border-color: var(--fbls-accent-border);
+}
+
+.fbls-status-pill.destroyed {
+  background: var(--fbls-danger-strong);
+  border-color: var(--fbls-danger-border);
+  color: var(--fbls-accent);
+}
+
+.fbls-building-card-brief {
+  padding: 0.42rem 0.65rem;
+}
+
+.fbls-building-card-brief span {
+  min-width: 0;
+}
+
+.fbls-progress-bar {
+  height: 0.33rem;
+  background: var(--fbls-overlay);
+}
+
+.fbls-progress-bar span {
+  display: block;
+  height: 100%;
+  background: var(--fbls-accent-bg);
+}
+
+@media (max-width: 1180px) {
+  .fbls-buildings-topline {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 860px) {
+  .fbls-buildings-topline,
+  .fbls-building-card-head {
+    grid-template-columns: 1fr;
+  }
+}

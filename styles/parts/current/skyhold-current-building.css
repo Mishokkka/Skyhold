@@ -1,83 +1,37 @@
-/* FBL Skyhold: current owner for building cards, building editor chips,
-   construction rows and production utility rows. */
-
-.fbl-skyhold .fbls-building-stat-chips {
-  display: inline-flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-}
-
-.fbl-skyhold .fbls-building-stat-chips em,
-.fbl-skyhold .fbls-editor-impact-strip span,
-.fbl-skyhold .fbls-editor-impact {
-  min-height: 24px;
-  padding: 0.16rem 0.45rem;
-  border-radius: 999px;
-  font-size: 0.78rem;
-  font-weight: 800;
-}
-
-.fbl-skyhold .fbls-building-stat-chips em i,
-.fbl-skyhold .fbls-editor-impact-strip i {
-  font-size: 0.8rem;
-}
-
-.fbl-skyhold .fbls-building-stat-chips em.food i { color: var(--fbls-dev-food); }
-.fbl-skyhold .fbls-building-stat-chips em.technology i { color: var(--fbls-dev-technology); }
-.fbl-skyhold .fbls-building-stat-chips em.culture i { color: var(--fbls-dev-culture); }
-.fbl-skyhold .fbls-building-stat-chips em.war i { color: var(--fbls-dev-war); }
-.fbl-skyhold .fbls-building-stat-chips em.morale i,
-.fbl-skyhold .fbls-building-stat-chips em.reputation i { color: var(--fbls-dev-morale); }
-
-.fbl-skyhold .fbls-building-card.planned,
-.fbl-skyhold .fbls-building-card.building,
-.fbl-skyhold .fbls-building-card.paused {
-  border-color: var(--fbls-blueprint-border);
-  background: var(--fbls-blueprint-bg);
-  background-size: var(--fbls-blueprint-grid), var(--fbls-blueprint-grid), auto;
-  box-shadow: var(--fbls-blueprint-shadow);
-}
-
-.fbl-skyhold .fbls-building-card.planned .fbls-building-card-icon,
-.fbl-skyhold .fbls-building-card.building .fbls-building-card-icon,
-.fbl-skyhold .fbls-building-card.paused .fbls-building-card-icon {
-  background: var(--fbls-blueprint-icon-bg);
-  border-color: var(--fbls-blueprint-icon-border);
-}
-
-.fbl-skyhold .fbls-building-card.planned.medical-building,
-.fbl-skyhold .fbls-building-card.building.medical-building,
-.fbl-skyhold .fbls-building-card.paused.medical-building {
-  border-color: var(--fbls-blueprint-border);
-  box-shadow: var(--fbls-blueprint-shadow);
-}
-
-.fbl-skyhold .fbls-building-card.planned.medical-building::before,
-.fbl-skyhold .fbls-building-card.building.medical-building::before,
-.fbl-skyhold .fbls-building-card.paused.medical-building::before {
-  background: linear-gradient(180deg, rgba(166, 213, 255, 0.8), rgba(70, 140, 210, 0.14));
-}
+/* FBL Skyhold: current owner for construction rows and shared building actions. */
 
 .fbl-skyhold .fbls-construction-card-actions.compact-line {
   display: grid;
-  grid-template-columns: minmax(6.4rem, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) minmax(9.4rem, auto);
   gap: 0.32rem;
   align-items: center;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
-.fbl-skyhold .fbls-construction-card-actions.compact-line .fbls-material-allocation-line {
-  min-width: 0;
-  justify-self: start;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.fbl-skyhold .fbls-construction-card-actions.compact-line:has(.icon-only-build) {
+  grid-template-columns: minmax(0, 1fr) 52px;
+}
+
+.fbl-skyhold .fbls-construction-card-actions.compact-line:has(.icon-only-materials) {
+  grid-template-columns: 38px minmax(0, 1fr) minmax(9.4rem, auto);
+}
+
+.fbl-skyhold .fbls-construction-card-actions.compact-line:has(.icon-only-materials):has(.icon-only-build) {
+  grid-template-columns: 38px minmax(0, 1fr) 52px;
+}
+
+.fbl-skyhold .fbls-button.secondary {
+  border-color: var(--fbls-info);
+  background: var(--fbls-info-soft);
 }
 
 .fbl-skyhold .fbls-construction-card-actions.compact-line .icon-only-materials {
   width: 38px;
   min-width: 38px;
   padding-inline: 0;
-  justify-self: end;
+  justify-self: start;
 }
 
 .fbl-skyhold .fbls-construction-card-actions.compact-line .fbls-compact-select {
@@ -93,6 +47,80 @@
 
 .fbl-skyhold .fbls-construction-card-actions.compact-line .fbls-button {
   padding-inline: 0.55rem;
+  justify-self: end;
+  max-width: 10.25rem;
+  width: 100%;
+}
+
+.fbl-skyhold .fbls-construction-card-actions.compact-line .fbls-button.icon-only-materials {
+  max-width: 38px;
+}
+
+.fbl-skyhold .fbls-construction-card-actions.compact-line .fbls-button.icon-only-build {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: end;
+  width: 52px;
+  min-width: 52px;
+  max-width: 52px;
+  gap: 4px;
+  padding-inline: 0;
+}
+
+.fbl-skyhold .fbls-construction-card-actions.compact-line .fbls-build-remaining {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.15rem;
+  height: 1.05rem;
+  padding: 0 0.25rem;
+  border-radius: 999px;
+  background: var(--fbls-overlay);
+  color: var(--fbls-accent);
+  font-size: 0.68rem;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.fbl-skyhold .fbls-building-context-menu,
+.fbls-building-context-menu {
+  position: fixed;
+  z-index: 9999;
+  display: grid;
+  gap: 4px;
+  min-width: 248px;
+  padding: 8px;
+  border: 1px solid var(--fbls-accent-border);
+  border-radius: 12px;
+  background: linear-gradient(180deg, var(--fbls-surface-3), var(--fbls-surface-2));
+  box-shadow: 0 20px 40px var(--fbls-overlay-strong);
+}
+
+.fbl-skyhold .fbls-building-context-menu button,
+.fbls-building-context-menu button {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: var(--fbls-surface-1);
+  color: var(--fbls-accent);
+  text-align: left;
+  cursor: pointer;
+}
+
+.fbls-building-context-menu button:hover {
+  border-color: var(--fbls-accent-border);
+  background: var(--fbls-surface-3);
+}
+
+.fbls-building-context-menu button.danger {
+  color: var(--fbls-danger);
 }
 
 .fbl-skyhold .fbls-function-strip.no-title {
@@ -104,25 +132,25 @@
 
 .fbl-skyhold .fbls-function-toggle.fbls-thin-check-chip {
   display: inline-grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: 1rem minmax(0, auto) 17px;
   align-items: center;
-  gap: 0.35rem;
-  min-width: 7.2rem;
-  max-width: 10.5rem;
-  min-height: 34px;
-  padding: 0.28rem 0.45rem;
+  gap: 0.26rem;
+  min-width: 0;
+  max-width: 9rem;
+  min-height: 30px;
+  padding: 0.18rem 0.34rem;
   border: 1px solid var(--fbls-border);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--fbls-surface-soft);
   color: var(--fbls-text);
-  font-size: 0.72rem;
+  font-size: 0.64rem;
   text-transform: uppercase;
-  letter-spacing: 0.035em;
+  letter-spacing: 0.02em;
 }
 
 .fbl-skyhold .fbls-function-toggle.fbls-thin-check-chip > i {
   position: static;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   opacity: 0.75;
 }
 
@@ -134,8 +162,7 @@
 }
 
 .fbl-skyhold .fbls-function-toggle.fbls-thin-check-chip input[type="checkbox"] {
-  width: 20px;
-  height: 20px;
+  --fbls-check-size: 17px;
   margin: 0;
   justify-self: end;
 }
@@ -180,48 +207,71 @@
   text-align: center;
 }
 
-.fbl-skyhold .fbls-production-utility-row.workers {
+.fbl-skyhold .fbls-build-subgrid {
   display: grid;
-  grid-template-columns: minmax(13rem, 1.1fr) minmax(12rem, 1fr) minmax(11rem, 0.8fr) auto;
-  align-items: end;
-  gap: 0.55rem;
+  grid-template-columns: minmax(14rem, 1fr) minmax(14rem, 1fr);
+  gap: 0.45rem;
+  margin-top: 0.2rem;
 }
 
-.fbl-skyhold .fbls-production-utility-row.nonworkers {
-  display: grid;
-  grid-template-columns: minmax(13rem, 1.1fr) minmax(12rem, 1fr) minmax(11rem, 0.8fr);
-  align-items: end;
-  gap: 0.55rem;
+.fbl-skyhold .fbls-build-subgrid.tighter {
+  gap: 0.45rem;
 }
 
-.fbl-skyhold .fbls-production-utility-row > label,
-.fbl-skyhold .fbls-production-season-box {
+.fbl-skyhold .fbls-subhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  margin-bottom: 0.24rem;
+  color: var(--fbls-muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.fbl-skyhold .fbls-cost-list,
+.fbl-skyhold .fbls-prereq-list {
+  min-width: 0;
+  padding: 0.35rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 9px;
+  background: var(--fbls-overlay-soft);
+}
+
+.fbl-skyhold .fbls-cost-row,
+.fbl-skyhold .fbls-prereq-row {
+  display: grid;
+  gap: 0.3rem;
+  align-items: center;
+  margin-top: 0.28rem;
+}
+
+.fbl-skyhold .fbls-cost-row {
+  grid-template-columns: minmax(5.5rem, 1fr) minmax(4.8rem, 5.2rem) 3rem 1.8rem;
+}
+
+.fbl-skyhold .fbls-prereq-row {
+  grid-template-columns: minmax(8rem, 1fr) 1.55rem;
+}
+
+.fbl-skyhold .fbls-cost-row input[type="text"],
+.fbl-skyhold .fbls-cost-row input[type="number"] {
   min-width: 0;
 }
 
-.fbl-skyhold .fbls-production-utility-row label:has([data-field$=".formula"]) {
-  max-width: 34rem;
+.fbl-skyhold .fbls-prereq-row.met select,
+.fbl-skyhold .fbls-prereq-row.met strong {
+  border-color: var(--fbls-success);
 }
 
-.fbl-skyhold .fbls-production-season-box {
-  display: grid;
-  gap: 0.25rem;
-  align-content: end;
-}
-
-.fbl-skyhold .fbls-production-season-box > span {
-  margin: 0;
-}
-
-.fbl-skyhold .fbls-season-pill {
-  height: 34px;
-  min-height: 34px;
+.fbl-skyhold .fbls-prereq-row.missing select,
+.fbl-skyhold .fbls-prereq-row.missing strong {
+  border-color: var(--fbls-danger-border);
 }
 
 @media (max-width: 1180px) {
-  .fbl-skyhold .fbls-build-main-row.with-dev-requirements,
-  .fbl-skyhold .fbls-production-utility-row.workers,
-  .fbl-skyhold .fbls-production-utility-row.nonworkers {
+  .fbl-skyhold .fbls-build-main-row.with-dev-requirements {
     grid-template-columns: 1fr;
   }
 
@@ -232,6 +282,12 @@
 }
 
 @media (max-width: 760px) {
+  .fbl-skyhold .fbls-build-subgrid,
+  .fbl-skyhold .fbls-cost-row,
+  .fbl-skyhold .fbls-prereq-row {
+    grid-template-columns: 1fr;
+  }
+
   .fbl-skyhold .fbls-dev-line-fields.compact-inline-dev {
     grid-template-columns: repeat(2, minmax(4.4rem, 1fr));
   }

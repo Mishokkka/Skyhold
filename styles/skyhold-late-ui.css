@@ -1,7 +1,8 @@
 /* FBL Skyhold late UI index.
-   Real rules are split into styles/parts so old override layers stop growing as one file. */
-@import url("./parts/skyhold-mass-combat.css");
-@import url("./parts/skyhold-ui-patches.css");
-@import url("./parts/skyhold-resident-list.css");
-@import url("./parts/skyhold-current-owners.css");
-@import url("./parts/skyhold-resident-editor-v2.css");
+   Late-loaded secondary windows and current component owners. */
+@layer skyhold.base, skyhold.layout, skyhold.components, skyhold.domains, skyhold.tools, skyhold.overrides;
+@import url("./parts/skyhold-resident-list.css") layer(skyhold.components);
+@import url("./parts/skyhold-current-owners.css") layer(skyhold.overrides);
+@import url("./parts/skyhold-gm.css") layer(skyhold.tools);
+@import url("./parts/skyhold-resident-editor-v2.css") layer(skyhold.components);
+@import url("./parts/skyhold-foundry-bridge.css");

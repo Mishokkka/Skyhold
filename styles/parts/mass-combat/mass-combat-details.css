@@ -29,13 +29,13 @@
 
 .fbl-skyhold-mass-combat .fbls-battle-source-table .row {
   padding: 7px 8px;
-  border: 1px solid rgba(255,255,255,.08);
+  border: 1px solid var(--fbls-border);
   border-radius: 8px;
-  background: rgba(0,0,0,.18);
+  background: var(--fbls-overlay-soft);
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-source-table .row.warning {
-  border-color: rgba(214, 157, 64, .36);
+  border-color: var(--fbls-accent-border);
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-source-table .row.low {
@@ -44,7 +44,7 @@
 
 .fbl-skyhold-mass-combat .fbls-battle-source-table strong,
 .fbl-skyhold-mass-combat .fbls-battle-source-table b {
-  color: var(--fbls-text, #efe7d2);
+  color: var(--fbls-text, var(--fbls-text));
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-source-table em {
@@ -53,6 +53,84 @@
   font-size: 11px;
   font-style: normal;
   opacity: .72;
+}
+
+.fbl-skyhold-mass-combat .fbls-source-tags-cell {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.fbl-skyhold-mass-combat .fbls-source-tag-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.fbl-skyhold-mass-combat .fbls-source-tag-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 2px 6px;
+  border: 1px solid var(--fbls-accent-border);
+  border-radius: 999px;
+  color: var(--fbls-accent);
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.fbl-skyhold-mass-combat .fbls-source-tag-badge.primary {
+  border-color: var(--fbls-accent-border);
+  color: var(--fbls-accent);
+  background: var(--fbls-accent-bg);
+}
+
+.fbl-skyhold-mass-combat .fbls-source-tag-badge.manual {
+  box-shadow: inset 0 0 0 1px var(--fbls-info-soft);
+}
+
+.fbl-skyhold-mass-combat .fbls-source-type-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  gap: 4px;
+  align-items: center;
+}
+
+.fbl-skyhold-mass-combat .fbls-source-efficiency-cell {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.fbl-skyhold-mass-combat .fbls-source-efficiency-controls {
+  display: grid;
+  grid-template-columns: minmax(60px, 1fr) 28px;
+  gap: 4px;
+  align-items: center;
+}
+
+.fbl-skyhold-mass-combat .fbls-source-efficiency-controls input {
+  min-width: 0;
+  height: 28px;
+  font-size: 12px;
+}
+
+.fbl-skyhold-mass-combat .fbls-source-type-restore {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--fbls-accent-border);
+  border-radius: 6px;
+  color: var(--fbls-text);
+  background: var(--fbls-overlay-soft);
+  cursor: pointer;
+}
+
+.fbl-skyhold-mass-combat .fbls-source-type-restore:hover,
+.fbl-skyhold-mass-combat .fbls-source-type-restore:focus-visible {
+  border-color: var(--fbls-accent-border);
+  background: var(--fbls-accent-bg);
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-calc-steps {
@@ -64,9 +142,9 @@
 
 .fbl-skyhold-mass-combat .fbls-battle-calc-steps li {
   padding: 6px 8px;
-  border: 1px solid rgba(255,255,255,.08);
+  border: 1px solid var(--fbls-border);
   border-radius: 8px;
-  background: rgba(0,0,0,.16);
+  background: var(--fbls-overlay-soft);
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-calc-steps strong,
@@ -86,7 +164,7 @@
   margin: 0 0 6px;
   padding: 7px 8px;
   border-radius: 8px;
-  background: rgba(0,0,0,.16);
+  background: var(--fbls-overlay-soft);
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-counter-list {
@@ -102,7 +180,7 @@
   align-items: start;
   padding: 6px 8px;
   border-radius: 8px;
-  background: rgba(0,0,0,.16);
+  background: var(--fbls-overlay-soft);
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-impact-grid {
@@ -113,9 +191,9 @@
 
 .fbl-skyhold-mass-combat .fbls-battle-impact-grid > div {
   padding: 8px;
-  border: 1px solid rgba(255,255,255,.08);
+  border: 1px solid var(--fbls-border);
   border-radius: 8px;
-  background: rgba(0,0,0,.18);
+  background: var(--fbls-overlay-soft);
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-impact-grid strong,
@@ -138,9 +216,9 @@
 
 .fbls-battle-chat .fbls-battle-chat-pools div {
   padding: 7px;
-  border: 1px solid rgba(120, 90, 50, .28);
+  border: 1px solid var(--fbls-accent-border);
   border-radius: 8px;
-  background: rgba(0,0,0,.08);
+  background: var(--fbls-overlay-soft);
 }
 
 .fbls-battle-chat .fbls-battle-chat-pools strong,
@@ -148,6 +226,10 @@
 .fbls-battle-chat .fbls-battle-chat-pools span,
 .fbls-battle-chat-pools em {
   display: block;
+}
+
+.fbls-battle-chat .fbls-battle-chat-pools span {
+  white-space: normal;
 }
 
 .fbls-battle-chat-pools em {
@@ -168,7 +250,7 @@
   align-items: center;
   gap: 4px;
   padding: 3px 7px;
-  border: 1px solid rgba(120,90,50,.20);
+  border: 1px solid var(--fbls-accent-border);
   border-radius: 999px;
 }
 

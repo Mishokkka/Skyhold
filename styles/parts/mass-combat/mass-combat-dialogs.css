@@ -1,454 +1,531 @@
-/* FBL Skyhold mass-combat: dark help dialogs, weather cards and tag counter graph. */
-.application.fbl-skyhold-dark-dialog,
-.window-app.fbl-skyhold-dark-dialog,
-.dialog.fbl-skyhold-dark-dialog,
-.window-app:has(.fbls-skyhold-dark-panel),
-.application:has(.fbls-skyhold-dark-panel),
-.dialog:has(.fbls-skyhold-dark-panel) {
-  --fbls-dialog-bg: linear-gradient(180deg, rgba(14, 18, 26, .98), rgba(7, 10, 15, .98));
-  --fbls-dialog-bg-solid: rgba(7, 10, 15, .98);
-  --fbls-dialog-text: rgba(240, 232, 214, .94);
-  --fbls-dialog-muted: rgba(235, 226, 206, .76);
-  --fbls-dialog-border: rgba(212, 185, 126, .16);
-  --fbls-dialog-panel: rgba(255, 255, 255, .045);
-  --fbls-dialog-panel-border: rgba(255, 255, 255, .10);
-  --fbls-dialog-action-bg: rgba(185, 58, 70, .82);
-  --fbls-dialog-action-border: rgba(255, 190, 190, .22);
-  --fbls-dialog-scroll-thumb: var(--fbls-battle-scroll-thumb, #b14a5d);
-  --fbls-dialog-scroll-track: #10131a;
+/* FBL Skyhold mass-combat reference windows: counter graph and weather catalog. */
+.fbl-skyhold-mass-reference {
+  --fbls-reference-bg: var(--fbls-surface-0);
+  --fbls-reference-panel: var(--fbls-surface-1);
+  --fbls-reference-panel-strong: var(--fbls-surface-2);
+  --fbls-reference-border: var(--fbls-accent-border);
+  --fbls-reference-text: var(--fbls-text);
+  --fbls-reference-muted: var(--fbls-muted);
+  --fbls-reference-gold: var(--fbls-accent);
+  --fbls-reference-scroll-track: var(--fbls-surface-0);
+  --fbls-reference-scroll-thumb: var(--fbls-danger-strong);
+  min-width: 520px;
+  min-height: 420px;
+  color: var(--fbls-reference-text);
   color-scheme: dark;
-  background: var(--fbls-dialog-bg) !important;
-  color: var(--fbls-dialog-text) !important;
+  background: var(--fbls-reference-bg);
 }
 
-.fbl-skyhold-dark-dialog .window-content,
-.application.fbl-skyhold-dark-dialog .window-content,
-.dialog.fbl-skyhold-dark-dialog .window-content,
-.window-app:has(.fbls-skyhold-dark-panel) .window-content,
-.application:has(.fbls-skyhold-dark-panel) .window-content,
-.dialog:has(.fbls-skyhold-dark-panel) .window-content,
-.window-content:has(.fbls-skyhold-dark-panel),
-.application-content:has(.fbls-skyhold-dark-panel),
-.standard-form:has(.fbls-skyhold-dark-panel),
-.dialog-content:has(.fbls-skyhold-dark-panel) {
-  padding: 0 !important;
-  background: var(--fbls-dialog-bg) !important;
-  color: var(--fbls-dialog-text) !important;
-  overflow: hidden !important;
+.fbl-skyhold-mass-reference,
+.fbl-skyhold-mass-reference * {
+  box-sizing: border-box;
 }
 
-.fbl-skyhold-dark-dialog .dialog-content,
-.application.fbl-skyhold-dark-dialog .dialog-content,
-.dialog.fbl-skyhold-dark-dialog .dialog-content,
-.fbl-skyhold-dark-dialog .application-content,
-.application.fbl-skyhold-dark-dialog .application-content,
-.dialog.fbl-skyhold-dark-dialog .application-content,
-.fbl-skyhold-dark-dialog form,
-.application.fbl-skyhold-dark-dialog form,
-.dialog.fbl-skyhold-dark-dialog form,
-.fbl-skyhold-dark-dialog .standard-form,
-.application.fbl-skyhold-dark-dialog .standard-form,
-.dialog.fbl-skyhold-dark-dialog .standard-form {
-  background: transparent !important;
-  color: var(--fbls-dialog-text) !important;
-}
-
-.fbl-skyhold-dark-dialog .dialog-content,
-.application.fbl-skyhold-dark-dialog .dialog-content,
-.dialog.fbl-skyhold-dark-dialog .dialog-content,
-.fbl-skyhold-dark-dialog .application-content,
-.application.fbl-skyhold-dark-dialog .application-content,
-.dialog.fbl-skyhold-dark-dialog .application-content {
-  padding: 14px 16px !important;
-  overflow: auto !important;
-  scrollbar-color: var(--fbls-dialog-scroll-thumb) var(--fbls-dialog-scroll-track);
-}
-
-.fbl-skyhold-dark-dialog .dialog-buttons,
-.application.fbl-skyhold-dark-dialog .dialog-buttons,
-.dialog.fbl-skyhold-dark-dialog .dialog-buttons,
-.fbl-skyhold-dark-dialog .form-footer,
-.application.fbl-skyhold-dark-dialog .form-footer,
-.dialog.fbl-skyhold-dark-dialog .form-footer,
-.window-app:has(.fbls-skyhold-dark-panel) .dialog-buttons,
-.application:has(.fbls-skyhold-dark-panel) .dialog-buttons,
-.dialog:has(.fbls-skyhold-dark-panel) .dialog-buttons,
-.window-content:has(.fbls-skyhold-dark-panel) .dialog-buttons,
-.application:has(.fbls-skyhold-dark-panel) .form-footer,
-.dialog:has(.fbls-skyhold-dark-panel) .form-footer,
-.window-content:has(.fbls-skyhold-dark-panel) .form-footer,
-.standard-form:has(.fbls-skyhold-dark-panel) .form-footer {
-  margin: 0 !important;
-  padding: 10px 16px 16px !important;
-  border: 0 !important;
-  background: var(--fbls-dialog-bg-solid) !important;
-}
-
-.window-app:has(.fbls-skyhold-dark-panel) button,
-.application:has(.fbls-skyhold-dark-panel) button,
-.dialog:has(.fbls-skyhold-dark-panel) button {
-  color: var(--fbls-dialog-text) !important;
-}
-
-.fbl-skyhold-dark-dialog .dialog-buttons button,
-.application.fbl-skyhold-dark-dialog .dialog-buttons button,
-.dialog.fbl-skyhold-dark-dialog .dialog-buttons button,
-.fbl-skyhold-dark-dialog .form-footer button,
-.application.fbl-skyhold-dark-dialog .form-footer button,
-.dialog.fbl-skyhold-dark-dialog .form-footer button,
-.window-app:has(.fbls-skyhold-dark-panel) .dialog-buttons button,
-.application:has(.fbls-skyhold-dark-panel) .dialog-buttons button,
-.dialog:has(.fbls-skyhold-dark-panel) .dialog-buttons button,
-.application:has(.fbls-skyhold-dark-panel) .form-footer button,
-.dialog:has(.fbls-skyhold-dark-panel) .form-footer button,
-.window-content:has(.fbls-skyhold-dark-panel) .form-footer button,
-.standard-form:has(.fbls-skyhold-dark-panel) .form-footer button {
-  min-height: 38px;
-  border: 1px solid var(--fbls-dialog-action-border) !important;
-  border-radius: 10px !important;
-  background: var(--fbls-dialog-action-bg) !important;
-  color: rgba(255, 242, 226, .95) !important;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08);
-}
-
-.fbl-skyhold-counter-dialog .window-content {
-  max-width: 690px;
-}
-
-.fbl-skyhold-weather-dialog .window-content {
-  max-width: 580px;
-}
-
-.fbl-skyhold .fbls-skyhold-dark-panel {
-  background: var(--fbls-dialog-bg, linear-gradient(180deg, rgba(14, 18, 26, .98), rgba(7, 10, 15, .98)));
-  color: var(--fbls-dialog-text, rgba(240, 232, 214, .94));
-}
-
-.fbl-skyhold .fbls-dialog-help.fbls-skyhold-dark-panel {
-  padding: 12px;
-  border: 1px solid var(--fbls-dialog-border, rgba(212, 185, 126, .16));
-  border-radius: 14px;
-}
-
-.fbl-skyhold .fbls-help-lead.compact {
-  display: grid;
-  gap: 3px;
-  padding: 10px 12px;
-  border: 1px solid rgba(212, 185, 126, .18);
-  border-radius: 12px;
-  background: var(--fbls-dialog-panel, rgba(255, 255, 255, .045));
-}
-
-.fbl-skyhold .fbls-help-lead.compact strong {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: #f4e6c8;
-}
-
-.fbl-skyhold .fbls-help-lead.compact span {
-  color: var(--fbls-dialog-muted, rgba(235, 226, 206, .76));
-  font-size: 12px;
-}
-
-.fbl-skyhold .fbls-counter-pentagram {
-  display: grid;
-  gap: 10px;
-  width: 620px;
-  max-width: 84vw;
-  color: var(--fbls-dialog-text, rgba(240, 232, 214, .92));
-}
-
-.fbl-skyhold .fbls-counter-graph-wrap {
-  position: relative;
-  width: min(var(--graph-w), 100%);
-  height: var(--graph-h);
-  justify-self: center;
-  border: 1px solid var(--fbls-dialog-border, rgba(212, 185, 126, .16));
-  border-radius: 16px;
+.fbls-mass-reference-shell {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 100%;
+  height: 100%;
+  color: var(--fbls-reference-text);
   background:
-    radial-gradient(circle at center, rgba(60, 78, 94, .34), rgba(13, 18, 26, .96) 62%),
-    linear-gradient(180deg, rgba(18, 24, 34, .98), rgba(8, 11, 16, .98));
-  overflow: hidden;
+    radial-gradient(circle at 50% -20%, var(--fbls-info-soft), transparent 42%),
+    var(--fbls-reference-bg);
 }
 
-.fbl-skyhold .counter-edge {
-  --edge-color: rgba(112, 214, 138, .72);
+.fbls-reference-toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 54px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--fbls-reference-border);
+  background: var(--fbls-info-soft);
+}
+
+.fbls-reference-toolbar p {
+  flex: 1 1 360px;
+  margin: 0;
+  color: var(--fbls-reference-muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.fbls-reference-toolbar p strong {
+  color: var(--fbls-reference-gold);
+}
+
+.fbls-counter-legend {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+}
+
+.fbls-counter-legend span {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  color: var(--fbls-text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.fbls-counter-legend i {
+  --legend-width: 2px;
+  display: block;
+  width: 24px;
+  height: 0;
+  border-top: var(--legend-width) solid var(--fbls-info);
+}
+
+.fbls-counter-legend .strong i {
+  --legend-width: 4px;
+}
+
+.fbls-counter-legend .full i {
+  --legend-width: 7px;
+}
+
+.fbls-counter-viewport {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px;
+  scrollbar-color: var(--fbls-reference-scroll-thumb) var(--fbls-reference-scroll-track);
+  scrollbar-gutter: stable;
+}
+
+.fbls-counter-viewport::-webkit-scrollbar,
+.fbls-weather-reference-list::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+  background: var(--fbls-reference-scroll-track);
+}
+
+.fbls-counter-viewport::-webkit-scrollbar-track,
+.fbls-weather-reference-list::-webkit-scrollbar-track {
+  background: var(--fbls-reference-scroll-track);
+}
+
+.fbls-counter-viewport::-webkit-scrollbar-thumb,
+.fbls-weather-reference-list::-webkit-scrollbar-thumb {
+  border: 2px solid var(--fbls-reference-scroll-track);
+  border-radius: 999px;
+  background: var(--fbls-reference-scroll-thumb);
+}
+
+.fbls-counter-pentagram {
+  display: grid;
+  place-items: center;
+  width: max-content;
+  min-width: 100%;
+  min-height: 100%;
+  margin: auto;
+}
+
+.fbls-counter-graph-wrap {
+  position: relative;
+  width: var(--graph-w);
+  min-width: var(--graph-w);
+  height: var(--graph-h);
+  border: 1px solid var(--fbls-accent-border);
+  border-radius: 16px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at center, var(--fbls-info-soft), transparent 48%),
+    linear-gradient(180deg, var(--fbls-surface-1), var(--fbls-surface-0));
+  box-shadow: inset 0 1px 0 var(--fbls-surface-soft);
+}
+
+.counter-edge {
+  --edge-color: var(--fbls-info-soft);
+  --edge-width: 2px;
+  --edge-opacity: .34;
+  --arrow-half: 5px;
+  --arrow-length: 8px;
   position: absolute;
   z-index: 1;
   left: var(--edge-x);
-  top: var(--edge-y);
+  top: calc(var(--edge-y) - var(--edge-width) / 2);
   width: var(--edge-l);
-  height: 0;
-  border-top: 1.35px solid var(--edge-color);
-  opacity: .35;
+  height: var(--edge-width);
+  border: 0;
+  border-radius: 999px;
+  background: var(--edge-color);
+  opacity: var(--edge-opacity);
   transform: rotate(var(--edge-a));
   transform-origin: 0 50%;
   pointer-events: none;
-  transition: border-color .16s ease, border-width .16s ease, opacity .16s ease;
+  transition: background-color .16s ease, height .16s ease, opacity .16s ease;
 }
 
-.fbl-skyhold .counter-edge::after {
+.counter-edge.strength-strong {
+  --edge-width: 4px;
+  --edge-opacity: .48;
+  --arrow-half: 6px;
+  --arrow-length: 10px;
+}
+
+.counter-edge.strength-full {
+  --edge-width: 7px;
+  --edge-opacity: .66;
+  --arrow-half: 8px;
+  --arrow-length: 13px;
+}
+
+.counter-edge::after {
   content: "";
   position: absolute;
-  right: -1px;
-  top: -4px;
-  width: 0;
-  height: 0;
-  border-top: 4px solid transparent;
-  border-bottom: 4px solid transparent;
-  border-left: 7px solid var(--edge-color);
-  filter: drop-shadow(0 0 3px rgba(0, 0, 0, .5));
+  right: 0;
+  top: 50%;
+  width: var(--arrow-length);
+  height: calc(var(--arrow-half) * 2);
+  background: var(--edge-color);
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+  filter: drop-shadow(0 0 3px var(--fbls-overlay-strong));
+  transform: translateY(-50%);
 }
 
-.fbl-skyhold .counter-edge-label {
+.counter-edge-label {
   position: absolute;
   z-index: 6;
   transform: translate(-50%, -50%);
   display: none;
-  min-width: 32px;
-  padding: 2px 6px;
-  border: 1px solid rgba(245, 231, 200, .20);
+  min-width: 36px;
+  padding: 3px 7px;
+  border: 1px solid var(--fbls-accent-border);
   border-radius: 999px;
-  background: rgba(7, 10, 15, .88);
-  color: #f5e7c8;
-  font-size: 13px;
+  background: var(--fbls-surface-0);
+  color: var(--fbls-accent);
+  box-shadow: 0 3px 10px var(--fbls-overlay-strong);
+  font-size: 12px;
   font-weight: 900;
   line-height: 1;
   pointer-events: none;
 }
 
-.fbl-skyhold .fbls-counter-pentagram[data-selected-tag="all"] .counter-edge {
-  opacity: .58;
-}
-
-.fbl-skyhold .fbls-counter-pentagram[data-selected-tag="all"] .counter-edge.tone-red {
-  --edge-color: rgba(224, 113, 113, .48);
-}
-
-.fbl-skyhold .fbls-counter-pentagram[data-selected-tag="all"] .counter-edge.tone-green {
-  --edge-color: rgba(112, 214, 138, .58);
-}
-
-.fbl-skyhold .fbls-counter-pentagram:not([data-selected-tag="all"]) .counter-edge,
-.fbl-skyhold .fbls-counter-pentagram:not([data-selected-tag="all"]) .fbls-counter-node {
-  opacity: .16;
-}
-
-.fbl-skyhold .fbls-counter-pentagram:not([data-selected-tag="all"]) .counter-edge-label {
+.counter-edge.is-filtered-out,
+.counter-edge-label.is-filtered-out {
   display: none;
 }
 
-.fbl-skyhold .counter-edge.is-related,
-.fbl-skyhold .fbls-counter-node.is-related {
-  opacity: .95;
+.fbls-counter-pentagram:not([data-selected-tag="all"]) .counter-edge,
+.fbls-counter-pentagram:not([data-selected-tag="all"]) .fbls-counter-node {
+  opacity: .10;
 }
 
-.fbl-skyhold .counter-edge.is-outgoing {
-  --edge-color: #70d68a;
+.fbls-counter-pentagram:not([data-selected-tag="all"]) .counter-edge.is-related,
+.fbls-counter-pentagram:not([data-selected-tag="all"]) .fbls-counter-node.is-related {
+  opacity: 1;
+}
+
+.counter-edge.is-outgoing {
+  --edge-color: var(--fbls-success);
+  --edge-opacity: 1;
   z-index: 3;
-  border-top-width: 1.8px;
+  filter: drop-shadow(0 0 4px var(--fbls-success-soft));
 }
 
-.fbl-skyhold .counter-edge.is-incoming {
-  --edge-color: #e07171;
+.counter-edge.is-incoming {
+  --edge-color: var(--fbls-danger-strong);
+  --edge-opacity: 1;
   z-index: 4;
-  border-top-width: 1.8px;
+  filter: drop-shadow(0 0 4px var(--fbls-danger-strong));
 }
 
-.fbl-skyhold .counter-edge.is-self {
-  --edge-color: #d6be70;
+.counter-edge.is-self {
+  --edge-color: var(--fbls-accent);
   z-index: 5;
 }
 
-.fbl-skyhold .counter-edge-label.is-related {
+.counter-edge-label.is-related {
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
-.fbl-skyhold .counter-edge-label.is-outgoing {
-  border-color: rgba(112, 214, 138, .30);
+.counter-edge-label.is-outgoing {
+  border-color: var(--fbls-success);
+  color: var(--fbls-success);
 }
 
-.fbl-skyhold .counter-edge-label.is-incoming {
-  border-color: rgba(224, 113, 113, .30);
+.counter-edge-label.is-incoming {
+  border-color: var(--fbls-danger-border);
+  color: var(--fbls-danger);
 }
 
-.fbl-skyhold .counter-edge-label.is-self {
-  border-color: rgba(214, 190, 112, .38);
+.counter-edge-label.is-self {
+  border-color: var(--fbls-accent-border);
+  color: var(--fbls-accent);
 }
 
-.fbl-skyhold .fbls-counter-node {
+.fbls-counter-node {
   appearance: none;
   -webkit-appearance: none;
   position: absolute;
+  z-index: 7;
   transform: translate(-50%, -50%);
   display: grid;
-  place-items: center;
-  gap: 2px;
-  width: 74px;
-  min-height: 42px;
-  padding: 5px;
-  border: 1px solid rgba(255, 255, 255, .14);
-  border-radius: 14px;
-  background: rgba(12, 16, 23, .98);
-  color: rgba(235, 226, 206, .86);
-  box-shadow: 0 8px 18px rgba(0, 0, 0, .30);
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 7px;
+  align-items: center;
+  width: 112px;
+  min-height: 48px;
+  margin: 0;
+  padding: 7px 9px;
+  border: 1px solid var(--fbls-accent-border);
+  border-radius: 12px;
+  background: var(--fbls-surface-0);
+  color: var(--fbls-accent);
+  box-shadow: 0 8px 20px var(--fbls-overlay-strong), inset 0 1px 0 var(--fbls-surface-soft);
   font-family: inherit;
-  text-align: center;
+  line-height: 1.1;
+  text-align: left;
   cursor: pointer;
-  transition: transform .16s ease, border-color .16s ease, background .16s ease;
+  transition: transform .16s ease, border-color .16s ease, background .16s ease, opacity .16s ease;
 }
 
-.fbl-skyhold .fbls-counter-node:hover {
-  border-color: rgba(235, 210, 142, .55);
-  background: rgba(235, 210, 142, .10);
-  color: #f5e7c8;
+.fbls-counter-node:hover,
+.fbls-counter-node:focus-visible {
+  border-color: var(--fbls-accent-border);
+  background: var(--fbls-surface-0);
+  color: var(--fbls-accent);
+  outline: none;
+  transform: translate(-50%, -50%) scale(1.04);
 }
 
-.fbl-skyhold .fbls-counter-node.is-selected {
-  border-color: rgba(235, 210, 142, .76);
-  background: rgba(235, 210, 142, .20);
-  color: #f5e7c8;
+.fbls-counter-node.is-selected {
+  border-color: var(--fbls-accent-border);
+  background: var(--fbls-accent);
+  color: var(--fbls-on-accent);
   opacity: 1;
-  transform: translate(-50%, -50%) scale(1.06);
+  transform: translate(-50%, -50%) scale(1.07);
 }
 
-.fbl-skyhold .fbls-counter-node.is-source {
-  border-color: rgba(224, 113, 113, .54);
+.fbls-counter-node.is-selected i { color: currentColor; }
+
+.fbls-counter-node.is-source {
+  border-color: var(--fbls-danger-border);
+  background: linear-gradient(180deg, var(--fbls-danger-strong), var(--fbls-danger-strong));
+  color: var(--fbls-on-accent);
+  box-shadow: 0 0 0 2px var(--fbls-danger-soft), 0 0 22px var(--fbls-danger-strong);
 }
 
-.fbl-skyhold .fbls-counter-node.is-target {
-  border-color: rgba(112, 214, 138, .54);
+.fbls-counter-node.is-target {
+  border-color: var(--fbls-success);
+  background: linear-gradient(180deg, var(--fbls-success), var(--fbls-success));
+  color: var(--fbls-on-accent);
+  box-shadow: 0 0 0 2px var(--fbls-success-soft), 0 0 22px var(--fbls-success-soft);
 }
 
-.fbl-skyhold .fbls-counter-node i {
-  font-size: 15px;
+.fbls-counter-node.is-source i {
+  color: currentColor;
 }
 
-.fbl-skyhold .fbls-counter-node span {
-  max-width: 64px;
+.fbls-counter-node.is-target i {
+  color: currentColor;
+}
+
+.fbls-counter-node i {
+  color: var(--fbls-accent);
+  font-size: 17px;
+  text-align: center;
+}
+
+.fbls-counter-node span {
+  display: block;
   overflow: hidden;
-  font-size: 10px;
+  color: inherit;
+  font-size: 11px;
   font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.fbl-skyhold .fbls-counter-center {
+.fbls-counter-center {
   appearance: none;
   -webkit-appearance: none;
   position: absolute;
-  z-index: 8;
+  z-index: 9;
   transform: translate(-50%, -50%) scale(.86);
   display: grid;
-  place-items: center;
-  gap: 3px;
-  width: 94px;
-  min-height: 56px;
-  padding: 8px;
-  border: 1px solid rgba(235, 210, 142, .72);
-  border-radius: 18px;
-  background: rgba(31, 26, 18, .96);
-  color: #f5e7c8;
-  box-shadow: 0 14px 28px rgba(0, 0, 0, .42), inset 0 1px 0 rgba(255, 255, 255, .08);
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 7px;
+  align-items: center;
+  width: 126px;
+  min-height: 58px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--fbls-accent-border);
+  border-radius: 14px;
+  background: var(--fbls-accent);
+  color: var(--fbls-on-accent);
+  box-shadow: 0 14px 30px var(--fbls-overlay-strong), inset 0 1px 0 var(--fbls-panel);
   font-family: inherit;
-  text-align: center;
+  text-align: left;
   cursor: pointer;
   opacity: 0;
   pointer-events: none;
   transition: opacity .16s ease, transform .16s ease;
 }
 
-.fbl-skyhold .fbls-counter-center.is-visible {
+.fbls-counter-center.is-visible {
   opacity: 1;
   pointer-events: auto;
   transform: translate(-50%, -50%) scale(1);
 }
 
-.fbl-skyhold .fbls-counter-center i {
-  font-size: 18px;
+.fbls-counter-center i {
+  color: currentColor;
+  font-size: 19px;
+  text-align: center;
 }
 
-.fbl-skyhold .fbls-counter-center span {
-  max-width: 78px;
+.fbls-counter-center span {
   overflow: hidden;
-  font-size: 11px;
+  color: inherit;
+  font-size: 12px;
   font-weight: 900;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.fbl-skyhold .fbls-weather-help-compact {
-  display: grid;
-  gap: 10px;
-  width: 520px;
-  max-width: 78vw;
-  color: var(--fbls-dialog-text, rgba(240, 232, 214, .92));
-}
-
-.fbl-skyhold .fbls-weather-help-list {
-  display: grid;
-  gap: 7px;
-  max-height: 430px;
-  overflow: auto;
-  padding-right: 2px;
-}
-
-.fbl-skyhold .fbls-weather-help-card {
-  display: grid;
-  gap: 6px;
-  padding: 9px 10px;
-  border: 1px solid var(--fbls-dialog-panel-border, rgba(255, 255, 255, .10));
-  border-radius: 12px;
-  background: var(--fbls-dialog-panel, rgba(255, 255, 255, .045));
-}
-
-.fbl-skyhold .fbls-weather-help-card header {
-  display: grid;
-  gap: 2px;
-}
-
-.fbl-skyhold .fbls-weather-help-card header strong {
-  color: #f4e6c8;
-  font-size: 14px;
-  text-shadow: none;
-}
-
-.fbl-skyhold .fbls-weather-help-card header em {
-  color: rgba(235, 226, 206, .78);
-  font-size: 12px;
-  font-style: normal;
-  text-shadow: none;
-}
-
-.fbl-skyhold .fbls-weather-help-card div {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+.fbls-reference-toolbar.weather {
   align-items: center;
 }
 
-.fbl-skyhold .fbls-weather-help-card b {
-  margin-right: 2px;
-  color: rgba(235, 226, 206, .60);
-  font-size: 11px;
-  letter-spacing: .05em;
-  text-shadow: none;
+.fbls-current-weather {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding: 5px 9px;
+  border: 1px solid var(--fbls-accent-border);
+  border-radius: 999px;
+  background: var(--fbls-accent-soft);
+  color: var(--fbls-accent);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.fbls-weather-reference-list {
+  display: grid;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-color: var(--fbls-reference-scroll-thumb) var(--fbls-reference-scroll-track);
+}
+
+.fbls-weather-reference-row {
+  display: grid;
+  grid-template-columns: minmax(190px, .8fr) minmax(340px, 1.7fr);
+  gap: 18px;
+  align-items: start;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--fbls-accent-border);
+  background: var(--fbls-info-soft);
+}
+
+.fbls-weather-reference-row:nth-child(even) {
+  background: var(--fbls-info-soft);
+}
+
+.fbls-weather-reference-row.current {
+  background: linear-gradient(90deg, var(--fbls-accent-bg), var(--fbls-info-soft));
+  box-shadow: inset 3px 0 0 var(--fbls-accent);
+}
+
+.fbls-weather-reference-row h3 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+  margin: 0;
+  color: var(--fbls-accent);
+  font-size: 16px;
+}
+
+.fbls-weather-reference-row h3 span {
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--fbls-accent-bg);
+  color: var(--fbls-accent);
+  font-size: 9px;
+  letter-spacing: .08em;
   text-transform: uppercase;
 }
 
-.fbl-skyhold .fbls-weather-help-card div span {
-  display: inline-flex;
-  padding: 2px 6px;
-  border: 1px solid rgba(255, 255, 255, .08);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, .055);
-  font-size: 11px;
-  text-shadow: none;
+.fbls-weather-reference-row header p {
+  margin: 5px 0 0;
+  color: var(--fbls-reference-muted);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
-.fbl-skyhold .fbls-weather-help-card .positive { color: #9ee6a1; }
-.fbl-skyhold .fbls-weather-help-card .negative { color: #ff9a8a; }
-.fbl-skyhold .fbls-weather-help-card .neutral { color: rgba(235, 226, 206, .74); }
+.fbls-weather-modifiers {
+  display: grid;
+  gap: 9px;
+}
+
+.fbls-weather-modifiers section {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+}
+
+.fbls-weather-modifiers b {
+  padding-top: 4px;
+  color: var(--fbls-muted);
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.fbls-weather-modifiers section > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.fbls-weather-modifiers span {
+  display: inline-flex;
+  padding: 3px 7px;
+  border: 1px solid var(--fbls-border);
+  border-radius: 999px;
+  background: var(--fbls-surface-soft);
+  color: var(--fbls-text);
+  font-size: 11px;
+}
+
+.fbls-weather-modifiers .positive {
+  border-color: var(--fbls-success);
+  background: var(--fbls-success-soft);
+  color: var(--fbls-success);
+}
+
+.fbls-weather-modifiers .negative {
+  border-color: var(--fbls-danger-border);
+  background: var(--fbls-danger-soft);
+  color: var(--fbls-danger);
+}
+
+.fbls-weather-modifiers .neutral {
+  color: var(--fbls-muted);
+}
+
+@media (max-width: 720px) {
+  .fbl-skyhold-mass-reference {
+    min-width: 0;
+  }
+
+  .fbls-weather-reference-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+}

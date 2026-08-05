@@ -1,0 +1,399 @@
+/* Random event editor window. */
+.application.fbl-skyhold-random-event-editor {
+  min-width: 46rem;
+  min-height: 34rem;
+}
+.application.fbl-skyhold-random-event-editor .window-content {
+  padding: 0;
+  background: transparent;
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-random-event-editor-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  height: 100%;
+  min-height: 0;
+  padding: 0.55rem;
+  overflow: hidden;
+  background: var(--fbls-bg);
+  color: var(--fbls-text);
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor *,
+.fbl-skyhold.fbl-skyhold-random-event-editor *::before,
+.fbl-skyhold.fbl-skyhold-random-event-editor *::after {
+  box-sizing: border-box;
+  letter-spacing: 0;
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor input,
+.fbl-skyhold.fbl-skyhold-random-event-editor select,
+.fbl-skyhold.fbl-skyhold-random-event-editor textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 1.85rem;
+  padding: 0.32rem 0.45rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 7px;
+  background: var(--fbls-overlay);
+  color: var(--fbls-text);
+  box-shadow: none;
+  font-size: 0.84rem;
+  line-height: 1.25;
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor textarea {
+  min-height: 5.5rem;
+  resize: vertical;
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor input::placeholder,
+.fbl-skyhold.fbl-skyhold-random-event-editor textarea::placeholder {
+  color: var(--fbls-placeholder);
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor input:focus,
+.fbl-skyhold.fbl-skyhold-random-event-editor select:focus,
+.fbl-skyhold.fbl-skyhold-random-event-editor textarea:focus {
+  border-color: var(--fbls-accent-border);
+  box-shadow: 0 0 0 2px var(--fbls-accent-soft);
+  outline: none;
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-button,
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-icon-button {
+  border-color: var(--fbls-border);
+  background: var(--fbls-panel);
+  color: var(--fbls-text);
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-button:hover,
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-icon-button:hover,
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-icon-button.active {
+  border-color: var(--fbls-accent-border);
+  background: var(--fbls-panel-strong);
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-button.primary {
+  border-color: var(--fbls-danger-border);
+  background: var(--fbls-danger-soft);
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-button.danger,
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-icon-button.danger {
+  border-color: var(--fbls-danger-border);
+  background: var(--fbls-danger-soft);
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-editor-header {
+  display: grid;
+  grid-template-columns: minmax(15rem, 0.8fr) minmax(20rem, 1.2fr) auto;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+  padding: 0.45rem 0.5rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 8px;
+  background: var(--fbls-surface-soft);
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-editor-title {
+  display: grid;
+  grid-template-columns: 2.1rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-editor-mark {
+  display: grid;
+  width: 2.1rem;
+  height: 2.1rem;
+  place-items: center;
+  border: 1px solid var(--fbls-accent-border);
+  border-radius: 8px;
+  background: var(--fbls-accent-soft);
+  color: var(--fbls-accent);
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-editor-title h2,
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-table-title h3 {
+  margin: 0;
+  color: var(--fbls-text);
+  line-height: 1.12;
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-editor-title h2 {
+  font-size: 1rem;
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-editor-title p,
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-table-title p {
+  min-width: 0;
+  margin: 0.1rem 0 0;
+  overflow: hidden;
+  color: var(--fbls-muted);
+  font-size: 0.78rem;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-editor-tabs {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.32rem;
+  min-width: 0;
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-tab {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.38rem;
+  min-width: 10rem;
+  min-height: 2.1rem;
+  padding: 0 0.55rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 999px;
+  background: var(--fbls-overlay-soft);
+  color: var(--fbls-muted);
+  cursor: pointer;
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-tab span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-tab strong {
+  min-width: 1.5rem;
+  padding: 0.08rem 0.34rem;
+  border-radius: 999px;
+  background: var(--fbls-panel);
+  color: var(--fbls-text);
+  font-size: 0.72rem;
+  text-align: center;
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-tab:hover,
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-tab.active {
+  border-color: var(--fbls-danger-border);
+  background: var(--fbls-danger-soft);
+  color: var(--fbls-text);
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-editor-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.45rem;
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-editor-dirty {
+  color: var(--fbls-accent);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-rule-chips span,
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-rule-chips em {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.25rem;
+  padding: 0.12rem 0.42rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 999px;
+  background: var(--fbls-panel);
+  color: var(--fbls-muted);
+  font-size: 0.7rem;
+  font-style: normal;
+  line-height: 1.1;
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-board {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 0;
+  padding: 0.5rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 8px;
+  background: var(--fbls-surface-soft);
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-table-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.65rem;
+  min-width: 0;
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-table-title {
+  min-width: 0;
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-table-title h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.96rem;
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-table-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-search-field {
+  display: grid;
+  grid-template-columns: auto minmax(10rem, 16rem);
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  color: var(--fbls-muted);
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-count {
+  color: var(--fbls-muted);
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-table-actions > .fbls-icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-list {
+  display: grid;
+  flex: 1 1 auto;
+  align-content: start;
+  gap: 0.45rem;
+  min-height: 0;
+  padding-right: 0.12rem;
+  overflow: auto;
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-card {
+  display: grid;
+  gap: 0.45rem;
+  min-width: 0;
+  padding: 0.5rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 8px;
+  background: var(--fbls-info-soft);
+  box-shadow: inset 0 1px 0 var(--fbls-surface-soft);
+  content-visibility: auto;
+  contain-intrinsic-size: 230px;
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-card.editing {
+  border-color: var(--fbls-accent-border);
+  background: var(--fbls-overlay-strong);
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-index {
+  display: grid;
+  align-self: stretch;
+  min-height: 1.85rem;
+  place-items: center;
+  border: 1px solid var(--fbls-border);
+  border-radius: 7px;
+  background: var(--fbls-surface-soft);
+  color: var(--fbls-accent);
+  font-size: 0.76rem;
+  font-weight: 850;
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-preview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-self: stretch;
+  align-items: center;
+  gap: 0.28rem;
+  min-height: 1.85rem;
+  padding: 0.24rem 0.45rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 7px;
+  background: var(--fbls-surface-soft);
+  color: var(--fbls-muted);
+  font-size: 0.72rem;
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-preview strong {
+  color: var(--fbls-text);
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-preview.ok {
+  border-color: var(--fbls-success);
+  background: var(--fbls-success-soft);
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-preview.blocked {
+  border-color: var(--fbls-danger-border);
+  background: var(--fbls-danger-soft);
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-card-actions {
+  display: flex;
+  align-items: end;
+  justify-content: flex-end;
+  gap: 0.3rem;
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-card-actions .fbls-icon-button {
+  width: 1.85rem;
+  height: 1.85rem;
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-rule-summary {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-rule-summary > div {
+  display: grid;
+  gap: 0.22rem;
+  min-width: 0;
+  padding: 0.38rem 0.42rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 7px;
+  background: var(--fbls-surface-soft);
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-rule-kicker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+  color: var(--fbls-muted);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-rule-kicker strong {
+  color: var(--fbls-accent);
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-rule-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.22rem;
+  max-height: 3.1rem;
+  overflow: auto;
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-rule-chips.boost span {
+  border-color: var(--fbls-success);
+  background: var(--fbls-success-soft);
+}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-empty {
+  margin: 0;
+  padding: 1rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 8px;
+  background: var(--fbls-surface-soft);
+  color: var(--fbls-muted);
+  text-align: center;
+}
+@media (max-width: 1160px) {
+  .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-editor-header {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-editor-tabs,
+  .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-editor-actions {
+    justify-content: flex-start;
+  }
+}
+@media (max-width: 760px) {
+  .application.fbl-skyhold-random-event-editor {
+    min-width: 28rem;
+  }
+  .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-random-event-editor-shell {
+    padding: 0.42rem;
+  }
+  .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-table-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-table-actions {
+    justify-content: flex-start;
+  }
+  .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-search-field {
+    grid-template-columns: auto minmax(0, 1fr);
+    width: 100%;
+  }
+  .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-index,
+  .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-preview {
+    grid-column: auto;
+  }
+  .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-card-actions {
+    justify-content: flex-start;
+  }
+}

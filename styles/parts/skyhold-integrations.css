@@ -1,0 +1,46 @@
+/* FBL Skyhold: small integration surfaces outside the main app window. */
+
+.fbls-building-note-tooltip {
+  position: fixed;
+  z-index: 1000000;
+  max-width: 320px;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--fbls-accent-border);
+  border-radius: 0.65rem;
+  background: var(--fbls-surface-2);
+  color: var(--fbls-text);
+  box-shadow: 0 14px 32px var(--fbls-overlay-strong);
+  pointer-events: none;
+  font-family: var(--font-primary, serif);
+}
+
+.fbls-building-note-tooltip * {
+  color: var(--fbls-text);
+}
+
+.fbls-building-note-tooltip h3 {
+  margin: 0 0 0.25rem;
+  color: var(--fbls-accent);
+  font-size: 1rem;
+  text-shadow: 0 1px 2px var(--fbls-overlay-strong);
+}
+
+.fbls-building-note-tooltip p {
+  margin: 0.18rem 0;
+  color: var(--fbls-accent);
+}
+
+.fbls-building-note-tooltip .fbls-note-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 0.35rem;
+}
+
+.fbls-building-note-tooltip .fbls-note-tags span {
+  padding: 0.12rem 0.4rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 999px;
+  background: var(--fbls-surface-soft);
+  font-size: 0.75rem;
+}

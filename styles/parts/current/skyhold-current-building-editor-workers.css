@@ -1,0 +1,155 @@
+/* FBL Skyhold: building editor worker controls, effective types and responsive layout. */
+
+.fbl-skyhold-building-editor .fbls-worker-top-row {
+  display: grid;
+  grid-template-columns: 4.7rem 4.7rem minmax(11rem, 1fr) 5.5rem 5.6rem;
+  align-items: end;
+  gap: 0.36rem;
+}
+
+.fbl-skyhold-building-editor .worker-layout-v4 {
+  display: grid;
+}
+
+.fbl-skyhold-building-editor .fbls-worker-top-row label,
+.fbl-skyhold-building-editor .effective-types-box.full-line {
+  min-width: 0;
+}
+
+.fbl-skyhold-building-editor .fbls-worker-top-row label > span,
+.fbl-skyhold-building-editor .effective-types-box.full-line > span,
+.fbl-skyhold-building-editor .fbls-assigned-worker-area > .fbls-field-title {
+  display: block;
+  color: var(--fbls-muted);
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.fbl-skyhold-building-editor .fbls-worker-top-row label > span {
+  margin-bottom: 0.22rem;
+}
+
+.fbl-skyhold-building-editor .fbls-worker-top-row .mini input,
+.fbl-skyhold-building-editor .fbls-worker-top-row .mini strong {
+  text-align: center;
+}
+
+.fbl-skyhold-building-editor .fbls-worker-top-row .mini select {
+  width: 100%;
+  min-width: 0;
+  text-align: center;
+}
+
+.fbl-skyhold-building-editor .effective-types-box.full-line {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.42rem;
+  padding: 0;
+}
+
+.fbl-skyhold-building-editor .effective-types-box.full-line > span {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.fbl-skyhold-building-editor .fbls-effective-type-line {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 2rem;
+  padding: 0.18rem 0.24rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid var(--fbls-border);
+  border-radius: 8px;
+  background: var(--fbls-overlay);
+}
+
+.fbl-skyhold-building-editor .fbls-effective-type-line .inline-add {
+  flex: 0 0 11rem;
+  min-height: 1.55rem;
+  padding: 0.12rem 0.35rem;
+}
+
+.fbl-skyhold-building-editor .fbls-type-effect-chip {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 0.25rem;
+  max-width: 100%;
+  min-height: 1.45rem;
+  padding: 0.08rem 0.24rem 0.08rem 0.44rem;
+  border: 1px solid var(--fbls-border-strong);
+  border-radius: 999px;
+  background: var(--fbls-panel);
+  border-color: var(--fbls-border-strong);
+  box-shadow: inset 0 0 0 1px var(--fbls-overlay-soft);
+}
+
+.fbl-skyhold-building-editor .fbls-type-effect-chip em {
+  color: inherit;
+  text-shadow: 0 1px 2px var(--fbls-overlay-strong);
+}
+
+.fbl-skyhold-building-editor .fbls-type-effect-chip input,
+.fbl-skyhold-building-editor .fbls-type-effect-chip strong {
+  width: 3.2rem;
+  min-height: 1.28rem;
+  padding: 0.05rem 0.2rem;
+  border-color: var(--fbls-border-strong);
+  background: var(--fbls-overlay);
+  color: var(--fbls-text-strong);
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+.fbl-skyhold-building-editor .fbls-type-effect-chip .fbls-chip-remove {
+  width: 1.2rem;
+  min-width: 1.2rem;
+  height: 1.2rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--fbls-overlay);
+  color: var(--fbls-text);
+  cursor: pointer;
+}
+
+.fbl-skyhold-building-editor .fbls-assigned-worker-area {
+  display: grid;
+  gap: 0.3rem;
+  margin-top: 0.18rem;
+}
+
+.fbl-skyhold-building-editor .fbls-worker-slot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
+  gap: 0.35rem;
+  margin-top: 0.2rem;
+}
+
+.fbl-skyhold-building-editor .fbls-worker-slot-grid label {
+  grid-template-columns: 2.2rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.fbl-skyhold-building-editor .fbls-worker-slot-grid label span {
+  margin: 0;
+  color: var(--fbls-dim);
+  text-align: center;
+}
+
+@media (max-width: 920px) {
+  .fbl-skyhold-building-editor .fbls-worker-top-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .fbl-skyhold-building-editor .fbls-worker-top-row .role,
+  .fbl-skyhold-building-editor .effective-types-box.full-line {
+    grid-column: 1 / -1;
+  }
+}

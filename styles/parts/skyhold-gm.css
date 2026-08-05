@@ -1,0 +1,472 @@
+/* FBL Skyhold: main GM tab owner.
+   Owns the dashboard, GM toggles, generator controls and resource catalog. */
+
+.fbl-skyhold.fbl-skyhold-app .fbls-gm-panel.compact-gm {
+  padding: 0.55rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  overflow: auto;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-gm-dashboard {
+  display: block;
+  column-count: 3;
+  column-gap: 0.65rem;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-gm-dashboard > .fbls-card,
+.fbl-skyhold.fbl-skyhold-app .fbls-gm-dashboard > .fbls-gm-card {
+  display: inline-block;
+  width: 100%;
+  margin: 0 0 0.65rem;
+  vertical-align: top;
+  break-inside: avoid;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-gm-card,
+.fbl-skyhold.fbl-skyhold-app .fbls-generator-card.compact-generator,
+.fbl-skyhold.fbl-skyhold-app .fbls-resource-catalog-launcher,
+.fbl-skyhold.fbl-skyhold-app .fbls-card.compact-danger {
+  padding: 0.72rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 0.75rem;
+  background: var(--fbls-info-soft);
+  box-shadow: inset 0 1px 0 var(--fbls-surface-soft);
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-gm-defense-card {
+  border-color: var(--fbls-info);
+  background: linear-gradient(135deg, var(--fbls-info-soft), var(--fbls-overlay-soft));
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-gm-card h2,
+.fbl-skyhold.fbl-skyhold-app .fbls-generator-card.compact-generator h2,
+.fbl-skyhold.fbl-skyhold-app .fbls-resource-catalog-launcher h2,
+.fbl-skyhold.fbl-skyhold-app .fbls-card.compact-danger h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.45rem;
+  font-size: 1.02rem;
+  line-height: 1.15;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-gm-card textarea,
+.fbl-skyhold.fbl-skyhold-app .fbls-generator-card.compact-generator input,
+.fbl-skyhold.fbl-skyhold-app .fbls-generator-card.compact-generator select,
+.fbl-skyhold.fbl-skyhold-app .fbls-generator-card.compact-generator textarea {
+  min-width: 0;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-gm-toggle-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.4rem;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-gm-toggle-grid.defense-flags {
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  margin-bottom: 0.5rem;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-checkbox-label.compact-check {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20px;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 0.42rem 0.55rem;
+  overflow: hidden;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-checkbox-label.compact-check > span {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-checkbox-label.compact-check input[type="checkbox"] {
+  position: static;
+  justify-self: end;
+  align-self: center;
+  transform: none;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-file-picker-row {
+  display: grid;
+  gap: 0.22rem;
+  min-width: 0;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-file-picker-row > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 2rem;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-file-picker-row input {
+  min-width: 0;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-file-picker-row .fbls-icon-button {
+  width: 2rem;
+  min-width: 2rem;
+  height: 2rem;
+  min-height: 2rem;
+  margin: 0;
+  padding: 0;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-gm-sound-grid {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-gm-mod-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(6.2rem, 1fr));
+  gap: 0.45rem;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-gm-mod-grid label,
+.fbl-skyhold.fbl-skyhold-app .fbls-generator-grid.compact-generator-grid label,
+.fbl-skyhold.fbl-skyhold-app .fbls-generated-person-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-gm-mod-grid label span,
+.fbl-skyhold.fbl-skyhold-app .fbls-generator-grid.compact-generator-grid label span,
+.fbl-skyhold.fbl-skyhold-app .fbls-generated-person-card label span {
+  color: var(--fbls-muted);
+  font-size: 0.68rem;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-gm-mod-grid input,
+.fbl-skyhold.fbl-skyhold-app .fbls-generator-grid.compact-generator-grid input,
+.fbl-skyhold.fbl-skyhold-app .fbls-generator-grid.compact-generator-grid select,
+.fbl-skyhold.fbl-skyhold-app .fbls-generated-person-card input,
+.fbl-skyhold.fbl-skyhold-app .fbls-generated-person-card select,
+.fbl-skyhold.fbl-skyhold-app .fbls-generated-person-card textarea {
+  width: 100%;
+  height: 2.05rem;
+  padding: 0.32rem 0.45rem;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-muted-text.compact {
+  margin: 0.4rem 0 0;
+  font-size: 0.78rem;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-gm-roll-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-last-roll.compact-last-roll {
+  display: grid;
+  gap: 0.2rem;
+  margin-top: 0.45rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 0.55rem;
+  background: var(--fbls-overlay-soft);
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-last-roll-actions,
+.fbl-skyhold.fbl-skyhold-app .fbls-event-schedule-row > div:last-child {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-event-schedule-list {
+  display: grid;
+  gap: 0.3rem;
+  margin-top: 0.45rem;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-event-schedule-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.4rem;
+  align-items: center;
+  padding: 0.35rem 0.42rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 0.5rem;
+  background: var(--fbls-surface-soft);
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-event-schedule-row.applied {
+  border-color: var(--fbls-success);
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-event-schedule-row > div:first-child {
+  display: grid;
+  min-width: 0;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-event-schedule-row small {
+  color: var(--fbls-muted);
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-operations-timeline-card {
+  margin-top: 0.65rem;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-operations-timeline {
+  display: grid;
+  gap: 0.3rem;
+  max-height: 20rem;
+  overflow: auto;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-operation-row {
+  display: grid;
+  grid-template-columns: 1.6rem minmax(0, 1fr) auto auto;
+  gap: 0.45rem;
+  align-items: center;
+  padding: 0.38rem 0.45rem;
+  border-left: 3px solid var(--fbls-border);
+  border-radius: 0.4rem;
+  background: var(--fbls-surface-soft);
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-operation-row.event-effect,
+.fbl-skyhold.fbl-skyhold-app .fbls-operation-row.event-schedule {
+  border-left-color: var(--fbls-accent-border);
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-operation-row.worker-assignment {
+  border-left-color: var(--fbls-info);
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-operation-row.storage {
+  border-left-color: var(--fbls-success);
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-operation-row.tenday {
+  border-left-color: var(--fbls-accent-border);
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-operation-row > div {
+  display: grid;
+  min-width: 0;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-operation-row span,
+.fbl-skyhold.fbl-skyhold-app .fbls-operation-row time {
+  color: var(--fbls-muted);
+  font-size: 0.72rem;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-card-headline.compact-headline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  margin-bottom: 0.55rem;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-card-headline.compact-headline p {
+  margin: 0.12rem 0 0;
+  color: var(--fbls-muted);
+  font-size: 0.82rem;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-generator-actions.compact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.35rem;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-generator-grid.compact-generator-grid {
+  display: grid;
+  grid-template-columns: 5rem repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: 0.45rem;
+  margin-bottom: 0.55rem;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-generator-edit-list.compact-selective {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-generated-person-card.selective {
+  display: block;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--fbls-info);
+  border-radius: 9px;
+  background: var(--fbls-info-soft);
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-generated-person-card.selective.muted {
+  opacity: 0.58;
+  filter: saturate(0.75);
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-generated-person-card.selective.editing {
+  border-color: var(--fbls-info);
+  background: var(--fbls-info-soft);
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-generated-person-card .pick {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.32rem;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-generated-person-card .pick input {
+  --fbls-check-size: 1rem;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-generated-person-card .pick span {
+  font-size: 0.78rem;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-generated-person-summary {
+  display: grid;
+  grid-template-columns: 1.6rem minmax(10rem, 1.2fr) minmax(7rem, 0.8fr) 4.8rem 2rem;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.35rem;
+  padding: 0.28rem 0.45rem;
+  cursor: pointer;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-generated-person-summary .pick {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-generated-person-summary .identity {
+  display: grid;
+  grid-template-columns: minmax(8rem, 0.8fr) minmax(12rem, 1fr);
+  align-items: baseline;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-generated-person-summary .identity strong,
+.fbl-skyhold.fbl-skyhold-app .fbls-generated-person-summary .identity span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-generated-person-summary .identity span,
+.fbl-skyhold.fbl-skyhold-app .fbls-generated-person-summary em {
+  color: var(--fbls-accent);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-generated-person-editor {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(64px, 1fr));
+  gap: 6px;
+  padding: 0.45rem;
+  border-top: 1px solid var(--fbls-border);
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-generated-person-editor label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-generated-person-editor label.name,
+.fbl-skyhold.fbl-skyhold-app .fbls-generated-person-editor label.background,
+.fbl-skyhold.fbl-skyhold-app .fbls-generated-person-editor label.traits {
+  grid-column: span 2;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-generated-person-editor label.appearance {
+  grid-column: 1 / -1;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-generated-person-editor span {
+  color: var(--fbls-accent);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-resource-catalog-launcher {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.fbl-skyhold.fbl-skyhold-app .fbls-card.compact-danger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+}
+
+@media (max-width: 1180px) {
+  .fbl-skyhold.fbl-skyhold-app .fbls-gm-dashboard {
+    column-count: 2;
+  }
+}
+
+@media (max-width: 900px) {
+  .fbl-skyhold.fbl-skyhold-app .fbls-card-headline.compact-headline,
+  .fbl-skyhold.fbl-skyhold-app .fbls-card.compact-danger {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .fbl-skyhold.fbl-skyhold-app .fbls-generator-actions.compact-actions {
+    justify-content: flex-start;
+  }
+
+}
+
+@media (max-width: 760px) {
+  .fbl-skyhold.fbl-skyhold-app .fbls-gm-dashboard {
+    column-count: 1;
+  }
+
+  .fbl-skyhold.fbl-skyhold-app .fbls-generated-person-summary {
+    grid-template-columns: 1.5rem minmax(0, 1fr) auto;
+  }
+
+  .fbl-skyhold.fbl-skyhold-app .fbls-generated-person-summary .identity,
+  .fbl-skyhold.fbl-skyhold-app .fbls-generated-person-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .fbl-skyhold.fbl-skyhold-app .fbls-generated-person-editor label.name,
+  .fbl-skyhold.fbl-skyhold-app .fbls-generated-person-editor label.background,
+  .fbl-skyhold.fbl-skyhold-app .fbls-generated-person-editor label.traits {
+    grid-column: 1 / -1;
+  }
+
+  .fbl-skyhold.fbl-skyhold-app .fbls-generated-person-summary .fbls-worker-badge,
+  .fbl-skyhold.fbl-skyhold-app .fbls-generated-person-summary em {
+    display: none;
+  }
+}

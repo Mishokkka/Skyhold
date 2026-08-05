@@ -1,0 +1,40 @@
+/* Storage room subtabs. */
+.fbls-storage-room-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.32rem;
+  flex-wrap: wrap;
+}
+.fbls-storage-room-tab {
+  min-height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.36rem;
+  padding: 0.22rem 0.58rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 999px;
+  background: var(--fbls-surface-soft);
+  color: var(--fbls-muted);
+  font-weight: 800;
+}
+.fbls-storage-room-tab b {
+  min-width: 1.35rem;
+  min-height: 1.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: var(--fbls-overlay);
+  color: var(--fbls-text);
+  font-size: 0.78rem;
+}
+.fbls-storage-room-tab.active {
+  color: var(--fbls-text);
+  border-color: var(--fbls-accent);
+  background: var(--fbls-accent-dim);
+  box-shadow: 0 0 0 1px var(--fbls-danger-soft) inset;
+}
+.fbls-storage-room-tab.inactive {
+  opacity: 0.65;
+}

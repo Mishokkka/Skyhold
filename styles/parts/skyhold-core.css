@@ -1,29 +1,82 @@
 /* FBL Skyhold: Core shell, shared cards, base tables and controls. */
 .fbls-shell {
+  box-sizing: border-box;
   min-height: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   background:
-    radial-gradient(circle at top left, rgba(130, 150, 170, 0.18), transparent 30rem),
-    linear-gradient(135deg, rgba(28, 32, 38, 0.98), rgba(10, 12, 16, 0.98));
+    radial-gradient(circle at top left, var(--fbls-info-soft), transparent 30rem),
+    linear-gradient(135deg, var(--fbls-surface-0), var(--fbls-surface-1));
+  background-color: var(--fbls-surface-0);
   color: var(--fbls-text);
+}
+
+.fbls-loading-host,
+.fbls-shell.fbls-loading-active {
+  position: relative;
+}
+
+.fbls-loading-overlay {
+  position: absolute;
+  z-index: 10000;
+  inset: 0;
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(ellipse at center, var(--fbls-info-soft) 0%, var(--fbls-info-soft) 48%, var(--fbls-info-soft) 100%);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  backdrop-filter: blur(1.5px);
+}
+
+.fbls-loading-overlay span {
+  display: none;
+}
+
+.fbls-loading-overlay img {
+  width: 142px;
+  height: 142px;
+  max-width: 142px;
+  max-height: 142px;
+  animation: fbls-loader-spin 1.25s linear infinite;
+  filter: drop-shadow(0 0 18px var(--fbls-panel-strong));
+}
+
+.fbls-loading-overlay i {
+  font-size: 2.65rem;
+  filter: drop-shadow(0 0 14px var(--fbls-panel-strong));
+}
+
+.fbls-shell.fbls-loading-active .fbls-loading-overlay,
+.fbls-loading-window-overlay.active {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: all;
+}
+
+.fbls-loading-window-overlay {
+  z-index: 100000;
+  transition: opacity 0.08s ease;
+}
+
+@keyframes fbls-loader-spin {
+  to { transform: rotate(360deg); }
 }
 
 
 .fbls-empty-head h1,
-.fbls-panel-head h2,
 .fbls-card h2,
 .fbls-card h3,
 .fbls-hero h1,
-.fbls-table th,
-.fbls-summary-table th {
+.fbls-table th {
   color: var(--fbls-text);
   border: 0;
   text-shadow: none;
 }
 
 .fbls-empty-head p,
-.fbls-panel-head p,
 .fbls-card p {
   color: var(--fbls-muted);
 }
@@ -33,13 +86,14 @@
   gap: 0.3rem;
   padding: 0.5rem 0.65rem;
   border-bottom: 1px solid var(--fbls-border);
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--fbls-overlay-soft);
 }
 
 .fbls-tab {
   display: inline-flex;
   align-items: center;
   gap: 0.42rem;
+  min-height: 2.25rem;
   border: 1px solid transparent;
   border-radius: 999px;
   background: transparent;
@@ -54,13 +108,14 @@
 }
 
 .fbls-tab.active {
-  border-color: rgba(185, 53, 65, 0.75);
-  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--fbls-danger-border);
+  background: var(--fbls-panel);
   color: var(--fbls-text);
 }
 
 .fbls-content {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
   padding: 0.8rem;
 }
@@ -70,25 +125,12 @@
   gap: 0.75rem;
 }
 
-.fbls-panel-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: end;
-  gap: 1rem;
-}
-
-.fbls-panel-head.compact-head {
-  align-items: center;
-}
-
-.fbls-panel-head h2,
 .fbls-card h2,
 .fbls-card h3 {
   margin: 0;
   font-size: 1.05rem;
 }
 
-.fbls-panel-head p,
 .fbls-card p {
   margin: 0.25rem 0 0;
 }
@@ -132,7 +174,6 @@
   gap: 0.45rem;
 }
 
-.fbls-summary-table,
 .fbls-table {
   width: 100%;
   border-collapse: separate;
@@ -143,8 +184,6 @@
   background: var(--fbls-panel);
 }
 
-.fbls-summary-table th,
-.fbls-summary-table td,
 .fbls-table th,
 .fbls-table td {
   padding: 0.45rem 0.5rem;
@@ -152,27 +191,17 @@
   vertical-align: middle;
 }
 
-.fbls-summary-table th,
 .fbls-table th {
   color: var(--fbls-muted);
   font-size: 0.68rem;
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--fbls-overlay-soft);
   white-space: nowrap;
 }
 
-.fbls-summary-table td {
-  text-align: center;
-}
-
-.fbls-summary-table tr:last-child td,
 .fbls-table tr:last-child td {
   border-bottom: 0;
-}
-
-.fbls-summary-table input {
-  text-align: center;
 }
 
 .fbls-table.people-table,
@@ -191,12 +220,6 @@
 }
 
 
-.fbls-button-stack {
-  display: grid;
-  gap: 0.5rem;
-  margin-top: 0.65rem;
-}
-
 .fbls-note-tip {
   position: relative;
   display: inline-grid;
@@ -208,30 +231,24 @@
 }
 
 .fbls-note-tip::after {
-  content: attr(data-fbls-tooltip);
-  position: absolute;
-  z-index: 1000;
-  left: 50%;
-  bottom: calc(100% + 0.45rem);
-  transform: translateX(-50%);
-  min-width: 14rem;
-  max-width: 24rem;
-  padding: 0.55rem 0.65rem;
-  border: 1px solid var(--fbls-border);
-  border-radius: 9px;
-  background: rgba(10, 12, 16, 0.98);
-  color: var(--fbls-text);
-  text-align: left;
-  white-space: normal;
-  line-height: 1.25;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.12s ease 1s;
-  box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.35);
+  content: none;
+  display: none;
 }
 
-.fbls-note-tip:hover::after {
-  opacity: 1;
+.fbls-floating-tooltip {
+  position: fixed;
+  z-index: 2147483647;
+  max-width: min(28rem, calc(100vw - 2rem));
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--fbls-border-strong);
+  border-radius: 9px;
+  background: var(--fbls-surface-2);
+  color: var(--fbls-text-strong);
+  font-size: 0.78rem;
+  line-height: 1.3;
+  white-space: pre-line;
+  pointer-events: none;
+  box-shadow: 0 0.6rem 1.6rem var(--fbls-overlay-strong), 0 0 0 1px var(--fbls-overlay);
 }
 
 .fbls-muted-text {
@@ -243,7 +260,7 @@
   padding: 0.7rem;
   border: 1px solid var(--fbls-border);
   border-radius: 10px;
-  background: rgba(0, 0, 0, 0.18);
+  background: var(--fbls-overlay-soft);
 }
 
 .fbls-last-roll span {
@@ -253,7 +270,7 @@
 }
 
 .danger-zone {
-  border-color: rgba(181, 72, 72, 0.45);
+  border-color: var(--fbls-danger-border);
 }
 
 .fbls-preline {
@@ -268,7 +285,7 @@
   border-top: 1px solid var(--fbls-border);
   color: var(--fbls-muted);
   font-size: 0.76rem;
-  background: rgba(0, 0, 0, 0.24);
+  background: var(--fbls-overlay);
 }
 
 .fbls-chat-card h3 {
@@ -284,9 +301,9 @@
     flex-wrap: wrap;
   }
 
-  .fbls-footer,
-  .fbls-panel-head {
+  .fbls-footer {
     flex-direction: column;
     align-items: stretch;
   }
+
 }

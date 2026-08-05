@@ -4,9 +4,9 @@
 .fbls-battle-preset label,
 .fbls-crew-headline label,
 .fbls-suitable-editor label,
-.fbls-storage-adjust-grid label,
-.fbls-storage-move-grid label,
 .fbls-field {
+  display: grid;
+  gap: 0.2rem;
   min-width: 0;
   color: var(--fbls-muted);
   font-size: 0.69rem;
@@ -19,8 +19,6 @@
 .fbls-battle-preset span,
 .fbls-crew-headline span,
 .fbls-suitable-editor span,
-.fbls-storage-adjust-grid span,
-.fbls-storage-move-grid span,
 .fbls-field > span {
   display: block;
   margin-bottom: 0.2rem;
@@ -31,44 +29,134 @@
 .fbl-skyhold-app select {
   width: 100%;
   min-width: 0;
+  font-size: 0.92rem;
   border: 1px solid var(--fbls-border);
   border-radius: 8px;
-  background: rgba(0, 0, 0, 0.28);
+  background: var(--fbls-overlay);
   color: var(--fbls-text);
   padding: 0.38rem 0.45rem;
   box-shadow: none;
+}
+
+.fbl-skyhold-building-editor input,
+.fbl-skyhold-building-editor select,
+.fbl-skyhold-building-editor textarea {
+  font-size: 0.92rem;
+}
+
+.fbl-skyhold-building-editor input[type="number"] {
+  font-size: 1.02rem;
+  font-weight: 800;
+}
+
+.fbl-skyhold-app input[type="number"] {
+  font-size: 1.08rem;
+  font-weight: 800;
 }
 
 .fbl-skyhold-app select {
   height: 1.95rem;
 }
 
-.fbl-skyhold-app select option {
-  background: #f2f2f2;
-  color: #111;
-}
-
 .fbl-skyhold-app textarea {
   resize: vertical;
   line-height: 1.3;
+  tab-size: 1;
 }
 
+.fbl-skyhold-app textarea[readonly] {
+  opacity: 1;
+  color: var(--fbls-text);
+  background: var(--fbls-overlay);
+}
 
 .fbl-skyhold-app input:focus,
 .fbl-skyhold-app textarea:focus,
 .fbl-skyhold-app select:focus {
-  border-color: rgba(255, 255, 255, 0.36);
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.08);
+  border-color: var(--fbls-border-strong);
+  box-shadow: 0 0 0 2px var(--fbls-panel);
   outline: none;
 }
 
 .fbl-skyhold-app input::placeholder,
 .fbl-skyhold-app textarea::placeholder {
-  color: rgba(255, 255, 255, 0.38);
+  color: var(--fbls-placeholder);
+}
+
+.fbl-skyhold input[type="checkbox"] {
+  --fbls-check-size: 20px;
+  --fbls-check-radius: 4px;
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  width: var(--fbls-check-size);
+  height: var(--fbls-check-size);
+  min-width: var(--fbls-check-size);
+  min-height: var(--fbls-check-size);
+  max-width: var(--fbls-check-size);
+  max-height: var(--fbls-check-size);
+  margin: 0;
+  padding: 0;
+  flex: 0 0 var(--fbls-check-size);
+  align-self: center;
+  justify-self: center;
+  vertical-align: middle;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid var(--fbls-border-strong);
+  border-radius: var(--fbls-check-radius);
+  background: var(--fbls-surface-0);
+  box-shadow: inset 0 1px 0 var(--fbls-overlay);
+  cursor: pointer;
+}
+
+.fbl-skyhold input[type="checkbox"]::before,
+.fbl-skyhold input[type="checkbox"]::after {
+  content: none;
+  display: none;
+  position: static;
+  inset: auto;
+  width: 0;
+  height: 0;
+  font-family: initial;
+}
+
+.fbl-skyhold input[type="checkbox"]:checked {
+  border-color: var(--fbls-accent-border);
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.2 8.2 6.5 11.4 12.8 4.8' fill='none' stroke='%23171a1c' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 72% 72% no-repeat,
+    linear-gradient(180deg, var(--fbls-accent), var(--fbls-accent));
+}
+
+.fbl-skyhold input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--fbls-accent-border);
+  outline-offset: 2px;
+}
+
+.fbl-skyhold input[type="checkbox"]:disabled {
+  cursor: default;
+  opacity: 0.58;
+}
+
+.fbls-checkbox-label,
+.fbls-checkbox-label.compact-check,
+.fbls-sale-flag.icon-only {
+  align-items: center;
+}
+
+.fbls-checkbox-label input[type="checkbox"] {
+  --fbls-check-size: 1.4rem;
+  justify-self: start;
+  position: static;
+  transform: none;
+}
+
+.fbls-sale-flag.icon-only input[type="checkbox"] {
+  position: static;
+  transform: none;
 }
 
 .fbls-form-grid strong,
-.fbls-summary-table strong,
 .fbls-battle-fields strong,
 .fbls-battle-preset strong,
 .fbls-crew-headline strong,
@@ -88,6 +176,11 @@
   cursor: pointer;
 }
 
+.fbl-skyhold :is(button, [role="button"], a[href], input, select, textarea):focus-visible {
+  outline: 2px solid var(--fbls-accent-border);
+  outline-offset: 2px;
+}
+
 .fbls-button {
   padding: 0.5rem 0.75rem;
   white-space: nowrap;
@@ -100,18 +193,47 @@
 
 .fbls-button:hover,
 .fbls-icon-button:hover {
-  background: rgba(255, 255, 255, 0.14);
+  background: var(--fbls-panel-strong);
 }
 
 .fbls-icon-button {
+  position: relative;
+  z-index: 1;
   display: inline-grid;
   place-items: center;
   width: 1.75rem;
   height: 1.75rem;
+  line-height: 1;
 }
 
 .fbls-button.danger,
 .fbls-icon-button.danger:hover {
-  border-color: rgba(181, 72, 72, 0.75);
-  background: rgba(181, 72, 72, 0.18);
+  border-color: var(--fbls-danger-border);
+  background: var(--fbls-danger-soft);
+}
+
+.fbls-link-button {
+  appearance: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--fbls-text);
+  font: inherit;
+  font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fbls-link-button:hover {
+  text-decoration: underline;
+}
+
+.fbls-prompt-form label {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.fbls-prompt-form input {
+  width: 100%;
 }

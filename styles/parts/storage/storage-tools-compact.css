@@ -1,0 +1,170 @@
+/* Storage titlebar shortcut, global search and selection tools. */
+.fbls-titlebar-runbar {
+  margin-left: auto;
+  margin-right: 0.45rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  min-width: 0;
+  flex: 0 0 auto;
+}
+
+.fbls-titlebar-runbar-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  min-height: 1.55rem;
+  padding: 0.08rem 0.48rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 8px;
+  background: var(--fbls-panel);
+  color: var(--fbls-text, var(--fbls-text-strong));
+  font-size: 0.78rem;
+  font-weight: 850;
+  line-height: 1;
+}
+
+.fbls-titlebar-runbar-button:hover {
+  border-color: var(--fbls-border-strong);
+  background: var(--fbls-panel-strong);
+}
+
+.fbl-skyhold .fbls-storage-global-search {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.32rem;
+  align-items: center;
+  margin: 0;
+}
+
+.fbl-skyhold .fbls-storage-global-search > label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.4rem;
+  align-items: center;
+  height: 1.85rem;
+  min-height: 1.85rem;
+  margin: 0;
+  padding: 0.12rem 0.45rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 8px;
+  color: var(--fbls-muted);
+  background: var(--fbls-surface-0);
+}
+
+.fbl-skyhold .fbls-storage-global-search input {
+  width: 100%;
+  height: 1.35rem;
+  min-height: 1.35rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.fbl-skyhold .fbls-storage-add-row {
+  height: 1.85rem;
+  min-height: 1.85rem;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.fbl-skyhold .fbls-storage-search-results {
+  position: absolute;
+  inset: calc(100% + 0.3rem) 0 auto;
+  z-index: 8;
+  margin: 0;
+  padding: 0.45rem;
+  border: 1px solid var(--fbls-border-strong);
+  border-radius: 9px;
+  background: var(--fbls-surface-2);
+  box-shadow: 0 12px 28px var(--fbls-overlay-strong);
+}
+
+.fbl-skyhold .fbls-storage-search-results[hidden],
+.fbl-skyhold .fbls-storage-search-results button[hidden],
+.fbl-skyhold .fbls-storage-search-results [data-storage-search-empty][hidden] {
+  display: none;
+}
+
+.fbl-skyhold .fbls-storage-search-results > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.1rem 0.2rem 0.4rem;
+}
+
+.fbl-skyhold .fbls-storage-search-results > div {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.32rem;
+  max-height: 16rem;
+  overflow: auto;
+}
+
+.fbl-skyhold .fbls-storage-search-results button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.45rem;
+  align-items: center;
+  min-height: 2.35rem;
+  padding: 0.32rem 0.48rem;
+  border: 1px solid var(--fbls-border);
+  color: var(--fbls-text-strong);
+  -webkit-text-fill-color: currentColor;
+  background: var(--fbls-surface-1);
+  text-align: left;
+}
+
+.fbl-skyhold .fbls-storage-search-results button:hover,
+.fbl-skyhold .fbls-storage-search-results button:focus-visible {
+  border-color: var(--fbls-accent-border);
+  color: var(--fbls-text-strong);
+  -webkit-text-fill-color: currentColor;
+  background: var(--fbls-surface-3);
+}
+
+.fbl-skyhold .fbls-storage-search-results button strong,
+.fbl-skyhold .fbls-storage-search-results button > i { color: inherit; }
+
+.fbl-skyhold .fbls-storage-search-results button span {
+  display: grid;
+  min-width: 0;
+}
+
+.fbl-skyhold .fbls-storage-search-results button small {
+  overflow: hidden;
+  color: var(--fbls-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fbl-skyhold .fbls-storage-selectionbar {
+  display: flex;
+  gap: 0.48rem;
+  align-items: center;
+  margin: 0;
+  min-height: 2rem;
+  padding: 0.24rem 0.5rem;
+  border-bottom: 1px solid var(--fbls-border);
+  background: var(--fbls-surface-soft);
+}
+
+.fbl-skyhold .fbls-storage-batch-count {
+  color: var(--fbls-muted);
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+
+.fbl-skyhold .fbls-storage-batch-count b,
+.fbl-skyhold .fbls-storage-batch-count i {
+  color: var(--fbls-accent);
+}
+
+.fbl-skyhold .fbls-storage-context-hint { margin-left: auto; color: var(--fbls-muted); font-size: 0.72rem; }
+.fbl-skyhold .fbls-storage-selectionbar button { height: 1.6rem; min-height: 1.6rem; margin: 0; }
+
+@media (max-width: 760px) {
+  .fbls-titlebar-runbar-button span { display: none; }
+  .fbl-skyhold .fbls-storage-context-hint { display: none; }
+}

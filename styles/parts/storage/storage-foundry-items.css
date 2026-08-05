@@ -1,0 +1,43 @@
+/* Foundry Item previews inside the compact storage register. */
+.fbls-storage-resource-img,
+.fbls-storage-item-main img {
+  width: 1.35rem;
+  height: 1.35rem;
+  object-fit: cover;
+  border-radius: 7px;
+  background: var(--fbls-panel);
+}
+.fbls-storage-item-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 0.35rem;
+}
+.fbls-storage-item-card {
+  display: grid;
+  gap: 0.35rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--fbls-surface-soft), var(--fbls-overlay-soft));
+  padding: 0.38rem;
+}
+.fbls-storage-item-main {
+  display: grid;
+  grid-template-columns: 1.55rem minmax(0, 1fr) 1.7rem;
+  gap: 0.35rem;
+  align-items: center;
+  min-width: 0;
+}
+.fbls-storage-item-main strong {
+  display: block;
+  font-size: 0.88rem;
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fbls-storage-item-main small {
+  display: block;
+  color: var(--fbls-muted);
+  font-size: 0.72rem;
+  margin-top: 0.08rem;
+}

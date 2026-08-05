@@ -1,13 +1,17 @@
 /* FBL Skyhold main stylesheet index.
    Domain rules are split into styles/parts to keep overrides local and reviewable. */
-@import url("./parts/skyhold-variables.css");
-@import url("./parts/skyhold-forms.css");
-@import url("./parts/skyhold-ui-kit.css");
-@import url("./parts/skyhold-core.css");
-@import url("./parts/skyhold-layout.css");
-@import url("./parts/skyhold-header.css");
-@import url("./parts/skyhold-residents.css");
-@import url("./parts/skyhold-buildings.css");
-@import url("./parts/skyhold-economy.css");
-@import url("./parts/skyhold-building-systems.css");
-@import url("./parts/skyhold-storage.css");
+@layer skyhold.base, skyhold.layout, skyhold.components, skyhold.domains, skyhold.tools, skyhold.overrides;
+@import url("./parts/skyhold-variables.css") layer(skyhold.base);
+@import url("./parts/skyhold-forms.css") layer(skyhold.components);
+@import url("./parts/skyhold-ui-kit.css") layer(skyhold.components);
+@import url("./parts/skyhold-core.css") layer(skyhold.base);
+@import url("./parts/skyhold-header.css") layer(skyhold.layout);
+@import url("./parts/skyhold-integrations.css") layer(skyhold.components);
+@import url("./parts/skyhold-residents.css") layer(skyhold.domains);
+@import url("./parts/skyhold-buildings.css") layer(skyhold.domains);
+@import url("./parts/skyhold-economy.css") layer(skyhold.domains);
+@import url("./parts/skyhold-building-systems.css") layer(skyhold.domains);
+@import url("./parts/unique-buildings/medical.css") layer(skyhold.domains);
+@import url("./parts/unique-buildings/fasti-shop.css") layer(skyhold.domains);
+@import url("./parts/skyhold-storage.css") layer(skyhold.domains);
+@import url("./parts/skyhold-content-pack.css") layer(skyhold.tools);

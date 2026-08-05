@@ -1,0 +1,67 @@
+/* Storage overview cards, adjustments and log rows. */
+.fbls-storage-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.36rem;
+  padding: 0.2rem 0 0.45rem;
+  border-bottom: 1px solid var(--fbls-border);
+  flex-wrap: wrap;
+}
+.fbls-storage-tab {
+  border: 1px solid var(--fbls-border);
+  border-radius: 999px;
+  background: var(--fbls-surface-soft);
+  color: var(--fbls-muted);
+  min-height: 2.25rem;
+  padding: 0.22rem 0.7rem;
+  font-weight: 800;
+}
+.fbls-storage-tab.active {
+  color: var(--fbls-text);
+  border-color: var(--fbls-accent);
+  background: var(--fbls-accent-dim);
+  box-shadow: 0 0 0 1px var(--fbls-danger-soft) inset;
+}
+.fbls-storage-resources-layout,
+.fbls-storage-accounting-layout {
+  display: grid;
+  gap: 0.62rem;
+}
+.fbls-storage-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem;
+  margin-bottom: 0.45rem;
+}
+.fbls-storage-card-head h3 { margin: 0; font-size: 0.96rem; }
+.fbls-accounting-card.modern .fbls-accounting-grid { grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); }
+.fbls-storage-log-list { display: grid; gap: 0.28rem; }
+.fbls-storage-log-row {
+  display: grid;
+  grid-template-columns: minmax(8.5rem, .9fr) minmax(6.5rem, .7fr) minmax(9rem, 1fr) 5.2rem minmax(8rem, 1fr) minmax(8rem, 1fr);
+  gap: 0.45rem;
+  align-items: center;
+  border: 1px solid var(--fbls-border);
+  border-radius: 10px;
+  background: var(--fbls-overlay-soft);
+  padding: 0.34rem 0.45rem;
+  font-size: 0.78rem;
+}
+.fbls-storage-log-row time,
+.fbls-storage-log-row .kind,
+.fbls-storage-log-row .source,
+.fbls-storage-log-row .note { color: var(--fbls-muted); }
+.fbls-storage-log-row .resource { font-weight: 800; }
+.fbls-storage-log-row strong { text-align: right; font-size: 0.92rem; }
+.fbls-storage-log-row.positive strong { color: var(--fbls-success); }
+.fbls-storage-log-row.negative strong { color: var(--fbls-danger); }
+@media (max-width: 1050px) {
+  .fbls-storage-log-row { grid-template-columns: minmax(7rem, 1fr) minmax(6rem, .8fr) minmax(8rem, 1fr) 4.6rem; }
+  .fbls-storage-log-row .source,
+  .fbls-storage-log-row .note { grid-column: span 2; }
+}
+@media (max-width: 620px) {
+  .fbls-storage-log-row { grid-template-columns: 1fr; }
+  .fbls-storage-log-row strong { text-align: left; }
+}

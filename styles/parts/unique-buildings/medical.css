@@ -1,0 +1,301 @@
+.fbl-skyhold-unique-building .window-content,
+.fbl-skyhold-medical-app .window-content {
+  padding: 0;
+  background: var(--fbls-surface-1);
+}
+
+.fbls-unique-medical {
+  min-height: 100%;
+  color: var(--fbls-text);
+  background:
+    radial-gradient(circle at 75% 0%, var(--fbls-panel-strong), transparent 38%),
+    linear-gradient(145deg, var(--fbls-surface-2), var(--fbls-surface-1) 70%);
+}
+
+.fbls-unique-building-tabs {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--fbls-accent-border);
+  background: var(--fbls-overlay);
+}
+
+.fbls-unique-building-tabs button {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  min-height: 32px;
+  border: 1px solid var(--fbls-border-strong);
+  border-radius: 6px;
+  padding: 6px 11px;
+  color: var(--fbls-text);
+  background: var(--fbls-surface-soft);
+}
+
+.fbls-unique-building-tabs button:hover,
+.fbls-unique-building-tabs button.active {
+  color: var(--fbls-accent);
+  border-color: var(--fbls-accent-border);
+  background: var(--fbls-panel-strong);
+}
+
+.fbls-unique-building-tabs button.active {
+  box-shadow: inset 0 -2px 0 var(--fbls-accent);
+}
+
+.fbls-unique-editor-tab {
+  padding: 0;
+}
+
+.fbls-unique-editor-tab .fbls-building-editor-shell {
+  min-height: calc(100% - 53px);
+  padding: 14px 16px 18px;
+  background: transparent;
+}
+
+.fbls-unique-editor-tab .fbls-building-editor-grid.tabbed-editor {
+  display: block;
+}
+
+.fbls-unique-editor-tab .fbls-building-editor-card {
+  margin: 0;
+  border-color: var(--fbls-accent-border);
+  background: var(--fbls-overlay);
+}
+
+.fbls-unique-editor-media-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.fbls-unique-editor-media-row span {
+  flex: 1 1 16rem;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--fbls-text);
+  font-size: .78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fbl-skyhold-unique-building input,
+.fbl-skyhold-unique-building select,
+.fbl-skyhold-unique-building textarea {
+  color: var(--fbls-text);
+  border-color: var(--fbls-accent-border);
+  background: var(--fbls-overlay);
+}
+
+.fbl-skyhold-unique-building input:disabled,
+.fbl-skyhold-unique-building select:disabled,
+.fbl-skyhold-unique-building textarea:disabled {
+  color: var(--fbls-text);
+  opacity: .85;
+}
+
+.fbl-skyhold-unique-building option {
+  color: var(--fbls-text);
+  background: var(--fbls-surface-1);
+  -webkit-text-fill-color: var(--fbls-text);
+}
+
+.fbl-skyhold-unique-building .fbls-building-editor-card,
+.fbl-skyhold-unique-building .fbls-building-editor-card h2,
+.fbl-skyhold-unique-building .fbls-building-editor-card h3,
+.fbl-skyhold-unique-building .fbls-building-editor-card h4,
+.fbl-skyhold-unique-building .fbls-building-editor-card label,
+.fbl-skyhold-unique-building .fbls-building-editor-card strong,
+.fbl-skyhold-unique-building .fbls-building-editor-card p,
+.fbl-skyhold-unique-building .fbls-building-editor-card span,
+.fbl-skyhold-unique-building .fbls-unique-editor-tab {
+  color: var(--fbls-text);
+}
+
+.fbl-skyhold-unique-building .fbls-building-editor-card label > span,
+.fbl-skyhold-unique-building .fbls-muted-line {
+  color: var(--fbls-muted);
+}
+
+.fbls-unique-medical-body {
+  padding: 14px 16px 18px;
+}
+
+.fbls-unique-medical-compact-hero {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--fbls-accent-border);
+  border-radius: 9px;
+  background: var(--fbls-overlay);
+}
+
+.fbls-unique-medical-icon {
+  display: grid;
+  place-items: center;
+  width: 68px;
+  height: 58px;
+  overflow: hidden;
+  border: 1px solid var(--fbls-accent-border);
+  border-radius: 8px;
+  color: var(--fbls-accent);
+  background:
+    radial-gradient(circle at 34% 22%, var(--fbls-accent-bg), transparent 58%),
+    linear-gradient(135deg, var(--fbls-panel-strong), var(--fbls-overlay-strong));
+  box-shadow: inset 0 1px 0 var(--fbls-panel-strong), 0 8px 18px var(--fbls-overlay);
+}
+
+.fbls-unique-medical-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: brightness(1.16) contrast(1.08) saturate(1.08);
+}
+
+.fbls-unique-medical-icon i {
+  font-size: 2rem;
+  text-shadow: 0 2px 6px var(--fbls-overlay-strong);
+}
+
+.fbls-unique-medical-icon.readonly {
+  cursor: default;
+}
+
+.fbls-unique-medical-reset-image {
+  align-self: center;
+  min-height: 1.75rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 5px;
+  padding: 0.18rem 0.42rem;
+  color: var(--fbls-accent);
+  background: var(--fbls-overlay);
+}
+
+.fbls-unique-medical-reset-image:disabled {
+  cursor: default;
+  opacity: .38;
+}
+
+.fbls-unique-medical-heading {
+  min-width: 0;
+}
+
+.fbls-unique-medical .eyebrow {
+  color: var(--fbls-success);
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.fbls-unique-medical-heading h2,
+.fbls-unique-medical-heading input {
+  width: 100%;
+  margin: 2px 0 5px;
+  color: var(--fbls-accent);
+  font: 700 1.45rem/1.1 var(--font-primary);
+}
+
+.fbls-unique-medical-heading input {
+  border: 0;
+  border-bottom: 1px solid var(--fbls-border-strong);
+  background: transparent;
+}
+
+.fbls-unique-medical-heading p {
+  margin: 0;
+  color: var(--fbls-text);
+}
+
+.fbls-unique-medical-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.fbls-unique-medical-stats span {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0 8px;
+  align-items: center;
+  padding: 9px;
+  border: 1px solid var(--fbls-border-strong);
+  border-radius: 6px;
+  background: var(--fbls-surface-soft);
+}
+
+.fbls-unique-medical-stats i { grid-row: 1 / 3; color: var(--fbls-success); }
+.fbls-unique-medical-stats b { color: var(--fbls-accent); font-size: 1.1rem; }
+.fbls-unique-medical-stats em { color: var(--fbls-muted); font-size: .68rem; font-style: normal; }
+.fbls-unique-medical-stats .danger i,
+.fbls-unique-medical-stats .danger b { color: var(--fbls-danger); }
+
+.fbls-unique-medical-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, .85fr) minmax(320px, 1.15fr);
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.fbls-unique-medical-panel {
+  padding: 16px;
+  border: 1px solid var(--fbls-accent-border);
+  border-radius: 7px;
+  background: var(--fbls-overlay);
+}
+
+.fbls-unique-medical-panel header h3 {
+  margin: 2px 0 14px;
+  color: var(--fbls-accent);
+  font-size: 1.15rem;
+}
+
+.fbls-unique-medical-settings-line {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.fbls-unique-medical-panel label { display: grid; gap: 4px; margin-bottom: 10px; }
+.fbls-unique-medical-panel label > span { color: var(--fbls-muted); font-size: .75rem; }
+.fbls-unique-medical-slots { margin-top: 14px; }
+.fbls-unique-patient-list { display: grid; gap: 7px; }
+
+.fbls-unique-patient-list article {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 11px;
+  border-left: 3px solid var(--fbls-border-strong);
+  background: var(--fbls-surface-soft);
+}
+
+.fbls-unique-patient-list article div { display: grid; }
+.fbls-unique-patient-list article span { color: var(--fbls-muted); font-size: .75rem; }
+
+.fbls-unique-medical-overflow {
+  display: grid;
+  gap: 5px;
+  margin-top: 12px;
+  padding: 11px;
+  border: 1px solid var(--fbls-danger-border);
+  color: var(--fbls-danger);
+  background: var(--fbls-danger-soft);
+}
+
+@media (max-width: 720px) {
+  .fbls-unique-medical-compact-hero,
+  .fbls-unique-medical-grid,
+  .fbls-unique-medical-settings-line {
+    grid-template-columns: 1fr;
+  }
+
+  .fbls-unique-medical-stats {
+    grid-template-columns: 1fr 1fr;
+  }
+}

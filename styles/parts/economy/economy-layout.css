@@ -1,0 +1,165 @@
+/* Economy layout and shared secondary-window theme. */
+
+.fbl-skyhold .fbls-tenday-readiness header,
+.fbl-skyhold .fbls-tenday-alert,
+.fbl-skyhold .fbls-tenday-ready-message {
+  display: flex;
+  gap: 0.65rem;
+  align-items: center;
+}
+
+.fbl-skyhold .fbls-tenday-readiness header {
+  justify-content: space-between;
+}
+
+.fbl-skyhold .fbls-harvest-reserve {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.42rem;
+  margin-top: 0.62rem;
+}
+
+.fbl-skyhold .fbls-harvest-reserve > span {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: "icon label" "icon value";
+  column-gap: 0.46rem;
+  align-items: center;
+  min-width: 0;
+  padding: 0.46rem 0.55rem;
+  border: 1px solid var(--fbls-accent-border);
+  border-radius: 8px;
+  background: var(--fbls-overlay-soft);
+}
+
+.fbl-skyhold .fbls-harvest-reserve > span > i { grid-area: icon; color: var(--fbls-accent); }
+.fbl-skyhold .fbls-harvest-reserve > span > small { grid-area: label; opacity: 0.72; }
+.fbl-skyhold .fbls-harvest-reserve > span > strong { grid-area: value; overflow-wrap: anywhere; }
+.fbl-skyhold .fbls-harvest-reserve.is-short > span { border-color: var(--fbls-danger-border); }
+
+.fbl-skyhold .fbls-tenday-readiness header h2,
+.fbl-skyhold .fbls-tenday-readiness header p {
+  margin: 0;
+}
+
+.fbl-skyhold .fbls-tenday-alerts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 0.45rem;
+  margin-top: 0.65rem;
+}
+
+.fbl-skyhold .fbls-tenday-alert {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--fbls-accent-border);
+  border-radius: 8px;
+  background: var(--fbls-overlay-soft);
+}
+
+.fbl-skyhold .fbls-tenday-alert.danger { border-color: var(--fbls-danger-border); }
+.fbl-skyhold .fbls-tenday-alert.warning { border-color: var(--fbls-accent-border); }
+.fbl-skyhold .fbls-tenday-alert.info { border-color: var(--fbls-info); }
+
+.fbl-skyhold .fbls-tenday-alert span {
+  display: grid;
+  min-width: 0;
+}
+
+.fbl-skyhold .fbls-tenday-alert small {
+  opacity: 0.78;
+}
+
+.fbl-skyhold .fbls-tenday-ready-message {
+  margin: 0.65rem 0 0;
+  color: var(--fbls-success);
+}
+
+.fbl-skyhold-crew-editor {
+  color: var(--fbls-text);
+  resize: both;
+  min-width: 520px;
+  min-height: 380px;
+}
+
+.fbl-skyhold-crew-editor .window-content {
+  padding: 0;
+  background: transparent;
+}
+
+.fbls-crew-editor-shell {
+  height: 100%;
+  overflow: auto;
+  padding: 0.65rem;
+  background:
+    radial-gradient(circle at 88% 0%, var(--fbls-info-soft), transparent 34%),
+    linear-gradient(135deg, var(--fbls-surface-0), var(--fbls-surface-1));
+  background-color: var(--fbls-surface-0);
+}
+
+
+
+.fbls-accounting-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.45rem;
+}
+
+.fbls-accounting-grid > div {
+  display: grid;
+  gap: 0.16rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 10px;
+  background: var(--fbls-overlay-soft);
+}
+
+.fbls-accounting-grid span {
+  color: var(--fbls-muted);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.fbls-accounting-grid strong {
+  font-size: 1.22rem;
+}
+
+.fbl-skyhold-crew-editor .fbls-editor-hero.compact {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.7rem;
+  align-items: center;
+  padding-bottom: 0.55rem;
+  margin-bottom: 0.55rem;
+  border-bottom: 1px solid var(--fbls-border);
+}
+.fbl-skyhold-crew-editor .fbls-editor-hero h1 { margin: 0; font-size: 1.25rem; border: 0; color: var(--fbls-text); }
+.fbl-skyhold-crew-editor .fbls-editor-hero p { margin: 0.15rem 0 0; color: var(--fbls-muted); }
+
+.fbls-crew-slot-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.35rem;
+}
+
+.fbls-crew-slot-grid label {
+  display: grid;
+  grid-template-columns: 2.2rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--fbls-muted);
+}
+
+.fbls-crew-slot-grid select,
+.fbl-skyhold-crew-editor input,
+.fbl-skyhold-crew-editor select,
+.fbl-skyhold-crew-editor textarea {
+  min-height: 1.85rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 8px;
+  background: var(--fbls-overlay);
+  color: var(--fbls-text);
+}
+.fbl-skyhold-app .fbls-table strong {
+  font-size: 1.08rem;
+}
