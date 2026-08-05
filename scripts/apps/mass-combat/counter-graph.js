@@ -1,9 +1,14 @@
-import { escapeHtml } from "../../core/helpers.js";
+import { createSafeIcon, escapeAttribute, escapeHtml, safeIconClasses } from "../../core/helpers.js";
+import { makeId } from "../../data/utils.js";
 import { getMassCombatRelationTags, getMassCombatTagCounters } from "./tag-config.js";
 import { asNumber } from "./rules.js";
 
 function safeClass(value) {
   return String(value ?? "").replace(/[^a-z0-9_-]/gi, "-");
+}
+
+function safeIconClassString(value) {
+  return safeIconClasses(value, ["fa-solid", "fa-circle"]).join(" ");
 }
 
 function edgeGeometry(x1, y1, x2, y2) {
@@ -39,8 +44,9 @@ function number(value, fallback = 0) {
 }
 
 function graphPositions(nodes, { width, height, cx, cy, radius }) {
+  const startAngle = (-Math.PI / 2) + (Math.PI / Math.max(1, nodes.length));
   return new Map(nodes.map((node, index) => {
-    const angle = (-Math.PI / 2) + (Math.PI * 2 * index / nodes.length);
+    const angle = startAngle + (Math.PI * 2 * index / nodes.length);
     return [node.key, {
       x: Math.round(cx + Math.cos(angle) * radius),
       y: Math.round(cy + Math.sin(angle) * radius),
@@ -87,30 +93,30 @@ function graphEdges(nodes, positions) {
 
 export function counterGraphHtml(graphId) {
   const nodes = Object.entries(getMassCombatRelationTags()).map(([key, tag]) => ({ key, ...tag }));
-  const width = 560;
-  const height = 430;
+  const radius = Math.max(245, Math.ceil(nodes.length * 116 / (Math.PI * 2)));
+  const width = radius * 2 + 260;
+  const height = radius * 2 + 180;
   const cx = width / 2;
-  const cy = 218;
-  const radius = 165;
+  const cy = height / 2;
   const positions = graphPositions(nodes, { width, height, cx, cy, radius });
   const edges = graphEdges(nodes, positions);
-  const uid = graphId || `fbls-counter-${globalThis.foundry?.utils?.randomID?.(6) ?? Math.floor(Math.random() * 999999)}`;
-  const edgeLines = edges.map((edge, index) => {
+  const uid = graphId || makeId("fbls-counter", 6);
+  const edgeLines = edges.map((edge) => {
     const source = safeClass(edge.sourceKey);
     const target = safeClass(edge.targetKey);
-    const tone = index % 2 ? "tone-red" : "tone-green";
-    return `<div class="counter-edge edge ${tone} from-${source} to-${target}" data-counter-source="${source}" data-counter-target="${target}" data-x1="${edge.x1}" data-y1="${edge.y1}" data-x2="${edge.x2}" data-y2="${edge.y2}" data-mx="${edge.mx}" data-my="${edge.my}" data-l="${edge.edgeLen}" data-a="${edge.angle}" style="--edge-x:${edge.x1}px;--edge-y:${edge.y1}px;--edge-l:${edge.edgeLen}px;--edge-a:${edge.angle}deg;"></div><span class="counter-edge-label edge-label from-${source} to-${target}" data-counter-source="${source}" data-counter-target="${target}" data-mx="${edge.mx}" data-my="${edge.my}" style="left:${edge.mx}px;top:${edge.my}px;">${edge.value}%</span>`;
+    const strength = edge.value >= 75 ? "full" : edge.value >= 50 ? "strong" : "base";
+    return `<div class="counter-edge edge strength-${strength} from-${source} to-${target}" data-counter-source="${source}" data-counter-target="${target}" data-x1="${edge.x1}" data-y1="${edge.y1}" data-x2="${edge.x2}" data-y2="${edge.y2}" data-mx="${edge.mx}" data-my="${edge.my}" data-l="${edge.edgeLen}" data-a="${edge.angle}" style="--edge-x:${edge.x1}px;--edge-y:${edge.y1}px;--edge-l:${edge.edgeLen}px;--edge-a:${edge.angle}deg;"></div><span class="counter-edge-label edge-label from-${source} to-${target}" data-counter-source="${source}" data-counter-target="${target}" data-mx="${edge.mx}" data-my="${edge.my}" style="left:${edge.mx}px;top:${edge.my}px;">${edge.value}%</span>`;
   }).join("");
   const nodeButtons = nodes.map((node) => {
     const pos = positions.get(node.key);
-    return `<button type="button" class="fbls-counter-node node tag-${safeClass(node.key)}" data-counter-tag="${safeClass(node.key)}" data-counter-x="${pos.labelX}" data-counter-y="${pos.labelY}" data-counter-label="${escapeHtml(node.label ?? node.key)}" data-counter-short="${escapeHtml(node.short ?? node.label ?? node.key)}" data-counter-icon="${escapeHtml(node.icon ?? "fa-solid fa-circle")}" style="left:${pos.labelX}px;top:${pos.labelY}px;" title="${escapeHtml(node.hint ?? "")}"><i class="${escapeHtml(node.icon ?? "fa-solid fa-circle")}"></i><span>${escapeHtml(node.short ?? node.label ?? node.key)}</span></button>`;
+    const iconClass = safeIconClassString(node.icon);
+    return `<div class="fbls-counter-node node tag-${safeClass(node.key)}" role="button" tabindex="0" aria-pressed="false" data-counter-tag="${safeClass(node.key)}" data-counter-x="${pos.labelX}" data-counter-y="${pos.labelY}" data-counter-label="${escapeAttribute(node.label ?? node.key)}" data-counter-short="${escapeAttribute(node.short ?? node.label ?? node.key)}" data-counter-icon="${escapeAttribute(iconClass)}" style="left:${pos.labelX}px;top:${pos.labelY}px;" title="${escapeAttribute(node.hint ?? "")}"><i class="${escapeAttribute(iconClass)}"></i><span>${escapeHtml(node.label ?? node.key)}</span></div>`;
   }).join("");
   return `
-    <div class="fbl-skyhold fbls-dialog-help fbls-skyhold-dark-panel fbls-counter-pentagram" data-counter-graph-id="${uid}" data-selected-tag="all">
-      <div class="fbls-help-lead compact"><strong><i class="fa-solid fa-circle-nodes"></i> Матрица контров</strong><span>Клик по типу переносит его в центр. Зеленые стрелки идут от него, красные — к нему.</span></div>
+    <div class="fbls-counter-pentagram" data-counter-graph-id="${uid}" data-selected-tag="all">
       <div class="fbls-counter-graph-wrap" data-counter-cx="${cx}" data-counter-cy="${cy}" style="--graph-w:${width}px;--graph-h:${height}px;">
         ${edgeLines}
-        <button type="button" class="fbls-counter-center" data-counter-clear="true" style="left:${cx}px;top:${cy}px;" title="Убрать выбранный тег из центра"><i class="fa-solid fa-circle-nodes"></i><span>Все</span></button>
+        <div class="fbls-counter-center" role="button" tabindex="0" data-counter-clear="true" style="left:${cx}px;top:${cy}px;" title="Убрать выбранный тег из центра"><i class="fa-solid fa-circle-nodes"></i><span>Все</span></div>
         ${nodeButtons}
       </div>
     </div>
@@ -118,7 +124,7 @@ export function counterGraphHtml(graphId) {
 }
 
 function clearGraphClasses(element) {
-  element.classList.remove("is-related", "is-outgoing", "is-incoming", "is-selected", "is-source", "is-target", "is-self");
+  element.classList.remove("is-related", "is-outgoing", "is-incoming", "is-selected", "is-source", "is-target", "is-self", "is-filtered-out");
 }
 
 function applyGeometry(edge, label, geometry) {
@@ -160,7 +166,10 @@ function updateGraph(graph, selected = "all") {
   graph.querySelectorAll(".fbls-counter-node").forEach((node) => node.setAttribute("aria-pressed", node.dataset.counterTag === selected ? "true" : "false"));
   const selectedNode = selected === "all" ? null : graph.querySelector(`.fbls-counter-node[data-counter-tag="${selected}"]`);
   if (center && selectedNode) {
-    center.innerHTML = `<i class="${selectedNode.dataset.counterIcon || "fa-solid fa-circle"}"></i><span>${selectedNode.dataset.counterShort || selectedNode.dataset.counterLabel || selected}</span>`;
+    const label = selectedNode.dataset.counterShort || selectedNode.dataset.counterLabel || selected;
+    const text = document.createElement("span");
+    text.textContent = label;
+    center.replaceChildren(createSafeIcon(selectedNode.dataset.counterIcon || "fa-solid fa-circle"), text);
     center.title = `${selectedNode.dataset.counterLabel || selected}: убрать из центра`;
   }
   if (selected === "all" || !selectedNode) return;
@@ -173,11 +182,14 @@ function updateGraph(graph, selected = "all") {
     const outgoing = source === selected;
     const incoming = target === selected;
     const self = outgoing && incoming;
-    edge.classList.toggle("is-related", outgoing || incoming);
+    const related = outgoing || incoming;
+    edge.classList.toggle("is-filtered-out", !related);
+    edge.classList.toggle("is-related", related);
     edge.classList.toggle("is-outgoing", outgoing);
     edge.classList.toggle("is-incoming", incoming);
     edge.classList.toggle("is-self", self);
-    label?.classList.toggle("is-related", outgoing || incoming);
+    label?.classList.toggle("is-filtered-out", !related);
+    label?.classList.toggle("is-related", related);
     label?.classList.toggle("is-outgoing", outgoing);
     label?.classList.toggle("is-incoming", incoming);
     label?.classList.toggle("is-self", self);
@@ -205,28 +217,27 @@ function updateGraph(graph, selected = "all") {
   });
 }
 
-export function bindCounterGraphRuntime(graphId) {
-  let disposed = false;
-  const graphSelector = `.fbls-counter-pentagram[data-counter-graph-id="${graphId}"]`;
-  const onClick = (event) => {
-    const button = event.target?.closest?.("[data-counter-tag], [data-counter-clear]");
-    if (!button) return;
-    const graph = button.closest?.(".fbls-counter-pentagram");
-    if (!graph || graph.dataset.counterGraphId !== graphId) return;
+export function bindCounterGraphRuntime(graphId, root = document) {
+  const graph = root?.querySelector?.(`.fbls-counter-pentagram[data-counter-graph-id="${graphId}"]`);
+  if (!graph) return () => {};
+  const activate = (event, control) => {
+    if (!control || !graph.contains(control)) return;
     event.preventDefault();
     event.stopPropagation();
-    if (button.dataset.counterClear === "true") return updateGraph(graph, "all");
-    const tag = button.dataset.counterTag || "all";
+    if (control.dataset.counterClear === "true") return updateGraph(graph, "all");
+    const tag = control.dataset.counterTag || "all";
     updateGraph(graph, graph.dataset.selectedTag === tag ? "all" : tag);
   };
-  const syncInitialState = () => {
-    if (!disposed) updateGraph(document.querySelector(graphSelector), "all");
+  const onClick = (event) => activate(event, event.target?.closest?.("[data-counter-tag], [data-counter-clear]"));
+  const onKeydown = (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    activate(event, event.target?.closest?.("[data-counter-tag], [data-counter-clear]"));
   };
-  document.addEventListener("click", onClick, true);
-  const initialTimer = setTimeout(syncInitialState, 0);
+  graph.addEventListener("click", onClick);
+  graph.addEventListener("keydown", onKeydown);
+  updateGraph(graph, "all");
   return () => {
-    disposed = true;
-    clearTimeout(initialTimer);
-    document.removeEventListener("click", onClick, true);
+    graph.removeEventListener("click", onClick);
+    graph.removeEventListener("keydown", onKeydown);
   };
 }

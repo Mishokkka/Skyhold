@@ -1,4 +1,22 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
+import { createSafeIcon } from "../../core/helpers.js";
+import { bindGlobalInputGuard, bindInputGuards, sanitizeTextBlock, unbindGlobalInputGuard } from "../../utils/input-guards.js";
+import { bindFloatingTooltips, hideFloatingTooltip } from "../common/floating-tooltip.js";
+
+function createRunbarButton({ qd, icon, label, title }, onClick) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "fbls-titlebar-runbar-button";
+  button.dataset.action = "run-economy-period";
+  button.dataset.qd = String(qd);
+  button.dataset.fblsTooltip = title;
+  button.setAttribute("aria-label", title);
+  const text = document.createElement("span");
+  text.textContent = label;
+  button.append(createSafeIcon(icon), text);
+  button.addEventListener("click", onClick);
+  return button;
+}
 
 export const UiDomain = {
 _safeNumber(value, fallback = 0) {
@@ -7,70 +25,26 @@ _safeNumber(value, fallback = 0) {
 },
 
 _sanitizeTextBlock(value = "") {
-  return String(value ?? "").replace(/\t/g, " ").replace(/\u00a0/g, " ").replace(/[ \t]+$/gm, "");
+  return sanitizeTextBlock(value);
 },
 
 _bindInputGuards(root) {
-  const stop = (event) => event.stopPropagation();
-  const sanitizeTabs = (event) => {
-    const field = event.currentTarget;
-    if (!(field instanceof HTMLTextAreaElement)) return;
-    const value = String(field.value ?? "");
-    const clean = this._sanitizeTextBlock ? this._sanitizeTextBlock(value) : value.replace(/	/g, " ").replace(/ /g, " ").replace(/[ 	]+$/gm, "");
-    if (clean === value) return;
-    const start = field.selectionStart;
-    const end = field.selectionEnd;
-    field.value = clean;
-    field.selectionStart = Math.max(0, Math.min(clean.length, start));
-    field.selectionEnd = Math.max(0, Math.min(clean.length, end));
-  };  root.querySelectorAll("input, textarea, select").forEach((field) => {
-    if (field instanceof HTMLTextAreaElement) {
-      field.addEventListener("input", sanitizeTabs);
-      field.addEventListener("paste", () => setTimeout(() => sanitizeTabs({ currentTarget: field }), 0));
-    }
-    for (const eventName of ["keydown", "keyup", "keypress", "input", "beforeinput", "paste", "copy", "cut", "mousedown", "mouseup", "click", "dblclick"]) {
-      field.addEventListener(eventName, stop, { capture: true });
-      field.addEventListener(eventName, stop);
-    }
+  bindInputGuards(root, {
+    textareaSanitizer: (value) => this._sanitizeTextBlock?.(value) ?? sanitizeTextBlock(value),
+    textareaSelectionMode: "clamp"
   });
 },
 
 _bindGlobalInputGuard(root) {
-  this._unbindGlobalInputGuard();
-
-  const editableSelector = "input, textarea, select, [contenteditable='true']";
-  this._globalInputGuard = (event) => {
-    const target = event.target;
-    const active = document.activeElement;
-    const targetInside = target instanceof Element && root.contains(target);
-    const activeInside = active instanceof Element && root.contains(active);
-    const targetEditable = target instanceof Element && Boolean(target.closest(editableSelector));
-    const activeEditable = active instanceof Element && Boolean(active.closest(editableSelector));
-
-    if ((targetInside && targetEditable) || (activeInside && activeEditable)) {
-      event.stopImmediatePropagation();
-    }
-  };
-
-  for (const eventName of ["keydown", "keyup", "keypress"]) {
-    window.addEventListener(eventName, this._globalInputGuard, true);
-  }
+  bindGlobalInputGuard(this, root);
 },
 
 _unbindGlobalInputGuard() {
-  if (!this._globalInputGuard) return;
-  for (const eventName of ["keydown", "keyup", "keypress"]) {
-    window.removeEventListener(eventName, this._globalInputGuard, true);
-  }
-  this._globalInputGuard = null;
+  unbindGlobalInputGuard(this);
 },
 
 _bindFloatingTooltips(root) {
-  root.querySelectorAll("[data-fbls-tooltip]").forEach((element) => {
-    element.addEventListener("mouseenter", (event) => this._showTooltip(event.currentTarget));
-    element.addEventListener("mousemove", (event) => this._positionTooltip(event.currentTarget));
-    element.addEventListener("mouseleave", () => this._hideTooltip());
-  });
+  bindFloatingTooltips(this, root, { followPointer: true });
 },
 
 
@@ -85,20 +59,17 @@ _syncTitlebarRunbar({ canEdit = false, hasHolding = false } = {}) {
 
   const bar = document.createElement("div");
   bar.className = "fbls-titlebar-runbar";
-  bar.innerHTML = `
-    <button type="button" class="fbls-titlebar-runbar-button" data-action="run-economy-period" data-qd="1" title="Провести производство за 1 четверть дня"><i class="fa-solid fa-clock"></i><span>1 QD</span></button>
-    <button type="button" class="fbls-titlebar-runbar-button" data-action="run-economy-period" data-qd="4" title="Провести производство за 1 день"><i class="fa-solid fa-sun"></i><span>День</span></button>
-    <button type="button" class="fbls-titlebar-runbar-button" data-action="run-economy-period" data-qd="40" title="Провести производство за десятник"><i class="fa-solid fa-rotate"></i><span>Десятник</span></button>
-  `;
-  bar.querySelectorAll("button[data-action='run-economy-period']").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      // ApplicationV2 may include the titlebar in this.element; without this guard
-      // the same button can receive both the direct titlebar listener and the
-      // normal app listener, advancing time twice.
-      event.stopImmediatePropagation();
-      return this._onRunEconomyPeriod(event);
-    });
-  });
+  const runPeriod = (event) => {
+    // ApplicationV2 may include the titlebar in this.element; without this guard
+    // the same button can receive both the direct titlebar listener and the
+    // normal app listener, advancing time twice.
+    event.stopImmediatePropagation();
+    return this._onRunEconomyPeriod(event);
+  };
+  bar.append(
+    createRunbarButton({ qd: 40, icon: "fa-solid fa-rotate", label: "Десятник", title: "Рассчитать прогноз и провести следующий десятник" }, runPeriod)
+  );
+  this._bindFloatingTooltips(bar);
 
   const controls = header.querySelector(".window-controls, .header-control, .window-header-buttons");
   if (controls?.parentElement === header) header.insertBefore(bar, controls);
@@ -110,41 +81,7 @@ _removeTitlebarRunbar() {
   appShell?.querySelector?.(".fbls-titlebar-runbar")?.remove();
 },
 
-_showTooltip(element) {
-  const text = String(element?.dataset?.fblsTooltip ?? "").trim();
-  if (!text) return;
-
-  this._hideTooltip();
-  const tooltip = document.createElement("div");
-  tooltip.className = "fbls-floating-tooltip";
-  tooltip.textContent = text;
-  document.body.appendChild(tooltip);
-  this._activeTooltip = tooltip;
-  this._positionTooltip(element);
-},
-
-_positionTooltip(element) {
-  const tooltip = this._activeTooltip;
-  if (!tooltip || !element) return;
-
-  const rect = element.getBoundingClientRect();
-  const margin = 10;
-  const maxLeft = window.innerWidth - tooltip.offsetWidth - margin;
-  let left = rect.left + rect.width / 2 - tooltip.offsetWidth / 2;
-  left = Math.max(margin, Math.min(maxLeft, left));
-
-  let top = rect.top - tooltip.offsetHeight - margin;
-  if (top < margin) top = rect.bottom + margin;
-  top = Math.max(margin, Math.min(window.innerHeight - tooltip.offsetHeight - margin, top));
-
-  tooltip.style.left = `${left}px`;
-  tooltip.style.top = `${top}px`;
-},
-
 _hideTooltip() {
-  if (this._activeTooltip) {
-    this._activeTooltip.remove();
-    this._activeTooltip = null;
-  }
+  hideFloatingTooltip(this);
 }
 };

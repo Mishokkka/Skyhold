@@ -1,5 +1,9 @@
-import { asInt, asNumber, STRATEGIES } from "./rules.js";
+import { asInt, STRATEGIES } from "./rules.js";
+import { makeId } from "../../data/utils.js";
 import { casualtySummaryFromRecords } from "./casualties.js";
+import { buildingOperationalState, normalizeBuildingOperationalState, setBuildingCondition, startBuildingRepair } from "../../core/building-state.js";
+import { reserveConstructionMaterials } from "../../engines/economy/construction-reservation.js";
+import { weightedBattleTargets } from "./targets.js";
 
 export function battleBuildingStatusLabel(status = "built") {
   const value = String(status || "built");
@@ -14,46 +18,75 @@ function holdingBattleDateText(holding) {
   return String(holding?.gm?.calendaria?.lastDateText ?? holding?.gm?.calendaria?.lastDateKey ?? "").trim() || "игровая дата не указана";
 }
 
+function buildingRepairTarget(building, status = building?.constructionStatus ?? "built") {
+  const baseTarget = Math.max(1, asInt(building?.originalBuildTarget ?? building?.baseBuildTarget ?? building?.buildTarget, 6));
+  const value = String(status || "built");
+  if (value === "damaged") return Math.ceil(baseTarget / 3);
+  if (value === "heavilyDamaged") return Math.ceil((baseTarget * 2) / 3);
+  if (value === "destroyed") return baseTarget;
+  return 0;
+}
+
+function repairShare(condition = "intact") {
+  if (condition === "damaged") return { numerator: 1, denominator: 3 };
+  if (condition === "heavilyDamaged") return { numerator: 2, denominator: 3 };
+  if (condition === "destroyed") return { numerator: 1, denominator: 1 };
+  return { numerator: 0, denominator: 1 };
+}
+
+export function buildingRepairMaterialCosts(building = {}, condition = buildingOperationalState(building).condition) {
+  const { numerator, denominator } = repairShare(condition);
+  if (!numerator) return [];
+  return (Array.isArray(building?.materialCosts) ? building.materialCosts : [])
+    .map((row, index) => {
+      const rawQty = Math.max(0, Number(row?.qty ?? row?.quantity) || 0);
+      return {
+        id: `repair-${String(row?.id ?? index + 1)}`,
+        resourceId: String(row?.resourceId ?? row?.resource ?? row?.name ?? "").trim(),
+        resourceGroup: String(row?.resourceGroup ?? "").trim(),
+        name: String(row?.name ?? row?.label ?? row?.resourceId ?? "Материал").trim() || "Материал",
+        qty: Math.ceil((rawQty * numerator) / denominator)
+      };
+    })
+    .filter((row) => row.qty > 0 && (row.resourceId || row.resourceGroup));
+}
+
 export function escalateBuildingBattleDamage(building, amount = 1) {
-  const current = String(building?.constructionStatus ?? "built");
-  const order = ["built", "damaged", "heavilyDamaged", "destroyed"];
+  normalizeBuildingOperationalState(building);
+  const current = building.condition;
+  const order = ["intact", "damaged", "heavilyDamaged", "destroyed"];
   const index = Math.max(0, order.indexOf(current));
   const step = amount >= 4 ? 2 : 1;
   const next = order[Math.min(order.length - 1, index + step)];
-  building.constructionStatus = next;
-  building.status = battleBuildingStatusLabel(next);
+  setBuildingCondition(building, next);
+  building.status = battleBuildingStatusLabel(building.constructionStatus);
   building.battleDamage = Math.max(0, asInt(building.battleDamage, 0) + Math.max(1, asInt(amount, 1)));
-  building.repairTarget = next === "damaged" ? 3 : next === "heavilyDamaged" ? 6 : next === "destroyed" ? 10 : 0;
+  building.repairTarget = buildingRepairTarget(building, next);
   building.repairProgress = 0;
   return next;
 }
 
-export function applySettlementBattleDamage(app, holding, state = {}, delta = 0, calc = {}) {
+export function applySettlementBattleDamage(holding, state = {}, delta = 0, calc = {}, { random = Math.random } = {}) {
   const amount = Math.max(0, asInt(delta, 0));
   if (!amount) return { text: "", damaged: [] };
-  const candidates = (holding?.buildings?.list ?? []).filter((building) => ["built", "damaged", "heavilyDamaged"].includes(String(building?.constructionStatus ?? "built")));
+  const candidates = (holding?.buildings?.list ?? []).filter((building) => {
+    const state = buildingOperationalState(building);
+    return state.lifecycle === "active" && state.condition !== "destroyed" && !state.repairActive;
+  });
   if (!candidates.length) return { text: "Урон владению есть, но подходящих зданий для повреждения не найдено.", damaged: [] };
 
   const attackerStrategy = calc?.attackerStrategy ?? STRATEGIES.attack;
-  const defenseTargets = candidates.filter((building) => app._isDefenseBuilding(building));
-  const storageTargets = candidates.filter((building) => /(склад|хранил|погреб|warehouse|storage|depot)/i.test(`${building?.name ?? ""} ${building?.type ?? ""} ${building?.category ?? ""}`));
-  const housingTargets = candidates.filter((building) => /(жиль|дом|казарм|barrack|house)/i.test(`${building?.name ?? ""} ${building?.type ?? ""} ${building?.category ?? ""}`));
-
-  let pool = [];
-  if (attackerStrategy?.breach && defenseTargets.length) pool = defenseTargets;
-  else if (attackerStrategy?.raid && storageTargets.length) pool = storageTargets;
-  else if (calc?.breachOpen && housingTargets.length) pool = housingTargets;
-  else pool = [...defenseTargets, ...storageTargets, ...candidates];
+  const pool = weightedBattleTargets(candidates, { attackerStrategy, breachOpen: calc?.breachOpen });
 
   const hits = amount >= 5 ? 2 : 1;
   const damaged = [];
   const records = [];
   const round = Math.max(1, asInt(state.round, 1));
-  const battleId = state.battleId || (state.battleId = foundry.utils.randomID?.(10) ?? `battle-${Date.now()}`);
+  const battleId = state.battleId || (state.battleId = makeId("battle"));
 
   for (let i = 0; i < hits; i += 1) {
     const available = pool.filter((item) => !damaged.includes(item));
-    const target = available[Math.floor(Math.random() * available.length)] ?? candidates[0];
+    const target = available[Math.floor(random() * available.length)] ?? candidates[0];
     if (!target) continue;
 
     const next = escalateBuildingBattleDamage(target, amount);
@@ -61,7 +94,7 @@ export function applySettlementBattleDamage(app, holding, state = {}, delta = 0,
     const stamp = `${label} в бою за владение (${holdingBattleDateText(holding)}), урон +${amount}.`;
     target.notes = [String(target.notes ?? "").trim(), stamp].filter(Boolean).join("\n");
     damaged.push(target);
-    records.push({ id: foundry.utils.randomID?.(10) ?? `bd-${Date.now()}-${i}`, battleId, round, buildingId: String(target.id ?? ""), name: target.name || "Здание", status: label, amount });
+    records.push({ id: makeId("bd"), battleId, round, buildingId: String(target.id ?? ""), name: target.name || "Здание", status: label, amount });
   }
 
   if (records.length) {
@@ -73,7 +106,7 @@ export function applySettlementBattleDamage(app, holding, state = {}, delta = 0,
   return { damaged, records, text: records.length ? records.map((row) => `${row.name}: ${row.status}`).join("; ") : "" };
 }
 
-export function battleAftermathRows(app, holding, state = {}) {
+export function battleAftermathRows(holding, state = {}, compactNameList) {
   const battleId = String(state.battleId ?? "");
   const casualtyLog = Array.isArray(state.casualtyLog) ? state.casualtyLog : [];
   const buildingLog = Array.isArray(state.buildingDamageLog) ? state.buildingDamageLog : [];
@@ -87,21 +120,55 @@ export function battleAftermathRows(app, holding, state = {}) {
   return {
     casualtyLog: latestCasualties,
     buildingLog: latestBuildings,
-    peopleText: casualtySummaryFromRecords(latestCasualties, (names) => app._compactNameList(names)),
+    peopleText: casualtySummaryFromRecords(latestCasualties, compactNameList),
     buildingText
   };
 }
 
-export function startBattleRepairs(holding) {
-  const targets = (holding?.buildings?.list ?? []).filter((building) => ["damaged", "heavilyDamaged"].includes(String(building?.constructionStatus ?? "")));
+export function startBattleRepairs(holding, {
+  operationId = "",
+  reservedAt = "",
+  reservedQd = null,
+  planCosts = null,
+  takeResourceLots = null
+} = {}) {
+  const targets = (holding?.buildings?.list ?? []).filter((building) => {
+    const state = buildingOperationalState(building);
+    return state.lifecycle === "active" && state.condition !== "intact" && !state.repairActive;
+  });
+  const started = [];
+  const blocked = [];
   for (const building of targets) {
-    const old = String(building.constructionStatus ?? "damaged");
-    building.repairOf = old;
-    building.constructionStatus = "building";
+    const old = buildingOperationalState(building).condition;
+    const target = buildingRepairTarget(building, old);
+    const costs = buildingRepairMaterialCosts(building, old);
+    if (!operationId || typeof planCosts !== "function" || typeof takeResourceLots !== "function" || !costs.length) {
+      blocked.push({
+        building,
+        code: costs.length ? "reservation-unavailable" : "empty-repair-recipe",
+        message: costs.length ? "Не удалось подготовить материальный резерв ремонта." : "Для здания не задана материальная смета ремонта."
+      });
+      continue;
+    }
+    const reservation = reserveConstructionMaterials({
+      holding,
+      building,
+      costs,
+      operationId: `${operationId}:${building.id}`,
+      reservedAt,
+      reservedQd,
+      replacePriorAllocation: true,
+      dependencies: { planCosts, takeResourceLots }
+    });
+    if (!reservation.ok) {
+      blocked.push({ building, code: reservation.code, message: reservation.message, missing: reservation.missing ?? [] });
+      continue;
+    }
+    startBuildingRepair(building, target, { startedAt: reservedAt });
     building.status = "Ремонтируется";
-    building.buildProgress = 0;
-    building.buildTarget = old === "heavilyDamaged" ? Math.max(6, asInt(building.repairTarget, 6)) : Math.max(3, asInt(building.repairTarget, 3));
-    building.notes = [String(building.notes ?? "").trim(), `Начат ремонт после боя (${holdingBattleDateText(holding)}). Нужно успехов: ${building.buildTarget}.`].filter(Boolean).join("\n");
+    const estimate = costs.map((row) => `${row.qty} ${row.name}`).join(" · ");
+    building.notes = [String(building.notes ?? "").trim(), `Начат ремонт после боя (${holdingBattleDateText(holding)}). Смета: ${estimate}. Нужно успехов: ${target}.`].filter(Boolean).join("\n");
+    started.push(building);
   }
-  return targets;
+  return { started, blocked };
 }

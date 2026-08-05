@@ -1,9 +1,24 @@
-import { MODULE_ID, SkyholdData } from "../../data/store.js";
+import { MODULE_ID } from "../../data/constants.js";
+import { SkyholdData } from "../../data/store.js";
+import { makeId } from "../../data/utils.js";
 import { findReadableHoldingEntry } from "../../data/access-guard.js";
+import { holdingPermissionContext } from "../../data/holding-permissions.js";
 import { fieldValue, joinList, splitList } from "../../core/helpers.js";
-import { getSkyholdAppClass, getSkyholdManager } from "../registry.js";
+import { bindGlobalInputGuard, bindInputGuards, unbindGlobalInputGuard } from "../../utils/input-guards.js";
+import { getSkyholdManager, requestSkyholdAppRender } from "../registry.js";
+import { bindDelegatedActions, unbindDelegatedActions } from "../common/delegated-events.js";
+import { RenderSchedulerMixin } from "../common/render-scheduler.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
+const CREW_EDITOR_NO_HOLDING_MESSAGE = "Владение не найдено или недоступно.";
+const CREW_EDITOR_ACTIONS = {
+  "remove-suitable-type": "_onRemoveSuitableType",
+  "add-crew": "_onAddCrew",
+  "delete-crew": "_onDeleteCrew",
+  "roll-construction-crew": "_onRollConstructionCrew",
+  "distribute-crew": "_onDistributeCrew",
+  "return-crew": "_onReturnCrew"
+};
 
 function getActiveSkyholdManager({ warn = false } = {}) {
   const manager = getSkyholdManager();
@@ -11,7 +26,7 @@ function getActiveSkyholdManager({ warn = false } = {}) {
   return manager;
 }
 
-export class SkyholdCrewEditor extends HandlebarsApplicationMixin(ApplicationV2) {
+export class SkyholdCrewEditor extends RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2)) {
   constructor({ holdingId } = {}, options = {}) {
     super(options);
     this.holdingId = holdingId;
@@ -20,29 +35,35 @@ export class SkyholdCrewEditor extends HandlebarsApplicationMixin(ApplicationV2)
   async _prepareContext(options) {
     const context = await super._prepareContext(options);
     const data = SkyholdData.get();
-    const { holding, index: holdingIndex } = findReadableHoldingEntry(data, this.holdingId, { fallback: true });
-    const manager = getActiveSkyholdManager();
+    const { holding, index: holdingIndex } = findReadableHoldingEntry(data, this.holdingId, { fallback: false });
     const canEdit = this._canEditCrew(holding);
-    if (!manager) return { ...context, canEdit, holding, holdingIndex, hasHolding: Boolean(holding), crews: [], hasCrews: false };
-    const people = (holding?.people?.list ?? []).filter((person) => !person?.dead && !(manager._isResidentInjured?.(person)) && (manager._canResidentWork?.(person) ?? true));
-    const occupiedAll = manager._assignedWorkerSet?.(holding) ?? new Set();
+    if (!holding) {
+      return { ...context, canEdit: false, holding: null, holdingIndex: -1, hasHolding: false, error: CREW_EDITOR_NO_HOLDING_MESSAGE, crews: [], hasCrews: false };
+    }
+    const manager = getActiveSkyholdManager();
+    if (!manager) return { ...context, canEdit, holding, holdingIndex, hasHolding: true, error: "", crews: [], hasCrews: false };
+    const renderContext = this._crewRenderContext(holding, manager);
+    const { eligiblePeople, occupiedAll, crewIndexById } = renderContext;
     const crews = manager._constructionCrews(holding).map((crew) => {
       const ownIds = new Set([String(crew.leaderId ?? ""), ...(crew.memberIds ?? []).map((id) => String(id ?? ""))].filter(Boolean));
-      const leaderPeople = people.filter((person) => ownIds.has(String(person.id)) || !occupiedAll.has(String(person.id)));
+      const crewIndex = crewIndexById.get(String(crew.id)) ?? -1;
+      const crewBasePath = `holdings.${holdingIndex}.constructionCrews.${crewIndex}`;
+      const suitablePath = `${crewBasePath}.suitableWorkerTypes`;
+      const leaderPeople = eligiblePeople.filter((person) => ownIds.has(String(person.id)) || !occupiedAll.has(String(person.id)));
       const prepared = manager._prepareConstructionCrew(holding, crew);
       return {
         ...prepared,
-        namePath: `holdings.${holdingIndex}.constructionCrews.${(holding.constructionCrews ?? []).findIndex((item) => String(item.id) === String(crew.id))}.name`,
-        leaderPath: `holdings.${holdingIndex}.constructionCrews.${(holding.constructionCrews ?? []).findIndex((item) => String(item.id) === String(crew.id))}.leaderId`,
-        suitablePath: `holdings.${holdingIndex}.constructionCrews.${(holding.constructionCrews ?? []).findIndex((item) => String(item.id) === String(crew.id))}.suitableWorkerTypes`,
+        namePath: `${crewBasePath}.name`,
+        leaderPath: `${crewBasePath}.leaderId`,
+        suitablePath,
         suitableTypeOptions: manager._workerTypeSelectOptions(crew.suitableWorkerTypes),
-        suitableTypeBadges: manager._suitableTypeBadges(crew.suitableWorkerTypes, `holdings.${holdingIndex}.constructionCrews.${(holding.constructionCrews ?? []).findIndex((item) => String(item.id) === String(crew.id))}.suitableWorkerTypes`),
+        suitableTypeBadges: manager._suitableTypeBadges(crew.suitableWorkerTypes, suitablePath),
         hasSuitableTypeBadges: splitList(crew.suitableWorkerTypes).length > 0,
         leaderOptions: [{ id: "", name: "Нет лидера", selected: !crew.leaderId }, ...leaderPeople.map((person) => ({ id: person.id, name: person.name || "Без имени", selected: String(person.id) === String(crew.leaderId) }))],
-        slots: this._crewSlots(holding, manager, crew)
+        slots: this._crewSlots(holding, manager, crew, renderContext)
       };
     });
-    return { ...context, canEdit, holding, holdingIndex, hasHolding: Boolean(holding), crews, hasCrews: crews.length > 0 };
+    return { ...context, canEdit, holding, holdingIndex, hasHolding: true, error: "", crews, hasCrews: crews.length > 0 };
   }
 
   async _onRender(context, options) {
@@ -54,44 +75,72 @@ export class SkyholdCrewEditor extends HandlebarsApplicationMixin(ApplicationV2)
     root.querySelectorAll("[data-field]").forEach((field) => field.addEventListener("change", (event) => this._onFieldChange(event)));
     root.querySelectorAll("[data-crew-slot]").forEach((field) => field.addEventListener("change", (event) => this._onCrewSlotChange(event)));
     root.querySelectorAll("[data-suitable-type-add-field]").forEach((field) => field.addEventListener("change", (event) => this._onSuitableTypeAddChange(event)));
-    root.querySelectorAll("[data-action='remove-suitable-type']").forEach((button) => button.addEventListener("click", (event) => this._onRemoveSuitableType(event)));
-    root.querySelectorAll("[data-action='add-crew']").forEach((button) => button.addEventListener("click", (event) => this._onAddCrew(event)));
-    root.querySelectorAll("[data-action='delete-crew']").forEach((button) => button.addEventListener("click", (event) => this._onDeleteCrew(event)));
-    root.querySelectorAll("[data-action='roll-construction-crew']").forEach((button) => button.addEventListener("click", (event) => this._onRollConstructionCrew(event)));
-    root.querySelectorAll("[data-action='distribute-crew']").forEach((button) => button.addEventListener("click", (event) => this._onDistributeCrew(event)));
-    root.querySelectorAll("[data-action='return-crew']").forEach((button) => button.addEventListener("click", (event) => this._onReturnCrew(event)));
+    bindDelegatedActions(this, root, CREW_EDITOR_ACTIONS);
   }
 
   async _onClose(options) {
     await super._onClose(options);
+    unbindDelegatedActions(this);
     this._unbindGlobalInputGuard();
-    getSkyholdAppClass()?.instance?.render({ force: true, focus: false });
+    requestSkyholdAppRender();
   }
 
   _canEditCrew(holding = null) {
-    if (game.user?.isGM) return true;
     const data = SkyholdData.get();
-    const target = holding ?? findReadableHoldingEntry(data, this.holdingId, { fallback: true }).holding;
-    return Boolean(target?.gm?.playersCanEditBuildings === true);
+    const target = holding ?? findReadableHoldingEntry(data, this.holdingId, { fallback: false }).holding;
+    return holdingPermissionContext(target).canEditBuildings;
   }
 
-  _crewSlots(holding, manager, crew) {
+  _resolveHoldingScopedPath(data, path = "") {
+    const suffix = String(path ?? "").match(/^holdings\.\d+\.(.+)$/)?.[1];
+    if (!suffix) return "";
+    const { index: holdingIndex } = findReadableHoldingEntry(data, this.holdingId, { fallback: false });
+    if (holdingIndex < 0) return "";
+    return `holdings.${holdingIndex}.${suffix}`;
+  }
+
+  _crewRenderContext(holding, manager) {
+    const livingPeople = (holding?.people?.list ?? []).filter((person) => !person?.dead);
+    const eligiblePeople = livingPeople.filter((person) => !(manager._isResidentInjured?.(person)) && (manager._canResidentWork?.(person) ?? true));
+    const crewIndexById = new Map((holding?.constructionCrews ?? []).map((crew, index) => [String(crew?.id ?? ""), index]));
+    return {
+      livingPeople,
+      eligiblePeople,
+      peopleById: new Map(livingPeople.map((person) => [String(person?.id ?? ""), person])),
+      occupiedAll: manager._assignedWorkerSet?.(holding) ?? new Set(),
+      crewIndexById,
+      contributionCache: new Map()
+    };
+  }
+
+  _crewContributionDetail(manager, person, suitable, renderContext) {
+    const key = `${String(person?.id ?? "")}|${suitable.join(",")}`;
+    if (!renderContext?.contributionCache?.has(key)) {
+      renderContext?.contributionCache?.set(key, manager._constructionContributionDetail(person, suitable));
+    }
+    return renderContext?.contributionCache?.get(key) ?? manager._constructionContributionDetail(person, suitable);
+  }
+
+  _crewSlots(holding, manager, crew, renderContext = null) {
+    renderContext = renderContext ?? this._crewRenderContext(holding, manager);
     const ids = Array.isArray(crew?.memberIds) ? [...crew.memberIds] : [];
     while (ids.length && !ids[ids.length - 1]) ids.pop();
     ids.push("");
-    const people = (holding?.people?.list ?? []).filter((person) => !person?.dead);
+    const people = renderContext.livingPeople;
+    const peopleById = renderContext.peopleById;
     const chosen = new Set(ids.filter(Boolean));
-    const occupiedBuildings = manager._assignedWorkerSet(holding);
+    const occupiedBuildings = renderContext.occupiedAll;
+    const suitable = splitList(crew?.suitableWorkerTypes).map((item) => item.toLowerCase());
     return ids.map((selectedId, slot) => {
       const rawSelectedId = String(selectedId ?? "");
-      const selectedPerson = people.find((person) => String(person.id) === rawSelectedId);
+      const selectedPerson = peopleById.get(rawSelectedId);
       selectedId = selectedPerson ? rawSelectedId : "";
       const options = [{ id: "", name: "Пусто", selected: !selectedId, disabled: false, hint: "" }];
       for (const person of people) {
         const id = String(person.id ?? "");
         const unavailable = (chosen.has(id) && id !== selectedId) || (occupiedBuildings.has(id) && id !== selectedId) || !(manager._canResidentWork?.(person) ?? true);
         if (unavailable) continue;
-        const detail = manager._constructionContributionDetail(person, splitList(crew?.suitableWorkerTypes).map((item) => item.toLowerCase()));
+        const detail = this._crewContributionDetail(manager, person, suitable, renderContext);
         options.push({ id, name: person.name || "Без имени", selected: id === selectedId, disabled: false, hint: `${manager._workerType(person)} · ${detail.dice}к6` });
       }
       return { crewId: crew.id, slot, slotNo: slot + 1, selectedId, label: selectedPerson?.name ?? "Пусто", options };
@@ -105,8 +154,14 @@ export class SkyholdCrewEditor extends HandlebarsApplicationMixin(ApplicationV2)
     const path = field.dataset.field;
     if (!path) return;
     const value = fieldValue(field);
-    await SkyholdData.update(path, value);
-    this.render({ force: true, focus: false });
+    const updated = await SkyholdData.transaction((data) => {
+      const scopedPath = this._resolveHoldingScopedPath(data, path);
+      if (!scopedPath) return SkyholdData.skipTransaction(false);
+      foundry.utils.setProperty(data, scopedPath, value);
+      return true;
+    }, { reason: "crew-editor:field-change" });
+    if (!updated) return;
+    this.requestRender();
   }
 
   async _onCrewSlotChange(event) {
@@ -116,42 +171,48 @@ export class SkyholdCrewEditor extends HandlebarsApplicationMixin(ApplicationV2)
     const crewId = String(event.currentTarget?.dataset?.crewId ?? "");
     if (!Number.isFinite(slot) || !crewId) return;
     const value = String(event.currentTarget?.value ?? "");
-    const data = SkyholdData.get();
-    const holding = findReadableHoldingEntry(data, this.holdingId, { fallback: true }).holding;
-    if (!holding) return;
     const manager = getActiveSkyholdManager({ warn: true });
     if (!manager) return;
-    manager._setCrewSlot(holding, crewId, slot, value);
-    await SkyholdData.set(data);
-    this.render({ force: true, focus: false });
+    const updated = await SkyholdData.updateHolding(this.holdingId, (holding) => {
+      manager._setCrewSlot(holding, crewId, slot, value);
+      return true;
+    }, { fallback: false, reason: "crew-editor:set-slot" });
+    if (!updated) return;
+    this.requestRender();
   }
 
   async _onAddCrew(event) {
     event.preventDefault();
     if (!this._canEditCrew()) return;
-    const data = SkyholdData.get();
-    const holding = findReadableHoldingEntry(data, this.holdingId, { fallback: true }).holding;
-    if (!holding) return;
-    if (!Array.isArray(holding.constructionCrews)) holding.constructionCrews = [];
-    holding.constructionCrews.push({ id: foundry.utils.randomID?.(10) ?? `crew-${Date.now()}`, name: `Стройбригада ${holding.constructionCrews.length + 1}`, memberIds: [], leaderId: "", suitableWorkerTypes: "Строитель, Силач, Умелец", distributed: false, distributedIds: [] });
-    await SkyholdData.set(data);
-    this.render({ force: true, focus: false });
+    const added = await SkyholdData.updateHolding(this.holdingId, (holding) => {
+      if (!Array.isArray(holding.constructionCrews)) holding.constructionCrews = [];
+      holding.constructionCrews.push({ id: makeId("crew"), name: `Стройбригада ${holding.constructionCrews.length + 1}`, memberIds: [], leaderId: "", suitableWorkerTypes: "Строитель, Силач, Умелец", distributed: false, distributedIds: [] });
+      return true;
+    }, { fallback: false, reason: "crew-editor:add-crew" });
+    if (!added) return;
+    this.requestRender();
   }
 
   async _onDeleteCrew(event) {
     event.preventDefault();
     if (!this._canEditCrew()) return;
     const crewId = String(event.currentTarget?.dataset?.crewId ?? "");
-    const data = SkyholdData.get();
-    const holding = findReadableHoldingEntry(data, this.holdingId, { fallback: true }).holding;
-    if (!holding || !Array.isArray(holding.constructionCrews) || holding.constructionCrews.length <= 1) { ui.notifications.warn("Нельзя удалить последнюю стройбригаду."); return; }
     const manager = getActiveSkyholdManager({ warn: true });
     if (!manager) return;
-    const crew = holding.constructionCrews.find((item) => String(item.id) === crewId);
-    for (const id of crew?.memberIds ?? []) manager._setPersonFree(holding, id);
-    holding.constructionCrews = holding.constructionCrews.filter((item) => String(item.id) !== crewId);
-    await SkyholdData.set(data);
-    this.render({ force: true, focus: false });
+    const result = await SkyholdData.updateHolding(this.holdingId, (holding) => {
+      if (!holding || !Array.isArray(holding.constructionCrews) || holding.constructionCrews.length <= 1) {
+        return SkyholdData.skipTransaction({ ok: false, message: "Нельзя удалить последнюю стройбригаду." });
+      }
+      const crew = holding.constructionCrews.find((item) => String(item.id) === crewId);
+      for (const id of crew?.memberIds ?? []) manager._setPersonFree(holding, id);
+      holding.constructionCrews = holding.constructionCrews.filter((item) => String(item.id) !== crewId);
+      return { ok: true };
+    }, { fallback: false, reason: "crew-editor:delete-crew" });
+    if (!result?.ok) {
+      if (result?.message) ui.notifications.warn(result.message);
+      return;
+    }
+    this.requestRender();
   }
   async _onSuitableTypeAddChange(event) {
     event.preventDefault();
@@ -160,12 +221,16 @@ export class SkyholdCrewEditor extends HandlebarsApplicationMixin(ApplicationV2)
     const path = field.dataset.suitableTypeAddField;
     const value = String(field.value ?? "").trim();
     if (!path || !value) return;
-    const data = SkyholdData.get();
-    const list = splitList(foundry.utils.getProperty(data, path));
-    if (!list.some((item) => item.toLowerCase() === value.toLowerCase())) list.push(value);
-    foundry.utils.setProperty(data, path, joinList(list));
-    await SkyholdData.set(data);
-    this.render({ force: true, focus: false });
+    const updated = await SkyholdData.transaction((data) => {
+      const scopedPath = this._resolveHoldingScopedPath(data, path);
+      if (!scopedPath) return SkyholdData.skipTransaction(false);
+      const list = splitList(foundry.utils.getProperty(data, scopedPath));
+      if (!list.some((item) => item.toLowerCase() === value.toLowerCase())) list.push(value);
+      foundry.utils.setProperty(data, scopedPath, joinList(list));
+      return true;
+    }, { reason: "crew-editor:add-suitable-type" });
+    if (!updated) return;
+    this.requestRender();
   }
 
   async _onRemoveSuitableType(event) {
@@ -174,61 +239,67 @@ export class SkyholdCrewEditor extends HandlebarsApplicationMixin(ApplicationV2)
     const path = event.currentTarget?.dataset?.suitableTypesField;
     const value = String(event.currentTarget?.dataset?.suitableType ?? "").trim().toLowerCase();
     if (!path || !value) return;
-    const data = SkyholdData.get();
-    const list = splitList(foundry.utils.getProperty(data, path)).filter((item) => item.toLowerCase() !== value);
-    foundry.utils.setProperty(data, path, joinList(list));
-    await SkyholdData.set(data);
-    this.render({ force: true, focus: false });
+    const updated = await SkyholdData.transaction((data) => {
+      const scopedPath = this._resolveHoldingScopedPath(data, path);
+      if (!scopedPath) return SkyholdData.skipTransaction(false);
+      const list = splitList(foundry.utils.getProperty(data, scopedPath)).filter((item) => item.toLowerCase() !== value);
+      foundry.utils.setProperty(data, scopedPath, joinList(list));
+      return true;
+    }, { reason: "crew-editor:remove-suitable-type" });
+    if (!updated) return;
+    this.requestRender();
   }
 
   async _onDistributeCrew(event) {
     event.preventDefault();
     if (!this._canEditCrew()) return;
     const crewId = String(event.currentTarget?.dataset?.crewId ?? "");
-    const data = SkyholdData.get();
-    const holding = findReadableHoldingEntry(data, this.holdingId, { fallback: true }).holding;
-    const crew = holding?.constructionCrews?.find((item) => String(item.id) === crewId);
-    if (!holding || !crew) return;
     const manager = getActiveSkyholdManager({ warn: true });
     if (!manager) return;
-    const ids = [...(crew.memberIds ?? [])].filter(Boolean);
-    crew.distributedIds = ids;
-    crew.memberIds = [];
-    crew.distributed = true;
-    for (const id of ids) {
-      let placed = false;
-      for (const building of holding.buildings?.list ?? []) {
-        if (manager._buildingStatus(building).value !== "built") continue;
-        const max = Math.max(0, manager._safeNumber(building.workersMax, 0));
-        if (max <= 0) continue;
-        if (!Array.isArray(building.assignedWorkerIds)) building.assignedWorkerIds = [];
-        while (building.assignedWorkerIds.length < max) building.assignedWorkerIds.push("");
-        const slot = building.assignedWorkerIds.findIndex((value) => !value);
-        if (slot >= 0) { manager._setBuildingSlot(holding, building.id, slot, id); placed = true; break; }
+    const distributed = await SkyholdData.updateHolding(this.holdingId, (holding) => {
+      const crew = holding?.constructionCrews?.find((item) => String(item.id) === crewId);
+      if (!holding || !crew) return SkyholdData.skipTransaction(false);
+      const ids = [...(crew.memberIds ?? [])].filter(Boolean);
+      crew.distributedIds = ids;
+      crew.memberIds = [];
+      crew.distributed = true;
+      for (const id of ids) {
+        let placed = false;
+        for (const building of holding.buildings?.list ?? []) {
+          if (manager._buildingStatus(building).value !== "built") continue;
+          const max = Math.max(0, manager._safeNumber(building.workersMax, 0));
+          if (max <= 0) continue;
+          if (!Array.isArray(building.assignedWorkerIds)) building.assignedWorkerIds = [];
+          while (building.assignedWorkerIds.length < max) building.assignedWorkerIds.push("");
+          const slot = building.assignedWorkerIds.findIndex((value) => !value);
+          if (slot >= 0) { manager._setBuildingSlot(holding, building.id, slot, id); placed = true; break; }
+        }
+        if (!placed) manager._setPersonFree(holding, id);
       }
-      if (!placed) manager._setPersonFree(holding, id);
-    }
-    await SkyholdData.set(data);
-    this.render({ force: true, focus: false });
+      return true;
+    }, { fallback: false, reason: "crew-editor:distribute-crew" });
+    if (!distributed) return;
+    this.requestRender();
   }
 
   async _onReturnCrew(event) {
     event.preventDefault();
     if (!this._canEditCrew()) return;
     const crewId = String(event.currentTarget?.dataset?.crewId ?? "");
-    const data = SkyholdData.get();
-    const holding = findReadableHoldingEntry(data, this.holdingId, { fallback: true }).holding;
-    const crew = holding?.constructionCrews?.find((item) => String(item.id) === crewId);
-    if (!holding || !crew) return;
     const manager = getActiveSkyholdManager({ warn: true });
     if (!manager) return;
-    const ids = [...(crew.distributedIds ?? [])].filter(Boolean);
-    crew.memberIds = [];
-    for (const id of ids) manager._setCrewSlot(holding, crew.id, crew.memberIds.length, id);
-    crew.distributedIds = [];
-    crew.distributed = false;
-    await SkyholdData.set(data);
-    this.render({ force: true, focus: false });
+    const returned = await SkyholdData.updateHolding(this.holdingId, (holding) => {
+      const crew = holding?.constructionCrews?.find((item) => String(item.id) === crewId);
+      if (!holding || !crew) return SkyholdData.skipTransaction(false);
+      const ids = [...(crew.distributedIds ?? [])].filter(Boolean);
+      crew.memberIds = [];
+      for (const id of ids) manager._setCrewSlot(holding, crew.id, crew.memberIds.length, id);
+      crew.distributedIds = [];
+      crew.distributed = false;
+      return true;
+    }, { fallback: false, reason: "crew-editor:return-crew" });
+    if (!returned) return;
+    this.requestRender();
   }
 
   async _onRollConstructionCrew(event) {
@@ -242,34 +313,15 @@ export class SkyholdCrewEditor extends HandlebarsApplicationMixin(ApplicationV2)
   }
 
   _bindInputGuards(root) {
-    const stop = (event) => event.stopPropagation();
-    root.querySelectorAll("input, textarea, select").forEach((field) => {
-      for (const eventName of ["keydown", "keyup", "keypress", "input", "beforeinput", "paste", "copy", "cut", "mousedown", "mouseup", "click", "dblclick"]) {
-        field.addEventListener(eventName, stop, { capture: true });
-        field.addEventListener(eventName, stop);
-      }
-    });
+    bindInputGuards(root);
   }
 
   _bindGlobalInputGuard(root) {
-    this._unbindGlobalInputGuard();
-    const editableSelector = "input, textarea, select, [contenteditable='true']";
-    this._globalInputGuard = (event) => {
-      const target = event.target;
-      const active = document.activeElement;
-      const targetInside = target instanceof Element && root.contains(target);
-      const activeInside = active instanceof Element && root.contains(active);
-      const targetEditable = target instanceof Element && Boolean(target.closest(editableSelector));
-      const activeEditable = active instanceof Element && Boolean(active.closest(editableSelector));
-      if ((targetInside && targetEditable) || (activeInside && activeEditable)) event.stopImmediatePropagation();
-    };
-    for (const eventName of ["keydown", "keyup", "keypress"]) window.addEventListener(eventName, this._globalInputGuard, true);
+    bindGlobalInputGuard(this, root);
   }
 
   _unbindGlobalInputGuard() {
-    if (!this._globalInputGuard) return;
-    for (const eventName of ["keydown", "keyup", "keypress"]) window.removeEventListener(eventName, this._globalInputGuard, true);
-    this._globalInputGuard = null;
+    unbindGlobalInputGuard(this);
   }
 }
 

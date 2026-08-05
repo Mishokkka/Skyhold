@@ -2,6 +2,91 @@
 import { traitBadges, traitMorale, traitOptions } from "../../generators/trait-definitions.js";
 import { CULTURE_NAMES } from "../../generators/name-pools.js";
 import { ageGroupFromAge, ageThresholdsFor, attributeSummary, normalizeBelief, raceKeyFromResident, socialBackgroundOptions, workerTypeFromAttributes, workerTypeStyleFromAttributes } from "../../generators/resident-rules.js";
+import { buildingOperationalState } from "../../core/building-state.js";
+import { compensationContractWarning, compensationTypeLabel, compensationTypeOptions, personBoardFoodDaily, personCashWageDaily, personShareRate } from "../../core/compensation.js";
+import { fleetVesselAvailableCopper, VESSEL_STATUSES } from "../../data/normalizers/fleet.js";
+import { calculateMoraleSnapshot, moraleBandForScore } from "../../engines/morale/morale-snapshot.js";
+import { EMPLOYMENT_MODE_IDS, EMPLOYMENT_SEASON_IDS } from "../../data/labor/employment-terms.js";
+import { WAGE_CATALOG, normalizeWageIndex, wageCopperPerTenday } from "../../data/labor/wage-catalog.js";
+import { normalizePayrollState } from "../../data/labor/payroll-state.js";
+import { assessNextTendayLabor } from "../../engines/labor/labor-consequences.js";
+import { foodProvisionModeOptions, foodProvisionWarning, normalizeFoodProvisionMode } from "../../data/food-provision.js";
+
+const EMPLOYMENT_MODE_LABELS = Object.freeze({
+  permanent: "Постоянный",
+  seasonal: "Сезонный",
+  "day-labor": "Подённый"
+});
+
+const EMPLOYMENT_SEASON_LABELS = Object.freeze({
+  spring: "Весна",
+  summer: "Лето",
+  autumn: "Осень",
+  winter: "Зима"
+});
+
+const FREE_RESIDENT_ASSIGNMENTS = new Set(["", "free", "unassigned", "child", "свободен", "без работы", "ребенок", "ребёнок"]);
+
+const LABOR_CONTRACT_REASON_LABELS = Object.freeze({
+  active: "Договор активен",
+  dependent: "Иждивение: труд не предусмотрен",
+  "missing-wage-class": "Не выбран класс ставки Economy V2",
+  "invalid-contract-term": "Неверный срок оплачиваемого договора",
+  "missing-current-qd": "Не определена дата следующего десятника",
+  "missing-season": "Не определён сезон следующего десятника",
+  "before-contract": "Договор ещё не начался",
+  "after-contract": "Договор завершён",
+  "inactive-season": "Сезонный договор сейчас неактивен",
+  "missing-share-rate": "Не задана положительная доля результата",
+  "volunteer-missing-reason": "Не указана причина добровольной работы",
+  "volunteer-missing-term": "Не задан конечный срок добровольной работы",
+  "volunteer-invalid-term": "Неверный срок добровольной работы",
+  "volunteer-not-started": "Добровольная работа ещё не началась",
+  "volunteer-expired": "Срок добровольной работы завершён",
+  "coerced-missing-basis": "Не указано основание принудительного труда",
+  "unknown-compensation-type": "Неизвестный тип договора"
+});
+
+const LABOR_EVENT_RISK_DESCRIPTIONS = Object.freeze({
+  "volunteer-fatigue": "Усталость добровольца: возможны просьба об отдыхе или отказ продолжать работу.",
+  "coerced-labor-unrest": "Принудительный труд: высок риск сопротивления, побега или открытого конфликта.",
+  "payroll-arrears-unrest": "Долгая просрочка оплаты: возможен трудовой спор, отказ от работы или уход.",
+  "hunger-crisis": "Продолжительный голод: возможны болезнь, уход жителей или продовольственный конфликт."
+});
+
+const LABOR_RISK_LEVEL_LABELS = Object.freeze({ low: "низкий", medium: "средний", high: "высокий" });
+
+function laborPercent(value) {
+  const numeric = Number(value);
+  return `${Math.round(Math.max(0, Math.min(1, Number.isFinite(numeric) ? numeric : 0)) * 100)}%`;
+}
+
+function signedLaborValue(value) {
+  const numeric = Number(value);
+  const safe = Number.isFinite(numeric) ? numeric : 0;
+  return `${safe > 0 ? "+" : ""}${String(safe).replace(".", ",")}`;
+}
+
+function contractStateText(assessment = {}) {
+  const reason = String(assessment?.contract?.reason ?? "");
+  const label = LABOR_CONTRACT_REASON_LABELS[reason] ?? `Состояние договора: ${reason || "не определено"}`;
+  if (assessment?.blocked) return `Заблокировано: ${label}`;
+  if (!assessment?.contractValid) return `Нужно исправить: ${label}`;
+  if (!assessment?.contractActive) return label;
+  if (assessment?.physicalReason && assessment.physicalReason !== "available") return `${label}; житель физически недоступен`;
+  if (!assessment?.assignedAsWorker) return `${label}; рабочего назначения нет`;
+  return label;
+}
+
+function laborRiskRows(risks = []) {
+  return risks.map((risk) => {
+    const id = String(risk?.id ?? "");
+    const level = String(risk?.level ?? "low");
+    const levelLabel = LABOR_RISK_LEVEL_LABELS[level] ?? level;
+    const description = LABOR_EVENT_RISK_DESCRIPTIONS[id] ?? `Социальный риск: ${id || "не определён"}.`;
+    return { ...risk, id, level, levelLabel, description: `${description} Уровень: ${levelLabel}.` };
+  });
+}
 
 export const ResidentDomain = {
 _prepareRows(holding, canEdit, activeTab = "overview", options = {}) {
@@ -10,7 +95,6 @@ _prepareRows(holding, canEdit, activeTab = "overview", options = {}) {
   const rows = { people: [], buildings: [], special: [], cemetery: [], storage: [] };
   const tab = String(activeTab ?? "overview");
   const canEditBuildings = Boolean(options?.canEditBuildings ?? canEdit);
-  const activePeopleTab = String(options?.activePeopleTab ?? "living");
 
   // The manager can contain hundreds of residents/resources and many production
   // lines. Preparing every tab on every render was the main source of UI lag.
@@ -19,7 +103,7 @@ _prepareRows(holding, canEdit, activeTab = "overview", options = {}) {
     rows.people = this._preparePersonRows(holding, canEdit, "living", true);
   }
 
-  if (tab === "buildings") rows.buildings = this._prepareBuildingRows(holding, canEditBuildings);
+  if (tab === "buildings") rows.buildings = this._prepareBuildingRows(holding, canEditBuildings, options);
 
   if (tab === "special" || tab === "defense") {
     const decorate = (sourceRows) => (sourceRows ?? []).map((row, index) => ({ ...row, _index: index }));
@@ -34,7 +118,23 @@ _prepareRows(holding, canEdit, activeTab = "overview", options = {}) {
 },
 
 _preparePersonRows(holding, canEdit = false, mode = "living", applyFilters = true) {
-  const workAssignments = this._peopleWorkAssignments(holding);
+  const housingIndex = this._residentHousingIndex(holding);
+  const workOptionsContext = this._residentWorkOptionsContext(holding);
+  const workAssignments = this._peopleWorkAssignments(holding, workOptionsContext);
+  const laborState = holding?.gm?.economy?.labor ?? {};
+  const wageIndex = normalizeWageIndex(laborState.wageIndex);
+  const payrollState = normalizePayrollState(laborState.payroll);
+  const lastQd = Math.max(0, Math.floor(this._safeNumber(holding?.gm?.calendaria?.lastQd, 0)));
+  let laborPeriod = { targetQd: lastQd + 40, season: "" };
+  try {
+    const localPeriod = this._employmentPeriodContext?.(holding, 40) ?? null;
+    if (localPeriod) {
+      laborPeriod = {
+        targetQd: Math.max(0, Math.floor(this._safeNumber(localPeriod.targetQd, lastQd + 40))),
+        season: String(localPeriod.targetSeason ?? localPeriod.currentSeason ?? "").trim().toLocaleLowerCase("en")
+      };
+    }
+  } catch (_error) {}
   const medicalIds = new Set();
   try {
     const assignments = this._medicalAssignments?.(holding);
@@ -43,16 +143,63 @@ _preparePersonRows(holding, canEdit = false, mode = "living", applyFilters = tru
     }
   } catch (_error) {}
   const people = (holding?.people?.list ?? []).map((row, index) => {
-    const morale = this._calculatePersonMorale(row, holding);
+    const morale = this._calculatePersonMorale(row, holding, { housingIndex });
     const traits = this._parseTraits(row.traitsText ?? row.traits);
     const badges = this._traitBadges(row.traitsText ?? row.traits);
     const noteTooltip = this._personNote(row);
-    const detailsItems = this._personDetails(row);
+    const displayBadges = badges.map((badge) => {
+      const name = String(badge?.name ?? "").trim();
+      return {
+        ...badge,
+        shortLabel: name.slice(0, 1).toUpperCase() || "?"
+      };
+    });
     const isChild = this._isChildResident(row);
     const rawWorkLabel = workAssignments.get(String(row.id)) || row.role || "";
     const workLabel = rawWorkLabel && !["Свободен", "Без работы"].includes(String(rawWorkLabel)) ? rawWorkLabel : (isChild ? "Ребенок" : (rawWorkLabel || "Без работы"));
     const injuredDays = Math.max(0, this._safeNumber(row.injuredDays, 0));
+    const isInjured = this._isResidentInjured(row);
     const inMedicalCare = injuredDays > 0 && medicalIds.has(String(row.id ?? ""));
+    const compensationWarning = compensationContractWarning(row);
+    const provisionWarning = foodProvisionWarning(row);
+    const personId = String(row.id ?? "");
+    const payrollAccount = payrollState.accounts[personId] ?? null;
+    const assignmentKey = String(row.workAssignment ?? "").trim().toLocaleLowerCase("ru");
+    const assignedAsWorker = !FREE_RESIDENT_ASSIGNMENTS.has(assignmentKey);
+    const laborAssessment = assessNextTendayLabor(row, {
+      currentQd: laborPeriod.targetQd,
+      season: laborPeriod.season,
+      payrollAccount,
+      hungerStreak: row.hungerStreakTendays,
+      assignedAsWorker,
+      living: !row.dead,
+      child: isChild,
+      injured: isInjured
+    });
+    const arrearsComponent = laborAssessment.components.find((component) => component.id === "arrears");
+    const hungerComponent = laborAssessment.components.find((component) => component.id === "hunger");
+    const laborRisks = laborRiskRows(laborAssessment.eventRisks);
+    const laborProjectionAttention = laborAssessment.blocked
+      || laborAssessment.contractValid === false
+      || (assignedAsWorker && laborAssessment.laborFactor < 1)
+      || (arrearsComponent?.streakTendays ?? 0) > 0
+      || (hungerComponent?.streakTendays ?? 0) > 0
+      || laborRisks.length > 0;
+    const laborProjectionClass = laborAssessment.blocked
+      ? "is-blocked"
+      : (laborProjectionAttention ? "has-risk" : "is-ready");
+    const laborProjectionBadgeClass = laborAssessment.blocked
+      ? "is-danger"
+      : (laborProjectionAttention ? "is-warning" : "is-success");
+    const wageClass = WAGE_CATALOG.find((entry) => entry.id === String(row.wageClassId ?? "")) ?? null;
+    const wageClassOptions = [
+      { value: "", label: "Не выбран (старый договор)", selected: !wageClass },
+      ...WAGE_CATALOG.map((entry) => ({
+        value: entry.id,
+        label: `${entry.label} — ${this._formatCopperCurrency(wageCopperPerTenday(entry.id, { wageIndex }))} / десятник`,
+        selected: entry.id === wageClass?.id
+      }))
+    ];
     return {
       ...row,
       _index: index,
@@ -61,22 +208,80 @@ _preparePersonRows(holding, canEdit = false, mode = "living", applyFilters = tru
       raceLine: this._raceLine(row),
       workLabel,
       dead: Boolean(row.dead),
-      injured: this._isResidentInjured(row),
+      injured: isInjured,
       injuredDays,
       injuredBadgeClass: inMedicalCare ? "in-care" : "untreated",
       injuredText: injuredDays > 0 ? String(injuredDays) : "",
       injuredTitle: inMedicalCare ? `Лежит в лазарете: ${injuredDays} дн.` : `Ранен: ${injuredDays} дн.`,
-      deadClass: row.dead ? "dead" : (this._isResidentInjured(row) ? "injured" : "living"),
+      deadClass: row.dead ? "dead" : (isInjured ? "injured" : "living"),
       deathLine: row.dead ? (row.deathDate ? `Погиб: ${row.deathDate}` : "Погиб") : "",
-      homeLabel: this._homeLabel(row, holding),
-      homeOptions: this._homeOptions(holding, row.home),
-      workOptions: this._workOptions(holding, row),
-      isCustomWork: this._isCustomWork(row, holding),
+      homeLabel: this._homeLabel(row, holding, housingIndex),
+      homeOptions: this._homeOptions(holding, row.home, housingIndex),
+      workOptions: this._workOptions(holding, row, workOptionsContext),
+      isCustomWork: this._isCustomWork(row, holding, workOptionsContext),
       cultureOptions: this._cultureOptions(row.culture),
       beliefOptions: this._beliefOptions(row.belief),
       backgroundOptions: socialBackgroundOptions(row.background),
+      compensationOptions: compensationTypeOptions(row.compensationType),
+      compensationTypeLabel: compensationTypeLabel(row.compensationType),
+      cashWageDaily: personCashWageDaily(row),
+      boardFoodDaily: personBoardFoodDaily(row),
+      foodProvisionMode: normalizeFoodProvisionMode(row.foodProvisionMode, { boardFoodDaily: row.boardFoodDaily }),
+      foodProvisionOptions: foodProvisionModeOptions(row),
+      foodProvisionWarning: provisionWarning,
+      hasFoodProvisionWarning: Boolean(provisionWarning),
+      shareRate: personShareRate(row),
+      baseWageDailyText: this._formatNumber?.(row.baseWageDaily ?? 0) ?? String(row.baseWageDaily ?? 0),
+      compensationWarning,
+      hasCompensationWarning: Boolean(compensationWarning),
+      wageClassOptions,
+      wageClassLabel: wageClass?.label ?? "Старый договор",
+      employmentModeOptions: EMPLOYMENT_MODE_IDS.map((value) => ({
+        value,
+        label: EMPLOYMENT_MODE_LABELS[value] ?? value,
+        selected: value === String(row.employmentMode ?? "permanent")
+      })),
+      employmentSeasonOptions: EMPLOYMENT_SEASON_IDS.map((key) => ({
+        key,
+        label: EMPLOYMENT_SEASON_LABELS[key] ?? key,
+        checked: row.employmentSeasonMask?.[key] === true
+      })),
+      employmentContractStartQdValue: row.employmentContractStartQd ?? "",
+      employmentContractEndQdValue: row.employmentContractEndQd ?? "",
+      employmentTariffText: wageClass
+        ? this._formatCopperCurrency(wageCopperPerTenday(wageClass.id, { wageIndex }))
+        : "—",
+      wageIndexText: this._formatNumber?.(wageIndex) ?? String(wageIndex),
+      payrollArrearsCopper: payrollAccount?.arrearsCopper ?? 0,
+      payrollArrearsText: this._formatCopperCurrency(payrollAccount?.arrearsCopper ?? 0),
+      payrollOverdueTendays: payrollAccount?.overdueTendays ?? 0,
+      hasPayrollArrears: (payrollAccount?.arrearsCopper ?? 0) > 0,
+      isVolunteerContract: String(row.compensationType ?? "") === "volunteer",
+      isCoercedContract: String(row.compensationType ?? "") === "coerced",
+      volunteerTermStartQdValue: row.volunteerTermStartQd ?? "",
+      volunteerTermEndQdValue: row.volunteerTermEndQd ?? "",
+      hungerStreakTendays: Math.max(0, Math.floor(this._safeNumber(row.hungerStreakTendays, 0))),
+      laborAssessment,
+      laborContractStateId: String(laborAssessment.contract?.reason ?? ""),
+      laborContractStateText: contractStateText(laborAssessment),
+      laborProjectionClass,
+      laborProjectionBadgeClass,
+      laborProjectionAttention,
+      laborProjectionBadgeText: laborAssessment.blocked ? "труд забл." : laborPercent(laborAssessment.laborFactor),
+      laborProjectionFactorText: laborPercent(laborAssessment.laborFactor),
+      laborProjectionMoraleText: signedLaborValue(laborAssessment.moraleDelta),
+      laborProjectionDescription: laborAssessment.description,
+      laborProjectionQd: laborAssessment.evaluationQd,
+      laborProjectionSeasonText: EMPLOYMENT_SEASON_LABELS[laborAssessment.season] ?? (laborAssessment.season || "не определён"),
+      laborAssignmentText: assignedAsWorker ? "есть основное назначение" : "нет рабочего назначения",
+      laborArrearsStepText: arrearsComponent?.description ?? "Просрочка оплаты: труд 100%, довольство +0.",
+      laborHungerStepText: hungerComponent?.description ?? "Голод: труд 100%, довольство +0.",
+      laborProjectionBlockers: laborAssessment.blockers,
+      hasLaborProjectionBlockers: laborAssessment.blockers.length > 0,
+      laborProjectionRisks: laborRisks,
+      hasLaborProjectionRisks: laborRisks.length > 0,
       traitsBrief: traits.length ? traits.join(", ") : "—",
-      traitBadges: badges,
+      traitBadges: displayBadges,
       traitOptions: traitOptions(traits),
       hasTraitBadges: badges.length > 0,
       noteTooltip,
@@ -85,9 +290,9 @@ _preparePersonRows(holding, canEdit = false, mode = "living", applyFilters = tru
       attributeSummary: this._attributeSummary(row),
       moraleValue: morale.total,
       moraleTooltip: morale.breakdown.join("\n"),
-      expanded: row.id === this.expandedPersonId,
-      detailsItems,
-      hasDetails: detailsItems.length > 0,
+      searchText: [row.name, this._raceLine(row), row.culture, this._workerType(row), workLabel, this._homeLabel(row, holding, housingIndex), traits.join(" "), row.belief, row.background, compensationTypeLabel(row.compensationType), row.compensationNote, row.volunteerReason, row.coercionBasis, contractStateText(laborAssessment)]
+        .map((value) => String(value ?? "").toLowerCase())
+        .join(" "),
       editing: canEdit && row.id === this.editingPersonId
     };
   }).filter((row) => mode === "cemetery" ? Boolean(row.dead) : !row.dead);
@@ -98,13 +303,44 @@ _prepareSpecialTabs(holding) {
   const people = holding?.people?.list ?? [];
   const dead = people.filter((person) => person?.dead).length;
   const records = holding?.special?.list?.length ?? 0;
-  const defense = holding?.gm?.defense ?? {};
-  const defenseCount = (Array.isArray(defense.squads) ? defense.squads.length : 0) + (defense.commanderId ? 1 : 0);
-  const active = ["records", "cemetery"].includes(this.activeSpecialTab) ? this.activeSpecialTab : "records";
+  const vessels = holding?.special?.fleet?.vessels?.filter((vessel) => vessel?.status !== "archived" && (game.user?.isGM || vessel?.visibility !== "gm"))?.length ?? 0;
+  const active = ["records", "fleet", "cemetery"].includes(this.activeSpecialTab) ? this.activeSpecialTab : "records";
   return [
     { id: "records", label: "Записи", icon: "fa-solid fa-sparkles", count: records, tabCount: records, active: active === "records" },
+    { id: "fleet", label: "Корабли", icon: "fa-solid fa-ship", count: vessels, tabCount: vessels, active: active === "fleet" },
     { id: "cemetery", label: "Кладбище", icon: "fa-solid fa-skull", count: dead, tabCount: dead, active: active === "cemetery" }
   ];
+},
+
+_prepareFleetCards(holding) {
+  const activeVesselId = String(holding?.special?.fleet?.activeVesselId ?? "");
+  return (holding?.special?.fleet?.vessels ?? [])
+    .filter((vessel) => vessel?.status !== "archived" && (game.user?.isGM || vessel?.visibility !== "gm"))
+    .map((vessel) => {
+      const voyage = vessel?.activeVoyage ?? null;
+      const gross = Math.max(0, Number(voyage?.outboundRevenueCopper) || 0) + Math.max(0, Number(voyage?.returnRevenueCopper) || 0);
+      const cost = Math.max(0, Number(voyage?.operatingCostCopper) || 0);
+      const location = String(vessel?.position?.locationLabel ?? "").trim()
+        || (String(vessel?.position?.dockedAtHoldingId ?? "") === String(holding?.id ?? "") ? holding.name : "Местоположение не указано");
+      const condition = Math.min(
+        Math.max(0, Number(vessel?.condition?.hull) || 0),
+        Math.max(0, Number(vessel?.condition?.lift) || 0),
+        Math.max(0, Number(vessel?.condition?.machinery) || 0)
+      );
+      return {
+        ...vessel,
+        active: String(vessel.id ?? "") === activeVesselId,
+        statusLabel: VESSEL_STATUSES[vessel.status] ?? vessel.status,
+        location,
+        condition,
+        cashText: this._formatCopperCurrency(vessel?.finances?.cashCopper ?? 0),
+        availableText: this._formatCopperCurrency(fleetVesselAvailableCopper(vessel)),
+        hasVoyage: Boolean(voyage),
+        voyageTitle: voyage?.title ?? "",
+        voyageEta: voyage ? `ETA QD ${voyage.etaQd}` : "",
+        voyageResultText: voyage ? this._formatCopperCurrency(gross - cost - Math.max(0, Number(voyage?.replacementReserveCopper) || 0)) : ""
+      };
+    });
 },
 
 _squadTypeDefs() {
@@ -130,23 +366,48 @@ _isCommanderCandidate(person = {}) {
   return this._safeNumber(attrs.wits, 0) >= 5 && this._isMilitaryBackgroundResident(person);
 },
 
-_defensePersonOptions(holding, selected = "", { soldiersOnly = false, sergeantsOnly = false, commandersOnly = false, excludedIds = [], squadType = "line" } = {}) {
+_defenseRenderContext(holding) {
+  const livingPeople = (holding?.people?.list ?? []).filter((person) => !person?.dead);
+  const activePeople = livingPeople.filter((person) => !this._isResidentInjured(person));
+  return {
+    livingPeople,
+    activePeople,
+    peopleById: new Map(livingPeople.map((person) => [String(person?.id ?? ""), person])),
+    filteredCache: new Map(),
+    efficiencyCache: new Map()
+  };
+},
+
+_cachedSoldierEfficiency(person, squadType = "line", renderContext = null) {
+  const id = String(person?.id ?? "");
+  const key = `${id}|${String(squadType ?? "line")}`;
+  if (id && renderContext?.efficiencyCache?.has(key)) return renderContext.efficiencyCache.get(key);
+  const value = this._soldierEfficiency(person, squadType);
+  if (id && renderContext?.efficiencyCache) renderContext.efficiencyCache.set(key, value);
+  return value;
+},
+
+_defensePersonOptions(holding, selected = "", { soldiersOnly = false, sergeantsOnly = false, commandersOnly = false, excludedIds = [], squadType = "line", renderContext = null } = {}) {
   const current = String(selected ?? "");
   const excluded = new Set((excludedIds ?? []).map((id) => String(id ?? "")).filter(Boolean));
-  const people = (holding?.people?.list ?? []).filter((person) => !person?.dead && !this._isResidentInjured(person));
-  const filtered = people.filter((person) => {
-    const hasProfession = this._hasSoldierProfession?.(person) === true;
-    if (commandersOnly) return hasProfession && !this._isChildResident?.(person);
-    if (sergeantsOnly) return hasProfession && this._isSergeantCandidate(person) && this._isSuitableForSquadType(person, squadType);
-    if (soldiersOnly) return hasProfession && this._isSuitableForSquadType(person, squadType);
-    return this._isSuitableForSquadType(person, squadType);
-  });
+  renderContext = renderContext ?? this._defenseRenderContext(holding);
+  const cacheKey = `${soldiersOnly ? 1 : 0}|${sergeantsOnly ? 1 : 0}|${commandersOnly ? 1 : 0}|${String(squadType ?? "line")}`;
+  if (!renderContext.filteredCache.has(cacheKey)) {
+    renderContext.filteredCache.set(cacheKey, renderContext.activePeople.filter((person) => {
+      const hasProfession = this._hasSoldierProfession?.(person) === true;
+      if (commandersOnly) return hasProfession && !this._isChildResident?.(person);
+      if (sergeantsOnly) return hasProfession && this._isSergeantCandidate(person) && this._isSuitableForSquadType(person, squadType);
+      if (soldiersOnly) return hasProfession && this._isSuitableForSquadType(person, squadType);
+      return this._isSuitableForSquadType(person, squadType);
+    }));
+  }
+  const filtered = renderContext.filteredCache.get(cacheKey);
   const options = [{ value: "", label: "—", selected: !current }];
   for (const person of filtered) {
     const id = String(person.id);
     if (excluded.has(id) && current !== id) continue;
     const attrs = person?.attributes ?? {};
-    const eff = this._soldierEfficiency(person, squadType);
+    const eff = this._cachedSoldierEfficiency(person, squadType, renderContext);
     const text = [person?.type, person?.workerType, person?.role, person?.background, person?.traits, person?.notes].map((value) => String(value ?? "").toLowerCase()).join(" ");
     const commanderEff = commandersOnly
       ? Math.min(3, Math.max(0,
@@ -160,7 +421,7 @@ _defensePersonOptions(holding, selected = "", { soldiersOnly = false, sergeantsO
     options.push({ value: id, label, selected: current === id, disabled: false });
   }
   if (current && !options.some((item) => item.value === current) && !(soldiersOnly || sergeantsOnly || commandersOnly)) {
-    const person = (holding?.people?.list ?? []).find((row) => String(row.id) === current);
+    const person = renderContext.peopleById.get(current);
     options.push({ value: current, label: `${person?.name || current} (недоступен для типа отряда)`, selected: true });
   }
   return options;
@@ -216,11 +477,12 @@ _sanitizeDefenseAssignments(holding) {
 
 _defenseContext(holding) {
   const defense = holding?.gm?.defense ?? {};
-  const people = (holding?.people?.list ?? []).filter((person) => !person?.dead);
+  const renderContext = this._defenseRenderContext(holding);
+  const peopleById = renderContext.peopleById;
   const typeDefs = this._squadTypeDefs();
-  const soldierCount = people.filter((person) => this._isSoldierResident(person) && !this._isResidentInjured(person)).length;
+  const soldierCount = renderContext.activePeople.filter((person) => this._isSoldierResident(person)).length;
   const commanderId = String(defense.commanderId ?? "");
-  const commander = people.find((person) => String(person.id) === commanderId);
+  const commander = peopleById.get(commanderId);
   const allAssignedIds = this._defenseAssignmentIds(holding);
   const squadsSource = Array.isArray(defense.squads) ? defense.squads : [];
   const squads = squadsSource.map((squad, index) => {
@@ -228,10 +490,10 @@ _defenseContext(holding) {
     const firstSlotId = String(squad.sergeantId ?? "");
     const combatantIds = [firstSlotId, ...memberIds.map((id) => String(id ?? ""))].filter(Boolean);
     const uniqueCombatantIds = [...new Set(combatantIds)];
-    const combatants = uniqueCombatantIds.map((id) => people.find((person) => String(person.id) === id)).filter(Boolean);
+    const combatants = uniqueCombatantIds.map((id) => peopleById.get(id)).filter(Boolean);
     const squadType = String(squad.type ?? "line") === "militia" ? "line" : String(squad.type ?? "line");
-    let effective = combatants.reduce((sum, person) => sum + this._soldierEfficiency(person, squadType), 0);
-    const firstSlotPerson = people.find((person) => String(person.id) === firstSlotId);
+    let effective = combatants.reduce((sum, person) => sum + this._cachedSoldierEfficiency(person, squadType, renderContext), 0);
+    const firstSlotPerson = peopleById.get(firstSlotId);
     const hasSergeant = Boolean(firstSlotPerson && this._isSergeantCandidate(firstSlotPerson));
     if (hasSergeant) effective += 0.5;
     if (!Number.isFinite(Number(effective))) effective = 0;
@@ -250,14 +512,14 @@ _defenseContext(holding) {
       typeKey: type.counterTag ?? "infantry",
       typeHint: type.hint,
       typeOptions: Object.entries(typeDefs).map(([value, data]) => ({ value, label: data.label, selected: squadType === value })),
-      firstSlotOptions: this._defensePersonOptions(holding, squad.sergeantId, { soldiersOnly: true, excludedIds: excludedForSquad, squadType }),
+      firstSlotOptions: this._defensePersonOptions(holding, squad.sergeantId, { soldiersOnly: true, excludedIds: excludedForSquad, squadType, renderContext }),
       firstSlotName: firstSlotPerson?.name ?? "—",
       firstSlotRoleLabel: hasSergeant ? "Сержант" : "Солдат",
       memberSlots: Array.from({ length: 4 }, (_, slot) => {
         const id = String(memberIds[slot] ?? "");
-        const person = people.find((row) => String(row.id) === id);
+        const person = peopleById.get(id);
         const excludedForSlot = allAssignedIds.filter((assignedId) => String(assignedId) !== id);
-        return { slot, slotNo: slot + 2, id, personName: person?.name ?? "", options: this._defensePersonOptions(holding, id, { soldiersOnly: true, excludedIds: excludedForSlot, squadType }) };
+        return { slot, slotNo: slot + 2, id, personName: person?.name ?? "", options: this._defensePersonOptions(holding, id, { soldiersOnly: true, excludedIds: excludedForSlot, squadType, renderContext }) };
       }),
       memberCount: combatants.length,
       effectiveText: this._formatNumber ? this._formatNumber(effective) : String(Math.round(effective * 10) / 10),
@@ -275,7 +537,7 @@ _defenseContext(holding) {
   return {
     commanderId,
     commanderName: commander?.name ?? "—",
-    commanderOptions: this._defensePersonOptions(holding, commanderId, { commandersOnly: true, excludedIds: allAssignedIds.filter((id) => String(id) !== commanderId) }),
+    commanderOptions: this._defensePersonOptions(holding, commanderId, { commandersOnly: true, excludedIds: allAssignedIds.filter((id) => String(id) !== commanderId), renderContext }),
     squads,
     hasSquads: squads.length > 0,
     soldierCount,
@@ -297,20 +559,12 @@ _preparePeopleTabs(holding) {
 
 _filterPeopleRows(people) {
   const filters = this.residentFilters ?? {};
-  const search = String(filters.search ?? "").trim().toLowerCase();
   const type = String(filters.type ?? "all");
   const work = String(filters.work ?? "all");
   const home = String(filters.home ?? "all");
   const morale = String(filters.morale ?? "all");
 
   return people.filter((person) => {
-    if (search) {
-      const haystack = [person.name, person.raceLine, person.culture, person.workerTypeLabel, person.workLabel, person.homeLabel, person.traitsBrief, person.belief, person.background]
-        .map((value) => String(value ?? "").toLowerCase())
-        .join(" ");
-      if (!haystack.includes(search)) return false;
-    }
-
     if (type !== "all" && person.workerTypeLabel !== type) return false;
     if (work === "free" && !["Без работы", "Свободен", "Ребенок"].includes(person.workLabel)) return false;
     if (work === "assigned" && ["Без работы", "Свободен", "Ребенок"].includes(person.workLabel)) return false;
@@ -343,28 +597,70 @@ _beliefOptions(current = "") {
   return options;
 },
 
-_workOptions(holding, person = {}) {
+_residentWorkOptionsContext(holding) {
+  const allBuildings = holding?.buildings?.list ?? [];
+  const crews = this._constructionCrews(holding);
+  const vessels = (holding?.special?.fleet?.vessels ?? []).filter((vessel) => vessel?.status !== "archived");
+  const availableBuildingIds = new Set();
+  const availableVesselIds = new Set();
+  const buildingRoleNames = new Set();
+
+  for (const building of allBuildings) {
+    const id = String(building?.id ?? "");
+    const name = String(building?.name ?? "").trim();
+    if (name) buildingRoleNames.add(name);
+    const max = Math.max(0, this._safeNumber(building?.workersMax, 0));
+    const assigned = Array.isArray(building?.assignedWorkerIds)
+      ? building.assignedWorkerIds.reduce((count, value) => count + (value ? 1 : 0), 0)
+      : 0;
+    if (id && max > 0 && assigned < max) availableBuildingIds.add(id);
+  }
+
+  for (const vessel of vessels) {
+    const id = String(vessel?.id ?? "");
+    const target = Math.max(0, this._safeNumber(vessel?.profile?.crewTarget, 0));
+    const assigned = new Set((vessel?.crew?.memberIds ?? []).map((value) => String(value ?? "")).filter(Boolean)).size;
+    if (id && target > 0 && assigned < target) availableVesselIds.add(id);
+  }
+
+  return { allBuildings, crews, vessels, availableBuildingIds, availableVesselIds, buildingRoleNames, buildingOptionsCache: new Map() };
+},
+
+_residentWorkOptionBuildings(context, selected = "") {
+  const key = String(selected ?? "");
+  if (context.buildingOptionsCache.has(key)) return context.buildingOptionsCache.get(key);
+  const buildings = context.allBuildings.filter((building) => {
+    const id = String(building?.id ?? "");
+    return id && (key === id || context.availableBuildingIds.has(id));
+  });
+  context.buildingOptionsCache.set(key, buildings);
+  return buildings;
+},
+
+_workOptions(holding, person = {}, workContext = null) {
   const selected = String(person?.workAssignment ?? "");
   const role = String(person?.role ?? "").trim();
-  const allBuildings = holding?.buildings?.list ?? [];
+  const context = workContext ?? this._residentWorkOptionsContext(holding);
   const isChild = this._isChildResident(person);
   const canWork = this._canResidentWork(person);
   const freeLabel = isChild ? "Ребенок" : "Свободен";
-  const buildings = canWork ? allBuildings.filter((building) => {
-    const buildingId = String(building?.id ?? "");
-    const max = Math.max(0, this._safeNumber(building?.workersMax, 0));
-    if (selected === buildingId) return true;
-    if (max <= 0) return false;
-    const assigned = Array.isArray(building?.assignedWorkerIds) ? building.assignedWorkerIds.filter(Boolean).length : 0;
-    return assigned < max;
+  const buildings = canWork ? this._residentWorkOptionBuildings(context, selected) : [];
+  const crews = canWork ? context.crews : [];
+  const vessels = canWork ? (context.vessels ?? []).filter((vessel) => {
+    const id = String(vessel?.id ?? "");
+    return selected === `fleet:${id}` || context.availableVesselIds?.has(id);
   }) : [];
-  const crews = canWork ? this._constructionCrews(holding) : [];
   const options = [
     { value: "", label: freeLabel, selected: !selected && (!role || role === "Свободен" || role === "Без работы" || role === "Ребенок") },
     ...crews.map((crew) => ({
       value: `construction:${crew.id}`,
       label: crew.name || "Стройбригада",
       selected: selected === `construction:${crew.id}` || (selected === "construction" && crew.isDefault)
+    })),
+    ...vessels.map((vessel) => ({
+      value: `fleet:${vessel.id}`,
+      label: `Экипаж: ${vessel.name || "корабль"}`,
+      selected: selected === `fleet:${vessel.id}`
     })),
     ...buildings.map((building) => ({
       value: String(building.id),
@@ -373,17 +669,18 @@ _workOptions(holding, person = {}) {
     }))
   ];
   if (canWork) options.push({ value: "soldier", label: "Солдат", selected: selected === "soldier" || (!selected && /^солдат$/i.test(role)) });
-  if (canWork || selected === "other") options.push({ value: "other", label: "Другое", selected: selected === "other" || (!selected && role && !["Свободен", "Без работы", "Ребенок"].includes(role) && !/^солдат$/i.test(role) && !allBuildings.some((b) => b.name === role)) });
+  if (canWork || selected === "other") options.push({ value: "other", label: "Другое", selected: selected === "other" || (!selected && role && !["Свободен", "Без работы", "Ребенок"].includes(role) && !/^солдат$/i.test(role) && !context.buildingRoleNames.has(role)) });
   return options;
 },
 
-_isCustomWork(person = {}, holding = null) {
+_isCustomWork(person = {}, holding = null, workContext = null) {
   const selected = String(person?.workAssignment ?? "");
   if (selected === "other") return true;
   if (selected) return false;
   const role = String(person?.role ?? "").trim();
   if (!role || role === "Свободен" || role === "Без работы" || role === "Ребенок") return false;
-  return !(holding?.buildings?.list ?? []).some((building) => building.name === role || String(building.id) === selected);
+  const context = workContext ?? this._residentWorkOptionsContext(holding);
+  return !context.buildingRoleNames.has(role);
 },
 
 _beliefSummary(holding) {
@@ -432,34 +729,46 @@ _residentFilterOptions(holding) {
   };
 },
 
-_peopleWorkAssignments(holding) {
+_peopleWorkAssignments(holding, workContext = null) {
   const map = new Map();
-  const buildingsById = new Map((holding?.buildings?.list ?? []).map((building) => [String(building.id), building]));
-  const crewsById = new Map(this._constructionCrews(holding).map((crew) => [String(crew.id), crew]));
+  const buildings = workContext?.allBuildings ?? (holding?.buildings?.list ?? []);
+  const buildingsById = new Map(buildings.map((building) => [String(building.id), building]));
+  const crews = workContext?.crews ?? this._constructionCrews(holding);
+  const crewsById = new Map(crews.map((crew) => [String(crew.id), crew]));
+  const vessels = workContext?.vessels ?? (holding?.special?.fleet?.vessels ?? []);
+  const vesselsById = new Map(vessels.map((vessel) => [String(vessel?.id ?? ""), vessel]));
   for (const person of holding?.people?.list ?? []) {
     if (person?.dead) continue;
     const id = String(person?.id ?? "");
     const selected = String(person?.workAssignment ?? "");
     if (!id) continue;
-    if (selected === "construction") map.set(id, this._constructionCrews(holding)[0]?.name || "Стройбригада");
+    if (selected === "construction") map.set(id, crews[0]?.name || "Стройбригада");
     else if (selected.startsWith("construction:")) {
       const crewId = selected.split(":")[1] || "";
       map.set(id, crewsById.get(crewId)?.name || "Стройбригада");
     }
     else if (selected === "other") map.set(id, String(person?.role ?? "").trim() || "Другое");
+    else if (selected.startsWith("fleet:")) {
+      const vesselId = selected.slice("fleet:".length);
+      map.set(id, `Экипаж: ${vesselsById.get(vesselId)?.name || vesselId || "корабль"}`);
+    }
     else if (selected && buildingsById.has(selected)) map.set(id, buildingsById.get(selected)?.name || "Здание");
     else if (person?.role) map.set(id, String(person.role));
   }
-  for (const crew of this._constructionCrews(holding)) {
+  for (const crew of crews) {
     const name = String(crew?.name ?? "Стройбригада").trim() || "Стройбригада";
     for (const id of crew?.memberIds ?? []) if (id) map.set(String(id), name);
   }
-  for (const building of holding?.buildings?.list ?? []) {
+  for (const building of buildings) {
     const name = String(building?.name ?? "").trim();
     if (!name) continue;
     for (const id of building?.assignedWorkerIds ?? []) {
       if (id) map.set(String(id), name);
     }
+  }
+  for (const vessel of vessels) {
+    const name = `Экипаж: ${String(vessel?.name ?? "корабль").trim() || "корабль"}`;
+    for (const id of vessel?.crew?.memberIds ?? []) if (id) map.set(String(id), name);
   }
   return map;
 },
@@ -602,22 +911,22 @@ _isNoHome(value) {
   return !text || ["без жилья", "без дома", "нет дома", "нет жилья", "—", "-"].includes(text);
 },
 
-_homeLabel(person, holding = null) {
+_homeLabel(person, holding = null, housingIndex = null) {
   if (this._isNoHome(person?.home)) return "Без дома";
-  const match = this._findHomeBuilding(holding, person?.home);
+  const match = this._findHomeBuilding(holding, person?.home, housingIndex);
   return match?.name ? String(match.name) : String(person?.home ?? "").trim();
 },
 
-_housingMorale(person, holding = null) {
+_housingMorale(person, holding = null, housingIndex = null) {
   if (person?.dead) return { value: 0, reason: "погиб" };
   if (this._isNoHome(person?.home)) return { value: -3, reason: "без дома" };
-  const home = this._findHomeBuilding(holding, person?.home);
+  const home = this._findHomeBuilding(holding, person?.home, housingIndex);
   if (!home) return { value: -1, reason: "жилье не найдено" };
   let comfort = this._safeNumber(home?.housing?.comfort, 0);
   const homeText = `${home?.name ?? ""} ${home?.type ?? ""} ${home?.notes ?? ""} ${home?.effect ?? ""}`;
   if (comfort < 0 && /казарм|barrack/i.test(homeText) && this._isMilitaryResidentLike(person)) comfort = 0;
   const capacity = this._safeNumber(home?.housing?.capacity, 0);
-  const occupied = this._housingOccupants(holding, home).length;
+  const occupied = this._housingOccupants(holding, home, housingIndex).length;
   const crowding = capacity > 0 && occupied > capacity ? -1 : 0;
   const parts = [];
   if (comfort) parts.push(`комфорт ${comfort > 0 ? "+" : ""}${comfort}`);
@@ -625,18 +934,20 @@ _housingMorale(person, holding = null) {
   return { value: comfort + crowding, reason: parts.join(", ") };
 },
 
-_homeOptions(holding, currentHome = "") {
+_homeOptions(holding, currentHome = "", housingIndex = null) {
   const current = String(currentHome ?? "").trim();
   const byValue = new Map();
   byValue.set("", { value: "", label: "Без дома", selected: this._isNoHome(current) });
 
-  for (const building of holding?.buildings?.list ?? []) {
-    if (!this._isResidentialBuilding(building)) continue;
+  const hasIndexedBuildings = Array.isArray(housingIndex?.residentialBuildings);
+  const buildings = hasIndexedBuildings ? housingIndex.residentialBuildings : (holding?.buildings?.list ?? []);
+  for (const building of buildings) {
+    if (!hasIndexedBuildings && !this._isResidentialBuilding(building)) continue;
     const id = String(building?.id ?? "").trim();
     const name = String(building?.name ?? "").trim();
     if (!id || !name || byValue.has(id)) continue;
     const capacity = this._safeNumber(building?.housing?.capacity, 0);
-    const occupied = this._housingOccupants(holding, building).length;
+    const occupied = this._housingOccupants(holding, building, housingIndex).length;
     const isSelected = current === id || current === name;
     if (capacity > 0 && occupied >= capacity && !isSelected) continue;
     const load = capacity > 0 ? ` ${occupied}/${capacity}` : ` ${occupied}/∞`;
@@ -651,8 +962,7 @@ _homeOptions(holding, currentHome = "") {
 },
 
 _isResidentialBuilding(building) {
-  const status = String(building?.constructionStatus ?? "").trim();
-  if (status && status !== "built") return false;
+  if (!buildingOperationalState(building).operational) return false;
   if (building?.functions?.housing) return true;
 
   const text = [
@@ -668,57 +978,116 @@ _isResidentialBuilding(building) {
   return /(дом|жиль|жил|палаточ|лагер|казарм|барак|общежит|хижин|комнат|кают)/i.test(text);
 },
 
-_findHomeBuilding(holding, value = "") {
+_residentHousingIndex(holding) {
+  const buildingsByKey = new Map();
+  const residentialBuildings = [];
+  const occupantsByBuildingKey = new Map();
+
+  const buildingKey = (building) => String(building?.id ?? "").trim() || String(building?.name ?? "").trim();
+  for (const building of holding?.buildings?.list ?? []) {
+    const id = String(building?.id ?? "").trim();
+    const name = String(building?.name ?? "").trim();
+    if (id && !buildingsByKey.has(id)) buildingsByKey.set(id, building);
+    if (name && !buildingsByKey.has(name)) buildingsByKey.set(name, building);
+    if (this._isResidentialBuilding(building)) residentialBuildings.push(building);
+  }
+
+  for (const person of holding?.people?.list ?? []) {
+    if (person?.dead) continue;
+    const home = String(person?.home ?? "").trim();
+    if (!home) continue;
+    const building = buildingsByKey.get(home);
+    if (!building) continue;
+    const key = buildingKey(building);
+    if (!key) continue;
+    if (!occupantsByBuildingKey.has(key)) occupantsByBuildingKey.set(key, []);
+    occupantsByBuildingKey.get(key).push(person);
+  }
+
+  return { buildingsByKey, residentialBuildings, occupantsByBuildingKey };
+},
+
+_findHomeBuilding(holding, value = "", housingIndex = null) {
   const text = String(value ?? "").trim();
   if (!text) return null;
+  const indexed = housingIndex?.buildingsByKey?.get(text);
+  if (indexed) return indexed;
   return (holding?.buildings?.list ?? []).find((building) => String(building?.id ?? "") === text || String(building?.name ?? "") === text) ?? null;
 },
 
-_housingOccupants(holding, building) {
+_housingOccupants(holding, building, housingIndex = null) {
   const id = String(building?.id ?? "");
   const name = String(building?.name ?? "");
+  const key = String(id).trim() || String(name).trim();
+  if (key && housingIndex?.occupantsByBuildingKey) return housingIndex.occupantsByBuildingKey.get(key) ?? [];
   return (holding?.people?.list ?? []).filter((person) => !person?.dead && (String(person?.home ?? "") === id || String(person?.home ?? "") === name));
 },
 
-_calculateMorale(holding) {
-  if (!holding) return 0;
+_moraleSnapshot(holding) {
+  if (!holding) return calculateMoraleSnapshot();
 
-  const people = holding.people?.list ?? [];
-  const buildings = holding.buildings?.list ?? [];
-  const special = holding.special?.list ?? [];
+  const housingIndex = this._residentHousingIndex(holding);
+  const settlementModifiers = [];
 
-  const peopleMorale = people.reduce((sum, row) => sum + this._calculatePersonMorale(row, holding).total, 0);
+  for (const building of holding?.buildings?.list ?? []) {
+    if (this._buildingStatus(building).value !== "built") continue;
+    const scale = String(building?.moraleScale ?? "legacy").trim().toLocaleLowerCase("en") === "normalized" ? 1 : 0.1;
+    const value = this._safeNumber(building?.moraleDelta, 0) * scale;
+    if (!value) continue;
+    settlementModifiers.push({
+      id: `building:${String(building?.id ?? building?.name ?? settlementModifiers.length)}`,
+      label: String(building?.name ?? "Здание"),
+      value
+    });
+  }
 
-  const buildingMorale = buildings.reduce((sum, row) => {
-    if (this._buildingStatus(row).value !== "built") return sum;
-    return sum + this._safeNumber(row.moraleDelta, 0);
-  }, 0);
-
-  const specialMorale = special.reduce((sum, row) => {
-    const type = String(row.type ?? "").toLowerCase();
-    const name = String(row.name ?? "").toLowerCase();
+  for (const row of holding?.special?.list ?? []) {
+    const type = String(row?.type ?? "").toLowerCase();
+    const name = String(row?.name ?? "").toLowerCase();
     const isModifier = (type.includes("модификатор") || name.includes("модификатор")) && (type.includes("доволь") || name.includes("доволь"));
-    if (isModifier) return sum + this._safeNumber(row.value ?? row.moraleDelta, 0);
-    if (row.includeInMorale === true || row.countsForMorale === true) return sum + this._safeNumber(row.value ?? row.moraleDelta, 0);
-    return sum;
-  }, 0);
+    if (!isModifier && row?.includeInMorale !== true && row?.countsForMorale !== true) continue;
+    const scale = String(row?.moraleScale ?? "legacy").trim().toLocaleLowerCase("en") === "normalized" ? 1 : 0.1;
+    const value = this._safeNumber(row?.value ?? row?.moraleDelta, 0) * scale;
+    if (!value) continue;
+    settlementModifiers.push({
+      id: `special:${String(row?.id ?? row?.name ?? settlementModifiers.length)}`,
+      label: String(row?.name ?? "Особый модификатор"),
+      value
+    });
+  }
 
-  const gmMorale = this._gmSettlementModifiers?.(holding)?.morale ?? this._safeNumber(holding?.gm?.modifiers?.morale, 0);
-  return peopleMorale + buildingMorale + specialMorale + gmMorale;
+  const gmMoraleScale = String(holding?.gm?.modifiers?.moraleScale ?? "legacy").trim().toLocaleLowerCase("en") === "normalized" ? 1 : 0.1;
+  const gmMorale = (this._gmSettlementModifiers?.(holding)?.morale ?? this._safeNumber(holding?.gm?.modifiers?.morale, 0)) * gmMoraleScale;
+  if (gmMorale) settlementModifiers.push({ id: "gm", label: "Модификатор ГМ", value: gmMorale });
+
+  const commonTableMorale = this._safeNumber(holding?.gm?.economy?.commonTable?.activeMoraleBonus, 0) > 0 ? 1 : 0;
+  if (commonTableMorale) settlementModifiers.push({ id: "common-table", label: "Общий стол", value: commonTableMorale });
+
+  return calculateMoraleSnapshot({
+    residents: holding?.people?.list ?? [],
+    residentScore: (person) => this._calculatePersonMorale(person, holding, { housingIndex }),
+    settlementModifiers
+  });
 },
 
-_calculatePersonMorale(person, holding = null) {
+_calculateMorale(holding) {
+  return this._moraleSnapshot(holding).score;
+},
+
+_calculatePersonMorale(person, holding = null, options = {}) {
   if (person?.dead) return { total: 0, breakdown: ["Погиб: довольство не считается"] };
+  const housingIndex = options?.housingIndex ?? null;
   const base = this._safeNumber(person?.moraleBase, -1);
   const workManual = this._safeNumber(person?.moraleWork, 0);
   const workAuto = this._workMorale(person, holding);
   const work = workManual + workAuto.value;
   const homeManual = this._safeNumber(person?.moraleHome, 0);
-  const homeAuto = this._housingMorale(person, holding);
+  const homeAuto = this._housingMorale(person, holding, housingIndex);
   const home = homeManual + homeAuto.value;
   const manual = this._safeNumber(person?.moraleManual, 0);
   const traits = this._traitMoraleModifier(person);
-  const total = base + work + home + traits.value + manual;
+  const contract = this._compensationMorale(person, holding);
+  const total = base + work + home + traits.value + manual + contract.value;
 
   const breakdown = [
     `Итог: ${total}`,
@@ -729,8 +1098,50 @@ _calculatePersonMorale(person, holding = null) {
   if (traits.value) breakdown.push(`Черты: ${traits.value} (${traits.reasons.join(", ")})`);
   else breakdown.push("Черты: 0");
   if (manual) breakdown.push(`Ручной модификатор: ${manual}`);
+  if (contract.value) breakdown.push(`Договор: ${contract.value} (${contract.reasons.join(", ")})`);
+  else breakdown.push("Договор: 0");
 
   return { total, breakdown };
+},
+
+_compensationMorale(person = {}, holding = null) {
+  let value = 0;
+  const reasons = [];
+  const laborState = holding?.gm?.economy?.labor ?? {};
+  const payrollState = normalizePayrollState(laborState.payroll);
+  const personId = String(person?.id ?? "");
+  const lastQd = Math.max(0, Math.floor(this._safeNumber(holding?.gm?.calendaria?.lastQd, 0)));
+  let targetQd = lastQd + 40;
+  let season = "";
+  try {
+    const period = this._employmentPeriodContext?.(holding, 40) ?? null;
+    if (period) {
+      targetQd = Math.max(0, Math.floor(this._safeNumber(period.targetQd, targetQd)));
+      season = String(period.targetSeason ?? period.currentSeason ?? "").trim().toLocaleLowerCase("en");
+    }
+  } catch (_error) {}
+  const assignment = String(person?.workAssignment ?? "").trim().toLocaleLowerCase("ru");
+  const assessment = assessNextTendayLabor(person, {
+    currentQd: targetQd,
+    season,
+    payrollAccount: payrollState.accounts[personId] ?? null,
+    hungerStreak: person?.hungerStreakTendays,
+    assignedAsWorker: !FREE_RESIDENT_ASSIGNMENTS.has(assignment),
+    living: !person?.dead,
+    child: this._isChildResident(person),
+    injured: this._isResidentInjured(person)
+  });
+  value += assessment.moraleDelta;
+  for (const component of assessment.components ?? []) {
+    if (!component.moraleDelta) continue;
+    reasons.push(`${component.label}: ${component.moraleDelta > 0 ? "+" : ""}${component.moraleDelta}`);
+  }
+  const home = String(person.home ?? "").trim();
+  if (person.housingProvided && (!home || /без жилья|нет жилья|homeless/i.test(home))) {
+    value -= 1;
+    reasons.push("обещанное жильё не предоставлено");
+  }
+  return { value, reasons };
 },
 
 _traitMoraleModifier(person) {
@@ -755,31 +1166,30 @@ _parseTraits(value) {
 },
 
 _moraleState(value) {
-  const morale = Number(value ?? 0);
+  const snapshot = value && typeof value === "object" ? value : null;
+  const morale = Number(snapshot?.score ?? snapshot?.value ?? value ?? 0);
   if (!Number.isFinite(morale)) {
     return { value: "?", label: "Неизвестно", range: "", notes: "Значение довольства не распознано." };
   }
-
-  if (morale < -30) {
-    return { value: morale, label: "Бунты", range: "<-30", icon: "fa-solid fa-face-angry", css: "riot", notes: "В конце десятника возможны уход жителей или бунт. Строительство: -3." };
-  }
-
-  if (morale <= -15) {
-    return { value: morale, label: "Недовольство", range: "-30 до -15", icon: "fa-solid fa-face-frown", css: "bad", notes: "Возможны уход жителей или кражи. Репутация и защищенность снижены. Строительство: -2. Уменьшите эффективность всех производящих зданий дополнительно на 0.3." };
-  }
-
-  if (morale < 0) {
-    return { value: morale, label: "Апатия", range: "-14 до -1", icon: "fa-solid fa-face-meh", css: "low", notes: "Уменьшите защищенность и репутацию на 1. Уменьшите эффективность Стройбригад наполовину (округляя вверх). Уменьшите эффективность всех производящих зданий на 0.2." };
-  }
-
-  if (morale <= 15) {
-    return { value: morale, label: "Без штрафов и бонусов", range: "0 до 15", icon: "fa-solid fa-face-smile", css: "neutral", notes: "Точка равновесия поселения." };
-  }
-
-  if (morale <= 30) {
-    return { value: morale, label: "Надежда", range: "16 до 30", icon: "fa-solid fa-face-grin-stars", css: "hope", notes: "+1к8 раз за партию, +1 к найму, репутация и защищенность выше. Строительство: +1. Увеличьте эффективность всех производящих зданий на 0.2." };
-  }
-
-  return { value: morale, label: "Дом", range: ">30", icon: "fa-solid fa-face-laugh-beam", css: "home", notes: "Переброс строительства, снижение оплаты жителей, усиленная репутация и защищенность. Строительство: +2." };
+  const band = snapshot?.band ?? moraleBandForScore(morale);
+  const formula = snapshot
+    ? `Среднее ${snapshot.livingCount ?? 0} живых жителей: ${snapshot.residentAverage ?? 0}; общие эффекты: ${snapshot.settlementModifier >= 0 ? "+" : ""}${snapshot.settlementModifier ?? 0}; итог: ${morale}.`
+    : `Итог: ${morale}.`;
+  return {
+    value: morale,
+    score: morale,
+    bandId: band.id,
+    label: band.label,
+    range: band.range,
+    icon: band.icon,
+    css: band.css,
+    notes: band.notes,
+    formula,
+    tooltip: `${band.label} (${band.range}). ${formula} ${band.notes}`,
+    modifiers: band.modifiers,
+    residentAverage: snapshot?.residentAverage,
+    settlementModifier: snapshot?.settlementModifier,
+    livingCount: snapshot?.livingCount
+  };
 }
 };

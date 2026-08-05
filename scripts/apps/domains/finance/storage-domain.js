@@ -1,5 +1,5 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
-import { escapeHtml, rollD6Pool } from "../../../core/helpers.js";
+import { makeId } from "../../../data/utils.js";
 import {
   isMoneyResource,
   normalizeResourceId,
@@ -8,247 +8,31 @@ import {
   resourceImage,
   resourceItemUuid,
   resourceLabel,
-  resourceOptions,
-  resourceUnit
+  resourceUnit,
+  parseResourceCosts
 } from "../../../core/resources.js";
-import { parseResourceCosts } from "../../../services/economy-service.js";
-import { storageFillClass, storageRowLoad, storageUnitLoad } from "../../../services/storage-service.js";
+import { moveStorageResource } from "../../../engines/storage/move.js";
+import { applyStorageBatchMove, planStorageBatchMove } from "../../../engines/storage/batch-move.js";
+import { payStorageCosts } from "../../../engines/storage/payment.js";
+import { planStorageCosts } from "../../../engines/storage/group-payment.js";
+import { addStorageWithOverflow } from "../../../engines/storage/placement.js";
+import { resourceMatchesMaterialGroup } from "../../../core/material-groups.js";
+import { economyLedgerStorageRows } from "../../../engines/economy/ledger.js";
+import { FinanceStorageContextDomain } from "./storage/context-domain.js";
+import { FinanceStorageItemDocumentDomain } from "./storage/item-document-domain.js";
+import { composeDomainGroup } from "../compose-domain.js";
+import { addResourceLot, resourceShelfLifeDaysForMode } from "../../../core/resource-lots.js";
+import { consumeAvailableStorageLots, storageAvailableQuantity, storageAvailableUsableQuantity } from "../../../engines/storage/reservations.js";
 
-export const FinanceStorageDomain = {
-_storageUnitLoad(resource = {}) {
-  return storageUnitLoad(resource);
-},
-
-_storageRowLoad(row = {}) {
-  return storageRowLoad(row);
-},
-
-_storageFillClass(options = {}) {
-  return storageFillClass(options);
-},
-
-_storageRooms(holding, { includeUnavailable = true } = {}) {
-  const rows = [];
-  const resources = Array.isArray(holding?.storage?.resources) ? holding.storage.resources : [];
-  const items = Array.isArray(holding?.storage?.items) ? holding.storage.items : [];
-  const usedByRoom = new Map();
-  const addLoad = (roomIdRaw, load) => {
-    const roomId = this._normalizeStorageRoomId(roomIdRaw);
-    const value = Math.max(0, this._safeNumber(load, 0));
-    if (!value) return;
-    usedByRoom.set(roomId, (usedByRoom.get(roomId) ?? 0) + value);
-  };
-  for (const row of resources) {
-    if (isMoneyResource(row?.resourceId, row?.name)) continue;
-    addLoad(row?.roomId ?? row?.storageRoomId, this._storageRowLoad(row));
-  }
-  for (const row of items) addLoad(row?.roomId ?? row?.storageRoomId, this._storageRowLoad(row));
-
-  rows.push(this._decorateStorageRoom({
-    id: "outdoors",
-    label: "Под открытым небом",
-    buildingId: "",
-    source: "base",
-    statusLabel: "Базовое",
-    statusClass: "built",
-    available: true,
-    unlimited: true,
-    capacity: 0,
-    used: usedByRoom.get("outdoors") ?? 0,
-    security: 0,
-    quality: 0,
-    securityText: "0",
-    qualityText: "0",
-    notes: "Базовое складирование без лимита вместимости. Защищенность и качество хранения минимальные."
-  }));
-
-  for (const building of holding?.buildings?.list ?? []) {
-    if (!this._buildingFunctions(building).storage) continue;
-    const status = this._buildingStatus(building);
-    const available = status.value === "built";
-    if (!includeUnavailable && !available) continue;
-    const storage = building.storage && typeof building.storage === "object" ? building.storage : {};
-    const capacity = Math.max(0, this._safeNumber(storage.capacity, 0));
-    const used = usedByRoom.get(String(building.id)) ?? 0;
-    rows.push(this._decorateStorageRoom({
-      id: String(building.id),
-      label: building.name || "Складское здание",
-      buildingId: String(building.id),
-      source: "building",
-      statusLabel: status.label,
-      statusClass: status.css,
-      available,
-      unlimited: capacity <= 0,
-      capacity,
-      used,
-      security: Math.max(0, this._safeNumber(storage.security, 0)),
-      quality: Math.max(0, this._safeNumber(storage.quality, 0)),
-      securityText: this._formatNumber(storage.security ?? 0),
-      qualityText: this._formatNumber(storage.quality ?? 0),
-      notes: String(storage.notes ?? building.notes ?? "")
-    }));
-  }
-
-  return rows;
-},
-
-_storageRoomOptions(holding, selected = "outdoors") {
-  return this._storageRoomOptionsFromRooms(this._storageRooms(holding, { includeUnavailable: true }), selected);
-},
-
-_storageRoomOptionsFromRooms(rooms = [], selected = "outdoors") {
-  const current = this._normalizeStorageRoomId(selected);
-  const options = rooms
-    .filter((room) => room.available)
-    .map((room) => ({ value: room.id, label: room.label, selected: room.id === current }));
-  if (current && !options.some((option) => option.value === current)) {
-    const fallback = rooms.find((room) => room.id === current);
-    options.push({ value: current, label: fallback ? `${fallback.label} (${fallback.statusLabel})` : `${current} (нет в списке)`, selected: true });
-  }
-  return options;
-},
-
-_storageRoomLabel(holding, roomId = "outdoors") {
-  return this._storageRoomLabelFromRooms(this._storageRooms(holding, { includeUnavailable: true }), roomId);
-},
-
-_storageRoomLabelFromRooms(rooms = [], roomId = "outdoors") {
-  const id = this._normalizeStorageRoomId(roomId);
-  return rooms.find((room) => room.id === id)?.label ?? "Под открытым небом";
-},
-
-_storageRoomsContext(holding, roomsArg = null) {
-  const rooms = Array.isArray(roomsArg) ? roomsArg : this._storageRooms(holding, { includeUnavailable: true });
-  return {
-    rows: rooms,
-    hasRooms: rooms.length > 0,
-    builtCount: rooms.filter((room) => room.available).length,
-    buildingCount: rooms.filter((room) => room.source === "building").length
-  };
-},
-
-_storageContext(holding, canEdit = false, activeRoomId = "outdoors") {
-  const activeSubtab = String(this.activeStorageTab ?? "resources");
-  if (activeSubtab === "accounting") {
-    return {
-      rows: [],
-      visibleRows: [],
-      activeRoomRows: [],
-      activeItemRows: [],
-      activeRoomId: this._normalizeStorageRoomId(activeRoomId),
-      activeRoom: null,
-      resourceRooms: [],
-      visibleCount: 0,
-      activeRoomCount: 0,
-      activeItemCount: 0,
-      categoryCount: 0,
-      hasRows: false,
-      hasVisibleRows: false,
-      hasActiveRoomRows: false,
-      hasActiveItemRows: false,
-      zeroCount: 0,
-      categories: [],
-      money: this._moneyContext(holding),
-      rooms: { rows: [], hasRooms: false, builtCount: 0, buildingCount: 0 },
-      roomOptions: [],
-      moveFromOptions: [],
-      moveToOptions: [],
-      logRows: [],
-      resourceOptions: [],
-      actorOptions: [],
-      hasActorOptions: false,
-      targetActor: this._storageTargetActorContext(),
-      notes: holding?.storage?.notes ?? "",
-      adjustToolOpen: Boolean(this.storageToolState?.adjust),
-      moveToolOpen: Boolean(this.storageToolState?.move)
-    };
-  }
-
-  const roomsAll = this._storageRooms(holding, { includeUnavailable: true });
-  const rawRows = (holding?.storage?.resources ?? [])
-    .map((row, index) => ({ ...row, __storageIndex: index }))
-    .filter((row) => !isMoneyResource(row?.resourceId, row?.name));
-  const rawItemRows = (holding?.storage?.items ?? [])
-    .map((row, index) => ({ ...row, __storageIndex: index }));
-  const visibleRawRows = rawRows.filter((row) => Math.abs(this._safeNumber(row.qty, 0)) >= 0.0001);
-  const visibleItemRows = rawItemRows.filter((row) => this._itemQuantity(row) > 0);
-
-  let activeRoom = this._normalizeStorageRoomId(activeRoomId);
-  const roomIds = new Set(roomsAll.map((room) => room.id));
-  if (!roomIds.has(activeRoom)) activeRoom = "outdoors";
-
-  const roomItemCounts = new Map();
-  const addCount = (row) => {
-    const roomId = this._normalizeStorageRoomId(row.roomId ?? row.storageRoomId);
-    roomItemCounts.set(roomId, (roomItemCounts.get(roomId) ?? 0) + 1);
-  };
-  for (const row of visibleRawRows) addCount(row);
-  for (const row of visibleItemRows) addCount(row);
-
-  const roomsWithRows = new Set(roomItemCounts.keys());
-  const activeRawRows = activeSubtab === "resources"
-    ? visibleRawRows.filter((row) => this._normalizeStorageRoomId(row.roomId ?? row.storageRoomId) === activeRoom)
-    : [];
-  const activeRawItems = activeSubtab === "items"
-    ? visibleItemRows.filter((row) => this._normalizeStorageRoomId(row.roomId ?? row.storageRoomId) === activeRoom)
-    : [];
-  const activeRoomRows = activeSubtab === "resources"
-    ? this._prepareStorageRows(holding, canEdit, roomsAll, activeRawRows)
-    : [];
-  const activeItemRows = activeSubtab === "items"
-    ? this._prepareStorageItemRows(holding, canEdit, roomsAll, activeRawItems)
-    : [];
-  const activeRoomInfo = roomsAll.find((room) => room.id === activeRoom) ?? roomsAll[0] ?? null;
-  const resourceRooms = roomsAll
-    .filter((room) => room.available || room.source === "base" || roomsWithRows.has(room.id))
-    .map((room) => ({
-      ...room,
-      active: room.id === activeRoom,
-      itemCount: roomItemCounts.get(room.id) ?? 0
-    }));
-
-  const byCategory = new Map();
-  for (const row of activeRoomRows) byCategory.set(row.category, (byCategory.get(row.category) ?? 0) + 1);
-  const categories = Array.from(byCategory.entries()).map(([name, count]) => ({ name, count })).sort((a, b) => a.name.localeCompare(b.name, "ru"));
-  const moveToDefault = roomsAll.find((room) => room.available && room.id !== activeRoom)?.id ?? activeRoom;
-  const targetActor = this._storageTargetActorContext();
-  return {
-    rows: activeRoomRows,
-    visibleRows: visibleRawRows,
-    activeRoomRows,
-    activeItemRows,
-    activeRoomId: activeRoom,
-    activeRoom: activeRoomInfo,
-    resourceRooms,
-    visibleCount: visibleRawRows.length,
-    itemCount: visibleItemRows.length,
-    activeRoomCount: activeRoomRows.length,
-    activeItemCount: activeItemRows.length,
-    categoryCount: categories.length,
-    hasRows: rawRows.length > 0,
-    hasVisibleRows: visibleRawRows.length > 0,
-    hasActiveRoomRows: activeRoomRows.length > 0,
-    hasActiveItemRows: activeItemRows.length > 0,
-    zeroCount: rawRows.length - visibleRawRows.length,
-    categories,
-    money: this._moneyContext(holding),
-    rooms: this._storageRoomsContext(holding, roomsAll),
-    roomOptions: ["resources", "items"].includes(activeSubtab) ? this._storageRoomOptionsFromRooms(roomsAll, activeRoom) : [],
-    moveFromOptions: activeSubtab === "resources" ? this._storageRoomOptionsFromRooms(roomsAll, activeRoom) : [],
-    moveToOptions: activeSubtab === "resources" ? this._storageRoomOptionsFromRooms(roomsAll, moveToDefault) : [],
-    logRows: activeSubtab === "log" ? this._storageLogRows(holding, roomsAll) : [],
-    resourceOptions: activeSubtab === "resources" ? resourceOptions("", "", { includeMoney: false }) : [],
-    actorOptions: [],
-    hasActorOptions: false,
-    targetActor,
-    notes: holding?.storage?.notes ?? "",
-    adjustToolOpen: Boolean(this.storageToolState?.adjust),
-    moveToolOpen: Boolean(this.storageToolState?.move)
-  };
-},
-
+const FinanceStorageCoreDomain = {
 _storageLogRows(holding, roomsArg = null) {
   const rooms = Array.isArray(roomsArg) ? roomsArg : this._storageRooms(holding, { includeUnavailable: true });
+  const roomLabelCache = new Map();
+  const labelFor = (roomId) => {
+    const id = this._normalizeStorageRoomId(roomId);
+    if (!roomLabelCache.has(id)) roomLabelCache.set(id, this._storageRoomLabelFromRooms(rooms, id));
+    return roomLabelCache.get(id);
+  };
   const log = Array.isArray(holding?.storage?.log) ? holding.storage.log : [];
   return [...log].reverse().slice(0, 80).map((row) => {
     const id = normalizeResourceId(row.resourceId, row.name);
@@ -260,6 +44,7 @@ _storageLogRows(holding, roomsArg = null) {
     const holdingDateText = String(holding?.gm?.calendaria?.lastDateText ?? holding?.gm?.calendaria?.lastDateKey ?? "").trim();
     const laputaDateText = String(row.laputaDateText ?? row.holdingDateText ?? holdingDateText).trim();
     const dateText = laputaDateText ? `${realDateText} · ${laputaDateText}` : realDateText;
+    const roomLabel = row.roomId ? labelFor(row.roomId) : "";
     return {
       ...row,
       resourceId: id,
@@ -273,8 +58,8 @@ _storageLogRows(holding, roomsArg = null) {
       laputaDateText,
       kindLabel: this._storageLogKindLabel(row.kind),
       source: row.source || "—",
-      roomLabel: row.roomId ? this._storageRoomLabelFromRooms(rooms, row.roomId) : "",
-      note: [row.roomId ? this._storageRoomLabelFromRooms(rooms, row.roomId) : "", row.note || row.period || ""].filter(Boolean).join(" · ")
+      roomLabel,
+      note: [roomLabel, row.note || row.period || ""].filter(Boolean).join(" · ")
     };
   });
 },
@@ -295,11 +80,13 @@ _storageLogKindLabel(kind = "") {
 
 _productionPreview(holding) {
   const result = [];
+  const storageRooms = this._storageRooms(holding, { includeUnavailable: true });
+  const workerContext = this._economyWorkerContext?.(holding) ?? null;
   for (const building of holding?.buildings?.list ?? []) {
     if (this._buildingStatus(building).value !== "built") continue;
     const functions = this._buildingFunctions(building);
-    const lines = functions.production ? this._prepareProductionLines(building, 0, holding).filter((line) => line.active) : [];
-    const income = functions.income ? this._buildingIncomeSummary(building, holding) : null;
+    const lines = functions.production ? this._prepareProductionLines(building, 0, holding, storageRooms).filter((line) => line.active) : [];
+    const income = functions.income ? this._buildingIncomeSummary(building, holding, workerContext) : null;
     if (!lines.length && !income?.total) continue;
     result.push({
       name: building.name || "Здание",
@@ -332,16 +119,47 @@ _storageFind(holding, resource = {}) {
   if (!Array.isArray(holding.storage.resources)) holding.storage.resources = [];
   if (isMoneyResource(resource.resourceId, resource.id, resource.name)) return null;
   const roomId = this._normalizeStorageRoomId(resource.roomId ?? resource.storageRoomId);
+  const exactRowId = String(resource.storageRowId ?? "").trim();
+  if (exactRowId) {
+    return holding.storage.resources.find((row) => (
+      String(row?.id ?? "") === exactRowId
+      && this._normalizeStorageRoomId(row.roomId ?? row.storageRoomId) === roomId
+      && this._storageResourceMatches(row, resource)
+    )) ?? null;
+  }
+  const hasExactRowIndex = resource.storageRowIndex !== undefined && resource.storageRowIndex !== null && resource.storageRowIndex !== "";
+  const exactRowIndex = Number(resource.storageRowIndex);
+  if (hasExactRowIndex && Number.isInteger(exactRowIndex) && exactRowIndex >= 0) {
+    const row = holding.storage.resources[exactRowIndex];
+    return row
+      && this._normalizeStorageRoomId(row.roomId ?? row.storageRoomId) === roomId
+      && this._storageResourceMatches(row, resource)
+      ? row
+      : null;
+  }
   return holding.storage.resources.find((row) => this._normalizeStorageRoomId(row.roomId ?? row.storageRoomId) === roomId && this._storageResourceMatches(row, resource)) ?? null;
 },
 
 _storageQuantity(holding, resource = {}) {
   if (isMoneyResource(resource.resourceId, resource.id, resource.name)) return this._moneyCopper(holding);
+  const resourceGroup = String(resource.resourceGroup ?? "").trim();
   const hasRoom = resource.roomId !== undefined || resource.storageRoomId !== undefined;
-  if (hasRoom) return this._safeNumber(this._storageFind(holding, resource)?.qty, 0);
+  if (resourceGroup) {
+    const roomId = hasRoom ? this._normalizeStorageRoomId(resource.roomId ?? resource.storageRoomId) : "";
+    return (holding?.storage?.resources ?? [])
+      .filter((row) => !hasRoom || this._normalizeStorageRoomId(row.roomId ?? row.storageRoomId) === roomId)
+      .filter((row) => this._storageResourceMatchesGroup(row, resourceGroup))
+      .reduce((sum, row) => sum + this._storageAvailableQuantity(holding, row), 0);
+  }
+  if (hasRoom) return this._storageAvailableQuantity(holding, this._storageFind(holding, resource));
   return (holding?.storage?.resources ?? [])
     .filter((row) => this._storageResourceMatches(row, resource))
-    .reduce((sum, row) => sum + this._safeNumber(row.qty, 0), 0);
+    .reduce((sum, row) => sum + this._storageAvailableQuantity(holding, row), 0);
+},
+
+_storageAvailableQuantity(holding, row = null) {
+  if (!row) return 0;
+  return storageAvailableQuantity(holding, row);
 },
 
 _storageAdd(holding, resource = {}, qty = 0) {
@@ -356,14 +174,15 @@ _storageAdd(holding, resource = {}, qty = 0) {
   const name = id === "custom" ? String(resource.name ?? "Ресурс") : resourceLabel(id);
   const roomId = this._normalizeStorageRoomId(resource.roomId ?? resource.storageRoomId);
   let row = this._storageFind(holding, { resourceId: id, name, roomId });
+  if (!row && qty < 0) return null;
   if (!row) {
     row = {
-      id: globalThis.foundry?.utils?.randomID?.(12) ?? `res-${Date.now()}`,
+      id: makeId("res", 12),
       resourceId: id,
       name,
       qty: 0,
-      unit: resource.unit || resourceUnit(id),
-      img: resource.img || resourceImage(id),
+      unit: resourceUnit(id, name),
+      img: id === "custom" ? String(resource.img ?? "") : resourceImage(id),
       itemUuid: resource.itemUuid || resourceItemUuid(id),
       itemId: resource.itemId || resourceDef(id)?.itemId || "",
       itemType: resource.itemType || resourceDef(id)?.itemType || "",
@@ -376,54 +195,80 @@ _storageAdd(holding, resource = {}, qty = 0) {
   }
   row.resourceId = id;
   row.name = name;
-  row.unit = row.unit || resourceUnit(id);
-  row.img = row.img || resource.img || resourceImage(id);
+  row.unit = resourceUnit(id, name);
+  row.img = id === "custom" ? (row.img || resource.img || "") : resourceImage(id);
   row.itemUuid = row.itemUuid || resource.itemUuid || resourceItemUuid(id);
   row.itemId = row.itemId || resource.itemId || resourceDef(id)?.itemId || "";
   row.itemType = row.itemType || resource.itemType || resourceDef(id)?.itemType || "";
   row.cost = row.cost || resource.cost || resourceDef(id)?.cost || "";
-  if (resource.weight !== undefined && resource.weight !== null && resource.weight !== "") row.weight = this._storageUnitLoad(resource);
-  if (resource.load !== undefined && resource.load !== null && resource.load !== "") row.load = this._storageUnitLoad(resource);
+  if (resource.cargoPoints !== undefined && resource.cargoPoints !== null && resource.cargoPoints !== "") {
+    row.cargoPoints = Math.max(0, Math.ceil(this._safeNumber(resource.cargoPoints, 0)));
+  }
+  if (resource.weight !== undefined && resource.weight !== null && resource.weight !== "") row.weight = resource.weight;
+  if (resource.load !== undefined && resource.load !== null && resource.load !== "") row.load = Math.max(0, this._safeNumber(resource.load, 0));
   row.roomId = roomId;
-  row.qty = this._safeNumber(row.qty, 0) + qty;
+  const currentQd = Math.max(0, this._safeNumber(resource.receivedQd ?? resource.acquiredQd ?? holding?.gm?.calendaria?.lastQd, 0));
+  const definition = resourceDef(id);
+  const shelfLifeDays = resourceShelfLifeDaysForMode({ ...row, ...resource }, definition);
+  if (qty > 0) {
+    addResourceLot(row, qty, {
+      currentQd,
+      shelfLifeDays,
+      source: resource.lotSource ?? resource.source ?? "",
+      lots: resource.lots
+    });
+  } else {
+    consumeAvailableStorageLots(holding, row, Math.abs(qty), { currentQd, shelfLifeDays });
+  }
   return row;
 },
 
+_storageTakeLots(holding, resource = {}, qty = 0, { usableAtQd = null } = {}) {
+  const row = resource?.qty !== undefined && (holding?.storage?.resources ?? []).includes(resource)
+    ? resource
+    : this._storageFind(holding, resource);
+  if (!row) return [];
+  const id = normalizeResourceId(row.resourceId, row.id, row.name);
+  const currentQd = Math.max(0, this._safeNumber(holding?.gm?.calendaria?.lastQd, 0));
+  const shelfLifeDays = resourceShelfLifeDaysForMode(row, resourceDef(id));
+  const roomId = String(row?.roomId ?? row?.storageRoomId ?? "outdoors") || "outdoors";
+  const storageQuality = Math.max(0, this._safeNumber(this._storageRooms(holding, { includeUnavailable: true }).find((room) => String(room?.id ?? "") === roomId)?.quality, 0));
+  return consumeAvailableStorageLots(holding, row, qty, {
+    currentQd,
+    shelfLifeDays,
+    usableAtQd,
+    storageQuality
+  });
+},
+
+_storageUsableQuantityAtQd(holding, row = {}, targetQd = 0) {
+  const id = normalizeResourceId(row.resourceId, row.id, row.name);
+  const currentQd = Math.max(0, this._safeNumber(holding?.gm?.calendaria?.lastQd, 0));
+  const shelfLifeDays = resourceShelfLifeDaysForMode(row, resourceDef(id));
+  const roomId = String(row?.roomId ?? row?.storageRoomId ?? "outdoors") || "outdoors";
+  const storageQuality = Math.max(0, this._safeNumber(this._storageRooms(holding, { includeUnavailable: true }).find((room) => String(room?.id ?? "") === roomId)?.quality, 0));
+  return storageAvailableUsableQuantity(holding, row, { currentQd, shelfLifeDays, usableAtQd: targetQd, storageQuality });
+},
+
 _storageAddWithOverflow(holding, resource = {}, qty = 0) {
-  const amount = Math.max(0, Math.floor(this._safeNumber(qty, 0)));
-  if (!amount) return [];
-  const id = normalizeResourceId(resource.resourceId, resource.id, resource.name);
-  if (isMoneyResource(id, resource.name)) {
-    this._storageAdd(holding, resource, amount);
-    return [{ roomId: "", qty: amount, overflowFrom: "" }];
-  }
+  return addStorageWithOverflow({
+    holding,
+    resource,
+    qty,
+    dependencies: this._storagePlacementDependencies()
+  });
+},
 
-  const targetRoomId = this._normalizeStorageRoomId(resource.roomId ?? resource.storageRoomId);
-  const rooms = this._storageRooms(holding, { includeUnavailable: true });
-  const targetRoom = rooms.find((room) => room.id === targetRoomId);
-  const placements = [];
-  const addPlacement = (roomId, part, overflowFrom = "") => {
-    const value = Math.max(0, Math.floor(this._safeNumber(part, 0)));
-    if (!value) return;
-    this._storageAdd(holding, { ...resource, resourceId: id, roomId }, value);
-    placements.push({ roomId, qty: value, overflowFrom });
+_storagePlacementDependencies() {
+  return {
+    safeNumber: (value, fallback = 0) => this._safeNumber(value, fallback),
+    normalizeResourceId,
+    isMoneyResource,
+    normalizeStorageRoomId: (roomId) => this._normalizeStorageRoomId(roomId),
+    storageRooms: (holding, options) => this._storageRooms(holding, options),
+    storageAdd: (holding, resource, qty) => this._storageAdd(holding, resource, qty),
+    storageUnitLoad: (resource) => this._storageUnitLoad(resource)
   };
-
-  if (targetRoomId === "outdoors" || !targetRoom || !targetRoom.available || targetRoom.unlimited) {
-    addPlacement(targetRoom && targetRoom.available ? targetRoomId : "outdoors", amount, targetRoom && !targetRoom.available ? targetRoomId : "");
-    return placements;
-  }
-
-  const unitLoad = this._storageUnitLoad(resource);
-  const freeLoad = Math.max(0, this._safeNumber(targetRoom.capacity, 0) - this._safeNumber(targetRoom.used, 0));
-  const fitAmount = unitLoad <= 0 ? amount : Math.max(0, Math.floor((freeLoad + 0.0001) / unitLoad));
-  if (fitAmount >= amount) {
-    addPlacement(targetRoomId, amount);
-    return placements;
-  }
-  if (fitAmount > 0) addPlacement(targetRoomId, fitAmount);
-  addPlacement("outdoors", amount - fitAmount, targetRoomId);
-  return placements;
 },
 
 _storagePlacementText(holding, placements = []) {
@@ -436,188 +281,50 @@ _storagePlacementText(holding, placements = []) {
 },
 
 _storageCanPay(holding, costs = []) {
-  const missing = [];
-  for (const cost of costs) {
-    const have = this._storageQuantity(holding, cost);
-    if (have + 0.0001 < cost.qty) missing.push({ ...cost, have });
-  }
-  return { ok: missing.length === 0, missing };
+  return planStorageCosts({
+    holding,
+    costs,
+    dependencies: this._storageCostPlanningDependencies()
+  });
 },
 
 _storagePay(holding, costs = []) {
-  for (const cost of costs) {
-    const amount = Math.max(0, this._safeNumber(cost.qty, 0));
-    if (!amount) continue;
-    if (isMoneyResource(cost.resourceId, cost.id, cost.name)) {
-      this._addMoney(holding, -amount);
-      continue;
-    }
-    const hasRoom = cost.roomId !== undefined || cost.storageRoomId !== undefined;
-    if (hasRoom) {
-      this._storageAdd(holding, cost, -amount);
-      continue;
-    }
-    let rest = amount;
-    for (const row of holding?.storage?.resources ?? []) {
-      if (rest <= 0.0001) break;
-      if (!this._storageResourceMatches(row, cost)) continue;
-      const have = Math.max(0, this._safeNumber(row.qty, 0));
-      if (!have) continue;
-      const take = Math.min(have, rest);
-      row.qty = have - take;
-      rest -= take;
-    }
-  }
+  const plan = this._storageCanPay(holding, costs);
+  if (!plan.ok) return plan;
+  payStorageCosts({
+    holding,
+    costs: plan.costs,
+    dependencies: this._storagePaymentDependencies()
+  });
+  return plan;
 },
 
-_storageDefaultActor() {
-  const userActor = globalThis.game?.user?.character ?? null;
-  if (userActor) return userActor;
-  const controlled = globalThis.canvas?.tokens?.controlled ?? [];
-  const controlledActor = controlled.find((token) => token?.actor)?.actor ?? null;
-  if (controlledActor && (globalThis.game?.user?.isGM || controlledActor.isOwner)) return controlledActor;
-  return null;
+_storageResourceMatchesGroup(row = {}, groupId = "") {
+  const id = normalizeResourceId(row.resourceId, row.id, row.name);
+  return resourceMatchesMaterialGroup(row, groupId, id === "custom" ? null : resourceDef(id));
 },
 
-_storageDefaultActorId() {
-  return String(this._storageDefaultActor()?.id ?? "");
-},
-
-_storageTargetActorContext() {
-  const actor = this._storageDefaultActor();
-  return actor
-    ? { id: String(actor.id ?? ""), name: String(actor.name ?? "Персонаж"), hasActor: true }
-    : { id: "", name: "Нет привязанного персонажа", hasActor: false };
-},
-
-_storageDepositSource(item = {}) {
-  const actor = item?.parent;
-  const actorDocumentName = actor?.documentName ?? actor?.constructor?.documentName;
-  if (actorDocumentName === "Actor" && item?.id) {
-    if (!game.user?.isGM && !actor.isOwner) {
-      return { ok: false, message: "Можно класть в хранилище только предметы персонажа, которым ты владеешь." };
-    }
-    return { ok: true, requiresRemoval: true, actor };
-  }
-
-  if (game.user?.isGM) return { ok: true, requiresRemoval: false, actor: null };
-  return { ok: false, message: "Игрок может класть в хранилище только предметы из инвентаря своего персонажа." };
-},
-
-_itemQuantity(itemOrData = {}) {
-  const system = itemOrData.system ?? itemOrData.itemData?.system ?? {};
-  const value = system.quantity ?? itemOrData.qty ?? itemOrData.quantity ?? 1;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? Math.max(1, Math.floor(parsed)) : 1;
-},
-
-_itemTypeLabel(type = "") {
-  const value = String(type ?? "");
-  const labels = {
-    rawMaterial: "Ресурс",
-    gear: "Снаряжение",
-    weapon: "Оружие",
-    armor: "Броня",
-    talent: "Талант",
-    spell: "Заклинание"
-  };
-  return (labels[value] ?? value) || "Предмет";
-},
-
-_resourceIdForFoundryItem(item = {}) {
-  const uuid = String(item.uuid ?? item.itemUuid ?? "");
-  const id = String(item.id ?? item._id ?? "");
-  const name = String(item.name ?? "");
-  const candidates = [uuid, id, name];
-  for (const def of this._resourceDefsForLookup()) {
-    if (def.itemUuid && uuid && String(def.itemUuid) === uuid) return def.id;
-    if (def.itemId && id && String(def.itemId) === id) return def.id;
-    if (normalizeResourceId(name) === def.id) return def.id;
-  }
-  return normalizeResourceId(name);
-},
-
-_resourceDefsForLookup() {
-  try {
-    return resourceOptions("", "", { includeMoney: false })
-      .map((option) => resourceDef(option.value))
-      .filter(Boolean);
-  } catch (_error) {
-    return [];
-  }
-},
-
-_snapshotItemForStorage(item = {}, qty = null, roomId = "outdoors") {
-  const source = item.toObject ? item.toObject() : (foundry?.utils?.deepClone?.(item) ?? JSON.parse(JSON.stringify(item)));
-  const amount = Math.max(1, Math.floor(this._safeNumber(qty ?? this._itemQuantity(source), 1)));
-  const itemData = this._setItemQuantityData(source, amount);
-  const parent = item.parent;
-  const parentDocumentName = parent?.documentName ?? parent?.constructor?.documentName;
+_storageCostPlanningDependencies() {
   return {
-    id: globalThis.foundry?.utils?.randomID?.(12) ?? `sitem-${Date.now()}-${Math.random()}`,
-    name: String(itemData.name ?? item.name ?? "Предмет"),
-    type: String(itemData.type ?? item.type ?? "gear"),
-    img: String(itemData.img ?? item.img ?? "icons/svg/item-bag.svg"),
-    qty: amount,
-    weight: String(itemData.system?.weight ?? ""),
-    cost: String(itemData.system?.cost ?? ""),
-    roomId: this._normalizeStorageRoomId(roomId),
-    forSale: Boolean(item.forSale ?? itemData.forSale ?? false),
-    sourceActorId: parentDocumentName === "Actor" ? String(parent.id ?? "") : "",
-    sourceActorName: parentDocumentName === "Actor" ? String(parent.name ?? "") : "",
-    itemUuid: String(item.uuid ?? ""),
-    itemData,
-    notes: ""
+    safeNumber: (value, fallback = 0) => this._safeNumber(value, fallback),
+    isMoneyResource,
+    storageResourceMatches: (row, resource) => this._storageResourceMatches(row, resource),
+    resourceMatchesGroup: (row, groupId) => this._storageResourceMatchesGroup(row, groupId),
+    storageAvailableQuantity: (holding, row) => this._storageAvailableQuantity(holding, row),
+    normalizeRoomId: (roomId) => this._normalizeStorageRoomId(roomId)
   };
 },
 
-async _storageReceiveFoundryItem(holding, item, { roomId = "outdoors" } = {}) {
-  if (!item) return { ok: false, message: "Предмет не найден." };
-  const targetRoom = this._normalizeStorageRoomId(roomId);
-  const amount = this._itemQuantity(item);
-  const source = this._storageDepositSource(item);
-  if (!source.ok) return source;
-
-  if (String(item.type) === "rawMaterial") {
-    const resourceId = this._resourceIdForFoundryItem(item);
-    const id = resourceId === "custom" ? "custom" : resourceId;
-    const label = id === "custom" ? String(item.name ?? "Ресурс") : resourceLabel(id);
-    if (source.requiresRemoval) {
-      const removed = await this._removeQuantityFromActorItem(item, amount);
-      if (!removed) return { ok: false, message: "Не удалось списать предмет из инвентаря персонажа." };
-    }
-    const placements = this._storageAddWithOverflow(holding, {
-      resourceId: id,
-      name: label,
-      roomId: targetRoom,
-      img: item.img,
-      itemUuid: item.uuid,
-      itemId: item.id,
-      itemType: item.type,
-      weight: item.system?.weight ?? ""
-    }, amount);
-    this._appendStorageLog(holding, placements.map((place) => ({
-      kind: "manual-add",
-      resourceId: id,
-      name: label,
-      qty: place.qty,
-      roomId: place.roomId,
-      source: "Инвентарь Foundry",
-      note: (item.parent?.documentName ?? item.parent?.constructor?.documentName) === "Actor" ? `из ${item.parent.name}` : "перетаскивание"
-    })));
-    return { ok: true, message: `${label}: принято ${this._formatNumber(amount)}; ${this._storagePlacementText(holding, placements)}.` };
-  }
-
-  if (!holding.storage) holding.storage = { notes: "", resources: [], items: [], moneyCopper: 0, log: [] };
-  if (!Array.isArray(holding.storage.items)) holding.storage.items = [];
-  const snapshot = this._snapshotItemForStorage(item, amount, targetRoom);
-  if (source.requiresRemoval) {
-    const removed = await this._removeQuantityFromActorItem(item, amount);
-    if (!removed) return { ok: false, message: "Не удалось списать предмет из инвентаря персонажа." };
-  }
-  holding.storage.items.push(snapshot);
-  this._appendStorageLog(holding, [{ kind: "manual-add", resourceId: "custom", name: snapshot.name, qty: amount, roomId: targetRoom, source: "Предмет Foundry", note: snapshot.sourceActorName ? `из ${snapshot.sourceActorName}` : "перетаскивание" }]);
-  return { ok: true, message: `${snapshot.name}: предмет принят в ${this._storageRoomLabel(holding, targetRoom)}.` };
+_storagePaymentDependencies() {
+  return {
+    safeNumber: (value, fallback = 0) => this._safeNumber(value, fallback),
+    isMoneyResource,
+    storageQuantity: (holding, resource) => this._storageQuantity(holding, resource),
+    addMoney: (holding, amount) => this._addMoney(holding, amount),
+    storageAdd: (holding, resource, qty) => this._storageAdd(holding, resource, qty),
+    storageResourceMatches: (row, resource) => this._storageResourceMatches(row, resource),
+    storageAvailableQuantity: (holding, row) => this._storageAvailableQuantity(holding, row)
+  };
 },
 
 _appendStorageLog(holding, entries = []) {
@@ -632,7 +339,7 @@ _appendStorageLog(holding, entries = []) {
     const name = id === "custom" ? String(raw?.name ?? "Ресурс") : resourceLabel(id);
     const roomId = isMoneyResource(id, name) ? "" : this._normalizeStorageRoomId(raw?.roomId ?? raw?.storageRoomId);
     holding.storage.log.push({
-      id: globalThis.foundry?.utils?.randomID?.(12) ?? `slog-${Date.now()}-${Math.random()}`,
+      id: makeId("slog", 12),
       ts: raw?.ts ?? now,
       laputaDateText: String(raw?.laputaDateText ?? raw?.holdingDateText ?? laputaDateText),
       kind: String(raw?.kind ?? "manual"),
@@ -642,7 +349,8 @@ _appendStorageLog(holding, entries = []) {
       roomId,
       source: String(raw?.source ?? ""),
       note: String(raw?.note ?? ""),
-      period: String(raw?.period ?? "")
+      period: String(raw?.period ?? ""),
+      operationId: String(raw?.operationId ?? "")
     });
   }
   holding.storage.log = holding.storage.log.slice(-250);
@@ -656,7 +364,13 @@ _applyManualStorageChange(holding, { resourceId = "custom", name = "", qty = 0, 
   const targetRoom = this._normalizeStorageRoomId(roomId);
   let placements = [];
   if (amount > 0) placements = this._storageAddWithOverflow(holding, { resourceId: id, name: label, roomId: targetRoom }, amount);
-  else this._storageAdd(holding, { resourceId: id, name: label, roomId: targetRoom }, amount);
+  else {
+    const available = this._storageQuantity(holding, { resourceId: id, name: label, roomId: targetRoom });
+    if (available + 0.0001 < Math.abs(amount)) {
+      return { ok: false, message: `${label}: нельзя списать ${this._formatNumber(Math.abs(amount))}. Доступно ${this._formatNumber(available)}.` };
+    }
+    this._storageAdd(holding, { resourceId: id, name: label, roomId: targetRoom }, amount);
+  }
   const entries = amount > 0 && placements.length
     ? placements.map((item) => ({ kind, resourceId: id, name: label, qty: item.qty, roomId: item.roomId, source: "Ручная правка", note: item.overflowFrom ? [note, `переполнение: ${this._storageRoomLabel(holding, item.overflowFrom)}`].filter(Boolean).join(" · ") : note }))
     : [{ kind, resourceId: id, name: label, qty: amount, roomId: targetRoom, source: "Ручная правка", note }];
@@ -666,33 +380,83 @@ _applyManualStorageChange(holding, { resourceId = "custom", name = "", qty = 0, 
 },
 
 _applyStorageMove(holding, { resourceId = "custom", name = "", qty = 0, fromRoomId = "outdoors", toRoomId = "outdoors", note = "" } = {}) {
-  const amount = Math.max(0, this._safeNumber(qty, 0));
-  if (!amount) return { ok: false, message: "Укажи количество." };
-  const fromRoom = this._normalizeStorageRoomId(fromRoomId);
-  const toRoom = this._normalizeStorageRoomId(toRoomId);
-  if (fromRoom === toRoom) return { ok: false, message: "Выбери разные склады." };
-  const id = normalizeResourceId(resourceId, name);
-  if (isMoneyResource(id, name)) return { ok: false, message: "Деньги перемещаются через казну, не через склады." };
-  const label = id === "custom" ? (String(name).trim() || "Ресурс") : resourceLabel(id);
-  const fromRow = this._storageFind(holding, { resourceId: id, name: label, roomId: fromRoom });
-  const have = Math.max(0, this._safeNumber(fromRow?.qty, 0));
-  if (have + 0.0001 < amount) return { ok: false, message: `В складе '${this._storageRoomLabel(holding, fromRoom)}' нет ${this._formatNumber(amount)} ${label}. Есть ${this._formatNumber(have)}.` };
-  const unit = fromRow?.unit || resourceUnit(id);
-  const weight = this._storageUnitLoad(fromRow ?? {});
-  this._storageAdd(holding, { resourceId: id, name: label, roomId: fromRoom, unit, weight }, -amount);
-  const placements = this._storageAddWithOverflow(holding, { resourceId: id, name: label, roomId: toRoom, unit, weight }, amount);
-  const entries = [
-    { kind: "move-out", resourceId: id, name: label, qty: -amount, roomId: fromRoom, source: "Перемещение", note: [note, `в ${this._storageRoomLabel(holding, toRoom)}`].filter(Boolean).join(" · ") }
-  ];
-  for (const item of placements) {
-    entries.push({ kind: "move-in", resourceId: id, name: label, qty: item.qty, roomId: item.roomId, source: "Перемещение", note: [note, `из ${this._storageRoomLabel(holding, fromRoom)}`, item.overflowFrom ? `переполнение: ${this._storageRoomLabel(holding, item.overflowFrom)}` : ""].filter(Boolean).join(" · ") });
-  }
-  this._appendStorageLog(holding, entries);
-  return { ok: true, message: `${label}: ${this._formatNumber(amount)} из ${this._storageRoomLabel(holding, fromRoom)}; ${this._storagePlacementText(holding, placements)}.` };
+  return moveStorageResource({
+    holding,
+    resourceId,
+    name,
+    qty,
+    fromRoomId,
+    toRoomId,
+    note,
+    dependencies: this._storageMoveDependencies()
+  });
 },
 
-_appendEconomyStorageLog(holding, report) {
+_storageBatchMoveDependencies() {
+  return {
+    safeNumber: (value, fallback = 0) => this._safeNumber(value, fallback),
+    normalizeStorageRoomId: (roomId) => this._normalizeStorageRoomId(roomId),
+    itemQuantity: (row) => this._itemQuantity(row),
+    storageRooms: (holding, options) => this._storageRooms(holding, options),
+    storageRowLoad: (row) => this._storageRowLoad(row),
+    storageAvailableQuantity: (holding, row) => this._storageAvailableQuantity(holding, row),
+    storageRoomLabel: (holding, roomId) => this._storageRoomLabel(holding, roomId),
+    addResourceWithOverflow: (holding, resource, qty) => this._storageAddWithOverflow(holding, resource, qty),
+    takeResourceLots: (holding, resource, qty) => this._storageTakeLots(holding, resource, qty),
+    appendStorageLog: (holding, entries) => this._appendStorageLog(holding, entries),
+    formatNumber: (value) => this._formatNumber(value)
+  };
+},
+
+_planStorageBatchMove(holding, options = {}) {
+  return planStorageBatchMove({
+    holding,
+    ...options,
+    dependencies: this._storageBatchMoveDependencies()
+  });
+},
+
+_applyStorageBatchMove(holding, options = {}) {
+  return applyStorageBatchMove({
+    holding,
+    ...options,
+    dependencies: this._storageBatchMoveDependencies()
+  });
+},
+
+_storageMoveDependencies() {
+  return {
+    safeNumber: (value, fallback = 0) => this._safeNumber(value, fallback),
+    normalizeStorageRoomId: (roomId) => this._normalizeStorageRoomId(roomId),
+    normalizeResourceId,
+    isMoneyResource,
+    resourceLabel,
+    resourceUnit,
+    storageFind: (holding, resource) => this._storageFind(holding, resource),
+    storageUnitLoad: (resource) => this._storageUnitLoad(resource),
+    storageAvailableQuantity: (holding, row) => this._storageAvailableQuantity(holding, row),
+    storageAdd: (holding, resource, qty) => this._storageAdd(holding, resource, qty),
+    storageAddWithOverflow: (holding, resource, qty) => this._storageAddWithOverflow(holding, resource, qty),
+    takeResourceLots: (holding, resource, qty) => this._storageTakeLots(holding, resource, qty),
+    storageRoomLabel: (holding, roomId) => this._storageRoomLabel(holding, roomId),
+    appendStorageLog: (holding, entries) => this._appendStorageLog(holding, entries),
+    storagePlacementText: (holding, placements) => this._storagePlacementText(holding, placements),
+    formatNumber: (value) => this._formatNumber(value)
+  };
+},
+
+_appendEconomyStorageLog(holding, report, { operationId = "" } = {}) {
   const summarized = this._summarizeEconomyReport(report);
+  if (Array.isArray(summarized.ledger) && summarized.ledger.length) {
+    this._appendStorageLog(holding, economyLedgerStorageRows(summarized.ledger, {
+      operationId,
+      period: summarized.periodLabel || ""
+    }));
+    return summarized;
+  }
+
+  // Compatibility path for reports saved before ledger schema 2. New economy
+  // runs never depend on parsing presentation strings.
   const entries = [];
   const rooms = this._storageRooms(holding, { includeUnavailable: true });
   const roomIdFromTail = (tail = "") => {
@@ -722,7 +486,8 @@ _appendEconomyStorageLog(holding, report) {
         roomId: roomIdFromTail(tail),
         source,
         note: tail.replace(/^\s+|[.]$/g, "").trim(),
-        period: summarized.periodLabel || ""
+        period: summarized.periodLabel || "",
+        operationId: String(operationId ?? "")
       });
     }
   };
@@ -733,3 +498,9 @@ _appendEconomyStorageLog(holding, report) {
   return summarized;
 }
 };
+
+export const FinanceStorageDomain = composeDomainGroup("FinanceStorageDomain", [
+  ["FinanceStorageContextDomain", FinanceStorageContextDomain],
+  ["FinanceStorageCoreDomain", FinanceStorageCoreDomain],
+  ["FinanceStorageItemDocumentDomain", FinanceStorageItemDocumentDomain]
+]);

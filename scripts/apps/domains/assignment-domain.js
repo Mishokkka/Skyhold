@@ -1,5 +1,10 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import { splitList } from "../../core/helpers.js";
+import { buildingOperationalState } from "../../core/building-state.js";
+import { makeId } from "../../data/utils.js";
+import { assignPersonToFleetCrew, clearPersonFromAssignments } from "../../data/resident-assignments.js";
+import { isFixedWageCompensation, personCashWageDaily } from "../../core/compensation.js";
+import { applyMoraleToConstructionDice } from "../../engines/morale/morale-snapshot.js";
 
 export const AssignmentDomain = {
 _assignedWorkerSet(holding, exceptBuildingId = null) {
@@ -17,6 +22,9 @@ _assignedWorkerSet(holding, exceptBuildingId = null) {
     if (squad?.sergeantId) set.add(String(squad.sergeantId));
     for (const id of (squad?.memberIds ?? []).slice(0, 4)) if (id) set.add(String(id));
   }
+  for (const vessel of holding?.special?.fleet?.vessels ?? []) {
+    for (const id of vessel?.crew?.memberIds ?? []) if (id) set.add(String(id));
+  }
   return set;
 },
 
@@ -25,31 +33,25 @@ _findPerson(holding, personId) {
 },
 
 _clearPersonFromAssignments(holding, personId) {
-  const id = String(personId ?? "");
-  if (!id) return;
-  for (const building of holding?.buildings?.list ?? []) {
-    if (!Array.isArray(building.assignedWorkerIds)) building.assignedWorkerIds = [];
-    building.assignedWorkerIds = building.assignedWorkerIds.map((value) => String(value) === id ? "" : value);
-  }
-  for (const crew of holding?.constructionCrews ?? []) {
-    if (!Array.isArray(crew.memberIds)) crew.memberIds = [];
-    crew.memberIds = crew.memberIds.filter((value) => String(value) !== id);
-    if (String(crew.leaderId ?? "") === id) crew.leaderId = "";
-  }
-  for (const squad of holding?.gm?.defense?.squads ?? []) {
-    if (!Array.isArray(squad.memberIds)) squad.memberIds = [];
-    squad.memberIds = squad.memberIds.map((value) => String(value) === id ? "" : value);
-    if (String(squad.sergeantId ?? "") === id) squad.sergeantId = "";
-  }
-  if (String(holding?.gm?.defense?.commanderId ?? "") === id) holding.gm.defense.commanderId = "";
+  return clearPersonFromAssignments(holding, personId);
 },
 
 _setPersonFree(holding, personId) {
   const person = this._findPerson(holding, personId);
   if (!person) return;
+  this._clearPersonFromAssignments?.(holding, personId);
   person.workAssignment = "";
   person.role = this._isChildResident?.(person) ? "Ребенок" : "Свободен";
-  person.salary = 0;
+  this._setPersonBaseWage(person, 0);
+},
+
+_setPersonBaseWage(person = {}, baseWageDaily = 0) {
+  const base = Math.max(0, Math.round((this._safeNumber?.(baseWageDaily, 0) ?? Number(baseWageDaily ?? 0)) * 100) / 100);
+  person.baseWageDaily = Number.isFinite(base) ? base : 0;
+  if (!person.compensationType || isFixedWageCompensation(person.compensationType)) person.cashWageDaily = person.baseWageDaily;
+  else person.cashWageDaily = personCashWageDaily(person);
+  person.salary = person.cashWageDaily;
+  return person.cashWageDaily;
 },
 
 _squadSalaryCopper(squad = {}) {
@@ -100,7 +102,7 @@ _applyDefenseSalaries(holding) {
       person.workAssignment = "soldier";
       person.role = `${isSergeant ? "Сержант" : "Солдат"}: ${squadName} (${typeLabel})`;
       const total = Math.max(0, Math.round((base + (isSergeant ? 2 : 0) + modifier) * 100) / 100);
-      person.salary = Number.isFinite(total) ? total : 0;
+      this._setPersonBaseWage(person, total);
       assigned += 1;
     }
   }
@@ -118,7 +120,7 @@ _applyDefenseSalaries(holding) {
       commander.workAssignment = "defenseCommander";
       commander.role = `Командир обороны: ${soldierCount} солд.`;
       const total = Math.max(0, Math.round((base + modifier) * 100) / 100);
-      commander.salary = Number.isFinite(total) ? total : 0;
+      this._setPersonBaseWage(commander, total);
       assigned += 1;
     }
   }
@@ -184,8 +186,7 @@ _applyPersonSalaryForAssignment(holding, person = {}, building = null) {
   const base = this._baseSalaryForAssignment(holding, person, building);
   const mod = this._salaryModifier(person);
   const total = Math.max(0, Math.round((base + mod) * 100) / 100);
-  person.salary = Number.isFinite(total) ? total : 0;
-  return person.salary;
+  return this._setPersonBaseWage(person, total);
 },
 
 _assignPersonToBuilding(holding, personId, buildingId) {
@@ -210,7 +211,7 @@ _assignPersonToCrew(holding, personId, crewId = null) {
   const person = this._findPerson(holding, personId);
   if (!person || person.dead || this._safeNumber(person?.injuredDays, 0) > 0 || (this._canResidentWork && !this._canResidentWork(person))) return false;
   if (!Array.isArray(holding.constructionCrews)) holding.constructionCrews = [];
-  if (!holding.constructionCrews.length) holding.constructionCrews.push({ id: foundry.utils.randomID?.(10) ?? `crew-${Date.now()}`, name: "Стройбригада", memberIds: [], leaderId: "", suitableWorkerTypes: "Строитель, Силач, Умелец" });
+  if (!holding.constructionCrews.length) holding.constructionCrews.push({ id: makeId("crew"), name: "Стройбригада", memberIds: [], leaderId: "", suitableWorkerTypes: "Строитель, Силач, Умелец" });
   const crew = crewId ? holding.constructionCrews.find((item) => String(item.id) === String(crewId)) : holding.constructionCrews[0];
   if (!crew) return false;
   this._clearPersonFromAssignments(holding, personId);
@@ -220,6 +221,12 @@ _assignPersonToCrew(holding, personId, crewId = null) {
   person.role = crew.name || "Стройбригада";
   this._applyPersonSalaryForAssignment?.(holding, person, null);
   return true;
+},
+
+_assignPersonToFleet(holding, personId, vesselId) {
+  const person = this._findPerson(holding, personId);
+  if (!person || person.dead || this._safeNumber(person?.injuredDays, 0) > 0 || (this._canResidentWork && !this._canResidentWork(person))) return false;
+  return assignPersonToFleetCrew(holding, personId, vesselId);
 },
 
 _setBuildingSlot(holding, buildingId, slot, personId) {
@@ -308,21 +315,56 @@ _constructionCrews(holding) {
   return [{ id: "legacy", name: "Стройбригада", memberIds: ids, leaderId: "", suitableWorkerTypes: "Строитель, Силач, Умелец", distributed: false, distributedIds: [], isDefault: true }];
 },
 
-_constructionCrew(holding, crewId = null) {
+_constructionCrew(holding, crewId = null, workerContext = null) {
   const crews = this._constructionCrews(holding);
   const target = crewId ? (crews.find((crew) => String(crew.id) === String(crewId)) ?? crews[0]) : crews[0];
-  return this._prepareConstructionCrew(holding, target);
+  return {
+    ...this._prepareConstructionCrew(holding, target, workerContext),
+    busyLines: this._constructionCrewBusyLines(holding, crews)
+  };
 },
 
-_prepareConstructionCrew(holding, crew) {
+_constructionCrewBusyLines(holding, crewsArg = null) {
+  const crews = Array.isArray(crewsArg) ? crewsArg : this._constructionCrews(holding);
+  const buildings = Array.isArray(holding?.buildings?.list) ? holding.buildings.list : [];
+  return crews.map((crew) => {
+    const crewId = String(crew?.id ?? "");
+    const projects = buildings.filter((building) => {
+      if (!crewId || String(building?.constructionCrewId ?? "") !== crewId) return false;
+      const state = buildingOperationalState(building);
+      return state.lifecycle === "planned" || state.lifecycle === "building" || state.repairActive;
+    });
+    const projectLabels = projects.map((building) => {
+      const name = String(building?.name ?? "").trim() || "Проект";
+      const statusLabel = this._buildingStatus?.(building)?.label ?? String(building?.constructionStatus ?? "").trim();
+      return statusLabel ? `${name} (${statusLabel})` : name;
+    });
+    const name = String(crew?.name ?? "").trim() || "Стройбригада";
+    const label = projectLabels.length ? projectLabels.join(", ") : "свободна";
+    return {
+      id: crewId,
+      name,
+      label,
+      title: `${name}: ${label}`,
+      busy: projectLabels.length > 0
+    };
+  });
+},
+
+_prepareConstructionCrew(holding, crew, workerContext = null) {
   const people = (holding?.people?.list ?? []).filter((person) => !person?.dead);
-  const ids = new Set((crew?.memberIds ?? []).map((id) => String(id || "")).filter(Boolean));
+  const peopleById = new Map(people.map((person) => [String(person?.id ?? ""), person]));
   const assignmentKey = crew?.id ? `construction:${crew.id}` : "construction";
-  for (const person of people) {
-    const assignment = String(person?.workAssignment ?? "");
-    if (assignment === assignmentKey || (crew?.isDefault && assignment === "construction")) ids.add(String(person.id));
+  const ids = workerContext?.laborPool
+    ? new Set(workerContext?.readyResidentIdsByAssignment?.get(assignmentKey) ?? [])
+    : new Set((crew?.memberIds ?? []).map((id) => String(id || "")).filter(Boolean));
+  if (!workerContext?.laborPool) {
+    for (const person of people) {
+      const assignment = String(person?.workAssignment ?? "");
+      if (assignment === assignmentKey || (crew?.isDefault && assignment === "construction")) ids.add(String(person.id));
+    }
   }
-  const members = Array.from(ids).map((id) => people.find((person) => String(person.id) === id)).filter(Boolean);
+  const members = Array.from(ids).map((id) => peopleById.get(id)).filter(Boolean);
   const suitable = splitList(crew?.suitableWorkerTypes).map((item) => item.toLowerCase());
   const prepared = members.map((person) => {
     const detail = this._constructionContributionDetail(person, suitable);
@@ -366,9 +408,6 @@ _constructionContribution(person) {
 },
 
 _constructionContributionDetail(person, suitableTypes = []) {
-  const attrs = person?.attributes ?? {};
-  const strength = this._safeNumber(attrs.strength, 0);
-  const wits = this._safeNumber(attrs.wits, 0);
   const type = this._workerType(person);
   const traits = this._traitBadges(person?.traitsText ?? person?.traits).map((trait) => trait.name.toLowerCase());
   const hasTrait = (name) => traits.includes(String(name).toLowerCase());
@@ -388,14 +427,16 @@ _constructionContributionDetail(person, suitableTypes = []) {
 },
 
 _constructionMoraleModifier(holding, rawDice = 0) {
-  const morale = this._calculateMorale(holding);
-  const state = this._moraleState(morale);
   const base = Math.max(0, this._safeNumber(rawDice, 0));
-  if (state.label === "Бунты") return { value: Math.ceil(base / 2) - base - 3, overrideDice: Math.max(0, Math.ceil(base / 2) - 3), reason: "Бунты: стройбригада /2, затем -3" };
-  if (state.label === "Недовольство") return { value: Math.ceil(base / 2) - base - 2, overrideDice: Math.max(0, Math.ceil(base / 2) - 2), reason: "Недовольство: стройбригада /2, затем -2" };
-  if (state.label === "Апатия") return { value: Math.ceil(base / 2) - base, overrideDice: Math.ceil(base / 2), reason: "Апатия: стройбригада /2" };
-  if (state.label === "Надежда") return { value: 1, reason: "Надежда: +1" };
-  if (state.label === "Дом") return { value: 2, reason: "Дом: +2" };
-  return { value: 0, reason: "Довольство: 0" };
+  const snapshot = this._moraleSnapshot(holding);
+  const state = this._moraleState(snapshot);
+  const adjusted = applyMoraleToConstructionDice(base, snapshot);
+  return {
+    value: adjusted - base,
+    overrideDice: adjusted,
+    reason: state.modifiers?.constructionEfficiency !== 1 || state.modifiers?.constructionDice
+      ? `${state.label}: ${state.notes}`
+      : "Довольство: без модификатора"
+  };
 }
 };

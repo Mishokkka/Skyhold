@@ -236,6 +236,49 @@ export const ROUND_THREATS = {
   raid: { label: "Рейд", icon: "fa-solid fa-mask", tags: ["skirmishers", "mobile"], hint: "Враг бьет по конкретной цели: склад, пленник, животные, причал, башня." }
 };
 
+const ROUND_THREAT_MODIFIERS = {
+  assault: {
+    attackerTagMods: { infantry: 0.10, heavy: 0.10, sappers: 0.10, monsters: 0.10 },
+    defenderTagMods: { infantry: 0.10, heavy: 0.10, garrison: 0.10 },
+    modifierHint: "Штурм: +10% атакующим Пехоте, Тяжёлым, Сапёрам и Монстрам; +10% обороняющимся Пехоте, Тяжёлым и Гарнизонам."
+  },
+  fire: {
+    attackerTagMods: { shooters: 0.15, siege: 0.15 },
+    defenderTagMods: { heavy: 0.10, garrison: 0.10 },
+    modifierHint: "Обстрел: +15% атакующим Огневым и Осадным; +10% обороняющимся Тяжёлым и Гарнизонам."
+  },
+  arson: {
+    attackerTagMods: { skirmishers: 0.15, sappers: 0.15 },
+    defenderTagMods: { skirmishers: 0.10, sappers: 0.10, garrison: 0.05 },
+    modifierHint: "Поджог: +15% атакующим Егерям и Сапёрам; +10% обороняющимся Егерям и Сапёрам, +5% Гарнизонам."
+  },
+  sabotage: {
+    attackerTagMods: { skirmishers: 0.20, sappers: 0.20 },
+    defenderTagMods: { skirmishers: 0.10, garrison: 0.10 },
+    modifierHint: "Саботаж: +20% атакующим Егерям и Сапёрам; +10% обороняющимся Егерям и Гарнизонам."
+  },
+  panic: {
+    attackerTagMods: { sacred: 0.15, skirmishers: 0.10, monsters: 0.10 },
+    defenderTagMods: { sacred: 0.15, militia: -0.10 },
+    modifierHint: "Паника: +15% атакующему Сакральному, +10% Егерям и Монстрам; +15% обороняющемуся Сакральному, −10% Ополчению."
+  },
+  breach: {
+    attackerTagMods: { siege: 0.20, sappers: 0.20 },
+    defenderTagMods: { garrison: 0.15, heavy: 0.15 },
+    modifierHint: "Брешь: +20% атакующим Осадным и Сапёрам; +15% обороняющимся Гарнизонам и Тяжёлым."
+  },
+  raid: {
+    attackerTagMods: { mobile: 0.15, skirmishers: 0.15 },
+    defenderTagMods: { mobile: 0.10, skirmishers: 0.10 },
+    modifierHint: "Рейд: +15% атакующим Мобильным и Егерям; +10% обороняющимся Мобильным и Егерям."
+  }
+};
+
+for (const [key, modifiers] of Object.entries(ROUND_THREAT_MODIFIERS)) {
+  Object.assign(ROUND_THREATS[key], modifiers);
+  ROUND_THREATS[key].hint = `${ROUND_THREATS[key].hint} ${modifiers.modifierHint}`;
+}
+
 export const DEFENDER_MOBILIZATIONS = {
   watch: { label: "Стража", hint: "Постоянные отряды, гарнизоны и военные специалисты." },
   militia: { label: "Стража + ополчение", hint: "Стража плюс гражданское ополчение, если включена галка." },
@@ -254,8 +297,36 @@ export const ATTACKER_PRESETS = {
   sapperTeam: { label: "Саперы и подкоп", summary: "Небольшая сила, которая хочет не честного боя, а бреши, взрыва или открытых ворот.", patch: { enemyName: "Саперная команда", objective: "Открыть брешь", scale: "siege", attackerUnits: 2, attackerBS: 10, attackerCommand: 1, attackerHero: 0, attackerSpecial: 0, attackerPosition: 0, attackerStrategy: "sabotage", attackerInfantry: 0, attackerShooters: 0, attackerMobile: 0, attackerHeavy: 0, attackerSappers: 2, attackerSiege: 1, attackerSkirmishers: 2, attackerMonsters: 0, attackerSacred: 0 } },
   siegeParty: { label: "Осадная партия", summary: "Таран, пушка, саперы или машина. Целенаправленно ломают укрепления.", patch: { enemyName: "Осадная партия", objective: "Пробить укрепления", scale: "siege", attackerUnits: 5, attackerBS: 28, attackerCommand: 2, attackerHero: 0, attackerSpecial: 0, attackerPosition: 0, attackerStrategy: "bombardment", attackerInfantry: 2, attackerShooters: 2, attackerMobile: 0, attackerHeavy: 1, attackerSappers: 3, attackerSiege: 4, attackerSkirmishers: 0, attackerMonsters: 0, attackerSacred: 0 } },
   flyingPirates: { label: "Воздушные пираты", summary: "Мобильная атака с воздуха, абордаж, крюки, вылазки и поджоги.", patch: { enemyName: "Воздушные пираты", objective: "Абордаж и грабеж", scale: "raid", attackerUnits: 4, attackerBS: 22, attackerCommand: 1, attackerHero: 1, attackerSpecial: 0, attackerPosition: 1, attackerStrategy: "breakthrough", attackerInfantry: 2, attackerShooters: 2, attackerMobile: 4, attackerHeavy: 0, attackerSappers: 1, attackerSiege: 0, attackerSkirmishers: 2, attackerMonsters: 0, attackerSacred: 0 } },
-  monstrousAssault: { label: "Чудовищный штурм", summary: "Одна или несколько крупных тварей. Мало тактики, много проломленных ворот.", patch: { enemyName: "Чудовищный штурм", objective: "Сломать ворота", scale: "battle", attackerUnits: 2, attackerBS: 18, attackerCommand: 0, attackerHero: 2, attackerSpecial: 0, attackerPosition: 0, attackerStrategy: "breakthrough", attackerInfantry: 0, attackerShooters: 0, attackerMobile: 1, attackerHeavy: 1, attackerSappers: 0, attackerSiege: 1, attackerSkirmishers: 0, attackerMonsters: 3, attackerSacred: 0 } },
+  monstrousAssault: { label: "Чудовищный штурм", summary: "Одна или несколько крупных тварей. Мало тактики, много проломленных ворот.", patch: { enemyName: "Чудовищный штурм", objective: "Сломать ворота", scale: "battle", attackerUnits: 2, attackerBS: 18, attackerCommand: 0, attackerHero: 2, attackerSpecial: 0, attackerPosition: 0, attackerStrategy: "breakthrough", attackerInfantry: 0, attackerShooters: 0, attackerMobile: 1, attackerHeavy: 1, attackerSappers: 0, attackerSiege: 1, attackerSkirmishers: 0, attackerMonsters: 2, attackerSacred: 0 } },
   armyColumn: { label: "Военная колонна", summary: "Сила государства или крупной фракции. Задача поселения — выиграть время и цену штурма.", patch: { enemyName: "Военная колонна", objective: "Оккупировать владение", scale: "siege", attackerUnits: 10, attackerBS: 60, attackerCommand: 4, attackerHero: 1, attackerSpecial: 0, attackerPosition: 1, attackerStrategy: "bombardment", attackerInfantry: 7, attackerShooters: 5, attackerMobile: 2, attackerHeavy: 3, attackerSappers: 3, attackerSiege: 4, attackerSkirmishers: 2, attackerMonsters: 0, attackerSacred: 0 } }
+};
+
+const ATTACKER_PRESET_TAG_COUNTS = {
+  pettyRaiders: { mobile: 1 },
+  banditGang: { infantry: 1, mobile: 1, skirmishers: 1 },
+  beastPack: { monsters: 3 },
+  cultMob: { infantry: 1, sacred: 3 },
+  skirmishers: { shooters: 2, skirmishers: 1 },
+  trainedWarband: { infantry: 1, shooters: 1, heavy: 1, sappers: 1 },
+  mercCompany: { infantry: 2, shooters: 1, mobile: 1, heavy: 1, sappers: 1 },
+  sapperTeam: { sappers: 2 },
+  siegeParty: { heavy: 1, sappers: 2, siege: 2 },
+  flyingPirates: { shooters: 1, mobile: 2, skirmishers: 1 },
+  monstrousAssault: { monsters: 2 },
+  armyColumn: { infantry: 4, shooters: 2, heavy: 1, sappers: 1, siege: 2 }
+};
+
+for (const [presetKey, counts] of Object.entries(ATTACKER_PRESET_TAG_COUNTS)) {
+  const patch = ATTACKER_PRESETS[presetKey]?.patch;
+  if (!patch) continue;
+  for (const tagKey of Object.keys(DEFAULT_MASS_COMBAT_TAGS)) {
+    const field = `attacker${tagKey[0].toUpperCase()}${tagKey.slice(1)}`;
+    patch[field] = counts[tagKey] ?? 0;
+  }
+}
+
+export const ATTACKER_PRESET_TAG_REQUIREMENTS = {
+  ...ATTACKER_PRESET_TAG_COUNTS
 };
 
 export function asNumber(value, fallback = 0) {
@@ -345,12 +416,13 @@ function capitalized(key = "") { return `${key[0]?.toUpperCase() ?? ""}${key.sli
 export function tagValue(state, side, key) {
   const prefix = side === "defender" ? "defender" : "attacker";
   const canonical = `${prefix}${capitalized(key)}`;
-  let value = Math.max(0, asNumber(state?.[canonical], 0));
+  if (state?.[canonical] !== undefined) return Math.max(0, asNumber(state[canonical], 0));
   for (const [legacy, mapped] of Object.entries(LEGACY_TAG_FIELD_MAP)) {
     if (mapped !== key) continue;
-    value += Math.max(0, asNumber(state?.[`${prefix}${capitalized(legacy)}`], 0));
+    const legacyKey = `${prefix}${capitalized(legacy)}`;
+    if (state?.[legacyKey] !== undefined) return Math.max(0, asNumber(state[legacyKey], 0));
   }
-  return value;
+  return 0;
 }
 
 export function bestTagAdvantage(state, ownSide, strategy = {}) {

@@ -1,8 +1,4 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
-import { SkyholdData } from "../../../data/store.js";
-import { ATTRIBUTE_META } from "../../../generators/resident-rules.js";
-import { splitList, WORKER_TYPE_OPTIONS } from "../../../core/helpers.js";
-import { normalizeResourceId, resourceIcon, resourceLabel, resourceOptions } from "../../../core/resources.js";
 import { inferBuildingSpecialKind } from "../../../core/building-specials.js";
 import { RELIGION_OPTIONS } from "./building-constants.js";
 
@@ -50,11 +46,9 @@ _gmEfficiencyModifiers(holding) {
 },
 
 _moraleProductionEfficiencyModifier(holding) {
-  const state = this._moraleState(this._calculateMorale(holding));
-  if (state.label === "Бунты" || state.label === "Недовольство") return { value: -0.5, reason: `${state.label}: производство -0.5` };
-  if (state.label === "Апатия") return { value: -0.2, reason: "Апатия: производство -0.2" };
-  if (state.label === "Надежда" || state.label === "Дом") return { value: 0.2, reason: `${state.label}: производство +0.2` };
-  return { value: 0, reason: "" };
+  const state = this._moraleState(this._moraleSnapshot(holding));
+  const value = this._safeNumber(state?.modifiers?.productionEfficiency, 0);
+  return { value, reason: value ? `${state.label}: производство ${value > 0 ? "+" : ""}${value}` : "" };
 },
 
 _buildingEfficiencyModifier(holding, building) {
@@ -128,6 +122,8 @@ _periodName(value = "day") {
   const text = String(value ?? "day");
   if (text === "qd") return "QD";
   if (text === "tenday") return "десятник";
+  if (text === "season") return "главный сезон";
+  if (text === "year") return "год";
   return "день";
 },
 
@@ -140,14 +136,14 @@ _sourceName(value = "workers") {
 
 _buildingCategoryOptions() {
   return [
-    { id: "all", label: "Все", icon: "fa-solid fa-layer-group" },
-    { id: "housing", label: "Жилые", icon: "fa-solid fa-house" },
-    { id: "storage", label: "Складские", icon: "fa-solid fa-box-archive" },
-    { id: "production", label: "Производство", icon: "fa-solid fa-industry" },
-    { id: "infrastructure", label: "Инфраструктура", icon: "fa-solid fa-road" },
-    { id: "defense", label: "Военные", icon: "fa-solid fa-shield-halved" },
-    { id: "culture", label: "Культурные", icon: "fa-solid fa-music" },
-    { id: "special", label: "Особые", icon: "fa-solid fa-star" }
+    { id: "all", label: "Все", shortLabel: "Все", icon: "fa-solid fa-layer-group" },
+    { id: "housing", label: "Жилые", shortLabel: "Жил.", icon: "fa-solid fa-house" },
+    { id: "storage", label: "Складские", shortLabel: "Склад", icon: "fa-solid fa-box-archive" },
+    { id: "production", label: "Производство", shortLabel: "Произв.", icon: "fa-solid fa-industry" },
+    { id: "infrastructure", label: "Инфраструктура", shortLabel: "Инфра", icon: "fa-solid fa-road" },
+    { id: "defense", label: "Военные", shortLabel: "Воен.", icon: "fa-solid fa-shield-halved" },
+    { id: "culture", label: "Культурные", shortLabel: "Культ.", icon: "fa-solid fa-music" },
+    { id: "special", label: "Особые", shortLabel: "Особ.", icon: "fa-solid fa-star" }
   ];
 },
 

@@ -1,9 +1,36 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import { SkyholdData } from "../../../data/store.js";
-import { ATTRIBUTE_META } from "../../../generators/resident-rules.js";
-import { splitList, WORKER_TYPE_OPTIONS } from "../../../core/helpers.js";
-import { normalizeResourceId, resourceIcon, resourceImage, resourceLabel, resourceOptions } from "../../../core/resources.js";
+import { splitList } from "../../../core/helpers.js";
+import { normalizeResourceId, resourceDef, resourceIcon, resourceImage, resourceLabel } from "../../../core/resources.js";
 import { inferBuildingSpecialKind, isMedicalBuilding, SPECIAL_BUILDING_KINDS } from "../../../core/building-specials.js";
+import { buildingOperationalState } from "../../../core/building-state.js";
+import { enterpriseCapitalState as getEnterpriseCapitalState } from "../../../core/enterprise-capital.js";
+import { buildingMaintenanceClassOptions, buildingMaintenanceState } from "../../../core/building-maintenance.js";
+import { validConstructionReservation } from "../../../engines/economy/construction-reservation.js";
+
+function buildingTemplateLookup(data) {
+  const byId = new Map();
+  const byName = new Map();
+  for (const template of data?.catalog?.buildings ?? []) {
+    const id = String(template?.id ?? "").trim().toLowerCase();
+    const name = String(template?.name ?? "").trim().toLowerCase();
+    if (id && !byId.has(id)) byId.set(id, template);
+    if (name && !byName.has(name)) byName.set(name, template);
+  }
+  return { byId, byName };
+}
+
+export function structuralMaterialCapitalCopper(materialCosts = [], { safeNumber = (value, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+} } = {}) {
+  return (Array.isArray(materialCosts) ? materialCosts : []).reduce((sum, item) => {
+    const quantity = Math.max(0, safeNumber(item?.qty, 0));
+    const referencePrice = Number(resourceDef(item?.resourceId, item?.name)?.referencePriceCopper);
+    const unitPrice = Number.isFinite(referencePrice) && referencePrice > 0 ? Math.floor(referencePrice) : 0;
+    return sum + quantity * unitPrice;
+  }, 0);
+}
 
 export const BuildingRowsDomain = {
 _buildingSpecialKind(building = {}) {
@@ -20,9 +47,12 @@ _isMedicalBuildingRecord(building = {}) {
 
 _isMedicalPatient(person = {}) {
   if (!person || person.dead) return false;
-  const injured = this._safeNumber(person?.injuredDays, 0) > 0;
+  const hasExplicitCounter = Object.hasOwn(person ?? {}, "injuredDays");
+  const injured = this._safeNumber(person?.injuredDays, 0);
+  if (injured > 0) return true;
   const text = `${person?.status ?? ""} ${person?.notes ?? ""} ${person?.deathNote ?? ""}`.toLowerCase();
-  return injured || /болен|больн|лихорад|жар|ранен|карантин|инфекц|травм/.test(text);
+  if (/болен|больн|лихорад|жар|карантин|инфекц/.test(text)) return true;
+  return !hasExplicitCounter && /ранен|тяжело|сломлен|травм|injured|wound/.test(text);
 },
 
 _medicalPatientLabel(person = {}) {
@@ -38,10 +68,10 @@ _medicalBuildingBaseRows(holding) {
   return (holding?.buildings?.list ?? []).filter((building) => this._isMedicalBuildingRecord(building));
 },
 
-_medicalCapacityForBuilding(holding, building) {
+_medicalCapacityForBuilding(holding, building, workerContext = null) {
   const def = SPECIAL_BUILDING_KINDS.medical;
-  const built = ["built", "damaged"].includes(String(building?.constructionStatus ?? "built"));
-  const efficiency = this._buildingEffectiveWorkers?.(holding, building) ?? { assigned: 0, total: 0 };
+  const built = buildingOperationalState(building).operational;
+  const efficiency = this._buildingEffectiveWorkers?.(holding, building, workerContext) ?? { assigned: 0, total: 0 };
   const assigned = Math.max(0, this._safeNumber(efficiency.assigned, 0));
   const total = Math.max(0, this._safeNumber(efficiency.total, 0));
   const perEfficiency = Math.max(1, this._safeNumber(building?.medical?.patientsPerEfficiency, def.patientsPerEfficiency) || def.patientsPerEfficiency);
@@ -51,13 +81,13 @@ _medicalCapacityForBuilding(holding, building) {
   return { assigned, efficiency: total, perEfficiency, maxPatients, rawCapacity, capacity, built };
 },
 
-_medicalAssignments(holding) {
+_medicalAssignments(holding, workerContext = null) {
   const patients = (holding?.people?.list ?? []).filter((person) => this._isMedicalPatient(person));
   const buildings = this._medicalBuildingBaseRows(holding);
   const result = new Map();
   let cursor = 0;
   for (const building of buildings) {
-    const stats = this._medicalCapacityForBuilding(holding, building);
+    const stats = this._medicalCapacityForBuilding(holding, building, workerContext);
     const assignedPatients = stats.capacity > 0 ? patients.slice(cursor, cursor + stats.capacity) : [];
     cursor += assignedPatients.length;
     result.set(String(building?.id ?? ""), { ...stats, patients: assignedPatients });
@@ -65,14 +95,14 @@ _medicalAssignments(holding) {
   const overflow = patients.slice(cursor);
   for (const building of buildings) {
     const key = String(building?.id ?? "");
-    const row = result.get(key) ?? this._medicalCapacityForBuilding(holding, building);
+    const row = result.get(key) ?? this._medicalCapacityForBuilding(holding, building, workerContext);
     result.set(key, { ...row, overflow, totalPatients: patients.length });
   }
   return result;
 },
 
-_medicalBuildingSummary(holding, building, workerEfficiency = null) {
-  const assignments = this._medicalAssignments(holding);
+_medicalBuildingSummary(holding, building, workerEfficiency = null, assignmentsArg = null) {
+  const assignments = assignmentsArg instanceof Map ? assignmentsArg : this._medicalAssignments(holding);
   const own = assignments.get(String(building?.id ?? "")) ?? { patients: [], overflow: [], totalPatients: 0, capacity: 0, assigned: 0, efficiency: 0, perEfficiency: 5, built: false };
   const efficiency = workerEfficiency ? Math.max(0, this._safeNumber(workerEfficiency.totalRaw ?? workerEfficiency.total, own.efficiency)) : own.efficiency;
   const assigned = workerEfficiency ? Math.max(0, this._safeNumber(workerEfficiency.assigned, own.assigned)) : own.assigned;
@@ -116,40 +146,65 @@ _medicalBuildingSummary(holding, building, workerEfficiency = null) {
   };
 },
 
-_prepareBuildingRows(holding, canEdit) {
-  const rows = holding?.buildings?.list ?? [];
+_prepareBuildingRows(holding, canEdit, options = {}) {
+  const sourceRows = holding?.buildings?.list ?? [];
+  const visibleRows = sourceRows
+    .map((row, index) => ({ row, index }))
+    .filter((entry) => game.user?.isGM || entry.row?.visibility !== "gm" || String(entry.row?.templateId ?? "").trim());
   const storageRooms = this._storageRooms?.(holding, { includeUnavailable: true }) ?? [];
-  const prepared = rows.map((row, index) => this._prepareBuildingRow(holding, row, index, canEdit, storageRooms));
+  const dataForTemplateLookup = this._contextData ?? SkyholdData.get();
+  const workerContext = options?.workerContext ?? this._economyWorkerContext?.(holding) ?? null;
+  const housingIndex = this._residentHousingIndex?.(holding) ?? null;
+  const prepareOptions = {
+    holdingIndex: this._holdingIndex(holding),
+    workerContext,
+    housingIndex,
+    livingPeople: (holding?.people?.list ?? []).filter((person) => !person?.dead),
+    development: (holding?.id && this._contextHoldingId === holding.id ? this._contextDevelopment : null) ?? this._developmentSummary(holding),
+    categoryOptions: this._buildingCategoryOptions(),
+    constructionCrews: this._constructionCrews(holding),
+    medicalAssignments: sourceRows.some((row) => this._isMedicalBuildingRecord(row)) ? this._medicalAssignments(holding, workerContext) : null,
+    templateLookup: buildingTemplateLookup(dataForTemplateLookup)
+  };
+  const prepared = visibleRows.map((entry) => this._prepareBuildingRow(holding, entry.row, entry.index, canEdit, storageRooms, prepareOptions));
   const category = this.activeBuildingCategory || "all";
   return category === "all" ? prepared : prepared.filter((row) => row.category === category);
 },
 
 _prepareBuildingRow(holding, row, index, canEdit, storageRoomsArg = null, options = {}) {
-  const holdingIndex = this._holdingIndex(holding);
+  const holdingIndex = Number.isInteger(options?.holdingIndex) ? options.holdingIndex : this._holdingIndex(holding);
   const recordPath = options?.basePath || `holdings.${holdingIndex}.buildings.list.${index}`;
   const isTemplate = Boolean(options?.isTemplate);
-  const development = this._developmentSummary(holding);
+  const development = options?.development ?? this._developmentSummary(holding);
   const requirements = this._devObject(row.requirements);
   const bonuses = this._devObject(row.bonuses);
   const functions = this._buildingFunctions(row);
-  const workerEfficiency = this._buildingEffectiveWorkers(holding, row);
+  const workerContext = options?.workerContext ?? null;
+  const housingIndex = options?.housingIndex ?? null;
+  const workerEfficiency = this._buildingEffectiveWorkers(holding, row, workerContext);
   const status = this._buildingStatus(row);
-  const workerSlots = this._buildingWorkerSlots(holding, row, index);
+  const workerSlots = this._buildingWorkerSlots(holding, row, index, workerContext, recordPath);
   const assignedCount = workerSlots.filter((slot) => slot.selectedId).length;
   const productionLines = this._prepareProductionLines(row, index, holding, storageRoomsArg, holdingIndex, recordPath);
-  const incomeSummary = this._buildingIncomeSummary(row, holding);
-  const defenseSummary = this._buildingDefenseSummary(row, holding);
+  const incomeSummary = this._buildingIncomeSummary(row, holding, workerContext, workerEfficiency);
+  const defenseSummary = this._buildingDefenseSummary(row, holding, workerContext, status, workerEfficiency);
   const progress = Math.max(0, this._safeNumber(row.buildProgress, 0));
   const target = Math.max(1, this._safeNumber(row.buildTarget, 6));
   const category = this._buildingCategory(row);
-  const categoryInfo = this._buildingCategoryOptions().find((item) => item.id === category);
-  const dataForTemplateLookup = this._contextData ?? SkyholdData.get();
+  const categoryOptionsAll = Array.isArray(options?.categoryOptions) ? options.categoryOptions : this._buildingCategoryOptions();
+  const categoryInfo = categoryOptionsAll.find((item) => item.id === category);
   const templateKey = String(row.templateId ?? "").trim().toLowerCase();
   const rowNameKey = String(row.name ?? "").trim().toLowerCase();
-  const templateSource = (dataForTemplateLookup?.catalog?.buildings ?? []).find((item) => {
-    if (templateKey && String(item?.id ?? "").trim().toLowerCase() === templateKey) return true;
-    return rowNameKey && String(item?.name ?? "").trim().toLowerCase() === rowNameKey;
-  }) ?? null;
+  const templateLookup = options?.templateLookup;
+  let templateSource = templateKey && templateLookup?.byId instanceof Map ? templateLookup.byId.get(templateKey) : null;
+  if (!templateSource && rowNameKey && templateLookup?.byName instanceof Map) templateSource = templateLookup.byName.get(rowNameKey);
+  if (!templateSource) {
+    const dataForTemplateLookup = this._contextData ?? SkyholdData.get();
+    templateSource = (dataForTemplateLookup?.catalog?.buildings ?? []).find((item) => {
+      if (templateKey && String(item?.id ?? "").trim().toLowerCase() === templateKey) return true;
+      return rowNameKey && String(item?.name ?? "").trim().toLowerCase() === rowNameKey;
+    }) ?? null;
+  }
   const icon = String(row.icon ?? templateSource?.icon ?? categoryInfo?.icon ?? "fa-solid fa-building").trim() || "fa-solid fa-building";
   const img = String(row.img ?? row.image ?? templateSource?.img ?? templateSource?.image ?? "").trim();
   const devUnlocked = this._requirementsMet(requirements, development.totals);
@@ -161,10 +216,116 @@ _prepareBuildingRow(holding, row, index, canEdit, storageRoomsArg = null, option
   const developmentDuplicate = this._isDuplicateDevelopmentBuilding?.(holding, row) ?? false;
   const materialCosts = this._prepareMaterialCosts(row, index, holdingIndex, recordPath);
   const materialCostsRequired = materialCosts.filter((item) => this._safeNumber(item.qty, 0) > 0);
-  const materialAllocated = Boolean(row.materialsAllocated);
-  const canAllocateMaterials = status.value !== "built" && materialCostsRequired.length > 0 && !materialAllocated;
-  const materialAllocationLine = materialCostsRequired.length
-    ? `${materialAllocated ? "Выделено" : "Нужно"}: ${materialCostsRequired.map((item) => `${item.qty} ${item.name || item.resourceId || "рес."}`).join(" · ")}`
+  const landRightsProvided = Boolean(holding?.gm?.economy?.landRightsProvided);
+  const capitalState = getEnterpriseCapitalState(
+    row,
+    (value, fallback = 0) => this._safeNumber(value, fallback),
+    { landRightsProvided }
+  );
+  const structuralCapitalCopper = structuralMaterialCapitalCopper(materialCostsRequired, {
+    safeNumber: (value, fallback = 0) => this._safeNumber(value, fallback)
+  });
+  const fullCashCapitalCopper = structuralCapitalCopper + capitalState.requiredCopper;
+  const fullReferenceCapitalCopper = structuralCapitalCopper + capitalState.nominalRequiredCopper;
+  const treasuryCopper = Math.max(0, this._safeNumber(holding?.storage?.moneyCopper, 0));
+  const fundAmountCopper = Math.min(treasuryCopper, capitalState.shortfallCopper);
+  const canConfigureCapital = canEdit && Boolean(globalThis.game?.user?.isGM);
+  const canManageFunding = canConfigureCapital && !isTemplate;
+  const manualFundingEditable = canManageFunding && ["manual", "legacy"].includes(capitalState.fundingProvenance) && !capitalState.grandfathered;
+  const fundingProvenanceLabels = {
+    treasury: "Казна",
+    manual: "Ручная сверка ГМ",
+    legacy: "Legacy — требуется сверка",
+    mixed: "Смешанное финансирование",
+    "legacy-grandfathered": "Legacy — готовность сохранена"
+  };
+  const enterpriseCapital = {
+    ...capitalState,
+    structuralCapitalCopper,
+    fullCashCapitalCopper,
+    fullReferenceCapitalCopper,
+    treasuryCopper,
+    fundAmountCopper,
+    requiresCapital: capitalState.enabled && capitalState.nominalRequiredCopper > 0,
+    landRightsProvided,
+    canConfigureCapital,
+    canManageFunding,
+    manualFundingEditable,
+    hasLegacyFunded: capitalState.legacyFundedCopper > 0,
+    canChangeFundingMode: canManageFunding && !capitalState.grandfathered,
+    canFund: canManageFunding
+      && capitalState.enabled
+      && !capitalState.legacyFundingNeedsReview
+      && capitalState.shortfallCopper > 0
+      && fundAmountCopper > 0,
+    stateLabel: !capitalState.enabled
+      ? "Не учитывается"
+      : (capitalState.grandfathered
+        ? "Legacy: введено"
+        : (capitalState.ready
+          ? "Готово"
+          : (capitalState.legacyFundingNeedsReview
+            ? "Нужна сверка legacy"
+            : (!capitalState.landRightReady && capitalState.shortfallCopper <= 0 ? "Нужно право" : "Не готово")))),
+    stateClass: !capitalState.enabled ? "muted" : (capitalState.ready ? "positive" : "negative"),
+    fundedPercentText: `${this._formatNumber(capitalState.fundedPercent)}%`,
+    landText: this._formatCopperCurrency(capitalState.landCopper),
+    equipmentText: this._formatCopperCurrency(capitalState.equipmentCopper),
+    workingCapitalText: this._formatCopperCurrency(capitalState.workingCapitalCopper),
+    requiredText: this._formatCopperCurrency(capitalState.requiredCopper),
+    nominalRequiredText: this._formatCopperCurrency(capitalState.nominalRequiredCopper),
+    commissioningPaidText: this._formatCopperCurrency(capitalState.commissioningPaidCopper),
+    commissioningShortfallText: this._formatCopperCurrency(capitalState.commissioningShortfallCopper),
+    reserveText: this._formatCopperCurrency(capitalState.workingCapitalReserveCopper),
+    reserveShortfallText: this._formatCopperCurrency(capitalState.reserveShortfallCopper),
+    committedText: this._formatCopperCurrency(capitalState.committedCopper),
+    legacyFundedText: this._formatCopperCurrency(capitalState.legacyFundedCopper),
+    shortfallText: this._formatCopperCurrency(capitalState.shortfallCopper),
+    structuralText: this._formatCopperCurrency(structuralCapitalCopper),
+    fullCashCapitalText: this._formatCopperCurrency(fullCashCapitalCopper),
+    fullReferenceCapitalText: this._formatCopperCurrency(fullReferenceCapitalCopper),
+    annualRenewalText: this._formatCopperCurrency(capitalState.annualRenewalCopper),
+    treasuryText: this._formatCopperCurrency(treasuryCopper),
+    fundAmountText: this._formatCopperCurrency(fundAmountCopper),
+    landRightLabel: capitalState.landRightRequired
+      ? (capitalState.landRightReady ? "Право предоставлено" : "Право не предоставлено")
+      : "Отдельное право не требуется",
+    commissioningStatusText: capitalState.grandfathered
+      ? "Legacy-ввод признан"
+      : (capitalState.commissioningReady ? "Ввод оплачен" : `Не хватает ${this._formatCopperCurrency(capitalState.commissioningShortfallCopper)}`),
+    reserveStatusText: capitalState.grandfathered
+      ? "Резерв не создавался"
+      : (capitalState.reserveReady ? "Резерв собран" : `Не хватает ${this._formatCopperCurrency(capitalState.reserveShortfallCopper)}`),
+    fundingProvenanceLabel: fundingProvenanceLabels[capitalState.fundingProvenance] ?? capitalState.fundingProvenance,
+    fundingProvenanceOptions: [
+      { value: "treasury", label: "Казна — только атомарная операция", selected: capitalState.fundingProvenance === "treasury" },
+      { value: "manual", label: "Ручная сверка ГМ — казна не меняется", selected: capitalState.fundingProvenance === "manual" },
+      ...(capitalState.fundingProvenance === "legacy" ? [{ value: "legacy", label: "Legacy — распределить старое fundedCopper", selected: true }] : []),
+      ...(capitalState.fundingProvenance === "mixed" ? [{ value: "mixed", label: "Смешанное — ручная сверка + казна", selected: true }] : [])
+    ],
+    enabledPath: `${recordPath}.enterpriseCapital.enabled`,
+    landPath: `${recordPath}.enterpriseCapital.landCopper`,
+    equipmentPath: `${recordPath}.enterpriseCapital.equipmentCopper`,
+    workingCapitalPath: `${recordPath}.enterpriseCapital.workingCapitalCopper`,
+    commissioningPaidPath: `${recordPath}.enterpriseCapital.commissioningPaidCopper`,
+    reservePath: `${recordPath}.enterpriseCapital.workingCapitalReserveCopper`,
+    fundingProvenancePath: `${recordPath}.enterpriseCapital.fundingProvenance`,
+    renewalPercentPath: `${recordPath}.enterpriseCapital.renewalPercentAnnual`,
+    notesPath: `${recordPath}.enterpriseCapital.notes`
+  };
+  const hasConstructionReservation = validConstructionReservation(row);
+  const hasInvalidConstructionReservation = Boolean(row?.constructionReservation) && !hasConstructionReservation;
+  const hasLegacyMaterialAllocation = !row?.constructionReservation && Boolean(row.materialsAllocated);
+  const materialAllocated = hasConstructionReservation || hasLegacyMaterialAllocation;
+  const hasFractionalMaterialRecipe = materialCosts.some((item) => item.quantityBlocked);
+  const canAllocateMaterials = status.value !== "built" && materialCostsRequired.length > 0 && !materialAllocated && !hasFractionalMaterialRecipe;
+  const reservedRecipe = hasConstructionReservation ? row.constructionReservation.recipe : [];
+  const allocationRecipe = reservedRecipe.length ? reservedRecipe : materialCostsRequired;
+  const materialAllocationLine = allocationRecipe.length
+    ? `${materialAllocated ? "Выделено" : "Нужно"}: ${allocationRecipe.map((item) => `${item.qty} ${item.name || item.resourceId || "рес."}`).join(" · ")}`
+    : "";
+  const constructionReservationSourceLine = hasConstructionReservation
+    ? row.constructionReservation.sources.map((source) => `${source.qty} ${source.name || source.resourceId || "рес."} · ${source.roomId || "склад"}`).join("; ")
     : "";
   const storageData = row.storage && typeof row.storage === "object" ? row.storage : {};
   const storageCapacity = Math.max(0, this._safeNumber(storageData.capacity, 0));
@@ -181,8 +342,8 @@ _prepareBuildingRow(holding, row, index, canEdit, storageRoomsArg = null, option
   const housingCapacity = Math.max(0, this._safeNumber(housingData.capacity, 0));
   const housingComfort = this._safeNumber(housingData.comfort, 0);
   const housingQuality = Math.max(0, this._safeNumber(housingData.quality, 0));
-  const housingOccupants = this._housingOccupants?.(holding, row) ?? [];
-  const housingSlots = this._buildingHousingSlots?.(holding, row, index, housingCapacity, housingOccupants) ?? [];
+  const housingOccupants = this._housingOccupants?.(holding, row, housingIndex) ?? [];
+  const housingSlots = this._buildingHousingSlots?.(holding, row, index, housingCapacity, housingOccupants, housingIndex, options?.livingPeople) ?? [];
   const housingUsed = housingOccupants.length;
   const housingFree = housingCapacity > 0 ? Math.max(0, housingCapacity - housingUsed) : Infinity;
   const housingFillClass = housingCapacity <= 0 ? "unlimited-capacity" : (housingUsed >= housingCapacity ? "full-capacity" : (housingUsed / Math.max(1, housingCapacity) >= 0.75 ? "near-capacity" : "ok-capacity"));
@@ -191,16 +352,17 @@ _prepareBuildingRow(holding, row, index, canEdit, storageRoomsArg = null, option
   const isSpecialBuilding = Boolean(specialKind);
   const specialDefinition = specialKind ? SPECIAL_BUILDING_KINDS[specialKind] : null;
   const isMedicalBuilding = specialKind === "medical";
-  const medicalSummary = isMedicalBuilding ? this._medicalBuildingSummary(holding, row, workerEfficiency) : null;
+  const medicalSummary = isMedicalBuilding ? this._medicalBuildingSummary(holding, row, workerEfficiency, options?.medicalAssignments) : null;
   if (medicalSummary) medicalSummary.maxPatientsPath = `${recordPath}.medical.maxPatients`;
   const buildingFlavorClass = isMedicalBuilding ? (specialDefinition?.cssClass || "medical-building") : "";
-  const categoryOptions = this._buildingCategoryOptions().filter((item) => item.id !== "all").map((item) => ({
+  const categoryOptions = categoryOptionsAll.filter((item) => item.id !== "all").map((item) => ({
     value: item.label,
     label: item.label,
     selected: category === item.id || String(row.type ?? "") === item.label
   }));
   const selectedCrewId = String(row.constructionCrewId ?? "");
-  const constructionCrewOptions = [{ id: "", label: "Без бригады", selected: !selectedCrewId }].concat(this._constructionCrews(holding).map((crew) => ({
+  const constructionCrews = Array.isArray(options?.constructionCrews) ? options.constructionCrews : this._constructionCrews(holding);
+  const constructionCrewOptions = [{ id: "", label: "Без бригады", selected: !selectedCrewId }].concat(constructionCrews.map((crew) => ({
     id: crew.id,
     label: crew.name || "Стройбригада",
     selected: String(crew.id) === selectedCrewId
@@ -217,6 +379,19 @@ _prepareBuildingRow(holding, row, index, canEdit, storageRoomsArg = null, option
     ...workerEfficiency,
     totalRaw: cleanWorkerEfficiencyTotal,
     total: this._formatNumber ? this._formatNumber(cleanWorkerEfficiencyTotal) : String(Math.round(cleanWorkerEfficiencyTotal * 100) / 100)
+  };
+  const activeProductionLines = productionLines.filter((line) => line.active);
+  const productionOverview = {
+    totalLines: productionLines.length,
+    activeLines: activeProductionLines.length,
+    inactiveLines: productionLines.length - activeProductionLines.length,
+    contents: Array.isArray(row?.contents) ? row.contents.length : 0,
+    workerLines: activeProductionLines.filter((line) => line.isWorkers).length,
+    timedLines: activeProductionLines.filter((line) => line.isTime).length,
+    contentLines: activeProductionLines.filter((line) => line.isContent).length,
+    pendingLines: activeProductionLines.filter((line) => line.hasPending).length,
+    wipLines: activeProductionLines.filter((line) => line.hasWorkInProgress).length,
+    workerEfficiencyText: preparedWorkerEfficiency.total
   };
   const formatSigned = (value) => `${value > 0 ? "+" : ""}${this._formatNumber ? this._formatNumber(value) : String(value)}`;
   const cardDevParts = this._developmentParts(bonuses).filter((part) => this._safeNumber(part.value, 0) !== 0).map((part) => {
@@ -256,20 +431,34 @@ _prepareBuildingRow(holding, row, index, canEdit, storageRoomsArg = null, option
         seasonTooltip: line.seasonTooltip
       };
     });
+  const cardProductionSeasonBadges = Array.from(new Map(cardProductionRows
+    .filter((line) => line.hasSeasonHint && String(line.seasonShort ?? "").trim())
+    .map((line) => {
+      const label = String(line.seasonShort ?? "").trim();
+      const tooltip = String(line.seasonTooltip ?? "").trim() || label;
+      return [`${label}\u0000${tooltip}`, { label, tooltip }];
+    })).values());
   const effectText = String(row.effect ?? "").trim();
   const notesText = String(row.notes ?? "").trim();
   const titleTooltip = [effectText, notesText].filter(Boolean).join("\n\n");
   const hasEffect = Boolean(effectText);
   const showStorageStrip = Boolean(functions.storage);
   const showHousingStrip = Boolean(functions.housing);
-  const hasCardBody = Boolean(cardProductionRows.length || showProjectNeeds || showBuildProgress || this._pendingProductionRows(row, holding, index).length);
+  const pendingProductionRows = this._pendingProductionRows(row, holding, index, productionLines);
+  const hasCardBody = Boolean(cardProductionRows.length || showProjectNeeds || showBuildProgress || pendingProductionRows.length);
   const headOnly = !hasCardBody && !showStorageStrip && !showHousingStrip;
+  const workerPrimaryAttributeOptions = this._workerPrimaryAttributeOptions(row.workerPrimaryAttribute);
+  const remainingBuildSuccesses = Math.max(0, target - progress);
+  const maintenance = buildingMaintenanceState(row, (value, fallback = 0) => this._safeNumber(value, fallback));
+  const maintenanceClassOptions = buildingMaintenanceClassOptions(maintenance.class);
 
   return {
     ...row,
     _index: index,
+    economyPriority: index + 1,
     category,
     categoryLabel: this._buildingCategoryLabel(category),
+    categoryIcon: categoryInfo?.icon ?? "fa-solid fa-building",
     categoryOptions,
     flavorClass: buildingFlavorClass,
     specialKind,
@@ -282,6 +471,8 @@ _prepareBuildingRow(holding, row, index, canEdit, storageRoomsArg = null, option
     hasCardStatParts: cardStatParts.length > 0,
     cardProductionRows,
     hasCardProductionRows: cardProductionRows.length > 0,
+    cardProductionSeasonBadges,
+    hasCardProductionSeasonBadges: cardProductionSeasonBadges.length > 0,
     effectText,
     notesText,
     titleTooltip,
@@ -301,6 +492,7 @@ _prepareBuildingRow(holding, row, index, canEdit, storageRoomsArg = null, option
     bonusParts: this._developmentParts(bonuses, `${recordPath}.bonuses`),
     moraleDelta: this._safeNumber(row.moraleDelta, 0),
     reputation: this._safeNumber(row.reputation, 0),
+    marketAccessLevel: Math.max(0, Math.min(4, Math.floor(this._safeNumber(row.marketAccessLevel, 0)))),
     impactParts: [
       { key: "morale", label: "Довольство", icon: "fa-solid fa-face-smile", css: "morale", value: this._safeNumber(row.moraleDelta, 0), path: `${recordPath}.moraleDelta` },
       { key: "reputation", label: "Репутация", icon: "fa-solid fa-crown", css: "reputation", value: this._safeNumber(row.reputation, 0), path: `${recordPath}.reputation` }
@@ -337,6 +529,10 @@ _prepareBuildingRow(holding, row, index, canEdit, storageRoomsArg = null, option
       fillPercent: housingFillPercent,
       hasCapacity: housingCapacity > 0,
       occupants: housingOccupants.map((person) => person.name || "Без имени").join(", "),
+      occupantRows: housingOccupants.map((person) => ({
+        id: String(person?.id ?? ""),
+        name: person?.name || "Без имени"
+      })),
       slotRows: housingSlots,
       hasSlotRows: housingSlots.length > 0,
       notes: String(housingData.notes ?? ""),
@@ -367,9 +563,15 @@ _prepareBuildingRow(holding, row, index, canEdit, storageRoomsArg = null, option
     unlockLabel: unlocked ? "Открыто" : "Не открыто",
     statusLabel: status.label,
     statusClass: [status.css, developmentDuplicate ? "dev-duplicate" : ""].filter(Boolean).join(" "),
+    statusIcon: status.icon,
     developmentDuplicate,
     developmentUniqueText: developmentDuplicate ? "Повторное здание: развитие не дублируется" : "Уникальный вклад развития",
     statusOptions: this._buildingStatusOptions(status.value),
+    lifecycleLabel: this._buildingLifecycleOptions(status.lifecycle).find((item) => item.selected)?.label ?? status.lifecycle,
+    lifecycleOptions: this._buildingLifecycleOptions(status.lifecycle),
+    conditionLabel: this._buildingConditionOptions(status.condition).find((item) => item.selected)?.label ?? status.condition,
+    conditionOptions: this._buildingConditionOptions(status.condition),
+    repairActive: status.repairActive,
     constructionStatus: row.constructionStatus || status.value,
     constructionCrewId: selectedCrewId,
     visibility,
@@ -384,21 +586,25 @@ _prepareBuildingRow(holding, row, index, canEdit, storageRoomsArg = null, option
     progress,
     target,
     progressText: `${progress}/${target}`,
+    remainingBuildSuccesses,
+    buildActionTooltip: `Строить. Осталось успехов: ${remainingBuildSuccesses} из ${target}`,
     progressPercent: Math.max(0, Math.min(100, Math.round((progress / target) * 100))),
     isBuilt: status.value === "built",
     showProjectNeeds,
     showBuildProgress,
-    productionLine: this._productionLine(row),
+    productionLine: this._productionLine(row, holding, productionLines),
     contents: this._prepareBuildingContents(row, index, holding, holdingIndex, recordPath),
     hasContents: Array.isArray(row.contents) && row.contents.length > 0,
     productionLines,
     hasProductionLines: productionLines.length > 0,
-    productionLinesText: this._productionLinesText(row, holding),
-    pendingProductionRows: this._pendingProductionRows(row, holding, index),
-    hasPendingProduction: this._pendingProductionRows(row, holding, index).length > 0,
-    productionSummary: this._buildingProductionSummary(row, assignedCount, holding),
+    productionOverview,
+    productionLinesText: this._productionLinesText(row, holding, productionLines),
+    pendingProductionRows,
+    hasPendingProduction: pendingProductionRows.length > 0,
+    productionSummary: this._buildingProductionSummary(row, assignedCount, holding, workerContext, workerEfficiency),
     income: incomeSummary,
     incomeSummary,
+    enterpriseCapital,
     defense: defenseSummary,
     defenseSummary,
     workerEfficiency: preparedWorkerEfficiency,
@@ -406,17 +612,32 @@ _prepareBuildingRow(holding, row, index, canEdit, storageRoomsArg = null, option
     workerRoleLine: String(row.workerRole ?? "").trim() || "—",
     suitableLine: String(row.suitableWorkerTypes ?? "").trim() || "—",
     suitableTypeOptions: this._workerTypeSelectOptions(row.suitableWorkerTypes),
-    workerPrimaryAttributeOptions: this._workerPrimaryAttributeOptions(row.workerPrimaryAttribute),
-    workerPrimaryAttributeLabel: this._workerPrimaryAttributeOptions(row.workerPrimaryAttribute).find((item) => item.selected)?.label ?? "—",
+    workerPrimaryAttributeOptions,
+    workerPrimaryAttributeLabel: workerPrimaryAttributeOptions.find((item) => item.selected)?.label ?? "—",
     suitableTypeBadges: this._suitableTypeBadges(row.suitableWorkerTypes, `${recordPath}.suitableWorkerTypes`, row),
     hasSuitableTypeBadges: splitList(row.suitableWorkerTypes).length > 0,
-    upkeep: this._safeNumber(row.upkeep, 0),
-    hasUpkeep: this._safeNumber(row.upkeep, 0) !== 0,
-    upkeepLine: this._safeNumber(row.upkeep, 0) ? String(this._safeNumber(row.upkeep, 0)) : "—",
+    maintenance: {
+      ...maintenance,
+      classLabel: maintenanceClassOptions.find((item) => item.selected)?.label ?? "Пользовательское",
+      classOptions: maintenanceClassOptions,
+      classPath: `${recordPath}.maintenance.class`,
+      operatingPath: `${recordPath}.maintenance.operatingCopperMonthly`,
+      reservePath: `${recordPath}.maintenance.repairReserveCopperMonthly`,
+      notesPath: `${recordPath}.maintenance.notes`
+    },
+    upkeep: maintenance.totalCopperMonthly,
+    hasUpkeep: maintenance.totalCopperMonthly !== 0,
+    upkeepLine: maintenance.totalCopperMonthly ? String(maintenance.totalCopperMonthly) : "—",
     materialCosts,
     materialCostsLine: materialCosts.length ? materialCosts.map((item) => `${item.qty} ${item.name}`.trim()).join(" · ") : "—",
     materialCostsRequired,
     materialAllocated,
+    hasConstructionReservation,
+    hasInvalidConstructionReservation,
+    hasLegacyMaterialAllocation,
+    hasFractionalMaterialRecipe,
+    canEditMaterialRecipe: canEdit && (isTemplate || !materialAllocated),
+    constructionReservationSourceLine,
     canAllocateMaterials,
     materialAllocationLine,
     requiredBuildings,
@@ -458,14 +679,7 @@ _holdingIndexForBuilding(building) {
 },
 
 _buildingStatus(building) {
-  const value = String(building?.constructionStatus ?? "built");
-  if (value === "planned") return { value, label: "Проект", css: "planned" };
-  if (value === "building") return { value, label: building?.repairOf ? "Ремонт" : "Строится", css: "building" };
-  if (value === "paused") return { value, label: "Пауза", css: "paused" };
-  if (value === "damaged") return { value, label: "Повреждено", css: "damaged" };
-  if (value === "heavilyDamaged") return { value, label: "Сильно повреждено", css: "heavilyDamaged" };
-  if (value === "destroyed") return { value, label: "Разрушено", css: "destroyed" };
-  return { value: "built", label: "Построено", css: "built" };
+  return buildingOperationalState(building);
 },
 
 _buildingStatusOptions(current) {
@@ -480,25 +694,46 @@ _buildingStatusOptions(current) {
   ];
 },
 
-_buildingHousingSlots(holding, building, buildingIndex, capacity = null, occupantsArg = null) {
+_buildingLifecycleOptions(current) {
+  return [
+    { value: "planned", label: "Проект", selected: current === "planned" },
+    { value: "building", label: "Строится", selected: current === "building" },
+    { value: "active", label: "Действует", selected: current === "active" },
+    { value: "disabled", label: "Не действует", selected: current === "disabled" },
+    { value: "abandoned", label: "Заброшено", selected: current === "abandoned" }
+  ];
+},
+
+_buildingConditionOptions(current) {
+  return [
+    { value: "intact", label: "Целое", selected: current === "intact" },
+    { value: "damaged", label: "Повреждено", selected: current === "damaged" },
+    { value: "heavilyDamaged", label: "Сильно повреждено", selected: current === "heavilyDamaged" },
+    { value: "destroyed", label: "Разрушено", selected: current === "destroyed" }
+  ];
+},
+
+_buildingHousingSlots(holding, building, buildingIndex, capacity = null, occupantsArg = null, housingIndex = null, livingPeopleArg = null) {
   const buildingId = String(building?.id ?? "");
-  const people = (holding?.people?.list ?? []).filter((person) => !person?.dead);
-  const occupants = Array.isArray(occupantsArg) ? occupantsArg : (this._housingOccupants?.(holding, building) ?? []);
+  const people = Array.isArray(livingPeopleArg) ? livingPeopleArg : (holding?.people?.list ?? []).filter((person) => !person?.dead);
+  const peopleById = new Map(people.map((person) => [String(person?.id ?? ""), person]));
+  const occupants = Array.isArray(occupantsArg) ? occupantsArg : (this._housingOccupants?.(holding, building, housingIndex) ?? []);
   const selectedIds = occupants.map((person) => String(person?.id ?? "")).filter(Boolean);
+  const selectedSet = new Set(selectedIds);
   const cap = Math.max(0, this._safeNumber(capacity ?? building?.housing?.capacity, 0));
   const slotCount = cap > 0 ? Math.max(cap, selectedIds.length) : Math.max(1, selectedIds.length + 1);
   const slots = [];
   for (let slot = 0; slot < slotCount; slot += 1) {
     const selectedId = String(selectedIds[slot] ?? "");
-    const selectedPerson = people.find((person) => String(person.id) === selectedId);
+    const selectedPerson = peopleById.get(selectedId);
     const options = [{ id: "", name: "Пусто", selected: !selectedId, disabled: false, hint: "" }];
     for (const person of people) {
       const personId = String(person?.id ?? "");
       if (!personId) continue;
       const home = String(person?.home ?? "");
-      const alreadyHere = selectedIds.includes(personId) && personId !== selectedId;
+      const alreadyHere = selectedSet.has(personId) && personId !== selectedId;
       if (alreadyHere) continue;
-      const currentHome = this._homeLabel?.(person, holding) ?? home;
+      const currentHome = this._homeLabel?.(person, holding, housingIndex) ?? home;
       const hint = home && home !== buildingId && currentHome !== "Без жилья" ? currentHome : this._workerType(person);
       options.push({
         id: personId,
@@ -519,15 +754,20 @@ _buildingHousingSlots(holding, building, buildingIndex, capacity = null, occupan
   return slots;
 },
 
-_buildingWorkerSlots(holding, building, buildingIndex) {
+_buildingWorkerSlots(holding, building, buildingIndex, workerContext = null, basePathArg = "") {
   const max = Math.max(0, this._safeNumber(building?.workersMax, 0));
   const assigned = Array.isArray(building?.assignedWorkerIds) ? building.assignedWorkerIds : [];
-  const people = (holding?.people?.list ?? []).filter((person) => !person?.dead && this._safeNumber(person?.injuredDays, 0) <= 0);
-  const occupied = this._assignedWorkerSet(holding, building?.id);
+  const people = Array.from(workerContext?.activePeopleById?.values?.() ?? (holding?.people?.list ?? []).filter((person) => !person?.dead && this._safeNumber(person?.injuredDays, 0) <= 0));
+  const peopleById = workerContext?.activePeopleById ?? new Map(people.map((person) => [String(person?.id ?? ""), person]));
+  const occupied = workerContext?.assignedWorkerIds ? new Set(workerContext.assignedWorkerIds) : this._assignedWorkerSet(holding, building?.id);
+  if (workerContext?.assignedWorkerIds) {
+    for (const id of assigned) if (id) occupied.delete(String(id));
+  }
+  const basePath = basePathArg || `holdings.${this._holdingIndex(holding)}.buildings.list.${buildingIndex}`;
   const slots = [];
   for (let slot = 0; slot < max; slot += 1) {
     const rawSelectedId = String(assigned[slot] ?? "");
-    const selectedPerson = people.find((person) => String(person.id) === rawSelectedId);
+    const selectedPerson = peopleById.get(rawSelectedId);
     const selectedId = selectedPerson ? rawSelectedId : "";
     const options = [{ id: "", name: "Пусто", selected: !selectedId, disabled: false, hint: "" }];
     for (const person of people) {
@@ -549,7 +789,7 @@ _buildingWorkerSlots(holding, building, buildingIndex) {
       slotNo: slot + 1,
       label: selectedPerson?.name ?? "Пусто",
       selectedId,
-      path: `holdings.${this._holdingIndex(holding)}.buildings.list.${buildingIndex}.assignedWorkerIds.${slot}`,
+      path: `${basePath}.assignedWorkerIds.${slot}`,
       options
     });
   }

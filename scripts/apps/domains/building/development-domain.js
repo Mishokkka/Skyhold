@@ -1,8 +1,7 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import { SkyholdData } from "../../../data/store.js";
-import { ATTRIBUTE_META } from "../../../generators/resident-rules.js";
-import { splitList, WORKER_TYPE_OPTIONS } from "../../../core/helpers.js";
-import { normalizeResourceId, resourceIcon, resourceLabel, resourceOptions } from "../../../core/resources.js";
+import { buildingOperationalState } from "../../../core/building-state.js";
+import { isWholeEconomyQuantity } from "../../../core/economy-quantity-contract.js";
 
 export const BuildingDevelopmentDomain = {
 _developmentParts(dev, basePath = "") {
@@ -29,6 +28,7 @@ _prepareMaterialCosts(building, buildingIndex, holdingIndexArg = null, basePathA
     name: String(item?.name ?? ""),
     resourceId: String(item?.resourceId ?? item?.resource ?? item?.name ?? ""),
     qty: this._safeNumber(item?.qty, 0),
+    quantityBlocked: Number(item?.qty) > 0 && !isWholeEconomyQuantity(item?.qty),
     namePath: `${recordPath}.materialCosts.${index}.name`,
     resourceIdPath: `${recordPath}.materialCosts.${index}.resourceId`,
     qtyPath: `${recordPath}.materialCosts.${index}.qty`
@@ -96,14 +96,14 @@ _buildingDevelopmentKey(building = {}) {
 },
 
 _isDuplicateDevelopmentBuilding(holding, building) {
-  if (!building || String(building?.constructionStatus ?? "built") !== "built") return false;
+  if (!building || !buildingOperationalState(building).operational) return false;
   const b = this._devObject(building?.bonuses);
   const hasBonus = ["food", "technology", "culture", "war"].some((key) => this._safeNumber(b[key], 0) !== 0);
   if (!hasBonus) return false;
   const key = this._buildingDevelopmentKey(building);
   for (const candidate of holding?.buildings?.list ?? []) {
     if (candidate === building) return false;
-    if (String(candidate?.constructionStatus ?? "built") !== "built") continue;
+    if (!buildingOperationalState(candidate).operational) continue;
     const cb = this._devObject(candidate?.bonuses);
     const candidateHasBonus = ["food", "technology", "culture", "war"].some((devKey) => this._safeNumber(cb[devKey], 0) !== 0);
     if (candidateHasBonus && this._buildingDevelopmentKey(candidate) === key) return true;
@@ -117,8 +117,7 @@ _developmentSummary(holding) {
   const duplicates = [];
   const seen = new Set();
   for (const building of holding?.buildings?.list ?? []) {
-    const status = String(building?.constructionStatus ?? "built");
-    if (status !== "built") continue;
+    if (!buildingOperationalState(building).operational) continue;
     const b = this._devObject(building?.bonuses);
     const hasBonus = ["food", "technology", "culture", "war"].some((key) => this._safeNumber(b[key], 0) !== 0);
     if (!hasBonus) continue;

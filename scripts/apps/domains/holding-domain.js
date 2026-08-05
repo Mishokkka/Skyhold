@@ -1,55 +1,15 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import { SkyholdData } from "../../data/store.js";
+import { makeId } from "../../data/utils.js";
 import { generatorOptionSets } from "../../generators/resident-generator.js";
 import { socialBackgroundOptions } from "../../generators/resident-rules.js";
 import { traitBadges } from "../../generators/trait-definitions.js";
-import { BUILTIN_RESOURCE_DEFS, normalizeResourceCatalogRow } from "../../core/resources.js";
-import { readableHoldings } from "../../data/access-guard.js";
-
-
-function normalizeSpecialSkill(value = "") {
-  const raw = String(value ?? "").trim().toLowerCase();
-  if (!raw) return "";
-  if (/(builder|строител|строитель)/i.test(raw)) return "Builder";
-  if (/(trader|торгов)/i.test(raw)) return "Trader";
-  if (/(scribe|писар|летопис|грамот)/i.test(raw)) return "Scribe";
-  if (/(healer|лекар|целител)/i.test(raw)) return "Healer";
-  if (/(priest|жрец|свящ)/i.test(raw)) return "Priest";
-  if (/(guard|страж|охран)/i.test(raw)) return "Guard";
-  if (/(sailor|моряк|навиг)/i.test(raw)) return "Sailor";
-  if (/(engineer|механик|инженер)/i.test(raw)) return "Engineer";
-  return String(value ?? "").trim();
-}
-
-function specialSkillLabel(value = "") {
-  const key = normalizeSpecialSkill(value);
-  const labels = {
-    Builder: "Builder / Строитель",
-    Trader: "Trader / Торговец",
-    Scribe: "Scribe / Писарь",
-    Healer: "Healer / Лекарь",
-    Priest: "Priest / Жрец",
-    Guard: "Guard / Стражник",
-    Sailor: "Sailor / Моряк",
-    Engineer: "Engineer / Механик"
-  };
-  return labels[key] ?? key;
-}
-
-function templateSpecialSkillRequirements(template = {}) {
-  const explicit = Array.isArray(template.requiredSpecialSkills) ? template.requiredSpecialSkills : [];
-  const text = `${template.specialRequirements ?? ""} ${template.sourceRequirement ?? ""}`;
-  const required = new Set(explicit.map(normalizeSpecialSkill).filter(Boolean));
-  if (/(builder|the\s+builder\s+talent|\bBUILDER\b|строител|строитель)/i.test(text)) required.add("Builder");
-  if (/(торговец|trader)/i.test(text)) required.add("Trader");
-  if (/(писарь|scribe)/i.test(text)) required.add("Scribe");
-  if (/(лекарь|healer)/i.test(text)) required.add("Healer");
-  if (/(жрец|priest)/i.test(text)) required.add("Priest");
-  if (/(стражник|guard)/i.test(text)) required.add("Guard");
-  if (/(моряк|sailor)/i.test(text)) required.add("Sailor");
-  if (/(механик|инженер|engineer)/i.test(text)) required.add("Engineer");
-  return [...required].map((value) => ({ value, label: specialSkillLabel(value) }));
-}
+import { isMoneyResource } from "../../core/resources.js";
+import { prepareResourceCatalogEditor } from "../../data/resources/resource-editor.js";
+import { marketEconomySummary } from "../../data/market/economy.js";
+import { readableHoldings, warnNoHoldingAccess } from "../../data/access-guard.js";
+import { EMPLOYMENT_MODE_IDS } from "../../data/labor/employment-terms.js";
+import { WAGE_CATALOG } from "../../data/labor/wage-catalog.js";
 
 
 function hasTraitText(value = "", name = "") {
@@ -86,6 +46,37 @@ function materialCostRows(template = {}) {
     .filter((item) => item.qty > 0);
 }
 
+function storageQuantityKey(identity = {}) {
+  return `${identity.id ?? ""}\u0000${identity.name ?? ""}`;
+}
+
+function storageQuantityIndex(app, holding) {
+  const totals = new Map();
+  for (const row of holding?.storage?.resources ?? []) {
+    if (isMoneyResource(row?.resourceId, row?.id, row?.name)) continue;
+    const identity = app._storageResourceIdentity?.(row);
+    if (!identity?.id) continue;
+    const qty = app._safeNumber?.(row.qty, row.quantity ?? 0) ?? 0;
+    if (Math.abs(qty) < 0.0001) continue;
+    const key = storageQuantityKey(identity);
+    totals.set(key, (totals.get(key) ?? 0) + qty);
+  }
+  return totals;
+}
+
+function storageCanPayFromIndex(app, holding, costs = [], storageTotals = new Map()) {
+  const missing = [];
+  for (const cost of costs) {
+    const qty = Math.max(0, app._safeNumber?.(cost.qty, 0) ?? 0);
+    if (!qty) continue;
+    const have = isMoneyResource(cost.resourceId, cost.id, cost.name)
+      ? (app._moneyCopper?.(holding) ?? 0)
+      : (storageTotals.get(storageQuantityKey(app._storageResourceIdentity?.(cost))) ?? 0);
+    if (have + 0.0001 < qty) missing.push({ ...cost, qty, have });
+  }
+  return { ok: missing.length === 0, missing };
+}
+
 export const HoldingDomain = {
 _getVisibleHoldings(data, canEdit) {
   if (canEdit) return Array.isArray(data.holdings) ? data.holdings : [];
@@ -103,8 +94,49 @@ _resolveActiveHolding(data, visibleHoldings) {
   return data.holdings.find((holding) => holding.id === active.id) ?? active;
 },
 
-_prepareTabs(canEdit, holding) {
-  const labels = this._contextLabels(holding);
+_activeWritableHoldingId(data = SkyholdData.get()) {
+  const visibleHoldings = this._getVisibleHoldings(data, Boolean(game.user?.isGM));
+  const id = String(this.activeHoldingId ?? "");
+  return visibleHoldings.some((holding) => String(holding?.id ?? "") === id) ? id : "";
+},
+
+_warnNoActiveHolding() {
+  warnNoHoldingAccess();
+  this.requestRender?.();
+},
+
+_resolveActiveHoldingScopedPath(data, path = "") {
+  const suffix = String(path ?? "").match(/^holdings\.\d+\.(.+)$/)?.[1];
+  if (!suffix) return "";
+  const holdingId = this._activeWritableHoldingId(data);
+  if (!holdingId) return "";
+  const holdingIndex = (Array.isArray(data?.holdings) ? data.holdings : []).findIndex((holding) => String(holding?.id ?? "") === holdingId);
+  if (holdingIndex < 0) return "";
+  return `holdings.${holdingIndex}.${suffix}`;
+},
+
+async _updateActiveHolding(updater, { reason = "active-holding:update" } = {}) {
+  const holdingId = this._activeWritableHoldingId(SkyholdData.get());
+  if (!holdingId) {
+    this._warnNoActiveHolding();
+    return null;
+  }
+  return SkyholdData.updateHolding(holdingId, updater, { fallback: false, reason });
+},
+
+async _updateActiveHoldingPath(path, value, { reason = "active-holding:path" } = {}) {
+  const updated = await SkyholdData.transaction((data) => {
+    const scopedPath = this._resolveActiveHoldingScopedPath(data, path);
+    if (!scopedPath) return SkyholdData.skipTransaction(false);
+    foundry.utils.setProperty(data, scopedPath, value);
+    return true;
+  }, { reason });
+  if (!updated) this._warnNoActiveHolding();
+  return updated;
+},
+
+_prepareTabs(canEdit, holding, labelsArg = null) {
+  const labels = labelsArg ?? this._contextLabels(holding);
   const tabs = [
     { id: "overview", label: "Обзор", icon: "fa-solid fa-compass" },
     { id: "people", label: labels.peopleTab, icon: "fa-solid fa-people-group" },
@@ -118,39 +150,24 @@ _prepareTabs(canEdit, holding) {
   return tabs;
 },
 
-_contextLabels(holding) {
-  if (holding?.type === "ship") {
-    return {
-      peopleTab: "Экипаж",
-      peopleTitle: "Экипаж",
-      peopleHint: "Офицеры, матросы, специалисты, пассажиры и наемники.",
-      buildingsTab: "Узлы",
-      buildingsTitle: "Узлы и отсеки",
-      buildingsHint: "Отсеки, вооружение, улучшения, поврежденные системы и важные корабельные объекты.",
-      buildingsIcon: "fa-solid fa-ship",
-      storageTab: "Груз",
-      storageTitle: "Груз и припасы",
-      storageHint: "Груз, припасы, контрабанда, топливо, деньги и корабельное имущество."
-    };
-  }
-
+_contextLabels(_holding) {
   return {
     peopleTab: "Жители",
     peopleTitle: "Жители",
     peopleHint: "Жители, специалисты, семьи, гости, наемники и проблемные персонажи.",
     buildingsTab: "Здания",
     buildingsTitle: "Здания",
-    buildingsHint: "Постройки, уровни, статусы, рабочие места и будущие механические эффекты.",
+    buildingsHint: "Постройки, рабочие места и явный порядок приоритета при дефиците сырья, бригад или общего спроса.",
     buildingsIcon: "fa-solid fa-building",
     storageTab: "Хранилище",
     storageTitle: "Хранилище",
-    storageHint: "Ресурсы и имущество владения. Пока без автоматической экономики."
+    storageHint: "Ресурсы и имущество владения: производство, питание, резервы, рынок, грузовые очки и переполнение."
   };
 },
 
 _prepareGeneratorContext(holding) {
   const options = generatorOptionSets(this.generatorConfig);
-  const preview = (this.generatorPreview ?? []).map((person, index) => {
+  const preview = (Array.isArray(this.generatorPreview) ? this.generatorPreview : []).map((person, index) => {
     const badges = this._traitBadges(person.traitsText ?? person.traits);
     return {
       ...person,
@@ -169,11 +186,20 @@ _prepareGeneratorContext(holding) {
       editing: this.activeGeneratedPersonIndex === index,
       cultureOptions: this._cultureOptions?.(person.culture) ?? [{ value: person.culture || "", label: person.culture || "—", selected: true }],
       beliefOptions: this._beliefOptions?.(person.belief) ?? [{ value: person.belief || "", label: person.belief || "—", selected: true }],
-      backgroundOptions: socialBackgroundOptions(person.background)
+      backgroundOptions: socialBackgroundOptions(person.background),
+      wageClassOptions: [
+        { value: "", label: "Без денежной ставки", selected: !person.wageClassId },
+        ...WAGE_CATALOG.map((row) => ({ value: row.id, label: row.label, selected: row.id === person.wageClassId }))
+      ],
+      employmentModeOptions: EMPLOYMENT_MODE_IDS.map((value) => ({
+        value,
+        label: ({ permanent: "Постоянный", seasonal: "Сезонный", "day-labor": "Подённый" })[value] ?? value,
+        selected: value === String(person.employmentMode ?? "permanent")
+      }))
     };
   });
 
-  const currentRegion = String(holding?.overview?.region ?? holding?.overview?.currentRegion ?? holding?.overview?.drift ?? "").trim() || "Нованд";
+  const currentRegion = String(holding?.overview?.region ?? "").trim() || "Регион не указан";
 
   return {
     ...this.generatorConfig,
@@ -186,29 +212,26 @@ _prepareGeneratorContext(holding) {
 
 
 _resourceCatalogContext(data, canEdit = false) {
-  const rows = Array.isArray(data?.catalog?.resources) ? data.catalog.resources : [];
-  const prepared = rows.map((row, index) => {
-    const normalized = normalizeResourceCatalogRow(row);
-    return {
-      ...normalized,
-      _index: index,
-      aliasesText: Array.isArray(row.aliases) ? row.aliases.join(", ") : String(row.aliases ?? normalized.aliases.join(", ")),
-      canEdit
-    };
-  });
+  return prepareResourceCatalogEditor(data?.catalog?.resources, { canEdit });
+},
+
+_marketCatalogContext(data) {
+  const summary = marketEconomySummary(data?.catalog?.marketEconomy, data?.catalog?.eventRegions ?? []);
   return {
-    rows: prepared,
-    builtins: BUILTIN_RESOURCE_DEFS.map((resource) => resource.label).join(", "),
-    builtinCount: BUILTIN_RESOURCE_DEFS.length,
-    hasRows: prepared.length > 0
+    ...summary,
+    marketCount: summary.locationCount,
+    activeMarketCount: summary.locationCount,
+    offerCount: summary.baseOfferCount
   };
 },
 
-_buildingTemplateContext(holding, data) {
+_buildingTemplateContext(holding, data, options = {}) {
   const templates = Array.isArray(data?.catalog?.buildings) ? data.catalog.buildings : [];
-  const development = this._developmentSummary(holding).totals;
+  const devSummary = options?.developmentSummary ?? this._developmentSummary(holding);
+  const development = devSummary.totals;
   const buildings = holding?.buildings?.list ?? [];
   const builderAvailable = crewHasBuilderTrait(holding);
+  const storageTotals = storageQuantityIndex(this, holding);
   const builtRows = buildings.filter((building) => this._buildingStatus?.(building)?.value === "built");
   const projectRows = buildings.filter((building) => this._buildingStatus?.(building)?.value !== "built");
   const builtIds = new Set(builtRows.map((building) => String(building.templateId ?? building.id ?? "")));
@@ -223,7 +246,7 @@ _buildingTemplateContext(holding, data) {
     const dependencies = Array.isArray(template.requiredBuildingIds) ? template.requiredBuildingIds : [];
     const depsOk = dependencies.every((id) => builtIds.has(String(id)) || builtNames.has(String(id).toLowerCase()));
     const costs = materialCostRows(template);
-    const payment = this._storageCanPay ? this._storageCanPay(holding, costs) : { ok: true, missing: [] };
+    const payment = costs.length ? storageCanPayFromIndex(this, holding, costs, storageTotals) : { ok: true, missing: [] };
     const materialsOk = Boolean(payment.ok);
     const builderRequired = templateRequiresBuilder(template);
     const requiredSpecialSkills = builderRequired ? [{ value: "Builder", label: "Builder / Строитель в стройбригаде" }] : [];
@@ -299,28 +322,33 @@ _buildingTemplateContext(holding, data) {
       reasonText: reason.join("; ") || (materialsOk ? "доступно" : `доступно, но не хватает материалов: ${missingMaterialsText}`)
     };
   });
-  const publicRows = prepared.filter((item) => item.playerVisible !== false);
-  const hiddenRows = prepared.filter((item) => item.playerVisible === false);
-  const devSummary = this._developmentSummary(holding);
+  const publicRows = [];
+  const hiddenRows = [];
+  const available = [];
+  const locked = [];
+  const byCategory = { food: [], technology: [], culture: [], war: [], housing: [], storage: [] };
+  for (const row of prepared) {
+    if (row.playerVisible === false) {
+      hiddenRows.push(row);
+      continue;
+    }
+    publicRows.push(row);
+    if (row.unlocked) available.push(row);
+    else locked.push(row);
+    if (byCategory[row.templateCategory]) byCategory[row.templateCategory].push(row);
+  }
   return {
     rows: prepared,
     publicRows,
     hiddenRows,
-    available: publicRows.filter((item) => item.unlocked),
-    locked: publicRows.filter((item) => !item.unlocked),
+    available,
+    locked,
     hasRows: prepared.length > 0,
-    availableCount: publicRows.filter((item) => item.unlocked).length,
-    lockedCount: publicRows.filter((item) => !item.unlocked).length,
+    availableCount: available.length,
+    lockedCount: locked.length,
     hiddenCount: hiddenRows.length,
     development: devSummary,
-    byCategory: {
-      food: publicRows.filter((item) => item.templateCategory === "food"),
-      technology: publicRows.filter((item) => item.templateCategory === "technology"),
-      culture: publicRows.filter((item) => item.templateCategory === "culture"),
-      war: publicRows.filter((item) => item.templateCategory === "war"),
-      housing: publicRows.filter((item) => item.templateCategory === "housing"),
-      storage: publicRows.filter((item) => item.templateCategory === "storage")
-    }
+    byCategory
   };
 },
 
@@ -374,7 +402,7 @@ _holdingIndex(holding) {
 },
 
 _emptyRowFor(collection) {
-  const id = foundry.utils.randomID(12);
+  const id = makeId("row", 12);
 
   if (collection.endsWith(".people.list")) {
     return {
@@ -392,6 +420,29 @@ _emptyRowFor(collection) {
       subrace: "Гвирл",
       salary: 0,
       salaryModifier: 0,
+      compensationType: "dependent",
+      baseWageDaily: 0,
+      cashWageDaily: 0,
+      boardFoodDaily: 1,
+      foodProvisionMode: "settlement",
+      housingProvided: false,
+      shareRate: 0,
+      employmentMode: "permanent",
+      wageClassId: "",
+      employmentSeasonMask: {
+        spring: false,
+        summer: false,
+        autumn: false,
+        winter: false
+      },
+      employmentContractStartQd: null,
+      employmentContractEndQd: null,
+      volunteerReason: "",
+      volunteerTermStartQd: null,
+      volunteerTermEndQd: null,
+      coercionBasis: "",
+      hungerStreakTendays: 0,
+      compensationNote: "Новый член хозяйства находится на общем содержании.",
       moraleBase: -1,
       moraleWork: 0,
       moraleHome: 0,
@@ -436,7 +487,7 @@ _emptyRowFor(collection) {
       productionFormula: "",
       productionLines: [],
       income: { base: 0, perWorker: 0, formula: "", risk: 0, illegal: false },
-      defense: { base: 0, perStep: 0, workerStep: 0 },
+      defense: { base: 0, perStep: 0, workerStep: 0, combatTag: "garrison" },
       housing: { capacity: 0, comfort: 0, quality: 0, notes: "" },
       storage: { capacity: 0, security: 0, quality: 0 },
       productionPerDay: 0,
@@ -482,6 +533,26 @@ _emptyRowFor(collection) {
       isMoney: false,
       hidden: false,
       notes: ""
+    };
+  }
+
+  if (/\.gm\.eventTables\.(general|external)\.rows$/.test(collection)) {
+    const kind = collection.match(/\.gm\.eventTables\.(general|external)\.rows$/)?.[1] ?? "general";
+    return {
+      id,
+      weight: kind === "external" ? 3 : 4,
+      title: "Новое событие",
+      condition: "",
+      text: "",
+      effect: "",
+      requirements: { logic: "all", rules: [] },
+      boosts: { logic: "any", rules: [] },
+      visibility: "public",
+      gmText: "",
+      cooldown: 0,
+      chainId: "",
+      nextEventId: "",
+      combatPreset: ""
     };
   }
 

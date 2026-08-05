@@ -1,8 +1,8 @@
 import { TEMPLATE_CATALOG_VERSION } from "../../data/building-templates.js";
+import { makeId } from "../../data/utils.js";
 
 export function skyholdRandomId(prefix = "id", length = 8) {
-  const randomID = globalThis.foundry?.utils?.randomID;
-  return `${prefix}-${randomID ? randomID(length) : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 2 + length)}`}`;
+  return makeId(prefix, length);
 }
 
 export function makeBlankBuildingTemplate(order = 1) {
@@ -15,6 +15,7 @@ export function makeBlankBuildingTemplate(order = 1) {
     primaryDev: "technology",
     icon: "fa-solid fa-drafting-compass",
     img: "",
+    audio: { mode: "file", track: "", src: "", playlistId: "", soundId: "", volume: 0.45, loop: true },
     unlocked: true,
     visibility: "public",
     description: "",
@@ -46,7 +47,7 @@ export function makeBlankBuildingTemplate(order = 1) {
       illegal: false,
       trade: { enabled: false, budgetFormula: "2d6*10", maxLotsPerBuyer: 1, roomId: "all", kind: "all", notes: "" }
     },
-    defense: { base: 0, perStep: 0, workerStep: 0 },
+    defense: { base: 0, perStep: 0, workerStep: 0, combatTag: "garrison" },
     housing: { capacity: 0, comfort: 0, quality: 0, notes: "" },
     storage: { capacity: 0, security: 0, quality: 0 },
     religion: { religious: false, faith: "", customFaith: "", notes: "" },

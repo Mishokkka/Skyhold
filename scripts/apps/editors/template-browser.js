@@ -1,16 +1,115 @@
-import { MODULE_ID, SkyholdData } from "../../data/store.js";
-import { findReadableHoldingEntry } from "../../data/access-guard.js";
-import { fieldValue } from "../../core/helpers.js";
-import { getSkyholdManager } from "../registry.js";
+import { MODULE_ID } from "../../data/constants.js";
+import { SkyholdData } from "../../data/store.js";
+import { makeId } from "../../data/utils.js";
+import { findReadableHoldingEntry, warnNoHoldingAccess } from "../../data/access-guard.js";
+import { holdingPermissionContext } from "../../data/holding-permissions.js";
+import { getSkyholdManager, requestSkyholdAppRender } from "../registry.js";
+import { bindDelegatedActions, unbindDelegatedActions } from "../common/delegated-events.js";
+import { bindFloatingTooltips, hideFloatingTooltip } from "../common/floating-tooltip.js";
+import { RenderSchedulerMixin } from "../common/render-scheduler.js";
+import { resolveUniqueBuilding } from "../unique-buildings/registry.js";
 import { SkyholdBuildingEditor } from "./building-editor.js";
 import { makeBlankBuildingTemplate } from "./helpers.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
+const TEMPLATE_BROWSER_ACTIONS = {
+  "template-category": "_onCategory",
+  "template-availability": "_onAvailability",
+  "create-building-from-template": "_onCreateBuildingFromTemplate",
+  "create-building-template": "_onCreateTemplate",
+  "edit-building-template": "_onEditTemplate",
+  "delete-building-template": "_onDeleteTemplate"
+};
+
+const uniqueTemplateEditorClasses = new WeakMap();
+
 function getActiveSkyholdManager({ warn = false } = {}) {
   const manager = getSkyholdManager();
   if (!manager && warn) ui.notifications?.warn?.("FBL Skyhold manager is closed. Open it before using this editor action.");
   return manager;
+}
+
+function uniqueTemplateEditorClassFor(appClass) {
+  if (uniqueTemplateEditorClasses.has(appClass)) return uniqueTemplateEditorClasses.get(appClass);
+
+  class SkyholdUniqueBuildingTemplateEditor extends appClass {
+    constructor({ holdingId, templateId } = {}, options = {}) {
+      super({ holdingId, buildingId: templateId }, options);
+      this.templateId = String(templateId ?? "");
+      this.buildingId = this.templateId;
+    }
+
+    async _prepareContext(options) {
+      const context = await super._prepareContext(options);
+      const data = SkyholdData.get();
+      const templateIndex = game.user?.isGM ? (data.catalog?.buildings ?? []).findIndex((item) => String(item.id) === String(this.templateId)) : -1;
+      const template = templateIndex >= 0 ? data.catalog.buildings[templateIndex] : null;
+      const { holding, index: holdingIndex } = findReadableHoldingEntry(data, this.holdingId, { fallback: false });
+      const manager = getActiveSkyholdManager();
+      const row = template && manager ? manager._prepareBuildingRow(holding, template, templateIndex, true, [], { basePath: `catalog.buildings.${templateIndex}`, isTemplate: true }) : null;
+      if (row) this._prepareUniqueBuildingTabs(row, { canManageEditorTabs: true });
+      return {
+        ...context,
+        canEdit: Boolean(game.user?.isGM),
+        canManageEditorTabs: Boolean(game.user?.isGM),
+        holding,
+        holdingIndex,
+        building: row,
+        buildingIndex: templateIndex,
+        hasBuilding: Boolean(row),
+        editDevGain: this.editDevGain,
+        constructionCrew: manager?._constructionCrew?.(holding) ?? { count: 0, dice: 0, names: "" },
+        development: manager?._developmentSummary?.(holding) ?? null,
+        isTemplateEditor: true
+      };
+    }
+
+    _canEditBuilding() {
+      return Boolean(game.user?.isGM);
+    }
+
+    _getMutableBuilding(data = SkyholdData.get()) {
+      const buildingIndex = (data.catalog?.buildings ?? []).findIndex((item) => String(item.id) === String(this.templateId));
+      const building = buildingIndex >= 0 ? data.catalog.buildings[buildingIndex] : null;
+      return { data, holding: null, holdingIndex: -1, building, buildingIndex };
+    }
+
+    async _onBuildingWorkerChange(event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
+    async _onRollConstructionCrew(event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
+    async _onRollConstruction(event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+
+    async _onClose(options) {
+      await super._onClose(options);
+      SkyholdBuildingTemplateBrowser.instance?.requestRender?.();
+    }
+  }
+
+  const baseOptions = appClass.DEFAULT_OPTIONS ?? {};
+  SkyholdUniqueBuildingTemplateEditor.DEFAULT_OPTIONS = {
+    ...baseOptions,
+    classes: [...new Set([...(baseOptions.classes ?? ["fbl-skyhold", "fbl-skyhold-unique-building"]), "fbl-skyhold-template-editor"])],
+    window: {
+      ...(baseOptions.window ?? {}),
+      title: "Шаблон уникального здания",
+      icon: baseOptions.window?.icon ?? "fa-solid fa-drafting-compass",
+      resizable: true
+    }
+  };
+  SkyholdUniqueBuildingTemplateEditor.PARTS = appClass.PARTS;
+  uniqueTemplateEditorClasses.set(appClass, SkyholdUniqueBuildingTemplateEditor);
+  return SkyholdUniqueBuildingTemplateEditor;
 }
 
 export class SkyholdBuildingTemplateEditor extends SkyholdBuildingEditor {
@@ -24,7 +123,7 @@ export class SkyholdBuildingTemplateEditor extends SkyholdBuildingEditor {
     const data = SkyholdData.get();
     const templateIndex = game.user?.isGM ? (data.catalog?.buildings ?? []).findIndex((item) => String(item.id) === String(this.templateId)) : -1;
     const template = templateIndex >= 0 ? data.catalog.buildings[templateIndex] : null;
-    const { holding, index: holdingIndex } = findReadableHoldingEntry(data, this.holdingId, { fallback: true });
+    const { holding, index: holdingIndex } = findReadableHoldingEntry(data, this.holdingId, { fallback: false });
     const manager = getActiveSkyholdManager();
     const row = template && manager ? manager._prepareBuildingRow(holding, template, templateIndex, true, [], { basePath: `catalog.buildings.${templateIndex}`, isTemplate: true }) : null;
     if (row) this._prepareEditorTabs(row);
@@ -65,7 +164,7 @@ export class SkyholdBuildingTemplateEditor extends SkyholdBuildingEditor {
 
   async _onClose(options) {
     await super._onClose(options);
-    SkyholdBuildingTemplateBrowser.instance?.render?.({ force: true, focus: false });
+    SkyholdBuildingTemplateBrowser.instance?.requestRender?.();
   }
 }
 
@@ -88,7 +187,7 @@ SkyholdBuildingTemplateEditor.PARTS = {
   }
 };
 
-export class SkyholdBuildingTemplateBrowser extends HandlebarsApplicationMixin(ApplicationV2) {
+export class SkyholdBuildingTemplateBrowser extends RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2)) {
   constructor({ holdingId } = {}, options = {}) {
     super(options);
     this.holdingId = holdingId;
@@ -101,7 +200,7 @@ export class SkyholdBuildingTemplateBrowser extends HandlebarsApplicationMixin(A
   async _prepareContext(options) {
     const context = await super._prepareContext(options);
     const data = SkyholdData.get();
-    const { holding } = findReadableHoldingEntry(data, this.holdingId, { fallback: true });
+    const { holding } = findReadableHoldingEntry(data, this.holdingId, { fallback: false });
     const manager = getActiveSkyholdManager();
     const canEdit = Boolean(game.user?.isGM);
     const catalog = manager?._buildingTemplateContext?.(holding, data) ?? { rows: [], availableCount: 0, lockedCount: 0, hiddenCount: 0 };
@@ -109,6 +208,17 @@ export class SkyholdBuildingTemplateBrowser extends HandlebarsApplicationMixin(A
     const hiddenRows = catalog.hiddenRows ?? (catalog.rows ?? []).filter((row) => row.playerVisible === false || row.visibility === "gm");
     if (!canEdit && this.availability === "hidden") this.availability = "all";
     const scopedRows = canEdit && this.availability === "hidden" ? hiddenRows : publicRows;
+    const categoryCounts = new Map([["all", scopedRows.length]]);
+    for (const row of scopedRows) {
+      const id = String(row.templateCategory ?? row.primaryDev);
+      categoryCounts.set(id, (categoryCounts.get(id) ?? 0) + 1);
+    }
+    let availableCount = 0;
+    let lockedCount = 0;
+    for (const row of publicRows) {
+      if (row.unlocked) availableCount += 1;
+      else lockedCount += 1;
+    }
     let rows = scopedRows;
     if (this.category !== "all") rows = rows.filter((row) => String(row.templateCategory ?? row.primaryDev) === this.category);
     if (this.availability === "available") rows = rows.filter((row) => row.unlocked);
@@ -126,7 +236,6 @@ export class SkyholdBuildingTemplateBrowser extends HandlebarsApplicationMixin(A
       ].map(normalizeSearch).some((value) => value.includes(search)));
     }
 
-    const categoryCount = (id) => id === "all" ? scopedRows.length : scopedRows.filter((row) => String(row.templateCategory ?? row.primaryDev) === id).length;
     const tabs = [
       ["all", "Все", "fa-solid fa-layer-group"],
       ["food", "Еда", "fa-solid fa-utensils"],
@@ -136,23 +245,24 @@ export class SkyholdBuildingTemplateBrowser extends HandlebarsApplicationMixin(A
       ["housing", "Жилье", "fa-solid fa-house"],
       ["storage", "Склады", "fa-solid fa-box-archive"]
     ].map(([id, label, icon]) => {
-      const tabCount = categoryCount(id);
+      const tabCount = categoryCounts.get(id) ?? 0;
       return { id, label, icon, active: this.category === id, count: tabCount, tabCount };
     });
     const availabilitySource = [["all", "Все"], ["available", "Доступные"], ["locked", "Закрытые"]];
     if (canEdit) availabilitySource.push(["hidden", `Скрытые ${hiddenRows.length}`]);
     const availabilityTabs = availabilitySource.map(([id, label]) => ({ id, label, active: this.availability === id }));
-    const canCreateProject = Boolean(game.user?.isGM || holding?.gm?.playersCanEditBuildings === true);
+    const canCreateProject = holdingPermissionContext(holding).canEditBuildings;
     return {
       ...context,
       holding,
+      hasHolding: Boolean(holding),
       rows,
       search: this.search,
       hasRows: rows.length > 0,
       tabs,
       availabilityTabs,
-      availableCount: publicRows.filter((row) => row.unlocked).length,
-      lockedCount: publicRows.filter((row) => !row.unlocked).length,
+      availableCount,
+      lockedCount,
       hiddenCount: hiddenRows.length,
       development: catalog.development,
       canEdit,
@@ -164,67 +274,22 @@ export class SkyholdBuildingTemplateBrowser extends HandlebarsApplicationMixin(A
     await super._onRender(context, options);
     const root = this.element;
     if (!root) return;
-    this._bindFloatingTooltips(root);
-    root.querySelectorAll("[data-template-category]").forEach((button) => button.addEventListener("click", (event) => this._onCategory(event)));
-    root.querySelectorAll("[data-template-availability]").forEach((button) => button.addEventListener("click", (event) => this._onAvailability(event)));
-    root.querySelectorAll("[data-action='create-building-from-template']").forEach((button) => button.addEventListener("click", (event) => this._onCreateBuildingFromTemplate(event)));
-    root.querySelectorAll("[data-action='create-building-template']").forEach((button) => button.addEventListener("click", (event) => this._onCreateTemplate(event)));
-    root.querySelectorAll("[data-action='edit-building-template']").forEach((button) => button.addEventListener("click", (event) => this._onEditTemplate(event)));
-    root.querySelectorAll("[data-action='delete-building-template']").forEach((button) => button.addEventListener("click", (event) => this._onDeleteTemplate(event)));
+    bindFloatingTooltips(this, root);
+    bindDelegatedActions(this, root, TEMPLATE_BROWSER_ACTIONS);
     root.querySelectorAll("[data-template-visibility]").forEach((checkbox) => checkbox.addEventListener("change", (event) => this._onTemplateVisibility(event)));
     root.querySelectorAll("[data-template-search]").forEach((field) => field.addEventListener("input", (event) => this._onSearch(event)));
-  }
-
-  _bindFloatingTooltips(root) {
-    root.querySelectorAll("[data-fbls-tooltip]").forEach((element) => {
-      element.addEventListener("mouseenter", (event) => this._showTooltip(event.currentTarget));
-      // Не привязываем mousemove на каждую карточку: позиция считается при входе.
-      element.addEventListener("mouseleave", () => this._hideTooltip());
-    });
-  }
-
-  _showTooltip(element) {
-    const text = String(element?.dataset?.fblsTooltip ?? "").trim();
-    if (!text) return;
-    this._hideTooltip();
-    const tooltip = document.createElement("div");
-    tooltip.className = "fbls-floating-tooltip";
-    tooltip.textContent = text;
-    document.body.appendChild(tooltip);
-    this._activeTooltip = tooltip;
-    this._positionTooltip(element);
-  }
-
-  _positionTooltip(element) {
-    const tooltip = this._activeTooltip;
-    if (!tooltip || !element) return;
-    const rect = element.getBoundingClientRect();
-    const margin = 10;
-    const maxLeft = window.innerWidth - tooltip.offsetWidth - margin;
-    let left = rect.left + rect.width / 2 - tooltip.offsetWidth / 2;
-    left = Math.max(margin, Math.min(maxLeft, left));
-    let top = rect.top - tooltip.offsetHeight - margin;
-    if (top < margin) top = rect.bottom + margin;
-    top = Math.max(margin, Math.min(window.innerHeight - tooltip.offsetHeight - margin, top));
-    tooltip.style.left = `${left}px`;
-    tooltip.style.top = `${top}px`;
-  }
-
-  _hideTooltip() {
-    this._activeTooltip?.remove?.();
-    this._activeTooltip = null;
   }
 
   _onCategory(event) {
     event.preventDefault();
     this.category = String(event.currentTarget?.dataset?.templateCategory ?? "all");
-    this.render({ force: true, focus: false });
+    this.requestRender();
   }
 
   _onAvailability(event) {
     event.preventDefault();
     this.availability = String(event.currentTarget?.dataset?.templateAvailability ?? "all");
-    this.render({ force: true, focus: false });
+    this.requestRender();
   }
 
   _onSearch(event) {
@@ -241,17 +306,17 @@ export class SkyholdBuildingTemplateBrowser extends HandlebarsApplicationMixin(A
     event.stopPropagation();
     if (!game.user?.isGM) return;
 
-    const data = SkyholdData.get();
-    if (!data.catalog || typeof data.catalog !== "object") data.catalog = {};
-    if (!Array.isArray(data.catalog.buildings)) data.catalog.buildings = [];
-
-    const template = makeBlankBuildingTemplate(data.catalog.buildings.length + 1);
-    data.catalog.buildings.push(template);
-    await SkyholdData.set(data);
+    const template = await SkyholdData.transaction((data) => {
+      if (!data.catalog || typeof data.catalog !== "object") data.catalog = {};
+      if (!Array.isArray(data.catalog.buildings)) data.catalog.buildings = [];
+      const created = makeBlankBuildingTemplate(data.catalog.buildings.length + 1);
+      data.catalog.buildings.push(created);
+      return created;
+    }, { reason: "template-browser:create-template" });
 
     this.category = "all";
     this.availability = "all";
-    this.render({ force: true, focus: false });
+    this.requestRender();
     new SkyholdBuildingTemplateEditor({ holdingId: this.holdingId, templateId: template.id }).render({ force: true, focus: true });
   }
 
@@ -261,6 +326,13 @@ export class SkyholdBuildingTemplateBrowser extends HandlebarsApplicationMixin(A
     if (!game.user?.isGM) return;
     const templateId = String(event.currentTarget?.dataset?.templateId ?? "");
     if (!templateId) return;
+    const template = (SkyholdData.get().catalog?.buildings ?? []).find((item) => String(item.id) === templateId);
+    const uniqueRegistration = template ? resolveUniqueBuilding(template) : null;
+    if (uniqueRegistration?.appClass) {
+      const EditorClass = uniqueTemplateEditorClassFor(uniqueRegistration.appClass);
+      new EditorClass({ holdingId: this.holdingId, templateId }).render({ force: true, focus: true });
+      return;
+    }
     new SkyholdBuildingTemplateEditor({ holdingId: this.holdingId, templateId }).render({ force: true, focus: true });
   }
 
@@ -270,12 +342,15 @@ export class SkyholdBuildingTemplateBrowser extends HandlebarsApplicationMixin(A
     if (!game.user?.isGM) return;
     const templateId = String(event.currentTarget?.dataset?.templateVisibility ?? "");
     if (!templateId) return;
-    const data = SkyholdData.get();
-    const template = (data.catalog?.buildings ?? []).find((item) => String(item.id) === templateId);
-    if (!template) return;
-    template.visibility = event.currentTarget.checked ? "public" : "gm";
-    await SkyholdData.set(data);
-    this.render({ force: true, focus: false });
+    const visibility = event.currentTarget.checked ? "public" : "gm";
+    const updated = await SkyholdData.transaction((data) => {
+      const template = (data.catalog?.buildings ?? []).find((item) => String(item.id) === templateId);
+      if (!template) return SkyholdData.skipTransaction(false);
+      template.visibility = visibility;
+      return true;
+    }, { reason: "template-browser:set-visibility" });
+    if (!updated) return;
+    this.requestRender();
   }
 
   async _confirmDeleteTemplate(template = {}) {
@@ -311,11 +386,17 @@ export class SkyholdBuildingTemplateBrowser extends HandlebarsApplicationMixin(A
     const template = templates[index];
     const confirmed = await this._confirmDeleteTemplate(template);
     if (!confirmed) return;
-    templates.splice(index, 1);
-    await SkyholdData.set(data);
-    this.render({ force: true, focus: false });
-    getSkyholdManager()?.render?.({ force: true, focus: false });
-    ui.notifications.info(`Шаблон «${template?.name || templateId}» удален.`);
+    const deleted = await SkyholdData.transaction((freshData) => {
+      const freshTemplates = Array.isArray(freshData.catalog?.buildings) ? freshData.catalog.buildings : [];
+      const freshIndex = freshTemplates.findIndex((item) => String(item.id) === templateId);
+      if (freshIndex < 0) return SkyholdData.skipTransaction(null);
+      const [removed] = freshTemplates.splice(freshIndex, 1);
+      return { name: removed?.name || templateId };
+    }, { reason: "template-browser:delete-template" });
+    if (!deleted) return;
+    this.requestRender();
+    requestSkyholdAppRender();
+    ui.notifications.info(`Шаблон «${deleted.name}» удален.`);
   }
 
   async _onCreateBuildingFromTemplate(event) {
@@ -325,38 +406,50 @@ export class SkyholdBuildingTemplateBrowser extends HandlebarsApplicationMixin(A
     if (!manager?._canEditBuildings?.()) return;
     const templateId = String(event.currentTarget?.dataset?.templateId ?? "");
     if (!templateId) return;
-    const data = SkyholdData.get();
-    const { holding } = findReadableHoldingEntry(data, this.holdingId, { fallback: true });
-    const template = (data.catalog?.buildings ?? []).find((item) => String(item.id) === templateId);
-    if (!holding || !template) { ui.notifications.warn("Шаблон здания не найден."); return; }
-    const templateState = manager._buildingTemplateContext?.(holding, data)?.rows?.find((row) => String(row.id) === templateId);
-    if (templateState && templateState.playerVisible === false && !game.user?.isGM) {
-      ui.notifications.warn("Шаблон скрыт ГМом.");
+    const { holding: targetHolding } = findReadableHoldingEntry(SkyholdData.get(), this.holdingId, { fallback: false });
+    if (!targetHolding) {
+      warnNoHoldingAccess();
+      this.requestRender();
       return;
     }
-    if (templateState && !templateState.unlocked) {
-      ui.notifications.warn(`Шаблон закрыт: ${templateState.reasonText || "требования не выполнены"}.`);
+    const result = await SkyholdData.updateHolding(this.holdingId, (holding, data) => {
+      const template = (data.catalog?.buildings ?? []).find((item) => String(item.id) === templateId);
+      if (!holding || !template) return SkyholdData.skipTransaction({ ok: false, message: "Шаблон здания не найден." });
+      const templateState = manager._buildingTemplateContext?.(holding, data)?.rows?.find((row) => String(row.id) === templateId);
+      if (templateState && templateState.playerVisible === false && !game.user?.isGM) {
+        return SkyholdData.skipTransaction({ ok: false, message: "Шаблон скрыт ГМом." });
+      }
+      if (templateState && !templateState.unlocked) {
+        return SkyholdData.skipTransaction({ ok: false, message: `Шаблон закрыт: ${templateState.reasonText || "требования не выполнены"}.` });
+      }
+      // Материалы больше не списываются при создании blueprint-проекта.
+      // Их можно довезти позже, пока проект уже виден в списке строительства.
+      if (!holding.buildings) holding.buildings = { list: [] };
+      if (!Array.isArray(holding.buildings.list)) holding.buildings.list = [];
+      const id = makeId("b", 12);
+      const building = manager._buildingFromTemplate(template, id);
+      building.visibility = "public";
+      holding.buildings.list.push(building);
+      return { ok: true, holdingId: holding.id, buildingId: id, buildingName: building.name };
+    }, { fallback: false, reason: "template-browser:create-building-from-template" });
+    if (!result) {
+      warnNoHoldingAccess();
+      this.requestRender();
       return;
     }
-    // Материалы больше не списываются при создании blueprint-проекта.
-    // Их можно довезти позже, пока проект уже виден в списке строительства.
-    if (!holding.buildings) holding.buildings = { list: [] };
-    if (!Array.isArray(holding.buildings.list)) holding.buildings.list = [];
-    const id = foundry.utils.randomID?.(12) ?? `b-${Date.now()}`;
-    const building = manager._buildingFromTemplate(template, id);
-    holding.buildings.list.push(building);
-    await SkyholdData.set(data);
-    manager.activeHoldingId = holding.id;
+    if (!result.ok) { ui.notifications.warn(result.message); return; }
+    manager.activeHoldingId = result.holdingId;
     manager.activeTab = "buildings";
-    manager.expandedBuildingId = id;
-    manager.render?.({ force: true, focus: false });
-    this.render({ force: true, focus: false });
-    ui.notifications.info(`${building.name} добавлено в проекты строительства.`);
+    manager.expandedBuildingId = result.buildingId;
+    requestSkyholdAppRender();
+    this.requestRender();
+    ui.notifications.info(`${result.buildingName} добавлено в проекты строительства.`);
   }
 
   async _onClose(options) {
     await super._onClose(options);
-    this._hideTooltip();
+    unbindDelegatedActions(this);
+    hideFloatingTooltip(this);
     if (SkyholdBuildingTemplateBrowser.instance === this) SkyholdBuildingTemplateBrowser.instance = null;
   }
 }

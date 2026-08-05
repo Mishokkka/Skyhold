@@ -1,4 +1,7 @@
-import { MODULE_ID, SETTING_MASS_COMBAT_TAGS, notifySkyholdChanged } from "../../data/store.js";
+import { MODULE_ID, SETTING_MASS_COMBAT_TAGS } from "../../data/constants.js";
+import { notifySkyholdChanged } from "../../data/notifications.js";
+import { makeId } from "../../utils/id.js";
+import { massCombatIconOptions } from "./icon-catalog.js";
 
 export const DEFAULT_MASS_COMBAT_TAGS = {
   infantry: { label: "Пехота", short: "Пех.", icon: "fa-solid fa-person-rifle", hint: "Базовая линейная сила. Сама ничего не контрит, но многие планы и враги работают против нее." },
@@ -85,7 +88,7 @@ function cacheKey(value) {
   try {
     return JSON.stringify(value ?? {});
   } catch (_error) {
-    return `${Date.now()}:${Math.random()}`;
+    return makeId("cache");
   }
 }
 
@@ -218,6 +221,7 @@ export function prepareMassCombatTagEditorContext() {
   }));
   return {
     tags,
+    iconOptions: massCombatIconOptions(),
     counterRows,
     tagCount: tags.filter((tag) => !tag.locked).length,
     relationCount: Object.values(config.counters).reduce((sum, row) => sum + Object.keys(row ?? {}).length, 0)
@@ -283,7 +287,7 @@ export function makeCustomMassCombatTagKey(existingKeys = []) {
     const key = `custom-${index}`;
     if (!existing.has(key)) return key;
   }
-  return `custom-${Date.now()}`;
+  return makeId("custom");
 }
 
 export async function addMassCombatCustomTag() {

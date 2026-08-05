@@ -1,88 +1,125 @@
-import { MODULE_ID } from "../data/store.js";
+import { MODULE_ID } from "../data/constants.js";
+import { warnNoHoldingAccess } from "../data/access-guard.js";
 import { HoldingService } from "../data/holding-service.js";
-import { escapeHtml, fieldValue, rollD6Pool } from "../core/helpers.js";
-import { getSkyholdAppClass, getSkyholdManager } from "./registry.js";
+import { holdingPermissionContext } from "../data/holding-permissions.js";
+import { SkyholdData } from "../data/store.js";
+import { makeId } from "../data/utils.js";
+import { escapeHtml, fieldValue } from "../core/helpers.js";
+import { bindGlobalInputGuard, bindInputGuards, replaceTabs, unbindGlobalInputGuard } from "../utils/input-guards.js";
+import { dispatchDelegatedAction } from "./common/delegated-events.js";
+import { bindFloatingTooltips, hideFloatingTooltip } from "./common/floating-tooltip.js";
+import { RenderSchedulerMixin } from "./common/render-scheduler.js";
+import { getSkyholdManager, requestSkyholdAppRender } from "./registry.js";
+import { createFoundryChatMessage, foundryChatSpeaker, foundryDialogV2, playFoundryAudio } from "../integrations/foundry-runtime.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
 import {
   ACCESS_MODES,
   ATTACKER_PRESETS,
-  DEFENDER_MOBILIZATIONS,
   DEFENSE_MODES,
-  OBJECTIVE_THRESHOLDS,
-  ROUND_LIMITS,
   ROUND_THREATS,
   SCALES,
-  STRATEGIES,
   asInt,
   asNumber,
-  applyPercentBonus,
-  bestTagAdvantage,
   clamp,
-  commandPercentFromEffectiveness,
-  diceText,
-  militiaQualityText,
-  militiaThreshold,
-  poolDiceFromStrength,
   selectOptions,
-  stateValue,
   strategyOptions,
   strategySummary,
-  strengthRatioBonus,
-  successCount,
-  tagCounterPressure,
-  tagValue,
-  toSigned
+  tagValue
 } from "./mass-combat/rules.js";
-import { isMassCombatUnitTagField, massCombatTagField } from "./mass-combat/tag-config.js";
-import { counterGraphHtml, bindCounterGraphRuntime } from "./mass-combat/counter-graph.js";
+import { getMassCombatTags, isMassCombatUnitTagField, massCombatTagField } from "./mass-combat/tag-config.js";
+import { SkyholdCounterReferenceApp, SkyholdWeatherReferenceApp } from "./mass-combat/reference-windows.js";
 
-import {
-  applyDefenderResidentCasualties,
-  defenderCasualtyCandidates,
-  medicalSupport,
-  applyBattleConditionToPerson
-} from "./mass-combat/casualties.js";
+import { medicalSupport } from "./mass-combat/casualties.js";
 
-import { applySettlementBattleDamage, battleAftermathRows, startBattleRepairs } from "./mass-combat/damage.js";
-import { roundConsequences } from "./mass-combat/round.js";
+import { battleAftermathRows, startBattleRepairs } from "./mass-combat/damage.js";
 import { roundChatContent } from "./mass-combat/chat.js";
-import { normalizeMassCombatPatch, resetMassCombatState } from "./mass-combat/state.js";
 import {
-  autoDefenderProfile,
-  builtBuildings,
-  calculateBattle,
-  commanderEffectiveness,
-  damageContext,
-  damageTrack,
-  defenseCommanderBonus,
-  defenseGarrisonProfile,
-  defenseSquadProfile,
-  deterrenceText,
-  fortificationProfile,
-  hasResidentWords,
-  inferRoundThreatKey,
-  isAdultResident,
-  isCommanderCandidate,
-  isDefenseBuilding,
-  isInjuredResident,
-  isMilitaryBackgroundResident,
-  isMilitaryResident,
-  isSergeantCandidate,
-  isSoldierResident,
-  isSuitableForSquadType,
-  lossTrack,
-  objectiveTrack,
-  personAssignmentText,
-  personText,
-  residentCombatTrait,
-  soldierEfficiency,
-  squadTypeProfile
-} from "./mass-combat/calculator.js";
+  applyAttackerPresetToState,
+  normalizeManualMassCombatPatch,
+  normalizeMassCombatPatch,
+  pruneAttackerSourceOverrides,
+  resetMassCombatState
+} from "./mass-combat/state.js";
+import { calculateBattle } from "./mass-combat/calculator.js";
+import { battleTerminalState } from "./mass-combat/terminal.js";
+import { applyPendingBattleRound, createPendingBattleRound, pendingBattleRoundContext } from "./mass-combat/round-resolution.js";
+import { archiveBattle, battleArchiveContext } from "./mass-combat/archive.js";
 
-export class SkyholdMassCombatApp extends HandlebarsApplicationMixin(ApplicationV2) {
+function chanceText(value) {
+  const chance = clamp(asInt(value, 0), 0, 6);
+  return `${chance}/6 (${Math.round((chance / 6) * 100)}%)`;
+}
+
+function battleCalculationDependencies(manager = getSkyholdManager()) {
+  const dependencies = {};
+  if (typeof manager?._buildingEffectiveWorkers === "function") {
+    dependencies.buildingEffectiveWorkers = (holding, building) => manager._buildingEffectiveWorkers(holding, building);
+  }
+  if (typeof manager?._calculateMorale === "function") {
+    dependencies.calculateMorale = (holding) => manager._calculateMorale(holding);
+  }
+  if (typeof manager?._medicalAssignments === "function") {
+    dependencies.medicalAssignments = (holding) => manager._medicalAssignments(holding);
+  }
+  if (typeof manager?._medicalCapacityForBuilding === "function") {
+    dependencies.medicalCapacityForBuilding = (holding, building) => manager._medicalCapacityForBuilding(holding, building);
+  }
+  return dependencies;
+}
+
+function battleRepairReservationOptions(holding, operationId, manager = getSkyholdManager()) {
+  return {
+    operationId,
+    reservedAt: new Date().toISOString(),
+    reservedQd: holding?.gm?.calendaria?.lastQd,
+    planCosts: typeof manager?._storageCanPay === "function"
+      ? ({ holding: draft, costs }) => manager._storageCanPay(draft, costs)
+      : null,
+    takeResourceLots: typeof manager?._storageTakeLots === "function"
+      ? (draft, row, qty) => manager._storageTakeLots(draft, row, qty)
+      : null
+  };
+}
+
+function buildMortalityHelp(holding, { calculationDependencies = {} } = {}) {
+  const support = medicalSupport(holding, { battleLost: false, ...calculationDependencies });
+  const hasCare = support.capacity > 0;
+  const base = { broken: 1, injured: 2, heavy: 3 };
+  const current = {
+    broken: Math.max(0, base.broken - (hasCare ? 1 : 0)),
+    injured: Math.max(0, base.injured - (hasCare ? 1 : 0)),
+    heavy: Math.max(0, base.heavy - (hasCare ? 1 : 0))
+  };
+  const currentLine = hasCare
+    ? `Сейчас с учетом лечебных зданий первые ${support.capacity} потерь получают лечение: перелом ${chanceText(current.broken)}, ранение ${chanceText(current.injured)}, тяжелое ${chanceText(current.heavy)}.`
+    : `Сейчас свободных медмест нет: перелом ${chanceText(base.broken)}, ранение ${chanceText(base.injured)}, тяжелое ${chanceText(base.heavy)}.`;
+  const short = hasCare
+    ? `лечение ${support.capacity}: ${chanceText(current.injured)} / ${chanceText(current.heavy)}`
+    : `без лечения: ${chanceText(base.injured)} / ${chanceText(base.heavy)}`;
+  const tooltip = [
+    "Impact по защитникам создает столько попыток потерь жителей.",
+    "Кандидаты: оборонные отряды, гарнизоны, военные жители и поднятое ополчение. Неполное ополчение тоже рискует, даже если не дает кубов.",
+    "Травма d6: 1 — перелом, 2–3 — ранение, 4–6 — тяжелое ранение.",
+    `Смерть d6 без лечения: перелом ${chanceText(base.broken)}, ранение ${chanceText(base.injured)}, тяжелое ${chanceText(base.heavy)}.`,
+    "Свободное медместо снижает шанс смерти одной потери на 1 шаг: перелом 0/6, ранение 1/6, тяжелое 2/6.",
+    currentLine,
+    `Медицина: ${support.text}.`,
+    "Если трек защитников сломан или цель врага выполнена, бой считается проигранным: лечебные здания не успевают принять новых раненых этого раунда."
+  ].join("\n");
+  return { short, tooltip, support };
+}
+
+export class SkyholdMassCombatApp extends RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2)) {
   static instances = new Set();
+
+  static open({ holdingId } = {}, options = {}) {
+    const id = String(holdingId ?? "");
+    const existing = Array.from(SkyholdMassCombatApp.instances).find((app) => String(app?.holdingId ?? "") === id);
+    const app = existing ?? new SkyholdMassCombatApp({ holdingId: id || holdingId });
+    return app.render({ force: true, focus: true, ...options });
+  }
 
   static rerenderOpen({ skipFocused = true } = {}) {
     for (const app of SkyholdMassCombatApp.instances) {
@@ -101,22 +138,26 @@ export class SkyholdMassCombatApp extends HandlebarsApplicationMixin(Application
 
   async _prepareContext(options) {
     const context = await super._prepareContext(options);
-    const { data, holding, index: holdingIndex } = HoldingService.getReadableHoldingEntry(this.holdingId, { fallback: true });
+    const { holding } = HoldingService.getReadableHoldingEntry(this.holdingId, { fallback: false });
     const manager = getSkyholdManager();
-    const canEdit = Boolean(game.user?.isGM);
-    const canEditDefender = canEdit || Boolean(holding?.gm?.playersCanEditBattle === true);
+    const calculationDependencies = battleCalculationDependencies(manager);
     const state = holding?.gm?.massCombat ?? {};
+    const pendingRound = pendingBattleRoundContext(state.pendingRound);
+    const permissions = holdingPermissionContext(holding);
+    const canResolveBattle = permissions.canResolveBattle;
+    const canEdit = canResolveBattle && !pendingRound;
+    const canEditDefender = permissions.canEditBattleSetup && !pendingRound;
     const defense = manager?._defenseSummary?.(holding) ?? { total: asNumber(holding?.overview?.defense, 0), tooltip: "" };
-    const reputation = manager?._reputationSummary?.(holding) ?? { total: asNumber(holding?.overview?.reputation, 0), tooltip: "" };
-    const morale = manager?._moraleState?.(manager?._calculateMorale?.(holding) ?? 0) ?? { value: 0, label: "", icon: "fa-regular fa-face-meh" };
-    const calc = this._calculateBattle(holding, state, { defenseTotal: defense.total });
+    const calc = calculateBattle(holding, state, { defenseTotal: defense.total, ...calculationDependencies });
+    calc.mortalityHelp = buildMortalityHelp(holding, { calculationDependencies });
+    const terminal = battleTerminalState(state, calc);
 
     return {
       ...context,
       canEdit,
       canEditDefender,
+      permissions,
       holding,
-      holdingIndex,
       hasHolding: Boolean(holding),
       state,
       scaleOptions: selectOptions(SCALES, state.scale),
@@ -133,9 +174,13 @@ export class SkyholdMassCombatApp extends HandlebarsApplicationMixin(Application
       attackerStrategySummary: strategySummary(calc.attackerStrategy, "attacker"),
       tagRows: this._tagRows(calc.effectiveState ?? state),
       defense,
-      reputation,
-      morale,
       calc,
+      terminal,
+      pendingRound,
+      battleArchive: battleArchiveContext(state.archive),
+      canRollRound: canEdit && !terminal.finished && !pendingRound,
+      canApplyPendingRound: canResolveBattle && Boolean(pendingRound),
+      canFinalizeBattle: canResolveBattle && terminal.finished && state.phase !== "archived",
       logRows: (state.log ?? []).slice().reverse().map((row) => ({
         ...row,
         createdText: String(row.createdAt ?? "").replace("T", " ").slice(0, 16),
@@ -153,6 +198,7 @@ export class SkyholdMassCombatApp extends HandlebarsApplicationMixin(Application
     if (!root) return;
     this._bindInputGuards(root);
     this._bindGlobalInputGuard(root);
+    bindFloatingTooltips(this, root);
     this._bindDelegatedEvents(root);
     this._applyCollapsedSections(root);
   }
@@ -164,25 +210,32 @@ export class SkyholdMassCombatApp extends HandlebarsApplicationMixin(Application
     const listenerOptions = { signal: controller.signal };
     const clickActions = {
       "mass-roll-round": "_onRollRound",
+      "mass-apply-round": "_onApplyPendingRound",
+      "mass-discard-round": "_onDiscardPendingRound",
+      "mass-finalize-battle": "_onFinalizeBattle",
       "mass-post-summary": "_onPostSummary",
       "mass-post-aftermath": "_onPostAftermath",
       "mass-start-repairs": "_onStartRepairs",
       "mass-reset": "_onResetBattle",
       "mass-clear-log": "_onClearLog",
       "mass-apply-preset": "_onApplyAttackerPreset",
+      "mass-restore-source-type": "_onRestoreAttackerSourceType",
+      "mass-restore-source-efficiency": "_onRestoreAttackerSourceEfficiency",
       "mass-toggle-tags": "_onToggleTagsPopover",
       "mass-toggle-section": "_onToggleSection",
       "mass-show-counters": "_onShowCounterHelp",
       "mass-show-weather": "_onShowWeatherHelp"
     };
     const dispatch = (event, element, handlerName) => {
-      const handler = this?.[handlerName];
-      if (typeof handler !== "function") return false;
-      handler.call(this, this._delegatedEvent(event, element));
-      return true;
+      return dispatchDelegatedAction(this, event, element, handlerName);
     };
 
     root.addEventListener("change", (event) => {
+      const presetSelect = event.target?.closest?.("[data-attacker-preset-select]");
+      if (presetSelect && root.contains(presetSelect)) {
+        dispatch(event, presetSelect, "_onAttackerPresetSelectionChange");
+        return;
+      }
       const field = event.target?.closest?.("[data-mass-field]");
       if (!field || !root.contains(field)) return;
       dispatch(event, field, "_onMassFieldChange");
@@ -195,18 +248,16 @@ export class SkyholdMassCombatApp extends HandlebarsApplicationMixin(Application
         if (handlerName) dispatch(event, element, handlerName);
       }
       if (event.target?.closest?.("[data-action='mass-toggle-tags'], [data-action='mass-show-counters'], [data-action='mass-show-weather'], .fbls-battle-tags-popover")) return;
-      root.querySelector(".fbls-battle-tags-popover")?.classList.remove("open");
+      this._closeTagsPopover();
     }, listenerOptions);
-  }
 
-  _delegatedEvent(event, currentTarget) {
-    return new Proxy(event, {
-      get(target, prop) {
-        if (prop === "currentTarget" || prop === "delegateTarget") return currentTarget;
-        const value = target[prop];
-        return typeof value === "function" ? value.bind(target) : value;
-      }
-    });
+    root.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") return;
+      const trigger = root.querySelector("[data-action='mass-toggle-tags']");
+      if (!root.querySelector(".fbls-battle-tags-popover.open")) return;
+      this._closeTagsPopover();
+      trigger?.focus?.();
+    }, listenerOptions);
   }
 
   _applyCollapsedSections(root = this.element) {
@@ -242,60 +293,25 @@ export class SkyholdMassCombatApp extends HandlebarsApplicationMixin(Application
   }
 
   _bindInputGuards(root) {
-    const stop = (event) => event.stopPropagation();
-    const sanitizeTabs = (event) => {
-      const field = event.currentTarget;
-      if (!(field instanceof HTMLTextAreaElement)) return;
-      const value = String(field.value ?? "");
-      if (!value.includes("	")) return;
-      const start = field.selectionStart;
-      const end = field.selectionEnd;
-      const beforeTabs = value.slice(0, start).split("	").length - 1;
-      const beforeEndTabs = value.slice(0, end).split("	").length - 1;
-      field.value = value.replace(/	/g, "  ");
-      field.selectionStart = Math.max(0, start + beforeTabs);
-      field.selectionEnd = Math.max(0, end + beforeEndTabs);
-    };
-    root.querySelectorAll("input, textarea, select").forEach((field) => {
-      if (field instanceof HTMLTextAreaElement) {
-        field.addEventListener("input", sanitizeTabs);
-        field.addEventListener("paste", () => setTimeout(() => sanitizeTabs({ currentTarget: field }), 0));
-      }
-      for (const eventName of ["keydown", "keyup", "keypress", "input", "beforeinput", "paste", "copy", "cut", "mousedown", "mouseup", "click", "dblclick"]) {
-        field.addEventListener(eventName, stop, { capture: true });
-        field.addEventListener(eventName, stop);
-      }
-    });
+    bindInputGuards(root, { textareaSanitizer: (value) => replaceTabs(value, "  ") });
   }
 
   _bindGlobalInputGuard(root) {
-    this._unbindGlobalInputGuard();
-    const editableSelector = "input, textarea, select, [contenteditable='true']";
-    this._globalInputGuard = (event) => {
-      const target = event.target;
-      const active = document.activeElement;
-      const targetInside = target instanceof Element && root.contains(target);
-      const activeInside = active instanceof Element && root.contains(active);
-      const targetEditable = target instanceof Element && Boolean(target.closest(editableSelector));
-      const activeEditable = active instanceof Element && Boolean(active.closest(editableSelector));
-      if ((targetInside && targetEditable) || (activeInside && activeEditable)) event.stopImmediatePropagation();
-    };
-    for (const eventName of ["keydown", "keyup", "keypress"]) window.addEventListener(eventName, this._globalInputGuard, true);
+    bindGlobalInputGuard(this, root);
   }
 
   _unbindGlobalInputGuard() {
-    if (!this._globalInputGuard) return;
-    for (const eventName of ["keydown", "keyup", "keypress"]) window.removeEventListener(eventName, this._globalInputGuard, true);
-    this._globalInputGuard = null;
+    unbindGlobalInputGuard(this);
   }
 
   async _onClose(options) {
     await super._onClose(options);
     this._delegatedAbortController?.abort?.();
     this._delegatedAbortController = null;
+    hideFloatingTooltip(this);
     this._unbindGlobalInputGuard();
     SkyholdMassCombatApp.instances.delete(this);
-    getSkyholdAppClass()?.instance?.render({ force: true, focus: false });
+    requestSkyholdAppRender();
   }
 
   _tagRows(state = {}) {
@@ -318,42 +334,36 @@ export class SkyholdMassCombatApp extends HandlebarsApplicationMixin(Application
     event.stopPropagation();
     const popover = this.element?.querySelector?.(".fbls-battle-tags-popover");
     if (!popover) return;
-    popover.classList.toggle("open");
+    const open = popover.classList.toggle("open");
+    event.currentTarget?.setAttribute?.("aria-expanded", open ? "true" : "false");
+  }
+
+  _closeTagsPopover() {
+    const root = this.element;
+    root?.querySelector?.(".fbls-battle-tags-popover")?.classList.remove("open");
+    root?.querySelector?.("[data-action='mass-toggle-tags']")?.setAttribute?.("aria-expanded", "false");
   }
 
   _onShowCounterHelp(event) {
     event.preventDefault();
     event.stopPropagation();
-    const graphId = `fbls-counter-${foundry.utils.randomID?.(6) ?? Math.floor(Math.random() * 999999)}`;
-    const cleanup = bindCounterGraphRuntime(graphId);
-    const result = this._showSimpleDialog("Контры тегов", counterGraphHtml(graphId), { classes: ["fbl-skyhold-dark-dialog", "fbl-skyhold-counter-dialog"], width: 660 });
-    if (result?.finally) return result.finally(cleanup);
-    return result;
+    return SkyholdCounterReferenceApp.open();
   }
 
   _onShowWeatherHelp(event) {
     event.preventDefault();
     event.stopPropagation();
-    const data = HoldingService.getReadableHoldingEntry(this.holdingId, { fallback: true });
-    const state = data?.holding?.gm?.massCombat ?? {};
-    const calc = this._calculateBattle(data?.holding, state, { defenseTotal: 0 });
-    const cards = (calc?.weather?.catalog ?? []).map((weather) => {
-      const tagText = (weather.tagRows ?? []).map((row) => `<span class="${row.tone}">${escapeHtml(row.text)}</span>`).join("") || "<span>нет</span>";
-      const planText = (weather.planRows ?? []).map((row) => `<span class="${row.tone}">${escapeHtml(row.text)}</span>`).join("") || "<span>нет</span>";
-      return `<article class="fbls-weather-help-card"><header><strong>${escapeHtml(weather.label)}</strong><em>${escapeHtml(weather.summary)}</em></header><div><b>Теги</b>${tagText}</div><div><b>Планы</b>${planText}</div></article>`;
-    }).join("");
-    const html = `<div class="fbl-skyhold fbls-dialog-help fbls-skyhold-dark-panel fbls-weather-help-compact"><div class="fbls-help-lead compact no-title"><span>Модификаторы эффективности в битве за владение.</span></div><div class="fbls-weather-help-list">${cards}</div></div>`;
-    return this._showSimpleDialog("Погода", html, { classes: ["fbl-skyhold-dark-dialog", "fbl-skyhold-weather-dialog"], width: 560 });
-  }
-
-  _showSimpleDialog(title, html, options = {}) {
-    const classes = [...new Set(["fbl-skyhold-dark-dialog", ...(options.classes ?? [])])];
-    const windowOptions = { title };
-    if (options.width) windowOptions.width = options.width;
-    if (foundry?.applications?.api?.DialogV2?.wait) {
-      return foundry.applications.api.DialogV2.wait({ window: windowOptions, classes, content: html, buttons: [{ action: "ok", label: "Понятно", default: true }] });
+    const data = HoldingService.getReadableHoldingEntry(this.holdingId, { fallback: false });
+    if (!data?.holding) {
+      warnNoHoldingAccess();
+      return null;
     }
-    return new Dialog({ title, content: html, classes, width: options.width, buttons: { ok: { label: "Понятно" } }, default: "ok" }).render(true);
+    const state = data?.holding?.gm?.massCombat ?? {};
+    const calc = calculateBattle(data?.holding, state, { defenseTotal: 0, ...battleCalculationDependencies() });
+    return SkyholdWeatherReferenceApp.open({
+      catalog: calc?.weather?.catalog ?? [],
+      currentKey: calc?.weather?.key ?? ""
+    });
   }
 
   _attackerPresetOptions(selected = "custom") {
@@ -366,66 +376,6 @@ export class SkyholdMassCombatApp extends HandlebarsApplicationMixin(Application
     }));
   }
 
-  _builtBuildings(holding) { return builtBuildings(this, holding); }
-
-  _isDefenseBuilding(building) { return isDefenseBuilding(this, building); }
-
-  _isAdultResident(person) { return isAdultResident(this, person); }
-
-  _personText(person = {}) { return personText(this, person); }
-
-  _personAssignmentText(person = {}) { return personAssignmentText(this, person); }
-
-  _isMilitaryResident(person = {}) { return isMilitaryResident(this, person); }
-
-  _hasResidentWords(person = {}, pattern) { return hasResidentWords(this, person, pattern); }
-
-  _residentCombatTrait(person = {}) { return residentCombatTrait(this, person); }
-
-  _isInjuredResident(person = {}) { return isInjuredResident(this, person); }
-
-  _isSoldierResident(person = {}) { return isSoldierResident(this, person); }
-
-  _isSergeantCandidate(person = {}) { return isSergeantCandidate(this, person); }
-
-  _isMilitaryBackgroundResident(person = {}) { return isMilitaryBackgroundResident(this, person); }
-
-  _isCommanderCandidate(person = {}) { return isCommanderCandidate(this, person); }
-
-  _isSuitableForSquadType(person = {}, type = "line") { return isSuitableForSquadType(this, person, type); }
-
-  _soldierEfficiency(person = {}, type = "line") { return soldierEfficiency(this, person, type); }
-
-  _squadTypeProfile(type = "line") { return squadTypeProfile(this, type); }
-
-  _defenseSquadProfile(holding, state = {}) { return defenseSquadProfile(this, holding, state); }
-
-  _commanderEffectiveness(person = {}) { return commanderEffectiveness(this, person); }
-
-  _defenseCommanderBonus(holding, armyDice = 0) { return defenseCommanderBonus(this, holding, armyDice); }
-
-  _inferRoundThreatKey(state = {}, attackerStrategy = {}) { return inferRoundThreatKey(this, state, attackerStrategy); }
-
-  _defenseGarrisonProfile(holding) { return defenseGarrisonProfile(this, holding); }
-
-  _fortificationProfile(holding, state = {}, options = {}) { return fortificationProfile(this, holding, state, options); }
-
-  _medicalSupport(holding, options = {}) {
-    return medicalSupport(this, holding, options);
-  }
-
-  _defenderCasualtyCandidates(holding, state = {}, calc = {}) {
-    return defenderCasualtyCandidates(this, holding, state, calc);
-  }
-
-  _applyBattleConditionToPerson(holding, person, condition = "injured", options = {}) {
-    return applyBattleConditionToPerson(this, holding, person, condition, options);
-  }
-
-  _applyDefenderResidentCasualties(holding, state = {}, lossSteps = 0, calc = {}) {
-    return applyDefenderResidentCasualties(this, holding, state, lossSteps, calc);
-  }
-
   _compactNameList(names = [], limit = 4) {
     const clean = names.map((name) => String(name ?? "").trim()).filter(Boolean);
     if (clean.length <= limit) return clean.join(", ");
@@ -436,27 +386,39 @@ export class SkyholdMassCombatApp extends HandlebarsApplicationMixin(Application
     event.preventDefault();
     event.stopPropagation();
     if (!game.user?.isGM) return;
-    const { data, holding, index: holdingIndex } = HoldingService.getHoldingEntry(this.holdingId);
-    if (holdingIndex < 0 || !holding) return;
-    const targets = startBattleRepairs(holding);
-    if (!targets.length) {
-      ui.notifications.info("Нет поврежденных зданий, которые можно отправить в ремонт.");
+    const operationId = makeId("battle-repair");
+    const result = await HoldingService.updateHolding(this.holdingId, (holding) => {
+      const repairs = startBattleRepairs(holding, battleRepairReservationOptions(holding, operationId));
+      if (!repairs.started.length) {
+        return SkyholdData.skipTransaction({
+          ok: false,
+          blocked: repairs.blocked.length,
+          message: repairs.blocked[0]?.message ?? ""
+        });
+      }
+      return { ok: true, count: repairs.started.length, blocked: repairs.blocked.length };
+    });
+    if (!result?.ok) {
+      if (result?.blocked) ui.notifications.warn(result.message || "Ремонт не начат: не удалось зарезервировать материалы по смете.");
+      else ui.notifications.info("Нет поврежденных зданий, которые можно отправить в ремонт.");
       return;
     }
-    await HoldingService.saveData(data);
-    ui.notifications.info(`Ремонт начат: ${targets.length} здан.`);
-    this.render({ force: true, focus: false });
+    ui.notifications.info(`Ремонт начат: ${result.count} здан.${result.blocked ? ` Без материалов осталось: ${result.blocked}.` : ""}`);
+    this.requestRender();
   }
 
   async _onPostAftermath(event) {
     event.preventDefault();
     event.stopPropagation();
-    const { holding } = HoldingService.getReadableHoldingEntry(this.holdingId, { fallback: true });
-    if (!holding) return;
+    const { holding } = HoldingService.getReadableHoldingEntry(this.holdingId, { fallback: false });
+    if (!holding) {
+      warnNoHoldingAccess();
+      return;
+    }
     const state = holding.gm?.massCombat ?? {};
-    const rows = battleAftermathRows(this, holding, state);
-    await ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ alias: holding.name || "Владение" }),
+    const rows = battleAftermathRows(holding, state, (names) => this._compactNameList(names));
+    await createFoundryChatMessage({
+      speaker: foundryChatSpeaker({ alias: holding.name || "Владение" }),
       content: `
         <div class="fbls-chat-card">
           <h3>${escapeHtml(state.title || `Итог боя: ${holding.name || "владение"}`)}</h3>
@@ -469,6 +431,65 @@ export class SkyholdMassCombatApp extends HandlebarsApplicationMixin(Application
     });
   }
 
+  async _onFinalizeBattle(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!game.user?.isGM) return;
+    const action = await this._chooseAftermathAction();
+    if (!action || action === "cancel") return;
+    const repairOperationId = makeId("battle-repair");
+    const result = await HoldingService.updateHolding(this.holdingId, (holding) => {
+      const state = holding?.gm?.massCombat;
+      if (!state) return SkyholdData.skipTransaction({ ok: false, reason: "missing" });
+      const manager = getSkyholdManager();
+      const calculationDependencies = battleCalculationDependencies(manager);
+      const defenseTotal = manager?._defenseSummary?.(holding)?.total ?? asNumber(holding?.overview?.defense, 0);
+      const terminal = battleTerminalState(state, calculateBattle(holding, state, { defenseTotal, ...calculationDependencies }));
+      if (!terminal.finished) return SkyholdData.skipTransaction({ ok: false, reason: "active" });
+      state.outcome = terminal.outcome;
+      state.terminalReason = terminal.reason;
+      state.resolvedAt = state.resolvedAt || new Date().toISOString();
+      state.resolvedBy = state.resolvedBy || String(game.user?.id ?? "");
+      const archive = archiveBattle(state, {
+        outcome: terminal.outcome,
+        terminalReason: terminal.reason,
+        resolvedAt: state.resolvedAt,
+        resolvedBy: state.resolvedBy,
+        reason: "resolved"
+      });
+      const repairs = action === "archive-repair"
+        ? startBattleRepairs(holding, battleRepairReservationOptions(holding, repairOperationId))
+        : { started: [], blocked: [] };
+      state.phase = "archived";
+      return { ok: true, archive, repairCount: repairs.started.length, repairBlocked: repairs.blocked.length };
+    });
+    if (!result?.ok) {
+      ui.notifications.warn(result?.reason === "active" ? "Бой ещё не достиг терминального исхода." : "Не удалось завершить бой.");
+      return;
+    }
+    ui.notifications.info(result.repairCount
+      ? `Бой архивирован. Ремонт начат: ${result.repairCount} здан.${result.repairBlocked ? ` Без материалов осталось: ${result.repairBlocked}.` : ""}`
+      : (result.repairBlocked ? `Бой архивирован. Ремонт не начат: для ${result.repairBlocked} здан. нет полной сметы или материалов.` : "Бой архивирован."));
+    this.requestRender();
+  }
+
+  async _chooseAftermathAction() {
+    const DialogV2 = foundry?.applications?.api?.DialogV2;
+    if (DialogV2?.wait) {
+      return DialogV2.wait({
+        window: { title: "Завершить бой" },
+        content: "<p>Сохранить воспроизводимый снимок боя в архиве? Повреждённые здания можно сразу перевести в ремонт.</p>",
+        buttons: [
+          { action: "archive", label: "Только архив", icon: "fa-solid fa-box-archive" },
+          { action: "archive-repair", label: "Архив и ремонт", icon: "fa-solid fa-screwdriver-wrench", default: true },
+          { action: "cancel", label: "Отмена", icon: "fa-solid fa-xmark" }
+        ],
+        rejectClose: false
+      });
+    }
+    return await this._confirm("Завершить бой", "Архивировать текущий бой?") ? "archive" : "cancel";
+  }
+
   _playDefenseSound(holding, margin = 0) {
     const src = margin > 0
       ? holding?.gm?.defense?.victorySound
@@ -476,29 +497,16 @@ export class SkyholdMassCombatApp extends HandlebarsApplicationMixin(Application
         ? holding?.gm?.defense?.defeatSound
         : holding?.gm?.defense?.drawSound;
     if (!src) return;
-    try { AudioHelper.play({ src, volume: 0.8, autoplay: true, loop: false }, true); }
+    try { playFoundryAudio({ src, volume: 0.8, autoplay: true, loop: false }, true); }
     catch (error) { console.warn("FBL Skyhold | Defense sound failed", error); }
   }
-
-  _autoDefenderProfile(holding, state = {}, options = {}) { return autoDefenderProfile(this, holding, state, options); }
-
-  _lossTrack(label, steps, units, fallbackUnits = 1) { return lossTrack(this, label, steps, units, fallbackUnits); }
-
-  _damageContext(holding, state = {}, calcBase = {}) { return damageContext(this, holding, state, calcBase); }
-
-  _damageTrack(holding, state = {}, calcBase = {}) { return damageTrack(this, holding, state, calcBase); }
-
-  _objectiveTrack(state = {}, scale = SCALES.raid) { return objectiveTrack(this, state, scale); }
-
-  _calculateBattle(holding, state = {}, options = {}) { return calculateBattle(this, holding, state, options); }
-
-  _deterrenceText(defenderCombatDice, attackerCombatDice, fortificationDice) { return deterrenceText(this, defenderCombatDice, attackerCombatDice, fortificationDice); }
 
   _readStateFromForm() {
     const root = this.element;
     if (!root) return null;
     const state = {};
     root.querySelectorAll("[data-mass-field]").forEach((field) => {
+      if (field.dataset.skipFormState === "true") return;
       const key = field.dataset.massField;
       if (!key) return;
       const value = fieldValue(field);
@@ -524,8 +532,8 @@ export class SkyholdMassCombatApp extends HandlebarsApplicationMixin(Application
 
   _canEditMassField(key = "") {
     if (game.user?.isGM) return true;
-    const { holding } = HoldingService.getReadableHoldingEntry(this.holdingId, { fallback: true });
-    return Boolean(holding?.gm?.playersCanEditBattle === true && this._isDefenderEditableMassKey(key));
+    const { holding } = HoldingService.getReadableHoldingEntry(this.holdingId, { fallback: false });
+    return Boolean(holdingPermissionContext(holding).canEditBattleSetup && this._isDefenderEditableMassKey(key));
   }
 
   async _saveStatePatch(patch = {}) {
@@ -533,8 +541,8 @@ export class SkyholdMassCombatApp extends HandlebarsApplicationMixin(Application
     if (game.user?.isGM) return HoldingService.updateMassCombatState(this.holdingId, cleanPatch);
     const allowed = Object.fromEntries(Object.entries(cleanPatch).filter(([key]) => this._isDefenderEditableMassKey(key)));
     if (!Object.keys(allowed).length) return null;
-    const { holding } = HoldingService.getReadableHoldingEntry(this.holdingId, { fallback: true });
-    if (holding?.gm?.playersCanEditBattle !== true) return null;
+    const { holding } = HoldingService.getReadableHoldingEntry(this.holdingId, { fallback: false });
+    if (!holdingPermissionContext(holding).canEditBattleSetup) return null;
     return HoldingService.updateMassCombatState(holding.id, allowed);
   }
 
@@ -545,21 +553,88 @@ export class SkyholdMassCombatApp extends HandlebarsApplicationMixin(Application
     const key = field?.dataset?.massField;
     if (!key || !this._canEditMassField(key)) return;
     const value = fieldValue(field);
-    await this._saveStatePatch({ [key]: value });
-    this.render({ force: true, focus: false });
+    const patch = game.user?.isGM
+      ? normalizeManualMassCombatPatch({
+        [key]: value,
+        pendingRound: null,
+        phase: "active",
+        outcome: "active",
+        terminalReason: ""
+      })
+      : { [key]: value };
+    if (game.user?.isGM && key === "attackerUnits") {
+      const cleanPatch = normalizeMassCombatPatch(patch);
+      await HoldingService.updateHolding(this.holdingId, (holding) => {
+        if (!holding.gm || typeof holding.gm !== "object") holding.gm = {};
+        if (!holding.gm.massCombat || typeof holding.gm.massCombat !== "object") holding.gm.massCombat = {};
+        Object.assign(holding.gm.massCombat, cleanPatch);
+        pruneAttackerSourceOverrides(holding.gm.massCombat, cleanPatch.attackerUnits);
+        return holding.gm.massCombat;
+      });
+    } else {
+      await this._saveStatePatch(patch);
+    }
+    this.requestRender();
   }
 
+  _onAttackerPresetSelectionChange(event) {
+    const selected = String(event.currentTarget?.value ?? "custom");
+    const summary = ATTACKER_PRESETS[selected]?.summary ?? ATTACKER_PRESETS.custom.summary;
+    const note = this.element?.querySelector?.("[data-attacker-preset-summary]");
+    if (note) note.textContent = summary;
+  }
+
+  async _onRestoreAttackerSourceType(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!game.user?.isGM) return;
+    const key = String(event.currentTarget?.dataset?.sourceTypeField ?? "");
+    if (!/^attackerSourcePrimaryTag\d+$/.test(key)) return;
+    await HoldingService.updateHolding(this.holdingId, (holding) => {
+      if (!holding.gm || typeof holding.gm !== "object") holding.gm = {};
+      if (!holding.gm.massCombat || typeof holding.gm.massCombat !== "object") holding.gm.massCombat = {};
+      delete holding.gm.massCombat[key];
+      holding.gm.massCombat.attackerPreset = "custom";
+      return holding.gm.massCombat;
+    });
+    this.requestRender();
+  }
+
+  async _onRestoreAttackerSourceEfficiency(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!game.user?.isGM) return;
+    const key = String(event.currentTarget?.dataset?.sourceEfficiencyField ?? "");
+    if (!/^attackerSourceEfficiency\d+$/.test(key)) return;
+    await HoldingService.updateHolding(this.holdingId, (holding) => {
+      if (!holding.gm || typeof holding.gm !== "object") holding.gm = {};
+      if (!holding.gm.massCombat || typeof holding.gm.massCombat !== "object") holding.gm.massCombat = {};
+      delete holding.gm.massCombat[key];
+      holding.gm.massCombat.attackerPreset = "custom";
+      return holding.gm.massCombat;
+    });
+    this.requestRender();
+  }
 
   async _onApplyAttackerPreset(event) {
     event.preventDefault();
     event.stopPropagation();
     if (!game.user?.isGM) return;
     const root = this.element;
-    const selected = root?.querySelector("[data-mass-field='attackerPreset']")?.value || "custom";
-    const preset = ATTACKER_PRESETS[selected] ?? ATTACKER_PRESETS.custom;
-    const patch = { attackerPreset: selected, ...(preset.patch ?? {}) };
-    await this._saveStatePatch(patch);
-    this.render({ force: true, focus: false });
+    const selected = root?.querySelector("[data-attacker-preset-select]")?.value || "custom";
+    if (selected !== "custom") {
+      const confirmed = await this._confirm(
+        "Применить пресет нападающих",
+        "Пресет заменит параметры нападающих и сбросит ручные теги отрядов. Продолжить?"
+      );
+      if (!confirmed) return;
+    }
+    await HoldingService.updateHolding(this.holdingId, (holding) => {
+      if (!holding.gm || typeof holding.gm !== "object") holding.gm = {};
+      if (!holding.gm.massCombat || typeof holding.gm.massCombat !== "object") holding.gm.massCombat = {};
+      return applyAttackerPresetToState(holding.gm.massCombat, selected);
+    });
+    this.requestRender();
   }
 
   async _onRollRound(event) {
@@ -567,88 +642,210 @@ export class SkyholdMassCombatApp extends HandlebarsApplicationMixin(Application
     event.stopPropagation();
     if (!game.user?.isGM) return;
     const formState = this._readStateFromForm() ?? {};
-    const { data, holding, index: holdingIndex } = HoldingService.getHoldingEntry(this.holdingId);
-    if (holdingIndex < 0 || !holding) return;
-    if (!holding.gm) holding.gm = {};
-    if (!holding.gm.massCombat || typeof holding.gm.massCombat !== "object") holding.gm.massCombat = {};
-    Object.assign(holding.gm.massCombat, formState);
-    const state = holding.gm.massCombat;
-    if (!state.battleId) state.battleId = foundry.utils.randomID?.(10) ?? `battle-${Date.now()}`;
-    const manager = getSkyholdManager();
-    const defenseTotal = manager?._defenseSummary?.(holding)?.total ?? asNumber(holding?.overview?.defense, 0);
-    const calc = this._calculateBattle(holding, state, { defenseTotal });
-    if (!calc.defenderPool && !calc.attackerPool) {
-      ui.notifications.warn("Нечего бросать: оба пула равны 0.");
+    const result = await HoldingService.updateHolding(this.holdingId, (holding) => {
+      if (!holding.gm) holding.gm = {};
+      if (!holding.gm.massCombat || typeof holding.gm.massCombat !== "object") holding.gm.massCombat = {};
+      Object.assign(holding.gm.massCombat, formState);
+      const state = holding.gm.massCombat;
+      state.schemaVersion = 2;
+      if (!state.battleId) state.battleId = makeId("battle");
+      if (!state.startedAt) state.startedAt = new Date().toISOString();
+      if (state.pendingRound) return SkyholdData.skipTransaction({ ok: true, pendingRound: state.pendingRound, alreadyPending: true });
+
+      const manager = getSkyholdManager();
+      const calculationDependencies = battleCalculationDependencies(manager);
+      const defenseTotal = manager?._defenseSummary?.(holding)?.total ?? asNumber(holding?.overview?.defense, 0);
+      const calc = calculateBattle(holding, state, { defenseTotal, ...calculationDependencies });
+      const terminal = battleTerminalState(state, calc);
+      if (terminal.finished) return SkyholdData.skipTransaction({ ok: false, reason: "terminal", terminal });
+      if (!calc.defenderPool && !calc.attackerPool) return SkyholdData.skipTransaction({ ok: false, reason: "empty-pools" });
+
+      const pending = createPendingBattleRound({
+        holding,
+        state,
+        calc,
+        defenseTotal,
+        calculationDependencies,
+        compactNameList: (names) => this._compactNameList(names)
+      });
+      state.pendingRound = pending.pendingRound;
+      state.phase = "pending";
+      state.outcome = "active";
+      state.terminalReason = "";
+      return { ok: true, pendingRound: state.pendingRound, alreadyPending: false };
+    });
+    if (!result) return;
+    if (!result.ok) {
+      if (result.reason === "terminal") ui.notifications.warn(result.terminal?.title ?? "Бой уже завершён.");
+      else ui.notifications.warn("Нечего бросать: оба пула равны 0.");
       return;
     }
+    if (!result.alreadyPending) ui.notifications.info("Результат раунда подготовлен. Проверь последствия и примени их.");
+    this.requestRender();
+  }
 
-    const defenderRolls = rollD6Pool(calc.defenderPool);
-    const attackerRolls = rollD6Pool(calc.attackerPool);
-    const defenderSuccesses = successCount(defenderRolls);
-    const attackerSuccesses = successCount(attackerRolls);
-    const margin = defenderSuccesses - attackerSuccesses;
-    const round = Math.max(1, asInt(state.round, 1));
-    const consequences = roundConsequences({ defenderSuccesses, attackerSuccesses, margin }, calc, state);
+  async _onApplyPendingRound(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!game.user?.isGM) return;
+    const result = await HoldingService.updateHolding(this.holdingId, (holding) => {
+      if (!holding.gm) holding.gm = {};
+      if (!holding.gm.massCombat || typeof holding.gm.massCombat !== "object") holding.gm.massCombat = {};
+      const state = holding.gm.massCombat;
+      const pendingRound = state.pendingRound;
+      if (!pendingRound) return SkyholdData.skipTransaction({ ok: false, reason: "missing-pending" });
+      if ((state.log ?? []).some((row) => String(row?.roundId ?? "") === String(pendingRound.roundId ?? ""))) {
+        state.pendingRound = null;
+        state.phase = "active";
+        return { ok: true, alreadyApplied: true, holding, state };
+      }
+      const manager = getSkyholdManager();
+      const calculationDependencies = battleCalculationDependencies(manager);
+      const defenseTotal = manager?._defenseSummary?.(holding)?.total ?? asNumber(holding?.overview?.defense, 0);
+      const calc = calculateBattle(holding, state, { defenseTotal, ...calculationDependencies });
+      const resolved = applyPendingBattleRound({
+        holding,
+        state,
+        pendingRound,
+        calc,
+        defenseTotal,
+        calculationDependencies,
+        compactNameList: (names) => this._compactNameList(names)
+      });
+      if (!resolved.ok) return SkyholdData.skipTransaction(resolved);
+      const {
+        round,
+        defenderRolls,
+        attackerRolls,
+        defenderSuccesses,
+        attackerSuccesses,
+        margin,
+        consequences,
+        casualtyResult,
+        damageResult,
+        terminal
+      } = resolved;
+      state.pendingRound = null;
+      state.phase = terminal.finished ? "terminal" : "active";
+      state.outcome = terminal.outcome;
+      state.terminalReason = terminal.reason;
+      state.resolvedAt = terminal.finished ? new Date().toISOString() : "";
+      state.resolvedBy = terminal.finished ? String(game.user?.id ?? "") : "";
+      if (!Array.isArray(state.log)) state.log = [];
+      const logRow = {
+        id: makeId("battle-log"),
+        roundId: resolved.roundId,
+        createdAt: new Date().toISOString(),
+        battleId: state.battleId,
+        round,
+        title: state.title || `Бой у ${holding.name || "владения"}`,
+        result: consequences.result,
+        defenderPool: calc.defenderPool,
+        attackerPool: calc.attackerPool,
+        defenderRolls,
+        attackerRolls,
+        randomTrace: pendingRound.randomTrace,
+        resultFingerprint: pendingRound.fingerprint,
+        defenderSuccesses,
+        attackerSuccesses,
+        margin,
+        defenderLossDelta: consequences.defenderLossDelta,
+        attackerLossDelta: consequences.attackerLossDelta,
+        settlementDamageDelta: consequences.settlementDamageDelta,
+        breachDelta: consequences.breachDelta,
+        objectiveDelta: consequences.objectiveDelta,
+        defenderPositionDelta: consequences.defenderPositionDelta,
+        attackerPositionDelta: consequences.attackerPositionDelta,
+        defenderImpact: consequences.defenderImpact,
+        attackerImpact: consequences.attackerImpact,
+        casualtyText: casualtyResult.text || "",
+        damageText: damageResult.text || "",
+      };
+      state.log.push(logRow);
+      state.log = state.log.slice(-20);
 
-    state.defenderLossSteps = Math.max(0, asInt(state.defenderLossSteps ?? state.defenderLosses, 0) + consequences.defenderLossDelta);
-    state.attackerLossSteps = Math.max(0, asInt(state.attackerLossSteps ?? state.attackerLosses, 0) + consequences.attackerLossDelta);
-    state.settlementDamage = Math.max(0, asInt(state.settlementDamage, 0) + consequences.settlementDamageDelta);
-    state.breachProgress = Math.max(0, asInt(state.breachProgress, 0) + consequences.breachDelta);
-    state.objectiveProgress = Math.max(0, asInt(state.objectiveProgress, 0) + consequences.objectiveDelta);
-    state.defenderPosition = clamp(asInt(state.defenderPosition, 0) + consequences.defenderPositionDelta, 0, 3);
-    state.attackerPosition = clamp(asInt(state.attackerPosition, 0) + consequences.attackerPositionDelta, 0, 3);
-    const battleLostForMedicine = asInt(state.defenderLossSteps ?? state.defenderLosses, 0) >= asInt(calc.defenderLossTrack?.threshold, 999) || asInt(state.objectiveProgress, 0) >= asInt(calc.objectiveTrack?.threshold, 999);
-    const casualtyResult = this._applyDefenderResidentCasualties(holding, state, consequences.defenderLossDelta, { ...calc, defenderRoundLost: battleLostForMedicine });
-    const damageResult = applySettlementBattleDamage(this, holding, state, consequences.settlementDamageDelta, calc);
-    state.round = round + 1;
-    if (!Array.isArray(state.log)) state.log = [];
-    const logRow = {
-      id: foundry.utils.randomID?.(10) ?? `battle-log-${Date.now()}`,
-      createdAt: new Date().toISOString(),
-      battleId: state.battleId,
-      round,
-      title: state.title || `Бой у ${holding.name || "владения"}`,
-      result: consequences.result,
-      defenderPool: calc.defenderPool,
-      attackerPool: calc.attackerPool,
-      defenderSuccesses,
-      attackerSuccesses,
-      margin,
-      defenderLossDelta: consequences.defenderLossDelta,
-      attackerLossDelta: consequences.attackerLossDelta,
-      settlementDamageDelta: consequences.settlementDamageDelta,
-      breachDelta: consequences.breachDelta,
-      objectiveDelta: consequences.objectiveDelta,
-      defenderPositionDelta: consequences.defenderPositionDelta,
-      attackerPositionDelta: consequences.attackerPositionDelta,
-      defenderImpact: consequences.defenderImpact,
-      attackerImpact: consequences.attackerImpact,
-      casualtyText: casualtyResult.text || "",
-      damageText: damageResult.text || "",
-    };
-    state.log.push(logRow);
-    state.log = state.log.slice(-20);
-
-    await HoldingService.saveData(data);
-    await ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ alias: holding.name || "Владение" }),
-      content: roundChatContent(this, holding, state, calc, { round, defenderRolls, attackerRolls, defenderSuccesses, attackerSuccesses, margin, casualtyText: casualtyResult.text || "", damageText: damageResult.text || "", ...consequences })
+      return {
+        ok: true,
+        holding,
+        state,
+        calc,
+        round,
+        defenderRolls,
+        attackerRolls,
+        defenderSuccesses,
+        attackerSuccesses,
+        margin,
+        casualtyText: casualtyResult.text || "",
+        damageText: damageResult.text || "",
+        consequences,
+        terminal
+      };
     });
-    this._playDefenseSound(holding, margin);
-    this.render({ force: true, focus: false });
+    if (!result) return;
+    if (!result.ok) {
+      if (result.reason === "missing-pending") ui.notifications.warn("Нет подготовленного раунда для применения.");
+      else if (result.reason === "stale") ui.notifications.warn("Данные боя изменились после броска. Отмени предпросмотр и брось раунд заново.");
+      else ui.notifications.error("Не удалось воспроизвести сохранённый random trace раунда. Последствия не применены.");
+      return;
+    }
+    if (result.alreadyApplied) {
+      ui.notifications.info("Этот раунд уже был применён ранее.");
+      this.requestRender();
+      return;
+    }
+    await createFoundryChatMessage({
+      speaker: foundryChatSpeaker({ alias: result.holding.name || "Владение" }),
+      content: roundChatContent(result.holding, result.state, result.calc, {
+        round: result.round,
+        defenderRolls: result.defenderRolls,
+        attackerRolls: result.attackerRolls,
+        defenderSuccesses: result.defenderSuccesses,
+        attackerSuccesses: result.attackerSuccesses,
+        margin: result.margin,
+        casualtyText: result.casualtyText,
+        damageText: result.damageText,
+        terminal: result.terminal,
+        ...result.consequences
+      })
+    });
+    this._playDefenseSound(result.holding, result.margin);
+    if (result.terminal?.finished) ui.notifications.info(result.terminal.title);
+    this.requestRender();
+  }
+
+  async _onDiscardPendingRound(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!game.user?.isGM) return;
+    const discarded = await HoldingService.updateHolding(this.holdingId, (holding) => {
+      const state = holding?.gm?.massCombat;
+      if (!state?.pendingRound) return SkyholdData.skipTransaction(false);
+      state.pendingRound = null;
+      state.phase = state.battleId ? "active" : "setup";
+      state.outcome = "active";
+      state.terminalReason = "";
+      return true;
+    });
+    if (!discarded) return;
+    ui.notifications.info("Предпросмотр раунда отменён без применения последствий.");
+    this.requestRender();
   }
 
   async _onPostSummary(event) {
     event.preventDefault();
     event.stopPropagation();
-    const { holding } = HoldingService.getReadableHoldingEntry(this.holdingId, { fallback: true });
-    if (!holding) return;
+    const { holding } = HoldingService.getReadableHoldingEntry(this.holdingId, { fallback: false });
+    if (!holding) {
+      warnNoHoldingAccess();
+      return;
+    }
     const state = holding.gm?.massCombat ?? {};
     const manager = getSkyholdManager();
+    const calculationDependencies = battleCalculationDependencies(manager);
     const defenseTotal = manager?._defenseSummary?.(holding)?.total ?? asNumber(holding?.overview?.defense, 0);
-    const calc = this._calculateBattle(holding, state, { defenseTotal });
-    await ChatMessage.create({
-      speaker: ChatMessage.getSpeaker({ alias: holding.name || "Владение" }),
+    const calc = calculateBattle(holding, state, { defenseTotal, ...calculationDependencies });
+    await createFoundryChatMessage({
+      speaker: foundryChatSpeaker({ alias: holding.name || "Владение" }),
       content: `
         <div class="fbls-chat-card">
           <h3>${escapeHtml(state.title || `Массовый бой: ${holding.name || "владение"}`)}</h3>
@@ -669,8 +866,21 @@ export class SkyholdMassCombatApp extends HandlebarsApplicationMixin(Application
     if (!game.user?.isGM) return;
     const confirmed = await this._confirm("Сбросить бой", "Очистить текущую подготовку боя, потери и лог? Характеристики владения не меняются.");
     if (!confirmed) return;
-    await this._saveStatePatch(resetMassCombatState());
-    this.render({ force: true, focus: false });
+    await HoldingService.updateHolding(this.holdingId, (holding) => {
+      if (!holding.gm || typeof holding.gm !== "object") holding.gm = {};
+      const current = holding.gm.massCombat ?? {};
+      archiveBattle(current, {
+        outcome: current.outcome ?? "active",
+        terminalReason: current.terminalReason ?? "",
+        resolvedBy: String(game.user?.id ?? ""),
+        reason: current.phase === "terminal" || current.phase === "archived" ? "resolved" : "aborted"
+      });
+      const next = resetMassCombatState();
+      next.archive = Array.isArray(current.archive) ? current.archive : [];
+      holding.gm.massCombat = next;
+      return next;
+    });
+    this.requestRender();
   }
 
   async _onClearLog(event) {
@@ -678,16 +888,12 @@ export class SkyholdMassCombatApp extends HandlebarsApplicationMixin(Application
     event.stopPropagation();
     if (!game.user?.isGM) return;
     await this._saveStatePatch({ log: [], casualtyLog: [], buildingDamageLog: [] });
-    this.render({ force: true, focus: false });
+    this.requestRender();
   }
 
   async _confirm(title, content) {
     try {
-      if (globalThis.Dialog?.confirm) {
-        return await globalThis.Dialog.confirm({ title, content: `<p>${escapeHtml(content)}</p>`, yes: () => true, no: () => false, defaultYes: false });
-      }
-      const DialogV2 = foundry?.applications?.api?.DialogV2;
-      if (DialogV2?.confirm) return await DialogV2.confirm({ window: { title }, content: `<p>${escapeHtml(content)}</p>`, modal: true });
+      return await foundryDialogV2().confirm({ window: { title }, content: `<p>${escapeHtml(content)}</p>`, modal: true });
     } catch (_error) {}
     return window.confirm(content);
   }

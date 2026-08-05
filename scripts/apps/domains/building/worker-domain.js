@@ -1,8 +1,6 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
-import { SkyholdData } from "../../../data/store.js";
 import { ATTRIBUTE_META } from "../../../generators/resident-rules.js";
 import { splitList, WORKER_TYPE_OPTIONS } from "../../../core/helpers.js";
-import { normalizeResourceId, resourceIcon, resourceLabel, resourceOptions } from "../../../core/resources.js";
 
 export const BuildingWorkerDomain = {
 _workerTypeSelectOptions(current = "") {
@@ -232,17 +230,23 @@ _workerEfficiencyForPerson(holding, building, person) {
   return { value: clean, suitable, traitBonus, matchedType, details };
 },
 
-_buildingEffectiveWorkers(holding, building) {
-  const assignedIds = (building?.assignedWorkerIds ?? []).filter(Boolean).map((id) => String(id));
-  const people = (holding?.people?.list ?? []).filter((person) => !person?.dead && this._safeNumber(person?.injuredDays, 0) <= 0);
+_buildingEffectiveWorkers(holding, building, workerContext = null) {
+  if (typeof workerContext?.dynamicEffectiveWorkers === "function") {
+    const dynamic = workerContext.dynamicEffectiveWorkers(holding, building);
+    if (dynamic && typeof dynamic === "object") return dynamic;
+  }
+  if (workerContext?.effectiveWorkers?.has(building)) return workerContext.effectiveWorkers.get(building);
+  const cachedWorkers = workerContext?.buildingWorkers?.get(building);
+  const assignedIds = cachedWorkers?.assignedIds ?? (building?.assignedWorkerIds ?? []).filter(Boolean).map((id) => String(id));
+  const activeAssignedPeople = cachedWorkers?.activeAssignedPeople ?? null;
+  const people = activeAssignedPeople ?? (holding?.people?.list ?? []).filter((person) => !person?.dead && this._safeNumber(person?.injuredDays, 0) <= 0);
   let total = 0;
   let suitableCount = 0;
   let traitBonus = 0;
   const matchedTypes = [];
   const details = [];
-  for (const id of assignedIds) {
-    const person = people.find((row) => String(row.id) === id);
-    if (!person) continue;
+  const assignedPeople = activeAssignedPeople ?? assignedIds.map((id) => people.find((row) => String(row.id) === id)).filter(Boolean);
+  for (const person of assignedPeople) {
     const result = this._workerEfficiencyForPerson(holding, building, person);
     total += result.value;
     if (result.suitable) suitableCount += 1;
@@ -250,10 +254,7 @@ _buildingEffectiveWorkers(holding, building) {
     if (result.traitBonus) traitBonus += result.traitBonus;
     details.push(...result.details);
   }
-  const leaderBonus = assignedIds.length > 1 && assignedIds.some((id) => {
-    const person = people.find((row) => String(row.id) === id);
-    return person && this._hasTrait(person, "Лидер");
-  }) ? 1 : 0;
+  const leaderBonus = assignedIds.length > 1 && assignedPeople.some((person) => this._hasTrait(person, "Лидер")) ? 1 : 0;
   total += leaderBonus;
   if (assignedIds.length) details.push(`${assignedIds.length} раб.`);
   if (suitableCount) details.push(`${suitableCount} эфф. тип.`);
@@ -261,6 +262,8 @@ _buildingEffectiveWorkers(holding, building) {
   if (traitBonus) details.push(`черты ${traitBonus > 0 ? "+" : ""}${traitBonus}`);
   if (leaderBonus) details.push("Лидер +1");
   if (!Number.isFinite(Number(total))) total = 0;
-  return { assigned: assignedIds.length, total, suitableCount, traitBonus, leaderBonus, detail: details.join(" · ") || "нет работников" };
+  const result = { assigned: assignedIds.length, total, suitableCount, traitBonus, leaderBonus, detail: details.join(" · ") || "нет работников" };
+  if (workerContext?.effectiveWorkers) workerContext.effectiveWorkers.set(building, result);
+  return result;
 }
 };

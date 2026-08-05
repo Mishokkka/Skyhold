@@ -1,5 +1,6 @@
 import { escapeHtml } from "../../core/helpers.js";
 import { asInt, asNumber } from "./rules.js";
+import { damageTrack, lossTrack, objectiveTrack } from "./tracks.js";
 
 export function shortDiceLine(rolls = [], successes = 0) {
   const count = Array.isArray(rolls) ? rolls.length : 0;
@@ -26,18 +27,18 @@ export function compactSources(calc = {}) {
     .join("");
 }
 
-export function roundChatContent(app, holding, state, calc, result) {
+export function roundChatContent(holding, state, calc, result) {
   const title = state.title || `Битва за владение: ${holding.name || "владение"}`;
   const breachLine = calc.breachThreshold > 0 ? `${asInt(state.breachProgress, 0)}/${calc.breachThreshold}` : "-";
-  const defenderLossTrack = app._lossTrack("Защитники", state.defenderLossSteps ?? state.defenderLosses, calc.defenderUnits);
-  const attackerLossTrack = app._lossTrack("Нападающие", state.attackerLossSteps ?? state.attackerLosses, calc.attackerUnits);
-  const damageTrack = app._damageTrack(holding, state, calc);
-  const objectiveTrack = app._objectiveTrack(state, calc.scale);
+  const defenderLossTrack = lossTrack("Защитники", state.defenderLossSteps ?? state.defenderLosses, calc.defenderUnits);
+  const attackerLossTrack = lossTrack("Нападающие", state.attackerLossSteps ?? state.attackerLosses, calc.attackerUnits);
+  const currentDamageTrack = damageTrack(holding, state, calc);
+  const currentObjectiveTrack = objectiveTrack(state, calc.scale);
   const sources = compactSources(calc);
   return `
     <div class="fbls-chat-card fbls-battle-chat">
       <h3>${escapeHtml(title)} · раунд ${result.round}</h3>
-      <p><strong>${escapeHtml(calc.roundThreat?.label ?? "Штурм")}</strong> · цель: ${escapeHtml(state.objective || "не задана")} · ${escapeHtml(calc.scale.label)}</p>
+      <p><strong>Угроза раунда:</strong> ${escapeHtml(calc.roundThreat?.label ?? "Штурм")} · цель: ${escapeHtml(state.objective || "не задана")} · ${escapeHtml(calc.scale.label)}</p>
       <div class="fbls-battle-chat-pools">
         <div><strong>Защитники</strong><b>${calc.defenderPool}к6</b><span>${shortDiceLine(result.defenderRolls, result.defenderSuccesses)}</span><em>${rollList(result.defenderRolls)}</em></div>
         <div><strong>${escapeHtml(state.enemyName || "Нападающие")}</strong><b>${calc.attackerPool}к6</b><span>${shortDiceLine(result.attackerRolls, result.attackerSuccesses)}</span><em>${rollList(result.attackerRolls)}</em></div>
@@ -47,9 +48,10 @@ export function roundChatContent(app, holding, state, calc, result) {
       <p><strong>Impact:</strong> по защитникам ${asInt(result.defenderImpact ?? result.defenderLossDelta, 0)}, по врагу ${asInt(result.attackerImpact ?? result.attackerLossDelta, 0)}. Итоговые потери меняются методами, планами и масштабом.</p>
       <p><strong>Итог:</strong> ${result.margin > 0 ? "+" : ""}${result.margin}. ${escapeHtml(result.result)}</p>
       <p><strong>Сдвиги:</strong> потери З +${result.defenderLossDelta}, В +${result.attackerLossDelta}; урон +${result.settlementDamageDelta}; брешь +${result.breachDelta}; часы цели ${result.objectiveDelta > 0 ? "+" : ""}${result.objectiveDelta}.</p>
+      ${result.terminal?.finished ? `<p><strong>${escapeHtml(result.terminal.label)}:</strong> ${escapeHtml(result.terminal.reason)}</p>` : ""}
       ${result.casualtyText ? `<p><strong>Потери жителей:</strong> ${escapeHtml(result.casualtyText)}</p>` : ""}
       ${result.damageText ? `<p><strong>Повреждения:</strong> ${escapeHtml(result.damageText)}</p>` : ""}
-      <p class="fbls-battle-chat-foot"><strong>Треки:</strong> З ${asInt(state.defenderLossSteps ?? state.defenderLosses, 0)}/${defenderLossTrack.threshold}; В ${asInt(state.attackerLossSteps ?? state.attackerLosses, 0)}/${attackerLossTrack.threshold}; урон ${asInt(state.settlementDamage, 0)}/${damageTrack.threshold}; брешь ${breachLine}; цель ${asInt(state.objectiveProgress, 0)}/${objectiveTrack.threshold}.</p>
+      <p class="fbls-battle-chat-foot"><strong>Треки:</strong> З ${asInt(state.defenderLossSteps ?? state.defenderLosses, 0)}/${defenderLossTrack.threshold}; В ${asInt(state.attackerLossSteps ?? state.attackerLosses, 0)}/${attackerLossTrack.threshold}; урон ${asInt(state.settlementDamage, 0)}/${currentDamageTrack.threshold}; брешь ${breachLine}; цель ${asInt(state.objectiveProgress, 0)}/${currentObjectiveTrack.threshold}.</p>
     </div>
   `;
 }
