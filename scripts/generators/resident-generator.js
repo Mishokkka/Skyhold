@@ -1,14 +1,11 @@
 import { CULTURE_NAMES, CULTURE_PROFILES } from "./name-pools.js";
-import { TRAIT_BY_NAME, TRAIT_POOLS, traitBadges } from "./trait-definitions.js";
+import { TRAIT_BY_NAME, TRAIT_POOLS } from "./trait-definitions.js";
+import { makeId } from "../utils/id.js";
 import {
   ageGroupFromAge,
   ageThresholdsFor,
-  clampAgeForRace,
   normalizeBelief,
-  raceKeyFromRace,
-  representativeAgeForGroup,
-  SOCIAL_BACKGROUND_OPTIONS,
-  workerTypeFromAttributes
+  SOCIAL_BACKGROUND_OPTIONS
 } from "./resident-rules.js";
 
 export const RESIDENT_GENERATOR_OPTIONS = {
@@ -104,13 +101,15 @@ function generateResident({ culture, arrival, ageMode, traitMode }) {
   const raceData = rollRace(profile.raceWeights);
   const age = rollAge(ageMode, raceData.race, arrival);
   const ageGroup = ageGroupFromAge(age, raceData.label, raceData.subrace);
+  const salary = defaultSalary(arrival, ageGroup);
+  const wageClassId = salary > 0 ? defaultWageClassId(arrival) : "";
   const attributes = rollAttributes(ageGroup, arrival);
   const background = pick(BACKGROUNDS[arrival] ?? BACKGROUNDS.settlers);
   const traits = ageGroup === "Ре" ? [] : rollTraits(traitMode);
   const traitNames = traits.map((trait) => trait.name);
   const belief = normalizeBelief(rollBelief(profile, raceData.race));
   const moraleFromTraits = traits.reduce((sum, trait) => sum + Number(trait.morale || 0), 0);
-  const id = `person-${randomId(10)}`;
+  const id = makeId("person");
 
   return {
     id,
@@ -125,8 +124,22 @@ function generateResident({ culture, arrival, ageMode, traitMode }) {
     background,
     race: raceData.label,
     subrace: raceData.subrace,
-    salary: defaultSalary(arrival, ageGroup),
+    salary,
     salaryModifier: 0,
+    compensationType: salary > 0 ? "wage-with-board" : "dependent",
+    wageClassId,
+    employmentMode: "permanent",
+    baseWageDaily: salary,
+    cashWageDaily: salary,
+    boardFoodDaily: 1,
+    housingProvided: false,
+    shareRate: 0,
+    volunteerReason: "",
+    volunteerTermStartQd: null,
+    volunteerTermEndQd: null,
+    coercionBasis: "",
+    hungerStreakTendays: 0,
+    compensationNote: salary > 0 ? "Сгенерированный постоянный договор с пищевым пансионом." : "Сгенерированный член хозяйства на общем содержании.",
     moraleBase: -1,
     moraleWork: 0,
     moraleHome: 0,
@@ -143,7 +156,7 @@ function generateResident({ culture, arrival, ageMode, traitMode }) {
 
 function resolveCulture(culture, holding) {
   if (culture && culture !== "current") return culture;
-  const region = String(holding?.overview?.region ?? holding?.overview?.currentRegion ?? holding?.overview?.drift ?? "").trim();
+  const region = String(holding?.overview?.region ?? "").trim();
   const found = CULTURE_NAMES.find((key) => region.toLowerCase().includes(key.toLowerCase()));
   if (found) return found;
   return "Нованд";
@@ -267,6 +280,10 @@ function defaultSalary(arrival, ageGroup) {
   return 0;
 }
 
+function defaultWageClassId(arrival) {
+  return arrival === "specialists" ? "skilled" : "common";
+}
+
 function buildAppearance(raceData, ageGroup) {
   const bits = [pick(FACE_BITS), pick(HAIR_BITS), pick(BUILD_BITS)];
   if (chance(70)) bits.push(pick(MARK_BITS));
@@ -317,9 +334,4 @@ function randomInt(min, max) {
   const low = Math.ceil(min);
   const high = Math.floor(max);
   return Math.floor(Math.random() * (high - low + 1)) + low;
-}
-
-function randomId(length = 10) {
-  if (globalThis.foundry?.utils?.randomID) return globalThis.foundry.utils.randomID(length);
-  return Math.random().toString(36).slice(2, 2 + length);
 }
