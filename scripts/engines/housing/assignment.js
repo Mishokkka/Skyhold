@@ -1,3 +1,5 @@
+import { isResidentInPopulation } from "../../data/resident-presence.js";
+
 function text(value) {
   return String(value ?? "").trim();
 }
@@ -12,7 +14,7 @@ function homeKey(building = {}) {
 }
 
 export function assignResidentsToFreeHousing(holding = {}, { isResidentialBuilding = () => false } = {}) {
-  const people = (holding?.people?.list ?? []).filter((person) => person && !person.dead);
+  const people = (holding?.people?.list ?? []).filter((person) => person && isResidentInPopulation(person, holding));
   const homes = (holding?.buildings?.list ?? [])
     .filter((building) => isResidentialBuilding(building))
     .filter((building) => homeKey(building))

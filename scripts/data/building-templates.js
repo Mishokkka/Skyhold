@@ -1,54 +1,39 @@
-import { BUILDING_TEMPLATES_FOOD } from "./building-template-catalog/food.js";
-import { BUILDING_TEMPLATES_LIVESTOCK } from "./building-template-catalog/livestock.js";
-import { BUILDING_TEMPLATES_CULTURE } from "./building-template-catalog/culture.js";
-import { BUILDING_TEMPLATES_TECHNOLOGY } from "./building-template-catalog/technology.js";
-import { BUILDING_TEMPLATES_WAR } from "./building-template-catalog/war.js";
 import { BUILDING_TEMPLATES_UNIQUE } from "./building-template-catalog/unique.js";
-import { canonicalMaterialCostRows } from "./building-template-materials.js";
-import { enterpriseCapitalForTemplate } from "./building-template-capital.js";
-import { buildingMaintenanceForTemplate } from "./building-template-maintenance.js";
+import { applyEconomicTemplateCalibration } from "./building-template-economy-calibration.js";
+import { APPROVED_BUILDING_TEMPLATE_MANIFEST } from "./building-template-manifest.js";
+import { APPROVED_BUILDING_TEMPLATE_IDS } from "./building-template-ids.js";
+import { applyApprovedBuildingWorkerProfile } from "../engines/workers/building-qualification.js";
 
-export const TEMPLATE_CATALOG_VERSION = 29;
+export const TEMPLATE_CATALOG_VERSION = 19;
 export const DEPRECATED_TEMPLATE_IDS = new Set(["campfire","hut","storehouse","field","garden","lumberyard","mine","smithy","bakery","tavern","market","watchtower","shrine","fireplace"]);
 
-export const TEMPLATE_ORDER = ["well","grain-field","garden","pasture","pigsty","sheepfold","goat-pen","poultry-yard","rabbitry","mill","bakery","inn","root-cellar","lumbermill","quarry","mine","forge","tannery","tailor-shop","vault","stables","construction-center","personnel-office","hiring-agency","pier","lighthouse","dovecote","tent-camp","cemetery","market","bathhouse","library","scriptorium","shrine","hall-of-fame","spire","shooting-range","training-camp","ramparts","moat","portcullis","guard-tower","dungeon","gallows","bunkhouse","common-house","boarding-house","barn","warehouse","guarded-storehouse","barracks","arsenal","lazaret","apothecary","watch-post","barricade-line","gatehouse","signal-tower","powder-magazine","field-fort","artillery-platform","school","fasti-shop"];
+const STORY_TEMPLATE_IDS = Object.freeze(["fasti-shop", "laputa-excavated-crypt"]);
+export const TEMPLATE_ORDER = [...APPROVED_BUILDING_TEMPLATE_IDS, ...STORY_TEMPLATE_IDS];
+const STORY_TEMPLATES = applyEconomicTemplateCalibration(BUILDING_TEMPLATES_UNIQUE)
+  .filter((template) => STORY_TEMPLATE_IDS.includes(String(template?.id ?? "")))
+  .map((template) => ({ ...template, maintenance: { schemaVersion: 2, requiredPoints: 0, priority: 0, backlogTendays: 0, needsResolution: false, lastOperationId: "" } }));
+function applyCatalogWorkerProfile(template) {
+  const workersMin = Number(template?.workersMin ?? 0);
+  const workersMax = Number(template?.workersMax ?? 0);
+  const profiled = applyApprovedBuildingWorkerProfile(template);
+  return {
+    ...profiled,
+    workersMin,
+    workersMax,
+    ...(profiled.workerProfile ? {
+      workerProfile: { ...profiled.workerProfile, workersMin, workersMax }
+    } : {})
+  };
+}
+
 const TEMPLATE_ROWS = [
-  ...BUILDING_TEMPLATES_FOOD,
-  ...BUILDING_TEMPLATES_LIVESTOCK,
-  ...BUILDING_TEMPLATES_CULTURE,
-  ...BUILDING_TEMPLATES_TECHNOLOGY,
-  ...BUILDING_TEMPLATES_WAR,
-  ...BUILDING_TEMPLATES_UNIQUE
-];
+  ...APPROVED_BUILDING_TEMPLATE_MANIFEST,
+  ...STORY_TEMPLATES
+].map(applyCatalogWorkerProfile)
+  .map((template) => ({ ...template, templateVersion: TEMPLATE_CATALOG_VERSION }));
 const TEMPLATE_BY_ID = new Map(TEMPLATE_ROWS.map((template) => [String(template.id), template]));
-
-export const FBL_SOURCE_BUILDING_MATERIAL_COSTS = Object.freeze(Object.fromEntries(
-  TEMPLATE_ROWS.map((template) => [
-    String(template.id),
-    Object.freeze(canonicalMaterialCostRows(template.materialCosts).map((row) => Object.freeze(row)))
-  ])
-));
-
-/**
- * @deprecated Historical name retained for import compatibility. The values are
- * the source/FBL recipes, not the later campaign calibration.
- */
-export const LEGACY_BUILDING_MATERIAL_COSTS = FBL_SOURCE_BUILDING_MATERIAL_COSTS;
-
-export const LEGACY_BUILDING_UPKEEP = Object.freeze(Object.fromEntries(
-  TEMPLATE_ROWS.map((template) => [String(template.id), Number(template.upkeep) || 0])
-));
 
 export const DEFAULT_BUILDING_TEMPLATES = TEMPLATE_ORDER
   .map((id) => TEMPLATE_BY_ID.get(id))
   .filter(Boolean)
-  .map((template) => {
-    const maintenance = buildingMaintenanceForTemplate(template.id, template.upkeep);
-    return {
-      ...template,
-      materialCosts: (FBL_SOURCE_BUILDING_MATERIAL_COSTS[template.id] ?? []).map((row) => ({ ...row })),
-      enterpriseCapital: enterpriseCapitalForTemplate(template.id) ?? template.enterpriseCapital,
-      maintenance,
-      upkeep: maintenance.operatingCopperMonthly + maintenance.repairReserveCopperMonthly
-    };
-  });
+  .map((template) => ({ ...template }));

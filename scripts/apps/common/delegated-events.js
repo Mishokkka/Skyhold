@@ -41,7 +41,8 @@ export function dispatchDelegatedAction(app, event, element, handlerName) {
     if (typeof handler !== "function") return false;
     const result = handler.call(app, delegatedEvent(event, element));
     if (!isPromiseLike(result)) return result ?? true;
-    return Promise.resolve(result).catch((error) => {
+    const pending = event.type === "change" && typeof app?._trackFieldSave === "function" ? app._trackFieldSave(result) : result;
+    return Promise.resolve(pending).catch((error) => {
       reportDelegatedActionError(error, { element, handlerName });
       return false;
     });

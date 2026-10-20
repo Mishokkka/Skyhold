@@ -3,19 +3,12 @@ function toNumber(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-export const LEGACY_STORAGE_LOAD_TO_CARGO_POINTS = 10;
-export const DEFAULT_OUTDOOR_SAFE_CAPACITY_CARGO_POINTS = 1000;
-
 export function normalizeStorageRoomId(value = "outdoors") {
   const id = String(value ?? "").trim();
   return id || "outdoors";
 }
 
 export function storageUnitLoad(resource = {}) {
-  const explicitCargoPoints = resource.cargoPoints ?? resource.unitCargoPoints;
-  if (explicitCargoPoints !== undefined && explicitCargoPoints !== null && explicitCargoPoints !== "") {
-    return Math.max(0, Math.ceil(toNumber(explicitCargoPoints, 0) - Number.EPSILON));
-  }
   const candidates = [
     resource.load,
     resource.weight,
@@ -30,25 +23,17 @@ export function storageUnitLoad(resource = {}) {
     if (candidate === undefined || candidate === null || candidate === "") continue;
     const text = String(candidate).trim().toLowerCase().replace(",", ".");
     if (["tiny", "negligible", "невесомый", "ничтожный"].includes(text)) return 0;
-    if (["light", "легкий", "лёгкий"].includes(text)) return 5;
-    if (["normal", "обычный"].includes(text)) return 10;
-    if (["heavy", "тяжелый", "тяжёлый"].includes(text)) return 20;
+    if (["light", "легкий", "лёгкий"].includes(text)) return 0.5;
+    if (["normal", "обычный"].includes(text)) return 1;
+    if (["heavy", "тяжелый", "тяжёлый"].includes(text)) return 2;
     const value = Number(text);
-    if (Number.isFinite(value)) return Math.max(0, Math.ceil(value * LEGACY_STORAGE_LOAD_TO_CARGO_POINTS - Number.EPSILON));
+    if (Number.isFinite(value)) return Math.max(0, value);
   }
-  return 10;
-}
-
-export function storageCapacityCargoPoints(storage = {}) {
-  const explicit = storage?.capacityCargoPoints;
-  if (explicit !== undefined && explicit !== null && explicit !== "") {
-    return Math.max(0, Math.floor(toNumber(explicit, 0)));
-  }
-  return Math.max(0, toNumber(storage?.capacity, 0) * LEGACY_STORAGE_LOAD_TO_CARGO_POINTS);
+  return 1;
 }
 
 export function storageRowLoad(row = {}) {
-  const qty = Math.max(0, toNumber(row?.qty ?? row?.quantity ?? row?.count, 0));
+  const qty = Math.max(0, Math.floor(toNumber(row?.qty ?? row?.quantity ?? row?.count, 0)));
   return qty * storageUnitLoad(row);
 }
 
@@ -87,31 +72,12 @@ export function decorateStorageRoom(room = {}, { formatLoad = (value) => String(
 
 export function buildStorageRooms({ holding, includeUnavailable = true, dependencies } = {}) {
   const deps = dependencies ?? {};
-  const required = ["isMoneyResource", "safeNumber", "buildingFunctions", "buildingStatus", "formatNumber", "formatLoad", "storageRowLoad"];
+  const required = ["isMoneyResource", "safeNumber", "storageRowLoad", "buildingFunctions", "buildingStatus", "storageFunctionAvailable", "storageProfileEffectFactor", "storageEffectiveRowLoad", "formatNumber", "formatLoad"];
   for (const name of required) {
     if (typeof deps[name] !== "function") throw new TypeError(`storage capacity engine requires dependencies.${name}`);
   }
 
-  const usedByRoom = new Map();
-  const addLoad = (roomIdRaw, load) => {
-    const roomId = normalizeStorageRoomId(roomIdRaw);
-    const value = Math.max(0, deps.safeNumber(load, 0));
-    if (!value) return;
-    usedByRoom.set(roomId, (usedByRoom.get(roomId) ?? 0) + value);
-  };
-  const resources = Array.isArray(holding?.storage?.resources) ? holding.storage.resources : [];
-  const items = Array.isArray(holding?.storage?.items) ? holding.storage.items : [];
-  for (const row of resources) {
-    if (deps.isMoneyResource(row?.resourceId, row?.name)) continue;
-    addLoad(row?.roomId ?? row?.storageRoomId, deps.storageRowLoad(row));
-  }
-  for (const row of items) addLoad(row?.roomId ?? row?.storageRoomId, deps.storageRowLoad(row));
-
-  const outdoorCapacity = Math.max(1, Math.floor(deps.safeNumber(
-    holding?.storage?.outdoorsSafeCapacityCargoPoints,
-    DEFAULT_OUTDOOR_SAFE_CAPACITY_CARGO_POINTS
-  )));
-  const rows = [decorateStorageRoom({
+  const rows = [{
     id: "outdoors",
     label: "Под открытым небом",
     buildingId: "",
@@ -121,17 +87,22 @@ export function buildStorageRooms({ holding, includeUnavailable = true, dependen
     statusLabel: "Базовое",
     statusClass: "built",
     available: true,
-    unlimited: false,
-    capacity: outdoorCapacity,
-    capacityCargoPoints: outdoorCapacity,
-    legacyCapacity: outdoorCapacity / LEGACY_STORAGE_LOAD_TO_CARGO_POINTS,
-    used: usedByRoom.get("outdoors") ?? 0,
+    unlimited: true,
+    capacity: 0,
+    used: 0,
     security: 0,
     quality: 0,
+    shelfLifeMultiplier: 1,
     securityText: "0",
     qualityText: "0",
-    notes: "Безопасная наружная площадка конечна; излишек получает один десятник отсрочки, затем подвергается порче, краже или потере."
-  }, { formatLoad: deps.formatLoad })];
+    notes: "Базовое складирование без лимита вместимости. Защищенность и качество хранения минимальные.",
+    profileEffectFactor: 0,
+    profileCapacityMultiplier: 1,
+    profileResourceIds: [],
+    profileCategoryTags: [],
+    profileMarketTags: [],
+    profilePerishableFood: false
+  }];
 
   for (const building of holding?.buildings?.list ?? []) {
     if (!deps.buildingFunctions(building).storage) continue;
@@ -139,9 +110,10 @@ export function buildStorageRooms({ holding, includeUnavailable = true, dependen
     const available = status.value === "built";
     if (!includeUnavailable && !available) continue;
     const storage = building.storage && typeof building.storage === "object" ? building.storage : {};
-    const capacity = storageCapacityCargoPoints(storage);
+    const capacity = Math.max(0, deps.safeNumber(storage.capacity, 0));
     const id = String(building.id);
-    rows.push(decorateStorageRoom({
+    const profileEffect = deps.storageProfileEffectFactor(holding, building);
+    rows.push({
       id,
       label: building.name || "Складское здание",
       buildingId: id,
@@ -153,17 +125,37 @@ export function buildStorageRooms({ holding, includeUnavailable = true, dependen
       available,
       unlimited: capacity <= 0,
       capacity,
-      capacityCargoPoints: capacity,
-      legacyCapacity: Math.max(0, deps.safeNumber(storage.capacity, 0)),
-      used: usedByRoom.get(id) ?? 0,
-      security: Math.max(0, deps.safeNumber(storage.security, 0)),
-      quality: Math.max(0, deps.safeNumber(storage.quality, 0)),
-      securityText: deps.formatNumber(storage.security ?? 0),
-      qualityText: deps.formatNumber(storage.quality ?? 0),
+      used: 0,
+      security: Math.max(0, deps.safeNumber(storage.security, 0)) * profileEffect,
+      quality: Math.max(0, deps.safeNumber(storage.quality, 0)) * profileEffect,
+      shelfLifeMultiplier: Math.max(1, deps.safeNumber(storage.shelfLifeMultiplier, 1)),
+      profileLabel: String(storage.profileLabel ?? ""),
+      profileResourceIds: [...(storage.profileResourceIds ?? [])],
+      profileCategoryTags: [...(storage.profileCategoryTags ?? [])],
+      profileMarketTags: [...(storage.profileMarketTags ?? [])],
+      profilePerishableFood: storage.profilePerishableFood === true,
+      autoReceive: storage.autoReceive === true,
+      profileCapacityMultiplier: Math.max(0.01, Math.min(1, deps.safeNumber(storage.profileCapacityMultiplier, 1))),
+      profileEffectFactor: profileEffect,
+      profileRequiresStaff: storage.profileRequiresStaff === true,
+      securityText: deps.formatNumber(Math.max(0, deps.safeNumber(storage.security, 0)) * profileEffect),
+      qualityText: deps.formatNumber(Math.max(0, deps.safeNumber(storage.quality, 0)) * profileEffect),
       notes: String(storage.notes ?? building.notes ?? "")
-    }, { formatLoad: deps.formatLoad }));
+    });
   }
-  return rows;
+
+  const roomById = new Map(rows.map((room) => [String(room.id), room]));
+  const addLoad = (row, rawLoad) => {
+    const roomId = normalizeStorageRoomId(row?.roomId ?? row?.storageRoomId);
+    const room = roomById.get(roomId) ?? roomById.get("outdoors");
+    const value = deps.storageEffectiveRowLoad(room, row, deps.safeNumber(rawLoad, 0));
+    if (value > 0) room.used += value;
+  };
+  for (const row of Array.isArray(holding?.storage?.resources) ? holding.storage.resources : []) {
+    if (!deps.isMoneyResource(row?.resourceId, row?.name)) addLoad(row, deps.storageRowLoad(row));
+  }
+  for (const row of Array.isArray(holding?.storage?.items) ? holding.storage.items : []) addLoad(row, deps.storageRowLoad(row));
+  return rows.map((room) => decorateStorageRoom(room, { formatLoad: deps.formatLoad }));
 }
 
 export function storageRoomOptionsFromRooms(rooms = [], selected = "outdoors") {
@@ -180,6 +172,7 @@ export function storageRoomOptionsFromRooms(rooms = [], selected = "outdoors") {
 
 export function storageRoomLabelFromRooms(rooms = [], roomId = "outdoors") {
   const id = normalizeStorageRoomId(roomId);
+  if (id === "auto") return "Предпочтительные склады";
   return rooms.find((room) => room.id === id)?.label ?? "Под открытым небом";
 }
 

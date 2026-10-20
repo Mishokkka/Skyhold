@@ -2,7 +2,6 @@ import { asInt, STRATEGIES } from "./rules.js";
 import { makeId } from "../../data/utils.js";
 import { casualtySummaryFromRecords } from "./casualties.js";
 import { buildingOperationalState, normalizeBuildingOperationalState, setBuildingCondition, startBuildingRepair } from "../../core/building-state.js";
-import { reserveConstructionMaterials } from "../../engines/economy/construction-reservation.js";
 import { weightedBattleTargets } from "./targets.js";
 
 export function battleBuildingStatusLabel(status = "built") {
@@ -25,30 +24,6 @@ function buildingRepairTarget(building, status = building?.constructionStatus ??
   if (value === "heavilyDamaged") return Math.ceil((baseTarget * 2) / 3);
   if (value === "destroyed") return baseTarget;
   return 0;
-}
-
-function repairShare(condition = "intact") {
-  if (condition === "damaged") return { numerator: 1, denominator: 3 };
-  if (condition === "heavilyDamaged") return { numerator: 2, denominator: 3 };
-  if (condition === "destroyed") return { numerator: 1, denominator: 1 };
-  return { numerator: 0, denominator: 1 };
-}
-
-export function buildingRepairMaterialCosts(building = {}, condition = buildingOperationalState(building).condition) {
-  const { numerator, denominator } = repairShare(condition);
-  if (!numerator) return [];
-  return (Array.isArray(building?.materialCosts) ? building.materialCosts : [])
-    .map((row, index) => {
-      const rawQty = Math.max(0, Number(row?.qty ?? row?.quantity) || 0);
-      return {
-        id: `repair-${String(row?.id ?? index + 1)}`,
-        resourceId: String(row?.resourceId ?? row?.resource ?? row?.name ?? "").trim(),
-        resourceGroup: String(row?.resourceGroup ?? "").trim(),
-        name: String(row?.name ?? row?.label ?? row?.resourceId ?? "Материал").trim() || "Материал",
-        qty: Math.ceil((rawQty * numerator) / denominator)
-      };
-    })
-    .filter((row) => row.qty > 0 && (row.resourceId || row.resourceGroup));
 }
 
 export function escalateBuildingBattleDamage(building, amount = 1) {
@@ -125,50 +100,17 @@ export function battleAftermathRows(holding, state = {}, compactNameList) {
   };
 }
 
-export function startBattleRepairs(holding, {
-  operationId = "",
-  reservedAt = "",
-  reservedQd = null,
-  planCosts = null,
-  takeResourceLots = null
-} = {}) {
+export function startBattleRepairs(holding) {
   const targets = (holding?.buildings?.list ?? []).filter((building) => {
     const state = buildingOperationalState(building);
     return state.lifecycle === "active" && state.condition !== "intact" && !state.repairActive;
   });
-  const started = [];
-  const blocked = [];
   for (const building of targets) {
     const old = buildingOperationalState(building).condition;
     const target = buildingRepairTarget(building, old);
-    const costs = buildingRepairMaterialCosts(building, old);
-    if (!operationId || typeof planCosts !== "function" || typeof takeResourceLots !== "function" || !costs.length) {
-      blocked.push({
-        building,
-        code: costs.length ? "reservation-unavailable" : "empty-repair-recipe",
-        message: costs.length ? "Не удалось подготовить материальный резерв ремонта." : "Для здания не задана материальная смета ремонта."
-      });
-      continue;
-    }
-    const reservation = reserveConstructionMaterials({
-      holding,
-      building,
-      costs,
-      operationId: `${operationId}:${building.id}`,
-      reservedAt,
-      reservedQd,
-      replacePriorAllocation: true,
-      dependencies: { planCosts, takeResourceLots }
-    });
-    if (!reservation.ok) {
-      blocked.push({ building, code: reservation.code, message: reservation.message, missing: reservation.missing ?? [] });
-      continue;
-    }
-    startBuildingRepair(building, target, { startedAt: reservedAt });
+    startBuildingRepair(building, target);
     building.status = "Ремонтируется";
-    const estimate = costs.map((row) => `${row.qty} ${row.name}`).join(" · ");
-    building.notes = [String(building.notes ?? "").trim(), `Начат ремонт после боя (${holdingBattleDateText(holding)}). Смета: ${estimate}. Нужно успехов: ${target}.`].filter(Boolean).join("\n");
-    started.push(building);
+    building.notes = [String(building.notes ?? "").trim(), `Начат ремонт после боя (${holdingBattleDateText(holding)}). Нужно успехов: ${target}.`].filter(Boolean).join("\n");
   }
-  return { started, blocked };
+  return targets;
 }

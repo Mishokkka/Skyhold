@@ -1,6 +1,7 @@
 {{#if canUseStorage}}
   <div class="fbls-storage-selectionbar" data-storage-batch-toolbar data-storage-batch-kind="{{storageContext.batchSelection.rowType}}">
     <span class="fbls-storage-batch-count"><i class="fa-solid fa-list-check"></i> Выбрано <b>{{storageContext.batchSelection.selectedCount}}</b> из {{storageContext.batchSelection.totalCount}}</span>
+    {{#if storageContext.batchSelection.selectedCount}}<button type="button" class="fbls-button compact" data-action="storage-selection-move" data-storage-batch-kind="{{storageContext.batchSelection.rowType}}"><i class="fa-solid fa-right-left"></i> Переместить выбранное</button>{{/if}}
     <span class="fbls-storage-context-hint"><i class="fa-solid fa-computer-mouse"></i> ПКМ — действия с позицией</span>
     <button type="button" class="fbls-button compact secondary" data-action="toggle-storage-batch-visible" data-storage-batch-kind="{{storageContext.batchSelection.rowType}}">
       <i class="fa-solid {{#if storageContext.batchSelection.allSelected}}fa-square-minus{{else}}fa-square-check{{/if}}"></i>

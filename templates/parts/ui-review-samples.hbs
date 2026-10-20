@@ -1,0 +1,87 @@
+<div class="fbls-ui-review-samples" role="group" aria-label="Визуальное сравнение: {{title}}">
+  <div class="fbls-ui-review-sample is-before">
+    <strong class="fbls-ui-review-sample-label">Сейчас</strong>
+    {{#if isTabs}}
+      <div class="fbls-ui-demo-tabs">
+        <div class="fbls-ui-demo-tab old-event is-active"><i class="fa-solid fa-scroll" aria-hidden="true"></i> Правила <b>2</b></div>
+        <div class="fbls-ui-demo-tab old-editor"><i class="fa-solid fa-house" aria-hidden="true"></i> Обзор</div>
+        <div class="fbls-ui-demo-tab old-market"><i class="fa-solid fa-store" aria-hidden="true"></i><span>Каталог<small>Товары и цены</small></span></div>
+      </div>
+    {{/if}}
+    {{#if isChips}}
+      <div class="fbls-ui-demo-chips">
+        <span class="fbls-ui-demo-chip old-politics"><i class="fa-solid fa-lock-open" aria-hidden="true"></i> Разделы открыты</span>
+        <span class="fbls-ui-demo-chip old-market">24 жителя</span>
+        <span class="fbls-ui-demo-chip old-defense"><i class="fa-solid fa-shield" aria-hidden="true"></i> Отряд готов</span>
+      </div>
+    {{/if}}
+    {{#if isEmpty}}
+      <div class="fbls-ui-demo-empty old-compact">Нет отрядов.</div>
+      <div class="fbls-ui-demo-empty old-full"><i class="fa-solid fa-box-open" aria-hidden="true"></i><strong>Нет истории</strong><span>Записи появятся после сделки.</span></div>
+    {{/if}}
+    {{#if isFields}}
+      <div class="fbls-ui-demo-fields is-before">
+        <div class="fbls-ui-demo-field old-catalog"><span>Название</span><div>Пшеничная мука</div></div>
+        <div class="fbls-ui-demo-field old-politics"><span>Срок</span><div>3</div></div>
+      </div>
+    {{/if}}
+    {{#if isMetrics}}
+      <div class="fbls-ui-demo-metrics is-before">
+        <div class="fbls-ui-demo-metric"><small>Вес партии</small><strong>24 кг</strong></div>
+        <div class="fbls-ui-demo-metric"><small>Цена</small><strong>12 ср</strong></div>
+        <div class="fbls-ui-demo-metric old-route"><small>Срок маршрута</small><strong>3 дня</strong></div>
+        <div class="fbls-ui-demo-metric old-route"><small>Стоимость</small><strong>8 ср</strong></div>
+      </div>
+    {{/if}}
+    {{#if isIconActions}}
+      <div class="fbls-ui-demo-actions is-before">
+        <div><span class="fbls-ui-demo-icon old-28"><i class="fa-solid fa-pen" aria-hidden="true"></i></span><small>28 px</small></div>
+        <div><span class="fbls-ui-demo-icon old-30"><i class="fa-solid fa-shield" aria-hidden="true"></i></span><small>30 px</small></div>
+        <div><span class="fbls-ui-demo-icon old-30"><i class="fa-solid fa-trash" aria-hidden="true"></i></span><small>30 px</small></div>
+      </div>
+    {{/if}}
+  </div>
+
+  <div class="fbls-ui-review-sample is-after">
+    <strong class="fbls-ui-review-sample-label">После</strong>
+    {{#if isTabs}}
+      <div class="fbls-ui-demo-tabs">
+        <div class="fbls-ui-demo-tab new-compact is-active"><i class="fa-solid fa-scroll" aria-hidden="true"></i> Правила <b>2</b></div>
+        <div class="fbls-ui-demo-tab new-compact"><i class="fa-solid fa-house" aria-hidden="true"></i> Обзор</div>
+        <div class="fbls-ui-demo-tab new-expanded"><i class="fa-solid fa-store" aria-hidden="true"></i><span>Каталог<small>Товары и цены</small></span></div>
+      </div>
+    {{/if}}
+    {{#if isChips}}
+      <div class="fbls-ui-demo-chips">
+        <span class="fbls-ui-demo-chip new-chip is-success"><i class="fa-solid fa-lock-open" aria-hidden="true"></i> Разделы открыты</span>
+        <span class="fbls-ui-demo-chip new-chip">24 жителя</span>
+        <span class="fbls-ui-demo-chip new-chip is-info"><i class="fa-solid fa-shield" aria-hidden="true"></i> Отряд готов</span>
+      </div>
+    {{/if}}
+    {{#if isEmpty}}
+      <div class="fbls-ui-demo-empty new-compact"><i class="fa-solid fa-users-slash" aria-hidden="true"></i><span><strong>Нет отрядов</strong><small>Добавьте первый отряд.</small></span></div>
+      <div class="fbls-ui-demo-empty new-full"><i class="fa-solid fa-box-open" aria-hidden="true"></i><span><strong>Нет истории</strong><small>Записи появятся после сделки.</small></span></div>
+    {{/if}}
+    {{#if isFields}}
+      <div class="fbls-ui-demo-fields is-after">
+        <div class="fbls-ui-demo-field"><span>Название</span><div>Пшеничная мука</div></div>
+        <div class="fbls-ui-demo-field"><span>Срок</span><div>3</div></div>
+      </div>
+    {{/if}}
+    {{#if isMetrics}}
+      <div class="fbls-ui-demo-metrics is-after">
+        <div class="fbls-ui-demo-metric"><small>Вес партии</small><strong>24 кг</strong></div>
+        <div class="fbls-ui-demo-metric"><small>Цена</small><strong>12 ср</strong></div>
+        <div class="fbls-ui-demo-metric"><small>Срок маршрута</small><strong>3 дня</strong></div>
+        <div class="fbls-ui-demo-metric"><small>Стоимость</small><strong>8 ср</strong></div>
+      </div>
+    {{/if}}
+    {{#if isIconActions}}
+      <div class="fbls-ui-demo-actions is-after">
+        <div><span class="fbls-ui-demo-icon"><i class="fa-solid fa-pen" aria-hidden="true"></i></span><small>32 px</small></div>
+        <div><span class="fbls-ui-demo-icon"><i class="fa-solid fa-shield" aria-hidden="true"></i></span><small>32 px</small></div>
+        <div><span class="fbls-ui-demo-icon"><i class="fa-solid fa-trash" aria-hidden="true"></i></span><small>32 px</small></div>
+      </div>
+    {{/if}}
+  </div>
+</div>

@@ -25,12 +25,22 @@
                 {{/each}}
               </select>
             </div>
-            {{#if canEdit}}
-              <button type="button" class="fbls-button compact" data-action="add-row" data-collection="holdings.{{holdingIndex}}.people.list">
-                <i class="fa-solid fa-plus"></i> Добавить
-              </button>
-            {{/if}}
+            <div class="fbls-resident-actions fbls-action-group" aria-label="Действия с жителями">
+              <button type="button" class="fbls-button compact" data-action="open-workforce-planner" title="Распределить QD жителей между работами"><i class="fa-solid fa-list-check" aria-hidden="true"></i> План работ</button>
+              {{#if canEdit}}
+                <button type="button" class="fbls-button compact" data-action="add-row" data-collection="holdings.{{holdingIndex}}.people.list">
+                  <i class="fa-solid fa-plus" aria-hidden="true"></i> Добавить
+                </button>
+              {{/if}}
+            </div>
           </div>
+          {{#if canManagePeople}}
+            <template data-resident-work-option-catalog>
+              {{#each rows.residentWorkOptionCatalog}}
+                <option value="{{value}}" data-resident-work-option-kind="{{kind}}" data-resident-work-option-available="{{available}}">{{label}}</option>
+              {{/each}}
+            </template>
+          {{/if}}
           <table class="fbls-table fbls-resident-list">
             <thead>
               <tr>
@@ -48,28 +58,35 @@
             <tbody>
               {{#each rows.people}}
                 <tr class="fbls-person-row {{deadClass}}" data-id="{{id}}" data-resident-search="{{searchText}}">
-                  <td class="fbls-person-name">{{#if injured}}<span class="fbls-injury-mark {{injuredBadgeClass}}" title="{{injuredTitle}}"><b>{{injuredText}}</b><i class="fa-solid fa-plus"></i></span>{{/if}}<span class="fbls-person-name-text">{{name}}</span>{{#if laborProjectionAttention}}<span class="fbls-chip {{laborProjectionBadgeClass}}" title="{{laborProjectionDescription}}" aria-label="Прогноз труда: {{laborProjectionDescription}}">{{laborProjectionBadgeText}}</span>{{/if}}{{#if dead}}<span class="fbls-status-pill fbls-chip dead">Погиб</span>{{/if}}</td>
+                  <td class="fbls-person-name">{{#if injured}}<span class="fbls-injury-mark {{injuredBadgeClass}}" title="{{injuredTitle}}"><b>{{injuredText}}</b><i class="fa-solid fa-plus"></i></span>{{/if}}<span class="fbls-person-name-text">{{name}}</span>{{#if awayOnShip}}<span class="fbls-status-pill fbls-chip" title="{{shipPresenceLabel}}" aria-label="{{shipPresenceLabel}}"><i class="fa-solid fa-ship" aria-hidden="true"></i> Вне поселения</span>{{/if}}{{#if dead}}<span class="fbls-status-pill fbls-chip dead">Погиб</span>{{/if}}</td>
                   <td>{{ageLine}}</td>
                   <td>{{raceLine}}</td>
-                  <td><span class="fbls-worker-badge fbls-chip fbls-note-tip inline-tip" style="{{workerTypeStyle}}" data-fbls-tooltip="{{attributeSummary}}">{{workerTypeLabel}}</span></td>
+                  <td><span class="fbls-worker-badge fbls-chip fbls-note-tip" style="{{workerTypeStyle}}" data-fbls-tooltip="{{attributeSummary}}">{{workerTypeLabel}}</span></td>
                   <td class="fbls-resident-work-cell">
+                    {{#if restingOnShip}}
+                      {{#if ../canManagePeople}}
+                        <button type="button" class="fbls-button compact fbls-crew-shore-button" data-action="crew-shore-duty" data-resident-id="{{id}}" data-ship-id="{{assignedShipId}}" data-holding-id="{{../holding.id}}" data-revision="{{../data.meta.revision}}" title="Считать обычным жителем до возвращения на корабль" aria-label="В поселение: {{name}}"><i class="fa-solid fa-person-walking" aria-hidden="true"></i> В поселение</button>
+                      {{else}}На отдыхе{{/if}}
+                    {{else}}
                     {{#if ../canManagePeople}}
-                      <select class="fbls-resident-work-select" data-work-assignment-field="holdings.{{../holdingIndex}}.people.list.{{_index}}.workAssignment" title="{{workLabel}}">
-                        {{#each workOptions}}
-                          <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
-                        {{/each}}
+                      <select class="fbls-resident-work-select" data-resident-work-select-lazy data-resident-can-work="{{workCanAssign}}" data-resident-free-label="{{workFreeLabel}}" data-work-assignment-field="holdings.{{../holdingIndex}}.people.list.{{_index}}.workAssignment" title="{{workLabel}}" aria-label="Работа: {{name}}">
+                        <option value="{{workInlineValue}}" selected>{{workInlineLabel}}</option>
                       </select>
                     {{else}}
                       {{workLabel}}
                     {{/if}}
+                    {{/if}}
                   </td>
                   <td>{{homeLabel}}</td>
-                  <td class="fbls-morale-cell"><span class="fbls-note-tip inline-tip" data-fbls-tooltip="{{moraleTooltip}}"><strong>{{moraleValue}}</strong></span></td>
+                  <td class="fbls-morale-cell"><span class="fbls-note-tip inline-tip" data-fbls-tooltip="{{moraleTooltip}}"><strong>{{#if restingOnShip}}—{{else}}{{moraleValue}}{{/if}}</strong></span></td>
                   <td class="fbls-traits-cell">
                     {{#if hasTraitBadges}}
+                      <span class="fbls-resident-traits" data-resident-traits>
                       {{#each traitBadges}}
-                        <span class="fbls-trait-badge fbls-chip fbls-note-tip" data-fbls-tooltip="{{description}}" data-full-label="{{name}}" data-short-label="{{shortLabel}}" title="{{name}}">{{name}}</span>
+                        <span class="fbls-trait-badge fbls-chip fbls-note-tip" data-resident-trait data-fbls-tooltip="{{tooltip}}" data-full-label="{{name}}" data-short-label="{{shortLabel}}" tabindex="0" aria-label="{{name}}">{{name}}</span>
                       {{/each}}
+                        <span class="fbls-trait-badge fbls-chip fbls-note-tip fbls-traits-more" data-resident-traits-more data-fbls-tooltip="{{traitsBrief}}" tabindex="0" aria-label="Все черты: {{traitsBrief}}" hidden>+0</span>
+                      </span>
                     {{else}}
                       <span class="fbls-muted-text">—</span>
                     {{/if}}
@@ -82,13 +99,6 @@
                     {{/if}}
                   </td>
                 </tr>
-                {{#if editing}}
-                  <tr class="fbls-person-edit-row">
-                    <td colspan="{{../peopleColspan}}">
-                      {{> "modules/fbl-skyhold/templates/parts/skyhold-resident-editor.hbs"}}
-                    </td>
-                  </tr>
-                {{/if}}
               {{else}}
                 <tr><td colspan="{{peopleColspan}}" class="fbls-empty">Записей пока нет.</td></tr>
               {{/each}}

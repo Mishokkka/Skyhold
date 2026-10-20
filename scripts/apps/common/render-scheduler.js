@@ -58,38 +58,9 @@ function restoreScrollState(app = null, rows = []) {
   }
 }
 
-function captureRenderFrame(app = null) {
-  const ownedFrame = app?._captureWindowFrame?.();
-  if (ownedFrame) return ownedFrame;
-  const root = app?.element;
-  const shell = root?.closest?.(".application, .app, .window-app") ?? root?.parentElement?.closest?.(".application, .app, .window-app") ?? root;
-  const rect = shell?.getBoundingClientRect?.();
-  const position = app?.position ?? {};
-  const frame = {};
-  for (const key of ["left", "top", "width", "height"]) {
-    const rectValue = rect?.[key];
-    const value = Number.isFinite(Number(rectValue)) ? Number(rectValue) : Number(position?.[key]);
-    if (!Number.isFinite(value) || ((key === "width" || key === "height") && value <= 0)) continue;
-    frame[key] = Math.round(value);
-  }
-  return Object.keys(frame).length ? frame : null;
-}
-
-function restoreRenderFrame(app = null, frame = null) {
-  if (!frame) return;
-  if (typeof app?._restoreWindowFrame === "function") {
-    app._restoreWindowFrame(frame);
-    return;
-  }
-  if (typeof app?.setPosition !== "function") return;
-  try { app.setPosition(frame); }
-  catch (_error) {
-    // A window can close while its queued render is still settling.
-  }
-}
-
 export function requestApplicationRender(app, options = {}) {
-  if (!app || typeof app.render !== "function") return null;
+  if (!app || typeof app.render !== "function" || app._renderSchedulerClosed) return null;
+  const generation = app._renderSchedulerGeneration ?? 0;
 
   const nextOptions = {
     force: true,
@@ -102,29 +73,36 @@ export function requestApplicationRender(app, options = {}) {
 
   if (app._queuedRenderPromise) return app._queuedRenderPromise;
 
+  const queueState = {};
+  app._renderQueueState = queueState;
+
   app._queuedRenderPromise = new Promise((resolve, reject) => {
     const flush = async () => {
       let result = null;
       try {
         do {
+          if (app._renderSchedulerClosed || (app._renderSchedulerGeneration ?? 0) !== generation) break;
           app._renderRequestedDuringQueue = false;
           const renderOptions = app._queuedRenderOptions ?? { force: true, focus: false };
           app._queuedRenderOptions = null;
           const focusState = captureFocusState(app, renderOptions);
           const scrollState = captureScrollState(app, renderOptions);
-          const renderFrame = captureRenderFrame(app);
           result = await app.render(renderOptions);
-          restoreRenderFrame(app, renderFrame);
-          restoreScrollState(app, scrollState);
-          restoreFocusState(focusState);
+          if (!app._renderSchedulerClosed && (app._renderSchedulerGeneration ?? 0) === generation) {
+            restoreScrollState(app, scrollState);
+            restoreFocusState(focusState);
+          }
         } while (app._renderRequestedDuringQueue);
         resolve(result);
       } catch (error) {
         reject(error);
       } finally {
-        app._queuedRenderPromise = null;
-        app._queuedRenderOptions = null;
-        app._renderRequestedDuringQueue = false;
+        if (app._renderQueueState === queueState) {
+          app._queuedRenderPromise = null;
+          app._queuedRenderOptions = null;
+          app._renderRequestedDuringQueue = false;
+          app._renderQueueState = null;
+        }
       }
     };
 
@@ -137,11 +115,19 @@ export function requestApplicationRender(app, options = {}) {
 
 export function RenderSchedulerMixin(Base) {
   return class RenderScheduledApplication extends Base {
-    async render(options = {}) {
-      const frame = this.rendered ? captureRenderFrame(this) : null;
-      const result = await super.render(options);
-      restoreRenderFrame(this, frame);
-      return result;
+    render(...args) {
+      this._renderSchedulerClosed = false;
+      return super.render(...args);
+    }
+
+    async _onClose(options) {
+      this._renderSchedulerClosed = true;
+      this._renderSchedulerGeneration = (this._renderSchedulerGeneration ?? 0) + 1;
+      this._renderQueueState = null;
+      this._queuedRenderPromise = null;
+      this._queuedRenderOptions = null;
+      this._renderRequestedDuringQueue = false;
+      return super._onClose(options);
     }
 
     requestRender(options = {}) {

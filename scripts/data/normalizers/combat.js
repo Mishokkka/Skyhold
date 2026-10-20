@@ -33,12 +33,18 @@ export function normalizeDefenseSquad(row = {}) {
     sergeantId = String(sourceMemberIds[0] ?? "");
     memberIds = sourceMemberIds.slice(1);
   }
+  const legacyEquipped = toBoolean(row.equipped, false);
+  const armamentResourceId = ["armament-simple", "armament-complex", "armament-elite"].includes(String(row.armamentResourceId ?? ""))
+    ? String(row.armamentResourceId)
+    : (legacyEquipped ? "armament-simple" : "");
   return {
     id,
     name: String(row.name ?? "Отряд"),
     type: String(row.type ?? "line") === "militia" ? "line" : String(row.type ?? "line"),
     sergeantId,
-    equipped: toBoolean(row.equipped, false),
+    equipped: Boolean(armamentResourceId),
+    armamentResourceId,
+    armamentSourceRoomId: String(row.armamentSourceRoomId ?? "outdoors") || "outdoors",
     memberIds: Array.from({ length: 4 }, (_, index) => String(memberIds[index] ?? "")),
     notes: String(row.notes ?? "")
   };
@@ -72,9 +78,8 @@ function normalizePendingBattleRound(row) {
   return pending.roundId && pending.stateSignature && pending.fingerprint ? pending : null;
 }
 
-function normalizeBattleArchive(entries, { destructive = false } = {}) {
-  const rows = (Array.isArray(entries) ? entries : []).filter((entry) => isPlainObject(entry));
-  return (destructive ? rows.slice(-20) : rows).map((entry) => ({
+function normalizeBattleArchive(entries) {
+  return (Array.isArray(entries) ? entries : []).filter((entry) => isPlainObject(entry)).slice(-20).map((entry) => ({
     id: String(entry.id || makeId("battle-archive")),
     battleId: String(entry.battleId ?? ""),
     title: String(entry.title ?? "Битва за владение"),
@@ -169,9 +174,18 @@ export function normalizeMassCombatState(state = {}, options = {}) {
   merged.round = Math.max(1, Math.floor(merged.round || 1));
   merged.defenderPosition = Math.max(0, Math.min(3, Math.floor(merged.defenderPosition || 0)));
   merged.attackerPosition = Math.max(0, Math.min(3, Math.floor(merged.attackerPosition || 0)));
-  for (const key of ["title", "enemyName", "objective", "roundThreat", "notes", "attackerPreset", "defenderMobilization", "accessMode", "battleId", "terminalReason", "startedAt", "resolvedAt", "resolvedBy"]) merged[key] = String(merged[key] ?? "");
+  for (const key of ["title", "enemyName", "objective", "roundThreat", "notes", "attackerPreset", "defenderMobilization", "accessMode", "battleId", "terminalReason", "startedAt", "resolvedAt", "resolvedBy", "militarySupplyBattleId"]) merged[key] = String(merged[key] ?? "");
   merged.useDefenseSquads = toBoolean(merged.useDefenseSquads, true);
   merged.raiseMilitia = toBoolean(merged.raiseMilitia, false);
+  merged.useMedicalSupplies = toBoolean(merged.useMedicalSupplies, false);
+  merged.useMedicinesForHeavyCasualties = toBoolean(merged.useMedicinesForHeavyCasualties, false);
+  merged.militarySuppliedSquadIds = (Array.isArray(merged.militarySuppliedSquadIds) ? merged.militarySuppliedSquadIds : []).map((id) => String(id ?? "")).filter(Boolean);
+  merged.militaryUnsuppliedSquadIds = (Array.isArray(merged.militaryUnsuppliedSquadIds) ? merged.militaryUnsuppliedSquadIds : []).map((id) => String(id ?? "")).filter(Boolean);
+  merged.militarySupplyCosts = (Array.isArray(merged.militarySupplyCosts) ? merged.militarySupplyCosts : []).map((cost) => ({
+    resourceId: String(cost?.resourceId ?? ""),
+    qty: Math.max(0, Math.floor(toNumber(cost?.qty, 0)))
+  })).filter((cost) => cost.resourceId && cost.qty > 0);
+  merged.militarySuppliesConsumed = toBoolean(merged.militarySuppliesConsumed, false);
   merged.scale = ["raid", "skirmish", "battle", "siege"].includes(String(merged.scale)) ? String(merged.scale) : "raid";
   merged.defenseMode = ["behindWalls", "outerWorks", "surprised", "outside"].includes(String(merged.defenseMode)) ? String(merged.defenseMode) : "behindWalls";
   merged.accessMode = ["normal", "airborne", "water", "cliff", "portal"].includes(String(merged.accessMode)) ? String(merged.accessMode) : "normal";
@@ -219,7 +233,7 @@ export function normalizeMassCombatState(state = {}, options = {}) {
   merged.phase = ["setup", "active", "pending", "terminal", "aftermath", "archived"].includes(sourcePhase) ? sourcePhase : inferredPhase;
   if (merged.pendingRound) merged.phase = "pending";
   merged.outcome = ["active", "attacker-victory", "defender-victory", "contested"].includes(String(merged.outcome)) ? String(merged.outcome) : "active";
-  merged.archive = normalizeBattleArchive(merged.archive, { destructive: Boolean(normalize.destructive) });
+  merged.archive = normalizeBattleArchive(merged.archive);
 
   if (!Array.isArray(merged.log)) merged.log = [];
   merged.log = merged.log.filter((row) => row && typeof row === "object").map((row) => ({
@@ -250,7 +264,6 @@ export function normalizeMassCombatState(state = {}, options = {}) {
     attackerImpact: Math.max(0, Math.floor(toNumber(row.attackerImpact, 0))),
     casualtyText: String(row.casualtyText ?? ""),
     damageText: String(row.damageText ?? "")
-  }));
-  if (normalize.destructive) merged.log = merged.log.slice(-20);
+  })).slice(-20);
   return merged;
 }

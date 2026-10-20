@@ -1,6 +1,7 @@
 import { MODULE_ID } from "../../data/constants.js";
 import { SkyholdData } from "../../data/store.js";
 import { clone } from "../../data/utils.js";
+import { stableDataHash } from "../../data/storage-commit.js";
 import {
   EVENT_THRESHOLD_KEYS,
   cloneDefaultRandomEventTables,
@@ -15,6 +16,8 @@ import { normalizeRandomEventEffect, normalizeRandomEventEffects } from "../../d
 import { fieldValue } from "../../core/helpers.js";
 import { dispatchDelegatedAction } from "../common/delegated-events.js";
 import { RenderSchedulerMixin } from "../common/render-scheduler.js";
+import { SaveStatus, syncSaveStatus } from "../common/save-status.js";
+import { bindFloatingTooltips, FloatingTooltipsMixin } from "../common/floating-tooltip.js";
 import { bindGlobalInputGuard, bindInputGuards, unbindGlobalInputGuard } from "../../utils/input-guards.js";
 import { newEventEffect, newEventRow, newRequirement } from "./random-event/draft.js";
 import {
@@ -43,7 +46,7 @@ const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const THRESHOLD_FIELDS = new Set(["lowMax", "highMin"]);
 const THRESHOLD_KEYS = new Set(EVENT_THRESHOLD_KEYS.map(({ key }) => key));
 
-export class SkyholdRandomEventEditor extends RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2)) {
+export class SkyholdRandomEventEditor extends FloatingTooltipsMixin(RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2))) {
   constructor({ holdingId = "", activeTable = "general" } = {}, options = {}) {
     super(options);
     this.holdingId = String(holdingId ?? "");
@@ -51,8 +54,10 @@ export class SkyholdRandomEventEditor extends RenderSchedulerMixin(HandlebarsApp
     this.search = "";
     this._buildingTemplates = [];
     this._draftTables = null;
+    this._draftSourceHash = "";
     this._draftHoldingId = "";
     this._dirty = false;
+    this._saveStatus = new SaveStatus({ mode: "manual", onChange: () => this._syncSaveStatus() });
     this._lastPosition = null;
     this._listScrollTop = 0;
     this._eventFacts = null;
@@ -68,6 +73,7 @@ export class SkyholdRandomEventEditor extends RenderSchedulerMixin(HandlebarsApp
     const storedTables = normalizeRandomEventTables(holding?.gm?.eventTables);
     if (!this._draftTables || this._draftHoldingId !== this.holdingId) {
       this._draftTables = clone(storedTables);
+      this._draftSourceHash = stableDataHash(storedTables);
       this._draftHoldingId = this.holdingId;
       this._dirty = false;
     }
@@ -84,14 +90,14 @@ export class SkyholdRandomEventEditor extends RenderSchedulerMixin(HandlebarsApp
       currentTable,
       search: this.search,
       dirty: this._dirty,
+      saveStatus: this._saveStatus.context,
       hasHolding: Boolean(holding)
     };
   }
 
   _refreshDataCaches() {
-    const data = SkyholdData.get();
-    const holding = data.holdings.find((item) => String(item?.id ?? "") === this.holdingId) ?? data.holdings[0] ?? null;
-    if (holding) this.holdingId = String(holding.id ?? "");
+    const data = SkyholdData.view();
+    const holding = data.holdings.find((item) => String(item?.id ?? "") === this.holdingId) ?? null;
     this._previewHolding = holding;
     this._buildingTemplates = Array.isArray(data?.catalog?.buildings) ? data.catalog.buildings : [];
     this._regionOptions = normalizeEventRegionOptions(data?.catalog?.eventRegions);
@@ -158,6 +164,8 @@ export class SkyholdRandomEventEditor extends RenderSchedulerMixin(HandlebarsApp
     this._filterRows(this.search);
     this._restoreListScroll();
     syncEventContextHeaderButton(this, root);
+    bindFloatingTooltips(this, root);
+    this._syncSaveStatus();
   }
 
   _bindEvents(root) {
@@ -255,8 +263,12 @@ export class SkyholdRandomEventEditor extends RenderSchedulerMixin(HandlebarsApp
 
   _markDirty() {
     this._dirty = true;
-    const status = this.element?.querySelector?.("[data-event-dirty-status]");
-    if (status) status.hidden = false;
+    this._saveStatus.markDirty();
+  }
+
+  _syncSaveStatus() {
+    syncSaveStatus(this.element, this._saveStatus);
+    for (const editor of this._rowEditors?.values() ?? []) syncSaveStatus(editor.element, this._saveStatus);
   }
 
   _commitOpenEditors() {
@@ -292,9 +304,10 @@ export class SkyholdRandomEventEditor extends RenderSchedulerMixin(HandlebarsApp
 
   _ensureDraftTables() {
     if (this._draftTables) return this._draftTables;
-    const data = SkyholdData.get();
-    const holding = data.holdings.find((item) => String(item?.id ?? "") === this.holdingId) ?? data.holdings[0] ?? null;
+    const data = SkyholdData.view();
+    const holding = data.holdings.find((item) => String(item?.id ?? "") === this.holdingId) ?? null;
     this._draftTables = clone(normalizeRandomEventTables(holding?.gm?.eventTables));
+    this._draftSourceHash = stableDataHash(this._draftTables);
     this._draftHoldingId = String(holding?.id ?? this.holdingId ?? "");
     return this._draftTables;
   }
@@ -604,19 +617,34 @@ export class SkyholdRandomEventEditor extends RenderSchedulerMixin(HandlebarsApp
 
   async _saveDraftTables({ render = true } = {}) {
     if (!game.user?.isGM || !this.holdingId) return;
+    if (this._saveTablesPromise) return this._saveTablesPromise;
     this._commitOpenEditors();
     const tablesToSave = normalizeRandomEventTables(this._ensureDraftTables());
-    const saved = await SkyholdData.updateHolding(this.holdingId, (holding) => {
-      if (!holding.gm || typeof holding.gm !== "object") holding.gm = {};
-      holding.gm.eventTables = tablesToSave;
+    if (!this._saveStatus.dirty.has("draft")) this._saveStatus.markDirty();
+    const revision = this._saveStatus.revision;
+    this._saveTablesPromise = this._saveStatus.track(async () => {
+      const saved = await SkyholdData.updateHolding(this.holdingId, (holding) => {
+        if (stableDataHash(normalizeRandomEventTables(holding?.gm?.eventTables)) !== this._draftSourceHash) {
+          ui.notifications?.warn?.("Таблицы событий изменились после открытия. Черновик сохранён в окне; откройте актуальные таблицы в другом окне и перенесите правки.");
+          return SkyholdData.skipTransaction(false);
+        }
+        if (!holding.gm || typeof holding.gm !== "object") holding.gm = {};
+        holding.gm.eventTables = tablesToSave;
+        return true;
+      }, { fallback: false, reason: "event-editor:save" });
+      if (!saved) return false;
+      if (this._saveStatus.revision === revision) this._draftTables = clone(tablesToSave);
+      this._draftSourceHash = stableDataHash(tablesToSave);
+      this._dirty = this._saveStatus.revision !== revision;
+      ui.notifications?.info?.("События сохранены.");
+      if (render) this._requestRenderPreservingPosition();
       return true;
-    }, { fallback: false, reason: "event-editor:save" });
-    if (!saved) return;
-    this._draftTables = clone(tablesToSave);
-    this._dirty = false;
-    ui.notifications?.info?.("События сохранены.");
-    if (render) this._requestRenderPreservingPosition();
-    return true;
+    }).catch((error) => {
+      console.error("FBL Skyhold | Failed to save event tables", error);
+      ui.notifications?.error?.("Не удалось сохранить события. Черновик остаётся в окне.");
+      return false;
+    }).finally(() => { this._saveTablesPromise = null; });
+    return this._saveTablesPromise;
   }
 
   async _onSave(event) {

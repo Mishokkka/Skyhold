@@ -1,8 +1,10 @@
+import { economyDayIndex } from "../../core/economy-calendar.js";
+import { marketMoneyInRange, MAX_MARKET_OPERATION_COPPER } from "../../data/market/money-limits.js";
+
 const KIND_LABELS = {
   material: "Материалы",
   resource: "Ресурсы",
-  consumable: "Расходники",
-  livestock: "Животные"
+  consumable: "Расходники"
 };
 
 export const MARKET_INSURANCE_COVERAGE_RATE = 0.84;
@@ -14,8 +16,7 @@ export const MARKET_CHARTER_ETA_FACTOR = 0.85;
 export const MARKET_DELIVERY_SERVICES = Object.freeze({
   standard: Object.freeze({ id: "standard", label: "Попутный груз", capacityFactor: 0.2, etaFactor: MARKET_STANDARD_ETA_FACTOR, intervalFactor: 0.25, fullFixedFare: false, operatingLegFactor: 1, surchargeRate: 0 }),
   express: Object.freeze({ id: "express", label: "Ускоренная доставка", capacityFactor: 0.1, etaFactor: MARKET_EXPRESS_ETA_FACTOR, intervalFactor: 0.1, fullFixedFare: false, operatingLegFactor: 1, surchargeRate: MARKET_EXPRESS_SURCHARGE_RATE }),
-  charter: Object.freeze({ id: "charter", label: "Выделенный рейс", capacityFactor: 1, etaFactor: MARKET_CHARTER_ETA_FACTOR, intervalFactor: 0.1, fullFixedFare: true, operatingLegFactor: 2, surchargeRate: 0 }),
-  owned: Object.freeze({ id: "owned", label: "Свой корабль", capacityFactor: 1, etaFactor: 1, intervalFactor: 1, fullFixedFare: true, operatingLegFactor: 1, surchargeRate: 0 })
+  charter: Object.freeze({ id: "charter", label: "Выделенный рейс", capacityFactor: 1, etaFactor: MARKET_CHARTER_ETA_FACTOR, intervalFactor: 0.1, fullFixedFare: true, operatingLegFactor: 2, surchargeRate: 0 })
 });
 
 // Calibrated against late-18th/19th-century sea trade: ordinary freight plus
@@ -40,180 +41,47 @@ const RISK_TRANSPORT_FACTORS = Object.freeze({
   multimodal: 1.1
 });
 
-const CARGO_KG_PER_LOAD = 10;
-const CARGO_LITRES_PER_LOAD = 20;
-const CARGO_EPSILON = 0.0000001;
-
-function pricingDependencies(dependencies = {}, required = []) {
-  for (const name of required) {
-    if (typeof dependencies[name] !== "function") {
-      throw new TypeError(`FBL Skyhold | Market pricing requires dependency "${name}".`);
-    }
-  }
-  return dependencies;
-}
-
-function cargoNonNegative(value, fallback = 0) {
-  const parsed = Number(value);
-  return Math.max(0, Number.isFinite(parsed) ? parsed : fallback);
-}
-
-function hasPhysicalValue(row, field) {
-  return row && Object.hasOwn(row, field) && Number.isFinite(Number(row[field])) && Number(row[field]) >= 0;
-}
-
-function cargoUnitMetrics(line = {}, dependencies = {}) {
-  const cargoPoints = dependencies.cargoPointsFromLegacy(line, { isMoney: false });
-  const fallbackLoad = dependencies.legacyLoadFromCargoPoints(cargoPoints);
-  const hasMass = hasPhysicalValue(line, "packageMassKg");
-  const hasVolume = hasPhysicalValue(line, "packageVolumeL");
-  const emptyPhysicalPair = hasMass && hasVolume
-    && cargoNonNegative(line.packageMassKg, 0) === 0
-    && cargoNonNegative(line.packageVolumeL, 0) === 0;
-  const massKg = hasMass && !emptyPhysicalPair
-    ? cargoNonNegative(line.packageMassKg, 0)
-    : fallbackLoad * CARGO_KG_PER_LOAD;
-  const volumeL = hasVolume && !emptyPhysicalPair
-    ? cargoNonNegative(line.packageVolumeL, 0)
-    : fallbackLoad * CARGO_LITRES_PER_LOAD;
-  return {
-    massKg,
-    volumeL,
-    cargoPoints,
-    load: fallbackLoad
-  };
-}
-
-function cargoLineMetrics(line = {}, quantity = line?.qty, dependencies = {}) {
-  const qty = cargoNonNegative(quantity, 0);
-  const unit = cargoUnitMetrics(line, dependencies);
-  const massKg = qty * unit.massKg;
-  const volumeL = qty * unit.volumeL;
-  return {
-    quantity: qty,
-    massKg,
-    volumeL,
-    cargoPoints: qty * unit.cargoPoints,
-    load: qty * unit.load
-  };
-}
-
-function cargoMetrics(lines = [], dependencies = {}) {
-  let massKg = 0;
-  let volumeL = 0;
-  let cargoPoints = 0;
-  for (const line of Array.isArray(lines) ? lines : []) {
-    const row = cargoLineMetrics(line, line?.qty, dependencies);
-    massKg += row.massKg;
-    volumeL += row.volumeL;
-    cargoPoints += row.cargoPoints;
-  }
-  return {
-    massKg,
-    volumeL,
-    cargoPoints,
-    load: dependencies.legacyLoadFromCargoPoints(cargoPoints)
-  };
-}
-
-function normalizeCargoCapacity(value = 0, dependencies = {}) {
-  if (typeof value === "number" || typeof value === "string") {
-    const load = cargoNonNegative(value, 0);
-    const cargoPoints = Math.ceil(load * 10 - Number.EPSILON);
-    return {
-      massKg: load * CARGO_KG_PER_LOAD,
-      volumeL: load * CARGO_LITRES_PER_LOAD,
-      cargoPoints,
-      load,
-      massLimited: load > 0,
-      volumeLimited: load > 0
-    };
-  }
-  const source = value && typeof value === "object" ? value : {};
-  const explicitCargoPoints = hasPhysicalValue(source, "capacityCargoPoints") || hasPhysicalValue(source, "cargoPoints");
-  const configuredCargoPoints = hasPhysicalValue(source, "capacityCargoPoints")
-    ? cargoNonNegative(source.capacityCargoPoints, 0)
-    : (hasPhysicalValue(source, "cargoPoints") ? cargoNonNegative(source.cargoPoints, 0) : 0);
-  const fallbackLoad = cargoNonNegative(source.capacityLoad ?? source.load, 0);
-  const explicitMass = hasPhysicalValue(source, "capacityMassKg") || hasPhysicalValue(source, "massKg");
-  const explicitVolume = hasPhysicalValue(source, "capacityVolumeL") || hasPhysicalValue(source, "volumeL");
-  const massLimited = explicitMass || fallbackLoad > 0;
-  const volumeLimited = explicitVolume || fallbackLoad > 0;
-  const massKg = hasPhysicalValue(source, "capacityMassKg")
-    ? cargoNonNegative(source.capacityMassKg, 0)
-    : (hasPhysicalValue(source, "massKg") ? cargoNonNegative(source.massKg, 0) : fallbackLoad * CARGO_KG_PER_LOAD);
-  const volumeL = hasPhysicalValue(source, "capacityVolumeL")
-    ? cargoNonNegative(source.capacityVolumeL, 0)
-    : (hasPhysicalValue(source, "volumeL") ? cargoNonNegative(source.volumeL, 0) : fallbackLoad * CARGO_LITRES_PER_LOAD);
-  const axes = [];
-  if (massLimited) axes.push(massKg / CARGO_KG_PER_LOAD);
-  if (volumeLimited) axes.push(volumeL / CARGO_LITRES_PER_LOAD);
-  return {
-    massKg,
-    volumeL,
-    cargoPoints: explicitCargoPoints ? Math.floor(configuredCargoPoints) : Math.ceil((axes.length ? Math.min(...axes) : fallbackLoad) * 10 - Number.EPSILON),
-    load: explicitCargoPoints ? dependencies.legacyLoadFromCargoPoints(configuredCargoPoints) : (axes.length ? Math.min(...axes) : fallbackLoad),
-    massLimited,
-    volumeLimited
-  };
-}
-
-function scaleCargoCapacity(value = 0, factor = 1, dependencies = {}) {
-  const capacity = normalizeCargoCapacity(value, dependencies);
-  const scale = cargoNonNegative(factor, 1);
-  return {
-    massKg: capacity.massKg * scale,
-    volumeL: capacity.volumeL * scale,
-    cargoPoints: capacity.cargoPoints * scale,
-    load: capacity.load * scale,
-    massLimited: capacity.massLimited,
-    volumeLimited: capacity.volumeLimited
-  };
-}
-
-function cargoFitsCapacity(metrics = {}, capacity = 0, dependencies = {}) {
-  const cargoPoints = cargoNonNegative(metrics.cargoPoints ?? metrics.totalCargoPoints, cargoNonNegative(metrics.load ?? metrics.totalLoad, 0) * 10);
-  const limit = normalizeCargoCapacity(capacity, dependencies);
-  return cargoPoints <= limit.cargoPoints + CARGO_EPSILON;
-}
-
-function cargoCapacityShare(metrics = {}, capacity = 0, dependencies = {}) {
-  const cargoPoints = cargoNonNegative(metrics.cargoPoints ?? metrics.totalCargoPoints, cargoNonNegative(metrics.load ?? metrics.totalLoad, 0) * 10);
-  const limit = normalizeCargoCapacity(capacity, dependencies);
-  return limit.cargoPoints > 0 ? Math.max(0, cargoPoints / limit.cargoPoints) : (cargoPoints > 0 ? Number.POSITIVE_INFINITY : 0);
-}
-
-function cargoUnitsFitting(metrics = {}, capacity = 0, dependencies = {}) {
-  const unitCargoPoints = cargoNonNegative(metrics.cargoPoints, cargoNonNegative(metrics.load, 0) * 10);
-  const explicitPointLimit = capacity && typeof capacity === "object"
-    && (Object.hasOwn(capacity, "capacityCargoPoints") || Object.hasOwn(capacity, "cargoPoints"));
-  const limit = normalizeCargoCapacity(capacity, dependencies);
-  if (!(unitCargoPoints > 0)) return Number.POSITIVE_INFINITY;
-  if (explicitPointLimit && !(limit.cargoPoints > 0)) return 0;
-  if (!(limit.cargoPoints > 0)) return Number.POSITIVE_INFINITY;
-  return Math.max(0, Math.floor((limit.cargoPoints + CARGO_EPSILON) / unitCargoPoints));
-}
-
 function finiteNumber(value, fallback = 0) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function optionalFinite(value) {
+  if (value === undefined || value === null || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function resolveMarketOfferEconomics(offer = {}, resource = {}) {
+  const sourceType = offer.sourceType === "item" ? "item" : "resource";
+  const explicitPrice = Object.hasOwn(offer, "priceOverrideCopper")
+    ? optionalFinite(offer.priceOverrideCopper)
+    : optionalFinite(offer.basePriceCopper);
+  const canonicalPrice = sourceType === "item" ? 0 : (optionalFinite(resource.basePriceCopper) ?? 0);
+  const priceFactor = Math.max(0, optionalFinite(offer.priceFactor) ?? 1);
+  const basePriceCopper = Math.max(1, Math.round((explicitPrice ?? canonicalPrice) * priceFactor));
+  const legacyLoad = (optionalFinite(offer.load) === null ? null : optionalFinite(offer.load) * 4)
+    ?? (optionalFinite(offer.weight) === null ? null : optionalFinite(offer.weight) * 4);
+  const explicitLoadPoints = Object.hasOwn(offer, "loadOverridePoints")
+    ? optionalFinite(offer.loadOverridePoints)
+    : legacyLoad;
+  const canonicalLoadPoints = sourceType === "item"
+    ? 4
+    : (optionalFinite(resource.loadPoints) ?? (resource.isMoney ? 0 : 4));
+  const loadPoints = Math.max(0, Math.round(sourceType === "item" ? (explicitLoadPoints ?? canonicalLoadPoints) : canonicalLoadPoints));
+  return {
+    ...offer,
+    basePriceCopper,
+    loadPoints,
+    load: loadPoints / 4,
+    economicsResolved: true,
+    priceSource: explicitPrice === null ? (sourceType === "item" ? "item-default" : "resource") : "offer-override",
+    loadSource: sourceType !== "item" ? "resource" : (explicitLoadPoints === null ? "item-default" : "offer-override")
+  };
+}
+
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
-}
-
-function marketOfferPriceMode(offer = {}) {
-  const requested = String(offer.priceMode ?? offer.pricingMode ?? "").trim().toLowerCase();
-  const customOffer = offer.sourceType === "item" || String(offer.resourceId ?? "custom") === "custom";
-  if (requested === "catalog" && !customOffer) return "catalog";
-  if (requested === "manual" && customOffer) return "manual";
-  return "legacy";
-}
-
-function standardMarketResourceOffer(offer = {}) {
-  const resourceId = String(offer.resourceId ?? "").trim();
-  return offer.sourceType !== "item" && resourceId && resourceId !== "custom";
 }
 
 export function marketHistoricalFreightRate(logistics = {}) {
@@ -241,63 +109,54 @@ function marketDeliveryService(serviceLevel = "standard", scheduled = true) {
   return MARKET_DELIVERY_SERVICES[String(serviceLevel ?? "")] ?? MARKET_DELIVERY_SERVICES.standard;
 }
 
-function appendBatchLine(batch, line, qty, dependencies = {}) {
+function appendBatchLine(batch, line, qty) {
   const unitPriceCopper = Math.max(1, Math.floor(finiteNumber(line.unitPriceCopper, 1)));
+  const load = Math.max(0, finiteNumber(line.load, 1));
   const copy = { ...line, qty, lineCopper: qty * unitPriceCopper };
   batch.lines.push(copy);
   batch.subtotalCopper += copy.lineCopper;
-  const metrics = cargoMetrics(batch.lines, dependencies);
-  batch.totalMassKg = metrics.massKg;
-  batch.totalVolumeL = metrics.volumeL;
-  batch.totalCargoPoints = metrics.cargoPoints;
-  batch.totalLoad = metrics.load;
+  batch.totalLoad += qty * load;
 }
 
-function emptyBatch() {
-  return { lines: [], subtotalCopper: 0, totalMassKg: 0, totalVolumeL: 0, totalCargoPoints: 0, totalLoad: 0 };
-}
-
-export function splitMarketShipmentLines(lines = [], capacityValue = 0, dependencies = {}) {
-  const deps = pricingDependencies(dependencies, ["cargoPointsFromLegacy", "legacyLoadFromCargoPoints"]);
+export function splitMarketShipmentLines(lines = [], capacityLoad = 0) {
   const rows = (Array.isArray(lines) ? lines : []).filter((line) => Math.max(0, Math.floor(finiteNumber(line?.qty, 0))) > 0);
   if (!rows.length) return [];
-  const capacity = normalizeCargoCapacity(capacityValue, deps);
-  if (!(capacity.cargoPoints > 0)) {
-    const batch = emptyBatch();
-    for (const line of rows) appendBatchLine(batch, line, Math.max(0, Math.floor(finiteNumber(line.qty, 0))), deps);
+  const capacity = Math.max(0, finiteNumber(capacityLoad, 0));
+  if (!(capacity > 0)) {
+    const batch = { lines: [], subtotalCopper: 0, totalLoad: 0 };
+    for (const line of rows) appendBatchLine(batch, line, Math.max(0, Math.floor(finiteNumber(line.qty, 0))));
     return [batch];
   }
 
   const batches = [];
-  let batch = emptyBatch();
+  let batch = { lines: [], subtotalCopper: 0, totalLoad: 0 };
   const flush = () => {
     if (!batch.lines.length) return;
     batches.push(batch);
-    batch = emptyBatch();
+    batch = { lines: [], subtotalCopper: 0, totalLoad: 0 };
   };
   for (const line of rows) {
     let remaining = Math.max(0, Math.floor(finiteNumber(line.qty, 0)));
-    const unit = cargoUnitMetrics(line, deps);
-    if (!(unit.cargoPoints > 0)) {
-      appendBatchLine(batch, line, remaining, deps);
+    const unitLoad = Math.max(0, finiteNumber(line.load, 1));
+    if (!(unitLoad > 0)) {
+      appendBatchLine(batch, line, remaining);
       continue;
     }
     while (remaining > 0) {
-      const available = {
-        capacityCargoPoints: Math.max(0, capacity.cargoPoints - batch.totalCargoPoints)
-      };
-      const fits = cargoUnitsFitting(unit, available, deps);
+      const available = Math.max(0, capacity - batch.totalLoad);
+      const fits = Math.floor((available + 0.0000001) / unitLoad);
       if (fits <= 0) {
         if (!batch.lines.length) {
-          appendBatchLine(batch, line, 1, deps);
+          appendBatchLine(batch, line, 1);
           remaining -= 1;
         }
         flush();
         continue;
       }
       const qty = Math.min(remaining, fits);
-      appendBatchLine(batch, line, qty, deps);
+      appendBatchLine(batch, line, qty);
       remaining -= qty;
+      if (batch.totalLoad >= capacity - 0.0000001) flush();
     }
   }
   flush();
@@ -335,107 +194,66 @@ export function resolveMarketLocation(holding = {}, profiles = []) {
 }
 
 export function marketQuotePeriodKey(holding = {}, { now = new Date(), quotePeriodDays = 10 } = {}) {
-  const rawLastQd = holding?.gm?.calendaria?.lastQd;
-  if (rawLastQd !== undefined && rawLastQd !== null && rawLastQd !== "" && Number.isFinite(Number(rawLastQd))) {
-    const elapsedQd = Math.max(0, Math.floor(Number(rawLastQd)));
-    const quotePeriodQd = Math.max(4, Math.floor(finiteNumber(quotePeriodDays, 10) * 4));
-    return `tenday:${Math.floor(elapsedQd / quotePeriodQd)}`;
-  }
+  const periodDays = Math.max(1, Math.floor(finiteNumber(quotePeriodDays, 10)));
+  const gameDay = economyDayIndex(holding);
+  if (gameDay !== null) return `game:${Math.floor(gameDay / periodDays)}:${periodDays}`;
+  const calendaria = String(holding?.gm?.calendaria?.lastDateKey ?? holding?.gm?.calendaria?.lastDateText ?? "").trim();
+  if (calendaria) return `calendaria:${calendaria}`;
   const period = String(holding?.overview?.period ?? "").trim();
   if (period) return `holding:${period}`;
   const day = Math.floor(new Date(now).getTime() / 86400000);
   return `utc:${Math.floor(day / Math.max(1, Math.floor(finiteNumber(quotePeriodDays, 10))))}`;
 }
 
-function quoteOffer(offer, { holding, market, location, quoteKey, seedKey = quoteKey, resource, logistics = {} } = {}, dependencies = {}) {
+function quoteOffer(offer, { location, quoteKey, resource, logistics = {} } = {}) {
   const volatility = clamp(finiteNumber(offer.volatility, 0.2), 0, 0.8);
-  const movement = 1 + ((marketRandomUnit(`${seedKey}|${location.id}|${offer.id}|price`) * 2) - 1) * volatility;
+  const movement = 1 + ((marketRandomUnit(`${quoteKey}|${location.id}|${offer.id}|price`) * 2) - 1) * volatility;
   const categoryFactor = finiteNumber(location?.categoryFactors?.[offer.kind], 1);
-  const reputation = finiteNumber(holding?.overview?.reputation, 0) + finiteNumber(holding?.gm?.modifiers?.reputation, 0);
-  const reputationFactor = clamp(1 - reputation * 0.005, 0.88, 1.12);
-  const priceMode = marketOfferPriceMode(offer);
-  const referencePriceCopper = Math.max(0, finiteNumber(resource?.referencePriceCopper, 0));
-  const catalogPriceFactor = Math.max(0.01, finiteNumber(offer.catalogPriceFactor, 1));
-  const priceAnchorCopper = priceMode === "catalog"
-    ? referencePriceCopper * catalogPriceFactor
-    : finiteNumber(offer.basePriceCopper, 1);
-  const askUnitCopper = Math.max(1, Math.round(priceAnchorCopper * finiteNumber(location.priceFactor, 1) * finiteNumber(logistics.priceFactor, 1) * categoryFactor * reputationFactor * movement));
-  const stockMovement = 0.65 + marketRandomUnit(`${seedKey}|${location.id}|${offer.id}|stock`) * 0.7;
-  const askStock = Math.max(0, Math.floor(finiteNumber(offer.baseAskStock ?? offer.baseStock, 0) * finiteNumber(location.availabilityFactor, 1) * finiteNumber(logistics.stockFactor, 1) * stockMovement));
-  const bidSpreadRate = clamp(finiteNumber(offer.bidSpreadRate, 0.18), 0.05, 0.5);
-  const bidUnitCopper = Math.max(0, Math.floor(askUnitCopper * (1 - bidSpreadRate)));
-  const sourceBidDemand = Math.max(0, finiteNumber(offer.baseBidDemand, Math.floor(finiteNumber(offer.baseAskStock ?? offer.baseStock, 0) * 0.75)));
-  const availability = Math.max(0.01, finiteNumber(location.availabilityFactor, 1) * finiteNumber(logistics.stockFactor, 1));
-  const demandFactor = clamp(1 / availability, 0.4, 2.5);
-  const demandMovement = 0.75 + marketRandomUnit(`${seedKey}|${location.id}|${offer.id}|demand`) * 0.5;
-  const bidDemand = Math.max(0, Math.floor(sourceBidDemand * demandFactor * demandMovement));
-  const liquidity = dependencies.normalizeMarketLiquidityQuote({
-    market,
-    offer: {
-      ...offer,
-      askUnitCopper,
-      askStock,
-      baseAskStock: askStock,
-      bidUnitCopper,
-      bidDemand,
-      baseBidDemand: bidDemand
-    },
-    marketId: String(market?.id ?? "external-market"),
-    quoteKey,
-    offerId: String(offer.id ?? "")
-  });
-  const inheritedLoad = resource && (offer.loadMode === "auto"
-    || (!offer.loadMode && String(offer.id ?? "").startsWith("market-") && String(offer.resourceId ?? "") !== "custom"));
-  const packageMassKg = inheritedLoad
-    ? Math.max(0, finiteNumber(resource?.packageMassKg, 0))
-    : (Object.hasOwn(offer, "packageMassKg") ? Math.max(0, finiteNumber(offer.packageMassKg, 0)) : undefined);
-  const packageVolumeL = inheritedLoad
-    ? Math.max(0, finiteNumber(resource?.packageVolumeL, 0))
-    : (Object.hasOwn(offer, "packageVolumeL") ? Math.max(0, finiteNumber(offer.packageVolumeL, 0)) : undefined);
+  const unitPriceCopper = Math.max(1, Math.round(finiteNumber(offer.basePriceCopper, 1) * finiteNumber(location.priceFactor, 1) * finiteNumber(logistics.priceFactor, 1) * categoryFactor * movement));
+  const stockMovement = 0.65 + marketRandomUnit(`${quoteKey}|${location.id}|${offer.id}|stock`) * 0.7;
+  const stock = Math.max(0, Math.floor(finiteNumber(offer.baseStock, 0) * finiteNumber(location.availabilityFactor, 1) * finiteNumber(logistics.stockFactor, 1) * stockMovement));
   return {
     ...offer,
-    priceMode,
     configuredName: String(offer.name ?? "").trim(),
     configuredImg: String(offer.img ?? "").trim(),
     name: String(offer.name ?? "").trim() || String(resource?.label ?? offer.resourceId ?? "Товар"),
-    unit: String(!offer.unit || offer.unit === "ед." ? (resource?.unitLabel ?? resource?.unit ?? "ед.") : offer.unit),
-    economyVersion: Math.max(1, Math.floor(finiteNumber(resource?.economyVersion ?? offer.economyVersion, 1))),
-    legacyEconomy: resource?.legacyEconomy === true,
-    loadMode: inheritedLoad ? "auto" : "manual",
-    load: inheritedLoad ? Math.max(0, finiteNumber(resource?.load, 1)) : Math.max(0, finiteNumber(offer.load, 1)),
-    cargoClass: inheritedLoad ? String(resource?.cargoClass ?? "10") : String(offer.cargoClass ?? "10"),
-    cargoPoints: inheritedLoad
-      ? Math.max(1, Math.ceil(finiteNumber(resource?.cargoPoints, finiteNumber(resource?.load, 1) * 10)))
-      : Math.max(1, Math.ceil(finiteNumber(offer.cargoPoints, finiteNumber(offer.load, 1) * 10))),
-    ...(packageMassKg === undefined ? {} : { packageMassKg }),
-    ...(packageVolumeL === undefined ? {} : { packageVolumeL }),
-    priceBasis: String(offer.priceBasis ?? "").trim() || String(resource?.priceBasis ?? ""),
+    unit: "ед.",
     icon: String(offer.icon ?? "").trim() || String(resource?.icon ?? "fa-solid fa-box"),
     img: String(offer.img ?? "").trim() || String(resource?.img ?? ""),
     kindLabel: KIND_LABELS[offer.kind] ?? "Товары",
-    priceAnchorCopper: Math.max(1, Math.round(priceAnchorCopper)),
-    askUnitCopper: liquidity.askUnitCopper,
-    askStock: liquidity.askStock,
-    baseAskStock: liquidity.baseAskStock,
-    bidUnitCopper: liquidity.bidUnitCopper,
-    bidDemand: liquidity.bidDemand,
-    baseBidDemand: liquidity.baseBidDemand,
-    unitPriceCopper: liquidity.askUnitCopper,
-    stock: liquidity.askStock,
-    liquidityKey: liquidity.key,
-    marketId: liquidity.marketId,
-    quoteKey: liquidity.quoteKey,
-    offerId: liquidity.offerId,
-    spreadCopper: liquidity.askUnitCopper - liquidity.bidUnitCopper,
-    spreadPercent: Math.round(((liquidity.askUnitCopper - liquidity.bidUnitCopper) / liquidity.askUnitCopper) * 100),
+    unitPriceCopper,
+    stock,
     movementPercent: Math.round((movement - 1) * 100),
-    demandMovementPercent: Math.round((demandMovement - 1) * 100),
     movementClass: movement > 1.015 ? "up" : (movement < 0.985 ? "down" : "stable")
   };
 }
 
-export function prepareMarketQuote({ holding = {}, market = {}, resources = [], location: locationOverride = null, logistics = null } = {}, dependencies = {}) {
-  const deps = pricingDependencies(dependencies, ["normalizeMarketLiquidityQuote", "resourceTradeReady"]);
+function quoteOutboundOffer(offer, { location, quoteKey, resource, logistics = {}, inboundPriceCopper = 0 } = {}) {
+  const volatility = clamp(finiteNumber(offer.volatility, 0.2), 0, 0.8);
+  const movement = 1 + ((marketRandomUnit(`${quoteKey}|${location.id}|${offer.id}|outbound-price`) * 2) - 1) * volatility;
+  const categoryFactor = finiteNumber(location?.categoryFactors?.[offer.kind], 1);
+  const directionalPriceFactor = finiteNumber(logistics.outboundPriceFactor, finiteNumber(logistics.priceFactor, 1));
+  let unitPriceCopper = Math.max(1, Math.round(finiteNumber(offer.basePriceCopper, 1) * finiteNumber(location.priceFactor, 1) * directionalPriceFactor * categoryFactor * movement));
+  if (logistics.sameRegion && finiteNumber(inboundPriceCopper, 0) > 0) unitPriceCopper = Math.min(unitPriceCopper, Math.floor(finiteNumber(inboundPriceCopper, 1)));
+  const demandMovement = 0.65 + marketRandomUnit(`${quoteKey}|${location.id}|${offer.id}|outbound-demand`) * 0.7;
+  const demand = Math.max(0, Math.floor(finiteNumber(offer.baseDemand, 0) * finiteNumber(location.demandFactor, 1) * finiteNumber(logistics.demandFactor, 1) * demandMovement));
+  return {
+    ...offer,
+    configuredName: String(offer.name ?? "").trim(),
+    configuredImg: String(offer.img ?? "").trim(),
+    name: String(offer.name ?? "").trim() || String(resource?.label ?? offer.resourceId ?? "Товар"),
+    unit: "ед.",
+    icon: String(offer.icon ?? "").trim() || String(resource?.icon ?? "fa-solid fa-box"),
+    img: String(offer.img ?? "").trim() || String(resource?.img ?? ""),
+    kindLabel: KIND_LABELS[offer.kind] ?? "Товары",
+    unitPriceCopper,
+    demand,
+    movementPercent: Math.round((movement - 1) * 100),
+    movementClass: movement > 1.015 ? "up" : (movement < 0.985 ? "down" : "stable")
+  };
+}
+
+export function prepareMarketQuote({ holding = {}, market = {}, resources = [], location: locationOverride = null, logistics = null } = {}) {
   const location = locationOverride ?? resolveMarketLocation(holding, market.locationProfiles);
   const quoteKey = marketQuotePeriodKey(holding, { quotePeriodDays: market.quotePeriodDays });
   const marketQuoteKey = `${quoteKey}|market:${String(market.id ?? "external-market")}`;
@@ -446,25 +264,68 @@ export function prepareMarketQuote({ holding = {}, market = {}, resources = [], 
   const activeOffers = (market.offers ?? []).filter((offer) => offer?.active !== false);
   const accessibleOffers = activeOffers.map((offer) => {
     const resource = resourceById.get(String(offer.resourceId ?? ""));
-    if (standardMarketResourceOffer(offer) && !deps.resourceTradeReady(resource)) return null;
-    const accessDifficulty = Math.max(0, Math.floor(finiteNumber(offer.accessDifficulty, 0)), Math.floor(finiteNumber(resource?.marketAccessDifficulty, 0)));
+    const effectiveOffer = offer.economicsResolved ? offer : resolveMarketOfferEconomics(offer, resource ?? {});
+    const accessDifficulty = Math.max(0, Math.floor(finiteNumber(effectiveOffer.accessDifficulty, 0)), Math.floor(finiteNumber(resource?.marketAccessDifficulty, 0)));
     const requiredUrs = routeAccessCost + accessDifficulty;
-    return { offer: { ...offer, accessDifficulty, requiredUrs }, resource, requiredUrs };
-  }).filter((row) => row && (!enforceAccess || row.requiredUrs <= accessLevel));
+    return { offer: { ...effectiveOffer, accessDifficulty, requiredUrs }, resource, requiredUrs };
+  }).filter((row) => !enforceAccess || row.requiredUrs <= accessLevel);
   const offers = accessibleOffers.map(({ offer, resource }) => quoteOffer(offer, {
     holding,
-    market,
     location,
-    quoteKey,
-    seedKey: marketQuoteKey,
+    quoteKey: marketQuoteKey,
     resource,
     logistics: logistics ?? {}
-  }, deps));
+  }));
   const deliveryMode = String(market.deliveryMode ?? "instant") === "scheduled" ? "scheduled" : "instant";
+  const deliveryBaseQd = finiteNumber(market.baseDeliveryQd, 2) * Math.max(0.1, finiteNumber(location.deliveryQdFactor, 1));
   const deliveryQd = deliveryMode === "scheduled"
-    ? Math.max(1, Math.ceil(finiteNumber(market.baseDeliveryQd, 2) * Math.max(0.1, finiteNumber(location.deliveryQdFactor, 1)) + Math.max(0, finiteNumber(logistics?.travelQd, 0))))
+    ? Math.max(1, Math.ceil(deliveryBaseQd + Math.max(0, finiteNumber(logistics?.travelQd, 0))))
     : 0;
-  return { marketId: String(market.id ?? "external-market"), marketLabel: String(market.label ?? "Внешний рынок"), quoteKey, location, locationText: marketLocationText(holding), deliveryMode, deliveryQd, logistics: logistics ?? null, offers, hiddenOfferCount: Math.max(0, activeOffers.length - accessibleOffers.length) };
+  return { marketId: String(market.id ?? "external-market"), marketLabel: String(market.label ?? "Внешний рынок"), quoteKey, location, locationText: marketLocationText(holding), deliveryMode, deliveryBaseQd, deliveryQd, logistics: logistics ?? null, offers, hiddenOfferCount: Math.max(0, activeOffers.length - accessibleOffers.length) };
+}
+
+export function prepareMarketOutboundQuote({ holding = {}, market = {}, resources = [], location: locationOverride = null, logistics = null, inboundOffers = [] } = {}) {
+  const location = locationOverride ?? resolveMarketLocation(holding, market.locationProfiles);
+  const quoteKey = marketQuotePeriodKey(holding, { quotePeriodDays: market.quotePeriodDays });
+  const marketQuoteKey = `${quoteKey}|market:${String(market.id ?? "external-market")}`;
+  const resourceById = new Map((resources ?? []).map((row) => [String(row.id ?? row.resourceId ?? ""), row]));
+  const inboundPriceByResource = new Map();
+  for (const offer of inboundOffers ?? []) {
+    const resourceId = String(offer?.resourceId ?? "");
+    const price = Math.max(0, Math.floor(finiteNumber(offer?.unitPriceCopper, 0)));
+    if (!resourceId || !price) continue;
+    const current = inboundPriceByResource.get(resourceId);
+    if (!current || price < current) inboundPriceByResource.set(resourceId, price);
+  }
+  const routeAccessCost = Math.max(0, Math.floor(finiteNumber(logistics?.routeAccessLevel ?? logistics?.routeAccessCost, finiteNumber(logistics?.hops, 0))));
+  const accessLevel = Math.max(0, Math.floor(finiteNumber(logistics?.accessLevel, 0)));
+  const enforceAccess = Boolean(logistics && Object.hasOwn(logistics, "accessLevel"));
+  const activeOffers = (market.outboundOffers ?? []).filter((offer) => offer?.active !== false && offer?.sourceType !== "item");
+  const accessibleOffers = activeOffers.map((offer) => {
+    const resource = resourceById.get(String(offer.resourceId ?? ""));
+    const effectiveOffer = offer.economicsResolved ? offer : resolveMarketOfferEconomics(offer, resource ?? {});
+    const accessDifficulty = Math.max(0, Math.floor(finiteNumber(effectiveOffer.accessDifficulty, 0)), Math.floor(finiteNumber(resource?.marketAccessDifficulty, 0)));
+    const requiredUrs = routeAccessCost + accessDifficulty;
+    return { offer: { ...effectiveOffer, accessDifficulty, requiredUrs }, resource, requiredUrs };
+  }).filter((row) => !enforceAccess || row.requiredUrs <= accessLevel);
+  const offers = accessibleOffers.map(({ offer, resource }) => quoteOutboundOffer(offer, {
+    holding,
+    location,
+    quoteKey: marketQuoteKey,
+    resource,
+    logistics: logistics ?? {},
+    inboundPriceCopper: inboundPriceByResource.get(String(offer.resourceId ?? "")) ?? 0
+  }));
+  return {
+    marketId: String(market.id ?? "external-market"),
+    marketLabel: String(market.label ?? "Внешний рынок"),
+    quoteKey,
+    location,
+    locationText: marketLocationText(holding),
+    logistics: logistics ?? null,
+    offers,
+    hiddenOfferCount: Math.max(0, activeOffers.length - accessibleOffers.length)
+  };
 }
 
 export function marketShipmentRiskProfile({ logistics = {}, deliveryQd = 0, subtotalCopper = 0, insuranceCopper = 0 } = {}) {
@@ -490,54 +351,56 @@ export function marketShipmentRiskProfile({ logistics = {}, deliveryQd = 0, subt
   };
 }
 
-export function planMarketPurchase({ holding = {}, quote = {}, quantities = {}, targetRoomId = "outdoors", serviceLevel = "standard" } = {}, dependencies = {}) {
-  const deps = pricingDependencies(dependencies, ["cargoPointsFromLegacy", "legacyLoadFromCargoPoints"]);
+export function planMarketPurchase({ holding = {}, quote = {}, quantities = {}, targetRoomId = "outdoors", serviceLevel = "standard", transportOnly = false } = {}) {
+  if (quote.logistics?.ok !== false && quote.logistics?.routeCandidates?.length) {
+    const selected = (quote.offers ?? []).filter((offer) => Number(quantities?.[offer.id]) > 0);
+    const difficulty = Math.max(0, ...selected.map((offer) => finiteNumber(offer.accessDifficulty, 0)));
+    const reference = quote.logistics.routeCandidates.find((route) => route.routePath.join("|") === quote.logistics.routePath.join("|")
+      && route.routeModes.join("|") === quote.logistics.routeModes.join("|"));
+    const capacityOverride = reference && quote.logistics.capacityLoad !== reference.capacityLoad ? quote.logistics.capacityLoad : null;
+    const plans = quote.logistics.routeCandidates.filter((route) => route.ok !== false
+      && route.routeAccessCost + difficulty <= route.accessLevel).map((candidate) => {
+      const route = capacityOverride === null ? candidate : { ...candidate, capacityLoad: Math.min(candidate.capacityLoad, capacityOverride) };
+      return planMarketPurchase({
+        holding, quantities, targetRoomId, serviceLevel, transportOnly, quote: { ...quote, logistics: route,
+          deliveryQd: quote.deliveryMode === "scheduled" ? Math.max(1, Math.ceil(finiteNumber(quote.deliveryBaseQd, 0) + route.travelQd)) : 0 }
+      });
+    }).filter((plan) => !plan.capacityExceeded && !plan.amountExceeded);
+    plans.sort((a, b) => a.totalCopper - b.totalCopper || a.deliveryQd - b.deliveryQd
+      || a.logistics.routePath.join("|").localeCompare(b.logistics.routePath.join("|")));
+    if (plans.length) return plans[0];
+    const { routeCandidates: _routes, ...fallback } = quote.logistics;
+    return planMarketPurchase({ holding, quantities, targetRoomId, serviceLevel, transportOnly, quote: { ...quote, logistics: fallback } });
+  }
   const lines = [];
   let subtotalCopper = 0;
+  let totalLoad = 0;
   for (const offer of quote.offers ?? []) {
     const requested = Math.max(0, Math.floor(finiteNumber(quantities?.[offer.id], 0)));
     const qty = Math.min(requested, Math.max(0, Math.floor(finiteNumber(offer.stock, 0))));
     if (!qty) continue;
     const lineCopper = qty * Math.max(1, Math.floor(finiteNumber(offer.unitPriceCopper, 1)));
     subtotalCopper += lineCopper;
+    totalLoad += qty * Math.max(0, finiteNumber(offer.load, 1));
     lines.push({ ...offer, qty, lineCopper, targetRoomId: String(targetRoomId || "outdoors") });
   }
-  const totalMetrics = cargoMetrics(lines, deps);
-  const totalMassKg = totalMetrics.massKg;
-  const totalVolumeL = totalMetrics.volumeL;
-  const totalCargoPoints = totalMetrics.cargoPoints;
-  const totalLoad = totalMetrics.load;
   const location = quote.location ?? {};
   const logistics = quote.logistics ?? {};
-  const physicalCapacity = normalizeCargoCapacity({
-    capacityLoad: logistics?.capacityLoad,
-    capacityCargoPoints: logistics?.capacityCargoPoints,
-    capacityMassKg: logistics?.capacityMassKg,
-    capacityVolumeL: logistics?.capacityVolumeL
-  }, deps);
-  const physicalCapacityLoad = physicalCapacity.load;
-  const physicalCapacityCargoPoints = physicalCapacity.cargoPoints;
-  const physicalCapacityMassKg = physicalCapacity.massKg;
-  const physicalCapacityVolumeL = physicalCapacity.volumeL;
-  const hasCapacityLimit = physicalCapacityCargoPoints > 0;
+  const physicalCapacityLoad = Math.max(0, finiteNumber(logistics?.capacityLoad, 0));
+  const hasCapacityLimit = physicalCapacityLoad > 0;
   const scheduled = quote.deliveryMode === "scheduled";
   const service = marketDeliveryService(serviceLevel, scheduled);
-  const ownedVesselDelivery = service.id === "owned" && Boolean(logistics?.ownedVesselId);
-  const bookingCapacity = hasCapacityLimit ? scaleCargoCapacity(physicalCapacity, scheduled ? service.capacityFactor : 1, deps) : normalizeCargoCapacity(0, deps);
-  const bookingCapacityLoad = bookingCapacity.load;
-  const bookingCapacityCargoPoints = bookingCapacity.cargoPoints;
-  const bookingCapacityMassKg = bookingCapacity.massKg;
-  const bookingCapacityVolumeL = bookingCapacity.volumeL;
-  const capacityExceeded = lines.length > 0 && hasCapacityLimit && (ownedVesselDelivery
-    ? !cargoFitsCapacity(totalMetrics, bookingCapacity, deps)
-    : scheduled
-      ? lines.some((line) => !cargoFitsCapacity(cargoLineMetrics(line, 1, deps), bookingCapacity, deps))
-      : !cargoFitsCapacity(totalMetrics, bookingCapacity, deps));
-  const batches = splitMarketShipmentLines(lines, scheduled ? bookingCapacity : 0, deps);
+  const bookingCapacityLoad = hasCapacityLimit ? physicalCapacityLoad * (scheduled ? service.capacityFactor : 1) : 0;
+  const capacityExceeded = lines.length > 0 && bookingCapacityLoad > 0 && (scheduled
+    ? lines.some((line) => Math.max(0, finiteNumber(line.load, 1)) > bookingCapacityLoad + 0.0001)
+    : totalLoad > bookingCapacityLoad + 0.0001);
+  const batches = splitMarketShipmentLines(lines, scheduled ? bookingCapacityLoad : 0);
   const routeFlatCopper = Math.max(0, Math.ceil(finiteNumber(logistics.distanceFlatCopper, 0)));
   const loadRateCopper = Math.max(0, finiteNumber(logistics.distanceLoadCopper, 0));
   const freightRate = marketHistoricalFreightRate(logistics);
-  const insuranceRate = marketHistoricalInsuranceRate({ location, logistics });
+  // Instant/GM-local delivery has no in-transit loss resolution, therefore it
+  // must not charge a policy that can never pay out.
+  const insuranceRate = scheduled ? marketHistoricalInsuranceRate({ location, logistics }) : 0;
   const standardDeliveryQd = scheduled ? Math.max(1, Math.floor(finiteNumber(quote.deliveryQd, 1))) : 0;
   const firstDeliveryQd = scheduled ? Math.max(1, Math.ceil(standardDeliveryQd * service.etaFactor)) : 0;
   const dispatchIntervalQd = scheduled ? Math.max(1, Math.ceil(standardDeliveryQd * service.intervalFactor)) : 0;
@@ -545,6 +408,9 @@ export function planMarketPurchase({ holding = {}, quote = {}, quantities = {}, 
   const handlingFlatCopper = Math.max(0, finiteNumber(location.deliveryFlatCopper, 0));
   const handlingLoadRateCopper = Math.max(0, finiteNumber(location.deliveryLoadCopper, 0));
   const taxRate = Math.max(0, finiteNumber(logistics.taxRate, 0));
+  const hasDirectionalTaxes = Object.hasOwn(logistics, "importTaxRate");
+  const importTaxRate = hasDirectionalTaxes ? Math.max(0, finiteNumber(logistics.importTaxRate, 0)) : taxRate;
+  const exportTaxRate = Math.max(0, finiteNumber(logistics.exportTaxRate, 0));
   const fullVesselLoadCopper = hasCapacityLimit ? Math.max(0, Math.ceil(physicalCapacityLoad * loadRateCopper)) : 0;
   const fullOneWayOperatingCopper = routeFlatCopper + fullVesselLoadCopper;
 
@@ -553,11 +419,9 @@ export function planMarketPurchase({ holding = {}, quote = {}, quantities = {}, 
     batch.number = index + 1;
     batch.capacityShare = service.fullFixedFare
       ? 1
-      : (hasCapacityLimit ? clamp(cargoCapacityShare(batch, physicalCapacity, deps), 0.02, 1) : 1);
+      : (hasCapacityLimit ? clamp(batch.totalLoad / physicalCapacityLoad, 0.02, 1) : 1);
     batch.billableLoad = service.fullFixedFare && hasCapacityLimit ? physicalCapacityLoad : batch.totalLoad;
     batch.loadCopper = Math.max(0, Math.ceil(batch.billableLoad * loadRateCopper));
-    // Kept as a comparison benchmark for legacy reports. Cargo value no longer
-    // sets freight: it affects only customs and optional insurance.
     batch.valueFreightCopper = Math.max(1, Math.ceil(batch.subtotalCopper * freightRate));
     batch.operatingLegFactor = service.operatingLegFactor;
     batch.fullOneWayOperatingCopper = hasCapacityLimit
@@ -566,19 +430,21 @@ export function planMarketPurchase({ holding = {}, quote = {}, quantities = {}, 
     // Rideshare pays its occupied share of a revenue-producing one-way service.
     // A charter reserves the whole vehicle and must also fund its return/repositioning.
     batch.operationalFreightCopper = Math.max(0, Math.ceil(batch.fullOneWayOperatingCopper * batch.capacityShare * batch.operatingLegFactor));
-    batch.routeCopper = batch.operationalFreightCopper;
+    batch.routeCopper = Math.max(batch.valueFreightCopper, batch.operationalFreightCopper);
     batch.handlingCopper = Math.max(0, Math.ceil((handlingFlatCopper + batch.totalLoad * handlingLoadRateCopper) * deliveryFactor));
-    batch.insuranceCopper = ownedVesselDelivery ? 0 : Math.max(0, Math.ceil(batch.subtotalCopper * insuranceRate));
-    batch.taxCopper = Math.max(0, Math.ceil(batch.subtotalCopper * taxRate));
+    batch.insuranceCopper = Math.max(0, Math.ceil(batch.subtotalCopper * insuranceRate));
+    batch.importTaxCopper = Math.max(0, Math.ceil(batch.subtotalCopper * importTaxRate));
+    batch.exportTaxCopper = Math.max(0, Math.ceil(batch.subtotalCopper * exportTaxRate));
+    batch.taxCopper = batch.importTaxCopper + batch.exportTaxCopper;
     batch.expressSurchargeCopper = service.surchargeRate > 0
       ? Math.max(1, Math.ceil((batch.routeCopper + batch.handlingCopper) * service.surchargeRate))
       : 0;
     batch.deliveryCopper = batch.routeCopper + batch.handlingCopper + batch.insuranceCopper + batch.taxCopper + batch.expressSurchargeCopper;
     batch.totalCopper = batch.subtotalCopper + batch.deliveryCopper;
     batch.deliveryQd = scheduled ? firstDeliveryQd + index * dispatchIntervalQd : 0;
-    batch.riskProfile = ownedVesselDelivery
-      ? { riskFactor: 1, lossChance: 0, delayChance: 0, maxDelayQd: 0, insuranceCoverageRate: 0, insuredValueCopper: batch.subtotalCopper, maximumInsurancePayoutCopper: 0 }
-      : marketShipmentRiskProfile({ logistics, deliveryQd: batch.deliveryQd, subtotalCopper: batch.subtotalCopper, insuranceCopper: batch.insuranceCopper });
+    batch.departureQd = scheduled ? index * dispatchIntervalQd : 0;
+    batch.transportQd = firstDeliveryQd;
+    batch.riskProfile = marketShipmentRiskProfile({ logistics, deliveryQd: firstDeliveryQd, subtotalCopper: batch.subtotalCopper, insuranceCopper: batch.insuranceCopper });
   }
 
   const sumBatch = (field) => batches.reduce((sum, batch) => sum + Math.max(0, finiteNumber(batch[field], 0)), 0);
@@ -591,6 +457,8 @@ export function planMarketPurchase({ holding = {}, quote = {}, quantities = {}, 
   const handlingCopper = sumBatch("handlingCopper");
   const insuranceCopper = sumBatch("insuranceCopper");
   const taxCopper = sumBatch("taxCopper");
+  const importTaxCopper = sumBatch("importTaxCopper");
+  const exportTaxCopper = sumBatch("exportTaxCopper");
   const expressSurchargeCopper = sumBatch("expressSurchargeCopper");
   const deliveryCopper = sumBatch("deliveryCopper");
   const deliveryQd = batches.length ? Math.max(...batches.map((batch) => batch.deliveryQd)) : 0;
@@ -600,16 +468,15 @@ export function planMarketPurchase({ holding = {}, quote = {}, quantities = {}, 
   const riskDelayChance = batches.length ? 1 - batches.reduce((chance, batch) => chance * (1 - batch.riskProfile.delayChance), 1) : 0;
   const riskMaxDelayQd = batches.length ? Math.max(...batches.map((batch) => batch.riskProfile.maxDelayQd)) : 0;
   const maximumInsurancePayoutCopper = batches.reduce((sum, batch) => sum + batch.riskProfile.maximumInsurancePayoutCopper, 0);
+  // The outbound adapter quotes freight without purchasing the cargo. Its own
+  // planner validates revenue and insured value; do not impose a fictitious
+  // inbound goods+delivery payment on that transport estimate.
+  const amountExceeded = !(transportOnly ? [deliveryCopper] : [subtotalCopper, deliveryCopper, totalCopper, maximumInsurancePayoutCopper])
+    .every(marketMoneyInRange);
   const merchantProviderIds = [...new Set(lines.map((line) => String(line.providerId ?? "")).filter(Boolean))];
-  const finalBatch = batches.at(-1) ?? {};
-  const finalBatchLoad = finalBatch.totalLoad ?? 0;
-  const finalBatchCargoPoints = finalBatch.totalCargoPoints ?? 0;
-  const finalBatchMassKg = finalBatch.totalMassKg ?? 0;
-  const finalBatchVolumeL = finalBatch.totalVolumeL ?? 0;
-  const finalBatchCapacityShare = hasCapacityLimit ? cargoCapacityShare(finalBatch, bookingCapacity, deps) : 0;
+  const finalBatchLoad = batches.at(-1)?.totalLoad ?? 0;
   const capacityRemainingLoad = bookingCapacityLoad > 0 ? Math.max(0, bookingCapacityLoad - finalBatchLoad) : 0;
-  const capacityRemainingCargoPoints = bookingCapacityCargoPoints > 0 ? Math.max(0, bookingCapacityCargoPoints - finalBatchCargoPoints) : 0;
-  const capacityUtilization = finalBatchCapacityShare;
+  const capacityUtilization = bookingCapacityLoad > 0 ? finalBatchLoad / bookingCapacityLoad : 0;
   const deliveryBreakdown = {
     distanceKm: Math.max(0, finiteNumber(logistics.distanceKm, 0)),
     hops: Math.max(0, Math.floor(finiteNumber(logistics.hops, 0))),
@@ -627,17 +494,10 @@ export function planMarketPurchase({ holding = {}, quote = {}, quantities = {}, 
     serviceLevel: service.id,
     serviceLabel: service.label,
     physicalCapacityLoad,
-    physicalCapacityCargoPoints,
-    physicalCapacityMassKg,
-    physicalCapacityVolumeL,
     bookingCapacityLoad,
-    bookingCapacityCargoPoints,
-    bookingCapacityMassKg,
-    bookingCapacityVolumeL,
     capacityShare,
     freightRate,
     valueFreightCopper,
-    valueFreightCharged: false,
     operationalFreightCopper,
     operatingLegFactor: service.operatingLegFactor,
     fullVesselLoadCopper,
@@ -652,20 +512,19 @@ export function planMarketPurchase({ holding = {}, quote = {}, quantities = {}, 
     insuranceRate,
     insuranceCopper,
     taxRate,
+    importTaxRate,
+    exportTaxRate,
+    importTaxCopper,
+    exportTaxCopper,
     taxCopper,
     expressSurchargeCopper,
     deliveryCopper,
-    subtotalCopper,
-    ownedVesselDelivery,
-    ownedVesselId: String(logistics?.ownedVesselId ?? ""),
-    ownedPickupQd: Math.max(0, finiteNumber(logistics?.ownedPickupQd, 0)),
-    ownedCargoQd: Math.max(0, finiteNumber(logistics?.ownedCargoQd, 0)),
-    ownedHandlingQd: Math.max(0, finiteNumber(logistics?.ownedHandlingQd, 0)),
-    ownedOperatingCostCopper: Math.max(0, Math.ceil(finiteNumber(logistics?.ownedOperatingCostCopper, 0))),
-    ownedReplacementReserveCopper: Math.max(0, Math.ceil(finiteNumber(logistics?.ownedReplacementReserveCopper, 0)))
+    subtotalCopper
   };
   return {
-    ok: lines.length > 0 && totalCopper > 0 && treasuryCopper >= totalCopper && logistics?.ok !== false && !capacityExceeded,
+    ok: lines.length > 0 && totalCopper > 0 && treasuryCopper >= totalCopper && logistics?.ok !== false && !capacityExceeded && !amountExceeded,
+    amountExceeded,
+    amountLimitCopper: MAX_MARKET_OPERATION_COPPER,
     empty: lines.length === 0,
     insufficientFunds: lines.length > 0 && treasuryCopper < totalCopper,
     inaccessible: logistics?.ok === false,
@@ -688,22 +547,12 @@ export function planMarketPurchase({ holding = {}, quote = {}, quantities = {}, 
     logistics,
     carrierId: String(logistics?.carrierId ?? ""),
     carrierLabel: String(logistics?.carrierLabel ?? ""),
-    ownedVesselDelivery,
-    ownedVesselId: String(logistics?.ownedVesselId ?? ""),
-    ownedVesselName: String(logistics?.ownedVesselName ?? ""),
-    ownedPickupRegionId: String(logistics?.ownedPickupRegionId ?? ""),
-    ownedPickupLabel: String(logistics?.ownedPickupLabel ?? ""),
-    ownedDestinationRegionId: String(logistics?.ownedDestinationRegionId ?? ""),
-    ownedDestinationLabel: String(logistics?.ownedDestinationLabel ?? ""),
-    ownedPickupQd: Math.max(0, finiteNumber(logistics?.ownedPickupQd, 0)),
-    ownedCargoQd: Math.max(0, finiteNumber(logistics?.ownedCargoQd, 0)),
-    ownedHandlingQd: Math.max(0, finiteNumber(logistics?.ownedHandlingQd, 0)),
-    ownedOperatingCostCopper: Math.max(0, Math.ceil(finiteNumber(logistics?.ownedOperatingCostCopper, 0))),
-    ownedReplacementReserveCopper: Math.max(0, Math.ceil(finiteNumber(logistics?.ownedReplacementReserveCopper, 0))),
     merchantProviderIds,
     deliveryBreakdown,
     routeCopper,
     taxCopper,
+    importTaxCopper,
+    exportTaxCopper,
     handlingCopper,
     expressSurchargeCopper,
     insuranceCopper,
@@ -721,26 +570,11 @@ export function planMarketPurchase({ holding = {}, quote = {}, quantities = {}, 
     subtotalCopper,
     deliveryCopper,
     totalLoad,
-    totalCargoPoints,
-    totalMassKg,
-    totalVolumeL,
     capacityLoad: physicalCapacityLoad,
-    capacityCargoPoints: physicalCapacityCargoPoints,
     physicalCapacityLoad,
-    physicalCapacityCargoPoints,
-    physicalCapacityMassKg,
-    physicalCapacityVolumeL,
     bookingCapacityLoad,
-    bookingCapacityCargoPoints,
-    bookingCapacityMassKg,
-    bookingCapacityVolumeL,
     finalBatchLoad,
-    finalBatchCargoPoints,
-    finalBatchMassKg,
-    finalBatchVolumeL,
-    finalBatchCapacityShare,
     capacityRemainingLoad,
-    capacityRemainingCargoPoints,
     capacityUtilization,
     totalCopper,
     treasuryCopper,

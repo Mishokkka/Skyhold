@@ -6,6 +6,7 @@ import { applySettlementBattleDamage } from "./damage.js";
 import { roundConsequences } from "./round.js";
 import { asInt, clamp, successCount } from "./rules.js";
 import { battleTerminalState } from "./terminal.js";
+import { consumeDefenderMilitarySupplies } from "./supplies.js";
 
 export const PENDING_ROUND_SCHEMA_VERSION = 1;
 
@@ -75,8 +76,13 @@ function resultFingerprint(result = {}) {
       personId: row.personId,
       condition: row.condition,
       treated: row.treated,
+      supplied: row.supplied,
+      medicineUsed: row.medicineUsed,
       sourceId: row.sourceId
     })),
+    medicalSuppliesUsed: result.casualtyResult?.medicalSuppliesUsed ?? 0,
+    medicinesUsed: result.casualtyResult?.medicinesUsed ?? 0,
+    militarySuppliesUsed: result.militarySupplyResult?.used ?? 0,
     damage: (result.damageResult?.records ?? []).map((row) => ({
       buildingId: row.buildingId,
       status: row.status,
@@ -95,6 +101,8 @@ export function resolveBattleRound({
   random = Math.random,
   compactNameList
 } = {}) {
+  const militarySupplyResult = consumeDefenderMilitarySupplies(holding, state, calculationDependencies);
+  if (!militarySupplyResult.ok) throw new Error(`FBL Skyhold | ${militarySupplyResult.text}`);
   const defenderRolls = dicePool(calc?.defenderPool, random);
   const attackerRolls = dicePool(calc?.attackerPool, random);
   const defenderSuccesses = successCount(defenderRolls);
@@ -122,7 +130,9 @@ export function resolveBattleRound({
       random,
       compactNameList,
       medicalAssignments: calculationDependencies.medicalAssignments,
-      medicalCapacityForBuilding: calculationDependencies.medicalCapacityForBuilding
+      medicalCapacityForBuilding: calculationDependencies.medicalCapacityForBuilding,
+      resourceQuantity: calculationDependencies.resourceQuantity,
+      consumeResource: calculationDependencies.consumeResource
     }
   );
   const damageResult = applySettlementBattleDamage(holding, state, consequences.settlementDamageDelta, calc, { random });
@@ -138,6 +148,7 @@ export function resolveBattleRound({
     attackerSuccesses,
     margin,
     consequences,
+    militarySupplyResult,
     casualtyResult,
     damageResult,
     terminal,
@@ -187,6 +198,7 @@ export function createPendingBattleRound({
     margin: preview.margin,
     consequences: clone(preview.consequences),
     casualtyText: String(preview.casualtyResult?.text ?? ""),
+    militarySupplyText: String(preview.militarySupplyResult?.text ?? ""),
     damageText: String(preview.damageResult?.text ?? ""),
     casualtyPreview: (preview.casualtyResult?.records ?? []).map((row) => ({
       personId: String(row.personId ?? ""),
@@ -194,6 +206,8 @@ export function createPendingBattleRound({
       condition: String(row.condition ?? ""),
       label: String(row.label ?? ""),
       treated: Boolean(row.treated),
+      supplied: Boolean(row.supplied),
+      medicineUsed: Boolean(row.medicineUsed),
       sourceLabel: String(row.sourceLabel ?? "")
     })),
     damagePreview: (preview.damageResult?.records ?? []).map((row) => ({

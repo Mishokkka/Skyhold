@@ -1,0 +1,39 @@
+<section class="fbls-body-text fbls-ship-window" aria-label="Управление кораблём" data-ship-holding-root="{{holding.id}}">
+  {{#each shipsContext.rows}}
+  <article class="fbls-ship-console" data-ship-card="{{id}}" data-ship-revision="{{@root.shipsContext.revision}}" data-ship-holding="{{@root.holding.id}}" data-ship-voyage="{{#if orderBundle}}{{orderBundle.id}}{{else}}{{activeVoyage.id}}{{/if}}">
+    <header class="fbls-ship-heading fbls-card-header">
+      <div class="fbls-section-heading"><h2 class="fbls-heading-title"><i class="fa-solid fa-ship" aria-hidden="true"></i> {{name}}</h2><p>{{#if isWorld}}{{locationLabel}} · {{statusLabel}} · {{profileLabel}}{{else}}{{#if away}}В рейсе{{else}}В поселении{{/if}} · Прежние рейсы{{/if}} · {{conditionLabel}}{{#if commanderName}} · {{commanderName}}{{/if}}</p></div>
+    </header>
+    {{#if isWorld}}
+    <nav class="fbls-ship-tabs fbls-action-group" aria-label="Разделы корабля">
+      {{#each @root.shipWindowTabs}}<button type="button" class="fbls-subnav-tab {{#if active}}active{{/if}}" data-action="ship-window-tab" data-ship-window-tab="{{id}}" aria-pressed="{{active}}" tabindex="{{#if active}}0{{else}}-1{{/if}}"><i class="{{icon}}" aria-hidden="true"></i> {{label}}</button>{{/each}}
+    </nav>
+    <dl class="fbls-ship-stats">
+      <div tabindex="0" data-fbls-tooltip="Дома доступны казна поселения и бортовой кошелёк. Стоянка сначала оплачивается из кошелька. В чужих портах доступны только деньги на борту; остаток рейса возвращается в казну при возвращении."><dt>{{moneySummary.balanceLabel}}</dt><dd>{{#if moneySummary.calculationValid}}{{fblsShipGold moneySummary.balanceCopper}} <small>ЗМ</small>{{else}}Не рассчитано{{/if}}</dd></div>
+      <div tabindex="0" data-fbls-tooltip="Готовых к рейсу моряков / требуемый состав. Ранения, погибшие, отсутствующие жители и конфликт приписки могут мешать отправлению. Причины указаны в разделе экипажа."><dt>Готовность команды</dt><dd>{{readiness.readyCount}} <small>/ {{readiness.requiredCount}}</small></dd></div>
+      <div tabindex="0" data-fbls-tooltip="Занято / полная вместимость в игровых единицах груза. Контрактный груз принадлежит заказчику и не поступает на склад поселения."><dt>Трюм</dt><dd>{{occupiedLoadPoints}} <small>/ {{capacityLoadPoints}}</small></dd></div>
+      {{#if atHome}}<div tabindex="0" data-fbls-tooltip="Автоматическое содержание корабля за день, включая плату и питание отдыхающих на борту моряков. Сначала расходуется бортовой кошелёк, затем казна поселения. ГМ может отключить новые начисления в настройках."><dt>{{#if homeUpkeepEnabled}}Содержание дома{{else}}Содержание дома отключено{{/if}}</dt><dd>{{fblsShipGold homeUpkeepCopperPerDay}} <small>ЗМ/день</small></dd></div>
+      {{else}}<div tabindex="0" data-fbls-tooltip="Свободные деньги после известных счетов и рекомендованного запаса на возвращение, стоянку и происшествия. Сам резерв не является расходом."><dt>Свободные средства</dt><dd>{{#if moneySummary.reserveKnown}}{{fblsShipGold moneySummary.freeCopper}} <small>ЗМ</small>{{else}}—{{/if}}</dd></div>{{/if}}
+    </dl>
+
+    <section class="fbls-ship-panel" data-ship-panel="orders" data-render-scroll-key="ship-orders" aria-label="Рейсы" {{#unless @root.shipPanels.orders}}hidden{{/unless}}>
+    {{#if needsCrewAttention}}<div class="fbls-ship-guidance fbls-stack" aria-label="Следующее действие">
+      <div class="fbls-toolbar"><strong>{{nextAction}}</strong><div class="fbls-action-group">
+        {{#if needsCrewAttention}}<button type="button" class="fbls-button compact" data-action="ship-window-tab" data-ship-panel-target="crew"><i class="fa-solid fa-users" aria-hidden="true"></i> Проверить экипаж</button>{{/if}}
+        {{#if needsMoneyAttention}}<button type="button" class="fbls-button compact" data-action="ship-window-tab" data-ship-panel-target="finance"><i class="fa-solid fa-coins" aria-hidden="true"></i> Проверить деньги</button>{{/if}}
+      </div></div>
+    </div>
+    {{else if needsMoneyAttention}}<div class="fbls-ship-guidance fbls-toolbar"><strong>{{nextAction}}</strong><button type="button" class="fbls-button compact" data-action="ship-window-tab" data-ship-panel-target="finance"><i class="fa-solid fa-coins" aria-hidden="true"></i> Проверить деньги</button></div>{{/if}}
+    {{#if permissionReason}}<p class="fbls-muted-text">{{permissionReason}}</p>{{/if}}
+    {{> "modules/fbl-skyhold/templates/parts/ship-window/orders.hbs"}}</section>
+    <section class="fbls-ship-panel" data-ship-panel="crew" data-render-scroll-key="ship-crew" aria-label="Экипаж" {{#unless @root.shipPanels.crew}}hidden{{/unless}}>{{> "modules/fbl-skyhold/templates/parts/ship-window/crew.hbs"}}</section>
+    <section class="fbls-ship-panel" data-ship-panel="finance" data-render-scroll-key="ship-finance" aria-label="Финансы" {{#unless @root.shipPanels.finance}}hidden{{/unless}}>{{> "modules/fbl-skyhold/templates/parts/ship-window/finance.hbs"}}</section>
+    {{#if @root.shipsContext.canCreateProfile}}<section class="fbls-ship-panel" data-ship-panel="settings" data-render-scroll-key="ship-settings" aria-label="Настройки" {{#unless @root.shipPanels.settings}}hidden{{/unless}}>{{> "modules/fbl-skyhold/templates/parts/ship-window/settings.hbs"}}</section>{{/if}}
+    {{else}}
+      <section class="fbls-ship-panel" data-render-scroll-key="ship-legacy">{{> "modules/fbl-skyhold/templates/parts/ship-window/legacy.hbs"}}
+        {{#if @root.shipsContext.canCreateProfile}}<button type="button" class="fbls-button compact danger" data-action="ship-delete" data-fbls-tooltip="{{deleteReason}}" {{#unless canDelete}}disabled{{/unless}}><i class="fa-solid fa-trash" aria-hidden="true"></i> Удалить корабль</button>{{/if}}
+      </section>
+    {{/if}}
+  </article>
+  {{else}}<div class="fbls-empty">{{error}}</div>{{/each}}
+</section>

@@ -1,23 +1,26 @@
-import { ageGroupFromAge, clampAgeForRace, normalizeBelief, representativeAgeForGroup } from "../../generators/resident-rules.js";
+import { ageGroupFromAge, clampAgeForRace, normalizeBelief, normalizeResidentAttribute, representativeAgeForGroup } from "../../generators/resident-rules.js";
 import { isPlainObject, makeId, toBoolean, toNumber } from "../utils.js";
+import { normalizeMaintenancePointsPerTenday } from "../economy/maintenance.js";
+import { normalizePersonWorkAllocations } from "../work-allocations.js";
 import { normalizeWorkerTypeSet } from "./building.js";
-import { defaultBoardFoodDaily, normalizeCompensationType } from "../../core/compensation.js";
-import { normalizeEmploymentTerms } from "../labor/employment-terms.js";
-import { normalizeFoodProvisionMode } from "../food-provision.js";
 
-function optionalSafeQd(value) {
-  if (value === null || value === undefined || value === "") return null;
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric) || numeric < 0) return null;
-  const qd = Math.floor(numeric);
-  return Number.isSafeInteger(qd) ? qd : null;
+const OBSOLETE_RESIDENT_SKILL_VALUES = new Set([
+  "-", "нет", "none",
+  "builder", "trader", "scribe", "healer", "priest", "guard", "sailor", "engineer",
+  "разнорабочий", "силач", "ловкач", "умелец", "переговорщик", "строитель", "механик", "бригадир",
+  "ремесленник", "посыльный", "управленец", "мастеровой", "агент", "старшина", "полевой вожак", "мастер на все руки"
+]);
+
+export function legacyResidentTraitFromSkill(value = "") {
+  const raw = String(value ?? "").trim();
+  return raw && !OBSOLETE_RESIDENT_SKILL_VALUES.has(raw.toLowerCase()) ? raw : "";
 }
 
-function nonnegativeSafeInteger(value, fallback = 0) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric) || numeric < 0) return fallback;
-  const whole = Math.floor(numeric);
-  return Number.isSafeInteger(whole) ? whole : fallback;
+function appendUniqueTrait(value = "", addition = "") {
+  const items = String(value ?? "").split(/[,;\n]/).map((item) => item.trim()).filter(Boolean);
+  const candidate = String(addition ?? "").trim();
+  if (candidate && !items.some((item) => item.toLowerCase() === candidate.toLowerCase())) items.push(candidate);
+  return items.join(", ");
 }
 
 export function clearPersonReferences(holding, personId) {
@@ -25,6 +28,7 @@ export function clearPersonReferences(holding, personId) {
   if (!id) return;
   for (const building of holding?.buildings?.list ?? []) {
     if (Array.isArray(building.assignedWorkerIds)) building.assignedWorkerIds = building.assignedWorkerIds.map((value) => String(value) === id ? "" : value);
+    if (Array.isArray(building.workerAdmissionOverrideIds)) building.workerAdmissionOverrideIds = building.workerAdmissionOverrideIds.filter((value) => String(value) !== id);
   }
   for (const person of holding?.people?.list ?? []) if (String(person?.id ?? "") === id) person.home = "";
   for (const crew of holding?.constructionCrews ?? []) {
@@ -42,9 +46,6 @@ export function clearPersonReferences(holding, personId) {
       if (Array.isArray(squad.memberIds)) squad.memberIds = squad.memberIds.map((value) => String(value ?? "") === id ? "" : value);
     }
   }
-  for (const vessel of holding?.special?.fleet?.vessels ?? []) {
-    if (Array.isArray(vessel?.crew?.memberIds)) vessel.crew.memberIds = vessel.crew.memberIds.filter((value) => String(value ?? "") !== id);
-  }
 }
 
 export function clearBuildingReferences(holding, building) {
@@ -59,6 +60,9 @@ export function clearBuildingReferences(holding, building) {
     }
     const home = String(person?.home ?? "");
     if (home === id || (name && home === name)) person.home = "";
+    if (Array.isArray(person?.workAllocations)) {
+      person.workAllocations = person.workAllocations.filter((row) => String(row?.sourceId ?? "") !== id);
+    }
   }
   for (const candidate of holding?.buildings?.list ?? []) {
     if (!Array.isArray(candidate.requiredBuildingIds)) continue;
@@ -76,19 +80,26 @@ export function normalizeConstructionCrew(crew, index = 0) {
   normalized.leaderId = String(normalized.leaderId ?? "");
   normalized.suitableWorkerTypes = normalizeWorkerTypeSet(normalized.suitableWorkerTypes ?? "").line;
   if (!Array.isArray(normalized.memberIds)) normalized.memberIds = Array.isArray(normalized.ids) ? normalized.ids : [];
-  normalized.memberIds = normalized.memberIds.map((id) => String(id ?? "")).filter(Boolean);
+  normalized.memberIds = [...new Set(normalized.memberIds.map((id) => String(id ?? "")).filter(Boolean))];
+  // A leader is a separate paid position and contributes no worker dice.
+  if (normalized.leaderId) normalized.memberIds = normalized.memberIds.filter((id) => id !== normalized.leaderId);
   normalized.distributed = toBoolean(normalized.distributed, false);
+  normalized.wageDailyCopper = Math.max(0, Math.floor(toNumber(normalized.wageDailyCopper, 0)));
+  normalized.lastConstructionPeriod = Math.max(0, Math.floor(toNumber(normalized.lastConstructionPeriod, 0)));
+  normalized.lastConstructionOperationId = String(normalized.lastConstructionOperationId ?? "");
   if (!Array.isArray(normalized.distributedIds)) normalized.distributedIds = [];
   normalized.distributedIds = normalized.distributedIds.map((id) => String(id ?? "")).filter(Boolean);
+  normalized.distributedLeaderId = String(normalized.distributedLeaderId ?? "");
   return normalized;
 }
 
 export function normalizePerson(person) {
+  const legacyTrait = legacyResidentTraitFromSkill(person?.skill);
   person.id = String(person.id || makeId("person"));
   person.name = String(person.name ?? "");
   person.role = String(person.role ?? person.workplace ?? person.work ?? "");
   person.workAssignment = String(person.workAssignment ?? "");
-  person.skill = String(person.skill ?? "");
+  delete person.skill;
   person.sex = String(person.sex ?? "");
   person.race = String(person.race ?? "");
   person.subrace = String(person.subrace ?? "");
@@ -101,45 +112,27 @@ export function normalizePerson(person) {
   person.belief = normalizeBelief(person.belief ?? "");
   person.background = String(person.background ?? "");
   person.appearance = String(person.appearance ?? "");
-  person.traitsText = String(person.traitsText ?? (Array.isArray(person.traits) ? person.traits.join(", ") : ""));
+  person.traitsText = appendUniqueTrait(
+    person.traitsText ?? (Array.isArray(person.traits) ? person.traits.join(", ") : ""),
+    legacyTrait
+  );
   delete person.workerTypeOverride;
   person.home = String(person.home ?? "");
-  const legacySalary = Math.max(0, toNumber(person.salary, 0));
-  const hadCompensationFields = ["compensationType", "cashWageDaily", "boardFoodDaily", "housingProvided", "shareRate", "compensationNote"]
-    .some((key) => Object.hasOwn(person, key));
+  person.salary = toNumber(person.salary, 0);
   person.salaryModifier = toNumber(person.salaryModifier, 0);
-  person.compensationType = normalizeCompensationType(person.compensationType, {
-    salary: person.cashWageDaily ?? legacySalary,
-    assigned: Boolean(String(person.workAssignment ?? "").trim() || !["", "Свободен", "Без работы", "Ребенок"].includes(String(person.role ?? "")))
-  });
-  person.baseWageDaily = Math.max(0, toNumber(person.baseWageDaily, Math.max(0, legacySalary - person.salaryModifier)));
-  person.cashWageDaily = Math.max(0, toNumber(person.cashWageDaily, legacySalary));
-  person.boardFoodDaily = Math.max(0, toNumber(person.boardFoodDaily, hadCompensationFields ? defaultBoardFoodDaily(person.compensationType) : 1));
-  person.foodProvisionMode = normalizeFoodProvisionMode(person.foodProvisionMode, { boardFoodDaily: person.boardFoodDaily });
-  if (person.foodProvisionMode === "settlement") person.boardFoodDaily = 1;
-  else if (person.foodProvisionMode === "self") person.boardFoodDaily = 0;
-  const homeText = String(person.home ?? "").trim();
-  person.housingProvided = toBoolean(person.housingProvided, !hadCompensationFields && Boolean(homeText) && !/без жилья|нет жилья|homeless/i.test(homeText));
-  person.shareRate = Math.max(0, Math.min(1, toNumber(person.shareRate, 0)));
-  person.compensationNote = String(person.compensationNote ?? (!hadCompensationFields
-    ? (legacySalary > 0
-      ? "Миграция: прежняя ставка сохранена как денежная часть; пансион — 1 человеко-день в день."
-      : "Миграция: прежняя нулевая ставка сохранена; GM должен проверить основание договора.")
-    : "")).trim();
-  // Compatibility alias for macros and old integrations. cashWageDaily is authoritative.
-  person.salary = person.cashWageDaily;
-  // Economy V2 contracts are opt-in through a valid wageClassId. Legacy daily
-  // aliases remain untouched and never infer a full tariff during normalization.
-  Object.assign(person, normalizeEmploymentTerms(person));
-  person.volunteerReason = String(person.volunteerReason ?? "").trim();
-  person.volunteerTermStartQd = optionalSafeQd(person.volunteerTermStartQd);
-  person.volunteerTermEndQd = optionalSafeQd(person.volunteerTermEndQd);
-  person.coercionBasis = String(person.coercionBasis ?? "").trim();
-  person.hungerStreakTendays = nonnegativeSafeInteger(person.hungerStreakTendays, 0);
-  const hadAttributes = isPlainObject(person.attributes);
-  if (!hadAttributes) person.attributes = {};
-  const attributeFallback = hadAttributes ? 3 : 0;
-  for (const key of ["strength", "agility", "wits", "empathy"]) person.attributes[key] = toNumber(person.attributes[key], attributeFallback);
+  person.wageDailyOverrideCopper = person.wageDailyOverrideCopper === null
+    || person.wageDailyOverrideCopper === undefined
+    || person.wageDailyOverrideCopper === ""
+    ? null
+    : Math.max(0, Math.floor(toNumber(person.wageDailyOverrideCopper, 0)));
+  person.volunteerLabor = toBoolean(person.volunteerLabor, false);
+  person.volunteerReason = String(person.volunteerReason ?? "");
+  normalizePersonWorkAllocations(person);
+  person.maintenancePointsPerTenday = normalizeMaintenancePointsPerTenday(person.maintenancePointsPerTenday);
+  if (!isPlainObject(person.attributes)) person.attributes = {};
+  for (const key of ["strength", "agility", "wits", "empathy"]) {
+    person.attributes[key] = normalizeResidentAttribute(person.attributes[key], 3);
+  }
   const oldMorale = toNumber(person.moraleDelta, null);
   if (person.moraleBase === undefined) person.moraleBase = -1;
   person.moraleBase = toNumber(person.moraleBase, -1);

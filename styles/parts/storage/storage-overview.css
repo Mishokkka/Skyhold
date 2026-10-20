@@ -19,7 +19,7 @@
 .fbls-storage-tab.active {
   color: var(--fbls-text);
   border-color: var(--fbls-accent);
-  background: var(--fbls-accent-dim);
+  background: var(--fbls-accent-bg);
   box-shadow: 0 0 0 1px var(--fbls-danger-soft) inset;
 }
 .fbls-storage-resources-layout,
@@ -46,7 +46,7 @@
   border-radius: 10px;
   background: var(--fbls-overlay-soft);
   padding: 0.34rem 0.45rem;
-  font-size: 0.78rem;
+  font-size: var(--fbls-type-compact-sm);
 }
 .fbls-storage-log-row time,
 .fbls-storage-log-row .kind,

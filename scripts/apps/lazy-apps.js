@@ -1,4 +1,5 @@
 import { ensureSkyholdStylesheet } from "./lazy-styles.js";
+import { ensureSkyholdTemplateGroup } from "./template-preload.js";
 
 const loadedAppClasses = new Set();
 
@@ -12,13 +13,24 @@ export function rerenderLoadedSkyholdApps(options = {}) {
 }
 
 export async function loadBuildingEditorClass() {
-  const module = await import("./editors/building-editor.js");
+  const [, module] = await Promise.all([
+    ensureSkyholdTemplateGroup("buildingEditor"),
+    import("./editors/building-editor.js")
+  ]);
   return rememberAppClass(module.SkyholdBuildingEditor);
 }
 
+export async function loadResidentEditorClass() {
+  const module = await import("./editors/resident-editor.js");
+  return rememberAppClass(module.SkyholdResidentEditor);
+}
+
 export async function openMassCombatApp(options = {}) {
-  await ensureSkyholdStylesheet("secondary");
-  const module = await import("./mass-combat.js");
+  const [, , module] = await Promise.all([
+    ensureSkyholdStylesheet("secondary"),
+    ensureSkyholdTemplateGroup("massCombat"),
+    import("./mass-combat.js")
+  ]);
   return rememberAppClass(module.SkyholdMassCombatApp).open(options);
 }
 
@@ -26,6 +38,18 @@ export async function openMarketApp(options = {}) {
   await ensureSkyholdStylesheet("secondary");
   const module = await import("./market-app.js");
   return rememberAppClass(module.SkyholdMarketApp).open(options);
+}
+
+export async function openBankApp(options = {}) {
+  await ensureSkyholdStylesheet("secondary");
+  const module = await import("./bank-app.js");
+  return rememberAppClass(module.SkyholdBankApp).open(options);
+}
+
+export async function openWorkforcePlanner(options = {}) {
+  await ensureSkyholdStylesheet("secondary");
+  const module = await import("./workforce-planner-app.js");
+  return rememberAppClass(module.SkyholdWorkforcePlanner).open(options);
 }
 
 export async function openTendayApp(options = {}) {
@@ -54,8 +78,23 @@ export async function openRouteGraphApp(options = {}) {
   return rememberAppClass(module.SkyholdRouteGraphEditor).open(options);
 }
 
-export async function openShipEnterpriseApp(options = {}) {
+export async function openShipWindow(options = {}) {
+  const module = await import("./ship-app.js");
+  await Promise.all([
+    ensureSkyholdStylesheet("secondary"),
+    ensureSkyholdTemplateGroup("shipWindow")
+  ]);
+  return rememberAppClass(module.SkyholdShipApp).open(options);
+}
+
+export async function openPoliticsApp(options = {}) {
   await ensureSkyholdStylesheet("secondary");
-  const module = await import("./ship-enterprise-app.js");
-  return rememberAppClass(module.SkyholdShipEnterpriseApp).open(options);
+  const module = await import("./politics-app.js");
+  return rememberAppClass(module.SkyholdPoliticsApp).open(options);
+}
+
+export async function openPoliticsBalanceEditor(options = {}) {
+  await ensureSkyholdStylesheet("secondary");
+  const module = await import("./editors/politics-balance-editor.js");
+  return rememberAppClass(module.SkyholdPoliticsBalanceEditor).open(options);
 }

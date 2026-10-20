@@ -1,0 +1,39 @@
+<div class="fbls-card-header fbls-order-map-heading"><strong>{{#if selectedCount}}План рейса · {{selectedCount}} / 3{{else}}Маршруты · {{locationLabel}}{{/if}}</strong><div class="fbls-action-group">{{#if map}}<button type="button" class="fbls-button compact" data-ship-planner-map-toggle aria-expanded="{{mapOpen}}" aria-controls="{{mapPanelId}}"><i class="fa-solid fa-map" aria-hidden="true"></i> Карта маршрутов</button>{{/if}}{{#if selectedCount}}<button type="button" class="fbls-button compact" data-ship-planner-clear><i class="fa-solid fa-xmark" aria-hidden="true"></i> Снять выбор</button>{{/if}}</div></div>
+{{#if map}}<section class="fbls-ship-map-panel" id="{{mapPanelId}}" data-ship-planner-map aria-label="Карта маршрутов корабля" {{#unless mapOpen}}hidden{{/unless}}>{{> "modules/fbl-skyhold/templates/parts/ship-window/route-map-view.hbs" map}}</section>{{/if}}
+{{#if error}}<p class="fbls-ship-notice" role="alert">{{error}}</p>{{/if}}
+{{#if hasPlan}}
+  <dl class="fbls-ship-facts fbls-order-totals">
+    <div><dt>Весь рейс</dt><dd>{{durationDays}} дн. · {{distanceKm}} км</dd></div>
+    <div><dt>Расходы рейса</dt><dd>{{fblsShipGold totalOperatingCopper}} ЗМ</dd></div>
+    <div><dt>Плата по договорам</dt><dd>{{fblsShipGold rewardCopper}} ЗМ</dd></div>
+    <div><dt>Конечный порт</dt><dd>{{finalPoint.label}}</dd></div>
+  </dl>
+  <dl class="fbls-ship-facts fbls-order-totals" aria-label="Бюджет и результат с возвращением">
+    <div><dt>Расчёт возвращения</dt><dd>{{fblsShipGold returnReserveCopper}} ЗМ</dd></div>
+    <div tabindex="0" data-fbls-tooltip="Плата по договорам минус расходы принятого рейса и расчёт прямого возвращения домой. Случайные исходы и дополнительная стоянка могут изменить результат. Это не гарантированная прибыль."><dt>Номинальный итог с возвратом ⓘ</dt><dd>{{fblsShipGold nominalExitCopper}} ЗМ</dd></div>
+    <div><dt>Рекомендуемый бортовой бюджет</dt><dd>{{fblsShipGold recommendedBudgetCopper}} ЗМ</dd></div>
+    {{#if atHome}}<div tabindex="0" data-fbls-tooltip="Дополнительный перевод на борт и часть счёта стоянки, оплачиваемая казной. Перевод и резерв не являются расходами."><dt>Из казны сейчас ⓘ</dt><dd>{{fblsShipGold settlementWithdrawalCopper}} ЗМ</dd></div>{{else}}<div><dt>На борту</dt><dd>{{fblsShipGold onboardCopper}} ЗМ</dd></div>{{/if}}
+  </dl>
+  <p class="fbls-order-explanation">Плата зависит от исходов. Возвращение домой выполняется отдельным приказом; его расчёт включён в показанный номинальный итог. Резервы остаются на борту до фактической траты.</p>
+  {{#if debtCopper}}<p class="fbls-ship-notice">Счёт стоянки перед отправлением: {{fblsShipGold debtCopper}} ЗМ.</p>{{/if}}
+<details class="fbls-order-explanation" data-ship-plan-details="explanation"><summary>Подробности маршрута и бюджета · {{#if isBundle}}без повторных заходов{{else}}с подходом к погрузке{{/if}}</summary>
+  <p>Максимум в трюме: {{maxLoadPoints}} / {{capacityLoadPoints}}. Плановая разница: {{fblsShipGold plannedMarginCopper}} ЗМ до случайных исходов и возвращения.</p>
+  <div class="fbls-action-group" aria-label="Подсветка грузов">{{#each orders}}<button type="button" class="fbls-button compact" data-ship-planner-focus="{{focusIds}}" aria-pressed="false" title="{{title}} · {{route}}">Заказ №{{number}}</button>{{/each}}<button type="button" class="fbls-button compact" data-ship-planner-focus="" aria-label="Снять подсветку груза">Весь рейс</button></div>
+  <details data-ship-plan-details="stops"><summary><strong>Остановки и загрузка по участкам</strong> · {{stops.length}} точки</summary>
+  <p class="fbls-muted-text">Полёт {{flightDays}} дн. · грузовые работы{{#if isBundle}} и передышки{{/if}} {{portDays}} дн. {{#if isBundle}}План оптимизирован по времени без повторных заходов в порт.{{/if}} Ожидание решений и случайные исходы могут изменить срок, расходы и плату. Возвращение домой — отдельный приказ.</p>
+  <ol class="fbls-order-stops" start="0" aria-label="Остановки рейса">
+    {{#each stops}}<li><button type="button" class="fbls-button compact" data-ship-planner-focus="{{offerIds}}" aria-pressed="false" title="Подсветить грузы остановки {{point.label}}">{{point.label}}</button><span>{{#if pickupText}}Погрузка {{pickupText}}. {{/if}}{{#if deliveryText}}Доставка {{deliveryText}}. {{/if}}После остановки: {{loadAfterPoints}} ед.</span></li>{{/each}}
+  </ol>
+  <div class="fbls-order-legs" aria-label="Загрузка по участкам">{{#each legs}}<p><strong>{{number}}. {{from.label}} → {{to.label}}</strong><span>{{cargoText}} · трюм {{loadOnLegPoints}} / {{../capacityLoadPoints}}{{#if hiddenOnLegPoints}} · тайники {{hiddenOnLegPoints}} / {{../hiddenCapacityLoadPoints}}{{/if}} · полёт {{flightDays}} дн.{{#if hasCosts}} · участок с портовыми работами {{durationDays}} дн. · {{fblsShipGold operatingCopper}} ЗМ{{/if}}</span></p>{{/each}}</div>
+  </details>
+  <details class="fbls-ship-budget-detail"><summary>Рекомендуемый бюджет: {{fblsShipGold recommendedBudgetCopper}} ЗМ</summary><dl class="fbls-ship-facts"><div><dt>Рейс</dt><dd>{{fblsShipGold totalOperatingCopper}} ЗМ</dd></div><div><dt>Резерв домой</dt><dd>{{fblsShipGold returnReserveCopper}} ЗМ</dd></div><div><dt>Резерв стоянки</dt><dd>{{fblsShipGold idleReserveCopper}} ЗМ</dd></div><div><dt>Резерв исходов</dt><dd>{{fblsShipGold outcomeReserveCopper}} ЗМ</dd></div></dl><p class="fbls-muted-text">Резервы остаются на борту до фактической траты. В составном рейсе запас рассчитан для всех подходов капитана.</p></details>
+  <p>На борту: {{fblsShipGold onboardCopper}} ЗМ. {{#if debtCopper}}Счёт стоянки: {{fblsShipGold debtCopper}} ЗМ. {{/if}}{{#if atHome}}Дополнительно на борт после оплаты стоянки: <strong>{{fblsShipGold transferCopper}} ЗМ</strong>.{{#if homeDebtCopper}} Из казны на стоянку: {{fblsShipGold homeDebtCopper}} ЗМ.{{/if}}{{else}}Расходы оплачиваются из бортового кошелька.{{/if}}</p>
+</details>
+  {{#if reserveShortageCopper}}<p class="fbls-ship-notice">До рекомендованного запаса не хватает {{fblsShipGold reserveShortageCopper}} ЗМ. Первый участок может быть доступен, но средств на дальнейший путь и исходы может не хватить.</p>{{/if}}
+  {{#if shortageCopper}}<p class="fbls-ship-notice">Для отправления не хватает {{fblsShipGold shortageCopper}} ЗМ.</p>{{/if}}
+  <div aria-live="polite">{{#each blockers}}<p class="fbls-ship-notice">{{this}}</p>{{/each}}{{#if permissionReason}}<p class="fbls-ship-notice">{{permissionReason}}</p>{{/if}}</div>
+  {{#if atHome}}<p class="fbls-muted-text">Команда уйдёт с работ поселения. После возвращения жильё и рабочие назначения не восстанавливаются автоматически.</p>
+  {{#if departingAssignments.length}}<details><summary>Освобождаемые назначения · {{departingAssignments.length}} жителей</summary>{{#each departingAssignments}}<div class="fbls-toolbar"><p>{{name}}: {{label}}</p><button type="button" class="fbls-button compact" data-action="ship-open-resident" data-resident-id="{{residentId}}" aria-label="Открыть жителя {{name}}"><i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i> Житель</button></div>{{/each}}</details>{{/if}}{{/if}}
+{{else}}
+  {{#unless error}}<p class="fbls-order-empty">Выберите 1–3 заказа — здесь появятся срок, расходы, плата и конечный порт.</p>{{/unless}}
+{{/if}}

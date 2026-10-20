@@ -1,0 +1,66 @@
+<div class="fbls-stack fbls-ships" data-ship-holding-root="{{holding.id}}">
+  {{#unless shipsContext.detailMode}}
+  <div class="fbls-toolbar">
+    <strong>Корабли поселения</strong>
+    {{#if shipsContext.canCreateProfile}}
+      <details data-ship-disclosure="create"><summary>Добавить корабль</summary><div class="fbls-action-group">
+      <button type="button" class="fbls-button compact" data-action="ship-create-profile" data-ship-profile="merchant-barque" data-ship-name="Магнифик" data-ship-holding="{{holding.id}}" data-ship-revision="{{shipsContext.revision}}">
+        <i class="fa-solid fa-ship"></i> Добавить «Магнифик»
+      </button>
+      <button type="button" class="fbls-button compact" data-action="ship-create-profile" data-ship-profile="schooner" data-ship-name="Новая шхуна" data-ship-holding="{{holding.id}}" data-ship-revision="{{shipsContext.revision}}">Новая шхуна</button>
+      <button type="button" class="fbls-button compact" data-action="ship-create-profile" data-ship-profile="cutter" data-ship-name="Новый каттер" data-ship-holding="{{holding.id}}" data-ship-revision="{{shipsContext.revision}}">Новый каттер</button>
+      <button type="button" class="fbls-button compact" data-action="ship-create-profile" data-ship-profile="merchant-barque" data-ship-name="Новый барк" data-ship-holding="{{holding.id}}" data-ship-revision="{{shipsContext.revision}}">Новый барк</button>
+      </div></details>
+    {{/if}}
+    {{#if shipsContext.canGenerateOffers}}
+      <button type="button" class="fbls-button compact" data-action="ship-generate-offers" data-ship-holding="{{holding.id}}" data-ship-revision="{{shipsContext.revision}}">
+        <i class="fa-solid fa-scroll"></i> Предложения для прежних рейсов
+      </button>
+    {{/if}}
+  </div>
+  {{/unless}}
+
+  {{#if shipsContext.fleetAccounting.tracked}}
+  <details class="fbls-panel"><summary>Весь флот: денежный результат {{shipsContext.fleetAccounting.netCopper}} ММ</summary>
+    <p>С начала нового учёта (QD {{shipsContext.fleetAccounting.sinceQd}}): поступления {{shipsContext.fleetAccounting.incomeCopper}} ММ; расходы {{shipsContext.fleetAccounting.expenseCopper}} ММ, в том числе домашний простой {{shipsContext.fleetAccounting.homeIdleCopper}} ММ и стоянки {{shipsContext.fleetAccounting.portIdleCopper}} ММ.</p>
+    <p>Включены {{shipsContext.fleetAccounting.trackedShips}} из {{shipsContext.fleetAccounting.ships}} кораблей. Переводы между бортом и казной исключены. История до начала этого учёта не восстановлена; отчёты отдельных рейсов приведены отдельно.</p>
+  </details>
+  {{/if}}
+  {{#each shipsContext.worldIssues}}
+    <p class="fbls-muted-text"><i class="fa-solid fa-triangle-exclamation"></i> {{this}}</p>
+  {{/each}}
+
+  {{#each shipsContext.rows}}
+    <article class="fbls-card fbls-stack fbls-ship-card" data-ship-card="{{id}}" data-ship-revision="{{../shipsContext.revision}}" data-ship-holding="{{../holding.id}}" data-ship-voyage="{{activeVoyage.id}}">
+      {{#unless ../shipsContext.detailMode}}
+        <div class="fbls-ship-overview-row">
+          <div class="fbls-ship-overview-identity">
+            <strong><i class="fa-solid fa-ship" aria-hidden="true"></i> {{name}}</strong>
+            <span class="fbls-muted-text">{{#if commanderName}}{{commanderName}} · {{/if}}{{profileLabel}}</span>
+          </div>
+          <div class="fbls-ship-overview-status">
+            <span class="fbls-chip">{{statusLabel}}</span>
+            <span>{{locationLabel}}</span>
+            {{#if inTransit}}<span class="fbls-muted-text">{{remainingDays}} дн. до прибытия</span>{{/if}}
+          </div>
+          <div class="fbls-ship-overview-facts">
+            {{#if isWorld}}
+              <span>Команда {{readiness.readyCount}} / {{readiness.requiredCount}}</span>
+              {{#if abstractCrewCount}}<span class="fbls-muted-text">Безымянных моряков: {{abstractCrewCount}}</span>{{/if}}
+              <span>На борту: {{walletGold}} ЗМ</span>
+            {{else}}
+              <span>Команда {{linkedCrewCount}} / {{totalCrewCount}}</span>
+            {{/if}}
+          </div>
+          <div class="fbls-ship-overview-action">
+            <span class="fbls-muted-text">{{nextAction}}</span>
+            {{#if permissionReason}}<span class="fbls-muted-text">{{permissionReason}}</span>{{/if}}
+            {{#if canOpen}}<button type="button" class="fbls-button compact" data-action="ship-open" aria-label="Открыть управление кораблём {{name}}"><i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i> Управление</button>{{/if}}
+          </div>
+        </div>
+      {{/unless}}
+    </article>
+  {{else}}
+    <p class="fbls-empty">Корабли ещё не добавлены.</p>
+  {{/each}}
+</div>

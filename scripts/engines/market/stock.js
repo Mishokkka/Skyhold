@@ -1,595 +1,231 @@
-import {
-  commitMarketAskStock,
-  marketLiquidityAvailable,
-  marketLiquidityKey,
-  normalizeMarketLiquidityQuote,
-  normalizeMarketLiquidityState,
-  replenishMarketLiquidity,
-  reserveMarketAskStock
-} from "./liquidity.js";
+import { marketStateFor, writeMarketState, sharedMarketTenday } from "../../data/market/shared-context.js";
+import { marketStockKey, marketStockRecoveryDuration, normalizeMarketStockState } from "../../data/market/stock-state.js";
 
-const DEFAULT_PERIOD_REFILL_RATE = 0.35;
-
-function quantity(value) {
+function integer(value, fallback = 0, min = 0, max = 1_000_000_000) {
   const parsed = Number(value);
-  return Math.max(0, Math.floor(Number.isFinite(parsed) ? parsed : 0));
+  const normalized = Number.isFinite(parsed) ? Math.floor(parsed) : fallback;
+  return Math.min(max, Math.max(min, normalized));
 }
 
-function text(value) {
-  return String(value ?? "").trim();
+function ensureMarketStock(holding, stock, tenday) {
+  writeMarketState(holding, "stock", stock, tenday);
 }
 
-function marketState(holding = {}, { create = false } = {}) {
-  if (!holding || typeof holding !== "object") return null;
-  if (!holding.special || typeof holding.special !== "object") {
-    if (!create) return null;
-    holding.special = { notes: "", list: [] };
+function sourceOfferId(offer = {}) {
+  return String(offer.stockOfferId ?? offer.sourceOfferId ?? offer.id ?? "").trim();
+}
+
+function stockGroups(lines = [], marketId = "") {
+  const groups = new Map();
+  for (const line of lines ?? []) {
+    const offerId = sourceOfferId(line);
+    const qty = integer(line?.qty);
+    if (!offerId || !qty) continue;
+    const key = marketStockKey(marketId, offerId);
+    const baseStock = integer(line.stockBaseStock ?? line.stockStateBaseStock ?? line.stock);
+    const revision = integer(line.stockStateRevision, 0, 0, Number.MAX_SAFE_INTEGER);
+    const previous = groups.get(key);
+    if (previous) {
+      previous.qty += qty;
+      previous.baseStock = Math.max(previous.baseStock, baseStock);
+      previous.revisions.add(revision);
+    } else {
+      groups.set(key, { key, marketId, offerId, qty, baseStock, revisions: new Set([revision]) });
+    }
   }
-  if (!holding.special.market || typeof holding.special.market !== "object") {
-    if (!create) return null;
-    holding.special.market = { orders: [], stockReservations: [] };
-  }
-  if (create && !Array.isArray(holding.special.market.stockReservations)) {
-    holding.special.market.stockReservations = [];
-  }
-  return holding.special.market;
+  return [...groups.values()];
 }
 
-function readLiquidityState(holding = {}) {
-  return normalizeMarketLiquidityState(marketState(holding)?.liquidity);
+export function marketStockTendayIndex(holding = {}) {
+  return sharedMarketTenday(holding);
 }
 
-function writeLiquidityState(holding, state) {
-  const market = marketState(holding, { create: true });
-  market.liquidity = normalizeMarketLiquidityState(state);
-  return market.liquidity;
-}
-
-function stockLine(line = {}) {
-  const offerId = text(line.id ?? line.offerId);
-  if (!offerId) return null;
-  return {
-    offerId,
-    sourceOfferId: text(line.sourceOfferId ?? offerId) || offerId,
-    providerId: text(line.providerId),
-    qty: quantity(line.qty)
-  };
-}
-
-function aggregateLines(lines = []) {
+export function marketStockPlanToken(lines = []) {
   const rows = new Map();
-  for (const source of Array.isArray(lines) ? lines : []) {
-    const line = stockLine(source);
-    if (!line?.qty) continue;
-    const key = `${line.offerId}\u001f${line.sourceOfferId}`;
-    const current = rows.get(key);
-    if (current) current.qty += line.qty;
-    else rows.set(key, line);
-  }
-  return [...rows.values()].sort((left, right) => (
-    left.offerId.localeCompare(right.offerId) || left.sourceOfferId.localeCompare(right.sourceOfferId)
-  ));
-}
-
-function legacyReservationUsage(holding = {}, marketId = "", quoteKey = "") {
-  const market = marketState(holding);
-  const reserved = new Map();
-  const released = new Map();
-  for (const reservation of market?.stockReservations ?? []) {
-    if (text(reservation?.marketId) !== text(marketId)) continue;
-    if (text(reservation?.quoteKey) !== text(quoteKey)) continue;
-    for (const line of aggregateLines(reservation?.lines)) {
-      const key = `${line.offerId}\u001f${line.sourceOfferId}`;
-      const current = reserved.get(key);
-      if (current) current.qty += line.qty;
-      else reserved.set(key, { ...line });
-    }
-    for (const release of reservation?.releases ?? []) {
-      for (const line of aggregateLines(release?.lines)) {
-        const key = `${line.offerId}\u001f${line.sourceOfferId}`;
-        const current = released.get(key);
-        if (current) current.qty += line.qty;
-        else released.set(key, { ...line });
-      }
-    }
-  }
-  const usage = [];
-  for (const [key, line] of reserved) {
-    const qty = Math.max(0, line.qty - quantity(released.get(key)?.qty));
-    if (qty > 0) usage.push({ ...line, qty });
-  }
-  return usage;
-}
-
-function legacyAdjustedOffers({ holding = {}, quote = {} } = {}) {
-  const offers = (quote.offers ?? []).map((offer) => ({
-    ...offer,
-    quotedStock: quantity(offer.quotedStock ?? offer.stock ?? offer.askStock ?? offer.baseAskStock),
-    stock: quantity(offer.quotedStock ?? offer.stock ?? offer.askStock ?? offer.baseAskStock),
-    reservedStock: 0
-  }));
-  const usage = legacyReservationUsage(holding, quote.marketId, quote.quoteKey);
-  const offerById = new Map(offers.map((offer) => [text(offer.id ?? offer.offerId), offer]));
-  const offersBySource = new Map();
-  for (const offer of offers) {
-    const sourceOfferId = text(offer.sourceOfferId ?? offer.id ?? offer.offerId);
-    if (!offersBySource.has(sourceOfferId)) offersBySource.set(sourceOfferId, []);
-    offersBySource.get(sourceOfferId).push(offer);
-  }
-
-  const overflowBySource = new Map();
-  for (const line of usage) {
-    const exact = offerById.get(line.offerId);
-    const exactSource = text(exact?.sourceOfferId ?? exact?.id ?? exact?.offerId);
-    const matchingExact = exact && exactSource === line.sourceOfferId;
-    const applied = matchingExact ? Math.min(exact.stock, line.qty) : 0;
-    if (matchingExact) {
-      exact.stock -= applied;
-      exact.reservedStock += applied;
-    }
-    const overflow = line.qty - applied;
-    if (overflow > 0) overflowBySource.set(line.sourceOfferId, quantity(overflowBySource.get(line.sourceOfferId)) + overflow);
-  }
-
-  for (const [sourceOfferId, rawQty] of overflowBySource) {
-    let remaining = quantity(rawQty);
-    for (const offer of offersBySource.get(sourceOfferId) ?? []) {
-      if (remaining <= 0) break;
-      const applied = Math.min(offer.stock, remaining);
-      offer.stock -= applied;
-      offer.reservedStock += applied;
-      remaining -= applied;
-    }
-  }
-  return offers;
-}
-
-function liquiditySideOffer(offer = {}, side = "both") {
-  if (side === "ask") {
-    return { ...offer, bidDemand: 0, baseBidDemand: 0 };
-  }
-  if (side === "bid") {
-    return {
-      ...offer,
-      askStock: 0,
-      baseAskStock: 0,
-      stock: 0,
-      quotedStock: 0
-    };
-  }
-  return offer;
-}
-
-function importReservationPrefix(operationId) {
-  return `market-import:${JSON.stringify(text(operationId))}:`;
-}
-
-function importReleasePrefix(operationId) {
-  return `market-import-release:${JSON.stringify(text(operationId))}:`;
-}
-
-function importReserveOperationId(operationId, index) {
-  return `${importReservationPrefix(operationId)}${index + 1}:reserve`;
-}
-
-function importCommitOperationId(operationId, index) {
-  return `${importReservationPrefix(operationId)}${index + 1}:commit`;
-}
-
-function importReservationId(operationId, index) {
-  return `${importReservationPrefix(operationId)}${index + 1}`;
-}
-
-function importReleaseOperationId(parentOperationId, order = {}) {
-  const orderId = text(order.operationId ?? order.id ?? order.cancellationOperationId) || "order";
-  return `${importReleasePrefix(parentOperationId)}${JSON.stringify(orderId)}`;
-}
-
-function liquidityLineForKey(state, key) {
-  return state.lines.find((line) => line.key === key) ?? null;
-}
-
-function quotePeriodParts(value = "") {
-  const match = /^(tenday|utc):(-?\d+)$/.exec(text(value));
-  if (!match) return null;
-  return { family: match[1], index: Number(match[2]) };
-}
-
-function previousLiquidityLine(state, { marketId = "", quoteKey = "", offerId = "" } = {}) {
-  const current = quotePeriodParts(quoteKey);
-  const candidates = state.lines.filter((line) => (
-    line.marketId === text(marketId)
-      && line.offerId === text(offerId)
-      && line.quoteKey !== text(quoteKey)
-  ));
-  if (!candidates.length) return null;
-  if (current) {
-    return candidates
-      .map((line) => ({ line, period: quotePeriodParts(line.quoteKey) }))
-      .filter((entry) => entry.period?.family === current.family && entry.period.index < current.index)
-      .sort((left, right) => right.period.index - left.period.index)[0]?.line ?? null;
-  }
-  return candidates
-    .filter((line) => line.quoteKey.localeCompare(text(quoteKey), "en") < 0)
-    .sort((left, right) => right.quoteKey.localeCompare(left.quoteKey, "en"))[0] ?? null;
-}
-
-function partiallyRefilledBalance(previousAvailable, nextBase, refillRate = DEFAULT_PERIOD_REFILL_RATE) {
-  const base = quantity(nextBase);
-  const remaining = Math.min(base, quantity(previousAvailable));
-  const rate = Math.max(0, Math.min(1, Number(refillRate) || 0));
-  return Math.min(base, remaining + Math.ceil((base - remaining) * rate));
-}
-
-function ensureLiquidityQuoteLine({ state, marketId, quoteKey, offer = {}, initialAskStock, initialBidDemand } = {}) {
-  const offerId = text(offer.id ?? offer.offerId);
-  const quotedStock = quantity(offer.quotedStock ?? offer.stock ?? offer.askStock ?? offer.baseAskStock);
-  const normalized = normalizeMarketLiquidityQuote({
-    marketId,
-    quoteKey,
-    offerId,
-    offer: {
-      ...offer,
-      askUnitCopper: offer.unitPriceCopper ?? offer.askUnitCopper ?? offer.basePriceCopper,
-      askStock: initialAskStock ?? offer.askStock ?? offer.stock ?? quotedStock,
-      baseAskStock: quotedStock
-    }
-  });
-  let line = liquidityLineForKey(state, normalized.key);
-  if (!line) {
-    const previous = previousLiquidityLine(state, { marketId, quoteKey, offerId });
-    const askStock = previous
-      ? partiallyRefilledBalance(
-        marketLiquidityAvailable({ state, key: previous.key, side: "ask" }),
-        normalized.baseAskStock
-      )
-      : quantity(initialAskStock ?? normalized.askStock);
-    const bidDemand = previous
-      ? partiallyRefilledBalance(
-        marketLiquidityAvailable({ state, key: previous.key, side: "bid" }),
-        normalized.baseBidDemand
-      )
-      : quantity(initialBidDemand ?? normalized.bidDemand);
-    line = {
-      ...normalized,
-      askStock: Math.min(askStock, quantity(initialAskStock ?? normalized.baseAskStock)),
-      bidDemand: Math.min(bidDemand, quantity(initialBidDemand ?? normalized.baseBidDemand))
-    };
-    state.lines.push(line);
-    state.lines.sort((left, right) => left.key.localeCompare(right.key));
-  } else {
-    line.askUnitCopper = normalized.askUnitCopper;
-    line.bidUnitCopper = normalized.bidUnitCopper;
-    line.baseAskStock = normalized.baseAskStock;
-    line.baseBidDemand = normalized.baseBidDemand;
-    line.askStock = Math.min(quantity(line.askStock), normalized.baseAskStock);
-    line.bidDemand = Math.min(quantity(line.bidDemand), normalized.baseBidDemand);
-  }
-  return line;
-}
-
-function liquidityImportReservation(holding = {}, operationId = "") {
-  const id = text(operationId);
-  if (!id) return null;
-  const state = readLiquidityState(holding);
-  const prefix = importReservationPrefix(id);
-  const reservations = state.reservations.filter((row) => row.side === "ask" && row.operationId.startsWith(prefix));
-  if (!reservations.length) return null;
-  reservations.sort((left, right) => left.operationId.localeCompare(right.operationId, undefined, { numeric: true }));
-  const lines = reservations.map((row) => {
-    const quoteLine = liquidityLineForKey(state, row.key);
-    return {
-      offerId: text(quoteLine?.offerId),
-      sourceOfferId: text(quoteLine?.offerId),
-      providerId: "",
-      qty: quantity(row.quantity),
-      committedQty: quantity(row.committedQuantity),
-      reservationId: row.id,
-      liquidityKey: row.key
-    };
-  }).filter((line) => line.offerId && line.qty > 0);
-  const quoteLine = liquidityLineForKey(state, reservations[0].key);
-  const releases = state.receipts.filter((receipt) => (
-    receipt.action === "replenish" && receipt.operationId.startsWith(importReleasePrefix(id))
-  )).map((receipt) => ({
-    operationId: receipt.operationId,
-    lines: (receipt.lines ?? []).map((line) => {
-      const releasedLine = liquidityLineForKey(state, line.key);
-      return {
-        offerId: text(releasedLine?.offerId),
-        sourceOfferId: text(releasedLine?.offerId),
-        providerId: "",
-        qty: quantity(line.askAdded),
-        liquidityKey: line.key
-      };
-    }).filter((line) => line.offerId && line.qty > 0)
-  }));
-  return {
-    operationId: id,
-    marketId: text(quoteLine?.marketId),
-    quoteKey: text(quoteLine?.quoteKey),
-    lines,
-    releases,
-    ledger: "liquidity"
-  };
-}
-
-export function marketStockReservationForOperation(holding = {}, operationId = "") {
-  const id = text(operationId);
-  if (!id) return null;
-  const legacy = (marketState(holding)?.stockReservations ?? []).find((row) => text(row?.operationId) === id) ?? null;
-  return legacy ?? liquidityImportReservation(holding, id);
-}
-
-export function applyMarketStockReservationsToQuote({ holding = {}, quote = {}, side = "both" } = {}) {
-  const marketId = text(quote.marketId ?? "external-market");
-  const quoteKey = text(quote.quoteKey);
-  const liquiditySide = side === "ask" || side === "bid" ? side : "both";
-  const projectedOffers = (quote.offers ?? []).map((offer) => liquiditySideOffer(offer, liquiditySide));
-  const legacyOffers = legacyAdjustedOffers({
-    holding,
-    quote: { ...quote, marketId, quoteKey, offers: projectedOffers }
-  });
-  const state = readLiquidityState(holding);
-  const offers = legacyOffers.map((offer) => {
-    const line = ensureLiquidityQuoteLine({
-      state,
-      marketId,
-      quoteKey,
-      offer,
-      initialAskStock: offer.stock,
-      initialBidDemand: offer.bidDemand
+  for (const line of lines ?? []) {
+    const key = String(line?.stockKey ?? "").trim();
+    if (!key) continue;
+    rows.set(key, {
+      key,
+      revision: integer(line.stockStateRevision, 0, 0, Number.MAX_SAFE_INTEGER),
+      baseStock: integer(line.stockBaseStock)
     });
-    const stock = marketLiquidityAvailable({ state, key: line.key, side: "ask" });
-    const quotedStock = quantity(offer.quotedStock ?? offer.stock);
+  }
+  return JSON.stringify([...rows.values()].sort((left, right) => left.key.localeCompare(right.key)));
+}
+
+export function overlayMarketQuoteStock({ holding = {}, quote = {} } = {}) {
+  const stock = normalizeMarketStockState(marketStateFor(holding, "stock"));
+  const marketId = String(quote.marketId ?? "external-market");
+  const offers = (quote.offers ?? []).map((offer) => {
+    const offerId = sourceOfferId(offer);
+    const key = marketStockKey(marketId, offerId);
+    const baseStock = integer(offer.stock);
+    const state = stock[key] ?? null;
+    const availableStock = state ? Math.min(baseStock, state.availableStock) : baseStock;
     return {
       ...offer,
-      askUnitCopper: line.askUnitCopper,
-      askStock: stock,
-      baseAskStock: quotedStock,
-      quotedStock,
-      stock,
-      reservedStock: Math.max(0, quotedStock - stock),
-      bidDemand: marketLiquidityAvailable({ state, key: line.key, side: "bid" })
+      stock: availableStock,
+      stockKey: key,
+      stockOfferId: offerId,
+      stockBaseStock: baseStock,
+      stockStateBaseStock: state?.baseStock ?? baseStock,
+      stockStateAvailable: availableStock,
+      stockStateRevision: state?.revision ?? 0,
+      stockStateInitialized: Boolean(state)
     };
   });
-  writeLiquidityState(holding, state);
   return { ...quote, offers };
 }
 
-export function retainMarketStockReservations(reservations = [], { quoteKey = "", archiveLimit = 500 } = {}) {
-  const rows = Array.isArray(reservations) ? reservations : [];
-  const currentQuoteKey = text(quoteKey);
-  const current = rows.filter((row) => currentQuoteKey && text(row?.quoteKey) === currentQuoteKey);
-  const archive = rows.filter((row) => !currentQuoteKey || text(row?.quoteKey) !== currentQuoteKey);
-  const retainedArchive = Math.max(0, Math.floor(Number(archiveLimit) || 0)) > 0
-    ? archive.slice(-Math.max(0, Math.floor(Number(archiveLimit) || 0)))
-    : [];
-  return [...retainedArchive, ...current];
-}
+export function reserveMarketStock({ holding = null, marketId = "", lines = [], operationId = "", currentTenday = null, updatedAt = "" } = {}) {
+  const id = String(operationId ?? "").trim();
+  const resolvedMarketId = String(marketId ?? "").trim();
+  if (!holding || !resolvedMarketId || !id) return { ok: false, message: "Market stock reservation requires holding, market and operation ids." };
+  const groups = stockGroups(lines, resolvedMarketId);
+  if (!groups.length) return { ok: false, empty: true, message: "Market stock reservation is empty." };
+  if (groups.some((row) => row.revisions.size !== 1)) return { ok: false, stale: true, message: "Market stock revisions disagree inside one offer." };
 
-function reservationMatchesLines(reservation, { marketId, quoteKey, lines }) {
-  if (text(reservation?.marketId) !== text(marketId) || text(reservation?.quoteKey) !== text(quoteKey)) return false;
-  const existing = aggregateLines(reservation?.lines).map((line) => [line.offerId, line.qty]);
-  const requested = aggregateLines(lines).map((line) => [line.offerId, line.qty]);
-  return JSON.stringify(existing) === JSON.stringify(requested);
-}
-
-function stockFailure(result, state, line) {
-  const key = marketLiquidityKey(line.marketId, line.quoteKey, line.offerId);
-  const availableQty = marketLiquidityAvailable({ state, key, side: "ask" });
-  return {
-    ok: false,
-    stale: result?.receipt?.reason === "insufficient-liquidity",
-    conflict: result?.conflict === true,
-    offerId: line.offerId,
-    requestedQty: line.qty,
-    availableQty,
-    message: result?.conflict
-      ? "Market stock operation id was already used for different cargo."
-      : "Market stock changed before the order was confirmed."
-  };
-}
-
-export function reserveMarketQuoteStock({ holding, plan = {}, operationId = "", createdAt = new Date().toISOString() } = {}) {
-  if (!holding || typeof holding !== "object") return { ok: false, message: "Market stock reservation requires a holding." };
-  const id = text(operationId);
-  if (!id) return { ok: false, message: "Market stock reservation requires an operation id." };
-
-  const marketId = text(plan.marketId ?? "external-market");
-  const quoteKey = text(plan.quoteKey);
-  if (!quoteKey) return { ok: false, message: "Market stock reservation requires a quote key." };
-  const lines = aggregateLines(plan.lines);
-  if (!lines.length) return { ok: false, message: "Market stock reservation requires at least one line." };
-  const replay = marketStockReservationForOperation(holding, id);
-  if (replay) {
-    if (!reservationMatchesLines(replay, { marketId, quoteKey, lines })) {
-      return { ok: false, replay: false, conflict: true, reservation: replay, message: "Market stock operation id was already used for different cargo." };
-    }
-    return { ok: true, replay: true, reservation: replay };
+  const stock = normalizeMarketStockState(marketStateFor(holding, "stock"));
+  const replayRows = groups.filter((row) => stock[row.key]?.reservationOperationIds?.includes(id));
+  if (replayRows.length) {
+    if (replayRows.length !== groups.length) return { ok: false, stale: true, message: "Market stock reservation is only partially applied." };
+    return { ok: true, replay: true, reservations: groups.map((row) => ({ marketId: row.marketId, offerId: row.offerId, qty: row.qty, baseStock: stock[row.key].baseStock })) };
   }
 
-  let state = readLiquidityState(holding);
-  const legacyOffers = legacyAdjustedOffers({ holding, quote: { marketId, quoteKey, offers: plan.lines ?? [] } });
-  const offerById = new Map((plan.lines ?? []).map((line) => [text(line?.id ?? line?.offerId), line]));
-  const legacyOfferById = new Map(legacyOffers.map((line) => [text(line?.id ?? line?.offerId), line]));
-  const staged = [];
-  for (const [index, line] of lines.entries()) {
-    const offer = offerById.get(line.offerId) ?? line;
-    const legacyOffer = legacyOfferById.get(line.offerId);
-    const quoteLine = ensureLiquidityQuoteLine({
-      state,
-      marketId,
-      quoteKey,
-      offer,
-      initialAskStock: legacyOffer?.stock ?? offer.stock
-    });
-    const reservationId = importReservationId(id, index);
-    const reserved = reserveMarketAskStock({
-      state,
-      quote: quoteLine,
-      quantity: line.qty,
-      operationId: importReserveOperationId(id, index),
-      reservationId,
-      allowPartial: false
-    });
-    if (!reserved.ok) return stockFailure(reserved, state, { ...line, marketId, quoteKey });
-    state = reserved.state;
-    staged.push({ index, line, reservationId });
+  const prepared = [];
+  const tenday = sharedMarketTenday(holding, currentTenday);
+  for (const group of groups) {
+    const existing = stock[group.key] ?? null;
+    const expectedRevision = [...group.revisions][0];
+    if ((existing?.revision ?? 0) !== expectedRevision) return { ok: false, stale: true, key: group.key, message: "Market stock changed after quote preview." };
+    const baseStock = group.baseStock;
+    const availableStock = existing ? Math.min(baseStock, existing.availableStock) : baseStock;
+    if (group.qty > availableStock) return { ok: false, insufficient: true, key: group.key, requested: group.qty, availableStock, message: "Market stock is insufficient." };
+    prepared.push({ group, existing, baseStock, availableStock });
   }
 
-  for (const entry of staged) {
-    const committed = commitMarketAskStock({
-      state,
-      reservationId: entry.reservationId,
-      quantity: entry.line.qty,
-      operationId: importCommitOperationId(id, entry.index)
-    });
-    if (!committed.ok) return stockFailure(committed, state, { ...entry.line, marketId, quoteKey });
-    state = committed.state;
-  }
-
-  writeLiquidityState(holding, state);
-  const reservation = liquidityImportReservation(holding, id) ?? {
-    operationId: id,
-    marketId,
-    quoteKey,
-    createdAt: text(createdAt),
-    lines,
-    releases: [],
-    ledger: "liquidity"
-  };
-  reservation.createdAt = text(createdAt);
-  return { ok: true, replay: false, reservation };
-}
-
-function releasedByParent(state, parentOperationId) {
-  const released = new Map();
-  const prefix = importReleasePrefix(parentOperationId);
-  for (const receipt of state.receipts) {
-    if (receipt.action !== "replenish" || !receipt.operationId.startsWith(prefix)) continue;
-    for (const line of receipt.lines ?? []) {
-      released.set(line.key, quantity(released.get(line.key)) + quantity(line.askAdded));
-    }
-  }
-  return released;
-}
-
-function liquidityReleaseSchedule({ state, reservation, order }) {
-  const committedByKey = new Map();
-  for (const line of reservation.lines ?? []) {
-    const key = text(line.liquidityKey) || marketLiquidityKey(reservation.marketId, reservation.quoteKey, line.offerId);
-    committedByKey.set(key, quantity(committedByKey.get(key)) + quantity(line.committedQty ?? line.qty));
-  }
-  const previouslyReleased = releasedByParent(state, reservation.operationId);
-  const remainingByKey = new Map([...committedByKey].map(([key, qty]) => [key, Math.max(0, qty - quantity(previouslyReleased.get(key)))]));
-  const schedule = [];
-  for (const line of aggregateLines(order.lines)) {
-    const key = marketLiquidityKey(reservation.marketId, reservation.quoteKey, line.offerId);
-    const askReplenish = Math.min(line.qty, quantity(remainingByKey.get(key)));
-    remainingByKey.set(key, Math.max(0, quantity(remainingByKey.get(key)) - askReplenish));
-    if (askReplenish > 0) schedule.push({ key, askReplenish });
-  }
-  return schedule;
-}
-
-function liquidityReleaseFromReceipt(state, receipt, { requestedOperationId = "", releasedAt = "" } = {}) {
-  const lines = (receipt?.lines ?? []).map((line) => {
-    const quoteLine = liquidityLineForKey(state, line.key);
-    return {
-      offerId: text(quoteLine?.offerId),
-      sourceOfferId: text(quoteLine?.offerId),
-      providerId: "",
-      qty: quantity(line.askAdded),
-      liquidityKey: line.key
+  const reservations = [];
+  for (const row of prepared) {
+    const previous = row.existing ?? {};
+    const reservationOperationIds = [...new Set([...(previous.reservationOperationIds ?? []), id])].slice(-80);
+    const availableStock = row.availableStock - row.group.qty;
+    stock[row.group.key] = {
+      marketId: row.group.marketId,
+      offerId: row.group.offerId,
+      availableStock,
+      baseStock: row.baseStock,
+      recoveryStartedTenday: tenday,
+      recoveryStartStock: availableStock,
+      recoveryDurationTendays: previous.recoveryDurationTendays ?? marketStockRecoveryDuration(row.group.marketId, row.group.offerId),
+      lastRecoveryTenday: tenday,
+      revision: integer(previous.revision, 0, 0, Number.MAX_SAFE_INTEGER - 1) + 1,
+      updatedAt: String(updatedAt ?? ""),
+      reservationOperationIds,
+      restorationOperationIds: previous.restorationOperationIds ?? []
     };
-  }).filter((line) => line.offerId && line.qty > 0);
-  return {
-    operationId: text(receipt?.operationId),
-    requestedOperationId: text(requestedOperationId),
-    releasedAt: text(releasedAt),
-    lines
-  };
+    reservations.push({ marketId: row.group.marketId, offerId: row.group.offerId, qty: row.group.qty, baseStock: row.baseStock, reservationOperationId: id });
+  }
+  ensureMarketStock(holding, stock, tenday);
+  return { ok: true, replay: false, reservations };
 }
 
-function releaseLegacyReservation({ holding, reservation, order, operationId, releasedAt }) {
-  if (!Array.isArray(reservation.releases)) reservation.releases = [];
-  const replay = reservation.releases.find((row) => text(row?.operationId) === operationId);
-  if (replay) return { ok: true, replay: true, released: false, reservation, release: replay };
-
-  const remainingByKey = new Map(legacyReservationUsage(holding, reservation.marketId, reservation.quoteKey).map((line) => [`${line.offerId}\u001f${line.sourceOfferId}`, line.qty]));
-  const lines = aggregateLines(order.lines).map((line) => {
-    const key = `${line.offerId}\u001f${line.sourceOfferId}`;
-    const qty = Math.min(line.qty, quantity(remainingByKey.get(key)));
-    remainingByKey.set(key, Math.max(0, quantity(remainingByKey.get(key)) - qty));
-    return { ...line, qty };
-  }).filter((line) => line.qty > 0);
-  if (!lines.length) return { ok: true, replay: false, released: false, reservation };
-
-  const state = readLiquidityState(holding);
-  const schedule = lines.map((line) => ({
-    key: marketLiquidityKey(reservation.marketId, reservation.quoteKey, line.offerId),
-    askReplenish: line.qty
-  })).filter((line) => liquidityLineForKey(state, line.key));
-  let nextState = state;
-  if (schedule.length) {
-    const replenished = replenishMarketLiquidity({
-      state,
-      operationId: importReleaseOperationId(reservation.operationId, order),
-      lines: schedule
-    });
-    if (!replenished.ok) return { ok: false, released: false, message: replenished.message || "Legacy stock restoration failed." };
-    nextState = replenished.state;
+export function restoreMarketStockReservations({ holding = null, reservations = [], operationId = "", currentTenday = null, updatedAt = "" } = {}) {
+  const id = String(operationId ?? "").trim();
+  if (!holding || !id) return { ok: false, message: "Market stock restoration requires holding and operation ids." };
+  const grouped = new Map();
+  for (const reservation of reservations ?? []) {
+    const marketId = String(reservation?.marketId ?? "").trim();
+    const offerId = String(reservation?.offerId ?? "").trim();
+    const qty = integer(reservation?.qty);
+    if (!marketId || !offerId || !qty) continue;
+    const key = marketStockKey(marketId, offerId);
+    const previous = grouped.get(key);
+    if (previous) previous.qty += qty;
+    else grouped.set(key, { key, marketId, offerId, qty, baseStock: integer(reservation.baseStock, qty) });
   }
-  const release = { operationId, releasedAt: text(releasedAt), lines };
-  reservation.releases.push(release);
-  if (schedule.length) writeLiquidityState(holding, nextState);
-  return { ok: true, replay: false, released: true, reservation, release };
+  const rows = [...grouped.values()];
+  if (!rows.length) return { ok: true, replay: true, restoredQty: 0, rows: [] };
+  const stock = normalizeMarketStockState(marketStateFor(holding, "stock"));
+  const replayRows = rows.filter((row) => stock[row.key]?.restorationOperationIds?.includes(id));
+  if (replayRows.length) {
+    if (replayRows.length !== rows.length) return { ok: false, stale: true, message: "Market stock restoration is only partially applied." };
+    return { ok: true, replay: true, restoredQty: 0, rows: [] };
+  }
+
+  const tenday = sharedMarketTenday(holding, currentTenday);
+  const restored = [];
+  for (const row of rows) {
+    const previous = stock[row.key] ?? {
+      marketId: row.marketId,
+      offerId: row.offerId,
+      availableStock: 0,
+      baseStock: row.baseStock,
+      recoveryStartedTenday: tenday,
+      recoveryStartStock: 0,
+      recoveryDurationTendays: marketStockRecoveryDuration(row.marketId, row.offerId),
+      lastRecoveryTenday: tenday,
+      revision: 0,
+      reservationOperationIds: [],
+      restorationOperationIds: []
+    };
+    const baseStock = Math.max(previous.baseStock, row.baseStock);
+    const availableStock = Math.min(baseStock, previous.availableStock + row.qty);
+    const restoredQty = availableStock - previous.availableStock;
+    stock[row.key] = {
+      ...previous,
+      availableStock,
+      baseStock,
+      revision: integer(previous.revision, 0, 0, Number.MAX_SAFE_INTEGER - 1) + 1,
+      updatedAt: String(updatedAt ?? ""),
+      restorationOperationIds: [...new Set([...(previous.restorationOperationIds ?? []), id])].slice(-80)
+    };
+    restored.push({ marketId: row.marketId, offerId: row.offerId, qty: restoredQty, baseStock });
+  }
+  ensureMarketStock(holding, stock, tenday);
+  return { ok: true, replay: false, restoredQty: restored.reduce((sum, row) => sum + row.qty, 0), rows: restored };
 }
 
-export function releaseMarketQuoteStock({ holding, order = {}, operationId = "", releasedAt = new Date().toISOString() } = {}) {
-  if (text(order?.status) !== "cancelled" || text(order?.dispatchedAt)) {
-    return { ok: false, released: false, message: "Only a cancelled, undispatched order can restore market stock." };
-  }
-  const parentOperationId = text(order?.parentOperationId ?? order?.operationId ?? order?.id);
-  const reservation = marketStockReservationForOperation(holding, parentOperationId);
-  if (!reservation) return { ok: true, released: false, legacy: true };
-  const id = text(operationId ?? order?.cancellationOperationId ?? `${order?.operationId || order?.id}:stock-release`);
-  if (!id) return { ok: false, released: false, message: "Market stock release requires an operation id." };
-  if (reservation.ledger !== "liquidity") {
-    return releaseLegacyReservation({ holding, reservation, order, operationId: id, releasedAt });
-  }
-
-  const state = readLiquidityState(holding);
-  const releaseOperationId = importReleaseOperationId(parentOperationId, order);
-  const existingReceipt = state.receipts.find((receipt) => receipt.operationId === releaseOperationId && receipt.action === "replenish") ?? null;
-  if (existingReceipt) {
-    return {
-      ok: true,
-      replay: true,
-      released: false,
-      reservation,
-      release: liquidityReleaseFromReceipt(state, existingReceipt, { requestedOperationId: id, releasedAt })
-    };
-  }
-  const schedule = liquidityReleaseSchedule({ state, reservation, order });
-  if (!schedule.length) return { ok: true, replay: false, released: false, reservation };
-  const replenished = replenishMarketLiquidity({ state, operationId: releaseOperationId, lines: schedule });
-  if (!replenished.ok) {
-    return {
-      ok: false,
-      released: false,
-      conflict: replenished.conflict === true,
-      message: replenished.message || "Market stock restoration failed."
-    };
-  }
-  if (!replenished.replay) writeLiquidityState(holding, replenished.state);
-  const release = liquidityReleaseFromReceipt(replenished.state, replenished.receipt, { requestedOperationId: id, releasedAt });
-  return {
-    ok: true,
-    replay: replenished.replay === true,
-    released: replenished.replay !== true && release.lines.length > 0,
-    reservation: liquidityImportReservation(holding, parentOperationId) ?? reservation,
-    release
+export function recoverMarketStock({ holding = null, currentTenday = null, baseStockByKey = null, updatedAt = "" } = {}) {
+  if (!holding) return { ok: false, message: "Market stock recovery requires a holding." };
+  const tenday = sharedMarketTenday(holding, currentTenday);
+  const stock = normalizeMarketStockState(marketStateFor(holding, "stock"));
+  const recovered = [];
+  let changed = false;
+  const capFor = (key, row) => {
+    const supplied = baseStockByKey instanceof Map ? baseStockByKey.get(key) : baseStockByKey?.[key];
+    return supplied === undefined || supplied === null ? row.baseStock : integer(supplied);
   };
+  for (const [key, row] of Object.entries(stock).sort(([left], [right]) => left.localeCompare(right))) {
+    const baseStock = capFor(key, row);
+    let availableStock = Math.min(baseStock, row.availableStock);
+    const duration = integer(row.recoveryDurationTendays, marketStockRecoveryDuration(row.marketId, row.offerId), 2, 6);
+    const recoveryStartedTenday = integer(row.recoveryStartedTenday, row.lastRecoveryTenday);
+    const recoveryStartStock = Math.min(baseStock, integer(row.recoveryStartStock, availableStock));
+    const elapsed = Math.max(0, tenday - recoveryStartedTenday);
+    const progress = Math.min(1, elapsed / duration);
+    const targetStock = Math.min(baseStock, Math.floor(recoveryStartStock + (baseStock - recoveryStartStock) * progress));
+    const recoveredQty = Math.max(0, targetStock - availableStock);
+    availableStock = Math.max(availableStock, targetStock);
+    const nextRecoveryTenday = recoveredQty > 0 ? tenday : row.lastRecoveryTenday;
+    if (availableStock === row.availableStock
+      && baseStock === row.baseStock
+      && nextRecoveryTenday === row.lastRecoveryTenday
+      && duration === row.recoveryDurationTendays) continue;
+    stock[key] = {
+      ...row,
+      availableStock,
+      baseStock,
+      recoveryStartedTenday,
+      recoveryStartStock,
+      lastRecoveryTenday: nextRecoveryTenday,
+      recoveryDurationTendays: duration,
+      revision: integer(row.revision, 0, 0, Number.MAX_SAFE_INTEGER - 1) + 1,
+      updatedAt: String(updatedAt ?? "")
+    };
+    changed = true;
+    if (recoveredQty > 0) recovered.push({ key, marketId: row.marketId, offerId: row.offerId, qty: recoveredQty, availableStock, baseStock });
+  }
+  if (changed) ensureMarketStock(holding, stock, tenday);
+  return { ok: true, changed, currentTenday: tenday, recoveredQty: recovered.reduce((sum, row) => sum + row.qty, 0), recovered };
 }

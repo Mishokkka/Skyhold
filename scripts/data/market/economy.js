@@ -31,10 +31,8 @@ function normalizedModes(value = []) {
 }
 
 function defaultOffer(offer, { ubiquity = "common", tags = [] } = {}) {
-  const resourceId = String(offer?.resourceId ?? "custom");
   return {
     ...offer,
-    priceMode: offer?.sourceType === "item" || resourceId === "custom" ? "manual" : "catalog",
     ubiquity,
     accessDifficulty: Math.max(0, Math.floor(Number(offer?.accessDifficulty ?? ACCESS_DIFFICULTY_BY_UBIQUITY[ubiquity] ?? 0) || 0)),
     tags: [...new Set([...(offer.tags ?? []), ...tags])]
@@ -48,12 +46,10 @@ export const DEFAULT_MARKET_BASE_OFFERS = DEFAULT_EXTERNAL_MARKET.offers.map((of
     iron: { ubiquity: "ordinary", tags: ["iron", "metal", "ore", "construction"] },
     glass: { ubiquity: "ordinary", tags: ["glass", "mineral", "construction", "chemical-container"] },
     leather: { ubiquity: "common", tags: ["leather", "hide", "organic", "textile"] },
-    "cloth-wool": { ubiquity: "common", tags: ["cloth", "wool", "textile"] },
+    cloth: { ubiquity: "common", tags: ["cloth", "textile"] },
     grain: { ubiquity: "essential", tags: ["grain", "edible", "food", "food.raw", "organic"] },
     flour: { ubiquity: "essential", tags: ["flour", "grain", "edible", "food", "food.processed"] },
-    eggs: { ubiquity: "common", tags: ["egg", "eggs", "edible", "food", "food.raw", "protein"] },
-    feathers: { ubiquity: "common", tags: ["feather", "feathers", "down", "textile", "organic"] },
-    charcoal: { ubiquity: "common", tags: ["charcoal", "fuel", "organic"] },
+    "fuel-solid": { ubiquity: "common", tags: ["coal", "charcoal", "coke", "fuel", "industrial-fuel", "mineral"] },
     herbs: { ubiquity: "ordinary", tags: ["herbs", "medicinal", "organic"] },
     water: { ubiquity: "essential", tags: ["water", "edible", "liquid"] },
     bread: { ubiquity: "essential", tags: ["bread", "grain", "edible", "food", "food.processed"] },
@@ -68,20 +64,9 @@ export const DEFAULT_MARKET_BASE_OFFERS = DEFAULT_EXTERNAL_MARKET.offers.map((of
     tallow: { ubiquity: "common", tags: ["tallow", "fat", "fuel", "organic"] },
     pelt: { ubiquity: "ordinary", tags: ["pelt", "fur", "hide", "organic"] },
     "iron-ore": { ubiquity: "ordinary", tags: ["iron", "ore", "metal", "mineral"] },
-    "black-coal": { ubiquity: "common", tags: ["coal", "fuel", "mineral"] },
-    coke: { ubiquity: "ordinary", tags: ["coke", "fuel", "industrial", "mineral"] },
     copper: { ubiquity: "ordinary", tags: ["copper", "metal", "conductor"] },
     silver: { ubiquity: "specialized", tags: ["silver", "metal", "precious", "currency"] },
-    gold: { ubiquity: "restricted", tags: ["gold", "metal", "precious", "luxury"] },
-    cattle: { ubiquity: "ordinary", tags: ["livestock", "cattle", "dairy", "meat"] },
-    pigs: { ubiquity: "ordinary", tags: ["livestock", "pig", "meat"] },
-    sheep: { ubiquity: "ordinary", tags: ["livestock", "sheep", "wool", "meat"] },
-    goats: { ubiquity: "ordinary", tags: ["livestock", "goat", "dairy", "meat"] },
-    horses: { ubiquity: "specialized", tags: ["livestock", "horse", "riding", "draft"] },
-    chickens: { ubiquity: "common", tags: ["livestock", "poultry", "chicken", "eggs", "meat"] },
-    geese: { ubiquity: "common", tags: ["livestock", "poultry", "goose", "eggs", "feathers", "meat"] },
-    rabbits: { ubiquity: "common", tags: ["livestock", "rabbit", "meat", "pelt"] },
-    pigeons: { ubiquity: "ordinary", tags: ["livestock", "pigeon", "messenger"] }
+    gold: { ubiquity: "restricted", tags: ["gold", "metal", "precious", "luxury"] }
   };
   return defaultOffer(offer, definitions[offer.resourceId] ?? {});
 });
@@ -112,11 +97,7 @@ function specialtyPreset(id, label, category, outputTags = [], inputTags = [], d
   const rules = [];
   if (outputTags.length) rules.push({ id: `${id}-output`, label: "Местная продукция", mode: "produce", targetTags: outputTags, stockFactor: options.outputStockFactor ?? 2, priceFactor: options.outputPriceFactor ?? 0.88, volatilityFactor: options.outputVolatilityFactor ?? 0.95 });
   if (inputTags.length) rules.push({ id: `${id}-input`, label: "Производственное потребление", mode: "consume", targetTags: inputTags, stockFactor: options.inputStockFactor ?? 0.82, priceFactor: options.inputPriceFactor ?? 1.14, volatilityFactor: options.inputVolatilityFactor ?? 1.08 });
-  const offers = (options.offers ?? []).map((offer) => ({
-    ...offer,
-    priceMode: offer?.sourceType === "item" || String(offer?.resourceId ?? "custom") === "custom" ? "manual" : "catalog"
-  }));
-  return { id, label, category, description, active: true, rules, offers };
+  return { id, label, category, description, active: true, rules, offers: options.offers ?? [] };
 }
 
 const S = specialtyPreset;
@@ -154,7 +135,7 @@ export const DEFAULT_MARKET_SPECIALTIES = [
   S("smokehouses", "Коптильни и засолка", "Пищевая переработка", ["preserved-food", "preserved-fish", "meat"], ["salt", "wood", "fuel", "barrel"], "Долгохранящиеся припасы для дальних маршрутов."),
   S("dairy-processing", "Молочная переработка", "Пищевая переработка", ["cheese", "butter", "dairy"], ["milk", "salt", "fuel"], "Сыры, масло и иные устойчивые молочные продукты."),
   S("breweries", "Пивоварение", "Пищевая переработка", ["beer", "alcohol"], ["grain", "hops", "water", "fuel", "barrel"], "Местное пиво и солодовые напитки."),
-  S("wineries", "Виноделие", "Пищевая переработка", ["wine", "alcohol"], ["grapes", "glass", "barrel"], "Вино и виноградные продукты.", { offers: [{ id: "specialty-wine", resourceId: "wine", name: "Местное вино", kind: "consumable", basePriceCopper: 24, baseStock: 70, volatility: 0.3, load: 1, ubiquity: "specialized", forceAvailable: true, tags: ["wine", "alcohol", "edible"] }] }),
+  S("wineries", "Виноделие", "Пищевая переработка", ["wine", "alcohol"], ["grapes", "glass", "barrel"], "Вино и виноградные продукты.", { offers: [{ id: "specialty-wine", resourceId: "alcohol-wine-fine-weak", name: "Местное вино", kind: "consumable", priceFactor: 1.2, baseStock: 70, volatility: 0.3, ubiquity: "specialized", forceAvailable: true, tags: ["wine", "alcohol", "fine"] }] }),
   S("distilleries", "Винокурение", "Пищевая переработка", ["spirits", "alcohol", "medicinal-alcohol"], ["grain", "fruit", "fuel", "glass"], "Крепкий алкоголь и технический спирт."),
   S("canning", "Консервное производство", "Пищевая переработка", ["preserved-food", "canned-food"], ["food.raw", "metal", "fuel"], "Индустриальная консервация продовольствия."),
 
@@ -163,10 +144,10 @@ export const DEFAULT_MARKET_SPECIALTIES = [
   S("tanneries", "Кожевни", "Промышленность", ["leather", "hide"], ["hide", "salt", "alum", "water"], "Обработанная кожа и ременные изделия."),
   S("wool-textiles", "Шерстяные мастерские", "Промышленность", ["wool", "cloth", "textile"], ["wool", "dye", "fuel"], "Шерстяные ткани и сукно."),
   S("linen-textiles", "Льняные мастерские", "Промышленность", ["linen", "cloth", "textile"], ["flax", "dye", "water"], "Полотно, нити и бытовая ткань."),
-  S("silk-textiles", "Шёлковые мастерские", "Промышленность", ["silk", "luxury", "textile"], ["silk-raw", "dye"], "Дорогие лёгкие ткани."),
+  S("silk-textiles", "Шёлковые мастерские", "Промышленность", ["silk", "luxury", "textile"], ["silk", "chemical"], "Дорогие лёгкие ткани."),
   S("dyehouses", "Красильни", "Промышленность", ["dyed-cloth", "dye", "textile"], ["cloth", "indigo", "madder", "alum", "fuel"], "Крашеные ткани и красильные составы."),
   S("rope-sailcloth", "Канатные и парусные мастерские", "Промышленность", ["rope", "sailcloth", "ship-supply"], ["hemp", "flax", "cloth", "tar"], "Снабжение флота и портов."),
-  S("pottery", "Гончарное производство", "Промышленность", ["pottery", "ceramic"], ["clay", "fuel"], "Посуда, трубы и хозяйственная керамика."),
+  S("pottery", "Гончарное производство", "Промышленность", ["household", "masonry"], ["clay", "fuel"], "Посуда, трубы и хозяйственная керамика."),
   S("brickworks", "Кирпичные заводы", "Промышленность", ["brick", "construction"], ["clay", "fuel"], "Массовый строительный кирпич."),
   S("glassworks", "Стекольное производство", "Промышленность", ["glass", "chemical-container"], ["sand", "fuel", "ash"], "Оконное, бутылочное и лабораторное стекло."),
   S("paper-parchment", "Бумага и пергамент", "Промышленность", ["paper", "parchment", "administration"], ["wood", "cloth", "hide", "water"], "Письменные материалы для торговли и управления."),
@@ -182,9 +163,9 @@ export const DEFAULT_MARKET_SPECIALTIES = [
   S("crystal-refining", "Обработка кристаллов", "Промышленность", ["crystal", "crystal-component"], ["crystal", "fuel", "chemical", "precision-tools"], "Огранка, очистка и подготовка кристаллов."),
 
   S("shipyard", "Обычная верфь", "Кораблестроение", ["ship-component", "ship-supply"], ["wood", "metal", "rope", "cloth", "resin"], "Строительство и оснащение обычных судов."),
-  S("crystal-shipyard", "Кристаллическая верфь", "Кораблестроение", ["ship-core", "crystal-component", "ship-component"], ["crystal", "metal", "glass", "fuel", "chemical"], "Ядра и сложные узлы кристаллических кораблей.", { offers: [{ id: "specialty-crystal-ship-core", resourceId: "custom", name: "Ядро кристаллического корабля", unit: "ед.", kind: "material", basePriceCopper: 1800, baseStock: 3, volatility: 0.45, load: 20, ubiquity: "restricted", forceAvailable: true, tags: ["ship-core", "crystal", "strategic"] }] }),
+  S("crystal-shipyard", "Кристаллическая верфь", "Кораблестроение", ["ship-core", "crystal", "shipbuilding"], ["crystal", "metal", "glass", "fuel", "chemical"], "Ядра и сложные узлы кристаллических кораблей.", { offers: [{ id: "specialty-crystal-ship-core", resourceId: "crystal-core", name: "Кристаллическое ядро", kind: "material", priceFactor: 1.25, baseStock: 3, volatility: 0.45, ubiquity: "restricted", forceAvailable: true, tags: ["ship-core", "crystal", "strategic", "shipbuilding"] }] }),
   S("naval-arsenal", "Военно-морской арсенал", "Кораблестроение", ["weapon", "ammunition", "ship-component"], ["metal", "fuel", "chemical", "wood"], "Военное снабжение и ремонт вооружённых кораблей."),
-  S("repair-docks", "Ремонтные доки", "Кораблестроение", ["repair-parts", "ship-component"], ["wood", "metal", "rope", "tools"], "Ремонтные материалы и запасные части."),
+  S("repair-docks", "Ремонтные доки", "Кораблестроение", ["component", "shipbuilding"], ["wood", "metal", "rope", "tools"], "Ремонтные материалы и запасные части."),
   S("air-harbor", "Воздушная гавань", "Логистика", ["ship-supply", "travel-supply"], ["fuel", "food", "water", "rope"], "Регулярные воздушные рейсы и снабжение экипажей."),
   S("warehouses", "Складской квартал", "Логистика", ["all"], [], "Большие партии и более стабильные запасы.", { outputStockFactor: 1.25, outputPriceFactor: 0.98, outputVolatilityFactor: 0.8 }),
   S("wholesale-hub", "Оптовый распределительный центр", "Логистика", ["all"], [], "Широкий ассортимент привозных товаров.", { outputStockFactor: 1.45, outputPriceFactor: 0.96, outputVolatilityFactor: 0.85 }),
@@ -202,7 +183,7 @@ export const DEFAULT_MARKET_SPECIALTIES = [
   S("pilgrimage", "Место паломничества", "Город и институты", ["food", "souvenir", "candle"], ["food", "cloth"], "Сезонный массовый спрос на простые товары."),
   S("hospital", "Крупная больница", "Город и институты", ["medicine", "bandage"], ["medicinal", "cloth", "alcohol", "food"], "Медицинский спрос и подготовка расходников."),
   S("financial-center", "Финансовый центр", "Город и институты", ["paper", "luxury", "import"], [], "Кредит, страхование и крупные оптовые сделки."),
-  S("border-town", "Пограничный город", "Город и институты", ["travel-supply", "contraband"], ["food", "weapon"], "Смешанный ассортимент и повышенная волатильность.", { outputVolatilityFactor: 1.25 }),
+  S("border-town", "Пограничный город", "Город и институты", ["consumer", "ship-supply"], ["food", "weapon"], "Смешанный ассортимент и повышенная волатильность.", { outputVolatilityFactor: 1.25 }),
   S("boomtown", "Шахтёрский город", "Город и институты", ["ore", "mineral"], ["food", "tools", "cloth", "alcohol"], "Экспорт сырья и дорогие привозные товары."),
   S("frontier", "Фронтирное поселение", "Город и институты", ["hide", "herbs", "salvage"], ["food", "tools", "weapon"], "Узкий ассортимент, высокие риски и привозное снабжение."),
 
@@ -215,7 +196,7 @@ export const DEFAULT_MARKET_SPECIALTIES = [
   S("rationing", "Нормирование", "Торговый режим", ["food", "fuel", "medicine"], [], "Ограниченные партии предметов первой необходимости.", { outputStockFactor: 0.55, outputPriceFactor: 1.08 }),
   S("black-market", "Контрабандный рынок", "Торговый режим", ["restricted", "contraband", "weapon", "medicine"], [], "Редкие и запрещённые товары по высокой и нестабильной цене.", { outputStockFactor: 0.4, outputPriceFactor: 1.5, outputVolatilityFactor: 1.65 }),
 
-  S("reconstruction-market", "Рынок восстановления", "Торговый режим", ["salvage", "repair-parts"], ["construction", "tools", "food", "fuel"], "Послевоенный рынок с высоким спросом на всё необходимое для восстановления.", { outputStockFactor: 1.2, inputStockFactor: 0.7, inputPriceFactor: 1.2 }),
+  S("reconstruction-market", "Рынок восстановления", "Торговый режим", ["component", "masonry", "metalwork"], ["construction", "tools", "food", "fuel"], "Послевоенный рынок с высоким спросом на всё необходимое для восстановления.", { outputStockFactor: 1.2, inputStockFactor: 0.7, inputPriceFactor: 1.2 }),
   S("grain-belt", "Зерновой пояс", "Сельское хозяйство", ["grain", "flour", "food.raw"], ["tools", "fuel"], "Крупная зерновая специализация с устойчивыми оптовыми партиями.", { outputStockFactor: 2.5, outputPriceFactor: 0.82 }),
   S("rice-belt", "Рисовый пояс", "Сельское хозяйство", ["rice", "grain", "food.raw"], ["tools", "water"], "Заливное земледелие и большие партии риса.", { outputStockFactor: 2.4, outputPriceFactor: 0.84 }),
   S("livestock-market", "Скотный рынок", "Сельское хозяйство", ["meat", "hide", "leather", "livestock"], ["grain", "salt"], "Региональный оборот живого скота и продуктов животноводства."),
@@ -344,6 +325,7 @@ export function normalizeMarketCountry(row = {}, index = 0) {
     conditionId: String(source.conditionId ?? source.marketConditionId ?? source.marketStatus ?? "stable").trim() || "stable",
     tradeRegime: String(source.tradeRegime ?? "open").trim().slice(0, 120) || "open",
     taxRate: bounded(source.taxRate ?? source.marketTaxRate, 0, 0, 1),
+    exportTaxRate: bounded(source.exportTaxRate, 0, 0, 1),
     priceFactor: bounded(source.priceFactor ?? source.marketPriceFactor, 1, 0.05, 20),
     stockFactor: bounded(source.stockFactor ?? source.marketAvailabilityFactor, 1, 0, 20),
     deliveryFactor: bounded(source.deliveryFactor ?? source.marketDeliveryFactor, 1, 0.05, 20),
@@ -383,6 +365,7 @@ export function normalizeMarketOrganization(row = {}, index = 0) {
   const source = row && typeof row === "object" ? row : {};
   const label = String(source.label ?? source.name ?? source.id ?? `Организация ${index + 1}`).trim();
   const merchantSource = source.merchant && typeof source.merchant === "object" ? source.merchant : {};
+  const buyerSource = source.buyer && typeof source.buyer === "object" ? source.buyer : {};
   const carrierSource = source.carrier && typeof source.carrier === "object" ? source.carrier : {};
   return {
     id: String(source.id ?? "").trim() || slug(label, `organization-${index + 1}`),
@@ -400,6 +383,12 @@ export function normalizeMarketOrganization(row = {}, index = 0) {
       priceFactor: bounded(merchantSource.priceFactor, 1, 0.5, 2),
       priceVolatility: bounded(merchantSource.priceVolatility, 0.04, 0, 0.3),
       stockStability: bounded(merchantSource.stockStability, 1, 0.25, 2)
+    },
+    buyer: {
+      enabled: toBoolean(buyerSource.enabled ?? source.buyerEnabled, false),
+      countryShares: normalizeCountryShares(buyerSource.countryShares ?? source.buyerCountryShares),
+      includeTags: stringList(buyerSource.includeTags ?? buyerSource.specialtyTags),
+      excludeTags: stringList(buyerSource.excludeTags)
     },
     carrier: {
       enabled: toBoolean(carrierSource.enabled ?? source.carrierEnabled, false),
@@ -452,7 +441,7 @@ function derivedCountries(locations = []) {
 
 export function createDefaultMarketEconomy(locations = []) {
   return normalizeMarketEconomy({
-    schemaVersion: 2,
+    schemaVersion: 3,
     settings: {
       quotePeriodDays: 10,
       deliveryMode: "scheduled",
@@ -491,7 +480,7 @@ export function normalizeMarketEconomy(source = null, { locations = [] } = {}) {
   const specialties = Array.isArray(row.specialties) ? row.specialties : DEFAULT_MARKET_SPECIALTIES;
   const countries = Array.isArray(row.countries) && row.countries.length ? row.countries : derivedCountries(locations);
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     settings: {
       quotePeriodDays: Math.floor(bounded(settings.quotePeriodDays, 10, 1, 365)),
       deliveryMode: String(settings.deliveryMode ?? "scheduled") === "instant" ? "instant" : "scheduled",
@@ -524,6 +513,7 @@ export function marketEconomySummary(source = null, locations = []) {
     specialtyCount: economy.specialties.filter((row) => row.active).length,
     organizationCount: economy.organizations.filter((row) => row.active).length,
     merchantCount: economy.organizations.filter((row) => row.active && row.merchant.enabled).length,
+    buyerCount: economy.organizations.filter((row) => row.active && row.buyer.enabled).length,
     carrierCount: economy.organizations.filter((row) => row.active && row.carrier.enabled).length
   };
 }

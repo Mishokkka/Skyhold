@@ -1,4 +1,5 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
+import { sellerUnitSalePrice } from "../../../engines/workers/seller-qualification.js";
 import {
   isMoneyResource,
   normalizeResourceId,
@@ -27,10 +28,11 @@ _tradeKindOptions(selected = "all") {
 },
 
 _tradeEfficiencySummary(holding, building, workerContext = null) {
-  const assigned = this._assignedBuildingPeople?.(holding, building, workerContext) ?? [];
-  const traders = assigned.length ? assigned : [null];
-  const values = traders.map((person) => person ? Math.max(0, this._personBuildingEfficiency(holding, building, person, workerContext)) : 1);
-  const clean = values.length ? values : [1];
+  const assigned = this._activeAssignedBuildingPeople?.(holding, building, workerContext, "income")
+    ?? this._assignedBuildingPeople?.(holding, building, workerContext, "income")
+    ?? [];
+  const values = assigned.map((person) => Math.max(0, this._personBuildingEfficiency(holding, building, person, workerContext, { purpose: "trade" })));
+  const clean = values.length ? values : [0];
   const total = clean.reduce((sum, value) => sum + value, 0);
   const average = total / clean.length;
   const min = Math.min(...clean);
@@ -39,16 +41,13 @@ _tradeEfficiencySummary(holding, building, workerContext = null) {
     ? this._formatNumber(average)
     : `${this._formatNumber(min)}–${this._formatNumber(max)}`;
   const title = assigned.length
-    ? `Эффективность берётся от случайного назначенного торговца. Среднее: ${this._formatNumber(average)}. 1 = 50% справочной цены каталога, 2 = 100%, 3 = 150%. Реализацию всё равно ограничивают покупатели, их бюджет, запас и труд.`
-    : "Торговцы не назначены: используется эффективность 1, то есть 50% справочной цены каталога; реализацию ограничивают спрос и бюджет.";
+    ? `Цена определяется средней эффективностью назначенных продавцов: ${this._formatNumber(average)}. 1 = 50% базовой цены, 2 = 100%, 3 = 150%; итог ограничен диапазоном ×0,5–×1,5.`
+    : "Торговцы не назначены: здание не продаёт товары.";
   return { value: average, min, max, text, title, assigned: assigned.length };
 },
 
 _tradeUnitSalePrice(baseCopper = 0, efficiency = 1) {
-  const base = Math.max(0, Math.floor(this._safeNumber(baseCopper, 0)));
-  if (!base) return 0;
-  const eff = Math.max(0, this._safeNumber(efficiency, 1));
-  return Math.max(1, Math.floor(base * 0.5 * eff));
+  return sellerUnitSalePrice(baseCopper, efficiency);
 },
 
 _tradeCandidateFilters(building = {}) {
@@ -72,8 +71,7 @@ _tradeCandidates(holding, filters = {}) {
   for (const row of holding?.storage?.resources ?? []) {
     if (!row?.forSale) continue;
     if (isMoneyResource(row.resourceId, row.name)) continue;
-    if (!this._resourceTradeReady(row)) continue;
-    const qty = Math.max(0, Math.floor(this._storageAvailableQuantity(holding, row)));
+    const qty = this._storageAvailableRowQuantity(holding, row);
     if (!qty) continue;
     const basePrice = this._resourcePriceCopper(row);
     if (!basePrice) continue;
@@ -95,7 +93,14 @@ _tradeCandidates(holding, filters = {}) {
 
 _tradeCandidateQuantity(candidate = {}) {
   if (!candidate?.row) return 0;
-  if (candidate.kind === "resource") return Math.max(0, Math.floor(this._storageAvailableQuantity(candidate.holding, candidate.row)));
+  if (candidate.kind === "resource") {
+    return this._storageQuantity(candidate.holding, {
+      resourceId: candidate.row.resourceId,
+      name: candidate.row.name,
+      roomId: candidate.row.roomId ?? candidate.row.storageRoomId,
+      storageRowId: candidate.row.id
+    });
+  }
   return Math.max(0, Math.floor(this._itemQuantity(candidate.row)));
 },
 
@@ -105,16 +110,19 @@ _reduceTradeCandidate(candidate, qty = 1) {
   if (candidate.kind === "resource") {
     const have = this._tradeCandidateQuantity(candidate);
     const take = Math.min(have, amount);
-    this._storageTakeLots(candidate.holding, candidate.row, take);
-    candidate.qty = have - take;
-    return take;
+    const receipt = this._storageTake(candidate.holding, {
+      resourceId: candidate.row.resourceId,
+      name: candidate.row.name,
+      roomId: candidate.row.roomId ?? candidate.row.storageRoomId,
+      storageRowId: candidate.row.id
+    }, take);
+    candidate.qty = this._tradeCandidateQuantity(candidate);
+    return Math.max(0, Math.floor(this._safeNumber(receipt?.takenQty, 0)));
   }
   const have = this._tradeCandidateQuantity(candidate);
   const take = Math.min(have, amount);
-  if (have > take) {
-    candidate.row.qty = have - take;
-    if (candidate.row.itemData?.system) candidate.row.itemData.system.quantity = have - take;
-  } else candidate.row.qty = 0;
+  candidate.row.qty = have - take;
+  if (candidate.row.itemData?.system) candidate.row.itemData.system.quantity = have - take;
   candidate.qty = Math.max(0, have - take);
   return take;
 }

@@ -1,6 +1,7 @@
 /* Random event editor window. */
 .application.fbl-skyhold-random-event-editor {
-  min-width: 46rem;
+  container: fbls-events / inline-size;
+  min-width: 28rem;
   min-height: 34rem;
 }
 .application.fbl-skyhold-random-event-editor .window-content {
@@ -24,21 +25,6 @@
   box-sizing: border-box;
   letter-spacing: 0;
 }
-.fbl-skyhold.fbl-skyhold-random-event-editor input,
-.fbl-skyhold.fbl-skyhold-random-event-editor select,
-.fbl-skyhold.fbl-skyhold-random-event-editor textarea {
-  width: 100%;
-  min-width: 0;
-  min-height: 1.85rem;
-  padding: 0.32rem 0.45rem;
-  border: 1px solid var(--fbls-border);
-  border-radius: 7px;
-  background: var(--fbls-overlay);
-  color: var(--fbls-text);
-  box-shadow: none;
-  font-size: 0.84rem;
-  line-height: 1.25;
-}
 .fbl-skyhold.fbl-skyhold-random-event-editor textarea {
   min-height: 5.5rem;
   resize: vertical;
@@ -54,21 +40,11 @@
   box-shadow: 0 0 0 2px var(--fbls-accent-soft);
   outline: none;
 }
-.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-button,
-.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-icon-button {
-  border-color: var(--fbls-border);
-  background: var(--fbls-panel);
-  color: var(--fbls-text);
-}
 .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-button:hover,
 .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-icon-button:hover,
 .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-icon-button.active {
   border-color: var(--fbls-accent-border);
   background: var(--fbls-panel-strong);
-}
-.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-button.primary {
-  border-color: var(--fbls-danger-border);
-  background: var(--fbls-danger-soft);
 }
 .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-button.danger,
 .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-icon-button.danger {
@@ -107,7 +83,7 @@
 .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-table-title h3 {
   margin: 0;
   color: var(--fbls-text);
-  line-height: 1.12;
+  line-height: 1.1;
 }
 .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-editor-title h2 {
   font-size: 1rem;
@@ -118,7 +94,7 @@
   margin: 0.1rem 0 0;
   overflow: hidden;
   color: var(--fbls-muted);
-  font-size: 0.78rem;
+  font-size: var(--fbls-type-compact-sm);
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -133,16 +109,7 @@
 .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-tab {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.38rem;
   min-width: 10rem;
-  min-height: 2.1rem;
-  padding: 0 0.55rem;
-  border: 1px solid var(--fbls-border);
-  border-radius: 999px;
-  background: var(--fbls-overlay-soft);
-  color: var(--fbls-muted);
-  cursor: pointer;
 }
 .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-tab span {
   overflow: hidden;
@@ -155,25 +122,14 @@
   border-radius: 999px;
   background: var(--fbls-panel);
   color: var(--fbls-text);
-  font-size: 0.72rem;
+  font-size: var(--fbls-type-compact-sm);
   text-align: center;
-}
-.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-tab:hover,
-.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-tab.active {
-  border-color: var(--fbls-danger-border);
-  background: var(--fbls-danger-soft);
-  color: var(--fbls-text);
 }
 .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-editor-actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 0.45rem;
-}
-.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-editor-dirty {
-  color: var(--fbls-accent);
-  font-size: 0.78rem;
-  white-space: nowrap;
 }
 .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-rule-chips span,
 .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-rule-chips em {
@@ -185,7 +141,7 @@
   border-radius: 999px;
   background: var(--fbls-panel);
   color: var(--fbls-muted);
-  font-size: 0.7rem;
+  font-size: var(--fbls-type-compact-xs);
   font-style: normal;
   line-height: 1.1;
 }
@@ -224,24 +180,13 @@
   gap: 0.35rem;
   min-width: 0;
 }
-.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-search-field {
-  display: grid;
-  grid-template-columns: auto minmax(10rem, 16rem);
-  align-items: center;
-  gap: 0.35rem;
-  margin: 0;
-  color: var(--fbls-muted);
-}
+.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-search-field { width: min(100%, 18rem); }
 .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-count {
   color: var(--fbls-muted);
-  font-size: 0.76rem;
+  font-size: var(--fbls-type-compact-sm);
   white-space: nowrap;
 }
 .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-table-actions > .fbls-icon-button {
-  display: inline-grid;
-  place-items: center;
-  width: 2rem;
-  height: 2rem;
   padding: 0;
 }
 .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-list {
@@ -272,14 +217,14 @@
 .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-index {
   display: grid;
   align-self: stretch;
-  min-height: 1.85rem;
+  min-height: 2rem;
   place-items: center;
   border: 1px solid var(--fbls-border);
   border-radius: 7px;
   background: var(--fbls-surface-soft);
   color: var(--fbls-accent);
-  font-size: 0.76rem;
-  font-weight: 850;
+  font-size: var(--fbls-type-compact-sm);
+  font-weight: 800;
 }
 .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-preview {
   display: grid;
@@ -287,13 +232,13 @@
   align-self: stretch;
   align-items: center;
   gap: 0.28rem;
-  min-height: 1.85rem;
+  min-height: 2rem;
   padding: 0.24rem 0.45rem;
   border: 1px solid var(--fbls-border);
   border-radius: 7px;
   background: var(--fbls-surface-soft);
   color: var(--fbls-muted);
-  font-size: 0.72rem;
+  font-size: var(--fbls-type-compact-sm);
 }
 .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-preview strong {
   color: var(--fbls-text);
@@ -311,10 +256,6 @@
   align-items: end;
   justify-content: flex-end;
   gap: 0.3rem;
-}
-.fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-card-actions .fbls-icon-button {
-  width: 1.85rem;
-  height: 1.85rem;
 }
 .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-rule-summary {
   display: grid;
@@ -336,7 +277,7 @@
   justify-content: space-between;
   gap: 0.45rem;
   color: var(--fbls-muted);
-  font-size: 0.68rem;
+  font-size: var(--fbls-type-compact-xs);
   text-transform: uppercase;
 }
 .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-rule-kicker strong {
@@ -362,19 +303,21 @@
   color: var(--fbls-muted);
   text-align: center;
 }
-@media (max-width: 1160px) {
+@container fbls-events (max-width: 1160px) {
   .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-editor-header {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) auto;
   }
-  .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-editor-tabs,
-  .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-editor-actions {
+  .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-editor-tabs {
+    grid-column: 1 / -1;
+    grid-row: 2;
     justify-content: flex-start;
   }
-}
-@media (max-width: 760px) {
-  .application.fbl-skyhold-random-event-editor {
-    min-width: 28rem;
+  .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-editor-actions {
+    grid-column: 2;
+    grid-row: 1;
   }
+}
+@container fbls-events (max-width: 760px) {
   .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-random-event-editor-shell {
     padding: 0.42rem;
   }
@@ -385,10 +328,7 @@
   .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-table-actions {
     justify-content: flex-start;
   }
-  .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-search-field {
-    grid-template-columns: auto minmax(0, 1fr);
-    width: 100%;
-  }
+  .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-search-field { width: min(100%, 18rem); }
   .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-index,
   .fbl-skyhold.fbl-skyhold-random-event-editor .fbls-event-preview {
     grid-column: auto;

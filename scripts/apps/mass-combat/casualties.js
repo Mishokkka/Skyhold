@@ -150,7 +150,9 @@ export function applyDefenderResidentCasualties(holding, state = {}, lossSteps =
   random = Math.random,
   compactNameList = defaultCompactNameList,
   medicalAssignments = null,
-  medicalCapacityForBuilding = null
+  medicalCapacityForBuilding = null,
+  resourceQuantity = null,
+  consumeResource = null
 } = {}) {
   const steps = Math.max(0, asInt(lossSteps, 0));
   if (!steps) return { text: "", injured: 0, dead: 0, broken: 0, records: [] };
@@ -177,6 +179,17 @@ export function applyDefenderResidentCasualties(holding, state = {}, lossSteps =
   const conditions = ["broken", "injured", "injured", "heavy", "heavy", "heavy"];
   const labels = { broken: "Сломлен", injured: "Ранен", heavy: "Тяжело ранен", dead: "Погиб" };
   const baseDeathChance = { broken: 1, injured: 2, heavy: 3 };
+  const medicalSuppliesEnabled = state.useMedicalSupplies === true;
+  const medicinesEnabled = state.useMedicinesForHeavyCasualties === true;
+  let medicalSuppliesAvailable = typeof resourceQuantity === "function"
+    ? Math.max(0, asInt(resourceQuantity(holding, "medical-supplies"), 0))
+    : 0;
+  let medicinesAvailable = typeof resourceQuantity === "function"
+    ? Math.max(0, asInt(resourceQuantity(holding, "medicines"), 0))
+    : 0;
+  let medicalSupplyCoverage = 0;
+  let medicalSuppliesUsed = 0;
+  let medicinesUsed = 0;
 
   for (let i = 0; i < steps; i += 1) {
     const alive = candidates.filter((person) => !person.dead && !isInjuredResident(person));
@@ -197,10 +210,43 @@ export function applyDefenderResidentCasualties(holding, state = {}, lossSteps =
     const days = condition === "heavy" ? Math.ceil(random() * 6) + Math.ceil(random() * 6) + 5 : condition === "injured" ? Math.ceil(random() * 6) + 2 : Math.ceil(random() * 3);
     const treated = medical.used < medical.capacity;
     if (treated) medical.used += 1;
+    let supplied = false;
+    let medicineUsed = false;
+    if (treated && medicalSuppliesEnabled) {
+      if (medicalSupplyCoverage <= 0 && medicalSuppliesAvailable > 0) {
+        const consumed = typeof consumeResource === "function"
+          ? consumeResource(holding, "medical-supplies", 1, `Бой ${battleId}, раунд ${round}: помощь раненым`)
+          : false;
+        if (consumed !== false) {
+          medicalSuppliesAvailable -= 1;
+          medicalSuppliesUsed += 1;
+          medicalSupplyCoverage = 5;
+        }
+      }
+      if (medicalSupplyCoverage > 0) {
+        supplied = true;
+        medicalSupplyCoverage -= 1;
+      }
+    }
+    if (treated && supplied && condition === "heavy" && medicinesEnabled && medicinesAvailable > 0) {
+      const consumed = typeof consumeResource === "function"
+        ? consumeResource(holding, "medicines", 1, `Бой ${battleId}, раунд ${round}: тяжелый раненый`)
+        : false;
+      if (consumed !== false) {
+        medicinesAvailable -= 1;
+        medicinesUsed += 1;
+        medicineUsed = true;
+      }
+    }
     const deathRoll = Math.ceil(random() * 6);
-    const deathChance = Math.max(0, (baseDeathChance[condition] ?? 2) - (treated ? 1 : 0));
+    const deathChance = Math.max(0, (baseDeathChance[condition] ?? 2) - (treated ? 1 : 0) - (supplied ? 1 : 0) - (medicineUsed ? 1 : 0));
     const sourceText = selectedSlot?.sourceLabel ? ` Источник риска: ${selectedSlot.sourceLabel}.` : "";
-    const note = `Раунд ${round}, бой ${battleId}.${sourceText} Травма d6=${injuryRoll}, смерть d6=${deathRoll}; ${treated ? "помещен в лазарет" : medical.text}.`;
+    const treatmentText = [
+      treated ? "помещен в лазарет" : medical.text,
+      supplied ? "использованы медицинские припасы" : "",
+      medicineUsed ? "использованы лекарства" : ""
+    ].filter(Boolean).join(", ");
+    const note = `Раунд ${round}, бой ${battleId}.${sourceText} Травма d6=${injuryRoll}, смерть d6=${deathRoll}; ${treatmentText}.`;
     if (deathChance > 0 && deathRoll <= deathChance) condition = "dead";
 
     if (condition === "dead") dead += 1;
@@ -217,6 +263,9 @@ export function applyDefenderResidentCasualties(holding, state = {}, lossSteps =
       condition,
       label: labels[condition] ?? "Ранен",
       treated,
+      supplied,
+      medicineUsed,
+      deathChance,
       sourceId: String(selectedSlot?.sourceId ?? ""),
       sourceLabel: selectedSlot?.sourceLabel || "",
       sourceType: selectedSlot?.type || "",
@@ -237,7 +286,10 @@ export function applyDefenderResidentCasualties(holding, state = {}, lossSteps =
   }
   const sourceText = sourceCounts.size ? ` Риск: ${Array.from(sourceCounts.entries()).slice(0, 4).map(([label, count]) => `${label} ×${count}`).join(", ")}.` : "";
   const medicalText = medical.capacity ? ` Лазарет: ${Math.min(medical.used, medical.capacity)}/${medical.capacity} мест использовано.` : "";
-  return { injured, dead, broken, records, text: `${summary}${sourceText}${medicalText}`.trim() };
+  const resourceText = medicalSuppliesUsed || medicinesUsed
+    ? ` Расход медицины: припасы ${medicalSuppliesUsed}, лекарства ${medicinesUsed}.`
+    : "";
+  return { injured, dead, broken, records, medicalSuppliesUsed, medicinesUsed, text: `${summary}${sourceText}${medicalText}${resourceText}`.trim() };
 }
 
 function defaultCompactNameList(names = [], limit = 4) {

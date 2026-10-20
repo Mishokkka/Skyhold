@@ -1,4 +1,6 @@
-export const BUILDING_TEMPLATES_CULTURE = [
+import { applyEconomicTemplateCalibration } from "../building-template-economy-calibration.js";
+
+export const BUILDING_TEMPLATES_CULTURE = applyEconomicTemplateCalibration([
   {
     "id": "inn",
     "compendiumId": "FufZdMqsTvhjYJxY",
@@ -8,7 +10,7 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "icon": "fa-solid fa-beer-mug-empty",
     "img": "",
     "unlocked": true,
-    "description": "Постоялый двор, где каждый назначенный работник организует общий стол для 20 жителей; приготовление еды подразумевается и не создаёт отдельный складской ресурс.",
+    "description": "Постоялый двор, еда, слухи и малый доход.",
     "sourceRequirement": "The BUILDER talent",
     "sourceRawMaterials": "250 Wood or 500 Stone",
     "specialRequirements": "Можно строить из 500 Stone вместо 250 Wood.",
@@ -39,50 +41,121 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "requiredBuildingIds": [],
     "workersMin": 1,
     "workersMax": 6,
-    "suitableWorkerTypes": "Все с ЭМП, Переговорщик",
-    "workerTypeEffects": {
-      "Все с ЭМП": 0.5,
-      "Переговорщик": 1
-    },
     "workerRole": "",
     "functions": {
-      "production": false,
+      "production": true,
       "income": true,
       "defense": false,
       "housing": true,
       "storage": false,
       "culture": true
     },
-    "productionLines": [],
+    "productionLines": [
+      {
+        "id": "line",
+        "active": true,
+        "name": "Готовая белковая пища",
+        "mode": "Готовая белковая пища",
+        "source": "workers",
+        "period": "qd",
+        "resourceId": "food-protein",
+        "resource": "Food (Protein)",
+        "outputQty": 3,
+        "workQd": 1,
+        "expenseMode": "cycle",
+        "expenses": "Белковое сырьё 6",
+        "costsText": "Белковое сырьё 6",
+        "requiresCollection": false,
+        "collectQd": 0,
+        "pendingQty": 0,
+        "storageRoomId": "outdoors",
+        "autoCollect": "none"
+      },
+      {
+        "id": "line-2",
+        "active": true,
+        "name": "Готовая пища из плодов",
+        "mode": "Готовая пища из плодов",
+        "source": "workers",
+        "period": "qd",
+        "resourceId": "food-fruit",
+        "resource": "Food (Fruit)",
+        "outputQty": 6,
+        "workQd": 1,
+        "expenseMode": "cycle",
+        "expenses": "Fruits 3, Vegetables 3",
+        "costsText": "Fruits 3, Vegetables 3",
+        "requiresCollection": false,
+        "collectQd": 0,
+        "pendingQty": 0,
+        "storageRoomId": "outdoors",
+        "autoCollect": "none"
+      },
+      {
+        "id": "line-3",
+        "active": true,
+        "name": "Готовая молочная пища",
+        "mode": "Готовая молочная пища",
+        "source": "workers",
+        "period": "qd",
+        "resourceId": "food-dairy",
+        "resource": "Food (Dairy)",
+        "outputQty": 6,
+        "workQd": 1,
+        "expenseMode": "cycle",
+        "expenses": "Milk 6",
+        "costsText": "Milk 6",
+        "requiresCollection": false,
+        "collectQd": 0,
+        "pendingQty": 0,
+        "storageRoomId": "outdoors",
+        "autoCollect": "none"
+      },
+      {
+        "id": "line-4",
+        "active": true,
+        "name": "Зерновая пища с яйцами",
+        "mode": "Зерновая пища с яйцами",
+        "source": "workers",
+        "period": "qd",
+        "resourceId": "food-grain",
+        "resource": "Food (Grain)",
+        "outputQty": 6,
+        "workQd": 1,
+        "expenseMode": "cycle",
+        "expenses": "Eggs 2, Flour 1",
+        "costsText": "Eggs 2, Flour 1",
+        "requiresCollection": false,
+        "collectQd": 0,
+        "pendingQty": 0,
+        "storageRoomId": "outdoors",
+        "autoCollect": "none"
+      }
+    ],
     "income": {
       "base": 0,
       "perWorker": 0,
       "formula": "",
       "risk": 0,
       "illegal": false,
-      "service": {
-        "enabled": true,
-        "demandPool": "hospitality",
-        "label": "Питание и ночлег",
-        "localDemandPerResident": 0,
-        "visitorDemandPerReputation": 2,
-        "visitorDemandPerConnection": 2,
-        "servicesPerWorker": 20,
-        "residentMealCapacityPerWorker": 20,
-        "foodPersonDaysPerService": 0.5,
-        "visitorRequiresHousing": true,
-        "inputResourceId": "",
-        "inputQtyPerService": 0,
-        "priceCopper": 8,
-        "notes": "За десятник работник сначала организует общий стол для 20 жителей. Оставшаяся рабочая мощность обслуживает приезжих: 2 визита за Репутацию + 2 визита за УРС."
-      },
       "trade": {
-        "enabled": false,
-        "budgetFormula": "2d6*10",
-        "maxLotsPerBuyer": 1,
+        "enabled": true,
+        "sourceIds": ["population", "inn-visitors"],
+        "allowedTags": ["food.prepared", "alcohol", "beverage", "service.inn"],
+        "demandSource": "inn-visitors",
+        "demandBudgetBaseCopper": 40,
+        "demandBudgetPerWorkerCopper": 10,
+        "throughputUnitsPerWorker": 5,
+        "gmPriority": 500,
         "roomId": "all",
         "kind": "all",
-        "notes": "Торговля складскими товарами отключена по умолчанию: услуги трактира считаются отдельной моделью спроса."
+        "service": {
+          "enabled": true,
+          "categoryTag": "service.inn",
+          "basePriceCopper": 5,
+          "unitsPerWorker": 2
+        },
+        "notes": "Покупатели трактирных услуг и мелких товаров."
       }
     },
     "defense": {
@@ -102,14 +175,13 @@ export const BUILDING_TEMPLATES_CULTURE = [
       "quality": 0
     },
     "reputation": 1,
-    "moraleDelta": 0,
+    "moraleDelta": 2,
     "workerMoraleDelta": 0,
     "upkeep": 3,
-    "effect": "Каждый назначенный работник обеспечивает общий стол до 20 жителей за десятник. Жители едят напрямую из съедобных запасов; отдельное производство готовой пищи не требуется. Оставшаяся рабочая мощность может обслуживать приезжих.",
-    "notes": "Сначала общий стол обслуживает жителей. Недостаток мест не вызывает голод, но не позволяет получить поселковый бонус за разнообразное питание; оставшаяся мощность может быть продана как питание и ночлег.",
+    "effect": "Meat или Vegetables превращаются в Food.",
+    "notes": "Meat или Vegetables превращаются в Food.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "wits"
   },
   {
     "id": "hiring-agency",
@@ -151,11 +223,6 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "requiredBuildingIds": [],
     "workersMin": 3,
     "workersMax": 6,
-    "suitableWorkerTypes": "Все с ЭМП, Переговорщик",
-    "workerTypeEffects": {
-      "Все с ЭМП": 0.5,
-      "Переговорщик": 1
-    },
     "workerRole": "",
     "functions": {
       "production": false,
@@ -205,7 +272,6 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "notes": "Раз в месяц предлагает новых работников.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "wits"
   },
   {
     "id": "tent-camp",
@@ -240,13 +306,6 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "requiredBuildingIds": [],
     "workersMin": 0,
     "workersMax": 1,
-    "suitableWorkerTypes": "Все с РАЗ, Все с ЭМП, Умелец, Переговорщик",
-    "workerTypeEffects": {
-      "Все с РАЗ": 0.5,
-      "Все с ЭМП": 0.5,
-      "Умелец": 1,
-      "Переговорщик": 1
-    },
     "workerRole": "",
     "functions": {
       "production": false,
@@ -296,7 +355,6 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "notes": "Позволяет расположить до 30 жителей, но снижает довольство.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": ""
   },
   {
     "id": "cemetery",
@@ -331,13 +389,6 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "requiredBuildingIds": [],
     "workersMin": 1,
     "workersMax": 2,
-    "suitableWorkerTypes": "Все с ЭМП, Все с РАЗ, Переговорщик, Умелец",
-    "workerTypeEffects": {
-      "Все с ЭМП": 0.5,
-      "Все с РАЗ": 0.5,
-      "Переговорщик": 1,
-      "Умелец": 1
-    },
     "workerRole": "",
     "functions": {
       "production": false,
@@ -387,7 +438,6 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "notes": "Позволяет похоронить умерших согласно верованиям.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "strength"
   },
   {
     "id": "market",
@@ -398,7 +448,7 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "icon": "fa-solid fa-scale-balanced",
     "img": "",
     "unlocked": true,
-    "description": "Торговые ряды, где жители и приезжие покупают реально выставленные товары в пределах спроса и рабочей мощности.",
+    "description": "Торговые ряды и место приезжих купцов.",
     "sourceRequirement": "-",
     "sourceRawMaterials": "60 Wood",
     "specialRequirements": "",
@@ -429,11 +479,6 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "requiredBuildingIds": [],
     "workersMin": 1,
     "workersMax": 8,
-    "suitableWorkerTypes": "Все с ЭМП, Переговорщик",
-    "workerTypeEffects": {
-      "Все с ЭМП": 0.5,
-      "Переговорщик": 1
-    },
     "workerRole": "",
     "functions": {
       "production": false,
@@ -452,16 +497,22 @@ export const BUILDING_TEMPLATES_CULTURE = [
       "illegal": false,
       "trade": {
         "enabled": true,
-        "demandModel": "settlement",
-        "localDemandPerResident": 0.08,
-        "visitorDemandPerReputation": 1,
-        "visitorDemandPerConnection": 1,
-        "buyersPerWorker": 8,
-        "budgetFormula": "3d6*10",
-        "maxLotsPerBuyer": 2,
+        "sourceIds": ["population", "market-flow"],
+        "allowedTags": ["all"],
+        "demandSource": "market-flow",
+        "demandBudgetBaseCopper": 80,
+        "demandBudgetPerWorkerCopper": 15,
+        "throughputUnitsPerWorker": 8,
+        "gmPriority": 500,
         "roomId": "all",
         "kind": "all",
-        "notes": "Спрос за десятник: 0,08 покупателя на жителя + 1 за Репутацию + 1 за УРС. Реальная продажа ограничена товарами, бюджетом и эффективными торговцами."
+        "service": {
+          "enabled": false,
+          "categoryTag": "",
+          "basePriceCopper": 0,
+          "unitsPerWorker": 0
+        },
+        "notes": "Обычная рыночная торговля."
       }
     },
     "defense": {
@@ -484,11 +535,10 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "moraleDelta": 3,
     "workerMoraleDelta": 0,
     "upkeep": 2,
-    "effect": "Рынок обслуживает платёжеспособный спрос жителей и приезжих; каждый эффективный торговец проводит до 8 покупателей за десятник. Довольство +3.",
-    "notes": "Пассивного дохода нет. Деньги возникают только от проданных складских товаров; необслуженный спрос отдельно показывает нехватку работников, товара или доступного бюджета.",
+    "effect": "Supply как у обычной деревни. Довольство +3.",
+    "notes": "Supply как у обычной деревни. Довольство +3.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "wits"
   },
   {
     "id": "bathhouse",
@@ -499,7 +549,7 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "icon": "fa-solid fa-hot-tub-person",
     "img": "",
     "unlocked": true,
-    "description": "Общественная баня с платными помывками для жителей и приезжих; число посетителей ограничено спросом, банщиками и топливом.",
+    "description": "Гигиена, отдых и довольство.",
     "sourceRequirement": "Well, BUILDER",
     "sourceRawMaterials": "150 Wood",
     "specialRequirements": "Требуется Колодец и строитель с Builder. Содержание: 2 Silver/день.",
@@ -532,17 +582,10 @@ export const BUILDING_TEMPLATES_CULTURE = [
     ],
     "workersMin": 1,
     "workersMax": 4,
-    "suitableWorkerTypes": "Все с ЭМП, Все с СИЛ, Переговорщик, Силач",
-    "workerTypeEffects": {
-      "Все с ЭМП": 0.5,
-      "Все с СИЛ": 0.5,
-      "Переговорщик": 1,
-      "Силач": 1
-    },
-    "workerRole": "Банщик",
+    "workerRole": "",
     "functions": {
       "production": false,
-      "income": true,
+      "income": false,
       "defense": false,
       "housing": false,
       "storage": false,
@@ -555,21 +598,6 @@ export const BUILDING_TEMPLATES_CULTURE = [
       "formula": "",
       "risk": 0,
       "illegal": false,
-      "service": {
-        "enabled": true,
-        "demandPool": "hygiene",
-        "label": "Банные услуги",
-        "localDemandPerResident": 0.3,
-        "visitorDemandPerReputation": 0.5,
-        "visitorDemandPerConnection": 1,
-        "servicesPerWorker": 25,
-        "foodPersonDaysPerService": 0,
-        "visitorRequiresHousing": false,
-        "inputResourceId": "wood",
-        "inputQtyPerService": 0.2,
-        "priceCopper": 5,
-        "notes": "Спрос за десятник: 0,3 посещения на жителя + 0,5 за Репутацию + 1 за УРС. Одна помывка расходует 0,2 связки дров; вода считается инфраструктурой колодца."
-      },
       "trade": {
         "enabled": false,
         "budgetFormula": "2d6*10",
@@ -599,11 +627,10 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "moraleDelta": 4,
     "workerMoraleDelta": 0,
     "upkeep": 2,
-    "effect": "Обслуживает платёжеспособный спрос жителей и приезжих: до 25 помывок на эффективного банщика за десятник, по 5 медных и 0,2 Wood за услугу. Довольство +4.",
-    "notes": "Баня не печатает пассивный доход: ей нужны банщик, топливо, обеспеченный капитал и реальные посетители. Колодец остаётся обязательной инфраструктурой.",
+    "effect": "Позволяет пользоваться баней, повышает довольство.",
+    "notes": "Позволяет пользоваться баней, повышает довольство.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "strength"
   },
   {
     "id": "library",
@@ -645,11 +672,6 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "requiredBuildingIds": [],
     "workersMin": 1,
     "workersMax": 4,
-    "suitableWorkerTypes": "Все с РАЗ, Умелец",
-    "workerTypeEffects": {
-      "Все с РАЗ": 0.5,
-      "Умелец": 1
-    },
     "workerRole": "",
     "functions": {
       "production": false,
@@ -699,7 +721,6 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "notes": "Gear Bonus +2 to Lore and открытие знаний за опыт/деньги.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "wits"
   },
   {
     "id": "scriptorium",
@@ -710,7 +731,7 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "icon": "fa-solid fa-book-sparkles",
     "img": "",
     "unlocked": true,
-    "description": "Чудеса, переписывание знаний и безопасное обучение мистике.",
+    "description": "Скрипторий чудотворцев: переписывание знаний и безопасное обучение чудотворству, чудесам и мистике.",
     "sourceRequirement": "Powerful artifact, book collection, BUILDER",
     "sourceRawMaterials": "100 Wood",
     "specialRequirements": "Требуется артефакт значительной силы, книжная коллекция и Builder.",
@@ -743,12 +764,7 @@ export const BUILDING_TEMPLATES_CULTURE = [
     ],
     "workersMin": 1,
     "workersMax": 4,
-    "suitableWorkerTypes": "Все с РАЗ, Умелец",
-    "workerTypeEffects": {
-      "Все с РАЗ": 0.5,
-      "Умелец": 1
-    },
-    "workerRole": "",
+    "workerRole": "Чудотворец, исследователь",
     "functions": {
       "production": false,
       "income": false,
@@ -797,7 +813,6 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "notes": "+2 к изучению чудотворства и чудес. Тяжесть Magic Mishap обучения ниже на 1.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "wits"
   },
   {
     "id": "shrine",
@@ -839,13 +854,6 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "requiredBuildingIds": [],
     "workersMin": 1,
     "workersMax": 4,
-    "suitableWorkerTypes": "Все с ЭМП, Все с РАЗ, Переговорщик, Умелец",
-    "workerTypeEffects": {
-      "Все с ЭМП": 0.5,
-      "Все с РАЗ": 0.5,
-      "Переговорщик": 1,
-      "Умелец": 1
-    },
     "workerRole": "",
     "functions": {
       "production": false,
@@ -895,7 +903,6 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "notes": "PC получают +1 WP при возвращении из путешествия. Довольство +4.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "wits"
   },
   {
     "id": "hall-of-fame",
@@ -943,13 +950,6 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "requiredBuildingIds": [],
     "workersMin": 1,
     "workersMax": 3,
-    "suitableWorkerTypes": "Все с ЭМП, Все с РАЗ, Переговорщик, Умелец",
-    "workerTypeEffects": {
-      "Все с ЭМП": 0.5,
-      "Все с РАЗ": 0.5,
-      "Переговорщик": 1,
-      "Умелец": 1
-    },
     "workerRole": "",
     "functions": {
       "production": false,
@@ -999,7 +999,6 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "notes": "Новые персонажи получают +5 опыта, героически погибшие с Reputation >4 усиливают бонус.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "wits"
   },
   {
     "id": "spire",
@@ -1047,13 +1046,6 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "requiredBuildingIds": [],
     "workersMin": 0,
     "workersMax": 2,
-    "suitableWorkerTypes": "Все с РАЗ, Все с ЭМП, Умелец, Переговорщик",
-    "workerTypeEffects": {
-      "Все с РАЗ": 0.5,
-      "Все с ЭМП": 0.5,
-      "Умелец": 1,
-      "Переговорщик": 1
-    },
     "workerRole": "",
     "functions": {
       "production": false,
@@ -1103,7 +1095,6 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "notes": "Репутация +3, довольство +6, бонусный опыт в конце арки.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "strength"
   },
   {
     "id": "bunkhouse",
@@ -1144,18 +1135,13 @@ export const BUILDING_TEMPLATES_CULTURE = [
       {
         "id": "mat-cloth",
         "name": "Cloth",
-        "resourceId": "cloth-wool",
+        "resourceId": "cloth",
         "qty": 20
       }
     ],
     "requiredBuildingIds": [],
     "workersMin": 0,
     "workersMax": 1,
-    "suitableWorkerTypes": "Все с ЭМП, Переговорщик",
-    "workerTypeEffects": {
-      "Все с ЭМП": 0.5,
-      "Переговорщик": 1
-    },
     "workerRole": "",
     "functions": {
       "production": false,
@@ -1205,7 +1191,6 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "notes": "Плотное жилье для рабочих и охраны. Дешево, без особого комфорта.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "strength"
   },
   {
     "id": "common-house",
@@ -1253,11 +1238,6 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "requiredBuildingIds": [],
     "workersMin": 0,
     "workersMax": 1,
-    "suitableWorkerTypes": "Все с ЭМП, Переговорщик",
-    "workerTypeEffects": {
-      "Все с ЭМП": 0.5,
-      "Переговорщик": 1
-    },
     "workerRole": "",
     "functions": {
       "production": false,
@@ -1307,7 +1287,6 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "notes": "Постоянный дом для нескольких семей или небольшой артели.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "strength"
   },
   {
     "id": "boarding-house",
@@ -1348,18 +1327,13 @@ export const BUILDING_TEMPLATES_CULTURE = [
       {
         "id": "mat-cloth",
         "name": "Cloth",
-        "resourceId": "cloth-wool",
+        "resourceId": "cloth",
         "qty": 30
       }
     ],
     "requiredBuildingIds": [],
     "workersMin": 0,
     "workersMax": 2,
-    "suitableWorkerTypes": "Все с ЭМП, Переговорщик",
-    "workerTypeEffects": {
-      "Все с ЭМП": 0.5,
-      "Переговорщик": 1
-    },
     "workerRole": "",
     "functions": {
       "production": false,
@@ -1409,7 +1383,6 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "notes": "Увеличивает вместимость жилья и помогает принимать временных работников, гостей и специалистов.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "wits"
   },
   {
     "id": "lazaret",
@@ -1450,7 +1423,7 @@ export const BUILDING_TEMPLATES_CULTURE = [
       {
         "id": "mat-cloth",
         "name": "Cloth",
-        "resourceId": "cloth-wool",
+        "resourceId": "cloth",
         "qty": 25
       },
       {
@@ -1463,13 +1436,6 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "requiredBuildingIds": [],
     "workersMin": 1,
     "workersMax": 3,
-    "suitableWorkerTypes": "Все с РАЗ, Все с ЭМП, Умелец, Переговорщик",
-    "workerTypeEffects": {
-      "Все с РАЗ": 0.5,
-      "Все с ЭМП": 0.5,
-      "Умелец": 1,
-      "Переговорщик": 1
-    },
     "workerRole": "Лекарь",
     "special": {
       "kind": "medical"
@@ -1527,7 +1493,6 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "notes": "В Mass Combat считается медицинской поддержкой. Больше лекарей и лечебных зданий уменьшают шанс смерти и переводят часть смертей в ранения.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "empathy"
   },
   {
     "id": "apothecary",
@@ -1581,16 +1546,9 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "requiredBuildingIds": [],
     "workersMin": 0,
     "workersMax": 2,
-    "suitableWorkerTypes": "Все с РАЗ, Все с ЭМП, Умелец, Переговорщик",
-    "workerTypeEffects": {
-      "Все с РАЗ": 0.5,
-      "Все с ЭМП": 0.5,
-      "Умелец": 1,
-      "Переговорщик": 1
-    },
-    "workerRole": "Аптекарь",
+    "workerRole": "",
     "functions": {
-      "production": false,
+      "production": true,
       "income": true,
       "defense": false,
       "housing": false,
@@ -1604,21 +1562,6 @@ export const BUILDING_TEMPLATES_CULTURE = [
       "formula": "",
       "risk": 0,
       "illegal": false,
-      "service": {
-        "enabled": true,
-        "demandPool": "medicine",
-        "label": "Аптекарские услуги",
-        "localDemandPerResident": 0.04,
-        "visitorDemandPerReputation": 0.5,
-        "visitorDemandPerConnection": 0.5,
-        "servicesPerWorker": 8,
-        "foodPersonDaysPerService": 0,
-        "visitorRequiresHousing": false,
-        "inputResourceId": "herbs",
-        "inputQtyPerService": 0.25,
-        "priceCopper": 24,
-        "notes": "Спрос за десятник: 0,04 обращения на жителя + 0,5 за Репутацию + 0,5 за УРС. Одна услуга расходует 0,25 партии Herbs; сложные лекарства и предметы по-прежнему продаются через рынок."
-      },
       "trade": {
         "enabled": false,
         "budgetFormula": "2d6*10",
@@ -1648,11 +1591,10 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "moraleDelta": 0,
     "workerMoraleDelta": 0,
     "upkeep": 0,
-    "effect": "Медицинская поддержка и до 8 платных обращений на эффективного аптекаря за десятник; каждое расходует 0,25 Herbs и приносит 24 медных.",
-    "notes": "В Mass Combat считается медицинской поддержкой. Денежная выручка возникает только при работнике, травах, обеспеченном капитале и реальном спросе.",
+    "effect": "Медицинская поддержка и доход от лекарств. При наличии трав снижает риск смерти раненых после защиты поселения.",
+    "notes": "В Mass Combat считается медицинской поддержкой. Подходит для аптекарей, лекарей и травников.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "wits"
   },
   {
     "id": "school",
@@ -1719,14 +1661,6 @@ export const BUILDING_TEMPLATES_CULTURE = [
     "effect": "Если в школе назначен взрослый учитель, дети получают шанс развития при прохождении первой трети детства, второй трети детства и выхода из детского возраста.",
     "notes": "Механика работает при годовом старении: шанс небольшой, но может дать +1 к характеристике и положительную черту.",
     "visibility": "public",
-    "workerPrimaryAttribute": "wits",
-    "suitableWorkerTypes": "Все с РАЗ, Умелец, Все с ЭМП, Переговорщик",
-    "workerTypeEffects": {
-      "Все с РАЗ": 0.5,
-      "Умелец": 1,
-      "Все с ЭМП": 0.5,
-      "Переговорщик": 1
-    },
     "templateVersion": 11
   }
-];
+]);

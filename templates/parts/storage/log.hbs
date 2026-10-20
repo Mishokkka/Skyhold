@@ -1,8 +1,8 @@
         {{#if activeStorage.log}}
-          <article class="fbls-card fbls-storage-log-card">
+          <article data-fbls-tab-panel="storage" class="fbls-card fbls-storage-log-card">
             <div class="fbls-storage-card-head fbls-card-header">
               <h3><i class="fa-solid fa-clock-rotate-left"></i> Лог ресурсов</h3>
-              {{#if canEdit}}<button type="button" class="fbls-button compact danger" data-action="clear-storage-log"><i class="fa-solid fa-trash"></i> Очистить</button>{{/if}}
+              {{#if canUseStorage}}<button type="button" class="fbls-button compact danger" data-action="clear-storage-log"><i class="fa-solid fa-trash"></i> Очистить</button>{{/if}}
             </div>
             <div class="fbls-storage-log-list">
               {{#each storageContext.logRows}}

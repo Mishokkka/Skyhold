@@ -18,9 +18,8 @@
 }
 
 .fbl-skyhold .fbls-defense-workspace-head > div:first-child { min-width: 0; }
-.fbl-skyhold .fbls-defense-workspace-head h2 { display: flex; align-items: center; gap: 0.4rem; margin: 0; color: var(--fbls-text-strong); font-size: 1rem; }
+.fbl-skyhold .fbls-defense-workspace-head h2 { display: flex; align-items: center; gap: 0.4rem; margin: 0; color: var(--fbls-text-strong); font-size: var(--fbls-type-section); }
 .fbl-skyhold .fbls-defense-workspace-head h2 > i:first-child { color: var(--fbls-info); }
-.fbl-skyhold .fbls-defense-eyebrow { color: var(--fbls-accent); font-size: 0.58rem; font-weight: 850; letter-spacing: 0.1em; text-transform: uppercase; }
 
 .fbl-skyhold .fbls-defense-overview { display: flex; align-items: stretch; gap: 0.25rem; }
 .fbl-skyhold .fbls-defense-overview > span {
@@ -51,9 +50,9 @@
 }
 .fbl-skyhold .fbls-defense-command-bar > i { display: grid; place-items: center; width: 2rem; height: 2rem; border-radius: 7px; color: var(--fbls-info); background: var(--fbls-info-soft); }
 .fbl-skyhold .fbls-defense-command-bar label { display: grid; grid-template-columns: auto minmax(8rem, 1fr); align-items: center; gap: 0.45rem; min-width: 0; margin: 0; }
-.fbl-skyhold .fbls-defense-command-bar label > span { color: var(--fbls-muted); font-size: 0.64rem; }
-.fbl-skyhold .fbls-defense-command-bar select { min-width: 0; height: 1.8rem; margin: 0; }
-.fbl-skyhold .fbls-defense-command-bar > small { overflow: hidden; color: var(--fbls-muted); font-size: 0.62rem; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+.fbl-skyhold .fbls-defense-command-bar label > span { color: var(--fbls-muted); font-size: var(--fbls-type-compact-xs); }
+.fbl-skyhold .fbls-defense-command-bar select { min-width: 0; height: var(--fbls-control-height); margin: 0; }
+.fbl-skyhold .fbls-defense-command-bar > small { overflow: hidden; color: var(--fbls-muted); font-size: var(--fbls-type-compact-xs); line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
 
 .fbl-skyhold .fbls-defense-squad-list { display: grid; gap: 0.45rem; min-width: 0; }
 .fbl-skyhold .fbls-defense-squad.compact {
@@ -83,21 +82,23 @@
 .fbl-skyhold .fbls-defense-member-grid label > span { color: var(--fbls-muted); font-size: 0.57rem; letter-spacing: 0.04em; line-height: 1; text-transform: uppercase; }
 .fbl-skyhold .fbls-defense-squad-identity input,
 .fbl-skyhold .fbls-defense-squad-identity select,
-.fbl-skyhold .fbls-defense-member-grid select { width: 100%; min-width: 0; height: 1.8rem; margin: 0; padding-block: 0; font-size: 0.68rem; }
+.fbl-skyhold .fbls-defense-member-grid select { width: 100%; min-width: 0; height: var(--fbls-control-height); margin: 0; padding-block: 0; font-size: var(--fbls-type-compact-xs); }
 
-.fbl-skyhold .fbls-defense-squad-metrics { display: flex; align-items: center; gap: 0.25rem; min-width: 0; height: 1.8rem; }
+.fbl-skyhold .fbls-defense-squad-metrics { display: flex; align-items: center; gap: 0.25rem; min-width: 0; height: 2rem; }
 .fbl-skyhold .fbls-defense-squad-metrics > span,
-.fbl-skyhold .fbls-defense-squad-metrics > em { display: inline-flex; align-items: center; gap: 0.25rem; min-height: 1.65rem; padding: 0.15rem 0.38rem; border: 1px solid var(--fbls-border); border-radius: 999px; background: var(--fbls-surface-0); font-size: 0.62rem; font-style: normal; white-space: nowrap; }
+.fbl-skyhold .fbls-defense-squad-metrics > em { gap: 0.25rem; background: var(--fbls-surface-0); font-style: normal; white-space: nowrap; }
 .fbl-skyhold .fbls-defense-squad-metrics i { color: var(--fbls-info); }
 .fbl-skyhold .fbls-defense-squad-metrics .tag { min-width: 5rem; justify-content: center; }
 .fbl-skyhold .fbls-defense-squad-metrics > em { max-width: 8rem; overflow: hidden; color: var(--fbls-muted); text-overflow: ellipsis; }
 .fbl-skyhold .fbls-defense-squad-metrics > em.ok { border-color: var(--fbls-success); color: var(--fbls-success); background: var(--fbls-success-soft); }
 .fbl-skyhold .fbls-defense-squad-metrics > em.warning { border-color: var(--fbls-warning); color: var(--fbls-warning); background: var(--fbls-accent-soft); }
 
-.fbl-skyhold .fbls-defense-squad-actions { display: flex; align-items: center; justify-content: flex-end; gap: 0.25rem; height: 1.8rem; }
-.fbl-skyhold .fbls-defense-squad-actions > button { min-height: 1.8rem; height: 1.8rem; margin: 0; }
-.fbl-skyhold .fbls-defense-equipped-toggle { display: inline-flex; align-items: center; gap: 0.3rem; min-height: 1.8rem; margin: 0; padding: 0 0.4rem; border: 1px solid var(--fbls-border); border-radius: 6px; color: var(--fbls-muted); background: var(--fbls-surface-0); font-size: 0.62rem; white-space: nowrap; }
+.fbl-skyhold .fbls-defense-squad-actions { display: flex; align-items: center; justify-content: flex-end; gap: 0.25rem; min-width: 0; min-height: 2rem; }
+.fbl-skyhold .fbls-defense-squad-actions > button { min-height: var(--fbls-control-height); height: var(--fbls-control-height); margin: 0; }
+.fbl-skyhold .fbls-defense-equipped-toggle { display: inline-flex; align-items: center; gap: 0.3rem; min-width: 0; min-height: 2rem; margin: 0; padding: 0; border: 1px solid var(--fbls-border); border-radius: 6px; color: var(--fbls-muted); background: var(--fbls-surface-0); font-size: var(--fbls-type-compact-xs); white-space: nowrap; overflow: visible; }
 .fbl-skyhold .fbls-defense-equipped-toggle input[type="checkbox"] { --fbls-check-size: 1.05rem; margin: 0; }
+.fbl-skyhold .fbls-defense-equipped-toggle select { width: 11.5rem; max-width: 11.5rem; min-height: var(--fbls-control-height); height: var(--fbls-control-height); margin: 0; padding-block: 0; border: 0; font-size: var(--fbls-type-compact-xs); line-height: 1.25; }
+.fbl-skyhold .fbls-defense-equipped-toggle .fbls-button { min-height: var(--fbls-control-height); height: var(--fbls-control-height); margin: 0; padding-block: 0; border-block: 0; border-right: 0; }
 
 .fbl-skyhold .fbls-defense-member-grid { display: grid; grid-template-columns: repeat(5, minmax(7.5rem, 1fr)); gap: 0.35rem; min-width: 0; }
 .fbl-skyhold .fbls-defense-member-grid .leader > span { color: var(--fbls-accent); }
@@ -105,19 +106,19 @@
 .fbl-skyhold .fbls-defense-squad select option:disabled { color: var(--fbls-muted); background: var(--fbls-surface-2); }
 
 .fbl-skyhold .fbls-defense-squad-notes,
-.fbl-skyhold .fbls-defense-general-notes { margin: 0; font-size: 0.64rem; }
+.fbl-skyhold .fbls-defense-general-notes { margin: 0; font-size: var(--fbls-type-compact-xs); }
 .fbl-skyhold .fbls-defense-squad-notes summary,
 .fbl-skyhold .fbls-defense-general-notes summary { color: var(--fbls-accent); cursor: pointer; }
 .fbl-skyhold .fbls-defense-squad-notes textarea,
 .fbl-skyhold .fbls-defense-general-notes textarea { width: 100%; min-height: 3rem; margin-top: 0.35rem; resize: vertical; }
 .fbl-skyhold .fbls-defense-general-notes { padding: 0.45rem 0.6rem; border: 1px solid var(--fbls-border); border-radius: 8px; background: var(--fbls-surface-soft); }
-.fbl-skyhold .fbls-defense-readonly-notes { margin: 0; color: var(--fbls-muted); font-size: 0.68rem; }
+.fbl-skyhold .fbls-defense-readonly-notes { margin: 0; color: var(--fbls-muted); font-size: var(--fbls-type-compact-xs); }
 
-.fbl-skyhold .fbls-defense-empty { display: grid; place-items: center; gap: 0.25rem; min-height: 9rem; padding: 1rem; border: 1px dashed var(--fbls-border-strong); border-radius: 9px; color: var(--fbls-muted); background: var(--fbls-surface-soft); text-align: center; }
+.fbl-skyhold .fbls-defense-empty { min-height: 9rem; padding: 1rem; border: 1px dashed var(--fbls-border-strong); border-radius: 9px; background: var(--fbls-surface-soft); }
 .fbl-skyhold .fbls-defense-empty i { color: var(--fbls-info); font-size: 1.5rem; }
 .fbl-skyhold .fbls-defense-empty strong { color: var(--fbls-text-strong); }
 
-@media (max-width: 1180px) {
+@media (max-width: 1380px) {
   .fbl-skyhold .fbls-defense-workspace-head { grid-template-columns: minmax(14rem, 1fr) auto; }
   .fbl-skyhold .fbls-defense-workspace-head > button { grid-column: 2; grid-row: 1; align-self: start; }
   .fbl-skyhold .fbls-defense-overview { grid-column: 1 / -1; }
@@ -126,12 +127,16 @@
   .fbl-skyhold .fbls-defense-squad-actions { grid-column: 2; grid-row: 2; }
 }
 
-@media (max-width: 840px) {
-  .fbl-skyhold .fbls-defense-command-bar { grid-template-columns: 2rem minmax(0, 1fr); }
-  .fbl-skyhold .fbls-defense-command-bar > small { grid-column: 1 / -1; white-space: normal; }
+@media (max-width: 1180px) {
   .fbl-skyhold .fbls-defense-squad-head { grid-template-columns: 1fr; }
   .fbl-skyhold .fbls-defense-squad-metrics,
   .fbl-skyhold .fbls-defense-squad-actions { grid-column: 1; grid-row: auto; justify-content: flex-start; }
+  .fbl-skyhold .fbls-defense-squad-actions { flex-wrap: wrap; }
+}
+
+@media (max-width: 840px) {
+  .fbl-skyhold .fbls-defense-command-bar { grid-template-columns: 2rem minmax(0, 1fr); }
+  .fbl-skyhold .fbls-defense-command-bar > small { grid-column: 1 / -1; white-space: normal; }
   .fbl-skyhold .fbls-defense-member-grid { grid-template-columns: repeat(2, minmax(8rem, 1fr)); }
 }
 

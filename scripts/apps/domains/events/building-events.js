@@ -1,28 +1,29 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import { MODULE_ID } from "../../../data/constants.js";
-import { SkyholdData } from "../../../data/store.js";
-import { clone, makeId } from "../../../data/utils.js";
-import { stableDataHash } from "../../../data/storage-commit.js";
-import { appendHoldingOperation, findHoldingOperation } from "../../../data/operations.js";
+import { requestConstructionOperation, SkyholdData } from "../../../data/store.js";
+import { makeId } from "../../../data/utils.js";
 import { traitBadges } from "../../../generators/trait-definitions.js";
 import { loadBuildingEditorClass } from "../../lazy-apps.js";
 import { openUniqueBuilding } from "../../unique-buildings/registry.js";
-import { createSafeIcon, escapeHtml, joinList, rollD6Pool, splitList } from "../../../core/helpers.js";
+import { createSafeIcon, escapeHtml, rollD6Pool } from "../../../core/helpers.js";
 import { buildingOperationalState } from "../../../core/building-state.js";
-import { assignResidentsToFreeHousing } from "../../../engines/housing/assignment.js";
-import { reserveConstructionMaterials, validConstructionReservation } from "../../../engines/economy/construction-reservation.js";
-import { buildingDeletionBlocker, deleteBuildingWithStorageLifecycle } from "../../../engines/storage/building-lifecycle.js";
-import { rememberApplicationFocusReturn } from "../../common/window-focus-keeper.js";
-import { createFoundryChatMessage, foundryChatSpeaker, foundryDialogV2 } from "../../../integrations/foundry-runtime.js";
+import { planConstructionCancellation } from "../../../engines/economy/construction-stages.js";
 import {
-  applyWorkerAssignmentPlan,
+  applyConstructionProjectCancellation,
+  isCancellableConstructionProject
+} from "../../../workflows/economy/construction-cancellation.js";
+import { assignResidentsToFreeHousing } from "../../../engines/housing/assignment.js";
+import { rememberApplicationFocusReturn } from "../../common/window-focus-keeper.js";
+import { confirmBuildingWorkerAdmission } from "../../common/building-worker-admission.js";
+import { createFoundryChatMessage, foundryChatSpeaker } from "../../../integrations/foundry-runtime.js";
+import {
   isBuiltAssignableBuilding,
   isCivilianWorkerCandidate,
   workerAssignmentScore
 } from "../../../engines/workers/assignment-planner.js";
 
 const BUILDING_CONTEXT_MENU_WIDTH = 280;
-const BUILDING_CONTEXT_MENU_HEIGHT = 220;
+const BUILDING_CONTEXT_MENU_HEIGHT = 260;
 const BUILDING_DRAG_CLICK_SUPPRESS_MS = 40;
 
 function clampAudioVolume(value, fallback = 0.45) {
@@ -85,7 +86,7 @@ function rawCrewForPrepared(holding = {}, crew = {}) {
 }
 
 function applyBuilderRerollIfAvailable(holding = {}, crew = {}, dicePool = 1, firstRolls = []) {
-  const leader = (crew.members ?? []).find((person) => person?.isLeader) ?? null;
+  const leader = crew?.leader ?? null;
   if (!leader || !hasTraitValue(leader, "Builder")) return { rolls: firstRolls, used: false, note: "" };
   const rawCrew = rawCrewForPrepared(holding, crew);
   if (!rawCrew) return { rolls: firstRolls, used: false, note: "" };
@@ -108,15 +109,13 @@ function diceTextHtml(rolls = []) {
 export const BuildingEventActions = {
   click: {
     "open-building-editor": "_onOpenBuildingEditor",
-    "auto-assign-building-workers": "_onAutoAssignBuildingWorkers",
     "auto-assign-housing": "_onAutoAssignHousing",
-    "allocate-building-materials": "_onAllocateBuildingMaterials",
+    "roll-construction": "_onRollConstruction",
     "roll-construction-crew": "_onRollConstructionCrew",
     "collect-building-production": "_onCollectBuildingProduction"
   },
   publicClick: [
     "open-building-editor",
-    "auto-assign-building-workers",
     "auto-assign-housing"
   ]
 };
@@ -129,10 +128,7 @@ _workerPlannerDependencies() {
     buildingOperationalState,
     workerEfficiencyForPerson: (holding, building, person) => this._workerEfficiencyForPerson?.(holding, building, person) ?? { value: 1 },
     isSoldierResident: (person) => Boolean(this._isSoldierResident?.(person)),
-    isMilitaryResidentLike: (person) => Boolean(this._isMilitaryResidentLike?.(person)),
-    setPersonFree: (holding, personId) => this._setPersonFree(holding, personId),
-    assignedWorkerSet: (holding) => this._assignedWorkerSet?.(holding) ?? new Set(),
-    applyPersonSalaryForAssignment: (holding, person, building) => this._applyPersonSalaryForAssignment?.(holding, person, building)
+    isMilitaryResidentLike: (person) => Boolean(this._isMilitaryResidentLike?.(person))
   };
 },
 
@@ -140,20 +136,12 @@ _isBuiltAssignableBuilding(building = {}) {
   return isBuiltAssignableBuilding(building, this._workerPlannerDependencies());
 },
 
-_isCivilianWorkerCandidate(person = {}, building = null) {
-  return isCivilianWorkerCandidate(person, building, this._workerPlannerDependencies());
+_isCivilianWorkerCandidate(person = {}, building = null, holding = null) {
+  return isCivilianWorkerCandidate(person, building, this._workerPlannerDependencies(), holding);
 },
 
 _buildingAssignmentScore(holding, building, person) {
   return workerAssignmentScore(holding, building, person, this._workerPlannerDependencies());
-},
-
-_autoAssignWorkersToBuildings(holding, { mode = "free" } = {}) {
-  return applyWorkerAssignmentPlan({
-    holding,
-    mode,
-    dependencies: this._workerPlannerDependencies()
-  });
 },
 
 _autoAssignResidentsToHousing(holding) {
@@ -180,68 +168,6 @@ async _onAutoAssignHousing(event) {
   }
 },
 
-async _onAutoAssignBuildingWorkers(event) {
-  event.preventDefault();
-  event.stopPropagation();
-  if (!this._canEditBuildings()) return;
-  const mode = String(event.currentTarget?.dataset?.mode ?? "free") === "all" ? "all" : "free";
-  try {
-    const data = SkyholdData.get();
-    const holdingId = this._activeWritableHoldingId(data);
-    const source = (data?.holdings ?? []).find((holding) => String(holding?.id ?? "") === String(holdingId ?? ""));
-    if (!source) return this._warnNoActiveHolding();
-    const sourceHash = stableDataHash(source);
-    const previewHolding = clone(source);
-    const preview = this._autoAssignWorkersToBuildings(previewHolding, { mode });
-    if (!preview.ok) {
-      ui.notifications.warn(preview.message);
-      return;
-    }
-    const rows = preview.assignments.slice(0, 14).map((assignment) => (
-      `<li><strong>${escapeHtml(assignment.personName)}</strong> → ${escapeHtml(assignment.buildingName)} <small>(${Math.round(assignment.score * 100) / 100})</small></li>`
-    )).join("");
-    const extra = preview.assignments.length > 14 ? `<p>И ещё назначений: ${preview.assignments.length - 14}.</p>` : "";
-    const clearing = preview.cleared ? `<p>Будет очищено старых рабочих слотов: <strong>${preview.cleared}</strong>.</p>` : "";
-    const confirmed = await foundryDialogV2().confirm({
-      window: { title: mode === "all" ? "План перераспределения работников" : "Предложения по свободным слотам" },
-      content: `<div class="fbls-dialog-text"><p>${escapeHtml(preview.message)}</p>${clearing}<ul>${rows}</ul>${extra}</div>`,
-      modal: true
-    });
-    if (!confirmed) return;
-    const operationId = makeId("worker-plan", 20);
-    const result = await this._updateActiveHolding((holding) => {
-      if (stableDataHash(holding) !== sourceHash) {
-        return SkyholdData.skipTransaction({ ok: false, stale: true, message: "Назначения изменились после предпросмотра. Построй план заново." });
-      }
-      if (findHoldingOperation(holding, operationId)) {
-        return SkyholdData.skipTransaction({ ok: true, duplicate: true, operationId, assigned: 0, cleared: 0, message: "Этот план уже применён." });
-      }
-      const applied = this._autoAssignWorkersToBuildings(holding, { mode });
-      if (!applied.ok) return SkyholdData.skipTransaction(applied);
-      appendHoldingOperation(holding, {
-        operationId,
-        type: "worker-assignment",
-        createdAt: new Date().toISOString(),
-        title: mode === "all" ? "Перераспределение работников" : "Заполнение свободных слотов",
-        summary: applied.message,
-        assigned: applied.assigned,
-        cleared: applied.cleared
-      });
-      return { ...applied, operationId };
-    }, { reason: "building:auto-assign-workers" });
-    if (!result) return;
-    if (!result.ok) {
-      ui.notifications.warn(result.message);
-      return;
-    }
-    this.activeTab = "buildings";
-    this.requestRender();
-    ui.notifications.info(result.message);
-  } catch (error) {
-    console.error("FBL Skyhold | Failed to auto-assign building workers", error);
-    ui.notifications.error("Не удалось автораспределить работников. Подробности в консоли.");
-  }
-},
 async _onCollectBuildingProduction(event) {
   event.preventDefault();
   event.stopPropagation();
@@ -307,7 +233,7 @@ _fillBuildingWorkers(holding, buildingId, { mode = "free" } = {}) {
   const candidateRows = people
     .filter((person) => !protectedIds.has(String(person.id)))
     .filter((person) => mode === "all" || ["", "Свободен", "Без работы", "Ребенок"].includes(String(person?.workAssignment || person?.role || "")))
-    .filter((person) => this._isCivilianWorkerCandidate(person, building))
+    .filter((person) => this._isCivilianWorkerCandidate(person, building, holding))
     .map((person) => ({ person, score: this._buildingAssignmentScore(holding, building, person) }))
     .filter((row) => row.score > 0)
     .sort((a, b) => b.score - a.score || String(a.person.name ?? "").localeCompare(String(b.person.name ?? ""), "ru"));
@@ -318,6 +244,7 @@ _fillBuildingWorkers(holding, buildingId, { mode = "free" } = {}) {
     if (!pick) continue;
     this._clearPersonFromAssignments(holding, pick.id);
     building.assignedWorkerIds[slot] = String(pick.id);
+    pick.workAllocationMode = "legacy";
     pick.workAssignment = String(building.id);
     pick.role = building.workerRole || building.name || "Работает в здании";
     this._applyPersonSalaryForAssignment?.(holding, pick, building);
@@ -336,33 +263,79 @@ _closeBuildingContextMenu() {
 
 async _executeBuildingContextAction(buildingId = "", action = "") {
   const data = SkyholdData.get();
-  const holding = data.holdings.find((item) => item.id === this.activeHoldingId) ?? data.holdings[0];
+  const holding = data.holdings.find((item) => item.id === this.activeHoldingId);
   const building = (holding?.buildings?.list ?? []).find((item) => String(item.id ?? "") === String(buildingId));
   if (!holding || !building) return;
   const name = String(building?.name ?? "Здание");
-  if (action === "delete") {
-    const blocked = buildingDeletionBlocker(building);
-    if (!blocked.ok) {
-      ui.notifications.warn(blocked.message);
+  if (action === "mothball" || action === "unmothball") {
+    return this._onSetFinanceBuildingMothball?.({
+      holdingId: String(holding.id ?? ""),
+      buildingId: String(building.id ?? ""),
+      mothballed: action === "mothball"
+    });
+  }
+  if (action === "cancel-project") {
+    if (!game.user?.isGM) {
+      ui.notifications.warn("Отменять незавершённый строительный проект может только ГМ.");
       return;
     }
-    const confirmed = await this._confirmAction?.("Удалить здание", `Удалить «${name}»? Содержимое его хранилища будет перенесено под открытое небо.`);
+    const requestedOperationId = makeId("construction-cancel", 20);
+    const preview = planConstructionCancellation({ holding, building, operationId: requestedOperationId });
+    if (!preview.ok) {
+      ui.notifications.warn(preview.message || "Этот проект нельзя отменить.");
+      return;
+    }
+    const operationId = preview.replay ? String(preview.operationId ?? requestedOperationId) : requestedOperationId;
+    const refundText = preview.refund.length
+      ? preview.refund.map((row) => `${row.name}: ${row.qty}`).join("; ")
+      : "без возврата материалов";
+    const confirmed = await this._confirmAction?.(
+      "Отменить проект",
+      `Отменить незавершённый проект «${name}»? Проект будет удалён, бригада освобождена. Возврат: ${refundText}.`
+    );
     if (!confirmed) return;
-    const deleted = await SkyholdData.updateHolding(holding.id, (freshHolding) => {
-      const result = deleteBuildingWithStorageLifecycle(freshHolding, buildingId, {
-        releaseWorker: (target, personId) => this._setPersonFree(target, personId),
-        appendStorageLog: (target, entries) => this._appendStorageLog(target, entries)
+    const cancelled = await SkyholdData.updateHolding(holding.id, (freshHolding) => {
+      const result = applyConstructionProjectCancellation({
+        holding: freshHolding,
+        buildingId,
+        operationId,
+        createdAt: new Date().toISOString(),
+        plan: preview,
+        dependencies: {
+          addStorageWithOverflow: (draft, row, qty) => this._storageAddWithOverflow(draft, row, qty),
+          appendStorageLog: (draft, entries) => this._appendStorageLog(draft, entries),
+          setPersonFree: (draft, personId) => this._setPersonFree(draft, personId)
+        }
       });
-      return result.ok ? result : SkyholdData.skipTransaction(result);
-    }, { reason: "building:context-delete" });
-    if (!deleted) return;
-    if (!deleted.ok) {
-      ui.notifications.warn(deleted.message);
+      return result.ok && !result.replay ? result : SkyholdData.skipTransaction(result);
+    }, { reason: `building:cancel-construction:${operationId}` });
+    if (!cancelled?.ok) {
+      ui.notifications.warn(cancelled?.message || "Не удалось отменить проект.");
       return;
     }
     this.requestRender();
-    const moved = deleted.movedResources + deleted.movedItems;
-    ui.notifications.info(`Здание «${name}» удалено.${moved ? ` Позиций перенесено наружу: ${moved}.` : ""}`);
+    const returned = cancelled.refund?.length
+      ? cancelled.refund.map((row) => `${row.name}: ${row.qty}`).join("; ")
+      : "материалы не возвращались";
+    ui.notifications.info(`Проект «${name}» отменён; ${returned}.`);
+    return;
+  }
+  if (action === "delete") {
+    if (isCancellableConstructionProject(building)) {
+      ui.notifications.warn("Незавершённый проект нужно отменять через действие «Отменить проект».");
+      return;
+    }
+    const confirmed = await this._confirmAction?.("Удалить здание", `Удалить построенное здание «${name}»? Строительные материалы не возвращаются.`);
+    if (!confirmed) return;
+    const deleted = await SkyholdData.updateHolding(holding.id, (freshHolding) => {
+      const before = freshHolding.buildings?.list?.length ?? 0;
+      if (!freshHolding.buildings) freshHolding.buildings = { list: [] };
+      freshHolding.buildings.list = (freshHolding.buildings.list ?? []).filter((item) => String(item.id ?? "") !== String(buildingId));
+      return freshHolding.buildings.list.length !== before;
+    }, { reason: "building:context-delete" });
+    if (!deleted) return;
+    this.requestRender();
+    ui.notifications.info(`Здание «${name}» удалено.`);
     return;
   }
   const result = await SkyholdData.updateHolding(holding.id, (freshHolding) => {
@@ -377,12 +350,25 @@ async _executeBuildingContextAction(buildingId = "", action = "") {
 
 async _showBuildingActionMenu(buildingId = "", position = null) {
   this._closeBuildingContextMenu();
+  const data = SkyholdData.get();
+  const holding = data.holdings.find((item) => item.id === this.activeHoldingId);
+  const building = (holding?.buildings?.list ?? []).find((item) => String(item.id ?? "") === String(buildingId));
+  if (!holding || !building) return;
+  const cancellableProject = isCancellableConstructionProject(building);
+  const mothballed = this._financeBuildingMothballed?.(holding, buildingId) === true;
   const items = [
     { action: "clear", icon: "fa-solid fa-user-minus", label: "Убрать всех жителей" },
     { action: "fill-free", icon: "fa-solid fa-user-plus", label: "Распределить сюда свободных жителей" },
     { action: "fill-max", icon: "fa-solid fa-people-group", label: "Распределить сюда максимум жителей" },
-    { action: "delete", icon: "fa-solid fa-trash", label: "Удалить", danger: true }
-  ];
+    game.user?.isGM && !cancellableProject
+      ? mothballed
+        ? { action: "unmothball", icon: "fa-solid fa-power-off", label: "Снять консервацию" }
+        : { action: "mothball", icon: "fa-solid fa-box-archive", label: "Законсервировать" }
+      : null,
+    cancellableProject
+      ? { action: "cancel-project", icon: "fa-solid fa-hammer-circle-xmark", label: game.user?.isGM ? "Отменить проект" : "Отменить проект (только ГМ)", danger: true }
+      : { action: "delete", icon: "fa-solid fa-trash", label: "Удалить здание", danger: true }
+  ].filter(Boolean);
   const menu = document.createElement("div");
   menu.className = "fbl-skyhold fbls-building-context-menu";
   menu.append(...items.map(createBuildingContextMenuButton));
@@ -446,7 +432,7 @@ _onBuildingDragStart(event) {
   const buildingId = String(card?.dataset?.buildingId || card?.dataset?.id || "");
   if (!buildingId) return;
   const data = SkyholdData.get();
-  const holding = data.holdings.find((item) => String(item.id) === String(this.activeHoldingId)) ?? data.holdings[0];
+  const holding = data.holdings.find((item) => String(item.id) === String(this.activeHoldingId));
   const buildingIndex = (holding?.buildings?.list ?? []).findIndex((item) => String(item.id) === buildingId);
   const building = buildingIndex >= 0 ? holding.buildings.list[buildingIndex] : null;
   if (!holding || !building) return;
@@ -516,49 +502,6 @@ async _onBuildingDrop(event) {
   this.requestRender();
 },
 
-async _onSuitableTypeAddChange(event) {
-  event.preventDefault();
-  if (!this._canEditBuildings()) return;
-  const field = event.currentTarget;
-  const path = field.dataset.suitableTypeAddField;
-  const value = String(field.value ?? "").trim();
-  if (!path || !value) return;
-  try {
-    await SkyholdData.transaction((data) => {
-      const scopedPath = this._resolveActiveHoldingScopedPath(data, path);
-      if (!scopedPath) return SkyholdData.skipTransaction(null);
-      const list = splitList(foundry.utils.getProperty(data, scopedPath));
-      if (!list.some((item) => item.toLowerCase() === value.toLowerCase())) list.push(value);
-      foundry.utils.setProperty(data, scopedPath, joinList(list));
-    }, { reason: "building:add-suitable-type" });
-    this.requestRender();
-  } catch (error) {
-    console.error("FBL Skyhold | Failed to add suitable type", error);
-    ui.notifications.error("Не удалось добавить подходящий тип. Подробности в консоли.");
-  }
-},
-
-async _onRemoveSuitableType(event) {
-  event.preventDefault();
-  if (!this._canEditBuildings()) return;
-  const button = event.currentTarget;
-  const path = button.dataset.suitableTypesField;
-  const value = String(button.dataset.suitableType ?? "").trim().toLowerCase();
-  if (!path || !value) return;
-  try {
-    await SkyholdData.transaction((data) => {
-      const scopedPath = this._resolveActiveHoldingScopedPath(data, path);
-      if (!scopedPath) return SkyholdData.skipTransaction(null);
-      const list = splitList(foundry.utils.getProperty(data, scopedPath)).filter((item) => item.toLowerCase() !== value);
-      foundry.utils.setProperty(data, scopedPath, joinList(list));
-    }, { reason: "building:remove-suitable-type" });
-    this.requestRender();
-  } catch (error) {
-    console.error("FBL Skyhold | Failed to remove suitable type", error);
-    ui.notifications.error("Не удалось убрать подходящий тип. Подробности в консоли.");
-  }
-},
-
 async _onBuildingWorkerChange(event) {
   event.preventDefault();
   if (!this._canEditBuildings()) return;
@@ -568,6 +511,14 @@ async _onBuildingWorkerChange(event) {
   const parts = path.match(/holdings\.(\d+)\.buildings\.list\.(\d+)\.assignedWorkerIds\.(\d+)$/);
   try {
     if (parts) {
+      const currentData = SkyholdData.get();
+      const currentPath = this._resolveActiveHoldingScopedPath(currentData, path);
+      const currentParts = currentPath.match(/holdings\.(\d+)\.buildings\.list\.(\d+)\.assignedWorkerIds\.(\d+)$/);
+      const currentHolding = currentParts ? currentData.holdings?.[Number(currentParts[1])] : null;
+      const currentBuilding = currentParts ? currentHolding?.buildings?.list?.[Number(currentParts[2])] : null;
+      const person = (currentHolding?.people?.list ?? []).find((row) => String(row?.id ?? "") === String(field.value ?? ""));
+      const decision = await confirmBuildingWorkerAdmission({ manager: this, building: currentBuilding, person });
+      if (!decision.allowed) { this.requestRender(); return; }
       await SkyholdData.transaction((data) => {
         const scopedPath = this._resolveActiveHoldingScopedPath(data, path);
         const scopedParts = scopedPath.match(/holdings\.(\d+)\.buildings\.list\.(\d+)\.assignedWorkerIds\.(\d+)$/);
@@ -575,8 +526,9 @@ async _onBuildingWorkerChange(event) {
         const holding = data.holdings[Number(scopedParts[1])];
         const building = holding?.buildings?.list?.[Number(scopedParts[2])];
         if (!holding || !building) return SkyholdData.skipTransaction(null);
-        this._setBuildingSlot(holding, building.id, Number(scopedParts[3]), field.value || "");
-      }, { reason: "building:worker-change" });
+        return this._setBuildingSlot(holding, building.id, Number(scopedParts[3]), field.value || "", decision)
+          || SkyholdData.skipTransaction(false);
+      }, { reason: "building:worker-change", scope: "holdings" });
     } else {
       const updated = await this._updateActiveHoldingPath(path, field.value || "", { reason: "building:worker-change" });
       if (!updated) return;
@@ -627,67 +579,20 @@ _buildingFromTemplate(template = {}, id = "") {
   delete templateCopy.locked;
   delete templateCopy.css;
   delete templateCopy.reasonText;
+  const workersMax = Math.max(0, Number(templateCopy.workersMax ?? 0) || 0);
   return {
+    ...templateCopy,
     id: id || makeId("b", 12),
     templateId: String(template.id ?? ""),
-    primaryDev: String(templateCopy.primaryDev ?? template.primaryDev ?? ""),
-    sourceRequirement: String(templateCopy.sourceRequirement ?? ""),
-    sourceRawMaterials: String(templateCopy.sourceRawMaterials ?? ""),
-    specialRequirements: String(templateCopy.specialRequirements ?? ""),
-    compendiumId: String(templateCopy.compendiumId ?? ""),
-    name: String(templateCopy.name ?? "Новая постройка"),
-    type: String(templateCopy.type ?? templateCopy.category ?? "Особые"),
     visibility: "public",
     status: "Проект",
     constructionStatus: "planned",
     constructionCrewId: "",
-    location: String(templateCopy.location ?? ""),
-    requirements: templateCopy.requirements ?? { food: 0, technology: 0, culture: 0, war: 0 },
-    bonuses: templateCopy.bonuses ?? { food: 0, technology: 0, culture: 0, war: 0 },
-    workersMin: Number(templateCopy.workersMin ?? 1) || 0,
-    workersMax: Number(templateCopy.workersMax ?? 1) || 1,
-    assignedWorkerIds: Array.from({ length: Math.max(0, Number(templateCopy.workersMax ?? 1) || 1) }, () => ""),
-    suitableWorkerTypes: String(templateCopy.suitableWorkerTypes ?? ""),
-    workerTypeEffects: templateCopy.workerTypeEffects ?? {},
-    workerRole: String(templateCopy.workerRole ?? ""),
-    workerPrimaryAttribute: String(templateCopy.workerPrimaryAttribute ?? ""),
-    effect: String(templateCopy.effect ?? templateCopy.description ?? ""),
-    production: String(templateCopy.production ?? ""),
-    functions: templateCopy.functions ?? { production: false, income: false, defense: false, housing: false, storage: false, culture: false },
-    productionLines: Array.isArray(templateCopy.productionLines) ? templateCopy.productionLines : [],
-    income: templateCopy.income ?? { base: 0, perWorker: 0, formula: "", risk: 0, illegal: false },
-    enterpriseCapital: templateCopy.enterpriseCapital ?? {
-      version: 2,
-      enabled: false,
-      landCopper: 0,
-      equipmentCopper: 0,
-      workingCapitalCopper: 0,
-      commissioningPaidCopper: 0,
-      workingCapitalReserveCopper: 0,
-      fundingProvenance: "treasury",
-      legacyGrandfathered: false,
-      fundedCopper: 0,
-      renewalPercentAnnual: 10,
-      notes: ""
-    },
-    defense: templateCopy.defense ?? { base: 0, perStep: 0, workerStep: 0, combatTag: "garrison" },
-    housing: templateCopy.housing ?? { capacity: 0, comfort: 0, quality: 0, notes: "" },
-    storage: templateCopy.storage ?? { capacity: 0, security: 0, quality: 0 },
-    religion: templateCopy.religion ?? { religious: false, faith: "", customFaith: "", notes: "" },
-    special: templateCopy.special ?? {},
-    medical: templateCopy.medical ?? {},
-    reputation: Number(templateCopy.reputation ?? 0) || 0,
-    moraleDelta: Number(templateCopy.moraleDelta ?? 0) || 0,
-    upkeep: Number(templateCopy.upkeep ?? 0) || 0,
-    materialCosts: Array.isArray(templateCopy.materialCosts) ? templateCopy.materialCosts : [],
-    icon: String(templateCopy.icon ?? template.icon ?? "fa-solid fa-building"),
-    img: String(templateCopy.img ?? templateCopy.image ?? template.img ?? template.image ?? ""),
-    audio: audioConfigFromTemplate(templateCopy),
-    requiredBuildingIds: Array.isArray(templateCopy.requiredBuildingIds) ? templateCopy.requiredBuildingIds : [],
-    buildDifficulty: Number(templateCopy.buildDifficulty ?? 0) || 0,
-    buildTarget: Math.max(1, Number(templateCopy.buildTarget ?? 6) || 6),
     buildProgress: 0,
-    notes: String(templateCopy.notes ?? templateCopy.description ?? "")
+    assignedWorkerIds: Array.from({ length: workersMax }, () => ""),
+    workerAdmissionOverrideIds: [],
+    audio: audioConfigFromTemplate(templateCopy),
+    serviceProjects: Array.isArray(templateCopy.serviceProjects) ? templateCopy.serviceProjects : []
   };
 },
 
@@ -707,71 +612,6 @@ async _onBuildingConstructionCrewChange(event) {
   this.requestRender();
 },
 
-
-_buildingMaterialCostsForAllocation(building = {}) {
-  return (Array.isArray(building?.materialCosts) ? building.materialCosts : [])
-    .map((item) => {
-      const resourceId = String(item?.resourceId ?? item?.resource ?? item?.name ?? "").trim();
-      const name = String(item?.name ?? item?.label ?? resourceId ?? "Материал").trim() || resourceId || "Материал";
-      const qty = Math.max(0, this._safeNumber(item?.qty, 0));
-      return { resourceId, id: resourceId, name, qty };
-    })
-    .filter((item) => item.qty > 0);
-},
-
-async _onAllocateBuildingMaterials(event) {
-  event.preventDefault();
-  event.stopPropagation();
-  if (!this._canEditBuildings()) return;
-  const buildingId = String(event.currentTarget?.dataset?.id ?? "");
-  if (!buildingId) return;
-  const operationId = makeId("construction-reserve", 20);
-  const reservedAt = new Date().toISOString();
-
-  const result = await this._updateActiveHolding((holding) => {
-    const building = (holding.buildings?.list ?? []).find((item) => String(item.id) === buildingId);
-    if (!building) return SkyholdData.skipTransaction({ ok: false, tone: "silent", message: "" });
-
-    const costs = this._buildingMaterialCostsForAllocation(building);
-    if (!costs.length) return SkyholdData.skipTransaction({ ok: false, tone: "info", message: "У здания нет материальных затрат." });
-    if (validConstructionReservation(building) || building.materialsAllocated) return SkyholdData.skipTransaction({ ok: false, tone: "info", message: "Материалы для этого здания уже выделены." });
-
-    const reservation = reserveConstructionMaterials({
-      holding,
-      building,
-      costs,
-      operationId,
-      reservedAt,
-      reservedQd: holding?.gm?.calendaria?.lastQd,
-      dependencies: {
-        planCosts: ({ holding: draft, costs: rows }) => this._storageCanPay(draft, rows),
-        takeResourceLots: (draft, row, qty) => this._storageTakeLots(draft, row, qty)
-      }
-    });
-    if (!reservation.ok) {
-      const missing = (reservation?.missing ?? []).map((item) => `${item.name || item.resourceId}: нужно ${item.qty}, есть ${this._formatNumber ? this._formatNumber(item.have) : item.have}`).join("; ");
-      return SkyholdData.skipTransaction({ ok: false, tone: "warn", message: `Не хватает материалов: ${missing || "неизвестно"}.` });
-    }
-    appendHoldingOperation(holding, {
-      operationId,
-      type: "construction-reservation",
-      createdAt: reservedAt,
-      title: `Материалы выделены: ${building.name || "здание"}`,
-      summary: building.materialsAllocatedLine,
-      payload: { buildingId: building.id, reservation: clone(reservation.reservation) }
-    });
-    return { ok: true, buildingName: building.name || "здание", reservation: reservation.reservation };
-  }, { reason: "building:allocate-materials" });
-
-  if (!result) return;
-  if (!result.ok) {
-    if (result.tone === "info") ui.notifications.info(result.message);
-    else if (result.tone === "warn") ui.notifications.warn(result.message);
-    return;
-  }
-  ui.notifications.info(`Материалы выделены: ${result.buildingName}.`);
-  this.requestRender();
-},
 
 async _onRollConstructionCrew(event) {
   event.preventDefault();
@@ -829,6 +669,58 @@ async _onRollConstruction(event) {
   event.preventDefault();
   event.stopPropagation();
   if (!this._canEditBuildings()) return;
-  ui.notifications.info("Прогресс строительства и ремонта начисляется только при расчёте десятника: так бригада использует общий запас труда и не может работать повторно.");
+
+  const buildingId = String(event.currentTarget?.dataset?.id ?? "");
+  if (!buildingId) return;
+  const data = SkyholdData.get();
+  const holdingId = this._activeWritableHoldingId(data);
+  const holding = (data?.holdings ?? []).find((row) => String(row?.id ?? "") === String(holdingId));
+  const building = (holding?.buildings?.list ?? []).find((row) => String(row?.id ?? "") === buildingId);
+  const crewId = String(event.currentTarget?.dataset?.crewId ?? building?.constructionCrewId ?? "");
+  if (!holding || !building || !crewId) {
+    ui.notifications.warn("Не удалось определить проект или назначенную стройбригаду.");
+    return;
+  }
+
+  let result;
+  try {
+    result = await requestConstructionOperation({
+      type: "rollConstruction",
+      operationId: makeId("construction", 20),
+      expectedRevision: Math.max(0, Number(data?.meta?.revision) || 0),
+      holdingId: String(holding.id ?? ""),
+      buildingId,
+      crewId
+    });
+  } catch (error) {
+    console.error("FBL Skyhold | Failed to execute construction operation", error);
+    ui.notifications.warn(error?.message || "Строительный бросок не выполнен.");
+    return;
+  }
+
+  if (!result?.ok) {
+    if (result?.message) ui.notifications.warn(result.message);
+    return;
+  }
+
+  await createFoundryChatMessage({
+    speaker: foundryChatSpeaker({ alias: result.holdingName }),
+    content: `
+      <div class="fbls-chat-card">
+        <h3>Строительство: ${escapeHtml(result.buildingName)}</h3>
+        <p><strong>Стройбригада:</strong> ${escapeHtml(result.crewNames)}</p>
+        <p><strong>Пул:</strong> ${result.rawDice}к6, довольство ${result.moraleMod > 0 ? "+" : ""}${result.moraleMod} (${escapeHtml(result.moraleReason)})${result.difficulty ? `, сложность ${result.difficulty > 0 ? "+" : ""}${result.difficulty}` : ""} = ${result.dicePool}к6</p>
+        <p><strong>Кости:</strong> ${diceTextHtml(result.rolls)}</p>
+        <p><strong>Успехи:</strong> ${result.successes}${result.successBonus ? ` (${result.rolledSuccesses} на костях +${result.successBonus} Центр Строительства)` : ""}; принято стадий: ${result.appliedStages}. Прогресс: ${result.oldProgress} → ${result.nextProgress} / ${result.target}</p>
+        ${result.appliedStages < result.requestedStages ? `<p><strong>Материалы ограничили прогресс:</strong> ${escapeHtml(result.missingText || "не хватает материалов следующей стадии")}</p>` : ""}
+        ${result.rerollNote ? `<p><strong>Builder:</strong> ${escapeHtml(result.rerollNote)}</p>` : ""}
+        ${result.nextProgress >= result.target ? "<p><strong>Постройка завершена.</strong></p>" : ""}
+      </div>
+    `
+  });
+
+  this.activeTab = "buildings";
+  this.expandedBuildingId = null;
+  this.requestRender();
 }
 };

@@ -45,14 +45,18 @@ export function applyTextareaSanitizer(field, sanitizer, { selectionMode = "mapp
   field.selectionEnd = Math.max(0, Math.min(clean.length, sanitizer(value.slice(0, end)).length));
 }
 
-export function bindInputGuards(root, { textareaSanitizer = null, textareaSelectionMode = "mapped" } = {}) {
+export function bindInputGuards(root, {
+  textareaSanitizer = null,
+  textareaSelectionMode = "mapped",
+  textareaSanitizeOnInput = true
+} = {}) {
   if (!root?.querySelectorAll) return;
   const stop = (event) => event.stopPropagation();
   const sanitize = (field) => applyTextareaSanitizer(field, textareaSanitizer, { selectionMode: textareaSelectionMode });
 
   root.querySelectorAll("input, textarea, select").forEach((field) => {
     if (field instanceof HTMLTextAreaElement && textareaSanitizer) {
-      field.addEventListener("input", () => sanitize(field));
+      field.addEventListener(textareaSanitizeOnInput ? "input" : "change", () => sanitize(field));
       field.addEventListener("paste", () => setTimeout(() => sanitize(field), TEXTAREA_PASTE_SANITIZE_DELAY_MS));
     }
   });

@@ -16,7 +16,6 @@
   --fbls-dim: var(--fbls-muted);
   --fbls-placeholder: var(--fbls-dim);
   --fbls-on-accent: #171a1c;
-  --fbls-soft: var(--fbls-panel);
   --fbls-overlay-soft: rgba(0, 0, 0, 0.18);
   --fbls-overlay: rgba(0, 0, 0, 0.28);
   --fbls-overlay-strong: rgba(0, 0, 0, 0.48);
@@ -24,7 +23,10 @@
   --fbls-accent-soft: rgba(210, 181, 117, 0.12);
   --fbls-accent-bg: rgba(210, 181, 117, 0.22);
   --fbls-accent-border: rgba(210, 181, 117, 0.42);
-  --fbls-accent-dim: var(--fbls-accent-bg);
+  --fbls-worker-strength: rgba(156, 49, 43, 0.92);
+  --fbls-worker-agility: rgba(47, 122, 75, 0.92);
+  --fbls-worker-wits: rgba(48, 90, 170, 0.92);
+  --fbls-worker-empathy: rgba(178, 67, 159, 0.92);
   --fbls-success: #7fc893;
   --fbls-success-soft: rgba(95, 190, 118, 0.16);
   --fbls-warning: #d8b35d;
@@ -37,6 +39,14 @@
   --fbls-info-soft: rgba(125, 184, 207, 0.18);
   --fbls-culture: #d09af6;
   --fbls-culture-soft: rgba(194, 139, 241, 0.18);
+  --fbls-type-body: 0.875rem;
+  --fbls-type-section: 1.125rem;
+  --fbls-type-title: 1.25rem;
+  --fbls-padding-regular: 0.55rem 0.65rem;
+  --fbls-padding-dense: 3px 5px;
+  --fbls-type-compact-xs: 0.6875rem;
+  --fbls-type-compact-sm: 0.75rem;
+  --fbls-type-compact-md: 0.8125rem;
   --fbls-radius-sm: 8px;
   --fbls-radius-md: 10px;
   --fbls-radius-lg: 12px;
@@ -44,10 +54,8 @@
   --fbls-gap-sm: 0.42rem;
   --fbls-gap-md: 0.56rem;
   --fbls-gap-lg: 0.72rem;
-  --fbls-control-height: 36px;
-  --fbls-control-height-sm: 32px;
-  --fbls-control-height-md: 38px;
-  --fbls-control-height-lg: 40px;
+  --fbls-control-height: 2rem;
+  --fbls-row-height: calc(var(--fbls-control-height) + 0.5rem);
   --fbls-header-control-height: 2.2rem;
   --fbls-header-stat-height: 2.3rem;
   --fbls-label-gap: 0.18rem;

@@ -46,6 +46,7 @@ import { calculateBattle } from "./mass-combat/calculator.js";
 import { battleTerminalState } from "./mass-combat/terminal.js";
 import { applyPendingBattleRound, createPendingBattleRound, pendingBattleRoundContext } from "./mass-combat/round-resolution.js";
 import { archiveBattle, battleArchiveContext } from "./mass-combat/archive.js";
+import { prepareDefenderMilitarySupplyPlan } from "./mass-combat/supplies.js";
 
 function chanceText(value) {
   const chance = clamp(asInt(value, 0), 0, 6);
@@ -66,26 +67,34 @@ function battleCalculationDependencies(manager = getSkyholdManager()) {
   if (typeof manager?._medicalCapacityForBuilding === "function") {
     dependencies.medicalCapacityForBuilding = (holding, building) => manager._medicalCapacityForBuilding(holding, building);
   }
+  if (typeof manager?._storageQuantity === "function") {
+    dependencies.resourceQuantity = (holding, resourceId) => manager._storageQuantity(holding, { resourceId });
+  }
+  if (typeof manager?._storagePay === "function") {
+    dependencies.consumeResource = (holding, resourceId, qty, note = "") => {
+      const amount = Math.max(0, Math.floor(Number(qty) || 0));
+      if (!amount) return true;
+      const payment = manager._storagePay(holding, [{ resourceId, name: resourceId, qty: amount }]);
+      if (!payment?.ok) return false;
+      manager._appendStorageLog?.(holding, [{
+        kind: String(resourceId).startsWith("military-supplies-") ? "mass-combat-ammunition" : "mass-combat-medical",
+        resourceId,
+        name: resourceId,
+        qty: -amount,
+        source: "Битва за владение",
+        note
+      }]);
+      return true;
+    };
+  }
   return dependencies;
 }
 
-function battleRepairReservationOptions(holding, operationId, manager = getSkyholdManager()) {
-  return {
-    operationId,
-    reservedAt: new Date().toISOString(),
-    reservedQd: holding?.gm?.calendaria?.lastQd,
-    planCosts: typeof manager?._storageCanPay === "function"
-      ? ({ holding: draft, costs }) => manager._storageCanPay(draft, costs)
-      : null,
-    takeResourceLots: typeof manager?._storageTakeLots === "function"
-      ? (draft, row, qty) => manager._storageTakeLots(draft, row, qty)
-      : null
-  };
-}
-
-function buildMortalityHelp(holding, { calculationDependencies = {} } = {}) {
+function buildMortalityHelp(holding, { state = {}, calculationDependencies = {} } = {}) {
   const support = medicalSupport(holding, { battleLost: false, ...calculationDependencies });
   const hasCare = support.capacity > 0;
+  const suppliesEnabled = state.useMedicalSupplies === true;
+  const medicinesEnabled = state.useMedicinesForHeavyCasualties === true;
   const base = { broken: 1, injured: 2, heavy: 3 };
   const current = {
     broken: Math.max(0, base.broken - (hasCare ? 1 : 0)),
@@ -104,6 +113,8 @@ function buildMortalityHelp(holding, { calculationDependencies = {} } = {}) {
     "Травма d6: 1 — перелом, 2–3 — ранение, 4–6 — тяжелое ранение.",
     `Смерть d6 без лечения: перелом ${chanceText(base.broken)}, ранение ${chanceText(base.injured)}, тяжелое ${chanceText(base.heavy)}.`,
     "Свободное медместо снижает шанс смерти одной потери на 1 шаг: перелом 0/6, ранение 1/6, тяжелое 2/6.",
+    suppliesEnabled ? "Медицинские припасы включены: еще −1; 1 единица покрывает до пяти принятых потерь." : "Медицинские припасы не расходуются автоматически.",
+    medicinesEnabled ? "Лекарства включены: по 1 единице на тяжелого раненого, уже обеспеченного припасами; еще −1." : "Лекарства для тяжелых случаев не расходуются автоматически.",
     currentLine,
     `Медицина: ${support.text}.`,
     "Если трек защитников сломан или цель врага выполнена, бой считается проигранным: лечебные здания не успевают принять новых раненых этого раунда."
@@ -118,7 +129,12 @@ export class SkyholdMassCombatApp extends RenderSchedulerMixin(HandlebarsApplica
     const id = String(holdingId ?? "");
     const existing = Array.from(SkyholdMassCombatApp.instances).find((app) => String(app?.holdingId ?? "") === id);
     const app = existing ?? new SkyholdMassCombatApp({ holdingId: id || holdingId });
-    return app.render({ force: true, focus: true, ...options });
+    return Promise.resolve(app.render({ force: true, focus: true, ...options })).catch((error) => {
+      this.instances.delete(app);
+      console.error("FBL Skyhold | Failed to open battle window", error);
+      globalThis.ui?.notifications?.error?.("Не удалось открыть бой.");
+      return null;
+    });
   }
 
   static rerenderOpen({ skipFocused = true } = {}) {
@@ -149,7 +165,7 @@ export class SkyholdMassCombatApp extends RenderSchedulerMixin(HandlebarsApplica
     const canEditDefender = permissions.canEditBattleSetup && !pendingRound;
     const defense = manager?._defenseSummary?.(holding) ?? { total: asNumber(holding?.overview?.defense, 0), tooltip: "" };
     const calc = calculateBattle(holding, state, { defenseTotal: defense.total, ...calculationDependencies });
-    calc.mortalityHelp = buildMortalityHelp(holding, { calculationDependencies });
+    calc.mortalityHelp = buildMortalityHelp(holding, { state, calculationDependencies });
     const terminal = battleTerminalState(state, calc);
 
     return {
@@ -168,6 +184,8 @@ export class SkyholdMassCombatApp extends RenderSchedulerMixin(HandlebarsApplica
       selectedAttackerPreset: ATTACKER_PRESETS[state.attackerPreset] ?? ATTACKER_PRESETS.custom,
       useDefenseSquadsChecked: state.useDefenseSquads !== false,
       raiseMilitiaChecked: state.raiseMilitia === true,
+      useMedicalSuppliesChecked: state.useMedicalSupplies === true,
+      useMedicinesForHeavyCasualtiesChecked: state.useMedicinesForHeavyCasualties === true,
       defenderStrategyOptions: strategyOptions(state.defenderStrategy, "defender"),
       attackerStrategyOptions: strategyOptions(state.attackerStrategy, "attacker"),
       defenderStrategySummary: strategySummary(calc.defenderStrategy, "defender"),
@@ -386,24 +404,16 @@ export class SkyholdMassCombatApp extends RenderSchedulerMixin(HandlebarsApplica
     event.preventDefault();
     event.stopPropagation();
     if (!game.user?.isGM) return;
-    const operationId = makeId("battle-repair");
     const result = await HoldingService.updateHolding(this.holdingId, (holding) => {
-      const repairs = startBattleRepairs(holding, battleRepairReservationOptions(holding, operationId));
-      if (!repairs.started.length) {
-        return SkyholdData.skipTransaction({
-          ok: false,
-          blocked: repairs.blocked.length,
-          message: repairs.blocked[0]?.message ?? ""
-        });
-      }
-      return { ok: true, count: repairs.started.length, blocked: repairs.blocked.length };
+      const targets = startBattleRepairs(holding);
+      if (!targets.length) return SkyholdData.skipTransaction({ ok: false });
+      return { ok: true, count: targets.length };
     });
     if (!result?.ok) {
-      if (result?.blocked) ui.notifications.warn(result.message || "Ремонт не начат: не удалось зарезервировать материалы по смете.");
-      else ui.notifications.info("Нет поврежденных зданий, которые можно отправить в ремонт.");
+      ui.notifications.info("Нет поврежденных зданий, которые можно отправить в ремонт.");
       return;
     }
-    ui.notifications.info(`Ремонт начат: ${result.count} здан.${result.blocked ? ` Без материалов осталось: ${result.blocked}.` : ""}`);
+    ui.notifications.info(`Ремонт начат: ${result.count} здан.`);
     this.requestRender();
   }
 
@@ -437,7 +447,6 @@ export class SkyholdMassCombatApp extends RenderSchedulerMixin(HandlebarsApplica
     if (!game.user?.isGM) return;
     const action = await this._chooseAftermathAction();
     if (!action || action === "cancel") return;
-    const repairOperationId = makeId("battle-repair");
     const result = await HoldingService.updateHolding(this.holdingId, (holding) => {
       const state = holding?.gm?.massCombat;
       if (!state) return SkyholdData.skipTransaction({ ok: false, reason: "missing" });
@@ -457,19 +466,17 @@ export class SkyholdMassCombatApp extends RenderSchedulerMixin(HandlebarsApplica
         resolvedBy: state.resolvedBy,
         reason: "resolved"
       });
-      const repairs = action === "archive-repair"
-        ? startBattleRepairs(holding, battleRepairReservationOptions(holding, repairOperationId))
-        : { started: [], blocked: [] };
+      const repairs = action === "archive-repair" ? startBattleRepairs(holding) : [];
       state.phase = "archived";
-      return { ok: true, archive, repairCount: repairs.started.length, repairBlocked: repairs.blocked.length };
+      return { ok: true, archive, repairCount: repairs.length };
     });
     if (!result?.ok) {
       ui.notifications.warn(result?.reason === "active" ? "Бой ещё не достиг терминального исхода." : "Не удалось завершить бой.");
       return;
     }
     ui.notifications.info(result.repairCount
-      ? `Бой архивирован. Ремонт начат: ${result.repairCount} здан.${result.repairBlocked ? ` Без материалов осталось: ${result.repairBlocked}.` : ""}`
-      : (result.repairBlocked ? `Бой архивирован. Ремонт не начат: для ${result.repairBlocked} здан. нет полной сметы или материалов.` : "Бой архивирован."));
+      ? `Бой архивирован. Ремонт начат: ${result.repairCount} здан.`
+      : "Бой архивирован.");
     this.requestRender();
   }
 
@@ -521,6 +528,8 @@ export class SkyholdMassCombatApp extends RenderSchedulerMixin(HandlebarsApplica
       "defenseMode",
       "useDefenseSquads",
       "raiseMilitia",
+      "useMedicalSupplies",
+      "useMedicinesForHeavyCasualties",
       "defenderPosition",
       "defenderHero",
       "defenderMorale",
@@ -655,7 +664,20 @@ export class SkyholdMassCombatApp extends RenderSchedulerMixin(HandlebarsApplica
       const manager = getSkyholdManager();
       const calculationDependencies = battleCalculationDependencies(manager);
       const defenseTotal = manager?._defenseSummary?.(holding)?.total ?? asNumber(holding?.overview?.defense, 0);
-      const calc = calculateBattle(holding, state, { defenseTotal, ...calculationDependencies });
+      let calc = calculateBattle(holding, state, { defenseTotal, ...calculationDependencies });
+      if (
+        String(state.militarySupplyBattleId ?? "") !== String(state.battleId ?? "")
+        || (Math.max(1, asInt(state.round, 1)) === 1 && state.militarySuppliesConsumed !== true)
+      ) {
+        state.militarySupplyBattleId = "";
+        prepareDefenderMilitarySupplyPlan(
+          holding,
+          state,
+          calc?.autoDefenders?.squadProfile?.squads?.map((squad) => squad.id) ?? [],
+          calculationDependencies
+        );
+        calc = calculateBattle(holding, state, { defenseTotal, ...calculationDependencies });
+      }
       const terminal = battleTerminalState(state, calc);
       if (terminal.finished) return SkyholdData.skipTransaction({ ok: false, reason: "terminal", terminal });
       if (!calc.defenderPool && !calc.attackerPool) return SkyholdData.skipTransaction({ ok: false, reason: "empty-pools" });
@@ -722,6 +744,7 @@ export class SkyholdMassCombatApp extends RenderSchedulerMixin(HandlebarsApplica
         margin,
         consequences,
         casualtyResult,
+        militarySupplyResult,
         damageResult,
         terminal
       } = resolved;
@@ -759,6 +782,7 @@ export class SkyholdMassCombatApp extends RenderSchedulerMixin(HandlebarsApplica
         defenderImpact: consequences.defenderImpact,
         attackerImpact: consequences.attackerImpact,
         casualtyText: casualtyResult.text || "",
+        militarySupplyText: militarySupplyResult.text || "",
         damageText: damageResult.text || "",
       };
       state.log.push(logRow);
@@ -776,6 +800,7 @@ export class SkyholdMassCombatApp extends RenderSchedulerMixin(HandlebarsApplica
         attackerSuccesses,
         margin,
         casualtyText: casualtyResult.text || "",
+        militarySupplyText: militarySupplyResult.text || "",
         damageText: damageResult.text || "",
         consequences,
         terminal
@@ -887,6 +912,7 @@ export class SkyholdMassCombatApp extends RenderSchedulerMixin(HandlebarsApplica
     event.preventDefault();
     event.stopPropagation();
     if (!game.user?.isGM) return;
+    if (!await this._confirm("Очистить лог боя", "Удалить журнал боя, потерь и повреждений зданий? Записи нельзя восстановить.")) return;
     await this._saveStatePatch({ log: [], casualtyLog: [], buildingDamageLog: [] });
     this.requestRender();
   }

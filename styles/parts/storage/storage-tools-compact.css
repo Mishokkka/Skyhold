@@ -13,14 +13,14 @@
   display: inline-flex;
   align-items: center;
   gap: 0.28rem;
-  min-height: 1.55rem;
+  min-height: var(--fbls-control-height);
   padding: 0.08rem 0.48rem;
   border: 1px solid var(--fbls-border);
   border-radius: 8px;
   background: var(--fbls-panel);
   color: var(--fbls-text, var(--fbls-text-strong));
-  font-size: 0.78rem;
-  font-weight: 850;
+  font-size: var(--fbls-type-compact-sm);
+  font-weight: 800;
   line-height: 1;
 }
 
@@ -43,8 +43,8 @@
   grid-template-columns: auto minmax(0, 1fr);
   gap: 0.4rem;
   align-items: center;
-  height: 1.85rem;
-  min-height: 1.85rem;
+  height: var(--fbls-control-height);
+  min-height: var(--fbls-control-height);
   margin: 0;
   padding: 0.12rem 0.45rem;
   border: 1px solid var(--fbls-border);
@@ -55,16 +55,16 @@
 
 .fbl-skyhold .fbls-storage-global-search input {
   width: 100%;
-  height: 1.35rem;
-  min-height: 1.35rem;
+  height: auto;
+  min-height: 0;
   padding: 0;
   border: 0;
   background: transparent;
 }
 
 .fbl-skyhold .fbls-storage-add-row {
-  height: 1.85rem;
-  min-height: 1.85rem;
+  height: var(--fbls-control-height);
+  min-height: var(--fbls-control-height);
   margin: 0;
   white-space: nowrap;
 }
@@ -144,7 +144,7 @@
   gap: 0.48rem;
   align-items: center;
   margin: 0;
-  min-height: 2rem;
+  min-height: var(--fbls-control-height);
   padding: 0.24rem 0.5rem;
   border-bottom: 1px solid var(--fbls-border);
   background: var(--fbls-surface-soft);
@@ -152,7 +152,7 @@
 
 .fbl-skyhold .fbls-storage-batch-count {
   color: var(--fbls-muted);
-  font-size: 0.76rem;
+  font-size: var(--fbls-type-compact-sm);
   white-space: nowrap;
 }
 
@@ -161,8 +161,8 @@
   color: var(--fbls-accent);
 }
 
-.fbl-skyhold .fbls-storage-context-hint { margin-left: auto; color: var(--fbls-muted); font-size: 0.72rem; }
-.fbl-skyhold .fbls-storage-selectionbar button { height: 1.6rem; min-height: 1.6rem; margin: 0; }
+.fbl-skyhold .fbls-storage-context-hint { margin-left: auto; color: var(--fbls-muted); font-size: var(--fbls-type-compact-sm); }
+.fbl-skyhold .fbls-storage-selectionbar button { height: var(--fbls-control-height); min-height: var(--fbls-control-height); margin: 0; }
 
 @media (max-width: 760px) {
   .fbls-titlebar-runbar-button span { display: none; }

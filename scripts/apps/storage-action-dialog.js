@@ -12,7 +12,14 @@ export class SkyholdStorageActionDialog extends WindowFrameMixin(HandlebarsAppli
   static open(config = {}) {
     return new Promise((resolve) => {
       const app = new this({ config, resolve });
-      app.render({ force: true, focus: true });
+      const failed = (error) => {
+        console.error("FBL Skyhold | Failed to open storage dialog", error);
+        app._settled = true;
+        app._resultResolver = null;
+        resolve(null);
+      };
+      try { Promise.resolve(app.render({ force: true, focus: true })).catch(failed); }
+      catch (error) { failed(error); }
     });
   }
 
@@ -28,6 +35,7 @@ export class SkyholdStorageActionDialog extends WindowFrameMixin(HandlebarsAppli
     const mode = String(this.config.mode ?? "confirm");
     const max = Math.max(1, Math.floor(finitePositive(this.config.max, 1)));
     const value = Math.max(1, Math.min(max, Math.floor(finitePositive(this.config.value, 1))));
+    const allowQuantity = mode === "move" && Boolean(this.config.allowQuantity);
     return {
       ...context,
       title: String(this.config.title ?? "Действие с хранилищем"),
@@ -37,7 +45,8 @@ export class SkyholdStorageActionDialog extends WindowFrameMixin(HandlebarsAppli
       danger: Boolean(this.config.danger),
       mode,
       isMove: mode === "move",
-      isQuantity: mode === "quantity",
+      isQuantity: mode === "quantity" || allowQuantity,
+      allowQuantity,
       isNote: mode === "note",
       isConfirm: mode === "confirm",
       options: Array.isArray(this.config.options) ? this.config.options : [],
@@ -62,7 +71,7 @@ export class SkyholdStorageActionDialog extends WindowFrameMixin(HandlebarsAppli
     });
     root.querySelector("[data-action='storage-dialog-confirm']")?.addEventListener("click", (event) => {
       event.preventDefault();
-      this._finish(this._readResult(form));
+      if (form?.reportValidity?.() !== false) this._finish(this._readResult(form));
     });
     const focusPrimaryField = () => root.querySelector("[autofocus]")?.focus?.({ preventScroll: true });
     if (globalThis.queueMicrotask) globalThis.queueMicrotask(focusPrimaryField);
@@ -100,19 +109,25 @@ export class SkyholdStorageActionDialog extends WindowFrameMixin(HandlebarsAppli
 
   _readResult(form) {
     const mode = String(this.config.mode ?? "confirm");
-    if (mode === "move") return String(form?.elements?.destination?.value ?? "");
-    if (mode === "note") return String(form?.elements?.note?.value ?? "");
-    if (mode === "quantity") {
-      const max = Math.max(1, Math.floor(finitePositive(this.config.max, 1)));
-      return Math.max(1, Math.min(max, Math.floor(finitePositive(form?.elements?.quantity?.value, 1))));
+    if (mode === "move") {
+      const destination = String(form?.elements?.destination?.value ?? "");
+      if (!this.config.allowQuantity) return destination;
+      return { destination, quantity: this._readQuantity(form) };
     }
+    if (mode === "note") return String(form?.elements?.note?.value ?? "");
+    if (mode === "quantity") return this._readQuantity(form);
     return true;
+  }
+
+  _readQuantity(form) {
+    const max = Math.max(1, Math.floor(finitePositive(this.config.max, 1)));
+    return Math.max(1, Math.min(max, Math.floor(finitePositive(form?.elements?.quantity?.value, 1))));
   }
 
   _onSubmit(event) {
     event.preventDefault();
     event.stopPropagation();
-    this._finish(this._readResult(event.currentTarget));
+    if (event.currentTarget?.reportValidity?.() !== false) this._finish(this._readResult(event.currentTarget));
   }
 
   async _finish(value) {
@@ -120,8 +135,9 @@ export class SkyholdStorageActionDialog extends WindowFrameMixin(HandlebarsAppli
     this._settled = true;
     const resolve = this._resultResolver;
     this._resultResolver = null;
-    await this.close();
-    resolve?.(value);
+    try { await this.close(); }
+    catch (error) { console.error("FBL Skyhold | Failed to close storage dialog", error); }
+    finally { resolve?.(value); }
   }
 
   async _onClose(options) {
@@ -140,7 +156,7 @@ SkyholdStorageActionDialog.DEFAULT_OPTIONS = {
   classes: ["fbl-skyhold", "fbls-storage-action-dialog"],
   tag: "section",
   window: { title: "Хранилище", icon: "fa-solid fa-box-archive", resizable: false },
-  position: { width: 440, height: 280 }
+  position: { width: 440, height: 330 }
 };
 
 SkyholdStorageActionDialog.PARTS = {

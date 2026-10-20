@@ -1,0 +1,91 @@
+/* Ship controls must keep the module palette in both light and dark Foundry themes. */
+.application.fbl-skyhold-ship,
+.window-app.fbl-skyhold-ship {
+  color-scheme: dark;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
+  --input-background-color: var(--fbls-surface-1);
+  --input-text-color: var(--fbls-text);
+  --input-placeholder-color: var(--fbls-placeholder);
+}
+
+.application.fbl-skyhold-ship input:not([type="checkbox"]),
+.application.fbl-skyhold-ship select,
+.application.fbl-skyhold-ship select option,
+.application.fbl-skyhold-ship optgroup {
+  background: var(--fbls-surface-1);
+  color: var(--fbls-text);
+  -webkit-text-fill-color: var(--fbls-text);
+  border-color: var(--fbls-border-strong);
+}
+
+.application.fbl-skyhold-ship button:not([data-ship-window-tab]) {
+  background: var(--fbls-surface-2);
+  color: var(--fbls-text);
+  border-color: var(--fbls-border-strong);
+  text-shadow: none;
+}
+
+.application.fbl-skyhold-ship button.danger {
+  color: var(--fbls-danger);
+  border-color: var(--fbls-danger-border);
+}
+
+/* Foundry draws checkbox glyphs on pseudo-elements; keep the ship selector legible in every theme. */
+.application.fbl-skyhold-ship input[type="checkbox"] {
+  appearance: none;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  max-width: 24px;
+  max-height: 24px;
+  margin: 0;
+  padding: 0;
+  border: 2px solid var(--fbls-muted);
+  border-radius: var(--fbls-radius-sm);
+  background: var(--fbls-surface-0);
+  box-shadow: none;
+}
+.application.fbl-skyhold-ship input[type="checkbox"]::before,
+.application.fbl-skyhold-ship input[type="checkbox"]::after { content: none; display: none; }
+.application.fbl-skyhold-ship input[type="checkbox"]:checked { background: var(--fbls-accent); border-color: var(--fbls-accent); }
+.application.fbl-skyhold-ship input[type="checkbox"]:checked::after {
+  content: "";
+  display: block;
+  position: static;
+  width: 7px;
+  height: 12px;
+  border: solid var(--fbls-on-accent);
+  border-width: 0 3px 3px 0;
+  border-radius: 0;
+  transform: translateY(-2px) rotate(45deg);
+}
+.application.fbl-skyhold-ship input[type="checkbox"]:focus-visible { outline: 2px solid var(--fbls-accent); outline-offset: 3px; }
+.application.fbl-skyhold-ship button[data-ship-planned]:not(:disabled) {
+  background: var(--fbls-accent);
+  color: var(--fbls-on-accent);
+  border-color: var(--fbls-accent);
+  font-weight: 700;
+}
+
+.application.fbl-skyhold-ship button:disabled {
+  color: var(--fbls-muted);
+  opacity: 0.7;
+}
+
+.fbl-skyhold-ship input::placeholder {
+  color: var(--fbls-placeholder);
+  -webkit-text-fill-color: var(--fbls-placeholder);
+  opacity: 1;
+}
+
+.fbl-skyhold-ship input:disabled,
+.fbl-skyhold-ship select:disabled {
+  color: var(--fbls-muted);
+  -webkit-text-fill-color: var(--fbls-muted);
+  opacity: 1;
+}
+

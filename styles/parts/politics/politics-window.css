@@ -1,0 +1,116 @@
+/* Standalone Politics and Control window. */
+.fbl-skyhold-politics .window-content { padding: 0; background: var(--fbls-surface-0); }
+.fbl-skyhold-politics .window-header .fbls-politics-view-toggle { display: inline-flex; align-items: center; flex: 0 0 auto; gap: var(--fbls-gap-sm); width: auto; min-height: var(--fbls-control-height); padding: 0.15rem 0.55rem; border: 1px solid var(--fbls-border); border-radius: var(--fbls-radius-sm); background: var(--fbls-surface-1); color: var(--fbls-text); font-size: var(--fbls-type-compact-md); white-space: nowrap; }
+.fbl-skyhold-politics .window-header .fbls-politics-view-toggle[aria-pressed="true"] { border-color: var(--fbls-accent-border); background: var(--fbls-accent-soft); color: var(--fbls-accent); }
+.fbl-skyhold-politics .window-header .fbls-politics-view-toggle:focus-visible { outline: 2px solid var(--fbls-accent); outline-offset: 2px; }
+.fbl-skyhold-politics .fbls-politics-shell { container: fbls-politics / inline-size; display: flex; flex-direction: column; height: 100%; min-height: 0; color: var(--fbls-text); background: var(--fbls-surface-0); font-size: var(--fbls-type-body); line-height: 1.4; }
+.fbl-skyhold-politics .fbls-politics-hero { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 1rem 1.15rem; border-bottom: 1px solid var(--fbls-border); background: var(--fbls-surface-1); }
+.fbl-skyhold-politics .fbls-politics-hero h1 { margin: 0.2rem 0 0; font-size: var(--fbls-type-title); line-height: 1.25; }
+.fbl-skyhold-politics .fbls-politics-status { display: grid; justify-items: end; gap: 0.3rem; color: var(--fbls-muted); white-space: nowrap; }
+.fbl-skyhold-politics .fbls-politics-status .fbls-chip { color: var(--fbls-accent); border-color: var(--fbls-accent-border); background: var(--fbls-accent-soft); }
+.fbl-skyhold-politics .fbls-politics-tabs { display: flex; gap: 0.2rem; padding: 0.35rem 1rem 0; border-bottom: 1px solid var(--fbls-border); background: var(--fbls-surface-1); overflow-x: auto; }
+.fbl-skyhold-politics .fbls-politics-tab { display: inline-flex; align-items: center; justify-content: center; gap: 0.48rem; min-height: 38px; padding: 0.4rem 0.85rem; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--fbls-muted); font: inherit; font-weight: 700; white-space: nowrap; cursor: pointer; }
+.fbl-skyhold-politics .fbls-politics-tab:hover { color: var(--fbls-text-strong); background: var(--fbls-surface-2); }
+.fbl-skyhold-politics .fbls-politics-tab.is-active { color: var(--fbls-accent); border-bottom-color: var(--fbls-accent); }
+.fbl-skyhold-politics .fbls-politics-tab:focus-visible { outline: 2px solid var(--fbls-accent); outline-offset: -2px; }
+.fbl-skyhold-politics .fbls-politics-content { flex: 1; min-height: 0; overflow: auto; padding: 0.9rem 1rem 1.1rem; color: var(--fbls-text); background: var(--fbls-surface-0); }
+.fbl-skyhold-politics .fbls-politics-panel { display: grid; gap: 0.8rem; }
+.fbl-skyhold-politics .fbls-politics-panel > .fbls-card-header { display: flex; justify-content: space-between; align-items: center; gap: 0.7rem; }
+.fbl-skyhold-politics h2 { margin: 0.12rem 0 0; font-size: var(--fbls-type-title); }
+.fbl-skyhold-politics h3 { margin: 0 0 0.65rem; font-size: 1rem; }
+.fbl-skyhold-politics h4 { margin: 0; font-size: var(--fbls-type-body); }
+.fbl-skyhold-politics p { margin: 0; line-height: 1.45; }
+.fbl-skyhold-politics .fbls-politics-card { min-width: 0; padding: var(--fbls-padding-regular); border: 1px solid var(--fbls-border); border-radius: var(--fbls-radius-sm); background: var(--fbls-surface-1); }
+.fbl-skyhold-politics .fbls-politics-card p { color: var(--fbls-muted); }
+.fbl-skyhold-politics .fbls-politics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; }
+.fbl-skyhold-politics .fbls-politics-grid .fbls-politics-card { display: flex; flex-direction: column; gap: 0.3rem; min-height: 150px; }
+.fbl-skyhold-politics .fbls-politics-grid .fbls-politics-card h3 { margin-bottom: 0.3rem; }
+.fbl-skyhold-politics .fbls-politics-form { display: grid; gap: 0.65rem; margin-top: 0.7rem; }
+.fbl-skyhold-politics .fbls-politics-form textarea { resize: vertical; }
+.fbl-skyhold-politics .fbls-politics-form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(6rem, 1fr)); gap: 0.5rem; }
+.fbl-skyhold-politics .fbls-politics-choice { display: flex; flex-wrap: wrap; gap: 0.4rem 0.8rem; min-width: 0; margin: 0; padding: 0.5rem; border: 1px solid var(--fbls-border); border-radius: var(--fbls-radius-sm); }
+.fbl-skyhold-politics .fbls-politics-choice legend { padding: 0 0.25rem; }
+.fbl-skyhold-politics .fbls-politics-form button[data-politics-save] { min-height: var(--fbls-control-height); width: fit-content; padding: 0.35rem 0.75rem; }
+.fbl-skyhold-politics .fbls-politics-history { display: grid; gap: 0.55rem; margin: 0; padding: 0; list-style: none; }
+.fbl-skyhold-politics .fbls-politics-history li { display: grid; gap: 0.3rem; }
+.fbl-skyhold-politics .fbls-politics-muted-chip { width: fit-content; margin-top: auto; color: var(--fbls-muted); background: var(--fbls-surface-2); font-size: var(--fbls-type-compact-sm); }
+.fbl-skyhold-politics .fbls-politics-intro { color: var(--fbls-muted); }
+.fbl-skyhold-politics .fbls-politics-course-layout { display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(15rem, 1fr); gap: 0.8rem; align-items: start; }
+.fbl-skyhold-politics .fbls-politics-course-main, .fbl-skyhold-politics .fbls-politics-course-rail { display: grid; gap: 0.8rem; min-width: 0; }
+.fbl-skyhold-politics .fbls-politics-directives { display: grid; gap: 0.42rem; }
+.fbl-skyhold-politics .fbls-politics-directive { display: grid; grid-template-columns: 9rem minmax(0, 0.8fr) minmax(13rem, 1.2fr); align-items: center; gap: 0.7rem; min-height: 48px; padding: 0.55rem 0.65rem; border: 1px solid var(--fbls-border); border-radius: var(--fbls-radius-sm); background: var(--fbls-surface-2); }
+.fbl-skyhold-politics .fbls-politics-directive .fbls-politics-form { grid-template-columns: minmax(0, 1fr) auto; align-items: end; margin-top: 0; }
+.fbl-skyhold-politics .fbls-politics-directive .fbls-politics-form .fbls-field { min-width: 0; }
+.fbl-skyhold-politics .fbls-politics-directive-name { display: inline-flex; align-items: center; gap: 0.52rem; }
+.fbl-skyhold-politics .fbls-politics-directive-name i { width: 1.25rem; color: var(--fbls-accent); text-align: center; }
+.fbl-skyhold-politics .fbls-politics-directive small { color: var(--fbls-muted); }
+.fbl-skyhold-politics .fbls-politics-decrees { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.55rem; }
+.fbl-skyhold-politics .fbls-politics-decrees article { display: grid; gap: 0.3rem; padding: 0.7rem; border: 1px solid var(--fbls-border); border-radius: var(--fbls-radius-sm); background: var(--fbls-surface-2); }
+.fbl-skyhold-politics .fbls-politics-decrees h4 { display: flex; align-items: center; gap: 0.5rem; }
+.fbl-skyhold-politics .fbls-politics-decrees h4 i { color: var(--fbls-accent); }
+.fbl-skyhold-politics .fbls-politics-decrees strong { color: var(--fbls-text-strong); font-size: var(--fbls-type-compact-md); }
+.fbl-skyhold-politics .fbls-politics-decrees small { color: var(--fbls-accent); }
+.fbl-skyhold-politics .fbls-politics-history-empty { padding: 3rem 1rem; }
+.fbl-skyhold-politics .fbls-politics-history-empty > i { color: var(--fbls-accent); font-size: 2rem; }
+.fbl-skyhold-politics .fbls-politics-history-empty h3 { margin: 0; }
+.fbl-skyhold-politics .fbls-politics-state { font-size: var(--fbls-type-compact-md); font-weight: 700; }
+.fbl-skyhold-politics .fbls-politics-state.is-covered { color: var(--fbls-success); background: var(--fbls-success-soft); }
+.fbl-skyhold-politics .fbls-politics-state.is-deficit { color: var(--fbls-danger); background: var(--fbls-danger-soft); }
+.fbl-skyhold-politics .fbls-politics-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.6rem; }
+.fbl-skyhold-politics .fbls-politics-metrics article { display: grid; gap: 0.3rem; padding: 0.75rem; border: 1px solid var(--fbls-border); border-radius: var(--fbls-radius-md); background: var(--fbls-surface-1); }
+.fbl-skyhold-politics .fbls-politics-metrics small { color: var(--fbls-muted); }
+.fbl-skyhold-politics .fbls-politics-metrics strong { color: var(--fbls-text-strong); font-size: 1.45rem; }
+.fbl-skyhold-politics .fbls-politics-metrics article > span { color: var(--fbls-muted); font-size: var(--fbls-type-compact-sm); }
+.fbl-skyhold-politics .fbls-politics-facts { display: flex; flex-wrap: wrap; gap: 0.5rem 1.1rem; margin-bottom: 0.6rem; }
+.fbl-skyhold-politics .fbls-politics-facts span { color: var(--fbls-muted); }
+.fbl-skyhold-politics .fbls-politics-facts b { color: var(--fbls-text-strong); }
+.fbl-skyhold-politics .fbls-politics-sources { display: grid; gap: 0.32rem; }
+.fbl-skyhold-politics .fbls-politics-source { display: grid; grid-template-columns: minmax(8rem, 1fr) repeat(3, auto); gap: 0.7rem; padding: 0.5rem 0.6rem; border-radius: var(--fbls-radius-sm); background: var(--fbls-surface-2); }
+.fbl-skyhold-politics .fbls-politics-source span { color: var(--fbls-muted); }
+.fbl-skyhold-politics .fbls-politics-empty { padding: 2rem; }
+.fbl-skyhold-politics .fbls-control-office { display: grid; grid-template-columns: minmax(9rem, 0.8fr) minmax(12rem, 1.3fr) minmax(13rem, 1fr); gap: var(--fbls-gap-md); align-items: start; padding: var(--fbls-padding-regular); border: 1px solid var(--fbls-border); border-radius: var(--fbls-radius-sm); background: var(--fbls-surface-2); }
+.fbl-skyhold-politics .fbls-control-jobs, .fbl-skyhold-politics .fbls-control-buildings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--fbls-gap-md); }
+.fbl-skyhold-politics .fbls-control-job, .fbl-skyhold-politics .fbls-control-building { min-width: 0; padding: var(--fbls-padding-regular); border: 1px solid var(--fbls-border); border-radius: var(--fbls-radius-sm); background: var(--fbls-surface-2); overflow-wrap: anywhere; }
+.fbl-skyhold-politics .fbls-control-job .fbls-card-header, .fbl-skyhold-politics .fbls-control-building .fbls-card-header { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--fbls-gap-sm); }
+.fbl-skyhold-politics .fbls-control-assignment-form { display: flex; flex-wrap: wrap; align-items: end; gap: var(--fbls-gap-sm); }
+.fbl-skyhold-politics .fbls-control-assignment-form .fbls-field { flex: 1 1 10rem; min-width: 0; }
+.fbl-skyhold-politics .fbls-control-roster { display: grid; gap: var(--fbls-gap-sm); margin: 0; padding: 0; list-style: none; }
+.fbl-skyhold-politics .fbls-control-roster li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--fbls-gap-sm); }
+.fbl-skyhold-politics .fbls-control-roster form { margin: 0; }
+.fbl-skyhold-politics .fbls-control-instance { padding-top: var(--fbls-gap-sm); border-top: 1px solid var(--fbls-border); }
+.fbl-skyhold-politics .fbls-control-office small, .fbl-skyhold-politics .fbls-control-job small, .fbl-skyhold-politics .fbls-control-building small { color: var(--fbls-muted); }
+.fbl-skyhold-politics .fbls-control-building .is-present { color: var(--fbls-success); background: var(--fbls-success-soft); }
+.fbl-skyhold-politics .fbls-control-building .is-missing { color: var(--fbls-muted); background: var(--fbls-surface-1); }
+.fbl-skyhold-politics .fbls-politics-term { cursor: help; text-decoration: underline dotted var(--fbls-muted); text-underline-offset: 0.2em; }
+.fbl-skyhold-politics .fbls-politics-term:focus-visible { outline: 2px solid var(--fbls-accent); outline-offset: 3px; }
+@container fbls-politics (max-width: 780px) {
+  .fbl-skyhold-politics .fbls-control-office, .fbl-skyhold-politics .fbls-control-jobs, .fbl-skyhold-politics .fbls-control-buildings { grid-template-columns: 1fr; }
+  .fbl-skyhold-politics .fbls-politics-course-layout { grid-template-columns: 1fr; }
+  .fbl-skyhold-politics .fbls-politics-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fbl-skyhold-politics .fbls-politics-directive { grid-template-columns: 1fr; gap: 0.3rem; }
+  .fbl-skyhold-politics .fbls-politics-grid, .fbl-skyhold-politics .fbls-politics-decrees { grid-template-columns: 1fr; }
+  .fbl-skyhold-politics .fbls-politics-source { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* GM catalog editor opened from the Politics card on the GM tab. */
+.fbl-skyhold-politics-balance .fbls-politics-balance-shell { container: fbls-politics-balance / inline-size; display: flex; flex-direction: column; min-height: 0; height: 100%; color: var(--fbls-text); background: var(--fbls-surface-0); color-scheme: dark; }
+.fbl-skyhold-politics-balance .fbls-politics-balance-head { padding: 0.9rem 1rem; border-bottom: 1px solid var(--fbls-border); background: var(--fbls-surface-1); }
+.fbl-skyhold-politics-balance .fbls-politics-balance-head h1 { margin: 0.12rem 0 0.25rem; color: var(--fbls-text-strong); font-size: var(--fbls-type-title); }
+.fbl-skyhold-politics-balance .fbls-politics-balance-head p, .fbl-skyhold-politics-balance .fbls-politics-balance-rail p, .fbl-skyhold-politics-balance .fbls-politics-balance-editor p { margin: 0; color: var(--fbls-muted); }
+.fbl-skyhold-politics-balance .fbls-politics-balance-content { flex: 1; min-height: 0; overflow: auto; padding: 0.85rem; }
+.fbl-skyhold-politics-balance .fbls-politics-card { padding: var(--fbls-padding-regular); border: 1px solid var(--fbls-border); border-radius: var(--fbls-radius-sm); background: var(--fbls-surface-1); }
+.fbl-skyhold-politics-balance .fbls-politics-balance-core { margin-bottom: 0.8rem; }
+.fbl-skyhold-politics-balance .fbls-politics-balance-core summary { cursor: pointer; color: var(--fbls-text-strong); font-weight: 700; }
+.fbl-skyhold-politics-balance .fbls-politics-balance-layout { display: grid; grid-template-columns: minmax(16rem, 0.8fr) minmax(0, 2fr); gap: 0.8rem; align-items: start; }
+.fbl-skyhold-politics-balance .fbls-politics-balance-rail, .fbl-skyhold-politics-balance .fbls-politics-balance-editor, .fbl-skyhold-politics-balance .fbls-politics-balance-form { display: grid; gap: 0.7rem; min-width: 0; }
+.fbl-skyhold-politics-balance .fbls-politics-balance-form { padding-top: 0.6rem; border-top: 1px solid var(--fbls-border); }
+.fbl-skyhold-politics-balance .fbls-politics-balance-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 0.6rem; }
+.fbl-skyhold-politics-balance .fbls-politics-balance-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; }
+.fbl-skyhold-politics-balance .fbls-politics-balance-form textarea { resize: vertical; }
+.fbl-skyhold-politics-balance .fbls-politics-balance-form button { min-height: var(--fbls-control-height); width: fit-content; }
+.fbl-skyhold-politics-balance .fbls-politics-balance-form h2, .fbl-skyhold-politics-balance .fbls-politics-balance-form h3, .fbl-skyhold-politics-balance .fbls-politics-balance-editor h2 { margin: 0; color: var(--fbls-text-strong); }
+.fbl-skyhold-politics-balance .fbls-politics-balance-editor .fbls-card-header { display: flex; justify-content: space-between; align-items: start; gap: 0.5rem; }
+.fbl-skyhold-politics-balance .fbls-politics-choice { display: flex; flex-wrap: wrap; min-width: 0; gap: 0.45rem 0.8rem; margin: 0; padding: 0.55rem; border: 1px solid var(--fbls-border); border-radius: var(--fbls-radius-sm); }
+@container fbls-politics-balance (max-width: 780px) {
+  .fbl-skyhold-politics-balance .fbls-politics-balance-layout, .fbl-skyhold-politics-balance .fbls-politics-balance-meta { grid-template-columns: 1fr; }
+}

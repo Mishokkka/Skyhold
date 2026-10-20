@@ -1,0 +1,33 @@
+/* GM comparison chrome. Accepted content uses the production editor owners. */
+.fbl-skyhold-ui-review .fbls-review-editor-options {
+  align-items: end;
+  flex-wrap: wrap;
+  margin-bottom: var(--fbls-gap-sm);
+}
+.fbl-skyhold-ui-review .fbls-review-editor-options .fbls-field { flex: 1 1 10rem; }
+.fbl-skyhold-ui-review .fbls-review-editor-navigation { margin-bottom: var(--fbls-gap-sm); }
+.fbl-skyhold-ui-review [data-review-editor-card][hidden] { display: none; }
+.fbl-skyhold-ui-review .fbls-review-editor-comparison { display: grid; gap: var(--fbls-gap-md); }
+.fbl-skyhold-ui-review .fbls-review-editor-side { min-width: 0; }
+.fbl-skyhold-ui-review .fbls-review-editor-side > h4 { margin: 0 0 var(--fbls-gap-xs); }
+.fbl-skyhold-ui-review [data-review-editor-side="after"] > h4 { color: var(--fbls-accent); }
+.fbl-skyhold-ui-review .fbls-review-editor-viewport {
+  max-height: 28rem;
+  overflow: auto;
+  scrollbar-gutter: stable;
+  border: 1px solid var(--fbls-border);
+  border-radius: var(--fbls-radius-sm);
+  background: var(--fbls-surface-0);
+}
+.fbl-skyhold-ui-review .fbls-review-editor-frame {
+  width: 940px;
+  min-width: 940px;
+  min-height: 0;
+  padding: 0;
+  box-sizing: border-box;
+  resize: none;
+}
+.fbl-skyhold-ui-review .fbls-review-editor-frame > .fbls-building-editor-shell { height: auto; max-height: none; overflow: visible; }
+.fbl-skyhold-ui-review .is-narrow .fbls-review-editor-frame { width: 620px; min-width: 620px; }
+.fbl-skyhold-ui-review [data-review-editor-comparison="before"] [data-review-editor-side="after"],
+.fbl-skyhold-ui-review [data-review-editor-comparison="after"] [data-review-editor-side="before"] { display: none; }

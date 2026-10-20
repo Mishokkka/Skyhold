@@ -1,7 +1,7 @@
 {
   "id": "fbl-skyhold",
   "title": "FBL Skyhold Manager",
-  "description": "A settlement, outpost, organization and flying-island manager for Forbidden Lands worlds in Foundry VTT v13 and v14.",
+  "description": "A holdings, settlement, ship and flying-island manager for Forbidden Lands worlds in Foundry VTT v13 and v14.",
   "version": "2.0.0",
   "authors": [
     {

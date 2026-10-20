@@ -18,8 +18,7 @@ export function moveStorageResource({
     "resourceUnit",
     "storageFind",
     "storageUnitLoad",
-    "storageAvailableQuantity",
-    "storageAdd",
+    "storageTake",
     "storageAddWithOverflow",
     "storageRoomLabel",
     "appendStorageLog",
@@ -30,7 +29,7 @@ export function moveStorageResource({
     if (typeof deps[dependency] !== "function") throw new TypeError(`storage move engine requires dependencies.${dependency}`);
   }
 
-  const amount = Math.max(0, deps.safeNumber(qty, 0));
+  const amount = Math.max(0, Math.floor(deps.safeNumber(qty, 0)));
   if (!amount) return { ok: false, message: "Укажи количество." };
   const fromRoom = deps.normalizeStorageRoomId(fromRoomId);
   const toRoom = deps.normalizeStorageRoomId(toRoomId);
@@ -42,7 +41,10 @@ export function moveStorageResource({
 
   const label = id === "custom" ? (String(name).trim() || "Ресурс") : deps.resourceLabel(id);
   const fromRow = deps.storageFind(holding, { resourceId: id, name: label, roomId: fromRoom });
-  const have = Math.max(0, deps.safeNumber(deps.storageAvailableQuantity(holding, fromRow), 0));
+  const have = Math.max(0, Math.floor(deps.safeNumber(
+    typeof deps.storageAvailableQuantity === "function" ? deps.storageAvailableQuantity(holding, fromRow) : fromRow?.qty,
+    0
+  )));
   if (have + 0.0001 < amount) {
     return {
       ok: false,
@@ -51,12 +53,19 @@ export function moveStorageResource({
   }
 
   const unit = fromRow?.unit || deps.resourceUnit(id);
-  const cargoPoints = deps.storageUnitLoad(fromRow ?? {});
-  const lots = typeof deps.takeResourceLots === "function" ? deps.takeResourceLots(holding, fromRow, amount) : [];
-  if (typeof deps.takeResourceLots !== "function") deps.storageAdd(holding, { resourceId: id, name: label, roomId: fromRoom, unit, cargoPoints }, -amount);
+  const weight = deps.storageUnitLoad(fromRow ?? {});
+  const receipt = deps.storageTake(holding, {
+    resourceId: id,
+    name: label,
+    roomId: fromRoom,
+    storageRowId: fromRow?.id,
+    unit,
+    weight
+  }, amount);
+  if (receipt.takenQty !== amount) throw new RangeError("storage move could not take the planned batch quantity");
   const placements = deps.storageAddWithOverflow(
     holding,
-    { resourceId: id, name: label, roomId: toRoom, unit, cargoPoints, lots },
+    { resourceId: id, name: label, roomId: toRoom, unit, weight, batches: receipt.batches },
     amount
   );
   const entries = [{

@@ -1,5 +1,10 @@
 import { CULTURE_NAMES, CULTURE_PROFILES } from "./name-pools.js";
-import { TRAIT_BY_NAME, TRAIT_POOLS } from "./trait-definitions.js";
+import {
+  TRAIT_BY_NAME,
+  TRAIT_POOLS,
+  WONDERWORKER_TRAIT_CHANCE_PERCENT,
+  WONDERWORKER_TRAIT_NAME
+} from "./trait-definitions.js";
 import { makeId } from "../utils/id.js";
 import {
   ageGroupFromAge,
@@ -101,11 +106,9 @@ function generateResident({ culture, arrival, ageMode, traitMode }) {
   const raceData = rollRace(profile.raceWeights);
   const age = rollAge(ageMode, raceData.race, arrival);
   const ageGroup = ageGroupFromAge(age, raceData.label, raceData.subrace);
-  const salary = defaultSalary(arrival, ageGroup);
-  const wageClassId = salary > 0 ? defaultWageClassId(arrival) : "";
   const attributes = rollAttributes(ageGroup, arrival);
   const background = pick(BACKGROUNDS[arrival] ?? BACKGROUNDS.settlers);
-  const traits = ageGroup === "Ре" ? [] : rollTraits(traitMode);
+  const traits = rollTraits(traitMode, { ordinaryTraits: ageGroup !== "Ре" });
   const traitNames = traits.map((trait) => trait.name);
   const belief = normalizeBelief(rollBelief(profile, raceData.race));
   const moraleFromTraits = traits.reduce((sum, trait) => sum + Number(trait.morale || 0), 0);
@@ -115,7 +118,6 @@ function generateResident({ culture, arrival, ageMode, traitMode }) {
     id,
     name: `${firstName} ${surname}`,
     role: arrival === "crew" ? "Свободный член команды" : "Свободен",
-    skill: "",
     sex,
     age,
     ageGroup,
@@ -124,22 +126,8 @@ function generateResident({ culture, arrival, ageMode, traitMode }) {
     background,
     race: raceData.label,
     subrace: raceData.subrace,
-    salary,
+    salary: defaultSalary(arrival, ageGroup),
     salaryModifier: 0,
-    compensationType: salary > 0 ? "wage-with-board" : "dependent",
-    wageClassId,
-    employmentMode: "permanent",
-    baseWageDaily: salary,
-    cashWageDaily: salary,
-    boardFoodDaily: 1,
-    housingProvided: false,
-    shareRate: 0,
-    volunteerReason: "",
-    volunteerTermStartQd: null,
-    volunteerTermEndQd: null,
-    coercionBasis: "",
-    hungerStreakTendays: 0,
-    compensationNote: salary > 0 ? "Сгенерированный постоянный договор с пищевым пансионом." : "Сгенерированный член хозяйства на общем содержании.",
     moraleBase: -1,
     moraleWork: 0,
     moraleHome: 0,
@@ -243,11 +231,15 @@ function pickWeightedAttribute(weights) {
   return weightedPick(weights);
 }
 
-function rollTraits(mode) {
+function rollTraits(mode, { ordinaryTraits = true } = {}) {
   if (mode === "none") return [];
 
+  const exceptional = chance(WONDERWORKER_TRAIT_CHANCE_PERCENT)
+    ? [TRAIT_BY_NAME[WONDERWORKER_TRAIT_NAME.toLowerCase()]]
+    : [];
+  if (!ordinaryTraits) return exceptional.filter(Boolean);
   const count = weightedPickNumber({ 0: 45, 1: 44, 2: 10, 3: 1 });
-  if (count <= 0) return [];
+  if (count <= 0) return exceptional.filter(Boolean);
 
   let names = [...TRAIT_POOLS.soft, ...TRAIT_POOLS.neutral];
   if (mode === "soft") names = [...TRAIT_POOLS.soft, ...TRAIT_POOLS.soft, ...TRAIT_POOLS.neutral.filter((name) => Number(TRAIT_BY_NAME[name.toLowerCase()]?.morale ?? 0) >= 0)];
@@ -263,7 +255,7 @@ function rollTraits(mode) {
     const def = TRAIT_BY_NAME[name.toLowerCase()];
     if (def) result.push(def);
   }
-  return result;
+  return [...result, ...exceptional.filter((trait) => trait && !used.has(trait.name))];
 }
 
 function rollBelief(profile, race) {
@@ -278,10 +270,6 @@ function defaultSalary(arrival, ageGroup) {
   if (arrival === "crew") return 5;
   if (arrival === "workers") return 5;
   return 0;
-}
-
-function defaultWageClassId(arrival) {
-  return arrival === "specialists" ? "skilled" : "common";
 }
 
 function buildAppearance(raceData, ageGroup) {

@@ -1,30 +1,43 @@
       {{#if building.showEditorCulture}}
-        <fieldset class="fbls-building-editor-card wide-card fbls-culture-building-card fbls-editor-tab-workspace tab-culture">
-          <legend class="fbls-editor-tab-legend">Культура и религия</legend>
-          <header class="fbls-editor-tab-head"><i class="fa-solid fa-place-of-worship"></i><div><span>Идентичность и обряды</span><h2>Культура и религия</h2><p>Религиозная принадлежность и содержательное описание здания.</p></div></header>
-          <section class="fbls-editor-tab-panel"><div class="fbls-editor-panel-head"><span><i class="fa-solid fa-book-open"></i> Культурный профиль</span><small>Вера, культ и практики</small></div><div class="fbls-culture-religion-grid">
-            <label class="fbls-religion-toggle">
-              <span data-fbls-tooltip="Если включено, здание считается религиозным и получает привязку к конкретной вере.">Религиозное?</span>
+        <fieldset class="fbls-building-editor-card wide-card fbls-culture-building-card">
+          <legend>Культура/Религия</legend>
+          <div class="fbls-subhead"><span>Досуг и Довольство</span></div>
+          <p class="fbls-muted-line">Назначение работников само по себе не даёт бонус: учитывается их фактическая работа за последний завершённый десятник. Максимум и снижение за повтор описаны в подсказках полей.</p>
+          <div class="fbls-building-main-line">
+            <label><span data-fbls-tooltip="Название группы одинакового досуга. Здания одного вида сортируются по фактически выработанному Довольству и дают 100%, 75%, 50%, затем по 25%; разные виды считаются отдельно. Пустое поле отключает досуг.">Вид досуга</span>{{#if canEdit}}<input class="fbls-control" type="text" data-field="{{building.basePath}}.service.leisure.kind" value="{{building.rulesView.leisure.kind}}" placeholder="Например: питейный досуг" />{{else}}<strong>{{building.rulesView.leisure.kind}}</strong>{{/if}}</label>
+            <label title="Максимум довольства"><span data-fbls-tooltip="Максимум довольства. Верхний предел Довольства от этого здания за десятник до снижения за повтор. Фактические QD делятся на «QD на единицу», результат ограничивается максимумом, умножается на эффективность обслуживания и округляется вниз. Затем применяется снижение за повтор.">Макс. ДОВ</span>{{#if canEdit}}<input aria-label="Максимум довольства" class="fbls-control" type="number" min="0" step="1" data-type="number" data-field="{{building.basePath}}.service.leisure.capacity" value="{{building.rulesView.leisure.capacity}}" />{{else}}<strong>{{building.rulesView.leisure.capacity}}</strong>{{/if}}</label>
+            <label title="Мин. работников досуга"><span data-fbls-tooltip="Мин. работников досуга. Минимум присутствующих, здоровых и оплаченных работников, которые фактически работали выбранную функцию в последний завершённый десятник и всё ещё назначены на неё. Если работников меньше, здание даёт 0 Довольства.">Мин. работн.</span>{{#if canEdit}}<input aria-label="Мин. работников досуга" class="fbls-control" type="number" min="1" step="1" data-type="number" data-field="{{building.basePath}}.service.leisure.minWorkers" value="{{building.rulesView.leisure.minWorkers}}" />{{else}}<strong>{{building.rulesView.leisure.minWorkers}}</strong>{{/if}}</label>
+            <label title="QD на единицу"><span data-fbls-tooltip="QD на единицу. Сколько фактически отработанных QD выбранной функции нужно для 1 Довольства. Например, при 2 QD за единицу и 20 подтверждённых QD вырабатывается 10 Довольства до обслуживания и повтора, но не выше максимума. Учитывается только последний завершённый десятник; ограничения по числу жителей нет.">QD / ДОВ</span>{{#if canEdit}}<input aria-label="QD на единицу" class="fbls-control" type="number" min="0.01" step="any" data-type="number" data-field="{{building.basePath}}.service.leisure.qdPerCapacity" value="{{building.rulesView.leisure.qdPerCapacity}}" />{{else}}<strong>{{building.rulesView.leisure.qdPerCapacity}}</strong>{{/if}}</label>
+            <label title="Учитываемая работа"><span data-fbls-tooltip="Учитываемая работа. Функция здания, фактические QD которой создают досуг. Учитываются только QD работников этой функции за последний завершённый десятник; QD других функций и технического обслуживания не подставляются автоматически.">Функция</span>{{#if canEdit}}<select aria-label="Учитываемая работа" class="fbls-control" data-field="{{building.basePath}}.service.leisure.functionId">{{#each building.rulesView.leisure.functionIdOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{#each building.rulesView.leisure.functionIdOptions}}{{#if selected}}{{label}}{{/if}}{{/each}}</strong>{{/if}}</label>
+          </div>
+          <div class="fbls-culture-religion-grid">
+            {{#if building.fuel.enabled}}
+              <label class="wide">
+                <span data-fbls-tooltip="Выбранный вариант расходуется раз в десятник. Если его не хватает, активная услуга здания не работает; другой вариант автоматически не подставляется.">Выбранное топливо</span>
+                {{#if canEdit}}<select class="fbls-control" data-field="{{building.fuel.choicePath}}">{{#each building.fuel.options}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{#each building.fuel.options}}{{#if selected}}{{label}}{{/if}}{{/each}}</strong>{{/if}}
+              </label>
+            {{/if}}
+            <label class="fbls-religion-toggle fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Если включено, здание считается религиозным и получает привязку к конкретной вере.">
+              <span>Религиозное?</span>
               {{#if canEdit}}<input type="checkbox" data-type="checkbox" data-field="{{building.cultureReligion.religiousPath}}" {{#if building.cultureReligion.religious}}checked{{/if}} />{{else}}<strong>{{#if building.cultureReligion.religious}}Да{{else}}Нет{{/if}}</strong>{{/if}}
             </label>
             {{#if building.cultureReligion.religious}}
               <label>
                 <span>Религия</span>
-                {{#if canEdit}}<select data-field="{{building.cultureReligion.faithPath}}">{{#each building.cultureReligion.faithOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{building.cultureReligion.faithLabel}}</strong>{{/if}}
+                {{#if canEdit}}<select class="fbls-control" data-field="{{building.cultureReligion.faithPath}}">{{#each building.cultureReligion.faithOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{building.cultureReligion.faithLabel}}</strong>{{/if}}
               </label>
               {{#if building.cultureReligion.showCustomFaith}}
                 <label class="fbls-religion-custom">
                   <span>Свое название</span>
-                  {{#if canEdit}}<input type="text" data-field="{{building.cultureReligion.customFaithPath}}" value="{{building.cultureReligion.customFaith}}" placeholder="Название религии или культа" />{{else}}<strong>{{building.cultureReligion.customFaith}}</strong>{{/if}}
+                  {{#if canEdit}}<input class="fbls-control" type="text" data-field="{{building.cultureReligion.customFaithPath}}" value="{{building.cultureReligion.customFaith}}" placeholder="Название религии или культа" />{{else}}<strong>{{building.cultureReligion.customFaith}}</strong>{{/if}}
                 </label>
               {{/if}}
             {{/if}}
             <label class="wide">
               <span>Описание</span>
-              {{#if canEdit}}<textarea data-field="{{building.cultureReligion.notesPath}}" rows="3" placeholder="Кому посвящено, кто служит, какие обряды и запреты.">{{building.cultureReligion.notes}}</textarea>{{else}}<p class="fbls-preline">{{building.cultureReligion.notes}}</p>{{/if}}
+              {{#if canEdit}}<textarea class="fbls-control" data-field="{{building.cultureReligion.notesPath}}" rows="3" placeholder="Кому посвящено, кто служит, какие обряды и запреты.">{{building.cultureReligion.notes}}</textarea>{{else}}<p class="fbls-preline">{{building.cultureReligion.notes}}</p>{{/if}}
             </label>
           </div>
-          <p class="fbls-muted-line">Механический эффект задается обычными полями здания: довольство, репутация, работники, требования и заметки.</p>
-          </section>
+          <p class="fbls-muted-line">Остальные механические эффекты задаются на вкладках «Основное» и «Работники».</p>
         </fieldset>
       {{/if}}

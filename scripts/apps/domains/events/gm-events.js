@@ -1,8 +1,11 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import { SkyholdData } from "../../../data/store.js";
+import { isResidentInPopulation } from "../../../data/resident-presence.js";
 import { clone, makeId } from "../../../data/utils.js";
 import { escapeHtml, rollD6Pool } from "../../../core/helpers.js";
+import { resourceLabel } from "../../../core/resources.js";
 import { normalizeEventRegionOptions, normalizeRandomEventTables, rollRandomEventTable } from "../../../data/random-events.js";
+import { controlIncidentSeverity } from "../../../engines/settlement/control.js";
 import { createFoundryChatMessage, foundryChatSpeaker, foundryWhisperRecipients } from "../../../integrations/foundry-runtime.js";
 
 function rollD100() {
@@ -86,22 +89,76 @@ function buildReputationEventRoll(app, holding, options = {}) {
   const rolls = rollD6Pool(reputation);
   const successes = rolls.filter((roll) => roll >= 6).length;
   const external = [];
+  let newcomerGranted = false;
   for (let index = 0; index < successes; index += 1) {
     const arrivalRoll = rollD100();
+    const arrivalSuccess = arrivalRoll <= 66;
+    const newcomer = arrivalSuccess && !newcomerGranted;
+    if (newcomer) newcomerGranted = true;
     external.push({
       index: index + 1,
       arrivalRoll,
-      newcomer: arrivalRoll <= 66,
+      newcomer,
+      newcomerCapped: arrivalSuccess && !newcomer,
       event: rollEventForHolding(app, holding, "external", options)
     });
   }
   return { reputation, rolls, successes, external };
 }
 
+function buildControlIncidentRoll(app, holding) {
+  const control = app?._controlSummary?.(holding) ?? {
+    orderRequirement: 0,
+    generalControl: 0,
+    unrestOnlyControl: 0,
+    crimeDeficit: 0,
+    unrestDeficit: 0,
+    rawMorale: app?._calculateMorale?.(holding) ?? 0,
+    disorderMorale: app?._calculateMorale?.(holding) ?? 0,
+    institutionalCeiling: null
+  };
+  const rolls = rollD6Pool(Math.max(0, Number(control.crimeDeficit) || 0));
+  const successes = rolls.filter((roll) => roll >= 6).length;
+  const severity = controlIncidentSeverity(control);
+  const copy = {
+    theft: {
+      title: "Кража или нарушение порядка",
+      text: "Недостаток общего Контроля дал кому-то возможность украсть припасы, нарушить запрет или проверить слабое место охраны.",
+      gmText: "Выберите уместную малую потерю, подозреваемого либо след для расследования. Это не автоматическое списание ресурса."
+    },
+    sabotage: {
+      title: "Саботаж",
+      text: "Недовольство и слабая охрана превратили мелкое нарушение в умышленную порчу, срыв работы или опасную провокацию.",
+      gmText: "Выберите одну функцию, запас или стройку под угрозой и дайте игрокам возможность расследовать происшествие до применения последствий."
+    },
+    riot: {
+      title: "Беспорядки",
+      text: "Накопившееся недовольство вырвалось наружу: толпа, драка, отказ подчиняться или открытый бунт требуют немедленного решения.",
+      gmText: "Определите участников и требования. Контроль подавляет проявление, но не изменяет сырое довольство и не устраняет его причины."
+    }
+  }[severity.id];
+  const incidents = Array.from({ length: successes }, (_, index) => ({
+    tableId: "control",
+    tableTitle: "Контроль поселения",
+    roll: 6,
+    totalWeight: Math.max(1, rolls.length),
+    row: {
+      id: `control-${severity.id}-${index + 1}`,
+      title: copy.title,
+      text: copy.text,
+      gmText: copy.gmText,
+      visibility: "public",
+      effects: []
+    }
+  }));
+  return { ...control, rolls, successes, severity, incidents };
+}
+
 function tendayEventResults(entries = []) {
   return (Array.isArray(entries) ? entries : []).flatMap((entry) => [
     entry?.general,
-    ...(entry?.reputation?.external ?? []).map((item) => item?.event)
+    ...(entry?.reputation?.external ?? []).map((item) => item?.event),
+    ...(entry?.control?.incidents ?? [])
   ]).filter((result) => result?.row);
 }
 
@@ -133,10 +190,11 @@ export function prepareTendayRandomEvents(app, holding, { periods = 1, regionOpt
   for (let index = 0; index < periodCount; index += 1) {
     const general = rollEventForHolding(app, holding, "general", { regionOptions });
     const reputation = buildReputationEventRoll(app, holding, { regionOptions });
+    const control = buildControlIncidentRoll(app, holding);
     if (!general) warnings.push(`Десятник ${index + 1}: в общей таблице нет активных событий.`);
-    const periodResults = [general, ...reputation.external.map((item) => item.event)].filter((result) => result?.row);
+    const periodResults = [general, ...reputation.external.map((item) => item.event), ...control.incidents].filter((result) => result?.row);
     appendEventHistory(holding, periodResults);
-    entries.push({ index: index + 1, general, reputation });
+    entries.push({ index: index + 1, general, reputation, control });
   }
 
   const title = periodCount > 1 ? `События ${periodCount} десятников` : "События десятника";
@@ -152,6 +210,10 @@ export function prepareTendayRandomEvents(app, holding, { periods = 1, regionOpt
         newcomer: external.newcomer,
         arrivalRoll: external.arrivalRoll
       });
+      if (snapshot) events.push(snapshot);
+    }
+    for (const incident of entry.control.incidents) {
+      const snapshot = tendayEventSnapshot(incident, { period: entry.index, kind: "control" });
       if (snapshot) events.push(snapshot);
     }
   }
@@ -171,7 +233,7 @@ export function prepareTendayRandomEvents(app, holding, { periods = 1, regionOpt
     eventId: `tenday:${bundleId}`,
     tableId: "tenday",
     title,
-    result: entries.map((entry) => `#${entry.index}: общее ${entry.general ? `${entry.general.roll}/${entry.general.totalWeight}` : "нет"}; репутация ${entry.reputation.successes}/${entry.reputation.reputation}`).join(" | "),
+    result: entries.map((entry) => `#${entry.index}: общее ${entry.general ? `${entry.general.roll}/${entry.general.totalWeight}` : "нет"}; репутация ${entry.reputation.successes}/${entry.reputation.reputation}; Контроль ${entry.control.successes}/${entry.control.crimeDeficit}`).join(" | "),
     entry: events.map((event) => event.title).filter(Boolean).join("; ") || "Активных событий нет.",
     effects: clone(effects),
     hasEffects,
@@ -193,7 +255,7 @@ function reputationRollHtml(result = {}) {
   const eventBlocks = external.length
     ? external.map((item) => `
       <div class="fbls-chat-reputation-event">
-        <p><strong>Успех ${item.index}.</strong> Новый житель: ${item.newcomer ? "да" : "нет"} (d100: ${item.arrivalRoll}, шанс 66%).</p>
+        <p><strong>Успех ${item.index}.</strong> Новый житель: ${item.newcomer ? "да" : "нет"} (d100: ${item.arrivalRoll}, шанс 66%${item.newcomerCapped ? "; лимит одного новичка за десятник уже использован" : ""}).</p>
         ${eventResultHtml(item.event, { gmDetails: isGmOnlyEvent(item.event) })}
       </div>
     `).join("")
@@ -209,11 +271,29 @@ function reputationRollHtml(result = {}) {
   `;
 }
 
+function controlRollHtml(result = {}) {
+  const rolls = Array.isArray(result?.rolls) ? result.rolls : [];
+  const diceLine = rolls.length ? dicePoolHtml(rolls) : "0к6";
+  const ceiling = result?.institutionalCeiling === null || result?.institutionalCeiling === undefined
+    ? "нет полного институционального охвата"
+    : String(result.institutionalCeiling);
+  return `
+    <section class="fbls-chat-control-roll">
+      <h4>Проверка Контроля</h4>
+      <p><strong>Норматив:</strong> ${Number(result?.orderRequirement) || 0}; <strong>общий Контроль:</strong> ${Number(result?.generalControl) || 0}; <strong>только против беспорядков:</strong> ${Number(result?.unrestOnlyControl) || 0}.</p>
+      <p><strong>Недостаток охраны:</strong> ${Number(result?.crimeDeficit) || 0}к6; <strong>кости:</strong> ${diceLine}; <strong>инциденты:</strong> ${Number(result?.successes) || 0}.</p>
+      <p><strong>Сырое довольство:</strong> ${Number(result?.rawMorale) || 0}; <strong>для беспорядков:</strong> ${Number(result?.disorderMorale) || 0}; <strong>потолок:</strong> ${escapeHtml(ceiling)}.</p>
+    </section>
+  `;
+}
+
 export const GmEventActions = {
   click: {
     "add-defense-squad": "_onAddDefenseSquad",
     "delete-defense-squad": "_onDeleteDefenseSquad",
     "fill-defense-squad-best": "_onFillDefenseSquadBest",
+    "assign-defense-armament": "_onAssignDefenseArmament",
+    "unassign-defense-armament": "_onUnassignDefenseArmament",
     "roll-event-table": "_onRollEventTable",
     "reset-data": "_onResetData"
   }
@@ -229,7 +309,7 @@ async _onAddDefenseSquad(event) {
     if (!holding.gm.defense) holding.gm.defense = {};
     if (!Array.isArray(holding.gm.defense.squads)) holding.gm.defense.squads = [];
     const number = holding.gm.defense.squads.length + 1;
-    holding.gm.defense.squads.push({ id: makeId("squad"), name: `${number}-й отряд`, type: "line", sergeantId: "", equipped: false, memberIds: ["", "", "", ""], notes: "" });
+    holding.gm.defense.squads.push({ id: makeId("squad"), name: `${number}-й отряд`, type: "line", sergeantId: "", equipped: false, armamentResourceId: "", armamentSourceRoomId: "outdoors", memberIds: ["", "", "", ""], notes: "" });
   }, { reason: "gm:add-defense-squad" });
   if (!added) return;
   this.activeTab = "defense";
@@ -242,8 +322,26 @@ async _onDeleteDefenseSquad(event) {
   if (!this._canManageDefense?.()) return;
   const id = String(event.currentTarget?.dataset?.squadId ?? "");
   if (!id) return;
+  const squad = SkyholdData.view().holdings.find((row) => row.id === this.activeHoldingId)?.gm?.defense?.squads?.find((row) => String(row.id) === id);
+  if (!squad || !await this._confirmAction("Расформировать отряд", `Расформировать «${escapeHtml(squad.name || "отряд")}»? Назначения будут сняты, комплект вооружения вернётся на склад.`)) return;
   const deleted = await this._updateActiveHolding((holding) => {
     if (!holding?.gm?.defense?.squads) return SkyholdData.skipTransaction(false);
+    const target = holding.gm.defense.squads.find((row) => String(row.id) === id);
+    if (target?.armamentResourceId) {
+      const placements = this._storageAddWithOverflow?.(holding, {
+        resourceId: target.armamentResourceId,
+        roomId: target.armamentSourceRoomId || "outdoors"
+      }, 1) ?? [];
+      this._appendStorageLog?.(holding, placements.map((row) => ({
+        kind: "military-armament-return",
+        resourceId: target.armamentResourceId,
+        name: resourceLabel(target.armamentResourceId),
+        qty: row.qty,
+        roomId: row.roomId,
+        source: target.name || "Расформированный отряд",
+        note: "Комплект возвращён при расформировании отряда"
+      })));
+    }
     const before = holding.gm.defense.squads.length;
     holding.gm.defense.squads = holding.gm.defense.squads.filter((row) => String(row.id) !== id);
     this._applyDefenseSalaries?.(holding);
@@ -251,6 +349,92 @@ async _onDeleteDefenseSquad(event) {
   }, { reason: "gm:delete-defense-squad" });
   if (!deleted) return;
   this.activeTab = "defense";
+  this.requestRender();
+},
+
+async _onAssignDefenseArmament(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  if (!this._canManageDefense?.()) return;
+  const squadId = String(event.currentTarget?.dataset?.squadId ?? "");
+  const resourceId = String(event.currentTarget?.closest?.(".fbls-defense-squad")?.querySelector?.("[data-defense-armament-choice]")?.value ?? "");
+  if (!squadId || !["armament-simple", "armament-complex", "armament-elite"].includes(resourceId)) return;
+  const result = await this._updateActiveHolding((holding) => {
+    const squad = holding?.gm?.defense?.squads?.find((row) => String(row?.id ?? "") === squadId);
+    if (!squad) return SkyholdData.skipTransaction({ ok: false, message: "Отряд не найден." });
+    if (String(squad.armamentResourceId ?? "") === resourceId) return SkyholdData.skipTransaction({ ok: true, unchanged: true });
+    const payment = this._storageCanPay?.(holding, [{ resourceId, qty: 1 }]);
+    if (!payment?.ok) return SkyholdData.skipTransaction({ ok: false, message: "На складе нет выбранной единицы Вооружения." });
+    this._storagePay(holding, payment.costs);
+    this._appendStorageLog?.(holding, payment.costs.map((row) => ({
+      kind: "military-armament-assign",
+      resourceId,
+      name: resourceLabel(resourceId),
+      qty: -Math.max(0, this._safeNumber(row?.qty, 0)),
+      roomId: row?.roomId ?? "",
+      source: squad.name || "Отряд",
+      note: "Комплект закреплён за отрядом"
+    })));
+    if (squad.armamentResourceId) {
+      const returnedResourceId = squad.armamentResourceId;
+      const placements = this._storageAddWithOverflow?.(holding, {
+        resourceId: squad.armamentResourceId,
+        roomId: squad.armamentSourceRoomId || "outdoors"
+      }, 1) ?? [];
+      this._appendStorageLog?.(holding, placements.map((row) => ({
+        kind: "military-armament-return",
+        resourceId: returnedResourceId,
+        name: resourceLabel(returnedResourceId),
+        qty: row.qty,
+        roomId: row.roomId,
+        source: squad.name || "Отряд",
+        note: "Прежний комплект возвращён при замене"
+      })));
+    }
+    squad.armamentResourceId = resourceId;
+    squad.armamentSourceRoomId = String(payment.costs?.[0]?.roomId ?? "outdoors") || "outdoors";
+    squad.equipped = true;
+    return { ok: true };
+  }, { reason: "gm:assign-defense-armament" });
+  if (!result?.ok) {
+    if (result?.message) ui.notifications.warn(result.message);
+    return;
+  }
+  this.requestRender();
+},
+
+async _onUnassignDefenseArmament(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  if (!this._canManageDefense?.()) return;
+  const squadId = String(event.currentTarget?.dataset?.squadId ?? "");
+  if (!squadId) return;
+  const result = await this._updateActiveHolding((holding) => {
+    const squad = holding?.gm?.defense?.squads?.find((row) => String(row?.id ?? "") === squadId);
+    if (!squad?.armamentResourceId) return SkyholdData.skipTransaction({ ok: false, message: "У отряда нет закрепленного Вооружения." });
+    const returnedResourceId = squad.armamentResourceId;
+    const placements = this._storageAddWithOverflow?.(holding, {
+      resourceId: squad.armamentResourceId,
+      roomId: squad.armamentSourceRoomId || "outdoors"
+    }, 1) ?? [];
+    this._appendStorageLog?.(holding, placements.map((row) => ({
+      kind: "military-armament-return",
+      resourceId: returnedResourceId,
+      name: resourceLabel(returnedResourceId),
+      qty: row.qty,
+      roomId: row.roomId,
+      source: squad.name || "Отряд",
+      note: "Комплект снят с отряда"
+    })));
+    squad.armamentResourceId = "";
+    squad.armamentSourceRoomId = "outdoors";
+    squad.equipped = false;
+    return { ok: true };
+  }, { reason: "gm:unassign-defense-armament" });
+  if (!result?.ok) {
+    if (result?.message) ui.notifications.warn(result.message);
+    return;
+  }
   this.requestRender();
 },
 
@@ -276,7 +460,7 @@ async _onFillDefenseSquadBest(event) {
     }
 
     const candidates = (holding?.people?.list ?? [])
-      .filter((person) => person && !person.dead && !this._isResidentInjured?.(person))
+      .filter((person) => person && isResidentInPopulation(person, holding) && !this._isResidentInjured?.(person))
       .filter((person) => !this._isChildResident?.(person))
       .filter((person) => this._isSuitableForSquadType?.(person, squadType))
       .filter((person) => String(person.id) !== commanderId)
@@ -311,7 +495,6 @@ async _onFillDefenseSquadBest(event) {
       person.workAssignment = "soldier";
       if (!/^\s*(солдат|сержант)\b/i.test(String(person.role ?? ""))) person.role = "Солдат";
     }
-    squad.equipped = true;
     squad.sergeantId = String(selected[0]?.id ?? "");
     squad.memberIds = selected.slice(1, 5).map((person) => String(person.id));
     while (squad.memberIds.length < 4) squad.memberIds.push("");
@@ -334,7 +517,7 @@ async _onRollEventTable(event) {
   if (!game.user?.isGM) return;
 
   const data = SkyholdData.get();
-  const holding = data.holdings.find((item) => item.id === this.activeHoldingId) ?? data.holdings[0];
+  const holding = data.holdings.find((item) => item.id === this.activeHoldingId);
   if (!holding) return;
 
   const kind = String(event.currentTarget?.dataset?.eventTableKind ?? "general");
@@ -434,6 +617,7 @@ async _postPreparedTendayRandomEventsChat(holding, prepared = {}) {
             <h4>Общее событие</h4>
             ${eventResultHtml(entry.general, { gmDetails: isGmOnlyEvent(entry.general) })}
             ${reputationRollHtml(entry.reputation)}
+            ${controlRollHtml(entry.control)}
           </section>
         `).join("")}
       </div>
@@ -467,7 +651,7 @@ async _onRollReputationEvent(event) {
   if (!game.user?.isGM) return;
 
   const data = SkyholdData.get();
-  const holding = data.holdings.find((item) => item.id === this.activeHoldingId) ?? data.holdings[0];
+  const holding = data.holdings.find((item) => item.id === this.activeHoldingId);
   if (!holding) return;
   return this._postReputationEventRoll(holding);
 },
@@ -478,7 +662,7 @@ async _onRollTendayEvents(event) {
   if (!game.user?.isGM) return;
 
   const data = SkyholdData.get();
-  const holding = data.holdings.find((item) => item.id === this.activeHoldingId) ?? data.holdings[0];
+  const holding = data.holdings.find((item) => item.id === this.activeHoldingId);
   if (!holding) return;
   return this._postTenDayRandomEvents(holding);
 },

@@ -1,6 +1,35 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import { inferBuildingSpecialKind } from "../../../core/building-specials.js";
+import {
+  CONSTRUCTION_LEADER_WAGE_DAILY_COPPER,
+  CONSTRUCTION_WORKER_WAGE_DAILY_COPPER
+} from "../../../engines/workers/construction-leadership.js";
+import { WORK_ALLOCATION_MODE_EXPLICIT } from "../../../data/work-allocations.js";
 import { RELIGION_OPTIONS } from "./building-constants.js";
+
+function whole(value, fallback = 0) {
+  const parsed = Number(value);
+  return Math.max(0, Math.floor(Number.isFinite(parsed) ? parsed : fallback));
+}
+
+function signedRound(value = 0) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || !parsed) return 0;
+  return Math.sign(parsed) * Math.round(Math.abs(parsed));
+}
+
+function clampWorkMorale(value = 0) {
+  return Math.max(-3, Math.min(3, signedRound(value)));
+}
+
+function latestWageObligation(holding = {}, personId = "") {
+  return (holding?.finance?.obligations ?? [])
+    .filter((row) => row?.kind === "wage" && String(row?.recipientId ?? "") === String(personId ?? ""))
+    .sort((left, right) => (
+      whole(right?.periodIndex) - whole(left?.periodIndex)
+      || String(right?.createdAt ?? "").localeCompare(String(left?.createdAt ?? ""))
+    ))[0] ?? null;
+}
 
 export const BuildingMetaDomain = {
 _religionOptions(current = "") {
@@ -45,12 +74,6 @@ _gmEfficiencyModifiers(holding) {
   };
 },
 
-_moraleProductionEfficiencyModifier(holding) {
-  const state = this._moraleState(this._moraleSnapshot(holding));
-  const value = this._safeNumber(state?.modifiers?.productionEfficiency, 0);
-  return { value, reason: value ? `${state.label}: производство ${value > 0 ? "+" : ""}${value}` : "" };
-},
-
 _buildingEfficiencyModifier(holding, building) {
   const gm = this._gmEfficiencyModifiers(holding);
   let value = gm.all;
@@ -58,8 +81,6 @@ _buildingEfficiencyModifier(holding, building) {
   if (gm.all) reasons.push(`ГМ все здания ${gm.all > 0 ? "+" : ""}${gm.all}`);
   if (this._buildingFunctions(building).production) {
     if (gm.production) { value += gm.production; reasons.push(`ГМ производство ${gm.production > 0 ? "+" : ""}${gm.production}`); }
-    const morale = this._moraleProductionEfficiencyModifier(holding);
-    if (morale.value) { value += morale.value; reasons.push(morale.reason); }
   }
   return { value, reasons };
 },
@@ -91,12 +112,12 @@ _functionOptions(building, buildingIndex, holdingIndexArg = null, basePathArg = 
   const recordPath = basePathArg || `holdings.${holdingIndex}.buildings.list.${buildingIndex}`;
   const base = `${recordPath}.functions`;
   const defs = [
-    ["production", "Производство", "fa-solid fa-industry", "Открывает блок производственных линий: какие ресурсы здание создает, сколько дает база и сколько добавляет эффективность работников."],
+    ["production", "Произв.", "fa-solid fa-industry", "Открывает блок производственных линий: какие ресурсы здание создает, сколько дает база и сколько добавляет эффективность работников."],
     ["income", "Доход", "fa-solid fa-coins", "Открывает блок доходности. Это деньги за десятник, которые попадут в бухгалтерию."],
     ["defense", "Оборона", "fa-solid fa-shield-halved", "Открывает блок реальной Защищенности. Это не развитие Войны, а кубы против угроз."],
     ["housing", "Жилье", "fa-solid fa-house", "Открывает жилой блок: места проживания, комфорт и заполненность жильцами."],
     ["storage", "Склад", "fa-solid fa-box-archive", "Помечает здание как складское помещение. Построенное складское здание появляется в списке мест хранения и может принимать продукцию."],
-    ["culture", "Культура/Религия", "fa-solid fa-music", "Помечает культурное или религиозное влияние: довольство, вера, репутация, события."]
+    ["culture", "Культ./рел.", "fa-solid fa-music", "Помечает культурное или религиозное влияние: довольство, вера, репутация, события."]
   ];
   return defs.map(([key, label, icon, tooltip]) => ({ key, label, icon, tooltip, checked: Boolean(functions[key]), path: `${base}.${key}` }));
 },
@@ -122,8 +143,6 @@ _periodName(value = "day") {
   const text = String(value ?? "day");
   if (text === "qd") return "QD";
   if (text === "tenday") return "десятник";
-  if (text === "season") return "главный сезон";
-  if (text === "year") return "год";
   return "день";
 },
 
@@ -191,15 +210,147 @@ _devObject(value) {
   };
 },
 
+_workMoraleForPeriod(person, holding = null, options = {}) {
+  if (!person || person?.dead) return { value: 0, conditions: 0, pay: 0, overtime: 0, totalQd: 0, reason: "" };
+  const buildings = holding?.buildings?.list ?? [];
+  const buildingById = new Map(buildings.flatMap((building) => [
+    [String(building?.id ?? ""), building],
+    [String(building?.name ?? ""), building]
+  ]).filter(([key]) => key));
+  const crews = new Map((holding?.constructionCrews ?? []).map((crew) => [String(crew?.id ?? ""), crew]));
+  const suppliedAssignments = Array.isArray(options?.assignments) ? options.assignments : null;
+  let assignments = suppliedAssignments?.map((row) => ({
+    sourceId: String(row?.sourceId ?? ""),
+    functionId: String(row?.functionId ?? ""),
+    normalQd: whole(row?.normalQd),
+    overtimeQd: whole(row?.overtimeQd),
+    volunteer: row?.volunteer === true
+  })) ?? [];
+
+  if (!suppliedAssignments && String(person?.workAllocationMode ?? "") === WORK_ALLOCATION_MODE_EXPLICIT) {
+    assignments = (person?.workAllocations ?? []).map((row) => ({
+      sourceId: String(row?.sourceId ?? ""),
+      functionId: String(row?.functionId ?? ""),
+      normalQd: whole(row?.normalQd),
+      overtimeQd: whole(row?.overtimeQd),
+      volunteer: row?.volunteer === true
+    }));
+  } else if (!suppliedAssignments) {
+    const selected = String(person?.workAssignment ?? "").trim();
+    const building = buildingById.get(selected);
+    if (selected && !["other", "Свободен", "Без работы", "Ребенок"].includes(selected)) {
+      const overtimeQd = building && this._buildingHasOvertimeProduction?.(building) ? 10 : 0;
+      assignments = [{
+        sourceId: selected,
+        functionId: building ? "production" : selected,
+        normalQd: 20,
+        overtimeQd
+      }];
+    }
+  }
+  assignments = assignments.filter((row) => row.sourceId && row.normalQd + row.overtimeQd > 0);
+
+  let weightedConditions = 0;
+  let totalQd = 0;
+  let overtimeQd = 0;
+  let weightedBaseline = 0;
+  let baselineQd = 0;
+  const conditionParts = [];
+  for (const assignment of assignments) {
+    const qd = assignment.normalQd + assignment.overtimeQd;
+    const building = buildingById.get(assignment.sourceId);
+    const condition = building ? this._safeNumber(building?.workerMoraleDelta, 0) : 0;
+    weightedConditions += condition * qd;
+    totalQd += qd;
+    overtimeQd += assignment.overtimeQd;
+    if (building && condition) conditionParts.push(`${building.name || "здание"} ${condition > 0 ? "+" : ""}${condition} × ${qd} QD`);
+
+    let baseline = building ? whole(building?.wageDailyCopper) : 0;
+    if (!baseline && assignment.functionId === "construction-leader") baseline = CONSTRUCTION_LEADER_WAGE_DAILY_COPPER;
+    if (!baseline && assignment.functionId === "construction") {
+      baseline = whole(crews.get(assignment.sourceId)?.wageDailyCopper) || CONSTRUCTION_WORKER_WAGE_DAILY_COPPER;
+    }
+    if (!baseline && ["sheriff", "шериф"].includes(assignment.sourceId.toLocaleLowerCase("ru"))) baseline = 18;
+    if (baseline > 0 && !assignment.volunteer) {
+      weightedBaseline += baseline * qd;
+      baselineQd += qd;
+    }
+  }
+  const conditions = totalQd > 0 ? signedRound(weightedConditions / totalQd) : 0;
+
+  let pay = 0;
+  let payReason = "";
+  const volunteer = person?.volunteerLabor === true || (assignments.length > 0 && assignments.every((row) => row.volunteer));
+  const obligation = options?.wageObligation ?? latestWageObligation(holding, person?.id);
+  if (assignments.length || obligation) {
+    if (volunteer) {
+      payReason = "добровольный труд";
+    } else if (obligation && whole(obligation?.dueCopper) > 0 && whole(obligation?.paidCopper) < whole(obligation?.dueCopper)) {
+      pay = -2;
+      payReason = "зарплата не выплачена полностью";
+    } else if (!obligation && baselineQd > 0) {
+      pay = -2;
+      payReason = "нет выплаченного договора за период";
+    } else if (obligation && whole(obligation?.dueCopper) > 0) {
+      const priced = (obligation?.meta?.assignments ?? []).filter((row) => !row.volunteer);
+      const pricedQd = priced.reduce((sum, row) => sum + whole(row?.normalQd) + whole(row?.overtimeQd), 0);
+      const effectiveRate = pricedQd > 0
+        ? priced.reduce((sum, row) => sum + whole(row?.effectiveDailyRateCopper) * (whole(row?.normalQd) + whole(row?.overtimeQd)), 0) / pricedQd
+        : 0;
+      const baselineRate = baselineQd > 0 ? weightedBaseline / baselineQd : effectiveRate;
+      const ratio = baselineRate > 0 ? effectiveRate / baselineRate : 1;
+      pay = ratio >= 1.5 ? 2 : ratio >= 1.25 ? 1 : ratio >= 1 ? 0 : -1;
+      payReason = baselineRate > 0 ? `ставка ${Math.round(ratio * 100)}% базовой` : "ставка выплачена";
+    }
+  }
+
+  const overtime = overtimeQd >= 6 ? -2 : overtimeQd >= 1 ? -1 : 0;
+  const value = clampWorkMorale(conditions + pay + overtime);
+  const reasons = [];
+  if (conditionParts.length) reasons.push(`условия: ${conditions > 0 ? "+" : ""}${conditions} (${conditionParts.join("; ")})`);
+  else if (totalQd > 0) reasons.push("условия: 0");
+  if (payReason) reasons.push(`оплата: ${pay > 0 ? "+" : ""}${pay} (${payReason})`);
+  if (overtimeQd > 0) reasons.push(`переработка: ${overtime} (${overtimeQd} QD)`);
+  if (reasons.length && value !== conditions + pay + overtime) reasons.push(`предел: ${value > 0 ? "+" : ""}${value}`);
+  return { value, conditions, pay, overtime, totalQd, overtimeQd, reason: reasons.join(", ") };
+},
+
 _workMorale(person, holding = null) {
-  const selected = String(person?.workAssignment ?? "");
-  if (!selected || selected === "other" || selected === "construction" || selected.startsWith("construction:")) return { value: 0, reason: "" };
-  const building = (holding?.buildings?.list ?? []).find((item) => String(item.id) === selected || String(item.name) === selected);
-  if (!building) return { value: 0, reason: "" };
-  const raw = this._safeNumber(building.workerMoraleDelta, 0);
-  const overtime = this._buildingHasOvertimeProduction(building);
-  const value = overtime && raw < 0 ? raw * 2 : raw;
-  const note = overtime && raw < 0 ? `, переработка удваивает ${raw}` : "";
-  return { value, reason: value ? `${building.name || "здание"}: ${value > 0 ? "+" : ""}${value}${note}` : "" };
+  const snapshot = holding?.gm?.moraleSnapshot?.residents?.[String(person?.id ?? "")]?.work;
+  if (snapshot && typeof snapshot === "object") return { ...snapshot };
+  return this._workMoraleForPeriod(person, holding);
+},
+
+_recordTendayMoraleSnapshot(holding, report = {}, financeContext = null, { operationId = "", createdAt = "" } = {}) {
+  if (!holding?.gm || typeof holding.gm !== "object") holding.gm = {};
+  const tier = String(report?.food?.effectiveTier ?? "normal");
+  const rationModifier = this._safeNumber(report?.food?.rationModifier, tier === "enhanced" ? 1 : tier === "sparse" ? -1 : tier === "hunger" ? -2 : 0);
+  const diversityBonus = Math.max(0, Math.min(2, this._safeNumber(report?.food?.diversityBonus, 0)));
+  const residents = {};
+  const obligations = new Map((report?.finance?.obligations ?? [])
+    .filter((row) => row?.kind === "wage")
+    .map((row) => [String(row?.recipientId ?? ""), row]));
+  for (const person of holding?.people?.list ?? []) {
+    if (person?.dead || !person?.id) continue;
+    const assignments = financeContext?.plannedAssignmentsByWorkerId?.get?.(String(person.id));
+    residents[String(person.id)] = {
+      ration: { value: rationModifier + diversityBonus, tier, diversityBonus },
+      work: this._workMoraleForPeriod(person, holding, {
+        assignments: assignments ? [...assignments] : [],
+        wageObligation: obligations.get(String(person.id)) ?? latestWageObligation(holding, person.id)
+      })
+    };
+  }
+  holding.gm.moraleSnapshot = {
+    schema: 1,
+    operationId: String(operationId ?? ""),
+    periodKey: String(financeContext?.periodIdentity?.periodKey ?? report?.finance?.periodKey ?? ""),
+    createdAt: String(createdAt ?? ""),
+    ration: { tier, modifier: rationModifier + diversityBonus, diversityBonus,
+      fullySupplied: Boolean(report?.food?.needed > 0 && report.food.effectiveTier === report.food.selectedTier
+        && !report.food.fallback && report.food.eaten >= report.food.needed) },
+    residents
+  };
+  return holding.gm.moraleSnapshot;
 }
 };

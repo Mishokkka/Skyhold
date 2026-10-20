@@ -1,20 +1,20 @@
-<section class="fbls-region-catalog-editor-shell">
+<section class="fbls-body-text fbls-region-catalog-editor-shell">
   <header class="fbls-region-studio-head">
     <div>
-      <h2><i class="fa-solid fa-map-location-dot"></i> Рынки-локации и маршруты</h2>
+      <h2 class="fbls-heading-title"><i class="fa-solid fa-map-location-dot"></i> Рынки-локации и маршруты</h2>
       <p>Географические точки принадлежат государствам и наследуют их характер рынка.</p>
     </div>
     <div class="fbls-region-studio-actions">
-      <button type="button" class="fbls-button compact" data-action="region-graph-open"><i class="fa-solid fa-diagram-project"></i> Карта связей</button>
-      {{#if canEdit}}<button type="button" class="fbls-button compact primary" data-action="region-catalog-add"><i class="fa-solid fa-plus"></i> Локация</button>{{/if}}
+      <button type="button" class="fbls-button fbls-button-role compact" data-action="region-graph-open"><i class="fa-solid fa-diagram-project"></i> Карта связей</button>
+      {{#if canEdit}}<button type="button" class="fbls-button fbls-button-role compact primary" data-action="region-catalog-add"><i class="fa-solid fa-plus"></i> Локация</button>{{/if}}
     </div>
   </header>
 
   <div class="fbls-region-studio">
     <aside class="fbls-region-sidebar">
-      <label class="fbls-region-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-region-search value="{{search}}" placeholder="Найти локацию, страну…" autocomplete="off" /></label>
+      <label class="fbls-search fbls-region-search"><i class="fa-solid fa-magnifying-glass"></i><input class="fbls-control" type="search" data-region-search value="{{search}}" placeholder="Найти локацию, страну…" autocomplete="off" /></label>
       <div class="fbls-region-sidebar-meta"><span>Рынки-локации</span><strong data-region-visible-count>{{rows.length}}</strong></div>
-      <nav class="fbls-region-card-list" aria-label="Рыночные локации мира">
+      <nav class="fbls-region-card-list" data-render-scroll-key="region-list" aria-label="Рыночные локации мира">
         {{#each rows}}
           <button type="button" class="fbls-region-card {{#if selected}}active{{/if}} {{#unless marketEnabled}}is-disabled{{/unless}}" data-action="region-catalog-select" data-region-id="{{value}}" data-region-search-text="{{searchText}}">
             <span class="fbls-region-card-state {{marketStatus}}"><i class="fa-solid {{#if marketEnabled}}fa-check{{else}}fa-pause{{/if}}"></i></span>
@@ -29,7 +29,7 @@
       {{#if selectedRegion}}
         <header class="fbls-region-detail-hero">
           <span class="fbls-region-detail-icon"><i class="fa-solid fa-location-dot"></i></span>
-          <div><h3>{{selectedRegion.label}}</h3><p>{{selectedRegion.countryLabel}} · {{selectedRegion.marketSizeLabel}} · {{selectedRegion.marketConditionLabel}}</p></div>
+          <div><h3 class="fbls-heading-section">{{selectedRegion.label}}</h3><p>{{selectedRegion.countryLabel}} · {{selectedRegion.marketSizeLabel}} · {{selectedRegion.marketConditionLabel}}</p></div>
           {{#if canEdit}}<button type="button" class="fbls-icon-button danger" data-action="region-catalog-delete" data-region-id="{{selectedRegion.value}}" title="Удалить локацию" aria-label="Удалить локацию {{selectedRegion.label}}"><i class="fa-solid fa-trash"></i></button>{{/if}}
         </header>
 
@@ -39,38 +39,38 @@
           <button type="button" class="{{#if section.logistics}}active{{/if}}" data-action="region-editor-section" data-section="logistics"><i class="fa-solid fa-route"></i> Логистика</button>
         </nav>
 
-        <div class="fbls-region-detail-scroll">
+        <div class="fbls-region-detail-scroll" data-render-scroll-key="region-detail">
           {{#if section.overview}}
             <section class="fbls-region-panel">
-              <header><div><h4>Идентификация точки</h4><p>ID используется поселениями и связями карты; название можно менять свободно.</p></div></header>
+              <header><div><h4 class="fbls-heading-section">Идентификация точки</h4><p>ID используется поселениями и связями карты; название можно менять свободно.</p></div></header>
               <div class="fbls-region-form-grid three">
-                <label><span>Название локации</span><input type="text" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="label" value="{{selectedRegion.label}}" /></label>
-                <label><span>Стабильный ID</span><input type="text" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="value" value="{{selectedRegion.value}}" /></label>
-                <label><span>Синонимы</span><input type="text" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="aliases" value="{{selectedRegion.aliasesText}}" placeholder="через запятую" /></label>
+                <label class="fbls-field"><span>Название локации</span><input class="fbls-control" type="text" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="label" value="{{selectedRegion.label}}" /></label>
+                <label class="fbls-field"><span>Стабильный ID</span><input class="fbls-control" type="text" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="value" value="{{selectedRegion.value}}" /></label>
+                <label class="fbls-field"><span>Синонимы</span><input class="fbls-control" type="text" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="aliases" value="{{selectedRegion.aliasesText}}" placeholder="через запятую" /></label>
               </div>
             </section>
 
             <section class="fbls-region-panel">
               <header><div><h4>Место в экономике мира</h4><p>Государство задаёт общий характер, размер — глубину ассортимента, состояние — временную ситуацию именно здесь.</p></div></header>
               <div class="fbls-region-form-grid three">
-                <label><span>Государство</span><select data-region-id="{{selectedRegion.value}}" data-region-catalog-field="countryId">{{#each selectedRegion.countryOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
-                <label><span>Размер рынка</span><select data-region-id="{{selectedRegion.value}}" data-region-catalog-field="marketSizeId">{{#each selectedRegion.marketSizeOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
-                <label><span>Локальное состояние</span><select data-region-id="{{selectedRegion.value}}" data-region-catalog-field="marketConditionId">{{#each selectedRegion.marketConditionOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
-                <label class="wide"><span>Теги локации</span><input type="text" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="marketTags" value="{{selectedRegion.marketTagsText}}" placeholder="столица, север, пограничье" /></label>
+                <label class="fbls-field"><span>Государство</span><select class="fbls-control" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="countryId">{{#each selectedRegion.countryOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                <label class="fbls-field"><span>Размер рынка</span><select class="fbls-control" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="marketSizeId">{{#each selectedRegion.marketSizeOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                <label class="fbls-field"><span>Локальное состояние</span><select class="fbls-control" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="marketConditionId">{{#each selectedRegion.marketConditionOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                <label class="fbls-field wide"><span>Теги локации</span><input class="fbls-control" type="text" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="marketTags" value="{{selectedRegion.marketTagsText}}" placeholder="столица, север, пограничье" /></label>
               </div>
               <div class="fbls-region-switch-grid">
-                <label class="fbls-region-switch"><input type="checkbox" data-type="checkbox" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="marketEnabled" {{#if selectedRegion.marketEnabled}}checked{{/if}} /><span><strong>Торговля доступна</strong><small>Отключённая локация остаётся на карте, но не предлагает рынок.</small></span></label>
-                <label class="fbls-region-switch"><input type="checkbox" data-type="checkbox" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="marketAirshipOnly" {{#if selectedRegion.marketAirshipOnly}}checked{{/if}} /><span><strong>Только воздушные корабли</strong><small>Для входящих и исходящих связей исключаются наземные способы.</small></span></label>
+                <label class="fbls-region-switch fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Торговля доступна. Отключённая локация остаётся на карте, но не предлагает рынок."><input type="checkbox" data-type="checkbox" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="marketEnabled" {{#if selectedRegion.marketEnabled}}checked{{/if}} /><span>Торговля доступна</span></label>
+                <label class="fbls-region-switch fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Только воздушные корабли. Для входящих и исходящих связей исключаются наземные способы."><input type="checkbox" data-type="checkbox" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="marketAirshipOnly" {{#if selectedRegion.marketAirshipOnly}}checked{{/if}} /><span>Только по воздуху</span></label>
               </div>
-              <label class="fbls-region-wide-field"><span>Заметки о локации и текущем состоянии</span><textarea data-region-id="{{selectedRegion.value}}" data-region-catalog-field="marketNotes" rows="3">{{selectedRegion.marketNotes}}</textarea></label>
+              <label class="fbls-field fbls-region-wide-field"><span>Заметки о локации и текущем состоянии</span><textarea class="fbls-control" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="marketNotes" rows="3">{{selectedRegion.marketNotes}}</textarea></label>
             </section>
 
             <section class="fbls-region-panel">
               <header><div><h4>Специализации рынка</h4><p>Можно сочетать несколько модификаторов: например «рыболовный порт», «коптильни» и «военно-морская база».</p></div><span class="fbls-region-link-badge"><i class="fa-solid fa-wand-magic-sparkles"></i> {{selectedRegion.marketSpecialtyCount}} выбрано</span></header>
-              <label class="fbls-region-specialty-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-region-specialty-search value="{{specialtySearch}}" placeholder="Найти специализацию…" /><small>Показано: <b data-region-specialty-visible-count>{{selectedRegion.marketSpecialtyOptions.length}}</b></small></label>
-              <div class="fbls-region-specialty-grid">
+              <label class="fbls-search fbls-region-specialty-search"><i class="fa-solid fa-magnifying-glass"></i><input class="fbls-control" type="search" data-region-specialty-search value="{{specialtySearch}}" placeholder="Найти специализацию…" /><small>Показано: <b data-region-specialty-visible-count>{{selectedRegion.marketSpecialtyOptions.length}}</b></small></label>
+              <div class="fbls-region-specialty-grid" data-render-scroll-key="region-specialties">
                 {{#each selectedRegion.marketSpecialtyOptions}}
-                  <label class="{{#if selected}}is-selected{{/if}}" data-region-specialty-search-text="{{label}} {{category}} {{description}} {{id}}"><input type="checkbox" data-type="checkbox" data-region-id="{{../selectedRegion.value}}" data-region-specialty-id="{{id}}" {{#if selected}}checked{{/if}} /><span><i class="fa-solid fa-industry"></i><strong>{{label}}</strong><small>{{category}} · {{description}}</small></span></label>
+                  <label class="{{#if selected}}is-selected{{/if}}" data-region-specialty-search-text="{{label}} {{category}} {{description}} {{id}}"><input type="checkbox" data-type="checkbox" data-region-id="{{../selectedRegion.value}}" data-region-specialty-id="{{id}}" {{#if selected}}checked{{/if}} /><span class="fbls-choice-card"><i class="fa-solid fa-industry"></i><strong>{{label}}</strong><small>{{category}} · {{description}}</small></span></label>
                 {{/each}}
               </div>
             </section>
@@ -81,14 +81,14 @@
               <header><div><h4>Локальные коэффициенты</h4><p>Редкое исключение поверх государства, состояния, размера и специализаций. Оставьте 1,00, если отдельная корректировка не нужна.</p></div></header>
               <div class="fbls-region-factor-guide"><i class="fa-solid fa-circle-info"></i><div><strong>Порядок расчёта</strong><p>Коэффициенты перемножаются. Например: разрушенная страна 1,45 × дорогая удалённая локация 1,10 = цена ×1,60. Пошлина локации прибавляется к государственной.</p></div></div>
               <div class="fbls-region-factor-grid">
-                <label><span><strong>Цена</strong><small>1,20 = на 20% дороже.</small></span><input type="number" min="0.25" max="4" step="0.05" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="marketPriceFactor" value="{{selectedRegion.marketPriceFactor}}" placeholder="1.00" /></label>
-                <label><span><strong>Наличие</strong><small>0,50 = вдвое меньше.</small></span><input type="number" min="0.25" max="4" step="0.05" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="marketAvailabilityFactor" value="{{selectedRegion.marketAvailabilityFactor}}" placeholder="1.00" /></label>
-                <label><span><strong>Доставка</strong><small>Цена маршрута и обработки.</small></span><input type="number" min="0.25" max="4" step="0.05" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="marketDeliveryFactor" value="{{selectedRegion.marketDeliveryFactor}}" placeholder="1.00" /></label>
-                <label><span><strong>Время</strong><small>Срок перевозки.</small></span><input type="number" min="0.25" max="4" step="0.05" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="marketTimeFactor" value="{{selectedRegion.marketTimeFactor}}" placeholder="1.00" /></label>
-                <label><span><strong>Риск</strong><small>Утрата и задержка.</small></span><input type="number" min="0.25" max="4" step="0.05" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="marketRiskFactor" value="{{selectedRegion.marketRiskFactor}}" placeholder="1.00" /></label>
-                <label><span><strong>Экспорт</strong><small>Дополнительно меняет запас.</small></span><input type="number" min="0.25" max="4" step="0.05" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="marketExportFactor" value="{{selectedRegion.marketExportFactor}}" placeholder="1.00" /></label>
-                <label><span><strong>Импорт</strong><small>Цена покупок для поселения здесь.</small></span><input type="number" min="0.25" max="4" step="0.05" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="marketImportFactor" value="{{selectedRegion.marketImportFactor}}" placeholder="1.00" /></label>
-                <label><span><strong>Местная пошлина</strong><small>0,10 добавляет 10% к государственной.</small></span><input type="number" min="0" max="1" step="0.01" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="marketTaxRate" value="{{selectedRegion.marketTaxRate}}" placeholder="0.00" /></label>
+                <label class="fbls-field"><span><strong>Цена</strong><small>1,20 = на 20% дороже.</small></span><input class="fbls-control" type="number" min="0.25" max="4" step="0.05" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="marketPriceFactor" value="{{selectedRegion.marketPriceFactor}}" placeholder="1.00" /></label>
+                <label class="fbls-field"><span><strong>Наличие</strong><small>0,50 = вдвое меньше.</small></span><input class="fbls-control" type="number" min="0.25" max="4" step="0.05" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="marketAvailabilityFactor" value="{{selectedRegion.marketAvailabilityFactor}}" placeholder="1.00" /></label>
+                <label class="fbls-field"><span><strong>Доставка</strong><small>Цена маршрута и обработки.</small></span><input class="fbls-control" type="number" min="0.25" max="4" step="0.05" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="marketDeliveryFactor" value="{{selectedRegion.marketDeliveryFactor}}" placeholder="1.00" /></label>
+                <label class="fbls-field"><span><strong>Время</strong><small>Срок перевозки.</small></span><input class="fbls-control" type="number" min="0.25" max="4" step="0.05" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="marketTimeFactor" value="{{selectedRegion.marketTimeFactor}}" placeholder="1.00" /></label>
+                <label class="fbls-field"><span><strong>Риск</strong><small>Утрата и задержка.</small></span><input class="fbls-control" type="number" min="0.25" max="4" step="0.05" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="marketRiskFactor" value="{{selectedRegion.marketRiskFactor}}" placeholder="1.00" /></label>
+                <label class="fbls-field"><span><strong>Экспорт</strong><small>Дополнительно меняет запас.</small></span><input class="fbls-control" type="number" min="0.25" max="4" step="0.05" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="marketExportFactor" value="{{selectedRegion.marketExportFactor}}" placeholder="1.00" /></label>
+                <label class="fbls-field"><span><strong>Импорт</strong><small>Цена покупок для поселения здесь.</small></span><input class="fbls-control" type="number" min="0.25" max="4" step="0.05" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="marketImportFactor" value="{{selectedRegion.marketImportFactor}}" placeholder="1.00" /></label>
+                <label class="fbls-field"><span><strong>Местная ввозная пошлина</strong><small>0,10 добавляет 10% к ввозной ставке страны назначения.</small></span><input class="fbls-control" type="number" min="0" max="1" step="0.01" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="marketTaxRate" value="{{selectedRegion.marketTaxRate}}" placeholder="0.00" /></label>
               </div>
             </section>
           {{/if}}
@@ -96,15 +96,15 @@
           {{#if section.logistics}}
             <section class="fbls-region-panel">
               <header><div><h4>География и транспорт</h4><p>Способы доставки ограничивают допустимые рёбра на карте маршрутов.</p></div><span class="fbls-region-link-badge"><i class="fa-solid fa-link"></i> {{selectedRegion.marketLinkCount}} связей</span></header>
-              <div class="fbls-region-form-grid two"><label><span>Материк / остров ID</span><input type="text" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="marketLandmassId" value="{{selectedRegion.marketLandmassId}}" placeholder="griston" /></label></div>
+              <div class="fbls-region-form-grid two"><label class="fbls-field"><span>Материк / остров ID</span><input class="fbls-control" type="text" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="marketLandmassId" value="{{selectedRegion.marketLandmassId}}" placeholder="griston" /></label></div>
               <div class="fbls-region-transport-grid">
-                {{#each selectedRegion.marketTransportOptions}}<label class="fbls-region-transport"><input type="checkbox" data-type="checkbox" data-region-id="{{../selectedRegion.value}}" data-region-transport-mode="{{value}}" {{#if selected}}checked{{/if}} /><span><i class="{{icon}}"></i>{{label}}</span></label>{{/each}}
+                {{#each selectedRegion.marketTransportOptions}}<label class="fbls-choice-card is-dense fbls-region-transport"><input type="checkbox" data-type="checkbox" data-region-id="{{../selectedRegion.value}}" data-region-transport-mode="{{value}}" {{#if selected}}checked{{/if}} /><span><i class="{{icon}}"></i>{{label}}</span></label>{{/each}}
               </div>
               <button type="button" class="fbls-region-route-callout" data-action="region-graph-open"><i class="fa-solid fa-diagram-project"></i><span><strong>Открыть визуальную карту маршрутов</strong><small>Расстояния, промежуточные точки, транспорт и направления редактируются на графе.</small></span><i class="fa-solid fa-arrow-right"></i></button>
             </section>
           {{/if}}
         </div>
-      {{else}}<div class="fbls-region-empty-state"><i class="fa-solid fa-map"></i><h3>Добавьте первую рыночную локацию</h3><p>Она станет точкой на карте и рынком выбранного государства.</p></div>{{/if}}
+      {{else}}<div class="fbls-empty-state fbls-region-empty-state"><i class="fa-solid fa-map"></i><h3>Добавьте первую рыночную локацию</h3><p>Она станет точкой на карте и рынком выбранного государства.</p></div>{{/if}}
     </main>
   </div>
 </section>

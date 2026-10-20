@@ -2,6 +2,8 @@ export function createDerivedContextCache({ limit = 12 } = {}) {
   const rows = new Map();
   const maxEntries = Math.max(1, Number(limit) || 1);
   const metrics = { hits: 0, misses: 0 };
+  let generation;
+  let hasGeneration = false;
 
   function getOrCreate(key, builder) {
     const normalizedKey = String(key ?? "");
@@ -23,6 +25,14 @@ export function createDerivedContextCache({ limit = 12 } = {}) {
     rows.clear();
   }
 
+  function setGeneration(value) {
+    if (hasGeneration && Object.is(generation, value)) return false;
+    generation = value;
+    hasGeneration = true;
+    clear();
+    return true;
+  }
+
   function getMetrics() {
     return { ...metrics, size: rows.size };
   }
@@ -32,7 +42,7 @@ export function createDerivedContextCache({ limit = 12 } = {}) {
     metrics.misses = 0;
   }
 
-  return { clear, getMetrics, getOrCreate, resetMetrics };
+  return { clear, getMetrics, getOrCreate, resetMetrics, setGeneration };
 }
 
 export function derivedContextKey(parts = {}) {

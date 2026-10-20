@@ -1,45 +1,81 @@
       {{#if building.showEditorWorkers}}
-        <fieldset class="fbls-building-editor-card worker-card wide-card worker-layout-v4 fbls-editor-tab-workspace tab-workers">
-          <legend class="fbls-editor-tab-legend">Работники</legend>
-          <header class="fbls-editor-tab-head"><i class="fa-solid fa-users-gear"></i><div><span>Команда здания</span><h2>Работники</h2><p>Слоты, специализация и фактическая эффективность назначенных жителей.</p></div><strong class="fbls-editor-head-metric" data-fbls-tooltip="{{building.workerEfficiency.detail}}"><small>Эффективность</small>{{building.workerEfficiency.total}}</strong></header>
-          <section class="fbls-editor-tab-panel"><div class="fbls-editor-panel-head"><span><i class="fa-solid fa-gauge-high"></i> Штат и роль</span><small>Лимиты, профиль и довольство</small></div><div class="fbls-worker-top-row">
-            <label class="mini"><span>Мин.</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.basePath}}.workersMin" value="{{building.workersMin}}" />{{else}}<strong>{{building.workersMin}}</strong>{{/if}}</label>
-            <label class="mini"><span>Макс.</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.basePath}}.workersMax" value="{{building.workersMax}}" />{{else}}<strong>{{building.workersMax}}</strong>{{/if}}</label>
-            <label class="role"><span data-fbls-tooltip="Как будут называться занятые слоты этого здания: фермеры, врачи, стражники, рабочие. Это подпись, не отдельная профессия жителя.">Название работника</span>{{#if canEdit}}<input type="text" data-field="{{building.basePath}}.workerRole" value="{{building.workerRole}}" placeholder="Фермер, садовник, каменщик..." />{{else}}<strong>{{building.workerRoleLine}}</strong>{{/if}}</label>
-            <label class="mini"><span data-fbls-tooltip="Характеристика, по которой здание оценивает пригодность работников и показывает подсказки эффективности. Не меняет тип жителя сама по себе.">Осн. хар.</span>{{#if canEdit}}<select data-field="{{building.basePath}}.workerPrimaryAttribute">{{#each building.workerPrimaryAttributeOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{building.workerPrimaryAttributeLabel}}</strong>{{/if}}</label>
-            <label class="mini"><span>Мод. ДОВ</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.basePath}}.workerMoraleDelta" value="{{building.workerMoraleDelta}}" />{{else}}<strong>{{building.workerMoraleDelta}}</strong>{{/if}}</label>
-          </div></section>
-          <section class="fbls-editor-tab-panel compact-panel"><div class="fbls-editor-panel-head"><span><i class="fa-solid fa-tags"></i> Эффективные типы</span><small>Модификаторы подходящих работников</small></div><div class="effective-types-box full-line">
-            <span>Эффективные типы</span>
-            <div class="fbls-effective-type-line">
-              {{#if building.hasSuitableTypeBadges}}
-                {{#each building.suitableTypeBadges}}
-                  <span class="fbls-type-effect-chip" style="{{style}}">
-                    <em>{{name}}</em>
-                    {{#if ../canEdit}}<input type="number" step="0.1" data-type="number" data-field="{{modifierPath}}" value="{{modifier}}" data-fbls-tooltip="Бонус эффективности, который этот тип работника получает в этом здании." />{{else}}<strong>{{modifier}}</strong>{{/if}}
-                    {{#if ../canEdit}}<button type="button" class="fbls-chip-remove" data-action="remove-suitable-type" data-suitable-types-field="{{path}}" data-suitable-type="{{name}}" aria-label="Убрать подходящий тип {{name}}">×</button>{{/if}}
-                  </span>
-                {{/each}}
-              {{else}}
-                <span class="fbls-muted-text">Нет.</span>
-              {{/if}}
-              {{#if canEdit}}
-                <select class="fbls-trait-picker inline-add" data-suitable-type-add-field="{{building.basePath}}.suitableWorkerTypes">
-                  <option value="">Добавить тип...</option>
-                  {{#each building.suitableTypeOptions}}<option value="{{name}}" {{#if selected}}disabled{{/if}}>{{name}}{{#if selected}} ✓{{/if}}</option>{{/each}}
-                </select>
-              {{/if}}
+        <fieldset class="fbls-building-editor-card worker-card wide-card worker-layout-v4">
+          <legend>Работники <i class="fa-regular fa-circle-question fbls-help" tabindex="0" role="img" aria-label="Число работников влияет на обычные функции здания. Квалификация меняет только целочисленный прогресс производственных линий и не умножает доход, оборону, Репутацию, довольство или вместимость." data-fbls-tooltip="Число работников влияет на обычные функции здания. Квалификация меняет только целочисленный прогресс производственных линий и не умножает доход, оборону, Репутацию, довольство или вместимость."></i></legend>
+          <div class="fbls-worker-top-row">
+            <label class="mini"><span>Мин.</span>{{#if canEdit}}<input class="fbls-control" type="number" data-type="number" data-field="{{building.basePath}}.workersMin" value="{{building.workersMin}}" />{{else}}<strong>{{building.workersMin}}</strong>{{/if}}</label>
+            <label class="mini"><span>Макс.</span>{{#if canEdit}}<input class="fbls-control" type="number" data-type="number" data-field="{{building.basePath}}.workersMax" value="{{building.workersMax}}" />{{else}}<strong>{{building.workersMax}}</strong>{{/if}}</label>
+            <label class="role" title="Название работника"><span data-fbls-tooltip="Название работника. Как будут называться занятые слоты этого здания: фермеры, врачи, стражники, рабочие. Это подпись, не отдельная профессия жителя.">Название</span>{{#if canEdit}}<input aria-label="Название работника" class="fbls-control" type="text" data-field="{{building.basePath}}.workerRole" value="{{building.workerRole}}" placeholder="Фермер, садовник, каменщик..." />{{else}}<strong>{{building.workerRoleLine}}</strong>{{/if}}</label>
+            <label class="mini" title="Мод. ДОВ"><span>Мод. ДОВ</span>{{#if canEdit}}<input aria-label="Мод. ДОВ" class="fbls-control" type="number" data-type="number" data-field="{{building.basePath}}.workerMoraleDelta" value="{{building.workerMoraleDelta}}" />{{else}}<strong>{{building.workerMoraleDelta}}</strong>{{/if}}</label>
+            <div class="fbls-worker-eff-total compact-number">
+              <span data-fbls-tooltip="Фактически работающие жители. Минимальный штат всегда считается по головам, а не по бонусам.">Работает</span>
+              <strong data-fbls-tooltip="Производственный эквивалент: {{building.workerEfficiency.productionEquivalentText}} QD. {{building.workerEfficiency.detail}}">{{building.workerEfficiency.total}}</strong>
             </div>
-          </div></section>
+          </div>
+          <div class="fbls-worker-profile-grid">
+            <section class="fbls-worker-profile-section">
+              <h4>Минимальные требования</h4>
+              <label class="fbls-worker-profile-toggle fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Обязательный допуск"><input type="checkbox" data-worker-profile-field="hard" data-profile-section="admission" {{#if building.workerProfileEditor.hard}}checked{{/if}} {{#unless isGM}}disabled{{/unless}} /><span>Строгий допуск</span></label>
+              <details class="fbls-worker-profile-help"><summary>Как задавать требования</summary><small>В одной группе — И; между группами — ИЛИ. Пустой список — без ограничений.</small></details>
+              {{#each building.workerProfileEditor.admissionRows}}
+              <div class="fbls-worker-profile-rule fbls-worker-profile-admission">
+                <select class="fbls-control" aria-label="Характеристика" data-worker-profile-field="attribute" data-profile-section="admission" data-profile-index="{{@index}}" {{#unless ../isGM}}disabled{{/unless}}>{{#each options}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+                <label>Мин.<input class="fbls-control" type="number" min="0" step="1" value="{{minimum}}" data-worker-profile-field="minimum" data-profile-section="admission" data-profile-index="{{@index}}" {{#unless ../isGM}}disabled{{/unless}} /></label>
+                <label>Группа<input class="fbls-control" type="number" min="1" step="1" value="{{group}}" data-worker-profile-field="group" data-profile-section="admission" data-profile-index="{{@index}}" {{#unless ../isGM}}disabled{{/unless}} /></label>
+                {{#if ../isGM}}<button type="button" class="fbls-button compact fbls-button-role" data-action="worker-profile-remove" data-profile-section="admission" data-profile-index="{{@index}}" aria-label="Удалить требование"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>{{/if}}
+              </div>{{/each}}
+              {{#if isGM}}<button type="button" class="fbls-button compact fbls-button-role" data-action="worker-profile-add" data-profile-section="admission">Добавить требование</button>{{/if}}
+              <details class="fbls-worker-profile-composition" {{#if building.workerProfileEditor.compositionRows}}open{{/if}}><summary>Обязательные предыстории</summary><small>Нужно указанное число работников с любой из выбранных предысторий.</small>
+              {{#each building.workerProfileEditor.compositionRows}}<div class="fbls-worker-profile-rule">
+                <div class="fbls-worker-profile-choice fbls-field"><span data-fbls-tooltip="Обязательные предыстории работников">Предыстории</span><details class="fbls-selection-field" data-profile-picker="composition" data-profile-index="{{index}}">
+                  <summary data-fbls-tooltip="{{selectedText}}" aria-label="Обязательные предыстории: {{selectedText}}"><span>{{selectedSummary.first}}</span><small {{#unless selectedSummary.additional}}hidden{{/unless}}>+{{selectedSummary.additional}}</small><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary>
+                  <div class="fbls-worker-choice-panel"><input class="fbls-control" type="search" data-worker-choice-search aria-label="Поиск предыстории" placeholder="Поиск…" />
+                    <div class="fbls-worker-choice-options">{{#each choices}}<button type="button" data-action="worker-profile-pick" data-profile-section="composition" data-profile-index="{{../index}}" data-profile-value="{{value}}" data-choice-search="{{search}}" aria-pressed="{{#if selected}}true{{else}}false{{/if}}" {{#unless ../../isGM}}disabled{{/unless}}><i class="fa-regular {{#if selected}}fa-square-check{{else}}fa-square{{/if}}" aria-hidden="true"></i> {{label}}</button>{{/each}}</div>
+                    <small data-worker-choice-empty hidden>Предыстория не найдена.</small>
+                  </div>
+                </details></div>
+                <label class="fbls-field"><span data-fbls-tooltip="Минимум работников с любой из выбранных предысторий">Чел.</span><input class="fbls-control" aria-label="Минимум работников с выбранными предысториями" type="number" min="1" step="1" value="{{count}}" data-worker-profile-field="count" data-profile-section="composition" data-profile-index="{{@index}}" {{#unless ../isGM}}disabled{{/unless}} /></label>
+                {{#if ../isGM}}<button type="button" class="fbls-button compact fbls-button-role" data-action="worker-profile-remove" data-profile-section="composition" data-profile-index="{{@index}}" aria-label="Удалить требование состава"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>{{/if}}
+              </div>{{/each}}
+              {{#if isGM}}<button type="button" class="fbls-button compact fbls-button-role" data-action="worker-profile-add" data-profile-section="composition">Добавить требование</button>{{/if}}</details>
+            </section>
+            {{#each building.workerProfileEditor.sections}}
+            <section class="fbls-worker-profile-section"><div class="fbls-worker-profile-rule fbls-worker-profile-heading"><h4>{{label}}</h4><span>Прирост, %</span></div>
+              {{#each rows}}
+              <div class="fbls-worker-profile-rule">
+                {{#if ../isTypes}}<select class="fbls-control" aria-label="Тип работника" data-worker-profile-field="match" data-profile-section="{{../key}}" data-profile-index="{{index}}" {{#unless ../../isGM}}disabled{{/unless}}>{{#each options}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+                {{else}}<div class="fbls-worker-profile-choice">
+                  <input class="fbls-control" type="text" aria-label="Прошлое или черта" value="{{displayMatch}}" title="{{displayMatch}}" placeholder="Выберите или впишите название" data-worker-profile-field="match" data-profile-section="{{../key}}" data-profile-index="{{index}}" {{#unless ../../isGM}}disabled{{/unless}} />
+                  {{#if ../../isGM}}<details><summary aria-label="Выбрать из списка" title="Выбрать из списка"><i class="fa-solid fa-list" aria-hidden="true"></i></summary>
+                    <div class="fbls-worker-choice-panel"><input class="fbls-control" type="search" data-worker-choice-search aria-label="Поиск по списку" placeholder="Поиск…" />
+                      <div class="fbls-worker-choice-options">{{#each choices}}<button type="button" data-action="worker-profile-pick" data-profile-section="{{../../key}}" data-profile-index="{{../index}}" data-profile-value="{{value}}" data-choice-search="{{search}}" title="{{title}}">{{label}}</button>{{/each}}</div>
+                      <small data-worker-choice-empty hidden>Ничего не найдено. Можно вписать своё название.</small>
+                    </div>
+                  </details>{{/if}}
+                </div>{{/if}}
+                <input class="fbls-control" aria-label="Прирост, %" type="number" min="-100" max="1000" step="1" value="{{percent}}" data-worker-profile-field="percent" data-profile-section="{{../key}}" data-profile-index="{{index}}" {{#unless ../../isGM}}disabled{{/unless}} />
+                {{#if ../../isGM}}<button type="button" class="fbls-button compact fbls-button-role" data-action="worker-profile-up" data-profile-section="{{../key}}" data-profile-index="{{index}}" aria-label="Выше по приоритету"><i class="fa-solid fa-arrow-up" aria-hidden="true"></i></button><button type="button" class="fbls-button compact fbls-button-role" data-action="worker-profile-remove" data-profile-section="{{../key}}" data-profile-index="{{index}}" aria-label="Удалить правило эффективности"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>{{/if}}
+              </div>
+              {{/each}}
+              {{#if ../isGM}}<button type="button" class="fbls-button compact fbls-button-role" data-action="worker-profile-add" data-profile-section="{{key}}">Добавить правило</button>{{/if}}
+            </section>{{/each}}
+          </div>
+          <details class="fbls-worker-profile-help"><summary>Как считается эффективность</summary><p class="fbls-muted-text">Обычный работник — 100%. Для типа и прошлого действует первое совпадение сверху; для черт — первое положительное и первое отрицательное. Правила разных областей складываются. Эффективность меняет только производство, не число работников.</p></details>
           {{#unless building.isTemplate}}
-          <section class="fbls-editor-tab-panel"><div class="fbls-assigned-worker-area">
-            <span class="fbls-field-title">Назначенные работники</span>
-            <div class="fbls-worker-slot-grid compact-slots">
-              {{#each building.workerSlots}}
-                <label><span>#{{slotNo}}</span>{{#if ../canEdit}}<select data-building-worker-field="{{path}}">{{#each options}}<option value="{{id}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{name}}{{#if hint}} · {{hint}}{{/if}}</option>{{/each}}</select>{{else}}<strong>{{label}}</strong>{{/if}}</label>
+          <div class="fbls-assigned-worker-area">
+            <span class="fbls-field-title">Назначенные работники · {{building.assignedCount}}/{{building.workersMax}}</span>
+            {{#if building.hasPlannedWorkers}}
+            <div class="fbls-cluster" aria-label="Работники по явному плану QD">
+              {{#each building.plannedWorkerRows}}
+                <span class="fbls-chip" data-fbls-tooltip="Явный план: {{qdLine}}; функций в этом здании: {{functionCount}}"><i class="fa-solid fa-calendar-check" aria-hidden="true"></i> {{name}} · {{qdLine}}</span>
               {{/each}}
             </div>
-          </div></section>
+            {{/if}}
+            <div class="fbls-worker-slot-grid compact-slots">
+              {{#each building.workerSlots}}
+                <label><span>#{{slotNo}}</span>{{#if ../canEdit}}<select class="fbls-control" data-building-worker-field="{{path}}">{{#each options}}<option value="{{id}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{name}}{{#if hint}} · {{hint}}{{/if}}</option>{{/each}}</select>{{else}}<strong>{{label}}</strong>{{/if}}</label>
+              {{/each}}
+            </div>
+          </div>
           {{/unless}}
         </fieldset>
       {{/if}}

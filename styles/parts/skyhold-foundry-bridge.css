@@ -1,117 +1,194 @@
 /* FBL Skyhold: unlayered bridge for Foundry window chrome and native controls.
    Keep this file narrow; layered domain files still own the actual app UI. */
 
+.application.fbl-skyhold-building-catalog-migration .window-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.application.fbl-skyhold-building-catalog-migration .fbls-content-pack-shell {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.application.fbl-skyhold-building-catalog-migration button {
+  flex: 0 0 auto;
+  width: auto;
+  min-height: var(--fbls-control-height);
+  height: auto;
+  padding: 0.3rem 0.65rem;
+  font-size: var(--fbls-type-compact-md);
+  line-height: 1.25;
+}
+
 /* Foundry themes own the ApplicationV2 root background.  Every Skyhold window
    must therefore establish its dark canvas at the bridge boundary instead of
    relying on the active Foundry theme. */
 .application.fbl-skyhold,
-.window-app.fbl-skyhold {
-  color: var(--fbls-text);
-  background: var(--fbls-bg);
-}
+.window-app.fbl-skyhold { color: var(--fbls-text); background: var(--fbls-bg); }
 
 .application.fbl-skyhold > .window-content,
-.window-app.fbl-skyhold > .window-content {
+.window-app.fbl-skyhold > .window-content { color: var(--fbls-text); background: var(--fbls-surface-0); }
+
+.application.fbl-skyhold-ui-review > .window-content,
+.window-app.fbl-skyhold-ui-review > .window-content { display: flex; flex-direction: column; min-height: 0; overflow: hidden; padding: 0; gap: 0; }
+
+.application.fbl-skyhold-ship > .window-content,
+.window-app.fbl-skyhold-ship > .window-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+  gap: 0;
+}
+
+.application.fbl-skyhold-politics .window-content,
+.window-app.fbl-skyhold-politics .window-content,
+.application.fbl-skyhold-politics-balance .window-content,
+.window-app.fbl-skyhold-politics-balance .window-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+  gap: 0;
   color: var(--fbls-text);
   background: var(--fbls-surface-0);
 }
 
-/* Fleet is rendered both inside the main Skyhold app and in its own ApplicationV2
-   window. Forbidden Lands assigns explicit dark colors to headings and native form
-   controls, so inheritance from the dark Skyhold canvas is not sufficient here. */
-.fbl-skyhold .fbls-fleet-overview h3,
-.fbl-skyhold-ship-enterprise .fbls-fleet-manager h2,
-.fbl-skyhold-ship-enterprise .fbls-fleet-manager h3,
-.fbl-skyhold-ship-enterprise .fbls-fleet-manager h4,
-.fbl-skyhold-ship-enterprise .fbls-fleet-section > summary,
-.fbl-skyhold-ship-enterprise .fbls-fleet-profile > summary,
-.fbl-skyhold-ship-enterprise .fbls-fleet-log > summary,
-.fbl-skyhold-ship-enterprise .fbls-fleet-inline-editor > summary,
-.fbl-skyhold-ship-enterprise .fbls-fleet-profile legend {
+.application.fbl-skyhold-politics .fbls-politics-shell,
+.window-app.fbl-skyhold-politics .fbls-politics-shell {
+  flex: 1 1 0;
+  min-height: 0;
+  color-scheme: dark;
+  color: var(--fbls-text);
+  background: var(--fbls-surface-0);
+  text-shadow: none;
+}
+
+.application.fbl-skyhold-politics .fbls-politics-content,
+.window-app.fbl-skyhold-politics .fbls-politics-content {
+  color: var(--fbls-text);
+  background: var(--fbls-surface-0);
+}
+
+.application.fbl-skyhold-politics .fbls-politics-shell :is(h1, h2, h3, h4),
+.window-app.fbl-skyhold-politics .fbls-politics-shell :is(h1, h2, h3, h4) {
   color: var(--fbls-text-strong);
-  -webkit-text-fill-color: var(--fbls-text-strong);
+  border: 0;
+  padding: 0;
+  text-shadow: none;
 }
 
-.fbl-skyhold-ship-enterprise .fbls-fleet-profile > summary small,
-.fbl-skyhold-ship-enterprise .fbls-fleet-log > summary small {
-  color: var(--fbls-muted);
-  -webkit-text-fill-color: var(--fbls-muted);
+.application.fbl-skyhold-politics .window-header,
+.window-app.fbl-skyhold-politics .window-header,
+.application.fbl-skyhold-politics-balance .window-header,
+.window-app.fbl-skyhold-politics-balance .window-header {
+  color: var(--fbls-text-strong);
+  background: var(--fbls-surface-2);
+  border-bottom: 1px solid var(--fbls-border);
+  text-shadow: none;
 }
 
-.fbl-skyhold-ship-enterprise input:not([type="checkbox"]),
-.fbl-skyhold-ship-enterprise textarea,
-.fbl-skyhold-ship-enterprise select {
-  width: 100%;
-  min-width: 0;
-  border: 1px solid var(--fbls-border-strong);
-  background: var(--fbls-surface-1);
+.application.fbl-skyhold-politics .window-header .window-title,
+.window-app.fbl-skyhold-politics .window-header .window-title,
+.application.fbl-skyhold-politics-balance .window-header .window-title,
+.window-app.fbl-skyhold-politics-balance .window-header .window-title {
+  color: var(--fbls-text-strong);
+  text-shadow: none;
+}
+
+.application.fbl-skyhold-morale-dialog .window-content,
+.window-app.fbl-skyhold-morale-dialog .window-content {
+  gap: 0;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.application.fbl-skyhold-morale-dialog .form-footer,
+.window-app.fbl-skyhold-morale-dialog .form-footer {
+  display: none;
+}
+
+/* All Skyhold native selects own BOTH colors, independent of the Foundry theme.
+   This covers classless controls, popover editors, optgroups and list selects. */
+.application.fbl-skyhold select,
+.window-app.fbl-skyhold select,
+.application.fbl-skyhold select.fbls-control,
+.window-app.fbl-skyhold select.fbls-control,
+.application.fbl-skyhold select :is(option, optgroup),
+.window-app.fbl-skyhold select :is(option, optgroup) {
+  color-scheme: dark;
   color: var(--fbls-text);
   -webkit-text-fill-color: var(--fbls-text);
-  box-shadow: none;
+  background: var(--fbls-surface-1);
+  opacity: 1;
+  text-shadow: none;
 }
-
-.fbl-skyhold-ship-enterprise input:not([type="checkbox"]):disabled,
-.fbl-skyhold-ship-enterprise textarea:disabled,
-.fbl-skyhold-ship-enterprise select:disabled {
+.application.fbl-skyhold select:disabled,
+.window-app.fbl-skyhold select:disabled,
+.application.fbl-skyhold select.fbls-control:disabled,
+.window-app.fbl-skyhold select.fbls-control:disabled,
+.application.fbl-skyhold select :is(option:disabled, optgroup:disabled),
+.window-app.fbl-skyhold select :is(option:disabled, optgroup:disabled),
+.application.fbl-skyhold select optgroup:disabled option,
+.window-app.fbl-skyhold select optgroup:disabled option {
   color: var(--fbls-muted);
   -webkit-text-fill-color: var(--fbls-muted);
-  opacity: 0.72;
-}
-
-.fbl-skyhold-ship-enterprise input::placeholder,
-.fbl-skyhold-ship-enterprise textarea::placeholder {
-  color: var(--fbls-placeholder);
-  -webkit-text-fill-color: var(--fbls-placeholder);
+  background: var(--fbls-surface-1);
   opacity: 1;
 }
 
-.fbl-skyhold-ship-enterprise select option,
-.fbl-skyhold-ship-enterprise select optgroup {
+.fbl-skyhold-tenday-app .fbls-tenday-contract-note select {
+  min-height: var(--fbls-control-height);
+  border: 1px solid var(--fbls-border-strong);
+  border-radius: var(--fbls-radius-sm);
   color: var(--fbls-text);
-  -webkit-text-fill-color: var(--fbls-text);
   background: var(--fbls-surface-1);
-}
-
-.fbl-skyhold-app select option,
-.fbl-skyhold-app optgroup,
-.fbl-skyhold-building-editor select option,
-.fbl-skyhold-building-editor optgroup,
-.fbl-skyhold-crew-editor select option {
-  background: var(--fbls-surface-1);
-  color: var(--fbls-text);
+  box-shadow: none;
   -webkit-text-fill-color: var(--fbls-text);
 }
 
-.fbl-skyhold-route-edge-editor select option,
-.fbl-skyhold-route-edge-editor select optgroup {
-  color: var(--fbls-text);
-  background: var(--fbls-surface-1);
-  -webkit-text-fill-color: var(--fbls-text);
+.fbl-skyhold-tenday-app .fbls-tenday-contract-note select:hover:not(:disabled),
+.fbl-skyhold-tenday-app .fbls-tenday-contract-note select:focus-visible {
+  border-color: var(--fbls-accent-border);
+  background: var(--fbls-surface-2);
 }
 
-.fbl-skyhold-app .fbls-person-editor.v2 > fieldset,
-.fbl-skyhold-app .fbls-person-editor.v2 > .fbls-resident-midline,
-.fbl-skyhold-app .fbls-person-editor.v2 > .fbls-person-notes-field,
-.fbl-skyhold-app .fbls-person-editor.v2 > .resident-actions {
+.fbl-skyhold-tenday-app .fbls-tenday-contract-note select:disabled {
+  color: var(--fbls-muted);
+  background: var(--fbls-surface-1);
+  opacity: 1;
+  -webkit-text-fill-color: var(--fbls-muted);
+}
+
+.application.fbl-skyhold-resident-editor .window-content,
+.window-app.fbl-skyhold-resident-editor .window-content {
+  padding: 0;
+  overflow: hidden;
+}
+
+/* Foundry owns unlayered fieldset margins. Reset only the standalone resident
+   form here so the layered component grid can control its actual section gap. */
+.application.fbl-skyhold-resident-editor .fbls-person-editor.v2 > fieldset,
+.application.fbl-skyhold-resident-editor .fbls-person-editor.v2 > .fbls-resident-midline,
+.application.fbl-skyhold-resident-editor .fbls-person-editor.v2 > .resident-actions,
+.window-app.fbl-skyhold-resident-editor .fbls-person-editor.v2 > fieldset,
+.window-app.fbl-skyhold-resident-editor .fbls-person-editor.v2 > .fbls-resident-midline,
+.window-app.fbl-skyhold-resident-editor .fbls-person-editor.v2 > .resident-actions {
   margin: 0;
   margin-block: 0;
   margin-inline: 0;
 }
 
-.fbl-skyhold-app .fbls-person-editor.v2 fieldset {
+.application.fbl-skyhold-resident-editor .fbls-person-editor.v2 fieldset,
+.window-app.fbl-skyhold-resident-editor .fbls-person-editor.v2 fieldset {
   min-inline-size: 0;
-  margin: 0;
-  margin-block: 0;
-  margin-inline: 0;
-  padding: 0.08rem 0.34rem 0.1rem;
-}
-
-.fbl-skyhold-app .fbls-person-editor.v2 legend {
-  margin: 0;
-  margin-block: 0;
-  margin-inline: 0;
-  padding: 0 0.22rem;
-  line-height: 1;
 }
 
 .application.fbl-skyhold-template-browser .window-content,
@@ -141,7 +218,7 @@
   display: inline-grid;
   place-items: center;
   width: 1.55rem;
-  height: 1.55rem;
+  height: var(--fbls-control-height);
   margin-inline: 0.12rem;
   border: 1px solid var(--fbls-border);
   border-radius: 5px;
@@ -170,7 +247,7 @@
 .application.fbl-skyhold-mass-combat,
 .window-app.fbl-skyhold-mass-combat {
   background-color: var(--fbls-battle-bg, var(--fbls-surface-0));
-  background: var(--fbls-battle-bg);
+  background: var(--fbls-battle-bg, var(--fbls-surface-0));
 }
 
 .application.fbl-skyhold-mass-combat .window-content,
@@ -180,7 +257,7 @@
   min-height: 0;
   overflow: hidden;
   background-color: var(--fbls-battle-bg, var(--fbls-surface-0));
-  background: var(--fbls-battle-bg);
+  background: var(--fbls-battle-bg, var(--fbls-surface-0));
   color: var(--fbls-battle-text);
 }
 
@@ -193,7 +270,7 @@
   min-height: 0;
   height: 100%;
   background-color: var(--fbls-battle-bg, var(--fbls-surface-0));
-  background: var(--fbls-battle-bg);
+  background: var(--fbls-battle-bg, var(--fbls-surface-0));
   color: var(--fbls-battle-text);
 }
 
@@ -258,12 +335,6 @@
 .window-app.fbl-skyhold-mass-combat .window-content:has([data-application-part="body"]) {
   overflow: hidden;
   scrollbar-gutter: auto;
-}
-
-.application.fbl-skyhold-mass-combat .fbls-battle-shell select option,
-.window-app.fbl-skyhold-mass-combat .fbls-battle-shell select option {
-  background: var(--fbls-battle-control-option-bg);
-  color: var(--fbls-battle-text-soft);
 }
 
 .application.fbl-skyhold-mass-tag-editor,
@@ -372,6 +443,7 @@
   .fbl-skyhold-app,
   .fbl-skyhold-building-editor,
   .fbl-skyhold-crew-editor,
+  .fbl-skyhold-resident-editor,
   .fbl-skyhold-template-browser,
   .fbl-skyhold-market-catalog-editor,
   .fbl-skyhold-region-catalog-editor,
@@ -416,6 +488,7 @@
   .fbl-skyhold-app,
   .fbl-skyhold-building-editor,
   .fbl-skyhold-crew-editor,
+  .fbl-skyhold-resident-editor,
   .fbl-skyhold-template-browser,
   .fbl-skyhold-market-catalog-editor,
   .fbl-skyhold-region-catalog-editor,
@@ -431,6 +504,7 @@
   .fbl-skyhold-app,
   .fbl-skyhold-building-editor,
   .fbl-skyhold-crew-editor,
+  .fbl-skyhold-resident-editor,
   .fbl-skyhold-template-browser,
   .fbl-skyhold-market-catalog-editor,
   .fbl-skyhold-region-catalog-editor,
@@ -455,6 +529,7 @@
   .fbl-skyhold-app,
   .fbl-skyhold-building-editor,
   .fbl-skyhold-crew-editor,
+  .fbl-skyhold-resident-editor,
   .fbl-skyhold-template-browser,
   .fbl-skyhold-market-catalog-editor,
   .fbl-skyhold-region-catalog-editor,
@@ -476,6 +551,7 @@
   .fbl-skyhold-app,
   .fbl-skyhold-building-editor,
   .fbl-skyhold-crew-editor,
+  .fbl-skyhold-resident-editor,
   .fbl-skyhold-template-browser,
   .fbl-skyhold-market-catalog-editor,
   .fbl-skyhold-region-catalog-editor,
@@ -495,6 +571,7 @@
   .fbl-skyhold-app,
   .fbl-skyhold-building-editor,
   .fbl-skyhold-crew-editor,
+  .fbl-skyhold-resident-editor,
   .fbl-skyhold-template-browser,
   .fbl-skyhold-market-catalog-editor,
   .fbl-skyhold-region-catalog-editor,
@@ -516,6 +593,12 @@
   z-index: 1;
   opacity: 1;
   visibility: visible;
+}
+
+/* Anchor the hidden specialty control inside its card so focus cannot scroll the V2 frame. */
+.fbl-skyhold-region-catalog-editor .fbls-region-specialty-grid input[type="checkbox"] {
+  --fbls-check-size: 1px;
+  position: absolute; inset: 0 auto auto 0; border: 0; overflow: hidden; clip-path: inset(50%);
 }
 
 /* Pill checkboxes are click targets, not visible checkboxes. Re-apply their overlay
@@ -540,3 +623,60 @@
 :is(.fbl-skyhold-app, .fbl-skyhold-building-editor) .fbls-season-pill input[type="checkbox"]::after {
   display: none;
 }
+
+/* Template development totals share the native title bar. */
+.fbl-skyhold-template-browser .window-header .fbls-template-header-development { display: flex; align-items: center; flex: 0 1 auto; gap: 6px; margin-right: auto; min-width: 0; }
+.fbl-skyhold-template-browser .window-header:has(.fbls-template-header-development) .window-title { flex: 0 1 auto; }
+.fbl-skyhold-template-browser .window-header .fbls-template-current-dev { padding: 1px 5px; min-height: 22px; font-size: var(--fbls-type-compact-md); }
+
+/* Native controls inside the worker profile must not inherit Foundry light-form defaults. */
+.fbl-skyhold-building-editor .fbls-worker-profile-grid h4,
+.fbl-skyhold-building-editor .fbls-worker-profile-grid summary,
+.fbl-skyhold-building-editor .fbls-worker-profile-grid label { color: var(--fbls-text); }
+.fbl-skyhold-building-editor .fbls-worker-profile-grid input:not([type="checkbox"]),
+.fbl-skyhold-building-editor .fbls-worker-profile-grid select { min-width: 0; width: 100%; height: var(--fbls-control-height); min-height: var(--fbls-control-height); padding: 3px 6px; margin: 0; color: var(--fbls-text-strong); background: var(--fbls-surface-1); border: 1px solid var(--fbls-border); font-size: var(--fbls-type-body); }
+.fbl-skyhold-building-editor .fbls-worker-profile-grid button { width: auto; height: var(--fbls-control-height); min-height: var(--fbls-control-height); padding: 3px 8px; margin: 0; color: var(--fbls-text); background: var(--fbls-surface-1); border: 1px solid var(--fbls-border); font-size: var(--fbls-type-compact-md); box-shadow: none; }
+.fbl-skyhold-building-editor .fbls-worker-choice-options button { display: block; width: 100%; height: auto; min-height: var(--fbls-control-height); text-align: left; white-space: normal; overflow-wrap: anywhere; }
+.fbl-skyhold-building-editor .fbls-worker-profile-grid input::placeholder { color: var(--fbls-placeholder); }
+
+.fbl-skyhold-building-editor .fbls-worker-profile-grid [hidden] { display: none; }
+
+/* Opt-in roles beat unlayered theme defaults, including dark-on-dark headings. */
+.application.fbl-skyhold .fbls-heading-title,
+.application.fbl-skyhold .fbls-heading-section,
+.window-app.fbl-skyhold .fbls-heading-title,
+.window-app.fbl-skyhold .fbls-heading-section {
+  color: var(--fbls-text-strong); -webkit-text-fill-color: var(--fbls-text-strong);
+  font-family: inherit; font-size: var(--fbls-heading-size); font-weight: 700;
+  line-height: 1.25; margin: 0; border: 0; text-shadow: none;
+}
+.application.fbl-skyhold-ui-review h1, .window-app.fbl-skyhold-ui-review h1,
+.application.fbl-skyhold-ui-review h2, .window-app.fbl-skyhold-ui-review h2,
+.application.fbl-skyhold-ui-review h3, .window-app.fbl-skyhold-ui-review h3,
+.application.fbl-skyhold-ui-review h4, .window-app.fbl-skyhold-ui-review h4 { color: var(--fbls-text-strong); -webkit-text-fill-color: var(--fbls-text-strong); }
+.application.fbls-workforce-window,
+.window-app.fbls-workforce-window {
+  min-width: min(900px, calc(100vw - 24px));
+  min-height: min(520px, calc(100vh - 24px));
+  border: 1px solid var(--fbls-surface-3); border-radius: var(--fbls-radius-md); outline: none;
+  background: var(--fbls-surface-0); box-shadow: 0 8px 32px var(--fbls-overlay-strong); overflow: hidden;
+  --background: var(--fbls-surface-0);
+  --color-border: var(--fbls-surface-3);
+  --color-text-primary: var(--fbls-text);
+  --color-text-secondary: var(--fbls-muted);
+  --color-text-emphatic: var(--fbls-text-strong);
+  --color-text-subtle: var(--fbls-muted);
+}
+.application.fbls-workforce-window .window-content,
+.window-app.fbls-workforce-window .window-content {
+  display: flex; flex-direction: column; min-height: 0;
+  padding: 0; gap: 0; overflow: hidden;
+  color: var(--fbls-text); background: var(--fbls-surface-0);
+}
+.application.fbls-workforce-window .window-header,
+.window-app.fbls-workforce-window .window-header {
+  background: var(--fbls-surface-2); color: var(--fbls-text-strong);
+  border-bottom: 1px solid var(--fbls-accent-border); text-shadow: none;
+}
+.application.fbls-workforce-window .window-header .window-title,
+.window-app.fbls-workforce-window .window-header .window-title { color: var(--fbls-text-strong); text-shadow: none; }

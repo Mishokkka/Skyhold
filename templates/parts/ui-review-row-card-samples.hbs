@@ -1,0 +1,50 @@
+{{#if isRowsChips}}
+  <div class="fbls-ui-review-pair">
+    <section class="fbls-ui-review-sample is-before"><h4>Сейчас</h4>
+      <div class="fbls-resident-editor-window"><div class="fbl-skyhold-resident-editor fbls-person-editor v2 fbls-ui-row-before" data-review-row-before>
+        <div class="fbls-trait-control-row">
+          <div class="fbls-trait-current"><span class="fbls-field-title">Выбрано</span><div class="fbls-selected-traits">
+            <span class="fbls-trait-badge editor-chip fbls-note-tip">Лидер<button type="button" class="fbls-chip-remove" aria-label="Убрать Лидер в образце">×</button></span>
+            <span class="fbls-trait-badge editor-chip fbls-note-tip">Дальновидный<button type="button" class="fbls-chip-remove" aria-label="Убрать Дальновидный в образце">×</button></span>
+            <span class="fbls-trait-badge editor-chip fbls-note-tip">Прирождённый строитель<button type="button" class="fbls-chip-remove" aria-label="Убрать Прирождённый строитель в образце">×</button></span>
+            <span class="fbls-trait-badge editor-chip fbls-note-tip">Непоколебимый<button type="button" class="fbls-chip-remove" aria-label="Убрать Непоколебимый в образце">×</button></span>
+            <span class="fbls-trait-badge editor-chip fbls-note-tip">Прирождённый следопыт<button type="button" class="fbls-chip-remove" aria-label="Убрать Прирождённый следопыт в образце">×</button></span>
+          </div></div>
+          <label class="fbls-trait-add-field"><span>Добавить</span><select class="fbls-trait-picker fbls-trait-add-compact" aria-label="Добавить черту в текущем образце"><option>Выберите черту</option><option>Осторожный</option></select></label>
+        </div>
+      </div></div>
+      <div class="fbl-skyhold-crew-editor fbls-ui-row-before"><div class="fbls-suitable-editor"><span class="fbls-field-title">Подходящие типы</span><div class="fbls-selected-traits"><span class="fbls-worker-badge fbls-chip editor-chip">Ремесленник<button type="button" class="fbls-chip-remove" aria-label="Убрать Ремесленник в образце">×</button></span><span class="fbls-worker-badge fbls-chip editor-chip">Эмпатия<button type="button" class="fbls-chip-remove" aria-label="Убрать Эмпатия в образце">×</button></span></div><select class="fbls-trait-picker" aria-label="Добавить подходящий тип в текущем образце"><option>Добавить подходящий тип...</option><option>Сила</option></select></div></div>
+    </section>
+    <section class="fbls-ui-review-sample is-after"><h4>Предлагается</h4>
+      <div class="fbls-ui-row-grid" data-review-row-after>
+        <div class="fbls-field"><span>Выбрано</span><details class="fbls-ui-token-field" data-review-disclosure-key="rows-traits"><summary><span data-fbls-tooltip="Лидер · Дальновидный · Прирождённый строитель · Непоколебимый · Прирождённый следопыт">Лидер <b>+4</b></span></summary><div class="fbls-ui-token-list fbls-cluster"><span class="fbls-chip is-compact">Лидер</span><span class="fbls-chip is-compact">Дальновидный</span><span class="fbls-chip is-compact" data-fbls-tooltip="Прирождённый строитель">Прирождённый строитель</span><span class="fbls-chip is-compact">Непоколебимый</span><span class="fbls-chip is-compact">Прирождённый следопыт</span></div></details></div>
+        <label class="fbls-field"><span>Добавить</span><select class="fbls-control" aria-label="Добавить черту в предлагаемом образце"><option>Выберите черту</option><option>Осторожный</option></select></label>
+      </div>
+      <div class="fbls-ui-row-grid"><div class="fbls-field"><span>Типы бригады</span><details class="fbls-ui-token-field" data-review-disclosure-key="rows-types"><summary><span data-fbls-tooltip="Ремесленник · Эмпатия">Ремесленник <b>+1</b></span></summary><div class="fbls-ui-token-list fbls-cluster"><span class="fbls-chip is-compact">Ремесленник</span><span class="fbls-chip is-compact">Эмпатия</span></div></details></div><label class="fbls-field"><span>Добавить тип</span><select class="fbls-control" aria-label="Добавить тип бригады в предлагаемом образце"><option>Выберите тип</option><option>Сила</option></select></label></div>
+    </section>
+  </div>
+{{/if}}
+{{#if isRowsBaselines}}
+  <div class="fbls-ui-review-pair">
+    <section class="fbls-ui-review-sample is-before"><h4>Сейчас</h4><div class="fbl-skyhold-building-editor fbls-ui-row-before"><div class="fbls-worker-profile-grid"><section class="fbls-worker-profile-section"><div class="fbls-worker-profile-composition"><div class="fbls-worker-profile-rule"><div class="fbls-worker-profile-choice"><details data-profile-picker="composition"><summary>Прирождённый строитель, ремесленник из гильдии каменщиков</summary><p>Пример раскрытого списка</p></details></div><label>Человек<input type="number" class="fbls-control" value="2" aria-label="Человек в текущем образце"></label><button type="button" class="fbls-button compact fbls-button-role" aria-label="Удалить строку в текущем образце"><i class="fa-solid fa-trash" aria-hidden="true"></i></button></div></div></section></div></div></section>
+    <section class="fbls-ui-review-sample is-after"><h4>Предлагается</h4><div class="fbls-ui-row-grid has-actions"><div class="fbls-field"><span>Состав</span><details class="fbls-ui-token-field" data-review-disclosure-key="rows-composition"><summary><span data-fbls-tooltip="Прирождённый строитель, ремесленник из гильдии каменщиков">Строитель / ремесленник</span></summary><p>Прирождённый строитель, ремесленник из гильдии каменщиков.</p></details></div><label class="fbls-field"><span data-fbls-tooltip="Минимум работников с любой из выбранных предысторий">Чел.</span><input type="number" class="fbls-control" value="2" aria-label="Минимум работников в предлагаемом образце"></label><button type="button" class="fbls-button compact fbls-button-role" aria-label="Удалить строку в предлагаемом образце"><i class="fa-solid fa-trash" aria-hidden="true"></i></button></div>
+      <div class="fbls-ui-row-grid"><label class="fbls-field"><span>Назначено</span><input type="number" class="fbls-control" value="2" aria-label="Назначено в образце"></label><div class="fbls-field"><span>Итог · просмотр</span><output class="fbls-ui-row-value">2 / 4</output></div></div>
+    </section>
+  </div>
+{{/if}}
+{{#if isRowsActions}}
+  <div class="fbls-ui-review-pair">
+    <section class="fbls-ui-review-sample is-before"><h4>Сейчас</h4><div class="fbl-skyhold-mass-combat fbls-ui-action-row"><select class="fbls-control" aria-label="Сторона в текущем образце"><option>Обороняющиеся</option></select><div class="fbls-battle-tags-anchor"><button type="button" class="fbls-button compact" aria-label="Теги в текущем образце"><i class="fa-solid fa-tags" aria-hidden="true"></i> Теги</button></div></div><div class="fbls-construction-card-actions compact-line"><select class="fbls-compact-select" aria-label="Бригада в текущем образце"><option>Бригада Руны</option></select><button type="button" class="fbls-button compact icon-only-build" aria-label="Строить в текущем образце"><i class="fa-solid fa-hammer" aria-hidden="true"></i> 8</button></div></section>
+    <section class="fbls-ui-review-sample is-after"><h4>Предлагается</h4><div class="fbls-ui-action-row"><select class="fbls-control" aria-label="Сторона в предлагаемом образце"><option>Обороняющиеся</option></select><button type="button" class="fbls-button compact fbls-button-role" aria-label="Теги в предлагаемом образце"><i class="fa-solid fa-tags" aria-hidden="true"></i> Теги</button></div><div class="fbls-ui-action-row"><select class="fbls-control" aria-label="Бригада в предлагаемом образце"><option>Бригада Руны</option></select><button type="button" class="fbls-button compact fbls-button-role" aria-label="Строить в предлагаемом образце"><i class="fa-solid fa-hammer" aria-hidden="true"></i> 8</button></div><div class="fbls-ui-action-row"><input type="text" class="fbls-control" value="Северные ворота" aria-label="Название в образце"><span class="fbls-chip is-compact">Готово</span></div></section>
+  </div>
+{{/if}}
+{{#if isCardsHeader}}
+  {{#each headerCases}}<div class="fbls-ui-review-pair"><section class="fbls-ui-review-sample is-before"><h4>Сейчас · {{label}}</h4>{{> "modules/fbl-skyhold/templates/parts/ui-review-building-current.hbs"}}</section><section class="fbls-ui-review-sample is-after"><h4>Предлагается</h4>{{> "modules/fbl-skyhold/templates/parts/ui-review-building-proposed.hbs" reviewScope="details"}}</section></div>{{/each}}
+{{/if}}
+{{#if isCardsDetails}}
+  <div class="fbls-toolbar"><label class="fbls-field"><span>Пример здания</span><select class="fbls-control" data-review-building-case aria-label="Пример здания">{{#each detailCases}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label><label class="fbls-field"><span>Доступ в образце</span><select class="fbls-control" data-review-card-permission aria-label="Доступ в образце"><option value="edit" {{#unless demoViewOnly}}selected{{/unless}}>Можно редактировать</option><option value="view" {{#if demoViewOnly}}selected{{/if}}>Только просмотр</option></select></label></div>
+  {{#each detailCases}}<div class="fbls-ui-review-pair" data-review-building-panel="{{id}}" {{#unless selected}}hidden{{/unless}}><section class="fbls-ui-review-sample is-before"><h4>Сейчас</h4>{{> "modules/fbl-skyhold/templates/parts/ui-review-building-current.hbs"}}</section><section class="fbls-ui-review-sample is-after"><h4>Предлагается</h4>{{> "modules/fbl-skyhold/templates/parts/ui-review-building-proposed.hbs" reviewScope="details"}}</section></div>{{/each}}
+{{/if}}
+{{#if isCardsLayout}}
+  <div class="fbls-ui-review-pair"><section class="fbls-ui-review-sample is-before"><h4>Сейчас · сверху вниз по колонкам</h4><div class="fbls-building-cards">{{> "modules/fbl-skyhold/templates/parts/ui-review-building-current.hbs"}}</div></section><section class="fbls-ui-review-sample is-after"><h4>Предлагается · слева направо</h4><div class="fbls-ui-building-grid">{{#each proposedBuildings}}{{> "modules/fbl-skyhold/templates/parts/ui-review-building-proposed.hbs" reviewScope="layout"}}{{/each}}</div></section></div>
+{{/if}}

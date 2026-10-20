@@ -21,6 +21,13 @@ export function routeGraphViewportsEqual(left, right) {
     && left.zoom === right.zoom;
 }
 
+/** Apply before paint as well as on animation frames; a replacement world must never flash at (0, 0). */
+export function routeGraphViewportTransform(view, width, height) {
+  const x = Number(width) / 2 - view.centerX * view.zoom;
+  const y = Number(height) / 2 - view.centerY * view.zoom;
+  return `translate3d(${x}px, ${y}px, 0) scale(${view.zoom})`;
+}
+
 export function readRouteGraphViewport(map = {}, settings = globalThis.game?.settings) {
   let stored = {};
   try {

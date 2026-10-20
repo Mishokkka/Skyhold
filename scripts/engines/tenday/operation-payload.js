@@ -44,28 +44,27 @@ export function hydrateTendayOperation(operation = {}, { holdingId = "", holding
       periodLabel: String(payload.periodLabel ?? economy.periodLabel ?? "десятник"),
       produced: compactRows(economy.produced),
       consumed: compactRows(economy.consumed),
-      spoiled: compactRows(economy.spoiled),
       income: compactRows(economy.income),
       work: compactRows(economy.work),
       skipped: compactRows(economy.skipped),
       formulas: compactRows(economy.formulas),
       ledger: compactRows(economy.ledger),
       ledgerTotals: copyValue(economy.ledgerTotals ?? {}),
-      labor: copyValue(economy.labor ?? { ready: true, lines: [] }),
-      payroll: copyValue(economy.payroll ?? { ready: true, rows: [], lines: [] }),
+      ledgerCount: Number(economy.ledger?.total ?? economy.ledger?.rows?.length ?? 0),
+      ledgerTruncated: Boolean(economy.ledger?.truncated),
       food: copyValue(economy.food ?? {}),
-      capital: copyValue(economy.capital ?? {}),
-      services: copyValue(economy.services ?? {}),
       construction: copyValue(economy.construction ?? {}),
       trade: copyValue(economy.trade ?? {}),
       treasury: copyValue(economy.treasury ?? {}),
-      market: copyValue(economy.market ?? null)
+      finance: copyValue(economy.finance ?? {}),
+      morale: copyValue(economy.morale ?? null),
+      market: copyValue(economy.market ?? null),
+      politics: copyValue(economy.politics ?? null)
     },
     changeSet: {
       totals: copyValue(payload.metrics ?? {}),
       clock,
       money: copyValue(payload.money ?? null),
-      debt: copyValue(payload.debt ?? null),
       food: copyValue(payload.food ?? null),
       date: copyValue(payload.date ?? null),
       resources: compactRows(changes.resources),
@@ -74,11 +73,12 @@ export function hydrateTendayOperation(operation = {}, { holdingId = "", holding
       residents: compactRows(changes.residents),
       development: compactRows(changes.development),
       modifiers: compactRows(changes.modifiers),
-      shipments: compactRows(changes.shipments)
+      shipments: compactRows(changes.shipments),
+      ships: compactRows(changes.ships),
+      politics: compactRows(changes.politics)
     },
     events: { periods: Math.max(1, Math.floor((Number(payload.qd) || 40) / 40)), entries: [], events: compactRows(payload.events) },
-    dueEvents: compactRows(payload.dueEvents),
-    spoilage: copyValue(payload.spoilage ?? { rows: [], totalQty: 0, bufferRationPoints: 0, foodPersonDays: 0, hasLosses: false })
+    dueEvents: compactRows(payload.dueEvents)
   };
 }
 
@@ -87,11 +87,11 @@ export function buildTendayOperationPayload(prepared = {}) {
   const ledger = normalizeEconomyLedger(report?.ledger ?? [], { limit: 600 });
   const changeSet = prepared?.changeSet ?? {};
   const changes = {};
-  for (const key of ["resources", "items", "buildings", "residents", "development", "modifiers", "shipments"]) {
+  for (const key of ["resources", "items", "buildings", "residents", "development", "modifiers", "shipments", "ships", "politics"]) {
     changes[key] = compactTendayRows(changeSet?.[key]);
   }
   return {
-    schema: 2,
+    schema: 3,
     holdingName: String(prepared?.holdingName ?? ""),
     periodLabel: String(prepared?.periodLabel ?? report?.periodLabel ?? "десятник"),
     qd: Number(prepared?.qd) || 40,
@@ -99,7 +99,6 @@ export function buildTendayOperationPayload(prepared = {}) {
     warnings: copyValue(prepared?.warnings ?? []),
     metrics: copyValue(changeSet?.totals ?? {}),
     money: copyValue(changeSet?.money ?? {}),
-    debt: copyValue(changeSet?.debt ?? {}),
     food: copyValue(changeSet?.food ?? {}),
     date: copyValue(changeSet?.date ?? null),
     changes,
@@ -107,24 +106,22 @@ export function buildTendayOperationPayload(prepared = {}) {
       periodLabel: String(report?.periodLabel ?? "десятник"),
       produced: compactTendayRows(report?.produced, 60),
       consumed: compactTendayRows(report?.consumed, 60),
-      spoiled: compactTendayRows(report?.spoiled, 40),
       income: compactTendayRows(report?.income, 40),
       work: compactTendayRows(report?.work, 40),
       skipped: compactTendayRows(report?.skipped, 40),
       formulas: compactTendayRows(report?.formulas, 40),
-      labor: copyValue(report?.labor ?? { ready: true, lines: [] }),
-      payroll: copyValue(report?.payroll ?? { ready: true, rows: [], lines: [] }),
       food: copyValue(report?.food ?? {}),
-      capital: copyValue(report?.capital ?? {}),
-      services: copyValue(report?.services ?? {}),
       construction: copyValue(report?.construction ?? {}),
       trade: copyValue(report?.trade ?? {}),
       treasury: copyValue(report?.treasury ?? {}),
+      finance: copyValue(report?.finance ?? {}),
+      morale: copyValue(report?.morale ?? null),
       market: copyValue(report?.market ?? null),
-      ledger: compactTendayRows(ledger, 300),
+      politics: copyValue(report?.politics ?? null),
+      ledger: { ...compactTendayRows(ledger, 300), total: report?.ledgerCount ?? ledger.length,
+        truncated: Boolean(report?.ledgerTruncated || (report?.ledgerCount ?? ledger.length) > 300) },
       ledgerTotals: copyValue(report?.ledgerTotals ?? economyLedgerTotals(ledger))
     },
-    spoilage: copyValue(prepared?.spoilage ?? { rows: [], totalQty: 0, bufferRationPoints: 0, foodPersonDays: 0, hasLosses: false }),
     events: compactTendayRows(prepared?.events?.events, 40),
     dueEvents: compactTendayRows(prepared?.dueEvents, 40)
   };

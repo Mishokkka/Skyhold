@@ -1,7 +1,7 @@
 {{#if active.defense}}
   <section class="fbls-panel fbls-defense-workspace">
     <header class="fbls-defense-workspace-head">
-      <div><span class="fbls-defense-eyebrow">Военный контур</span><h2><i class="fa-solid fa-shield-halved"></i> Оборона поселения <i class="fa-regular fa-circle-question fbls-help-icon" data-fbls-tooltip="{{defenseContext.defenseHelpText}}"></i></h2></div>
+      <div class="fbls-section-heading"><span class="fbls-eyebrow is-tiny fbls-defense-eyebrow">Военный контур</span><h2 class="fbls-heading-section"><i class="fa-solid fa-shield-halved"></i> Оборона поселения <i class="fa-regular fa-circle-question fbls-help-icon" data-fbls-tooltip="{{defenseContext.defenseHelpText}}"></i></h2></div>
       <div class="fbls-defense-overview" aria-label="Сводка обороны">
         <span><i class="fa-solid fa-person-rifle"></i><small>Доступно</small><b>{{defenseContext.soldierCount}}</b></span>
         <span><i class="fa-solid fa-bolt"></i><small>Эффективность</small><b>{{defenseContext.countedEffectiveText}}</b></span>
@@ -25,14 +25,17 @@
               <label data-fbls-tooltip="{{typeHint}}"><span>Тип</span>{{#if ../canManageDefense}}<select title="{{typeHint}}" data-field="holdings.{{../holdingIndex}}.gm.defense.squads.{{_index}}.type">{{#each typeOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{typeLabel}}</strong>{{/if}}</label>
             </div>
             <div class="fbls-defense-squad-metrics" aria-label="Показатели {{label}}">
-              <span title="Бойцов"><i class="fa-solid fa-users"></i><b>{{memberCount}}/5</b></span>
-              <span title="Эффективность"><i class="fa-solid fa-bolt"></i><b>{{effectiveText}}</b></span>
-              <span class="tag" data-fbls-tooltip="{{typeTag}}"><i class="{{typeIcon}}"></i><b>{{typeTag}}</b></span>
-              <em class="{{statusClass}}">{{statusText}}</em>
+              <span class="fbls-chip is-compact" title="Бойцов"><i class="fa-solid fa-users"></i><b>{{memberCount}}/5</b></span>
+              <span class="fbls-chip is-compact" title="Эффективность"><i class="fa-solid fa-bolt"></i><b>{{effectiveText}}</b></span>
+              <span class="fbls-chip is-compact tag" data-fbls-tooltip="{{typeTag}}"><i class="{{typeIcon}}"></i><b>{{typeTag}}</b></span>
+              <em class="fbls-chip is-compact {{statusClass}}">{{statusText}}</em>
             </div>
             <div class="fbls-defense-squad-actions">
               {{#if ../canManageDefense}}<button type="button" class="fbls-button compact" data-action="fill-defense-squad-best" data-squad-id="{{id}}" title="Назначить лучших подходящих солдат"><i class="fa-solid fa-ranking-star"></i><span>Лучшие</span></button>{{/if}}
-              {{#if ../canManageDefense}}<label class="fbls-defense-equipped-toggle" title="Экипированный полный отряд учитывается в обороне"><input type="checkbox" data-type="checkbox" data-field="holdings.{{../holdingIndex}}.gm.defense.squads.{{_index}}.equipped" {{#if equipped}}checked{{/if}} /><span>Экипирован</span></label>{{/if}}
+              {{#if ../canManageDefense}}
+                <label class="fbls-defense-equipped-toggle" title="Выдача списывает одну единицу выбранного Вооружения со склада и закрепляет её за отрядом."><select data-defense-armament-choice aria-label="Тип вооружения для {{label}}">{{#each armamentOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select><button type="button" class="fbls-button compact" data-action="assign-defense-armament" data-squad-id="{{id}}"><i class="fa-solid fa-gun"></i><span>{{#if equipped}}Заменить{{else}}Выдать{{/if}}</span></button></label>
+                {{#if equipped}}<button type="button" class="fbls-button compact" data-action="unassign-defense-armament" data-squad-id="{{id}}" title="Вернуть {{armamentLabel}} на склад"><i class="fa-solid fa-box-open"></i><span>Снять</span></button>{{/if}}
+              {{else}}<span class="fbls-defense-equipped-toggle"><i class="fa-solid fa-gun"></i> {{armamentLabel}}</span>{{/if}}
               {{#if ../canManageDefense}}<button type="button" class="fbls-icon-button danger" data-action="delete-defense-squad" data-squad-id="{{id}}" title="Удалить отряд" aria-label="Удалить отряд {{name}}"><i class="fa-solid fa-trash"></i></button>{{/if}}
             </div>
           </header>
@@ -47,7 +50,7 @@
           {{#if ../canManageDefense}}<details class="fbls-defense-squad-notes"><summary><i class="fa-solid fa-note-sticky"></i> Заметки отряда</summary><textarea rows="2" data-field="holdings.{{../holdingIndex}}.gm.defense.squads.{{_index}}.notes" placeholder="Вооружение, задача, позиция…">{{notes}}</textarea></details>{{else}}{{#if notes}}<p class="fbls-defense-readonly-notes">{{notes}}</p>{{/if}}{{/if}}
         </article>
       {{else}}
-        <div class="fbls-defense-empty"><i class="fa-solid fa-people-group"></i><strong>Отрядов пока нет</strong><span>Создайте отряд и назначьте жителей с военной профессией.</span></div>
+        <div class="fbls-empty-state fbls-defense-empty"><i class="fa-solid fa-people-group"></i><strong>Отрядов пока нет</strong><span>Создайте отряд и назначьте жителей с военным прошлым, подходящими характеристиками или чертами.</span></div>
       {{/each}}
     </div>
 

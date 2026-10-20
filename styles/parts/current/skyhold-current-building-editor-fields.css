@@ -1,0 +1,237 @@
+/* Building editor field geometry and form grids; building cards have separate owners. */
+.fbl-skyhold-building-editor .fbls-building-editor-card label {
+  display: grid;
+  align-content: end;
+  min-width: 0;
+  gap: 2px;
+  color: var(--fbls-muted);
+  font-size: 0.625rem;
+  line-height: 1.4;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.fbl-skyhold-building-editor .fbls-building-editor-card span,
+.fbl-skyhold-building-editor .fbls-building-editor-card label span {
+  letter-spacing: 0.04em;
+}
+
+.fbl-skyhold-building-editor .fbls-building-editor-card label span {
+  display: block;
+}
+
+.fbl-skyhold-building-editor label > strong {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: var(--fbls-control-height);
+  line-height: 1.25;
+}
+
+.fbl-skyhold-building-editor .fbls-building-editor-card input,
+.fbl-skyhold-building-editor .fbls-building-editor-card select,
+.fbl-skyhold-building-editor .fbls-building-editor-card textarea,
+.fbl-skyhold-building-editor .fbls-building-editor-card strong,
+.fbl-skyhold-building-editor .fbls-building-editor-card p.fbls-preline {
+  min-height: var(--fbls-control-height);
+  padding: 0.25rem 0.4rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 7px;
+  background: var(--fbls-overlay);
+  color: var(--fbls-text);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.fbl-skyhold-building-editor .income-card .fbls-income-grid,
+.fbl-skyhold-building-editor .income-card .fbls-trade-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  align-items: end; gap: 0.35rem;
+}
+.fbl-skyhold-building-editor .fbls-production-season-box {
+  display: grid; grid-template-rows: auto var(--fbls-control-height); gap: 2px; align-content: end;
+}
+.fbl-skyhold-building-editor .fbls-production-season-box > span { font-size: 0.625rem; line-height: 1.4; }
+.fbl-skyhold-building-editor .fbls-production-season-pills { display: flex; align-items: center; gap: 2px; }
+.fbl-skyhold-building-editor .fbls-production-season-pills .fbls-season-pill {
+  min-height: var(--fbls-control-height); padding-block: 0.25rem; box-sizing: border-box;
+}
+.fbl-skyhold-building-editor .fbls-prereq-row { grid-template-columns: minmax(0, 1fr) var(--fbls-control-height); }
+
+@container fbls-building-editor (max-width: 920px) {
+  .fbl-skyhold-building-editor .fbls-build-main-row.with-dev-requirements { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .fbl-skyhold-building-editor .fbls-construction-dev-inline { grid-column: 1 / -1; min-width: 0; width: 100%; }
+}
+@container fbls-building-editor (max-width: 760px) {
+  .fbl-skyhold-building-editor .fbls-build-subgrid.tighter { grid-template-columns: minmax(0, 1fr); }
+}
+
+.fbl-skyhold-building-editor .fbls-building-editor-card input[type="checkbox"] {
+  --fbls-check-size: 18px;
+  display: grid;
+  place-items: center;
+  width: var(--fbls-check-size);
+  height: var(--fbls-check-size);
+  min-width: var(--fbls-check-size);
+  min-height: var(--fbls-check-size);
+  max-width: var(--fbls-check-size);
+  max-height: var(--fbls-check-size);
+  margin: 0;
+  padding: 0;
+  flex: 0 0 var(--fbls-check-size);
+  align-self: center;
+  justify-self: center;
+}
+
+.fbl-skyhold-building-editor .fbls-building-editor-card input[type="number"],
+.fbl-skyhold-building-editor .fbls-building-editor-card strong,
+.fbl-skyhold-building-editor .fbls-cost-row input[type="number"] {
+  font-size: 1.08rem;
+  font-weight: 800;
+}
+
+.fbl-skyhold-building-editor .fbls-building-editor-card textarea {
+  min-height: 3.2rem;
+}
+
+.fbl-skyhold-building-editor .fbls-culture-religion-grid {
+  display: grid;
+  grid-template-columns: minmax(8rem, auto) minmax(13rem, 1fr) minmax(12rem, 1fr);
+  gap: 0.5rem;
+  align-items: end;
+}
+
+.fbl-skyhold-building-editor .fbls-culture-religion-grid label {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+}
+
+.fbl-skyhold-building-editor .fbls-culture-religion-grid .wide {
+  grid-column: 1 / -1;
+}
+
+.fbl-skyhold-building-editor .fbls-culture-religion-grid textarea {
+  min-height: 4.5rem;
+}
+
+.fbl-skyhold-building-editor .fbls-culture-religion-grid .fbls-religion-custom {
+  min-width: 0;
+}
+
+@container fbls-building-editor (max-width: 880px) {
+  .fbl-skyhold-building-editor .fbls-culture-religion-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.fbl-skyhold-building-editor .fbls-cost-row input[type="text"],
+.fbl-skyhold-building-editor .fbls-cost-row input[type="number"] {
+  min-width: 0;
+}
+
+.fbl-skyhold-building-editor .fbls-building-option-row {
+  display: flex; flex-wrap: wrap; align-items: end; gap: var(--fbls-gap-sm);
+}
+.fbl-skyhold-building-editor .fbls-building-option-row > label:not(.fbls-choice-toggle) { flex: 1 1 8rem; }
+.fbl-skyhold-building-editor .fbls-building-option-row > .fbls-cluster { flex: 0 1 auto; }
+
+/* Accepted editor groups; values and action hooks remain in their original controls. */
+.fbl-skyhold-building-editor.fbls-building-editor-layout .fbls-editor-group {
+  display: grid;
+  align-content: start;
+  min-width: 0;
+  gap: var(--fbls-gap-xs);
+  margin: 0;
+  padding: var(--fbls-gap-sm) 0;
+  border-top: 1px solid var(--fbls-border);
+}
+.fbl-skyhold-building-editor.fbls-building-editor-layout .fbls-editor-group > :is(h4, summary) {
+  margin: 0;
+  color: var(--fbls-text-strong);
+  font-size: var(--fbls-type-compact-sm);
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: none;
+  line-height: 1.4;
+}
+.fbl-skyhold-building-editor.fbls-building-editor-layout details.fbls-editor-group { display: block; }
+.fbl-skyhold-building-editor.fbls-building-editor-layout details.fbls-editor-group > summary { cursor: pointer; }
+.fbl-skyhold-building-editor.fbls-building-editor-layout details.fbls-editor-group > div { margin-top: var(--fbls-gap-xs); }
+.fbl-skyhold-building-editor.fbls-building-editor-layout .fbls-editor-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(10rem, 100%), 1fr));
+  align-items: end;
+  gap: var(--fbls-gap-sm);
+  min-width: 0;
+}
+.fbl-skyhold-building-editor.fbls-building-editor-layout .fbls-editor-fields > .wide,
+.fbl-skyhold-building-editor.fbls-building-editor-layout .fbls-editor-fields > .fbls-wide-label,
+.fbl-skyhold-building-editor.fbls-building-editor-layout .fbls-editor-fields > .fbls-cluster,
+.fbl-skyhold-building-editor.fbls-building-editor-layout .fbls-editor-fields > p { grid-column: 1 / -1; }
+.fbl-skyhold-building-editor.fbls-building-editor-layout .fbls-building-editor-card label {
+  margin: 0;
+  gap: 2px;
+  font-size: 0.625rem;
+  line-height: 1.4;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.fbl-skyhold-building-editor.fbls-building-editor-layout .fbls-building-editor-card label > span {
+  margin: 0;
+  letter-spacing: 0;
+  color: var(--fbls-muted);
+}
+.fbl-skyhold-building-editor.fbls-building-editor-layout .fbls-building-editor-card :is(input[type="number"], strong) {
+  font-size: var(--fbls-type-body);
+  font-weight: 700;
+}
+.fbl-skyhold-building-editor.fbls-building-editor-layout .fbls-building-editor-card h3,
+.fbl-skyhold-building-editor.fbls-building-editor-layout .fbls-building-editor-card h4 {
+  color: var(--fbls-text-strong);
+  text-shadow: none;
+}
+.fbl-skyhold-building-editor.fbls-building-editor-layout .fbls-building-editor-card :is(header strong, p strong, span strong) {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.fbl-skyhold-building-editor.fbls-building-editor-layout .fbls-cost-row.fbls-editor-cost {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 5rem var(--fbls-control-height);
+  align-items: center;
+  gap: var(--fbls-gap-xs);
+}
+.fbl-skyhold-building-editor.fbls-building-editor-layout .defense-card {
+  grid-template-columns: minmax(0, 3fr) minmax(8rem, 1fr);
+  align-items: end;
+}
+.fbl-skyhold-building-editor.fbls-building-editor-layout .defense-card > .fbls-editor-group { padding: 0; border: 0; }
+.fbl-skyhold-building-editor.fbls-building-editor-layout .defense-card .fbls-editor-fields {
+  grid-template-columns: repeat(auto-fit, minmax(min(8rem, 100%), 1fr));
+}
+.fbl-skyhold-building-editor.fbls-building-editor-layout .fbls-editor-construction > .fbls-editor-fields {
+  display: flex; flex-wrap: wrap; align-items: end; gap: var(--fbls-gap-sm);
+}
+.fbl-skyhold-building-editor.fbls-building-editor-layout .fbls-editor-construction label { flex: 0 0 4.2rem; }
+.fbl-skyhold-building-editor.fbls-building-editor-layout .fbls-editor-construction button { flex: 0 0 auto; }
+.fbl-skyhold-building-editor.fbls-building-editor-layout .fbls-editor-construction label.fbls-editor-development-requirement {
+  display: grid; grid-template-columns: 1rem minmax(0, 1fr); align-items: center; flex-basis: 5.5rem;
+}
+.fbl-skyhold-building-editor.fbls-building-editor-layout .fbls-editor-development-requirement i { font-size: var(--fbls-type-body); }
+.fbl-skyhold-building-editor.fbls-building-editor-layout .fbls-editor-development-requirement.food i { color: var(--fbls-dev-food); }
+.fbl-skyhold-building-editor.fbls-building-editor-layout .fbls-editor-development-requirement.technology i { color: var(--fbls-dev-technology); }
+.fbl-skyhold-building-editor.fbls-building-editor-layout .fbls-editor-development-requirement.culture i { color: var(--fbls-dev-culture); }
+.fbl-skyhold-building-editor.fbls-building-editor-layout .fbls-editor-development-requirement.war i { color: var(--fbls-dev-war); }
+.fbl-skyhold-building-editor.fbls-building-editor-layout .fbls-editor-construction input { width: 100%; min-width: 0; }
+
+.fbl-skyhold-building-editor .fbls-editor-list-picker { width: 100%; min-width: 0; }
+.fbl-skyhold-building-editor .fbls-editor-list-panel { padding: var(--fbls-gap-sm); border: 1px solid var(--fbls-border); border-radius: var(--fbls-radius-sm); background: var(--fbls-surface-2); }
+.fbl-skyhold-building-editor .fbls-editor-list-options { display: grid; gap: var(--fbls-gap-xs); max-height: 12rem; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.fbl-skyhold-building-editor .fbls-editor-list-options [hidden] { display: none; }
+.fbl-skyhold-building-editor .fbls-editor-list-options .fbls-choice-toggle { display: flex; justify-content: space-between; width: 100%; font-size: var(--fbls-type-body); }
+.fbl-skyhold-building-editor .fbls-editor-list-options .fbls-choice-toggle > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fbl-skyhold-building-editor .fbls-editor-fields:has(.fbls-editor-list-picker[open]) { align-items: start; }
+.fbl-skyhold-building-editor .fbls-housing-slot-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(15rem, 100%), 1fr)); gap: var(--fbls-gap-sm); }

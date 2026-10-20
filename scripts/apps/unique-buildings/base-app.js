@@ -2,13 +2,15 @@ import { SkyholdData } from "../../data/store.js";
 import { makeId } from "../../data/utils.js";
 import { findReadableHoldingEntry } from "../../data/access-guard.js";
 import { holdingPermissionContext } from "../../data/holding-permissions.js";
-import { fieldValue, joinList, splitList } from "../../core/helpers.js";
+import { fieldValue } from "../../core/helpers.js";
 import { bindGlobalInputGuard, bindInputGuards, replaceTabs, unbindGlobalInputGuard } from "../../utils/input-guards.js";
 import { getSkyholdManager, requestSkyholdAppRender } from "../registry.js";
+import { confirmBuildingWorkerAdmission } from "../common/building-worker-admission.js";
 import { bindDelegatedActions, unbindDelegatedActions } from "../common/delegated-events.js";
 import { bindFloatingTooltips, hideFloatingTooltip } from "../common/floating-tooltip.js";
 import { WindowFrameMixin } from "../common/window-frame.js";
 import { RenderSchedulerMixin } from "../common/render-scheduler.js";
+import { ensureSkyholdTemplateGroup } from "../template-preload.js";
 import {
   clearBuildingAudioTrack,
   pickBuildingAudioTrack,
@@ -25,8 +27,8 @@ const BASE_ACTIONS = {
   "unique-building-tab": "_onUniqueBuildingTab",
   "pick-unique-building-image": "_onPickBuildingImage",
   "clear-unique-building-image": "_onClearBuildingImage",
+  "roll-construction": "_onRollConstruction",
   "roll-construction-crew": "_onRollConstructionCrew",
-  "remove-suitable-type": "_onRemoveSuitableType",
   "add-building-material": "_onAddBuildingMaterial",
   "delete-building-material": "_onDeleteBuildingMaterial",
   "add-building-prerequisite": "_onAddBuildingPrerequisite",
@@ -53,6 +55,7 @@ export class SkyholdUniqueBuildingApp extends WindowFrameMixin(RenderSchedulerMi
   }
 
   async _prepareContext(options) {
+    await ensureSkyholdTemplateGroup("uniqueBuilding");
     const context = await super._prepareContext(options);
     const data = SkyholdData.get();
     const { holding, index: holdingIndex } = findReadableHoldingEntry(data, this.holdingId, { fallback: false });
@@ -99,9 +102,6 @@ export class SkyholdUniqueBuildingApp extends WindowFrameMixin(RenderSchedulerMi
     root.querySelectorAll("[data-building-worker-field]").forEach((field) => {
       field.addEventListener("change", (event) => this._onBuildingWorkerChange(event));
     });
-    root.querySelectorAll("[data-suitable-type-add-field]").forEach((field) => {
-      field.addEventListener("change", (event) => this._onSuitableTypeAddChange(event));
-    });
   }
 
   get uniqueBuildingActions() {
@@ -120,7 +120,6 @@ export class SkyholdUniqueBuildingApp extends WindowFrameMixin(RenderSchedulerMi
     building.showUniqueBuildingBody = this.activeUniqueBuildingTab === "unique";
     building.showEditorMain = canManageEditorTabs && this.activeUniqueBuildingTab === "main";
     building.showEditorConstruction = canManageEditorTabs && this.activeUniqueBuildingTab === "construction";
-    building.showEditorCapital = false;
     building.showEditorWorkers = false;
     building.showEditorProduction = false;
     building.showEditorIncome = false;
@@ -160,7 +159,7 @@ export class SkyholdUniqueBuildingApp extends WindowFrameMixin(RenderSchedulerMi
       if (!current.building || (requireHolding && !current.holding)) return SkyholdData.skipTransaction(null);
       const result = await updater(current);
       return result === undefined ? true : result;
-    }, { reason });
+    }, { reason, scope: "holdings" });
   }
 
   _resolveBuildingScopedPath(data, path = "") {
@@ -194,7 +193,7 @@ export class SkyholdUniqueBuildingApp extends WindowFrameMixin(RenderSchedulerMi
       if (!scopedPath) return SkyholdData.skipTransaction(false);
       foundry.utils.setProperty(data, scopedPath, value);
       return true;
-    }, { reason: `unique-building:field:${path}` });
+    }, { reason: `unique-building:field:${path}`, scope: "holdings" });
     if (!updated) return;
     this.requestRender();
     requestSkyholdAppRender();
@@ -208,49 +207,14 @@ export class SkyholdUniqueBuildingApp extends WindowFrameMixin(RenderSchedulerMi
     if (!slotMatch) return;
     const manager = getSkyholdManager();
     if (!manager) return;
+    const current = this._getMutableBuilding();
+    const person = (current.holding?.people?.list ?? []).find((row) => String(row?.id ?? "") === String(field.value ?? ""));
+    const decision = await confirmBuildingWorkerAdmission({ manager, building: current.building, person });
+    if (!decision.allowed) { this.requestRender(); return; }
     const updated = await this._updateMutableBuilding(({ holding, building }) => {
-      manager._setBuildingSlot(holding, building.id, Number(slotMatch[1]), field.value || "");
+      return manager._setBuildingSlot(holding, building.id, Number(slotMatch[1]), field.value || "", decision)
+        || SkyholdData.skipTransaction(false);
     }, { reason: "unique-building:worker-change", requireHolding: true });
-    if (!updated) return;
-    this.requestRender();
-    requestSkyholdAppRender();
-  }
-
-  async _onSuitableTypeAddChange(event) {
-    event.preventDefault();
-    if (!this._canEditBuilding()) return;
-    const field = event.currentTarget;
-    const path = field?.dataset?.suitableTypeAddField;
-    const value = String(field?.value ?? "").trim();
-    if (!path || !value) return;
-    const updated = await SkyholdData.transaction((data) => {
-      const scopedPath = this._resolveBuildingScopedPath(data, path);
-      if (!scopedPath) return SkyholdData.skipTransaction(false);
-      const list = splitList(foundry.utils.getProperty(data, scopedPath));
-      if (!list.some((item) => item.toLowerCase() === value.toLowerCase())) list.push(value);
-      foundry.utils.setProperty(data, scopedPath, joinList(list));
-      return true;
-    }, { reason: "unique-building:add-suitable-type" });
-    if (!updated) return;
-    field.value = "";
-    this.requestRender();
-    requestSkyholdAppRender();
-  }
-
-  async _onRemoveSuitableType(event) {
-    event.preventDefault();
-    if (!this._canEditBuilding()) return;
-    const button = event.currentTarget;
-    const path = button?.dataset?.suitableTypesField;
-    const value = String(button?.dataset?.suitableType ?? "").trim().toLowerCase();
-    if (!path || !value) return;
-    const updated = await SkyholdData.transaction((data) => {
-      const scopedPath = this._resolveBuildingScopedPath(data, path);
-      if (!scopedPath) return SkyholdData.skipTransaction(false);
-      const list = splitList(foundry.utils.getProperty(data, scopedPath)).filter((item) => item.toLowerCase() !== value);
-      foundry.utils.setProperty(data, scopedPath, joinList(list));
-      return true;
-    }, { reason: "unique-building:remove-suitable-type" });
     if (!updated) return;
     this.requestRender();
     requestSkyholdAppRender();
@@ -344,9 +308,10 @@ export class SkyholdUniqueBuildingApp extends WindowFrameMixin(RenderSchedulerMi
   async _onAddBuildingPrerequisite(event) {
     event.preventDefault();
     if (!this._canEditBuilding()) return;
+    const field = event.currentTarget?.dataset?.prerequisiteMode === "any" ? "requiredAnyBuildingIds" : "requiredBuildingIds";
     const updated = await this._updateMutableBuilding(({ building }) => {
-      if (!Array.isArray(building.requiredBuildingIds)) building.requiredBuildingIds = [];
-      building.requiredBuildingIds.push("");
+      if (!Array.isArray(building[field])) building[field] = [];
+      building[field].push("");
     }, { reason: "unique-building:add-prerequisite" });
     if (!updated) return;
     this.requestRender();
@@ -358,9 +323,10 @@ export class SkyholdUniqueBuildingApp extends WindowFrameMixin(RenderSchedulerMi
     if (!this._canEditBuilding()) return;
     const index = Number(event.currentTarget?.dataset?.index);
     if (!Number.isFinite(index)) return;
+    const field = event.currentTarget?.dataset?.prerequisiteMode === "any" ? "requiredAnyBuildingIds" : "requiredBuildingIds";
     const updated = await this._updateMutableBuilding(({ building }) => {
-      if (!Array.isArray(building.requiredBuildingIds)) return SkyholdData.skipTransaction(false);
-      building.requiredBuildingIds.splice(index, 1);
+      if (!Array.isArray(building[field])) return SkyholdData.skipTransaction(false);
+      building[field].splice(index, 1);
       return true;
     }, { reason: "unique-building:delete-prerequisite" });
     if (!updated) return;
@@ -377,6 +343,7 @@ export class SkyholdUniqueBuildingApp extends WindowFrameMixin(RenderSchedulerMi
     unbindGlobalInputGuard(this);
     this._unbindWindowFrameSync();
     SkyholdUniqueBuildingApp.instances.delete(this);
-    requestSkyholdAppRender();
+    const manager = getSkyholdManager();
+    if (manager?._pendingExternalRerender) requestSkyholdAppRender({ deferForActiveWindow: false });
   }
 }

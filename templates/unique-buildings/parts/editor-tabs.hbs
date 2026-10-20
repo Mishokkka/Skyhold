@@ -12,6 +12,18 @@
         </section>
         {{> "modules/fbl-skyhold/templates/parts/building-editor/main.hbs"}}
         {{#if building.isMedicalBuilding}}
+          <section class="fbls-building-editor-card fbls-unique-medical-development">
+            <h3><i class="fa-solid fa-chart-line"></i> Вклад в развитие поселения</h3>
+            <p class="fbls-muted-line">Эти значения прибавляются к характеристикам развития владения, когда Лазарет построен.</p>
+            <div class="fbls-unique-medical-development-grid">
+              {{#each building.bonusParts}}
+                <label class="{{css}}">
+                  <span><i class="{{icon}}"></i> {{label}}</span>
+                  {{#if ../canEdit}}<input type="number" step="1" data-type="number" data-field="{{path}}" value="{{value}}" />{{else}}<strong>{{value}}</strong>{{/if}}
+                </label>
+              {{/each}}
+            </div>
+          </section>
           {{> "modules/fbl-skyhold/templates/unique-buildings/parts/medical-effective-types.hbs"}}
         {{/if}}
       </section>

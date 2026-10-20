@@ -4,5 +4,10 @@
 @import url("./parts/skyhold-resident-list.css") layer(skyhold.components);
 @import url("./parts/skyhold-current-owners.css") layer(skyhold.overrides);
 @import url("./parts/skyhold-gm.css") layer(skyhold.tools);
+@import url("./parts/skyhold-form-flags.css") layer(skyhold.overrides);
 @import url("./parts/skyhold-resident-editor-v2.css") layer(skyhold.components);
 @import url("./parts/skyhold-foundry-bridge.css");
+
+@import url("./parts/ships/ship-foundry-bridge.css");
+
+@import url("./parts/skyhold-form-bridge.css");

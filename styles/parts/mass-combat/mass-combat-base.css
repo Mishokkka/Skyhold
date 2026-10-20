@@ -173,7 +173,7 @@
   margin: 0 0 10px;
   color: var(--fbls-battle-title);
   font-size: 15px;
-  letter-spacing: .02em;
+  letter-spacing: 0.04em;
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-section-toggle {
@@ -209,6 +209,10 @@
   color: var(--fbls-accent);
   font-size: 12px;
   transition: transform .16s ease, color .16s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fbl-skyhold-mass-combat .fbls-battle-collapse-icon { transition: none; }
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-section-toggle:hover .fbls-battle-collapse-icon {
@@ -278,7 +282,7 @@
   font-size: 10px;
   line-height: 1;
   text-transform: uppercase;
-  letter-spacing: .06em;
+  letter-spacing: 0.06em;
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-shell input,
@@ -287,7 +291,7 @@
 .fbl-skyhold-mass-combat .fbls-battle-fields label > strong,
 .fbl-skyhold-mass-combat .fbls-battle-notes > p {
   width: 100%;
-  min-height: 30px;
+  min-height: var(--fbls-control-height);
   padding: 5px 8px;
   border: 1px solid var(--fbls-battle-field-border);
   border-radius: 8px;
@@ -306,34 +310,6 @@
 .fbl-skyhold-mass-combat .fbls-battle-shell textarea {
   min-height: 86px;
   resize: vertical;
-}
-
-.fbl-skyhold-mass-combat .fbls-battle-check,
-.fbl-skyhold-mass-combat .fbls-battle-shell label.fbls-battle-check {
-  position: relative;
-  display: grid;
-  grid-template-columns: 1fr;
-  grid-template-rows: 1.25rem 1.75rem;
-  align-items: center;
-  justify-content: center;
-  justify-items: center;
-  gap: 2px;
-  min-height: 0;
-  padding: 0;
-  overflow: visible;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
-
-.fbl-skyhold-mass-combat .fbls-battle-check span {
-  display: grid;
-  place-items: center;
-  width: 100%;
-  margin: 0;
-  color: var(--fbls-accent);
-  font-size: 16px;
-  line-height: 1;
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-shell input[type="checkbox"],
@@ -527,14 +503,7 @@
   gap: 4px;
 }
 
-.fbl-skyhold-mass-combat .fbls-battle-preset-warning {
-  display: flex;
-  gap: 6px;
-  align-items: flex-start;
-  margin: 6px 0 2px;
-  color: var(--fbls-accent);
-  font-size: 11px;
-}
+.fbl-skyhold-mass-combat .fbls-battle-preset-warning { margin: 6px 0 2px; }
 
 .fbl-skyhold-mass-combat .fbls-battle-track-grid {
   display: grid;

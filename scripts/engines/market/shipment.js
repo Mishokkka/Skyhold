@@ -1,4 +1,6 @@
-import { releaseMarketQuoteStock, reserveMarketQuoteStock } from "./stock.js";
+import { ageMarketCargo, cargoDeliveryQuantity, cargoShelfLife, marketLossInsurancePayoutCopper, marketInsurancePayoutCopper, viableCargoValueRatio } from "./cargo-aging.js";
+import { marketShipmentSchedule } from "./shipment-schedule.js";
+import { marketPurchasePaymentEntry } from "./purchase-payment.js";
 
 function requireFunctions(dependencies = {}, names = []) {
   for (const name of names) {
@@ -14,6 +16,19 @@ function cloneSerializable(value) {
 function bounded(value, fallback, min, max) {
   const parsed = Number(value);
   return Math.min(max, Math.max(min, Number.isFinite(parsed) ? parsed : fallback));
+}
+
+function shipmentRiskSeed({ id = "", createdAt = "", plan = {} } = {}) {
+  return [
+    "shipment-risk-v2",
+    String(id),
+    String(createdAt),
+    String(plan.quoteKey ?? ""),
+    String(plan.marketId ?? "external-market"),
+    String(plan.batchIndex ?? 0),
+    String(plan.originRegionId ?? plan.logistics?.originRegionId ?? ""),
+    String(plan.destinationRegionId ?? plan.logistics?.destinationRegionId ?? "")
+  ].join("|");
 }
 
 export function retainMarketShipmentOrders(orders = [], archiveLimit = 300) {
@@ -41,7 +56,7 @@ export function deterministicMarketShipmentUnit(seed = "") {
 function marketOrderLines(plan = {}, itemDocuments = new Map()) {
   return (plan.lines ?? []).map((line) => ({
     offerId: String(line.id ?? ""),
-    sourceOfferId: String(line.sourceOfferId ?? line.id ?? ""),
+    stockOfferId: String(line.stockOfferId ?? line.sourceOfferId ?? line.id ?? ""),
     sourceType: line.sourceType === "item" ? "item" : "resource",
     resourceId: String(line.resourceId ?? "custom"),
     itemUuid: String(line.itemUuid ?? ""),
@@ -49,14 +64,30 @@ function marketOrderLines(plan = {}, itemDocuments = new Map()) {
     providerLabel: String(line.providerLabel ?? ""),
     name: line.sourceType === "item" ? String(itemDocuments.get(line.id)?.name ?? line.name ?? "Товар") : String(line.name ?? "Товар"),
     qty: Math.max(0, Number(line.qty) || 0),
-    unitPriceCopper: Math.max(0, Number(line.unitPriceCopper) || 0),
-    economyVersion: Math.max(1, Math.floor(Number(line.economyVersion) || 1)),
-    cargoClass: String(line.cargoClass ?? ""),
-    unitCargoPoints: Math.max(0, Math.ceil(Number(line.cargoPoints) || 0)),
-    totalCargoPoints: Math.max(0, Math.ceil((Number(line.cargoPoints) || 0) * (Number(line.qty) || 0))),
-    packageMassKg: Math.max(0, Number(line.packageMassKg) || 0),
-    packageVolumeL: Math.max(0, Number(line.packageVolumeL) || 0)
+    unitPriceCopper: Math.max(0, Number(line.unitPriceCopper) || 0)
   })).filter((line) => line.qty > 0);
+}
+
+function marketOrderStockReservations(plan = {}) {
+  const reservationOperationId = String(plan.stockReservationOperationId ?? "").trim();
+  if (!reservationOperationId) return [];
+  const rows = new Map();
+  for (const line of plan.lines ?? []) {
+    const offerId = String(line.stockOfferId ?? line.sourceOfferId ?? line.id ?? "").trim();
+    const qty = Math.max(0, Math.floor(Number(line.qty) || 0));
+    if (!offerId || !qty) continue;
+    const key = `${String(plan.marketId ?? "external-market")}::${offerId}`;
+    const previous = rows.get(key);
+    if (previous) previous.qty += qty;
+    else rows.set(key, {
+      marketId: String(plan.marketId ?? "external-market"),
+      offerId,
+      qty,
+      baseStock: Math.max(0, Math.floor(Number(line.stockBaseStock) || 0)),
+      reservationOperationId
+    });
+  }
+  return [...rows.values()];
 }
 
 function prepareCargo(plan = {}, itemDocuments = new Map(), dependencies = {}) {
@@ -88,15 +119,12 @@ function prepareCargo(plan = {}, itemDocuments = new Map(), dependencies = {}) {
       name: String(line.name ?? "Ресурс"),
       providerId: String(line.providerId ?? ""),
       providerLabel: String(line.providerLabel ?? ""),
-      unit: String(line.unit ?? "ед."),
+      unit: "ед.",
+      ageQd: Math.max(0, Number(line.ageQd) || 0),
+      shelfLifeQd: cargoShelfLife(line),
+      unitPriceCopper: Math.max(0, Number(line.unitPriceCopper) || 0),
       img: String(line.img ?? ""),
-      loadMode: String(line.loadMode ?? "manual") === "auto" ? "auto" : "manual",
-      economyVersion: Math.max(1, Math.floor(Number(line.economyVersion) || 1)),
-      cargoClass: String(line.cargoClass ?? ""),
-      cargoPoints: Math.max(1, Math.ceil(Number(line.cargoPoints) || (Number(line.load) || 0) * 10 || 1)),
       load: Math.max(0, Number(line.load) || 0),
-      packageMassKg: Math.max(0, Number(line.packageMassKg) || 0),
-      packageVolumeL: Math.max(0, Number(line.packageVolumeL) || 0),
       qty: Math.max(0, Number(line.qty) || 0),
       targetRoomId: String(plan.targetRoomId || "outdoors")
     });
@@ -113,9 +141,6 @@ function marketShipmentBatchPlans(plan = {}) {
         deliveryCopper: plan.deliveryCopper,
         totalCopper: plan.totalCopper,
         totalLoad: plan.totalLoad,
-        totalCargoPoints: plan.totalCargoPoints,
-        totalMassKg: plan.totalMassKg,
-        totalVolumeL: plan.totalVolumeL,
         routeCopper: plan.routeCopper,
         taxCopper: plan.taxCopper,
         handlingCopper: plan.handlingCopper,
@@ -145,9 +170,6 @@ function marketShipmentBatchPlans(plan = {}) {
       deliveryCopper: Math.max(0, Number(batch.deliveryCopper) || 0),
       totalCopper: Math.max(0, Number(batch.totalCopper) || 0),
       totalLoad: Math.max(0, Number(batch.totalLoad) || 0),
-      totalCargoPoints: Math.max(0, Number(batch.totalCargoPoints) || 0),
-      totalMassKg: Math.max(0, Number(batch.totalMassKg) || 0),
-      totalVolumeL: Math.max(0, Number(batch.totalVolumeL) || 0),
       billableLoad: Math.max(0, Number(batch.billableLoad ?? batch.totalLoad) || 0),
       routeCopper: Math.max(0, Number(batch.routeCopper) || 0),
       taxCopper: Math.max(0, Number(batch.taxCopper) || 0),
@@ -172,6 +194,7 @@ function marketShipmentBatchPlans(plan = {}) {
 function createShipmentOrder({ plan, prepared, id, parentOperationId, createdAt, itemDocuments }) {
   const deliveryQd = Math.max(1, Math.floor(Number(plan.deliveryQd) || 1));
   const riskPending = Number(plan.riskLossChance) > 0 || Number(plan.riskDelayChance) > 0;
+  const riskSeed = shipmentRiskSeed({ id, createdAt, plan });
   return {
     id,
     operationId: id,
@@ -186,7 +209,7 @@ function createShipmentOrder({ plan, prepared, id, parentOperationId, createdAt,
     deliveryMode: "scheduled",
     deliveryQd,
     standardDeliveryQd: Math.max(1, Math.floor(Number(plan.standardDeliveryQd) || deliveryQd)),
-    serviceLevel: ["standard", "express", "charter", "owned"].includes(String(plan.serviceLevel ?? "")) ? String(plan.serviceLevel) : "standard",
+    serviceLevel: ["standard", "express", "charter"].includes(String(plan.serviceLevel ?? "")) ? String(plan.serviceLevel) : "standard",
     etaQd: deliveryQd,
     remainingQd: deliveryQd,
     marketId: String(plan.marketId ?? "external-market"),
@@ -204,32 +227,11 @@ function createShipmentOrder({ plan, prepared, id, parentOperationId, createdAt,
     transportMode: String(plan.logistics?.transportMode ?? ""),
     carrierId: String(plan.carrierId ?? plan.logistics?.carrierId ?? ""),
     carrierLabel: String(plan.carrierLabel ?? plan.logistics?.carrierLabel ?? ""),
-    ownedVesselDelivery: Boolean(plan.ownedVesselDelivery),
-    ownedVesselId: String(plan.ownedVesselId ?? ""),
-    ownedVesselName: String(plan.ownedVesselName ?? ""),
-    ownedPickupRegionId: String(plan.ownedPickupRegionId ?? ""),
-    ownedPickupLabel: String(plan.ownedPickupLabel ?? ""),
-    ownedDestinationRegionId: String(plan.ownedDestinationRegionId ?? ""),
-    ownedDestinationLabel: String(plan.ownedDestinationLabel ?? ""),
-    ownedPickupQd: Math.max(0, Number(plan.ownedPickupQd) || 0),
-    ownedCargoQd: Math.max(0, Number(plan.ownedCargoQd) || 0),
-    ownedHandlingQd: Math.max(0, Number(plan.ownedHandlingQd) || 0),
-    ownedOperatingCostCopper: Math.max(0, Number(plan.ownedOperatingCostCopper) || 0),
-    ownedReplacementReserveCopper: Math.max(0, Number(plan.ownedReplacementReserveCopper) || 0),
     carrierCapacityFactor: Math.max(0.1, Number(plan.logistics?.carrierCapacityFactor) || 1),
     carrierCapacityLoad: Math.max(0, Number(plan.physicalCapacityLoad ?? plan.capacityLoad) || 0),
-    carrierCapacityCargoPoints: Math.max(0, Number(plan.physicalCapacityCargoPoints ?? plan.capacityCargoPoints) || 0),
-    carrierCapacityMassKg: Math.max(0, Number(plan.physicalCapacityMassKg) || 0),
-    carrierCapacityVolumeL: Math.max(0, Number(plan.physicalCapacityVolumeL) || 0),
     bookingCapacityLoad: Math.max(0, Number(plan.bookingCapacityLoad) || 0),
-    bookingCapacityCargoPoints: Math.max(0, Number(plan.bookingCapacityCargoPoints) || 0),
-    bookingCapacityMassKg: Math.max(0, Number(plan.bookingCapacityMassKg) || 0),
-    bookingCapacityVolumeL: Math.max(0, Number(plan.bookingCapacityVolumeL) || 0),
     chargedCapacityShare: Math.max(0, Number(plan.chargedCapacityShare) || 0),
     totalLoad: Math.max(0, Number(plan.totalLoad) || 0),
-    totalCargoPoints: Math.max(0, Number(plan.totalCargoPoints) || 0),
-    totalMassKg: Math.max(0, Number(plan.totalMassKg) || 0),
-    totalVolumeL: Math.max(0, Number(plan.totalVolumeL) || 0),
     billableLoad: Math.max(0, Number(plan.billableLoad ?? plan.totalLoad) || 0),
     merchantProviderIds: Array.isArray(plan.merchantProviderIds) ? [...plan.merchantProviderIds] : [],
     accessLevel: Math.max(0, Number(plan.logistics?.accessLevel) || 0),
@@ -249,13 +251,19 @@ function createShipmentOrder({ plan, prepared, id, parentOperationId, createdAt,
     riskLossChance: bounded(plan.riskLossChance, 0, 0, 0.08),
     riskDelayChance: bounded(plan.riskDelayChance, 0, 0, 0.45),
     riskMaxDelayQd: Math.max(1, Math.min(20, Math.ceil(Number(plan.riskMaxDelayQd) || 1))),
-    riskResolutionId: `${id}:risk:v1`,
-    riskResolutionVersion: 1,
+    riskSeed,
+    riskResolutionId: `${id}:risk:v2`,
+    riskResolutionVersion: 2,
     riskStatus: riskPending ? "pending" : "waived",
     riskOutcome: riskPending ? "pending" : "waived",
+    riskProposedAt: "",
+    riskProposal: null,
+    riskResolutionOperationId: "",
+    riskResolutionChoice: "",
     riskResolvedAt: "",
     riskLossRoll: null,
     riskDelayRoll: null,
+    riskDelayDurationRoll: null,
     delayQd: 0,
     delayRemainingQd: 0,
     delayedAt: "",
@@ -264,6 +272,10 @@ function createShipmentOrder({ plan, prepared, id, parentOperationId, createdAt,
     cancellationOperationId: "",
     cancellationRefundCopper: 0,
     cancellationWithheldCopper: 0,
+    stockReservationOperationId: String(plan.stockReservationOperationId ?? ""),
+    stockRestorationOperationId: "",
+    stockRestoredAt: "",
+    stockReservations: marketOrderStockReservations(plan),
     subtotalCopper: Math.max(0, Number(plan.subtotalCopper) || 0),
     deliveryCopper: Math.max(0, Number(plan.deliveryCopper) || 0),
     totalCopper: Math.max(0, Number(plan.totalCopper) || 0),
@@ -273,7 +285,7 @@ function createShipmentOrder({ plan, prepared, id, parentOperationId, createdAt,
 }
 
 export function createMarketShipment({ holding, plan, itemDocuments = new Map(), operationId = "", createdAt = new Date().toISOString(), dependencies = {} } = {}) {
-  const deps = requireFunctions(dependencies, ["addMoney", "snapshotItemForStorage"]);
+  const deps = requireFunctions(dependencies, ["addMoney", "snapshotItemForStorage", "appendStorageLog"]);
   if (!holding || !plan?.ok || plan.deliveryMode !== "scheduled" || !(Number(plan.deliveryQd) > 0)) {
     return { ok: false, message: "Market shipment requires an affordable scheduled plan." };
   }
@@ -296,17 +308,14 @@ export function createMarketShipment({ holding, plan, itemDocuments = new Map(),
   const batchTotalCopper = preparedOrders.reduce((sum, order) => sum + order.totalCopper, 0);
   if (batchTotalCopper !== Math.max(0, Number(plan.totalCopper) || 0)) return { ok: false, message: "Market shipment batches do not reconcile to the confirmed total." };
 
-  const reservation = reserveMarketQuoteStock({ holding, plan, operationId: id, createdAt });
-  if (!reservation.ok) return reservation;
-  if (reservation.replay) return { ok: true, replay: true, order: null, orders: [], batchCount: 0, reservation: reservation.reservation };
-
   deps.addMoney(holding, -batchTotalCopper);
   if (!holding.special || typeof holding.special !== "object") holding.special = { notes: "", list: [] };
   if (!holding.special.market || typeof holding.special.market !== "object") holding.special.market = { orders: [] };
   if (!Array.isArray(holding.special.market.orders)) holding.special.market.orders = [];
   holding.special.market.orders.push(...preparedOrders);
   holding.special.market.orders = retainMarketShipmentOrders(holding.special.market.orders);
-  return { ok: true, replay: false, order: preparedOrders[0], orders: preparedOrders, batchCount: preparedOrders.length, reservation: reservation.reservation };
+  deps.appendStorageLog(holding, [marketPurchasePaymentEntry(plan, id)]);
+  return { ok: true, replay: false, order: preparedOrders[0], orders: preparedOrders, batchCount: preparedOrders.length };
 }
 
 export function marketShipmentCancellationQuote(order = {}) {
@@ -317,14 +326,7 @@ export function marketShipmentCancellationQuote(order = {}) {
     && ["pending", "waived"].includes(String(order?.riskStatus ?? "pending"));
   const cancellable = ["pending", "in-transit"].includes(status) && beforeDispatch;
   const totalCopper = Math.max(0, Math.floor(Number(order?.totalCopper) || 0));
-  const refundableCopper = order?.ownedVesselDelivery
-    ? totalCopper
-    : Math.max(0, Math.floor(
-      Number(order?.subtotalCopper || 0)
-      + Number(order?.insuranceCopper || 0)
-      + Number(order?.taxCopper || 0)
-    ));
-  const refundCopper = Math.min(totalCopper, refundableCopper);
+  const refundCopper = totalCopper;
   return {
     ok: cancellable || alreadyCancelled,
     cancellable,
@@ -332,7 +334,7 @@ export function marketShipmentCancellationQuote(order = {}) {
     refundCopper: alreadyCancelled ? Math.max(0, Math.floor(Number(order?.cancellationRefundCopper) || 0)) : refundCopper,
     withheldCopper: alreadyCancelled
       ? Math.max(0, Math.floor(Number(order?.cancellationWithheldCopper) || 0))
-      : Math.max(0, totalCopper - refundCopper),
+      : 0,
     reason: cancellable || alreadyCancelled ? "" : "Заказ уже передан перевозчику и не может быть отменён."
   };
 }
@@ -348,6 +350,20 @@ export function cancelMarketShipment({ holding, orderId = "", cancelledAt = new 
   if (quote.alreadyCancelled) return { ok: true, replay: true, order, ...quote };
 
   const operationId = String(order.cancellationOperationId || `${order.operationId || order.id}:cancel`);
+  let stockRestoration = { ok: true, replay: true, restoredQty: 0 };
+  const stockReservations = Array.isArray(order.stockReservations) ? order.stockReservations : [];
+  if (stockReservations.length && !String(order.stockRestoredAt ?? "")) {
+    if (typeof deps.restoreMarketStock !== "function") return { ok: false, message: "Market shipment cancellation requires stock restoration.", order, ...quote };
+    stockRestoration = deps.restoreMarketStock({
+      holding,
+      reservations: stockReservations,
+      operationId,
+      updatedAt: String(cancelledAt || "")
+    });
+    if (!stockRestoration?.ok) return { ok: false, message: stockRestoration?.message || "Market stock restoration failed.", order, ...quote };
+    order.stockRestorationOperationId = operationId;
+    order.stockRestoredAt = String(cancelledAt || "");
+  }
   order.status = "cancelled";
   order.dispatchStatus = "cancelled";
   order.remainingQd = 0;
@@ -358,8 +374,6 @@ export function cancelMarketShipment({ holding, orderId = "", cancelledAt = new 
   order.cancellationOperationId = operationId;
   order.cancellationRefundCopper = quote.refundCopper;
   order.cancellationWithheldCopper = quote.withheldCopper;
-  const stockRelease = releaseMarketQuoteStock({ holding, order, operationId, releasedAt: cancelledAt });
-  if (!stockRelease.ok) return { ok: false, message: stockRelease.message, order, ...quote };
   if (quote.refundCopper > 0) {
     deps.addMoney(holding, quote.refundCopper);
     deps.appendStorageLog(holding, [{
@@ -370,75 +384,169 @@ export function cancelMarketShipment({ holding, orderId = "", cancelledAt = new 
       unit: "ММ",
       roomId: "treasury",
       source: String(order.marketLabel ?? "Внешний рынок"),
-      note: `отмена до отправки ${order.operationId || order.id}; удержано ${deps.formatCurrency(quote.withheldCopper)}`,
+      note: `отмена до отправки ${order.operationId || order.id}; полный возврат`,
       operationId
     }]);
   }
-  return { ok: true, replay: false, order, operationId, stockRelease, ...quote };
+  return { ok: true, replay: false, order, operationId, stockRestoration, ...quote };
 }
 
-export function resolveMarketShipmentRisk({ holding, order, resolvedAt = new Date().toISOString(), dependencies = {} } = {}) {
-  const deps = requireFunctions(dependencies, ["addMoney", "appendStorageLog", "formatCurrency"]);
-  if (!holding || !order || order.riskStatus !== "pending") return { resolved: false, outcome: String(order?.riskOutcome ?? "waived"), order };
-  const randomUnit = typeof deps.riskUnit === "function" ? deps.riskUnit : deterministicMarketShipmentUnit;
-  const resolutionId = String(order.riskResolutionId || `${order.operationId || order.id}:risk:v1`);
-  const lossRoll = bounded(randomUnit(`${resolutionId}|loss`), 1, 0, 0.999999999);
-  const delayRoll = bounded(randomUnit(`${resolutionId}|delay`), 1, 0, 0.999999999);
+export function proposeMarketShipmentRisk({ order, proposedAt = new Date().toISOString(), elapsedQd = 0, dependencies = {} } = {}) {
+  if (!order || String(order.riskStatus ?? "") !== "pending") {
+    return {
+      ok: Boolean(order),
+      replay: String(order?.riskStatus ?? "") === "needsResolution",
+      event: String(order?.riskStatus ?? "") === "needsResolution",
+      outcome: String(order?.riskProposal?.outcome ?? order?.riskOutcome ?? "waived"),
+      proposal: order?.riskProposal ?? null,
+      order
+    };
+  }
+  if (marketShipmentSchedule(order).isWaiting) {
+    return { ok: true, replay: false, event: false, waiting: true, outcome: "pending", proposal: null, order };
+  }
+  const randomUnit = typeof dependencies.riskUnit === "function" ? dependencies.riskUnit : deterministicMarketShipmentUnit;
+  const resolutionId = String(order.riskResolutionId || `${order.operationId || order.id}:risk:v2`);
+  const seed = String(order.riskSeed || `${resolutionId}|legacy-seed`);
+  const lossRoll = bounded(randomUnit(`${seed}|loss`), 1, 0, 0.999999999);
+  const delayRoll = bounded(randomUnit(`${seed}|delay`), 1, 0, 0.999999999);
+  const durationRoll = bounded(randomUnit(`${seed}|delay-duration`), 0, 0, 0.999999999);
+  const lossChance = bounded(order.riskLossChance, 0, 0, 0.08);
+  const delayChance = bounded(order.riskDelayChance, 0, 0, 0.45);
+  const maxDelayQd = Math.max(1, Math.min(20, Math.ceil(Number(order.riskMaxDelayQd) || 1)));
+  const delayQd = 1 + Math.floor(durationRoll * maxDelayQd);
+  const outcome = lossRoll < lossChance ? "lost" : (delayRoll < delayChance ? "delayed" : "clear");
+
+  order.riskSeed = seed;
   order.riskResolutionId = resolutionId;
-  order.riskResolutionVersion = 1;
-  order.riskStatus = "resolved";
-  order.riskResolvedAt = String(resolvedAt || "");
+  order.riskResolutionVersion = 2;
   order.riskLossRoll = lossRoll;
   order.riskDelayRoll = delayRoll;
+  order.riskDelayDurationRoll = durationRoll;
 
-  if (lossRoll < bounded(order.riskLossChance, 0, 0, 0.08)) {
-    order.riskOutcome = "lost";
-    order.status = "lost";
-    order.dispatchStatus = "lost";
-    order.remainingQd = 0;
+  if (outcome === "clear") {
+    order.riskStatus = "resolved";
+    order.riskOutcome = "clear";
+    order.riskResolvedAt = String(proposedAt || "");
+    return { ok: true, replay: false, event: false, outcome, proposal: null, order };
+  }
+
+  // Date and value refer to the same checkpoint. Later GM deliberation cannot reprice this loss.
+  ageMarketCargo(order, elapsedQd);
+  const insuredValueCopper = Math.floor(Math.max(0, Number(order.insuredValueCopper ?? order.subtotalCopper) || 0) * viableCargoValueRatio(order));
+  const insuranceCoverageRate = bounded(order.insuranceCoverageRate, 0, 0, 1);
+  const calculatedPayoutCopper = Math.floor(insuredValueCopper * insuranceCoverageRate);
+  const maximumInsurancePayoutCopper = Math.max(0, Math.floor(Number(order.maximumInsurancePayoutCopper) || calculatedPayoutCopper));
+  const potentialInsurancePayoutCopper = marketInsurancePayoutCopper(order);
+  const proposal = {
+    id: resolutionId,
+    outcome,
+    proposedAt: String(proposedAt || ""),
+    lossRoll,
+    lossChance,
+    delayRoll,
+    delayChance,
+    delayDurationRoll: durationRoll,
+    maxDelayQd,
+    delayQd,
+    insuredValueCopper,
+    insuranceCoverageRate,
+    maximumInsurancePayoutCopper,
+    potentialInsurancePayoutCopper,
+    proposedInsurancePayoutCopper: outcome === "lost" ? potentialInsurancePayoutCopper : 0
+  };
+  order.status = "needsResolution";
+  order.riskStatus = "needsResolution";
+  order.riskOutcome = "pending";
+  order.riskProposedAt = String(proposedAt || "");
+  order.riskProposal = proposal;
+  return { ok: true, replay: false, event: true, outcome, proposal, order, operationId: resolutionId };
+}
+
+function shipmentOrderById(holding, orderId = "") {
+  const id = String(orderId ?? "").trim();
+  const orders = holding?.special?.market?.orders;
+  return Array.isArray(orders)
+    ? orders.find((row) => [row?.id, row?.operationId].some((value) => String(value ?? "") === id))
+    : null;
+}
+
+export function resolveMarketShipmentRisk({ holding, order: suppliedOrder = null, orderId = "", outcome = "proposal", delayQd = null, operationId = "", resolvedAt = new Date().toISOString(), dependencies = {} } = {}) {
+  const order = suppliedOrder ?? shipmentOrderById(holding, orderId);
+  if (!holding || !order) return { ok: false, resolved: false, message: "Market shipment risk event is unavailable.", order };
+  const resolutionOperationId = String(operationId || `${order.riskResolutionId || order.operationId || order.id}:gm-resolution`).trim();
+  if (String(order.riskStatus ?? "") === "resolved" && String(order.riskResolutionOperationId ?? "")) {
+    return {
+      ok: true,
+      resolved: true,
+      replay: true,
+      outcome: String(order.riskOutcome ?? "clear"),
+      order,
+      operationId: String(order.riskResolutionOperationId),
+      payoutCopper: Math.max(0, Math.floor(Number(order.insurancePayoutCopper) || 0)),
+      delayQd: Math.max(0, Math.ceil(Number(order.delayQd) || 0))
+    };
+  }
+  if (String(order.status ?? "") !== "needsResolution" || String(order.riskStatus ?? "") !== "needsResolution" || !order.riskProposal) {
+    return { ok: false, resolved: false, message: "Market shipment has no unresolved risk event.", order };
+  }
+  const requested = String(outcome ?? "proposal");
+  const selectedOutcome = requested === "proposal" ? String(order.riskProposal.outcome ?? "") : requested;
+  if (!["clear", "delayed", "lost"].includes(selectedOutcome)) {
+    return { ok: false, resolved: false, message: "Market shipment risk outcome is invalid.", order };
+  }
+  const deps = requireFunctions(dependencies, ["addMoney", "appendStorageLog", "formatCurrency"]);
+  const at = String(resolvedAt || "");
+  order.riskStatus = "resolved";
+  order.riskOutcome = selectedOutcome;
+  order.riskResolvedAt = at;
+  order.riskResolutionOperationId = resolutionOperationId;
+  order.riskResolutionChoice = requested === "proposal" ? "proposal" : (selectedOutcome === "clear" ? "cancelled" : "changed");
+
+  if (selectedOutcome === "clear") {
+    order.status = "in-transit";
+    order.delayQd = 0;
     order.delayRemainingQd = 0;
-    order.lostAt = String(resolvedAt || "");
-    const insuredValue = Math.max(0, Math.floor(Number(order.insuredValueCopper ?? order.subtotalCopper) || 0));
-    const coverageRate = bounded(order.insuranceCoverageRate, 0, 0, 1);
-    const calculatedPayout = Math.floor(insuredValue * coverageRate);
-    const maximumPayout = Math.max(0, Math.floor(Number(order.maximumInsurancePayoutCopper) || calculatedPayout));
-    const payout = Math.min(calculatedPayout, maximumPayout);
-    order.insurancePayoutCopper = payout;
-    order.insuranceOperationId = String(order.insuranceOperationId || `${order.operationId || order.id}:insurance`);
-    if (payout > 0 && !order.insurancePaidAt) {
-      deps.addMoney(holding, payout);
-      order.insurancePaidAt = String(resolvedAt || "");
-      deps.appendStorageLog(holding, [{
-        kind: "market-insurance",
-        resourceId: "money",
-        name: "Страховая выплата",
-        qty: payout,
-        unit: "ММ",
-        roomId: "treasury",
-        source: String(order.marketLabel ?? "Страховщик"),
-        note: `утрата заказа ${order.operationId || order.id}; покрытие ${Math.round(coverageRate * 100)}%; выплата ${deps.formatCurrency(payout)}`,
-        operationId: order.insuranceOperationId
-      }]);
-    }
-    return { resolved: true, outcome: "lost", order, payoutCopper: payout, operationId: order.insuranceOperationId };
+    return { ok: true, resolved: true, replay: false, outcome: "clear", order, operationId: resolutionOperationId, payoutCopper: 0, delayQd: 0 };
   }
 
-  if (delayRoll < bounded(order.riskDelayChance, 0, 0, 0.45)) {
-    const durationRoll = bounded(randomUnit(`${resolutionId}|delay-duration`), 0, 0, 0.999999999);
-    const maxDelayQd = Math.max(1, Math.min(20, Math.ceil(Number(order.riskMaxDelayQd) || 1)));
-    const delayQd = 1 + Math.floor(durationRoll * maxDelayQd);
-    order.riskOutcome = "delayed";
+  if (selectedOutcome === "delayed") {
+    const resolvedDelayQd = Math.max(1, Math.min(20, Math.ceil(Number(delayQd ?? order.riskProposal.delayQd) || 1)));
     order.status = "delayed";
-    order.delayQd = delayQd;
-    order.delayRemainingQd = delayQd;
-    order.delayedAt = String(resolvedAt || "");
-    order.remainingQd = Math.max(0, Number(order.remainingQd ?? order.deliveryQd) || 0) + delayQd;
-    order.etaQd = Math.max(0, Number(order.etaQd ?? order.deliveryQd) || 0) + delayQd;
-    return { resolved: true, outcome: "delayed", order, delayQd, operationId: `${order.operationId || order.id}:delay` };
+    order.delayQd = resolvedDelayQd;
+    order.delayRemainingQd = resolvedDelayQd;
+    order.delayedAt = at;
+    order.remainingQd = Math.max(0, Number(order.remainingQd ?? order.deliveryQd) || 0) + resolvedDelayQd;
+    order.etaQd = Math.max(0, Number(order.etaQd ?? order.deliveryQd) || 0) + resolvedDelayQd;
+    return { ok: true, resolved: true, replay: false, outcome: "delayed", order, delayQd: resolvedDelayQd, operationId: resolutionOperationId, payoutCopper: 0 };
   }
 
-  order.riskOutcome = "clear";
-  return { resolved: true, outcome: "clear", order };
+  order.status = "lost";
+  order.dispatchStatus = "lost";
+  order.remainingQd = 0;
+  order.delayRemainingQd = 0;
+  order.lostAt = at;
+  const coverageRate = bounded(order.insuranceCoverageRate, 0, 0, 1);
+  // A changed delay becomes a new loss now. Incomplete legacy events have no recoverable dated value.
+  const payout = marketLossInsurancePayoutCopper(order);
+  order.insurancePayoutCopper = payout;
+  order.insuranceOperationId = String(order.insuranceOperationId || `${order.operationId || order.id}:insurance`);
+  if (payout > 0 && !order.insurancePaidAt) {
+    deps.addMoney(holding, payout);
+    order.insurancePaidAt = at;
+    deps.appendStorageLog(holding, [{
+      kind: "market-insurance",
+      resourceId: "money",
+      name: "Страховая выплата",
+      qty: payout,
+      unit: "ММ",
+      roomId: order.ownShipId ? `ship:${order.ownShipId}` : "treasury",
+      source: String(order.marketLabel ?? "Страховщик"),
+      note: `утрата заказа ${order.operationId || order.id}; покрытие ${Math.round(coverageRate * 100)}%; выплата ${deps.formatCurrency(payout)}`,
+      operationId: order.insuranceOperationId
+    }]);
+  }
+  return { ok: true, resolved: true, replay: false, outcome: "lost", order, payoutCopper: payout, delayQd: 0, operationId: resolutionOperationId, insuranceOperationId: order.insuranceOperationId };
 }
 
 function deliverOrder(holding, order, dependencies, deliveredAt) {
@@ -452,12 +560,20 @@ function deliverOrder(holding, order, dependencies, deliveredAt) {
   }
   if (!holding.storage || typeof holding.storage !== "object") holding.storage = { resources: [], items: [], moneyCopper: 0, log: [] };
   if (!Array.isArray(holding.storage.items)) holding.storage.items = [];
+  ageMarketCargo(order, 0);
   const deliveryOperationId = String(order.deliveryOperationId || `${order.operationId || order.id}:arrival`);
 
   for (const cargo of order.cargo ?? []) {
+    const deliveredQty = cargoDeliveryQuantity(cargo);
+    if (deliveredQty < cargo.qty) storageEntries.push({ kind: "market-spoilage", resourceId: cargo.resourceId, name: cargo.name,
+      qty: -(cargo.qty - deliveredQty), roomId: "transit", source: order.marketLabel,
+      note: "Груз испортился в пути; естественная порча не страхуется.", operationId: deliveryOperationId });
+    if (!deliveredQty) continue;
+    const internalDemandAvailableFromQd = Math.max(0, Math.floor(Number(dependencies.internalDemandAvailableFromQd(holding)) || 0));
     if (cargo.sourceType === "item") {
       const snapshot = cloneSerializable(cargo.item);
       snapshot.roomId = String(cargo.targetRoomId || order.targetRoomId || "outdoors");
+      snapshot.internalDemandAvailableFromQd = internalDemandAvailableFromQd;
       holding.storage.items.push(snapshot);
       storageEntries.push({
         kind: "market-arrival",
@@ -472,23 +588,20 @@ function deliverOrder(holding, order, dependencies, deliveredAt) {
       delivered.push({ offerId: cargo.offerId, sourceType: "item", name: snapshot.name, qty: cargo.qty, roomId: snapshot.roomId });
       continue;
     }
-    const storageResource = {
+    const placements = dependencies.storageAddWithOverflow(holding, {
       resourceId: cargo.resourceId,
       name: cargo.name,
       unit: cargo.unit,
       img: cargo.img,
-      roomId: String(cargo.targetRoomId || order.targetRoomId || "outdoors")
-    };
-    // Старые заказы без loadMode считаются ручным исключением; новые auto-грузы
-    // продолжают наследовать живую физику каталога после помещения на склад.
-    if (cargo.loadMode !== "auto") storageResource.load = cargo.load;
-    if (cargo.resourceId === "custom") {
-      storageResource.economyVersion = cargo.economyVersion;
-      storageResource.cargoClass = cargo.cargoClass;
-      storageResource.cargoPoints = cargo.cargoPoints;
-    }
-    const placements = dependencies.storageAddWithOverflow(holding, storageResource, cargo.qty);
+      roomId: String(cargo.targetRoomId || order.targetRoomId || "outdoors"),
+      arrivalShelfLifeQd: cargo.shelfLifeQd,
+      batches: [{ qty: deliveredQty, ageQd: (Number(cargo.ageQd) || 0) + (Number(order.postArrivalElapsedQd) || 0), internalDemandAvailableFromQd }]
+    }, deliveredQty);
     for (const placement of placements) {
+      if (placement.spoiledQty) storageEntries.push({ kind: "market-spoilage", resourceId: cargo.resourceId, name: cargo.name,
+        qty: -placement.spoiledQty, roomId: placement.roomId, source: order.marketLabel,
+        note: "Груз прибыл, но истёкший срок хранения не позволяет использовать его к концу периода.", operationId: deliveryOperationId });
+      if (!placement.qty) continue;
       storageEntries.push({
         kind: "market-arrival",
         resourceId: cargo.resourceId,
@@ -516,22 +629,44 @@ function deliverOrder(holding, order, dependencies, deliveredAt) {
 }
 
 export function advanceMarketShipments({ holding, elapsedQd = 0, forceOrderId = "", deliveredAt = new Date().toISOString(), dependencies = {} } = {}) {
-  const deps = requireFunctions(dependencies, ["addMoney", "storageAddWithOverflow", "appendStorageLog", "formatCurrency"]);
+  const deps = requireFunctions(dependencies, ["addMoney", "storageAddWithOverflow", "appendStorageLog", "formatCurrency", "internalDemandAvailableFromQd"]);
   const qd = Math.max(0, Math.floor(Number(elapsedQd) || 0));
   const forced = String(forceOrderId ?? "").trim();
-  const report = { advancedQd: qd, delivered: [], delayed: [], lost: [], inTransit: [], ignored: 0 };
+  const report = { advancedQd: qd, delivered: [], delayed: [], lost: [], needsResolution: [], inTransit: [], ignored: 0 };
   const orders = holding?.special?.market?.orders;
   if (!Array.isArray(orders)) return { ok: true, ...report };
 
   for (const order of orders) {
     const id = String(order?.id ?? order?.operationId ?? "");
     const force = Boolean(forced && (id === forced || String(order?.operationId ?? "") === forced));
+    let manualRiskWaiver = false;
     if (forced && !force) continue;
-    if (!["pending", "in-transit", "delayed"].includes(String(order?.status ?? ""))) {
+    if (!["pending", "in-transit", "delayed", "needsResolution"].includes(String(order?.status ?? ""))) {
       report.ignored += 1;
       continue;
     }
-    if (order.status === "pending") order.status = "in-transit";
+    if (String(order.status ?? "") === "needsResolution" || String(order.riskStatus ?? "") === "needsResolution") {
+      ageMarketCargo(order, qd);
+      report.needsResolution.push({
+        orderId: id,
+        orderOperationId: String(order.operationId ?? id),
+        operationId: String(order.riskResolutionId || `${order.operationId || id}:risk:v2`),
+        marketLabel: String(order.marketLabel ?? "Внешний рынок"),
+        proposedAt: String(order.riskProposedAt ?? ""),
+        newEvent: false
+      });
+      continue;
+    }
+    const schedule = marketShipmentSchedule(order);
+    const waitingElapsedQd = force ? 0 : Math.min(qd, schedule.waitingQd);
+    const travelElapsedQd = qd - waitingElapsedQd;
+    if (waitingElapsedQd > 0) order.remainingQd = schedule.remainingQd - waitingElapsedQd;
+    if (!force && schedule.isWaiting && qd < schedule.waitingQd) {
+      ageMarketCargo(order, qd);
+      report.inTransit.push({ orderId: id, status: order.status, remainingQd: order.remainingQd, waitingQd: schedule.waitingQd - waitingElapsedQd });
+      continue;
+    }
+    if (order.status === "pending" && (force || qd > 0)) order.status = "in-transit";
     if (!force && qd > 0 && String(order.dispatchStatus ?? "booked") === "booked") {
       order.dispatchStatus = "departed";
       order.dispatchedAt = String(deliveredAt || "");
@@ -540,33 +675,36 @@ export function advanceMarketShipments({ holding, elapsedQd = 0, forceOrderId = 
       order.dispatchStatus = "departed";
       order.dispatchedAt = String(deliveredAt || "");
     }
-    if (!force && qd > 0 && order.riskStatus === "pending") {
-      const risk = resolveMarketShipmentRisk({ holding, order, resolvedAt: deliveredAt, dependencies: deps });
-      if (risk.outcome === "lost") {
-        report.lost.push({
+    if (!force && travelElapsedQd > 0 && order.riskStatus === "pending") {
+      const risk = proposeMarketShipmentRisk({ order, proposedAt: deliveredAt, elapsedQd: qd, dependencies: deps });
+      if (risk.event) {
+        report.needsResolution.push({
           orderId: id,
           orderOperationId: String(order.operationId ?? id),
-          operationId: risk.operationId,
+          operationId: String(risk.operationId ?? order.riskResolutionId ?? ""),
           marketLabel: String(order.marketLabel ?? "Внешний рынок"),
-          lostAt: String(order.lostAt ?? deliveredAt ?? ""),
-          payoutCopper: Math.max(0, Number(risk.payoutCopper) || 0),
-          cargoCount: (order.cargo ?? []).length
+          proposedAt: String(order.riskProposedAt ?? deliveredAt ?? ""),
+          newEvent: !risk.replay
         });
         continue;
       }
-      if (risk.outcome === "delayed") report.delayed.push({
-        orderId: id,
-        orderOperationId: String(order.operationId ?? id),
-        operationId: risk.operationId,
-        marketLabel: String(order.marketLabel ?? "Внешний рынок"),
-        delayedAt: String(order.delayedAt ?? deliveredAt ?? ""),
-        delayQd: Math.max(1, Number(risk.delayQd) || 1)
-      });
     }
+    if (force && String(order.riskStatus ?? "") === "pending") {
+      const riskResolutionId = String(order.riskResolutionId || `${order.operationId || id}:risk:v2`);
+      order.riskResolutionId = riskResolutionId;
+      order.riskStatus = "waived";
+      order.riskOutcome = "waived";
+      order.riskResolvedAt = String(deliveredAt || "");
+      order.riskResolutionOperationId = String(order.riskResolutionOperationId || `${riskResolutionId}:manual-delivery`);
+      order.riskResolutionChoice = "manual-delivery";
+      manualRiskWaiver = true;
+    }
+    ageMarketCargo(order, force ? 0 : Math.min(qd, schedule.remainingQd));
+    order.postArrivalElapsedQd = force ? 0 : Math.max(0, qd - schedule.remainingQd);
     const current = Math.max(0, Number(order.remainingQd ?? order.deliveryQd ?? order.etaQd) || 0);
-    order.remainingQd = force ? 0 : Math.max(0, current - qd);
+    order.remainingQd = force ? 0 : Math.max(0, current - travelElapsedQd);
     if (!force && order.status === "delayed") {
-      order.delayRemainingQd = Math.max(0, Number(order.delayRemainingQd) - qd);
+      order.delayRemainingQd = Math.max(0, Number(order.delayRemainingQd) - travelElapsedQd);
       if (order.delayRemainingQd <= 0) order.status = "in-transit";
     }
     if (order.remainingQd > 0) {
@@ -575,6 +713,8 @@ export function advanceMarketShipments({ holding, elapsedQd = 0, forceOrderId = 
     }
     const arrival = deliverOrder(holding, order, deps, deliveredAt);
     if (!arrival.ok) return { ok: false, ...report, message: arrival.message, failedOrderId: id };
+    arrival.riskWaived = manualRiskWaiver;
+    arrival.riskWaiverOperationId = manualRiskWaiver ? String(order.riskResolutionOperationId ?? "") : "";
     report.delivered.push(arrival);
   }
   return { ok: true, ...report };

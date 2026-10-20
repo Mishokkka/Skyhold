@@ -1,29 +1,38 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
+import { bindSharedMarketHolding, advanceSharedMarketClock } from "../../../data/market/shared-context.js";
 import { escapeHtml } from "../../../core/helpers.js";
 import { buildingOperationalState } from "../../../core/building-state.js";
-import { allResourceDefs, compactResourceUnit } from "../../../core/resources.js";
 import { SkyholdData } from "../../../data/store.js";
 import { clone, makeId } from "../../../data/utils.js";
 import { stableDataHash } from "../../../data/storage-commit.js";
 import { appendHoldingOperation } from "../../../data/operations.js";
-import { economyV2RuntimeStatus } from "../../../data/economy-v2-activation.js";
 import { mergeHoldingDefaults } from "../../../data/normalizers.js";
-import { ageGroupFromAge, ageThresholdsFor, raceKeyFromResident } from "../../../generators/resident-rules.js";
-import { TRAIT_POOLS } from "../../../generators/trait-definitions.js";
+import { adjustResidentAttributesForAgeTransition, ageGroupFromAge, ageThresholdsFor, raceKeyFromResident } from "../../../generators/resident-rules.js";
+import { financeBuildingFunctionBlockState, financeWorkerBlockState } from "../../../engines/economy/finance-obligations.js";
 import { addCalendariaQd, calendariaDateKey, formatCalendariaDateTime, getCalendariaSnapshot, parseCalendariaDateInput, timestampForCalendariaDate } from "../../../integrations/calendaria-bridge.js";
 import {
   advanceTendayClock,
   applyPreparedTenday,
   dueTendaySchedule,
   normalizeTendayQd,
+  preparedTendayReplay,
   tendayDependencySnapshot
 } from "./tenday-preview.js";
 import { createFoundryChatMessage, foundryChatSpeaker } from "../../../integrations/foundry-runtime.js";
 import { buildTendayChangeSet } from "../../../engines/tenday/change-set.js";
 import { buildTendayOperationPayload } from "../../../engines/tenday/operation-payload.js";
+import { recoverMarketStock } from "../../../engines/market/stock.js";
 import { appendEconomyLedger } from "../../../engines/economy/ledger.js";
-import { applyStorageSpoilage, storageSpoilageLedgerRows } from "../../../engines/storage/spoilage.js";
+import {
+  beginPerishableStoragePeriod,
+  cancelPerishableStoragePeriod,
+  finishPerishableStoragePeriod
+} from "../../../engines/economy/perishable-storage.js";
+import { normalizeFoodRationUnits } from "../../../engines/economy/food-rations.js";
 import { openTendayApp, openTendayHistory } from "../../lazy-apps.js";
+import { politicsDecisionContext } from "../../politics-decision-context.js";
+import { prepareSequentialTendays } from "../../../engines/tenday/sequential.js";
+import { politicsPeriodTracked } from "../../../engines/politics/period.js";
 
 export const EconomyEventActions = {
   click: {
@@ -56,8 +65,6 @@ async _onRunEconomyPeriod(event) {
   if (!game.user?.isGM) return;
   const qd = normalizeTendayQd(event.currentTarget?.dataset?.qd);
   const data = SkyholdData.get();
-  const economyStatus = economyV2RuntimeStatus(data);
-  if (!economyStatus.ready) return ui.notifications?.warn?.(economyStatus.message);
   const holdingId = this._activeWritableHoldingId(data);
   if (!holdingId) return this._warnNoActiveHolding();
   return openTendayApp({ holdingId, qd });
@@ -71,100 +78,73 @@ _tendayDependencyHash(data, holdingId) {
 _isPreparedTendayCurrent(prepared = {}, suppliedData = null) {
   if (!prepared?.holdingId || !prepared?.dependencyHash) return false;
   const data = suppliedData ?? SkyholdData.view();
-  const revision = Math.max(0, Number(data?.meta?.revision) || 0);
-  if (prepared.dataRevision === revision) return true;
+  // External world settings are included in the hash, not the data revision.
   return this._tendayDependencyHash(data, prepared.holdingId) === prepared.dependencyHash;
 },
 
-async _prepareTendayOperation({ holdingId = "", qd = 40, dataView = null, dependencyHash: suppliedDependencyHash = "" } = {}) {
+async _prepareTendayOperation({ holdingId = "", qd = 40, rationUnitsPerResident = null, dataView = null, dependencyHash: suppliedDependencyHash = "",
+  operationId: suppliedOperationId = "", preparedAt: suppliedPreparedAt = "" } = {}) {
   if (!game.user?.isGM) return { ok: false, message: "Провести десятник может только GM." };
   const periodQd = normalizeTendayQd(qd);
   const data = dataView ?? SkyholdData.view();
-  const economyStatus = economyV2RuntimeStatus(data);
-  if (!economyStatus.ready) return { ok: false, blocked: true, economyInactive: true, message: economyStatus.message };
   const id = String(holdingId ?? "");
   const source = (data?.holdings ?? []).find((holding) => String(holding?.id ?? "") === id);
   if (!source) return { ok: false, missing: true, message: "Владение для расчёта не найдено." };
+  if (periodQd > 40 && politicsPeriodTracked(source, politicsDecisionContext(source, this, { data }))) {
+    const prepared = await prepareSequentialTendays(this, { holdingId: id, qd: periodQd, data, rationUnitsPerResident,
+      operationId: suppliedOperationId || makeId("tenday", 20), preparedAt: suppliedPreparedAt || new Date().toISOString() });
+    if (!prepared.ok) return prepared;
+    prepared.changeSet = buildTendayChangeSet(source, prepared.preparedHolding, {
+      isFoodResource: (row) => this._isFoodResource(row), roomLabel: (holding, roomId) => this._storageRoomLabel(holding, roomId),
+      formatNumber: (value) => this._formatNumber(value)
+    });
+    return prepared;
+  }
 
-  const operationId = makeId("tenday", 20);
+  const operationId = suppliedOperationId || makeId("tenday", 20);
+  const preparedAt = suppliedPreparedAt || new Date().toISOString();
   const sourceHash = stableDataHash(source);
   const dependencyHash = String(suppliedDependencyHash || this._tendayDependencyHash(data, id));
   const sourceSnapshot = clone(source);
   const previewHolding = clone(source);
-  const laborPool = this._buildTendayLaborPool(previewHolding);
-  const labor = this._laborPoolStatus(laborPool);
-  if (!labor.ready) {
-    return {
-      ok: false,
-      blocked: true,
-      laborBlocked: true,
-      operationId,
-      holdingId: id,
-      holdingName: String(source.name || "Владение"),
-      qd: periodQd,
-      sourceHash,
-      dependencyHash,
-      dataRevision: Math.max(0, Number(data?.meta?.revision) || 0),
-      laborPool,
-      labor,
-      report: { labor, skipped: [labor.message] },
-      readiness: { ready: false, alerts: labor.alerts, alertCount: labor.alerts.length, labor },
-      message: labor.message
-    };
-  }
+  const sharedMarketDraft = data?.meta?.sharedMarkets?.enabled ? clone(data.meta.sharedMarkets) : null;
+  bindSharedMarketHolding(previewHolding, sharedMarketDraft);
+  if (!previewHolding.gm || typeof previewHolding.gm !== "object") previewHolding.gm = {};
+  if (!previewHolding.gm.food || typeof previewHolding.gm.food !== "object") previewHolding.gm.food = {};
+  const selectedRationUnits = normalizeFoodRationUnits(
+    rationUnitsPerResident ?? previewHolding.gm.food.rationUnitsPerResident,
+    10
+  );
+  previewHolding.gm.food.rationUnitsPerResident = selectedRationUnits;
   const calendariaGate = this._checkCalendariaEconomyAdvance(previewHolding, periodQd);
   if (!calendariaGate.ok) return { ok: false, blocked: true, message: calendariaGate.message, calendariaGate };
-  const payrollContext = this._payrollReadinessContext(sourceSnapshot, {
-    laborPool,
-    period: this._employmentPeriodContext(sourceSnapshot, periodQd),
-    qd: periodQd
-  });
-  if (!payrollContext.ready) {
-    return {
-      ok: false,
-      blocked: true,
-      payrollBlocked: true,
-      operationId,
-      holdingId: id,
-      holdingName: String(source.name || "Владение"),
-      qd: periodQd,
-      sourceHash,
-      dependencyHash,
-      dataRevision: Math.max(0, Number(data?.meta?.revision) || 0),
-      laborPool,
-      labor,
-      payroll: payrollContext,
-      report: { labor, payroll: payrollContext, skipped: [payrollContext.message] },
-      readiness: { ready: false, alerts: payrollContext.alerts, alertCount: payrollContext.alerts.length, labor, payroll: payrollContext },
-      message: payrollContext.message
-    };
-  }
 
-  const rawReport = await this._runEconomyForQd(previewHolding, periodQd, { laborPool, operationId, payrollContext });
-  if (rawReport?.blocked) {
-    return {
-      ok: false,
-      blocked: true,
-      payrollBlocked: rawReport?.payroll?.ready === false,
-      operationId,
-      holdingId: id,
-      holdingName: String(source.name || "Владение"),
-      qd: periodQd,
-      sourceHash,
-      dependencyHash,
-      dataRevision: Math.max(0, Number(data?.meta?.revision) || 0),
-      laborPool,
-      labor,
-      payroll: rawReport?.payroll,
+  beginPerishableStoragePeriod(previewHolding);
+  let rawReport;
+  try {
+    rawReport = await this._runEconomyForQd(previewHolding, periodQd, { operationId, createdAt: preparedAt, data });
+    finishPerishableStoragePeriod({
+      holding: previewHolding,
+      elapsedQd: periodQd,
       report: rawReport,
-      readiness: { ready: false, alerts: rawReport?.payroll?.ready === false ? payrollContext.alerts : labor.alerts, alertCount: 1, labor, payroll: rawReport?.payroll },
-      message: rawReport?.skipped?.at?.(-1) || "Расчёт десятника заблокирован."
-    };
+      appendLedger: appendEconomyLedger,
+      formatNumber: (value) => this._formatNumber(value)
+    });
+  } catch (error) {
+    cancelPerishableStoragePeriod(previewHolding);
+    throw error;
   }
+  const foodAvailable = Number(rawReport?.food?.availableBeforeConsumption);
+  const readiness = await this._tendayReadinessContext(sourceSnapshot, {
+    foodProjection: Number.isFinite(foodAvailable) ? { available: foodAvailable } : null
+  });
   const recovery = this._advanceResidentRecovery(previewHolding, Math.floor(periodQd / 4));
   if (recovery.recovered) rawReport.work.push(`Выздоровело жителей: ${recovery.recovered}.`);
-  if (!calendariaGate.snapshot?.available && periodQd >= 1460) {
-    const aging = this._advanceResidentAges(previewHolding, Math.floor(periodQd / 1460));
+  // A game year is 240 days; count boundaries even when time advances by one day.
+  const beforeAgeQd = Math.max(0, Number(sourceSnapshot?.gm?.calendaria?.lastQd) || 0);
+  const elapsedYears = Math.floor((beforeAgeQd + periodQd) / 960) - Math.floor(beforeAgeQd / 960);
+  if (!calendariaGate.snapshot?.available && elapsedYears > 0) {
+    const aging = this._advanceResidentAges(previewHolding, elapsedYears);
     if (aging.changed) rawReport.work.push(`Возрастные категории изменились: ${aging.changed}.`);
     if (aging.educated) rawReport.work.push(`Школа дала развитие детям: ${aging.educated}.`);
   }
@@ -172,36 +152,14 @@ async _prepareTendayOperation({ holdingId = "", qd = 40, dataView = null, depend
   if (calendarAdvance?.aging?.changed) rawReport.work.push(`Возрастные категории изменились: ${calendarAdvance.aging.changed}.`);
   if (calendarAdvance?.aging?.educated) rawReport.work.push(`Школа дала развитие детям: ${calendarAdvance.aging.educated}.`);
   const clock = advanceTendayClock(previewHolding, periodQd);
-  const spoilage = applyStorageSpoilage({
+  advanceSharedMarketClock(previewHolding);
+  const marketStockRecovery = recoverMarketStock({
     holding: previewHolding,
-    fromQd: clock.before,
-    toQd: clock.after,
-    resourceDefinitions: allResourceDefs({ catalogRows: data?.catalog?.resources }),
-    rooms: this._storageRooms(previewHolding, { includeUnavailable: true })
+    currentTenday: clock.afterPeriod,
+    updatedAt: `tenday:${clock.afterPeriod}`
   });
-  rawReport.spoiled = spoilage.rows.map((row) => {
-    if (String(row.kind ?? "").startsWith("overflow-")) {
-      const lossLabel = row.lossKind === "theft" ? "украдено" : (row.lossKind === "spoilage" ? "испорчено" : "потеряно");
-      return `${row.name}: ${lossLabel} ${this._formatNumber(row.qty)} ${compactResourceUnit(row.unit)} в «${row.roomLabel}» после отсрочки переполнения.`;
-    }
-    const effectiveShelfLife = row.effectiveShelfLifeDays ?? (row.shelfLifeDays * row.shelfLifeFactor);
-    return `${row.name}: испорчено ${this._formatNumber(row.qty)} ${compactResourceUnit(row.unit)} в «${row.roomLabel}» (качество ${this._formatNumber(row.storageQuality)}, срок ${this._formatNumber(effectiveShelfLife)} дн.).`;
-  });
-  rawReport.spoiled.push(...(spoilage.overflow?.warnings ?? []).map((warning) => (
-    warning.graceRemainingQd > 0
-      ? `Переполнение «${warning.roomLabel}»: лишние ${this._formatNumber(warning.excessCargoPoints)} груз. оч.; отсрочка ещё ${this._formatNumber(warning.graceRemainingQd)} QD.`
-      : `Переполнение «${warning.roomLabel}»: лишние ${this._formatNumber(warning.excessCargoPoints)} груз. оч.; действует риск порчи, кражи и потери.`
-  )));
-  appendEconomyLedger(rawReport, storageSpoilageLedgerRows(spoilage.rows));
-  const foodAvailable = Number(rawReport?.food?.availableBeforeConsumption);
-  const projectedFoodAvailable = Number.isFinite(foodAvailable)
-    ? Math.max(0, foodAvailable - spoilage.foodPersonDays)
-    : null;
-  const readiness = await this._tendayReadinessContext(sourceSnapshot, {
-    foodProjection: projectedFoodAvailable === null ? null : { available: projectedFoodAvailable },
-    catalogRows: data?.catalog?.resources,
-    workerContext: this._economyWorkerContext(sourceSnapshot, laborPool)
-  });
+  rawReport.marketStockRecovery = marketStockRecovery;
+  if (marketStockRecovery.recoveredQty > 0) rawReport.work.push(`Внешние рынки восстановили ${marketStockRecovery.recoveredQty} ед. запаса.`);
   const report = this._appendEconomyStorageLog(previewHolding, rawReport, { operationId });
   const eventPeriods = Math.max(1, Math.floor(periodQd / 40));
   const events = typeof this._prepareTendayRandomEvents === "function"
@@ -220,12 +178,9 @@ async _prepareTendayOperation({ holdingId = "", qd = 40, dataView = null, depend
   });
   const warnings = [];
   if (this._safeNumber(report?.food?.hungryResidentDays, 0) > 0) warnings.push({ key: "food", severity: "danger", text: `Голод: ${report.food.hungryResidentDays} человеко-дней без пищи.` });
-  if (this._safeNumber(report?.treasury?.deficit, 0) > 0) warnings.push({ key: "treasury", severity: "danger", text: `Задолженность казны: ${this._formatCopperCurrency(report.treasury.deficit)}.` });
+  if (this._safeNumber(report?.treasury?.deficit, 0) > 0) warnings.push({ key: "treasury", severity: "danger", text: `Дефицит казны: ${this._formatCopperCurrency(report.treasury.deficit)}.` });
+  if ((report?.maintenance?.needsResolution ?? []).length) warnings.push({ key: "maintenance", severity: "warning", text: `Требуют решения GM после третьего пропуска обслуживания: ${report.maintenance.needsResolution.length}.` });
   if ((report?.skipped ?? []).length) warnings.push({ key: "skipped", severity: "warning", text: `Не выполнено операций: ${report.skipped.length}.` });
-  if (spoilage.hasLosses) {
-    const foodLoss = spoilage.foodPersonDays > 0 ? `, включая ${this._formatNumber(spoilage.foodPersonDays)} человеко-дней пищи` : "";
-    warnings.push({ key: "spoilage", severity: "warning", text: `Испорчено складских позиций: ${spoilage.rows.length}${foodLoss}.` });
-  }
   if (dueEvents.length) warnings.push({ key: "due-events", severity: "warning", text: `Подошёл срок запланированных событий: ${dueEvents.length}.` });
   for (const text of events?.warnings ?? []) warnings.push({ key: "events", severity: "warning", text: String(text) });
   return {
@@ -234,39 +189,42 @@ async _prepareTendayOperation({ holdingId = "", qd = 40, dataView = null, depend
     holdingId: id,
     holdingName: String(source.name || "Владение"),
     qd: periodQd,
+    rationUnitsPerResident: selectedRationUnits,
     periodLabel: String(report.periodLabel || `${periodQd} QD`),
     sourceHash,
     dependencyHash,
     dataRevision: Math.max(0, Number(data?.meta?.revision) || 0),
     preparedHolding,
+    ...(sharedMarketDraft ? { preparedSharedMarkets: sharedMarketDraft } : {}),
     report,
     recovery,
     calendarAdvance,
     calendariaGate,
     clock,
-    spoilage,
-    laborPool,
-    labor,
     readiness,
     events,
     dueEvents,
     changeSet,
     warnings,
-    preparedAt: new Date().toISOString()
+    preparedAt
   };
 },
 
 async _applyPreparedTendayOperation(prepared = {}) {
   if (!game.user?.isGM) return { ok: false, message: "Провести десятник может только GM." };
   if (!prepared?.ok || !prepared?.preparedHolding || !prepared?.holdingId) return { ok: false, message: "Подготовленный расчёт десятника отсутствует." };
-  if (prepared?.laborPool?.readiness?.ready !== true) return { ok: false, blocked: true, laborBlocked: true, message: "Снимок труда отсутствует или содержит конфликт. Подготовь десятник заново." };
-  if (prepared?.report?.payroll?.ready !== true || String(prepared?.report?.payroll?.operationId ?? "") !== String(prepared?.operationId ?? "")) {
-    return { ok: false, blocked: true, payrollBlocked: true, message: "Расчёт оплаты труда отсутствует или не совпадает с десятником. Подготовь расчёт заново." };
-  }
   const payload = buildTendayOperationPayload(prepared);
   const result = await SkyholdData.updateHolding(prepared.holdingId, (holding, data) => {
-    const economyStatus = economyV2RuntimeStatus(data);
-    if (!economyStatus.ready) return SkyholdData.skipTransaction({ ok: false, blocked: true, economyInactive: true, message: economyStatus.message });
+    const replay = preparedTendayReplay(holding, prepared.operationId);
+    if (replay) {
+      return SkyholdData.skipTransaction({
+        ok: true,
+        replay: true,
+        duplicate: true,
+        holding: clone(holding),
+        operationId: prepared.operationId
+      });
+    }
     const dependencyHash = this._tendayDependencyHash(data, prepared.holdingId);
     if (!dependencyHash || dependencyHash !== prepared.dependencyHash) {
       return SkyholdData.skipTransaction({ ok: false, stale: true, message: "Владение или влияющий каталог изменились после расчёта. Подготовь десятник заново." });
@@ -275,17 +233,19 @@ async _applyPreparedTendayOperation(prepared = {}) {
     if (!applied.ok) {
       return SkyholdData.skipTransaction({ ok: false, stale: true, message: "Владение изменилось после расчёта. Подготовь десятник заново." });
     }
+    if (prepared.preparedSharedMarkets) data.meta.sharedMarkets = clone(prepared.preparedSharedMarkets);
     appendHoldingOperation(holding, {
       operationId: prepared.operationId,
       type: "tenday",
       createdAt: new Date().toISOString(),
       title: `Проведён десятник №${prepared.clock?.afterPeriod ?? "—"}: ${prepared.holdingName}`,
-      summary: `Казна ${prepared.changeSet?.money?.deltaText ?? "0"}; изменено ресурсов ${prepared.changeSet?.resources?.length ?? 0}; порча ${prepared.spoilage?.rows?.length ?? 0}; стройки ${prepared.report?.construction?.attempts ?? 0}; события ${prepared.events?.events?.length ?? 0}.`,
+      summary: `Казна ${prepared.changeSet?.money?.deltaText ?? "0"}; изменено ресурсов ${prepared.changeSet?.resources?.length ?? 0}; стройки ${prepared.report?.construction?.attempts ?? 0}; события ${prepared.events?.events?.length ?? 0}.`,
       payload
     });
     return { ok: true, holding: clone(holding), operationId: prepared.operationId };
   }, { fallback: false, reason: `economy:tenday:${prepared.operationId}` });
   if (!result?.ok) return result ?? { ok: false, message: "Не удалось записать десятник." };
+  if (result.replay) return { ...result, chatPosted: false, chatError: "", prepared };
 
   let chatPosted = true;
   let chatError = "";
@@ -324,7 +284,6 @@ _advanceResidentRecovery(holding, days = 0) {
 _advanceResidentAges(holding, years = 1) {
   const count = Math.max(0, Math.floor(this._safeNumber(years, 0)));
   if (!count) return { aged: 0, changed: 0 };
-  const attrs = ["strength", "agility", "wits", "empathy"];
   const school = this._schoolEducationContext(holding);
   let aged = 0;
   let changed = 0;
@@ -341,17 +300,25 @@ _advanceResidentAges(holding, years = 1) {
     aged += 1;
     if (oldGroup !== newGroup) {
       changed += 1;
-      if (!(oldGroup === "Ре" && newGroup === "Мл")) {
-        const available = attrs.filter((key) => this._safeNumber(person?.attributes?.[key], 0) > 1);
-        if (available.length) {
-          const key = available[Math.floor(Math.random() * available.length)];
-          person.attributes[key] = Math.max(1, this._safeNumber(person.attributes[key], 0) - 1);
-          const names = { strength: "Сила", agility: "Ловкость", wits: "Разум", empathy: "Эмпатия" };
-          person.notes = [String(person.notes ?? "").trim(), `Возрастная категория изменилась: ${oldGroup} → ${newGroup}; ${names[key]} -1.`].filter(Boolean).join("\n");
+      const groups = ["Ре", "Мл", "Вз", "Ст"];
+      const oldIndex = groups.indexOf(oldGroup);
+      const newIndex = groups.indexOf(newGroup);
+      const names = { strength: "Сила", agility: "Ловкость", wits: "Разум", empathy: "Эмпатия" };
+      const transitionNotes = [];
+      if (oldIndex >= 0 && newIndex > oldIndex) {
+        for (let index = oldIndex + 1; index <= newIndex; index += 1) {
+          const fromGroup = groups[index - 1];
+          const toGroup = groups[index];
+          const adjusted = adjustResidentAttributesForAgeTransition(person.attributes, fromGroup, toGroup);
+          person.attributes = adjusted.attributes;
+          const changeText = adjusted.changes
+            .map(({ key, delta }) => `${names[key]} ${delta > 0 ? "+" : ""}${delta}`)
+            .join(", ");
+          transitionNotes.push(`${fromGroup} → ${toGroup}${changeText ? `; ${changeText}` : ""}`);
         }
-      } else {
-        person.notes = [String(person.notes ?? "").trim(), `Вырос: ${oldGroup} → ${newGroup}.`].filter(Boolean).join("\n");
       }
+      const prefix = oldGroup === "Ре" ? "Вырос" : "Возрастная категория изменилась";
+      person.notes = [String(person.notes ?? "").trim(), `${prefix}: ${transitionNotes.join("; ") || `${oldGroup} → ${newGroup}`}.`].filter(Boolean).join("\n");
     }
   }
   return { aged, changed, educated };
@@ -359,9 +326,10 @@ _advanceResidentAges(holding, years = 1) {
 
 _schoolEducationContext(holding) {
   const buildings = (holding?.buildings?.list ?? []).filter((building) => {
-    const id = String(building?.id ?? building?.templateId ?? "").toLowerCase();
+    const id = `${String(building?.id ?? "")} ${String(building?.templateId ?? "")}`.toLowerCase();
     const name = String(building?.name ?? "").toLowerCase();
-    return buildingOperationalState(building).operational && (id === "school" || id.includes("school") || name.includes("школ"));
+    if (!buildingOperationalState(building).operational || !(id === "school" || id.includes("school") || name.includes("школ"))) return false;
+    return !financeBuildingFunctionBlockState({ finance: holding?.finance, buildingId: String(building?.id ?? ""), functionId: "culture" }).blocked;
   });
   const peopleById = new Map((holding?.people?.list ?? []).map((person) => [String(person?.id ?? ""), person]));
   const teachers = [];
@@ -369,13 +337,15 @@ _schoolEducationContext(holding) {
     for (const id of Array.isArray(building?.assignedWorkerIds) ? building.assignedWorkerIds : []) {
       const person = peopleById.get(String(id));
       if (!person || person.dead || this._safeNumber(person?.injuredDays, 0) > 0) continue;
+      if (financeWorkerBlockState({ finance: holding?.finance, workerId: String(person?.id ?? "") }).blocked) continue;
       const group = ageGroupFromAge(person.age, person.race, person.subrace);
       if (group === "Ре") continue;
       teachers.push(person);
     }
   }
   const teacherCount = teachers.length;
-  return { active: teacherCount > 0, teacherCount, chance: Math.min(0.55, 0.20 + teacherCount * 0.07) };
+  const requiredTeachers = buildings.length ? Math.min(...buildings.map((building) => Math.max(1, Math.floor(this._safeNumber(building?.workersMin, 1))))) : 1;
+  return { active: teacherCount >= requiredTeachers, teacherCount, requiredTeachers };
 },
 
 _childEducationMilestones(person = {}) {
@@ -393,26 +363,23 @@ _applySchoolEducation(holding, person = {}, oldAge = 0, newAge = 0, school = {})
   if (oldGroup !== "Ре") return 0;
   if (!Array.isArray(person.educationMilestones)) person.educationMilestones = [];
   const done = new Set(person.educationMilestones.map((value) => String(value)));
-  let successes = 0;
-  const attrLabels = { strength: "Сила", agility: "Ловкость", wits: "Разум", empathy: "Эмпатия" };
+  let resolutions = 0;
   for (const milestone of this._childEducationMilestones(person)) {
     if (done.has(milestone.key)) continue;
     if (!(oldAge < milestone.age && newAge >= milestone.age)) continue;
     person.educationMilestones.push(milestone.key);
-    if (Math.random() >= school.chance) continue;
-    if (!person.attributes || typeof person.attributes !== "object") person.attributes = {};
-    const attr = ["strength", "agility", "wits", "empathy"][Math.floor(Math.random() * 4)];
-    person.attributes[attr] = Math.min(6, this._safeNumber(person.attributes[attr], 0) + 1);
-    const currentTraits = String(person.traitsText ?? "").split(/[,;\n]/).map((item) => item.trim()).filter(Boolean);
-    const currentLow = new Set(currentTraits.map((item) => item.toLowerCase()));
-    const traitPool = (TRAIT_POOLS.soft ?? []).filter((name) => !currentLow.has(String(name).toLowerCase()));
-    const trait = traitPool[Math.floor(Math.random() * traitPool.length)] ?? "Грамотный";
-    if (trait && !currentLow.has(String(trait).toLowerCase())) currentTraits.push(trait);
-    person.traitsText = currentTraits.join(", ");
-    person.notes = [String(person.notes ?? "").trim(), `Школа: ${milestone.label}; ${attrLabels[attr]} +1; черта «${trait}».`].filter(Boolean).join("\n");
-    successes += 1;
+    const operationId = `school-milestone:${String(person?.id ?? "resident")}:${milestone.key}:${milestone.age}`;
+    appendHoldingOperation(holding, {
+      operationId,
+      type: "system",
+      title: `Решение ГМа: обучение ${person.name || "ребёнка"}`,
+      summary: `${person.name || "Ребёнок"} достиг(ла) вехи «${milestone.label}» при работающей Школе. ГМ решает ролевой результат; характеристики и черты автоматически не меняются.`,
+      payload: { needsResolution: true, resolutionKind: "school-milestone", residentId: person.id, milestone: milestone.key, age: milestone.age, teacherCount: school.teacherCount }
+    });
+    person.notes = [String(person.notes ?? "").trim(), `Школа: достигнута веха «${milestone.label}»; результат ожидает решения ГМа.`].filter(Boolean).join("\n");
+    resolutions += 1;
   }
-  return successes;
+  return resolutions;
 },
 
 _checkCalendariaEconomyAdvance(holding, qd = 0) {
@@ -517,7 +484,6 @@ async _postTendaySummaryChat(holding, prepared = {}) {
     : (prepared?.events?.events?.length ? "Результат доступен GM." : "Активных событий нет.");
   const construction = report?.construction ?? {};
   const skipped = report?.skipped ?? [];
-  const spoilage = prepared?.spoilage ?? { rows: [], totalQty: 0, bufferRationPoints: 0, foodPersonDays: 0 };
   await createFoundryChatMessage({
     speaker: foundryChatSpeaker({ alias: holding.name || "Владение" }),
     content: `
@@ -525,7 +491,7 @@ async _postTendaySummaryChat(holding, prepared = {}) {
         <h3>Десятник №${escapeHtml(prepared?.clock?.afterPeriod ?? "—")}: ${escapeHtml(holding.name || "Владение")}</h3>
         <p><strong>Казна:</strong> ${escapeHtml(this._formatCopperCurrency(money.before))} → ${escapeHtml(this._formatCopperCurrency(money.after))} (${escapeHtml(moneyDeltaText)}).</p>
         <p><strong>Пища:</strong> съедено ${this._safeNumber(food.eaten, 0)} из ${this._safeNumber(food.needed, 0)}${this._safeNumber(food.hungryResidentDays, 0) > 0 ? `; голод ${this._safeNumber(food.hungryResidentDays, 0)} человеко-дней` : ""}.</p>
-        <p><strong>Хозяйство:</strong> производственных изменений ${(report.produced ?? []).length}, расходных ${(report.consumed ?? []).length}; порча ${this._safeNumber(spoilage.totalQty, 0)}${this._safeNumber(spoilage.foodPersonDays, 0) > 0 ? ` (${this._safeNumber(spoilage.foodPersonDays, 0)} чел.-дн. пищи)` : ""}; стройки ${this._safeNumber(construction.attempts, 0)}, завершено ${this._safeNumber(construction.completed, 0)}${skipped.length ? `; не выполнено ${skipped.length}` : ""}.</p>
+        <p><strong>Хозяйство:</strong> производственных изменений ${(report.produced ?? []).length}, расходных ${(report.consumed ?? []).length}; стройки ${this._safeNumber(construction.attempts, 0)}, завершено ${this._safeNumber(construction.completed, 0)}${skipped.length ? `; не выполнено ${skipped.length}` : ""}.</p>
         <p><strong>События:</strong> ${escapeHtml(publicEventText)}</p>
       </div>
     `

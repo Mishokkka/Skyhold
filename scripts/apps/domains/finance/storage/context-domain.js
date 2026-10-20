@@ -6,11 +6,9 @@ import {
   resourceImage,
   resourceItemUuid,
   resourceLabel,
-  resourceOptions,
-  resourceUnit,
-  resourceUnitShort
+  resourceUnitLoad,
+  resourceOptions
 } from "../../../../core/resources.js";
-import { effectiveConsumerRationPoints } from "../../../../engines/resource-ration-points.js";
 import {
   buildStorageRooms,
   decorateStorageRoom,
@@ -21,30 +19,20 @@ import {
   storageUnitLoad
 } from "../../../../engines/storage/capacity.js";
 import { buildStorageSearchRows } from "../../../../engines/storage/search.js";
-import { storageOverflowRoomStatus } from "../../../../engines/storage/overflow.js";
-import { activeStorageReservationForRow, storageAvailableQuantity } from "../../../../engines/storage/reservations.js";
+import { storageEffectiveRowLoad, storageProfileEffectFactor } from "../../../../engines/storage/specialization.js";
+import { financeBuildingFunctionBlockState } from "../../../../engines/economy/finance-obligations.js";
 
 export const FinanceStorageContextDomain = {
 _storageUnitLoad(resource = {}) {
-  const explicitFields = [
-    resource.cargoPoints,
-    resource.unitCargoPoints,
-    resource.load,
-    resource.weight,
-    resource.system?.weight,
-    resource.system?.weight?.value,
-    resource.item?.system?.weight,
-    resource.item?.system?.weight?.value,
-    resource.itemData?.system?.weight,
-    resource.itemData?.system?.weight?.value
-  ];
-  if (explicitFields.some((value) => value !== undefined && value !== null && value !== "")) return storageUnitLoad(resource);
-  const definition = resourceDef(resource.resourceId, resource.id, resource.name);
-  return definition ? storageUnitLoad({ ...definition, ...resource, cargoPoints: definition.cargoPoints }) : storageUnitLoad(resource);
+  if (resource?.resourceId !== undefined && resource?.resourceId !== null && String(resource.resourceId).trim()) {
+    const id = normalizeResourceId(resource.resourceId, resource.name);
+    return id === "custom" ? 1 : resourceUnitLoad(id);
+  }
+  return storageUnitLoad(resource);
 },
 
 _storageRowLoad(row = {}) {
-  const qty = Math.max(0, this._safeNumber(row?.qty ?? row?.quantity ?? row?.count, 0));
+  const qty = Math.max(0, Math.floor(this._safeNumber(row?.qty ?? row?.quantity ?? row?.count, 0)));
   return qty * this._storageUnitLoad(row);
 },
 
@@ -83,17 +71,9 @@ _prepareStorageRows(holding, canEdit = false, roomsArg = null, rawRowsArg = null
     const def = id !== "custom" ? resourceDef(id) : null;
     const label = id === "custom" ? (row.name || "Ресурс") : resourceLabel(id);
     const qty = this._safeNumber(row.qty, 0);
-    const storageIndex = Number.isInteger(row.__storageIndex) ? row.__storageIndex : index;
-    const reservedQty = activeStorageReservationForRow(holding, row, storageIndex).qty;
-    const availableQty = storageAvailableQuantity(holding, row, storageIndex);
     const roomId = this._normalizeStorageRoomId(row.roomId ?? row.storageRoomId);
     const priceCopper = this._resourcePriceCopper(row);
-    const canMarkForSale = this._resourceTradeReady(row);
-    const saleTooltip = canMarkForSale
-      ? "Пометить ресурс как доступный для продажи торговцами."
-      : String(def?.tradeConfigurationError || def?.tradeDisabledReason || "Ресурс не настроен для торговли в каталоге.");
-    const foodValue = effectiveConsumerRationPoints(row, def);
-    const unitLoad = this._storageUnitLoad(row);
+    const canMarkForSale = priceCopper > 0;
     return {
       ...row,
       _index: Number.isInteger(row.__storageIndex) ? row.__storageIndex : index,
@@ -103,23 +83,9 @@ _prepareStorageRows(holding, canEdit = false, roomsArg = null, rawRowsArg = null
       img: id === "custom" ? String(row.img ?? "") : resourceImage(id),
       itemUuid: row.itemUuid || resourceItemUuid(id),
       category: def?.category ?? "Пользовательское",
-      unitFull: resourceUnit(id, row.name),
-      unit: resourceUnitShort(id, row.name),
-      quantityStep: id === "custom"
-        ? Math.max(0.001, this._safeNumber(row.quantityStep, 1))
-        : Math.max(1, this._safeNumber(def?.quantityStep, 1)),
-      legacyRemainder: Math.max(0, this._safeNumber(row.legacyRemainder, 0)),
-      legacyRemainderText: this._formatNumber(Math.max(0, this._safeNumber(row.legacyRemainder, 0))),
-      hasLegacyRemainder: this._safeNumber(row.legacyRemainder, 0) > 0.000001,
-      unitLoad,
-      unitLoadText: this._formatStorageLoad(unitLoad),
+      unit: "ед.",
+      unitLoad: this._storageUnitLoad(row),
       loadText: this._formatStorageLoad(this._storageRowLoad(row)),
-      unitCargoPointsText: this._formatStorageLoad(unitLoad),
-      cargoPointsText: this._formatStorageLoad(this._storageRowLoad(row)),
-      foodValue,
-      foodValueText: this._formatNumber(foodValue),
-      foodDaysText: this._formatNumber(qty * foodValue),
-      nutritionTagsText: (def?.nutritionTags ?? []).join(", "),
       resourceOptions: resourceOptions(id, row.name, { includeMoney: false }),
       roomId,
       roomLabel: labelFor(roomId),
@@ -127,15 +93,10 @@ _prepareStorageRows(holding, canEdit = false, roomsArg = null, rawRowsArg = null
       priceCopper,
       canMarkForSale,
       forSale: canMarkForSale && Boolean(row.forSale),
-      saleTooltip,
+      saleTooltip: canMarkForSale ? "Пометить ресурс как доступный для продажи торговцами." : "У ресурса нет цены, поэтому его нельзя отметить к продаже.",
       isCustomResource: id === "custom",
       qty,
       qtyText: this._formatNumber(qty),
-      reservedQty,
-      reservedQtyText: this._formatNumber(reservedQty),
-      availableQty,
-      availableQtyText: this._formatNumber(availableQty),
-      hasReservation: reservedQty > 0.000001,
       qtyClass: qty > 0 ? "positive" : qty < 0 ? "negative" : "zero",
       isZero: Math.abs(qty) < 0.0001,
       canEdit
@@ -174,7 +135,6 @@ _prepareStorageItemRows(holding, canEdit = false, roomsArg = null, rawRowsArg = 
       roomLabel: labelFor(roomId),
       roomOptions: optionsFor(roomId),
       loadText: this._formatStorageLoad(this._storageRowLoad(row)),
-      cargoPointsText: this._formatStorageLoad(this._storageRowLoad(row)),
       priceCopper,
       canMarkForSale,
       forSale: canMarkForSale && Boolean(row.forSale),
@@ -190,9 +150,16 @@ _storageCapacityDependencies() {
     safeNumber: (value, fallback = 0) => this._safeNumber(value, fallback),
     buildingFunctions: (building) => this._buildingFunctions(building),
     buildingStatus: (building) => this._buildingStatus(building),
+    storageFunctionAvailable: (holding, building) => !financeBuildingFunctionBlockState({
+      finance: holding?.finance,
+      buildingId: String(building?.id ?? ""),
+      functionId: "storage"
+    }).blocked,
+    storageProfileEffectFactor,
+    storageEffectiveRowLoad,
+    storageRowLoad: (row) => this._storageRowLoad(row),
     formatNumber: (value) => this._formatNumber(value),
-    formatLoad: (value) => this._formatStorageLoad(value),
-    storageRowLoad: (row) => this._storageRowLoad(row)
+    formatLoad: (value) => this._formatStorageLoad(value)
   };
 },
 
@@ -257,21 +224,7 @@ _storageContext(holding, canEdit = false, activeRoomId = "outdoors") {
     };
   }
 
-  const overflowState = holding?.storage?.overflow ?? {};
-  const currentQd = Math.max(0, Math.floor(this._safeNumber(holding?.gm?.calendaria?.lastQd, 0)));
-  const roomsAll = this._storageRooms(holding, { includeUnavailable: true }).map((room) => {
-    const overflowStatus = storageOverflowRoomStatus({
-      room,
-      overflowState,
-      currentQd,
-      formatLoad: (value) => this._formatStorageLoad(value)
-    });
-    return {
-      ...room,
-      ...overflowStatus,
-      fillTitle: overflowStatus.hasOverflow ? overflowStatus.overflowStatusText : room.fillTitle
-    };
-  });
+  const roomsAll = this._storageRooms(holding, { includeUnavailable: true });
   const rawRows = (holding?.storage?.resources ?? []).map((row, index) => ({ ...row, __storageIndex: index })).filter((row) => !isMoneyResource(row?.resourceId, row?.name));
   const rawItemRows = (holding?.storage?.items ?? []).map((row, index) => ({ ...row, __storageIndex: index }));
   const visibleRawRows = rawRows.filter((row) => Math.abs(this._safeNumber(row.qty, 0)) >= 0.0001);

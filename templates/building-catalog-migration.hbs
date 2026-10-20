@@ -1,0 +1,32 @@
+<section class="fbls-content-pack-shell">
+  <header class="fbls-content-pack-head">
+    <div><h2>Обновление дерева зданий</h2><p>Каталог v{{preview.sourceTemplateCatalogVersion}} → v{{targetVersion}} · шаблонов: {{preview.catalogTemplates}}</p></div>
+    <button type="button" class="fbls-button compact" data-action="building-catalog-migration-refresh" title="Пересчитать обновление"><i class="fa-solid fa-arrows-rotate"></i> Обновить расчёт</button>
+  </header>
+  <div class="fbls-migration-body" data-render-scroll-key="building-migration-preview" tabindex="0" role="region" aria-label="Результат проверки обновления зданий">
+    <p>Всё дерево шаблонов заменяется утверждённой редакцией. Постройки получают новые характеристики без выбора каждого старого значения. Жители, казна, имущество и состояние поселений сохраняются.</p>
+    {{#if status}}<p class="fbls-content-pack-summary">{{status}}</p>{{/if}}
+    {{#if error}}<p class="fbls-content-pack-error">{{error}}</p>{{/if}}
+    <article class="fbls-content-pack-summary"><div><strong>{{#if noChanges}}Уже актуально{{else}}{{#if canApply}}Готово к обновлению{{else}}Нужно разобрать состояния построек{{/if}}{{/if}}</strong><span>{{preview.changedInstances}} построек обновится · {{preview.blockingIssues}} препятствий</span></div></article>
+    {{#if hasIssues}}
+      <article class="fbls-card"><h3>Что мешает обновлению</h3><div class="fbls-stack">
+        {{#each issueRows}}<article class="fbls-content-pack-row reset"><strong>{{buildingName}}{{#if holdingName}} · {{holdingName}}{{/if}}</strong><p>{{detail}}</p></article>{{/each}}
+      </div>{{#if issuesTruncated}}<p>Показаны первые 80 проблем.</p>{{/if}}</article>
+    {{/if}}
+    {{#if decisions.length}}
+      <article class="fbls-card"><h3>Назначения обслуживания</h3><p>Старое общее обслуживание снимается. Освободившиеся QD нужно назначить конкретным техническим зданиям перед первым десятником.</p>
+        {{#each decisions}}<p>{{detail}}</p>{{/each}}
+      </article>
+    {{/if}}
+    {{#if changedRows.length}}
+      <article class="fbls-card"><h3>Обновляемые постройки</h3><div class="fbls-stack">
+        {{#each changedRows}}<article class="fbls-content-pack-row update"><strong>{{buildingName}}</strong><span>{{holdingName}} · {{mapping}}</span></article>{{/each}}
+      </div>{{#if rowsTruncated}}<p>Показаны первые 80 построек.</p>{{/if}}</article>
+    {{/if}}
+    <p>Сохраняются названия, заметки, жильцы, содержимое, повреждения и доля строительного прогресса. Начатые партии с прежним рецептом сохраняются вместе с прогрессом и резервом сырья. Несовместимые циклы и неизвестные соответствия не обнуляются. Перед записью создаётся копия для отката.</p>
+  </div>
+  <footer class="fbls-content-pack-actions">
+    <p>Просмотр ничего не записывает в мир.</p>
+    <button type="button" class="fbls-button primary" data-action="building-catalog-migration-apply" {{#unless canApply}}disabled{{/unless}}><i class="fa-solid fa-building-circle-check"></i> Обновить всё дерево и постройки</button>
+  </footer>
+</section>

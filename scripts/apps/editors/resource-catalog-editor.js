@@ -1,8 +1,12 @@
+import { FloatingTooltipsMixin } from "../common/floating-tooltip.js";
+import { PendingFieldSavesMixin } from "../common/pending-field-saves.js";
+import { dispatchDelegatedAction } from "../common/delegated-events.js";
 import { MODULE_ID } from "../../data/constants.js";
 import { SkyholdData } from "../../data/store.js";
+import { assertResourceCatalogUnused } from "../../data/catalog-dependencies.js";
+import { assertAvailableEntityId } from "../../data/entity-identity.js";
 import { makeId } from "../../data/utils.js";
 import { BUILTIN_RESOURCE_DEFS } from "../../data/resources/builtin-resources.js";
-import { RESOURCE_ECONOMY_VERSION } from "../../data/resources/resource-economy-contract.js";
 import { prepareResourceCatalogEditor } from "../../data/resources/resource-editor.js";
 import { normalizeResourceCatalogRow } from "../../core/resources.js";
 import { fieldValue } from "../../core/helpers.js";
@@ -14,7 +18,7 @@ import { renderFoundryFilePicker } from "../../integrations/foundry-runtime.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
-export class SkyholdResourceCatalogEditor extends RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2)) {
+export class SkyholdResourceCatalogEditor extends FloatingTooltipsMixin(PendingFieldSavesMixin(RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2)))) {
   constructor({ picker = null, ...options } = {}) {
     super(options);
     this.search = "";
@@ -33,7 +37,7 @@ export class SkyholdResourceCatalogEditor extends RenderSchedulerMixin(Handlebar
 
   async _prepareContext(options) {
     const context = await super._prepareContext(options);
-    const data = SkyholdData.get();
+    const data = SkyholdData.view();
     const catalog = prepareResourceCatalogEditor(data?.catalog?.resources, { canEdit: Boolean(game.user?.isGM) });
     if (this.picker && !catalog.rows.some((row) => String(row.id) === "custom")) {
       catalog.rows.push({ id: "custom", label: "Другой материал…", category: "Особое", unit: "ед.", icon: "fa-solid fa-pen", img: "", searchText: "custom другой материал особое", isBuiltin: true, isOverride: false });
@@ -87,8 +91,10 @@ export class SkyholdResourceCatalogEditor extends RenderSchedulerMixin(Handlebar
     event.preventDefault();
     if (!this.picker) return;
     const id = String(element.dataset.resourceId ?? "");
-    const resource = prepareResourceCatalogEditor(SkyholdData.get()?.catalog?.resources, { canEdit: false }).rows
-      .find((row) => String(row.id) === id);
+    const resource = id === "custom"
+      ? { id: "custom", label: "Другой материал…", category: "Особое", unit: "ед.", icon: "fa-solid fa-pen", img: "" }
+      : prepareResourceCatalogEditor(SkyholdData.view()?.catalog?.resources, { canEdit: false }).rows
+        .find((row) => String(row.id) === id);
     if (!resource) return;
     const callback = this.picker.onSelect;
     if (typeof callback === "function") await callback(resource);
@@ -118,7 +124,7 @@ export class SkyholdResourceCatalogEditor extends RenderSchedulerMixin(Handlebar
       if (data.catalog.resources.some((row) => String(row?.id ?? "") === id)) return SkyholdData.skipTransaction(true);
       data.catalog.resources.push(normalizeResourceCatalogRow({ ...builtin, aliases: [...(builtin.aliases ?? [])] }));
       return true;
-    }, { reason: "resource-editor:customize" });
+    }, { reason: "resource-editor:customize", scope: "catalog" });
   }
 
   async _onEdit(event, element) {
@@ -136,9 +142,9 @@ export class SkyholdResourceCatalogEditor extends RenderSchedulerMixin(Handlebar
     const added = await SkyholdData.transaction((data) => {
       if (!data.catalog || typeof data.catalog !== "object") data.catalog = {};
       if (!Array.isArray(data.catalog.resources)) data.catalog.resources = [];
-      data.catalog.resources.push(normalizeResourceCatalogRow({ id, label: "Новый ресурс", img: "", economyVersion: RESOURCE_ECONOMY_VERSION }));
+      data.catalog.resources.push(normalizeResourceCatalogRow({ id, label: "Новый ресурс", img: "" }));
       return true;
-    }, { reason: "resource-editor:add" });
+    }, { reason: "resource-editor:add", scope: "catalog" });
     if (!added) return;
     new SkyholdResourceRowEditor({ resourceId: id, owner: this }).render({ force: true, focus: true });
   }
@@ -156,7 +162,7 @@ export class SkyholdResourceCatalogEditor extends RenderSchedulerMixin(Handlebar
   }
 }
 
-export class SkyholdResourceRowEditor extends RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2)) {
+export class SkyholdResourceRowEditor extends FloatingTooltipsMixin(PendingFieldSavesMixin(RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2)))) {
   constructor({ resourceId = "", owner = null } = {}, options = {}) {
     super(options);
     this.resourceId = String(resourceId ?? "");
@@ -165,7 +171,7 @@ export class SkyholdResourceRowEditor extends RenderSchedulerMixin(HandlebarsApp
 
   async _prepareContext(options) {
     const context = await super._prepareContext(options);
-    const catalog = prepareResourceCatalogEditor(SkyholdData.get()?.catalog?.resources, { canEdit: Boolean(game.user?.isGM) });
+    const catalog = prepareResourceCatalogEditor(SkyholdData.view()?.catalog?.resources, { canEdit: Boolean(game.user?.isGM) });
     return { ...context, canEdit: Boolean(game.user?.isGM), resource: catalog.rows.find((row) => String(row.id) === this.resourceId) ?? null };
   }
 
@@ -186,15 +192,15 @@ export class SkyholdResourceRowEditor extends RenderSchedulerMixin(HandlebarsApp
     const options = { signal: controller.signal };
     root.addEventListener("change", (event) => {
       const field = event.target?.closest?.("[data-resource-field]");
-      if (field && root.contains(field)) this._onFieldChange(event, field);
+      if (field && root.contains(field)) dispatchDelegatedAction(this, event, field, (e) => this._onFieldChange(e, field));
     }, options);
     root.addEventListener("click", (event) => {
       const element = event.target?.closest?.("[data-action]");
       if (!element || !root.contains(element)) return;
       const action = String(element.dataset.action ?? "");
-      if (action === "resource-pick-image") this._onPickImage(event);
-      else if (action === "resource-restore") this._onRestore(event);
-      else if (action === "resource-delete") this._onDelete(event);
+      if (action === "resource-pick-image") dispatchDelegatedAction(this, event, element, "_onPickImage");
+      else if (action === "resource-restore") dispatchDelegatedAction(this, event, element, "_onRestore");
+      else if (action === "resource-delete") dispatchDelegatedAction(this, event, element, "_onDelete");
     }, options);
   }
 
@@ -204,8 +210,6 @@ export class SkyholdResourceRowEditor extends RenderSchedulerMixin(HandlebarsApp
     const key = String(field.dataset.resourceField ?? "");
     if (!/^[A-Za-z][A-Za-z0-9]*$/.test(key) || (key === "id" && BUILTIN_RESOURCE_DEFS.some((row) => row.id === this.resourceId))) return;
     let value = fieldValue(field);
-    if (key === "quantityStep") value = 1;
-    if (key === "id") value = String(value ?? "").trim();
     if (field instanceof HTMLTextAreaElement) value = sanitizeTextBlock(value);
     const oldId = this.resourceId;
     const updated = await SkyholdData.transaction((data) => {
@@ -213,22 +217,18 @@ export class SkyholdResourceRowEditor extends RenderSchedulerMixin(HandlebarsApp
       const index = rows.findIndex((row) => String(row?.id ?? "") === oldId);
       if (index < 0) return SkyholdData.skipTransaction(false);
       if (key === "id") {
-        const identity = String(value ?? "").toLocaleLowerCase("en");
-        if (!identity || rows.some((row, rowIndex) => rowIndex !== index && String(row?.id ?? "").trim().toLocaleLowerCase("en") === identity)) {
-          ui.notifications?.warn?.("ID ресурса должен быть непустым и уникальным. Склад, рецепты и заказы не были изменены.");
-          return SkyholdData.skipTransaction(false);
-        }
+        value = normalizeResourceCatalogRow({ ...rows[index], id: value }).id;
+        value = assertAvailableEntityId([...rows, ...BUILTIN_RESOURCE_DEFS], value, { current: rows[index] });
+        if (value !== oldId) assertResourceCatalogUnused(data, oldId);
       }
       rows[index][key] = value;
-      if (["quantityStep", "referencePriceCopper", "tradable", "cargoClass", "cargoPoints", "rationPoints", "shelfLifeTendays"].includes(key)) {
-        rows[index].economyVersion = RESOURCE_ECONOMY_VERSION;
-        rows[index].legacyEconomy = false;
-        rows[index].legacyEconomyVersion = 0;
-      }
-      if (key === "cargoClass" && /^\d+$/.test(String(value))) rows[index].cargoPoints = Number(value);
-      if (key === "cargoPoints") rows[index].cargoClass = Number(value) > 40 ? "oversized" : "";
       return true;
-    }, { reason: `resource-row-editor:field:${key}` });
+    }, { reason: `resource-row-editor:field:${key}`, scope: "catalog" }).catch((error) => {
+      if (error.code !== "conflict") throw error;
+      if (key === "id") field.value = oldId;
+      ui.notifications?.warn?.(error.message);
+      return false;
+    });
     if (!updated) return;
     if (key === "id") this.resourceId = String(value ?? "");
     requestSkyholdAppRender();
@@ -239,10 +239,12 @@ export class SkyholdResourceRowEditor extends RenderSchedulerMixin(HandlebarsApp
     if (!game.user?.isGM) return;
     const field = this.element?.querySelector?.("[data-resource-field='img']");
     if (!field) return;
+    const resourceId = this.resourceId;
     renderFoundryFilePicker({
       type: "image",
       current: String(field.value ?? ""),
       callback: (picked) => {
+        if (!this.rendered || !field.isConnected || this.resourceId !== resourceId || !this.element?.contains?.(field)) return;
         field.value = String(picked ?? "");
         field.dispatchEvent(new Event("change", { bubbles: true }));
       }
@@ -261,16 +263,22 @@ export class SkyholdResourceRowEditor extends RenderSchedulerMixin(HandlebarsApp
     event.preventDefault();
     if (!game.user?.isGM || BUILTIN_RESOURCE_DEFS.some((row) => row.id === this.resourceId)) return;
     if (!await this._confirm("Удалить пользовательский ресурс из каталога?")) return;
-    await this._removeOverride("resource-row-editor:delete");
+    try { await this._removeOverride("resource-row-editor:delete"); }
+    catch (error) {
+      if (error.code !== "conflict") throw error;
+      ui.notifications.warn(error.message);
+      return;
+    }
     await this.close();
   }
 
   async _removeOverride(reason) {
     await SkyholdData.transaction((data) => {
+      if (!BUILTIN_RESOURCE_DEFS.some((row) => row.id === this.resourceId)) assertResourceCatalogUnused(data, this.resourceId);
       const rows = Array.isArray(data?.catalog?.resources) ? data.catalog.resources : [];
       data.catalog.resources = rows.filter((row) => String(row?.id ?? "") !== this.resourceId);
       return true;
-    }, { reason });
+    }, { reason, scope: "catalog" });
     requestSkyholdAppRender();
   }
 
@@ -304,7 +312,7 @@ SkyholdResourceRowEditor.DEFAULT_OPTIONS = {
   classes: ["fbl-skyhold", "fbl-skyhold-resource-row-editor"],
   tag: "section",
   window: { title: "Редактор ресурса", icon: "fa-solid fa-box", resizable: true },
-  position: { width: 760, height: 720 }
+  position: { width: 660, height: 620 }
 };
 
 SkyholdResourceRowEditor.PARTS = {

@@ -1,10 +1,10 @@
   {{#if hasHolding}}
-    <nav class="fbls-tabs" aria-label="Вкладки владения">
+    <div role="tablist" data-fbls-tablist="manager" class="fbls-tabs" aria-label="Вкладки владения">
       {{#each tabs}}
-        <button type="button" class="fbls-tab {{#if active}}active{{/if}}" data-action="tab" data-fbls-tab="{{id}}">
+        <button type="button" aria-selected="{{#if active}}true{{else}}false{{/if}}" tabindex="{{#if active}}0{{else}}-1{{/if}}" class="fbls-tab {{#if active}}active{{/if}}" data-action="tab" data-fbls-tab="{{id}}" data-fbls-tab-value="{{id}}">
           <i class="{{icon}}"></i>
           <span>{{label}}</span>
         </button>
       {{/each}}
-    </nav>
+    </div>
   {{/if}}

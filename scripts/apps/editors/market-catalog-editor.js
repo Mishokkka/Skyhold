@@ -1,13 +1,11 @@
+import { FloatingTooltipsMixin } from "../common/floating-tooltip.js";
+import { PendingFieldSavesMixin } from "../common/pending-field-saves.js";
+import { dispatchDelegatedAction } from "../common/delegated-events.js";
 import { MODULE_ID } from "../../data/constants.js";
 import { SkyholdData } from "../../data/store.js";
 import { makeId } from "../../data/utils.js";
 import { marketEconomySummary, normalizeMarketEconomy } from "../../data/market/economy.js";
-import {
-  prepareMarketEconomySettingsForEditor,
-  marketEconomySettingFromEditor,
-  storedLoadFromMarketCargoPoints
-} from "../../data/market/editor-units.js";
-import { allResourceDefs } from "../../core/resources.js";
+import { allResourceDefs, resourceBasePriceCopper, resourceLoadPoints } from "../../core/resources.js";
 import { fieldValue } from "../../core/helpers.js";
 import { requestSkyholdAppRender } from "../registry.js";
 import { SkyholdMarketApp } from "../market-app.js";
@@ -41,11 +39,6 @@ const RULE_MODE_OPTIONS = [
   { value: "adjust", label: "Ручная корректировка" },
   { value: "restrict", label: "Исключает из ассортимента" }
 ];
-const PRICE_MODE_OPTIONS = [
-  { value: "catalog", label: "Цена ресурса из каталога" },
-  { value: "manual", label: "Ручная цена товара" },
-  { value: "legacy", label: "Старая сохранённая цена" }
-];
 const TRANSPORT_OPTIONS = [
   { value: "caravan", label: "Караван", icon: "fa-solid fa-cart-flatbed" },
   { value: "rail", label: "Железная дорога", icon: "fa-solid fa-train" },
@@ -63,58 +56,37 @@ function textList(value) {
 }
 
 function prepareOffer(offer = {}, resourcesById = new Map()) {
-  const resourceId = String(offer.resourceId ?? "");
-  const resource = resourcesById.get(resourceId) ?? {};
-  const isCustomOffer = offer.sourceType === "item" || resourceId === "custom";
-  const priceMode = String(offer.priceMode ?? "legacy");
-  const catalogReferencePriceCopper = Math.max(0, Math.round(Number(resource.referencePriceCopper) || 0));
-  const baseAskStock = Math.max(0, Math.floor(Number(offer.baseAskStock ?? offer.baseStock) || 0));
-  const baseBidDemand = Math.max(0, Math.floor(Number(offer.baseBidDemand) || 0));
-  const bidSpreadPct = Math.round(Math.max(0.05, Math.min(0.5, Number(offer.bidSpreadRate) || 0.18)) * 100);
+  const resource = resourcesById.get(String(offer.resourceId ?? "")) ?? {};
   const displayName = String(offer.name ?? "").trim() || String(resource.label ?? offer.resourceId ?? "Товар");
-  const inheritedLoad = offer.loadMode === "auto" && resource.load !== undefined && resource.load !== null;
-  const inheritedCargo = offer.loadMode === "auto" && Number(resource.cargoPoints) > 0;
-  const cargoPoints = inheritedCargo
-    ? Math.max(1, Math.ceil(Number(resource.cargoPoints) || 1))
-    : Math.max(1, Math.ceil(Number(offer.cargoPoints) || (Number(offer.load) || 0) * 10 || 1));
-  const cargoClass = inheritedCargo
-    ? String(resource.cargoClass ?? cargoPoints)
-    : String(offer.cargoClass ?? "").trim() || (cargoPoints > 40 ? "oversized" : "manual");
+  const isItemOffer = offer.sourceType === "item";
+  const canonicalPriceCopper = isItemOffer ? null : resourceBasePriceCopper(resource, offer.resourceId);
+  const canonicalLoadPoints = isItemOffer ? null : resourceLoadPoints(resource, offer.resourceId);
+  const hasPriceOverride = offer.priceOverrideCopper !== null && offer.priceOverrideCopper !== undefined && offer.priceOverrideCopper !== "";
+  const hasLoadOverride = isItemOffer && offer.loadOverridePoints !== null && offer.loadOverridePoints !== undefined && offer.loadOverridePoints !== "";
+  const priceFactor = Number(offer.priceFactor) > 0 ? Number(offer.priceFactor) : 1;
+  const effectivePriceCopper = Math.max(1, Math.round((hasPriceOverride ? Number(offer.priceOverrideCopper) : Number(canonicalPriceCopper)) * priceFactor) || 1);
+  const effectiveLoadPoints = Math.max(0, Math.round(hasLoadOverride ? Number(offer.loadOverridePoints) : Number(canonicalLoadPoints)) || 0);
   return {
     ...offer,
-    priceMode,
-    priceModeOptions: selectedOptions(PRICE_MODE_OPTIONS, priceMode).map((row) => ({
-      ...row,
-      disabled: row.value === "catalog" ? isCustomOffer : row.value === "manual" && !isCustomOffer
-    })),
-    priceModeHint: priceMode === "catalog"
-      ? `Котировка начинается с цены ресурса: ${catalogReferencePriceCopper} ММ за единицу.`
-      : priceMode === "manual"
-        ? "Котировка начинается с ручной цены этого особого товара."
-        : "Совместимость: используется цена, сохранённая старой версией мира.",
-    storedPriceHint: priceMode === "catalog"
-      ? "Не участвует в расчёте, пока выбрана цена из каталога."
-      : "Это исходная цена до условий рынка и поправки торговца.",
-    catalogPriceMode: priceMode === "catalog",
-    baseAskStock,
-    baseBidDemand,
-    bidSpreadPct,
-    load: inheritedLoad ? resource.load : offer.load,
-    loadAuto: offer.loadMode === "auto",
-    loadManual: offer.loadMode === "manual",
-    cargoPoints,
-    cargoClass,
-    cargoPointsInherited: inheritedCargo,
-    cargoPointsHint: inheritedCargo
-      ? `Из каталога ресурса · класс ${cargoClass}`
-      : `Ручное исключение · класс ${cargoClass}`,
     displayName,
     displayIcon: String(offer.icon ?? "").trim() || String(resource.icon ?? "fa-solid fa-box"),
     tagsText: (offer.tags ?? []).join(", "),
     searchText: `${displayName} ${offer.id ?? ""} ${offer.resourceId ?? ""} ${offer.kind ?? ""} ${offer.ubiquity ?? ""} ${(offer.tags ?? []).join(" ")}`.toLocaleLowerCase("ru"),
     kindOptions: selectedOptions(KIND_OPTIONS, offer.kind),
     ubiquityOptions: selectedOptions(UBIQUITY_OPTIONS, offer.ubiquity),
-    visibilityOptions: selectedOptions(VISIBILITY_OPTIONS, offer.visibility)
+    visibilityOptions: selectedOptions(VISIBILITY_OPTIONS, offer.visibility),
+    isItemOffer,
+    isResourceOffer: !isItemOffer,
+    hasPriceOverride,
+    hasLoadOverride,
+    priceOverrideValue: hasPriceOverride ? offer.priceOverrideCopper : "",
+    loadOverrideValue: hasLoadOverride ? offer.loadOverridePoints : "",
+    canonicalPriceCopper,
+    canonicalLoadPoints,
+    canonicalLoadText: canonicalLoadPoints === null ? "—" : `${canonicalLoadPoints} п. (${canonicalLoadPoints / 4} нагрузки)`,
+    effectivePriceCopper,
+    effectiveLoadPoints,
+    effectiveLoadText: `${effectiveLoadPoints} п. (${effectiveLoadPoints / 4} нагрузки)`
   };
 }
 
@@ -147,17 +119,24 @@ function preparedOrganization(organization = {}, countries = []) {
       includeTagsText: (organization.merchant?.includeTags ?? []).join(", "),
       excludeTagsText: (organization.merchant?.excludeTags ?? []).join(", ")
     },
+    buyer: {
+      ...organization.buyer,
+      includeTagsText: (organization.buyer?.includeTags ?? []).join(", "),
+      excludeTagsText: (organization.buyer?.excludeTags ?? []).join(", ")
+    },
     carrier: {
       ...organization.carrier,
       transportOptions: TRANSPORT_OPTIONS.map((row) => ({ ...row, selected: carrierModes.has(row.value) }))
     },
     countryRows: countries.map((country) => {
       const merchant = presenceRow(organization.merchant?.countryShares, country.id);
+      const buyer = presenceRow(organization.buyer?.countryShares, country.id);
       const carrier = presenceRow(organization.carrier?.countryShares, country.id);
       return {
         id: country.id,
         label: country.label,
         merchantSharePct: merchant.sharePct,
+        buyerSharePct: buyer.sharePct,
         carrierSharePct: carrier.sharePct,
         caravanSharePct: carrier.modeShares?.caravan,
         railSharePct: carrier.modeShares?.rail,
@@ -187,6 +166,7 @@ function economyTarget(economy, scope, ownerId = "", rowId = "") {
   const organization = economy.organizations.find((row) => row.id === ownerId);
   if (scope === "organization") return organization;
   if (scope === "organization-merchant") return organization?.merchant;
+  if (scope === "organization-buyer") return organization?.buyer;
   if (scope === "organization-carrier") return organization?.carrier;
   return null;
 }
@@ -205,18 +185,11 @@ function defaultOffer(id = makeId("offer", 12)) {
     kind: "material",
     ubiquity: "common",
     forceAvailable: false,
-    priceMode: "manual",
-    basePriceCopper: 10,
-    bidSpreadRate: 0.18,
+    priceFactor: 1,
+    priceOverrideCopper: null,
+    loadOverridePoints: null,
     volatility: 0.2,
-    baseAskStock: 10,
     baseStock: 10,
-    baseBidDemand: 8,
-    economyVersion: 2,
-    loadMode: "auto",
-    cargoClass: "10",
-    cargoPoints: 10,
-    load: 1,
     accessDifficulty: 0,
     origin: "",
     tags: []
@@ -227,7 +200,7 @@ function defaultRule(id = makeId("rule", 12)) {
   return { id, label: "Новое правило", active: true, mode: "adjust", targetTags: [], resourceIds: [], stockFactor: 1, priceFactor: 1, volatilityFactor: 1, notes: "" };
 }
 
-export class SkyholdMarketCatalogEditor extends RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2)) {
+export class SkyholdMarketCatalogEditor extends FloatingTooltipsMixin(PendingFieldSavesMixin(RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2)))) {
   constructor(options = {}) {
     super(options);
     this.activeSection = "base";
@@ -265,7 +238,7 @@ export class SkyholdMarketCatalogEditor extends RenderSchedulerMixin(HandlebarsA
       canEdit: Boolean(game.user?.isGM),
       section: Object.fromEntries([...SECTIONS].map((key) => [key, this.activeSection === key])),
       summary,
-      settings: prepareMarketEconomySettingsForEditor(economy.settings),
+      settings: economy.settings,
       baseOffers: economy.baseOffers.map((row) => prepareOffer(row, resourcesById)),
       countries: economy.countries.map((row) => ({ ...row, selected: row.id === this.countryId, searchText: `${row.label} ${row.id} ${(row.tags ?? []).join(" ")}`.toLocaleLowerCase("ru") })),
       selectedCountry: selectedCountry ? {
@@ -302,8 +275,8 @@ export class SkyholdMarketCatalogEditor extends RenderSchedulerMixin(HandlebarsA
     const controller = new AbortController();
     this._marketEconomyAbortController = controller;
     const listenerOptions = { signal: controller.signal };
-    root.addEventListener("click", (event) => this._onClick(event, root), listenerOptions);
-    root.addEventListener("change", (event) => this._onChange(event, root), listenerOptions);
+    root.addEventListener("click", (event) => dispatchDelegatedAction(this, event, event.target, () => this._onClick(event, root)), listenerOptions);
+    root.addEventListener("change", (event) => dispatchDelegatedAction(this, event, event.target, () => this._onChange(event, root)), listenerOptions);
     root.addEventListener("input", (event) => this._onInput(event, root), listenerOptions);
     for (const [kind, value] of Object.entries(this.searches)) this._applySearch(root, kind, value);
   }
@@ -329,9 +302,9 @@ export class SkyholdMarketCatalogEditor extends RenderSchedulerMixin(HandlebarsA
       event.preventDefault();
       this.organizationId = String(element.dataset.organizationId ?? "");
       this.requestRender({ focus: false });
-    } else if (action === "market-economy-add") this._onAdd(event, element);
-    else if (action === "market-economy-delete") this._onDelete(event, element);
-    else if (action === "market-economy-pick-resource") this._onPickResource(event, element);
+    } else if (action === "market-economy-add") return this._onAdd(event, element);
+    else if (action === "market-economy-delete") return this._onDelete(event, element);
+    else if (action === "market-economy-pick-resource") return this._onPickResource(event, element);
     else if (action === "market-route-graph-open") {
       event.preventDefault();
       await openRouteGraphApp({ owner: this });
@@ -363,11 +336,10 @@ export class SkyholdMarketCatalogEditor extends RenderSchedulerMixin(HandlebarsA
   _onChange(event, root) {
     const mode = event.target?.closest?.("[data-organization-carrier-mode]");
     if (mode && root.contains(mode)) {
-      this._onCarrierModeChange(event, mode);
-      return;
+      return this._onCarrierModeChange(event, mode);
     }
     const field = event.target?.closest?.("[data-economy-field]");
-    if (field && root.contains(field)) this._onEconomyFieldChange(event, field);
+    if (field && root.contains(field)) return this._onEconomyFieldChange(event, field);
   }
 
   async _mutate(reason, mutator, { rerender = false } = {}) {
@@ -381,7 +353,7 @@ export class SkyholdMarketCatalogEditor extends RenderSchedulerMixin(HandlebarsA
       data.catalog.markets = [];
       data.catalog.marketEconomy = normalizeMarketEconomy(economy, { locations: data.catalog.eventRegions ?? locations });
       return true;
-    }, { reason: `market-economy:${reason}` });
+    }, { reason: `market-economy:${reason}`, scope: "catalog" });
     if (!saved) return false;
     requestSkyholdAppRender();
     refreshOpenMarketWindows();
@@ -394,22 +366,19 @@ export class SkyholdMarketCatalogEditor extends RenderSchedulerMixin(HandlebarsA
     const scope = String(field.dataset.scope ?? "");
     const ownerId = String(field.dataset.ownerId ?? "");
     const rowId = String(field.dataset.rowId ?? "");
-    const inputKey = String(field.dataset.economyField ?? "");
-    if (!scope || !inputKey) return;
-    let key = inputKey === "bidSpreadPct" ? "bidSpreadRate" : inputKey;
+    const key = String(field.dataset.economyField ?? "");
+    if (!scope || !key) return;
     let value = fieldValue(field);
+    if (["priceOverrideCopper", "loadOverridePoints"].includes(key) && String(field.value ?? "").trim() === "") value = null;
     if (field.hasAttribute("data-list")) value = textList(field.value);
     if (field instanceof HTMLTextAreaElement) value = sanitizeTextBlock(value);
-    if (inputKey === "bidSpreadPct") {
-      const spreadPct = Number(value);
-      value = Math.max(0.05, Math.min(0.5, (Number.isFinite(spreadPct) ? spreadPct : 18) / 100));
-    }
-    if (scope === "settings") ({ key, value } = marketEconomySettingFromEditor(inputKey, value));
     const rerender = field.hasAttribute("data-rerender");
     await this._mutate(`${scope}:${key}`, (economy) => {
-      if (scope === "organization-merchant-presence" || scope === "organization-carrier-presence") {
+      if (["organization-merchant-presence", "organization-buyer-presence", "organization-carrier-presence"].includes(scope)) {
         const organization = economy.organizations.find((row) => row.id === ownerId);
-        const role = scope === "organization-merchant-presence" ? "merchant" : "carrier";
+        const role = scope === "organization-merchant-presence"
+          ? "merchant"
+          : (scope === "organization-buyer-presence" ? "buyer" : "carrier");
         if (!organization) return false;
         let presence = organization[role].countryShares.find((row) => row.countryId === rowId);
         if (!presence) {
@@ -425,15 +394,6 @@ export class SkyholdMarketCatalogEditor extends RenderSchedulerMixin(HandlebarsA
       const target = economyTarget(economy, scope, ownerId, rowId);
       if (!target) return false;
       target[key] = value;
-      if (key === "baseAskStock" || key === "baseBidDemand") target[key] = Math.max(0, Math.floor(Number(value) || 0));
-      if (key === "cargoPoints") {
-        target.economyVersion = 2;
-        target.cargoPoints = Math.max(1, Math.ceil(Number(value) || 1));
-        target.load = storedLoadFromMarketCargoPoints(target.cargoPoints);
-        target.cargoClass = target.cargoPoints > 40 ? "oversized" : "manual";
-        target.loadMode = "manual";
-      }
-      if (key === "load") target.loadMode = "manual";
       return true;
     }, { rerender });
     const card = field.closest?.("[data-economy-card]");
@@ -464,7 +424,7 @@ export class SkyholdMarketCatalogEditor extends RenderSchedulerMixin(HandlebarsA
       if (kind === "base-offer") economy.baseOffers.push(defaultOffer());
       else if (kind === "country") {
         selectedId = makeId("country", 12);
-        economy.countries.push({ id: selectedId, label: "Новое государство", active: true, visibility: "public", description: "", conditionId: "stable", tradeRegime: "open", taxRate: 0, priceFactor: 1, stockFactor: 1, deliveryFactor: 1, timeFactor: 1, riskFactor: 1, rules: [], offers: [], tags: [] });
+        economy.countries.push({ id: selectedId, label: "Новое государство", active: true, visibility: "public", description: "", conditionId: "stable", tradeRegime: "open", taxRate: 0, exportTaxRate: 0, priceFactor: 1, stockFactor: 1, deliveryFactor: 1, timeFactor: 1, riskFactor: 1, rules: [], offers: [], tags: [] });
       } else if (kind === "country-rule") {
         const country = economy.countries.find((row) => row.id === this.countryId);
         if (!country) return false;
@@ -486,7 +446,7 @@ export class SkyholdMarketCatalogEditor extends RenderSchedulerMixin(HandlebarsA
         specialty.offers.push({ ...defaultOffer(), forceAvailable: true, ubiquity: "specialized" });
       } else if (kind === "organization") {
         selectedId = makeId("organization", 12);
-        economy.organizations.push({ id: selectedId, label: "Новая организация", active: true, visibility: "public", description: "", icon: "fa-solid fa-building-columns", tags: [], merchant: { enabled: true, countryShares: [], includeTags: [], excludeTags: [], priceFactor: 1, priceVolatility: 0.04, stockStability: 1 }, carrier: { enabled: false, countryShares: [], modes: ["caravan", "airship"], priceFactor: 1, timeFactor: 1, riskFactor: 1, capacityFactor: 1 } });
+        economy.organizations.push({ id: selectedId, label: "Новая организация", active: true, visibility: "public", description: "", icon: "fa-solid fa-building-columns", tags: [], merchant: { enabled: true, countryShares: [], includeTags: [], excludeTags: [], priceFactor: 1, priceVolatility: 0.04, stockStability: 1 }, buyer: { enabled: false, countryShares: [], includeTags: [], excludeTags: [] }, carrier: { enabled: false, countryShares: [], modes: ["caravan", "airship"], priceFactor: 1, timeFactor: 1, riskFactor: 1, capacityFactor: 1 } });
       } else if (kind === "size") {
         economy.sizeProfiles.push({ id: makeId("market-size", 12), label: "Новый размер", description: "", active: true, maxUbiquity: "ordinary", stockFactor: 1, priceFactor: 1, handlingFactor: 1 });
       } else if (kind === "condition") {
@@ -518,6 +478,7 @@ export class SkyholdMarketCatalogEditor extends RenderSchedulerMixin(HandlebarsA
         for (const location of data.catalog.eventRegions ?? []) if (String(location.countryId ?? "") === rowId) location.countryId = fallback || String(location.value ?? "");
         for (const organization of economy.organizations) {
           organization.merchant.countryShares = organization.merchant.countryShares.filter((row) => row.countryId !== rowId);
+          organization.buyer.countryShares = organization.buyer.countryShares.filter((row) => row.countryId !== rowId);
           organization.carrier.countryShares = organization.carrier.countryShares.filter((row) => row.countryId !== rowId);
         }
       } else if (kind === "country-rule") {
@@ -559,19 +520,19 @@ export class SkyholdMarketCatalogEditor extends RenderSchedulerMixin(HandlebarsA
         await this._mutate("pick-resource", (economy) => {
           const offer = economyTarget(economy, scope, ownerId, rowId);
           if (!offer) return false;
+          const wasItemOffer = offer.sourceType === "item";
           offer.sourceType = "resource";
           offer.resourceId = String(resource.id ?? "custom");
-          offer.priceMode = offer.resourceId === "custom" ? "manual" : "catalog";
+          if (wasItemOffer) {
+            offer.priceOverrideCopper = null;
+            offer.loadOverridePoints = null;
+            delete offer.basePriceCopper;
+            delete offer.load;
+          }
           if (!String(offer.name ?? "").trim() || offer.name === "Новый товар") offer.name = String(resource.label ?? "");
           offer.icon = String(resource.icon ?? offer.icon ?? "fa-solid fa-box");
           offer.img = String(resource.img ?? offer.img ?? "");
-          offer.unit = String(resource.unitLabel ?? resource.unit ?? "ед.");
-          offer.priceBasis = String(resource.priceBasis ?? "");
-          offer.economyVersion = Math.max(1, Math.floor(Number(resource.economyVersion) || 1));
-          offer.loadMode = "auto";
-          offer.cargoClass = String(resource.cargoClass ?? "10");
-          offer.cargoPoints = Math.max(1, Math.ceil(Number(resource.cargoPoints) || (Number(resource.load) || 0) * 10 || 1));
-          offer.load = Math.max(0, Number(resource.load) || 0);
+          offer.unit = "ед.";
           return true;
         }, { rerender: true });
       }

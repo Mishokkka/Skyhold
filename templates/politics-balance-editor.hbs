@@ -1,0 +1,69 @@
+<div class="fbls-body-text fbls-politics-balance-shell">
+  {{#unless canEdit}}
+    <div class="fbls-politics-empty">Редактор баланса Политики доступен только ГМу для открытого владения.</div>
+  {{else}}
+    <header class="fbls-politics-balance-head">
+      <span class="fbls-eyebrow fbls-politics-eyebrow">НАСТРОЙКИ ВЛАДЕНИЯ</span>
+      <h1 class="fbls-heading-title">Баланс Политики · {{holdingName}}</h1>
+      <p>Числа сохраняются для этого владения. Для обычных бонусов 0 означает отсутствие эффекта; для потребности в пище нейтрально 100%. Новые решения используют только перечисленные ниже эффекты и условия.</p>
+    </header>
+    <div class="fbls-politics-balance-content" data-render-scroll-key="politics-balance-content">
+      <details class="fbls-politics-card fbls-politics-balance-core">
+        <summary>Общие правила: Влияние, смена власти и компетенции</summary>
+        <form data-politics-balance-form="core" class="fbls-politics-balance-form">
+          <div class="fbls-politics-balance-fields">
+            {{#each coreFields}}
+              <label class="fbls-field"><span>{{label}}{{#if changed}} · изменено ГМом{{/if}}</span><input class="fbls-control" type="number" name="{{id}}" min="{{min}}" max="{{max}}" step="1" value="{{value}}" required title="Исходное значение: {{base}}"></label>
+            {{/each}}
+          </div>
+          <button type="button" class="primary fbls-button fbls-button-role" data-politics-balance-submit title="Сохранить общие числовые правила Политики">Сохранить общие правила</button>
+        </form>
+      </details>
+
+      <div class="fbls-politics-balance-layout">
+        <aside class="fbls-politics-card fbls-politics-balance-rail">
+          <label class="fbls-field"><span>Что настроить</span><select class="fbls-control" data-politics-balance-select aria-label="Выбрать политическое решение">
+            {{#each groups}}<optgroup label="{{label}}">{{#each rows}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{label}}{{#if archetypeLabel}} · {{archetypeLabel}}{{/if}}{{#if custom}} · своё{{/if}}</option>{{/each}}</optgroup>{{/each}}
+          </select></label>
+          <p>Штатные решения можно перенастроить и вернуть к исходным числам. Собственные решения остаются отдельными строками каталога.</p>
+          <form data-politics-balance-form="create" class="fbls-politics-balance-form">
+            <h2 class="fbls-heading-section">Новое решение</h2>
+            <label class="fbls-field"><span>Вид</span><select class="fbls-control" name="kind" aria-label="Вид нового решения"><option value="directive">Директива</option><option value="decree">Разовый указ</option><option value="perk">Пассивный перк</option></select></label>
+            <label class="fbls-field"><span>Название</span><input class="fbls-control" name="label" type="text" maxlength="100" required></label>
+            <label class="fbls-field"><span>Типаж</span><select class="fbls-control" name="archetypeId" aria-label="Типаж для нового решения">{{#each newArchetypeOptions}}<option value="{{id}}">{{label}}</option>{{/each}}</select></label>
+            <label class="fbls-field"><span>Направление общей директивы</span><select class="fbls-control" name="slot" aria-label="Направление общей директивы">{{#each newSlotOptions}}<option value="{{id}}">{{label}}</option>{{/each}}</select></label>
+            <p>Типаж «Все типажи» создаёт общее решение. Личная директива выбранного типажа занимает любой открытый слот; общая — выбранное направление.</p>
+            <button type="button" class="primary fbls-button fbls-button-role" data-politics-balance-submit title="Создать решение для настройки">Создать</button>
+          </form>
+        </aside>
+
+        {{#if row}}
+          <section class="fbls-politics-card fbls-politics-balance-editor">
+            <header class="fbls-card-header"><div class="fbls-section-heading"><span class="fbls-eyebrow fbls-politics-eyebrow">{{row.kindLabel}} · {{row.archetypeLabel}}</span><h2 class="fbls-heading-section">{{row.label}}</h2></div>{{#unless row.custom}}<button type="button" class="fbls-button fbls-button-role" data-politics-balance-reset title="Вернуть исходные числа этого решения">Сбросить числа</button>{{/unless}}</header>
+            <p>Слот: {{row.slotLabel}}. Условия: {{row.requirementLabels}}.</p>
+            <form data-politics-balance-form="row" class="fbls-politics-balance-form">
+              {{#if row.custom}}
+                <div class="fbls-politics-balance-meta">
+                  <label class="fbls-field"><span>Название</span><input class="fbls-control" name="label" type="text" maxlength="100" value="{{row.label}}" required></label>
+                  <label class="fbls-field"><span>Публичное описание</span><textarea class="fbls-control" name="summary" maxlength="500" rows="2">{{row.summary}}</textarea></label>
+                  <label class="fbls-field"><span>Типаж</span><select class="fbls-control" name="archetypeId" aria-label="Типаж решения">{{#each row.archetypeOptions}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                  {{#if row.slotOptions}}<label class="fbls-field"><span>Направление общей директивы</span><select class="fbls-control" name="slot" aria-label="Направление решения"><option value="">Любой открытый слот</option>{{#each row.slotOptions}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>{{/if}}
+                </div>
+              {{/if}}
+              <label class="fbls-politics-checkbox fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Решение включено"><input type="checkbox" name="enabled" {{#if row.enabled}}checked{{/if}}><span>Решение включено</span></label>
+              {{#if row.systemSlots}}<fieldset class="fbls-politics-choice"><legend>Слоты системы при самоуправлении</legend>{{#each row.systemSlots}}<label class="fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="{{label}}"><input type="checkbox" name="systemSlots" value="{{id}}" {{#if selected}}checked{{/if}}><span>{{label}}</span></label>{{/each}}</fieldset><p>Срок 0 означает бессрочное назначение. Изменение срока действует для текущего представителя; закрытые слоты прекращают давать эффекты.</p>{{/if}}
+              <fieldset class="fbls-politics-choice"><legend>Рабочие условия</legend>{{#each row.requirementOptions}}<label class="fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="{{label}}"><input type="checkbox" name="requires" value="{{id}}" {{#if selected}}checked{{/if}}><span>{{label}}</span></label>{{/each}}</fieldset>
+              <h3 class="fbls-heading-section">Бонусы и штрафы</h3>
+              <p>Положительное число добавляет бонус, отрицательное — штраф. Проценты складываются с другими политическими источниками; пища задаётся как процент от обычной потребности.</p>
+              <div class="fbls-politics-balance-fields">
+                {{#each row.effects}}<label class="fbls-field"><span>{{label}}</span><input class="fbls-control" type="number" name="effects.{{id}}" min="{{min}}" max="{{max}}" step="{{step}}" value="{{value}}" required></label>{{/each}}
+              </div>
+              {{#if row.parameters.length}}<h3 class="fbls-heading-section">Цена, срок и пороги</h3><div class="fbls-politics-balance-fields">{{#each row.parameters}}<label class="fbls-field"><span>{{label}}</span><input class="fbls-control" type="number" name="{{id}}" min="{{min}}" max="{{max}}" step="{{step}}" value="{{value}}" required></label>{{/each}}</div>{{/if}}
+              <button type="button" class="primary fbls-button fbls-button-role" data-politics-balance-submit title="Сохранить параметры политического решения">Сохранить решение</button>
+            </form>
+          </section>
+        {{/if}}
+      </div>
+    </div>
+  {{/unless}}
+</div>

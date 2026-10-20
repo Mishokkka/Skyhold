@@ -1,0 +1,40 @@
+        <p class="fbls-muted-text">Этот корабль использует прежний ручной расчёт. Активные рейсы можно завершить без изменения их условий.</p>
+        {{#if canAdopt}}<div class="fbls-action-group"><span>Подключить как:</span><button type="button" class="fbls-button compact" data-action="ship-adopt" data-ship-profile="merchant-barque">Торговый барк</button><button type="button" class="fbls-button compact" data-action="ship-adopt" data-ship-profile="schooner">Шхуна</button><button type="button" class="fbls-button compact" data-action="ship-adopt" data-ship-profile="cutter">Каттер</button></div>{{/if}}
+        {{#if canEditPlan}}
+          <div class="fbls-cluster">
+            <label class="fbls-field"><span>Название</span><input type="text" data-field="holdings.{{@root.holdingIndex}}.special.ships.list.{{index}}.name" value="{{name}}" /></label>
+            <label class="fbls-field"><span>Командующий</span><input type="text" data-field="holdings.{{@root.holdingIndex}}.special.ships.list.{{index}}.commanderName" value="{{commanderName}}" /></label>
+            <label class="fbls-field"><span>Скорость, км/день</span><input type="number" min="1" data-type="number" data-field="holdings.{{@root.holdingIndex}}.special.ships.list.{{index}}.speedKmPerDay" value="{{speedKmPerDay}}" /></label>
+          </div>
+          <details data-ship-disclosure="plan:{{id}}"><summary>Условия прежнего рейса</summary><div class="fbls-cluster">
+            <label class="fbls-field"><span>Назначение</span><input type="text" data-field="holdings.{{@root.holdingIndex}}.special.ships.list.{{index}}.routePlan.destination" value="{{routePlan.destination}}" /></label>
+            <label class="fbls-field"><span>В одну сторону, км</span><input type="number" min="1" data-type="number" data-field="holdings.{{@root.holdingIndex}}.special.ships.list.{{index}}.routePlan.distanceKm" value="{{routePlan.distanceKm}}" /></label>
+            <label class="fbls-field"><span>Дней в порту</span><input type="number" min="0" data-type="number" data-field="holdings.{{@root.holdingIndex}}.special.ships.list.{{index}}.routePlan.portDays" value="{{routePlan.portDays}}" /></label>
+             <label class="fbls-field"><span>Подготовка, ЗМ</span><input type="number" min="0" step="0.01" data-field="holdings.{{@root.holdingIndex}}.special.ships.list.{{index}}.routePlan.preparationCopper" value="{{fblsShipGoldInput routePlan.preparationCopper}}" /></label>
+             <label class="fbls-field"><span>Содержание/день, ЗМ</span><input type="number" min="0" step="0.01" data-field="holdings.{{@root.holdingIndex}}.special.ships.list.{{index}}.routePlan.upkeepPerDayCopper" value="{{fblsShipGoldInput routePlan.upkeepPerDayCopper}}" /></label>
+             <label class="fbls-field"><span>Плата, ЗМ</span><input type="number" min="0" step="0.01" data-field="holdings.{{@root.holdingIndex}}.special.ships.list.{{index}}.routePlan.rewardCopper" value="{{fblsShipGoldInput routePlan.rewardCopper}}" /></label>
+          </div></details>
+        {{/if}}
+        {{#if @root.shipsContext.history.length}}<details class="fbls-ship-box" data-ship-disclosure="history:{{id}}"><summary>Завершённые рейсы</summary>
+          {{#each @root.shipsContext.history}}<details><summary>{{destination}} · {{fblsShipGold netCopper}} ЗМ</summary>{{#if returnedCopper}}<p>Передано домой: {{fblsShipGold returnedCopper}} ЗМ</p>{{/if}}{{#if outcome}}<p>{{outcome.commercialLabel}} · {{outcome.eventLabel}} · плата {{fblsShipGold outcome.rewardCopper}} · расход {{fblsShipGold outcome.expenseCopper}} ЗМ</p>{{/if}}{{#each ledger}}<p>{{label}} · {{fblsShipGold externalDeltaCopper}} ЗМ</p>{{/each}}</details>{{/each}}
+        </details>{{/if}}
+
+        {{#if away}}
+          {{#if outcome}}<div class="fbls-card"><p>{{outcome.commercialLabel}} · {{outcome.eventLabel}}</p><p>Плата: {{fblsShipGold outcome.rewardCopper}} ЗМ · расходы: {{fblsShipGold outcome.expenseCopper}} ЗМ · задержка: {{outcome.delayDays}} дн.</p></div>{{/if}}
+          {{#if awaitingOutcome}}
+            <p><strong>Рейс ожидает подведения итогов.</strong></p>
+            {{#if canResolve}}<button type="button" class="fbls-button" data-action="ship-resolve"><i class="fa-solid fa-dice"></i> Подвести итог</button>{{/if}}
+          {{else}}<p>В рейсе: {{activeVoyage.quote.destination}} · осталось {{remainingDays}} дн.</p>{{/if}}
+          {{#if canAdjust}}<details data-ship-disclosure="funds:{{id}}"><summary>Деньги в рейсе</summary><div class="fbls-cluster" data-ship-draft-scope="funds:{{activeVoyage.id}}">
+            <label class="fbls-field"><span>Операция</span><select data-ship-kind data-ship-draft="kind"><option value="expense">Расход</option><option value="income">Поступление</option></select></label>
+             <label class="fbls-field"><span>Сумма, ЗМ</span><input type="number" min="0" step="0.01" value="0.00" data-ship-amount data-ship-draft="amount" /></label>
+            <label class="fbls-field"><span>Причина</span><input type="text" data-ship-reason data-ship-draft="reason" /></label><button type="button" class="fbls-button compact" data-action="ship-adjust">Провести</button>
+          </div></details>{{/if}}
+        {{else}}
+          {{#if offers.length}}<details data-ship-disclosure="offers:{{id}}"><summary>Прежние предложения ({{offers.length}})</summary><div class="fbls-stack">
+            {{#each offers}}<section class="fbls-card fbls-stack" data-ship-offer="{{id}}" data-ship-draft-scope="offer:{{id}}"><strong>{{title}}</strong><p>{{destination}} · {{durationDays}} дн. · {{fblsShipGold rewardCopper}} ЗМ</p>
+               {{#if ../canDepartOffer}}<div class="fbls-action-group"><label class="fbls-field"><span>Подход</span><select data-ship-style data-ship-draft="style"><option value="cautious">Осторожно</option><option value="normal" selected>Обычно</option><option value="bold">С риском</option></select></label><label class="fbls-field"><span>Бюджет, ЗМ</span><input type="number" min="{{fblsShipGoldInput normalGuidance.minimumBudgetCopper}}" step="0.01" value="{{fblsShipGoldInput normalGuidance.suggestedBudgetCopper}}" data-ship-budget data-ship-draft="budget" /></label><button type="button" class="fbls-button" data-action="ship-depart">Принять и отправить</button></div>{{/if}}
+            </section>{{/each}}
+          </div></details>{{/if}}
+           {{#if quote}}<details data-ship-disclosure="manual:{{id}}"><summary>Ручной рейс</summary><div class="fbls-stack" data-ship-manual data-ship-draft-scope="manual:{{id}}"><p>{{quote.destination}} · туда и обратно {{durationDays}} дн. · плата {{fblsShipGold quote.rewardCopper}} ЗМ</p><p class="fbls-muted-text">Расход {{fblsShipGold quote.operatingCopper}} ЗМ.</p>{{#if canDepart}}<div class="fbls-action-group"><label class="fbls-field"><span>Бортовой бюджет, ЗМ</span><input type="number" min="{{fblsShipGoldInput quote.operatingCopper}}" step="0.01" value="{{fblsShipGoldInput quote.operatingCopper}}" data-ship-budget data-ship-draft="budget" /></label><button type="button" class="fbls-button" data-action="ship-depart">Отправить</button></div>{{/if}}</div></details>{{else}}<p class="fbls-muted-text">{{quoteError}}</p>{{/if}}
+        {{/if}}

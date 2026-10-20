@@ -262,10 +262,30 @@ function foodTotal(holding = {}, isFoodResource = null) {
     .reduce((sum, row) => sum + Math.max(0, finiteNumber(row?.qty, 0)), 0);
 }
 
-function treasuryDebt(holding = {}) {
-  const treasury = holding?.gm?.economy?.treasury ?? {};
-  return Math.max(0, finiteNumber(treasury.salaryArrearsCopper, 0))
-    + Math.max(0, finiteNumber(treasury.upkeepArrearsCopper, 0));
+function shipRows(before, after, formatNumber) {
+  const previous = new Map((before.special?.ships?.list ?? []).map((ship) => [ship.id, ship]));
+  const labels = { docked: "В поселении", away: "В рейсе", repairRequired: "Требует ремонта" };
+  return (after.special?.ships?.list ?? []).flatMap((ship) => {
+    const old = previous.get(ship.id) ?? {};
+    const changes = [];
+    if ((old.location?.label ?? "") !== (ship.location?.label ?? "")) changes.push(textChange("location", "Местонахождение", old.location?.label ?? "", ship.location?.label ?? ""));
+    if (changedNumber(old.pendingPortBillCopper ?? 0, ship.pendingPortBillCopper ?? 0)) changes.push(numberChange("pendingPortBillCopper", "Неоплаченное содержание, ММ", old.pendingPortBillCopper ?? 0, ship.pendingPortBillCopper ?? 0, formatNumber));
+    if (old.status !== ship.status) changes.push(textChange("status", "Состояние", labels[old.status] ?? old.status, labels[ship.status] ?? ship.status));
+    const oldAwaiting = old.activeVoyage?.awaitingOutcome === true;
+    const nextAwaiting = ship.activeVoyage?.awaitingOutcome === true;
+    if (oldAwaiting !== nextAwaiting) changes.push(textChange("awaitingOutcome", "Итог контракта", oldAwaiting ? "Ожидается" : "Не ожидается", nextAwaiting ? "Ожидается" : "Не ожидается"));
+    if (changedNumber(old.onboardCopper, ship.onboardCopper)) changes.push(numberChange("onboardCopper", "Бортовая казна, ММ", old.onboardCopper, ship.onboardCopper, formatNumber));
+    if (changedNumber(old.activeVoyage?.remainingQd ?? 0, ship.activeVoyage?.remainingQd ?? 0)) changes.push(numberChange("remainingQd", ship.navigationMode === "world" ? "До прибытия, QD" : "До возвращения, QD", old.activeVoyage?.remainingQd ?? 0, ship.activeVoyage?.remainingQd ?? 0, formatNumber));
+    const oldAttention = old.attentionByDirection && typeof old.attentionByDirection === "object" ? old.attentionByDirection : {};
+    const nextAttention = ship.attentionByDirection && typeof ship.attentionByDirection === "object" ? ship.attentionByDirection : {};
+    for (const directionKey of new Set([...Object.keys(oldAttention), ...Object.keys(nextAttention)])) {
+      const level = (entry) => finiteNumber(entry && typeof entry === "object" ? entry.level : entry, 0);
+      const beforeLevel = level(oldAttention[directionKey]);
+      const afterLevel = level(nextAttention[directionKey]);
+      if (changedNumber(beforeLevel, afterLevel)) changes.push(numberChange(`attention:${directionKey}`, `Внимание: ${directionKey.replace(/^destination:/, "")}`, beforeLevel, afterLevel, formatNumber));
+    }
+    return changes.length ? [{ id: ship.id, name: ship.name, changes }] : [];
+  });
 }
 
 export function buildTendayChangeSet(before = {}, after = {}, options = {}) {
@@ -278,6 +298,7 @@ export function buildTendayChangeSet(before = {}, after = {}, options = {}) {
   const development = keyedNumberRows(before?.overview?.development, after?.overview?.development, DEVELOPMENT_LABELS, "development:", formatNumber);
   const modifiers = keyedNumberRows(before?.gm?.modifiers, after?.gm?.modifiers, MODIFIER_LABELS, "modifier:", formatNumber);
   const shipments = shipmentRows(before, after, formatNumber);
+  const ships = shipRows(before, after, formatNumber);
   const beforeQd = Math.max(0, finiteNumber(before?.gm?.calendaria?.lastQd, 0));
   const afterQd = Math.max(0, finiteNumber(after?.gm?.calendaria?.lastQd, 0));
   const clock = numberChange("clock", "Внутренние QD", beforeQd, afterQd, formatNumber);
@@ -285,8 +306,14 @@ export function buildTendayChangeSet(before = {}, after = {}, options = {}) {
   const afterDate = String(after?.gm?.calendaria?.lastDateText ?? after?.gm?.calendaria?.lastDateKey ?? "");
   const date = beforeDate === afterDate ? null : textChange("date", "Дата владения", beforeDate, afterDate);
   const money = numberChange("money", "Казна", before?.storage?.moneyCopper, after?.storage?.moneyCopper, formatNumber);
-  const debt = numberChange("debt", "Задолженность казны", treasuryDebt(before), treasuryDebt(after), formatNumber);
   const food = numberChange("food", "Запас пищи", foodTotal(before, options.isFoodResource), foodTotal(after, options.isFoodResource), formatNumber);
+  const politics = [];
+  if (changedNumber(before?.politics?.influence, after?.politics?.influence)) {
+    politics.push(numberChange("influence", "Влияние", before?.politics?.influence, after?.politics?.influence, formatNumber));
+  }
+  const decreeText = (holding) => (holding?.politics?.activeDecrees ?? []).map((row) =>
+    `${row.decreeId} (до ${row.expiresPeriodIndex})`).join(", ") || "нет";
+  if (decreeText(before) !== decreeText(after)) politics.push(textChange("decrees", "Действующие указы", decreeText(before), decreeText(after)));
   const totals = {
     resourceRows: resources.length,
     itemRows: items.length,
@@ -295,14 +322,15 @@ export function buildTendayChangeSet(before = {}, after = {}, options = {}) {
     developmentRows: development.length,
     modifierRows: modifiers.length,
     shipmentRows: shipments.length,
+    shipRows: ships.length,
+    politicsRows: politics.length,
     recoveredResidents: residents.filter((row) => row.recovered).length,
     healingResidents: residents.filter((row) => row.healing).length
   };
   const hasChanges = changedNumber(money.before, money.after)
-    || changedNumber(debt.before, debt.after)
     || changedNumber(food.before, food.after)
     || changedNumber(clock.before, clock.after)
     || Boolean(date)
     || Object.values(totals).some((value) => value > 0);
-  return { money, debt, food, clock, date, resources, items, buildings, residents, development, modifiers, shipments, totals, hasChanges };
+  return { money, food, clock, date, resources, items, buildings, residents, development, modifiers, politics, shipments, ships, totals, hasChanges };
 }

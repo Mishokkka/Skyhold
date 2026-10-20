@@ -1,15 +1,18 @@
-<section class="fbls-event-row-editor-shell">
+<section class="fbls-body-text fbls-event-row-editor-shell">
   {{#if hasRow}}
     {{#with row}}
       <header class="fbls-event-row-editor-head">
         <div>
-          <h2>{{title}}</h2>
+          <h2 class="fbls-heading-title">{{title}}</h2>
           <p>{{../tableTitle}}</p>
         </div>
-        <button type="button" class="fbls-button compact primary" data-action="event-row-editor-save">
+        <div class="fbls-action-group fbls-event-save-actions">
+        {{> "modules/fbl-skyhold/templates/parts/save-status.hbs" saveStatus=../saveStatus}}
+        <button type="button" class="fbls-button fbls-button-role compact primary" data-action="event-row-editor-save" data-save-trigger>
           <i class="fa-solid fa-floppy-disk"></i>
           Сохранить
         </button>
+        </div>
         <div class="fbls-event-preview-detail {{#if preview.eligible}}ok{{else}}blocked{{/if}}">
           <span>{{preview.status}}</span>
           <strong>{{preview.weight}}</strong>
@@ -21,81 +24,81 @@
 
       <section class="fbls-event-row-editor-card">
         <div class="fbls-event-row-main-grid">
-          <label class="fbls-event-field title">
+          <label class="fbls-field fbls-event-field title">
             <span>Название</span>
-            <input type="text" data-event-table-kind="{{../tableKind}}" data-event-row-id="{{id}}" data-event-field="title" value="{{title}}" />
+            <input class="fbls-control" type="text" data-event-table-kind="{{../tableKind}}" data-event-row-id="{{id}}" data-event-field="title" value="{{title}}" />
           </label>
-          <label class="fbls-event-field compact">
+          <label class="fbls-field fbls-event-field compact">
             <span>Вес</span>
-            <input type="number" min="0" step="1" data-type="number" data-event-table-kind="{{../tableKind}}" data-event-row-id="{{id}}" data-event-field="weight" value="{{weight}}" />
+            <input class="fbls-control" type="number" min="0" step="1" data-type="number" data-event-table-kind="{{../tableKind}}" data-event-row-id="{{id}}" data-event-field="weight" value="{{weight}}" />
           </label>
-          <label class="fbls-event-field compact">
+          <label class="fbls-field fbls-event-field compact">
             <span>Повтор</span>
-            <input type="number" min="0" step="1" data-type="number" data-event-table-kind="{{../tableKind}}" data-event-row-id="{{id}}" data-event-field="cooldown" value="{{cooldown}}" />
+            <input class="fbls-control" type="number" min="0" step="1" data-type="number" data-event-table-kind="{{../tableKind}}" data-event-row-id="{{id}}" data-event-field="cooldown" value="{{cooldown}}" />
           </label>
-          <label class="fbls-event-field">
+          <label class="fbls-field fbls-event-field">
             <span>Публикация</span>
-            <select data-event-table-kind="{{../tableKind}}" data-event-row-id="{{id}}" data-event-field="visibility">
+            <select class="fbls-control" data-event-table-kind="{{../tableKind}}" data-event-row-id="{{id}}" data-event-field="visibility">
               {{#each visibilityOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
             </select>
           </label>
-          <label class="fbls-event-field">
+          <label class="fbls-field fbls-event-field">
             <span>Боевой пресет</span>
-            <select data-event-table-kind="{{../tableKind}}" data-event-row-id="{{id}}" data-event-field="combatPreset">
+            <select class="fbls-control" data-event-table-kind="{{../tableKind}}" data-event-row-id="{{id}}" data-event-field="combatPreset">
               {{#each combatPresetOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
             </select>
           </label>
         </div>
 
         <div class="fbls-event-row-text-grid">
-          <label class="fbls-event-field text">
+          <label class="fbls-field fbls-event-field text">
             <span>Текст события</span>
-            <textarea class="fbls-event-main-textarea" data-event-autogrow data-event-table-kind="{{../tableKind}}" data-event-row-id="{{id}}" data-event-field="text" rows="4">{{text}}</textarea>
+            <textarea class="fbls-control fbls-event-main-textarea" data-event-autogrow data-event-table-kind="{{../tableKind}}" data-event-row-id="{{id}}" data-event-field="text" rows="4">{{text}}</textarea>
           </label>
-          <label class="fbls-event-field text gm">
+          <label class="fbls-field fbls-event-field text gm">
             <span>Заметки ГМа</span>
-            <textarea class="fbls-event-gm-textarea" data-event-autogrow data-event-table-kind="{{../tableKind}}" data-event-row-id="{{id}}" data-event-field="gmText" rows="3" placeholder="скрыто для игроков">{{gmText}}</textarea>
+            <textarea class="fbls-control fbls-event-gm-textarea" data-event-autogrow data-event-table-kind="{{../tableKind}}" data-event-row-id="{{id}}" data-event-field="gmText" rows="3" placeholder="скрыто для игроков">{{gmText}}</textarea>
           </label>
         </div>
 
         <div class="fbls-event-row-chain-grid">
-          <label class="fbls-event-field">
+          <label class="fbls-field fbls-event-field">
             <span>Цепь</span>
-            <input type="text" data-event-table-kind="{{../tableKind}}" data-event-row-id="{{id}}" data-event-field="chainId" value="{{chainId}}" placeholder="id цепи" />
+            <input class="fbls-control" type="text" data-event-table-kind="{{../tableKind}}" data-event-row-id="{{id}}" data-event-field="chainId" value="{{chainId}}" placeholder="id цепи" />
           </label>
-          <label class="fbls-event-field">
+          <label class="fbls-field fbls-event-field">
             <span>Следующее</span>
-            <input type="text" data-event-table-kind="{{../tableKind}}" data-event-row-id="{{id}}" data-event-field="nextEventId" value="{{nextEventId}}" placeholder="id события" />
+            <input class="fbls-control" type="text" data-event-table-kind="{{../tableKind}}" data-event-row-id="{{id}}" data-event-field="nextEventId" value="{{nextEventId}}" placeholder="id события" />
           </label>
         </div>
 
         <section class="fbls-event-effects-block">
           <div class="fbls-event-effects-head">
             <div><strong>Эффекты</strong><small>{{effectCount}}</small></div>
-            <button type="button" class="fbls-button compact" data-action="event-editor-add-effect"><i class="fa-solid fa-plus"></i> Эффект</button>
+            <button type="button" class="fbls-button fbls-button-role compact" data-action="event-editor-add-effect"><i class="fa-solid fa-plus"></i> Эффект</button>
           </div>
           <div class="fbls-event-effects-list">
             {{#each effects}}
               <article class="fbls-event-effect-card">
-                <label class="fbls-event-field">
+                <label class="fbls-field fbls-event-field">
                   <span>Тип</span>
-                  <select data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-effect-id="{{id}}" data-event-effect-field="type">
+                  <select class="fbls-control" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-effect-id="{{id}}" data-event-effect-field="type">
                     {{#each typeOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
                   </select>
                 </label>
                 {{#if isDevelopment}}
-                  <label class="fbls-event-field"><span>Показатель</span><select data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-effect-id="{{id}}" data-event-effect-field="key">{{#each developmentOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                  <label class="fbls-field fbls-event-field"><span>Показатель</span><select class="fbls-control" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-effect-id="{{id}}" data-event-effect-field="key">{{#each developmentOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
                 {{/if}}
                 {{#if isModifier}}
-                  <label class="fbls-event-field"><span>Модификатор</span><select data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-effect-id="{{id}}" data-event-effect-field="key">{{#each modifierOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                  <label class="fbls-field fbls-event-field"><span>Модификатор</span><select class="fbls-control" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-effect-id="{{id}}" data-event-effect-field="key">{{#each modifierOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
                 {{/if}}
                 {{#if isResource}}
                   <label class="fbls-event-field"><span>Ресурс</span><button type="button" class="fbls-event-resource-picker" data-action="event-editor-pick-resource" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-effect-id="{{id}}" data-resource-id="{{resourceId}}"><i class="fa-solid fa-box"></i><strong>{{name}}</strong><i class="fa-solid fa-chevron-right"></i></button></label>
-                  <label class="fbls-event-field"><span>Своё название</span><input type="text" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-effect-id="{{id}}" data-event-effect-field="name" value="{{name}}" /></label>
-                  <label class="fbls-event-field"><span>Помещение</span><select data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-effect-id="{{id}}" data-event-effect-field="roomId">{{#each roomOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                  <label class="fbls-field fbls-event-field"><span>Своё название</span><input class="fbls-control" type="text" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-effect-id="{{id}}" data-event-effect-field="name" value="{{name}}" /></label>
+                  <label class="fbls-field fbls-event-field"><span>Помещение</span><select class="fbls-control" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-effect-id="{{id}}" data-event-effect-field="roomId">{{#each roomOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
                 {{/if}}
-                <label class="fbls-event-field compact"><span>Изменение</span><input type="number" step="1" data-type="number" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-effect-id="{{id}}" data-event-effect-field="amount" value="{{amount}}" /></label>
-                <label class="fbls-event-field effect-note"><span>Пояснение</span><input type="text" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-effect-id="{{id}}" data-event-effect-field="note" value="{{note}}" placeholder="для журнала" /></label>
+                <label class="fbls-field fbls-event-field compact"><span>Изменение</span><input class="fbls-control" type="number" step="1" data-type="number" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-effect-id="{{id}}" data-event-effect-field="amount" value="{{amount}}" /></label>
+                <label class="fbls-field fbls-event-field effect-note"><span>Пояснение</span><input class="fbls-control" type="text" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-effect-id="{{id}}" data-event-effect-field="note" value="{{note}}" placeholder="для журнала" /></label>
                 <button type="button" class="fbls-icon-button danger" data-action="event-editor-delete-effect" data-event-effect-id="{{id}}" title="Удалить эффект" aria-label="Удалить эффект"><i class="fa-solid fa-trash"></i></button>
               </article>
             {{else}}
@@ -112,9 +115,9 @@
             <small>{{requirementCount}}</small>
           </div>
           <div class="fbls-event-requirement-logic">
-            <label class="fbls-event-field">
+            <label class="fbls-field fbls-event-field">
               <span>Логика</span>
-              <select data-event-requirement-logic data-event-table-kind="{{../tableKind}}" data-event-row-id="{{id}}">
+              <select class="fbls-control" data-event-requirement-logic data-event-table-kind="{{../tableKind}}" data-event-row-id="{{id}}">
                 {{#each requirementLogicOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
               </select>
             </label>
@@ -129,79 +132,79 @@
                   </button>
                 </summary>
                 <div class="fbls-event-requirement-grid">
-                  <label class="fbls-event-field">
+                  <label class="fbls-field fbls-event-field">
                     <span>Тип</span>
-                    <select data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="type">
+                    <select class="fbls-control" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="type">
                       {{#each typeOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
                     </select>
                   </label>
-                  <label class="fbls-event-field">
+                  <label class="fbls-field fbls-event-field">
                     <span>Оператор</span>
-                    <select data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="operator">
+                    <select class="fbls-control" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="operator">
                       {{#each operatorOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}} {{#if hidden}}hidden disabled{{/if}}>{{label}}</option>{{/each}}
                     </select>
                   </label>
-                  <label class="fbls-event-field" data-event-requirement-value-wrap="development">
+                  <label class="fbls-field fbls-event-field" data-event-requirement-value-wrap="development">
                     <span>Показатель</span>
-                    <select data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="key" data-event-requirement-key>
+                    <select class="fbls-control" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="key" data-event-requirement-key>
                       {{#each developmentOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
                     </select>
                   </label>
-                  <label class="fbls-event-field" data-event-requirement-value-wrap="number development">
+                  <label class="fbls-field fbls-event-field" data-event-requirement-value-wrap="number development">
                     <span>Число</span>
-                    <input type="number" step="1" data-type="number" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="number" value="{{number}}" />
+                    <input class="fbls-control" type="number" step="1" data-type="number" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="number" value="{{number}}" />
                   </label>
-                  <label class="fbls-event-field" data-event-requirement-value-wrap="feature">
+                  <label class="fbls-field fbls-event-field" data-event-requirement-value-wrap="feature">
                     <span>Признак</span>
-                    <select data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-value="feature">
+                    <select class="fbls-control" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-value="feature">
                       {{#each featureOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
                     </select>
                   </label>
-                  <label class="fbls-event-field" data-event-requirement-value-wrap="region">
+                  <label class="fbls-field fbls-event-field" data-event-requirement-value-wrap="region">
                     <span>Регион</span>
-                    <select data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-value="region">
+                    <select class="fbls-control" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-value="region">
                       {{#each regionOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
                     </select>
                   </label>
-                  <label class="fbls-event-field" data-event-requirement-value-wrap="faith">
+                  <label class="fbls-field fbls-event-field" data-event-requirement-value-wrap="faith">
                     <span>Вера</span>
-                    <select data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-value="faith">
+                    <select class="fbls-control" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-value="faith">
                       {{#each faithOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
                     </select>
                   </label>
-                  <label class="fbls-event-field" data-event-requirement-value-wrap="faction">
+                  <label class="fbls-field fbls-event-field" data-event-requirement-value-wrap="faction">
                     <span>Фракция</span>
-                    <select data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-value="faction">
+                    <select class="fbls-control" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-value="faction">
                       {{#each factionOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
                     </select>
                   </label>
-                  <label class="fbls-event-field" data-event-requirement-value-wrap="calendar">
+                  <label class="fbls-field fbls-event-field" data-event-requirement-value-wrap="calendar">
                     <span>Календарь</span>
-                    <select data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-value="calendar">
+                    <select class="fbls-control" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-value="calendar">
                       {{#each calendarOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
                     </select>
                   </label>
-                  <label class="fbls-event-field" data-event-requirement-value-wrap="holding-type">
+                  <label class="fbls-field fbls-event-field" data-event-requirement-value-wrap="holding-type">
                     <span>Тип владения</span>
-                    <select data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-value="holding-type">
+                    <select class="fbls-control" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-value="holding-type">
                       {{#each holdingTypeOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
                     </select>
                   </label>
-                  <label class="fbls-event-field" data-event-requirement-value-wrap="building-function">
+                  <label class="fbls-field fbls-event-field" data-event-requirement-value-wrap="building-function">
                     <span>Функция</span>
-                    <select data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-value="building-function">
+                    <select class="fbls-control" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-value="building-function">
                       {{#each buildingFunctionOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
                     </select>
                   </label>
-                  <label class="fbls-event-field" data-event-requirement-value-wrap="building-template">
+                  <label class="fbls-field fbls-event-field" data-event-requirement-value-wrap="building-template">
                     <span>Шаблон здания</span>
-                    <select data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-value="building-template">
+                    <select class="fbls-control" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-value="building-template">
                       {{#each buildingTemplateOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
                     </select>
                   </label>
-                  <label class="fbls-event-field" data-event-requirement-value-wrap="text">
+                  <label class="fbls-field fbls-event-field" data-event-requirement-value-wrap="text">
                     <span>Текст</span>
-                    <input type="text" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-text value="{{value}}" />
+                    <input class="fbls-control" type="text" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-text value="{{value}}" />
                   </label>
                 </div>
               </details>
@@ -209,45 +212,45 @@
             {{/each}}
           </div>
           <div class="fbls-event-requirement-add" data-event-requirement-controls>
-            <select data-event-requirement-type title="Тип условия">
+            <select class="fbls-control" data-event-requirement-type title="Тип условия">
               {{#each ../currentTable.requirementTypeGroups}}
                 <optgroup label="{{category}}">
                   {{#each options}}<option value="{{value}}">{{label}}</option>{{/each}}
                 </optgroup>
               {{/each}}
             </select>
-            <select data-event-requirement-operator title="Оператор">
+            <select class="fbls-control" data-event-requirement-operator title="Оператор">
               {{#each ../currentTable.requirementOperatorOptions}}<option value="{{value}}">{{label}}</option>{{/each}}
             </select>
-            <select data-event-requirement-key data-event-requirement-value-wrap="development" title="Показатель">
+            <select class="fbls-control" data-event-requirement-key data-event-requirement-value-wrap="development" title="Показатель">
               {{#each ../currentTable.developmentOptions}}<option value="{{value}}">{{label}}</option>{{/each}}
             </select>
-            <input type="number" step="1" data-event-requirement-number data-event-requirement-value-wrap="number development" value="1" title="Число" />
-            <select data-event-requirement-value="feature" data-event-requirement-value-wrap="feature" title="Признак">
+            <input class="fbls-control" type="number" step="1" data-event-requirement-number data-event-requirement-value-wrap="number development" value="1" title="Число" />
+            <select class="fbls-control" data-event-requirement-value="feature" data-event-requirement-value-wrap="feature" title="Признак">
               {{#each ../currentTable.featureOptions}}<option value="{{value}}">{{label}}</option>{{/each}}
             </select>
-            <select data-event-requirement-value="region" data-event-requirement-value-wrap="region" title="Регион">
+            <select class="fbls-control" data-event-requirement-value="region" data-event-requirement-value-wrap="region" title="Регион">
               {{#each ../currentTable.regionOptions}}<option value="{{value}}">{{label}}</option>{{/each}}
             </select>
-            <select data-event-requirement-value="faith" data-event-requirement-value-wrap="faith" title="Вера">
+            <select class="fbls-control" data-event-requirement-value="faith" data-event-requirement-value-wrap="faith" title="Вера">
               {{#each ../currentTable.faithOptions}}<option value="{{value}}">{{label}}</option>{{/each}}
             </select>
-            <select data-event-requirement-value="faction" data-event-requirement-value-wrap="faction" title="Фракция">
+            <select class="fbls-control" data-event-requirement-value="faction" data-event-requirement-value-wrap="faction" title="Фракция">
               {{#each ../currentTable.factionOptions}}<option value="{{value}}">{{label}}</option>{{/each}}
             </select>
-            <select data-event-requirement-value="calendar" data-event-requirement-value-wrap="calendar" title="Календарь">
+            <select class="fbls-control" data-event-requirement-value="calendar" data-event-requirement-value-wrap="calendar" title="Календарь">
               {{#each ../currentTable.calendarOptions}}<option value="{{value}}">{{label}}</option>{{/each}}
             </select>
-            <select data-event-requirement-value="holding-type" data-event-requirement-value-wrap="holding-type" title="Тип владения">
+            <select class="fbls-control" data-event-requirement-value="holding-type" data-event-requirement-value-wrap="holding-type" title="Тип владения">
               {{#each ../currentTable.holdingTypeOptions}}<option value="{{value}}">{{label}}</option>{{/each}}
             </select>
-            <select data-event-requirement-value="building-function" data-event-requirement-value-wrap="building-function" title="Функция здания">
+            <select class="fbls-control" data-event-requirement-value="building-function" data-event-requirement-value-wrap="building-function" title="Функция здания">
               {{#each ../currentTable.buildingFunctionOptions}}<option value="{{value}}">{{label}}</option>{{/each}}
             </select>
-            <select data-event-requirement-value="building-template" data-event-requirement-value-wrap="building-template" title="Шаблон здания">
+            <select class="fbls-control" data-event-requirement-value="building-template" data-event-requirement-value-wrap="building-template" title="Шаблон здания">
               {{#each ../currentTable.buildingTemplateOptions}}<option value="{{value}}">{{label}}</option>{{/each}}
             </select>
-            <input type="text" data-event-requirement-text data-event-requirement-value-wrap="text" placeholder="слово или фраза" />
+            <input class="fbls-control" type="text" data-event-requirement-text data-event-requirement-value-wrap="text" placeholder="слово или фраза" />
             <button type="button" class="fbls-icon-button" data-action="event-editor-add-requirement" data-event-table-kind="{{../tableKind}}" data-event-row-id="{{id}}" title="Добавить условие" aria-label="Добавить условие">
               <i class="fa-solid fa-plus"></i>
             </button>
@@ -269,79 +272,79 @@
                   </button>
                 </summary>
                 <div class="fbls-event-requirement-grid">
-                  <label class="fbls-event-field">
+                  <label class="fbls-field fbls-event-field">
                     <span>Тип</span>
-                    <select data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="type">
+                    <select class="fbls-control" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="type">
                       {{#each typeOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
                     </select>
                   </label>
-                  <label class="fbls-event-field">
+                  <label class="fbls-field fbls-event-field">
                     <span>Оператор</span>
-                    <select data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="operator">
+                    <select class="fbls-control" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="operator">
                       {{#each operatorOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}} {{#if hidden}}hidden disabled{{/if}}>{{label}}</option>{{/each}}
                     </select>
                   </label>
-                  <label class="fbls-event-field" data-event-requirement-value-wrap="development">
+                  <label class="fbls-field fbls-event-field" data-event-requirement-value-wrap="development">
                     <span>Показатель</span>
-                    <select data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="key" data-event-requirement-key>
+                    <select class="fbls-control" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="key" data-event-requirement-key>
                       {{#each developmentOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
                     </select>
                   </label>
-                  <label class="fbls-event-field" data-event-requirement-value-wrap="number development">
+                  <label class="fbls-field fbls-event-field" data-event-requirement-value-wrap="number development">
                     <span>Число</span>
-                    <input type="number" step="1" data-type="number" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="number" value="{{number}}" />
+                    <input class="fbls-control" type="number" step="1" data-type="number" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="number" value="{{number}}" />
                   </label>
-                  <label class="fbls-event-field" data-event-requirement-value-wrap="feature">
+                  <label class="fbls-field fbls-event-field" data-event-requirement-value-wrap="feature">
                     <span>Признак</span>
-                    <select data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-value="feature">
+                    <select class="fbls-control" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-value="feature">
                       {{#each featureOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
                     </select>
                   </label>
-                  <label class="fbls-event-field" data-event-requirement-value-wrap="region">
+                  <label class="fbls-field fbls-event-field" data-event-requirement-value-wrap="region">
                     <span>Регион</span>
-                    <select data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-value="region">
+                    <select class="fbls-control" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-value="region">
                       {{#each regionOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
                     </select>
                   </label>
-                  <label class="fbls-event-field" data-event-requirement-value-wrap="faith">
+                  <label class="fbls-field fbls-event-field" data-event-requirement-value-wrap="faith">
                     <span>Вера</span>
-                    <select data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-value="faith">
+                    <select class="fbls-control" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-value="faith">
                       {{#each faithOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
                     </select>
                   </label>
-                  <label class="fbls-event-field" data-event-requirement-value-wrap="faction">
+                  <label class="fbls-field fbls-event-field" data-event-requirement-value-wrap="faction">
                     <span>Фракция</span>
-                    <select data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-value="faction">
+                    <select class="fbls-control" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-value="faction">
                       {{#each factionOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
                     </select>
                   </label>
-                  <label class="fbls-event-field" data-event-requirement-value-wrap="calendar">
+                  <label class="fbls-field fbls-event-field" data-event-requirement-value-wrap="calendar">
                     <span>Календарь</span>
-                    <select data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-value="calendar">
+                    <select class="fbls-control" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-value="calendar">
                       {{#each calendarOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
                     </select>
                   </label>
-                  <label class="fbls-event-field" data-event-requirement-value-wrap="holding-type">
+                  <label class="fbls-field fbls-event-field" data-event-requirement-value-wrap="holding-type">
                     <span>Тип владения</span>
-                    <select data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-value="holding-type">
+                    <select class="fbls-control" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-value="holding-type">
                       {{#each holdingTypeOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
                     </select>
                   </label>
-                  <label class="fbls-event-field" data-event-requirement-value-wrap="building-function">
+                  <label class="fbls-field fbls-event-field" data-event-requirement-value-wrap="building-function">
                     <span>Функция</span>
-                    <select data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-value="building-function">
+                    <select class="fbls-control" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-value="building-function">
                       {{#each buildingFunctionOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
                     </select>
                   </label>
-                  <label class="fbls-event-field" data-event-requirement-value-wrap="building-template">
+                  <label class="fbls-field fbls-event-field" data-event-requirement-value-wrap="building-template">
                     <span>Шаблон здания</span>
-                    <select data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-value="building-template">
+                    <select class="fbls-control" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-value="building-template">
                       {{#each buildingTemplateOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
                     </select>
                   </label>
-                  <label class="fbls-event-field" data-event-requirement-value-wrap="text">
+                  <label class="fbls-field fbls-event-field" data-event-requirement-value-wrap="text">
                     <span>Текст</span>
-                    <input type="text" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-text value="{{value}}" />
+                    <input class="fbls-control" type="text" data-event-table-kind="{{../../tableKind}}" data-event-row-id="{{../id}}" data-event-requirement-id="{{id}}" data-event-requirement-field="value" data-event-requirement-text value="{{value}}" />
                   </label>
                 </div>
               </details>
@@ -349,45 +352,45 @@
             {{/each}}
           </div>
           <div class="fbls-event-requirement-add" data-event-requirement-controls>
-            <select data-event-requirement-type title="Тип совпадения">
+            <select class="fbls-control" data-event-requirement-type title="Тип совпадения">
               {{#each ../currentTable.requirementTypeGroups}}
                 <optgroup label="{{category}}">
                   {{#each options}}<option value="{{value}}">{{label}}</option>{{/each}}
                 </optgroup>
               {{/each}}
             </select>
-            <select data-event-requirement-operator title="Оператор">
+            <select class="fbls-control" data-event-requirement-operator title="Оператор">
               {{#each ../currentTable.requirementOperatorOptions}}<option value="{{value}}">{{label}}</option>{{/each}}
             </select>
-            <select data-event-requirement-key data-event-requirement-value-wrap="development" title="Показатель">
+            <select class="fbls-control" data-event-requirement-key data-event-requirement-value-wrap="development" title="Показатель">
               {{#each ../currentTable.developmentOptions}}<option value="{{value}}">{{label}}</option>{{/each}}
             </select>
-            <input type="number" step="1" data-event-requirement-number data-event-requirement-value-wrap="number development" value="1" title="Число" />
-            <select data-event-requirement-value="feature" data-event-requirement-value-wrap="feature" title="Признак">
+            <input class="fbls-control" type="number" step="1" data-event-requirement-number data-event-requirement-value-wrap="number development" value="1" title="Число" />
+            <select class="fbls-control" data-event-requirement-value="feature" data-event-requirement-value-wrap="feature" title="Признак">
               {{#each ../currentTable.featureOptions}}<option value="{{value}}">{{label}}</option>{{/each}}
             </select>
-            <select data-event-requirement-value="region" data-event-requirement-value-wrap="region" title="Регион">
+            <select class="fbls-control" data-event-requirement-value="region" data-event-requirement-value-wrap="region" title="Регион">
               {{#each ../currentTable.regionOptions}}<option value="{{value}}">{{label}}</option>{{/each}}
             </select>
-            <select data-event-requirement-value="faith" data-event-requirement-value-wrap="faith" title="Вера">
+            <select class="fbls-control" data-event-requirement-value="faith" data-event-requirement-value-wrap="faith" title="Вера">
               {{#each ../currentTable.faithOptions}}<option value="{{value}}">{{label}}</option>{{/each}}
             </select>
-            <select data-event-requirement-value="faction" data-event-requirement-value-wrap="faction" title="Фракция">
+            <select class="fbls-control" data-event-requirement-value="faction" data-event-requirement-value-wrap="faction" title="Фракция">
               {{#each ../currentTable.factionOptions}}<option value="{{value}}">{{label}}</option>{{/each}}
             </select>
-            <select data-event-requirement-value="calendar" data-event-requirement-value-wrap="calendar" title="Календарь">
+            <select class="fbls-control" data-event-requirement-value="calendar" data-event-requirement-value-wrap="calendar" title="Календарь">
               {{#each ../currentTable.calendarOptions}}<option value="{{value}}">{{label}}</option>{{/each}}
             </select>
-            <select data-event-requirement-value="holding-type" data-event-requirement-value-wrap="holding-type" title="Тип владения">
+            <select class="fbls-control" data-event-requirement-value="holding-type" data-event-requirement-value-wrap="holding-type" title="Тип владения">
               {{#each ../currentTable.holdingTypeOptions}}<option value="{{value}}">{{label}}</option>{{/each}}
             </select>
-            <select data-event-requirement-value="building-function" data-event-requirement-value-wrap="building-function" title="Функция здания">
+            <select class="fbls-control" data-event-requirement-value="building-function" data-event-requirement-value-wrap="building-function" title="Функция здания">
               {{#each ../currentTable.buildingFunctionOptions}}<option value="{{value}}">{{label}}</option>{{/each}}
             </select>
-            <select data-event-requirement-value="building-template" data-event-requirement-value-wrap="building-template" title="Шаблон здания">
+            <select class="fbls-control" data-event-requirement-value="building-template" data-event-requirement-value-wrap="building-template" title="Шаблон здания">
               {{#each ../currentTable.buildingTemplateOptions}}<option value="{{value}}">{{label}}</option>{{/each}}
             </select>
-            <input type="text" data-event-requirement-text data-event-requirement-value-wrap="text" placeholder="слово или фраза" />
+            <input class="fbls-control" type="text" data-event-requirement-text data-event-requirement-value-wrap="text" placeholder="слово или фраза" />
             <button type="button" class="fbls-icon-button" data-action="event-editor-add-requirement" data-event-table-kind="{{../tableKind}}" data-event-row-id="{{id}}" title="Добавить совпадение" aria-label="Добавить усилитель шанса">
               <i class="fa-solid fa-plus"></i>
             </button>

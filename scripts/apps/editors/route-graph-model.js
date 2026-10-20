@@ -1,4 +1,4 @@
-import { LEGACY_MARKET_ROUTE_UNIT_KM } from "../../data/random-events.js";
+import { LEGACY_MARKET_ROUTE_UNIT_KM, MAX_MARKET_LINKS_PER_REGION } from "../../data/random-events.js";
 import { marketRouteDistanceKm, marketRoutePolylineLength, normalizeMarketRouteMap } from "../../data/market/route-map.js";
 
 const MODES = new Set(["caravan", "rail", "airship"]);
@@ -7,8 +7,14 @@ export function clampRouteValue(value, min, max) {
   return Math.min(max, Math.max(min, Number(value) || 0));
 }
 
-export function routeEdgeKey(from = "", to = "") {
-  return [String(from), String(to)].sort().join("::");
+function normalizedRouteId(value = "") {
+  return String(value ?? "").trim().slice(0, 128);
+}
+
+export function routeEdgeKey(from = "", to = "", routeId = "") {
+  const pair = [String(from), String(to)].sort().join("::");
+  const id = normalizedRouteId(routeId);
+  return id ? `${pair}::${id}` : pair;
 }
 
 export function normalizeRoutePathPoints(points = [], map = {}) {
@@ -56,11 +62,15 @@ export function defaultRouteNodePosition(index = 0, count = 1, map = {}) {
   };
 }
 
-export function removeRouteEdge(regions, fromId, toId) {
+export function removeRouteEdge(regions, fromId, toId, routeId = "") {
+  const selectedRouteId = normalizedRouteId(routeId);
   for (const region of regions) {
     if (region.value !== fromId && region.value !== toId) continue;
     const other = region.value === fromId ? toId : fromId;
-    region.marketLinks = (region.marketLinks ?? []).filter((link) => String(link.regionId) !== String(other));
+    region.marketLinks = (region.marketLinks ?? []).filter((link) => (
+      String(link.regionId) !== String(other)
+      || normalizedRouteId(link.routeId) !== selectedRouteId
+    ));
   }
 }
 
@@ -68,25 +78,42 @@ export function upsertRouteEdge(regions, fromId, toId, patch = {}) {
   const source = regions.find((row) => row.value === fromId);
   const target = regions.find((row) => row.value === toId);
   if (!source || !target || source === target) return false;
+  const routeId = normalizedRouteId(patch.routeId);
+  const replacingSource = (source.marketLinks ?? []).some((link) => String(link.regionId) === String(toId)
+    && normalizedRouteId(link.routeId) === routeId);
+  if (!replacingSource && (source.marketLinks?.length ?? 0) >= MAX_MARKET_LINKS_PER_REGION) return false;
   let previous = null;
+  let previousWasReverse = false;
   for (const region of [source, target]) {
     const otherId = region === source ? toId : fromId;
-    previous ??= (region.marketLinks ?? []).find((link) => String(link.regionId) === String(otherId)) ?? null;
+    const match = (region.marketLinks ?? []).find((link) => (
+      String(link.regionId) === String(otherId)
+      && normalizedRouteId(link.routeId) === routeId
+    )) ?? null;
+    if (!previous && match) {
+      previous = match;
+      previousWasReverse = region === target;
+    }
   }
-  removeRouteEdge(regions, fromId, toId);
+  removeRouteEdge(regions, fromId, toId, routeId);
   const modes = Array.isArray(patch.modes) ? patch.modes.filter((mode) => MODES.has(mode)) : (previous?.modes ?? ["caravan", "airship"]);
+  const previousPath = previousWasReverse
+    ? [...(previous?.pathPoints ?? [])].reverse()
+    : (previous?.pathPoints ?? []);
   source.marketLinks ??= [];
-  source.marketLinks.push({
+  const link = {
     regionId: toId,
     ursCost: Math.min(99, Math.max(1, Math.floor(Number(patch.ursCost ?? previous?.ursCost ?? 1) || 1))),
     distanceKm: Math.max(1, Number(patch.distanceKm ?? previous?.distanceKm ?? LEGACY_MARKET_ROUTE_UNIT_KM) || LEGACY_MARKET_ROUTE_UNIT_KM),
     distanceMode: String(patch.distanceMode ?? previous?.distanceMode ?? "") === "scaled" ? "scaled" : "manual",
-    pathPoints: normalizeRoutePathPoints(patch.pathPoints ?? previous?.pathPoints ?? [], { worldWidth: 12000, worldHeight: 8000 }),
+    pathPoints: normalizeRoutePathPoints(patch.pathPoints ?? previousPath, { worldWidth: 12000, worldHeight: 8000 }),
     modes: modes.length ? modes : ["caravan"],
     seasonalModifiers: patch.seasonalModifiers && typeof patch.seasonalModifiers === "object"
       ? patch.seasonalModifiers
       : (previous?.seasonalModifiers ?? {})
-  });
+  };
+  if (routeId) link.routeId = routeId;
+  source.marketLinks.push(link);
   return true;
 }
 

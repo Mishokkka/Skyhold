@@ -2,7 +2,7 @@
 
 .fbl-skyhold-building-editor .fbls-worker-top-row {
   display: grid;
-  grid-template-columns: 4.7rem 4.7rem minmax(11rem, 1fr) 5.5rem 5.6rem;
+  grid-template-columns: 4.7rem 4.7rem minmax(11rem, 1fr) 5.5rem 5.6rem 5.4rem;
   align-items: end;
   gap: 0.36rem;
 }
@@ -21,13 +21,15 @@
 .fbl-skyhold-building-editor .fbls-assigned-worker-area > .fbls-field-title {
   display: block;
   color: var(--fbls-muted);
-  font-size: 0.66rem;
+  font-size: var(--fbls-type-compact-xs);
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .fbl-skyhold-building-editor .fbls-worker-top-row label > span {
-  margin-bottom: 0.22rem;
+  margin-bottom: 0;
+  font-size: 0.625rem;
+  line-height: 1.4;
 }
 
 .fbl-skyhold-building-editor .fbls-worker-top-row .mini input,
@@ -39,6 +41,41 @@
   width: 100%;
   min-width: 0;
   text-align: center;
+}
+
+.fbl-skyhold-building-editor .fbls-worker-eff-total.compact-number {
+  display: grid;
+  grid-template-rows: auto var(--fbls-control-height);
+  align-content: stretch;
+  align-self: stretch;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.fbl-skyhold-building-editor .fbls-worker-eff-total.compact-number span {
+  display: block;
+  margin-bottom: 0;
+  font-size: 0.625rem;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.fbl-skyhold-building-editor .fbls-worker-eff-total.compact-number strong {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  justify-content: center;
+  width: 100%;
+  min-height: var(--fbls-control-height);
+  padding: 0.28rem 0.4rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 7px;
+  background: var(--fbls-overlay);
 }
 
 .fbl-skyhold-building-editor .effective-types-box.full-line {
@@ -74,50 +111,6 @@
   padding: 0.12rem 0.35rem;
 }
 
-.fbl-skyhold-building-editor .fbls-type-effect-chip {
-  display: inline-flex;
-  align-items: center;
-  flex: 0 0 auto;
-  gap: 0.25rem;
-  max-width: 100%;
-  min-height: 1.45rem;
-  padding: 0.08rem 0.24rem 0.08rem 0.44rem;
-  border: 1px solid var(--fbls-border-strong);
-  border-radius: 999px;
-  background: var(--fbls-panel);
-  border-color: var(--fbls-border-strong);
-  box-shadow: inset 0 0 0 1px var(--fbls-overlay-soft);
-}
-
-.fbl-skyhold-building-editor .fbls-type-effect-chip em {
-  color: inherit;
-  text-shadow: 0 1px 2px var(--fbls-overlay-strong);
-}
-
-.fbl-skyhold-building-editor .fbls-type-effect-chip input,
-.fbl-skyhold-building-editor .fbls-type-effect-chip strong {
-  width: 3.2rem;
-  min-height: 1.28rem;
-  padding: 0.05rem 0.2rem;
-  border-color: var(--fbls-border-strong);
-  background: var(--fbls-overlay);
-  color: var(--fbls-text-strong);
-  font-size: 0.82rem;
-  text-align: center;
-}
-
-.fbl-skyhold-building-editor .fbls-type-effect-chip .fbls-chip-remove {
-  width: 1.2rem;
-  min-width: 1.2rem;
-  height: 1.2rem;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: var(--fbls-overlay);
-  color: var(--fbls-text);
-  cursor: pointer;
-}
-
 .fbl-skyhold-building-editor .fbls-assigned-worker-area {
   display: grid;
   gap: 0.3rem;
@@ -143,13 +136,68 @@
   text-align: center;
 }
 
-@media (max-width: 920px) {
+@container fbls-building-editor (max-width: 920px) {
   .fbl-skyhold-building-editor .fbls-worker-top-row {
     grid-template-columns: 1fr 1fr;
   }
 
   .fbl-skyhold-building-editor .fbls-worker-top-row .role,
+  .fbl-skyhold-building-editor .fbls-worker-eff-total.compact-number,
   .fbl-skyhold-building-editor .effective-types-box.full-line {
     grid-column: 1 / -1;
   }
+}
+
+/* GM worker profile editor: compact rows and local choice lists. */
+.fbl-skyhold-building-editor .fbls-worker-profile-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: start; }
+.fbl-skyhold-building-editor .fbls-worker-profile-section { display: flex; flex-direction: column; gap: 8px; padding: 10px; min-width: 0; border: 1px solid var(--fbls-border); border-radius: 6px; background: var(--fbls-overlay-soft); }
+.fbl-skyhold-building-editor .fbls-worker-profile-section h4 { margin: 0; font-size: 1rem; }
+.fbl-skyhold-building-editor .fbls-worker-profile-grid .fbls-worker-profile-rule { display: grid; grid-template-columns: minmax(0, 1fr) 68px var(--fbls-control-height) var(--fbls-control-height); align-items: end; gap: 6px; margin: 0; }
+.fbl-skyhold-building-editor .fbls-worker-profile-rule > label { display: flex; flex-direction: column; gap: 2px; min-width: 0; margin: 0; font-size: 0.625rem; line-height: 1.4; }
+.fbl-skyhold-building-editor .fbls-worker-profile-section > button { align-self: flex-start; }
+.fbl-skyhold-building-editor .fbls-worker-profile-help { margin: 0; font-size: var(--fbls-type-compact-md); color: var(--fbls-muted); }
+.fbl-skyhold-building-editor .fbls-worker-profile-composition { display: block; margin: 0; }
+.fbl-skyhold-building-editor .fbls-worker-profile-composition > .fbls-worker-profile-rule { margin-top: 6px; }
+.fbl-skyhold-building-editor .fbls-worker-profile-choice { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.fbl-skyhold-building-editor .fbls-worker-profile-choice > input { min-width: 0; flex: 1; }
+.fbl-skyhold-building-editor .fbls-worker-profile-choice > details { position: relative; flex: 0 0 var(--fbls-control-height); }
+.fbl-skyhold-building-editor .fbls-worker-profile-choice summary { display: flex; align-items: center; justify-content: center; list-style: none; cursor: pointer; height: var(--fbls-control-height); }
+.fbl-skyhold-building-editor .fbls-worker-choice-panel { position: relative; width: 100%; padding: 8px; background: var(--fbls-surface-2); border: 1px solid var(--fbls-border-strong); border-radius: 6px; box-shadow: 0 5px 16px var(--fbls-overlay-strong); }
+.fbl-skyhold-building-editor .fbls-worker-choice-options { max-height: 190px; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; margin-top: 6px; }
+@container fbls-building-editor (max-width: 800px) { .fbl-skyhold-building-editor .fbls-worker-profile-grid { grid-template-columns: minmax(0, 1fr); } }
+
+.fbl-skyhold-building-editor .fbls-worker-profile-choice:has(details[open]) { flex-wrap: wrap; }
+.fbl-skyhold-building-editor .fbls-worker-profile-choice > details[open] { flex-basis: 100%; }
+.fbl-skyhold-building-editor .fbls-worker-profile-choice > details[open] > summary { justify-content: flex-start; }
+.fbl-skyhold-building-editor .fbls-worker-profile-rule:has(details[open]) { align-items: start; }
+
+.fbl-skyhold-building-editor .fbls-worker-profile-grid .fbls-worker-profile-admission { grid-template-columns: minmax(0, 1fr) 60px 60px var(--fbls-control-height); }
+.fbl-skyhold-building-editor .fbls-worker-profile-grid .fbls-worker-profile-composition .fbls-worker-profile-rule { grid-template-columns: minmax(0, 1fr) 68px var(--fbls-control-height); }
+
+.fbl-skyhold-building-editor .fbls-worker-profile-heading > span { font-size: var(--fbls-type-compact-xs); color: var(--fbls-muted); white-space: nowrap; }
+.fbl-skyhold-building-editor .fbls-worker-profile-composition .fbls-worker-profile-choice { display: grid; gap: 2px; align-content: start; }
+.fbl-skyhold-building-editor .fbls-worker-profile-choice > details[data-profile-picker="composition"] { min-width: 0; }
+.fbl-skyhold-building-editor .fbls-worker-profile-choice > details[data-profile-picker="composition"] > summary { justify-content: flex-start; }
+.fbl-skyhold-building-editor .fbls-worker-profile-composition .fbls-worker-profile-rule > button { align-self: start; position: relative; top: calc(0.625rem * 1.4 + 2px); }
+
+.fbl-skyhold-building-editor.fbls-building-editor-layout .fbls-worker-profile-grid { gap: var(--fbls-gap-sm); }
+.fbl-skyhold-building-editor.fbls-building-editor-layout .fbls-worker-profile-section {
+  padding: var(--fbls-gap-sm);
+  gap: var(--fbls-gap-sm);
+}
+.fbl-skyhold-building-editor.fbls-building-editor-layout .fbls-worker-profile-heading { display: block; }
+.fbl-skyhold-building-editor.fbls-building-editor-layout .fbls-worker-profile-grid .fbls-worker-profile-rule {
+  grid-template-columns: minmax(8rem, 1fr) 4.25rem auto auto;
+}
+.fbl-skyhold-building-editor.fbls-building-editor-layout .fbls-worker-profile-grid .fbls-worker-profile-admission {
+  grid-template-columns: minmax(8rem, 1fr) 3.75rem 3.75rem auto;
+}
+.fbl-skyhold-building-editor.fbls-building-editor-layout .fbls-worker-profile-composition .fbls-worker-profile-rule {
+  grid-template-columns: minmax(8rem, 1fr) 4.25rem auto;
+}
+.fbl-skyhold-building-editor.fbls-building-editor-layout .fbls-worker-profile-composition .fbls-worker-profile-rule > button { align-self: end; position: static; }
+.fbl-skyhold-building-editor.fbls-building-editor-layout .fbls-worker-profile-composition .fbls-worker-profile-rule:has(details[open]) > button {
+  align-self: start;
+  position: relative;
+  top: calc(0.625rem * 1.4 + 2px);
 }

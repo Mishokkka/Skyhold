@@ -1,0 +1,41 @@
+      {{#if building.showEditorProjects}}
+        <fieldset class="fbls-building-editor-card wide-card fbls-stack">
+          <legend>Долгосрочные проекты</legend>
+          <div class="fbls-card-header">
+            <p class="fbls-muted-line">Проект хранит цель, участников, затраты и QD. Его сюжетный результат применяется только после решения GM.</p>
+            {{#if canEdit}}<button type="button" class="fbls-button compact fbls-button-role" data-action="add-service-project"><i class="fa-solid fa-plus"></i> Проект</button>{{/if}}
+          </div>
+
+          <div class="fbls-stack">
+            {{#each building.serviceProjectRows}}
+              <article class="fbls-card fbls-stack" data-building-project-id="{{id}}">
+                <header class="fbls-card-header">
+                  <strong>{{title}}</strong>
+                  {{#if ../canEdit}}<button type="button" class="fbls-icon-button danger" data-action="delete-service-project" data-project-index="{{projectIndex}}" aria-label="Удалить проект {{title}}"><i class="fa-solid fa-trash"></i></button>{{/if}}
+                </header>
+                <div class="fbls-building-main-line">
+                  <label><span>Название</span>{{#if ../canEdit}}<input class="fbls-control" type="text" data-field="{{../building.basePath}}.serviceProjects.{{projectIndex}}.title" value="{{title}}" />{{else}}<strong>{{title}}</strong>{{/if}}</label>
+                  <label><span>Вид проекта</span>{{#if ../canEdit}}<input class="fbls-control" type="text" data-field="{{../building.basePath}}.serviceProjects.{{projectIndex}}.kind" value="{{kind}}" />{{else}}<strong>{{kind}}</strong>{{/if}}</label>
+                  <label><span>Статус</span>{{#if ../canEdit}}<select class="fbls-control" data-field="{{../building.basePath}}.serviceProjects.{{projectIndex}}.status">{{#each statusOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{status}}</strong>{{/if}}</label>
+                  <label><span>Прогресс QD</span>{{#if ../canEdit}}<input class="fbls-control" type="number" min="0" step="1" data-type="number" data-field="{{../building.basePath}}.serviceProjects.{{projectIndex}}.progressQd" value="{{progressQd}}" />{{else}}<strong>{{progressQd}}</strong>{{/if}}</label>
+                  <label><span>Цель QD</span>{{#if ../canEdit}}<input class="fbls-control" type="number" min="1" step="1" data-type="number" data-field="{{../building.basePath}}.serviceProjects.{{projectIndex}}.targetQd" value="{{targetQd}}" />{{else}}<strong>{{targetQd}}</strong>{{/if}}</label>
+                  <label><span>Решение GM</span>{{#if ../isGM}}{{#if ../canEdit}}<select class="fbls-control" data-field="{{../building.basePath}}.serviceProjects.{{projectIndex}}.gmDecisionStatus">{{#each decisionOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{gmDecisionStatus}}</strong>{{/if}}{{else}}<strong>{{gmDecisionStatus}}</strong>{{/if}}</label>
+                </div>
+                <div class="fbls-main-effects-grid">
+                  <div class="fbls-field"><span>Участники</span>{{#if ../canEdit}}{{> "modules/fbl-skyhold/templates/parts/building-editor/list-picker.hbs" participantPicker}}{{else}}<p class="fbls-preline">{{participantPicker.tooltip}}</p>{{/if}}</div>
+                  <label><span>ID целей</span>{{#if ../canEdit}}<textarea class="fbls-control" data-building-string-list-field="{{../building.basePath}}.serviceProjects.{{projectIndex}}.targetIds" rows="2">{{targetIdsText}}</textarea>{{else}}<p class="fbls-preline">{{targetIdsText}}</p>{{/if}}</label>
+                </div>
+                <div class="fbls-cost-list">
+                  <div class="fbls-subhead"><span>Затраты ресурсов</span>{{#if ../canEdit}}<button type="button" class="fbls-icon-button" data-action="add-service-project-cost" data-project-index="{{projectIndex}}" title="Добавить ресурс" aria-label="Добавить ресурс проекта"><i class="fa-solid fa-plus"></i></button>{{/if}}</div>
+                  {{#each resourceCosts}}
+                    <div class="fbls-cost-row">{{#if ../../canEdit}}<button type="button" class="fbls-resource-picker-button fbls-control" data-action="pick-service-project-resource" data-project-index="{{projectIndex}}" data-cost-index="{{costIndex}}"><i class="{{icon}}"></i><span>{{label}}</span><i class="fa-solid fa-chevron-right"></i></button><input class="fbls-control" type="number" min="1" step="1" data-type="number" data-field="{{qtyPath}}" value="{{qty}}" /><button type="button" class="fbls-icon-button danger" data-action="delete-service-project-cost" data-project-index="{{projectIndex}}" data-cost-index="{{costIndex}}" aria-label="Удалить ресурс {{label}}"><i class="fa-solid fa-trash"></i></button>{{else}}<strong>{{qty}} {{label}}</strong>{{/if}}</div>
+                  {{else}}<p class="fbls-muted-line">Ресурсы не заданы.</p>{{/each}}
+                </div>
+                <label class="fbls-wide-label"><span>Заметки</span>{{#if ../canEdit}}<textarea class="fbls-control" data-field="{{../building.basePath}}.serviceProjects.{{projectIndex}}.notes" rows="2">{{notes}}</textarea>{{else}}<p class="fbls-preline">{{notes}}</p>{{/if}}</label>
+              </article>
+            {{else}}
+              <p class="fbls-muted-line">Проекты ещё не заведены.</p>
+            {{/each}}
+          </div>
+        </fieldset>
+      {{/if}}

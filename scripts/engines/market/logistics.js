@@ -1,3 +1,6 @@
+import { politicsRuntimeEffects } from "../politics/runtime-effects.js";
+import { marketTransportRoutes } from "./route-candidates.js";
+
 export const MARKET_TRANSPORT_TARIFFS = Object.freeze({
   caravan: Object.freeze({ label: "Наземный караван", dispatchCopper: 6, distanceCopper: 2, loadDistanceCopper: 1, operatingCopperPerQd: 0, qdPerDistance: 4 }),
   rail: Object.freeze({ label: "Железная дорога", dispatchCopper: 12, distanceCopper: 3, loadDistanceCopper: 0.15, operatingCopperPerQd: 0, qdPerDistance: 1 }),
@@ -17,20 +20,10 @@ export const MARKET_DEFAULT_TRANSPORT_CAPACITY_LOAD = Object.freeze({
   airship: 4000
 });
 
-export const MARKET_DEFAULT_TRANSPORT_CAPACITY_CARGO_POINTS = Object.freeze(Object.fromEntries(
-  Object.entries(MARKET_DEFAULT_TRANSPORT_CAPACITY_LOAD).map(([mode, load]) => [mode, load * 10])
-));
-
 const MARKET_TRANSPORT_CAPACITY_FIELDS = Object.freeze({
   caravan: "caravanCapacityLoad",
   rail: "railCapacityLoad",
   airship: "airshipCapacityLoad"
-});
-
-const MARKET_TRANSPORT_CAPACITY_POINT_FIELDS = Object.freeze({
-  caravan: "caravanCapacityCargoPoints",
-  rail: "railCapacityCargoPoints",
-  airship: "airshipCapacityCargoPoints"
 });
 
 function finite(value, fallback = 0) {
@@ -57,17 +50,12 @@ function normalizedSeasonId(value = "") {
   return "";
 }
 
-function marketRouteCapacityCargoPoints(market = {}, modes = []) {
+function marketRouteCapacityLoad(market = {}, modes = []) {
   const capacities = [...new Set(modes)]
     .map((mode) => {
-      const pointField = MARKET_TRANSPORT_CAPACITY_POINT_FIELDS[mode];
       const field = MARKET_TRANSPORT_CAPACITY_FIELDS[mode];
       if (!field) return null;
-      const explicitPoints = pointField ? market?.[pointField] : undefined;
-      if (explicitPoints !== undefined && explicitPoints !== null && explicitPoints !== "") {
-        return Math.max(1, Math.floor(finite(explicitPoints, MARKET_DEFAULT_TRANSPORT_CAPACITY_CARGO_POINTS[mode])));
-      }
-      return Math.max(1, finite(market?.[field], MARKET_DEFAULT_TRANSPORT_CAPACITY_LOAD[mode]) * 10);
+      return Math.max(1, finite(market?.[field], MARKET_DEFAULT_TRANSPORT_CAPACITY_LOAD[mode]));
     })
     .filter((value) => Number.isFinite(value));
   return capacities.length ? Math.min(...capacities) : 0;
@@ -111,12 +99,14 @@ function routeGraph(regions = []) {
     for (const link of region?.marketLinks ?? []) {
       const to = String(link?.regionId ?? "").trim();
       if (!to || to === from) continue;
-      const key = [from, to].sort().join("::");
+      const routeId = String(link?.routeId ?? "").trim().slice(0, 128);
+      const key = `${[from, to].sort().join("::")}\u0000${routeId}`;
       if (seen.has(key)) continue;
       seen.add(key);
       const distanceKm = Math.max(1, finite(link?.distanceKm, KM_PER_ROUTE_UNIT));
       const edge = {
         to,
+        routeId,
         ursCost: Math.min(99, Math.max(1, Math.floor(finite(link?.ursCost ?? link?.accessCost, 1)))),
         distanceKm,
         distance: distanceKm / KM_PER_ROUTE_UNIT,
@@ -217,27 +207,34 @@ export function shortestMarketRoute(fromId = "", toId = "", regions = [], { mode
   return null;
 }
 
-export function holdingMarketAccessLevel(holding = {}) {
+export function holdingMarketAccessLevel(holding = {}, { politicsMarketAccess = null } = {}) {
   const manual = holding?.gm?.modifiers?.marketConnectionsLevel;
   const legacy = holding?.special?.market?.accessLevelOverride;
-  const level = Math.max(0, Math.floor(finite(manual, finite(legacy, 1))));
-  return { level, source: "GM · УРС" };
+  const politics = politicsMarketAccess ?? politicsRuntimeEffects(holding)?.marketAccess ?? 0;
+  const level = Math.max(0, Math.floor(finite(manual, finite(legacy, 1)) + politics));
+  return { level, source: politics ? "GM · УРС + Политика" : "GM · УРС" };
 }
 
 function logisticsRegionFactors(region = {}, resolver = null) {
   const factors = typeof resolver === "function" ? resolver(region) : {};
+  const importFactor = Math.max(0, finite(factors.import, 1));
+  const priceFactor = Math.max(0.01, finite(factors.price, 1));
   return {
     enabled: factors.enabled ?? region?.marketEnabled !== false,
-    price: Math.max(0.01, finite(factors.price, 1)),
+    price: priceFactor,
+    buyPrice: priceFactor * importFactor,
+    demand: importFactor,
     stock: Math.max(0, finite(factors.availability, 1) * finite(factors.export, 1)),
     delivery: Math.max(0.01, finite(factors.delivery, 1)),
     time: Math.max(0.01, finite(factors.time, 1)),
     risk: Math.max(0.01, finite(factors.risk, 1)),
-    taxRate: Math.max(0, Math.min(1, finite(factors.taxRate ?? region?.marketTaxRate, 0)))
+    taxRate: Math.max(0, Math.min(1, finite(factors.taxRate ?? region?.marketTaxRate, 0))),
+    exportTaxRate: Math.max(0, Math.min(1, finite(factors.exportTaxRate, 0)))
   };
 }
 
-export function resolveMarketLogistics({ holding = {}, market = {}, regions = [], seasonId = "", dependencies = {} } = {}) {
+export function resolveMarketLogistics({ holding = {}, market = {}, regions = [], seasonId = "", dependencies = {},
+  direction = "inbound", selectedRoute = null, singleRoute = false, accessLevel = null } = {}) {
   const destination = findHoldingRegion(holding, regions, dependencies.regionResolver);
   const origin = findRegion(market.regionId, regions, dependencies.regionResolver);
   const sameRegion = Boolean(origin && destination && origin.value === destination.value);
@@ -245,16 +242,42 @@ export function resolveMarketLogistics({ holding = {}, market = {}, regions = []
   const marketModes = new Set(Array.isArray(market.transportModes) ? market.transportModes : ["caravan", "rail", "airship"]);
   const destinationModes = new Set(destination?.marketTransportModes ?? ["caravan", "airship"]);
   const originModes = new Set(origin?.marketTransportModes ?? ["caravan", "airship"]);
-  const graphRoute = shortestMarketRoute(destination?.value, origin?.value, regions, { allowedModes: [...marketModes], metric: "access" });
-  const airshipRequired = holding?.type === "sky-island" || crossLandmass || destination?.marketAirshipOnly || origin?.marketAirshipOnly;
+  const airshipRequired = holding?.type === "sky-island" || holding?.type === "ship" || crossLandmass || destination?.marketAirshipOnly || origin?.marketAirshipOnly;
   const routeRequired = Boolean(origin && destination && !sameRegion);
+  const access = Number.isFinite(accessLevel) ? { level: Math.max(0, Math.floor(accessLevel)), source: "УРС с действующими политическими источниками" } : holdingMarketAccessLevel(holding);
+  const byId = new Map(regions.map((region) => [String(region.value), region]));
+  const search = selectedRoute || !routeRequired ? { routes: [], limited: false } : marketTransportRoutes({
+    graph: routeGraph(regions), from: destination.value, to: origin.value, maxAccess: access.level,
+    modesForEdge: (fromId, edge) => {
+      const fromRegion = byId.get(fromId);
+      const toRegion = byId.get(edge.to);
+      const mustFly = fromRegion?.marketAirshipOnly || toRegion?.marketAirshipOnly
+        || (fromRegion?.marketLandmassId && toRegion?.marketLandmassId && fromRegion.marketLandmassId !== toRegion.marketLandmassId);
+      return (edge.modes?.length ? edge.modes : [...marketModes]).filter((mode) => TRANSPORT[mode] && marketModes.has(mode)
+        && (!mustFly || mode === "airship")
+        && (!fromRegion?.marketTransportModes || fromRegion.marketTransportModes.includes(mode))
+        && (!toRegion?.marketTransportModes || toRegion.marketTransportModes.includes(mode)));
+    },
+    termsForEdge: (edge, transport) => {
+      const terms = TRANSPORT[transport];
+      const seasonal = edgeSeasonalModifier(edge, seasonId);
+      return { flat: edge.distance * terms.distanceCopper * seasonal.costFactor,
+        load: edge.distance * terms.loadDistanceCopper * seasonal.costFactor,
+        time: edge.distance * terms.qdPerDistance * seasonal.timeFactor,
+        operating: edge.distance * terms.qdPerDistance * seasonal.timeFactor * terms.operatingCopperPerQd,
+        risk: seasonal.riskFactor };
+    }
+  });
+  const graphRoute = selectedRoute ?? search.routes.sort((a, b) => a.accessCost - b.accessCost || a.distanceKm - b.distanceKm
+    || a.time - b.time || a.mask - b.mask)[0] ?? null;
   const routeModes = (graphRoute?.edges ?? []).map((edge) => {
+    if (edge.selectedMode) return edge.selectedMode;
     const candidates = (edge.modes?.length ? edge.modes : ["caravan", "rail", "airship"]).filter((mode) => marketModes.has(mode));
     if (candidates.includes("rail")) return "rail";
     if (candidates.includes("caravan")) return "caravan";
     return candidates.includes("airship") ? "airship" : "";
   }).filter(Boolean);
-  const airshipLastMile = holding?.type === "sky-island" && marketModes.has("airship");
+  const airshipLastMile = ["sky-island", "ship"].includes(String(holding?.type ?? "")) && marketModes.has("airship");
   const usedModes = [...new Set([...routeModes, ...(airshipLastMile ? ["airship"] : [])])];
   let transportMode = usedModes.length > 1 ? "multimodal" : (usedModes[0] ?? "");
   if (!routeRequired && !transportMode) {
@@ -270,13 +293,13 @@ export function resolveMarketLogistics({ holding = {}, market = {}, regions = []
   const hops = graphRoute?.hops ?? (sameRegion ? 0 : 1);
   const routeAccessLevel = Math.max(0, Math.floor(finite(graphRoute?.accessCost, sameRegion ? 0 : 1)));
   const requiredAccessLevel = routeAccessLevel;
-  const access = holdingMarketAccessLevel(holding);
 
   const originFactors = logisticsRegionFactors(origin, dependencies.regionFactors);
   const destinationFactors = logisticsRegionFactors(destination, dependencies.regionFactors);
   const fallbackMode = TRANSPORT[transportMode] ? transportMode : (usedModes[0] ?? "");
   const mode = TRANSPORT[fallbackMode] ?? null;
   const reasons = [];
+  if (search.limited) reasons.push("Сеть содержит слишком много альтернатив для точного расчёта. Упростите связи между рынками.");
   if (!destination) reasons.push("Регион поселения не найден в каталоге логистики.");
   if (origin && !originFactors.enabled) reasons.push("Торговля в регионе поставщика отключена.");
   if (destination && !destinationFactors.enabled) reasons.push("Регион поселения закрыт для торговли.");
@@ -305,15 +328,14 @@ export function resolveMarketLogistics({ holding = {}, market = {}, regions = []
   const usesAirship = transportMode === "airship" || routeModes.includes("airship") || airshipLastMile;
   const travelQd = mode ? Math.max(1, Math.ceil(routeTravelQd * originFactors.time)) : 0;
   const capacityModes = usedModes.length ? usedModes : [transportMode].filter(Boolean);
-  const baseCapacityCargoPoints = marketRouteCapacityCargoPoints(market, capacityModes);
-  const baseCapacityLoad = baseCapacityCargoPoints / 10;
+  const baseCapacityLoad = marketRouteCapacityLoad(market, capacityModes);
   const configuredDistanceFlatCopper = distance * Math.max(0, finite(market.deliveryDistanceCopper, 0));
   const configuredDistanceLoadCopper = distance * Math.max(0, finite(market.deliveryLoadDistanceCopper, 0));
   const operatingTimeBeforeFactorCopper = routeOperatingTimeCopper * originFactors.time;
   const routeFlatBeforeFactorCopper = dispatchCopper + routeDistanceCopper + configuredDistanceFlatCopper + operatingTimeBeforeFactorCopper;
   const routeLoadBeforeFactorCopper = routeLoadCopper + configuredDistanceLoadCopper;
   const airshipHireCopper = usesAirship ? Math.max(0, finite(market.airshipHireCopper, 120)) : 0;
-  return {
+  const result = {
     ok: reasons.length === 0,
     reasons,
     destinationRegionId: String(destination?.value ?? ""),
@@ -322,6 +344,7 @@ export function resolveMarketLogistics({ holding = {}, market = {}, regions = []
     originLabel: String(origin?.label ?? market.origin ?? "Неизвестный источник"),
     originStatus: String(origin?.marketStatus ?? "stable"),
     destinationStatus: String(destination?.marketStatus ?? "stable"),
+    sameRegion,
     distance,
     distanceKm,
     distanceText: `${Number.isInteger(distanceKm) ? distanceKm : Number(distanceKm.toFixed(1))} км`,
@@ -341,16 +364,19 @@ export function resolveMarketLogistics({ holding = {}, market = {}, regions = []
     capacityModes,
     baseCapacityLoad,
     capacityLoad: baseCapacityLoad,
-    baseCapacityCargoPoints,
-    capacityCargoPoints: baseCapacityCargoPoints,
     transportLabel: transportMode === "multimodal" ? `Смешанный маршрут: ${usedModes.map((item) => TRANSPORT[item]?.label).filter(Boolean).join(" + ")}` : (mode?.label ?? "Маршрут недоступен"),
     airshipRequired: Boolean(airshipRequired),
     priceFactor: originFactors.price,
+    outboundPriceFactor: originFactors.buyPrice,
+    demandFactor: originFactors.demand,
     stockFactor: originFactors.stock,
     deliveryFactor: originFactors.delivery,
     travelQd,
     riskFactor: originFactors.risk * destinationFactors.risk * seasonalRiskFactor,
-    taxRate: destinationFactors.taxRate,
+    direction,
+    importTaxRate: direction === "outbound" ? originFactors.taxRate : destinationFactors.taxRate,
+    exportTaxRate: direction === "outbound" ? destinationFactors.exportTaxRate : originFactors.exportTaxRate,
+    taxRate: (direction === "outbound" ? originFactors.taxRate + destinationFactors.exportTaxRate : destinationFactors.taxRate + originFactors.exportTaxRate),
     dispatchCopper,
     routeDistanceCopper,
     routeOperatingTimeCopper: operatingTimeBeforeFactorCopper,
@@ -363,4 +389,8 @@ export function resolveMarketLogistics({ holding = {}, market = {}, regions = []
     distanceFlatCopper: mode ? Math.ceil(routeFlatBeforeFactorCopper * originFactors.delivery) + airshipHireCopper : 0,
     distanceLoadCopper: mode ? routeLoadBeforeFactorCopper * originFactors.delivery : 0
   };
+  if (!singleRoute && search.routes.length) result.routeCandidates = search.routes.map((route) => resolveMarketLogistics({
+    holding, market, regions, seasonId, dependencies, direction, selectedRoute: route, singleRoute: true
+  }));
+  return result;
 }

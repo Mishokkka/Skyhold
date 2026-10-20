@@ -4,7 +4,7 @@
       <span class="fbls-tenday-kicker">{{periodLabel}}</span>
       <h1>{{holdingName}}</h1>
       {{#if clock}}
-        <p><i class="fa-regular fa-clock"></i> QD {{clock.before}} → {{clock.after}}{{#if dateText}} · расчёт до {{dateText}}{{/if}}</p>
+        <p><i class="fa-regular fa-clock"></i> QD {{clock.before}} → {{clock.after}}{{#if dateText}} · {{dateText}}{{/if}}</p>
       {{else}}
         <p><i class="fa-regular fa-clock"></i> Подготовка изолированного расчёта</p>
       {{/if}}
@@ -40,9 +40,9 @@
     {{/if}}
 
     {{#if hasPrepared}}
-      <nav class="fbls-tenday-tabs" role="tablist" aria-label="Разделы отчёта десятника">
+      <nav class="fbls-tenday-tabs" data-fbls-tablist="tenday" role="tablist" aria-label="Разделы отчёта десятника">
         {{#each tabs}}
-          <button type="button" class="fbls-tenday-tab {{#if active}}active{{/if}}" data-action="tenday-tab" data-tab="{{id}}" role="tab" aria-selected="{{active}}">
+          <button type="button" class="fbls-tenday-tab {{#if active}}active{{/if}}" data-action="tenday-tab" data-tab="{{id}}" data-fbls-tab-value="{{id}}" role="tab" aria-selected="{{active}}">
             <i class="{{icon}}"></i><span>{{label}}</span>
           </button>
         {{/each}}
@@ -50,7 +50,17 @@
 
       <main class="fbls-tenday-content">
         {{#if activeSummary}}
-          <section class="fbls-tenday-view" role="tabpanel">
+          <section class="fbls-tenday-view" data-fbls-tab-panel="tenday" role="tabpanel">
+            <div class="fbls-tenday-contract-note fbls-cluster">
+              <i class="fa-solid fa-utensils"></i>
+              <label class="fbls-field">
+                <span>Рацион на жителя за десятник</span>
+                <select data-tenday-ration aria-label="Рацион на жителя за десятник" {{#unless isPreview}}disabled{{/unless}}>
+                  {{#each rationOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+                </select>
+              </label>
+              <span>Если запасов не хватает, расчёт автоматически берёт ближайший доступный уровень; голод начинается только ниже 5 ед.</span>
+            </div>
             <div class="fbls-tenday-metrics">
               <article class="fbls-tenday-metric">
                 <i class="fa-solid fa-clock-rotate-left"></i><span>Время</span><strong>{{metrics.clock}}</strong><small>десятник №{{clock.afterPeriod}}</small>
@@ -95,7 +105,7 @@
         {{/if}}
 
         {{#if activeEconomy}}
-          <section class="fbls-tenday-view" role="tabpanel">
+          <section class="fbls-tenday-view" data-fbls-tab-panel="tenday" role="tabpanel">
             {{#if hasEconomySections}}
               <div class="fbls-tenday-section-grid">
                 {{#each economySections}}
@@ -119,7 +129,7 @@
         {{/if}}
 
         {{#if activeEvents}}
-          <section class="fbls-tenday-view" role="tabpanel">
+          <section class="fbls-tenday-view" data-fbls-tab-panel="tenday" role="tabpanel">
             {{#if dueEvents.length}}
               <article class="fbls-tenday-due-events">
                 <header><div><i class="fa-solid fa-calendar-check"></i><h2>Подошли по расписанию</h2></div><span>{{dueEvents.length}}</span></header>
@@ -145,8 +155,8 @@
                       {{/if}}
                       <div class="fbls-tenday-decision-bar">
                         <span class="fbls-tenday-decision-status {{decisionStatus.css}}"><i class="{{decisionStatus.icon}}"></i> {{decisionStatus.label}}</span>
-                        {{#if canApplyDecision}}<button type="button" class="fbls-button compact primary" data-action="tenday-event-apply" data-decision-id="{{decisionId}}"><i class="fa-solid fa-wand-magic-sparkles"></i> Применить</button>{{/if}}
-                        {{#if canScheduleDecision}}<button type="button" class="fbls-button compact" data-action="tenday-event-schedule" data-decision-id="{{decisionId}}"><i class="fa-solid fa-calendar-plus"></i> Отложить</button>{{/if}}
+                        {{#if canApplyDecision}}<button type="button" class="fbls-button fbls-button-role compact primary" data-action="tenday-event-apply" data-decision-id="{{decisionId}}"><i class="fa-solid fa-wand-magic-sparkles"></i> Применить</button>{{/if}}
+                        {{#if canScheduleDecision}}<button type="button" class="fbls-button fbls-button-role compact" data-action="tenday-event-schedule" data-decision-id="{{decisionId}}"><i class="fa-solid fa-calendar-plus"></i> Отложить</button>{{/if}}
                       </div>
                     </article>
                   {{/each}}
@@ -168,7 +178,7 @@
         {{/if}}
 
         {{#if activeChanges}}
-          <section class="fbls-tenday-view" role="tabpanel">
+          <section class="fbls-tenday-view" data-fbls-tab-panel="tenday" role="tabpanel">
             {{#if hasChangeGroups}}
               <div class="fbls-tenday-change-groups">
                 {{#each changeGroups}}
@@ -201,15 +211,15 @@
   {{/if}}
 
   <footer class="fbls-tenday-footer">
-    <button type="button" class="fbls-button" data-action="tenday-close"><i class="fa-solid fa-xmark"></i> Закрыть</button>
+    <button type="button" class="fbls-button fbls-button-role" data-action="tenday-close"><i class="fa-solid fa-xmark"></i> Закрыть</button>
     <div class="fbls-tenday-footer-actions">
       {{#if isPreview}}
-        <button type="button" class="fbls-button primary" data-action="tenday-apply" {{#unless canApply}}disabled{{/unless}}><i class="fa-solid fa-check"></i> Провести десятник</button>
+        <button type="button" class="fbls-button fbls-button-role primary" data-action="tenday-apply" {{#unless canApply}}disabled{{/unless}}><i class="fa-solid fa-check"></i> Провести десятник</button>
       {{/if}}
-      {{#if isStale}}<button type="button" class="fbls-button primary" data-action="tenday-refresh"><i class="fa-solid fa-rotate"></i> Подготовить заново</button>{{/if}}
-      {{#if isError}}<button type="button" class="fbls-button primary" data-action="tenday-refresh"><i class="fa-solid fa-rotate"></i> Повторить расчёт</button>{{/if}}
-      {{#if isResult}}<button type="button" class="fbls-button primary" data-action="tenday-next"><i class="fa-solid fa-forward-step"></i> Следующий десятник</button>{{/if}}
-      {{#if isApplying}}<button type="button" class="fbls-button primary" disabled><i class="fa-solid fa-spinner fa-spin"></i> Запись…</button>{{/if}}
+      {{#if isStale}}<button type="button" class="fbls-button fbls-button-role primary" data-action="tenday-refresh"><i class="fa-solid fa-rotate"></i> Подготовить заново</button>{{/if}}
+      {{#if isError}}<button type="button" class="fbls-button fbls-button-role primary" data-action="tenday-refresh"><i class="fa-solid fa-rotate"></i> Повторить расчёт</button>{{/if}}
+      {{#if isResult}}<button type="button" class="fbls-button fbls-button-role primary" data-action="tenday-next"><i class="fa-solid fa-forward-step"></i> Следующий десятник</button>{{/if}}
+      {{#if isApplying}}<button type="button" class="fbls-button fbls-button-role primary" disabled><i class="fa-solid fa-spinner fa-spin"></i> Запись…</button>{{/if}}
     </div>
   </footer>
 </section>

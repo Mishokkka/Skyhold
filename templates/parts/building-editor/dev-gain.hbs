@@ -1,7 +1,7 @@
     {{#if editDevGain}}
       <section class="fbls-inline-dev-gain-editor" data-fbls-tooltip="Вклад в развитие редактируется здесь. Эти значения прибавляются к отраслевым характеристикам владения, когда здание построено.">
         {{#each building.bonusParts}}
-          <label class="{{css}}"><i class="{{icon}}"></i>{{#if ../canEdit}}<input type="number" data-type="number" data-field="{{path}}" value="{{value}}" />{{else}}<strong>{{value}}</strong>{{/if}}</label>
+          <label class="{{css}}"><i class="{{icon}}"></i>{{#if ../canEdit}}<input class="fbls-control" type="number" data-type="number" data-field="{{path}}" value="{{value}}" />{{else}}<strong>{{value}}</strong>{{/if}}</label>
         {{/each}}
       </section>
     {{/if}}

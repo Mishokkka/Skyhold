@@ -1,0 +1,92 @@
+{{#if isResponsive}}<button type="button" class="fbls-button compact" data-review-demo-width aria-pressed="false" aria-label="Сузить оба образца окна">Узкое окно</button>{{/if}}
+<div class="fbls-ui-review-samples fbls-ui-audit-samples" role="group" aria-label="Практическое сравнение: {{title}}">
+  <div class="fbls-ui-review-sample is-before">
+    <strong class="fbls-ui-review-sample-label">Сейчас</strong>
+    {{#if isFields}}
+      <div class="fbls-ui-audit-fields">
+        <label class="fbls-ui-audit-field old-resource"><span>Название ресурса</span><input type="text" value="Пшеничная мука" readonly aria-label="Текущий пример поля ресурса"></label>
+        <label class="fbls-ui-audit-field old-region"><span>Цена доставки</span><input type="number" value="12" readonly aria-label="Текущий пример поля локации"></label>
+      </div>
+    {{/if}}
+    {{#if isSearch}}
+      <div class="fbls-ui-audit-search old-catalog"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><span>Мука</span></div>
+      <div class="fbls-ui-audit-search old-route"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><span>Лапута</span><small>3</small></div>
+    {{/if}}
+    {{#if isButtons}}
+      <div class="fbls-ui-audit-buttons"><button type="button" class="fbls-button compact" aria-label="Текущий пример сохранения">Сохранить</button><button type="button" class="fbls-button compact" aria-label="Текущий пример отмены">Отмена</button><button type="button" class="fbls-button compact danger" aria-label="Текущий пример удаления">Удалить</button></div>
+    {{/if}}
+    {{#if isHeadings}}
+      <header class="fbls-ui-audit-heading old-politics"><small>ПОЛИТИКА</small><h3>Текущий курс</h3></header>
+      <header class="fbls-ui-audit-heading old-defense"><small>ОБОРОНА</small><h3>Гарнизон</h3></header>
+    {{/if}}
+    {{#if isCallouts}}
+      <div class="fbls-ui-audit-message old-warning">Доставка недоступна</div>
+      <div class="fbls-ui-audit-message old-error"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> Пакет не прочитан</div>
+    {{/if}}
+    {{#if isType}}
+      <div class="fbls-ui-audit-type old-type"><h3>Каталог ресурсов</h3><h4>Общие настройки</h4><p>Редактируйте название и единицу измерения.</p><div>Стоимость доставки: 12 ММ</div></div>
+    {{/if}}
+    {{#if isDensity}}
+      <div class="fbls-ui-audit-density old-loose"><strong>Обычная строка</strong><span>Мука · 12 ММ</span></div>
+      <div class="fbls-ui-audit-density old-dense"><strong>Тесная строка</strong><span>Мука · 12 ММ</span></div>
+    {{/if}}
+    {{#if isChoices}}
+      <div class="fbls-ui-audit-choice old-market"><i class="fa-solid fa-check" aria-hidden="true"></i><span><strong>Зерновой рынок</strong><small>Мука и крупы</small></span></div>
+      <div class="fbls-ui-audit-choice old-transport"><i class="fa-solid fa-square-check" aria-hidden="true"></i><span>Воздушный корабль</span></div>
+    {{/if}}
+    {{#if isNavigation}}
+      <div class="fbls-ui-audit-navigation"><span class="is-selected">Ресурсы</span><span>Предметы</span><span>История</span></div><p class="fbls-ui-audit-caption">Выбранный раздел отмечен только цветом.</p>
+    {{/if}}
+    {{#if isResponsive}}
+      <div class="fbls-ui-audit-window"><strong>Окно локации</strong><div class="fbls-ui-audit-window-fields"><span>Название<br><b>Лапута</b></span><span>Доставка<br><b>12 ММ</b></span></div></div>
+    {{/if}}
+  </div>
+  <div class="fbls-ui-review-sample is-after">
+    <strong class="fbls-ui-review-sample-label">Применено</strong>
+    {{#if isFields}}
+      <div class="fbls-ui-audit-fields">
+        <label class="fbls-field fbls-ui-audit-field"><span>Название ресурса</span><input class="fbls-control" type="text" value="Пшеничная мука" readonly aria-label="Предлагаемый пример поля ресурса"></label>
+        <label class="fbls-field fbls-ui-audit-field"><span>Цена доставки</span><input class="fbls-control" type="number" value="12" readonly aria-label="Предлагаемый пример поля локации"></label>
+      </div>
+    {{/if}}
+    {{#if isSearch}}
+      <div class="fbls-search fbls-ui-audit-search"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><span>Мука</span></div>
+      <div class="fbls-ui-audit-search"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><span>Лапута</span><small>3</small></div>
+    {{/if}}
+    {{#if isButtons}}
+      <div class="fbls-ui-audit-buttons"><button type="button" class="fbls-button fbls-button-role compact primary" aria-label="Предлагаемый пример сохранения">Сохранить</button><button type="button" class="fbls-button fbls-button-role compact" aria-label="Предлагаемый пример отмены">Отмена</button><button type="button" class="fbls-button fbls-button-role compact danger" aria-label="Предлагаемый пример удаления">Удалить</button></div>
+    {{/if}}
+    {{#if isHeadings}}
+      <header class="fbls-section-heading fbls-ui-audit-heading"><small>ПОЛИТИКА</small><h3 class="fbls-heading-section">Текущий курс</h3></header>
+      <header class="fbls-section-heading fbls-ui-audit-heading is-compact"><small>ОБОРОНА</small><h3 class="fbls-heading-section">Гарнизон</h3></header>
+    {{/if}}
+    {{#if isCallouts}}
+      <div class="fbls-callout is-warning fbls-ui-audit-message new-warning"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i><span><strong>Доставка недоступна</strong><small>Проверьте маршрут.</small></span></div>
+      <div class="fbls-callout is-error fbls-ui-audit-message new-error"><i class="fa-solid fa-circle-exclamation" aria-hidden="true"></i><span><strong>Пакет не прочитан</strong><small>Проверьте файл.</small></span></div>
+    {{/if}}
+    {{#if isType}}
+      <div class="fbls-body-text fbls-ui-audit-type"><h3 class="fbls-heading-title">Каталог ресурсов</h3><h4 class="fbls-heading-section">Общие настройки</h4><p>Редактируйте название и единицу измерения.</p><div>Стоимость доставки: 12 ММ</div></div>
+    {{/if}}
+    {{#if isDensity}}
+      <div class="fbls-density-regular fbls-ui-audit-density"><strong>Обычная строка</strong><span>Мука · 12 ММ</span></div>
+      <div class="fbls-density-dense fbls-ui-audit-density is-dense"><strong>Тесная строка</strong><span>Мука · 12 ММ</span></div>
+    {{/if}}
+    {{#if isChoices}}
+      <div class="fbls-choice-card is-selected fbls-ui-audit-choice"><i class="fa-solid fa-check" aria-hidden="true"></i><span><strong>Зерновой рынок</strong><small>Мука и крупы</small></span></div>
+      <div class="fbls-choice-card is-selected is-dense fbls-ui-audit-choice"><i class="fa-solid fa-check" aria-hidden="true"></i><span>Воздушный корабль</span></div>
+    {{/if}}
+    {{#if isNavigation}}
+      <nav class="fbls-ui-audit-navigation" role="tablist" data-review-demo-tablist aria-label="Образец доступных вкладок">
+        <button type="button" role="tab" id="{{id}}-resources-tab" aria-controls="{{id}}-resources-panel" aria-selected="true" tabindex="0" data-review-demo-tab>Ресурсы</button>
+        <button type="button" role="tab" id="{{id}}-items-tab" aria-controls="{{id}}-items-panel" aria-selected="false" tabindex="-1" data-review-demo-tab>Предметы</button>
+        <button type="button" role="tab" id="{{id}}-log-tab" aria-controls="{{id}}-log-panel" aria-selected="false" tabindex="-1" data-review-demo-tab>История</button>
+      </nav>
+      <div role="tabpanel" id="{{id}}-resources-panel" aria-labelledby="{{id}}-resources-tab" class="fbls-ui-audit-caption">Мука · 24 кг</div>
+      <div role="tabpanel" id="{{id}}-items-panel" aria-labelledby="{{id}}-items-tab" class="fbls-ui-audit-caption" hidden>Инструменты · 3 шт.</div>
+      <div role="tabpanel" id="{{id}}-log-panel" aria-labelledby="{{id}}-log-tab" class="fbls-ui-audit-caption" hidden>Последняя поставка: сегодня</div>
+    {{/if}}
+    {{#if isResponsive}}
+      <div class="fbls-ui-audit-window"><strong>Окно локации</strong><div class="fbls-ui-audit-window-fields"><span>Название<br><b>Лапута</b></span><span>Доставка<br><b>12 ММ</b></span></div></div>
+    {{/if}}
+  </div>
+</div>

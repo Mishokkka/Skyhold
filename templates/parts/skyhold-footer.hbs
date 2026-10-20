@@ -1,4 +1,11 @@
   <footer class="fbls-footer">
     <span>{{modeLabel}}</span>
+    {{#if active.people}}
+      <nav class="fbls-people-tabs fbls-action-group" aria-label="Жители и экипажи">
+        {{#each peopleTabs}}
+          <button type="button" class="fbls-button compact {{#if active}}active{{/if}}" data-action="people-subtab" data-people-tab="{{id}}" aria-pressed="{{active}}"><i class="{{icon}}" aria-hidden="true"></i> {{label}} <b>{{this.count}}</b></button>
+        {{/each}}
+      </nav>
+    {{/if}}
     {{#if hasHolding}}<span>{{holdingTypeLabel}} · {{holding.name}}</span>{{/if}}
   </footer>

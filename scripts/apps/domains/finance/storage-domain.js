@@ -1,5 +1,5 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
-import { makeId } from "../../../data/utils.js";
+import { clone, makeId } from "../../../data/utils.js";
 import {
   isMoneyResource,
   normalizeResourceId,
@@ -16,13 +16,22 @@ import { applyStorageBatchMove, planStorageBatchMove } from "../../../engines/st
 import { payStorageCosts } from "../../../engines/storage/payment.js";
 import { planStorageCosts } from "../../../engines/storage/group-payment.js";
 import { addStorageWithOverflow } from "../../../engines/storage/placement.js";
+import { storageProfileLoadMultiplier } from "../../../engines/storage/specialization.js";
 import { resourceMatchesMaterialGroup } from "../../../core/material-groups.js";
 import { economyLedgerStorageRows } from "../../../engines/economy/ledger.js";
 import { FinanceStorageContextDomain } from "./storage/context-domain.js";
 import { FinanceStorageItemDocumentDomain } from "./storage/item-document-domain.js";
 import { composeDomainGroup } from "../compose-domain.js";
-import { addResourceLot, resourceShelfLifeDaysForMode } from "../../../core/resource-lots.js";
-import { consumeAvailableStorageLots, storageAvailableQuantity, storageAvailableUsableQuantity } from "../../../engines/storage/reservations.js";
+import {
+  addResourceBatches,
+  availableResourceBatchInventory,
+  availableResourceRowQuantity,
+  isResourceBatchPeriodActive,
+  protectedResourceBatchIds,
+  splitResourceBatchParts,
+  syncResourceRowBatches,
+  takeResourceBatches
+} from "../../../core/resource-batches.js";
 
 const FinanceStorageCoreDomain = {
 _storageLogRows(holding, roomsArg = null) {
@@ -119,25 +128,13 @@ _storageFind(holding, resource = {}) {
   if (!Array.isArray(holding.storage.resources)) holding.storage.resources = [];
   if (isMoneyResource(resource.resourceId, resource.id, resource.name)) return null;
   const roomId = this._normalizeStorageRoomId(resource.roomId ?? resource.storageRoomId);
-  const exactRowId = String(resource.storageRowId ?? "").trim();
-  if (exactRowId) {
-    return holding.storage.resources.find((row) => (
-      String(row?.id ?? "") === exactRowId
-      && this._normalizeStorageRoomId(row.roomId ?? row.storageRoomId) === roomId
-      && this._storageResourceMatches(row, resource)
-    )) ?? null;
-  }
-  const hasExactRowIndex = resource.storageRowIndex !== undefined && resource.storageRowIndex !== null && resource.storageRowIndex !== "";
-  const exactRowIndex = Number(resource.storageRowIndex);
-  if (hasExactRowIndex && Number.isInteger(exactRowIndex) && exactRowIndex >= 0) {
-    const row = holding.storage.resources[exactRowIndex];
-    return row
-      && this._normalizeStorageRoomId(row.roomId ?? row.storageRoomId) === roomId
-      && this._storageResourceMatches(row, resource)
-      ? row
-      : null;
-  }
-  return holding.storage.resources.find((row) => this._normalizeStorageRoomId(row.roomId ?? row.storageRoomId) === roomId && this._storageResourceMatches(row, resource)) ?? null;
+  const storageRowId = String(resource.storageRowId ?? "").trim();
+  const row = holding.storage.resources.find((candidate) => {
+    if (storageRowId && String(candidate?.id ?? "") !== storageRowId) return false;
+    return this._normalizeStorageRoomId(candidate.roomId ?? candidate.storageRoomId) === roomId && this._storageResourceMatches(candidate, resource);
+  }) ?? null;
+  if (row) syncResourceRowBatches(row, { makeId, compact: !isResourceBatchPeriodActive(holding), protectedBatchIds: protectedResourceBatchIds(holding, row) });
+  return row;
 },
 
 _storageQuantity(holding, resource = {}) {
@@ -149,39 +146,40 @@ _storageQuantity(holding, resource = {}) {
     return (holding?.storage?.resources ?? [])
       .filter((row) => !hasRoom || this._normalizeStorageRoomId(row.roomId ?? row.storageRoomId) === roomId)
       .filter((row) => this._storageResourceMatchesGroup(row, resourceGroup))
-      .reduce((sum, row) => sum + this._storageAvailableQuantity(holding, row), 0);
+      .reduce((sum, row) => sum + availableResourceRowQuantity(row, holding), 0);
   }
-  if (hasRoom) return this._storageAvailableQuantity(holding, this._storageFind(holding, resource));
+  if (hasRoom) return availableResourceRowQuantity(this._storageFind(holding, resource), holding);
   return (holding?.storage?.resources ?? [])
     .filter((row) => this._storageResourceMatches(row, resource))
-    .reduce((sum, row) => sum + this._storageAvailableQuantity(holding, row), 0);
+    .reduce((sum, row) => sum + availableResourceRowQuantity(row, holding), 0);
 },
 
-_storageAvailableQuantity(holding, row = null) {
-  if (!row) return 0;
-  return storageAvailableQuantity(holding, row);
+_storageAvailableRowQuantity(holding, row = {}) {
+  return availableResourceRowQuantity(row, holding);
 },
 
 _storageAdd(holding, resource = {}, qty = 0) {
-  if (!qty) return null;
+  const amount = Math.trunc(this._safeNumber(qty, 0));
+  if (!amount) return null;
   if (!holding.storage) holding.storage = { notes: "", resources: [], moneyCopper: 0, log: [] };
   if (!Array.isArray(holding.storage.resources)) holding.storage.resources = [];
   const id = normalizeResourceId(resource.resourceId, resource.id, resource.name);
   if (isMoneyResource(id, resource.name)) {
-    this._addMoney(holding, qty);
+    this._addMoney(holding, amount);
     return { id: "money", resourceId: "money", name: "Деньги", qty: this._moneyCopper(holding), unit: "медн.", notes: "" };
   }
   const name = id === "custom" ? String(resource.name ?? "Ресурс") : resourceLabel(id);
   const roomId = this._normalizeStorageRoomId(resource.roomId ?? resource.storageRoomId);
-  let row = this._storageFind(holding, { resourceId: id, name, roomId });
-  if (!row && qty < 0) return null;
+  let row = this._storageFind(holding, { resourceId: id, name, roomId, storageRowId: resource.storageRowId });
+  if (!row && amount < 0) return null;
   if (!row) {
     row = {
       id: makeId("res", 12),
       resourceId: id,
       name,
       qty: 0,
-      unit: resourceUnit(id, name),
+      batches: [],
+      unit: "ед.",
       img: id === "custom" ? String(resource.img ?? "") : resourceImage(id),
       itemUuid: resource.itemUuid || resourceItemUuid(id),
       itemId: resource.itemId || resourceDef(id)?.itemId || "",
@@ -195,59 +193,27 @@ _storageAdd(holding, resource = {}, qty = 0) {
   }
   row.resourceId = id;
   row.name = name;
-  row.unit = resourceUnit(id, name);
+  row.unit = "ед.";
   row.img = id === "custom" ? (row.img || resource.img || "") : resourceImage(id);
   row.itemUuid = row.itemUuid || resource.itemUuid || resourceItemUuid(id);
   row.itemId = row.itemId || resource.itemId || resourceDef(id)?.itemId || "";
   row.itemType = row.itemType || resource.itemType || resourceDef(id)?.itemType || "";
   row.cost = row.cost || resource.cost || resourceDef(id)?.cost || "";
-  if (resource.cargoPoints !== undefined && resource.cargoPoints !== null && resource.cargoPoints !== "") {
-    row.cargoPoints = Math.max(0, Math.ceil(this._safeNumber(resource.cargoPoints, 0)));
-  }
-  if (resource.weight !== undefined && resource.weight !== null && resource.weight !== "") row.weight = resource.weight;
-  if (resource.load !== undefined && resource.load !== null && resource.load !== "") row.load = Math.max(0, this._safeNumber(resource.load, 0));
   row.roomId = roomId;
-  const currentQd = Math.max(0, this._safeNumber(resource.receivedQd ?? resource.acquiredQd ?? holding?.gm?.calendaria?.lastQd, 0));
-  const definition = resourceDef(id);
-  const shelfLifeDays = resourceShelfLifeDaysForMode({ ...row, ...resource }, definition);
-  if (qty > 0) {
-    addResourceLot(row, qty, {
-      currentQd,
-      shelfLifeDays,
-      source: resource.lotSource ?? resource.source ?? "",
-      lots: resource.lots
-    });
-  } else {
-    consumeAvailableStorageLots(holding, row, Math.abs(qty), { currentQd, shelfLifeDays });
-  }
+  if (amount > 0) {
+    const input = Object.prototype.hasOwnProperty.call(resource, "batches")
+      ? { batches: resource.batches }
+      : { qty: amount, ageQd: resource.ageQd };
+    addResourceBatches(row, input, { holding, makeId });
+  } else takeResourceBatches(row, Math.abs(amount), { holding, makeId });
   return row;
 },
 
-_storageTakeLots(holding, resource = {}, qty = 0, { usableAtQd = null } = {}) {
-  const row = resource?.qty !== undefined && (holding?.storage?.resources ?? []).includes(resource)
-    ? resource
-    : this._storageFind(holding, resource);
-  if (!row) return [];
-  const id = normalizeResourceId(row.resourceId, row.id, row.name);
-  const currentQd = Math.max(0, this._safeNumber(holding?.gm?.calendaria?.lastQd, 0));
-  const shelfLifeDays = resourceShelfLifeDaysForMode(row, resourceDef(id));
-  const roomId = String(row?.roomId ?? row?.storageRoomId ?? "outdoors") || "outdoors";
-  const storageQuality = Math.max(0, this._safeNumber(this._storageRooms(holding, { includeUnavailable: true }).find((room) => String(room?.id ?? "") === roomId)?.quality, 0));
-  return consumeAvailableStorageLots(holding, row, qty, {
-    currentQd,
-    shelfLifeDays,
-    usableAtQd,
-    storageQuality
-  });
-},
-
-_storageUsableQuantityAtQd(holding, row = {}, targetQd = 0) {
-  const id = normalizeResourceId(row.resourceId, row.id, row.name);
-  const currentQd = Math.max(0, this._safeNumber(holding?.gm?.calendaria?.lastQd, 0));
-  const shelfLifeDays = resourceShelfLifeDaysForMode(row, resourceDef(id));
-  const roomId = String(row?.roomId ?? row?.storageRoomId ?? "outdoors") || "outdoors";
-  const storageQuality = Math.max(0, this._safeNumber(this._storageRooms(holding, { includeUnavailable: true }).find((room) => String(room?.id ?? "") === roomId)?.quality, 0));
-  return storageAvailableUsableQuantity(holding, row, { currentQd, shelfLifeDays, usableAtQd: targetQd, storageQuality });
+_storageTake(holding, resource = {}, qty = 0) {
+  const amount = Math.max(0, Math.floor(this._safeNumber(qty, 0)));
+  const row = this._storageFind(holding, resource);
+  if (!row || !amount) return { requested: amount, takenQty: 0, batches: [], shortfall: amount, row: row ?? null };
+  return { ...takeResourceBatches(row, amount, { holding, makeId }), row };
 },
 
 _storageAddWithOverflow(holding, resource = {}, qty = 0) {
@@ -267,7 +233,9 @@ _storagePlacementDependencies() {
     normalizeStorageRoomId: (roomId) => this._normalizeStorageRoomId(roomId),
     storageRooms: (holding, options) => this._storageRooms(holding, options),
     storageAdd: (holding, resource, qty) => this._storageAdd(holding, resource, qty),
-    storageUnitLoad: (resource) => this._storageUnitLoad(resource)
+    splitTransferBatches: (batches, qty) => splitResourceBatchParts(batches, qty),
+    storageUnitLoad: (resource) => this._storageUnitLoad(resource),
+    storageProfileLoadMultiplier
   };
 },
 
@@ -288,20 +256,33 @@ _storageCanPay(holding, costs = []) {
   });
 },
 
-_storagePay(holding, costs = []) {
+_storagePay(holding, costs = [], { captureReceipt = false } = {}) {
   const plan = this._storageCanPay(holding, costs);
   if (!plan.ok) return plan;
-  payStorageCosts({
+  const receipt = payStorageCosts({
     holding,
     costs: plan.costs,
+    captureReceipt,
     dependencies: this._storagePaymentDependencies()
   });
-  return plan;
+  return captureReceipt ? { ...plan, receipt } : plan;
+},
+
+_restoreProductionResource(holding, resource, qty) {
+  // Recreate the original custom metadata if its empty inventory row was removed.
+  if (!this._storageFind(holding, resource)) {
+    const row = { ...resource, qty: 0, batches: [] };
+    delete row.storageRowId;
+    holding.storage.resources.push(row);
+  }
+  return this._storageAdd(holding, resource, qty);
 },
 
 _storageResourceMatchesGroup(row = {}, groupId = "") {
   const id = normalizeResourceId(row.resourceId, row.id, row.name);
-  return resourceMatchesMaterialGroup(row, groupId, id === "custom" ? null : resourceDef(id));
+  const definition = id === "custom" ? null : resourceDef(id);
+  if (row.noAutoConsume === true || definition?.noAutoConsume === true) return false;
+  return resourceMatchesMaterialGroup(row, groupId, definition);
 },
 
 _storageCostPlanningDependencies() {
@@ -310,8 +291,8 @@ _storageCostPlanningDependencies() {
     isMoneyResource,
     storageResourceMatches: (row, resource) => this._storageResourceMatches(row, resource),
     resourceMatchesGroup: (row, groupId) => this._storageResourceMatchesGroup(row, groupId),
-    storageAvailableQuantity: (holding, row) => this._storageAvailableQuantity(holding, row),
-    normalizeRoomId: (roomId) => this._normalizeStorageRoomId(roomId)
+    normalizeRoomId: (roomId) => this._normalizeStorageRoomId(roomId),
+    resourceBatches: (row, holding) => availableResourceBatchInventory(row, holding)
   };
 },
 
@@ -322,8 +303,8 @@ _storagePaymentDependencies() {
     storageQuantity: (holding, resource) => this._storageQuantity(holding, resource),
     addMoney: (holding, amount) => this._addMoney(holding, amount),
     storageAdd: (holding, resource, qty) => this._storageAdd(holding, resource, qty),
-    storageResourceMatches: (row, resource) => this._storageResourceMatches(row, resource),
-    storageAvailableQuantity: (holding, row) => this._storageAvailableQuantity(holding, row)
+    storageTake: (holding, resource, qty) => this._storageTake(holding, resource, qty),
+    storageResourceMatches: (row, resource) => this._storageResourceMatches(row, resource)
   };
 },
 
@@ -333,7 +314,7 @@ _appendStorageLog(holding, entries = []) {
   const now = new Date().toISOString();
   const laputaDateText = String(holding?.gm?.calendaria?.lastDateText ?? holding?.gm?.calendaria?.lastDateKey ?? "").trim();
   for (const raw of entries) {
-    const qty = this._safeNumber(raw?.qty, 0);
+    const qty = Math.trunc(this._safeNumber(raw?.qty, 0));
     if (!qty && raw?.kind !== "note") continue;
     const id = normalizeResourceId(raw?.resourceId, raw?.name);
     const name = id === "custom" ? String(raw?.name ?? "Ресурс") : resourceLabel(id);
@@ -356,8 +337,8 @@ _appendStorageLog(holding, entries = []) {
   holding.storage.log = holding.storage.log.slice(-250);
 },
 
-_applyManualStorageChange(holding, { resourceId = "custom", name = "", qty = 0, note = "", kind = "manual-add", roomId = "outdoors" } = {}) {
-  const amount = this._safeNumber(qty, 0);
+_applyManualStorageChange(holding, { resourceId = "custom", name = "", qty = 0, note = "", kind = "manual-add", roomId = "outdoors", operationId = "" } = {}) {
+  const amount = Math.trunc(this._safeNumber(qty, 0));
   if (!amount) return { ok: false, message: "Укажи количество." };
   const id = normalizeResourceId(resourceId, name);
   const label = id === "custom" ? (String(name).trim() || "Ресурс") : resourceLabel(id);
@@ -372,8 +353,8 @@ _applyManualStorageChange(holding, { resourceId = "custom", name = "", qty = 0, 
     this._storageAdd(holding, { resourceId: id, name: label, roomId: targetRoom }, amount);
   }
   const entries = amount > 0 && placements.length
-    ? placements.map((item) => ({ kind, resourceId: id, name: label, qty: item.qty, roomId: item.roomId, source: "Ручная правка", note: item.overflowFrom ? [note, `переполнение: ${this._storageRoomLabel(holding, item.overflowFrom)}`].filter(Boolean).join(" · ") : note }))
-    : [{ kind, resourceId: id, name: label, qty: amount, roomId: targetRoom, source: "Ручная правка", note }];
+    ? placements.map((item) => ({ kind, resourceId: id, name: label, qty: item.qty, roomId: item.roomId, source: "Ручная правка", note: item.overflowFrom ? [note, `переполнение: ${this._storageRoomLabel(holding, item.overflowFrom)}`].filter(Boolean).join(" · ") : note, operationId }))
+    : [{ kind, resourceId: id, name: label, qty: amount, roomId: targetRoom, source: "Ручная правка", note, operationId }];
   this._appendStorageLog(holding, entries);
   const suffix = isMoneyResource(id, label) ? "" : (amount > 0 ? `; ${this._storagePlacementText(holding, placements)}` : ` → ${this._storageRoomLabel(holding, targetRoom)}`);
   return { ok: true, message: `${label}: ${amount > 0 ? "+" : ""}${this._formatNumber(amount)}${suffix}.` };
@@ -399,10 +380,20 @@ _storageBatchMoveDependencies() {
     itemQuantity: (row) => this._itemQuantity(row),
     storageRooms: (holding, options) => this._storageRooms(holding, options),
     storageRowLoad: (row) => this._storageRowLoad(row),
-    storageAvailableQuantity: (holding, row) => this._storageAvailableQuantity(holding, row),
     storageRoomLabel: (holding, roomId) => this._storageRoomLabel(holding, roomId),
     addResourceWithOverflow: (holding, resource, qty) => this._storageAddWithOverflow(holding, resource, qty),
-    takeResourceLots: (holding, resource, qty) => this._storageTakeLots(holding, resource, qty),
+    clone,
+    makeId,
+    setItemQuantity: (row, qty) => {
+      const amount = Math.max(1, Math.floor(this._safeNumber(qty, 1)));
+      row.qty = amount;
+      if (row.quantity !== undefined) row.quantity = amount;
+      if (row.itemData?.system && typeof row.itemData.system === "object") row.itemData.system.quantity = amount;
+      if (row.system && typeof row.system === "object") row.system.quantity = amount;
+      return row;
+    },
+    takeResourceRow: (holding, row, qty) => takeResourceBatches(row, qty, { holding, makeId }),
+    resourceAvailableQuantity: (holding, row) => this._storageAvailableRowQuantity(holding, row),
     appendStorageLog: (holding, entries) => this._appendStorageLog(holding, entries),
     formatNumber: (value) => this._formatNumber(value)
   };
@@ -433,11 +424,11 @@ _storageMoveDependencies() {
     resourceLabel,
     resourceUnit,
     storageFind: (holding, resource) => this._storageFind(holding, resource),
+    storageAvailableQuantity: (holding, row) => this._storageAvailableRowQuantity(holding, row),
     storageUnitLoad: (resource) => this._storageUnitLoad(resource),
-    storageAvailableQuantity: (holding, row) => this._storageAvailableQuantity(holding, row),
     storageAdd: (holding, resource, qty) => this._storageAdd(holding, resource, qty),
+    storageTake: (holding, resource, qty) => this._storageTake(holding, resource, qty),
     storageAddWithOverflow: (holding, resource, qty) => this._storageAddWithOverflow(holding, resource, qty),
-    takeResourceLots: (holding, resource, qty) => this._storageTakeLots(holding, resource, qty),
     storageRoomLabel: (holding, roomId) => this._storageRoomLabel(holding, roomId),
     appendStorageLog: (holding, entries) => this._appendStorageLog(holding, entries),
     storagePlacementText: (holding, placements) => this._storagePlacementText(holding, placements),

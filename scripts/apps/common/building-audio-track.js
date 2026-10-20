@@ -1,3 +1,4 @@
+import { FloatingTooltipsMixin } from "./floating-tooltip.js";
 import { MODULE_ID } from "../../data/constants.js";
 import { fieldValue } from "../../core/helpers.js";
 import { bindGlobalInputGuard, bindInputGuards, unbindGlobalInputGuard } from "../../utils/input-guards.js";
@@ -162,10 +163,6 @@ function createTrackButton(building = {}, onPick = null, onClear = null) {
     onClear?.(event);
   });
   return button;
-}
-
-export function buildingAudioTrack(building = {}) {
-  return audioSourceLabel(building?.audio ?? {});
 }
 
 export function syncBuildingAudioTrackHeader(app, root, { building = null, canManage = false, onPick = null, onClear = null } = {}) {
@@ -400,15 +397,6 @@ export async function setBuildingAudioConfig(app, config = {}, { reason = "build
   return true;
 }
 
-export async function setBuildingAudioTrack(app, track = "", { reason = "building-audio-track:set" } = {}) {
-  return setBuildingAudioConfig(app, {
-    mode: "file",
-    src: String(track ?? "").trim(),
-    volume: DEFAULT_AUDIO_VOLUME,
-    loop: true
-  }, { reason });
-}
-
 function selectedOptions(options = [], selectedValue = "") {
   const selected = String(selectedValue ?? "");
   return options.map((option) => ({ ...option, selected: String(option.value) === selected }));
@@ -437,7 +425,7 @@ function soundOptions(playlistId = "", selectedValue = "") {
   })).filter((option) => option.value && option.path), selectedValue);
 }
 
-class SkyholdBuildingAudioTrackEditor extends RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2)) {
+class SkyholdBuildingAudioTrackEditor extends FloatingTooltipsMixin(RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2))) {
   constructor({ owner = null, reason = "building-audio-track:set" } = {}, options = {}) {
     super(options);
     this.owner = owner;

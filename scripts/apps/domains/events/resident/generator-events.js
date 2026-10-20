@@ -1,7 +1,7 @@
 import { SkyholdData } from "../../../../data/store.js";
 import { makeId } from "../../../../data/utils.js";
 import { generateResidents } from "../../../../generators/resident-generator.js";
-import { ageGroupFromAge, normalizeBelief } from "../../../../generators/resident-rules.js";
+import { ageGroupFromAge, normalizeBelief, normalizeResidentAttribute } from "../../../../generators/resident-rules.js";
 import { fieldValue } from "../../../../core/helpers.js";
 import { foundryActorClass, resolveFoundryUuid } from "../../../../integrations/foundry-runtime.js";
 
@@ -31,7 +31,8 @@ _onGenerateResidents(event) {
   if (!game.user?.isGM) return;
 
   const data = SkyholdData.get();
-  const holding = data.holdings.find((item) => item.id === this.activeHoldingId) ?? data.holdings[0];
+  const holding = data.holdings.find((item) => item.id === this.activeHoldingId);
+  if (!holding) { this._warnNoActiveHolding(); return; }
   this.generatorPreview = generateResidents({
     ...this.generatorConfig,
     holding
@@ -50,7 +51,10 @@ _onGeneratedPersonFieldChange(event) {
   const key = String(field?.dataset?.generatorPersonField ?? "");
   if (!Number.isInteger(index) || index < 0 || !key || !this.generatorPreview?.[index]) return;
   let value = fieldValue(field);
-  if (["age", "salary", "boardFoodDaily", "shareRate", "moraleBase", "moraleWork", "moraleHome", "moraleManual", "attributes.strength", "attributes.agility", "attributes.wits", "attributes.empathy"].includes(key)) {
+  const attributeFields = new Set(["attributes.strength", "attributes.agility", "attributes.wits", "attributes.empathy"]);
+  if (attributeFields.has(key)) {
+    value = normalizeResidentAttribute(value, 3);
+  } else if (["age", "salary", "moraleBase", "moraleWork", "moraleHome", "moraleManual"].includes(key)) {
     const parsed = Number(value);
     value = Number.isFinite(parsed) ? parsed : 0;
   }
@@ -158,7 +162,7 @@ _residentFromActorGenerated(actor, holding = null) {
   const valueToText = (value) => {
     if (Array.isArray(value)) return value.map((item) => valueToText(item)).filter(Boolean).join(", ");
     if (value && typeof value === "object") {
-      const candidate = value.name ?? value.label ?? value.value ?? value.id ?? "";
+      const candidate = value.value ?? value.name ?? value.label ?? value.id ?? "";
       return typeof candidate === "object" ? "" : String(candidate ?? "").trim();
     }
     return String(value ?? "").trim();
@@ -172,26 +176,27 @@ _residentFromActorGenerated(actor, holding = null) {
   };
   const actorNumber = (...paths) => {
     for (const path of paths) {
-      const value = Number(foundry.utils.getProperty(actor, path));
+      const raw = foundry.utils.getProperty(actor, path);
+      const value = Number(raw?.value ?? raw);
       if (Number.isFinite(value) && value > 0) return Math.floor(value);
     }
     return null;
   };
-  const generatedAttrs = generated.attributes ?? {};
   const attrs = {
-    strength: generatedAttrs.strength,
-    agility: generatedAttrs.agility,
-    wits: generatedAttrs.wits,
-    empathy: generatedAttrs.empathy
+    strength: 3,
+    agility: 3,
+    wits: 3,
+    empathy: 3
   };
   for (const key of Object.keys(attrs)) {
     const actorValue = this._actorAttribute(actor, key);
-    if (Number.isFinite(Number(actorValue)) && Number(actorValue) > 0) attrs[key] = Math.floor(Number(actorValue));
+    if (Number.isFinite(Number(actorValue)) && Number(actorValue) > 0) attrs[key] = normalizeResidentAttribute(actorValue, 3);
   }
 
-  const age = actorNumber("system.age", "system.details.age");
-  const race = actorString("system.race", "system.details.race") || generated.race || "Человек";
+  const age = actorNumber("system.bio.age", "system.age", "system.details.age");
+  const race = actorString("system.bio.kin", "system.race", "system.details.race") || generated.race || "Человек";
   const subrace = actorString("system.kin", "system.details.kin", "system.subrace", "system.details.subrace") || generated.subrace || "";
+  const background = actorString("system.bio.profession", "system.background", "system.details.background", "system.profession", "system.details.profession") || generated.background || "";
   const traitsText = actorString("system.traitsText", "system.traits", "system.details.traits", "system.bio.traits");
   const actorNote = `Создан из Actor ${actor?.name ?? ""}.`;
   const notes = [generated.notes, actorNote].map((value) => String(value ?? "").trim()).filter(Boolean).join("\n");
@@ -205,12 +210,13 @@ _residentFromActorGenerated(actor, holding = null) {
     ageGroup: age ? ageGroupFromAge(age, race, subrace) : generated.ageGroup,
     culture: actorString("system.culture", "system.details.culture") || generated.culture || "",
     belief: normalizeBelief(actorString("system.belief", "system.faith", "system.details.belief", "system.details.faith") || generated.belief || ""),
-    background: actorString("system.background", "system.details.background", "system.profession", "system.details.profession") || generated.background || "",
+    background,
     race,
     subrace,
     attributes: attrs,
     traitsText: traitsText || generated.traitsText || "",
-    appearance: actorString("system.appearance", "system.description.appearance", "system.details.appearance") || generated.appearance || "",
+    appearance: [actorString("system.bio.face"), actorString("system.bio.body"), actorString("system.bio.clothing")].filter(Boolean).join("; ")
+      || actorString("system.appearance", "system.description.appearance", "system.details.appearance") || generated.appearance || "",
     notes,
     actorUuid: actor?.uuid ?? ""
   };
@@ -242,8 +248,8 @@ async _onResidentActorDrop(event) {
   }, { reason: "resident:actor-drop" });
   if (!person) return;
   this.activeTab = "people";
-  this.editingPersonId = person.id;
   this.requestRender();
+  await this._openResidentEditor(person.id, event.currentTarget);
   ui.notifications.info(`${person.name} добавлен как житель.`);
 }
 };

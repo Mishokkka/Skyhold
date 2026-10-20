@@ -1,0 +1,61 @@
+<section class="fbls-content-pack-shell">
+  <header class="fbls-content-pack-head">
+    <div>
+      <h2><i class="fa-solid fa-shield-halved"></i> Миграция экономики Лапуты</h2>
+      <p>Одноразовый перенос из утверждённого снимка с чистой установкой встроенных материалов и рынка. Файл проверяется по SHA-256 и точному составу данных до любой записи.</p>
+    </div>
+    {{#if hasPlan}}<button type="button" class="fbls-button compact" data-action="laputa-migration-clear"><i class="fa-solid fa-xmark"></i> Очистить</button>{{/if}}
+  </header>
+
+  {{#if status}}<p class="fbls-content-pack-summary"><span>{{status}}</span></p>{{/if}}
+  {{#if markerExists}}
+    <article class="fbls-content-pack-summary">
+      <div>
+        <strong>{{#if migrationUpgradeAvailable}}Доступно обновление миграции{{else}}Миграция уже применена{{/if}}</strong>
+        <span>Версия {{migrationVersion}} · операция {{migrationOperationId}}{{#if migrationCreatedAt}} · {{migrationCreatedAt}}{{/if}}</span>
+        {{#if migrationUpgradeAvailable}}<small>Можно применить миграцию v{{targetMigrationVersion}} и рынок v{{targetMarketPackVersion}} поверх этой версии. Перед записью текущее состояние станет новой точной rollback-копией.</small>{{/if}}
+      </div>
+      {{#if canRollback}}
+        <button type="button" class="fbls-button danger" data-action="laputa-migration-rollback"><i class="fa-solid fa-rotate-left"></i> Откатить к revision {{rollbackRevision}}</button>
+      {{else}}
+        {{#if rollbackUnavailable}}<span class="fbls-content-pack-error"><i class="fa-solid fa-triangle-exclamation"></i> Точная rollback-копия этой миграции недоступна; автоматический откат заблокирован.</span>{{/if}}
+      {{/if}}
+    </article>
+  {{/if}}
+
+  {{#unless migrationApplied}}
+    <label class="fbls-content-pack-file">
+      <input class="fbls-content-pack-native-file" type="file" accept="application/json,.json" data-laputa-migration-file />
+      <i class="fa-solid fa-file-shield"></i>
+      <span><strong>Снимок мира до миграции</strong><small>{{#if fileName}}{{fileName}}{{else}}Выберите утверждённый JSON-снимок Лапуты{{/if}}</small></span>
+      <span class="fbls-content-pack-file-action"><i class="fa-solid fa-folder-open"></i> Выбрать JSON</span>
+    </label>
+  {{/unless}}
+
+  {{#if error}}<p class="fbls-content-pack-error"><i class="fa-solid fa-triangle-exclamation"></i> {{error}}</p>{{/if}}
+
+  {{#if hasPlan}}
+    <article class="fbls-content-pack-summary">
+      <div><strong>Снимок подтверждён</strong><span>{{fileName}} · SHA-256 {{sourceHash}}</span></div>
+      <span class="fbls-status-pill ok"><i class="fa-solid fa-check"></i> Preview готов</span>
+    </article>
+
+    <div class="fbls-content-pack-preview">
+      <article class="fbls-content-pack-row update"><div><strong>Лапута</strong><small>Единственное target-поселение</small></div><span>{{preview.residents}} жителей: {{preview.livingResidents}} живых, {{preview.deadResidents}} погибших</span></article>
+      <article class="fbls-content-pack-row update"><div><strong>Постройки</strong><small>Новые шаблоны, старые instance ID</small></div><span>{{preview.buildings}} зданий · назначения очищены</span></article>
+      <article class="fbls-content-pack-row update"><div><strong>Казна и склад</strong><small>Новая экономика</small></div><span>{{preview.moneyCopper}} ММ · складских строк {{preview.storageRows}}</span></article>
+      <article class="fbls-content-pack-row reset"><div><strong>Старый каталог и рынок</strong><small>Полная замена без смешивания</small></div><span>{{preview.resourceRowsReplaced}} строк материалов · {{preview.marketRowsReplaced}} рыночных строк удаляются</span></article>
+      <article class="fbls-content-pack-row update"><div><strong>Новые материалы</strong><small>Единый набор экономики v{{preview.resourceCatalogVersion}}</small></div><span>{{preview.resourceCatalogRows}} товаров · {{preview.marketBaseOffers}} базовых предложений</span></article>
+      <article class="fbls-content-pack-row update"><div><strong>Рынок Воздушных Островов v{{preview.marketPackVersion}}</strong><small>Страны, локации, специализации, организации и карта маршрутов</small></div><span>{{preview.marketLocations}} локаций · {{preview.marketCountries}} стран · {{preview.marketSpecialties}} специализаций · {{preview.marketOrganizations}} организаций</span></article>
+      <article class="fbls-content-pack-row update"><div><strong>Поголовье</strong><small>Pasture</small></div><span>{{preview.cattle}} cattle, включая {{preview.breedingBulls}} breeding male</span></article>
+      {{#if hasRemovedHoldings}}
+        <article class="fbls-content-pack-row reset"><div><strong>Удаляемые поселения</strong><small>Не переносятся в target</small></div><span>{{#each removedHoldingIds}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}</span></article>
+      {{/if}}
+    </div>
+
+    <footer class="fbls-content-pack-actions">
+      <p>Операция атомарна. Отдельно импортировать материалы или рынок не нужно. Перед записью текущий root будет сохранён как точная rollback-копия. Повтор той же операции не создаёт дубликаты.</p>
+      <button type="button" class="fbls-button primary" data-action="laputa-migration-apply" {{#unless canApply}}disabled{{/unless}}><i class="fa-solid fa-shield-halved"></i> Применить миграцию</button>
+    </footer>
+  {{/if}}
+</section>

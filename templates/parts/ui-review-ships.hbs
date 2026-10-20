@@ -1,0 +1,120 @@
+<section class="fbls-review-ships fbls-stack" data-ship-review aria-label="Сравнение окна своих кораблей">
+  <div class="fbls-toolbar">
+    <div class="fbls-action-group" role="group" aria-label="Вариант окна">{{#each variants}}<button type="button" class="fbls-subnav-tab {{#if selected}}active{{/if}}" data-ship-review-variant="{{id}}" aria-pressed="{{selected}}" data-fbls-tooltip="{{hint}}">{{label}}</button>{{/each}}</div>
+  </div>
+  <div class="fbls-toolbar fbls-review-ship-controls">
+    <label class="fbls-field"><span>Состояние корабля</span><select class="fbls-control" data-ship-review-setting="scenario">{{#each scenarios}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+    <label class="fbls-field"><span>Права в примере</span><select class="fbls-control" data-ship-review-setting="permission">{{#each permissions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+    <label class="fbls-field"><span>Ширина образца</span><select class="fbls-control" data-ship-review-setting="width">{{#each widths}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+  </div>
+  <p class="fbls-muted-text">{{variantHint}} Данные вымышленные; ширина ограничена доступным местом в окне.</p>
+  <div class="fbls-review-ship-frame" data-ship-review-width="{{width}}" data-ship-review-variant-view="{{variant}}" data-ship-review-scenario="{{scenario}}" data-ship-review-permission="{{permission}}">
+  {{#if isCurrent}}
+    <div class="fbl-skyhold fbl-skyhold-ship fbls-review-ship-current">{{{currentHtml}}}</div>
+  {{else}}
+    <article class="fbls-review-ship-proposed" aria-label="Предлагаемое окно корабля">
+      <header class="fbls-review-ship-heading fbls-card-header">
+        <div><h2 class="fbls-heading-title"><i class="fa-solid fa-ship" aria-hidden="true"></i> {{ship.name}}</h2><span class="fbls-muted-text">{{ship.locationLabel}} · {{ship.commanderName}} · {{ship.profileLabel}}</span></div>
+        <span class="fbls-chip is-compact">{{ship.statusLabel}}</span>
+      </header>
+      <div class="fbls-review-ship-body">
+        <nav class="fbls-review-ship-nav" aria-label="Разделы образца">{{#each tabs}}<button type="button" class="fbls-subnav-tab {{#if active}}active{{/if}}" data-ship-review-panel="{{id}}" aria-pressed="{{active}}">{{label}}</button>{{/each}}</nav>
+        <div class="fbls-review-ship-main" data-render-scroll-key="ship-review-{{variant}}-{{panel}}">
+          <div class="fbls-review-ship-strip fbls-cluster" aria-label="Состояние корабля">
+            <span data-fbls-tooltip="Готовые к отправлению моряки / требуемый состав" tabindex="0"><i class="fa-solid fa-users" aria-hidden="true"></i> {{readyCount}} / 6</span>
+            <span data-fbls-tooltip="Занято в трюме / полная вместимость, ед. груза" tabindex="0"><i class="fa-solid fa-box" aria-hidden="true"></i> {{ship.occupiedLoadPoints}} / 100</span>
+            <span data-fbls-tooltip="Деньги бортового кошелька; дома отдельно доступна казна" tabindex="0"><i class="fa-solid fa-coins" aria-hidden="true"></i> На борту {{ship.walletGold}} ЗМ</span>
+            {{#if atHome}}<span data-fbls-tooltip="Деньги поселения доступны кораблю только дома" tabindex="0">Казна {{fblsShipGold ship.moneySummary.settlementCopper}} ЗМ</span>{{/if}}
+          </div>
+          {{#unless canAct}}<p class="fbls-callout is-info">Только просмотр · действия недоступны</p>{{/unless}}
+          {{#if blocked}}<div class="fbls-callout is-warning"><strong>Отправление недоступно</strong><p>Команда 4 / 6 · на выбранный рейс не хватает денег.</p><div class="fbls-action-group"><button type="button" class="fbls-button fbls-button-role" data-ship-review-panel="crew">Проверить экипаж</button><button type="button" class="fbls-button fbls-button-role" data-ship-review-panel="finance">Проверить деньги</button></div></div>{{/if}}
+
+          {{#if showOrders}}
+            {{#if active}}
+              <section class="fbls-review-ship-box fbls-stack"><div class="fbls-card-header"><h3 class="fbls-heading-section">{{#if ownSale}}Доставка собственного груза{{else}}Скайхолд → Ассур{{/if}}</h3><span class="fbls-chip is-compact">В пути</span></div>
+                <p>Зерно · 60 ед. · {{#if ownSale}}товар поселения{{else}}груз заказчика{{/if}}</p>
+                <progress value="2" max="4" aria-label="Учтено два из четырёх дней рейса"></progress><div class="fbls-card-header"><span>Учтено 2 из 4 дней</span><strong>Осталось 2 дня</strong></div>
+                <p class="fbls-muted-text">Корабельное время учитывается при расчёте поселения.</p>
+                {{#if ownSale}}<button type="button" class="fbls-button fbls-button-role primary" data-ship-review-demo="sale">Открыть продажу во Внешнем рынке</button>{{else}}<button type="button" class="fbls-button fbls-button-role" disabled data-fbls-tooltip="Итог доступен после прибытия">Подвести итог · после прибытия</button>{{/if}}
+                <details><summary>Маршрут и ожидаемые поступления</summary><p>Скайхолд → Ассур · ожидаемая плата 34 ЗМ. Она ещё не поступила на борт и не входит в доступные средства.</p></details>
+              </section>
+            {{else}}
+              <div class="fbls-card-header"><h3 class="fbls-heading-section">{{#if atHome}}Следующий рейс{{else}}Заказы в Ассуре{{/if}}</h3><div class="fbls-action-group"><button type="button" class="fbls-button fbls-button-role" data-ship-review-demo="offers" {{#unless canAct}}disabled{{/unless}}>Получить заказы</button>{{#if isGM}}<button type="button" class="fbls-button fbls-button-role" data-ship-review-demo="reroll" data-fbls-tooltip="ГМ: заменить свободные предложения" aria-label="Перебросить предложения"><i class="fa-solid fa-dice" aria-hidden="true"></i></button>{{/if}}</div></div>
+              {{#if isSteps}}<nav class="fbls-cluster" aria-label="Шаги подготовки">{{#each steps}}<button type="button" class="fbls-subnav-tab {{#if selected}}active{{/if}}" data-ship-review-step="{{value}}" aria-pressed="{{selected}}">{{label}}</button>{{/each}}</nav>{{/if}}
+              <div class="fbls-review-ship-workspace">
+                {{#if showList}}<section class="fbls-review-ship-list fbls-stack" aria-label="Выбор заказов">
+                  <div class="fbls-search"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><input type="search" class="fbls-control" data-ship-review-search="orders" value="{{search}}" placeholder="Груз или порт…" aria-label="Поиск заказов в примере" /></div>
+                  {{#each ship.offers}}<div class="fbls-review-ship-offer {{#if selected}}is-selected{{/if}}" data-ship-review-offer>
+                    <label class="fbls-review-ship-pick"><input type="checkbox" data-ship-review-order value="{{id}}" {{#if selected}}checked{{/if}} {{#unless @root.shipReview.canAct}}disabled{{/unless}} aria-label="Включить в пример плана: {{title}}" /><span><strong>{{contract.cargo.name}}</strong><small data-fbls-tooltip="{{title}}">{{pickupLabel}} → {{destination}}</small></span></label>
+                    <div class="fbls-review-ship-offer-numbers"><span>{{contract.cargo.loadPoints}} ед. · {{durationDays}} дн.</span><span data-fbls-tooltip="Плата заказчика до расходов и возможных исходов" tabindex="0">Плата <strong>{{fblsShipGold rewardCopper}} ЗМ</strong></span><span>Смета {{fblsShipGold costs.totalCopper}} ЗМ</span></div>
+                    <details><summary>Условия заказа</summary><p>{{title}}. Подход {{approachKm}} км, с грузом {{deliveryKm}} км. Обычный риск. Будущие происшествия, обратный путь и стоянка не входят в смету заказа.</p></details>
+                  </div>{{/each}}
+                  <div class="fbls-empty-state is-compact" data-ship-review-empty="orders" hidden>{{#if empty}}Заказов пока нет · получите предложения порта{{else}}По этому запросу заказов нет{{/if}}</div>
+                  {{#if atHome}}<details><summary>Свой груз со склада</summary><p>Продажа подготавливается во Внешнем рынке с этим кораблём как перевозчиком.</p><button type="button" class="fbls-button fbls-button-role" data-ship-review-demo="market" {{#unless canAct}}disabled{{/unless}}>Подготовить продажу</button></details>{{/if}}
+                </section>{{/if}}
+                {{#if showPlan}}<section class="fbls-review-ship-plan fbls-review-ship-box fbls-stack" aria-label="План в примере">
+                  <div class="fbls-card-header"><h3 class="fbls-heading-section">План рейса</h3><span class="fbls-chip is-compact">Заказов: {{selectedCount}}</span></div>
+                  {{#if selectedCount}}<ol>{{#each selectedOffers}}<li>{{pickupLabel}} → {{destination}}<small> · {{contract.cargo.name}}</small></li>{{/each}}</ol>{{else}}<p class="fbls-empty-state is-compact">Выберите от одного до трёх заказов</p>{{/if}}
+                  <dl class="fbls-review-ship-metrics"><div><dt>Место под заказы</dt><dd>{{load}} / 100</dd></div><div><dt>Плановая плата</dt><dd>{{reward}} ЗМ</dd></div><div><dt>Смета заказов</dt><dd>{{cost}} ЗМ</dd></div><div><dt>Бюджет с запасом</dt><dd>{{budget}} ЗМ</dd></div><div><dt>Пример срока</dt><dd>{{plan.durationDays}} дн.</dd></div><div><dt>С возвратом, до исходов</dt><dd>{{fblsShipGold plan.nominalExitCopper}} ЗМ</dd></div></dl>
+                  <button type="button" class="fbls-button fbls-button-role" data-ship-review-map-toggle aria-expanded="{{mapOpen}}" aria-controls="review-ship-map"><i class="fa-solid fa-map" aria-hidden="true"></i> Карта маршрутов</button><section id="review-ship-map" class="fbl-skyhold-ship" data-ship-review-map aria-label="Пример большой карты маршрутов" {{#unless mapOpen}}hidden{{/unless}}>{{{mapHtml}}}<p>Демонстрационная схема. Рабочая карта строится по выбранным заказам и связям портов.</p></section>
+                  {{#unless capacityReady}}<p class="fbls-callout is-warning">Выбранные грузы превышают вместимость.</p>{{/unless}}
+                  <details><summary>Как читать суммы</summary><p>Демонстрационная смета складывает отдельные заказы. В рабочем окне общий маршрут пересчитывает движок. Запас 17 ЗМ остаётся на борту; плата поступит после доставки. Это не чистая прибыль.</p></details>
+                </section>{{/if}}
+              </div>
+              {{#if showCheck}}<section class="fbls-review-ship-command fbls-stack" aria-label="Проверка перед отправлением">
+                <div class="fbls-toolbar"><label class="fbls-field"><span>Подход капитана</span><select class="fbls-control" aria-label="Подход капитана в образце" disabled data-fbls-tooltip="Для честного сравнения в образцах используется один подход"><option>Обычно</option></select></label><label class="fbls-field"><span>Бюджет, ЗМ</span><input class="fbls-control" aria-label="Пример автоматического бюджета" value="{{budget}}" readonly /></label><button type="button" class="fbls-button fbls-button-role primary" data-ship-review-demo="depart" {{#unless canDepart}}disabled{{/unless}}>Принять и отправить</button></div>
+                {{#unless canDepart}}<p class="fbls-muted-text">{{#unless canAct}}Нужны права управления кораблями. {{/unless}}{{#unless selectedCount}}Выберите заказ. {{/unless}}{{#unless crewReady}}Команда не готова. {{/unless}}{{#unless moneyReady}}Недостаточно денег. {{/unless}}{{#unless capacityReady}}Не хватает места в трюме.{{/unless}}</p>{{/unless}}
+              </section>{{/if}}
+              {{#if isSteps}}<div class="fbls-action-group"><button type="button" class="fbls-button fbls-button-role" data-ship-review-step="orders">К заказам</button><button type="button" class="fbls-button fbls-button-role" data-ship-review-step="plan">Проверить план</button><button type="button" class="fbls-button fbls-button-role primary" data-ship-review-step="check">К отправлению</button></div>{{/if}}
+              {{#unless atHome}}<details><summary>Возвращение и смена порта</summary><p>Возвращение домой и перелёт без заказа оформляются отдельными приказами. Их стоимость проверяется до отправки.</p><button type="button" class="fbls-button fbls-button-role" data-ship-review-demo="return" {{#unless canAct}}disabled{{/unless}}>Проверить возвращение домой</button></details>{{/unless}}
+            {{/if}}
+          {{/if}}
+
+          {{#if showCrew}}
+            <div class="fbls-card-header"><h3 class="fbls-heading-section">Команда · {{ship.linkedCrewCount}} жителей</h3><span class="fbls-chip is-compact">Готовы {{readyCount}} / 6</span></div>
+            <div class="fbls-search"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><input type="search" class="fbls-control" data-ship-review-search="crew" value="{{crewSearch}}" placeholder="Имя или обязанность…" aria-label="Поиск моряков в примере" /></div>
+            <div class="fbls-review-ship-workspace">
+              <section class="fbls-stack fbls-review-ship-roster" aria-label="Состав команды">
+                {{#each ship.crewRoster}}<div class="fbls-review-ship-person" data-ship-review-person><strong>{{name}}</strong><span>{{duty}}</span><span class="fbls-chip is-compact">{{status}}</span><button type="button" class="fbls-button fbls-button-role" data-ship-review-demo="resident" aria-label="Открыть жителя {{name}}" data-fbls-tooltip="Открыть запись жителя"><i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></button></div>{{/each}}
+                <p class="fbls-empty-state is-compact" data-ship-review-empty="crew" hidden>{{#if empty}}Именной состав ещё не назначен{{else}}Никто не найден{{/if}}</p>
+              </section>
+              <aside class="fbls-stack"><details class="fbls-review-ship-box" {{#if isSteps}}open{{/if}}><summary>Готовность и береговая работа</summary><p>При отправлении освобождаются работа и жильё моряков. Назначения и возвращение на борт доступны в списке жителей с соответствующими правами.</p>{{#if blocked}}<p class="fbls-callout is-warning">Бор ранен, Ида отсутствует. Нужны ещё два готовых моряка.</p>{{/if}}</details>
+              {{#if ship.canConfigureCrew}}<details class="fbls-review-ship-box"><summary>Изменить состав</summary><p class="fbls-muted-text">Назначения ГМа · дома между рейсами</p><div class="fbls-review-ship-assignment">{{#each crewOptions}}<label class="fbls-checkbox-label fbls-choice-toggle"><input type="checkbox" data-ship-review-crew value="{{id}}" {{#if selected}}checked{{/if}} /><span data-fbls-tooltip="{{name}} · {{duty}}">{{name}}</span></label>{{/each}}</div><span data-ship-review-crew-count>Выбрано: {{ship.linkedCrewCount}}</span><button type="button" class="fbls-button fbls-button-role primary" data-ship-review-demo="crew">Сохранить состав</button></details>{{else}}<p class="fbls-muted-text">Состав назначает ГМ дома между рейсами.</p>{{/if}}</aside>
+            </div>
+          {{/if}}
+
+          {{#if showFinance}}
+            <div class="fbls-card-header"><h3 class="fbls-heading-section">Бортовые деньги</h3><span class="fbls-chip is-compact">{{#if atHome}}Дома · доступна казна{{else}}Автономный бюджет{{/if}}</span></div>
+            <dl class="fbls-review-ship-metrics"><div><dt>На борту</dt><dd>{{ship.walletGold}} ЗМ</dd></div><div><dt>Счета к оплате</dt><dd>{{obligations}} ЗМ</dd></div><div><dt>Рекомендуемый запас</dt><dd>{{reserve}} ЗМ</dd></div><div><dt>{{#if atHome}}Свободно с казной{{else}}Свободно на борту{{/if}}</dt><dd>{{free}} ЗМ</dd></div></dl>
+            <p class="fbls-muted-text">Свободно = {{#if atHome}}борт + казна{{else}}борт{{/if}} − счета − запас. Запас и переводы не являются расходами.</p>
+            <div class="fbls-review-ship-workspace">
+              <section class="fbls-stack">{{#if ship.canAdjust}}<section class="fbls-review-ship-box fbls-stack"><h3 class="fbls-heading-section">{{#if atHome}}Перевод денег{{else}}ГМ · денежная операция{{/if}}</h3><div class="fbls-review-ship-fields"><label class="fbls-field"><span>Операция</span><select class="fbls-control">{{#if atHome}}<option>Из казны на борт</option><option>С борта в казну</option>{{else}}<option>Расход</option><option>Поступление</option>{{/if}}</select></label><label class="fbls-field"><span>Сумма, ЗМ</span><input type="number" class="fbls-control" min="0" step="0.01" value="10" /></label></div><label class="fbls-field"><span>Основание</span><input class="fbls-control" type="text" value="Подготовка к рейсу" /></label><button type="button" class="fbls-button fbls-button-role primary" data-ship-review-demo="funds">Проверить операцию</button></section>{{/if}}
+              <details class="fbls-review-ship-box"><summary>Счета и состав запаса</summary><p>Начисленная стоянка: {{obligations}} ЗМ. Запас на будущий путь и риски: {{reserve}} ЗМ. Счета ещё не оплачены; ожидаемая плата не включена в баланс.</p></details></section>
+              <section class="fbls-stack"><div class="fbls-review-ship-box"><h3 class="fbls-heading-section">{{#if active}}Ожидается после доставки{{else}}Последний завершённый выход{{/if}}</h3>{{#if active}}<p>34 ЗМ · деньги ещё недоступны</p>{{else if empty}}<p>Истории выходов пока нет.</p>{{else}}<dl class="fbls-review-ship-metrics"><div><dt>Получено</dt><dd>34 ЗМ</dd></div><div><dt>Оплачено</dt><dd>18,50 ЗМ</dd></div></dl><p>Результат: 15,50 ЗМ</p>{{/if}}</div><details class="fbls-review-ship-box" {{#if isSteps}}open{{/if}}><summary>Журнал и история рейсов</summary>{{#if empty}}<p>Записей пока нет.</p>{{else}}<p>Пример: перевод на борт 40 ЗМ; оплата пути 18,50 ЗМ. Переводы отделены от расходов. Частичный учёт в рабочем окне должен быть явно помечен.</p>{{/if}}</details><details class="fbls-review-ship-box"><summary>Известность по направлениям</summary><span class="fbls-chip is-compact">Ассур · 2 / 10 · низкое</span></details></section>
+            </div>
+          {{/if}}
+
+          {{#if showSettings}}
+            <div class="fbls-card-header"><h3 class="fbls-heading-section">Паспорт корабля</h3><span class="fbls-chip is-compact">ГМ · пример автосохранения</span></div>
+            <div class="fbls-review-ship-workspace"><section class="fbls-review-ship-box fbls-stack">
+              <div class="fbls-review-ship-fields"><label class="fbls-field"><span>Название</span><input class="fbls-control" value="{{ship.name}}" {{#unless atHome}}disabled{{/unless}} /></label><label class="fbls-field"><span>Командующий</span><input class="fbls-control" value="Руна" {{#unless atHome}}disabled{{/unless}} /></label></div>
+              <div class="fbls-review-ship-fields is-three"><label class="fbls-field"><span>Скорость, км/д.</span><input type="number" class="fbls-control" value="120" min="1" {{#unless atHome}}disabled{{/unless}} /></label><label class="fbls-field"><span>Трюм, ед.</span><input type="number" class="fbls-control" value="100" min="1" {{#unless atHome}}disabled{{/unless}} /></label><label class="fbls-field"><span>Тайники, ед.</span><input type="number" class="fbls-control" value="10" min="0" data-fbls-tooltip="Тайники входят в общую вместимость трюма" {{#unless atHome}}disabled{{/unless}} /></label></div>
+              {{#unless atHome}}<p class="fbls-callout is-info">Паспорт меняется дома между рейсами.</p>{{/unless}}
+              <label class="fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Отключение прекращает новые начисления дома. Прежние долги и расходы рейсов сохраняются."><input type="checkbox" checked /><span>Содержание дома · 3,20 ЗМ/день</span></label>
+            </section><aside class="fbls-stack">
+              <details class="fbls-review-ship-box" {{#if isSteps}}open{{/if}}><summary>Домашняя точка · Скайхолд</summary><p>Меняется регион всего поселения; свободные предложения сбрасываются. Требуется отдельное подтверждение.</p><label class="fbls-field"><span>Связь на карте</span><select class="fbls-control"><option>Ассур — Зелёный пояс</option></select></label><label class="fbls-field"><span>Положение, %</span><input type="number" class="fbls-control" value="50" min="1" max="99" /></label><button type="button" class="fbls-button fbls-button-role" data-ship-review-demo="home">Проверить размещение</button></details>
+              <details class="fbls-review-ship-box"><summary>Удаление корабля</summary><p>{{ship.deleteReason}}</p><button type="button" class="fbls-button fbls-button-role danger" data-ship-review-demo="delete" {{#unless atHome}}disabled{{/unless}}>Проверить удаление</button></details>
+            </aside></div>
+          {{/if}}
+        </div>
+      </div>
+    </article>
+  {{/if}}
+  </div>
+  <p class="fbls-review-ship-feedback" role="status" aria-live="polite" data-ship-review-message>{{message}}</p>
+  <details class="fbls-ui-review-detail"><summary>Что выявлено и чем отличаются варианты</summary><p>Сейчас показатели готовности и денег повторяются, крупные справочные блоки вытесняют рабочие строки, домашняя точка стоит раньше паспорта. Вкладки реализованы отдельно от общего компонента навигации. Список заказов прокручивается внутри прокручиваемой вкладки.</p><p>А — минимум переучивания; при большом числе заказов план ниже списка. Б — одновременно видны выбор и план; наиболее удобен в широком окне. В — последовательная проверка; чаще приходится возвращаться между шагами. В рейсе все варианты показывают прогресс вместо подготовки.</p></details>
+  <section class="fbls-stack" aria-label="Решения по кораблям"><h2 class="fbls-heading-section">Выбор по разделам</h2><p class="fbls-muted-text">Можно сочетать варианты. Переключение образца выше не означает согласование.</p>
+    {{#each decisions}}<div class="fbls-review-ship-decision"><label class="fbls-field"><span>{{label}}</span><select class="fbls-control" data-ship-review-decision="{{id}}">{{#each options}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label><label class="fbls-field"><span>Условие или сочетание</span><input class="fbls-control" data-ship-review-note="{{id}}" value="{{note}}" maxlength="300" placeholder="Необязательно" /></label></div>{{/each}}
+    <label class="fbls-field"><span>Текст решений</span><textarea data-review-summary readonly rows="8">{{summary}}</textarea></label>
+  </section>
+</section>

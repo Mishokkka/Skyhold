@@ -32,6 +32,7 @@ function defaultNormalizeLedger(rows = []) {
 function defaultLedgerTotals(rows = []) {
   const totals = { resourcesIn: 0, resourcesOut: 0, itemsIn: 0, itemsOut: 0, moneyIn: 0, moneyOut: 0, decisions: 0 };
   for (const row of rows) {
+    if (row?.meta?.internalTransfer || row?.meta?.displayOnly || row?.meta?.reportOnly) continue;
     const qty = defaultSafeNumber(row?.qty, 0);
     if (row?.kind === "money") qty >= 0 ? totals.moneyIn += qty : totals.moneyOut += Math.abs(qty);
     else if (row?.kind === "resource") qty >= 0 ? totals.resourcesIn += qty : totals.resourcesOut += Math.abs(qty);
@@ -109,11 +110,13 @@ export function summarizeFoodReport(food = {}, options = {}) {
   const needed = Math.max(0, Math.floor(safeNumber(food.needed, 0)));
   const eaten = Math.max(0, Math.floor(safeNumber(food.eaten, 0)));
   const hungry = Math.max(0, Math.floor(safeNumber(food.hungryResidentDays, 0)));
+  const hungerLevel = Math.max(0, Math.min(10, Math.floor(safeNumber(food.hungerLevelAfter ?? food.hungerLevel, 0))));
+  const hungerFactor = Math.max(0.5, Math.min(1, safeNumber(food.hungerFactor, 1 - hungerLevel * 0.05)));
   const lines = [];
   if (needed) lines.push(`Нужно пищи: ${needed}. Съедено: ${eaten}.`);
   for (const line of food.lines ?? []) if (line) lines.push(String(line));
   if (hungry && !lines.some((line) => /Голод/.test(line))) lines.push(`Голод: ${hungry} человеко-дней без пищи.`);
-  return { needed, eaten, hungryResidentDays: hungry, lines, hasRows: lines.length > 0 };
+  return { needed, eaten, hungryResidentDays: hungry, hungerLevel, hungerFactor, lines, hasRows: lines.length > 0 };
 }
 
 export function summarizeConstructionReport(construction = {}) {
@@ -122,63 +125,30 @@ export function summarizeConstructionReport(construction = {}) {
   return { attempts: construction.attempts ?? 0, completed: construction.completed ?? 0, lines, hasRows: lines.length > 0 };
 }
 
-export function summarizeCapitalReport(capital = {}, options = {}) {
-  const { safeNumber, formatCopperCurrency } = reportDependencies(options);
-  const blocked = Math.max(0, Math.floor(safeNumber(capital.blocked, 0)));
-  const shortfallCopper = Math.max(0, Math.floor(safeNumber(capital.shortfallCopper, 0)));
-  const annualRenewalCopper = Math.max(0, Math.ceil(safeNumber(capital.annualRenewalCopper, 0)));
-  const lines = (capital.lines ?? []).filter(Boolean).map(String);
-  if (annualRenewalCopper > 0) lines.push(`Целевой резерв обновления оборудования: ${formatCopperCurrency(annualRenewalCopper)} за 240-дневный год; это ориентир, а не автоматическое списание.`);
-  if (blocked > 0 && !lines.some((line) => /остановлена/.test(line))) lines.push(`Не обеспечено предприятий: ${blocked}; дефицит капитала ${formatCopperCurrency(shortfallCopper)}.`);
-  return { blocked, shortfallCopper, annualRenewalCopper, lines, hasRows: lines.length > 0 };
-}
-
 export function summarizeTradeReport(trade = {}, options = {}) {
   const { safeNumber, formatNumber, formatCopperCurrency } = reportDependencies(options);
   const buyers = Math.max(0, Math.floor(safeNumber(trade.buyers, 0)));
+  const demandSources = trade.demandSources === undefined ? null : Math.max(0, Math.floor(safeNumber(trade.demandSources, 0)));
   const revenue = Math.max(0, Math.floor(safeNumber(trade.revenue, 0)));
   const purchases = Array.isArray(trade.purchases) ? trade.purchases : [];
-  const demand = Math.max(0, Math.floor(safeNumber(trade.demand, 0)));
-  const capacity = Math.max(0, Math.floor(safeNumber(trade.capacity, 0)));
-  const servedBuyers = Math.max(0, Math.floor(safeNumber(trade.servedBuyers, 0)));
-  const unserved = Math.max(0, Math.floor(safeNumber(trade.unserved, 0)));
-  const capacityShortfall = Math.max(0, Math.floor(safeNumber(trade.capacityShortfall, 0)));
-  const stockShortfall = Math.max(0, Math.floor(safeNumber(trade.stockShortfall, 0)));
   const map = new Map();
   for (const row of purchases) {
-    const name = String(row?.item ?? "Товар");
+    const name = String(row?.name ?? row?.item ?? "Товар");
     const current = map.get(name) ?? { name, qty: 0, revenue: 0 };
     current.qty += Math.max(0, safeNumber(row?.qty, 0));
-    current.revenue += Math.max(0, safeNumber(row?.revenue, 0));
+    current.revenue += Math.max(0, safeNumber(row?.revenueCopper ?? row?.revenue, 0));
     map.set(name, current);
   }
   const soldLines = [...map.values()]
     .sort((a, b) => String(a.name).localeCompare(String(b.name), "ru"))
     .map((row) => `${row.name} ×${formatNumber(row.qty)} за ${formatCopperCurrency(row.revenue)}`);
-  const lines = (trade.lines ?? []).filter(Boolean).map(String);
+  const lines = [];
   if (buyers || revenue || soldLines.length) {
-    if (demand) lines.push(`Спрос ${demand}, мощность ${capacity}, покупки совершили ${servedBuyers}, не обслужено ${unserved}.`);
-    else lines.push(`Покупателей: ${buyers}.`);
+    lines.push(demandSources === null ? `Покупателей: ${buyers}.` : `Источников спроса: ${demandSources}.`);
     if (soldLines.length) lines.push(`Куплено: ${soldLines.join("; ")}.`);
     lines.push(`В казну: ${formatCopperCurrency(revenue)}.`);
   }
-  return { buyers, revenue, demand, capacity, servedBuyers, unserved, capacityShortfall, stockShortfall, soldLines, lines, hasRows: lines.length > 0 };
-}
-
-export function summarizeServicesReport(services = {}, options = {}) {
-  const { safeNumber, formatNumber, formatCopperCurrency } = reportDependencies(options);
-  const demand = Math.max(0, Math.floor(safeNumber(services.demand, 0)));
-  const capacity = Math.max(0, Math.floor(safeNumber(services.capacity, 0)));
-  const served = Math.max(0, Math.floor(safeNumber(services.served, 0)));
-  const unserved = Math.max(0, Math.floor(safeNumber(services.unserved, 0)));
-  const foodPersonDays = Math.max(0, safeNumber(services.foodPersonDays, 0));
-  const revenue = Math.max(0, Math.floor(safeNumber(services.revenue, 0)));
-  const lines = (services.lines ?? []).filter(Boolean).map(String);
-  if ((demand || capacity || served || revenue) && !lines.length) {
-    lines.push(`Спрос ${demand}, мощность ${capacity}, обслужено ${served}, не обслужено ${unserved}.`);
-    lines.push(`Пища ${formatNumber(foodPersonDays)} чел.-дн.; выручка ${formatCopperCurrency(revenue)}.`);
-  }
-  return { demand, capacity, served, unserved, foodPersonDays, revenue, lines, hasRows: lines.length > 0 };
+  return { buyers, demandSources, revenue, soldLines, lines, hasRows: lines.length > 0 };
 }
 
 export function summarizeTreasuryReport(treasury = {}, options = {}) {
@@ -189,7 +159,7 @@ export function summarizeTreasuryReport(treasury = {}, options = {}) {
   for (const line of treasury.lines ?? []) if (line) lines.push(String(line));
   if (spent || deficit) {
     lines.push(`Потрачено из казны: ${formatCopperCurrency(spent)}.`);
-    if (deficit) lines.push(`Задолженность после расчёта: ${formatCopperCurrency(deficit)}.`);
+    if (deficit) lines.push(`Накопленный неоплаченный долг: ${formatCopperCurrency(deficit)}.`);
   }
   return { spent, deficit, lines, hasRows: lines.length > 0 };
 }
@@ -200,13 +170,13 @@ export function summarizeEconomyReport(report = {}, options = {}) {
   return {
     ...report,
     ledger,
-    ledgerTotals: dependencies.ledgerTotals(ledger),
+    ledgerTotals: report.ledgerTotals ?? dependencies.ledgerTotals(report.ledger ?? []),
+    ledgerCount: report.ledgerCount ?? (report.ledger ?? []).length,
+    ledgerTruncated: Boolean(report.ledgerTruncated || (report.ledgerCount ?? (report.ledger ?? []).length) > ledger.length),
     produced: summarizeSignedLines(report.produced ?? [], "+", options),
     consumed: summarizeSignedLines(report.consumed ?? [], "-", options),
     income: summarizeSignedLines(report.income ?? [], "+", options),
     foodSummary: summarizeFoodReport(report.food ?? {}, options),
-    capitalSummary: summarizeCapitalReport(report.capital ?? {}, options),
-    serviceSummary: summarizeServicesReport(report.services ?? {}, options),
     constructionSummary: summarizeConstructionReport(report.construction ?? {}),
     tradeSummary: summarizeTradeReport(report.trade ?? {}, options),
     treasurySummary: summarizeTreasuryReport(report.treasury ?? {}, options),

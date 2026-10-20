@@ -1,3 +1,5 @@
+import { normalLaborQdPerTenday } from "../../../data/labor-budget.js";
+
 export const TENDAY_QD = 40;
 
 export function normalizeTendayQd(value = TENDAY_QD) {
@@ -14,14 +16,26 @@ export function applyPreparedTenday(current, prepared, sourceHash, { hash, clone
   return { ok: true, stale: false };
 }
 
+export function preparedTendayReplay(current, operationId = "") {
+  const id = String(operationId ?? "").trim();
+  if (!id) return null;
+  return (current?.log ?? []).find((row) => (
+    String(row?.operationId ?? row?.id ?? "") === id
+      && String(row?.type ?? "") === "tenday"
+  )) ?? null;
+}
+
 export function tendayDependencySnapshot(data = {}, holdingId = "") {
   const id = String(holdingId ?? "");
   const holding = (data?.holdings ?? []).find((row) => String(row?.id ?? "") === id) ?? null;
   if (!holding) return null;
   return {
     holding,
+    normalLaborQdPerTenday: normalLaborQdPerTenday(),
+    ...(data?.meta?.sharedMarkets ? { sharedMarkets: data.meta.sharedMarkets } : {}),
     catalog: {
       resources: data?.catalog?.resources ?? [],
+      marketEconomy: data?.catalog?.marketEconomy ?? {},
       eventRegions: data?.catalog?.eventRegions ?? []
     }
   };

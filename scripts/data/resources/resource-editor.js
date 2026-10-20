@@ -1,21 +1,38 @@
 import { normalizeResourceCatalogRow } from "../../core/resources.js";
-import { materialGroupHelpText } from "../../core/material-groups.js";
+import { formatCopperCurrencyCompact } from "../../core/currency.js";
 import { BUILTIN_RESOURCE_DEFS } from "./builtin-resources.js";
 
-function economyEditorFlags(row = {}) {
-  const cargoClass = String(row.cargoClass ?? "10");
+const FOOD_TYPE_OPTIONS = Object.freeze([
+  { value: "", label: "Не задан" },
+  { value: "grain", label: "Зерновая еда" },
+  { value: "protein", label: "Белковая еда" },
+  { value: "dairy", label: "Молочная еда" },
+  { value: "fruit", label: "Фруктовая еда" },
+  { value: "vegetable", label: "Овощная еда" }
+]);
+
+function loadValueText(loadPoints = 0) {
+  const value = Math.max(0, Number(loadPoints) || 0) / 4;
+  return Number.isInteger(value) ? String(value) : String(Math.round(value * 100) / 100);
+}
+
+function editorPresentation(row = {}) {
+  const builtin = BUILTIN_RESOURCE_DEFS.find((resource) => resource.id === row.id);
+  const unitExplanation = builtin ? String(builtin.notes ?? "").match(/Смысл 1 ЕД\.:.*$/u)?.[0] ?? "" : "";
+  const legacyFields = [
+    row.materialGroups?.length ? `materialGroups: ${row.materialGroups.join(", ")}` : "",
+    row.cost ? `cost: ${row.cost}` : "",
+    row.shelfLife ? `shelfLife: ${row.shelfLife}` : ""
+  ].filter(Boolean);
+  const loadText = loadValueText(row.loadPoints);
   return {
-    economyLegacy: row.legacyEconomy === true,
-    economyCurrent: row.legacyEconomy !== true,
-    cargoClass1: cargoClass === "1",
-    cargoClass2: cargoClass === "2",
-    cargoClass5: cargoClass === "5",
-    cargoClass10: cargoClass === "10",
-    cargoClass20: cargoClass === "20",
-    cargoClass40: cargoClass === "40",
-    cargoClassLivestock: cargoClass === "livestock",
-    cargoClassOversized: cargoClass === "oversized",
-    cargoPointsManual: cargoClass === "livestock" || cargoClass === "oversized"
+    unitExplanation: unitExplanation && !String(row.notes ?? "").includes(unitExplanation) ? unitExplanation : "",
+    priceText: formatCopperCurrencyCompact(row.basePriceCopper),
+    loadValueText: loadText,
+    loadTitle: `Нагрузка: ${loadText} (${row.loadPoints} пунктов, 1 пункт = 0,25)`,
+    foodTypeOptions: FOOD_TYPE_OPTIONS.map((option) => ({ ...option, selected: option.value === row.foodType })),
+    hasLegacyFields: legacyFields.length > 0,
+    legacyFieldsText: legacyFields.join(" · ")
   };
 }
 
@@ -25,21 +42,12 @@ export function prepareResourceCatalogEditor(catalogRows = [], { canEdit = false
     const normalized = normalizeResourceCatalogRow(row);
     return {
       ...normalized,
-      ...economyEditorFlags(normalized),
       _index: index,
       basePath: `catalog.resources.${index}`,
       aliasesText: Array.isArray(row.aliases) ? row.aliases.join(", ") : String(row.aliases ?? normalized.aliases.join(", ")),
       materialGroupsText: normalized.materialGroups.join(", "),
       marketTagsText: normalized.marketTags.join(", "),
-      nutritionTagsText: normalized.nutritionTags.join(", "),
-      dietGroupNone: !normalized.dietGroup,
-      dietGroupStaple: normalized.dietGroup === "staple",
-      dietGroupProtein: normalized.dietGroup === "protein",
-      dietGroupDairy: normalized.dietGroup === "dairy",
-      dietGroupProduce: normalized.dietGroup === "produce",
-      loadAuto: normalized.loadMode === "auto",
-      loadManual: normalized.loadMode === "manual",
-      materialGroupHelpText: materialGroupHelpText(),
+      ...editorPresentation(normalized),
       isOverride: true,
       canEdit
     };
@@ -51,7 +59,6 @@ export function prepareResourceCatalogEditor(catalogRows = [], { canEdit = false
     const effective = normalizeResourceCatalogRow(override ? { ...builtin, ...override } : builtin);
     return {
       ...effective,
-      ...economyEditorFlags(effective),
       ...(override ?? {}),
       id: builtin.id,
       isBuiltin: true,
@@ -59,23 +66,15 @@ export function prepareResourceCatalogEditor(catalogRows = [], { canEdit = false
       aliasesText: (override?.aliases ?? effective.aliases ?? []).join(", "),
       materialGroupsText: (override?.materialGroups ?? effective.materialGroups ?? []).join(", "),
       marketTagsText: (override?.marketTags ?? effective.marketTags ?? []).join(", "),
-      nutritionTagsText: (override?.nutritionTags ?? effective.nutritionTags ?? []).join(", "),
-      dietGroupNone: !(override?.dietGroup ?? effective.dietGroup),
-      dietGroupStaple: (override?.dietGroup ?? effective.dietGroup) === "staple",
-      dietGroupProtein: (override?.dietGroup ?? effective.dietGroup) === "protein",
-      dietGroupDairy: (override?.dietGroup ?? effective.dietGroup) === "dairy",
-      dietGroupProduce: (override?.dietGroup ?? effective.dietGroup) === "produce",
-      loadAuto: (override?.loadMode ?? effective.loadMode) === "auto",
-      loadManual: (override?.loadMode ?? effective.loadMode) === "manual",
-      materialGroupHelpText: materialGroupHelpText(),
-      searchText: [builtin.id, override?.label ?? effective.label, override?.category ?? effective.category, override?.dietGroup ?? effective.dietGroup, ...(override?.aliases ?? effective.aliases ?? []), ...(override?.materialGroups ?? effective.materialGroups ?? []), ...(override?.marketTags ?? effective.marketTags ?? [])].join(" ").toLocaleLowerCase("ru"),
+      ...editorPresentation({ ...effective, ...(override ?? {}) }),
+      searchText: [builtin.id, override?.label ?? effective.label, override?.category ?? effective.category, override?.categoryTag ?? effective.categoryTag, ...(override?.aliases ?? effective.aliases ?? []), ...(override?.materialGroups ?? effective.materialGroups ?? []), ...(override?.marketTags ?? effective.marketTags ?? [])].join(" ").toLocaleLowerCase("ru"),
       canEdit
     };
   });
   const customRows = overrides.filter((row) => !builtinIds.has(row.id)).map((row) => ({
     ...row,
     isBuiltin: false,
-    searchText: [row.id, row.label, row.category, row.dietGroup, ...(row.aliases ?? []), ...(row.materialGroups ?? []), ...(row.marketTags ?? [])].join(" ").toLocaleLowerCase("ru")
+    searchText: [row.id, row.label, row.category, row.categoryTag, ...(row.aliases ?? []), ...(row.materialGroups ?? []), ...(row.marketTags ?? [])].join(" ").toLocaleLowerCase("ru")
   }));
   return {
     rows: [...builtinRows, ...customRows],

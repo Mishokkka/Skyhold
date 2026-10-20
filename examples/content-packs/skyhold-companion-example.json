@@ -1,0 +1,174 @@
+{
+  "schema": "fbl-skyhold.content-pack",
+  "formatVersion": 1,
+  "id": "skyhold-companion-example",
+  "source": "example.skyhold-companion",
+  "version": 2,
+  "name": "Пример companion pack",
+  "description": "Минимальный пример всех поддерживаемых разделов content pack.",
+  "content": {
+    "buildings": [
+      {
+        "id": "example-wind-observatory",
+        "name": "Ветровая обсерватория",
+        "type": "Инфраструктура",
+        "status": "planned",
+        "workersMax": 2,
+        "description": "Наблюдает за потоками ветра вокруг летающего острова."
+      }
+    ],
+    "resources": [
+      {
+        "id": "example-cloud-fiber",
+        "label": "Облачное волокно",
+        "unit": "моток",
+        "category": "Пример",
+        "materialGroups": [
+          "textile",
+          "organic"
+        ],
+        "cost": "12 ММ",
+        "notes": "Пример пользовательского ресурса из content pack."
+      }
+    ],
+    "events": {
+      "general": [
+        {
+          "id": "example-favorable-wind",
+          "weight": 2,
+          "title": "Попутный ветер",
+          "text": "Воздушные потоки облегчают снабжение владения.",
+          "visibility": "public",
+          "effects": [
+            {
+              "id": "example-favorable-wind-money",
+              "type": "money",
+              "amount": 20,
+              "note": "Доход от ускоренной торговли"
+            }
+          ]
+        }
+      ],
+      "external": []
+    },
+    "regions": [
+      {
+        "id": "example-high-winds",
+        "label": "Пояс высоких ветров",
+        "aliases": [
+          "высокие ветра"
+        ],
+        "marketProfile": "aerial",
+        "marketPriceFactor": 1.1,
+        "marketAvailabilityFactor": 0.85,
+        "marketDeliveryFactor": 1.25,
+        "countryId": "example-high-winds",
+        "marketSizeId": "town",
+        "marketSpecialtyIds": [
+          "air-harbor"
+        ],
+        "marketConditionId": ""
+      }
+    ],
+    "doctrines": [
+      {
+        "id": "example-wind-screen",
+        "name": "Ветровой заслон",
+        "description": "Пример декларативной доктрины для companion-контента.",
+        "tags": [
+          "garrison",
+          "shooters"
+        ]
+      }
+    ],
+    "marketEconomy": {
+      "baseOffers": [],
+      "countries": [
+        {
+          "id": "example-high-winds",
+          "label": "Пояс высоких ветров",
+          "active": true,
+          "visibility": "public",
+          "description": "Учебный характер рынка.",
+          "conditionId": "stable",
+          "tradeRegime": "open",
+          "taxRate": 0,
+          "priceFactor": 1,
+          "stockFactor": 1,
+          "deliveryFactor": 1.1,
+          "timeFactor": 1,
+          "riskFactor": 1.1,
+          "rules": [],
+          "offers": [
+            {
+              "active": true,
+              "visibility": "public",
+              "sourceType": "resource",
+              "kind": "material",
+              "ubiquity": "common",
+              "forceAvailable": false,
+              "unit": "ед.",
+              "icon": "fa-solid fa-box",
+              "tags": [],
+              "id": "example-wind-market-wood",
+              "resourceId": "wood",
+              "basePriceCopper": 8,
+              "volatility": 0.25,
+              "baseStock": 70,
+              "load": 1
+            }
+          ],
+          "tags": [
+            "example"
+          ]
+        }
+      ],
+      "specialties": [],
+      "organizations": [
+        {
+          "id": "example-wind-guild",
+          "label": "Гильдия воздушных перевозчиков",
+          "active": true,
+          "visibility": "public",
+          "description": "Учебная организация с обеими ролями.",
+          "icon": "fa-solid fa-wind",
+          "tags": [
+            "example"
+          ],
+          "merchant": {
+            "enabled": true,
+            "countryShares": [
+              {
+                "countryId": "example-high-winds",
+                "sharePct": 35
+              }
+            ],
+            "includeTags": [],
+            "excludeTags": [],
+            "priceFactor": 1,
+            "priceVolatility": 0.04,
+            "stockStability": 1
+          },
+          "carrier": {
+            "enabled": true,
+            "countryShares": [
+              {
+                "countryId": "example-high-winds",
+                "sharePct": 30
+              }
+            ],
+            "modes": [
+              "airship"
+            ],
+            "priceFactor": 1,
+            "timeFactor": 0.95,
+            "riskFactor": 1,
+            "capacityFactor": 1
+          }
+        }
+      ],
+      "sizeProfiles": [],
+      "conditions": []
+    }
+  }
+}

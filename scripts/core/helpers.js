@@ -33,7 +33,7 @@ export function fieldValue(field) {
   if (!field) return "";
   if (field.dataset?.type === "visibility") return field.checked ? "public" : "gm";
   if (field.dataset?.type === "checkbox" || field.type === "checkbox") return Boolean(field.checked);
-  if (field.dataset?.type === "optional-number") {
+  if (field.dataset?.type === "nullable-number") {
     if (String(field.value ?? "").trim() === "") return null;
     const parsed = Number(field.value);
     return Number.isFinite(parsed) ? parsed : null;

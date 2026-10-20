@@ -1,6 +1,6 @@
 import { normalizeEventRegionOptions } from "../../data/random-events.js";
 import { normalizeMarketEconomy } from "../../data/market/economy.js";
-import { resourceTradeReady } from "../../data/resources/resource-economy-contract.js";
+import { resolveMarketOfferEconomics } from "./pricing.js";
 
 const UBIQUITY_RANK = Object.freeze({ essential: 1, common: 2, ordinary: 3, specialized: 4, restricted: 5 });
 const NON_MATERIALIZING_TAGS = new Set(["all", "import", "export", "bulk", "resource", "material", "consumable", "edible", "food", "food.raw", "food.processed", "organic", "mineral", "metal", "construction", "textile", "hide", "fuel", "liquid", "medicinal", "medicine", "chemical", "luxury"]);
@@ -29,7 +29,7 @@ function tagMatches(candidate = "", selector = "") {
   const target = normalized(selector);
   if (!tag || !target) return false;
   if (target === "all") return true;
-  return tag === target || tag.startsWith(`${target}.`) || tag.startsWith(`${target}-`) || tag.includes(target);
+  return tag === target || tag.startsWith(`${target}.`) || tag.startsWith(`${target}-`);
 }
 
 function materializationTagMatches(candidate = "", selector = "") {
@@ -40,6 +40,9 @@ function materializationTagMatches(candidate = "", selector = "") {
 }
 
 export function marketOfferTags(offer = {}, resource = {}) {
+  const categoryTags = String(resource.categoryTag ?? "").trim()
+    ? [resource.categoryTag]
+    : (resource.materialGroups ?? []);
   return [...new Set([
     "all",
     String(offer.kind ?? ""),
@@ -47,7 +50,7 @@ export function marketOfferTags(offer = {}, resource = {}) {
     String(resource.id ?? ""),
     String(resource.category ?? ""),
     ...(offer.tags ?? []),
-    ...(resource.materialGroups ?? []),
+    ...categoryTags,
     ...(resource.marketTags ?? [])
   ].map(normalized).filter(Boolean))];
 }
@@ -61,7 +64,7 @@ function ruleMatches(rule = {}, offer = {}, tags = []) {
   return selectors.some((selector) => tags.some((tag) => tagMatches(tag, selector)));
 }
 
-function applyRules(offer = {}, resource = {}, sources = []) {
+function applyRules(offer = {}, resource = {}, sources = [], { direction = "inbound" } = {}) {
   const tags = marketOfferTags(offer, resource);
   let stockFactor = 1;
   let priceFactor = 1;
@@ -74,7 +77,10 @@ function applyRules(offer = {}, resource = {}, sources = []) {
       const stock = factor(rule.stockFactor, 1);
       const price = factor(rule.priceFactor, 1);
       const volatility = factor(rule.volatilityFactor, 1);
-      stockFactor *= stock;
+      const quantity = direction === "outbound" && ["produce", "consume"].includes(String(rule.mode ?? ""))
+        ? 1 / Math.max(0.05, stock)
+        : stock;
+      stockFactor *= quantity;
       priceFactor *= price;
       volatilityFactor *= volatility;
       restricted ||= rule.mode === "restrict";
@@ -84,7 +90,7 @@ function applyRules(offer = {}, resource = {}, sources = []) {
         ruleId: String(rule.id ?? ""),
         ruleLabel: String(rule.label ?? rule.id ?? "Правило"),
         mode: String(rule.mode ?? "adjust"),
-        stockFactor: stock,
+        stockFactor: quantity,
         priceFactor: price,
         volatilityFactor: volatility
       });
@@ -115,8 +121,8 @@ export function marketCountryForLocation(location = {}, economySource = null, lo
   return marketCountryFromEconomy(location, economy);
 }
 
-export function marketLocationFactors(location = {}, economySource = null, locations = []) {
-  const economy = normalizeMarketEconomy(economySource, { locations });
+export function marketLocationFactors(location = {}, economySource = null, locations = [], { normalizedEconomy = false } = {}) {
+  const economy = normalizedEconomy ? economySource : normalizeMarketEconomy(economySource, { locations });
   const country = marketCountryFromEconomy(location, economy) ?? {
     id: String(location?.countryId ?? location?.value ?? ""),
     label: String(location?.label ?? "Неизвестное государство"),
@@ -148,6 +154,7 @@ export function marketLocationFactors(location = {}, economySource = null, locat
     export: factor(location?.marketExportFactor, 1),
     import: factor(location?.marketImportFactor, 1),
     taxRate: Math.max(0, Math.min(1, finite(country.taxRate, 0) + finite(location?.marketTaxRate, 0))),
+    exportTaxRate: Math.max(0, Math.min(1, finite(country.exportTaxRate, 0))),
     countryId: country.id,
     countryLabel: country.label,
     countryConditionId: country.conditionId,
@@ -172,19 +179,6 @@ function mergeOfferRows(rows = []) {
   return [...result.values()];
 }
 
-function resourcePrice(resource = {}) {
-  const configured = Number(resource.referencePriceCopper);
-  return Number.isFinite(configured) ? Math.max(0, Math.round(configured)) : 0;
-}
-
-function marketPriceMode(offer = {}) {
-  const requested = String(offer.priceMode ?? offer.pricingMode ?? "").trim().toLowerCase();
-  const customOffer = offer.sourceType === "item" || String(offer.resourceId ?? "custom") === "custom";
-  if (requested === "catalog" && !customOffer) return "catalog";
-  if (requested === "manual" && customOffer) return "manual";
-  return "legacy";
-}
-
 function materializedOffers(source = {}, resources = []) {
   const selectors = [...new Set((source.rules ?? [])
     .filter((rule) => rule.active !== false && rule.mode === "produce")
@@ -196,13 +190,11 @@ function materializedOffers(source = {}, resources = []) {
   const output = [];
   for (const resource of resources ?? []) {
     const resourceId = String(resource?.id ?? "");
-    if (!resourceId || resourceId === "money" || resource.hidden || resource.isMoney || explicitIds.has(resourceId) || !resourceTradeReady(resource)) continue;
+    if (!resourceId || resourceId === "money" || resource.hidden || resource.isMoney || explicitIds.has(resourceId)) continue;
     const tags = marketOfferTags({ resourceId, kind: "material", tags: resource.marketTags ?? [] }, resource);
     if (!selectors.some((selector) => tags.some((tag) => materializationTagMatches(tag, selector)))) continue;
     const groups = new Set(resource.materialGroups ?? []);
-    const kind = tags.includes("livestock")
-      ? "livestock"
-      : (groups.has("edible") || groups.has("medicinal") ? "consumable" : (groups.has("fuel") || groups.has("mineral") ? "resource" : "material"));
+    const kind = groups.has("edible") || groups.has("medicinal") ? "consumable" : (groups.has("fuel") || groups.has("mineral") ? "resource" : "material");
     output.push({
       id: `generated-${String(source.id ?? "market").replace(/[^a-z0-9-]+/gi, "-")}-${resourceId}`,
       active: true,
@@ -210,22 +202,13 @@ function materializedOffers(source = {}, resources = []) {
       sourceType: "resource",
       resourceId,
       name: String(resource.label ?? resourceId),
-      unit: String(resource.unitLabel ?? resource.unit ?? "ед."),
+      unit: "ед.",
       icon: String(resource.icon ?? "fa-solid fa-box"),
       img: String(resource.img ?? ""),
       kind,
-      priceMode: "catalog",
-      basePriceCopper: resourcePrice(resource),
-      bidSpreadRate: 0.18,
-      baseAskStock: 36,
       baseStock: 36,
-      baseBidDemand: 27,
       volatility: 0.28,
-      loadMode: "auto",
-      load: Math.max(0, finite(resource.load, 1)),
-      cargoClass: String(resource.cargoClass ?? "10"),
-      cargoPoints: Math.max(1, Math.round(finite(resource.cargoPoints, 10))),
-      priceBasis: String(resource.priceBasis ?? ""),
+      priceFactor: 1,
       accessDifficulty: Math.max(0, Math.floor(finite(resource.marketAccessDifficulty, 0))),
       ubiquity: "specialized",
       forceAvailable: true,
@@ -243,7 +226,7 @@ function sourceRows(country = {}, specialties = [], resources = []) {
   ];
 }
 
-export function composeMarketLocation({ location = {}, economy: economySource = null, resources = [], locations = [], normalizedEconomy = false } = {}) {
+export function composeMarketLocation({ location = {}, economy: economySource = null, resources = [], locations = [], normalizedEconomy = false, includeOffers = true } = {}) {
   const economy = normalizedEconomy ? economySource : normalizeMarketEconomy(economySource, { locations });
   const country = marketCountryFromEconomy(location, economy);
   if (!country || country.active === false || location?.marketEnabled === false) return null;
@@ -252,49 +235,48 @@ export function composeMarketLocation({ location = {}, economy: economySource = 
     ?? { id: "town", label: "Городской рынок", maxUbiquity: "ordinary", stockFactor: 1, priceFactor: 1, handlingFactor: 1 };
   const specialtyIds = new Set(location?.marketSpecialtyIds ?? []);
   const specialties = economy.specialties.filter((row) => row.active !== false && specialtyIds.has(row.id));
-  const sources = sourceRows(country, specialties, resources);
-  const resourcesById = new Map((resources ?? []).map((row) => [String(row.id ?? ""), row]));
-  const offers = mergeOfferRows([{ offers: economy.baseOffers }, ...sources]).map((offer) => {
+  const sources = includeOffers ? sourceRows(country, specialties, resources) : [];
+  const resourcesById = includeOffers ? new Map((resources ?? []).map((row) => [String(row.id ?? ""), row])) : new Map();
+  const mergedOffers = includeOffers ? mergeOfferRows([{ offers: economy.baseOffers }, ...sources]) : [];
+  const offers = mergedOffers.map((offer) => {
     const resource = resourcesById.get(String(offer.resourceId ?? "")) ?? {};
-    const standardResourceOffer = offer.sourceType !== "item"
-      && String(offer.resourceId ?? "")
-      && String(offer.resourceId ?? "") !== "custom";
-    if (standardResourceOffer && !resourceTradeReady(resource)) return null;
-    const applied = applyRules(offer, resource, sources);
+    const effectiveOffer = resolveMarketOfferEconomics(offer, resource);
+    const applied = applyRules(effectiveOffer, resource, sources);
     const maxRank = UBIQUITY_RANK[size.maxUbiquity] ?? UBIQUITY_RANK.ordinary;
     const offerRank = UBIQUITY_RANK[offer.ubiquity] ?? UBIQUITY_RANK.common;
     const forceAvailable = offer.forceAvailable || !economy.baseOffers.some((row) => row.id === offer.id);
     if (!forceAvailable && offerRank > maxRank) return null;
     if (applied.restricted && !forceAvailable) return null;
-    const sizeStockFactor = factor(size.stockFactor, 1);
-    const baseStock = Math.max(0, Math.floor(finite(offer.baseAskStock ?? offer.baseStock, 0) * sizeStockFactor * applied.stockFactor));
+    const baseStock = Math.max(0, Math.floor(finite(offer.baseStock, 0) * factor(size.stockFactor, 1) * applied.stockFactor));
     if (baseStock <= 0 && !forceAvailable) return null;
-    const priceMode = marketPriceMode(offer);
-    const catalogPriceFactor = factor(size.priceFactor, 1) * applied.priceFactor;
-    const priceAnchorCopper = priceMode === "catalog" ? resourcePrice(resource) : finite(offer.basePriceCopper, 1);
-    const sourceBidDemand = finite(offer.baseBidDemand, Math.max(0, Math.floor(finite(offer.baseAskStock ?? offer.baseStock, 0) * 0.75)));
-    const demandFactor = sizeStockFactor * Math.max(0.25, Math.min(4, 1 / Math.max(0.01, applied.stockFactor)));
-    const baseBidDemand = Math.max(0, Math.floor(sourceBidDemand * demandFactor));
     return {
-      ...offer,
-      priceMode,
-      unit: String(!offer.unit || offer.unit === "ед." ? (resource.unitLabel ?? resource.unit ?? "ед.") : offer.unit),
-      load: offer.loadMode === "auto" && resource.load !== undefined && resource.load !== null
-        ? Math.max(0, finite(resource.load, 1))
-        : Math.max(0, finite(offer.load, 1)),
-      cargoClass: offer.loadMode === "auto" && resource.cargoClass
-        ? String(resource.cargoClass)
-        : String(offer.cargoClass ?? "10"),
-      cargoPoints: offer.loadMode === "auto" && resource.cargoPoints !== undefined
-        ? Math.max(1, Math.round(finite(resource.cargoPoints, 10)))
-        : Math.max(1, Math.round(finite(offer.cargoPoints, finite(offer.load, 1) * 10))),
-      priceBasis: String(offer.priceBasis ?? "").trim() || String(resource.priceBasis ?? ""),
-      accessDifficulty: Math.max(0, Math.floor(finite(offer.accessDifficulty, 0)), Math.floor(finite(resource.marketAccessDifficulty, 0))),
-      basePriceCopper: Math.max(1, Math.round(priceAnchorCopper * catalogPriceFactor)),
-      catalogPriceFactor: priceMode === "catalog" ? catalogPriceFactor : 1,
-      baseAskStock: baseStock,
+      ...effectiveOffer,
+      accessDifficulty: Math.max(0, Math.floor(finite(effectiveOffer.accessDifficulty, 0)), Math.floor(finite(resource.marketAccessDifficulty, 0))),
+      basePriceCopper: Math.max(1, Math.round(finite(effectiveOffer.basePriceCopper, 1) * factor(size.priceFactor, 1) * applied.priceFactor)),
       baseStock,
-      baseBidDemand,
+      volatility: Math.max(0, Math.min(0.8, finite(offer.volatility, 0.2) * applied.volatilityFactor)),
+      tags: applied.tags,
+      composition: applied.breakdown,
+      compositionSource: forceAvailable ? "specialty" : "base"
+    };
+  }).filter(Boolean);
+  const outboundOffers = mergedOffers.map((offer) => {
+    if (offer.sourceType === "item") return null;
+    const resource = resourcesById.get(String(offer.resourceId ?? "")) ?? {};
+    const effectiveOffer = resolveMarketOfferEconomics(offer, resource);
+    const applied = applyRules(effectiveOffer, resource, sources, { direction: "outbound" });
+    const maxRank = UBIQUITY_RANK[size.maxUbiquity] ?? UBIQUITY_RANK.ordinary;
+    const offerRank = UBIQUITY_RANK[offer.ubiquity] ?? UBIQUITY_RANK.common;
+    const forceAvailable = offer.forceAvailable || !economy.baseOffers.some((row) => row.id === offer.id);
+    if (!forceAvailable && offerRank > maxRank) return null;
+    if (applied.restricted && !forceAvailable) return null;
+    const baseDemand = Math.max(0, Math.floor(finite(offer.baseDemand, finite(offer.baseStock, 0)) * factor(size.stockFactor, 1) * applied.stockFactor));
+    if (baseDemand <= 0 && !forceAvailable) return null;
+    return {
+      ...effectiveOffer,
+      accessDifficulty: Math.max(0, Math.floor(finite(effectiveOffer.accessDifficulty, 0)), Math.floor(finite(resource.marketAccessDifficulty, 0))),
+      basePriceCopper: Math.max(1, Math.round(finite(effectiveOffer.basePriceCopper, 1) * factor(size.priceFactor, 1) * applied.priceFactor)),
+      baseDemand,
       volatility: Math.max(0, Math.min(0.8, finite(offer.volatility, 0.2) * applied.volatilityFactor)),
       tags: applied.tags,
       composition: applied.breakdown,
@@ -339,13 +321,22 @@ export function composeMarketLocation({ location = {}, economy: economySource = 
       deliveryQdFactor: 1,
       categoryFactors: {}
     },
-    offers
+    offers,
+    outboundOffers
   };
 }
 
-export function effectiveMarketLocations({ economy: economySource = null, locations = [], resources = [], isGM = false, normalizedEconomy = false } = {}) {
+export function effectiveMarketLocations({ economy: economySource = null, locations = [], resources = [], isGM = false, normalizedEconomy = false, offerLocationIds = null } = {}) {
   const normalizedLocations = normalizeEventRegionOptions(locations, { fallback: false });
   const economy = normalizedEconomy ? economySource : normalizeMarketEconomy(economySource, { locations: normalizedLocations });
-  return normalizedLocations.map((location) => composeMarketLocation({ location, economy, resources, locations: normalizedLocations, normalizedEconomy: true }))
+  const included = offerLocationIds === null ? null : new Set(Array.from(offerLocationIds ?? [], String));
+  return normalizedLocations.map((location) => composeMarketLocation({
+    location,
+    economy,
+    resources,
+    locations: normalizedLocations,
+    normalizedEconomy: true,
+    includeOffers: included === null || included.has(String(location.value ?? ""))
+  }))
     .filter((market) => market && market.active && (isGM || market.visibility !== "gm"));
 }

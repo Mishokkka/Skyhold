@@ -1,0 +1,99 @@
+<div class="fbls-ui-review-shell">
+  <header class="fbls-ui-review-hero fbls-card-header">
+    <div>
+      {{#if isShipReview}}
+      <span class="fbls-ui-review-eyebrow">СВОИ КОРАБЛИ · ВАРИАНТ А ВНЕСЁН</span>
+      <h1 class="fbls-ui-review-title">Удобное окно корабля</h1>
+      <p class="fbls-ui-review-intro">Вариант А внесён во все разделы. Карта раскрывается отдельной кнопкой в большой области; панель отправления без повторных чипов. «Сейчас» показывает рабочие шаблоны. Примеры и выбор ничего не применяют к миру.</p>
+      {{else}}
+      <span class="fbls-ui-review-eyebrow">РЕДАКТОР ЗДАНИЯ · ВСЕ ВКЛАДКИ</span>
+      <h1 class="fbls-ui-review-title">Компоновка редактора здания</h1>
+      <p class="fbls-ui-review-intro">Согласованные изменения внесены во все 12 вкладок и навигацию. Здесь сохранены исходная и принятая компоновки на текущих полях. Примеры локальные: действия и расчёты не выполняются, выбор ничего не применяет к миру.</p>
+      {{/if}}
+    </div>
+    <span class="fbls-chip">Прежние решения сохранены</span>
+  </header>
+
+  <main class="fbls-ui-review-content" data-render-scroll-key="ui-review-content">
+    <div class="fbls-action-group" role="group" aria-label="Подборки сравнения"><button type="button" class="fbls-subnav-tab {{#if isShipReview}}active{{/if}}" data-review-mode="ships" aria-pressed="{{#if isShipReview}}true{{else}}false{{/if}}">Окно корабля</button><button type="button" class="fbls-subnav-tab {{#unless isShipReview}}active{{/unless}}" data-review-mode="archive" aria-pressed="{{#if isShipReview}}false{{else}}true{{/if}}">Принятые ранее</button></div>
+    {{#if isShipReview}}
+      {{> "modules/fbl-skyhold/templates/parts/ui-review-ships.hbs" shipReview}}
+    {{else}}
+    <section class="fbls-ui-review-section" aria-label="Новая подборка элементов">
+      <header class="fbls-card-header fbls-ui-review-section-header">
+        <div><h2 class="fbls-ui-review-section-title"><i class="fa-solid fa-shapes" aria-hidden="true"></i> Принятые решения</h2></div>
+        <span class="fbls-chip">{{proposalCount}} решений</span>
+      </header>
+      <div class="fbls-toolbar fbls-review-editor-options">
+        <label class="fbls-field"><span>Пример</span><select class="fbls-control" data-review-editor-setting="kind" aria-label="Пример редактора">{{#each editorView.kinds}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+        <label class="fbls-field"><span>Доступ</span><select class="fbls-control" data-review-editor-setting="permission" aria-label="Доступ в примере">{{#each editorView.permissions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+        <label class="fbls-field"><span>Сравнение</span><select class="fbls-control" data-review-editor-setting="comparison" aria-label="Вид сравнения">{{#each editorView.comparisons}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+        <button type="button" class="fbls-button fbls-button-role" data-review-editor-width aria-pressed="{{#if editorView.narrow}}true{{else}}false{{/if}}" data-fbls-tooltip="Обычный образец 940 px; узкий 620 px — текущий минимум редактора.">Узкое окно · 620 px</button>
+      </div>
+      <div class="fbls-cluster fbls-review-editor-navigation" role="group" aria-label="Предложения по вкладкам">{{#each proposals}}<button type="button" class="fbls-subnav-tab {{#if active}}active{{/if}}" data-review-editor-proposal="{{id}}" aria-pressed="{{#if active}}true{{else}}false{{/if}}">{{title}}</button>{{/each}}</div>
+      <div class="fbls-ui-review-grid {{#if editorView.narrow}}is-narrow{{/if}}" data-review-editor-gallery data-review-editor-comparison="{{editorView.comparison}}">
+        {{#each proposals}}
+          <article class="fbls-ui-review-card" data-review-card="{{id}}" data-review-editor-card="{{id}}" {{#unless active}}hidden{{/unless}}>
+            <header class="fbls-card-header fbls-ui-review-card-header">
+              <div><h3 class="fbls-ui-review-card-title">{{title}}</h3><small>{{where}}</small></div><span class="fbls-chip">{{status}}</span>
+            </header>
+            {{#if isLivestock}}<label class="fbls-field"><span>Стадо в примере</span><select class="fbls-control" data-review-editor-setting="flock" aria-label="Стадо в примере">{{#each flockOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>{{/if}}
+            <div class="fbls-review-editor-comparison">
+              <section class="fbls-review-editor-side" data-review-editor-side="before" aria-label="Исходная компоновка: {{title}}"><h4 class="fbls-ui-review-sample-label">Исходная компоновка</h4><div class="fbls-review-editor-viewport"><div class="fbl-skyhold fbl-skyhold-building-editor fbls-review-editor-frame"><div class="fbls-building-editor-shell"><div class="fbls-building-editor-grid compact-v2 tabbed-editor">{{{sampleHtml}}}</div></div></div></div></section>
+              <section class="fbls-review-editor-side" data-review-editor-side="after" aria-label="Принятый вид: {{title}}"><h4 class="fbls-ui-review-sample-label">Принятый вид</h4><div class="fbls-review-editor-viewport"><div class="fbl-skyhold fbl-skyhold-building-editor fbls-review-editor-frame fbls-review-editor-after" data-review-editor-after="{{tab}}"><div class="fbls-building-editor-shell"><div class="fbls-building-editor-grid compact-v2 tabbed-editor">{{{sampleHtml}}}</div></div></div></div></section>
+            </div>
+            <details class="fbls-ui-review-detail"><summary>Что именно меняется</summary><p><strong>Сейчас:</strong> {{before}}</p><p><strong>После:</strong> {{after}}</p><p><strong>Проверить:</strong> {{caution}}</p></details>
+            <div class="fbls-action-group fbls-ui-review-choices" role="group" aria-label="Решение: {{title}}">
+              {{#each choices}}
+                <button type="button" class="fbls-button compact" data-review-id="{{../id}}" data-review-choice="{{id}}" aria-pressed="{{#if selected}}true{{else}}false{{/if}}" aria-label="{{label}}: {{../title}}">{{label}}</button>
+              {{/each}}
+            </div>
+            <input type="text" class="fbls-ui-review-note" data-review-note="{{id}}" value="{{note}}" maxlength="240" placeholder="Условие или свой вариант" aria-label="Комментарий: {{title}}">
+          </article>
+        {{/each}}
+      </div>
+    </section>
+
+    <details class="fbls-ui-review-archive"><summary>Принятые ранее: строки и карточки зданий (6 пунктов)</summary>{{#each approvedRows}}<article class="fbls-ui-review-card {{#if demoViewOnly}}is-view-only{{/if}}" data-review-card="{{id}}"><h3>{{title}}</h3><span class="fbls-chip">{{status}}</span>{{> "modules/fbl-skyhold/templates/parts/ui-review-row-card-samples.hbs"}}</article>{{/each}}</details>
+
+    <section class="fbls-ui-review-summary" aria-label="Итог решений">
+      <header class="fbls-card-header"><div><h2 class="fbls-ui-review-section-title">Итог для согласования</h2><p class="fbls-ui-review-summary-help">Скопируйте текст и отправьте его мне в чат. Пустые пункты останутся помечены как «Не решено».</p></div></header>
+      <label class="fbls-field"><span>Общий комментарий</span><input type="text" data-review-general-note value="{{generalNote}}" maxlength="500" placeholder="Например, с какого окна начать"></label>
+      <label class="fbls-field"><span>Решения</span><textarea data-review-summary readonly rows="9" aria-label="Текст решений для копирования">{{summary}}</textarea></label>
+    </section>
+
+    <details class="fbls-ui-review-archive">
+      <summary>Принятые ранее: сохранение и компоновка ГМ (2 пункта)</summary>
+      {{#each approvedBehaviors}}
+        <article class="fbls-ui-review-card" data-review-card="{{id}}"><h3>{{title}}</h3><span class="fbls-chip">{{status}}</span>{{> "modules/fbl-skyhold/templates/parts/ui-review-behavior-samples.hbs"}}</article>
+      {{/each}}
+    </details>
+    <details class="fbls-ui-review-archive">
+      <summary>Принятые ранее: два UI-аудита (10 пунктов)</summary>
+      {{#each approvedAudits}}
+        <article class="fbls-ui-review-card" data-review-card="{{id}}"><h3>{{title}}</h3><span class="fbls-chip">{{status}}</span>{{> "modules/fbl-skyhold/templates/parts/ui-review-audit-samples.hbs"}}</article>
+      {{/each}}
+    </details>
+    <details class="fbls-ui-review-archive">
+      <summary>Принятые ранее: элементы интерфейса (6 пунктов)</summary>
+      {{#each approvedComponents}}
+        <article class="fbls-ui-review-card"><h3>{{title}}</h3><span class="fbls-chip">{{status}}</span>{{> "modules/fbl-skyhold/templates/parts/ui-review-samples.hbs"}}</article>
+      {{/each}}
+    </details>
+    <details class="fbls-ui-review-archive">
+      <summary>Принятые ранее: палитра и типографика (8 пунктов)</summary>
+      <div class="fbls-ui-review-history">
+        {{#each history}}
+          <div><strong>{{title}}</strong><span>{{status}}</span><small>{{before}} → {{after}}</small></div>
+        {{/each}}
+      </div>
+    </details>
+    {{/if}}
+  </main>
+
+  <footer class="fbls-toolbar fbls-ui-review-footer">
+    <span data-review-count>{{#if isShipReview}}{{shipReview.decisionCount}}/5{{else}}{{decisionCount}}/{{proposalCount}}{{/if}} решений</span>
+    <button type="button" class="fbls-button" data-review-copy><i class="fa-solid fa-copy" aria-hidden="true"></i> Скопировать решения</button>
+  </footer>
+</div>
+

@@ -4,6 +4,8 @@ import { canCurrentUserOpenSkyhold, registerSettings } from "./data/settings.js"
 import {
   getSkyholdDataPerformanceMetrics,
   handleSkyholdSocketPayload,
+  registerConstructionOperationExecutor,
+  registerMarketOperationExecutor,
   registerStorageOperationExecutor,
   resetSkyholdDataPerformanceMetrics
 } from "./data/store.js";
@@ -17,9 +19,10 @@ import {
 import { SkyholdApp } from "./apps/skyhold-app.js";
 import { rerenderLoadedSkyholdApps } from "./apps/lazy-apps.js";
 import { executeStorageOperation } from "./apps/storage-operation-executor.js";
+import { executeConstructionOperation } from "./apps/construction-operation-executor.js";
 import { detectCalendaria, getCalendariaSnapshot, getLastCalendariaSnapshot, installCalendariaBridge } from "./integrations/calendaria-bridge.js";
 import { installSceneNotesIntegration } from "./integrations/scene-notes.js";
-import { preloadFoundryTemplates } from "./integrations/foundry-runtime.js";
+import { ensureSkyholdTemplateGroup } from "./apps/template-preload.js";
 import {
   getUniqueBuildingRegistration,
   listUniqueBuildings,
@@ -32,57 +35,18 @@ import { installSkyholdWindowFocusKeeper } from "./apps/common/window-focus-keep
 
 let apiInstalled = false;
 registerStorageOperationExecutor(executeStorageOperation);
-
-const SKYHOLD_PARTIAL_TEMPLATES = [
-  `modules/${MODULE_ID}/templates/parts/skyhold-header.hbs`,
-  `modules/${MODULE_ID}/templates/parts/skyhold-tabs.hbs`,
-  `modules/${MODULE_ID}/templates/parts/skyhold-empty.hbs`,
-  `modules/${MODULE_ID}/templates/parts/skyhold-resident-editor.hbs`,
-  `modules/${MODULE_ID}/templates/parts/skyhold-tab-overview.hbs`,
-  `modules/${MODULE_ID}/templates/parts/skyhold-tab-people.hbs`,
-  `modules/${MODULE_ID}/templates/parts/skyhold-tab-buildings.hbs`,
-  `modules/${MODULE_ID}/templates/parts/skyhold-tab-defense.hbs`,
-  `modules/${MODULE_ID}/templates/parts/skyhold-tab-special.hbs`,
-  `modules/${MODULE_ID}/templates/parts/skyhold-tab-storage.hbs`,
-  `modules/${MODULE_ID}/templates/parts/storage/tabs.hbs`,
-  `modules/${MODULE_ID}/templates/parts/storage/resources.hbs`,
-  `modules/${MODULE_ID}/templates/parts/storage/items.hbs`,
-  `modules/${MODULE_ID}/templates/parts/storage/rooms.hbs`,
-  `modules/${MODULE_ID}/templates/parts/storage/accounting.hbs`,
-  `modules/${MODULE_ID}/templates/parts/storage/market.hbs`,
-  `modules/${MODULE_ID}/templates/parts/storage/log.hbs`,
-  `modules/${MODULE_ID}/templates/parts/storage/batch-controls.hbs`,
-  `modules/${MODULE_ID}/templates/parts/storage/room-rail.hbs`,
-  `modules/${MODULE_ID}/templates/parts/market/sell.hbs`,
-  `modules/${MODULE_ID}/templates/parts/skyhold-tab-gm.hbs`,
-  `modules/${MODULE_ID}/templates/parts/skyhold-footer.hbs`,
-  `modules/${MODULE_ID}/templates/content-pack-importer.hbs`,
-  `modules/${MODULE_ID}/templates/parts/building-editor/hero.hbs`,
-  `modules/${MODULE_ID}/templates/parts/building-editor/dev-gain.hbs`,
-  `modules/${MODULE_ID}/templates/parts/building-editor/tabs.hbs`,
-  `modules/${MODULE_ID}/templates/parts/building-editor/main.hbs`,
-  `modules/${MODULE_ID}/templates/parts/building-editor/workers.hbs`,
-  `modules/${MODULE_ID}/templates/parts/building-editor/construction.hbs`,
-  `modules/${MODULE_ID}/templates/parts/building-editor/enterprise-capital.hbs`,
-  `modules/${MODULE_ID}/templates/parts/building-editor/production.hbs`,
-  `modules/${MODULE_ID}/templates/parts/building-editor/income.hbs`,
-  `modules/${MODULE_ID}/templates/parts/building-editor/defense.hbs`,
-  `modules/${MODULE_ID}/templates/parts/building-editor/housing.hbs`,
-  `modules/${MODULE_ID}/templates/parts/building-editor/storage.hbs`,
-  `modules/${MODULE_ID}/templates/parts/building-editor/culture.hbs`,
-  `modules/${MODULE_ID}/templates/parts/building-editor/text.hbs`,
-  `modules/${MODULE_ID}/templates/building-audio-track-editor.hbs`,
-  `modules/${MODULE_ID}/templates/resource-row-editor.hbs`,
-  `modules/${MODULE_ID}/templates/unique-buildings/parts/tabs.hbs`,
-  `modules/${MODULE_ID}/templates/unique-buildings/parts/editor-tabs.hbs`,
-  `modules/${MODULE_ID}/templates/unique-buildings/parts/medical-effective-types.hbs`,
-  `modules/${MODULE_ID}/templates/parts/mass-combat/setup.hbs`,
-  `modules/${MODULE_ID}/templates/parts/mass-combat/details.hbs`,
-  `modules/${MODULE_ID}/templates/parts/mass-combat/progress.hbs`
-];
+registerConstructionOperationExecutor(executeConstructionOperation);
+registerMarketOperationExecutor(async (operation, context) => {
+  if (["bank-borrow", "bank-repay"].includes(operation?.type)) {
+    const { executeBankOperation } = await import("./apps/bank-operation-executor.js");
+    return executeBankOperation(operation, context);
+  }
+  const { executeMarketOperation } = await import("./apps/market-operation-executor.js");
+  return executeMarketOperation(operation, context);
+});
 
 async function preloadSkyholdTemplates() {
-  await preloadFoundryTemplates(SKYHOLD_PARTIAL_TEMPLATES);
+  await ensureSkyholdTemplateGroup("core");
 }
 
 function openSkyhold() {
@@ -239,11 +203,16 @@ Hooks.once("ready", () => {
     installSkyholdWindowFocusKeeper();
     installCalendariaBridge();
 
-    game.socket?.on(`module.${MODULE_ID}`, async (payload) => {
-      if (await handleSkyholdSocketPayload(payload)) return;
-      if (payload?.type !== "dataChanged") return;
-      if (payload.userId === game.user?.id) return;
-      Hooks.callAll("fblSkyholdDataChanged");
+    game.socket?.on(`module.${MODULE_ID}`, async (payload, senderId) => {
+      try {
+        if (await handleSkyholdSocketPayload(payload, senderId)) return;
+        if (payload?.type !== "dataChanged") return;
+        if (payload.userId !== senderId || !game.users?.get?.(senderId)?.isGM) return;
+        if (payload.userId === game.user?.id) return;
+        Hooks.callAll("fblSkyholdDataChanged");
+      } catch (error) {
+        console.error("FBL Skyhold | Socket payload failed", error);
+      }
     });
 
     installSceneNotesIntegration();

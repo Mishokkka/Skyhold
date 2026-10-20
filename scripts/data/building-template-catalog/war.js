@@ -39,13 +39,6 @@ export const BUILDING_TEMPLATES_WAR = [
     "requiredBuildingIds": [],
     "workersMin": 0,
     "workersMax": 2,
-    "suitableWorkerTypes": "Все с ЛОВ, Все с РАЗ, Ловкач, Умелец",
-    "workerTypeEffects": {
-      "Все с ЛОВ": 0.5,
-      "Все с РАЗ": 0.5,
-      "Ловкач": 1,
-      "Умелец": 1
-    },
     "workerRole": "",
     "functions": {
       "production": false,
@@ -95,7 +88,6 @@ export const BUILDING_TEMPLATES_WAR = [
     "notes": "Бонус +2 на прокачку Marksmanship, стоимость навыка и талантов ниже на 1.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "strength"
   },
   {
     "id": "training-camp",
@@ -137,13 +129,6 @@ export const BUILDING_TEMPLATES_WAR = [
     "requiredBuildingIds": [],
     "workersMin": 0,
     "workersMax": 4,
-    "suitableWorkerTypes": "Все с СИЛ, Все с ЭМП, Силач, Переговорщик",
-    "workerTypeEffects": {
-      "Все с СИЛ": 0.5,
-      "Все с ЭМП": 0.5,
-      "Силач": 1,
-      "Переговорщик": 1
-    },
     "workerRole": "",
     "functions": {
       "production": false,
@@ -193,7 +178,6 @@ export const BUILDING_TEMPLATES_WAR = [
     "notes": "Бонус +2 на прокачку Melee, стоимость навыка и талантов ниже на 1.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "strength"
   },
   {
     "id": "ramparts",
@@ -235,11 +219,6 @@ export const BUILDING_TEMPLATES_WAR = [
     "requiredBuildingIds": [],
     "workersMin": 1,
     "workersMax": 8,
-    "suitableWorkerTypes": "Все с СИЛ, Строитель",
-    "workerTypeEffects": {
-      "Все с СИЛ": 0.5,
-      "Строитель": 1
-    },
     "workerRole": "",
     "functions": {
       "production": false,
@@ -289,7 +268,6 @@ export const BUILDING_TEMPLATES_WAR = [
     "notes": "Defense Rating +2.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "strength"
   },
   {
     "id": "moat",
@@ -326,13 +304,6 @@ export const BUILDING_TEMPLATES_WAR = [
     ],
     "workersMin": 1,
     "workersMax": 6,
-    "suitableWorkerTypes": "Все с СИЛ, Все с ЛОВ, Силач, Ловкач",
-    "workerTypeEffects": {
-      "Все с СИЛ": 0.5,
-      "Все с ЛОВ": 0.5,
-      "Силач": 1,
-      "Ловкач": 1
-    },
     "workerRole": "",
     "functions": {
       "production": false,
@@ -382,7 +353,6 @@ export const BUILDING_TEMPLATES_WAR = [
     "notes": "Defense Rating +1.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "strength"
   },
   {
     "id": "portcullis",
@@ -427,13 +397,6 @@ export const BUILDING_TEMPLATES_WAR = [
     ],
     "workersMin": 1,
     "workersMax": 4,
-    "suitableWorkerTypes": "Все с СИЛ, Все с РАЗ, Механик, Силач",
-    "workerTypeEffects": {
-      "Все с СИЛ": 0.5,
-      "Все с РАЗ": 0.5,
-      "Механик": 1,
-      "Силач": 1
-    },
     "workerRole": "",
     "functions": {
       "production": false,
@@ -483,7 +446,6 @@ export const BUILDING_TEMPLATES_WAR = [
     "notes": "Defense Rating +1.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "strength"
   },
   {
     "id": "guard-tower",
@@ -525,13 +487,6 @@ export const BUILDING_TEMPLATES_WAR = [
     "requiredBuildingIds": [],
     "workersMin": 1,
     "workersMax": 4,
-    "suitableWorkerTypes": "Все с ЛОВ, Все с РАЗ, Ловкач, Умелец",
-    "workerTypeEffects": {
-      "Все с ЛОВ": 0.5,
-      "Все с РАЗ": 0.5,
-      "Ловкач": 1,
-      "Умелец": 1
-    },
     "workerRole": "",
     "functions": {
       "production": false,
@@ -581,7 +536,6 @@ export const BUILDING_TEMPLATES_WAR = [
     "notes": "Scouting +2 and Defense Rating +1.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "strength"
   },
   {
     "id": "dungeon",
@@ -629,13 +583,6 @@ export const BUILDING_TEMPLATES_WAR = [
     "requiredBuildingIds": [],
     "workersMin": 1,
     "workersMax": 2,
-    "suitableWorkerTypes": "Все с СИЛ, Все с ЭМП, Силач, Переговорщик",
-    "workerTypeEffects": {
-      "Все с СИЛ": 0.5,
-      "Все с ЭМП": 0.5,
-      "Силач": 1,
-      "Переговорщик": 1
-    },
     "workerRole": "",
     "functions": {
       "production": false,
@@ -685,7 +632,6 @@ export const BUILDING_TEMPLATES_WAR = [
     "notes": "До четырех заключенных, если за ними следит тюремщик.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "strength"
   },
   {
     "id": "gallows",
@@ -727,11 +673,6 @@ export const BUILDING_TEMPLATES_WAR = [
     "requiredBuildingIds": [],
     "workersMin": 0,
     "workersMax": 1,
-    "suitableWorkerTypes": "Все с ЭМП, Переговорщик",
-    "workerTypeEffects": {
-      "Все с ЭМП": 0.5,
-      "Переговорщик": 1
-    },
     "workerRole": "",
     "functions": {
       "production": false,
@@ -781,7 +722,6 @@ export const BUILDING_TEMPLATES_WAR = [
     "notes": "После публичной казни риск нежелательных посетителей снижается.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "strength"
   },
   {
     "id": "guarded-storehouse",
@@ -835,13 +775,6 @@ export const BUILDING_TEMPLATES_WAR = [
     "requiredBuildingIds": [],
     "workersMin": 0,
     "workersMax": 2,
-    "suitableWorkerTypes": "Все с СИЛ, Все с РАЗ, Силач, Умелец",
-    "workerTypeEffects": {
-      "Все с СИЛ": 0.5,
-      "Все с РАЗ": 0.5,
-      "Силач": 1,
-      "Умелец": 1
-    },
     "workerRole": "",
     "functions": {
       "production": false,
@@ -891,7 +824,6 @@ export const BUILDING_TEMPLATES_WAR = [
     "notes": "Склад с замками, учетной комнатой и местом для караула.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "strength"
   },
   {
     "id": "barracks",
@@ -939,13 +871,6 @@ export const BUILDING_TEMPLATES_WAR = [
     "requiredBuildingIds": [],
     "workersMin": 0,
     "workersMax": 1,
-    "suitableWorkerTypes": "Все с СИЛ, Все с ЭМП, Силач, Переговорщик",
-    "workerTypeEffects": {
-      "Все с СИЛ": 0.5,
-      "Все с ЭМП": 0.5,
-      "Силач": 1,
-      "Переговорщик": 1
-    },
     "workerRole": "",
     "functions": {
       "production": false,
@@ -991,11 +916,10 @@ export const BUILDING_TEMPLATES_WAR = [
     "moraleDelta": 0,
     "workerMoraleDelta": 0,
     "upkeep": 0,
-    "effect": "20 мест. Жители с военной профессией не получают штраф довольства от казармы; остальные получают -2 от жилья.",
+    "effect": "20 мест. Жители с военным прошлым или текущим назначением в гарнизон не получают штраф довольства от казармы; остальные получают -2 от жилья.",
     "notes": "Казарма нужна для постоянной стражи, ротных комнат и дисциплины. Используется как дешевое жилье для солдатских отрядов.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "strength"
   },
   {
     "id": "arsenal",
@@ -1049,13 +973,6 @@ export const BUILDING_TEMPLATES_WAR = [
     "requiredBuildingIds": [],
     "workersMin": 0,
     "workersMax": 2,
-    "suitableWorkerTypes": "Все с СИЛ, Все с РАЗ, Механик, Силач",
-    "workerTypeEffects": {
-      "Все с СИЛ": 0.5,
-      "Все с РАЗ": 0.5,
-      "Механик": 1,
-      "Силач": 1
-    },
     "workerRole": "",
     "functions": {
       "production": false,
@@ -1105,7 +1022,6 @@ export const BUILDING_TEMPLATES_WAR = [
     "notes": "Покупку вооружения модуль пока не автоматизирует. Галочка экипировки у отряда остается решением ГМа.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "strength"
   },
   {
     "id": "watch-post",
@@ -1162,14 +1078,6 @@ export const BUILDING_TEMPLATES_WAR = [
     "effect": "2 стражника дают +1 DR. Без людей пост почти не работает.",
     "notes": "Дешевое решение для складов, причалов и ворот.",
     "visibility": "public",
-    "workerPrimaryAttribute": "agility",
-    "suitableWorkerTypes": "Все с ЛОВ, Все с РАЗ, Ловкач, Умелец",
-    "workerTypeEffects": {
-      "Все с ЛОВ": 0.5,
-      "Все с РАЗ": 0.5,
-      "Ловкач": 1,
-      "Умелец": 1
-    },
     "templateVersion": 11
   },
   {
@@ -1231,12 +1139,6 @@ export const BUILDING_TEMPLATES_WAR = [
     "effect": "+1 базовой DR и еще +1 DR при 3 назначенных работниках.",
     "notes": "Хорошо против рейда и уличного боя.",
     "visibility": "public",
-    "workerPrimaryAttribute": "strength",
-    "suitableWorkerTypes": "Все с СИЛ, Строитель",
-    "workerTypeEffects": {
-      "Все с СИЛ": 0.5,
-      "Строитель": 1
-    },
     "templateVersion": 11
   },
   {
@@ -1298,14 +1200,6 @@ export const BUILDING_TEMPLATES_WAR = [
     "effect": "+2 базовой DR, +1 DR за каждые 2 стражника.",
     "notes": "Ключевая точка для боев у входа.",
     "visibility": "public",
-    "workerPrimaryAttribute": "wits",
-    "suitableWorkerTypes": "Все с СИЛ, Все с РАЗ, Механик, Силач",
-    "workerTypeEffects": {
-      "Все с СИЛ": 0.5,
-      "Все с РАЗ": 0.5,
-      "Механик": 1,
-      "Силач": 1
-    },
     "templateVersion": 11
   },
   {
@@ -1367,12 +1261,6 @@ export const BUILDING_TEMPLATES_WAR = [
     "effect": "+1 базовой DR и +1 DR при 3 дозорных. В Mass Combat усиливает разведку через работников и теги.",
     "notes": "Хороша против внезапных налетов.",
     "visibility": "public",
-    "workerPrimaryAttribute": "wits",
-    "suitableWorkerTypes": "Все с РАЗ, Умелец",
-    "workerTypeEffects": {
-      "Все с РАЗ": 0.5,
-      "Умелец": 1
-    },
     "templateVersion": 11
   },
   {
@@ -1439,14 +1327,6 @@ export const BUILDING_TEMPLATES_WAR = [
     "effect": "Безопасное хранение боеприпасов. 2 смотрителя дают +1 DR за готовность оборонных запасов.",
     "notes": "Не создает бойцов, но помогает вооруженной обороне.",
     "visibility": "public",
-    "workerPrimaryAttribute": "wits",
-    "suitableWorkerTypes": "Все с РАЗ, Все с СИЛ, Умелец, Силач",
-    "workerTypeEffects": {
-      "Все с РАЗ": 0.5,
-      "Все с СИЛ": 0.5,
-      "Умелец": 1,
-      "Силач": 1
-    },
     "templateVersion": 11
   },
   {
@@ -1503,14 +1383,6 @@ export const BUILDING_TEMPLATES_WAR = [
     "effect": "+2 базовой DR, +1 DR при 3 и 5 назначенных бойцах.",
     "notes": "Лучше всего для обороны подступов и внешних складов.",
     "visibility": "public",
-    "workerPrimaryAttribute": "strength",
-    "suitableWorkerTypes": "Все с СИЛ, Все с ЛОВ, Силач, Ловкач",
-    "workerTypeEffects": {
-      "Все с СИЛ": 0.5,
-      "Все с ЛОВ": 0.5,
-      "Силач": 1,
-      "Ловкач": 1
-    },
     "templateVersion": 11
   },
   {
@@ -1572,14 +1444,6 @@ export const BUILDING_TEMPLATES_WAR = [
     "effect": "+1 базовой DR, +2 DR при 3 и 5 членах расчета. Для полноценного огня нужен отряд артиллеристов во вкладке Оборона.",
     "notes": "Дает сильную DR, но не заменяет артиллерийскую команду.",
     "visibility": "public",
-    "workerPrimaryAttribute": "wits",
-    "suitableWorkerTypes": "Все с РАЗ, Все с СИЛ, Умелец, Силач",
-    "workerTypeEffects": {
-      "Все с РАЗ": 0.5,
-      "Все с СИЛ": 0.5,
-      "Умелец": 1,
-      "Силач": 1
-    },
     "templateVersion": 11
   }
 ];

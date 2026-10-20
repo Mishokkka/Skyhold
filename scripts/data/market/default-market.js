@@ -1,3 +1,5 @@
+import { RESOURCE_BASE_DEFINITIONS } from "../resources/resource-base-definitions.js";
+
 export const DEFAULT_MARKET_LOCATION_PROFILES = [
   {
     id: "connected",
@@ -49,6 +51,40 @@ export const DEFAULT_MARKET_LOCATION_PROFILES = [
   }
 ];
 
+const ESSENTIAL_RESOURCE_IDS = new Set(["wood", "stone", "grain", "flour", "vegetables", "water", "bread", "animal-feed"]);
+
+function defaultAvailability(resource = {}) {
+  if (ESSENTIAL_RESOURCE_IDS.has(resource.id)) return { ubiquity: "essential", baseStock: 180, volatility: 0.2 };
+  const difficulty = Number(resource.marketAccessDifficulty ?? 0);
+  if (difficulty >= 4) return { ubiquity: "restricted", baseStock: 8, volatility: 0.42 };
+  if (difficulty >= 2) return { ubiquity: "specialized", baseStock: 24, volatility: 0.34 };
+  if (difficulty >= 1) return { ubiquity: "ordinary", baseStock: 55, volatility: 0.28 };
+  return { ubiquity: "common", baseStock: 100, volatility: 0.24 };
+}
+
+function defaultOfferKind(resource = {}) {
+  if (resource.foodEdible || resource.marketTags?.some((tag) => ["medicine", "consumer", "alcohol"].includes(tag))) return "consumable";
+  if (resource.marketTags?.some((tag) => ["fuel", "ore", "food.raw"].includes(tag))) return "resource";
+  return "material";
+}
+
+export const DEFAULT_EXTERNAL_MARKET_OFFERS = RESOURCE_BASE_DEFINITIONS
+  .filter((resource) => resource.id !== "money")
+  .map((resource) => {
+    const availability = defaultAvailability(resource);
+    return {
+      id: `market-${resource.id}`,
+      resourceId: resource.id,
+      kind: defaultOfferKind(resource),
+      baseStock: availability.baseStock,
+      baseDemand: availability.baseStock,
+      volatility: availability.volatility,
+      ubiquity: availability.ubiquity,
+      accessDifficulty: resource.marketAccessDifficulty ?? 0,
+      tags: [...new Set([resource.categoryTag, ...(resource.marketTags ?? [])].filter(Boolean))]
+    };
+  });
+
 export const DEFAULT_EXTERNAL_MARKET = {
   schemaVersion: 2,
   id: "external-market",
@@ -65,45 +101,5 @@ export const DEFAULT_EXTERNAL_MARKET = {
   railCapacityLoad: 8000,
   airshipCapacityLoad: 4000,
   locationProfiles: DEFAULT_MARKET_LOCATION_PROFILES,
-  offers: [
-    { id: "market-cattle", resourceId: "cattle", kind: "livestock", basePriceCopper: 1200, volatility: 0.28, baseStock: 12, load: 40, ubiquity: "ordinary", tags: ["livestock", "cattle", "dairy", "meat"] },
-    { id: "market-pigs", resourceId: "pigs", kind: "livestock", basePriceCopper: 480, volatility: 0.32, baseStock: 24, load: 10, ubiquity: "ordinary", tags: ["livestock", "pig", "meat"] },
-    { id: "market-sheep", resourceId: "sheep", kind: "livestock", basePriceCopper: 200, volatility: 0.3, baseStock: 30, load: 6, ubiquity: "ordinary", tags: ["livestock", "sheep", "wool", "meat"] },
-    { id: "market-goats", resourceId: "goats", kind: "livestock", basePriceCopper: 160, volatility: 0.3, baseStock: 30, load: 5, ubiquity: "ordinary", tags: ["livestock", "goat", "dairy", "meat"] },
-    { id: "market-horses", resourceId: "horses", kind: "livestock", basePriceCopper: 2500, volatility: 0.34, baseStock: 8, load: 45, ubiquity: "specialized", tags: ["livestock", "horse", "riding", "draft"] },
-    { id: "market-chickens", resourceId: "chickens", kind: "livestock", basePriceCopper: 8, volatility: 0.24, baseStock: 120, load: 0.2, ubiquity: "common", tags: ["livestock", "poultry", "chicken", "eggs", "meat"] },
-    { id: "market-geese", resourceId: "geese", kind: "livestock", basePriceCopper: 20, volatility: 0.26, baseStock: 60, load: 0.5, ubiquity: "common", tags: ["livestock", "poultry", "goose", "eggs", "feathers", "meat"] },
-    { id: "market-rabbits", resourceId: "rabbits", kind: "livestock", basePriceCopper: 12, volatility: 0.28, baseStock: 90, load: 0.25, ubiquity: "common", tags: ["livestock", "rabbit", "meat", "pelt"] },
-    { id: "market-pigeons", resourceId: "pigeons", kind: "livestock", basePriceCopper: 6, volatility: 0.3, baseStock: 80, load: 0.05, ubiquity: "ordinary", tags: ["livestock", "pigeon", "messenger"] },
-    { id: "market-wood", resourceId: "wood", kind: "material", basePriceCopper: 6, volatility: 0.18, baseStock: 120, load: 1 },
-    { id: "market-stone", resourceId: "stone", kind: "material", basePriceCopper: 5, volatility: 0.15, baseStock: 140, load: 2 },
-    { id: "market-iron", resourceId: "iron", kind: "material", basePriceCopper: 15, volatility: 0.24, baseStock: 60, load: 2 },
-    { id: "market-glass", resourceId: "glass", kind: "material", basePriceCopper: 20, volatility: 0.28, baseStock: 35, load: 1 },
-    { id: "market-leather", resourceId: "leather", kind: "material", basePriceCopper: 14, volatility: 0.22, baseStock: 45, load: 1 },
-    { id: "market-cloth", resourceId: "cloth-wool", kind: "material", basePriceCopper: 18, volatility: 0.2, baseStock: 40, load: 1 },
-    { id: "market-grain", resourceId: "grain", kind: "resource", basePriceCopper: 4, volatility: 0.3, baseStock: 180, load: 1 },
-    { id: "market-flour", resourceId: "flour", kind: "resource", basePriceCopper: 6, volatility: 0.26, baseStock: 120, load: 1 },
-    { id: "market-eggs", resourceId: "eggs", kind: "consumable", basePriceCopper: 6, volatility: 0.28, baseStock: 90, load: 0.25, tags: ["egg", "eggs", "edible", "food", "food.raw"] },
-    { id: "market-feathers", resourceId: "feathers", kind: "material", basePriceCopper: 8, volatility: 0.24, baseStock: 50, load: 0.5, tags: ["feather", "feathers", "down", "textile", "organic"] },
-    { id: "market-charcoal", resourceId: "charcoal", kind: "resource", basePriceCopper: 8, volatility: 0.24, baseStock: 75, load: 1 },
-    { id: "market-herbs", resourceId: "herbs", kind: "resource", basePriceCopper: 12, volatility: 0.35, baseStock: 30, load: 1 },
-    { id: "market-water", resourceId: "water", kind: "resource", basePriceCopper: 2, volatility: 0.12, baseStock: 220, load: 1 },
-    { id: "market-bread", resourceId: "bread", kind: "consumable", basePriceCopper: 6, volatility: 0.25, baseStock: 100, load: 1 },
-    { id: "market-meat", resourceId: "meat", kind: "consumable", basePriceCopper: 8, volatility: 0.35, baseStock: 70, load: 1 },
-    { id: "market-milk", resourceId: "milk", kind: "consumable", basePriceCopper: 3, volatility: 0.3, baseStock: 80, load: 1 },
-    { id: "market-honey", resourceId: "honey", kind: "consumable", basePriceCopper: 8, volatility: 0.22, baseStock: 45, load: 1 },
-    { id: "market-parchment", resourceId: "parchment", kind: "consumable", basePriceCopper: 10, volatility: 0.18, baseStock: 35, load: 1 },
-    { id: "market-vegetables", resourceId: "vegetables", kind: "consumable", basePriceCopper: 4, volatility: 0.3, baseStock: 110, load: 1 },
-    { id: "market-fruits", resourceId: "fruits", kind: "consumable", basePriceCopper: 5, volatility: 0.34, baseStock: 85, load: 1 },
-    { id: "market-straw", resourceId: "straw", kind: "resource", basePriceCopper: 2, volatility: 0.2, baseStock: 140, load: 1 },
-    { id: "market-wool", resourceId: "wool", kind: "material", basePriceCopper: 12, volatility: 0.24, baseStock: 55, load: 1 },
-    { id: "market-tallow", resourceId: "tallow", kind: "material", basePriceCopper: 6, volatility: 0.24, baseStock: 55, load: 1 },
-    { id: "market-pelt", resourceId: "pelt", kind: "material", basePriceCopper: 10, volatility: 0.3, baseStock: 35, load: 1 },
-    { id: "market-iron-ore", resourceId: "iron-ore", kind: "resource", basePriceCopper: 8, volatility: 0.26, baseStock: 80, load: 2 },
-    { id: "market-black-coal", resourceId: "black-coal", kind: "resource", basePriceCopper: 10, volatility: 0.25, baseStock: 95, load: 2 },
-    { id: "market-coke", resourceId: "coke", kind: "resource", basePriceCopper: 12, volatility: 0.24, baseStock: 65, load: 2 },
-    { id: "market-copper", resourceId: "copper", kind: "material", basePriceCopper: 45, volatility: 0.28, baseStock: 30, load: 2 },
-    { id: "market-silver", resourceId: "silver", kind: "material", basePriceCopper: 85, volatility: 0.32, baseStock: 10, load: 1 },
-    { id: "market-gold", resourceId: "gold", kind: "material", basePriceCopper: 650, volatility: 0.38, baseStock: 3, load: 1 }
-  ]
+  offers: DEFAULT_EXTERNAL_MARKET_OFFERS
 };

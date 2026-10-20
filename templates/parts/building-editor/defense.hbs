@@ -1,13 +1,12 @@
       {{#if building.showEditorDefense}}
-        <fieldset class="fbls-building-editor-card wide-card defense-card fbls-editor-tab-workspace tab-defense">
-          <legend class="fbls-editor-tab-legend">Оборона</legend>
-          <header class="fbls-editor-tab-head"><i class="fa-solid fa-shield-halved"></i><div><span>Защищённость владения</span><h2>Оборона</h2><p>Базовая защита, вклад гарнизона и тег боевого отряда.</p></div><strong class="fbls-editor-head-metric"><small>Итого</small>{{building.defenseSummary.total}}</strong></header>
-          <section class="fbls-editor-tab-panel"><div class="fbls-editor-panel-head"><span><i class="fa-solid fa-shield"></i> Формула защиты</span><small>База + ступени от эффективных работников</small></div><div class="fbls-defense-grid">
-            <label><span>База защиты</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.basePath}}.defense.base" value="{{building.defense.base}}" />{{else}}<strong>{{building.defense.base}}</strong>{{/if}}</label>
-            <label><span>+ защиты</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.basePath}}.defense.perStep" value="{{building.defense.perStep}}" />{{else}}<strong>{{building.defense.perStep}}</strong>{{/if}}</label>
-            <label><span>За каждые N работников</span>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.basePath}}.defense.workerStep" value="{{building.defense.workerStep}}" />{{else}}<strong>{{building.defense.workerStep}}</strong>{{/if}}</label>
-            <label><span>Тег отряда здания</span>{{#if canEdit}}<select data-field="{{building.basePath}}.defense.combatTag">{{#each combatTagOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{building.defenseCombatTagLabel}}</strong>{{/if}}</label>
+        <fieldset class="fbls-building-editor-card wide-card defense-card">
+          <legend>Оборона <i class="fa-regular fa-circle-question fbls-help" tabindex="0" role="img" aria-label="Оборона дает реальную Защищенность поселения. Это не развитие Войны. Война открывает здания, а Защищенность бросается кубами против угроз и может зависеть от людей в башнях, стенах и гарнизонах." data-fbls-tooltip="Оборона дает реальную Защищенность поселения. Это не развитие Войны. Война открывает здания, а Защищенность бросается кубами против угроз и может зависеть от людей в башнях, стенах и гарнизонах."></i></legend>
+          <div class="fbls-defense-grid">
+            <label><span>База защиты</span>{{#if canEdit}}<input class="fbls-control" type="number" data-type="number" data-field="{{building.basePath}}.defense.base" value="{{building.defense.base}}" />{{else}}<strong>{{building.defense.base}}</strong>{{/if}}</label>
+            <label><span>+ защиты</span>{{#if canEdit}}<input class="fbls-control" type="number" data-type="number" data-field="{{building.basePath}}.defense.perStep" value="{{building.defense.perStep}}" />{{else}}<strong>{{building.defense.perStep}}</strong>{{/if}}</label>
+            <label title="За каждые N работников"><span>Шаг работн.</span>{{#if canEdit}}<input aria-label="За каждые N работников" class="fbls-control" type="number" data-type="number" data-field="{{building.basePath}}.defense.workerStep" value="{{building.defense.workerStep}}" />{{else}}<strong>{{building.defense.workerStep}}</strong>{{/if}}</label>
+            <label title="Тег отряда здания"><span>Тег отряда</span>{{#if canEdit}}<select aria-label="Тег отряда здания" class="fbls-control" data-field="{{building.basePath}}.defense.combatTag">{{#each combatTagOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{building.defenseCombatTagLabel}}</strong>{{/if}}</label>
             <div class="fbls-result-box" data-fbls-tooltip="{{building.defenseSummary.detail}}"><span>Итого защиты</span><strong>{{building.defenseSummary.total}}</strong><em>кубов защиты</em></div>
-          </div></section>
+          </div>
         </fieldset>
       {{/if}}

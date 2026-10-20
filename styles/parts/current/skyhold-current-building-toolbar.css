@@ -27,8 +27,8 @@
 
 .fbl-skyhold .fbls-crew-card-main h3 {
   margin: 0 0 0.08rem;
-  font-size: 0.78rem;
-  line-height: 1.05;
+  font-size: var(--fbls-type-compact-sm);
+  line-height: 1.1;
   color: var(--fbls-info);
   text-shadow: 0 0 8px var(--fbls-info-soft);
 }
@@ -36,7 +36,7 @@
 .fbl-skyhold .fbls-crew-card-main p {
   margin: 0;
   color: var(--fbls-muted);
-  font-size: 0.72rem;
+  font-size: var(--fbls-type-compact-sm);
   line-height: 1.1;
 }
 
@@ -60,7 +60,7 @@
   border-radius: 6px;
   background: var(--fbls-overlay-soft);
   color: var(--fbls-muted);
-  font-size: 0.68rem;
+  font-size: var(--fbls-type-compact-xs);
   line-height: 1.1;
 }
 
@@ -136,6 +136,18 @@
   margin-left: 0;
 }
 
+.fbl-skyhold .fbls-building-actions {
+  flex-wrap: nowrap;
+  gap: 0.35rem;
+}
+
+.fbl-skyhold .fbls-building-actions > .fbls-button {
+  flex: 0 0 auto;
+  width: auto;
+  margin: 0;
+  white-space: nowrap;
+}
+
 .fbl-skyhold .fbls-building-tab {
   display: inline-flex;
   flex: 1 1 0;
@@ -149,7 +161,7 @@
   border-radius: 999px;
   background: var(--fbls-surface-soft);
   color: var(--fbls-muted);
-  font-size: 0.76rem;
+  font-size: var(--fbls-type-compact-sm);
   line-height: 1;
   cursor: pointer;
 }
@@ -160,7 +172,7 @@
 }
 
 .fbl-skyhold .fbls-building-tab i {
-  font-size: 0.78rem;
+  font-size: var(--fbls-type-compact-sm);
 }
 
 .fbl-skyhold .fbls-building-tab.all i { color: var(--fbls-info); }
@@ -196,7 +208,7 @@
   border-radius: 999px;
   background: var(--fbls-overlay);
   color: var(--fbls-text);
-  font-size: 0.72rem;
+  font-size: var(--fbls-type-compact-sm);
 }
 
 .fbl-skyhold .fbls-building-add-button {

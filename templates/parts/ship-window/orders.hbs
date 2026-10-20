@@ -1,0 +1,96 @@
+<div class="fbls-ship-section-head fbls-card-header">
+  <div><h3 class="fbls-heading-section">{{#if hasBundle}}Составной рейс{{else if inTransit}}Текущий рейс{{else}}Заказы поселений{{/if}}</h3>{{#if inTransit}}<p>{{nextAction}}</p>{{/if}}</div>
+  <div class="fbls-action-group">
+    {{#if canGenerateWorld}}<button type="button" class="fbls-button compact" data-action="ship-generate-world" data-fbls-tooltip="Получить предложения этого порта на текущую декаду. Получение предложений бесплатно и не отправляет корабль."><i class="fa-solid fa-scroll" aria-hidden="true"></i> Получить заказы</button>{{/if}}
+    {{#if canRerollWorld}}<button type="button" class="fbls-button compact" data-action="ship-reroll-world" data-fbls-tooltip="ГМ: заменить только свободные предложения этого корабля в текущем порту. Принятые договоры и чужие заказы сохраняются."><i class="fa-solid fa-dice" aria-hidden="true"></i> Перебросить</button>{{/if}}
+  </div>
+</div>
+{{#if atHome}}{{#unless hasBundle}}{{#unless ownSale}}<div class="fbls-toolbar"><p class="fbls-muted-text">Свой груз · через Внешний рынок</p><button type="button" class="fbls-button compact" data-action="ship-open-market" data-id="{{id}}" aria-label="Подготовить продажу груза кораблём {{name}}" title="Открыть рынок с этим кораблём как перевозчиком; отправление выполняется после проверки сделки."><i class="fa-solid fa-box" aria-hidden="true"></i> Продать груз</button></div>{{/unless}}{{/unless}}{{/if}}
+{{#each @root.shipsContext.worldIssues}}<p class="fbls-ship-notice">{{this}}</p>{{/each}}
+{{#unless voyagePresentation}}{{#if catchUpDays}}<p class="fbls-muted-text">До даты поселения: {{catchUpDays}} дн. корабельного времени. Следующий приказ может использовать эти дни; новый рейс остановится на следующем требующем решения прибытии.</p>{{/if}}{{/unless}}
+{{#if ownSale}}<div class="fbls-action-group"><button type="button" class="fbls-button compact" data-action="ship-open-sale" data-id="{{id}}" aria-label="Открыть продажу груза корабля {{name}}"><i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i> Открыть продажу</button></div><div class="fbls-ship-box" tabindex="0" data-fbls-tooltip="Складской товар снят при отправлении. Сделка и спрос учитываются во «Внешнем рынке». Выручка поступит в бортовой кошелёк после доставки и решения возможного происшествия."><strong>Товар поселения → {{ownSale.marketLabel}}</strong><p>{{ownSaleCargoText}}</p>{{#if ownSale.delayRemainingQd}}<p class="fbls-ship-notice">Продажа задержана; до расчёта с учётом задержки {{ownSaleRemainingDays}} дн.</p>{{/if}}<p>Ожидаемая выручка на борт: {{fblsShipGold ownSale.revenueCopper}} ЗМ.{{#if ownSaleNeedsResolution}} Требуется решение ГМа во «Внешнем рынке».{{/if}}</p></div>{{/if}}
+{{#if departureIssues.length}}<details class="fbls-ship-box" data-ship-disclosure="departure-issues:{{id}}"><summary>Мешает новому отправлению · {{departureIssues.length}}</summary><ul>{{#each departureIssues}}<li>{{this}}</li>{{/each}}</ul></details>{{/if}}
+{{#if moneySummary.shortageCopper}}<p class="fbls-ship-notice">До покрытия счетов и рекомендуемого запаса не хватает {{fblsShipGold moneySummary.shortageCopper}} ЗМ.</p>{{/if}}
+{{#if voyagePresentation}}{{> "modules/fbl-skyhold/templates/parts/ship-window/voyage-progress.hbs" voyagePresentation}}{{/if}}
+{{#if hasBundle}}
+  <div class="fbls-ship-box">
+    <strong>Принятые грузы · {{orderBundle.orders.length}}</strong>
+    <p class="fbls-muted-text">Общая дорога и содержание оплачиваются по участкам. Плата и исход учитываются отдельно для каждого заказа.</p>
+    <dl class="fbls-ship-facts">{{#each bundleOrders}}<div tabindex="0" data-fbls-tooltip="{{title}}. Груз: {{loadPoints}} ед. Плата заказчика: {{fblsShipGold rewardCopper}} ЗМ; фактическая выплата зависит от исхода и поступает только после доставки."><dt>{{cargoName}} · {{loadPoints}} ед.</dt><dd>{{stateLabel}}<br /><small>{{pickupLabel}} → {{destination}}</small></dd></div>{{/each}}</dl>
+    {{#if commands.resolveBundle}}
+      {{> "modules/fbl-skyhold/templates/parts/ship-window/command-readiness.hbs" commands.resolveBundle}}
+      <p class="fbls-muted-text">Исход сохраняется до проверки денег. При нехватке средств корабль дождётся оплаты; повтор продолжит сохранённый результат.</p>
+      <button type="button" class="fbls-button compact" data-action="ship-resolve-bundle" title="{{commands.resolveBundle.reasonText}}" data-fbls-tooltip="Подвести итоги доставленных в этом порту заказов. Исход каждого сохраняется до проверки денег; повтор не выдаёт плату дважды." {{#unless canResolveBundle}}disabled{{/unless}}><i class="fa-solid fa-dice" aria-hidden="true"></i> {{#if orderBundle.waitingFunds}}Продолжить сохранённые исходы{{else}}Подвести итоги заказов{{/if}}</button>
+      {{#if orderBundle.waitingFunds}}<button type="button" class="fbls-button compact" data-action="ship-window-tab" data-ship-panel-target="finance"><i class="fa-solid fa-coins" aria-hidden="true"></i> Проверить деньги</button>{{/if}}
+    {{/if}}
+    {{#if commands.continueBundle}}
+      <strong>Следующий участок → {{bundleNextStop.point.label}}</strong>
+      {{> "modules/fbl-skyhold/templates/parts/ship-window/command-readiness.hbs" commands.continueBundle}}
+      <button type="button" class="fbls-button compact" data-action="ship-continue-bundle" title="{{commands.continueBundle.reasonText}}" data-fbls-tooltip="Отправиться в следующий порт по принятому маршруту. Плановые расходы этого участка оплачиваются с борта один раз." {{#unless canContinueBundle}}disabled{{/unless}}><i class="fa-solid fa-paper-plane" aria-hidden="true"></i> Следующий порт</button>
+    {{/if}}
+  </div>
+{{else if inTransit}}
+  {{#if activeVoyage.quote.contract}}
+  <div class="fbls-ship-box">
+    <strong>Исход заказа · {{activeVoyage.quote.contract.cargo.name}}</strong>
+    {{#if outcome}}
+      <p>{{outcome.commercialLabel}} · {{outcome.eventLabel}}</p>
+      <dl class="fbls-ship-facts"><div><dt>Плата</dt><dd>{{fblsShipGold outcome.rewardCopper}} ЗМ</dd></div><div><dt>Доп. расходы</dt><dd>{{fblsShipGold outcome.expenseCopper}} ЗМ</dd></div><div><dt>Задержка</dt><dd>{{outcome.delayDays}} дн.</dd></div><div><dt>Внимание</dt><dd>{{outcome.attentionDelta}}</dd></div></dl>
+      {{#if shortageCopper}}<p class="fbls-ship-notice">Не хватает {{fblsShipGold shortageCopper}} ЗМ. Исход сохранён и повторно не бросается.</p>{{/if}}
+    {{/if}}
+    {{#if commands.resolveWorld}}
+      {{> "modules/fbl-skyhold/templates/parts/ship-window/command-readiness.hbs" commands.resolveWorld}}
+      <p class="fbls-muted-text">Исход сохраняется до проверки денег. При нехватке средств корабль дождётся оплаты; повтор продолжит сохранённый результат.</p>
+      <button type="button" class="fbls-button" data-action="ship-resolve-world" title="{{commands.resolveWorld.reasonText}}" data-fbls-tooltip="Подвести итог прибывшего заказа. Повторное нажатие не меняет уже сохранённый исход и не выдаёт плату дважды." {{#unless canResolve}}disabled{{/unless}}><i class="fa-solid fa-dice" aria-hidden="true"></i> {{#if outcome}}Продолжить сохранённый исход{{else}}Подвести итог{{/if}}</button>
+      {{#if activeVoyage.waitingFunds}}<button type="button" class="fbls-button compact" data-action="ship-window-tab" data-ship-panel-target="finance"><i class="fa-solid fa-coins" aria-hidden="true"></i> Проверить деньги</button>{{/if}}
+    {{else}}<p class="fbls-muted-text">Время рейса учитывается при расчёте поселения.</p>{{/if}}
+  </div>
+  {{/if}}
+{{else}}
+{{#unless ownSale}}
+<div class="fbls-order-workspace">
+{{#if offers.length}}<label class="fbls-search"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><input type="search" data-ship-order-search aria-label="Поиск заказов корабля" placeholder="Груз или порт…" autocomplete="off" /></label>{{/if}}
+<div class="fbls-order-list" data-render-scroll-key="ship-order-list">
+  
+  {{#each offers}}
+  <details class="fbls-ship-order" data-ship-order-choice data-ship-order-search-text="{{title}} {{contract.cargo.name}} {{pickupLabel}} {{destination}} {{kindLabel}}" data-ship-disclosure="order:{{id}}" data-ship-offer="{{id}}" data-ship-draft-scope="offer:{{id}}">
+    <summary><label class="fbls-order-select"><input type="checkbox" value="{{id}}" data-ship-bundle-select aria-label="Добавить в план: {{title}}" /><span data-fbls-tooltip="{{title}} · {{kindLabel}}"><strong>{{contract.cargo.name}}</strong><small>{{kindLabel}} · {{contract.cargo.loadPoints}} ед.</small></span></label><div class="fbls-order-destination" data-fbls-tooltip="{{pickupLabel}} → {{destination}} · {{durationDays}} дн. · {{difficultyLabel}}"><strong>{{pickupLabel}} → {{destination}}</strong><small>{{durationDays}} дн. · {{difficultyLabel}}</small></div><span class="fbls-order-prices" data-fbls-tooltip="Расходы отдельного заказа при обычном подходе; плата до случайных исходов"><strong>Плата {{fblsShipGold rewardCopper}} ЗМ</strong><small>Смета {{fblsShipGold costs.totalCopper}} ЗМ</small></span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary>
+    <div class="fbls-ship-order-body">
+      <p class="fbls-muted-text">Порожний подход: {{approachKm}} км · путь с грузом: {{deliveryKm}} км.</p>
+      <div class="fbls-ship-route" tabindex="0" data-fbls-tooltip="{{departureLabel}} — текущее место корабля, а не отправитель груза. При удалённой погрузке корабль сначала летит туда порожним. Время и расходы охватывают весь путь."><span>Корабль: {{departureLabel}}</span><strong>Погрузка: {{pickupLabel}}</strong><strong>Выгрузка: {{destination}}</strong><span>{{quote.distanceKm}} км</span></div>
+      <p class="fbls-muted-text" tabindex="0" data-fbls-tooltip="Перелёт рассчитан по средней скорости корабля: обычный ночной отдых уже учтён. Погрузка и разгрузка зависят от объёма груза, размера порта и местного состояния рынка; каждая занимает минимум четверть дня. Транзитные точки маршрута не требуют остановки без отдельного заказа.">Время: перелёт {{timing.flightDays}} дн. · погрузка {{timing.loadingDays}} дн. · разгрузка {{timing.unloadingDays}} дн.</p>
+      <div class="fbls-card-header"><span>{{contract.cargo.name}} · {{contract.cargo.quantity}} ед.</span><span class="fbls-chip" tabindex="0" data-fbls-tooltip="Внимание властей и известность корабля на этом направлении. Они влияют на риск и доступные дела; высокая известность может привлечь контрабандные предложения.">Внимание {{attention.level}}/10 · {{attention.label}}</span></div>
+      <dl class="fbls-ship-facts">
+        <div tabindex="0" data-fbls-tooltip="Базовая плата — больший из тарифа по грузу и ориентировочных расходов перевозчика с надбавкой. Затем действуют спрос, вид заказа и разброс ±10%; добавляются пошлины и сборы. Дорогая фактическая команда не повышает плату. Подход капитана и события меняют итог."><dt>Плата заказчика ⓘ</dt><dd>{{fblsShipGold rewardCopper}} ЗМ</dd></div>
+        <div tabindex="0" data-fbls-tooltip="Место, занятое грузом заказчика. Это оптовая партия заказчика, а не покупка для поселения. Обычный груз стремится занять 60–95% трюма; предложение и спрос могут ограничить объём. Контрабанда ограничена тайниками."><dt>Место в трюме</dt><dd>{{contract.cargo.loadPoints}} ед.</dd></div>
+        <div tabindex="0" data-fbls-tooltip="Провизия: {{fblsShipGold costs.foodCopper}} ЗМ. Жалованье: {{fblsShipGold costs.crewCopper}} ЗМ. Содержание: {{fblsShipGold costs.upkeepCopper}} ЗМ. Порт: {{fblsShipGold costs.handlingCopper}} ЗМ. Пошлины: {{fblsShipGold costs.taxCopper}} ЗМ. В сумму не включены будущие происшествия, возвращение и дальнейшая стоянка."><dt>Смета рейса ⓘ</dt><dd>{{fblsShipGold costs.totalCopper}} ЗМ</dd></div>
+        <div tabindex="0" data-fbls-tooltip="При обычном подходе бюджет = смета рейса {{fblsShipGold costs.totalCopper}} ЗМ + возвращение {{fblsShipGold returnReserveCopper}} ЗМ + стоянка {{fblsShipGold idleReserveCopper}} ЗМ + запас на коммерческий и случайный исход {{fblsShipGold outcomeReserveCopper}} ЗМ. Стоянка рассчитана до следующего десятника, минимум 2 дня, по {{fblsShipGold idleUpkeepCopperPerDay}} ЗМ/день. При другом подходе автоматический бюджет уточняется при отправке. Резервы остаются на борту до фактической траты."><dt>Бюджет ⓘ</dt><dd>{{fblsShipGold recommendedBudgetCopper}} ЗМ</dd></div>
+      </dl>
+      <details class="fbls-ship-budget-detail"><summary>Из чего сложен бюджет</summary><dl class="fbls-ship-facts"><div><dt>Путь и обработка груза</dt><dd>{{fblsShipGold costs.totalCopper}} ЗМ</dd></div><div><dt>Возвращение домой</dt><dd>{{fblsShipGold returnReserveCopper}} ЗМ</dd></div><div><dt>Стоянка до решения</dt><dd>{{fblsShipGold idleReserveCopper}} ЗМ</dd></div><div><dt>Исходы и риск</dt><dd>{{fblsShipGold outcomeReserveCopper}} ЗМ</dd></div></dl><p class="fbls-muted-text">Расходы рейса: провизия {{fblsShipGold costs.foodCopper}}, жалованье {{fblsShipGold costs.crewCopper}}, содержание {{fblsShipGold costs.upkeepCopper}}, порт {{fblsShipGold costs.handlingCopper}}, пошлины {{fblsShipGold costs.taxCopper}} ЗМ. Резерв — деньги на борту, а не списание.</p></details>
+      <div class="fbls-ship-risk-grid">{{#each styles}}<div tabindex="0" data-fbls-tooltip="{{styleHint}} Риск: {{riskLabel}}. Возможная выплата {{fblsShipGold rewardRangeCopper.min}}–{{fblsShipGold rewardRangeCopper.max}} ЗМ; это выручка, а не чистая прибыль."><strong>{{styleLabel}}</strong><span>{{riskLabel}}</span><small>{{fblsShipGold rewardRangeCopper.min}}–{{fblsShipGold rewardRangeCopper.max}} ЗМ</small></div>{{/each}}</div>
+
+    </div>
+  </details>
+  {{else}}<div class="fbls-empty">{{#if ownSale}}После расчёта за доставку товара появятся новые приказы.{{else if worldOffersGenerated}}Сейчас свободных заказов в этом порту нет. Новые могут появиться в следующую декаду.{{else}}Получите предложения, чтобы выбрать следующий рейс.{{/if}}</div>{{/each}}
+</div>
+<p class="fbls-empty-state is-compact" data-ship-order-empty hidden>По этому запросу заказов нет. Выбранные заказы остаются в плане.</p>
+<section class="fbls-order-plan" aria-label="План выбранных заказов" data-ship-draft-scope="bundle:{{id}}">
+  <div data-ship-planner-preview aria-label="Предварительный расчёт рейса"></div>
+  <footer class="fbls-order-command fbls-toolbar" aria-label="Отправление корабля">
+    <label class="fbls-field"><span>Подход</span><select data-ship-bundle-style data-ship-draft="bundle-style" aria-label="Подход капитана"><option value="cautious">Осторожно</option><option value="normal" selected>Обычно</option><option value="bold">С риском</option></select></label>
+    {{#if atHome}}<label class="fbls-field"><span>Бюджет, ЗМ</span><input type="number" min="0" step="0.01" data-ship-bundle-budget data-ship-draft="bundle-budget" placeholder="Автоматически" aria-label="Целевой бюджет корабля в ЗМ" title="Пустое поле — рекомендуемый запас. Переводится только недостающее; резерв остаётся на борту." /></label>{{/if}}
+    <span class="fbls-muted-text" data-ship-planner-status role="status" aria-live="polite">Выберите 1–3 заказа</span>
+    <button type="button" class="fbls-button" data-action="ship-depart-world" data-ship-planned disabled><i class="fa-solid fa-paper-plane" aria-hidden="true"></i> Принять и отправить</button>
+  </footer>
+</section>
+</div>
+  {{#if worldOfferError}}<p class="fbls-ship-notice">{{worldOfferError}}</p>{{/if}}
+  {{#if returnOffer}}<div class="fbls-ship-box">
+    <div class="fbls-card-header"><strong>Возвращение домой</strong><span>{{returnOffer.durationDays}} дн.</span></div>
+    {{> "modules/fbl-skyhold/templates/parts/ship-window/command-readiness.hbs" commands.returnHome}}
+    {{#unless readiness.ready}}<p class="fbls-muted-text">Для возвращения домой допускается неполная или неготовая команда. Перед новым заказом готовность проверяется отдельно.</p>{{/unless}}
+    <button type="button" class="fbls-button compact" data-action="ship-return-home" title="{{commands.returnHome.reasonText}}" data-fbls-tooltip="Отправиться домой без нового заказа. Оплачиваются счёт стоянки к выходу и расходы пути. Провизия {{fblsShipGold returnOffer.costs.foodCopper}}, жалованье {{fblsShipGold returnOffer.costs.crewCopper}}, содержание {{fblsShipGold returnOffer.costs.upkeepCopper}}, порт {{fblsShipGold returnOffer.costs.handlingCopper}}, пошлины {{fblsShipGold returnOffer.costs.taxCopper}} ЗМ. При возвращении бортовой остаток передаётся поселению." {{#unless canReturnHome}}disabled{{/unless}}><i class="fa-solid fa-house" aria-hidden="true"></i> Лететь домой</button>
+  </div>{{else if returnError}}<p class="fbls-ship-notice">{{returnError}}</p>{{/if}}
+  {{#if canRelocate}}<div class="fbls-ship-box fbls-card-header"><div><strong>Передислокация</strong><p>Перелёт в другой порт без заказа и платы клиента.</p></div><div class="fbls-action-group"><label class="fbls-field"><span>Порт</span><select data-ship-relocation-port aria-label="Порт передислокации" data-fbls-tooltip="Открытые воздушные порты. Наличие маршрута, длительность и расходы будут проверены перед отправкой.">{{#each relocationPorts}}<option value="{{id}}">{{label}}</option>{{/each}}</select></label><button type="button" class="fbls-button compact" data-action="ship-relocate-world" data-fbls-tooltip="Показать смету и отправить корабль без контракта. Передислокация оплачивается из корабельных денег; дома нужный бюджет передаётся из казны поселения."><i class="fa-solid fa-location-arrow" aria-hidden="true"></i> Лететь</button></div></div>{{/if}}
+{{/unless}}
+{{/if}}

@@ -1,0 +1,194 @@
+<div class="fbls-body-text fbls-politics-shell">
+  {{#unless hasHolding}}
+    <div class="fbls-empty fbls-politics-empty">Поселение недоступно.</div>
+  {{else}}
+    {{#if available}}
+      <header class="fbls-politics-hero">
+        <div class="fbls-section-heading"><span class="fbls-eyebrow fbls-politics-eyebrow">УПРАВЛЕНИЕ ПОСЕЛЕНИЕМ</span><h1 class="fbls-heading-title">Политика · {{holdingName}}</h1></div>
+        <div class="fbls-politics-status"><span class="fbls-chip fbls-politics-term" tabindex="0" data-fbls-tooltip="Политика доступна после достижения порога Культуры и при работающем Доме собраний или Ратуше. ГМ может временно отключить требование здания для проверки интерфейса.">Разделы открыты</span><small class="fbls-politics-term" tabindex="0" data-fbls-tooltip="Десятник — период в 10 игровых дней, или 40 четвертей дня. Номер берётся из календаря поселения.">Десятник {{periodIndex}}</small></div>
+      </header>
+    {{/if}}
+
+    <nav class="fbls-politics-tabs" aria-label="Разделы Политики">
+      {{#each tabs}}
+        <button type="button" data-politics-tab="{{id}}" class="fbls-politics-tab {{#if active}}is-active{{/if}}" data-fbls-tooltip="{{tooltip}}" {{#if active}}aria-current="page"{{/if}}><i class="{{icon}}" aria-hidden="true"></i><span>{{label}}</span></button>
+      {{/each}}
+    </nav>
+
+    <main class="fbls-politics-content" data-render-scroll-key="politics-content">
+      {{#unless available}}<p class="fbls-muted">Политика приостановлена. Административные записи доступны ГМу; игровые эффекты и новые решения курса отключены.</p>{{/unless}}
+      {{#if panels.control}}
+        <div class="fbls-politics-panel">
+<header class="fbls-card-header"><div class="fbls-section-heading"><span class="fbls-eyebrow fbls-politics-eyebrow">ПОРЯДОК И БЕЗОПАСНОСТЬ</span><h2 class="fbls-heading-section">Контроль поселения</h2></div><span class="fbls-chip fbls-politics-state fbls-politics-term {{#if control.covered}}is-covered{{else}}is-deficit{{/if}}" tabindex="0" data-fbls-tooltip="Норматив охраны выполнен, если общий Контроль не меньше одного пункта на каждые начатые 10 жителей.">{{#if control.covered}}Норматив выполнен{{else}}Есть недостаток{{/if}}</span></header>
+          <div class="fbls-politics-metrics">
+            <article><small class="fbls-politics-term" tabindex="0" data-fbls-tooltip="Сумма общего Контроля от действующих источников. После косой черты — требование: один пункт на каждые начатые 10 жителей.">Общий Контроль</small><strong>{{control.generalControl}} / {{control.orderRequirement}}</strong><span>Норматив: 1 на 10 жителей</span></article>
+            <article><small class="fbls-politics-term" tabindex="0" data-fbls-tooltip="Разница между нормативом охраны и общим Контролем, если Контроля не хватает. На завершении десятника каждый недостающий пункт даёт кость риска преступления.">Недостаток охраны</small><strong>{{control.crimeDeficit}}к6</strong><span>За завершённый десятник</span></article>
+            <article><small class="fbls-politics-term" tabindex="0" data-fbls-tooltip="Специальный Контроль, который добавляется к общему только при расчёте беспорядков. В норматив охраны он не входит.">Против беспорядков</small><strong>+{{control.unrestOnlyControl}}</strong><span>Дополнительно к общему Контролю</span></article>
+            <article><small class="fbls-politics-term" tabindex="0" data-fbls-tooltip="Мощности действующих учреждений должны покрывать всё население. Только тогда Контроль может смягчить отрицательное довольство до указанного предела; без полного охвата предел не действует.">Охват учреждений</small><strong>{{control.institutionalCeilingText}}</strong><span>Потолок подавления беспорядков</span></article>
+          </div>
+          <section class="fbls-politics-card fbls-stack">
+            <h3 class="fbls-heading-section">Должности и служба охраны</h3>
+            <p>Назначайте свободных жителей как на обычную работу. Занятого жителя сначала освободите от прежнего назначения. Штат учреждений и фактическая служба учитываются общим расчётом Контроля.</p>
+            {{#if control.permissionReason}}<p>{{control.permissionReason}}</p>{{/if}}
+            <article class="fbls-control-office">
+              <div class="fbls-stack"><h4 class="fbls-heading-section">Шериф без учреждения</h4><strong>{{control.sheriff.names}}</strong><span class="fbls-chip">{{#if control.sheriff.active}}Действует{{else}}Не действует{{/if}}</span></div>
+              <div class="fbls-stack"><span>Общий Контроль +1 · охват 10 жителей · предел −10</span><small>Учитывается один шериф. Отсутствие, ранение или блокировка зарплаты отключают его вклад.</small>{{#if control.sheriff.multiple}}<small>Найдено несколько назначений. Сохранение выбранного шерифа освобождает остальных.</small>{{/if}}</div>
+              {{#if control.canAssign}}<form data-control-assignment="sheriff" class="fbls-control-assignment-form">
+                <label class="fbls-field">Назначить жителя<select class="fbls-control" name="residentId" aria-label="Житель на должность шерифа"><option value="" {{#if control.sheriff.empty}}selected{{/if}}>Не назначен</option>{{#each control.sheriff.options}}<option value="{{id}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{name}}</option>{{/each}}</select></label>
+                <button type="button" class="primary fbls-button fbls-button-role" data-control-save title="Сохранить назначение шерифа">Сохранить</button>
+              </form>{{/if}}
+            </article>
+            {{#if control.hasJobs}}<div class="fbls-control-jobs">
+              {{#each control.jobs}}<article class="fbls-control-job fbls-stack">
+                <header class="fbls-card-header"><h4 class="fbls-heading-section">{{name}}</h4><span class="fbls-chip">Штат {{count}} / {{max}}</span></header>
+                <small>{{role}} · минимум {{min}} работников · {{qd}} QD за десятник · {{stateLabel}}{{#if admission}}. Допуск: {{admission}}{{/if}}</small>
+                {{#if hasWorkers}}<ul class="fbls-control-roster">{{#each workers}}<li><span>{{name}}{{#if explicit}} · план QD, изменяется в редакторе жителя{{/if}}</span>{{#if canRemove}}<form data-control-assignment="remove" data-building-id="{{../id}}"><input type="hidden" name="residentId" value="{{id}}"><button type="button" class="fbls-button fbls-button-role" data-control-save title="Освободить {{name}} от работы в учреждении"><i class="fa-solid fa-user-minus" aria-hidden="true"></i><span>Снять</span></button></form>{{/if}}</li>{{/each}}</ul>{{else}}<p>Сотрудники не назначены.</p>{{/if}}
+                {{#if canAdd}}<form data-control-assignment="add" data-building-id="{{id}}" class="fbls-control-assignment-form">
+                  <label class="fbls-field">Свободный житель<select class="fbls-control" name="residentId" required aria-label="Назначить сотрудника в {{name}}"><option value="">Выберите жителя</option>{{#each candidates}}<option value="{{id}}">{{name}}</option>{{/each}}</select></label>
+                  <button type="button" class="primary fbls-button fbls-button-role" data-control-save title="Назначить сотрудника в {{name}}">Назначить</button>
+                </form>{{/if}}
+              </article>{{/each}}
+            </div>{{else}}<p>Учреждений с рабочими местами Контроля пока нет. Их прогрессия и эффекты показаны ниже.</p>{{/if}}
+          </section>
+          <section class="fbls-politics-card">
+            <h3 class="fbls-heading-section">Довольство и беспорядки</h3>
+            <div class="fbls-politics-facts"><span class="fbls-politics-term" tabindex="0" data-fbls-tooltip="Исходное довольство жителей до защитного эффекта Контроля. Сам Контроль это значение не повышает.">Сырое довольство <b>{{control.rawMorale}}</b></span><span class="fbls-politics-term" tabindex="0" data-fbls-tooltip="Довольство, используемое для определения тяжести беспорядков. Может стать выше исходного только при полном охвате населения учреждениями.">Для проверки беспорядков <b>{{control.disorderMorale}}</b></span><span class="fbls-politics-term" tabindex="0" data-fbls-tooltip="Разница между нормативом и суммой общего и специального Контроля. Показывает, сколько Контроля не хватает именно против беспорядков.">Недостаток против беспорядков <b>{{control.unrestDeficit}}</b></span></div>
+            <p>Контроль влияет на риск беспорядков, но не повышает сырое довольство. Смягчение действует при полном институциональном охвате населения.</p>
+          </section>
+          <section class="fbls-politics-card">
+            <h3 class="fbls-heading-section fbls-politics-term" tabindex="0" data-fbls-tooltip="Учитываются действующие здания и назначенный шериф. Вклад здания зависит от его работы, персонала и состояния.">Источники Контроля</h3>
+            {{#if control.hasSources}}
+              <div class="fbls-politics-sources">
+                {{#each control.sources}}
+                  <div class="fbls-politics-source"><strong>{{name}}</strong><span class="fbls-politics-term" tabindex="0" data-fbls-tooltip="Вклад этого источника в общий Контроль и норматив охраны.">Общий {{general}}</span><span class="fbls-politics-term" tabindex="0" data-fbls-tooltip="Дополнительный вклад этого источника только в защиту от беспорядков.">Беспорядки +{{unrestOnly}}</span><span class="fbls-politics-term" tabindex="0" data-fbls-tooltip="Сколько жителей может охватить источник. Для общего смягчения беспорядков учреждения должны охватить всех жителей.">Охват {{capacity}}</span></div>
+                {{/each}}
+              </div>
+            {{else}}
+              <p>Доступных для просмотра источников Контроля нет.</p>
+            {{/if}}
+          </section>
+          {{#each control.buildingGroups}}{{#if rows}}<section class="fbls-politics-card fbls-stack">
+            <h3 class="fbls-heading-section">{{label}}</h3>
+            {{#if chain}}<p>Пост шерифа → Караульный дом → Участок охраны → Суд. Следующая ступень требует указанных зданий и развития; эффекты имеющихся учреждений складываются. Предел подавления действует только при полном охвате населения.</p>{{/if}}
+            <div class="fbls-control-buildings {{#if chain}}is-chain{{/if}}">
+              {{#each rows}}<article class="fbls-control-building fbls-stack">
+                <header class="fbls-card-header"><h4 class="fbls-heading-section">{{name}}</h4><span class="fbls-chip {{#if present}}is-present{{else}}is-missing{{/if}}">{{statusLabel}}</span></header>
+                <small>Ступень развития {{stage}} · штат {{minWorkers}}–{{maxWorkers}} · {{qd}} QD за десятник</small>
+                <strong>{{effects}}</strong>
+                <div class="fbls-cluster">{{#each requirements}}<span class="fbls-chip {{#if met}}is-present{{else}}is-missing{{/if}}">{{label}} {{current}} / {{required}}</span>{{/each}}</div>
+                {{#if prerequisites}}<p>{{prerequisites}}</p>{{/if}}
+                <small>{{activation}}</small>
+                {{#each instances}}<div class="fbls-control-instance fbls-stack"><div class="fbls-card-header"><strong>{{name}}</strong><span class="fbls-chip">{{stateLabel}}</span></div><span>{{actualEffects}}</span><small>Эффекты экземпляра: {{effects}}</small>{{#if reasons}}<small>Причины: {{reasons}}</small>{{/if}}</div>{{/each}}
+              </article>{{/each}}
+            </div>
+          </section>{{/if}}{{/each}}
+        </div>
+      {{/if}}
+
+      {{#if showPoliticsPanels}}
+        {{#if panels.cabinet}}
+          <div class="fbls-politics-panel">
+            <header class="fbls-card-header"><div class="fbls-section-heading"><span class="fbls-eyebrow fbls-politics-eyebrow">ПОЛИТИЧЕСКОЕ УСТРОЙСТВО</span><h2 class="fbls-heading-section">Кабинет</h2></div></header>
+            <div class="fbls-politics-grid">
+              <section class="fbls-politics-card"><h3 class="fbls-heading-section fbls-politics-term" tabindex="0" data-fbls-tooltip="Стадию правления меняет ГМ сюжетным актом с обязательной причиной. Смена стадии очищает директивы, которые станут недоступны.">Стадия власти</h3><p><strong>{{politics.stageLabel}}</strong></p>
+                {{#if canManagePolitics}}<form data-politics-action="stage" class="fbls-politics-form">
+                  <label class="fbls-field">Новая стадия<select class="fbls-control" name="stage" aria-label="Новая стадия Политики">{{#each stageOptions}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                  <label class="fbls-field">Публичная сюжетная причина<input class="fbls-control" name="reason" type="text" maxlength="500" required></label>
+                  <button type="button" class="primary fbls-button fbls-button-role" data-politics-save title="Сохранить новую стадию Политики">Оформить акт</button>
+                </form>{{/if}}
+              </section>
+              <section class="fbls-politics-card"><h3 class="fbls-heading-section fbls-politics-term" tabindex="0" data-fbls-tooltip="Хартия фиксирует публичные условия покровительства. Дань начисляется с указанного десятника; недоплата сохраняется в реестре долгов.">Хартия и покровительство</h3>
+                <p>Патрон: <strong>{{#if politics.patronName}}{{politics.patronName}}{{else}}не указан{{/if}}</strong>. {{politics.charter.terms}}</p>
+                <p>Слоты: {{charterSlotLabels}}. Одобрение указов: {{#if politics.charter.approvalRequired}}требуется{{else}}не требуется{{/if}}.</p>
+                <p>Дань: {{politics.charter.tributeCopper}} ММ{{#if politics.charter.tributeStartPeriodIndex}}, с десятника {{politics.charter.tributeStartPeriodIndex}}{{else}}, дата начала не задана{{/if}}{{#if politics.charter.tributeEndPeriodIndex}} по {{politics.charter.tributeEndPeriodIndex}}{{/if}}.</p>
+                {{#if canManagePolitics}}<form data-politics-action="charter" class="fbls-politics-form">
+                  <label class="fbls-field">Патрон<input class="fbls-control" name="patronName" type="text" maxlength="100" value="{{politics.patronName}}"></label>
+                  <label class="fbls-field">Условия хартии<textarea class="fbls-control" name="terms" maxlength="2000" rows="3">{{politics.charter.terms}}</textarea></label>
+                  <fieldset class="fbls-politics-choice"><legend>Разрешённые слоты на стадии хартии</legend>{{#each charterSlots}}<label class="fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="{{label}}"><input type="checkbox" name="allowedSlots" value="{{id}}" {{#if selected}}checked{{/if}}><span>{{label}}</span></label>{{/each}}</fieldset>
+                  <label class="fbls-politics-checkbox fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Указы требуют одобрения патрона"><input type="checkbox" name="approvalRequired" {{#if politics.charter.approvalRequired}}checked{{/if}}><span>Одобрение патрона</span></label>
+                  <div class="fbls-politics-form-row"><label class="fbls-field">Дань, ММ<input class="fbls-control" name="tributeCopper" type="number" min="0" max="100000000" step="1" value="{{politics.charter.tributeCopper}}"></label><label class="fbls-field">С десятника<input class="fbls-control" name="tributeStartPeriodIndex" type="number" min="1" step="1" value="{{politics.charter.tributeStartPeriodIndex}}"></label><label class="fbls-field">По десятник<input class="fbls-control" name="tributeEndPeriodIndex" type="number" min="1" step="1" value="{{politics.charter.tributeEndPeriodIndex}}"></label></div>
+                  <button type="button" class="primary fbls-button fbls-button-role" data-politics-save title="Сохранить условия хартии">Сохранить хартию</button>
+                </form>{{/if}}
+              </section>
+              <section class="fbls-politics-card"><h3 class="fbls-heading-section fbls-politics-term" tabindex="0" data-fbls-tooltip="Представителем может быть один живой житель поселения. Положительные компетенции суммарно не превышают 4; каждая лежит в диапазоне от −2 до +3. Бонусы учитываются при проведении десятника.">Представитель</h3><p><strong>{{politics.representativeName}}</strong>{{#if politics.representative.title}} · {{politics.representative.title}}{{/if}}{{#if politics.representativeExpired}} · срок истёк{{/if}}</p><p>{{politics.representative.note}}</p>
+                {{#if canManagePolitics}}<form data-politics-action="representative" class="fbls-politics-form">
+                  <label class="fbls-field">Житель<select class="fbls-control" name="residentId" aria-label="Представитель поселения"><option value="">Нет представителя</option>{{#each residentOptions}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{name}}</option>{{/each}}</select></label>
+                  <label class="fbls-field">Титул<input class="fbls-control" name="title" type="text" maxlength="100" value="{{politics.representative.title}}"></label>
+                  <label class="fbls-field">Публичная заметка<textarea class="fbls-control" name="note" maxlength="1000" rows="2">{{politics.representative.note}}</textarea></label>
+                  <div class="fbls-politics-form-row"><label class="fbls-field">Экономика<input class="fbls-control" name="economy" type="number" min="-2" max="3" step="1" value="{{politics.representative.competencies.economy}}"></label><label class="fbls-field">Война<input class="fbls-control" name="war" type="number" min="-2" max="3" step="1" value="{{politics.representative.competencies.war}}"></label><label class="fbls-field">Дипломатия<input class="fbls-control" name="diplomacy" type="number" min="-2" max="3" step="1" value="{{politics.representative.competencies.diplomacy}}"></label><label class="fbls-field">Культура<input class="fbls-control" name="culture" type="number" min="-2" max="3" step="1" value="{{politics.representative.competencies.culture}}"></label></div>
+                  <button type="button" class="primary fbls-button fbls-button-role" data-politics-save title="Сохранить назначение представителя">Сохранить назначение</button>
+                </form>{{#if canRenewRepresentative}}<form data-politics-action="renew-representative" class="fbls-politics-form"><button type="button" class="primary fbls-button fbls-button-role" data-politics-save title="Начать новый срок полномочий текущего представителя">Переизбрать представителя</button></form>{{/if}}{{/if}}
+              </section>
+              <section class="fbls-politics-card"><h3 class="fbls-heading-section fbls-politics-term" tabindex="0" data-fbls-tooltip="Влияние — политический ресурс. Оно начисляется за завершённый десятник и тратится на решения; ГМ может вручную записать изменение с причиной.">Влияние</h3><p><strong>{{politics.influence}}</strong></p>
+                {{#if canManagePolitics}}<form data-politics-action="influence" class="fbls-politics-form"><label class="fbls-field">Изменение<input class="fbls-control" name="delta" type="number" min="-1000" max="1000" step="1" required></label><label class="fbls-field">Публичная причина<input class="fbls-control" name="reason" type="text" maxlength="500" required></label><button type="button" class="primary fbls-button fbls-button-role" data-politics-save title="Записать изменение Влияния">Изменить Влияние</button></form>{{/if}}
+              </section>
+              <section class="fbls-politics-card fbls-stack"><h3 class="fbls-heading-section">Обращения и петиции</h3><p>Публичная просьба ГМу. Отправка и ответ сами по себе не меняют показатели поселения.</p>
+                {{#if politicsReadOnlyReason}}<p>{{politicsReadOnlyReason}}</p>{{/if}}
+                {{#if canPetition}}<form data-politics-action="petition" class="fbls-politics-form"><label class="fbls-field">Обращение<textarea class="fbls-control" name="message" maxlength="2000" rows="3" required></textarea></label><button type="button" class="primary fbls-button fbls-button-role" data-politics-save title="Отправить публичное обращение ГМу">Отправить обращение</button></form>{{/if}}
+                {{#each petitions}}<article class="fbls-stack"><p>{{message}}</p>{{#if response}}<p>Ответ: {{response}}</p>{{/if}}{{#if pending}}<small>Ожидает ответа</small>{{#if ../canManagePolitics}}<form data-politics-action="resolve-petition" class="fbls-politics-form"><input type="hidden" name="id" value="{{id}}"><label class="fbls-field">Публичный ответ<textarea class="fbls-control" name="response" maxlength="2000" rows="2" required></textarea></label><button type="button" class="fbls-button fbls-button-role" data-politics-save title="Ответить на обращение">Ответить</button></form>{{/if}}{{/if}}</article>{{/each}}
+              </section>
+              <section class="fbls-politics-card"><h3 class="fbls-heading-section">Восстание</h3><p>{{#if politics.unresolvedRevolt}}Восстание не разрешено. Политические эффекты приостановлены.{{else}}Неразрешённого восстания нет.{{/if}}</p>{{#if canManagePolitics}}<form data-politics-action="revolt" class="fbls-politics-form"><label class="fbls-field">Сюжетный акт<select class="fbls-control" name="active" aria-label="Состояние восстания"><option value="true">Зафиксировать начало восстания</option><option value="false" {{#if politics.unresolvedRevolt}}selected{{/if}}>Разрешить восстание</option></select></label><label class="fbls-field">Публичное объяснение<textarea class="fbls-control" name="reason" maxlength="2000" rows="2" required></textarea></label><button type="button" class="fbls-button fbls-button-role" data-politics-save title="Записать сюжетный акт восстания">Оформить акт</button></form>{{/if}}</section>
+              <section class="fbls-politics-card"><h3 class="fbls-heading-section fbls-politics-term" tabindex="0" data-fbls-tooltip="Система задаёт профиль власти и доступные слоты. На самоуправлении выбор оформляет ГМ; эффекты учитываются в десятнике.">Система правления</h3><p>Записано: <strong>{{politics.systemLabel}}</strong>.</p>
+                {{#if canChooseSystem}}{{#if canManagePolitics}}<form data-politics-action="system" class="fbls-politics-form">
+                  <p>Обычная цена: {{systemChangePrice}} Влияния.{{#if systemNextAllowed}} Следующая смена — не раньше десятника {{systemNextAllowed}}.{{/if}}</p>
+                  <label class="fbls-field">Новая система<select class="fbls-control" name="system" aria-label="Новая система правления">{{#each systemOptions}}<option value="{{id}}" {{#if selected}}selected{{/if}} {{#unless unlocked}}disabled{{/unless}} title="{{reason}}">{{label}}{{#unless unlocked}} · {{reason}}{{/unless}}</option>{{/each}}</select></label>
+                  <label class="fbls-politics-checkbox fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Пригласить наместника на самоуправление"><input type="checkbox" name="governorInvited"><span>Пригласить наместника</span></label>
+                  <label class="fbls-politics-checkbox fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Сюжетное исключение из цены и срока"><input type="checkbox" name="exception"><span>Сюжетное исключение</span></label>
+                  <label class="fbls-field">Причина исключения<input class="fbls-control" type="text" name="reason" maxlength="500"></label>
+                  <button type="button" class="primary fbls-button fbls-button-role" data-politics-save title="Оформить выбор системы правления">Выбрать систему</button>
+                </form>{{/if}}{{/if}}
+                <p>Числовые эффекты отображаются в каталоге и учитываются при проведении десятника.</p>
+              </section>
+            </div>
+          </div>
+        {{/if}}
+
+        {{#if panels.course}}
+          <div class="fbls-politics-panel">
+            <header class="fbls-card-header"><div class="fbls-section-heading"><span class="fbls-eyebrow fbls-politics-eyebrow">РЕШЕНИЯ ПОСЕЛЕНИЯ</span><h2 class="fbls-heading-section">Курс</h2></div><span class="fbls-chip fbls-politics-muted-chip">Каталог владения</span></header>
+            <p class="fbls-politics-intro">Разрешённые решения проверяет и сохраняет ГМ. Десятник применяет действующие эффекты, списывает содержание и обновляет Влияние и сроки указов.{{#if approvalRequired}} Хартия требует одобрения указов: заявка не списывает оплату до подтверждения.{{/if}}</p>
+            <div class="fbls-politics-course-layout">
+              <div class="fbls-politics-course-main">
+                <section class="fbls-politics-card">
+                  <h3 class="fbls-heading-section fbls-politics-term" tabindex="0" data-fbls-tooltip="В каждом открытом слоте действует одна записанная директива. Переключение того же слота повторно в текущем десятнике запрещено.">Директивы</h3>
+                  <div class="fbls-politics-directives">
+                    {{#each courseSlots}}
+                      <div class="fbls-politics-directive"><span class="fbls-politics-directive-name"><i class="{{icon}}" aria-hidden="true"></i><strong>{{label}}</strong></span><span>{{#if allowed}}{{selectedLabel}}{{else}}Слот закрыт{{/if}}</span>
+                        {{#if reason}}<small>{{reason}}</small>{{/if}}
+                        {{#if canChange}}{{#if ../canUseDirectives}}<form data-politics-action="directive" class="fbls-politics-form"><input type="hidden" name="slot" value="{{id}}"><label class="fbls-field">Директива<select class="fbls-control" name="directiveId" aria-label="Директива: {{label}}">{{#each options}}<option value="{{id}}" {{#if selected}}selected{{/if}} {{#unless unlocked}}disabled{{/unless}} title="{{summary}} {{reason}}">{{label}}{{#unless unlocked}} · {{reason}}{{/unless}}</option>{{/each}}</select></label><button type="button" class="primary fbls-button fbls-button-role" data-politics-save title="Сохранить директиву">Принять</button></form>{{/if}}{{/if}}
+                      </div>
+                    {{/each}}
+                  </div>
+                </section>
+                <section class="fbls-politics-card">
+                  <h3 class="fbls-heading-section fbls-politics-term" tabindex="0" data-fbls-tooltip="Указы оплачиваются при издании. Их действующие числовые бонусы входят в расчёт десятника до истечения срока.">Указы</h3>
+                  <div class="fbls-politics-decrees">
+                    {{#each courseDecrees}}
+                      <article><h4 class="fbls-politics-term" tabindex="0" data-fbls-tooltip="{{#if summary}}{{summary}}{{else}}{{effect}}{{/if}}"><i class="fa-solid fa-scroll" aria-hidden="true"></i>{{label}}</h4><strong>{{price}}</strong><p>{{effect}}</p><small>{{term}}.{{#if nextAllowedPeriodIndex}} Повтор — с десятника {{nextAllowedPeriodIndex}}.{{/if}}{{#if reason}} {{reason}}{{/if}}</small>{{#if ../canIssueDecrees}}{{#if unlocked}}<form data-politics-action="decree" class="fbls-politics-form"><input type="hidden" name="decreeId" value="{{id}}"><button type="button" class="primary fbls-button fbls-button-role" data-politics-save title="{{#if ../approvalRequired}}Запросить одобрение{{else}}Издать указ{{/if}} «{{label}}»">{{#if ../approvalRequired}}Запросить одобрение{{else}}Издать указ{{/if}}</button></form>{{/if}}{{/if}}</article>
+                    {{/each}}
+                  </div>
+                  {{#if otherDecrees.length}}<details><summary>Другие личные указы · {{otherDecrees.length}}</summary>{{#each otherDecrees}}<article class="fbls-stack"><h4>{{label}}</h4><p>{{effect}}</p><small>{{price}} · {{term}}. {{reason}}</small></article>{{/each}}</details>{{/if}}
+                </section>
+                <section class="fbls-politics-card fbls-stack"><h3 class="fbls-heading-section">Заявки и запросы Сведений</h3>{{#each requests}}<article class="fbls-stack"><p><strong>{{decreeId}}</strong> · {{status}}{{#if topic}}: {{topic}}{{/if}}</p>{{#if response}}<p>{{response}}</p>{{/if}}{{#if pending}}{{#if ../canManagePolitics}}<form data-politics-action="resolve-request" class="fbls-politics-form"><input type="hidden" name="id" value="{{id}}"><label class="fbls-field">Решение<select class="fbls-control" name="approved" aria-label="Решение по заявке"><option value="true">Одобрить</option><option value="false">Отклонить</option></select></label><label class="fbls-field">Публичный ответ или зацепка<textarea class="fbls-control" name="response" maxlength="2000" rows="3" required></textarea></label><button type="button" class="primary fbls-button fbls-button-role" data-politics-save title="Повторно проверить условия и завершить заявку">Завершить заявку</button></form>{{/if}}{{/if}}</article>{{else}}<p>Заявок пока нет.</p>{{/each}}</section>
+              </div>
+              <aside class="fbls-politics-course-rail" aria-label="Текущий политический курс">
+                <section class="fbls-politics-card fbls-stack"><h3 class="fbls-heading-section fbls-politics-term" tabindex="0" data-fbls-tooltip="Записанные директивы и оплаченные указы видны всем. Действующие бонусы учитываются в десятнике.">Записанный курс</h3>{{#each courseSlots}}{{#if allowed}}<p>{{label}}: <strong>{{selectedLabel}}</strong></p>{{/if}}{{/each}}{{#each activeDecrees}}<article class="fbls-stack"><p>Указ: <strong>{{label}}</strong>, до десятника {{expiresPeriodIndex}}</p>{{#if intel}}{{#if ../canRequestIntel}}<form data-politics-action="request-intel" class="fbls-politics-form"><input type="hidden" name="decreeId" value="{{id}}"><label class="fbls-field">О чём узнать<textarea class="fbls-control" name="topic" maxlength="500" rows="2" required placeholder="Маршрут, рынок или действующее лицо и ваш вопрос"></textarea></label><button type="button" class="fbls-button fbls-button-role" data-politics-save title="Запросить одну публичную зацепку ГМа">Запросить Сведения</button></form>{{/if}}{{/if}}{{#if ../canManagePolitics}}<form data-politics-action="cancel-decree" class="fbls-politics-form"><input type="hidden" name="decreeId" value="{{id}}"><label class="fbls-field">Причина отмены<input class="fbls-control" name="reason" maxlength="500" required></label><button type="button" class="fbls-button fbls-button-role" data-politics-save title="Отменить указ без возврата оплаты и без сброса перезарядки">Отменить указ</button></form>{{/if}}</article>{{/each}}</section>
+                <section class="fbls-politics-card"><h3 class="fbls-heading-section fbls-politics-term" tabindex="0" data-fbls-tooltip="Предварительный расчёт по текущим записям. Фактический эффект десятника зависит от оплаты содержания, питания и действующих учреждений.">Предварительные эффекты</h3><p>{{effectPreview}}</p></section>
+                <section class="fbls-politics-card"><h3 class="fbls-heading-section fbls-politics-term" tabindex="0" data-fbls-tooltip="Типаж вычисляется из текущих характеристик назначенного жителя. Личные перки доступны только при живом представителе с неистёкшим сроком.">Типаж представителя</h3><p>{{representativeArchetypeLabel}}</p>{{#each personalPerks}}<p><strong>{{label}}</strong>: {{effect}}{{#unless unlocked}} · условие не выполнено{{/unless}}</p>{{/each}}</section>
+                <section class="fbls-politics-card"><h3 class="fbls-heading-section fbls-politics-term" tabindex="0" data-fbls-tooltip="Текущий записанный баланс Влияния. Прирост начисляется при завершении десятника, расходы по указам — при издании.">Влияние</h3><p>Баланс: {{politics.influence}}. Следующий прирост зависит от текущего курса и условий.</p></section>
+                <section class="fbls-politics-card"><h3 class="fbls-heading-section fbls-politics-term" tabindex="0" data-fbls-tooltip="Срок представителя отсчитывается от десятника назначения. После истечения компетенции ослабевают, личные перки и директивы теряют силу.">Срок полномочий</h3><p>{{#if politics.representative.appointedPeriodIndex}}Назначен с десятника {{politics.representative.appointedPeriodIndex}}.{{#if politics.representativeExpiry}} Окончание — десятник {{politics.representativeExpiry}}.{{else}} Срок бессрочный.{{/if}}{{#if politics.representativeExpired}} Срок истёк.{{/if}}{{#if politics.representativeExpiringSoon}} Осталось {{politics.representativeRemaining}} десятника: подготовьте переизбрание.{{/if}}{{else}}Представитель не назначен.{{/if}}</p></section>
+              </aside>
+            </div>
+          </div>
+        {{/if}}
+
+        {{#if panels.history}}
+          <div class="fbls-politics-panel">
+            <header class="fbls-card-header"><div class="fbls-section-heading"><span class="fbls-eyebrow fbls-politics-eyebrow">ХРОНИКА РЕШЕНИЙ</span><h2 class="fbls-heading-section">История</h2></div></header>
+{{#if politics.hasHistory}}<ol class="fbls-politics-history">{{#each politics.history}}<li class="fbls-politics-card"><strong>Десятник {{periodIndex}}</strong><p>{{summary}}</p></li>{{/each}}</ol>{{else}}<section class="fbls-politics-card fbls-empty-state fbls-politics-history-empty"><i class="fa-solid fa-scroll" aria-hidden="true"></i><h3 class="fbls-heading-section">Политических актов пока нет</h3><p>Оформленные ГМ решения появятся здесь.</p></section>{{/if}}
+          </div>
+        {{/if}}
+      {{/if}}
+    </main>
+  {{/unless}}
+</div>

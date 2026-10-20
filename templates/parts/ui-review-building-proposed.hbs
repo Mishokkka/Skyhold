@@ -1,0 +1,41 @@
+<article class="fbls-ui-building {{statusClass}} {{#if isMedicalBuilding}}is-medical{{/if}}">
+  <header class="fbls-ui-building-head">
+    <span class="fbls-ui-building-icon" data-fbls-tooltip="{{categoryLabel}}"><i class="{{icon}}" aria-hidden="true"></i></span>
+    <div class="fbls-ui-building-title">
+      <button type="button" class="fbls-ui-building-open" data-fbls-tooltip="Открыть здание: {{name}}" aria-label="Открыть здание {{name}}">{{name}}</button>
+      <span class="fbls-ui-building-state"><i class="{{statusIcon}}" aria-hidden="true"></i> {{statusLabel}}</span>
+    </div>
+  </header>
+  {{#if hasDisplayMetrics}}<div class="fbls-ui-building-metrics fbls-cluster">
+    {{#if hasUpkeep}}<span class="fbls-chip is-compact" tabindex="0" data-fbls-tooltip="Содержание, медные монеты"><i class="fa-solid fa-coins" aria-hidden="true"></i> {{upkeepLine}}</span>{{/if}}
+    {{#if hasWorkerCapacity}}<span class="fbls-chip is-compact" tabindex="0" data-fbls-tooltip="Работники: занято / максимум"><i class="fa-solid fa-users" aria-hidden="true"></i> {{workerCountLine}}</span>{{/if}}
+    {{#if isMedicalBuilding}}<span class="fbls-chip is-compact" tabindex="0" data-fbls-tooltip="Койкоместа: занято / всего"><i class="fa-solid fa-bed-pulse" aria-hidden="true"></i> {{medicalSummary.used}}/{{medicalSummary.capacity}}</span>{{/if}}
+    {{#if hasCardStatParts}}{{#each cardStatParts}}<span class="fbls-chip is-compact" tabindex="0" data-fbls-tooltip="Учтённый вклад: {{label}}"><i class="{{icon}}" aria-hidden="true"></i> {{signed}}</span>{{/each}}{{/if}}
+  </div>{{/if}}
+  {{#unless headerOnly}}
+    {{#if attention}}<p class="fbls-ui-building-attention"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> {{attention}}</p>{{/if}}
+    <div class="fbls-ui-building-function">
+      <strong>{{functionLabel}}</strong>
+      {{#if isStorage}}<meter min="0" max="100" value="68" aria-label="Заполнение склада: 68 из 100 кг"></meter>{{/if}}
+      {{#if isHousing}}<meter min="0" max="10" value="6" aria-label="Заселено 6 из 10 мест"></meter>{{/if}}
+      {{#if isConstruction}}<progress max="20" value="12" aria-label="Стройка: 12 из 20 успехов"></progress>{{/if}}
+    </div>
+    {{#if hasPendingProduction}}
+      {{#each pendingProductionRows}}<div class="fbls-ui-building-row fbls-ui-building-ready"><span><b>{{resource}}: {{qty}}</b> · готово</span><button type="button" class="fbls-button compact fbls-button-role" data-review-edit-only>Собрать</button></div>{{/each}}
+    {{/if}}
+    {{#if isConstruction}}<div class="fbls-ui-building-row" data-review-edit-only><select class="fbls-control" aria-label="Стройбригада в образце"><option>Бригада Руны · 6к6</option></select><button type="button" class="fbls-button compact fbls-button-role" aria-label="Строительный бросок, осталось 8 успехов" data-fbls-tooltip="Строительный бросок, осталось 8 успехов"><i class="fa-solid fa-hammer" aria-hidden="true"></i> 8</button></div>{{/if}}
+    <details class="fbls-ui-building-details" data-review-disclosure-key="{{reviewScope}}:{{id}}">
+      <summary>{{#if isProduction}}Рецепты и расходы · 3{{else}}Подробности{{/if}}</summary>
+      {{#if isProduction}}
+        <div class="fbls-cluster"><span class="fbls-chip is-compact">Все сезоны</span></div>
+        {{#each cardProductionRows}}
+          <div class="fbls-ui-building-recipe"><span data-fbls-tooltip="{{resource}}">{{resource}}</span><b data-fbls-tooltip="{{outputText}} · {{cycleText}}">{{outputText}}</b><small data-fbls-tooltip="Расход за цикл: зерно 4">Зерно 4</small></div>
+        {{/each}}
+      {{else if isStorage}}<p>Свободно: 32 кг · Защита: 3 · Качество хранения: 2</p>
+      {{else if isHousing}}<p>Свободно: 4 места · Комфорт: 2 · Качество: 2</p>
+      {{else if isConstruction}}<p><b>Развитие:</b> Техника 2 · Пища 1</p><p><b>Материалы:</b> Камень 20 · Древесина 10</p>
+      {{else if isMedical}}<p>Койки: 3 из 8 · Работники: 2 из 4 · Требуется ремонт</p>
+      {{else}}<p>Функции здания не учитываются, пока оно разрушено.</p>{{/if}}
+    </details>
+  {{/unless}}
+</article>

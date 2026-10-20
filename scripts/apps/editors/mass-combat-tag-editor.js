@@ -1,3 +1,4 @@
+import { FloatingTooltipsMixin } from "../common/floating-tooltip.js";
 import { MODULE_ID } from "../../data/constants.js";
 import {
   addMassCombatCustomTag,
@@ -12,7 +13,7 @@ import { createSafeIcon } from "../../core/helpers.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
-export class SkyholdMassCombatTagEditor extends RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2)) {
+export class SkyholdMassCombatTagEditor extends FloatingTooltipsMixin(RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2))) {
   async _prepareContext(options) {
     const context = await super._prepareContext(options);
     return {

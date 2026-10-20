@@ -4,7 +4,8 @@ export function normalizeStorageItemRow(row) {
   if (!row || typeof row !== "object") return null;
   const itemData = isPlainObject(row.itemData) ? clone(row.itemData) : {};
   const system = isPlainObject(itemData.system) ? itemData.system : (isPlainObject(row.system) ? clone(row.system) : {});
-  const qty = Math.max(0, toNumber(row.qty ?? row.quantity ?? system.quantity ?? 1, 1));
+  const qty = Math.max(0, Math.floor(toNumber(row.qty ?? row.quantity ?? system.quantity ?? 1, 1)));
+  const internalDemandAvailableFromQd = Math.max(0, Math.floor(toNumber(row.internalDemandAvailableFromQd, 0)));
   return {
     id: String(row.id || makeId("sitem")),
     name: String(row.name ?? itemData.name ?? "Предмет"),
@@ -12,10 +13,6 @@ export function normalizeStorageItemRow(row) {
     img: String(row.img ?? itemData.img ?? "icons/svg/item-bag.svg"),
     qty,
     weight: String(row.weight ?? system.weight ?? ""),
-    ...((row.cargoPoints ?? row.unitCargoPoints) === undefined || (row.cargoPoints ?? row.unitCargoPoints) === null || (row.cargoPoints ?? row.unitCargoPoints) === ""
-      ? {}
-      : { cargoPoints: Math.max(0, Math.ceil(toNumber(row.cargoPoints ?? row.unitCargoPoints, 0))) }),
-    ...(String(row.cargoClass ?? "").trim() ? { cargoClass: String(row.cargoClass).trim() } : {}),
     roomId: String(row.roomId ?? row.storageRoomId ?? "outdoors") || "outdoors",
     sourceActorId: String(row.sourceActorId ?? ""),
     sourceActorName: String(row.sourceActorName ?? ""),
@@ -28,7 +25,8 @@ export function normalizeStorageItemRow(row) {
       system
     },
     notes: String(row.notes ?? ""),
-    forSale: toBoolean(row.forSale ?? row.sale ?? row.markedForSale, false)
+    forSale: toBoolean(row.forSale ?? row.sale ?? row.markedForSale, false),
+    ...(internalDemandAvailableFromQd > 0 ? { internalDemandAvailableFromQd } : {})
   };
 }
 
@@ -41,7 +39,7 @@ export function normalizeStorageLogRow(row) {
     kind: String(row.kind ?? row.type ?? "manual"),
     resourceId: String(row.resourceId ?? row.resource ?? "custom"),
     name: String(row.name ?? row.resourceName ?? row.label ?? ""),
-    qty: toNumber(row.qty ?? row.amount ?? 0, 0),
+    qty: Math.trunc(toNumber(row.qty ?? row.amount ?? 0, 0)),
     roomId: String(row.roomId ?? row.storageRoomId ?? ""),
     source: String(row.source ?? ""),
     note: String(row.note ?? row.reason ?? ""),

@@ -1,1 +1,0 @@
-export const ECONOMY_V2_ACTIVATION_VERSION = 3;

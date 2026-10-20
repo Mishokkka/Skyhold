@@ -8,6 +8,24 @@ const PROTECTED_SKYHOLD_WINDOW_SELECTOR = [
 let installed = false;
 let lastProtectedWindow = null;
 
+function elementReference(element) {
+  return typeof globalThis.WeakRef === "function"
+    ? new globalThis.WeakRef(element)
+    : { deref: () => element };
+}
+
+function rememberedProtectedWindow() {
+  if (!lastProtectedWindow) return null;
+  const protectedWindow = lastProtectedWindow.protectedWindowRef?.deref?.() ?? null;
+  const frame = lastProtectedWindow.frameRef?.deref?.() ?? null;
+  const target = lastProtectedWindow.targetRef?.deref?.() ?? null;
+  if (!protectedWindow || !frame) {
+    lastProtectedWindow = null;
+    return null;
+  }
+  return { protectedWindow, frame, target, time: lastProtectedWindow.time };
+}
+
 function now() {
   return Date.now?.() ?? new Date().getTime();
 }
@@ -24,8 +42,25 @@ export function rememberProtectedSkyholdWindow(target = null) {
   const protectedWindow = protectedWindowForElement(target);
   const frame = windowFrameForElement(protectedWindow ?? target);
   if (!protectedWindow || !frame) return null;
-  lastProtectedWindow = { protectedWindow, frame, target, time: now() };
-  return lastProtectedWindow;
+  const descriptor = { protectedWindow, frame, target, time: now() };
+  lastProtectedWindow = {
+    protectedWindowRef: elementReference(protectedWindow),
+    frameRef: elementReference(frame),
+    targetRef: elementReference(target),
+    time: descriptor.time
+  };
+  return descriptor;
+}
+
+export function forgetProtectedSkyholdWindow(element = null) {
+  const remembered = rememberedProtectedWindow();
+  if (!remembered) return false;
+  if (element) {
+    const frame = windowFrameForElement(element) ?? element;
+    if (remembered.frame !== frame && remembered.protectedWindow !== element && remembered.target !== element) return false;
+  }
+  lastProtectedWindow = null;
+  return true;
 }
 
 export function getActiveProtectedSkyholdWindow({ recentMs = 5000 } = {}) {
@@ -36,9 +71,16 @@ export function getActiveProtectedSkyholdWindow({ recentMs = 5000 } = {}) {
     if (frame) return { protectedWindow: activeProtected, frame, target: active, time: now(), active: true };
   }
 
-  if (!lastProtectedWindow?.frame?.isConnected) return null;
-  if (recentMs >= 0 && now() - Number(lastProtectedWindow.time ?? 0) > recentMs) return null;
-  return lastProtectedWindow;
+  const remembered = rememberedProtectedWindow();
+  if (!remembered?.frame?.isConnected) {
+    lastProtectedWindow = null;
+    return null;
+  }
+  if (recentMs >= 0 && now() - Number(remembered.time ?? 0) > recentMs) {
+    lastProtectedWindow = null;
+    return null;
+  }
+  return remembered;
 }
 
 export function hasActiveProtectedSkyholdWindow(options = {}) {
@@ -62,6 +104,8 @@ export function focusApplicationContent(app, {
   preferredSelector = ""
 } = {}) {
   if (options?.focus !== true || !root?.querySelector) return false;
+  const frame = app?._getWindowFrameElement?.(root) ?? windowFrameForElement(root);
+  bringWindowFrameToFront(frame);
   const apply = () => {
     if (!root?.isConnected) return;
     const active = globalThis.document?.activeElement;

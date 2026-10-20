@@ -1,52 +1,145 @@
-/* FBL Skyhold: resident editor v2 component owner.
-   This file is the single source of truth for the expanded resident editor.
-   Keep layout changes here unless Foundry chrome requires a narrow bridge rule. */
+/* FBL Skyhold: standalone resident editor and its compact responsive form. */
 
-.fbl-skyhold .fbls-person-editor.v2,
-.fbl-skyhold .fbls-person-editor.v2 *,
-.fbl-skyhold .fbls-person-editor.v2 *::before,
-.fbl-skyhold .fbls-person-editor.v2 *::after {
-  box-sizing: border-box;
+.fbl-skyhold-resident-editor { color-scheme: dark; }
+
+.fbl-skyhold .fbls-resident-editor-window,
+.fbl-skyhold .fbls-resident-editor-window *,
+.fbl-skyhold .fbls-resident-editor-window *::before,
+.fbl-skyhold .fbls-resident-editor-window *::after { box-sizing: border-box; }
+
+.fbl-skyhold .fbls-resident-editor-window {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  color: var(--fbls-text);
+  background: var(--fbls-surface-0);
 }
 
+.fbl-skyhold .fbls-resident-editor-hero {
+  display: grid;
+  grid-template-columns: auto minmax(12rem, 1fr) auto;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.65rem 0.85rem;
+  border-bottom: 1px solid var(--fbls-border);
+  background: var(--fbls-surface-1);
+}
+
+.fbl-skyhold .fbls-resident-editor-avatar {
+  display: grid;
+  place-items: center;
+  width: 2.35rem;
+  height: 2.35rem;
+  border: 1px solid var(--fbls-accent-border);
+  border-radius: var(--fbls-radius-md);
+  color: var(--fbls-accent);
+  background: var(--fbls-accent-soft);
+  font-size: 1.05rem;
+}
+
+.fbl-skyhold .fbls-resident-editor-heading { min-width: 0; }
+
+.fbl-skyhold .fbls-resident-editor-heading > span {
+  display: block;
+  overflow: hidden;
+  color: var(--fbls-muted);
+  font-size: var(--fbls-type-compact-sm);
+  letter-spacing: 0.08em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.fbl-skyhold .fbls-resident-editor-heading h2 {
+  margin: 0.08rem 0 0;
+  overflow: hidden;
+  color: var(--fbls-text-strong);
+  font-size: 1.18rem;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fbl-skyhold .fbls-resident-editor-summary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  min-width: 0;
+  max-width: 23rem;
+}
+
+.fbl-skyhold .fbls-resident-editor-summary .fbls-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  max-width: 15rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fbl-skyhold .fbls-resident-editor-scroll {
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.fbl-skyhold .fbls-resident-editor-error {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 0.65rem;
+  min-height: 14rem;
+  padding: 2rem;
+  color: var(--fbls-muted);
+  text-align: center;
+}
+
+.fbl-skyhold .fbls-resident-editor-error i { color: var(--fbls-warning); font-size: 1.8rem; }
+
 .fbl-skyhold .fbls-person-editor.v2 {
-  --fbls-person-control-h: 32px;
-  --fbls-person-label-gap: 0.08rem;
-  --fbls-person-row-min: calc(var(--fbls-person-control-h) + 0.46rem);
+  --fbls-person-control-h: var(--fbls-control-height);
+  container: fbls-resident-editor / inline-size;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-auto-rows: max-content;
+  align-content: start;
+  gap: 0.28rem;
   width: 100%;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0;
+  padding: 0.65rem 0.75rem 0.75rem;
 }
 
 .fbl-skyhold .fbls-person-editor.v2 fieldset {
   min-width: 0;
   margin: 0;
-  padding: 0.08rem 0.34rem 0.1rem;
-  border-radius: var(--fbls-radius-lg, 12px);
-}
-
-.fbl-skyhold .fbls-person-editor.v2 > fieldset,
-.fbl-skyhold .fbls-person-editor.v2 > .fbls-resident-midline,
-.fbl-skyhold .fbls-person-editor.v2 > .fbls-person-notes-field,
-.fbl-skyhold .fbls-person-editor.v2 > .resident-actions {
-  margin-block: 0;
+  padding: 0.42rem 0.55rem 0.55rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: var(--fbls-radius-md);
+  background: var(--fbls-surface-1);
 }
 
 .fbl-skyhold .fbls-person-editor.v2 legend {
-  max-width: 100%;
-  padding: 0 0.22rem;
-  line-height: 1;
   margin: 0;
+  padding: 0 0.3rem;
+  color: var(--fbls-accent);
+  font-size: var(--fbls-type-compact-sm);
+  letter-spacing: 0.06em;
+  line-height: 1;
+  text-transform: uppercase;
 }
 
 .fbl-skyhold .fbls-person-editor.v2 label,
 .fbl-skyhold .fbls-person-editor.v2 .fbls-derived-mini,
 .fbl-skyhold .fbls-person-editor.v2 .fbls-derived-box {
+  display: grid;
+  grid-template-rows: auto var(--fbls-person-control-h);
+  align-content: end;
+  gap: 0.12rem;
   min-width: 0;
-  max-width: none;
   width: 100%;
   margin: 0;
 }
@@ -56,637 +149,348 @@
 .fbl-skyhold .fbls-person-editor.v2 .fbls-derived-box > span {
   display: block;
   min-width: 0;
-  margin: 0 0 var(--fbls-person-label-gap);
   overflow: hidden;
+  color: var(--fbls-muted);
+  font-size: var(--fbls-type-compact-sm);
+  line-height: 1.1;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .fbl-skyhold .fbls-person-editor.v2 input:not([type="checkbox"]),
-.fbl-skyhold .fbls-person-editor.v2 select,
-.fbl-skyhold .fbls-person-editor.v2 textarea {
+.fbl-skyhold .fbls-person-editor.v2 textarea,
+.fbl-skyhold .fbls-person-editor.v2 select {
   width: 100%;
   min-width: 0;
+  color: var(--fbls-text);
 }
 
 .fbl-skyhold .fbls-person-editor.v2 input:not([type="checkbox"]),
-.fbl-skyhold .fbls-person-editor.v2 .fbls-derived-mini strong,
-.fbl-skyhold .fbls-person-editor.v2 .fbls-derived-box strong {
-  height: var(--fbls-person-control-h);
-  min-height: var(--fbls-person-control-h);
-  max-height: var(--fbls-person-control-h);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-  text-align: center;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .fbls-derived-mini strong,
-.fbl-skyhold .fbls-person-editor.v2 .fbls-derived-box strong,
-.fbl-skyhold .fbls-person-editor.v2 .fbls-derived-box em {
-  padding: 0.32rem 0.45rem;
-  border: 1px solid var(--fbls-border);
-  border-radius: 0.45rem;
-  background: var(--fbls-overlay-soft);
-  color: var(--fbls-text);
-  font-style: normal;
-  text-transform: none;
-  letter-spacing: 0;
-}
-
 .fbl-skyhold .fbls-person-editor.v2 select {
   height: var(--fbls-person-control-h);
   min-height: var(--fbls-person-control-h);
-  max-height: var(--fbls-person-control-h);
-  display: block;
-  line-height: var(--fbls-person-control-h);
-  padding-top: 0;
-  padding-bottom: 0;
 }
 
+.fbl-skyhold .fbls-person-editor.v2 textarea { min-height: var(--fbls-person-control-h); resize: vertical; }
 .fbl-skyhold .fbls-person-editor.v2 .num-field,
-.fbl-skyhold .fbls-person-editor.v2 .num-field input[type="number"] {
-  max-width: none;
+.fbl-skyhold .fbls-person-editor.v2 .num-field input[type="number"] { max-width: none; }
+
+.fbl-skyhold .fbls-person-editor.v2 .fbls-derived-mini strong,
+.fbl-skyhold .fbls-person-editor.v2 .fbls-derived-box strong {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  height: var(--fbls-person-control-h);
+  padding: 0 0.4rem;
+  overflow: hidden;
+  border: 1px solid var(--fbls-border);
+  border-radius: var(--fbls-radius-sm);
+  color: var(--fbls-text-strong);
+  background: var(--fbls-overlay-soft);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.fbl-skyhold .fbls-person-editor.v2 :is(
-  .main-set.compact-resident-main > label,
-  .main-set.compact-resident-main > .fbls-derived-mini,
-  .main-set.compact-resident-main .fbls-resident-main-grid > label,
-  .main-set.compact-resident-main .fbls-resident-main-grid > .fbls-derived-mini,
-  .work-set.compact-resident-work label,
-  .stat-set.compact-set > label,
-  .morale-set.compact-set > label,
-  .morale-set.compact-set > .fbls-derived-box
-) {
+.fbl-skyhold .fbls-resident-main-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 0.42rem;
+  align-items: end;
+}
+
+.fbl-skyhold .fbls-resident-main-grid .person-name { grid-column: span 3; }
+.fbl-skyhold .fbls-resident-main-grid .person-sex,
+.fbl-skyhold .fbls-resident-main-grid .person-age,
+.fbl-skyhold .fbls-resident-main-grid .person-category { grid-column: span 1; }
+.fbl-skyhold .fbls-resident-main-grid .person-culture,
+.fbl-skyhold .fbls-resident-main-grid .person-belief,
+.fbl-skyhold .fbls-resident-main-grid .person-injured { grid-column: span 2; }
+.fbl-skyhold .fbls-resident-main-grid .person-race,
+.fbl-skyhold .fbls-resident-main-grid .person-subrace { grid-column: span 2; }
+.fbl-skyhold .fbls-resident-main-grid .person-appearance { grid-column: span 8; }
+.fbl-skyhold .fbls-resident-main-grid .person-death-date { grid-column: span 3; }
+.fbl-skyhold .fbls-resident-main-grid .person-death-note { grid-column: span 9; }
+.fbl-skyhold .fbls-person-editor.v2 label.person-appearance,
+.fbl-skyhold .fbls-person-editor.v2 label.person-death-note {
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
+  gap: 0.12rem;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 label.person-appearance textarea,
+.fbl-skyhold .fbls-person-editor.v2 label.person-death-note textarea {
+  flex: 0 0 auto;
+  height: var(--fbls-person-control-h);
+}
+
+.fbl-skyhold .work-set.compact-resident-work {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 0.42rem;
+}
+
+.fbl-skyhold .work-set.compact-resident-work > legend { grid-column: 1 / -1; }
+
+.fbl-skyhold .work-set.compact-resident-work > .fbls-resident-ship-status {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: var(--fbls-gap-sm);
+  min-width: 0;
+  padding: 0.3rem 0.45rem;
+  border-radius: var(--fbls-radius-sm);
+  color: var(--fbls-muted);
+  background: var(--fbls-surface-2);
+  font-size: var(--fbls-type-compact-sm);
+  cursor: help;
+}
+
+.fbl-skyhold .fbls-resident-ship-status > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .person-home > .fbls-resident-ship-home {
+  display: flex;
+  align-items: center;
+  min-height: var(--fbls-person-control-h);
+  padding: 0 0.45rem;
+  color: var(--fbls-text);
+  background: var(--fbls-surface-2);
+  border-radius: var(--fbls-radius-sm);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.fbl-skyhold .fbls-work-block {
+  display: grid;
+  gap: 0.42rem;
+  min-width: 0;
+}
+
+.fbl-skyhold .fbls-work-source-block {
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+}
+
+.fbl-skyhold .fbls-work-source-block .person-work { grid-column: span 3; }
+.fbl-skyhold .fbls-work-source-block .person-salary { grid-column: span 2; }
+.fbl-skyhold .fbls-work-source-block .person-volunteer { grid-column: span 2; }
+.fbl-skyhold .fbls-work-source-block .person-volunteer-reason { grid-column: span 5; }
+.fbl-skyhold .fbls-work-source-block .person-custom-role { grid-column: 1 / -1; }
+
+.fbl-skyhold .fbls-work-home-block {
+  grid-column: span 7;
+  grid-template-columns: minmax(0, 5fr) minmax(7rem, 2fr);
+}
+
+.fbl-skyhold .fbls-work-background-block {
+  grid-column: span 5;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.fbl-skyhold .fbls-person-editor.v2 .is-hidden { display: none; }
+
+.fbl-skyhold .fbls-work-allocation-toolbar {
+  display: grid;
+  grid-template-columns: minmax(13rem, 1fr) minmax(10.5rem, auto) auto;
+  align-items: end;
+  gap: 0.45rem;
+}
+
+.fbl-skyhold .fbls-work-allocation-total-field {
   display: grid;
   grid-template-rows: auto var(--fbls-person-control-h);
   align-content: end;
-  gap: 0;
-  min-height: 0;
-}
-
-/* Main row: first line holds compact identity fields. Appearance owns the full second line. */
-.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main {
-  display: block;
+  gap: 0.12rem;
   min-width: 0;
 }
 
-.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .fbls-resident-main-grid {
-  display: grid;
-  grid-template-columns:
-    minmax(168px, 1.35fr)
-    52px
-    62px
-    46px
-    minmax(112px, .92fr)
-    minmax(132px, 1fr)
-    minmax(118px, .92fr)
-    minmax(116px, .9fr)
-    58px;
-  grid-template-areas:
-    "name sex age category culture belief race subrace injured"
-    "appearance appearance appearance appearance appearance appearance appearance appearance appearance";
-  grid-template-rows: auto auto;
-  gap: 0.04rem 0.3rem;
-  align-items: end;
-  min-width: 0;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-name { grid-area: name; }
-.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-sex { grid-area: sex; }
-.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-age { grid-area: age; }
-.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-category { grid-area: category; }
-.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-culture { grid-area: culture; }
-.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-belief { grid-area: belief; }
-.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-race { grid-area: race; }
-.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-subrace { grid-area: subrace; }
-.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-injured { grid-area: injured; }
-
-.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-appearance {
-  grid-area: appearance;
-  grid-column: 1 / -1;
-  grid-row: 2;
-  display: grid;
-  grid-template-rows: auto auto;
-  align-content: stretch;
-  align-self: start;
-  justify-self: stretch;
-  min-width: 0;
-  width: 100%;
-  min-height: 0;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-appearance textarea {
-  display: block;
-  height: 32px;
-  min-height: 32px;
-  max-height: none;
-  resize: none;
+.fbl-skyhold .fbls-work-allocation-total-field > span {
   overflow: hidden;
-  line-height: 1.2;
-  max-width: 100%;
+  color: var(--fbls-muted);
+  font-size: var(--fbls-type-compact-sm);
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-category,
-.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-category strong {
-  width: 46px;
-  min-width: 46px;
-  max-width: 46px;
-  justify-self: stretch;
-  padding-left: 0.18rem;
-  padding-right: 0.18rem;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-name input,
-.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-race input,
-.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-subrace input {
-  justify-content: flex-start;
-  text-align: left;
-  padding-left: 0.58rem;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-sex input,
-.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-age input,
-.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-injured input {
-  text-align: center;
-  padding-left: 0.2rem;
-  padding-right: 0.2rem;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-death-date {
-  grid-column: 1 / span 2;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .wide,
-.fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-death-note {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-rows: auto minmax(52px, auto);
-}
-
-/* Work, housing and background stay compact; the explicit contract occupies a full second row. */
-.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  grid-template-areas:
-    "workSource workHome workBackground"
-    "workContract workContract workContract";
-  gap: 0.06rem;
-  align-items: start;
-  min-width: 0;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work > .fbls-work-block {
-  min-width: 0;
-  width: 100%;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .fbls-work-source-block {
-  grid-area: workSource;
-  display: grid;
-  grid-template-columns: minmax(142px, 1fr);
-  grid-template-areas: "work";
-  gap: 0.06rem;
-  align-items: end;
-  justify-self: stretch;
-  justify-items: stretch;
-  max-width: 100%;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work.has-custom-work .fbls-work-source-block {
-  grid-template-areas:
-    "work"
-    "custom";
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .fbls-work-home-block {
-  grid-area: workHome;
-  display: grid;
-  justify-items: center;
-  align-items: end;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .fbls-work-background-block {
-  grid-area: workBackground;
-  display: grid;
-  justify-items: end;
-  align-items: end;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .fbls-work-contract-block {
-  grid-area: workContract;
-  display: grid;
-  grid-template-columns: minmax(190px, 1.4fr) repeat(5, minmax(92px, .72fr));
-  gap: 0.18rem;
-  align-items: end;
-  padding-top: 0.3rem;
-  border-top: 1px solid var(--fbls-border);
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-work { grid-area: work; }
-.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-custom-role { grid-area: custom; }
-
-.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-home {
-  width: 180px;
-  max-width: 100%;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-background {
-  width: 220px;
-  max-width: 100%;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-work select,
-.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-home select,
-.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-background select,
-.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-compensation-type select,
-.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-custom-role input {
-  justify-content: flex-start;
-  text-align: left;
-  padding-left: 0.58rem;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-custom-role {
-  width: 100%;
-  min-width: 0;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-custom-role.is-hidden {
-  display: none;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-compensation-note { grid-column: 1 / -1; }
-.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-housing-provided { align-self: center; min-height: 32px; }
-.fbl-skyhold .fbls-person-editor.v2 .fbls-employment-v2 {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 0.3rem;
-  padding: 0.45rem;
+.fbl-skyhold .fbls-work-allocation-total {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--fbls-person-control-h);
+  min-height: var(--fbls-person-control-h);
+  padding: 0 0.55rem;
   border: 1px solid var(--fbls-border);
   border-radius: var(--fbls-radius-sm);
-  background: var(--fbls-surface-soft);
+  color: var(--fbls-text-strong);
+  background: var(--fbls-overlay-soft);
+  line-height: 1;
+  white-space: nowrap;
 }
 
-.fbl-skyhold .fbls-person-editor.v2 .fbls-employment-v2-title,
-.fbl-skyhold .fbls-person-editor.v2 .fbls-employment-v2 > .fbls-muted-text {
+.fbl-skyhold .fbls-work-allocation-total.has-warning {
+  border-color: var(--fbls-danger-border);
+  color: var(--fbls-danger);
+  background: var(--fbls-danger-soft);
+}
+
+.fbl-skyhold .fbls-work-allocation-rows {
+  display: grid;
+  gap: 0.38rem;
+  margin-top: 0.48rem;
+}
+
+.fbl-skyhold .fbls-work-allocation-contract {
   grid-column: 1 / -1;
-  margin: 0;
 }
 
-.fbl-skyhold .fbls-person-editor.v2 .fbls-employment-v2-title {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.5rem;
+.fbls-work-allocation-row {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) 6.5rem 6.5rem auto;
+  align-items: end;
+  gap: 0.42rem;
+}
+
+.fbl-skyhold .fbls-resident-midline {
+  display: grid;
+  grid-template-columns: minmax(15rem, 0.9fr) minmax(19rem, 1.05fr) minmax(20rem, 1.25fr);
+  align-items: start;
+  gap: 0.38rem;
+  min-width: 0;
+}
+
+.fbl-skyhold .fbls-resident-midline .compact-set {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: end;
+  gap: 0.38rem;
+}
+
+.fbl-skyhold .fbls-resident-midline .compact-set > legend { grid-column: 1 / -1; }
+.fbl-skyhold .fbls-resident-midline .morale-set { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.fbl-skyhold .fbls-resident-midline .traits-set { display: block; }
+
+.fbl-skyhold .fbls-resident-midline .fbls-derived-box {
+  cursor: help;
+}
+
+.fbl-skyhold .fbls-trait-control-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(11rem, 0.72fr);
+  align-items: start;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.fbl-skyhold .fbls-trait-editor {
   color: var(--fbls-text);
+  font-size: inherit;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
-.fbl-skyhold .fbls-person-editor.v2 .fbls-employment-v2-title span {
+.fbl-skyhold .fbls-trait-current {
+  display: grid;
+  grid-template-rows: auto auto;
+  align-content: start;
+  gap: 2px;
+  min-width: 0;
+}
+
+.fbl-skyhold .fbls-trait-current > .fbls-field-title {
+  overflow: hidden;
   color: var(--fbls-muted);
+  font-size: 0.625rem;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.fbl-skyhold .fbls-person-editor.v2 .fbls-employment-seasons {
-  grid-column: span 2;
+.fbl-skyhold .fbls-selected-traits {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.25rem 0.5rem;
-  min-width: 0;
-  margin: 0;
-  padding: 0.2rem 0.4rem 0.35rem;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .fbls-employment-seasons label {
-  display: inline-flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 0.25rem;
-  min-height: var(--fbls-person-control-h);
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .fbls-employment-payroll-status {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-content: center;
-  gap: 0.08rem 0.35rem;
-  min-height: var(--fbls-person-control-h);
-  padding: 0.25rem 0.45rem;
-  border: 1px solid var(--fbls-border);
-  border-radius: var(--fbls-radius-sm);
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .fbls-employment-payroll-status small {
-  grid-column: 1 / -1;
-  color: var(--fbls-muted);
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .fbls-employment-payroll-status.has-arrears strong {
-  color: var(--fbls-warning);
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .fbls-labor-projection {
-  display: grid;
   gap: 0.3rem;
-  padding: 0.45rem;
-  border: 1px solid var(--fbls-border);
-  border-radius: var(--fbls-radius-sm);
-  background: var(--fbls-surface-2);
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .fbls-labor-projection.has-risk { border-color: var(--fbls-accent-border); }
-.fbl-skyhold .fbls-person-editor.v2 .fbls-labor-projection.is-blocked { border-color: var(--fbls-danger-border); }
-.fbl-skyhold .fbls-person-editor.v2 .fbls-labor-projection.is-ready { border-color: var(--fbls-success); }
-
-.fbl-skyhold .fbls-person-editor.v2 .fbls-labor-projection p,
-.fbl-skyhold .fbls-person-editor.v2 .fbls-labor-projection-list {
-  margin: 0;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .fbls-labor-projection-list {
-  padding-left: 1.1rem;
-  white-space: normal;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .fbls-compensation-warning {
-  grid-column: 1 / -1;
-  margin: 0;
-  color: var(--fbls-warning);
-  font-size: 0.72rem;
-}
-
-/* Stats, morale and traits. */
-.fbl-skyhold .fbls-person-editor.v2 .fbls-resident-midline {
-  display: grid;
-  grid-template-columns: minmax(285px, .92fr) minmax(345px, 1fr) minmax(360px, 1.18fr);
-  gap: 0.06rem;
-  align-items: start;
   min-width: 0;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .stat-set.compact-set,
-.fbl-skyhold .fbls-person-editor.v2 .morale-set.compact-set,
-.fbl-skyhold .fbls-person-editor.v2 .traits-set.compact-set {
-  min-width: 0;
-  min-height: 0;
-  height: auto;
-  align-self: start;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .stat-set.compact-set {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(56px, 72px));
-  justify-content: start;
-  gap: 0.06rem;
-  align-items: end;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .morale-set.compact-set {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(56px, 72px));
-  justify-content: start;
-  gap: 0.06rem;
-  align-items: end;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .stat-set.compact-set legend,
-.fbl-skyhold .fbls-person-editor.v2 .morale-set.compact-set legend,
-.fbl-skyhold .fbls-person-editor.v2 .traits-set.compact-set legend {
-  grid-column: 1 / -1;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .morale-set.compact-set > .fbls-derived-box {
-  margin: 0;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .morale-set.compact-set .fbls-derived-box span {
-  text-align: left;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .morale-set.compact-set .fbls-derived-box strong {
-  width: 100%;
-  margin: 0;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .morale-set.compact-set .fbls-derived-box em {
-  display: none;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .traits-set.compact-set {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto auto;
-  gap: 0.04rem;
-  align-content: start;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .traits-set.compact-set .fbls-trait-editor {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  align-content: start;
-  gap: 0;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .traits-set.compact-set .fbls-trait-control-row {
-  min-width: 0;
-  width: 100%;
   min-height: var(--fbls-person-control-h);
-  display: flex;
-  gap: var(--fbls-gap-xs, 0.32rem);
-  align-items: center;
-  padding: 0.08rem;
-  border: 1px solid var(--fbls-border);
-  border-radius: 0.45rem;
-  background: var(--fbls-overlay-soft);
-  overflow: hidden;
-  text-transform: none;
-  letter-spacing: 0;
+  padding-block: 0.2rem;
 }
 
-.fbl-skyhold .fbls-person-editor.v2 .traits-set.compact-set .fbls-selected-traits {
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: calc(var(--fbls-person-control-h) - 0.24rem);
-  width: auto;
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: center;
-  gap: var(--fbls-gap-xs, 0.32rem);
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  scrollbar-width: thin;
-  text-transform: none;
-  letter-spacing: 0;
-}
+.fbl-skyhold .fbls-person-editor.v2 .fbls-trait-add-field { gap: 2px; font-size: 0.625rem; line-height: 1.4; }
 
-.fbl-skyhold .fbls-person-editor.v2 .traits-set.compact-set .fbls-selected-traits .fbls-muted-text {
-  white-space: nowrap;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .traits-set.compact-set .editor-chip {
-  flex: 0 0 auto;
-  max-width: min(12rem, 100%);
-  min-height: calc(var(--fbls-person-control-h) - 0.5rem);
-  width: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.28rem;
-  line-height: 1;
-  white-space: nowrap;
-  text-transform: none;
-  letter-spacing: 0;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .traits-set.compact-set .fbls-chip-remove {
-  flex: 0 0 auto;
-  width: 1.1rem;
-  height: 1.1rem;
-  min-width: 1.1rem;
-  min-height: 1.1rem;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .traits-set.compact-set .fbls-trait-add-compact {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  min-width: 0;
-  max-width: none;
-  height: 100%;
-  min-height: 0;
-  max-height: none;
-  padding: 0;
-  opacity: 0;
-  cursor: pointer;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .traits-set.compact-set .fbls-trait-add-shell {
-  flex: 0 0 var(--fbls-person-control-h);
-  width: var(--fbls-person-control-h);
-  height: calc(var(--fbls-person-control-h) - 0.24rem);
-  min-width: var(--fbls-person-control-h);
-  min-height: calc(var(--fbls-person-control-h) - 0.24rem);
-  position: relative;
-  display: grid;
-  place-items: center;
-  margin: 0;
-  border-radius: 0.38rem;
-  border: 1px solid var(--fbls-border);
-  background: var(--fbls-panel);
-  color: var(--fbls-text);
-  overflow: hidden;
-  cursor: pointer;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .traits-set.compact-set .fbls-trait-add-icon {
-  display: grid;
-  place-items: center;
-  margin: 0;
-  line-height: 1;
-  font-size: 0.92rem;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 input[type="hidden"][data-resident-traits-value] {
-  display: none;
-}
-
-.fbl-skyhold .fbls-person-editor.v2 .fbls-person-notes-field {
-  display: block;
-  width: 100%;
-  min-width: 0;
-  height: 38px;
-  min-height: 38px;
-  margin: 0;
-  resize: vertical;
-}
+.fbl-skyhold .fbls-resident-notes-set textarea { min-height: 4.5rem; }
 
 .fbl-skyhold .fbls-person-editor.v2 .resident-actions {
+  position: sticky;
+  bottom: -0.75rem;
+  z-index: 2;
   display: flex;
+  align-items: center;
   justify-content: flex-end;
-  gap: var(--fbls-gap-sm, 0.42rem);
-  min-width: 0;
+  gap: 0.7rem;
+  min-height: 2.8rem;
+  margin: 0 -0.75rem -0.75rem;
+  padding: 0.45rem 0.75rem;
+  border-top: 1px solid var(--fbls-border);
+  background: var(--fbls-surface-1);
 }
 
-@media (max-width: 1180px) {
-  .fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .fbls-resident-main-grid {
-    grid-template-columns:
-      minmax(150px, 1.25fr)
-      50px
-      60px
-      46px
-      minmax(108px, .92fr)
-      minmax(128px, 1fr)
-      minmax(112px, .9fr)
-      minmax(110px, .9fr)
-      56px;
-  }
+@container fbls-resident-editor (max-width: 58rem) {
+  .fbl-skyhold .fbls-resident-main-grid .person-name { grid-column: span 4; }
+  .fbl-skyhold .fbls-resident-main-grid .person-race,
+  .fbl-skyhold .fbls-resident-main-grid .person-subrace { grid-column: span 3; }
+  .fbl-skyhold .fbls-resident-main-grid .person-appearance { grid-column: span 6; }
+  .fbl-skyhold .fbls-work-source-block .person-work { grid-column: span 4; }
+  .fbl-skyhold .fbls-work-source-block .person-volunteer-reason { grid-column: span 5; }
+  .fbl-skyhold .fbls-resident-midline { grid-template-columns: 1fr 1fr; }
+  .fbl-skyhold .fbls-resident-midline .traits-set { grid-column: 1 / -1; }
 }
 
-@media (max-width: 980px) {
-  .fbl-skyhold .fbls-person-editor.v2 .fbls-resident-midline {
-    grid-template-columns: minmax(0, 1fr);
-  }
+@container fbls-resident-editor (max-width: 42rem) {
+  .fbl-skyhold .fbls-resident-main-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .fbl-skyhold .fbls-resident-main-grid .person-appearance,
+  .fbl-skyhold .fbls-resident-main-grid .person-death-note { grid-column: 1 / -1; }
+  .fbl-skyhold .work-set.compact-resident-work,
+  .fbl-skyhold .fbls-work-source-block { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .fbl-skyhold .fbls-work-source-block .person-work { grid-column: auto / span 3; }
+  .fbl-skyhold .fbls-work-source-block .person-volunteer-reason { grid-column: 1 / -1; }
+  .fbl-skyhold .fbls-work-home-block,
+  .fbl-skyhold .fbls-work-background-block { grid-column: 1 / -1; }
+  .fbl-skyhold .fbls-work-allocation-toolbar { grid-template-columns: 1fr auto; }
+  .fbl-skyhold .fbls-work-allocation-mode { grid-column: 1 / -1; }
+  .fbl-skyhold .fbls-work-allocation-row { grid-template-columns: minmax(0, 1fr) 5.5rem 5.5rem auto; }
+  .fbl-skyhold .fbls-resident-midline { grid-template-columns: 1fr; }
+  .fbl-skyhold .fbls-resident-midline .traits-set { grid-column: auto; }
+  .fbl-skyhold .fbls-trait-control-row { grid-template-columns: minmax(0, 1fr) minmax(11rem, 0.65fr); }
 }
 
-@media (max-width: 900px) {
-  .fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas:
-      "workSource"
-      "workHome"
-      "workBackground"
-      "workContract";
-  }
-
-  .fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .fbls-work-source-block,
-  .fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-home,
-  .fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .person-background {
-    max-width: 100%;
-    width: 100%;
-  }
-
-  .fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .fbls-work-home-block,
-  .fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .fbls-work-background-block {
-    justify-items: stretch;
-  }
-
-  .fbl-skyhold .fbls-person-editor.v2 .work-set.compact-resident-work .fbls-work-contract-block { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-
-@media (max-width: 760px) {
-  .fbl-skyhold .fbls-person-editor.v2 .fbls-employment-v2,
-  .fbl-skyhold .fbls-person-editor.v2 .fbls-employment-seasons {
-    grid-template-columns: minmax(0, 1fr);
-    grid-column: 1 / -1;
-  }
-
-  .fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .fbls-resident-main-grid,
-  .fbl-skyhold .fbls-person-editor.v2 .stat-set.compact-set,
-  .fbl-skyhold .fbls-person-editor.v2 .morale-set.compact-set {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: none;
-  }
-
-  .fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .fbls-resident-main-grid > label,
-  .fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .fbls-resident-main-grid > .fbls-derived-mini {
-    grid-area: auto;
-  }
-
-  .fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-appearance,
-  .fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-death-date,
-  .fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .wide,
-  .fbl-skyhold .fbls-person-editor.v2 .main-set.compact-resident-main .person-death-note {
-    grid-column: auto;
-    grid-row: auto;
-  }
+@container fbls-resident-editor (max-width: 29rem) {
+  .fbl-skyhold .fbls-resident-main-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fbl-skyhold .fbls-resident-main-grid > * { grid-column: span 1; }
+  .fbl-skyhold .fbls-resident-main-grid .person-name,
+  .fbl-skyhold .fbls-resident-main-grid .person-culture,
+  .fbl-skyhold .fbls-resident-main-grid .person-belief { grid-column: 1 / -1; }
+  .fbl-skyhold .work-set.compact-resident-work,
+  .fbl-skyhold .fbls-work-source-block,
+  .fbl-skyhold .fbls-work-home-block,
+  .fbl-skyhold .fbls-work-allocation-toolbar,
+  .fbl-skyhold .fbls-work-allocation-row { grid-template-columns: minmax(0, 1fr); }
+  .fbl-skyhold .fbls-work-source-block .person-work,
+  .fbl-skyhold .fbls-work-source-block .person-salary,
+  .fbl-skyhold .fbls-work-source-block .person-volunteer,
+  .fbl-skyhold .fbls-work-source-block .person-volunteer-reason,
+  .fbl-skyhold .fbls-work-source-block .person-custom-role,
+  .fbl-skyhold .fbls-work-home-block,
+  .fbl-skyhold .fbls-work-background-block,
+  .fbl-skyhold .fbls-work-allocation-mode { grid-column: auto; }
+  .fbl-skyhold .fbls-work-allocation-row .icon-only { justify-self: end; }
+  .fbl-skyhold .fbls-resident-midline .compact-set,
+  .fbl-skyhold .fbls-resident-midline .morale-set { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fbl-skyhold .fbls-trait-control-row { grid-template-columns: minmax(0, 1fr); }
+  .fbl-skyhold .fbls-person-editor.v2 .resident-actions { align-items: flex-end; flex-direction: column; }
 }

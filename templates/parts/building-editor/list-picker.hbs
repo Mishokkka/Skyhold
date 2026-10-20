@@ -1,0 +1,10 @@
+<details class="fbls-selection-field fbls-editor-list-picker" data-building-list-picker="{{path}}" data-building-list-all="{{#if all}}true{{else}}false{{/if}}" data-building-list-empty-label="{{empty}}" data-fbls-disclosure="{{disclosure}}">
+  <summary class="fbls-control" data-selection-summary data-fbls-tooltip="{{tooltip}}" aria-label="Выбранные значения: {{tooltip}}"><span data-selection-label>{{first}}</span><span class="fbls-chip" data-selection-count {{#unless additional}}hidden{{/unless}}>+{{additional}}</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary>
+  <div class="fbls-editor-list-panel fbls-stack">
+    <input type="search" class="fbls-control" data-building-list-search placeholder="Найти в списке…" aria-label="Поиск в списке" />
+    <div class="fbls-editor-list-options">
+      {{#each choices}}<label class="fbls-checkbox-label fbls-choice-toggle" data-building-list-search-text="{{search}}" data-fbls-tooltip="{{label}} · {{value}}"><span>{{label}}</span><input type="checkbox" value="{{value}}" data-building-list-option data-building-list-label="{{label}}" {{#if selected}}checked{{/if}} /></label>{{/each}}
+      <p class="fbls-empty" data-building-list-empty {{#if choices}}hidden{{/if}}>Нет подходящих вариантов.</p>
+    </div>
+  </div>
+</details>

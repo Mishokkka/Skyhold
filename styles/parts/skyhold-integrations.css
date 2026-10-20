@@ -42,5 +42,5 @@
   border: 1px solid var(--fbls-border);
   border-radius: 999px;
   background: var(--fbls-surface-soft);
-  font-size: 0.75rem;
+  font-size: var(--fbls-type-compact-sm);
 }

@@ -14,15 +14,18 @@
                 <span class="{{css}}"><i class="{{icon}}"></i><strong>{{value}}</strong></span>
               {{/each}}
             </button>
-            <label class="fbls-editor-impact morale" data-fbls-tooltip="Общий эффект построенного здания. Существующие значения переводятся в единую шкалу: 10 старых пунктов дают +1 к итоговому довольству."><i class="fa-solid fa-face-smile"></i>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.basePath}}.moraleDelta" value="{{building.moraleDelta}}" />{{else}}<strong>{{building.moraleDelta}}</strong>{{/if}}</label>
-            <label class="fbls-editor-impact reputation" data-fbls-tooltip="Репутация здания: прибавляется к общей Репутации владения, если здание построено."><i class="fa-solid fa-crown"></i>{{#if canEdit}}<input type="number" data-type="number" data-field="{{building.basePath}}.reputation" value="{{building.reputation}}" />{{else}}<strong>{{building.reputation}}</strong>{{/if}}</label>
+            <label class="fbls-editor-impact morale" data-fbls-tooltip="Довольство здания: общий модификатор довольства поселения от построенного здания."><i class="fa-solid fa-face-smile"></i>{{#if canEdit}}<input class="fbls-control" type="number" data-type="number" data-field="{{building.basePath}}.moraleDelta" value="{{building.moraleDelta}}" />{{else}}<strong>{{building.moraleDelta}}</strong>{{/if}}</label>
+            <label class="fbls-editor-impact reputation" data-fbls-tooltip="Репутация здания учитывается, когда оно построено. Повтор одного шаблона дает 1/n исходного вклада: 100%, 1/2, 1/3 и далее, с округлением к нулю до целого."><i class="fa-solid fa-crown"></i>{{#if canEdit}}<input class="fbls-control" type="number" data-type="number" data-field="{{building.basePath}}.reputation" value="{{building.reputation}}" />{{else}}<strong>{{building.reputation}}</strong>{{/if}}</label>
           </div>
         </div>
         <p>{{holding.name}} · {{building.categoryLabel}}</p>
       </div>
+      <div class="fbls-stack fbls-save-meta">
+        {{#if canEdit}}{{> "modules/fbl-skyhold/templates/parts/save-status.hbs"}}{{/if}}
       <div class="fbls-building-badges">
         <span class="fbls-status-pill fbls-chip {{building.statusClass}}">{{building.statusLabel}}</span>
         <span class="fbls-status-pill fbls-chip">Рабочие {{building.assignedCount}}/{{building.workersMax}}</span>
         {{#if building.defenseSummary.hasDefense}}<span class="fbls-status-pill fbls-chip defense">Защита +{{building.defenseSummary.total}}</span>{{/if}}
+      </div>
       </div>
     </header>

@@ -1,147 +1,58 @@
-/* FBL Skyhold template browser: catalog flow, card states and overview chips. */
-/* 1.0.3: counters, cemetery table and building impact chips */
-.fbl-skyhold-template-browser .fbls-template-browser-meta.two-column {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.22rem 0.55rem;
-  font-size: 0.76rem;
-  line-height: 1.15;
-}
-.fbl-skyhold-template-browser .fbls-template-browser-meta.two-column span {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  padding-top: 0.22rem;
-}
+/* Compact catalog navigation. Shared special-tab counters remain owned here. */
 .fbls-special-subtabs .fbls-storage-tab b {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.35rem;
-  height: 1.05rem;
-  padding: 0 0.32rem;
-  margin-left: 0.2rem;
-  border-radius: 999px;
-  color: var(--fbls-info);
-  background: var(--fbls-panel);
-  border: 1px solid var(--fbls-info);
-  font-size: 0.72rem;
-  line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 1.35rem; height: 1.05rem; padding: 0 0.32rem; margin-left: 0.2rem;
+  border-radius: 999px; color: var(--fbls-info); background: var(--fbls-panel);
+  border: 1px solid var(--fbls-info); font-size: var(--fbls-type-compact-sm); line-height: 1;
 }
-/* 1.0.4: header dev chips and materials no longer lock projects */
-
-.fbl-skyhold-template-browser .fbls-template-title-block {
+.fbls-building-card.dev-duplicate { border-color: var(--fbls-accent-border); }
+.fbl-skyhold-template-browser .fbls-template-browser-catalog {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   min-width: 0;
+  gap: 10px;
 }
-
-.fbl-skyhold-template-browser .fbls-template-title-block h3 {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.fbl-skyhold-template-browser .fbls-template-browser-catalog > .fbls-card-header { font-size: var(--fbls-type-compact-md); }
+.fbl-skyhold-template-browser .fbls-template-browser-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+  scrollbar-color: var(--fbls-info) var(--fbls-surface-0);
 }
-
-.fbl-skyhold-template-browser .fbls-template-title-block p {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.fbl-skyhold-template-browser .fbls-template-dev-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.18rem;
-  min-height: 1.35rem;
-  padding: 0.12rem 0.38rem;
-  border-radius: 999px;
-  border: 1px solid var(--fbls-info);
-  background: var(--fbls-info-soft);
-  color: var(--fbls-blueprint-text);
-  font-size: 0.72rem;
-  line-height: 1;
-  font-weight: 900;
-  white-space: nowrap;
-}
-
-.fbl-skyhold-template-browser .fbls-template-dev-chip.bonus {
-  border-color: var(--fbls-success);
-  background: var(--fbls-overlay-strong);
-  color: var(--fbls-success);
-}
-
-.fbl-skyhold-template-browser .fbls-template-dev-chip.requirement {
-  border-color: var(--fbls-danger-border);
-  background: var(--fbls-danger-strong);
-  color: var(--fbls-danger);
-}
-
-.fbl-skyhold-template-browser .fbls-template-browser-meta.two-column {
+.fbl-skyhold-template-browser .fbls-template-browser-row {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.2rem 0.55rem;
-  min-width: 0;
-}
-
-.fbl-skyhold-template-browser .fbls-template-browser-meta.two-column span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.fbl-skyhold-template-browser .fbls-template-browser-meta.two-column span.missing {
-  color: var(--fbls-accent);
-}
-
-.fbl-skyhold-template-browser .fbls-template-material-warning {
-  margin: 0;
-  min-width: 0;
-  overflow-wrap: anywhere;
-  font-size: 0.73rem;
-  line-height: 1.16;
-}
-
-.fbl-skyhold-template-browser .fbls-template-material-warning {
-  color: var(--fbls-accent);
-}
-
-/* 1.0.5: template masonry, dev status, compact residents/cemetery */
-.fbl-skyhold-template-browser .fbls-template-current-dev-label {
-  color: var(--fbls-info);
-  border: 0;
-  background: transparent;
-  padding-inline: 0;
-  font-weight: 800;
-}
-.fbl-skyhold-template-browser .fbls-template-current-dev {
-  display: inline-flex;
+  grid-template-columns: 26px minmax(90px, 1fr) minmax(0, auto);
   align-items: center;
-  gap: 0.25rem;
-  min-width: 2.25rem;
-  justify-content: center;
+  width: 100%;
+  min-height: 64px;
+  height: auto;
+  padding: 10px;
+  gap: 4px 10px;
+  margin: 0 0 4px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: var(--fbls-overlay-soft);
+  color: var(--fbls-text);
+  font-size: 0.9rem;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: left;
+  box-shadow: none;
 }
-.fbl-skyhold-template-browser .fbls-template-current-dev.food i { color: var(--fbls-accent); }
-.fbl-skyhold-template-browser .fbls-template-current-dev.technology i { color: var(--fbls-info); }
-.fbl-skyhold-template-browser .fbls-template-current-dev.culture i { color: var(--fbls-culture); }
-.fbl-skyhold-template-browser .fbls-template-current-dev.war i { color: var(--fbls-danger); }
-
-.fbl-skyhold-template-browser .fbls-template-browser-card.built {
-  border-color: var(--fbls-accent-border);
-  background:
-    repeating-linear-gradient(135deg, var(--fbls-accent-bg) 0 10px, var(--fbls-overlay) 10px 20px),
-    linear-gradient(var(--fbls-info-soft) 1px, transparent 1px),
-    linear-gradient(90deg, var(--fbls-info-soft) 1px, transparent 1px),
-    linear-gradient(135deg, var(--fbls-overlay-strong), var(--fbls-overlay-strong));
-  background-size: auto, 18px 18px, 18px 18px, auto;
-  box-shadow: inset 0 0 0 1px var(--fbls-accent-bg), 0 0 14px var(--fbls-accent-soft);
+.fbl-skyhold-template-browser .fbls-template-browser-row:hover { background: var(--fbls-info-soft); }
+.fbl-skyhold-template-browser .fbls-template-browser-row.selected {
+  box-shadow: inset 3px 0 var(--fbls-info);
+  outline: 1px solid var(--fbls-info);
+  outline-offset: -3px;
 }
-.fbl-skyhold-template-browser .fbls-template-browser-card.planned:not(.built) {
-  border-color: var(--fbls-accent-border);
-  box-shadow: inset 0 0 0 1px var(--fbls-accent-soft), 0 0 12px var(--fbls-accent-soft);
-}
-.fbl-skyhold-template-browser .fbls-template-browser-card.built .fbls-template-title-block p { color: var(--fbls-accent); }
-.fbl-skyhold-template-browser .fbls-template-browser-card.planned:not(.built) .fbls-template-title-block p { color: var(--fbls-accent); }
-.fbl-skyhold-template-browser .fbls-template-browser-card.hidden-template {
-  opacity: 0.78;
-}
-
-.fbls-building-card.dev-duplicate {
-  border-color: var(--fbls-accent-border);
-}
+.fbl-skyhold-template-browser .fbls-template-browser-row.locked { border-color: var(--fbls-danger-border); background: var(--fbls-danger-soft); }
+.fbl-skyhold-template-browser .fbls-template-browser-row.built { border-color: var(--fbls-accent); }
+.fbl-skyhold-template-browser .fbls-template-browser-row > i { grid-column: 1; grid-row: 1 / 3; font-size: 1.3rem; color: var(--fbls-info); }
+.fbl-skyhold-template-browser .fbls-template-row-name { grid-column: 2; grid-row: 1; min-width: 0; overflow-wrap: anywhere; color: var(--fbls-text-strong); }
+.fbl-skyhold-template-browser .fbls-template-row-meta { grid-column: 2; grid-row: 2; color: var(--fbls-muted); font-size: var(--fbls-type-compact-sm); }
+.fbl-skyhold-template-browser .fbls-template-dev-chip-row { grid-column: 3; grid-row: 1; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; max-width: 270px; }
+.fbl-skyhold-template-browser .fbls-template-deficit-row { grid-column: 3; grid-row: 2; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; max-width: 270px; }
+.fbl-skyhold-template-browser .fbls-template-built-check { color: var(--fbls-accent); font-size: 1.1rem; }
+.fbl-skyhold-template-browser .fbls-template-built-stamp { display: inline-block; border: 1px solid var(--fbls-accent-border); padding: 1px 5px; color: var(--fbls-accent); font-size: var(--fbls-type-compact-xs); font-weight: 700; letter-spacing: 0.10em; line-height: 1.45; transform: rotate(-3deg); }

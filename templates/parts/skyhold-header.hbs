@@ -1,10 +1,10 @@
-  <div class="fbls-loading-overlay" data-loading-overlay>{{#if loadingImage}}<img src="{{loadingImage}}" alt="" />{{else}}<i class="fa-solid fa-spinner fa-spin"></i>{{/if}}</div>
+  <div class="fbls-loading-overlay" data-loading-overlay role="status" aria-label="Загрузка">{{#if loadingImage}}<img src="{{loadingImage}}" alt="" />{{else}}<i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>{{/if}}<span>Загрузка…</span></div>
   <header class="fbls-hero compact">
     <div class="fbls-hero-top">
       {{#if hasHolding}}
         <div class="fbls-header-control-band {{#if isPlayer}}player-view{{/if}}">
           <label class="fbls-header-select-main compact-name">
-            <select data-action="select-holding">
+            <select data-action="select-holding" aria-label="Выбрать владение">
               {{#each holdingOptions}}
                 <option value="{{id}}" {{#if selected}}selected{{/if}}>{{name}}</option>
               {{/each}}
@@ -16,7 +16,7 @@
 
           <label class="fbls-header-type-select">
             {{#if canEdit}}
-              <select data-field="holdings.{{holdingIndex}}.type">
+              <select data-field="holdings.{{holdingIndex}}.type" aria-label="Тип владения">
                 {{#each typeOptions}}
                   <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
                 {{/each}}
@@ -61,7 +61,7 @@
         </div>
 
         <div class="fbls-header-statline">
-          <button type="button" class="fbls-morale-compact {{moraleState.css}}" data-action="show-morale-help" data-fbls-tooltip="{{moraleState.tooltip}}">
+          <button type="button" class="fbls-morale-compact {{moraleState.css}}" data-action="show-morale-help" data-fbls-tooltip="{{moraleState.label}} ({{moraleState.range}}): {{moraleState.notes}}">
             <i class="{{moraleState.icon}}"></i>
             <strong>{{moraleState.value}}</strong>
           </button>
@@ -82,6 +82,10 @@
           </div>
 
           <div class="fbls-right-stats">
+            <button type="button" class="fbls-politics-open" data-action="open-politics" title="{{politicsEntry.title}}" aria-label="{{politicsEntry.title}}">
+              <i class="fa-solid fa-shield-halved"></i>
+              <span>{{politicsEntry.label}}</span>
+            </button>
             <label class="fbls-roll-stat reputation" data-fbls-tooltip="{{reputationSummary.tooltip}}">
               <i class="fa-solid fa-crown"></i>
               <strong>{{reputationSummary.total}}</strong>

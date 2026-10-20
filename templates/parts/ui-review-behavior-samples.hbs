@@ -1,0 +1,64 @@
+<div class="fbls-ui-review-samples" role="group" aria-label="Практическое сравнение: {{title}}">
+  <div class="fbls-ui-review-sample is-before">
+    <strong class="fbls-ui-review-sample-label">До изменений</strong>
+    {{#if isSave}}
+      {{#each saveDemos}}
+        <section class="fbls-ui-save-window">
+          <header class="fbls-card-header"><strong>{{title}}</strong>{{#unless isAuto}}<button type="button" class="fbls-button fbls-button-role primary">Сохранить</button>{{/unless}}</header>
+          <label class="fbls-field"><span>{{field}}</span><input class="fbls-control" type="text" value="{{value}}" readonly aria-label="Текущий пример: {{title}}, {{field}}"></label>
+        </section>
+      {{/each}}
+    {{/if}}
+    {{#if isGm}}
+      <section class="fbls-ui-gm-group">
+        <h4 class="fbls-heading-section">Быстрые броски</h4>
+        <div class="fbls-action-group">
+          <button type="button" class="fbls-button fbls-button-role">Общее</button>
+          <button type="button" class="fbls-button fbls-button-role">Внешнее</button>
+          <button type="button" class="fbls-button fbls-button-role primary">Редактор событий</button>
+          <button type="button" class="fbls-button fbls-button-role">Регионы</button>
+          <button type="button" class="fbls-button fbls-button-role">Content packs</button>
+          <button type="button" class="fbls-button fbls-button-role">Миграция зданий</button>
+          <button type="button" class="fbls-button fbls-button-role">Миграция Лапуты</button>
+        </div>
+      </section>
+      <section class="fbls-ui-gm-group"><h4 class="fbls-heading-section">Каталог ресурсов</h4><button type="button" class="fbls-button fbls-button-role">Открыть редактор ресурсов</button></section>
+      <section class="fbls-ui-gm-group"><h4 class="fbls-heading-section">Каталог внешнего рынка</h4><button type="button" class="fbls-button fbls-button-role">Открыть редактор рынка</button></section>
+      <section class="fbls-ui-gm-group"><h4 class="fbls-heading-section">Политика и бой</h4><div class="fbls-action-group"><button type="button" class="fbls-button fbls-button-role">Баланс политики</button><button type="button" class="fbls-button fbls-button-role">Теги и контры</button></div></section>
+      <section class="fbls-ui-gm-group"><h4 class="fbls-heading-section">Опасная зона</h4><button type="button" class="fbls-button fbls-button-role danger">Сбросить данные</button></section>
+    {{/if}}
+  </div>
+  <div class="fbls-ui-review-sample is-after">
+    <strong class="fbls-ui-review-sample-label">Внесено · можно попробовать</strong>
+    {{#if isSave}}
+      {{#each saveDemos}}
+        <section class="fbls-ui-save-window" data-review-save-demo="{{id}}" data-review-save-mode="{{mode}}" data-review-save-state="saved">
+          <header class="fbls-card-header"><strong>{{title}}</strong><div class="fbls-action-group">
+            {{> "modules/fbl-skyhold/templates/parts/save-status.hbs" review=true}}
+            <button type="button" class="fbls-button fbls-button-role {{#unless isAuto}}primary{{/unless}}" data-review-save-submit disabled {{#if isAuto}}hidden{{/if}}>{{#if isAuto}}Повторить{{else}}Сохранить{{/if}}</button>
+          </div></header>
+          <label class="fbls-field"><span>{{field}}</span><input class="fbls-control" type="text" value="{{value}}" data-review-save-field aria-label="Изменить пример: {{title}}, {{field}}"></label>
+          <button type="button" class="fbls-button fbls-button-role" data-review-save-error aria-label="Показать ошибку в примере: {{title}}" title="Показать ошибку только в этом образце, без обращения к миру">Показать ошибку</button>
+        </section>
+      {{/each}}
+    {{/if}}
+    {{#if isGm}}
+      <details class="fbls-ui-gm-group" data-review-gm-section="actions" open>
+        <summary>Быстрые действия</summary>
+        <div class="fbls-action-group"><button type="button" class="fbls-button fbls-button-role">Общее</button><button type="button" class="fbls-button fbls-button-role">Внешнее</button><button type="button" class="fbls-button fbls-button-role primary">Редактор событий</button></div>
+      </details>
+      <details class="fbls-ui-gm-group" data-review-gm-section="catalogs" open>
+        <summary>Каталоги</summary>
+        <div class="fbls-action-group"><button type="button" class="fbls-button fbls-button-role">Открыть редактор ресурсов</button><button type="button" class="fbls-button fbls-button-role">Открыть редактор рынка</button><button type="button" class="fbls-button fbls-button-role">Регионы</button></div>
+      </details>
+      <details class="fbls-ui-gm-group" data-review-gm-section="balance">
+        <summary>Баланс</summary>
+        <div class="fbls-action-group"><button type="button" class="fbls-button fbls-button-role">Баланс политики</button><button type="button" class="fbls-button fbls-button-role">Теги и контры</button></div>
+      </details>
+      <details class="fbls-ui-gm-group" data-review-gm-section="service">
+        <summary>Служебные операции</summary>
+        <div class="fbls-action-group"><button type="button" class="fbls-button fbls-button-role">Content packs</button><button type="button" class="fbls-button fbls-button-role">Миграция зданий</button><button type="button" class="fbls-button fbls-button-role">Миграция Лапуты</button><button type="button" class="fbls-button fbls-button-role danger">Сбросить данные</button></div>
+      </details>
+    {{/if}}
+  </div>
+</div>

@@ -4,6 +4,7 @@ import { normalizeMarketOffer } from "./market/market-catalog.js";
 import { normalizeMarketCondition, normalizeMarketCountry, normalizeMarketEconomy, normalizeMarketOrganization, normalizeMarketSizeProfile, normalizeMarketSpecialty } from "./market/economy.js";
 import { normalizeMarketRouteMap } from "./market/route-map.js";
 import { normalizeResourceCatalogRow } from "../core/resources.js";
+import { removedCatalogDependencies } from "./catalog-dependencies.js";
 
 export const CONTENT_PACK_SCHEMA = "fbl-skyhold.content-pack";
 export const CONTENT_PACK_FORMAT_VERSION = 1;
@@ -124,8 +125,7 @@ export function normalizeContentPack(raw = {}) {
     install: {
       replaceMarket: installSource.replaceMarket === true,
       replaceResources: installSource.replaceResources === true,
-      overwriteResources: installSource.overwriteResources === true,
-      replaceBuildings: installSource.replaceBuildings === true
+      overwriteResources: installSource.overwriteResources === true
     },
     content: {
       buildings: mapRows(content.buildings, (row) => normalizeBuildingEntry(row, source, version)),
@@ -197,7 +197,9 @@ function changeFor(existing, incoming) {
 
 export function planContentPackImport({ data, holdingId = "", rawPack } = {}) {
   const pack = normalizeContentPack(rawPack);
-  const holding = (data?.holdings ?? []).find((row) => String(row?.id ?? "") === String(holdingId ?? "")) ?? data?.holdings?.[0] ?? null;
+  const holding = holdingId
+    ? (data?.holdings ?? []).find((row) => String(row?.id ?? "") === String(holdingId))
+    : data?.holdings?.[0];
   if (!holding) throw new Error("FBL Skyhold | Content pack target holding was not found.");
   const changes = [];
   if (pack.install.replaceMarket) {
@@ -226,23 +228,9 @@ export function planContentPackImport({ data, holdingId = "", rawPack } = {}) {
       incoming: null
     });
   }
-  if (pack.install.replaceBuildings) {
-    changes.push({
-      key: "reset:buildings",
-      kind: "buildings.reset",
-      id: "buildings-reset",
-      label: "Текущий каталог шаблонов зданий",
-      status: "remove",
-      reason: "Полная чистая установка шаблонов зданий этого пакета",
-      resetScope: "buildings",
-      existing: null,
-      incoming: null
-    });
-  }
   for (const kind of CONTENT_KINDS) {
     const replaceKind = (pack.install.replaceMarket && (kind === "regions" || kind === "market.routeMap" || kind.startsWith("market.")))
-      || (pack.install.replaceResources && kind === "resources")
-      || (pack.install.replaceBuildings && kind === "buildings");
+      || (pack.install.replaceResources && kind === "resources");
     const existing = replaceKind ? [] : existingRows(data, holding, kind);
     const byId = new Map(existing.map((row) => [rowId(row, kind), row]).filter(([id]) => Boolean(id)));
     for (const incoming of incomingRows(pack, kind)) {
@@ -312,6 +300,17 @@ function targetRows(data, holding, kind) {
 }
 
 export function applyContentPackImport({ data, plan, resolutions = {} } = {}) {
+  const draft = clone(data);
+  const result = applyContentPackToDraft({ data: draft, plan, resolutions });
+  if (!result.ok) return result;
+  const dependencies = removedCatalogDependencies(data, draft);
+  if (dependencies.length) return { ok: false, dependencies,
+    message: `Импорт удаляет используемые записи: ${dependencies.slice(0, 5).map((row) => `${row.id} (${row.path})`).join("; ")}. Сначала замените ссылки или используйте пакет без полной замены.` };
+  Object.assign(data, draft);
+  return result;
+}
+
+function applyContentPackToDraft({ data, plan, resolutions = {} } = {}) {
   if (!data || typeof data !== "object" || !plan?.pack) throw new TypeError("FBL Skyhold | A current data root and import plan are required.");
   const currentRevision = Math.max(0, toNumber(data?.meta?.revision, 0));
   if (currentRevision !== Math.max(0, toNumber(plan.baseRevision, 0))) return { ok: false, stale: true, message: "Данные изменились после предпросмотра импорта." };
@@ -342,13 +341,6 @@ export function applyContentPackImport({ data, plan, resolutions = {} } = {}) {
     if (change.resetScope === "resources") {
       data.catalog ??= {};
       data.catalog.resources = [];
-      applied.push({ key: change.key, kind: change.kind, id: change.id, resolution: "remove" });
-      continue;
-    }
-    if (change.resetScope === "buildings") {
-      data.catalog ??= {};
-      data.catalog.buildings = [];
-      data.catalog.deletedBuildingTemplateIds = [];
       applied.push({ key: change.key, kind: change.kind, id: change.id, resolution: "remove" });
       continue;
     }

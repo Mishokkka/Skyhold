@@ -32,7 +32,7 @@ export class HoldingService {
   }
 
   static async updateData(updater) {
-    return SkyholdData.transaction(updater, { reason: "holding-service:update-data" });
+    return SkyholdData.transaction(updater, { reason: "holding-service:update-data", scope: "both" });
   }
 
   static async updateHolding(holdingId, updater, { fallback = false } = {}) {

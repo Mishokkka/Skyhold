@@ -21,15 +21,15 @@
   gap: 0.22rem;
   margin: 0;
   color: var(--fbls-muted);
-  font-size: 0.72rem;
+  font-size: var(--fbls-type-compact-sm);
   text-transform: uppercase;
-  letter-spacing: .045em;
+  letter-spacing: 0.04em;
 }
 .fbls-storage-money-counter input {
   text-align: center;
-  min-height: 1.65rem;
+  min-height: var(--fbls-control-height);
   padding: 0.22rem 0.34rem;
-  font-weight: 850;
+  font-weight: 800;
 }
 .fbls-storage-money-counter strong {
   color: var(--fbls-text);
@@ -88,7 +88,7 @@
 }
 .fbls-storage-room-stats span {
   color: var(--fbls-muted);
-  font-size: 0.72rem;
+  font-size: var(--fbls-type-compact-sm);
 }
 .fbls-storage-room-stats strong {
   font-size: 0.96rem;
@@ -104,9 +104,9 @@
   gap: 0.18rem;
   min-width: 0;
   color: var(--fbls-muted);
-  font-size: 0.72rem;
+  font-size: var(--fbls-type-compact-sm);
   text-transform: uppercase;
-  letter-spacing: .045em;
+  letter-spacing: 0.04em;
 }
 .fbls-storage-building-grid input {
   text-align: center;

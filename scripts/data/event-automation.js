@@ -53,18 +53,18 @@ export function normalizeEventScheduleEntry(entry = {}, { archived = false } = {
   };
 }
 
-export function normalizeEventSchedule(rows = [], { limit = null } = {}) {
-  const normalized = (Array.isArray(rows) ? rows : [])
+export function normalizeEventSchedule(rows = []) {
+  return (Array.isArray(rows) ? rows : [])
     .filter((row) => row && typeof row === "object")
-    .map((row) => normalizeEventScheduleEntry(row));
-  return Number.isFinite(limit) ? normalized.slice(-Math.max(0, Math.floor(limit))) : normalized;
+    .map((row) => normalizeEventScheduleEntry(row))
+    .slice(-80);
 }
 
-export function normalizeEventArchive(rows = [], { limit = null } = {}) {
-  const normalized = (Array.isArray(rows) ? rows : [])
+export function normalizeEventArchive(rows = []) {
+  return (Array.isArray(rows) ? rows : [])
     .filter((row) => row && typeof row === "object")
-    .map((row) => normalizeEventScheduleEntry(row, { archived: true }));
-  return Number.isFinite(limit) ? normalized.slice(-Math.max(0, Math.floor(limit))) : normalized;
+    .map((row) => normalizeEventScheduleEntry(row, { archived: true }))
+    .slice(-160);
 }
 
 export function normalizeLastEventRoll(lastRoll = null) {

@@ -1,4 +1,18 @@
-/* Storage room subtabs. */
+/* Storage room subtabs and compact production utility rows. */
+.fbls-production-utility-row {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) minmax(14rem, 1.35fr) minmax(8rem, 0.65fr);
+  gap: 0.38rem;
+  align-items: end;
+}
+.fbls-production-utility-row.nonworkers {
+  grid-template-columns: minmax(12rem, 1fr) minmax(14rem, 1.35fr);
+}
+.fbls-production-utility-row label {
+  display: grid;
+  gap: 0.18rem;
+  min-width: 0;
+}
 .fbls-storage-room-tabs {
   display: flex;
   align-items: center;
@@ -27,14 +41,22 @@
   border-radius: 999px;
   background: var(--fbls-overlay);
   color: var(--fbls-text);
-  font-size: 0.78rem;
+  font-size: var(--fbls-type-compact-sm);
 }
 .fbls-storage-room-tab.active {
   color: var(--fbls-text);
   border-color: var(--fbls-accent);
-  background: var(--fbls-accent-dim);
+  background: var(--fbls-accent-bg);
   box-shadow: 0 0 0 1px var(--fbls-danger-soft) inset;
 }
 .fbls-storage-room-tab.inactive {
   opacity: 0.65;
+}
+@media (max-width: 900px) {
+  .fbls-production-utility-row,
+  .fbls-production-utility-row.nonworkers { grid-template-columns: repeat(2, minmax(8rem, 1fr)); }
+}
+@media (max-width: 560px) {
+  .fbls-production-utility-row,
+  .fbls-production-utility-row.nonworkers { grid-template-columns: 1fr; }
 }

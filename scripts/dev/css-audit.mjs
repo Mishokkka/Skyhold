@@ -3,9 +3,21 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const ALLOWED_DUPLICATE_SELECTORS = new Set([
+  ".fbl-skyhold-building-editor",
+  ".fbl-skyhold-crew-editor",
+  ".fbl-skyhold-resident-editor",
+  ".fbl-skyhold-mass-combat",
+  ".fbl-skyhold-mass-tag-editor",
+  ".fbl-skyhold-route-edge-editor",
+  ".fbl-skyhold-template-browser"
+]);
+const FOUNDRY_BRIDGE = "styles/parts/skyhold-foundry-bridge.css";
+const LAZY_CSS_ENTRIES = ["styles/skyhold-secondary.css", "styles/skyhold-template-browser.css"];
 
 function walk(dir, predicate = () => true, output = []) {
   for (const entry of readdirSync(dir)) {
+    if ([".git", ".agents", ".codex", ".codex-tmp", "node_modules", "dist"].includes(entry)) continue;
     const full = path.join(dir, entry);
     const stat = statSync(full);
     if (stat.isDirectory()) walk(full, predicate, output);
@@ -16,6 +28,31 @@ function walk(dir, predicate = () => true, output = []) {
 
 function rel(file) {
   return path.relative(root, file).replaceAll(path.sep, "/");
+}
+
+function normalizeRel(file) {
+  return file.replaceAll("\\", "/");
+}
+
+function cssImportsOf(file) {
+  const text = readFileSync(file, "utf8");
+  const importRe = /@import\s+url\((?:"|')(.+?)(?:"|')\)/g;
+  const imports = [];
+  for (const match of text.matchAll(importRe)) imports.push(path.resolve(path.dirname(file), match[1]));
+  return imports;
+}
+
+function activeCssFiles() {
+  const manifest = JSON.parse(readFileSync(path.join(root, "module.json"), "utf8"));
+  const stack = [...(manifest.styles ?? []), ...LAZY_CSS_ENTRIES].map((file) => path.resolve(root, normalizeRel(file)));
+  const active = new Set();
+  while (stack.length) {
+    const file = stack.pop();
+    if (active.has(file)) continue;
+    active.add(file);
+    for (const imported of cssImportsOf(file)) stack.push(imported);
+  }
+  return active;
 }
 
 function stripComments(text) {
@@ -44,7 +81,12 @@ function extractClassNames(text) {
 }
 
 function main() {
-  const cssFiles = walk(path.join(root, "styles"), (file) => file.endsWith(".css"));
+  const allCssFiles = walk(path.join(root, "styles"), (file) => file.endsWith(".css"));
+  const active = activeCssFiles();
+  const includeAll = process.argv.includes("--all");
+  const strict = process.argv.includes("--strict");
+  const cssFiles = includeAll ? allCssFiles : allCssFiles.filter((file) => active.has(file));
+  const inactiveCssFiles = allCssFiles.filter((file) => !active.has(file));
   const nonCssFiles = walk(root, (file) => /\.(js|mjs|hbs|json|md)$/.test(file));
 
   let totalImportant = 0;
@@ -81,6 +123,10 @@ function main() {
     .filter(([, locations]) => new Set(locations).size > 1)
     .map(([selector, locations]) => ({ selector, files: [...new Set(locations)].sort(), count: locations.length }))
     .sort((a, b) => b.files.length - a.files.length || b.count - a.count || a.selector.localeCompare(b.selector));
+  const allowedDuplicateSelectors = duplicateSelectors.filter((entry) => {
+    return ALLOWED_DUPLICATE_SELECTORS.has(entry.selector) && entry.files.includes(FOUNDRY_BRIDGE);
+  });
+  const actionableDuplicateSelectors = duplicateSelectors.filter((entry) => !allowedDuplicateSelectors.includes(entry));
 
   const exactDuplicates = [...exactRules.entries()]
     .filter(([, locations]) => new Set(locations).size > 1)
@@ -91,9 +137,10 @@ function main() {
 
   console.log("FBL Skyhold CSS audit");
   console.log("=====================");
-  console.log(`CSS files: ${cssFiles.length}`);
+  console.log(`Scope: ${includeAll ? "all CSS files" : "manifest plus lazy runtime cascades"}`);
+  console.log(`CSS files: ${cssFiles.length}${includeAll ? "" : ` active, ${inactiveCssFiles.length} inactive/archive`}`);
   console.log(`!important total: ${totalImportant}`);
-  console.log(`Duplicate selectors across files: ${duplicateSelectors.length}`);
+  console.log(`Duplicate selectors across files: ${actionableDuplicateSelectors.length} actionable, ${allowedDuplicateSelectors.length} allowed`);
   console.log(`Exact duplicate rules across files: ${exactDuplicates.length}`);
   console.log(`Maybe unused Skyhold classes: ${maybeUnused.length}`);
   console.log("");
@@ -104,12 +151,20 @@ function main() {
     console.log("");
   }
 
-  if (duplicateSelectors.length) {
-    console.log("Top duplicate selectors:");
-    for (const entry of duplicateSelectors.slice(0, 12)) {
+  if (actionableDuplicateSelectors.length) {
+    console.log("Top actionable duplicate selectors:");
+    for (const entry of actionableDuplicateSelectors.slice(0, 12)) {
       console.log(`  ${entry.files.length} files / ${entry.count} rules  ${entry.selector}`);
       for (const file of entry.files.slice(0, 4)) console.log(`      ${file}`);
       if (entry.files.length > 4) console.log(`      ... ${entry.files.length - 4} more`);
+    }
+    console.log("");
+  }
+
+  if (allowedDuplicateSelectors.length) {
+    console.log("Allowed Foundry bridge duplicate selectors:");
+    for (const entry of allowedDuplicateSelectors) {
+      console.log(`  ${entry.files.length} files / ${entry.count} rules  ${entry.selector}`);
     }
     console.log("");
   }
@@ -128,6 +183,19 @@ function main() {
     console.log("Maybe unused classes, warning only:");
     for (const className of maybeUnused.slice(0, 80)) console.log(`  .${className}`);
     if (maybeUnused.length > 80) console.log(`  ... ${maybeUnused.length - 80} more`);
+  }
+
+  if (!includeAll && inactiveCssFiles.length) {
+    console.log("");
+    console.log("Inactive/archive CSS files:");
+    for (const file of inactiveCssFiles.slice(0, 40)) console.log(`  ${rel(file)}`);
+    if (inactiveCssFiles.length > 40) console.log(`  ... ${inactiveCssFiles.length - 40} more`);
+    console.log("Use --all to include archived CSS in duplicate and !important counts.");
+  }
+
+  if (strict && (totalImportant || actionableDuplicateSelectors.length || exactDuplicates.length || maybeUnused.length)) {
+    console.error("\nCSS audit failed in strict mode.");
+    process.exitCode = 1;
   }
 }
 

@@ -1,0 +1,25 @@
+<div class="fbls-route-view">
+  <div class="fbls-action-group fbls-route-view-tools" aria-label="Управление картой">
+    <button type="button" class="fbls-button compact" data-route-view-action="fit" aria-label="Показать весь маршрут" title="Показать весь маршрут">⛶</button>
+    <button type="button" class="fbls-button compact" data-route-view-action="in" aria-label="Приблизить карту">+</button>
+    <button type="button" class="fbls-button compact" data-route-view-action="out" aria-label="Отдалить карту">−</button>
+    <details class="fbls-route-pan" data-ship-plan-details="map-pan">
+      <summary aria-label="Перемещение обзора" title="Перемещение обзора">↔</summary>
+      <div class="fbls-action-group">
+        <button type="button" class="fbls-button compact" data-route-view-action="left" aria-label="Переместить обзор влево">←</button>
+        <button type="button" class="fbls-button compact" data-route-view-action="right" aria-label="Переместить обзор вправо">→</button>
+        <button type="button" class="fbls-button compact" data-route-view-action="up" aria-label="Переместить обзор вверх">↑</button>
+        <button type="button" class="fbls-button compact" data-route-view-action="down" aria-label="Переместить обзор вниз">↓</button>
+      </div>
+    </details>
+  </div>
+  <svg data-route-view viewBox="{{viewBox}}" role="img" aria-label="Предварительный маршрут корабля. Остановки и грузы перечислены под картой.">
+    {{#if background}}<image href="{{background}}" x="0" y="0" width="{{worldWidth}}" height="{{worldHeight}}" opacity="{{backgroundOpacity}}" preserveAspectRatio="none" />{{/if}}
+    {{#each lines}}<polyline class="fbls-route-view-line {{#if empty}}is-empty{{/if}} {{#if network}}is-network{{/if}}" points="{{points}}" data-route-offers="{{offerIds}}" vector-effect="non-scaling-stroke"><title>{{label}}</title></polyline>{{/each}}
+    {{#each nodes}}<g class="fbls-route-view-node {{#if start}}is-start{{/if}} {{#if final}}is-final{{/if}}"><title>{{label}}{{#if start}} · корабль здесь{{/if}}{{#if final}} · завершение рейса{{/if}}</title><circle cx="{{x}}" cy="{{y}}" r="{{../markerRadius}}" vector-effect="non-scaling-stroke" />{{#if isStop}}<text x="{{x}}" y="{{y}}" font-size="{{../labelSize}}" text-anchor="middle" dominant-baseline="central">{{stopNumbers}}</text><text data-route-node-label x="{{x}}" y="{{y}}" font-size="{{../labelSize}}" text-anchor="middle">{{label}}</text>{{/if}}</g>{{/each}}
+  </svg>
+  <p class="fbls-route-view-legend">{{#if overview}}0 — корабль сейчас{{else}}Пунктир — порожний подход{{/if}}{{#unless background}} · схема без фона{{/unless}}</p>
+  <p class="fbls-ship-notice" data-route-background-error hidden>Фон недоступен. Маршрут и остановки показаны без изображения.</p>
+  {{#if schematic}}<p class="fbls-ship-notice">Часть портов не размещена на карте: их положение условное.</p>{{/if}}
+  {{#if incomplete}}<p class="fbls-ship-notice">Геометрию части пути нельзя показать: нет доступной связи или отдельных координат. Сверяйтесь со списком участков.</p>{{/if}}
+</div>

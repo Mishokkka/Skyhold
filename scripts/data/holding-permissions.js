@@ -7,17 +7,6 @@ function grantedPlayerPermission(holding, key, readable) {
 
 function authorityStatus(authority, { isGM, hasGrantedPlayerWrites } = {}) {
   if (isGM) {
-    if (authority?.writeAvailable === false) {
-      return {
-        show: true,
-        severity: "readonly",
-        icon: "fa-solid fa-user-lock",
-        label: "Другой GM сохраняет изменения",
-        detail: authority?.activeGmName
-          ? `Единственным writer выбран ${authority.activeGmName}. Эта GM-сессия доступна только для чтения, чтобы не повредить данные мира.`
-          : "Эта GM-сессия доступна только для чтения, чтобы не допустить конкурентную запись в данные мира."
-      };
-    }
     return {
       show: false,
       severity: "gm",
@@ -68,8 +57,8 @@ export function holdingPermissionContext(holding, {
   const mayEditDefense = isGM || grantedPlayerPermission(holding, "playersCanEditDefense", canView);
   const mayEditBattleSetup = isGM || grantedPlayerPermission(holding, "playersCanEditBattle", canView);
   const mayEditSpecial = isGM || grantedPlayerPermission(holding, "playersCanEditSpecial", canView);
-  const mayManageMarkets = isGM || grantedPlayerPermission(holding, "playersCanManageMarkets", canView);
-  const writeAvailable = Boolean(authority?.writeAvailable);
+  const mayManageShips = isGM || grantedPlayerPermission(holding, "playersCanManageShips", canView);
+  const writeAvailable = Boolean(isGM || authority?.writeAvailable);
   const hasGrantedPlayerWrites = !isGM && [
     mayEditOverview,
     mayEditBuildings,
@@ -78,7 +67,7 @@ export function holdingPermissionContext(holding, {
     mayEditDefense,
     mayEditBattleSetup,
     mayEditSpecial,
-    mayManageMarkets
+    mayManageShips
   ].some(Boolean);
 
   return {
@@ -96,15 +85,15 @@ export function holdingPermissionContext(holding, {
     mayEditDefense,
     mayEditBattleSetup,
     mayEditSpecial,
-    mayManageMarkets,
+    mayManageShips,
+    canManageShips: mayManageShips && writeAvailable,
     canEditOverview: mayEditOverview && writeAvailable,
     canEditBuildings: mayEditBuildings && writeAvailable,
     canUseStorage: mayUseStorage && writeAvailable,
     canEditResidents: mayEditResidents && writeAvailable,
     canEditDefense: mayEditDefense && writeAvailable,
     canEditBattleSetup: mayEditBattleSetup && writeAvailable,
-    canResolveBattle: isGM && writeAvailable,
-    canEditSpecial: mayEditSpecial && writeAvailable,
-    canManageMarkets: mayManageMarkets && writeAvailable
+    canResolveBattle: isGM,
+    canEditSpecial: mayEditSpecial && writeAvailable
   };
 }

@@ -11,18 +11,6 @@ export function activeSkyholdGm(users = globalThis.game?.users) {
     .sort((left, right) => String(left?.id ?? "").localeCompare(String(right?.id ?? "")))[0] ?? null;
 }
 
-export function isSkyholdAuthorityGm({
-  user = globalThis.game?.user,
-  users = globalThis.game?.users
-} = {}) {
-  if (!user?.isGM) return false;
-  const activeGm = activeSkyholdGm(users);
-  // During early Foundry startup the active-user collection may not be ready.
-  // A local GM remains usable then; as soon as active users are known, the
-  // deterministic first GM becomes the only world-settings writer.
-  return !activeGm || String(activeGm.id ?? "") === String(user?.id ?? "");
-}
-
 export function getSkyholdAuthorityState({
   user = globalThis.game?.user,
   users = globalThis.game?.users,
@@ -30,12 +18,11 @@ export function getSkyholdAuthorityState({
 } = {}) {
   const isGM = Boolean(user?.isGM);
   const activeGm = activeSkyholdGm(users);
-  const isAuthorityGm = isSkyholdAuthorityGm({ user, users });
   const socketAvailable = Boolean(socket && typeof socket.emit === "function");
   const hasActiveGm = Boolean(activeGm);
-  const writeAvailable = isGM ? isAuthorityGm : (socketAvailable && hasActiveGm);
+  const writeAvailable = isGM || (socketAvailable && hasActiveGm);
   const status = isGM
-    ? (isAuthorityGm ? "local-gm" : "secondary-gm")
+    ? "local-gm"
     : !socketAvailable
       ? "socket-unavailable"
       : hasActiveGm
@@ -45,7 +32,6 @@ export function getSkyholdAuthorityState({
   return {
     status,
     isGM,
-    isAuthorityGm,
     activeGm,
     activeGmId: String(activeGm?.id ?? ""),
     activeGmName: String(activeGm?.name ?? ""),

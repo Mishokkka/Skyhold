@@ -47,7 +47,7 @@
           <tbody>
             {{#each editor.tags}}
               <tr data-tag-key="{{key}}" data-tag-system="{{#if locked}}true{{else}}false{{/if}}" class="{{#if locked}}system{{/if}}">
-                <td class="center"><input type="checkbox" data-tag-field="enabled" {{#if enabledChecked}}checked{{/if}} {{#if locked}}disabled{{/if}} /></td>
+                <td class="center"><label class="fbls-checkbox-label fbls-choice-toggle icon-only" data-fbls-tooltip="Включить тег {{label}}"><input type="checkbox" aria-label="Включить тег {{label}}" data-tag-field="enabled" {{#if enabledChecked}}checked{{/if}} {{#if locked}}disabled{{/if}} /></label></td>
                 <td><code>{{key}}</code></td>
                 <td><input type="text" data-tag-field="label" value="{{label}}" /></td>
                 <td><input type="text" data-tag-field="short" value="{{short}}" /></td>

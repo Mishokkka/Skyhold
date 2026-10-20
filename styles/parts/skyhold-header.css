@@ -21,7 +21,7 @@
   border-bottom: 1px solid var(--fbls-border);
   background: var(--fbls-overlay-soft);
   color: var(--fbls-muted);
-  font-size: 0.76rem;
+  font-size: var(--fbls-type-compact-sm);
 }
 
 .fbls-authority-strip > i {
@@ -179,10 +179,10 @@
 .fbls-header-calendar-last span {
   margin: 0;
   color: var(--fbls-muted);
-  font-size: 0.68rem;
+  font-size: var(--fbls-type-compact-xs);
   line-height: 1;
   text-transform: uppercase;
-  letter-spacing: 0.045em;
+  letter-spacing: 0.04em;
   white-space: nowrap;
 }
 
@@ -193,7 +193,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.78rem;
+  font-size: var(--fbls-type-compact-sm);
 }
 
 .fbls-header-calendar-box strong {
@@ -278,6 +278,7 @@
 .fbls-header-statline .fbls-dev-stat,
 .fbls-header-statline .fbls-faith-stat,
 .fbls-header-statline .fbls-roll-stat,
+.fbls-header-statline .fbls-politics-open,
 .fbls-header-statline .fbls-battle-open-button {
   box-sizing: border-box;
   height: var(--fbls-header-stat-height, 2.3rem);
@@ -387,8 +388,8 @@
 .fbls-faith-stat span {
   color: var(--fbls-muted);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  font-size: var(--fbls-type-compact-xs);
 }
 
 .fbls-faith-stat strong {
@@ -402,6 +403,25 @@
   justify-content: flex-end;
   gap: 0.45rem;
 }
+
+.fbls-header-statline .fbls-politics-open {
+  display: inline-flex;
+  gap: 0.42rem;
+  justify-content: center;
+  min-width: 6.2rem;
+  color: var(--fbls-text);
+  font: inherit;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.fbls-header-statline .fbls-politics-open:hover {
+  border-color: var(--fbls-accent-border);
+  background: var(--fbls-accent-soft);
+}
+
+.fbls-header-statline .fbls-politics-open i { color: var(--fbls-accent); }
 
 .fbls-roll-stat i {
   font-size: 1.08rem;
@@ -435,7 +455,7 @@
 
 .fbls-header-statline .fbls-battle-open-button i:last-child {
   color: var(--fbls-info);
-  font-size: 0.82rem;
+  font-size: var(--fbls-type-compact-md);
 }
 
 .fbls-header-statline .fbls-roll-stat button {

@@ -1,6 +1,11 @@
+import { createDefaultFinanceObligationsState } from "../finance/obligations.js";
+import { createDefaultShipsState } from "../ships.js";
+import { createDefaultPoliticsState } from "../politics-state.js";
+
 export const HOLDING_TYPES = {
   "sky-island": "Остров-летяга",
   settlement: "Поселение",
+  ship: "Корабль",
   outpost: "Аванпост",
   organization: "Организация"
 };
@@ -47,61 +52,47 @@ export const BASE_HOLDING = {
   special: {
     notes: "Уникальные свойства, маршруты, договоры, странности, артефакты и секреты.",
     list: [],
+    ships: createDefaultShipsState(),
     market: {
-      schemaVersion: 2,
       preferredRoomId: "outdoors",
-      orders: [],
-      // Legacy import reservations remain readable during migration. New
-      // Market V2 operations use the single bid/ask liquidity ledger below.
-      stockReservations: [],
-      liquidity: {
-        schemaVersion: 1,
-        lines: [],
-        reservations: [],
-        receipts: []
-      },
-      exportBook: {
-        version: 1,
-        orders: [],
-        advanceRuns: []
-      }
-    },
-    fleet: {
-      schemaVersion: 3,
-      activeVesselId: "",
-      vessels: [],
-      transferMethods: {
-        physical: { id: "physical", label: "Физическая передача", enabled: true, feePercent: 0, etaQd: 0, requiresDock: true, trace: "none" },
-        bank: { id: "bank", label: "Банковский перевод через СТЛ", enabled: true, feePercent: 2, etaQd: 40, requiresDock: false, trace: "paper" },
-        shadow: { id: "shadow", label: "Теневой перевод", enabled: true, feePercent: 6, etaQd: 20, requiresDock: false, trace: "discreet" }
-      },
-      transfers: []
+      stock: {},
+      orders: []
     }
   },
   storage: {
     notes: "Ресурсы, припасы, груз и имущество.",
     resources: [],
-    rationBuffer: {
-      version: 1,
-      entries: []
-    },
     items: [],
     moneyCopper: 0,
     log: []
   },
+  finance: createDefaultFinanceObligationsState(),
+  politics: createDefaultPoliticsState(),
   gm: {
+    economy: {
+      internalDemand: {
+        populationBudgetPerResidentCopper: 12,
+        moraleScale: 40,
+        minimumSatisfactionFactor: 0.5,
+        maximumSatisfactionFactor: 1.5,
+        satisfactionOverrideFactor: null,
+        priorities: { population: 30, innVisitors: 20, marketFlow: 10 }
+      }
+    },
+    food: {
+      rationUnitsPerResident: 10,
+      hungerLevel: 0
+    },
     notes: "Скрытые заметки ГМа, заготовки событий и служебные пометки.",
     lastRoll: null,
+    moraleSnapshot: null,
     eventTables: null,
     eventHistory: [],
     eventTagThresholds: {
       food: { lowMax: 0, highMin: 3 },
       technology: { lowMax: 0, highMin: 3 },
       culture: { lowMax: 0, highMin: 3 },
-      war: { lowMax: 0, highMin: 3 },
-      population: { lowMax: 5, highMin: 15 },
-      morale: { lowMax: -0.001, highMin: 1.501 },
-      reputation: { lowMax: 0, highMin: 3 }
+      war: { lowMax: 0, highMin: 3 }
     },
     playersCanUseStorage: false,
     playersCanEditOverview: true,
@@ -110,7 +101,10 @@ export const BASE_HOLDING = {
     playersCanEditDefense: false,
     playersCanEditBattle: false,
     playersCanEditSpecial: false,
-    playersCanManageMarkets: false,
+    playersCanManageShips: false,
+    politicsCultureThreshold: 16,
+    politicsIgnoreInstitutionRequirement: false,
+    politicsBalance: { version: 1, core: {}, rows: {}, custom: [] },
     loadingImage: "",
     modifiers: {
       food: 0,
@@ -139,31 +133,6 @@ export const BASE_HOLDING = {
       squads: []
     },
     calendaria: { enabled: false, lastTimestamp: null, lastDateKey: "", lastDateText: "", lastDateTime: null, lastQd: 0 },
-    economy: {
-      landRightsProvided: false,
-      commonTable: {
-        activeMoraleBonus: 0,
-        pendingMoraleBonus: 0
-      },
-      foodAllocation: {
-        cursorResidentId: "",
-        receipts: []
-      },
-      labor: {
-        wageIndex: 1,
-        payroll: {
-          version: 1,
-          accounts: {},
-          receipts: []
-        }
-      },
-      treasury: {
-        upkeepThirdRemainder: 0,
-        salaryArrearsCopper: 0,
-        upkeepArrearsCopper: 0,
-        upkeepOverdueTendays: 0
-      }
-    },
     massCombat: {
       schemaVersion: 2,
       phase: "setup",
@@ -184,6 +153,11 @@ export const BASE_HOLDING = {
       defenderMobilization: "watch",
       useDefenseSquads: true,
       raiseMilitia: false,
+      militarySupplyBattleId: "",
+      militarySuppliedSquadIds: [],
+      militaryUnsuppliedSquadIds: [],
+      militarySupplyCosts: [],
+      militarySuppliesConsumed: false,
       attackerPreset: "custom",
       defenderUnits: 0,
       defenderBS: 0,

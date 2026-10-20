@@ -2,13 +2,17 @@ import { makeId, toNumber } from "./utils.js";
 
 const OPERATION_TYPES = new Set([
   "worker-assignment",
+  "construction-attempt",
+  "construction-cancellation",
   "event-effect",
   "event-schedule",
   "battle-aftermath",
   "tenday",
-  "enterprise-capital",
   "market-purchase",
-  "market-export",
+  "market-outbound",
+  "bank",
+  "ship-operation",
+  "politics",
   "system",
   "content-import"
 ]);
@@ -30,11 +34,11 @@ export function normalizeHoldingOperation(row = {}) {
   };
 }
 
-export function normalizeHoldingOperationLog(rows = [], { limit = null } = {}) {
-  const normalized = (Array.isArray(rows) ? rows : [])
+export function normalizeHoldingOperationLog(rows = []) {
+  return (Array.isArray(rows) ? rows : [])
     .filter((row) => row && typeof row === "object")
-    .map((row) => normalizeHoldingOperation(row));
-  return Number.isFinite(limit) ? normalized.slice(-Math.max(0, Math.floor(limit))) : normalized;
+    .map((row) => normalizeHoldingOperation(row))
+    .slice(-250);
 }
 
 export function findHoldingOperation(holding, operationId) {

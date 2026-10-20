@@ -1,34 +1,42 @@
+import { marketPlanCargoExpiryWarnings } from "../engines/market/cargo-aging.js";
+import { escapeHtml } from "../core/helpers.js";
+import { dispatchDelegatedAction } from "./common/delegated-events.js";
+import { visibleActiveShipments } from "./market/shipment-list.js";
 import { MODULE_ID } from "../data/constants.js";
-import { SkyholdData, requestStorageOperation } from "../data/store.js";
+import { requestMarketOperation, SkyholdData } from "../data/store.js";
 import { findReadableHoldingEntry } from "../data/access-guard.js";
 import { holdingPermissionContext } from "../data/holding-permissions.js";
 import { appendHoldingOperation } from "../data/operations.js";
-import { stableDataHash } from "../data/storage-commit.js";
-import { clone, makeId } from "../data/utils.js";
-import { economyV2RuntimeStatus } from "../data/economy-v2-activation.js";
+import { makeId } from "../data/utils.js";
 import { normalizeMarketEconomy } from "../data/market/economy.js";
 import { marketRegionForValue } from "../data/market/region-market.js";
-import { allResourceDefs, compactResourceUnit } from "../core/resources.js";
+import { allResourceDefs } from "../core/resources.js";
 import { copperCurrencyParts, formatCopperCurrencyCompact, formatCopperCurrencyCompact as formatCopperCurrency } from "../core/currency.js";
-import { planMarketPurchase, prepareMarketQuote } from "../engines/market/pricing.js";
-import { MARKET_PRICING_DEPENDENCIES } from "../engines/market/pricing-adapter.js";
-import { deliverMarketShipmentNow, marketShipmentCancellationQuote } from "../engines/market/shipment.js";
-import { applyMarketStockReservationsToQuote } from "../engines/market/stock.js";
-import { planMarketExport } from "../engines/market/export-plan.js";
-import { createMarketExportLiquidityDemandAdapter } from "../engines/market/export-liquidity-adapter.js";
-import { analyzeMarketIntegrity } from "../engines/market/integrity.js";
-import { holdingMarketAccessLevel, marketRegionAccessCostMap, resolveMarketLogistics } from "../engines/market/logistics.js";
-import { effectiveMarketLocations, marketLocationFactors } from "../engines/market/composition.js";
-import { allocateQuoteToMerchantProviders, applyCarrierToLogistics, carrierCapacityForLogistics, carrierProvidersForRoute } from "../engines/market/providers.js";
-import { FLEET_OWNED_DELIVERY_SERVICE, fleetVesselIdFromCarrier, matchedExternalCharterLogistics, ownedFleetCarriersForMarket } from "../engines/fleet/market-integration.js";
-import { getCalendariaSeasonSnapshot } from "../integrations/calendaria-bridge.js";
+import { internalDemandBatchClockQd } from "../core/resource-batches.js";
+import { planMarketPurchase } from "../engines/market/pricing.js";
+import { cancelMarketShipment, deliverMarketShipmentNow, marketShipmentCancellationQuote, resolveMarketShipmentRisk } from "../engines/market/shipment.js";
+import { holdingMarketAccessLevel, marketRegionAccessCostMap } from "../engines/market/logistics.js";
+import { effectiveMarketLocations } from "../engines/market/composition.js";
+import { carrierCapacityForLogistics } from "../engines/market/providers.js";
+import { restoreMarketStockReservations } from "../engines/market/stock.js";
+import {
+  cancelMarketOutboundShipment,
+  resolveMarketOutboundShipmentRisk
+} from "../workflows/market/outbound-shipment.js";
 import { foundryDialogV2, resolveFoundryUuid } from "../integrations/foundry-runtime.js";
 import { requestSkyholdAppRender } from "./registry.js";
 import { getSkyholdWorkflowService } from "../workflows/skyhold-workflow-service.js";
 import { RenderSchedulerMixin } from "./common/render-scheduler.js";
 import { bindImageFallbacks, capturePersistentImages, restorePersistentImages } from "./common/image-fallback.js";
 import { bindFloatingTooltips, hideFloatingTooltip } from "./common/floating-tooltip.js";
+import { restoreApplicationFocus } from "./common/window-focus-keeper.js";
+import { focusMarketOutboundOrder } from "./market/outbound-focus.js";
 import { groupMarketOffers, marketOfferGroupTotals, merchantAbbreviation, merchantTone } from "./market/offer-groups.js";
+import { marketShipmentRiskContext } from "./market/shipment-context.js";
+import { marketPurchaseCostPresentation, marketShipmentFinancialRiskText } from "./market/purchase-cost-presentation.js";
+import { marketShipmentSchedule } from "../engines/market/shipment-schedule.js";
+import { prepareMarketOutboundContext } from "./market/outbound-context.js";
+import { authorityMarketLogistics, authorityMarketQuote, authorityOutboundRoutes, authorityOwnShipOutboundRoute, marketAuthoritySourceToken, marketPurchasePlanToken, validateOwnShipOutboundFunding } from "./market/authority-context.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
@@ -38,8 +46,6 @@ function prepareLine(line, quantity = 0) {
   const movementDirection = movementPercent > 0 ? "выше" : movementPercent < 0 ? "ниже" : "равна";
   return {
     ...line,
-    unitFull: String(line.unit ?? "ед."),
-    unit: compactResourceUnit(line.unit),
     qty,
     selected: qty > 0,
     priceText: formatCopperCurrencyCompact(line.unitPriceCopper),
@@ -58,94 +64,36 @@ function shipmentStatusLabel(status = "") {
   if (status === "lost") return "Утрачен";
   if (status === "cancelled") return "Отменён";
   if (status === "delayed") return "Задержан";
+  if (status === "needsResolution") return "Требует решения";
   if (status === "pending") return "Готовится";
   return "В пути";
 }
 
-function exportStatusLabel(status = "") {
+function outboundShipmentStatusLabel(status = "") {
+  if (status === "booked") return "Забронирован";
   if (status === "delivered") return "Продан";
-  if (status === "lost") return "Утрачен";
-  if (status === "cancelled") return "Отменён";
-  if (status === "reserved") return "Бронь";
-  return "В пути";
-}
-
-function activeExportReservations(exportBook = {}) {
-  const reserved = new Map();
-  for (const order of exportBook?.orders ?? []) {
-    if (String(order?.status ?? "") !== "reserved") continue;
-    for (const source of order?.sources ?? []) {
-      const rowId = String(source?.storageRowId ?? "").trim();
-      if (!rowId) continue;
-      reserved.set(rowId, (reserved.get(rowId) ?? 0) + Math.max(0, Math.floor(Number(source?.qty) || 0)));
-    }
-  }
-  return reserved;
-}
-
-function exportStorageRows(holding = {}, exportBook = {}, resourceId = "") {
-  const id = String(resourceId ?? "").trim();
-  const resources = Array.isArray(holding?.storage?.resources) ? holding.storage.resources : [];
-  const idCounts = new Map();
-  for (const row of resources) {
-    const rowId = String(row?.id ?? "").trim();
-    if (rowId) idCounts.set(rowId, (idCounts.get(rowId) ?? 0) + 1);
-  }
-  const reserved = activeExportReservations(exportBook);
-  return resources.map((row, index) => {
-    const rowId = String(row?.id ?? "").trim();
-    const storedQty = Math.max(0, Math.floor(Number(row?.qty) || 0));
-    const reservedQty = Math.max(0, reserved.get(rowId) ?? 0);
-    return {
-      row,
-      index,
-      rowId,
-      roomId: String(row?.roomId ?? row?.storageRoomId ?? "outdoors") || "outdoors",
-      storedQty,
-      reservedQty,
-      availableQty: Math.max(0, storedQty - reservedQty)
-    };
-  }).filter((entry) => (
-    entry.rowId
-      && idCounts.get(entry.rowId) === 1
-      && String(entry.row?.resourceId ?? "") === id
-      && entry.availableQty > 0
-  ));
-}
-
-function exportQuantitiesForSelection(holding = {}, exportBook = {}, resourceId = "", requestedQty = 0) {
-  let remaining = Math.max(0, Math.floor(Number(requestedQty) || 0));
-  const quantities = {};
-  for (const entry of exportStorageRows(holding, exportBook, resourceId)) {
-    if (remaining <= 0) break;
-    const qty = Math.min(entry.availableQty, remaining);
-    if (qty > 0) quantities[entry.rowId] = qty;
-    remaining -= qty;
-  }
-  return quantities;
+  return shipmentStatusLabel(status);
 }
 
 function percentText(value = 0) {
   return `${(Math.max(0, Number(value) || 0) * 100).toFixed(1)}%`;
 }
 
-function cargoPointsText(value = 0) {
-  const cargoPoints = Math.max(0, Math.round(Number(value) || 0));
-  return `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(cargoPoints)} груз. очк.`;
+function loadText(value = 0) {
+  const load = Math.max(0, Number(value) || 0);
+  return `${Number.isInteger(load) ? load : Number(load.toFixed(1))} ед.`;
 }
 
 function marketServiceLabel(serviceLevel = "standard") {
-  if (serviceLevel === FLEET_OWNED_DELIVERY_SERVICE) return "свой корабль";
-  if (serviceLevel === "express") return "Express";
-  if (serviceLevel === "charter") return "Charter";
-  return "Standard";
+  if (serviceLevel === "express") return "ускоренная";
+  if (serviceLevel === "charter") return "выделенный рейс";
+  return "попутный груз";
 }
 
 function marketServiceDescription(serviceLevel = "standard") {
-  if (serviceLevel === FLEET_OWNED_DELIVERY_SERVICE) return "Свой корабль: один рейс в пределах его грузовых очков. Оплачиваются эксплуатация и резерв корабля; стоимость товара не задаёт фрахт.";
-  if (serviceLevel === "express") return "Express: до 10% вместимости на рейс, оплачивается занятая доля одного плеча; ETA ×0,70 и надбавка 20% за срочность.";
-  if (serviceLevel === "charter") return "Charter: бронируется вся машина и оплачиваются два плеча — доставка и возврат либо перегон транспорта.";
-  return "Standard: до 20% вместимости на рейс, оплачивается занятая доля одного плеча; остаток автоматически уходит следующей попуткой.";
+  if (serviceLevel === "express") return "До 10% вместимости на рейс · ETA ×0,70 · надбавка 20% к маршруту и обработке.";
+  if (serviceLevel === "charter") return "Вся вместимость транспорта · ETA ×0,85 · оплачивается полный оборот, включая возвращение или перегон транспорта.";
+  return "До 20% вместимости на рейс · ETA ×1,25 · остаток автоматически уходит следующей попуткой.";
 }
 
 function marketTripCountText(value = 0) {
@@ -158,28 +106,25 @@ function marketTripCountText(value = 0) {
 
 function marketBatchPreview(batch = {}, plan = {}, selected = false) {
   const number = Math.max(1, Number(batch.number) || Number(batch.index) + 1 || 1);
-  const bookingCapacityCargoPoints = Math.max(0, Number(plan.bookingCapacityCargoPoints) || 0);
-  const actualCargoPoints = Math.max(0, Number(batch.totalCargoPoints) || 0);
-  const billsFullCapacity = Number(batch.billableLoad) > Number(batch.totalLoad) + 0.0001;
-  const billableCargoPoints = billsFullCapacity
-    ? Math.max(0, Number(plan.physicalCapacityCargoPoints) || bookingCapacityCargoPoints)
-    : actualCargoPoints;
+  const bookingCapacity = Math.max(0, Number(plan.bookingCapacityLoad) || 0);
+  const actualLoad = Math.max(0, Number(batch.totalLoad) || 0);
+  const billableLoad = Math.max(0, Number(batch.billableLoad ?? batch.totalLoad) || 0);
+  const valueFreight = Math.max(0, Number(batch.valueFreightCopper) || 0);
+  const operationalFreight = Math.max(0, Number(batch.operationalFreightCopper) || 0);
   const routeCopper = Math.max(0, Number(batch.routeCopper) || 0);
-  const billingRule = plan.serviceLevel === "charter"
-    ? "Charter: вся машина, два плеча"
-    : "Standard/Express: занятая доля одного плеча";
+  const routeBasis = operationalFreight > valueFreight ? "операционная смета" : "фрахт от цены";
   return {
     number,
     index: Math.max(0, number - 1),
     selected,
-    optionLabel: `Рейс ${number} · ETA ${Math.max(0, Number(batch.deliveryQd) || 0)} QD · ${cargoPointsText(actualCargoPoints)}`,
+    optionLabel: `Рейс ${number} · ETA ${Math.max(0, Number(batch.deliveryQd) || 0)} QD · ${loadText(actualLoad)}`,
     etaText: `${Math.max(0, Number(batch.deliveryQd) || 0)} QD`,
-    cargoPointsText: bookingCapacityCargoPoints > 0
-      ? `${cargoPointsText(actualCargoPoints)} / ${cargoPointsText(bookingCapacityCargoPoints)}`
-      : cargoPointsText(actualCargoPoints),
+    departureText: Number(batch.departureQd) > 0 ? `через ${batch.departureQd} QD` : "ближайшее отправление",
+    transportText: `${Math.max(0, Number(batch.transportQd) || 0)} QD`,
+    loadText: bookingCapacity > 0 ? `${loadText(actualLoad)} / ${loadText(bookingCapacity)}` : loadText(actualLoad),
     capacityShareText: percentText(batch.capacityShare),
-    billableCargoPointsText: cargoPointsText(billableCargoPoints),
-    billsFullCapacity,
+    billableLoadText: loadText(billableLoad),
+    billsFullCapacity: billableLoad > actualLoad + 0.0001,
     cargo: (batch.lines ?? []).map((line) => ({
       name: String(line.name ?? "Товар"),
       providerLabel: String(line.providerLabel ?? ""),
@@ -187,7 +132,9 @@ function marketBatchPreview(batch = {}, plan = {}, selected = false) {
       lineText: formatCopperCurrencyCompact(line.lineCopper ?? (Number(line.qty) || 0) * (Number(line.unitPriceCopper) || 0))
     })),
     subtotalText: formatCopperCurrencyCompact(batch.subtotalCopper),
-    routeText: `${formatCopperCurrencyCompact(routeCopper)} · ${billingRule}`,
+    valueFreightText: formatCopperCurrencyCompact(valueFreight),
+    operationalFreightText: formatCopperCurrencyCompact(operationalFreight),
+    routeText: `${formatCopperCurrencyCompact(routeCopper)} · выбран: ${routeBasis}`,
     handlingText: formatCopperCurrencyCompact(batch.handlingCopper),
     insuranceText: formatCopperCurrencyCompact(batch.insuranceCopper),
     taxText: formatCopperCurrencyCompact(batch.taxCopper),
@@ -200,8 +147,9 @@ function marketBatchPreview(batch = {}, plan = {}, selected = false) {
   };
 }
 
-function shipmentRiskText(order = {}) {
-  if (order.status === "cancelled") return `Возвращено ${formatCopperCurrency(order.cancellationRefundCopper || 0)} · удержано ${formatCopperCurrency(order.cancellationWithheldCopper || 0)}`;
+function shipmentRiskText(order = {}, riskContext = null) {
+  if (riskContext?.needsResolution) return riskContext.genericEventText;
+  if (order.status === "cancelled") return `Полностью возвращено ${formatCopperCurrency(order.cancellationRefundCopper || 0)}`;
   if (order.status === "lost" || order.riskOutcome === "lost") {
     const payout = Math.max(0, Number(order.insurancePayoutCopper) || 0);
     return payout > 0 ? `Груз утрачен · страховка ${formatCopperCurrency(payout)}` : "Груз утрачен без выплаты";
@@ -231,12 +179,6 @@ function shipmentTimeline(order = {}) {
   return rows;
 }
 
-function marketSeasonId(holding = {}) {
-  const calendaria = holding?.gm?.calendaria ?? {};
-  const snapshot = getCalendariaSeasonSnapshot(calendaria.lastDateTime, calendaria.lastDateText);
-  return String(snapshot?.season?.id ?? "").trim();
-}
-
 function marketSeasonLabel(seasonId = "") {
   return ({ spring: "Весна", summer: "Лето", autumn: "Осень", winter: "Зима" })[seasonId] ?? "Сезон";
 }
@@ -244,16 +186,28 @@ function marketSeasonLabel(seasonId = "") {
 export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2)) {
   static instances = new Map();
 
-  static open({ holdingId } = {}) {
+  static open({ holdingId, outboundOrderId = "", ownShipId = null } = {}) {
     const id = String(holdingId ?? "");
     const existing = this.instances.get(id);
     if (existing) {
+      if (outboundOrderId) { existing._focusOutboundOrderId = String(outboundOrderId); existing._focusOutbound = false; }
+      if (ownShipId !== null) {
+        existing.ownShipId = String(ownShipId);
+        existing._focusOutboundOrderId = String(outboundOrderId);
+        existing._focusOutbound = true;
+      }
       existing.render({ force: true, focus: true });
       return existing;
     }
     const app = new this({ holdingId: id });
+    app._focusOutboundOrderId = String(outboundOrderId);
+    if (ownShipId !== null) { app.ownShipId = String(ownShipId); app._focusOutbound = true; }
     this.instances.set(id, app);
-    app.render({ force: true, focus: true });
+    Promise.resolve(app.render({ force: true, focus: true })).catch((error) => {
+      if (this.instances.get(id) === app) this.instances.delete(id);
+      console.error("FBL Skyhold | Failed to open market window", error);
+      globalThis.ui?.notifications?.error?.("Не удалось открыть рынок.");
+    });
     return app;
   }
 
@@ -270,11 +224,11 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     this.serviceLevel = "standard";
     this.batchPreviewIndex = 0;
     this.deliveryBreakdownOpen = true;
-    this.tradeMode = "buy";
-    this.exportOfferId = "";
-    this.exportQuantity = 0;
-    this.exportCarrierId = "";
-    this.exportServiceLevel = "charter";
+    this.landedPricesOpen = false;
+    this.outboundQuantities = {};
+    this.outboundInsuranceEnabled = true;
+    this.ownShipId = "";
+    this._outboundOperationPending = false;
   }
 
   render(options = {}) {
@@ -309,211 +263,83 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     }).filter((market) => market.routeAccessCost !== null && market.routeAccessCost <= access.level);
   }
 
-  _marketLogistics(holding, data, market, { carrierId = this.carrierId, persistCarrier = false, includeFleet = true, isGM = Boolean(game.user?.isGM), economy: preparedEconomy = null } = {}) {
-    if (!market) return { logistics: null, carriers: [], carrier: null };
-    const locations = data?.catalog?.eventRegions ?? [];
-    const economy = preparedEconomy ?? normalizeMarketEconomy(data?.catalog?.marketEconomy, { locations });
-    const baseLogistics = resolveMarketLogistics({
-      holding,
-      market,
-      regions: locations,
-      seasonId: marketSeasonId(holding),
-      dependencies: {
-        regionFactors: (region) => marketLocationFactors(region, economy, locations),
-        regionResolver: marketRegionForValue
-      }
-    });
-    const externalCarriers = carrierProvidersForRoute({
-      organizations: economy.organizations,
-      countryId: market.countryId,
-      transportMode: baseLogistics.transportMode,
-      routeModes: baseLogistics.routeModes,
-      isGM
-    });
-    const externalCarrier = externalCarriers.find((row) => row.id === String(carrierId ?? "")) ?? externalCarriers[0] ?? null;
-    const referenceLogistics = applyCarrierToLogistics(baseLogistics, externalCarrier);
-    const fleetCarriers = includeFleet ? ownedFleetCarriersForMarket({ holding, market, regions: locations, baseLogistics }) : [];
-    const carriers = [...externalCarriers, ...fleetCarriers];
-    const requestedFleetVesselId = fleetVesselIdFromCarrier(carrierId);
-    const fleetCarrier = requestedFleetVesselId
-      ? fleetCarriers.find((row) => String(row.vesselId ?? "") === requestedFleetVesselId) ?? null
-      : null;
-    const carrier = fleetCarrier ?? externalCarrier;
-    if (persistCarrier) this.carrierId = String(carrier?.id ?? "");
-    return {
-      logistics: fleetCarrier?.logistics ?? applyCarrierToLogistics(baseLogistics, externalCarrier),
-      referenceLogistics,
-      carriers,
-      carrier
-    };
+  _marketLogistics(holding, data, market, { carrierId = this.carrierId, persistCarrier = false, isGM = Boolean(game.user?.isGM), economy = null } = {}) {
+    const result = authorityMarketLogistics({ holding, data, market, carrierId, isGM, economy });
+    if (persistCarrier) this.carrierId = String(result.carrier?.id ?? "");
+    return result;
   }
 
-  _marketQuote(holding, data, market, { isGM = Boolean(game.user?.isGM), economy: preparedEconomy = null, resources: preparedResources = null } = {}) {
-    if (!market) return null;
-    const economy = preparedEconomy ?? normalizeMarketEconomy(data?.catalog?.marketEconomy, { locations: data?.catalog?.eventRegions ?? [] });
-    const { logistics, referenceLogistics, carriers, carrier } = this._marketLogistics(holding, data, market, { persistCarrier: true, isGM, economy });
-    const resources = preparedResources ?? allResourceDefs({ catalogRows: data?.catalog?.resources });
-    const quoteMarket = logistics?.ownedVesselId ? { ...market, deliveryMode: "scheduled" } : market;
-    const quote = prepareMarketQuote({
-      holding,
-      market: quoteMarket,
-      resources,
-      location: market.locationProfile,
-      logistics
-    }, MARKET_PRICING_DEPENDENCIES);
-    const referenceQuote = logistics?.ownedVesselId
-      ? prepareMarketQuote({
-          holding,
-          market: quoteMarket,
-          resources,
-          location: market.locationProfile,
-          logistics: referenceLogistics
-        }, MARKET_PRICING_DEPENDENCIES)
-      : null;
-    const allocated = allocateQuoteToMerchantProviders({
-      offers: quote.offers,
-      organizations: economy.organizations,
-      countryId: market.countryId,
-      quoteKey: quote.quoteKey,
-      isGM
-    });
-    return applyMarketStockReservationsToQuote({ holding, side: "ask", quote: {
-      ...quote,
-      offers: allocated.offers,
-      merchantProviders: allocated.providers,
-      carriers,
-      referenceLogistics,
-      referenceDeliveryQd: Math.max(0, Number(referenceQuote?.deliveryQd) || 0),
-      selectedCarrierId: String(carrier?.id ?? "")
-    } });
-  }
-
-  _marketSellQuote(holding, data, market, { isGM = Boolean(game.user?.isGM), economy: preparedEconomy = null, resources: preparedResources = null } = {}) {
-    if (!market) return null;
-    const economy = preparedEconomy ?? normalizeMarketEconomy(data?.catalog?.marketEconomy, { locations: data?.catalog?.eventRegions ?? [] });
-    const { logistics, carriers, carrier } = this._marketLogistics(holding, data, market, {
-      carrierId: this.exportCarrierId,
-      persistCarrier: false,
-      includeFleet: false,
-      isGM,
-      economy
-    });
-    this.exportCarrierId = String(carrier?.id ?? "");
-    const resources = preparedResources ?? allResourceDefs({ catalogRows: data?.catalog?.resources });
-    const quote = prepareMarketQuote({
-      holding,
-      market: { ...market, deliveryMode: "scheduled" },
-      resources,
-      location: market.locationProfile,
-      logistics
-    }, MARKET_PRICING_DEPENDENCIES);
-    return applyMarketStockReservationsToQuote({ holding, side: "bid", quote: {
-      ...quote,
-      carriers,
-      selectedCarrierId: this.exportCarrierId
-    } });
-  }
-
-  _exportPlan(holding, quote) {
-    if (!holding || !quote || !this.exportOfferId) return null;
-    const offer = (quote.offers ?? []).find((row) => String(row?.id ?? row?.offerId ?? "") === String(this.exportOfferId));
-    if (!offer) return null;
-    const exportBook = holding?.special?.market?.exportBook ?? { version: 1, orders: [], advanceRuns: [] };
-    const quantities = exportQuantitiesForSelection(holding, exportBook, offer.resourceId, this.exportQuantity);
-    const liquidity = holding?.special?.market?.liquidity;
-    const demand = liquidity && typeof liquidity === "object"
-      ? createMarketExportLiquidityDemandAdapter(liquidity)
-      : null;
-    return planMarketExport({
-      holding,
-      exportBook,
-      quote,
-      offerId: offer.id,
-      quantities,
-      serviceLevel: ["standard", "express", "charter"].includes(this.exportServiceLevel) ? this.exportServiceLevel : "charter",
-      dependencies: demand ? { demand } : {}
-    });
-  }
-
-  _exportPlanFingerprint(plan = null) {
-    if (!plan) return "";
-    return stableDataHash({
-      offerId: plan.offerId,
-      resourceId: plan.resourceId,
-      totalQty: plan.totalQty,
-      cargo: plan.cargo,
-      exportQuote: plan.exportQuote,
-      financials: plan.financials,
-      eta: plan.eta,
-      risk: plan.risk,
-      capacity: plan.capacity,
-      dispatchCash: plan.dispatchCash
-    });
-  }
-
-  _purchasePlan(holding, quote) {
-    if (!quote) return null;
-    const owned = Boolean(quote?.logistics?.ownedVesselId);
-    const serviceLevel = owned
-      ? FLEET_OWNED_DELIVERY_SERVICE
-      : (this.serviceLevel === FLEET_OWNED_DELIVERY_SERVICE ? "standard" : this.serviceLevel);
-    const plan = planMarketPurchase({ holding, quote, quantities: this.quantities, targetRoomId: this.targetRoomId, serviceLevel }, MARKET_PRICING_DEPENDENCIES);
-    if (!owned || !quote.referenceLogistics) return plan;
-    const comparisonLogistics = matchedExternalCharterLogistics(quote.referenceLogistics, quote.logistics);
-    const referenceQuote = {
-      ...quote,
-      deliveryQd: Math.max(1, Number(quote.referenceDeliveryQd) || Number(quote.deliveryQd) || 1),
-      logistics: comparisonLogistics
-    };
-    const externalPlan = planMarketPurchase({ holding, quote: referenceQuote, quantities: this.quantities, targetRoomId: this.targetRoomId, serviceLevel: "charter" }, MARKET_PRICING_DEPENDENCIES);
-    plan.externalComparison = {
-      carrierLabel: String(referenceQuote.logistics?.carrierLabel ?? "Внешний перевозчик"),
-      capacityLoad: Math.max(0, Number(comparisonLogistics.capacityLoad) || 0),
-      capacityCargoPoints: Math.max(0, Number(comparisonLogistics.capacityCargoPoints) || 0),
-      capacityTonnes: Math.max(0, Number(comparisonLogistics.comparisonCapacityTonnes) || 0),
-      capacityVolumeM3: Math.max(0, Number(comparisonLogistics.comparisonCapacityVolumeM3) || 0),
-      deliveryCopper: Math.max(0, Number(externalPlan.deliveryCopper) || 0),
-      routeCopper: Math.max(0, Number(externalPlan.routeCopper) || 0),
-      deliveryQd: Math.max(0, Number(externalPlan.deliveryQd) || 0),
-      differenceCopper: Math.max(0, Number(plan.deliveryCopper) || 0) - Math.max(0, Number(externalPlan.deliveryCopper) || 0)
-    };
-    return plan;
+  _marketQuote(holding, data, market, { isGM = Boolean(game.user?.isGM), economy = null, resources = null } = {}) {
+    const quote = authorityMarketQuote({ holding, data, market, carrierId: this.carrierId, isGM, economy, resources });
+    if (quote) this.carrierId = String(quote.selectedCarrierId ?? "");
+    return quote;
   }
 
   _marketSourceHash(data, holding, marketId = "") {
-    return stableDataHash({
-      holding,
-      eventRegions: data?.catalog?.eventRegions,
-      marketEconomy: data?.catalog?.marketEconomy,
-      marketRouteMap: data?.catalog?.marketRouteMap,
-      resources: data?.catalog?.resources,
-      marketId: String(marketId ?? ""),
-      carrierId: String(this.carrierId ?? ""),
-      serviceLevel: String(this.serviceLevel ?? "standard"),
-      exportCarrierId: String(this.exportCarrierId ?? ""),
-      exportServiceLevel: String(this.exportServiceLevel ?? "charter")
-    });
+    return marketAuthoritySourceToken({ data, holding, marketId, carrierId: this.carrierId });
   }
 
-  _marketSnapshot({ isGM = Boolean(game.user?.isGM), data: suppliedData = null } = {}) {
-    const data = suppliedData ?? SkyholdData.view();
-    const { holding: sourceHolding } = findReadableHoldingEntry(data, this.holdingId, { fallback: false });
+  _marketOutboundRoutes(options = {}) {
+    return authorityOutboundRoutes(options);
+  }
+
+  _marketOutboundContext({ holding, data, market, quote, economy, resources, isGM = Boolean(game.user?.isGM) } = {}) {
+    if (!holding || !market || !quote) return prepareMarketOutboundContext();
+    const outboundQuote = { ...quote, offers: quote.outboundOffers ?? quote.offers ?? [], countryId: String(market.countryId ?? "") };
+    const buyerOrganizations = (economy?.organizations ?? []).filter((organization) => isGM || organization?.visibility !== "gm");
+    const preliminary = prepareMarketOutboundContext({
+      holding,
+      quote: outboundQuote,
+      resourceDefinitions: resources,
+      organizations: buyerOrganizations,
+      quantities: this.outboundQuantities,
+      insuranceEnabled: this.outboundInsuranceEnabled
+    });
+    const routes = this._marketOutboundRoutes({
+      holding,
+      data,
+      market,
+      economy,
+      resources,
+      offers: preliminary.offers,
+      carriers: quote.carriers ?? [],
+      isGM
+    });
+    const ownShip = this.ownShipId ? authorityOwnShipOutboundRoute({
+      holding, data, market, offers: preliminary.offers, routes, ownShipId: this.ownShipId
+    }) : null;
+    const result = prepareMarketOutboundContext({
+      holding,
+      quote: outboundQuote,
+      resourceDefinitions: resources,
+      organizations: buyerOrganizations,
+      routes: this.ownShipId ? (ownShip?.route ? [ownShip.route] : []) : routes,
+      quantities: this.outboundQuantities,
+      insuranceEnabled: this.outboundInsuranceEnabled
+    });
+    if (this.ownShipId && ownShip?.reason && result.plan) {
+      result.plan.ok = false;
+      result.plan.reasons = [...new Set([...result.plan.reasons, ownShip.reason])];
+    }
+    return { ...validateOwnShipOutboundFunding(holding, result, ownShip), ownShip };
+  }
+
+  _marketSnapshot({ isGM = Boolean(game.user?.isGM), includePlan = true } = {}) {
+    const data = SkyholdData.view();
+    const { holding } = findReadableHoldingEntry(data, this.holdingId, { fallback: false });
     const locations = data?.catalog?.eventRegions ?? [];
     const economy = normalizeMarketEconomy(data?.catalog?.marketEconomy, { locations });
     const resources = allResourceDefs({ catalogRows: data?.catalog?.resources });
-    const markets = this._availableMarkets(data, { holding: sourceHolding, isGM, economy, resources });
+    const markets = this._availableMarkets(data, { holding, isGM, economy, resources });
     const market = markets.find((row) => row.id === this.marketId) ?? markets[0] ?? null;
     if (market && market.id !== this.marketId) this.marketId = market.id;
-    if (!sourceHolding) return { data, holding: null, markets, market, quote: null, plan: null, sellQuote: null, exportPlan: null, marketIntegrity: { ready: true, issues: [] }, sourceHash: "" };
-    const sourceHash = this._marketSourceHash(data, sourceHolding, market?.id);
-    // Quote projection lazily materializes ledger lines. Rendering must never
-    // mutate SkyholdData.view(), so all quote work happens on a detached copy.
-    const holding = clone(sourceHolding);
-    const quote = this._marketQuote(holding, data, market, { isGM, economy, resources });
-    const plan = this._purchasePlan(holding, quote);
-    const sellQuote = this._marketSellQuote(holding, data, market, { isGM, economy, resources });
-    const exportPlan = this._exportPlan(holding, sellQuote);
-    const marketIntegrity = analyzeMarketIntegrity({ quotes: [quote, sellQuote].filter(Boolean) });
+    if (!holding) return { data, holding: null, markets, market, quote: null, plan: null, outbound: null, sourceHash: "" };
+    let quote = this._marketQuote(holding, data, market, { isGM, economy, resources });
+    const plan = includePlan && quote
+      ? planMarketPurchase({ holding, quote, quantities: this.quantities, targetRoomId: this.targetRoomId, serviceLevel: this.serviceLevel })
+      : null;
+    const outbound = this._marketOutboundContext({ holding, data, market, quote, economy, resources, isGM });
+    if (plan?.logistics) quote = { ...quote, logistics: plan.logistics };
     return {
       data,
       holding,
@@ -521,10 +347,8 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
       market,
       quote,
       plan,
-      sellQuote,
-      exportPlan,
-      marketIntegrity,
-      sourceHash
+      outbound,
+      sourceHash: this._marketSourceHash(data, holding, market?.id)
     };
   }
 
@@ -555,7 +379,7 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
 
   async _prepareContext(options) {
     const context = await super._prepareContext(options);
-    let { data, holding, markets, market, quote, plan, sellQuote, exportPlan, marketIntegrity } = this._marketSnapshot();
+    let { data, holding, markets, market, quote, plan, outbound } = this._marketSnapshot({ includePlan: false });
     const permissions = holdingPermissionContext(holding);
     const workflow = getSkyholdWorkflowService();
     const rooms = holding ? workflow._storageRooms(holding, { includeUnavailable: false }) : [];
@@ -563,25 +387,8 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     if (!availableRoomIds.has(this.targetRoomId)) {
       const preferred = String(holding?.special?.market?.preferredRoomId ?? "outdoors") || "outdoors";
       this.targetRoomId = availableRoomIds.has(preferred) ? preferred : (availableRoomIds.has("outdoors") ? "outdoors" : String(rooms[0]?.id ?? "outdoors"));
-      plan = this._purchasePlan(holding, quote);
     }
     quote = await this._enrichMarketQuoteItems(quote);
-    const exportBook = holding?.special?.market?.exportBook ?? { version: 1, orders: [], advanceRuns: [] };
-    const roomLabels = new Map(rooms.map((room) => [String(room.id ?? ""), String(room.name ?? room.label ?? room.id ?? "Хранилище")]));
-    const sellCandidates = (sellQuote?.offers ?? []).map((offer) => {
-      const storageRows = exportStorageRows(holding, exportBook, offer.resourceId);
-      const availableQty = storageRows.reduce((sum, row) => sum + row.availableQty, 0);
-      const bidDemand = Math.max(0, Math.floor(Number(offer.bidDemand) || 0));
-      const maxQty = Math.min(availableQty, bidDemand);
-      return { offer, storageRows, availableQty, bidDemand, maxQty };
-    }).filter((row) => row.maxQty > 0 && Math.max(0, Number(row.offer?.bidUnitCopper) || 0) > 0 && row.offer?.sourceType !== "item");
-    if (!sellCandidates.some((row) => String(row.offer?.id ?? "") === String(this.exportOfferId ?? ""))) {
-      this.exportOfferId = String(sellCandidates[0]?.offer?.id ?? "");
-      this.exportQuantity = 0;
-    }
-    const selectedSellCandidate = sellCandidates.find((row) => String(row.offer?.id ?? "") === this.exportOfferId) ?? null;
-    this.exportQuantity = Math.max(0, Math.min(selectedSellCandidate?.maxQty ?? 0, Math.floor(Number(this.exportQuantity) || 0)));
-    exportPlan = this._exportPlan(holding, sellQuote);
     const selectionHints = { ...this.merchantSelections };
     for (const offer of quote?.offers ?? []) {
       if ((Number(this.quantities[offer.id]) || 0) <= 0) continue;
@@ -594,25 +401,38 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
       if (!selectedOffer) continue;
       this.merchantSelections[group.sourceOfferId] = String(selectedOffer.providerId ?? "");
     }
-    if (quote) plan = this._purchasePlan(holding, quote);
+    if (quote) plan = planMarketPurchase({ holding, quote, quantities: this.quantities, targetRoomId: this.targetRoomId, serviceLevel: this.serviceLevel });
     const selectedCount = plan?.lines?.reduce((sum, line) => sum + line.qty, 0) ?? 0;
     const activeShipmentOrders = (holding?.special?.market?.orders ?? [])
-      .filter((order) => ["pending", "in-transit", "delayed"].includes(String(order?.status ?? "")));
-    const shipments = activeShipmentOrders
-      .slice(0, 12)
+      .filter((order) => ["pending", "in-transit", "delayed", "needsResolution"].includes(String(order?.status ?? "")));
+    const shipments = visibleActiveShipments(activeShipmentOrders, 12)
       .map((order) => {
         const cancellation = marketShipmentCancellationQuote(order);
+        const schedule = marketShipmentSchedule(order);
+        const riskContext = marketShipmentRiskContext(order, {
+          isGM: permissions.isGM,
+          formatPercent: percentText,
+          formatCurrency: formatCopperCurrency
+        });
         return {
-          ...order,
-          statusLabel: shipmentStatusLabel(order.status),
-          canDeliverNow: Boolean(permissions.isGM && permissions.writeAvailable && !order.ownedVesselDelivery && ["pending", "in-transit", "delayed"].includes(String(order.status ?? ""))),
-          canCancel: Boolean(permissions.canManageMarkets && cancellation.cancellable),
+          id: String(order.id ?? order.operationId ?? ""),
+          status: String(order.status ?? "in-transit"),
+          marketLabel: String(order.marketLabel ?? "Внешний рынок"),
+          statusLabel: schedule.booked ? "Ожидает отправления" : shipmentStatusLabel(order.status),
+          canDeliverNow: ["pending", "in-transit", "delayed"].includes(String(order.status ?? "")) && !riskContext.needsResolution,
+          canCancel: Boolean(permissions.isGM && cancellation.cancellable),
+          canResolveRisk: riskContext.canResolveRisk,
+          gmResolution: riskContext.gmResolution,
           cancellationRefundText: formatCopperCurrency(cancellation.refundCopper),
           cancellationWithheldText: formatCopperCurrency(cancellation.withheldCopper),
           serviceText: marketServiceLabel(order.serviceLevel),
           batchText: Number(order.batchCount) > 1 ? `партия ${Math.max(1, Number(order.batchIndex) + 1)} из ${order.batchCount}` : "одна партия",
           remainingText: `${Math.max(0, Number(order.remainingQd) || 0)} QD`,
-          riskText: shipmentRiskText(order),
+          riskText: shipmentRiskText(order, riskContext),
+          timingText: schedule.booked
+            ? (schedule.isWaiting ? `До отправления ${schedule.waitingQd} QD; перевозка ${schedule.transportQd} QD.` : "Подготовлен к ближайшему отправлению.")
+            : "",
+          financialRiskText: marketShipmentFinancialRiskText(order),
           totalText: formatCopperCurrency(order.totalCopper),
           routeText: (order.routePath ?? []).map((id) => String(id)).join(" → "),
           carrierText: String(order.carrierLabel ?? "") || "Независимые перевозчики",
@@ -625,7 +445,8 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
       .slice()
       .reverse()
       .map((order) => ({
-        ...order,
+        status: String(order.status ?? "delivered"),
+        marketLabel: String(order.marketLabel ?? "Внешний рынок"),
         statusLabel: shipmentStatusLabel(order.status),
         statusText: shipmentRiskText(order),
         orderedText: shipmentDateText(order.orderedAt),
@@ -636,71 +457,69 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
         cargoText: (order.cargo ?? order.lines ?? []).map((line) => `${line.name || "Товар"} ×${line.qty || 0}`).slice(0, 6).join(" · "),
         timeline: shipmentTimeline(order)
       }));
-    const isSellMode = this.tradeMode === "sell";
-    const activeQuote = isSellMode ? sellQuote : quote;
+    const outboundPlan = outbound?.plan ?? null;
+    const outboundOffers = (outbound?.offers ?? []).map((offer) => ({
+      ...offer,
+      priceText: formatCopperCurrency(offer.unitPriceCopper),
+      lineText: formatCopperCurrency(offer.unitPriceCopper * offer.qty),
+      availabilityText: `${offer.availableStock} на складе · спрос ${offer.availableDemand}`
+    }));
+    const outboundOrdersRaw = holding?.special?.market?.outbound?.orders ?? [];
+    const outboundOrders = visibleActiveShipments(outboundOrdersRaw
+      .filter((order) => ["booked", "in-transit", "delayed", "needsResolution"].includes(String(order?.status ?? ""))), 20)
+      .map((order) => {
+        const schedule = marketShipmentSchedule(order);
+        const riskContext = marketShipmentRiskContext(order, {
+          isGM: permissions.isGM,
+          formatPercent: percentText,
+          formatCurrency: formatCopperCurrency
+        });
+        return {
+          id: String(order.id ?? order.operationId ?? ""),
+          status: String(order.status ?? "booked"),
+          statusLabel: schedule.booked ? "Ожидает отправления" : outboundShipmentStatusLabel(order.status),
+          marketLabel: String(order.marketLabel ?? "Внешний рынок"),
+          cargoText: (order.cargoReservations ?? order.cargo ?? order.lines ?? []).map((line) => `${line.name || line.resourceId || "Товар"} ×${Math.max(0, Number(line.qty) || 0)}`).slice(0, 6).join(" · "),
+          buyerText: (order.buyerAllocations ?? []).map((row) => `${row.buyerLabel || row.buyerId || "Покупатель"} ×${Math.max(0, Number(row.qty) || 0)}`).slice(0, 6).join(" · "),
+          routeText: String(order.carrierLabel ?? order.routeLabel ?? order.routeId ?? "Перевозчик"),
+          remainingText: `${Math.max(0, Number(order.remainingQd) || 0)} QD`,
+          upfrontText: formatCopperCurrency(order.upfrontCopper),
+          revenueText: formatCopperCurrency(order.revenueCopper),
+          batchText: Number(order.batchCount) > 1 ? `Партия ${Number(order.batchIndex) + 1} из ${order.batchCount}` : "",
+          timingText: schedule.isWaiting ? `До отправления ${schedule.waitingQd} QD; перевозка ${schedule.transportQd} QD.` : "",
+          financialRiskText: marketShipmentFinancialRiskText(order),
+          riskText: shipmentRiskText(order, riskContext),
+          canCancel: Boolean(permissions.isGM && String(order.dispatchStatus ?? "booked") === "booked" && !order.dispatchedAt),
+          canResolveRisk: riskContext.canResolveRisk,
+          gmResolution: riskContext.gmResolution
+        };
+      });
+    const outboundArchive = outboundOrdersRaw
+      .filter((order) => ["delivered", "lost", "cancelled"].includes(String(order?.status ?? "")))
+      .slice(-20)
+      .reverse()
+      .map((order) => ({
+        status: String(order.status ?? "delivered"),
+        statusLabel: outboundShipmentStatusLabel(order.status),
+        marketLabel: String(order.marketLabel ?? "Внешний рынок"),
+        cargoText: (order.cargo ?? order.cargoReservations ?? order.lines ?? []).map((line) => `${line.name || line.resourceId || "Товар"} ×${Math.max(0, Number(line.qty) || 0)}`).slice(0, 6).join(" · "),
+        revenueText: formatCopperCurrency(order.revenueCopper),
+        statusText: shipmentRiskText(order),
+        dateText: shipmentDateText(order.deliveredAt || order.lostAt || order.cancelledAt || order.createdAt)
+      }));
     const regionLabels = new Map((data?.catalog?.eventRegions ?? []).map((row) => [String(row.value ?? ""), String(row.label ?? row.value ?? "")]));
-    const routePathText = (activeQuote?.logistics?.routePath ?? []).map((id) => regionLabels.get(String(id)) ?? String(id)).join(" → ");
+    const routePathText = (quote?.logistics?.routePath ?? []).map((id) => regionLabels.get(String(id)) ?? String(id)).join(" → ");
     const merchantTones = new Map((quote?.merchantProviders ?? []).map((provider, index) => [String(provider.id ?? ""), index % 6]));
     const shipmentBatches = Array.isArray(plan?.shipmentBatches) ? plan.shipmentBatches : [];
     const selectedBatchIndex = Math.min(Math.max(0, Math.floor(Number(this.batchPreviewIndex) || 0)), Math.max(0, shipmentBatches.length - 1));
     this.batchPreviewIndex = selectedBatchIndex;
     const shipmentBatchPreviews = shipmentBatches.map((batch, index) => marketBatchPreview(batch, plan, index === selectedBatchIndex));
-    const exportOrders = Array.isArray(exportBook.orders) ? exportBook.orders : [];
-    const exports = exportOrders
-      .filter((order) => ["reserved", "in-transit"].includes(String(order?.status ?? "")))
-      .slice(0, 12)
-      .map((order) => {
-        const frozen = order?.quoteSnapshot ?? {};
-        const costs = Math.max(0, Number(frozen?.costs?.totalCopper) || 0);
-        const etaQd = Math.max(0, Number(frozen?.route?.etaQd) || 0);
-        const remainingQd = Math.max(0, Number(order?.remainingQd ?? etaQd) || 0);
-        return {
-          id: String(order?.id ?? order?.operationId ?? ""),
-          status: String(order?.status ?? "in-transit"),
-          statusLabel: exportStatusLabel(order?.status),
-          marketLabel: String(frozen?.market?.label ?? "Внешний рынок"),
-          offerName: String(frozen?.offer?.name ?? order?.cargoSnapshot?.name ?? "Товар"),
-          qty: Math.max(0, Number(order?.qty) || 0),
-          unit: compactResourceUnit(frozen?.offer?.unit ?? "ед."),
-          remainingText: `${remainingQd} QD`,
-          etaText: `${etaQd} QD`,
-          carrierText: String(frozen?.route?.carrierLabel ?? frozen?.freight?.serviceLabel ?? "Внешний перевозчик"),
-          grossText: formatCopperCurrency(frozen?.bid?.grossCopper ?? 0),
-          costsText: formatCopperCurrency(costs),
-          netText: formatCopperCurrency(frozen?.projectedNetCopper ?? 0),
-          riskText: `Утрата ${percentText(frozen?.risk?.lossChance)}${Number(frozen?.insurance?.payoutCopper) > 0 ? ` · страховка ${formatCopperCurrency(frozen.insurance.payoutCopper)}` : " · без страховой выплаты"}`
-        };
-      });
-    const exportArchive = exportOrders
-      .filter((order) => ["delivered", "lost", "cancelled"].includes(String(order?.status ?? "")))
-      .slice(-20)
-      .reverse()
-      .map((order) => {
-        const frozen = order?.quoteSnapshot ?? {};
-        const settlement = order?.settlement ?? {};
-        const status = String(order?.status ?? "cancelled");
-        const resolvedAt = order?.deliveredAt ?? order?.lostAt ?? order?.cancelledAt ?? "";
-        return {
-          status,
-          statusLabel: exportStatusLabel(status),
-          marketLabel: String(frozen?.market?.label ?? "Внешний рынок"),
-          offerName: String(frozen?.offer?.name ?? order?.cargoSnapshot?.name ?? "Товар"),
-          qty: Math.max(0, Number(order?.qty) || 0),
-          unit: compactResourceUnit(frozen?.offer?.unit ?? "ед."),
-          resolvedText: shipmentDateText(resolvedAt),
-          outcomeText: status === "delivered" ? "продано по зафиксированной ставке" : status === "lost" ? "груз утрачен в пути" : "контракт отменён до отправки",
-          grossText: formatCopperCurrency(settlement?.grossCopper ?? 0),
-          costsText: formatCopperCurrency(settlement?.costs?.totalCopper ?? frozen?.costs?.totalCopper ?? 0),
-          insurancePayoutText: formatCopperCurrency(settlement?.insurancePayoutCopper ?? 0),
-          netText: formatCopperCurrency(settlement?.netCopper ?? (status === "cancelled" ? 0 : frozen?.projectedNetCopper ?? 0))
-        };
-      });
-    const exportFinancials = exportPlan?.financials ?? {};
     return {
       ...context,
-      isBuyMode: !isSellMode,
-      isSellMode,
       holding,
+      isGM: permissions.isGM,
+      cargoWarnings: [...marketPlanCargoExpiryWarnings(plan),
+        ...marketPlanCargoExpiryWarnings(outbound?.plan, { direction: "outbound" })],
       hasHolding: Boolean(holding),
       hasMarket: Boolean(market),
       marketLabel: market?.label ?? "—",
@@ -713,36 +532,25 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
         ...provider,
         shareText: `${Math.round(Number(provider.sharePct ?? 0))}%`
       })),
-      carrierOptions: (activeQuote?.carriers ?? []).map((carrier) => ({
+      carrierOptions: (quote?.carriers ?? []).map((carrier) => ({
         value: carrier.id,
-        label: carrier.ownFleet
-          ? `${carrier.label} · ${cargoPointsText(carrier.capacityCargoPoints)} · ${carrier.available ? `забор ${carrier.pickupQd} QD + доставка ${carrier.cargoQd} QD` : carrier.reason || "недоступен"}`
-          : `${carrier.label} · до ${cargoPointsText(
-            Math.max(0, Number(activeQuote?.referenceLogistics?.baseCapacityCargoPoints ?? activeQuote?.logistics?.baseCapacityCargoPoints ?? activeQuote?.logistics?.capacityCargoPoints) || 0)
-              * Math.max(0.1, Number(carrier.capacityFactor) || 1)
-              || carrierCapacityForLogistics(activeQuote?.referenceLogistics ?? activeQuote?.logistics, carrier).capacityLoad * 10
-          )} · цена ×${Number(carrier.priceFactor || 1).toFixed(2)}`,
-        selected: carrier.id === activeQuote?.selectedCarrierId,
-        disabled: carrier.ownFleet && !carrier.available
+        label: `${carrier.label} · до ${loadText(carrierCapacityForLogistics(quote?.logistics, carrier).capacityLoad)} · цена ×${Number(carrier.priceFactor || 1).toFixed(2)}`,
+        selected: carrier.id === quote?.selectedCarrierId
       })),
-      hasCarrierChoice: (activeQuote?.carriers ?? []).length > 1,
-      carrierLabel: activeQuote?.logistics?.carrierLabel || "Независимые перевозчики",
-      canPurchase: Boolean(holding && permissions.canManageMarkets),
-      canOrder: Boolean(holding && permissions.canManageMarkets && activeQuote?.logistics?.ok !== false),
-      readOnlyReason: permissions.canManageMarkets
-        ? ""
-        : (permissions.mayManageMarkets ? "Рыночные операции временно недоступны: нет активного authority-GM." : "GM не делегировал управление внешним рынком."),
-      marketIntegrityOk: marketIntegrity?.ready !== false,
-      marketIntegrityMessage: (marketIntegrity?.issues ?? []).filter((issue) => issue.severity === "error").map((issue) => issue.message).slice(0, 3).join(" "),
-      logisticsOk: activeQuote?.logistics?.ok !== false,
-      logisticsReason: (activeQuote?.logistics?.reasons ?? []).join(" "),
-      transportLabel: activeQuote?.logistics?.transportLabel ?? "—",
-      routeDistanceText: activeQuote?.logistics ? `${activeQuote.logistics.hops} перех. · ${activeQuote.logistics.distanceText}` : "—",
+      hasCarrierChoice: (quote?.carriers ?? []).length > 1,
+      carrierLabel: quote?.logistics?.carrierLabel || "Независимые перевозчики",
+      canPurchase: Boolean(holding && permissions.isGM),
+      canOrder: Boolean(holding && permissions.isGM && quote?.logistics?.ok !== false),
+      readOnlyReason: permissions.isGM ? "" : "Покупки на внешнем рынке подтверждает GM.",
+      logisticsOk: quote?.logistics?.ok !== false,
+      logisticsReason: (quote?.logistics?.reasons ?? []).join(" "),
+      transportLabel: quote?.logistics?.transportLabel ?? "—",
+      routeDistanceText: quote?.logistics ? `${quote.logistics.hops} перех. · ${quote.logistics.distanceText}` : "—",
       routePathText: routePathText || "—",
-      marketAccessText: activeQuote?.logistics ? `УРС ${activeQuote.logistics.accessLevel} · рынок ${activeQuote.logistics.requiredAccessLevel}` : "—",
-      routeRiskText: activeQuote?.logistics ? `×${Number(activeQuote.logistics.riskFactor || 1).toFixed(2)}` : "—",
-      routeSeasonText: activeQuote?.logistics?.seasonalEdgeCount
-        ? `${marketSeasonLabel(activeQuote.logistics.seasonId)} · ${activeQuote.logistics.seasonalEdgeCount} участ.`
+      marketAccessText: quote?.logistics ? `УРС ${quote.logistics.accessLevel} · рынок ${quote.logistics.requiredAccessLevel}` : "—",
+      routeRiskText: quote?.logistics ? `×${Number(quote.logistics.riskFactor || 1).toFixed(2)}` : "—",
+      routeSeasonText: quote?.logistics?.seasonalEdgeCount
+        ? `${marketSeasonLabel(quote.logistics.seasonId)} · ${quote.logistics.seasonalEdgeCount} участ.`
         : "нет активной надбавки",
       treasuryText: formatCopperCurrencyCompact(plan?.treasuryCopper ?? holding?.storage?.moneyCopper ?? 0),
       treasuryParts: copperCurrencyParts(plan?.treasuryCopper ?? holding?.storage?.moneyCopper ?? 0),
@@ -776,56 +584,7 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
           searchText: `${line.searchText} ${group.offers.map((offer) => offer.providerLabel).filter(Boolean).join(" ")}`.toLocaleLowerCase("ru")
         };
       }),
-      sellOffers: sellCandidates.map(({ offer, storageRows, availableQty, bidDemand, maxQty }) => {
-        const selected = String(offer.id ?? "") === String(this.exportOfferId ?? "");
-        const qty = selected ? this.exportQuantity : 0;
-        const unitPriceCopper = Math.max(0, Number(offer.bidUnitCopper) || 0);
-        const roomsText = storageRows.map((row) => `${roomLabels.get(row.roomId) ?? row.roomId} ×${row.availableQty}`).join(" · ");
-        return {
-          ...offer,
-          id: String(offer.id ?? offer.offerId ?? ""),
-          unitFull: String(offer.unit ?? "ед."),
-          unit: compactResourceUnit(offer.unit),
-          availableQty,
-          bidDemand,
-          maxQty,
-          qty,
-          selected,
-          priceText: formatCopperCurrencyCompact(unitPriceCopper),
-          priceParts: copperCurrencyParts(unitPriceCopper),
-          lineText: formatCopperCurrencyCompact(unitPriceCopper * qty),
-          lineParts: copperCurrencyParts(unitPriceCopper * qty),
-          roomsText,
-          searchText: [offer.name, offer.kindLabel, offer.resourceId, roomsText, ...(offer.tags ?? [])].filter(Boolean).join(" ").toLocaleLowerCase("ru")
-        };
-      }),
-      exportSelectedCount: this.exportQuantity,
-      hasExportSelection: Boolean(this.exportOfferId),
-      exportGrossText: formatCopperCurrency(exportFinancials.grossCopper ?? 0),
-      exportFreightText: formatCopperCurrency(exportFinancials.freightCopper ?? 0),
-      exportHandlingText: formatCopperCurrency(exportFinancials.handlingCopper ?? 0),
-      exportTaxText: formatCopperCurrency(exportFinancials.taxCopper ?? 0),
-      exportInsuranceText: formatCopperCurrency(exportFinancials.insuranceCopper ?? 0),
-      exportTotalCostsText: formatCopperCurrency(exportFinancials.totalCostCopper ?? 0),
-      exportNetText: formatCopperCurrency(exportFinancials.projectedNetCopper ?? 0),
-      exportNetPositive: Number(exportFinancials.projectedNetCopper ?? 0) >= 0,
-      exportEtaText: `${Math.max(0, Number(exportPlan?.eta?.qd) || 0)} QD${Number(exportPlan?.eta?.batchCount) > 1 ? ` · ${marketTripCountText(exportPlan.eta.batchCount)}` : ""}`,
-      exportLossChanceText: percentText(exportPlan?.risk?.lossChance),
-      exportInsurancePayoutText: formatCopperCurrency(exportPlan?.risk?.insurancePayoutCopper ?? 0),
-      exportCargoText: cargoPointsText(exportPlan?.capacity?.requiredCargoPoints),
-      exportCapacityText: `${cargoPointsText(exportPlan?.capacity?.requiredCargoPoints)} / ${cargoPointsText(exportPlan?.capacity?.bookingCapacityCargoPoints)}`,
-      exportDemandText: `${Math.max(0, Number(exportPlan?.demand?.availableQty ?? selectedSellCandidate?.bidDemand) || 0)} ед.`,
-      exportReserveText: `${formatCopperCurrency(exportPlan?.dispatchCash?.requiredCopper ?? 0)} сейчас · доступно ${formatCopperCurrency(exportPlan?.dispatchCash?.availableCopper ?? holding?.storage?.moneyCopper ?? 0)}`,
-      exportIssues: this.exportQuantity > 0 ? (exportPlan?.issues ?? []) : [],
-      canConfirmExport: Boolean(permissions.canManageMarkets && marketIntegrity?.ready !== false && this.exportQuantity > 0 && exportPlan?.ready),
-      exportServiceStandard: this.exportServiceLevel === "standard",
-      exportServiceExpress: this.exportServiceLevel === "express",
-      exportServiceCharter: this.exportServiceLevel === "charter",
-      exports,
-      hasExports: exports.length > 0,
-      exportArchive,
-      hasExportArchive: exportArchive.length > 0,
-      hiddenOfferCount: Math.max(0, Number(activeQuote?.hiddenOfferCount) || 0),
+      hiddenOfferCount: Math.max(0, Number(quote?.hiddenOfferCount) || 0),
       rooms: rooms.map((room) => ({ ...room, selected: room.id === this.targetRoomId })),
       search: this.search,
       kind: this.kind,
@@ -837,19 +596,20 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
       hasSelection: selectedCount > 0,
       hasCapacityLimit: Boolean(plan?.hasCapacityLimit),
       capacityExceeded: Boolean(plan?.capacityExceeded),
-      totalLoadValue: Math.max(0, Math.min(100, (Number(plan?.finalBatchCapacityShare) || 0) * 100)),
-      capacityLoadValue: 100,
-      totalCargoPointsText: cargoPointsText(plan?.totalCargoPoints),
-      bookingCapacityCargoPointsText: cargoPointsText(plan?.bookingCapacityCargoPoints),
-      physicalCapacityCargoPointsText: cargoPointsText(plan?.physicalCapacityCargoPoints),
-      capacityRemainingCargoPointsText: cargoPointsText(plan?.capacityRemainingCargoPoints),
-      finalBatchCargoPointsText: cargoPointsText(plan?.finalBatchCargoPoints),
+      totalLoadValue: Math.max(0, Number(plan?.finalBatchLoad) || 0),
+      capacityLoadValue: Math.max(0, Number(plan?.bookingCapacityLoad) || 0),
+      totalLoadText: loadText(plan?.totalLoad),
+      capacityLoadText: loadText(plan?.bookingCapacityLoad),
+      physicalCapacityText: loadText(plan?.physicalCapacityLoad),
+      capacityRemainingText: loadText(plan?.capacityRemainingLoad),
+      finalBatchLoadText: loadText(plan?.finalBatchLoad),
       batchCount: Math.max(0, Number(plan?.batchCount) || 0),
       batchCountText: marketTripCountText(plan?.batchCount),
       hasMultipleShipmentBatches: shipmentBatchPreviews.length > 1,
       shipmentBatchPreviews,
       selectedShipmentBatch: shipmentBatchPreviews[selectedBatchIndex] ?? null,
       subtotalText: formatCopperCurrencyCompact(plan?.subtotalCopper ?? 0),
+      purchaseCosts: marketPurchaseCostPresentation(plan ?? {}),
       subtotalParts: copperCurrencyParts(plan?.subtotalCopper ?? 0),
       deliveryText: formatCopperCurrencyCompact(plan?.deliveryCopper ?? 0),
       deliveryParts: copperCurrencyParts(plan?.deliveryCopper ?? 0),
@@ -869,22 +629,6 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
       serviceStandard: plan?.serviceLevel === "standard",
       serviceExpress: plan?.serviceLevel === "express",
       serviceCharter: plan?.serviceLevel === "charter",
-      serviceOwned: plan?.serviceLevel === FLEET_OWNED_DELIVERY_SERVICE,
-      ownedVesselDelivery: Boolean(plan?.ownedVesselDelivery),
-      ownedVesselName: String(plan?.ownedVesselName ?? ""),
-      ownedCapacityText: cargoPointsText(plan?.logistics?.ownedCapacityCargoPoints ?? plan?.physicalCapacityCargoPoints),
-      ownedPickupTimingText: `${Math.max(0, Number(plan?.ownedPickupQd) || 0)} QD`,
-      ownedCargoTimingText: `${Math.max(0, Number(plan?.ownedCargoQd) || 0)} QD`,
-      ownedHandlingTimingText: `${Math.max(0, Number(plan?.ownedHandlingQd) || 0)} QD`,
-      ownedOperatingCostText: formatCopperCurrency(plan?.ownedOperatingCostCopper ?? 0),
-      ownedReplacementReserveText: formatCopperCurrency(plan?.ownedReplacementReserveCopper ?? 0),
-      hasExternalComparison: Boolean(plan?.ownedVesselDelivery && plan?.externalComparison),
-      externalComparisonCarrier: String(plan?.externalComparison?.carrierLabel ?? "Внешний перевозчик"),
-      externalComparisonCapacityText: cargoPointsText(plan?.externalComparison?.capacityCargoPoints),
-      externalComparisonDeliveryText: formatCopperCurrency(plan?.externalComparison?.deliveryCopper ?? 0),
-      externalComparisonEtaText: `${Math.max(0, Number(plan?.externalComparison?.deliveryQd) || 0)} QD`,
-      externalComparisonDifferenceText: `${Number(plan?.externalComparison?.differenceCopper) >= 0 ? "+" : "−"}${formatCopperCurrency(Math.abs(Number(plan?.externalComparison?.differenceCopper) || 0))}`,
-      externalComparisonMoreExpensive: Number(plan?.externalComparison?.differenceCopper) > 0,
       expressAvailable: plan?.deliveryMode === "scheduled",
       riskLossChanceText: percentText(plan?.riskLossChance),
       riskDelayChanceText: percentText(plan?.riskDelayChance),
@@ -909,30 +653,71 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
         factorText: `регион ×${Number(plan?.deliveryBreakdown?.distanceFactor ?? 1).toFixed(2)} · перевозчик ×${Number(plan?.deliveryBreakdown?.carrierPriceFactor ?? 1).toFixed(2)}`,
         airshipHireText: formatCopperCurrencyCompact(plan?.deliveryBreakdown?.airshipHireCopper ?? 0),
         operatingTimeText: formatCopperCurrencyCompact(plan?.deliveryBreakdown?.operatingTimeCopper ?? 0),
-        fullCapacityCargoPointsText: `${cargoPointsText(plan?.deliveryBreakdown?.physicalCapacityCargoPoints)} · составляющая тарифа ${formatCopperCurrencyCompact(plan?.deliveryBreakdown?.fullVesselLoadCopper ?? 0)}`,
+        fullVesselLoadText: `${loadText(plan?.deliveryBreakdown?.physicalCapacityLoad ?? 0)} × ${Number(plan?.deliveryBreakdown?.loadRateCopper ?? 0).toFixed(3)} М/ед. = ${formatCopperCurrencyCompact(plan?.deliveryBreakdown?.fullVesselLoadCopper ?? 0)}`,
         fullOneWayOperatingText: formatCopperCurrencyCompact(plan?.deliveryBreakdown?.fullOneWayOperatingCopper ?? 0),
         operatingLegsText: Number(plan?.deliveryBreakdown?.operatingLegFactor ?? 1) > 1 ? "2 плеча: доставка + возврат/перегон" : "1 плечо; обратный рейс оплачивает другой груз",
         capacityShareText: plan?.hasCapacityLimit
           ? `${percentText(plan?.deliveryBreakdown?.capacityShare ?? 0)} полной сметы · ${marketTripCountText(plan?.batchCount)}`
           : "без лимита · полная операционная смета",
+        valueFreightFormulaText: `сумма по ${marketTripCountText(plan?.batchCount)} при ставке ${percentText(plan?.deliveryBreakdown?.freightRate ?? 0)} = ${formatCopperCurrencyCompact(plan?.deliveryBreakdown?.valueFreightCopper ?? 0)}`,
         operationalFormulaText: `${formatCopperCurrencyCompact(plan?.deliveryBreakdown?.fullOneWayOperatingCopper ?? 0)} × суммарная доля ${percentText(plan?.deliveryBreakdown?.capacityShare ?? 0)} × ${Number(plan?.deliveryBreakdown?.operatingLegFactor ?? 1)} плеч. = ${formatCopperCurrencyCompact(plan?.deliveryBreakdown?.operationalFreightCopper ?? 0)}`,
-        routeTotalFormulaText: `операционный фрахт всех партий = ${formatCopperCurrencyCompact(plan?.deliveryBreakdown?.routeCopper ?? 0)}`,
-        handlingFormulaText: `погрузка каждой из ${marketTripCountText(plan?.batchCount)} + тариф грузовых очков = ${formatCopperCurrencyCompact(plan?.deliveryBreakdown?.handlingCopper ?? 0)}`,
+        routeTotalFormulaText: `сумма большего тарифа каждой партии = ${formatCopperCurrencyCompact(plan?.deliveryBreakdown?.routeCopper ?? 0)}`,
+        handlingFormulaText: `погрузка каждой из ${marketTripCountText(plan?.batchCount)} + массовый тариф = ${formatCopperCurrencyCompact(plan?.deliveryBreakdown?.handlingCopper ?? 0)}`,
         insuranceFormulaText: `${formatCopperCurrencyCompact(plan?.deliveryBreakdown?.subtotalCopper ?? 0)} × ${percentText(plan?.deliveryBreakdown?.insuranceRate ?? 0)} = ${formatCopperCurrencyCompact(plan?.deliveryBreakdown?.insuranceCopper ?? 0)}`,
-        taxFormulaText: `${formatCopperCurrencyCompact(plan?.deliveryBreakdown?.subtotalCopper ?? 0)} × ${percentText(plan?.deliveryBreakdown?.taxRate ?? 0)} = ${formatCopperCurrencyCompact(plan?.deliveryBreakdown?.taxCopper ?? 0)}`,
+        taxFormulaText: `Ввоз ${percentText(plan?.deliveryBreakdown?.importTaxRate ?? 0)}: ${formatCopperCurrencyCompact(plan?.importTaxCopper ?? 0)}; вывоз ${percentText(plan?.deliveryBreakdown?.exportTaxRate ?? 0)}: ${formatCopperCurrencyCompact(plan?.exportTaxCopper ?? 0)}; всего ${formatCopperCurrencyCompact(plan?.taxCopper ?? 0)}`,
         expressText: formatCopperCurrencyCompact(plan?.deliveryBreakdown?.expressSurchargeCopper ?? 0),
         totalFormulaText: `${formatCopperCurrencyCompact(plan?.deliveryBreakdown?.routeCopper ?? 0)} + ${formatCopperCurrencyCompact(plan?.deliveryBreakdown?.handlingCopper ?? 0)} + ${formatCopperCurrencyCompact(plan?.deliveryBreakdown?.insuranceCopper ?? 0)} + ${formatCopperCurrencyCompact(plan?.deliveryBreakdown?.taxCopper ?? 0)} + ${formatCopperCurrencyCompact(plan?.deliveryBreakdown?.expressSurchargeCopper ?? 0)} = ${formatCopperCurrencyCompact(plan?.deliveryBreakdown?.deliveryCopper ?? 0)}`
       },
       deliveryBreakdownOpen: this.deliveryBreakdownOpen,
+      landedPricesOpen: this.landedPricesOpen,
       insufficientFunds: Boolean(plan?.insufficientFunds),
-        canConfirm: Boolean(permissions.canManageMarkets && marketIntegrity?.ready !== false && plan?.ok),
+      canConfirm: Boolean(permissions.canUseStorage && plan?.ok),
       shipments,
       hasShipments: shipments.length > 0,
       activeShipmentCount: activeShipmentOrders.length,
       hiddenShipmentCount: Math.max(0, activeShipmentOrders.length - shipments.length),
       hasHiddenShipments: activeShipmentOrders.length > shipments.length,
       shipmentArchive,
-      hasShipmentArchive: shipmentArchive.length > 0
+      hasShipmentArchive: shipmentArchive.length > 0,
+      outboundOffers,
+      outboundHasOffers: outboundOffers.length > 0,
+      outboundHasForSaleStock: Boolean(outbound?.hasForSaleStock),
+      outboundUnavailableForSaleCount: Math.max(0, Number(outbound?.unavailableForSaleCount) || 0),
+      outboundSelectedUnits: Math.max(0, Number(outbound?.selectedUnits) || 0),
+      outboundHasSelection: Math.max(0, Number(outbound?.selectedUnits) || 0) > 0,
+      outboundInsuranceEnabled: this.outboundInsuranceEnabled,
+      outboundShipOptions: [
+        { value: "", label: "Наёмный перевозчик", selected: !this.ownShipId },
+        ...(holding?.special?.ships?.list ?? [])
+          .filter((ship) => (ship.navigationMode === "world" && ship.location?.kind === "home" && !ship.activeVoyage && !ship.orderBundle)
+            || ship.id === this.ownShipId)
+          .map((ship) => ({ value: ship.id, label: ship.name, selected: ship.id === this.ownShipId,
+            disabled: !permissions.canManageShips || ship.navigationMode !== "world" || ship.location?.kind !== "home"
+              || Boolean(ship.activeVoyage || ship.orderBundle) }))
+      ],
+      outboundOwnShipSelected: Boolean(this.ownShipId),
+      outboundCanBook: Boolean(permissions.canUseStorage && (!this.ownShipId || permissions.canManageShips) && outboundPlan?.ok),
+      outboundPlanReason: (outboundPlan?.reasons ?? []).join(" "),
+      outboundRevenueText: formatCopperCurrency(outboundPlan?.revenueCopper ?? 0),
+      outboundUpfrontText: formatCopperCurrency(outboundPlan?.upfrontCopper ?? 0),
+      outboundImportTaxText: formatCopperCurrency(outboundPlan?.importTaxCopper ?? 0),
+      outboundExportTaxText: formatCopperCurrency(outboundPlan?.exportTaxCopper ?? 0),
+      outboundShipTransferText: formatCopperCurrency(Math.max(0,
+        Number(outbound?.ownShip?.voyageOffer?.quote?.recommendedBudgetCopper ?? 0)
+        - Number((holding?.special?.ships?.list ?? []).find((ship) => ship.id === this.ownShipId)?.onboardCopper ?? 0))),
+      outboundShipOperatingText: formatCopperCurrency(outbound?.ownShip?.voyageOffer?.quote?.costs?.totalCopper ?? 0),
+      outboundBalanceText: formatCopperCurrency(Math.max(0, Number(holding?.storage?.moneyCopper) - Number(outboundPlan?.upfrontCopper ?? 0)
+        - Math.max(0, Number(outbound?.ownShip?.voyageOffer?.quote?.recommendedBudgetCopper ?? 0)
+          - Number((holding?.special?.ships?.list ?? []).find((ship) => ship.id === this.ownShipId)?.onboardCopper ?? 0)))),
+      outboundDeliveryText: outboundPlan?.shipmentBatches?.length > 1
+        ? `${outboundPlan.shipmentBatches.length} партии; приход ${outboundPlan.shipmentBatches[0].deliveryQd}–${outboundPlan.deliveryQd} QD`
+        : (outboundPlan?.deliveryQd ? `${outboundPlan.deliveryQd} QD` : "—"),
+      outboundCarrierText: String(outboundPlan?.route?.label ?? outboundPlan?.route?.carrierLabel ?? "—"),
+      outboundBuyerText: (outboundPlan?.buyerAllocations ?? []).map((row) => `${row.buyerLabel || row.buyerId || "Покупатель"} ×${Math.max(0, Number(row.qty) || 0)}`).slice(0, 8).join(" · "),
+      outboundOrders,
+      hasOutboundOrders: outboundOrders.length > 0,
+      outboundArchive,
+      hasOutboundArchive: outboundArchive.length > 0
     };
   }
 
@@ -943,12 +728,12 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     restorePersistentImages(root, this._pendingPersistentImages);
     this._pendingPersistentImages = null;
     bindImageFallbacks(root);
-    bindFloatingTooltips(this, root, { followPointer: true });
+    bindFloatingTooltips(this, root);
     this._marketAbortController?.abort?.();
     const controller = new AbortController();
     this._marketAbortController = controller;
     const listenerOptions = { signal: controller.signal };
-    root.addEventListener("click", (event) => this._onClick(event, root), listenerOptions);
+    root.addEventListener("click", (event) => dispatchDelegatedAction(this, event, event.target, () => this._onClick(event, root)), listenerOptions);
     root.addEventListener("contextmenu", (event) => this._onContextMenu(event, root), listenerOptions);
     root.addEventListener("change", (event) => this._onChange(event, root), listenerOptions);
     root.addEventListener("input", (event) => this._onInput(event, root), listenerOptions);
@@ -956,17 +741,29 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     deliveryDetails?.addEventListener?.("toggle", () => {
       this.deliveryBreakdownOpen = Boolean(deliveryDetails.open);
     }, listenerOptions);
+    const landedDetails = root.querySelector?.("[data-market-landed-prices]");
+    landedDetails?.addEventListener?.("toggle", () => {
+      this.landedPricesOpen = Boolean(landedDetails.open);
+    }, listenerOptions);
     this._applyFilters(root);
+    if (this._focusOutboundOrderId || this._focusOutbound) {
+      const orderId = this._focusOutboundOrderId;
+      this._focusOutboundOrderId = "";
+      this._focusOutbound = false;
+      if (!focusMarketOutboundOrder(root, orderId)) globalThis.ui?.notifications?.warn?.("Продажа уже недоступна в списке. Обновите окно корабля.");
+    }
   }
 
   _onClick(event, root) {
     const element = event.target?.closest?.("[data-action]");
     if (!element || !root.contains(element)) return;
     const action = String(element.dataset.action ?? "");
-    if (action === "market-set-trade-mode") {
+    if (action === "market-open-banks") {
       event.preventDefault();
-      this.tradeMode = element.dataset.mode === "sell" ? "sell" : "buy";
-      this.requestRender({ focus: false });
+      return import("./lazy-apps.js").then(({ openBankApp }) => openBankApp({ holdingId: this.holdingId }));
+    } else if (action === "market-shared-preview") {
+      event.preventDefault();
+      return this._onSharedMarketPreview();
     } else if (action === "market-select-merchant") {
       event.preventDefault();
       const sourceOfferId = String(element.dataset.sourceOfferId ?? "");
@@ -985,53 +782,47 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
       this.requestRender({ focus: false });
     } else if (action === "market-buy") {
       event.preventDefault();
-      this._onBuy();
-    } else if (action === "market-export-select") {
-      event.preventDefault();
-      const offerId = String(element.dataset.offerId ?? "");
-      if (offerId) {
-        const changed = offerId !== this.exportOfferId;
-        this.exportOfferId = offerId;
-        if (changed || this.exportQuantity <= 0) this.exportQuantity = 1;
-      }
-      this.requestRender({ focus: false });
-    } else if (action === "market-export-quantity-step") {
-      event.preventDefault();
-      const offerId = String(element.dataset.offerId ?? "");
-      if (offerId && offerId !== this.exportOfferId) {
-        this.exportOfferId = offerId;
-        this.exportQuantity = 0;
-      }
-      const step = Number(element.dataset.step) || 0;
-      const max = Math.max(0, Number(element.dataset.max) || 0);
-      this._setExportQuantity(this.exportQuantity + step, max);
-    } else if (action === "market-export-clear") {
-      event.preventDefault();
-      this.exportOfferId = "";
-      this.exportQuantity = 0;
-      this.requestRender({ focus: false });
-    } else if (action === "market-export-dispatch") {
-      event.preventDefault();
-      this._onExport();
+      return this._onBuy();
     } else if (action === "market-deliver-shipment") {
       event.preventDefault();
-      this._onDeliverShipment(element);
+      return this._onDeliverShipment(element);
     } else if (action === "market-cancel-shipment") {
       event.preventDefault();
-      this._onCancelShipment(element);
+      return this._onCancelShipment(element);
+    } else if (action === "market-resolve-shipment-risk") {
+      event.preventDefault();
+      return this._onResolveShipmentRisk(element);
+    } else if (action === "market-outbound-quantity-step") {
+      event.preventDefault();
+      const resourceId = String(element.dataset.resourceId ?? "");
+      const step = Number(element.dataset.step) || 0;
+      const available = Math.max(0, Number(element.dataset.available) || 0);
+      this._setOutboundQuantity(resourceId, Math.floor(Number(this.outboundQuantities[resourceId]) || 0) + step, available);
+    } else if (action === "market-outbound-clear") {
+      event.preventDefault();
+      this.outboundQuantities = {};
+      this.requestRender({ focus: false });
+    } else if (action === "market-outbound-book") {
+      event.preventDefault();
+      return this._onBookOutbound();
+    } else if (action === "market-outbound-cancel") {
+      event.preventDefault();
+      return this._onCancelOutbound(element);
+    } else if (action === "market-outbound-resolve-risk") {
+      event.preventDefault();
+      return this._onResolveOutboundRisk(element);
     }
   }
 
   _onContextMenu(event, root) {
-    const element = event.target?.closest?.('[data-action="market-quantity-step"], [data-action="market-export-quantity-step"]');
+    const element = event.target?.closest?.('[data-action="market-quantity-step"], [data-action="market-outbound-quantity-step"]');
     if (!element || !root.contains(element) || element.disabled) return;
     event.preventDefault();
-    if (element.dataset.action === "market-export-quantity-step") {
-      const offerId = String(element.dataset.offerId ?? "");
-      if (offerId) this.exportOfferId = offerId;
-      const max = Math.max(0, Number(element.dataset.max) || 0);
+    if (element.dataset.action === "market-outbound-quantity-step") {
+      const resourceId = String(element.dataset.resourceId ?? "");
+      const available = Math.max(0, Number(element.dataset.available) || 0);
       const step = Number(element.dataset.step) || 0;
-      this._setExportQuantity(step > 0 ? max : 0, max);
+      this._setOutboundQuantity(resourceId, step > 0 ? available : 0, available);
       return;
     }
     const offerId = String(element.dataset.offerId ?? "");
@@ -1046,9 +837,10 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     this._requestOfferRender();
   }
 
-  _setExportQuantity(value, max) {
-    this.exportQuantity = Math.max(0, Math.min(Math.max(0, Number(max) || 0), Math.floor(Number(value) || 0)));
-    this._requestOfferRender();
+  _setOutboundQuantity(resourceId, value, available) {
+    if (!resourceId) return;
+    this.outboundQuantities[resourceId] = Math.max(0, Math.min(Math.max(0, Number(available) || 0), Math.floor(Number(value) || 0)));
+    this.requestRender({ focus: false });
   }
 
   _requestOfferRender() {
@@ -1064,9 +856,7 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     }
     const service = event.target?.closest?.("[data-market-service-level]");
     if (service && root.contains(service)) {
-      const nextService = ["standard", "express", "charter"].includes(service.value) ? service.value : "standard";
-      if (this.tradeMode === "sell") this.exportServiceLevel = nextService;
-      else this.serviceLevel = nextService;
+      this.serviceLevel = ["standard", "express", "charter"].includes(service.value) ? service.value : "standard";
       this.batchPreviewIndex = 0;
       this.requestRender({ focus: false });
       return;
@@ -1077,21 +867,33 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
       this.carrierId = "";
       this.batchPreviewIndex = 0;
       this.quantities = {};
+      this.outboundQuantities = {};
       this.merchantSelections = {};
-      this.exportOfferId = "";
-      this.exportQuantity = 0;
+      this.requestRender({ focus: false });
+      return;
+    }
+    const outboundQuantity = event.target?.closest?.("[data-market-outbound-quantity]");
+    if (outboundQuantity && root.contains(outboundQuantity)) {
+      const resourceId = String(outboundQuantity.dataset.resourceId ?? "");
+      const available = Math.max(0, Number(outboundQuantity.max) || 0);
+      this._setOutboundQuantity(resourceId, outboundQuantity.value, available);
+      return;
+    }
+    const outboundInsurance = event.target?.closest?.("[data-market-outbound-insurance]");
+    if (outboundInsurance && root.contains(outboundInsurance)) {
+      this.outboundInsuranceEnabled = Boolean(outboundInsurance.checked);
+      this.requestRender({ focus: false });
+      return;
+    }
+    const outboundShip = event.target?.closest?.("[data-market-outbound-ship]");
+    if (outboundShip && root.contains(outboundShip)) {
+      this.ownShipId = String(outboundShip.value ?? "");
       this.requestRender({ focus: false });
       return;
     }
     const carrier = event.target?.closest?.("[data-market-carrier]");
     if (carrier && root.contains(carrier)) {
-      if (this.tradeMode === "sell") {
-        this.exportCarrierId = String(carrier.value ?? "");
-      } else {
-        this.carrierId = String(carrier.value ?? "");
-        if (fleetVesselIdFromCarrier(this.carrierId)) this.serviceLevel = FLEET_OWNED_DELIVERY_SERVICE;
-        else if (this.serviceLevel === FLEET_OWNED_DELIVERY_SERVICE) this.serviceLevel = "standard";
-      }
+      this.carrierId = String(carrier.value ?? "");
       this.batchPreviewIndex = 0;
       this.requestRender({ focus: false });
       return;
@@ -1101,13 +903,6 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
       const offerId = String(quantity.dataset.offerId ?? "");
       const stock = Math.max(0, Number(quantity.max) || 0);
       this._setMarketQuantity(offerId, quantity.value, stock);
-      return;
-    }
-    const exportQuantity = event.target?.closest?.("[data-market-export-quantity]");
-    if (exportQuantity && root.contains(exportQuantity)) {
-      const offerId = String(exportQuantity.dataset.offerId ?? "");
-      if (offerId) this.exportOfferId = offerId;
-      this._setExportQuantity(exportQuantity.value, exportQuantity.max);
       return;
     }
     const room = event.target?.closest?.("[data-market-room]");
@@ -1143,167 +938,375 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     if (count) count.textContent = String(visible);
   }
 
-  async _resolveMarketItemDocuments(lines = []) {
-    const documents = new Map();
-    for (const line of lines) {
-      if (line.sourceType !== "item") continue;
-      const uuid = String(line.itemUuid ?? "").trim();
-      if (!uuid) return { ok: false, message: `Для «${line.name}» не указан Item UUID.` };
-      let document = null;
-      try { document = await resolveFoundryUuid(uuid); } catch (_error) {}
-      const documentName = document?.documentName ?? document?.constructor?.documentName;
-      if (!document || documentName !== "Item") return { ok: false, message: `Item не найден: ${uuid}.` };
-      documents.set(line.id, document);
-    }
-    return { ok: true, documents };
-  }
-
-  async _onExport() {
-    const snapshot = this._marketSnapshot();
-    const permissions = holdingPermissionContext(snapshot.holding);
-    if (!permissions.canManageMarkets) return ui.notifications?.warn?.(permissions.mayManageMarkets ? "Рыночные операции временно недоступны: нет активного authority-GM." : "GM не делегировал управление внешним рынком.");
-    const economyStatus = economyV2RuntimeStatus(snapshot.data);
-    if (!economyStatus.ready) return ui.notifications?.warn?.(economyStatus.message);
-    if (snapshot.marketIntegrity?.ready === false) return ui.notifications?.warn?.(`Рыночная котировка нарушает контракт Market V2: ${snapshot.marketIntegrity.issues?.[0]?.message ?? "проверьте цены и ликвидность"}`);
-    const plan = snapshot.exportPlan;
-    if (!plan || this.exportQuantity <= 0) return ui.notifications?.warn?.("Выберите один товар и целое количество для продажи.");
-    if (!plan.ready) return ui.notifications?.warn?.(plan.issues?.map((issue) => issue.message).filter(Boolean).join(" ") || "Экспортный контракт пока не готов к отправке.");
-    const offer = snapshot.sellQuote?.offers?.find?.((row) => String(row?.id ?? "") === String(plan.offerId ?? ""));
-    const content = [
-      `<p><strong>${String(offer?.name ?? plan.resourceId ?? "Товар")}</strong> ×${plan.totalQty} → ${String(snapshot.sellQuote?.marketLabel ?? "Внешний рынок")}.</p>`,
-      `<p>Ожидаемая выручка <strong>${formatCopperCurrency(plan.financials.grossCopper)}</strong>; все расходы ${formatCopperCurrency(plan.financials.totalCostCopper)}; чистый итог ${formatCopperCurrency(plan.financials.projectedNetCopper)}.</p>`,
-      `<p>При отправке будут сразу списаны товары и ${formatCopperCurrency(plan.dispatchCash.requiredCopper)} за фрахт, страхование и обработку. Пошлина удерживается только при продаже.</p>`,
-      `<p>ETA ${Math.max(0, Number(plan.eta?.qd) || 0)} QD; риск утраты ${percentText(plan.risk?.lossChance)}${Number(plan.risk?.insurancePayoutCopper) > 0 ? `; страховая выплата ${formatCopperCurrency(plan.risk.insurancePayoutCopper)}` : "; без страховой выплаты"}.</p>`
-    ].join("");
-    const confirmed = await foundryDialogV2().confirm({
-      window: { title: "Отправить товар на внешний рынок" },
-      content,
-      modal: true
-    });
+  async _onSharedMarketPreview() {
+    if (!globalThis.game?.user?.isGM) return;
+    const { previewSharedMarketMigration, applySharedMarketMigration } = await import("../data/market/shared-migration.js");
+    const preview = previewSharedMarketMigration(SkyholdData.view());
+    if (preview.active) return ui.notifications?.info?.("Единые остатки и спрос уже действуют для всех поселений.");
+    const notices = [...(preview.warnings ?? []), ...(preview.blockers ?? [])].map((row) => `<p>${escapeHtml(row)}</p>`).join("");
+    const content = `<p>Объединить внешние рынки всех поселений: ${preview.stockCount} остатков, ${preview.demandCount} записей спроса.</p><p>Существующие поставки и брони сохранятся. Запасы будут восстанавливаться по общему игровому времени, без повторного восстановления при проведении второго поселения. Раздельные записи сохранятся как исторические данные и перестанут использоваться.</p>${notices}`;
+    if (!preview.ok) return foundryDialogV2().prompt({ window: { title: "Общий рынок: переход пока невозможен" }, content, modal: true });
+    const confirmed = await foundryDialogV2().confirm({ window: { title: "Общий рынок: применить переход" }, content, modal: true });
     if (!confirmed) return;
-
-    const operationId = makeId("market-export", 20);
-    const expectedFingerprint = this._exportPlanFingerprint(plan);
-    const result = await requestStorageOperation({
-      type: "marketExport",
-      operationId,
-      expectedRevision: Math.max(0, Number(snapshot.data?.meta?.revision) || 0),
-      holdingId: this.holdingId,
-      marketId: String(plan.exportQuote?.market?.id ?? this.marketId),
-      exportOfferId: this.exportOfferId,
-      exportQuantity: this.exportQuantity,
-      exportCarrierId: this.exportCarrierId,
-      exportServiceLevel: this.exportServiceLevel,
-      expectedSourceHash: snapshot.sourceHash,
-      expectedFingerprint
-    }).catch((error) => ({ ok: false, message: error?.message ?? String(error) }));
-
-    if (!result?.ok) return ui.notifications?.warn?.(result?.message || "Данные поселения или экспортного контракта изменились. Проверьте его ещё раз.");
-    this.exportQuantity = 0;
+    await SkyholdData.transaction((data) => applySharedMarketMigration(data, preview.sourceToken),
+      { reason: "shared-market-migration", scope: "holdings", forceRollbackSnapshot: true });
     requestSkyholdAppRender();
     this.requestRender({ focus: false });
-    ui.notifications?.info?.(`Экспорт отправлен: ${result.qty} ед., расходы ${formatCopperCurrency(result.upfrontCostsCopper)}, ETA ${result.etaQd} QD. Выручка поступит после прибытия.`);
   }
 
   async _onBuy() {
+    if (this._buyOperationPending) return;
+    this._buyOperationPending = true;
+    try {
+      const snapshot = this._marketSnapshot();
+      if (!holdingPermissionContext(snapshot.holding).canUseStorage) {
+        return ui.notifications?.warn?.("Для рыночной покупки нужны права на хранилище и активный GM.");
+      }
+      const plan = snapshot.plan;
+      if (!plan || plan.empty) return ui.notifications?.warn?.("Корзина рынка пуста.");
+      if (plan.inaccessible) return ui.notifications?.warn?.(plan.logistics?.reasons?.join(" ") || "Маршрут к этой площадке недоступен.");
+      if (plan.amountExceeded) return ui.notifications?.warn?.(`Сумма заказа превышает ${formatCopperCurrency(plan.amountLimitCopper)}. Разделите покупку на несколько заказов.`);
+      if (plan.capacityExceeded) return ui.notifications?.warn?.(`Одна единица товара не помещается в лимит ${marketServiceLabel(plan.serviceLevel)} (${loadText(plan.bookingCapacityLoad)}). Выберите выделенный рейс или другого перевозчика.`);
+      if (plan.insufficientFunds) return ui.notifications?.warn?.("В казне недостаточно денег с учётом доставки.");
+      const timing = plan.deliveryMode === "scheduled"
+        ? `${marketServiceLabel(plan.serviceLevel)}: ${marketTripCountText(plan.batchCount)}, прибытие ${plan.batchCount > 1 ? `${plan.firstDeliveryQd}–${plan.deliveryQd}` : plan.deliveryQd} QD${plan.serviceLevel === "express" ? `, надбавка ${formatCopperCurrency(plan.expressSurchargeCopper)}` : ""}.`
+        : "Груз будет доставлен сразу.";
+      const risk = plan.deliveryMode === "scheduled"
+        ? `Риск утраты ${percentText(plan.riskLossChance)}, задержки ${percentText(plan.riskDelayChance)}. При утрате всего заказа страховка возместит до ${formatCopperCurrency(plan.maximumInsurancePayoutCopper)}; не покрываются ${marketPurchaseCostPresentation(plan).unrecoveredText}. Страхуется стоимость товаров; расходы доставки не возмещаются.`
+        : "";
+      const content = `<p><strong>${escapeHtml(plan.marketLabel)}</strong>: ${plan.lines.length} позиций, товары ${formatCopperCurrency(plan.subtotalCopper)}, доставка ${formatCopperCurrency(plan.deliveryCopper)}.</p><p>Итого: <strong>${formatCopperCurrency(plan.totalCopper)}</strong>. ${escapeHtml(plan.logistics?.transportLabel || plan.locationLabel)}, дальность ${escapeHtml(plan.logistics?.distanceText || "—")}. ${timing}</p>${risk ? `<p>${risk}</p>` : ""}`;
+      const confirmed = await foundryDialogV2().confirm({
+        window: { title: "Подтвердить покупку на рынке" },
+        content,
+        modal: true
+      });
+      if (!confirmed) return;
+
+      const operationId = makeId("market-order", 20);
+      let result;
+      try {
+        result = await requestMarketOperation({
+          type: "purchase",
+          operationId,
+          holdingId: this.holdingId,
+          expectedRevision: Math.max(0, Math.floor(Number(snapshot.data?.meta?.revision) || 0)),
+          sourceToken: snapshot.sourceHash,
+          planToken: marketPurchasePlanToken(plan),
+          marketId: plan.marketId,
+          carrierId: this.carrierId,
+          targetRoomId: this.targetRoomId,
+          serviceLevel: plan.serviceLevel,
+          quantities: this.quantities
+        });
+      } catch (error) {
+        return ui.notifications?.warn?.(error?.code === "conflict"
+          ? "Данные поселения или котировки изменились. Проверь корзину ещё раз."
+          : (error?.message || "Рыночная покупка не выполнена."));
+      }
+
+      if (!result?.ok) return ui.notifications?.warn?.("Данные поселения или котировки изменились. Проверь корзину ещё раз.");
+      this.quantities = {};
+      requestSkyholdAppRender();
+      this.requestRender({ focus: false });
+      ui.notifications?.info?.(result.scheduled
+        ? `Заказ принят: ${marketServiceLabel(result.serviceLevel)}, ${marketTripCountText(result.batchCount)}. ETA ${result.batchCount > 1 ? `${result.firstDeliveryQd}–${result.deliveryQd}` : result.deliveryQd} QD, списано ${formatCopperCurrency(result.totalCopper)}.`
+        : `Заказ доставлен в поселение. Списано ${formatCopperCurrency(result.totalCopper)}.`);
+    } finally {
+      this._buyOperationPending = false;
+    }
+  }
+
+  async _onBookOutbound() {
+    if (this._outboundOperationPending) return;
     const snapshot = this._marketSnapshot();
     const permissions = holdingPermissionContext(snapshot.holding);
-    if (!permissions.canManageMarkets) return ui.notifications?.warn?.(permissions.mayManageMarkets ? "Рыночные операции временно недоступны: нет активного authority-GM." : "GM не делегировал управление внешним рынком.");
-    const economyStatus = economyV2RuntimeStatus(snapshot.data);
-    if (!economyStatus.ready) return ui.notifications?.warn?.(economyStatus.message);
-    if (snapshot.marketIntegrity?.ready === false) return ui.notifications?.warn?.(`Рыночная котировка нарушает контракт Market V2: ${snapshot.marketIntegrity.issues?.[0]?.message ?? "проверьте цены и ликвидность"}`);
-    const plan = snapshot.plan;
-    if (!plan || plan.empty) return ui.notifications?.warn?.("Корзина рынка пуста.");
-    if (plan.inaccessible) return ui.notifications?.warn?.(plan.logistics?.reasons?.join(" ") || "Маршрут к этой площадке недоступен.");
-    if (plan.capacityExceeded) {
-      const message = plan.ownedVesselDelivery
-        ? `Общий груз не помещается в ${marketServiceLabel(plan.serviceLevel)} (${cargoPointsText(plan.bookingCapacityCargoPoints)}). Уменьшите заказ или выберите внешнего перевозчика.`
-        : `Одна единица товара не помещается в лимит ${marketServiceLabel(plan.serviceLevel)} (${cargoPointsText(plan.bookingCapacityCargoPoints)}). Выберите Charter или другого перевозчика.`;
-      return ui.notifications?.warn?.(message);
+    if (!permissions.canUseStorage) {
+      return ui.notifications?.warn?.("Для исходящей продажи нужны права на хранилище и активный GM.");
     }
-    if (plan.insufficientFunds) return ui.notifications?.warn?.("В казне недостаточно денег с учётом доставки.");
-    const timing = plan.deliveryMode === "scheduled"
-      ? `${marketServiceLabel(plan.serviceLevel)}: ${marketTripCountText(plan.batchCount)}, прибытие ${plan.batchCount > 1 ? `${plan.firstDeliveryQd}–${plan.deliveryQd}` : plan.deliveryQd} QD${plan.serviceLevel === "express" ? `, надбавка ${formatCopperCurrency(plan.expressSurchargeCopper)}` : ""}.`
-      : "Груз будет доставлен сразу.";
-    const risk = plan.deliveryMode === "scheduled"
-      ? (plan.ownedVesselDelivery
-        ? `Свой корабль: до точки забора ${plan.ownedPickupQd} QD, погрузка ${plan.ownedHandlingQd} QD, с грузом ${plan.ownedCargoQd} QD. Эксплуатация ${formatCopperCurrency(plan.ownedOperatingCostCopper)}, резерв замены ${formatCopperCurrency(plan.ownedReplacementReserveCopper)}.`
-        : `Риск утраты ${percentText(plan.riskLossChance)}, задержки ${percentText(plan.riskDelayChance)}. При утрате страховка возместит до ${formatCopperCurrency(plan.maximumInsurancePayoutCopper)}.`)
-      : "";
-    const content = `<p><strong>${plan.marketLabel}</strong>: ${plan.lines.length} позиций, товары ${formatCopperCurrency(plan.subtotalCopper)}, доставка ${formatCopperCurrency(plan.deliveryCopper)}.</p><p>Итого: <strong>${formatCopperCurrency(plan.totalCopper)}</strong>. ${plan.logistics?.transportLabel || plan.locationLabel}, дальность ${plan.logistics?.distanceText || "—"}. ${timing}</p>${risk ? `<p>${risk}</p>` : ""}`;
+    if (this.ownShipId && !permissions.canManageShips) {
+      return ui.notifications?.warn?.("Для отправки собственного судна нужны права на корабли и активный GM.");
+    }
+    const plan = snapshot.outbound?.plan;
+    if (!plan || !snapshot.outbound?.selectedUnits) return ui.notifications?.warn?.("Не выбраны товары для исходящей продажи.");
+    if (!plan.ok) return ui.notifications?.warn?.(plan.reasons?.join(" ") || "Исходящую продажу нельзя оформить.");
+    const buyerText = (plan.buyerAllocations ?? []).map((row) => `${row.buyerLabel || row.buyerId} ×${row.qty}`).join(" · ");
+    const shipQuote = snapshot.outbound?.ownShip?.voyageOffer?.quote;
+    const ship = (snapshot.holding?.special?.ships?.list ?? []).find((row) => row.id === this.ownShipId);
+    const shipTransferCopper = Math.max(0, Number(shipQuote?.recommendedBudgetCopper ?? 0) - Number(ship?.onboardCopper ?? 0));
     const confirmed = await foundryDialogV2().confirm({
-      window: { title: "Подтвердить покупку на рынке" },
-      content,
+      window: { title: "Подтвердить исходящую продажу" },
+      content: `<p><strong>${escapeHtml(plan.marketLabel)}</strong>: ${this.ownShipId ? "погрузить и отправить" : "забронировать"} ${plan.lines.reduce((sum, line) => line.qty + sum, 0)} ед. товара.</p><p>Рыночные расходы: <strong>${formatCopperCurrency(plan.upfrontCopper)}</strong>${this.ownShipId ? `; перевод на борт: <strong>${formatCopperCurrency(shipTransferCopper)}</strong>, из него расходы рейса: ${formatCopperCurrency(shipQuote?.costs?.totalCopper ?? 0)}` : ""}. Выручка <strong>${formatCopperCurrency(plan.revenueCopper)}</strong> поступит ${this.ownShipId ? "на борт" : "в казну"} после доставки.</p>${buyerText ? `<p>Покупатели: ${escapeHtml(buyerText)}.</p>` : ""}`,
       modal: true
     });
     if (!confirmed) return;
 
-    const operationId = makeId("market-order", 20);
-    const result = await requestStorageOperation({
-      type: "marketPurchase",
-      operationId,
-      expectedRevision: Math.max(0, Number(snapshot.data?.meta?.revision) || 0),
-      holdingId: this.holdingId,
-      marketId: plan.marketId,
-      quantities: this.quantities,
-      targetRoomId: this.targetRoomId,
-      serviceLevel: this.serviceLevel,
-      carrierId: this.carrierId,
-      expectedSourceHash: snapshot.sourceHash,
-      expectedQuoteKey: plan.quoteKey,
-      expectedTotalCopper: plan.totalCopper
-    }).catch((error) => ({ ok: false, message: error?.message ?? String(error) }));
+    this._outboundOperationPending = true;
+    try {
+      const operationId = makeId("market-outbound", 20);
+      const result = await requestMarketOperation({
+        type: "outbound",
+        operationId,
+        holdingId: this.holdingId,
+        expectedRevision: Math.max(0, Math.floor(Number(snapshot.data?.meta?.revision) || 0)),
+        sourceToken: snapshot.sourceHash,
+        planToken: String(plan.planToken ?? ""),
+        marketId: plan.marketId,
+        carrierId: this.carrierId,
+        ownShipId: this.ownShipId,
+        quantities: this.outboundQuantities,
+        insuranceEnabled: this.outboundInsuranceEnabled
+      });
+      if (!result?.ok) return ui.notifications?.warn?.("Запас, спрос, маршрут или казна изменились. Проверьте исходящую продажу ещё раз.");
+      this.outboundQuantities = {};
+      requestSkyholdAppRender();
+      this.requestRender({ focus: false });
+      ui.notifications?.info?.(`${this.ownShipId ? "Корабль отправлен с товаром" : "Исходящая продажа забронирована"}. Рыночные расходы ${formatCopperCurrency(result.upfrontCopper)}; ${formatCopperCurrency(result.revenueCopper)} поступит после доставки.`);
+    } catch (error) {
+      ui.notifications?.warn?.(error?.code === "conflict"
+        ? "Запас, спрос, маршрут или казна изменились. Проверьте исходящую продажу ещё раз."
+        : (error?.message || "Исходящая продажа не выполнена."));
+    } finally {
+      this._outboundOperationPending = false;
+    }
+  }
 
-    if (!result?.ok) return ui.notifications?.warn?.(result?.message || "Данные поселения или котировки изменились. Проверь корзину ещё раз.");
-    this.quantities = {};
+  async _onCancelOutbound(element) {
+    if (!game.user?.isGM) return ui.notifications?.warn?.("Отменить исходящую продажу может только GM.");
+    const orderId = String(element?.dataset?.orderId ?? "").trim();
+    if (!orderId) return;
+    const holding = this._marketSnapshot({ isGM: true }).holding;
+    const order = holding?.special?.market?.outbound?.orders?.find?.((row) => [row?.id, row?.operationId].some((value) => String(value ?? "") === orderId));
+    if (!order || String(order.dispatchStatus ?? "booked") !== "booked" || order.dispatchedAt) return ui.notifications?.warn?.("Продажа уже отправлена или недоступна для отмены.");
+    const confirmed = await foundryDialogV2().confirm({
+      window: { title: "Отменить исходящую продажу" },
+      content: `<p>Груз ещё находится на складе. Точная batch-бронь и внешний спрос будут освобождены, а в казну вернётся вся предоплата расходов: <strong>${formatCopperCurrency(order.upfrontCopper)}</strong>.</p>`,
+      modal: true
+    });
+    if (!confirmed) return;
+    const workflow = getSkyholdWorkflowService();
+    const cancelledAt = new Date().toISOString();
+    const result = await SkyholdData.updateHolding(this.holdingId, (freshHolding) => {
+      const cancelled = cancelMarketOutboundShipment({
+        holding: freshHolding,
+        orderId,
+        cancelledAt,
+        dependencies: {
+          addMoney: (target, amount) => workflow._addMoney(target, amount),
+          appendStorageLog: (target, entries) => workflow._appendStorageLog(target, entries)
+        }
+      });
+      if (!cancelled.ok) return SkyholdData.skipTransaction({ ok: false, message: cancelled.message });
+      if (!cancelled.replay) appendHoldingOperation(freshHolding, {
+        operationId: cancelled.operationId,
+        type: "market-outbound",
+        createdAt: cancelledAt,
+        title: `Отменена исходящая продажа: ${cancelled.order.marketLabel}`,
+        summary: `Batch-бронь и спрос освобождены; возвращено ${formatCopperCurrency(cancelled.refundCopper)}.`,
+        payload: { orderId, orderOperationId: cancelled.order.operationId, refundCopper: cancelled.refundCopper }
+      });
+      return { ok: true, replay: cancelled.replay, refundCopper: cancelled.refundCopper };
+    }, { fallback: false, reason: "market:outbound-cancel" });
+    if (!result?.ok) return ui.notifications?.warn?.("Продажа уже отправлена или изменилась; отмена недоступна.");
     requestSkyholdAppRender();
     this.requestRender({ focus: false });
-    ui.notifications?.info?.(result.scheduled
-      ? `Заказ принят: ${marketServiceLabel(result.serviceLevel)}, ${marketTripCountText(result.batchCount)}. ETA ${result.batchCount > 1 ? `${result.firstDeliveryQd}–${result.deliveryQd}` : result.deliveryQd} QD, списано ${formatCopperCurrency(result.totalCopper)}.`
-      : `Заказ доставлен в поселение. Списано ${formatCopperCurrency(result.totalCopper)}.`);
+    ui.notifications?.info?.(`Исходящая продажа отменена. Возвращено ${formatCopperCurrency(result.refundCopper)}.`);
+  }
+
+  async _onResolveOutboundRisk(element) {
+    if (!game.user?.isGM) return ui.notifications?.warn?.("Событие исходящей поставки разрешает только GM.");
+    const orderId = String(element?.dataset?.orderId ?? "").trim();
+    const requestedOutcome = String(element?.dataset?.riskOutcome ?? "proposal");
+    if (!orderId || !["proposal", "clear", "delayed", "lost"].includes(requestedOutcome)) return;
+    const holding = this._marketSnapshot({ isGM: true }).holding;
+    const order = holding?.special?.market?.outbound?.orders?.find?.((row) => [row?.id, row?.operationId].some((value) => String(value ?? "") === orderId));
+    const riskContext = marketShipmentRiskContext(order, { isGM: true, formatPercent: percentText, formatCurrency: formatCopperCurrency });
+    if (!riskContext.canResolveRisk) return ui.notifications?.warn?.("Событие уже разрешено или недоступно.");
+    const delayQd = Math.max(1, Math.min(20, Math.ceil(Number(element?.dataset?.delayQd ?? riskContext.gmResolution?.delayQd) || 1)));
+    const confirmed = await foundryDialogV2().confirm({
+      window: { title: "Разрешить событие исходящей поставки" },
+      content: `<p><strong>${escapeHtml(order.marketLabel || "Внешний рынок")}</strong>: применить исход «${requestedOutcome === "proposal" ? riskContext.gmResolution?.proposalLabel : requestedOutcome}»?</p><p>При подтверждённой утрате спрос восстановится, товар на склад не вернётся, а страховая выплата будет начислена один раз.</p>`,
+      modal: true
+    });
+    if (!confirmed) return;
+    const workflow = getSkyholdWorkflowService();
+    const expectedResolutionId = String(order.riskResolutionId ?? "");
+    const resolvedAt = new Date().toISOString();
+    const operationId = `${expectedResolutionId || orderId}:gm-resolution`;
+    const result = await SkyholdData.updateHolding(this.holdingId, (freshHolding) => {
+      const freshOrder = freshHolding?.special?.market?.outbound?.orders?.find?.((row) => [row?.id, row?.operationId].some((value) => String(value ?? "") === orderId));
+      if (!freshOrder || String(freshOrder.riskResolutionId ?? "") !== expectedResolutionId) return SkyholdData.skipTransaction({ ok: false, stale: true });
+      const resolution = resolveMarketOutboundShipmentRisk({
+        holding: freshHolding,
+        orderId,
+        outcome: requestedOutcome,
+        delayQd,
+        operationId,
+        resolvedAt,
+        dependencies: {
+          addMoney: (target, amount) => workflow._addMoney(target, amount),
+          appendStorageLog: (target, entries) => workflow._appendStorageLog(target, entries),
+          formatCurrency: (amount) => formatCopperCurrency(amount)
+        }
+      });
+      if (!resolution.ok) return SkyholdData.skipTransaction({ ok: false, message: resolution.message });
+      if (!resolution.replay) appendHoldingOperation(freshHolding, {
+        operationId: resolution.operationId,
+        type: "market-outbound",
+        createdAt: resolvedAt,
+        title: `Разрешено событие исходящей продажи: ${freshOrder.marketLabel}`,
+        summary: resolution.outcome === "lost"
+          ? `Груз утрачен; спрос восстановлен${resolution.payoutCopper > 0 ? `; страховка ${formatCopperCurrency(resolution.payoutCopper)}` : ""}.`
+          : (resolution.outcome === "delayed" ? `Задержка +${resolution.delayQd} QD.`
+            : resolution.delivered?.ok ? "Груз доставлен; выручка поступила в бортовой кошелёк." : "Маршрут свободен; доставка продолжается."),
+        payload: { orderId, orderOperationId: freshOrder.operationId, outcome: resolution.outcome, delayQd: resolution.delayQd, payoutCopper: resolution.payoutCopper }
+      });
+      return { ok: true, replay: resolution.replay, outcome: resolution.outcome, delayQd: resolution.delayQd,
+        payoutCopper: resolution.payoutCopper, delivered: Boolean(resolution.delivered?.ok) };
+    }, { fallback: false, reason: "market:outbound-resolve-risk" });
+    if (!result?.ok) return ui.notifications?.warn?.("Событие изменилось или уже было разрешено. Обновите рынок.");
+    requestSkyholdAppRender();
+    this.requestRender({ focus: false });
+    ui.notifications?.info?.(result.replay ? "Событие уже было разрешено." : (result.outcome === "lost" ? `Груз утрачен${result.payoutCopper > 0 ? `; страховка ${formatCopperCurrency(result.payoutCopper)}` : ""}.` : result.outcome === "delayed" ? `Поставка задержана на ${result.delayQd} QD.` : result.delivered ? "Груз доставлен; выручка на борту." : "Поставка продолжит путь."));
   }
 
   async _onCancelShipment(element) {
+    if (!game.user?.isGM) return ui.notifications?.warn?.("Отменить рыночную поставку может только GM.");
     const orderId = String(element?.dataset?.orderId ?? "").trim();
     if (!orderId) return;
-    const snapshot = this._marketSnapshot();
-    const permissions = holdingPermissionContext(snapshot.holding);
-    if (!permissions.canManageMarkets) return ui.notifications?.warn?.(permissions.mayManageMarkets ? "Рыночные операции временно недоступны: нет активного authority-GM." : "GM не делегировал управление внешним рынком.");
-    const { holding } = snapshot;
+    const workflow = getSkyholdWorkflowService();
+    const { holding } = this._marketSnapshot({ isGM: true });
     const order = holding?.special?.market?.orders?.find?.((row) => [row?.id, row?.operationId].some((value) => String(value ?? "") === orderId));
     const cancellation = marketShipmentCancellationQuote(order);
     if (!cancellation.cancellable) return ui.notifications?.warn?.(cancellation.reason || "Эту поставку уже нельзя отменить.");
-    const cancellationContent = order?.ownedVesselDelivery
-      ? `<p>Собственный рейс ещё не начат. Корабль освободится, а в казну вернётся полная сумма: <strong>${formatCopperCurrency(cancellation.refundCopper)}</strong>.</p>`
-      : `<p>Заказ ещё не передан перевозчику. В казну вернётся <strong>${formatCopperCurrency(cancellation.refundCopper)}</strong>.</p><p>Бронирование маршрута, обработка и срочная надбавка не возвращаются: ${formatCopperCurrency(cancellation.withheldCopper)}.</p>`;
     const confirmed = await foundryDialogV2().confirm({
       window: { title: "Отменить рыночную поставку" },
-      content: cancellationContent,
+      content: `<p>Заказ ещё не передан перевозчику. В казну вернётся вся уплаченная сумма: <strong>${formatCopperCurrency(cancellation.refundCopper)}</strong>.</p><p>Зарезервированный товар также полностью вернётся в запас рынка.</p>`,
       modal: true
     });
     if (!confirmed) return;
-    const result = await requestStorageOperation({
-      type: "marketCancelShipment",
-      operationId: makeId("market-cancel", 20),
-      expectedRevision: Math.max(0, Number(snapshot.data?.meta?.revision) || 0),
-      holdingId: this.holdingId,
-      orderId,
-      marketId: this.marketId,
-      expectedSourceHash: snapshot.sourceHash
-    }).catch((error) => ({ ok: false, message: error?.message ?? String(error) }));
-    if (!result?.ok) return ui.notifications?.warn?.(result?.message || "Поставку уже передали перевозчику; отмена недоступна.");
+    const cancelledAt = new Date().toISOString();
+    const result = await SkyholdData.updateHolding(this.holdingId, (freshHolding) => {
+      const cancelled = cancelMarketShipment({
+        holding: freshHolding,
+        orderId,
+        cancelledAt,
+        dependencies: {
+          addMoney: (target, amount) => workflow._addMoney(target, amount),
+          appendStorageLog: (target, entries) => workflow._appendStorageLog(target, entries),
+          formatCurrency: (amount) => formatCopperCurrency(amount),
+          restoreMarketStock: (options) => restoreMarketStockReservations(options)
+        }
+      });
+      if (!cancelled.ok) return SkyholdData.skipTransaction({ ok: false, message: cancelled.message });
+      if (!cancelled.replay) appendHoldingOperation(freshHolding, {
+        operationId: cancelled.operationId,
+        type: "market-purchase",
+        createdAt: cancelledAt,
+        title: `Отменена поставка: ${cancelled.order.marketLabel}`,
+        summary: `Полный возврат ${formatCopperCurrency(cancelled.refundCopper)}.`,
+        payload: { orderId, orderOperationId: cancelled.order.operationId, refundCopper: cancelled.refundCopper, withheldCopper: cancelled.withheldCopper }
+      });
+      return { ok: true, replay: cancelled.replay, refundCopper: cancelled.refundCopper };
+    }, { fallback: false, reason: "market:cancel-shipment" });
+    if (!result?.ok) return ui.notifications?.warn?.("Поставку уже передали перевозчику; отмена недоступна.");
     requestSkyholdAppRender();
     this.requestRender({ focus: false });
     ui.notifications?.info?.(`Поставка отменена. В казну возвращено ${formatCopperCurrency(result.refundCopper)}.`);
+  }
+
+  async _onResolveShipmentRisk(element) {
+    if (!game.user?.isGM) return ui.notifications?.warn?.("Событие поставки может разрешить только GM.");
+    const orderId = String(element?.dataset?.orderId ?? "").trim();
+    const requestedOutcome = String(element?.dataset?.riskOutcome ?? "proposal");
+    if (!orderId || !["proposal", "clear", "delayed", "lost"].includes(requestedOutcome)) return;
+    const workflow = getSkyholdWorkflowService();
+    const { holding } = this._marketSnapshot({ isGM: true });
+    const order = holding?.special?.market?.orders?.find?.((row) => [row?.id, row?.operationId].some((value) => String(value ?? "") === orderId));
+    const riskContext = marketShipmentRiskContext(order, { isGM: true, formatPercent: percentText, formatCurrency: formatCopperCurrency });
+    if (!riskContext.canResolveRisk) return ui.notifications?.warn?.("Это событие уже разрешено или недоступно.");
+    const delayQd = Math.max(1, Math.min(20, Math.ceil(Number(element?.dataset?.delayQd ?? riskContext.gmResolution?.delayQd) || 1)));
+    const actionText = requestedOutcome === "proposal"
+      ? `Применить предложение: ${riskContext.gmResolution?.proposalLabel || "событие"}`
+      : requestedOutcome === "clear"
+        ? "Отменить событие и продолжить путь без последствий"
+        : requestedOutcome === "delayed"
+          ? `Изменить результат на задержку +${delayQd} QD`
+          : "Изменить результат на полную утрату груза";
+    const confirmed = await foundryDialogV2().confirm({
+      window: { title: "Разрешить событие поставки" },
+      content: `<p><strong>${escapeHtml(order.marketLabel || "Внешний рынок")}</strong>: ${actionText}?</p><p>Решение применяется только к этой партии. Страховая выплата возможна только при подтверждённой утрате.</p>`,
+      modal: true
+    });
+    if (!confirmed) return;
+
+    const expectedResolutionId = String(order.riskResolutionId ?? "");
+    const resolvedAt = new Date().toISOString();
+    const resolutionOperationId = `${expectedResolutionId || orderId}:gm-resolution`;
+    const result = await SkyholdData.updateHolding(this.holdingId, (freshHolding) => {
+      const freshOrder = freshHolding?.special?.market?.orders?.find?.((row) => [row?.id, row?.operationId].some((value) => String(value ?? "") === orderId));
+      if (!freshOrder || String(freshOrder.riskResolutionId ?? "") !== expectedResolutionId) {
+        return SkyholdData.skipTransaction({ ok: false, stale: true });
+      }
+      const resolution = resolveMarketShipmentRisk({
+        holding: freshHolding,
+        order: freshOrder,
+        outcome: requestedOutcome,
+        delayQd,
+        operationId: resolutionOperationId,
+        resolvedAt,
+        dependencies: {
+          addMoney: (target, amount) => workflow._addMoney(target, amount),
+          appendStorageLog: (target, entries) => workflow._appendStorageLog(target, entries),
+          formatCurrency: (amount) => formatCopperCurrency(amount)
+        }
+      });
+      if (!resolution.ok) return SkyholdData.skipTransaction({ ok: false, message: resolution.message });
+      if (!resolution.replay) {
+        const outcomeLabel = resolution.outcome === "lost"
+          ? "груз утрачен"
+          : resolution.outcome === "delayed"
+            ? `задержка +${resolution.delayQd} QD`
+            : "маршрут свободен, путь продолжен";
+        appendHoldingOperation(freshHolding, {
+          operationId: resolution.operationId,
+          type: "market-purchase",
+          createdAt: resolvedAt,
+          title: `Разрешено событие поставки: ${freshOrder.marketLabel}`,
+          summary: `${outcomeLabel}${resolution.payoutCopper > 0 ? `; страховка ${formatCopperCurrency(resolution.payoutCopper)}` : ""}.`,
+          payload: {
+            orderId,
+            orderOperationId: freshOrder.operationId,
+            outcome: resolution.outcome,
+            delayQd: resolution.delayQd,
+            payoutCopper: resolution.payoutCopper,
+            resolutionChoice: freshOrder.riskResolutionChoice,
+            gmResolution: true
+          }
+        });
+      }
+      return {
+        ok: true,
+        replay: resolution.replay,
+        outcome: resolution.outcome,
+        delayQd: resolution.delayQd,
+        payoutCopper: resolution.payoutCopper
+      };
+    }, { fallback: false, reason: "market:resolve-shipment-risk" });
+    if (!result?.ok) return ui.notifications?.warn?.("Событие изменилось или уже было разрешено. Обновите рынок.");
+    requestSkyholdAppRender();
+    this.requestRender({ focus: false });
+    const resultText = result.outcome === "lost"
+      ? `Груз утрачен${result.payoutCopper > 0 ? `; выплачено ${formatCopperCurrency(result.payoutCopper)}` : ""}.`
+      : result.outcome === "delayed"
+        ? `Поставка задержана на ${result.delayQd} QD.`
+        : "Событие отменено; поставка продолжит путь.";
+    ui.notifications?.info?.(result.replay ? "Событие уже было разрешено." : resultText);
   }
 
   async _onDeliverShipment(element) {
     if (!game.user?.isGM) return ui.notifications?.warn?.("Доставить груз сейчас может только GM.");
     const orderId = String(element?.dataset?.orderId ?? "").trim();
     if (!orderId) return;
-    const snapshot = this._marketSnapshot({ isGM: true });
-    const existing = snapshot.holding?.special?.market?.orders?.find?.((row) => [row?.id, row?.operationId].some((value) => String(value ?? "") === orderId));
-    if (existing?.ownedVesselDelivery) return ui.notifications?.warn?.("Доставка своим кораблём завершается только вместе с его рейсом по календарю.");
     const workflow = getSkyholdWorkflowService();
     const result = await SkyholdData.updateHolding(this.holdingId, (holding) => {
       const arrival = deliverMarketShipmentNow({
@@ -1314,7 +1317,8 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
           addMoney: (target, amount) => workflow._addMoney(target, amount),
           storageAddWithOverflow: (target, resource, qty) => workflow._storageAddWithOverflow(target, resource, qty),
           appendStorageLog: (target, entries) => workflow._appendStorageLog(target, entries),
-          formatCurrency: (amount) => formatCopperCurrency(amount)
+          formatCurrency: (amount) => formatCopperCurrency(amount),
+          internalDemandAvailableFromQd: (target) => internalDemandBatchClockQd(target)
         }
       });
       const delivered = arrival.delivered?.[0];
@@ -1324,8 +1328,8 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
         type: "market-purchase",
         createdAt: new Date().toISOString(),
         title: `Прибыла поставка: ${delivered.marketLabel}`,
-        summary: `${delivered.delivered.length} грузовых позиций доставлено вручную GM.`,
-        payload: { orderId: delivered.orderId, orderOperationId: delivered.orderOperationId, manual: true }
+        summary: `${delivered.delivered.length} грузовых позиций доставлено вручную GM${delivered.riskWaived ? "; ожидавшая проверки риска явно отменена GM" : ""}.`,
+        payload: { orderId: delivered.orderId, orderOperationId: delivered.orderOperationId, manual: true, riskWaived: Boolean(delivered.riskWaived), riskWaiverOperationId: String(delivered.riskWaiverOperationId ?? "") }
       });
       return { ok: true, count: delivered.delivered.length };
     }, { fallback: false, reason: "market:deliver-now" });
@@ -1340,24 +1344,8 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     this._marketAbortController?.abort?.();
     hideFloatingTooltip(this);
     SkyholdMarketApp.instances.delete(this.holdingId);
+    restoreApplicationFocus(this);
   }
-}
-
-export function createHeadlessMarketAdapter({ holdingId = "", marketId = "", quantities = {}, targetRoomId = "", serviceLevel = "standard", carrierId = "", exportOfferId = "", exportQuantity = 0, exportCarrierId = "", exportServiceLevel = "charter" } = {}) {
-  const adapter = Object.create(SkyholdMarketApp.prototype);
-  Object.assign(adapter, {
-    holdingId: String(holdingId ?? ""),
-    marketId: String(marketId ?? ""),
-    quantities: quantities && typeof quantities === "object" ? clone(quantities) : {},
-    targetRoomId: String(targetRoomId ?? ""),
-    serviceLevel: String(serviceLevel ?? "standard"),
-    carrierId: String(carrierId ?? ""),
-    exportOfferId: String(exportOfferId ?? ""),
-    exportQuantity: Math.max(0, Math.floor(Number(exportQuantity) || 0)),
-    exportCarrierId: String(exportCarrierId ?? ""),
-    exportServiceLevel: String(exportServiceLevel ?? "charter")
-  });
-  return adapter;
 }
 
 SkyholdMarketApp.DEFAULT_OPTIONS = {

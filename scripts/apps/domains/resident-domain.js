@@ -1,98 +1,41 @@
+import { specialMoraleModifier } from "../../core/special-effects.js";
+import { residentLaborCapacity } from "../../data/labor-budget.js";
+import { selectionSummary } from "../common/selection-summary.js";
+import { residentTraitTooltip } from "../common/resident-trait-chips.js";
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import { traitBadges, traitMorale, traitOptions } from "../../generators/trait-definitions.js";
 import { CULTURE_NAMES } from "../../generators/name-pools.js";
 import { ageGroupFromAge, ageThresholdsFor, attributeSummary, normalizeBelief, raceKeyFromResident, socialBackgroundOptions, workerTypeFromAttributes, workerTypeStyleFromAttributes } from "../../generators/resident-rules.js";
 import { buildingOperationalState } from "../../core/building-state.js";
-import { compensationContractWarning, compensationTypeLabel, compensationTypeOptions, personBoardFoodDaily, personCashWageDaily, personShareRate } from "../../core/compensation.js";
-import { fleetVesselAvailableCopper, VESSEL_STATUSES } from "../../data/normalizers/fleet.js";
-import { calculateMoraleSnapshot, moraleBandForScore } from "../../engines/morale/morale-snapshot.js";
-import { EMPLOYMENT_MODE_IDS, EMPLOYMENT_SEASON_IDS } from "../../data/labor/employment-terms.js";
-import { WAGE_CATALOG, normalizeWageIndex, wageCopperPerTenday } from "../../data/labor/wage-catalog.js";
-import { normalizePayrollState } from "../../data/labor/payroll-state.js";
-import { assessNextTendayLabor } from "../../engines/labor/labor-consequences.js";
-import { foodProvisionModeOptions, foodProvisionWarning, normalizeFoodProvisionMode } from "../../data/food-provision.js";
-
-const EMPLOYMENT_MODE_LABELS = Object.freeze({
-  permanent: "Постоянный",
-  seasonal: "Сезонный",
-  "day-labor": "Подённый"
-});
-
-const EMPLOYMENT_SEASON_LABELS = Object.freeze({
-  spring: "Весна",
-  summer: "Лето",
-  autumn: "Осень",
-  winter: "Зима"
-});
-
-const FREE_RESIDENT_ASSIGNMENTS = new Set(["", "free", "unassigned", "child", "свободен", "без работы", "ребенок", "ребёнок"]);
-
-const LABOR_CONTRACT_REASON_LABELS = Object.freeze({
-  active: "Договор активен",
-  dependent: "Иждивение: труд не предусмотрен",
-  "missing-wage-class": "Не выбран класс ставки Economy V2",
-  "invalid-contract-term": "Неверный срок оплачиваемого договора",
-  "missing-current-qd": "Не определена дата следующего десятника",
-  "missing-season": "Не определён сезон следующего десятника",
-  "before-contract": "Договор ещё не начался",
-  "after-contract": "Договор завершён",
-  "inactive-season": "Сезонный договор сейчас неактивен",
-  "missing-share-rate": "Не задана положительная доля результата",
-  "volunteer-missing-reason": "Не указана причина добровольной работы",
-  "volunteer-missing-term": "Не задан конечный срок добровольной работы",
-  "volunteer-invalid-term": "Неверный срок добровольной работы",
-  "volunteer-not-started": "Добровольная работа ещё не началась",
-  "volunteer-expired": "Срок добровольной работы завершён",
-  "coerced-missing-basis": "Не указано основание принудительного труда",
-  "unknown-compensation-type": "Неизвестный тип договора"
-});
-
-const LABOR_EVENT_RISK_DESCRIPTIONS = Object.freeze({
-  "volunteer-fatigue": "Усталость добровольца: возможны просьба об отдыхе или отказ продолжать работу.",
-  "coerced-labor-unrest": "Принудительный труд: высок риск сопротивления, побега или открытого конфликта.",
-  "payroll-arrears-unrest": "Долгая просрочка оплаты: возможен трудовой спор, отказ от работы или уход.",
-  "hunger-crisis": "Продолжительный голод: возможны болезнь, уход жителей или продовольственный конфликт."
-});
-
-const LABOR_RISK_LEVEL_LABELS = Object.freeze({ low: "низкий", medium: "средний", high: "высокий" });
-
-function laborPercent(value) {
-  const numeric = Number(value);
-  return `${Math.round(Math.max(0, Math.min(1, Number.isFinite(numeric) ? numeric : 0)) * 100)}%`;
-}
-
-function signedLaborValue(value) {
-  const numeric = Number(value);
-  const safe = Number.isFinite(numeric) ? numeric : 0;
-  return `${safe > 0 ? "+" : ""}${String(safe).replace(".", ",")}`;
-}
-
-function contractStateText(assessment = {}) {
-  const reason = String(assessment?.contract?.reason ?? "");
-  const label = LABOR_CONTRACT_REASON_LABELS[reason] ?? `Состояние договора: ${reason || "не определено"}`;
-  if (assessment?.blocked) return `Заблокировано: ${label}`;
-  if (!assessment?.contractValid) return `Нужно исправить: ${label}`;
-  if (!assessment?.contractActive) return label;
-  if (assessment?.physicalReason && assessment.physicalReason !== "available") return `${label}; житель физически недоступен`;
-  if (!assessment?.assignedAsWorker) return `${label}; рабочего назначения нет`;
-  return label;
-}
-
-function laborRiskRows(risks = []) {
-  return risks.map((risk) => {
-    const id = String(risk?.id ?? "");
-    const level = String(risk?.level ?? "low");
-    const levelLabel = LABOR_RISK_LEVEL_LABELS[level] ?? level;
-    const description = LABOR_EVENT_RISK_DESCRIPTIONS[id] ?? `Социальный риск: ${id || "не определён"}.`;
-    return { ...risk, id, level, levelLabel, description: `${description} Уровень: ${levelLabel}.` };
-  });
-}
+import { resourceLabel } from "../../core/resources.js";
+import {
+  buildingConfirmedHarmActive,
+  buildingConfirmedLeisureCapacity,
+  buildingConfirmedServiceCapacity,
+  buildingConfirmedSocialStatus,
+  scaleIntegerBuildingEffect
+} from "../../engines/economy/building-service.js";
+import { settlementControlSummary } from "../../engines/settlement/control.js";
+import { politicsRuntimeEffects } from "../../engines/politics/runtime-effects.js";
+import { isResidentAway, residentShipAssignment, shipForResident, isResidentRestingOnShip, isResidentInPopulation } from "../../data/resident-presence.js";
+import {
+  COMMANDER_MIN_WITS,
+  MANAGER_SQUAD_TYPE_PROFILES,
+  residentSoldierEfficiency,
+  residentSuitableForSquadType
+} from "../../data/military-resident-rules.js";
+import {
+  buildWorkAllocationTargets,
+  validateWorkAllocationPlan,
+  WORK_ALLOCATION_MODE_EXPLICIT,
+  workAllocationTargetKey
+} from "../../data/work-allocations.js";
 
 export const ResidentDomain = {
 _prepareRows(holding, canEdit, activeTab = "overview", options = {}) {
-  if (!holding) return { people: [], buildings: [], special: [], cemetery: [], storage: [] };
+  if (!holding) return { people: [], residentWorkOptionCatalog: [], buildings: [], special: [], cemetery: [], storage: [] };
 
-  const rows = { people: [], buildings: [], special: [], cemetery: [], storage: [] };
+  const rows = { people: [], residentWorkOptionCatalog: [], buildings: [], special: [], cemetery: [], storage: [] };
   const tab = String(activeTab ?? "overview");
   const canEditBuildings = Boolean(options?.canEditBuildings ?? canEdit);
 
@@ -100,7 +43,11 @@ _prepareRows(holding, canEdit, activeTab = "overview", options = {}) {
   // lines. Preparing every tab on every render was the main source of UI lag.
   // Only prepare the rows that the active template branch can actually render.
   if (tab === "people") {
-    rows.people = this._preparePersonRows(holding, canEdit, "living", true);
+    const workOptionsContext = this._residentWorkOptionsContext(holding);
+    const hasRestingCrew = (holding.people?.list ?? []).some((person) => isResidentRestingOnShip(person, holding));
+    const mode = options.activePeopleTab === "ship-crew" && hasRestingCrew ? "ship-crew" : "residents";
+    rows.people = this._preparePersonRows(holding, canEdit, mode, true, { workOptionsContext, editorPersonId: "" });
+    rows.residentWorkOptionCatalog = canEdit ? this._residentWorkOptionCatalog(workOptionsContext) : [];
   }
 
   if (tab === "buildings") rows.buildings = this._prepareBuildingRows(holding, canEditBuildings, options);
@@ -117,24 +64,10 @@ _prepareRows(holding, canEdit, activeTab = "overview", options = {}) {
   return rows;
 },
 
-_preparePersonRows(holding, canEdit = false, mode = "living", applyFilters = true) {
+_preparePersonRows(holding, canEdit = false, mode = "living", applyFilters = true, options = {}) {
   const housingIndex = this._residentHousingIndex(holding);
-  const workOptionsContext = this._residentWorkOptionsContext(holding);
+  const workOptionsContext = options?.workOptionsContext ?? this._residentWorkOptionsContext(holding);
   const workAssignments = this._peopleWorkAssignments(holding, workOptionsContext);
-  const laborState = holding?.gm?.economy?.labor ?? {};
-  const wageIndex = normalizeWageIndex(laborState.wageIndex);
-  const payrollState = normalizePayrollState(laborState.payroll);
-  const lastQd = Math.max(0, Math.floor(this._safeNumber(holding?.gm?.calendaria?.lastQd, 0)));
-  let laborPeriod = { targetQd: lastQd + 40, season: "" };
-  try {
-    const localPeriod = this._employmentPeriodContext?.(holding, 40) ?? null;
-    if (localPeriod) {
-      laborPeriod = {
-        targetQd: Math.max(0, Math.floor(this._safeNumber(localPeriod.targetQd, lastQd + 40))),
-        season: String(localPeriod.targetSeason ?? localPeriod.currentSeason ?? "").trim().toLocaleLowerCase("en")
-      };
-    }
-  } catch (_error) {}
   const medicalIds = new Set();
   try {
     const assignments = this._medicalAssignments?.(holding);
@@ -142,8 +75,40 @@ _preparePersonRows(holding, canEdit = false, mode = "living", applyFilters = tru
       for (const patient of entry?.patients ?? []) medicalIds.add(String(patient?.id ?? ""));
     }
   } catch (_error) {}
-  const people = (holding?.people?.list ?? []).map((row, index) => {
+  const sourceRows = (holding?.people?.list ?? [])
+    .map((row, index) => ({ row, index }))
+    .filter(({ row }) => mode === "cemetery" ? Boolean(row?.dead) : !row?.dead)
+    .filter(({ row }) => mode === "ship-crew" ? isResidentRestingOnShip(row, holding)
+      : mode === "residents" ? !isResidentRestingOnShip(row, holding) : true);
+  const people = [];
+  const shipsById = new Map((holding?.special?.ships?.list ?? [])
+    .map((ship) => [String(ship?.id ?? ""), ship])
+    .filter(([id]) => id));
+  let workAllocationTargets = null;
+  let workAllocationTargetMap = null;
+
+  for (const { row, index } of sourceRows) {
     const morale = this._calculatePersonMorale(row, holding, { housingIndex });
+    const isChild = this._isChildResident(row);
+    const canWork = this._canResidentWork(row, holding);
+    const shipAssignment = residentShipAssignment(row);
+    const awayOnShip = isResidentAway(row);
+    const assignedShip = shipForResident(row, holding) ?? (awayOnShip ? shipsById.get(String(shipAssignment?.shipId ?? "")) : null);
+    const restingOnShip = isResidentRestingOnShip(row, holding);
+    const shipPresenceLabel = awayOnShip
+      ? `На корабле «${String(assignedShip?.name || shipAssignment?.shipId || "неизвестный корабль")}»`
+      : restingOnShip ? `Отдых на корабле «${assignedShip?.name || "корабль"}»` : "";
+    const rawWorkLabel = workAssignments.get(String(row.id)) || row.role || "";
+    const settlementWorkLabel = rawWorkLabel && !["Свободен", "Без работы"].includes(String(rawWorkLabel)) ? rawWorkLabel : (isChild ? "Ребенок" : (rawWorkLabel || "Без работы"));
+    const workLabel = shipPresenceLabel || settlementWorkLabel;
+    const homeLabel = this._homeLabel(row, holding, housingIndex);
+    const workerTypeLabel = this._workerType(row);
+    const injuredDays = Math.max(0, this._safeNumber(row.injuredDays, 0));
+    const isInjured = this._isResidentInjured(row);
+    const inMedicalCare = injuredDays > 0 && medicalIds.has(String(row.id ?? ""));
+    const filterRow = { workerTypeLabel, workLabel, homeLabel, moraleValue: morale.total, restingOnShip };
+    if (applyFilters && !this._personMatchesResidentFilters(filterRow)) continue;
+
     const traits = this._parseTraits(row.traitsText ?? row.traits);
     const badges = this._traitBadges(row.traitsText ?? row.traits);
     const noteTooltip = this._personNote(row);
@@ -151,62 +116,28 @@ _preparePersonRows(holding, canEdit = false, mode = "living", applyFilters = tru
       const name = String(badge?.name ?? "").trim();
       return {
         ...badge,
+        tooltip: residentTraitTooltip(badge),
         shortLabel: name.slice(0, 1).toUpperCase() || "?"
       };
     });
-    const isChild = this._isChildResident(row);
-    const rawWorkLabel = workAssignments.get(String(row.id)) || row.role || "";
-    const workLabel = rawWorkLabel && !["Свободен", "Без работы"].includes(String(rawWorkLabel)) ? rawWorkLabel : (isChild ? "Ребенок" : (rawWorkLabel || "Без работы"));
-    const injuredDays = Math.max(0, this._safeNumber(row.injuredDays, 0));
-    const isInjured = this._isResidentInjured(row);
-    const inMedicalCare = injuredDays > 0 && medicalIds.has(String(row.id ?? ""));
-    const compensationWarning = compensationContractWarning(row);
-    const provisionWarning = foodProvisionWarning(row);
-    const personId = String(row.id ?? "");
-    const payrollAccount = payrollState.accounts[personId] ?? null;
-    const assignmentKey = String(row.workAssignment ?? "").trim().toLocaleLowerCase("ru");
-    const assignedAsWorker = !FREE_RESIDENT_ASSIGNMENTS.has(assignmentKey);
-    const laborAssessment = assessNextTendayLabor(row, {
-      currentQd: laborPeriod.targetQd,
-      season: laborPeriod.season,
-      payrollAccount,
-      hungerStreak: row.hungerStreakTendays,
-      assignedAsWorker,
-      living: !row.dead,
-      child: isChild,
-      injured: isInjured
-    });
-    const arrearsComponent = laborAssessment.components.find((component) => component.id === "arrears");
-    const hungerComponent = laborAssessment.components.find((component) => component.id === "hunger");
-    const laborRisks = laborRiskRows(laborAssessment.eventRisks);
-    const laborProjectionAttention = laborAssessment.blocked
-      || laborAssessment.contractValid === false
-      || (assignedAsWorker && laborAssessment.laborFactor < 1)
-      || (arrearsComponent?.streakTendays ?? 0) > 0
-      || (hungerComponent?.streakTendays ?? 0) > 0
-      || laborRisks.length > 0;
-    const laborProjectionClass = laborAssessment.blocked
-      ? "is-blocked"
-      : (laborProjectionAttention ? "has-risk" : "is-ready");
-    const laborProjectionBadgeClass = laborAssessment.blocked
-      ? "is-danger"
-      : (laborProjectionAttention ? "is-warning" : "is-success");
-    const wageClass = WAGE_CATALOG.find((entry) => entry.id === String(row.wageClassId ?? "")) ?? null;
-    const wageClassOptions = [
-      { value: "", label: "Не выбран (старый договор)", selected: !wageClass },
-      ...WAGE_CATALOG.map((entry) => ({
-        value: entry.id,
-        label: `${entry.label} — ${this._formatCopperCurrency(wageCopperPerTenday(entry.id, { wageIndex }))} / десятник`,
-        selected: entry.id === wageClass?.id
-      }))
-    ];
-    return {
+    const raceLine = this._raceLine(row);
+    const editorPersonId = Object.hasOwn(options ?? {}, "editorPersonId")
+      ? String(options.editorPersonId ?? "")
+      : String(this.editingPersonId ?? "");
+    const editing = canEdit && String(row.id ?? "") === editorPersonId;
+    const prepared = {
       ...row,
       _index: index,
       ageGroup: this._ageGroup(row),
       ageLine: this._ageLine(row),
-      raceLine: this._raceLine(row),
+      raceLine,
       workLabel,
+      awayOnShip,
+      restingOnShip,
+      onBoardOnly: restingOnShip || awayOnShip,
+      assignedShipId: assignedShip?.id ?? "",
+      assignedShipName: assignedShip?.name ?? "",
+      shipPresenceLabel,
       dead: Boolean(row.dead),
       injured: isInjured,
       injuredDays,
@@ -215,144 +146,104 @@ _preparePersonRows(holding, canEdit = false, mode = "living", applyFilters = tru
       injuredTitle: inMedicalCare ? `Лежит в лазарете: ${injuredDays} дн.` : `Ранен: ${injuredDays} дн.`,
       deadClass: row.dead ? "dead" : (isInjured ? "injured" : "living"),
       deathLine: row.dead ? (row.deathDate ? `Погиб: ${row.deathDate}` : "Погиб") : "",
-      homeLabel: this._homeLabel(row, holding, housingIndex),
-      homeOptions: this._homeOptions(holding, row.home, housingIndex),
-      workOptions: this._workOptions(holding, row, workOptionsContext),
-      isCustomWork: this._isCustomWork(row, holding, workOptionsContext),
-      cultureOptions: this._cultureOptions(row.culture),
-      beliefOptions: this._beliefOptions(row.belief),
-      backgroundOptions: socialBackgroundOptions(row.background),
-      compensationOptions: compensationTypeOptions(row.compensationType),
-      compensationTypeLabel: compensationTypeLabel(row.compensationType),
-      cashWageDaily: personCashWageDaily(row),
-      boardFoodDaily: personBoardFoodDaily(row),
-      foodProvisionMode: normalizeFoodProvisionMode(row.foodProvisionMode, { boardFoodDaily: row.boardFoodDaily }),
-      foodProvisionOptions: foodProvisionModeOptions(row),
-      foodProvisionWarning: provisionWarning,
-      hasFoodProvisionWarning: Boolean(provisionWarning),
-      shareRate: personShareRate(row),
-      baseWageDailyText: this._formatNumber?.(row.baseWageDaily ?? 0) ?? String(row.baseWageDaily ?? 0),
-      compensationWarning,
-      hasCompensationWarning: Boolean(compensationWarning),
-      wageClassOptions,
-      wageClassLabel: wageClass?.label ?? "Старый договор",
-      employmentModeOptions: EMPLOYMENT_MODE_IDS.map((value) => ({
-        value,
-        label: EMPLOYMENT_MODE_LABELS[value] ?? value,
-        selected: value === String(row.employmentMode ?? "permanent")
-      })),
-      employmentSeasonOptions: EMPLOYMENT_SEASON_IDS.map((key) => ({
-        key,
-        label: EMPLOYMENT_SEASON_LABELS[key] ?? key,
-        checked: row.employmentSeasonMask?.[key] === true
-      })),
-      employmentContractStartQdValue: row.employmentContractStartQd ?? "",
-      employmentContractEndQdValue: row.employmentContractEndQd ?? "",
-      employmentTariffText: wageClass
-        ? this._formatCopperCurrency(wageCopperPerTenday(wageClass.id, { wageIndex }))
-        : "—",
-      wageIndexText: this._formatNumber?.(wageIndex) ?? String(wageIndex),
-      payrollArrearsCopper: payrollAccount?.arrearsCopper ?? 0,
-      payrollArrearsText: this._formatCopperCurrency(payrollAccount?.arrearsCopper ?? 0),
-      payrollOverdueTendays: payrollAccount?.overdueTendays ?? 0,
-      hasPayrollArrears: (payrollAccount?.arrearsCopper ?? 0) > 0,
-      isVolunteerContract: String(row.compensationType ?? "") === "volunteer",
-      isCoercedContract: String(row.compensationType ?? "") === "coerced",
-      volunteerTermStartQdValue: row.volunteerTermStartQd ?? "",
-      volunteerTermEndQdValue: row.volunteerTermEndQd ?? "",
-      hungerStreakTendays: Math.max(0, Math.floor(this._safeNumber(row.hungerStreakTendays, 0))),
-      laborAssessment,
-      laborContractStateId: String(laborAssessment.contract?.reason ?? ""),
-      laborContractStateText: contractStateText(laborAssessment),
-      laborProjectionClass,
-      laborProjectionBadgeClass,
-      laborProjectionAttention,
-      laborProjectionBadgeText: laborAssessment.blocked ? "труд забл." : laborPercent(laborAssessment.laborFactor),
-      laborProjectionFactorText: laborPercent(laborAssessment.laborFactor),
-      laborProjectionMoraleText: signedLaborValue(laborAssessment.moraleDelta),
-      laborProjectionDescription: laborAssessment.description,
-      laborProjectionQd: laborAssessment.evaluationQd,
-      laborProjectionSeasonText: EMPLOYMENT_SEASON_LABELS[laborAssessment.season] ?? (laborAssessment.season || "не определён"),
-      laborAssignmentText: assignedAsWorker ? "есть основное назначение" : "нет рабочего назначения",
-      laborArrearsStepText: arrearsComponent?.description ?? "Просрочка оплаты: труд 100%, довольство +0.",
-      laborHungerStepText: hungerComponent?.description ?? "Голод: труд 100%, довольство +0.",
-      laborProjectionBlockers: laborAssessment.blockers,
-      hasLaborProjectionBlockers: laborAssessment.blockers.length > 0,
-      laborProjectionRisks: laborRisks,
-      hasLaborProjectionRisks: laborRisks.length > 0,
+      homeLabel,
       traitsBrief: traits.length ? traits.join(", ") : "—",
       traitBadges: displayBadges,
-      traitOptions: traitOptions(traits),
+      traitSelection: selectionSummary(displayBadges.map(badge => badge.name), "Черт нет"),
       hasTraitBadges: badges.length > 0,
       noteTooltip,
-      workerTypeLabel: this._workerType(row),
+      workerTypeLabel,
       workerTypeStyle: this._workerTypeStyle(row),
       attributeSummary: this._attributeSummary(row),
       moraleValue: morale.total,
       moraleTooltip: morale.breakdown.join("\n"),
-      searchText: [row.name, this._raceLine(row), row.culture, this._workerType(row), workLabel, this._homeLabel(row, holding, housingIndex), traits.join(" "), row.belief, row.background, compensationTypeLabel(row.compensationType), row.compensationNote, row.volunteerReason, row.coercionBasis, contractStateText(laborAssessment)]
+      searchText: [row.name, raceLine, row.culture, workerTypeLabel, workLabel, shipPresenceLabel, homeLabel, traits.join(" "), row.belief, row.background]
         .map((value) => String(value ?? "").toLowerCase())
         .join(" "),
-      editing: canEdit && row.id === this.editingPersonId
+      editing
     };
-  }).filter((row) => mode === "cemetery" ? Boolean(row.dead) : !row.dead);
-  return applyFilters ? this._filterPeopleRows(people) : people;
+
+    if (canEdit) {
+      const inlineWork = this._residentInlineWorkOption(row, workLabel, workOptionsContext);
+      Object.assign(prepared, {
+        workInlineValue: inlineWork.value,
+        workInlineLabel: inlineWork.label,
+        workFreeLabel: inlineWork.freeLabel,
+        workCanAssign: inlineWork.canWork
+      });
+    }
+
+    if (editing) {
+      workAllocationTargets ??= buildWorkAllocationTargets(holding);
+      workAllocationTargetMap ??= new Map(workAllocationTargets.map((target) => [target.key, target]));
+      const laborCapacity = residentLaborCapacity(row);
+      const normalWorkCap = canWork ? laborCapacity.normalQd : 0;
+      const overtimeWorkCap = canWork ? laborCapacity.overtimeQd : 0;
+      const workAllocationValidation = validateWorkAllocationPlan(row?.workAllocations, {
+        targets: workAllocationTargetMap,
+        maximumNormalQd: normalWorkCap,
+        maximumOvertimeQd: overtimeWorkCap
+      });
+      const workAllocations = workAllocationValidation.rows.map((allocation, allocationIndex) => {
+        const selectedKey = workAllocationTargetKey(allocation.sourceId, allocation.functionId);
+        const targetOptions = workAllocationTargets.map((target) => ({
+          value: target.key,
+          label: target.label,
+          selected: target.key === selectedKey,
+          overtimeAllowed: canWork && !isChild && target.overtimeAllowed
+        }));
+        if (selectedKey && !workAllocationTargetMap.has(selectedKey)) {
+          targetOptions.unshift({ value: selectedKey, label: `Недоступная функция (${selectedKey})`, selected: true, overtimeAllowed: false });
+        }
+        targetOptions.unshift({ value: "", label: "— Выберите функцию —", selected: !selectedKey, overtimeAllowed: false });
+        return {
+          ...allocation,
+          _index: allocationIndex,
+          selectedKey,
+          targetOptions,
+          overtimeAllowed: canWork && !isChild && Boolean(workAllocationTargetMap.get(selectedKey)?.overtimeAllowed)
+        };
+      });
+      Object.assign(prepared, {
+        homeOptions: this._homeOptions(holding, row.home, housingIndex),
+        workOptions: this._workOptions(holding, row, workOptionsContext),
+        workAllocationExplicit: String(row?.workAllocationMode ?? "") === WORK_ALLOCATION_MODE_EXPLICIT,
+        workAllocationModeOptions: [
+          { value: "legacy", label: "Одно основное назначение", selected: String(row?.workAllocationMode ?? "legacy") !== WORK_ALLOCATION_MODE_EXPLICIT },
+          { value: WORK_ALLOCATION_MODE_EXPLICIT, label: "Явный план QD", selected: String(row?.workAllocationMode ?? "") === WORK_ALLOCATION_MODE_EXPLICIT }
+        ],
+        workAllocations,
+        workAllocationNormalQd: workAllocationValidation.totals.normalQd,
+        workAllocationOvertimeQd: workAllocationValidation.totals.overtimeQd,
+        workAllocationNormalCap: normalWorkCap,
+        workAllocationOvertimeCap: overtimeWorkCap,
+        workAllocationValid: workAllocationValidation.ok,
+        workAllocationIssueText: workAllocationValidation.issues.map((issue) => issue.message).join(" · "),
+        isCustomWork: this._isCustomWork(row, holding, workOptionsContext),
+        cultureOptions: this._cultureOptions(row.culture),
+        beliefOptions: this._beliefOptions(row.belief),
+        backgroundOptions: socialBackgroundOptions(row.background),
+        traitOptions: traitOptions(traits)
+      });
+    }
+    people.push(prepared);
+  }
+  return people;
 },
 
 _prepareSpecialTabs(holding) {
   const people = holding?.people?.list ?? [];
   const dead = people.filter((person) => person?.dead).length;
   const records = holding?.special?.list?.length ?? 0;
-  const vessels = holding?.special?.fleet?.vessels?.filter((vessel) => vessel?.status !== "archived" && (game.user?.isGM || vessel?.visibility !== "gm"))?.length ?? 0;
-  const active = ["records", "fleet", "cemetery"].includes(this.activeSpecialTab) ? this.activeSpecialTab : "records";
+  const active = ["records", "cemetery"].includes(this.activeSpecialTab) ? this.activeSpecialTab : "records";
   return [
     { id: "records", label: "Записи", icon: "fa-solid fa-sparkles", count: records, tabCount: records, active: active === "records" },
-    { id: "fleet", label: "Корабли", icon: "fa-solid fa-ship", count: vessels, tabCount: vessels, active: active === "fleet" },
     { id: "cemetery", label: "Кладбище", icon: "fa-solid fa-skull", count: dead, tabCount: dead, active: active === "cemetery" }
   ];
 },
 
-_prepareFleetCards(holding) {
-  const activeVesselId = String(holding?.special?.fleet?.activeVesselId ?? "");
-  return (holding?.special?.fleet?.vessels ?? [])
-    .filter((vessel) => vessel?.status !== "archived" && (game.user?.isGM || vessel?.visibility !== "gm"))
-    .map((vessel) => {
-      const voyage = vessel?.activeVoyage ?? null;
-      const gross = Math.max(0, Number(voyage?.outboundRevenueCopper) || 0) + Math.max(0, Number(voyage?.returnRevenueCopper) || 0);
-      const cost = Math.max(0, Number(voyage?.operatingCostCopper) || 0);
-      const location = String(vessel?.position?.locationLabel ?? "").trim()
-        || (String(vessel?.position?.dockedAtHoldingId ?? "") === String(holding?.id ?? "") ? holding.name : "Местоположение не указано");
-      const condition = Math.min(
-        Math.max(0, Number(vessel?.condition?.hull) || 0),
-        Math.max(0, Number(vessel?.condition?.lift) || 0),
-        Math.max(0, Number(vessel?.condition?.machinery) || 0)
-      );
-      return {
-        ...vessel,
-        active: String(vessel.id ?? "") === activeVesselId,
-        statusLabel: VESSEL_STATUSES[vessel.status] ?? vessel.status,
-        location,
-        condition,
-        cashText: this._formatCopperCurrency(vessel?.finances?.cashCopper ?? 0),
-        availableText: this._formatCopperCurrency(fleetVesselAvailableCopper(vessel)),
-        hasVoyage: Boolean(voyage),
-        voyageTitle: voyage?.title ?? "",
-        voyageEta: voyage ? `ETA QD ${voyage.etaQd}` : "",
-        voyageResultText: voyage ? this._formatCopperCurrency(gross - cost - Math.max(0, Number(voyage?.replacementReserveCopper) || 0)) : ""
-      };
-    });
-},
-
 _squadTypeDefs() {
-  return {
-    line: { label: "Линейная пехота", tag: "Пехота", icon: "fa-solid fa-person-rifle", counterTag: "infantry", attrs: ["strength", "agility"], min: { strength: 3, agility: 3 }, hint: "Универсальный строй. Нужны Сила 3+ и Ловкость 3+. Эффективность идет от Силы и Ловкости." },
-    fusiliers: { label: "Фузилеры", tag: "Огневые", icon: "fa-solid fa-bullseye", counterTag: "shooters", attrs: ["agility"], min: { strength: 3, agility: 4 }, hint: "Линейный стрелковый отряд. Нужны Сила 3+ и Ловкость 4+. Эффективность идет от Ловкости." },
-    jaegers: { label: "Егеря", tag: "Егеря", icon: "fa-solid fa-eye", counterTag: "skirmishers", attrs: ["agility", "wits"], min: { strength: 3, agility: 4, wits: 3 }, hint: "Легкая пехота, разведчики и охотники. Нужны Сила 3+, Ловкость 4+ и Разум 3+. Эффективность идет от Ловкости и Разума." },
-    grenadiers: { label: "Гренадеры", tag: "Тяжелые", icon: "fa-solid fa-shield-halved", counterTag: "heavy", attrs: ["strength"], min: { strength: 4, agility: 3 }, hint: "Отборные штурмовики. Нужны Сила 4+ и Ловкость 3+. Эффективность идет от Силы." },
-    sappers: { label: "Саперы", tag: "Саперы", icon: "fa-solid fa-hammer", counterTag: "sappers", attrs: ["wits"], min: { strength: 3, agility: 3, wits: 4 }, hint: "Инженерный отряд. Нужны Сила 3+, Ловкость 3+ и Разум 4+. Эффективность идет от Разума." },
-    artillery: { label: "Артиллерийская команда", tag: "Осадные", icon: "fa-solid fa-tower-observation", counterTag: "siege", attrs: ["wits"], min: { strength: 3, agility: 3, wits: 4 }, hint: "Расчет тяжелого оружия. Нужны Сила 3+, Ловкость 3+ и Разум 4+. Эффективность идет от Разума." },
-    cavalry: { label: "Драгуны / конные", tag: "Мобильные", icon: "fa-solid fa-horse", counterTag: "mobile", attrs: ["agility"], min: { strength: 3, agility: 4 }, hint: "Быстрый отряд для вылазок и погони. Нужны Сила 3+ и Ловкость 4+. Эффективность идет от Ловкости." }
-  };
+  return MANAGER_SQUAD_TYPE_PROFILES;
 },
 
 _isMilitaryBackgroundResident(person = {}) {
@@ -363,7 +254,7 @@ _isMilitaryBackgroundResident(person = {}) {
 _isCommanderCandidate(person = {}) {
   if (!this._isSoldierResident(person) || this._isResidentInjured(person) || person?.dead) return false;
   const attrs = person?.attributes ?? {};
-  return this._safeNumber(attrs.wits, 0) >= 5 && this._isMilitaryBackgroundResident(person);
+  return this._safeNumber(attrs.wits, 0) >= COMMANDER_MIN_WITS;
 },
 
 _defenseRenderContext(holding) {
@@ -395,7 +286,7 @@ _defensePersonOptions(holding, selected = "", { soldiersOnly = false, sergeantsO
   if (!renderContext.filteredCache.has(cacheKey)) {
     renderContext.filteredCache.set(cacheKey, renderContext.activePeople.filter((person) => {
       const hasProfession = this._hasSoldierProfession?.(person) === true;
-      if (commandersOnly) return hasProfession && !this._isChildResident?.(person);
+      if (commandersOnly) return hasProfession && !this._isChildResident?.(person) && this._isCommanderCandidate(person);
       if (sergeantsOnly) return hasProfession && this._isSergeantCandidate(person) && this._isSuitableForSquadType(person, squadType);
       if (soldiersOnly) return hasProfession && this._isSuitableForSquadType(person, squadType);
       return this._isSuitableForSquadType(person, squadType);
@@ -411,7 +302,7 @@ _defensePersonOptions(holding, selected = "", { soldiersOnly = false, sergeantsO
     const text = [person?.type, person?.workerType, person?.role, person?.background, person?.traits, person?.notes].map((value) => String(value ?? "").toLowerCase()).join(" ");
     const commanderEff = commandersOnly
       ? Math.min(3, Math.max(0,
-        (this._safeNumber(attrs.wits, 0) >= 5 || /команд|началь|офиц|тактик|стратег|разум|мыслител|писарь|уч[её]н|воевод|капитан/i.test(text) ? 1 : 0)
+        (this._safeNumber(attrs.wits, 0) >= COMMANDER_MIN_WITS || /команд|началь|офиц|тактик|стратег|разум|мыслител|писарь|уч[её]н|воевод|капитан/i.test(text) ? 1 : 0)
         + (this._isMilitaryBackgroundResident(person) || this._isSoldierResident(person) ? 1 : 0)
         + (/лидер|вожд|команд|офиц|капитан|тактик|стратег|авторитет|харизм|дисциплин/i.test(text) ? 1 : 0)))
       : 0;
@@ -447,7 +338,7 @@ _sanitizeDefenseAssignments(holding) {
   const commanderId = String(defense.commanderId ?? "");
   if (commanderId) {
     const commander = people.get(commanderId);
-    if (!commander || !this._hasSoldierProfession?.(commander) || this._isChildResident?.(commander) || this._isResidentInjured(commander) || commander.dead) {
+    if (!commander || !this._hasSoldierProfession?.(commander) || !this._isCommanderCandidate(commander) || this._isChildResident?.(commander) || this._isResidentInjured(commander) || commander.dead) {
       defense.commanderId = "";
       changed = true;
     } else used.add(commanderId);
@@ -497,7 +388,10 @@ _defenseContext(holding) {
     const hasSergeant = Boolean(firstSlotPerson && this._isSergeantCandidate(firstSlotPerson));
     if (hasSergeant) effective += 0.5;
     if (!Number.isFinite(Number(effective))) effective = 0;
-    const equipped = Boolean(squad.equipped);
+    const armamentResourceId = ["armament-simple", "armament-complex", "armament-elite"].includes(String(squad.armamentResourceId ?? ""))
+      ? String(squad.armamentResourceId)
+      : "";
+    const equipped = Boolean(armamentResourceId);
     const full = combatants.length >= 5 || effective >= 5;
     const counted = equipped && full && effective >= 5;
     const type = typeDefs[squadType] ?? typeDefs.line;
@@ -526,6 +420,13 @@ _defenseContext(holding) {
       effective,
       hasSergeant,
       equipped,
+      armamentResourceId,
+      armamentLabel: armamentResourceId ? resourceLabel(armamentResourceId) : "Вооружение не выдано",
+      armamentOptions: ["armament-simple", "armament-complex", "armament-elite"].map((resourceId) => ({
+        value: resourceId,
+        label: resourceLabel(resourceId),
+        selected: resourceId === (armamentResourceId || "armament-simple")
+      })),
       full,
       counted,
       statusText: counted ? (hasSergeant ? "учитывается, сержант" : "учитывается") : (!equipped ? "нет вооружения" : (!full ? "неполный" : "эффективность < 5")),
@@ -544,37 +445,42 @@ _defenseContext(holding) {
     countedEffectiveText: this._formatNumber ? this._formatNumber(countedEffective) : String(Math.round(countedEffective * 10) / 10),
     effectiveUnits,
     squadTypeSummary: Object.values(typeDefs).map((item) => `${item.label}: ${item.tag}`).join(" · "),
-    equipmentCostText: "Ориентир: 1 отряд из 5 человек = 60–90 СМ за простое оружие и амуницию; фузилеры/ружья = 150–250 СМ; артиллерийская команда с орудием = от 600 СМ.",
-    defenseHelpText: `Командир выбирается отдельно от отрядов: любой живой взрослый житель. Он не дает плоских кубов; его эффективность 0-3 дает +7%/+14%/+21% к боевой мощи армии. Эффективность: Разум/управленческий тип, военное прошлое, лидерские черты. Сержантом считается только солдат с военным социальным прошлым и любой характеристикой 5+. ${Object.values(typeDefs).map((item) => `${item.label}: ${item.tag}`).join(" · ")}. Первый слот отряда — сержант или обычный солдат; всего в отряде 5 бойцов. Один житель не может занимать несколько слотов. Недоукомплектованные и неэкипированные отряды не считаются.`
+    equipmentCostText: "Одна единица Вооружения закрепляется за одним отрядом из пяти человек до замены, разоружения или расформирования.",
+    defenseHelpText: `Командир выбирается отдельно от отрядов: любой живой взрослый житель. Он не дает плоских кубов; его эффективность 0-3 дает +7%/+14%/+21% к боевой мощи армии. Эффективность: Разум/управленческий тип, военное прошлое, лидерские черты. Сержантом считается только солдат с военным социальным прошлым и любой характеристикой 5+. ${Object.values(typeDefs).map((item) => `${item.label}: ${item.tag}`).join(" · ")}. Первый слот отряда — сержант или обычный солдат; всего в отряде 5 бойцов. Один житель не может занимать несколько слотов. Недоукомплектованные отряды и отряды без закрепленной единицы Вооружения не считаются. Один участвующий отряд расходует одну подходящую единицу Военных припасов за весь бой; без неё он сохраняется, но лишается 20% огнестрельного бонуса и тегов Стрелки/Осадные.`
   };
 },
 
 _preparePeopleTabs(holding) {
   const people = holding?.people?.list ?? [];
-  const living = people.filter((person) => !person?.dead).length;
-  return [
-    { id: "living", label: "Жители", icon: "fa-solid fa-users", count: living, active: true }
-  ];
+  const resting = people.filter((person) => isResidentRestingOnShip(person, holding)).length;
+  const living = people.filter((person) => !person?.dead && !isResidentRestingOnShip(person, holding)).length;
+  const activeCrew = resting > 0 && this.activePeopleTab === "ship-crew";
+  const tabs = [{ id: "living", label: "Жители", icon: "fa-solid fa-users", count: living, active: !activeCrew }];
+  if (resting) tabs.push({ id: "ship-crew", label: "Экипажи", icon: "fa-solid fa-ship", count: resting, active: activeCrew });
+  return tabs;
 },
 
 _filterPeopleRows(people) {
+  return people.filter((person) => this._personMatchesResidentFilters(person));
+},
+
+_personMatchesResidentFilters(person) {
   const filters = this.residentFilters ?? {};
   const type = String(filters.type ?? "all");
   const work = String(filters.work ?? "all");
   const home = String(filters.home ?? "all");
   const morale = String(filters.morale ?? "all");
 
-  return people.filter((person) => {
-    if (type !== "all" && person.workerTypeLabel !== type) return false;
-    if (work === "free" && !["Без работы", "Свободен", "Ребенок"].includes(person.workLabel)) return false;
-    if (work === "assigned" && ["Без работы", "Свободен", "Ребенок"].includes(person.workLabel)) return false;
-    if (home === "homeless" && !this._isNoHome(person.homeLabel)) return false;
-    if (home === "housed" && this._isNoHome(person.homeLabel)) return false;
-    if (morale === "negative" && this._safeNumber(person.moraleValue, 0) >= 0) return false;
-    if (morale === "neutral" && this._safeNumber(person.moraleValue, 0) !== 0) return false;
-    if (morale === "positive" && this._safeNumber(person.moraleValue, 0) <= 0) return false;
-    return true;
-  });
+  if (type !== "all" && person.workerTypeLabel !== type) return false;
+  if (person.restingOnShip) return true;
+  if (work === "free" && !["Без работы", "Свободен", "Ребенок"].includes(person.workLabel)) return false;
+  if (work === "assigned" && ["Без работы", "Свободен", "Ребенок"].includes(person.workLabel)) return false;
+  if (home === "homeless" && !this._isNoHome(person.homeLabel)) return false;
+  if (home === "housed" && this._isNoHome(person.homeLabel)) return false;
+  if (morale === "negative" && this._safeNumber(person.moraleValue, 0) >= 0) return false;
+  if (morale === "neutral" && this._safeNumber(person.moraleValue, 0) !== 0) return false;
+  if (morale === "positive" && this._safeNumber(person.moraleValue, 0) <= 0) return false;
+  return true;
 },
 
 _cultureOptions(current = "") {
@@ -599,31 +505,41 @@ _beliefOptions(current = "") {
 
 _residentWorkOptionsContext(holding) {
   const allBuildings = holding?.buildings?.list ?? [];
+  const livingPeople = (holding?.people?.list ?? []).filter((person) => !person?.dead);
   const crews = this._constructionCrews(holding);
-  const vessels = (holding?.special?.fleet?.vessels ?? []).filter((vessel) => vessel?.status !== "archived");
+  const buildingsById = new Map();
+  const crewsById = new Map();
   const availableBuildingIds = new Set();
-  const availableVesselIds = new Set();
   const buildingRoleNames = new Set();
+  const residentAssignments = new Map();
+
+  for (const person of livingPeople) {
+    const buildingId = String(person?.workAssignment ?? "");
+    const personId = String(person?.id ?? "");
+    if (!buildingId || !personId) continue;
+    if (!residentAssignments.has(buildingId)) residentAssignments.set(buildingId, new Set());
+    residentAssignments.get(buildingId).add(personId);
+  }
 
   for (const building of allBuildings) {
     const id = String(building?.id ?? "");
     const name = String(building?.name ?? "").trim();
+    if (id) buildingsById.set(id, building);
     if (name) buildingRoleNames.add(name);
     const max = Math.max(0, this._safeNumber(building?.workersMax, 0));
-    const assigned = Array.isArray(building?.assignedWorkerIds)
-      ? building.assignedWorkerIds.reduce((count, value) => count + (value ? 1 : 0), 0)
-      : 0;
-    if (id && max > 0 && assigned < max) availableBuildingIds.add(id);
+    const occupiedIds = new Set([
+      ...(Array.isArray(building?.assignedWorkerIds) ? building.assignedWorkerIds : []),
+      ...(residentAssignments.get(id) ?? [])
+    ].map((value) => String(value ?? "")).filter(Boolean));
+    const operational = buildingOperationalState(building).operational;
+    if (id && operational && max > 0 && occupiedIds.size < max) availableBuildingIds.add(id);
+  }
+  for (const crew of crews) {
+    const id = String(crew?.id ?? "");
+    if (id) crewsById.set(id, crew);
   }
 
-  for (const vessel of vessels) {
-    const id = String(vessel?.id ?? "");
-    const target = Math.max(0, this._safeNumber(vessel?.profile?.crewTarget, 0));
-    const assigned = new Set((vessel?.crew?.memberIds ?? []).map((value) => String(value ?? "")).filter(Boolean)).size;
-    if (id && target > 0 && assigned < target) availableVesselIds.add(id);
-  }
-
-  return { allBuildings, crews, vessels, availableBuildingIds, availableVesselIds, buildingRoleNames, buildingOptionsCache: new Map() };
+  return { holding, allBuildings, buildingsById, crews, crewsById, availableBuildingIds, buildingRoleNames, buildingOptionsCache: new Map() };
 },
 
 _residentWorkOptionBuildings(context, selected = "") {
@@ -637,30 +553,83 @@ _residentWorkOptionBuildings(context, selected = "") {
   return buildings;
 },
 
+_residentWorkOptionCatalog(context) {
+  return [
+    ...context.crews.map((crew) => ({
+      value: `construction:${crew.id}`,
+      label: crew.name || "Стройбригада",
+      kind: "crew"
+    })),
+    ...context.allBuildings.filter((building) => context.availableBuildingIds.has(String(building?.id ?? ""))).map((building) => ({
+      value: String(building.id),
+      label: building.name || "Без названия",
+      kind: "building",
+      available: true
+    })),
+    { value: "soldier", label: "Солдат", kind: "soldier" },
+    { value: "other", label: "Другое", kind: "other" }
+  ];
+},
+
+_residentInlineWorkOption(person = {}, workLabel = "", workContext = null) {
+  const context = workContext ?? { buildingsById: new Map(), crews: [], crewsById: new Map(), buildingRoleNames: new Set() };
+  const selected = String(person?.workAssignment ?? "");
+  const role = String(person?.role ?? "").trim();
+  const isChild = this._isChildResident(person);
+  const canWork = this._canResidentWork(person, context.holding);
+  const freeLabel = isChild ? "Ребенок" : "Свободен";
+  const free = { value: "", label: freeLabel, freeLabel, canWork };
+
+  if (selected.startsWith("construction-leader:")) {
+    const crew = context.crewsById.get(selected.slice("construction-leader:".length));
+    if (crew) return { value: selected, label: `Руководитель: ${crew.name || "Стройбригада"}`, freeLabel, canWork };
+  }
+  if (!canWork) {
+    if (selected === "other") return { value: "other", label: "Другое", freeLabel, canWork };
+    return free;
+  }
+
+  if (selected === "construction") {
+    const crew = context.crews.find((entry) => entry?.isDefault) ?? context.crews[0];
+    if (crew?.id) return { value: `construction:${crew.id}`, label: crew.name || "Стройбригада", freeLabel, canWork };
+    return free;
+  }
+  if (selected.startsWith("construction:")) {
+    const crew = context.crewsById.get(selected.slice("construction:".length));
+    if (crew) return { value: selected, label: crew.name || "Стройбригада", freeLabel, canWork };
+    return free;
+  }
+  const building = context.buildingsById.get(selected);
+  if (building) return { value: selected, label: building.name || workLabel || "Без названия", freeLabel, canWork };
+  if (selected === "soldier") return { value: "soldier", label: "Солдат", freeLabel, canWork };
+  if (selected === "other") return { value: "other", label: "Другое", freeLabel, canWork };
+  if (selected) return free;
+  if (/^солдат$/i.test(role)) return { value: "soldier", label: "Солдат", freeLabel, canWork };
+  if (role && !["Свободен", "Без работы", "Ребенок"].includes(role) && !context.buildingRoleNames.has(role)) {
+    return { value: "other", label: "Другое", freeLabel, canWork };
+  }
+  return free;
+},
+
 _workOptions(holding, person = {}, workContext = null) {
   const selected = String(person?.workAssignment ?? "");
   const role = String(person?.role ?? "").trim();
   const context = workContext ?? this._residentWorkOptionsContext(holding);
   const isChild = this._isChildResident(person);
-  const canWork = this._canResidentWork(person);
+  const canWork = this._canResidentWork(person, holding);
   const freeLabel = isChild ? "Ребенок" : "Свободен";
   const buildings = canWork ? this._residentWorkOptionBuildings(context, selected) : [];
   const crews = canWork ? context.crews : [];
-  const vessels = canWork ? (context.vessels ?? []).filter((vessel) => {
-    const id = String(vessel?.id ?? "");
-    return selected === `fleet:${id}` || context.availableVesselIds?.has(id);
-  }) : [];
+  const leaderCrew = selected.startsWith("construction-leader:")
+    ? context.crewsById.get(selected.slice("construction-leader:".length)) : null;
   const options = [
     { value: "", label: freeLabel, selected: !selected && (!role || role === "Свободен" || role === "Без работы" || role === "Ребенок") },
+    // Leadership is appointed in the crew editor; retain the current position here.
+    ...(leaderCrew ? [{ value: selected, label: `Руководитель: ${leaderCrew.name || "Стройбригада"}`, selected: true }] : []),
     ...crews.map((crew) => ({
       value: `construction:${crew.id}`,
       label: crew.name || "Стройбригада",
       selected: selected === `construction:${crew.id}` || (selected === "construction" && crew.isDefault)
-    })),
-    ...vessels.map((vessel) => ({
-      value: `fleet:${vessel.id}`,
-      label: `Экипаж: ${vessel.name || "корабль"}`,
-      selected: selected === `fleet:${vessel.id}`
     })),
     ...buildings.map((building) => ({
       value: String(building.id),
@@ -732,32 +701,31 @@ _residentFilterOptions(holding) {
 _peopleWorkAssignments(holding, workContext = null) {
   const map = new Map();
   const buildings = workContext?.allBuildings ?? (holding?.buildings?.list ?? []);
-  const buildingsById = new Map(buildings.map((building) => [String(building.id), building]));
+  const buildingsById = workContext?.buildingsById ?? new Map(buildings.map((building) => [String(building.id), building]));
   const crews = workContext?.crews ?? this._constructionCrews(holding);
-  const crewsById = new Map(crews.map((crew) => [String(crew.id), crew]));
-  const vessels = workContext?.vessels ?? (holding?.special?.fleet?.vessels ?? []);
-  const vesselsById = new Map(vessels.map((vessel) => [String(vessel?.id ?? ""), vessel]));
+  const crewsById = workContext?.crewsById ?? new Map(crews.map((crew) => [String(crew.id), crew]));
   for (const person of holding?.people?.list ?? []) {
     if (person?.dead) continue;
     const id = String(person?.id ?? "");
     const selected = String(person?.workAssignment ?? "");
     if (!id) continue;
     if (selected === "construction") map.set(id, crews[0]?.name || "Стройбригада");
+    else if (selected.startsWith("construction-leader:")) {
+      const crew = crewsById.get(selected.slice("construction-leader:".length));
+      map.set(id, `Руководитель: ${crew?.name || "Стройбригада"}`);
+    }
     else if (selected.startsWith("construction:")) {
       const crewId = selected.split(":")[1] || "";
       map.set(id, crewsById.get(crewId)?.name || "Стройбригада");
     }
     else if (selected === "other") map.set(id, String(person?.role ?? "").trim() || "Другое");
-    else if (selected.startsWith("fleet:")) {
-      const vesselId = selected.slice("fleet:".length);
-      map.set(id, `Экипаж: ${vesselsById.get(vesselId)?.name || vesselId || "корабль"}`);
-    }
     else if (selected && buildingsById.has(selected)) map.set(id, buildingsById.get(selected)?.name || "Здание");
     else if (person?.role) map.set(id, String(person.role));
   }
   for (const crew of crews) {
     const name = String(crew?.name ?? "Стройбригада").trim() || "Стройбригада";
     for (const id of crew?.memberIds ?? []) if (id) map.set(String(id), name);
+    if (crew?.leaderId) map.set(String(crew.leaderId), `Руководитель: ${name}`);
   }
   for (const building of buildings) {
     const name = String(building?.name ?? "").trim();
@@ -765,10 +733,6 @@ _peopleWorkAssignments(holding, workContext = null) {
     for (const id of building?.assignedWorkerIds ?? []) {
       if (id) map.set(String(id), name);
     }
-  }
-  for (const vessel of vessels) {
-    const name = `Экипаж: ${String(vessel?.name ?? "корабль").trim() || "корабль"}`;
-    for (const id of vessel?.crew?.memberIds ?? []) if (id) map.set(String(id), name);
   }
   return map;
 },
@@ -798,10 +762,10 @@ _isChildResident(person = {}) {
   return String(person?.ageGroup ?? ageGroupFromAge(person?.age, person?.race, person?.subrace) ?? "") === "Ре";
 },
 
-_canResidentWork(person = {}) {
-  if (!person || person.dead || this._isResidentInjured(person)) return false;
+_canResidentWork(person = {}, holding = null) {
+  if (!person || !isResidentInPopulation(person, holding) || this._isResidentInjured(person)) return false;
   if (!this._isChildResident(person)) return true;
-  return this._safeNumber(person?.age, 0) >= 12;
+  return this._safeNumber(person?.age, 0) >= this._childWorkThreshold(person);
 },
 
 _childWorkThreshold(person = {}) {
@@ -810,7 +774,7 @@ _childWorkThreshold(person = {}) {
 },
 
 _isMilitaryResidentLike(person = {}) {
-  const text = [person?.role, person?.skill, person?.background, person?.traitsText, person?.status, person?.notes]
+  const text = [person?.role, person?.background, person?.traitsText, person?.status, person?.notes]
     .map((value) => String(value ?? "").toLowerCase()).join(" ");
   return /(солдат|сержант|командир|офицер|страж|ветеран|наемник|наёмник|ополчен|дозор|егерь|разведчик|мушкет|канонир|сап[её]р|тюремщик|охран|guard|soldier|sergeant|officer|veteran|mercenary|ranger|scout|musketeer|gunner|sapper)/i.test(text);
 },
@@ -821,7 +785,7 @@ _hasSoldierProfession(person = {}) {
 
 _isSoldierResident(person = {}) {
   if (this._hasSoldierProfession?.(person)) return true;
-  const text = [person?.role, person?.skill, person?.background, person?.traitsText, person?.status, person?.notes]
+  const text = [person?.role, person?.background, person?.traitsText, person?.status, person?.notes]
     .map((value) => String(value ?? "").toLowerCase()).join(" ");
   return /(солдат|страж|гвард|мушкет[её]р|фузил[её]р|егерь|ветеран|наемник|наёмник|канонир|сап[её]р|guard|soldier|musketeer|fusilier|jaeger|rifle|veteran|mercenary|gunner|sapper)/i.test(text);
 },
@@ -834,26 +798,13 @@ _isSergeantCandidate(person = {}) {
 },
 
 _isSuitableForSquadType(person = {}, squadType = "line") {
-  const profile = this._squadTypeDefs()[String(squadType)] ?? this._squadTypeDefs().line;
   const attrs = person?.attributes ?? {};
-  for (const [key, min] of Object.entries(profile.min ?? {})) {
-    if (this._safeNumber(attrs[key], 0) < this._safeNumber(min, 0)) return false;
-  }
-  return true;
+  return residentSuitableForSquadType(attrs, squadType);
 },
 
 _soldierEfficiency(person = {}, squadType = "line") {
-  if (!this._isSuitableForSquadType(person, squadType)) return 0;
-  const profile = this._squadTypeDefs()[String(squadType)] ?? this._squadTypeDefs().line;
   const attrs = person?.attributes ?? {};
-  const keys = Array.isArray(profile.attrs) && profile.attrs.length ? profile.attrs : ["strength", "agility"];
-  let value = 1;
-  for (const key of keys) {
-    const score = this._safeNumber(attrs[key], 0);
-    value += score >= 5 ? 0.35 : score >= 4 ? 0.15 : 0;
-  }
-  const clean = Math.min(1.7, Number(value));
-  return Number.isFinite(clean) ? clean : 0;
+  return residentSoldierEfficiency(attrs, squadType, { militaryBackground: this._isMilitaryBackgroundResident(person) });
 },
 
 _attributeSummary(person) {
@@ -912,6 +863,7 @@ _isNoHome(value) {
 },
 
 _homeLabel(person, holding = null, housingIndex = null) {
+  if (isResidentRestingOnShip(person, holding) || isResidentAway(person)) return shipForResident(person, holding)?.name || "Корабль";
   if (this._isNoHome(person?.home)) return "Без дома";
   const match = this._findHomeBuilding(holding, person?.home, housingIndex);
   return match?.name ? String(match.name) : String(person?.home ?? "").trim();
@@ -970,8 +922,7 @@ _isResidentialBuilding(building) {
     building?.type,
     building?.status,
     building?.effect,
-    building?.notes,
-    building?.location
+    building?.notes
   ].map((value) => String(value ?? "").toLowerCase()).join(" ");
 
   if (/строится|руин|разруш|снесен|не постро/i.test(text)) return false;
@@ -993,7 +944,7 @@ _residentHousingIndex(holding) {
   }
 
   for (const person of holding?.people?.list ?? []) {
-    if (person?.dead) continue;
+    if (!isResidentInPopulation(person, holding)) continue;
     const home = String(person?.home ?? "").trim();
     if (!home) continue;
     const building = buildingsByKey.get(home);
@@ -1020,128 +971,190 @@ _housingOccupants(holding, building, housingIndex = null) {
   const name = String(building?.name ?? "");
   const key = String(id).trim() || String(name).trim();
   if (key && housingIndex?.occupantsByBuildingKey) return housingIndex.occupantsByBuildingKey.get(key) ?? [];
-  return (holding?.people?.list ?? []).filter((person) => !person?.dead && (String(person?.home ?? "") === id || String(person?.home ?? "") === name));
-},
-
-_moraleSnapshot(holding) {
-  if (!holding) return calculateMoraleSnapshot();
-
-  const housingIndex = this._residentHousingIndex(holding);
-  const settlementModifiers = [];
-
-  for (const building of holding?.buildings?.list ?? []) {
-    if (this._buildingStatus(building).value !== "built") continue;
-    const scale = String(building?.moraleScale ?? "legacy").trim().toLocaleLowerCase("en") === "normalized" ? 1 : 0.1;
-    const value = this._safeNumber(building?.moraleDelta, 0) * scale;
-    if (!value) continue;
-    settlementModifiers.push({
-      id: `building:${String(building?.id ?? building?.name ?? settlementModifiers.length)}`,
-      label: String(building?.name ?? "Здание"),
-      value
-    });
-  }
-
-  for (const row of holding?.special?.list ?? []) {
-    const type = String(row?.type ?? "").toLowerCase();
-    const name = String(row?.name ?? "").toLowerCase();
-    const isModifier = (type.includes("модификатор") || name.includes("модификатор")) && (type.includes("доволь") || name.includes("доволь"));
-    if (!isModifier && row?.includeInMorale !== true && row?.countsForMorale !== true) continue;
-    const scale = String(row?.moraleScale ?? "legacy").trim().toLocaleLowerCase("en") === "normalized" ? 1 : 0.1;
-    const value = this._safeNumber(row?.value ?? row?.moraleDelta, 0) * scale;
-    if (!value) continue;
-    settlementModifiers.push({
-      id: `special:${String(row?.id ?? row?.name ?? settlementModifiers.length)}`,
-      label: String(row?.name ?? "Особый модификатор"),
-      value
-    });
-  }
-
-  const gmMoraleScale = String(holding?.gm?.modifiers?.moraleScale ?? "legacy").trim().toLocaleLowerCase("en") === "normalized" ? 1 : 0.1;
-  const gmMorale = (this._gmSettlementModifiers?.(holding)?.morale ?? this._safeNumber(holding?.gm?.modifiers?.morale, 0)) * gmMoraleScale;
-  if (gmMorale) settlementModifiers.push({ id: "gm", label: "Модификатор ГМ", value: gmMorale });
-
-  const commonTableMorale = this._safeNumber(holding?.gm?.economy?.commonTable?.activeMoraleBonus, 0) > 0 ? 1 : 0;
-  if (commonTableMorale) settlementModifiers.push({ id: "common-table", label: "Общий стол", value: commonTableMorale });
-
-  return calculateMoraleSnapshot({
-    residents: holding?.people?.list ?? [],
-    residentScore: (person) => this._calculatePersonMorale(person, holding, { housingIndex }),
-    settlementModifiers
-  });
+  return (holding?.people?.list ?? []).filter((person) => isResidentInPopulation(person, holding) && (String(person?.home ?? "") === id || String(person?.home ?? "") === name));
 },
 
 _calculateMorale(holding) {
-  return this._moraleSnapshot(holding).score;
+  if (!holding) return 0;
+
+  const people = holding.people?.list ?? [];
+  const special = holding.special?.list ?? [];
+  const housingIndex = this._residentHousingIndex(holding);
+
+  const peopleMorale = people.reduce((sum, row) => sum + this._calculatePersonMorale(row, holding, { housingIndex }).total, 0);
+
+  const buildingMorale = this._buildingMoraleSummary(holding).total;
+
+  const specialMorale = special.reduce((sum, row) => sum + specialMoraleModifier(row), 0);
+
+  const gmMorale = this._gmSettlementModifiers?.(holding)?.morale ?? this._safeNumber(holding?.gm?.modifiers?.morale, 0);
+  return peopleMorale + buildingMorale + specialMorale + gmMorale + (politicsRuntimeEffects(holding)?.morale ?? 0);
+},
+
+_buildingMoraleSummary(holding) {
+  const population = (holding?.people?.list ?? []).filter((person) => isResidentInPopulation(person, holding)).length;
+  const operationalBuildings = (holding?.buildings?.list ?? []).filter((building) => this._buildingStatus(building).value === "built");
+  const groups = new Map();
+  const negative = [];
+  const leisureGroups = new Map();
+  for (const [index, building] of operationalBuildings.entries()) {
+    const leisure = building?.service?.leisure;
+    const hasLeisure = leisure && typeof leisure === "object" && String(leisure.kind ?? "").trim();
+    const raw = hasLeisure ? this._safeNumber(leisure.capacity, 0) : this._safeNumber(building?.moraleDelta, 0);
+    if (!raw) continue;
+    if (raw < 0) {
+      if (buildingConfirmedHarmActive(holding, building)) negative.push({ building, raw, value: raw });
+      continue;
+    }
+    if (hasLeisure) {
+      const capacity = buildingConfirmedLeisureCapacity(holding, building);
+      if (capacity <= 0) continue;
+      const kind = String(leisure.kind).trim().toLocaleLowerCase("ru");
+      if (!leisureGroups.has(kind)) leisureGroups.set(kind, []);
+      leisureGroups.get(kind).push({ building, raw, capacity, index, kind });
+      continue;
+    }
+    const status = buildingConfirmedSocialStatus(holding, building);
+    if (!status.active) continue;
+    const templateId = String(building?.templateId ?? "").trim().toLocaleLowerCase("ru");
+    const key = templateId ? `template:${templateId}` : `instance:${String(building?.id ?? index)}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push({ building, raw, factor: status.maintenanceFactor, index });
+  }
+
+  let total = negative.reduce((sum, row) => sum + row.value, 0);
+  const sources = negative.map((row) => ({
+    id: String(row.building?.id ?? ""),
+    name: row.building?.name || "Здание",
+    raw: row.raw,
+    value: row.value,
+    repeated: false,
+    coverage: 1,
+    negative: true
+  }));
+  for (const rows of groups.values()) {
+    rows.sort((left, right) => String(left.building?.id ?? left.index).localeCompare(String(right.building?.id ?? right.index)));
+    const first = rows[0];
+    const serviceRows = rows.filter((row) => row.building?.service && typeof row.building.service === "object");
+    let coverage = 1;
+    let capacity = 0;
+    let coverageTarget = population;
+    if (serviceRows.length) {
+      const coverageKind = String(first.building?.service?.coverageKind ?? "population");
+      capacity = serviceRows.reduce((sum, row) => sum + buildingConfirmedServiceCapacity(holding, row.building), 0);
+      if (["buildings", "target-buildings"].includes(coverageKind)) {
+        const validIds = new Set(operationalBuildings.flatMap((building) => [String(building?.id ?? ""), String(building?.templateId ?? "")]).filter(Boolean));
+        const covered = new Set(serviceRows.flatMap((row) => row.building?.service?.coveredBuildingIds ?? []).map(String).filter((id) => validIds.has(id)));
+        coverageTarget = Math.max(1, operationalBuildings.length);
+        capacity = Math.min(capacity, covered.size);
+      }
+      coverage = coverageTarget > 0 ? Math.min(1, capacity / coverageTarget) : 1;
+    }
+    const value = scaleIntegerBuildingEffect(first.raw, serviceRows.length ? coverage : first.factor);
+    total += value;
+    sources.push({
+      id: String(first.building?.id ?? ""),
+      name: first.building?.name || "Здание",
+      raw: first.raw,
+      value,
+      repeated: false,
+      coverage,
+      capacity,
+      coverageTarget,
+      negative: false
+    });
+    for (const row of rows.slice(1)) {
+      const repeatAllowed = row.building?.repeatSettlementEffects === true;
+      const repeatValue = repeatAllowed ? scaleIntegerBuildingEffect(row.raw, row.factor) : 0;
+      total += repeatValue;
+      sources.push({
+        id: String(row.building?.id ?? ""),
+        name: row.building?.name || "Здание",
+        raw: row.raw,
+        value: repeatValue,
+        repeated: true,
+        repeatAllowed,
+        coverage: 0,
+        negative: false
+      });
+    }
+  }
+
+  const diversityFactors = [1, 0.75, 0.5];
+  for (const rows of leisureGroups.values()) {
+    rows.sort((left, right) => right.capacity - left.capacity
+      || String(left.building?.id ?? left.index).localeCompare(String(right.building?.id ?? right.index)));
+    for (const [index, row] of rows.entries()) {
+      const rank = index + 1;
+      const diversityFactor = diversityFactors[index] ?? 0.25;
+      const value = Math.floor(row.capacity * diversityFactor);
+      total += value;
+      sources.push({
+        id: String(row.building?.id ?? ""),
+        name: row.building?.name || "Здание",
+        raw: row.raw,
+        value,
+        repeated: rank > 1,
+        repeatAllowed: true,
+        coverage: 1,
+        capacity: row.capacity,
+        coverageTarget: row.capacity,
+        negative: false,
+        leisure: true,
+        leisureKind: row.kind,
+        diversityFactor,
+        rank
+      });
+    }
+  }
+  return { total, population, sources };
+},
+
+_controlSummary(holding, rawMorale = null) {
+  const raw = rawMorale === null ? this._calculateMorale(holding) : this._safeNumber(rawMorale, 0);
+  return settlementControlSummary(holding, { rawMorale: raw });
+},
+
+_rationMorale(person, holding = null) {
+  if (person?.dead) return { value: 0, tier: "none", reason: "погиб" };
+  const row = holding?.gm?.moraleSnapshot?.residents?.[String(person?.id ?? "")]?.ration;
+  if (row && typeof row === "object") {
+    const tier = String(row?.tier ?? "normal");
+    const label = tier === "enhanced" ? "усиленный" : tier === "sparse" ? "скудный" : tier === "hunger" ? "голод" : "обычный";
+    return { value: this._safeNumber(row?.value, 0), tier, reason: label + (row.diversityBonus > 0 ? `; разнообразие +${row.diversityBonus}` : "") };
+  }
+  return { value: 0, tier: "normal", reason: "обычный (до первого расчёта)" };
 },
 
 _calculatePersonMorale(person, holding = null, options = {}) {
   if (person?.dead) return { total: 0, breakdown: ["Погиб: довольство не считается"] };
+  if (!isResidentInPopulation(person, holding)) return { total: 0, breakdown: ["Экипаж на корабле: довольство поселения не считается"] };
   const housingIndex = options?.housingIndex ?? null;
   const base = this._safeNumber(person?.moraleBase, -1);
   const workManual = this._safeNumber(person?.moraleWork, 0);
   const workAuto = this._workMorale(person, holding);
-  const work = workManual + workAuto.value;
+  const workUnclamped = workManual + workAuto.value;
+  const work = Math.max(-3, Math.min(3, Math.sign(workUnclamped) * Math.round(Math.abs(workUnclamped))));
+  const ration = this._rationMorale(person, holding);
   const homeManual = this._safeNumber(person?.moraleHome, 0);
   const homeAuto = this._housingMorale(person, holding, housingIndex);
   const home = homeManual + homeAuto.value;
   const manual = this._safeNumber(person?.moraleManual, 0);
   const traits = this._traitMoraleModifier(person);
-  const contract = this._compensationMorale(person, holding);
-  const total = base + work + home + traits.value + manual + contract.value;
+  const total = base + ration.value + work + home + traits.value + manual;
 
   const breakdown = [
     `Итог: ${total}`,
     `База: ${base}`,
+    `Питание: ${ration.value > 0 ? "+" : ""}${ration.value} (${ration.reason})`,
     `Работа: ${work}${workAuto.reason ? ` (${workAuto.reason})` : ""}`,
     `Жилье: ${home}${homeAuto.reason ? ` (${homeAuto.reason})` : ""}`
   ];
   if (traits.value) breakdown.push(`Черты: ${traits.value} (${traits.reasons.join(", ")})`);
   else breakdown.push("Черты: 0");
   if (manual) breakdown.push(`Ручной модификатор: ${manual}`);
-  if (contract.value) breakdown.push(`Договор: ${contract.value} (${contract.reasons.join(", ")})`);
-  else breakdown.push("Договор: 0");
 
   return { total, breakdown };
-},
-
-_compensationMorale(person = {}, holding = null) {
-  let value = 0;
-  const reasons = [];
-  const laborState = holding?.gm?.economy?.labor ?? {};
-  const payrollState = normalizePayrollState(laborState.payroll);
-  const personId = String(person?.id ?? "");
-  const lastQd = Math.max(0, Math.floor(this._safeNumber(holding?.gm?.calendaria?.lastQd, 0)));
-  let targetQd = lastQd + 40;
-  let season = "";
-  try {
-    const period = this._employmentPeriodContext?.(holding, 40) ?? null;
-    if (period) {
-      targetQd = Math.max(0, Math.floor(this._safeNumber(period.targetQd, targetQd)));
-      season = String(period.targetSeason ?? period.currentSeason ?? "").trim().toLocaleLowerCase("en");
-    }
-  } catch (_error) {}
-  const assignment = String(person?.workAssignment ?? "").trim().toLocaleLowerCase("ru");
-  const assessment = assessNextTendayLabor(person, {
-    currentQd: targetQd,
-    season,
-    payrollAccount: payrollState.accounts[personId] ?? null,
-    hungerStreak: person?.hungerStreakTendays,
-    assignedAsWorker: !FREE_RESIDENT_ASSIGNMENTS.has(assignment),
-    living: !person?.dead,
-    child: this._isChildResident(person),
-    injured: this._isResidentInjured(person)
-  });
-  value += assessment.moraleDelta;
-  for (const component of assessment.components ?? []) {
-    if (!component.moraleDelta) continue;
-    reasons.push(`${component.label}: ${component.moraleDelta > 0 ? "+" : ""}${component.moraleDelta}`);
-  }
-  const home = String(person.home ?? "").trim();
-  if (person.housingProvided && (!home || /без жилья|нет жилья|homeless/i.test(home))) {
-    value -= 1;
-    reasons.push("обещанное жильё не предоставлено");
-  }
-  return { value, reasons };
 },
 
 _traitMoraleModifier(person) {
@@ -1166,30 +1179,31 @@ _parseTraits(value) {
 },
 
 _moraleState(value) {
-  const snapshot = value && typeof value === "object" ? value : null;
-  const morale = Number(snapshot?.score ?? snapshot?.value ?? value ?? 0);
+  const morale = Number(value ?? 0);
   if (!Number.isFinite(morale)) {
     return { value: "?", label: "Неизвестно", range: "", notes: "Значение довольства не распознано." };
   }
-  const band = snapshot?.band ?? moraleBandForScore(morale);
-  const formula = snapshot
-    ? `Среднее ${snapshot.livingCount ?? 0} живых жителей: ${snapshot.residentAverage ?? 0}; общие эффекты: ${snapshot.settlementModifier >= 0 ? "+" : ""}${snapshot.settlementModifier ?? 0}; итог: ${morale}.`
-    : `Итог: ${morale}.`;
-  return {
-    value: morale,
-    score: morale,
-    bandId: band.id,
-    label: band.label,
-    range: band.range,
-    icon: band.icon,
-    css: band.css,
-    notes: band.notes,
-    formula,
-    tooltip: `${band.label} (${band.range}). ${formula} ${band.notes}`,
-    modifiers: band.modifiers,
-    residentAverage: snapshot?.residentAverage,
-    settlementModifier: snapshot?.settlementModifier,
-    livingCount: snapshot?.livingCount
-  };
+
+  if (morale < -30) {
+    return { value: morale, label: "Бунты", range: "<-30", icon: "fa-solid fa-face-angry", css: "riot", notes: "В конце десятника возможны уход жителей или бунт. Строительство: -3." };
+  }
+
+  if (morale <= -15) {
+    return { value: morale, label: "Недовольство", range: "-30 до -15", icon: "fa-solid fa-face-frown", css: "bad", notes: "Возможны уход жителей или кражи. Репутация и защищенность снижены. Строительство: -2. Уменьшите эффективность всех производящих зданий дополнительно на 0.3." };
+  }
+
+  if (morale < 0) {
+    return { value: morale, label: "Апатия", range: "-14 до -1", icon: "fa-solid fa-face-meh", css: "low", notes: "Уменьшите защищенность и репутацию на 1. Уменьшите эффективность Стройбригад наполовину (округляя вверх). Уменьшите эффективность всех производящих зданий на 0.2." };
+  }
+
+  if (morale <= 15) {
+    return { value: morale, label: "Без штрафов и бонусов", range: "0 до 15", icon: "fa-solid fa-face-smile", css: "neutral", notes: "Точка равновесия поселения." };
+  }
+
+  if (morale <= 30) {
+    return { value: morale, label: "Надежда", range: "16 до 30", icon: "fa-solid fa-face-grin-stars", css: "hope", notes: "+1к8 раз за партию, +1 к найму, репутация и защищенность выше. Строительство: +1. Увеличьте эффективность всех производящих зданий на 0.2." };
+  }
+
+  return { value: morale, label: "Дом", range: ">30", icon: "fa-solid fa-face-laugh-beam", css: "home", notes: "Переброс строительства, снижение оплаты жителей, усиленная репутация и защищенность. Строительство: +2." };
 }
 };

@@ -6,7 +6,7 @@
   align-content: start;
   gap: 0.28rem;
   color: var(--fbls-muted);
-  font-size: 0.66rem;
+  font-size: var(--fbls-type-compact-xs);
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
@@ -14,6 +14,8 @@
 .fbls-field-title {
   line-height: 1;
 }
+
+.fbls-trait-editor .fbls-field > span { font-size: 0.625rem; line-height: 1.4; }
 
 .fbls-selected-traits {
   min-height: 1.85rem;
@@ -33,7 +35,8 @@
   width: 100%;
 }
 
-.fbls-trait-badge.fbls-note-tip {
+/* Dense table chips retain the resident-list owner's dimensions. */
+.fbls-trait-badge.fbls-note-tip:not([data-resident-trait], [data-resident-traits-more]) {
   display: inline-flex;
   width: auto;
   height: auto;
@@ -64,7 +67,7 @@
   border-radius: 999px;
   background: var(--fbls-overlay);
   color: var(--fbls-text);
-  font-size: 0.78rem;
+  font-size: var(--fbls-type-compact-sm);
   line-height: 1;
 }
 

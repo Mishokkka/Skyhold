@@ -1,0 +1,23 @@
+<section class="fbls-ship-box fbls-voyage" aria-label="Принятый маршрут и время корабля">
+  <div class="fbls-card-header"><strong>{{title}}</strong>{{#unless leg}}<span class="fbls-chip">{{statusLabel}}</span>{{/unless}}</div>
+  {{#if leg}}
+    <div class="fbls-card-header"><span>{{leg.label}}</span><span class="fbls-chip">{{leg.statusLabel}}</span></div>
+    {{#if leg.hasProgress}}<progress class="fbls-voyage-progress" value="{{leg.elapsedQd}}" max="{{leg.totalQd}}" aria-label="{{#if leg.isDelay}}Учтённое время задержки{{else}}Учтённое время текущего участка{{/if}}" aria-valuetext="{{leg.progressText}}"></progress>{{/if}}
+    <p>Учтено {{leg.elapsedDays}} из {{leg.durationDays}} дн.{{#if leg.remainingDays}} · {{#if leg.isDelay}}задержка ещё{{else}}до завершения участка{{/if}} {{leg.remainingDays}} дн. корабельного времени.{{/if}}</p>
+  {{else if delayDays}}<p class="fbls-ship-notice">Осталось учесть задержку: {{delayDays}} дн.</p>{{/if}}
+  {{#if snapshotIssue}}<p class="fbls-ship-notice">{{snapshotIssue}}</p>{{else}}<p class="fbls-muted-text">{{timeExplanation}}</p>{{/if}}
+  {{#if catchUpDays}}<p class="fbls-ship-notice">До утверждённой даты поселения остаётся разобрать {{catchUpDays}} дн. корабельного времени. После решения следующий приказ может использовать эти дни; каждый требующий решения исход подтверждается отдельно.</p>{{/if}}
+  {{#if clockReversed}}<p class="fbls-ship-notice">Дата поселения раньше уже обработанного времени корабля. ГМу нужно восстановить дату; проведённые дни и выплаты сами не откатываются.</p>{{/if}}
+  <ol class="fbls-voyage-stops" start="{{startNumber}}" aria-label="Принятая последовательность портов">
+    {{#each stops}}
+      <li class="{{#if current}}is-current{{else if complete}}is-complete{{/if}}" aria-current="{{#if current}}step{{else}}false{{/if}}">
+        <div class="fbls-card-header"><strong>{{label}}</strong><span class="fbls-chip is-compact">{{statusLabel}}</span></div>
+        {{#if incomingLabel}}<p class="fbls-muted-text">{{incomingLabel}}{{#if durationDays}} · по принятой смете {{durationDays}} дн. с портовыми работами{{/if}}</p>{{/if}}
+        {{#if pickupText}}<p>Погрузка: {{pickupText}}</p>{{/if}}{{#if deliveryText}}<p>Доставка: {{deliveryText}}</p>{{/if}}
+        {{#if hasLoadPlan}}<p class="fbls-muted-text">По плану: трюм на входящем участке {{loadOnLegPoints}} ед. · после работ {{loadAfterPoints}} ед.</p>{{/if}}
+      </li>
+    {{/each}}
+  </ol>
+  {{#if hasRemotePickup}}<p class="fbls-muted-text">Удалённая погрузка входит в этот участок. Момент её завершения отдельно не фиксируется; место под груз зарезервировано на весь заказ.</p>{{/if}}
+  {{#if isBundle}}<p class="fbls-muted-text">По принятому плану впереди: {{remainingPlannedDays}} дн. пути и работ. Ожидание решений и происшествия могут увеличить срок. Возвращение домой — отдельный приказ.</p>{{/if}}
+</section>

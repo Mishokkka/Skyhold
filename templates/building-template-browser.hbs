@@ -1,94 +1,97 @@
-<div class="fbls-template-browser-body">
-  <header class="fbls-template-browser-head fbls-toolbar">
-    <div class="fbls-template-browser-title fbls-toolbar-group">
-      <h2><i class="fa-solid fa-drafting-compass"></i> Шаблоны зданий</h2>
-    </div>
-    {{#if canEdit}}
-      <button type="button" class="fbls-button compact fbls-template-create-button" data-action="create-building-template" data-fbls-tooltip="Создать новый пользовательский шаблон здания."><i class="fa-solid fa-plus"></i> Шаблон</button>
-    {{/if}}
-    <div class="fbls-template-browser-counts fbls-toolbar-group">
-      <span class="fbls-template-current-dev-label">Текущее:</span>
-      {{#each development.labels}}
-        <span class="fbls-template-current-dev fbls-chip {{css}}" data-fbls-tooltip="{{tooltip}}"><i class="{{icon}}"></i> {{value}}</span>
-      {{/each}}
-      <span class="available">Доступно {{availableCount}}</span>
-      <span class="locked">Закрыто {{lockedCount}}</span>
-      {{#if canEdit}}<span class="hidden">Скрыто {{hiddenCount}}</span>{{/if}}
-    </div>
-  </header>
-
-  <nav class="fbls-template-browser-tabs">
-    {{#each tabs}}
-      <button type="button" class="fbls-template-browser-tab {{#if active}}active{{/if}} {{id}}" data-action="template-category" data-template-category="{{id}}">
-        <i class="{{icon}}"></i><span>{{label}}</span><strong>{{tabCount}}</strong>
-      </button>
-    {{/each}}
-  </nav>
-
-  <div class="fbls-template-browser-tools fbls-toolbar">
-    <nav class="fbls-template-browser-availability fbls-action-group">
-      {{#each availabilityTabs}}
-        <button type="button" class="fbls-button compact {{#if active}}active{{/if}}" data-action="template-availability" data-template-availability="{{id}}">{{label}}</button>
-      {{/each}}
-    </nav>
-    <label class="fbls-template-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-template-search value="{{search}}" placeholder="Поиск по названию" /></label>
+<div class="fbls-template-browser-body {{#if detailOpen}}detail-open{{/if}}">
+  <div class="fbls-template-header-development fbls-cluster" data-template-header-development>
+    {{#each development.labels}}<span class="fbls-chip fbls-template-current-dev" title="{{tooltip}}"><i class="{{icon}} fbls-template-tone {{css}}" aria-hidden="true"></i> {{value}}</span>{{/each}}
   </div>
-
-  <section class="fbls-template-browser-grid">
-    {{#each rows}}
-      <article class="fbls-template-browser-card {{css}} {{primaryDevCss}}" data-fbls-tooltip="{{reasonText}}">
+  <div class="fbls-template-browser-tools fbls-toolbar">
+    <nav class="fbls-template-browser-tabs fbls-action-group" aria-label="Направление развития">
+      {{#each tabs}}<button type="button" class="fbls-button compact {{#if active}}active{{/if}}" data-action="template-category" data-template-category="{{id}}" aria-label="{{label}}" title="{{label}}: {{tabCount}}" aria-pressed="{{active}}"><i class="{{icon}} fbls-template-tone {{id}}" aria-hidden="true"></i><small>{{tabCount}}</small></button>{{/each}}
+    </nav>
+    <nav class="fbls-template-browser-availability fbls-action-group" aria-label="Доступность">
+      {{#each availabilityTabs}}<button type="button" class="fbls-button compact {{#if active}}active{{/if}}" data-action="template-availability" data-template-availability="{{id}}" aria-label="{{label}}" aria-pressed="{{active}}">{{label}}</button>{{/each}}
+    </nav>
+    {{#if canEdit}}<button type="button" class="fbls-button compact" data-action="create-building-template"><i class="fa-solid fa-plus" aria-hidden="true"></i> Шаблон</button>{{/if}}
+  </div>
+  <div class="fbls-template-browser-filters fbls-toolbar">
+    <details class="fbls-template-search-disclosure" data-template-search-disclosure {{#if searchExpanded}}open{{/if}}>
+      <summary class="fbls-button compact" aria-label="Раскрыть поиск" title="Поиск по названию, функции или материалу"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>{{#if search}}<span aria-label="Фильтр поиска активен">•</span>{{/if}}</summary>
+      <label class="fbls-template-search"><input type="search" data-template-search value="{{search}}" aria-label="Поиск чертежей" placeholder="Название, функция или материал…" /></label>
+    </details>
+    <label class="fbls-field">Назначение<select data-template-filter="purpose" aria-label="Назначение">{{#each purposeOptions}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+    <label class="fbls-field">Этап<select data-template-filter="stage" aria-label="Этап"><option value="all">Все этапы</option>{{#each stageOptions}}<option value="{{id}}" {{#if selected}}selected{{/if}}>Этап {{id}}</option>{{/each}}</select></label>
+    <label class="fbls-field">Порядок<select data-template-filter="sort" aria-label="Порядок"><option value="name">По названию</option><option value="stage" {{#if sortByStage}}selected{{/if}}>По этапу</option></select></label>
+  </div>
+  <div class="fbls-template-browser-workspace">
+    <section class="fbls-template-browser-catalog" aria-label="Каталог чертежей">
+      <div class="fbls-card-header"><span>Чертежи · <span data-template-result-count aria-live="polite">{{rows.length}}</span></span><span class="fbls-muted-text">Выберите здание</span></div>
+      <div class="fbls-template-browser-list" data-template-list data-render-scroll-key="template-list">
+        {{#each rows}}
+          <button type="button" class="fbls-template-browser-row {{listState}} {{#if selected}}selected{{/if}}" data-action="select-template" data-template-id="{{id}}" data-template-search-row="{{searchText}}" aria-pressed="{{selected}}">
+            <i class="{{icon}}" aria-hidden="true"></i>
+            <span class="fbls-template-row-name">{{name}}</span>
+            <span class="fbls-template-dev-chip-row">
+              {{#if showBuiltCheck}}<i class="fa-solid fa-check fbls-template-built-check" aria-label="Построено, повторные бонусы не начисляются" title="Построено, повторные бонусы не начисляются"></i>
+              {{else}}{{#each listBonusChips}}<span class="fbls-chip fbls-template-dev-chip {{#if negative}}negative{{/if}}" data-fbls-tooltip="{{tooltip}}" aria-label="{{tooltip}}"><i class="{{icon}}" aria-hidden="true"></i>{{text}}</span>{{/each}}{{/if}}
+            </span>
+            <small class="fbls-template-row-meta">{{primaryDevLabel}}{{#unless hasBuilt}}{{#if hasProject}} · В проекте{{else}}{{#if unlocked}} · Можно начать{{/if}}{{/if}}{{/unless}}</small>
+            <span class="fbls-template-deficit-row">
+              {{#if hasBuilt}}<span class="fbls-template-built-stamp">ПОСТРОЕНО</span>
+              {{else}}{{#each missingDevelopmentChips}}<span class="fbls-chip fbls-template-dev-chip negative" data-fbls-tooltip="{{tooltip}}" aria-label="{{label}}: не хватает {{deficit}}"><i class="{{icon}}" aria-hidden="true"></i>{{deficit}}</span>{{/each}}{{/if}}
+            </span>
+          </button>
+        {{else}}<p class="fbls-muted-text">По этим фильтрам чертежей нет.</p>{{/each}}
+        <p class="fbls-muted-text" data-template-search-empty hidden>Ничего не найдено. Измените запрос или фильтры.</p>
+      </div>
+    </section>
+    <section class="fbls-template-browser-detail" aria-label="Паспорт чертежа">
+      <button type="button" class="fbls-button compact fbls-template-back" data-action="template-list"><i class="fa-solid fa-arrow-left" aria-hidden="true"></i> К списку</button>
+      <p class="fbls-muted-text" data-template-select-prompt {{#if selected}}hidden{{/if}}>Выберите чертёж из результатов поиска.</p>
+      {{#with selected}}
+      <article class="fbls-template-passport" data-template-passport>
         <header class="fbls-template-card-head fbls-card-header">
-          <div class="fbls-template-title-block">
-            <h3><i class="{{icon}}"></i> {{name}}</h3>
-            <p><strong>{{primaryDevLabel}}</strong> · {{type}} · {{#if unlocked}}доступно{{else}}закрыто{{/if}}{{#if duplicateStateText}} · {{duplicateStateText}}{{/if}}{{#unless playerVisible}} · скрыто{{/unless}}</p>
-          </div>
-          {{#if showDevelopmentWarning}}
-            <div class="fbls-template-missing-dev inline" data-fbls-tooltip="{{missingDevelopmentText}}">
-              <span>Не хватает:</span>
-              {{#each missingDevelopmentChips}}
-                <em class="{{css}}" data-fbls-tooltip="{{tooltip}}"><i class="{{icon}}"></i>{{value}}</em>
-              {{/each}}
-            </div>
-          {{/if}}
-          <div class="fbls-template-dev-chip-row fbls-cluster">
-            {{#each bonusChips}}
-              <span class="fbls-template-dev-chip fbls-chip bonus {{css}}" data-fbls-tooltip="{{tooltip}}"><i class="{{icon}}"></i>{{text}}</span>
-            {{/each}}
-            {{#each requirementChips}}
-              <span class="fbls-template-dev-chip fbls-chip requirement {{css}}" data-fbls-tooltip="{{tooltip}}"><i class="{{icon}}"></i>{{text}}</span>
-            {{/each}}
-          </div>
+          <div class="fbls-stack"><h3><i class="{{icon}}" aria-hidden="true"></i> {{name}}</h3><span class="fbls-muted-text">{{functionLabels}} · Этап {{developmentStage}}</span></div>
+          {{#if ../canEdit}}<details class="fbls-template-menu"><summary aria-label="Управление шаблоном"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></summary><div class="fbls-stack">
+            <label class="fbls-template-player-toggle fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Видно игрокам"><input type="checkbox" data-template-visibility="{{id}}" {{#if playerVisible}}checked{{/if}} /><span>Видно игрокам</span></label>
+            <button type="button" class="fbls-button compact" data-action="edit-building-template" data-template-id="{{id}}"><i class="fa-solid fa-pen" aria-hidden="true"></i> Редактировать</button>
+            <button type="button" class="fbls-button compact" data-action="delete-building-template" data-template-id="{{id}}"><i class="fa-solid fa-trash" aria-hidden="true"></i> Удалить шаблон</button>
+          </div></details>{{/if}}
         </header>
-
-        <p class="fbls-template-description">{{description}}</p>
-
-        <div class="fbls-template-browser-meta two-column">
-          <span><b>Стройка</b> {{buildText}}</span>
-          <span class="{{#unless materialsOk}}missing{{/unless}}"><b>Материалы</b> {{materialCostsText}}</span>
-          <span><b>Развитие</b> {{requirementsText}}</span>
-          <span><b>Зависимости</b> {{dependenciesText}}</span>
-          <span><b>Функции</b> {{functionLabels}}</span>
-          <span><b>Спецнавыки</b> {{specialSkillRequirementsText}}</span>
-          <span><b>Линии</b> {{productionLinesText}}</span>
+        <div class="fbls-template-passport-scroll" data-template-detail-scroll data-render-scroll-key="template-detail-{{id}}">
+          <div class="fbls-template-overview">
+            {{#if description}}<p>{{description}}</p>{{/if}}
+            <div class="fbls-cluster" aria-label="Бонусы развития">{{#each displayBonusChips}}<span class="fbls-chip fbls-template-dev-chip {{#if negative}}negative{{/if}}" data-fbls-tooltip="{{tooltip}}"><i class="{{icon}}" aria-hidden="true"></i>{{text}}</span>{{else}}<span class="fbls-muted-text">Без бонусов развития</span>{{/each}}</div>
+          </div>
+          <div class="fbls-template-passport-columns">
+            <section class="fbls-template-panel"><h4><i class="fa-solid fa-hammer" aria-hidden="true"></i> Строительство</h4>
+              <div class="fbls-template-build-metrics"><div><span>Цель · успехи</span><strong>{{buildTarget}}</strong></div><div><span>Сложность</span><strong>{{buildDifficulty}}</strong></div></div>
+              {{#if materialAvailability}}<table><thead><tr><th scope="col">Материал</th><th scope="col">Нужно</th><th scope="col">Есть</th></tr></thead><tbody>{{#each materialAvailability}}<tr><td>{{name}}</td><td>{{qty}}</td><td class="{{#unless enough}}missing{{/unless}}">{{have}}</td></tr>{{/each}}</tbody></table>{{else}}<p class="fbls-muted-text">Материалы не требуются.</p>{{/if}}
+              {{#unless materialsOk}}<p class="fbls-template-material-warning">Материалы можно довезти после создания проекта.</p>{{/unless}}
+            </section>
+            <section class="fbls-template-panel"><h4><i class="fa-solid fa-users-gear" aria-hidden="true"></i> Работа и содержание</h4>
+              <dl><div><dt>Работники</dt><dd>{{staffingText}}</dd></div><div><dt>Ставка / день</dt><dd>{{wageText}}</dd></div><div><dt>База / месяц</dt><dd>{{baseUpkeepText}}</dd></div><div><dt>При работе / месяц</dt><dd>{{operatingUpkeepText}}</dd></div><div><dt>Обслуживание</dt><dd>{{maintenanceText}}</dd></div>
+              {{#if workerRole}}<div><dt>Должность</dt><dd>{{workerRole}}</dd></div>{{/if}}
+              {{#if workerMoraleDelta}}<div><dt>Мораль работников</dt><dd>{{workerMoraleDelta}}</dd></div>{{/if}}</dl>
+              {{#if workerProfile.admission.text}}<div class="fbls-template-rule"><span>{{#if workerProfile.admission.hard}}Допуск к работе{{else}}Рекомендуемый работник{{/if}}</span><p>{{workerProfile.admission.text}}</p></div>{{/if}}
+            </section>
+          </div>
+          <section class="fbls-template-panel"><h4><i class="fa-solid fa-clipboard-check" aria-hidden="true"></i> Требования строительства</h4>
+            <div class="fbls-template-rule"><span>Развитие поселения</span><div class="fbls-cluster">{{#each requirementChips}}<span class="fbls-chip" data-fbls-tooltip="{{tooltip}}"><i class="{{icon}}" aria-hidden="true"></i>{{text}}</span>{{else}}<span class="fbls-muted-text">Без требований к развитию</span>{{/each}}</div></div>
+            {{#if showDevelopmentWarning}}<p class="fbls-template-material-warning">{{missingDevelopmentText}}</p>{{/if}}
+            {{#if hasDependencies}}<div class="fbls-template-rule"><span>Предшествующие здания</span><p>{{dependenciesText}}</p></div>{{/if}}
+            {{#if requiredSpecialSkills}}<div class="fbls-template-rule"><span>Черты стройбригады</span><p>{{specialSkillRequirementsText}}</p></div>{{/if}}
+            {{#if siteRequirementsText}}<div class="fbls-template-rule"><span>Участок</span><p>{{siteRequirementsText}}</p></div>{{/if}}
+            {{#if specialRequirements}}<div class="fbls-template-rule"><span>Особые требования</span><p>{{specialRequirements}}</p></div>{{/if}}
+          </section>
+          {{#if recipes}}<section class="fbls-template-panel"><h4><i class="fa-solid fa-industry" aria-hidden="true"></i> Производство</h4>{{#each recipes}}<div class="fbls-template-recipe"><strong>{{name}}</strong><dl><div><dt>Расход · {{expensePeriod}}</dt><dd>{{inputs}}</dd></div><div><dt>Результат</dt><dd>{{output}}</dd></div></dl><small>{{cycleText}}{{#if seasonText}} · {{seasonText}}{{/if}}</small></div>{{/each}}</section>{{/if}}
+          {{#if effect}}<section class="fbls-template-panel"><h4><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i> Эффекты и услуги</h4><p>{{effect}}</p></section>{{/if}}
+          {{#if functions.housing}}<section class="fbls-template-panel"><h4>Жильё</h4><dl><div><dt>Мест</dt><dd>{{housing.capacity}}</dd></div><div><dt>Комфорт</dt><dd>{{housing.comfort}}</dd></div></dl></section>{{/if}}
+          {{#if functions.storage}}<section class="fbls-template-panel"><h4>Хранение</h4><dl><div><dt>Вместимость</dt><dd>{{storage.capacity}}</dd></div><div><dt>Защита</dt><dd>{{storage.security}}</dd></div></dl></section>{{/if}}
+          {{#if functions.defense}}<section class="fbls-template-panel"><h4>Оборона</h4><dl><div><dt>Защита</dt><dd>{{defense.base}}</dd></div></dl></section>{{/if}}
+          {{#if activationConditionText}}<details class="fbls-template-panel"><summary>Условия действия эффектов</summary><p>{{activationConditionText}}</p></details>{{/if}}
+          {{#if notes}}<details class="fbls-template-panel"><summary>Примечания</summary><p>{{notes}}</p></details>{{/if}}
         </div>
-
-        {{#if specialRequirements}}<p class="fbls-template-special"><b>Особое:</b> {{specialRequirements}}</p>{{/if}}
-        {{#if sourceRequirement}}<p class="fbls-template-source"><b>Ориг. треб.:</b> {{sourceRequirement}}</p>{{/if}}
-        {{#unless materialsOk}}<p class="fbls-template-material-warning"><i class="fa-solid fa-triangle-exclamation"></i> Не хватает: {{missingMaterialsText}}.</p>{{/unless}}
-
-        <footer class="fbls-action-group">
-          {{#if ../canEdit}}
-            <label class="fbls-template-player-toggle"><input type="checkbox" data-template-visibility="{{id}}" {{#if playerVisible}}checked{{/if}} /> игроки</label>
-            <button type="button" class="fbls-button compact" data-action="edit-building-template" data-template-id="{{id}}"><i class="fa-solid fa-pen-to-square"></i> Редактировать</button>
-            <button type="button" class="fbls-button compact danger" data-action="delete-building-template" data-template-id="{{id}}"><i class="fa-solid fa-trash"></i> Удалить</button>
-          {{/if}}
-          {{#if ../canCreateProject}}
-            <button type="button" class="fbls-button compact primary" data-action="create-building-from-template" data-template-id="{{id}}" {{#unless unlocked}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> В проект</button>
-          {{/if}}
-        </footer>
+        <footer class="fbls-template-passport-footer fbls-card-header"><span>{{reasonText}}</span>{{#if ../canCreateProject}}<button type="button" class="fbls-button primary" data-action="create-building-from-template" data-template-id="{{id}}" {{#unless unlocked}}disabled{{/unless}}><i class="fa-solid fa-plus" aria-hidden="true"></i> В проект</button>{{/if}}</footer>
       </article>
-    {{else}}
-      <article class="fbls-card"><h3>Ничего не найдено</h3><p>Для выбранного фильтра шаблонов нет.</p></article>
-    {{/each}}
-  </section>
+      {{/with}}
+    </section>
+  </div>
 </div>

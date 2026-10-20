@@ -1,13 +1,59 @@
 import { toNumber } from "../data/utils.js";
 
 export const ATTRIBUTE_META = {
-  strength: { short: "С", label: "Сила", color: "rgba(156, 49, 43, 0.92)" },
-  agility: { short: "Л", label: "Ловкость", color: "rgba(47, 122, 75, 0.92)" },
-  wits: { short: "Р", label: "Разум", color: "rgba(48, 90, 170, 0.92)" },
-  empathy: { short: "Э", label: "Эмпатия", color: "rgba(178, 67, 159, 0.92)" }
+  strength: { short: "С", label: "Сила", color: "var(--fbls-worker-strength)" },
+  agility: { short: "Л", label: "Ловкость", color: "var(--fbls-worker-agility)" },
+  wits: { short: "Р", label: "Разум", color: "var(--fbls-worker-wits)" },
+  empathy: { short: "Э", label: "Эмпатия", color: "var(--fbls-worker-empathy)" }
 };
 
 export const ATTRIBUTE_ORDER = ["strength", "agility", "wits", "empathy"];
+export const RESIDENT_ATTRIBUTE_MIN = 1;
+export const RESIDENT_ATTRIBUTE_MAX = 6;
+export const GENERATED_ATTRIBUTE_CAP = 5;
+
+export const AGE_GROUP_ATTRIBUTE_BUDGETS = Object.freeze({
+  "Ре": 10,
+  "Мл": 15,
+  "Вз": 14,
+  "Ст": 13
+});
+
+export function normalizeResidentAttribute(value, fallback = 3) {
+  const missing = value === null || value === undefined || String(value).trim() === "";
+  const parsed = missing ? Number.NaN : Number(value);
+  const safeFallback = Number.isFinite(Number(fallback)) ? Number(fallback) : 3;
+  const numeric = Number.isFinite(parsed) ? parsed : safeFallback;
+  return Math.max(RESIDENT_ATTRIBUTE_MIN, Math.min(RESIDENT_ATTRIBUTE_MAX, Math.floor(numeric)));
+}
+
+export function adjustResidentAttributesForAgeTransition(attrs = {}, fromGroup = "", toGroup = "", { random = Math.random } = {}) {
+  const fromBudget = Number(AGE_GROUP_ATTRIBUTE_BUDGETS[fromGroup]);
+  const toBudget = Number(AGE_GROUP_ATTRIBUTE_BUDGETS[toGroup]);
+  const next = Object.fromEntries(ATTRIBUTE_ORDER.map((key) => [key, normalizeResidentAttribute(attrs?.[key], 3)]));
+  if (!Number.isFinite(fromBudget) || !Number.isFinite(toBudget) || fromGroup === toGroup) return { attributes: next, changes: [] };
+
+  const changeByKey = new Map();
+  let remaining = Math.abs(toBudget - fromBudget);
+  const direction = Math.sign(toBudget - fromBudget);
+  while (remaining > 0 && direction !== 0) {
+    const candidates = ATTRIBUTE_ORDER.filter((key) => (
+      direction > 0 ? next[key] < GENERATED_ATTRIBUTE_CAP : next[key] > RESIDENT_ATTRIBUTE_MIN
+    ));
+    if (!candidates.length) break;
+    const rolled = Number(typeof random === "function" ? random() : Math.random());
+    const bounded = Number.isFinite(rolled) ? Math.max(0, Math.min(0.999999999, rolled)) : 0;
+    const key = candidates[Math.floor(bounded * candidates.length)];
+    next[key] += direction;
+    changeByKey.set(key, (changeByKey.get(key) ?? 0) + direction);
+    remaining -= 1;
+  }
+
+  return {
+    attributes: next,
+    changes: ATTRIBUTE_ORDER.filter((key) => changeByKey.has(key)).map((key) => ({ key, delta: changeByKey.get(key) }))
+  };
+}
 
 export const AGE_THRESHOLDS = {
   human: { young: 18, adult: 30, old: 55, max: 70 },
@@ -134,45 +180,17 @@ export function socialBackgroundOptions(current = "") {
   return options;
 }
 
-export const SPECIAL_SKILL_DEFINITIONS = [
-  { value: "", label: "Нет", description: "Спецнавык не задан." },
-  { value: "Builder", label: "Builder / Строитель", description: "Профессиональный строитель. Выполняет требования Builder и помогает сложным проектам." },
-  { value: "Trader", label: "Trader / Торговец", description: "Умеет торговаться, вести лавку и продавать товары поселения." },
-  { value: "Scribe", label: "Scribe / Писарь", description: "Грамота, учет, архивы, библиотека, скрипторий и администрация." },
-  { value: "Healer", label: "Healer / Лекарь", description: "Лечение, баня, санитария и уход за больными." },
-  { value: "Priest", label: "Priest / Жрец", description: "Культовые здания, погребальные практики, святилища и обряды." },
-  { value: "Guard", label: "Guard / Стражник", description: "Оборона, охрана складов, башни, темницы и военная дисциплина." },
-  { value: "Sailor", label: "Sailor / Моряк", description: "Пирсы, маяки, корабли, снабжение и навигация." },
-  { value: "Engineer", label: "Engineer / Механик", description: "Механизмы, сложные мастерские, генераторы и техническая инфраструктура." }
-];
-
-export function specialSkillOptions(current = "") {
-  const selected = String(current ?? "").trim();
-  const normalized = selected.toLowerCase();
-  const options = SPECIAL_SKILL_DEFINITIONS.map((skill) => ({
-    ...skill,
-    selected: String(skill.value).toLowerCase() === normalized || String(skill.label).toLowerCase() === normalized
-  }));
-  if (selected && !options.some((item) => item.selected)) options.push({ value: selected, label: selected, description: "Пользовательский спецнавык.", selected: true });
-  return options;
-}
-
-export function specialSkillDescription(value = "") {
-  const raw = String(value ?? "").trim().toLowerCase();
-  return SPECIAL_SKILL_DEFINITIONS.find((skill) => String(skill.value).toLowerCase() === raw || String(skill.label).toLowerCase() === raw)?.description ?? "Пользовательский спецнавык.";
-}
-
 export function workerTypeStyleFromAttributes(attrs = {}) {
   const keys = outstandingAttributeKeys(attrs);
   if (!keys.length) return "";
-  if (keys.length === 1) return `background: ${ATTRIBUTE_META[keys[0]].color}; color: #f4f0e8;`;
+  if (keys.length === 1) return `background: ${ATTRIBUTE_META[keys[0]].color}; color: var(--fbls-text-strong);`;
 
   const stops = keys.map((key, index) => {
     const pct = keys.length === 1 ? 0 : Math.round((index / (keys.length - 1)) * 100);
     return `${ATTRIBUTE_META[key].color} ${pct}%`;
   }).join(", ");
 
-  return `background: linear-gradient(90deg, ${stops}); color: #f4f0e8;`;
+  return `background: linear-gradient(90deg, ${stops}); color: var(--fbls-text-strong);`;
 }
 
 export function normalizeBelief(value = "") {

@@ -1,0 +1,34 @@
+/* Shared form flags: native checkbox, compact text, intrinsic width. */
+.fbl-skyhold label.fbls-checkbox-label.fbls-choice-toggle {
+  display: inline-flex; flex-direction: row; flex-wrap: nowrap; align-items: center; justify-content: flex-start;
+  box-sizing: border-box; width: fit-content; max-width: 100%; min-width: 0;
+  height: var(--fbls-control-height); min-height: var(--fbls-control-height);
+  align-self: end; gap: 6px; margin: 0; padding: 3px 8px;
+  border: 1px solid var(--fbls-border); border-radius: var(--fbls-radius-sm);
+  font-size: var(--fbls-type-compact-md); font-weight: 400; line-height: 1.25;
+  text-transform: none; letter-spacing: normal; cursor: pointer;
+}
+.fbl-skyhold label.fbls-checkbox-label.fbls-choice-toggle > span {
+  order: 2; display: block; min-width: 0; margin: 0; letter-spacing: normal;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: inherit;
+  font-size: inherit; line-height: inherit; text-transform: none;
+}
+.fbl-skyhold label.fbls-checkbox-label.fbls-choice-toggle input[type="checkbox"] {
+  --fbls-check-size: 18px; order: 0; flex: 0 0 var(--fbls-check-size);
+  align-self: center; margin: 0;
+}
+.fbl-skyhold label.fbls-checkbox-label.fbls-choice-toggle > strong {
+  order: 0; min-height: 0; padding: 0; border: 0; background: transparent; font-size: inherit;
+}
+.fbl-skyhold label.fbls-checkbox-label.fbls-choice-toggle.icon-only {
+  width: var(--fbls-control-height); padding: 0; justify-content: center;
+}
+.fbl-skyhold label.fbls-checkbox-label.fbls-choice-toggle:has(input:checked) {
+  border-color: var(--fbls-success); background: var(--fbls-success-soft); color: var(--fbls-text-strong);
+}
+.fbl-skyhold label.fbls-checkbox-label.fbls-choice-toggle:has(input:disabled) { cursor: default; }
+.fbl-skyhold label.fbls-checkbox-label.fbls-choice-toggle:not(:has(input)) { cursor: help; }
+.fbl-skyhold label.fbls-checkbox-label.fbls-choice-toggle:focus-within {
+  outline: 2px solid var(--fbls-accent-border); outline-offset: 2px;
+}
+

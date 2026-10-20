@@ -1,7 +1,7 @@
-import { reserveMarketQuoteStock } from "./stock.js";
+import { marketPurchasePaymentEntry } from "./purchase-payment.js";
 
 function requireDependencies(dependencies = {}) {
-  for (const name of ["addMoney", "storageAddWithOverflow", "snapshotItemForStorage", "appendStorageLog", "formatCurrency"]) {
+  for (const name of ["addMoney", "storageAddWithOverflow", "snapshotItemForStorage", "appendStorageLog", "formatCurrency", "internalDemandAvailableFromQd"]) {
     if (typeof dependencies[name] !== "function") throw new TypeError(`market delivery requires dependencies.${name}`);
   }
   return dependencies;
@@ -16,19 +16,17 @@ export function applyMarketDelivery({ holding, plan, itemDocuments = new Map(), 
     }
   }
 
-  const reservation = reserveMarketQuoteStock({ holding, plan, operationId });
-  if (!reservation.ok) return reservation;
-  if (reservation.replay) return { ok: true, replay: true, delivered: [], storageEntries: [], reservation: reservation.reservation };
-
   deps.addMoney(holding, -plan.totalCopper);
   const storageEntries = [];
   const delivered = [];
   for (const line of plan.lines ?? []) {
+    const internalDemandAvailableFromQd = Math.max(0, Math.floor(Number(deps.internalDemandAvailableFromQd(holding)) || 0));
     if (line.sourceType === "item") {
       const item = itemDocuments.get(line.id);
       if (!holding.storage || typeof holding.storage !== "object") holding.storage = { resources: [], items: [], moneyCopper: 0, log: [] };
       if (!Array.isArray(holding.storage.items)) holding.storage.items = [];
       const snapshot = deps.snapshotItemForStorage(item, line.qty, plan.targetRoomId);
+      snapshot.internalDemandAvailableFromQd = internalDemandAvailableFromQd;
       snapshot.itemUuid = String(line.itemUuid || item.uuid || snapshot.itemUuid || "");
       if (line.configuredName) snapshot.name = line.configuredName;
       if (line.configuredImg) snapshot.img = line.configuredImg;
@@ -53,10 +51,7 @@ export function applyMarketDelivery({ holding, plan, itemDocuments = new Map(), 
       unit: line.unit,
       img: line.img,
       roomId: plan.targetRoomId,
-      economyVersion: line.economyVersion,
-      cargoClass: line.cargoClass,
-      cargoPoints: line.cargoPoints,
-      load: line.load
+      batches: [{ qty: line.qty, ageQd: 0, internalDemandAvailableFromQd }]
     }, line.qty);
     for (const placement of placements) {
       storageEntries.push({
@@ -72,6 +67,7 @@ export function applyMarketDelivery({ holding, plan, itemDocuments = new Map(), 
       delivered.push({ offerId: line.id, sourceType: "resource", name: line.name, qty: placement.qty, roomId: placement.roomId });
     }
   }
+  storageEntries.push(marketPurchasePaymentEntry(plan, operationId));
   deps.appendStorageLog(holding, storageEntries);
-  return { ok: true, replay: false, delivered, storageEntries, reservation: reservation.reservation };
+  return { ok: true, delivered, storageEntries };
 }

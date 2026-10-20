@@ -1,4 +1,6 @@
-export const BUILDING_TEMPLATES_FOOD = [
+import { applyEconomicTemplateCalibration } from "../building-template-economy-calibration.js";
+
+export const BUILDING_TEMPLATES_FOOD = applyEconomicTemplateCalibration([
   {
     "id": "well",
     "compendiumId": "jua1yTNmTQf6Sb7z",
@@ -39,11 +41,6 @@ export const BUILDING_TEMPLATES_FOOD = [
     "requiredBuildingIds": [],
     "workersMin": 0,
     "workersMax": 1,
-    "suitableWorkerTypes": "Все с СИЛ, Силач",
-    "workerTypeEffects": {
-      "Все с СИЛ": 0.5,
-      "Силач": 1
-    },
     "workerRole": "",
     "functions": {
       "production": false,
@@ -93,7 +90,6 @@ export const BUILDING_TEMPLATES_FOOD = [
     "notes": "Everyone in the stronghold has free access to water. Зависимость для Бани.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "strength"
   },
   {
     "id": "grain-field",
@@ -128,13 +124,6 @@ export const BUILDING_TEMPLATES_FOOD = [
     "requiredBuildingIds": [],
     "workersMin": 1,
     "workersMax": 8,
-    "suitableWorkerTypes": "Все с СИЛ, Все с ЭМП, Силач, Переговорщик",
-    "workerTypeEffects": {
-      "Все с СИЛ": 0.5,
-      "Все с ЭМП": 0.5,
-      "Силач": 1,
-      "Переговорщик": 1
-    },
     "workerRole": "",
     "functions": {
       "production": true,
@@ -144,38 +133,37 @@ export const BUILDING_TEMPLATES_FOOD = [
       "storage": false,
       "culture": false
     },
-    "productionLines": [
-      {
-        "id": "line",
-        "active": true,
-        "name": "Зерно",
-        "mode": "Зерно",
-        "source": "time",
-        "cadence": "tenday",
-        "cadenceEvery": 1,
-        "resourceId": "grain",
-        "resource": "Grain",
-        "outputQty": 40,
-        "laborQdPerBatch": 0,
-        "maxBatchesPerCadence": 1,
-        "formula": "40*@eff",
-        "expenseMode": "cycle",
-        "expenses": "",
-        "costsText": "",
-        "requiresCollection": true,
-        "collectQd": 2,
-        "daylightCollectionOnly": true,
-        "pendingQty": 0,
-        "storageRoomId": "outdoors",
-        "autoCollect": "building",
-        "seasons": {
-          "spring": false,
-          "summer": true,
-          "autumn": false,
-          "winter": false
+    "productionLines": [],
+    "agriculture": {
+      "schemaVersion": 1,
+      "enabled": true,
+      "kind": "field",
+      "activeCropId": "grain",
+      "outputRoomId": "outdoors",
+      "gmPriority": 500,
+      "operations": {
+        "sow": true,
+        "harvest": true
+      },
+      "crops": [
+        {
+          "id": "grain",
+          "label": "Зерно",
+          "resourceId": "grain",
+          "outputQty": 20,
+          "sowingSeasons": ["spring"],
+          "sowingWorkQd": 8,
+          "growingQd": 480,
+          "harvestWorkQd": 20,
+          "expiryRule": "qd",
+          "readyExpiryQd": 120
         }
+      ],
+      "state": {
+        "version": 1,
+        "phase": "empty"
       }
-    ],
+    },
     "income": {
       "base": 0,
       "perWorker": 0,
@@ -211,22 +199,21 @@ export const BUILDING_TEMPLATES_FOOD = [
     "moraleDelta": 0,
     "workerMoraleDelta": 0,
     "upkeep": 0,
-    "effect": "Во второй половине Зарости поле каждые десять дней даёт 40 мешков зерна на эффективного работника. Сбор требует 2 QD и переносится с теньдня на светлый день.",
-    "notes": "Урожайное окно: Зноерост и Зноеход. Вне этого окна зерно не создаётся; назначенные работники определяют объём урожая и выполняют сбор.",
+    "effect": "Посев требует сезонного труда, рост идёт по календарю, готовый Grain остаётся на поле до постепенного сбора.",
+    "notes": "Семена абстрактны; незавершённый посев после допустимого сезона не создаёт урожай.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "strength"
   },
   {
     "id": "garden",
     "compendiumId": "8gvZgN6Av4xVjoYg",
-    "name": "Сад и огород",
+    "name": "Сад",
     "type": "Производство",
     "primaryDev": "food",
     "icon": "fa-solid fa-seedling",
     "img": "",
     "unlocked": true,
-    "description": "Смешанное хозяйство с овощными грядками, плодовыми деревьями и лекарственными травами.",
+    "description": "Огород, травы и овощи для стола и лекарского дела.",
     "sourceRequirement": "-",
     "sourceRawMaterials": "-",
     "specialRequirements": "",
@@ -250,13 +237,6 @@ export const BUILDING_TEMPLATES_FOOD = [
     "requiredBuildingIds": [],
     "workersMin": 1,
     "workersMax": 4,
-    "suitableWorkerTypes": "Все с ЭМП, Все с РАЗ, Переговорщик, Умелец",
-    "workerTypeEffects": {
-      "Все с ЭМП": 0.5,
-      "Все с РАЗ": 0.5,
-      "Переговорщик": 1,
-      "Умелец": 1
-    },
     "workerRole": "",
     "functions": {
       "production": true,
@@ -266,98 +246,49 @@ export const BUILDING_TEMPLATES_FOOD = [
       "storage": false,
       "culture": false
     },
-    "productionLines": [
-      {
-        "id": "line",
-        "active": true,
-        "name": "Овощи",
-        "mode": "Овощи",
-        "source": "time",
-        "cadence": "tenday",
-        "cadenceEvery": 1,
-        "resourceId": "vegetables",
-        "resource": "Vegetables",
-        "outputQty": 12,
-        "formula": "12*@eff",
-        "laborQdPerBatch": 0,
-        "maxBatchesPerCadence": 1,
-        "expenseMode": "cycle",
-        "expenses": "",
-        "costsText": "",
-        "requiresCollection": true,
-        "collectQd": 2,
-        "daylightCollectionOnly": true,
-        "pendingQty": 0,
-        "storageRoomId": "outdoors",
-        "autoCollect": "building",
-        "seasons": {
-          "spring": true,
-          "summer": true,
-          "autumn": false,
-          "winter": false
-        }
+    "productionLines": [],
+    "agriculture": {
+      "schemaVersion": 1,
+      "enabled": true,
+      "kind": "garden",
+      "activeCropId": "vegetables",
+      "outputRoomId": "outdoors",
+      "gmPriority": 500,
+      "operations": {
+        "sow": true,
+        "harvest": true
       },
-      {
-        "id": "line-2",
-        "active": true,
-        "name": "Фрукты",
-        "mode": "Фрукты",
-        "source": "time",
-        "cadence": "tenday",
-        "cadenceEvery": 1,
-        "resourceId": "fruits",
-        "resource": "Fruits",
-        "outputQty": 8,
-        "formula": "8*@eff",
-        "laborQdPerBatch": 0,
-        "maxBatchesPerCadence": 1,
-        "expenseMode": "cycle",
-        "expenses": "",
-        "costsText": "",
-        "requiresCollection": true,
-        "collectQd": 2,
-        "daylightCollectionOnly": true,
-        "pendingQty": 0,
-        "storageRoomId": "outdoors",
-        "autoCollect": "building",
-        "seasons": {
-          "spring": false,
-          "summer": true,
-          "autumn": false,
-          "winter": false
+      "crops": [
+        {
+          "id": "vegetables",
+          "label": "Овощи",
+          "resourceId": "vegetables",
+          "outputQty": 20,
+          "sowingSeasons": ["spring", "summer"],
+          "sowingWorkQd": 4,
+          "growingQd": 120,
+          "harvestWorkQd": 10,
+          "expiryRule": "qd",
+          "readyExpiryQd": 80
+        },
+        {
+          "id": "herbs",
+          "label": "Травы",
+          "resourceId": "herbs",
+          "outputQty": 10,
+          "sowingSeasons": ["spring", "summer"],
+          "sowingWorkQd": 4,
+          "growingQd": 80,
+          "harvestWorkQd": 10,
+          "expiryRule": "season-end",
+          "readyExpiryQd": 0
         }
-      },
-      {
-        "id": "line-3",
-        "active": true,
-        "name": "Травы",
-        "mode": "Травы",
-        "source": "time",
-        "cadence": "tenday",
-        "cadenceEvery": 1,
-        "resourceId": "herbs",
-        "resource": "Herbs",
-        "outputQty": 3,
-        "formula": "3*@eff",
-        "laborQdPerBatch": 0,
-        "maxBatchesPerCadence": 1,
-        "expenseMode": "cycle",
-        "expenses": "",
-        "costsText": "",
-        "requiresCollection": true,
-        "collectQd": 2,
-        "daylightCollectionOnly": true,
-        "pendingQty": 0,
-        "storageRoomId": "outdoors",
-        "autoCollect": "building",
-        "seasons": {
-          "spring": true,
-          "summer": true,
-          "autumn": false,
-          "winter": false
-        }
+      ],
+      "state": {
+        "version": 1,
+        "phase": "empty"
       }
-    ],
+    },
     "income": {
       "base": 0,
       "perWorker": 0,
@@ -393,11 +324,10 @@ export const BUILDING_TEMPLATES_FOOD = [
     "moraleDelta": 0,
     "workerMoraleDelta": 0,
     "upkeep": 0,
-    "effect": "Смешанное хозяйство даёт Vegetables, Fruits и Herbs только в Зарость; в Ухудно сад не производит урожай.",
-    "notes": "Овощи и травы доступны в обе половины Зарости, фрукты — во второй половине Зарости. Каждая линия требует 2 QD сбора и переносится с теньдня.",
+    "effect": "Весной и летом можно посеять Vegetables или Herbs; урожай растёт по календарю и остаётся на участке до сбора.",
+    "notes": "Семена абстрактны. Срок готового урожая и правило гибели настраиваются отдельно для каждой культуры.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "strength"
   },
   {
     "id": "pasture",
@@ -439,13 +369,6 @@ export const BUILDING_TEMPLATES_FOOD = [
     "requiredBuildingIds": [],
     "workersMin": 1,
     "workersMax": 4,
-    "suitableWorkerTypes": "Все с ЭМП, Все с СИЛ, Переговорщик, Силач",
-    "workerTypeEffects": {
-      "Все с ЭМП": 0.5,
-      "Все с СИЛ": 0.5,
-      "Переговорщик": 1,
-      "Силач": 1
-    },
     "workerRole": "",
     "functions": {
       "production": true,
@@ -455,42 +378,26 @@ export const BUILDING_TEMPLATES_FOOD = [
       "storage": false,
       "culture": false
     },
-    "contents": [
-      {
-        "id": "cows",
-        "name": "Коровы",
-        "resourceId": "cattle",
-        "qty": 0,
-        "capacity": 12,
-        "notes": "Коровы поступают со склада. Их количество сразу меняет выпуск молока."
+    "livestock": {
+      "enabled": true,
+      "speciesId": "cattle",
+      "outputRoomId": "outdoors",
+      "state": {
+        "adults": 0,
+        "breedingMales": 0,
+        "young": [],
+        "woolReady": 0,
+        "lastBirthSeasonKey": ""
+      },
+      "operations": {
+        "milk": true,
+        "shearQty": 0,
+        "slaughterQty": 0,
+        "slaughterBreedingMales": 0,
+        "feedPriority": "adults"
       }
-    ],
-    "productionLines": [
-      {
-        "id": "line",
-        "active": true,
-        "name": "Молоко",
-        "mode": "Молоко",
-        "source": "content",
-        "contentId": "cows",
-        "contentUnitsPerBatch": 12,
-        "cadence": "day",
-        "cadenceEvery": 1,
-        "resourceId": "milk",
-        "resource": "Milk",
-        "outputQty": 2,
-        "laborQdPerBatch": 0,
-        "maxBatchesPerCadence": 1,
-        "expenseMode": "cycle",
-        "expenses": "",
-        "costsText": "",
-        "requiresCollection": true,
-        "collectQd": 2,
-        "pendingQty": 0,
-        "storageRoomId": "outdoors",
-        "autoCollect": "building"
-      }
-    ],
+    },
+    "productionLines": [],
     "income": {
       "base": 0,
       "perWorker": 0,
@@ -526,11 +433,10 @@ export const BUILDING_TEMPLATES_FOOD = [
     "moraleDelta": 0,
     "workerMoraleDelta": 0,
     "upkeep": 0,
-    "effect": "Полное стадо из двенадцати коров даёт 2 партии Milk в день; сбор требует 2 рабочих QD, а обычный корм обеспечивает выпас.",
-    "notes": "Коровы задаются в «Содержимом здания». Выпуск начинается при полной когорте из 12 голов; право выпаса входит в работу пастбища, поэтому Grain не является обязательным входом.",
-    "templateVersion": 11,
+    "effect": "До 12 коров. В пастбищные сезоны корм бесплатен, зимой нужен Animal Feed. Milk требует ежедневных рабочих QD; приплод рассчитывается один раз весной; забой задаётся явно.",
+    "notes": "Каждое пастбище содержит отдельное стадо; животные не хранятся под открытым небом.",
+    "templateVersion": 12,
     "visibility": "public",
-    "workerPrimaryAttribute": "strength"
   },
   {
     "id": "pigsty",
@@ -572,13 +478,6 @@ export const BUILDING_TEMPLATES_FOOD = [
     "requiredBuildingIds": [],
     "workersMin": 1,
     "workersMax": 3,
-    "suitableWorkerTypes": "Все с ЭМП, Все с СИЛ, Переговорщик, Силач",
-    "workerTypeEffects": {
-      "Все с ЭМП": 0.5,
-      "Все с СИЛ": 0.5,
-      "Переговорщик": 1,
-      "Силач": 1
-    },
     "workerRole": "",
     "functions": {
       "production": true,
@@ -588,43 +487,26 @@ export const BUILDING_TEMPLATES_FOOD = [
       "storage": false,
       "culture": false
     },
-    "contents": [
-      {
-        "id": "pigs",
-        "name": "Свиньи",
-        "resourceId": "pigs",
-        "qty": 0,
-        "capacity": 12,
-        "notes": "Свиньи поступают со склада. Их количество прямо меняет усреднённый выход мяса."
+    "livestock": {
+      "enabled": true,
+      "speciesId": "pigs",
+      "outputRoomId": "outdoors",
+      "state": {
+        "adults": 0,
+        "breedingMales": 0,
+        "young": [],
+        "woolReady": 0,
+        "lastBirthSeasonKey": ""
+      },
+      "operations": {
+        "milk": false,
+        "shearQty": 0,
+        "slaughterQty": 0,
+        "slaughterBreedingMales": 0,
+        "feedPriority": "adults"
       }
-    ],
-    "productionLines": [
-      {
-        "id": "line",
-        "active": true,
-        "name": "Мясо со свиней",
-        "mode": "Мясо со свиней",
-        "source": "content",
-        "contentId": "pigs",
-        "contentUnitsPerBatch": 12,
-        "cadence": "tenday",
-        "cadenceEvery": 1,
-        "resourceId": "meat",
-        "resource": "Meat",
-        "outputQty": 11,
-        "formula": "",
-        "laborQdPerBatch": 0,
-        "maxBatchesPerCadence": 1,
-        "expenseMode": "cycle",
-        "expenses": "Grain 2",
-        "costsText": "Grain 2",
-        "requiresCollection": true,
-        "collectQd": 2,
-        "pendingQty": 0,
-        "storageRoomId": "outdoors",
-        "autoCollect": "building"
-      }
-    ],
+    },
+    "productionLines": [],
     "income": {
       "base": 0,
       "perWorker": 0,
@@ -660,11 +542,10 @@ export const BUILDING_TEMPLATES_FOOD = [
     "moraleDelta": 0,
     "workerMoraleDelta": 0,
     "upkeep": 0,
-    "effect": "Стадо из двенадцати свиней раз в десятник даёт в среднем 11 партий Meat, расходуя 2 мешка Grain; разделка требует 2 QD.",
-    "notes": "Свиньи задаются в «Содержимом здания». Выпуск начинается при полной когорте из 12 голов; линия описывает устойчивую выбраковку и восстановление стада.",
-    "templateVersion": 11,
+    "effect": "До 12 свиней. Animal Feed нужен круглый год; приплод рассчитывается один раз весной; забой целых взрослых задаётся явно.",
+    "notes": "Каждый свинарник содержит отдельное стадо; при нехватке корма животные не производят и не размножаются, но не умирают автоматически.",
+    "templateVersion": 12,
     "visibility": "public",
-    "workerPrimaryAttribute": "strength"
   },
   {
     "id": "sheepfold",
@@ -675,7 +556,7 @@ export const BUILDING_TEMPLATES_FOOD = [
     "icon": "fa-solid fa-sheep",
     "img": "",
     "unlocked": true,
-    "description": "Стадо до двенадцати овец даёт годовой настриг; осенняя выбраковка приносит мясо и шкуры.",
+    "description": "Овцы дают шерсть, мясо и приплод.",
     "sourceRequirement": "Up to a dozen sheep, bought or stolen separately",
     "sourceRawMaterials": "20 Wood",
     "specialRequirements": "",
@@ -704,16 +585,9 @@ export const BUILDING_TEMPLATES_FOOD = [
       }
     ],
     "requiredBuildingIds": [],
-    "workersMin": 0,
+    "workersMin": 1,
     "workersMax": 4,
-    "suitableWorkerTypes": "Все с ЭМП, Все с СИЛ, Переговорщик, Силач",
-    "workerTypeEffects": {
-      "Все с ЭМП": 0.5,
-      "Все с СИЛ": 0.5,
-      "Переговорщик": 1,
-      "Силач": 1
-    },
-    "workerRole": "Овчар",
+    "workerRole": "",
     "functions": {
       "production": true,
       "income": false,
@@ -722,111 +596,26 @@ export const BUILDING_TEMPLATES_FOOD = [
       "storage": false,
       "culture": false
     },
-    "contents": [
-      {
-        "id": "sheep",
-        "name": "Овцы",
-        "resourceId": "sheep",
-        "qty": 0,
-        "capacity": 12,
-        "notes": "Овцы поступают со склада. Количество масштабирует настриг и устойчивую выбраковку."
-      }
-    ],
-    "productionLines": [
-      {
-        "id": "line",
-        "active": true,
-        "name": "Шерсть",
-        "mode": "Шерсть",
-        "source": "content",
-        "contentId": "sheep",
-        "contentUnitsPerBatch": 12,
-        "cadence": "year",
-        "cadenceEvery": 1,
-        "resourceId": "wool",
-        "resource": "Wool",
-        "outputQty": 36,
-        "laborQdPerBatch": 0,
-        "maxBatchesPerCadence": 1,
-        "expenseMode": "cycle",
-        "expenses": "",
-        "costsText": "",
-        "requiresCollection": true,
-        "collectQd": 2,
-        "pendingQty": 0,
-        "storageRoomId": "outdoors",
-        "autoCollect": "building",
-        "daylightProductionOnly": true,
-        "seasons": {
-          "spring": true,
-          "summer": false,
-          "autumn": false,
-          "winter": false
-        }
+    "livestock": {
+      "enabled": true,
+      "speciesId": "sheep",
+      "outputRoomId": "outdoors",
+      "state": {
+        "adults": 0,
+        "breedingMales": 0,
+        "young": [],
+        "woolReady": 0,
+        "lastBirthSeasonKey": ""
       },
-      {
-        "id": "line-cull-meat",
-        "active": true,
-        "name": "Осенняя выбраковка: мясо",
-        "mode": "Выбраковка стада",
-        "source": "content",
-        "contentId": "sheep",
-        "contentUnitsPerBatch": 12,
-        "cadence": "year",
-        "cadenceEvery": 1,
-        "resourceId": "meat",
-        "resource": "Meat",
-        "outputQty": 48,
-        "laborQdPerBatch": 0,
-        "maxBatchesPerCadence": 1,
-        "expenseMode": "cycle",
-        "expenses": "Grain 6",
-        "costsText": "Grain 6",
-        "requiresCollection": true,
-        "collectQd": 1,
-        "pendingQty": 0,
-        "storageRoomId": "outdoors",
-        "autoCollect": "building",
-        "daylightProductionOnly": true,
-        "seasons": {
-          "spring": false,
-          "summer": false,
-          "autumn": true,
-          "winter": false
-        }
-      },
-      {
-        "id": "line-cull-pelt",
-        "active": true,
-        "name": "Осенняя выбраковка: шкуры",
-        "mode": "Выбраковка стада",
-        "source": "content",
-        "contentId": "sheep",
-        "contentUnitsPerBatch": 12,
-        "cadence": "year",
-        "cadenceEvery": 1,
-        "resourceId": "pelt",
-        "resource": "Pelt",
-        "outputQty": 6,
-        "laborQdPerBatch": 0,
-        "maxBatchesPerCadence": 1,
-        "expenseMode": "cycle",
-        "expenses": "",
-        "costsText": "",
-        "requiresCollection": true,
-        "collectQd": 1,
-        "pendingQty": 0,
-        "storageRoomId": "outdoors",
-        "autoCollect": "building",
-        "daylightProductionOnly": true,
-        "seasons": {
-          "spring": false,
-          "summer": false,
-          "autumn": true,
-          "winter": false
-        }
+      "operations": {
+        "milk": false,
+        "shearQty": 0,
+        "slaughterQty": 0,
+        "slaughterBreedingMales": 0,
+        "feedPriority": "adults"
       }
-    ],
+    },
+    "productionLines": [],
     "income": {
       "base": 0,
       "perWorker": 0,
@@ -862,11 +651,10 @@ export const BUILDING_TEMPLATES_FOOD = [
     "moraleDelta": 0,
     "workerMoraleDelta": 0,
     "upkeep": 0,
-    "effect": "Двенадцать овец дают весной 36 Wool; осенняя выбраковка даёт 48 Meat и 6 Pelt. Сбор и разделка требуют суммарно 4 QD и 6 Grain.",
-    "notes": "Овцы задаются в «Содержимом здания». Все три линии работают при полной когорте из 12 голов; работника можно назначать сезонно.",
-    "templateVersion": 11,
+    "effect": "До 12 овец. В пастбищные сезоны корм бесплатен, зимой нужен Animal Feed. Готовность Wool возникает один раз в сезон; приплод и забой рассчитываются явно.",
+    "notes": "Каждая овчарня содержит отдельное стадо; неостриженная готовность сохраняется, но не накапливается выше числа взрослых.",
+    "templateVersion": 12,
     "visibility": "public",
-    "workerPrimaryAttribute": "strength"
   },
   {
     "id": "mill",
@@ -914,13 +702,6 @@ export const BUILDING_TEMPLATES_FOOD = [
     "requiredBuildingIds": [],
     "workersMin": 1,
     "workersMax": 4,
-    "suitableWorkerTypes": "Все с РАЗ, Все с СИЛ, Умелец, Механик",
-    "workerTypeEffects": {
-      "Все с РАЗ": 0.5,
-      "Все с СИЛ": 0.5,
-      "Умелец": 1,
-      "Механик": 1
-    },
     "workerRole": "",
     "functions": {
       "production": true,
@@ -937,13 +718,11 @@ export const BUILDING_TEMPLATES_FOOD = [
         "name": "Мука",
         "mode": "Мука",
         "source": "workers",
-        "cadence": "qd",
-        "cadenceEvery": 1,
+        "period": "qd",
         "resourceId": "flour",
         "resource": "Flour",
-        "outputQty": 10,
-        "laborQdPerBatch": 1,
-        "maxBatchesPerCadence": 0,
+        "outputQty": 12,
+        "workQd": 1,
         "expenseMode": "cycle",
         "expenses": "Grain 12",
         "costsText": "Grain 12",
@@ -989,11 +768,10 @@ export const BUILDING_TEMPLATES_FOOD = [
     "moraleDelta": 0,
     "workerMoraleDelta": 0,
     "upkeep": 0,
-    "effect": "12 малых мешков зерна дают 10 малых мешков муки за 1 рабочий QD; разница отражает отруби, примеси и технологические потери.",
-    "notes": "Выход муки составляет около 83% массы зерна. Побочные продукты пока не материализуются отдельным ресурсом.",
+    "effect": "Grain превращается в Flour по Quarter Day.",
+    "notes": "Grain превращается в Flour по Quarter Day.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "strength"
   },
   {
     "id": "bakery",
@@ -1041,13 +819,6 @@ export const BUILDING_TEMPLATES_FOOD = [
     "requiredBuildingIds": [],
     "workersMin": 1,
     "workersMax": 3,
-    "suitableWorkerTypes": "Все с ЭМП, Все с РАЗ, Переговорщик, Умелец",
-    "workerTypeEffects": {
-      "Все с ЭМП": 0.5,
-      "Все с РАЗ": 0.5,
-      "Переговорщик": 1,
-      "Умелец": 1
-    },
     "workerRole": "",
     "functions": {
       "production": true,
@@ -1064,16 +835,14 @@ export const BUILDING_TEMPLATES_FOOD = [
         "name": "Хлеб",
         "mode": "Хлеб",
         "source": "workers",
-        "cadence": "qd",
-        "cadenceEvery": 1,
+        "period": "qd",
         "resourceId": "bread",
         "resource": "Bread",
-        "outputQty": 24,
-        "laborQdPerBatch": 2,
-        "maxBatchesPerCadence": 0,
+        "outputQty": 12,
+        "workQd": 1,
         "expenseMode": "cycle",
-        "expenses": "Flour 20, Горючее 1",
-        "costsText": "Flour 20, Горючее 1",
+        "expenses": "Flour 12",
+        "costsText": "Flour 12",
         "requiresCollection": false,
         "collectQd": 0,
         "pendingQty": 0,
@@ -1116,11 +885,10 @@ export const BUILDING_TEMPLATES_FOOD = [
     "moraleDelta": 0,
     "workerMoraleDelta": 0,
     "upkeep": 0,
-    "effect": "20 малых мешков муки и 1 партия горючего дают 24 свёртка хлеба за 2 рабочих QD.",
-    "notes": "Вода считается доступной хозяйственной частью процесса; топливо списывается явно. Пищевая ценность выхода не превышает пищевую ценность муки.",
+    "effect": "Flour превращается в Bread/Food.",
+    "notes": "Flour превращается в Bread/Food.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "wits"
   },
   {
     "id": "root-cellar",
@@ -1162,13 +930,6 @@ export const BUILDING_TEMPLATES_FOOD = [
     "requiredBuildingIds": [],
     "workersMin": 0,
     "workersMax": 1,
-    "suitableWorkerTypes": "Все с РАЗ, Все с СИЛ, Умелец, Силач",
-    "workerTypeEffects": {
-      "Все с РАЗ": 0.5,
-      "Все с СИЛ": 0.5,
-      "Умелец": 1,
-      "Силач": 1
-    },
     "workerRole": "",
     "functions": {
       "production": false,
@@ -1208,7 +969,8 @@ export const BUILDING_TEMPLATES_FOOD = [
     "storage": {
       "capacity": 400,
       "security": 1,
-      "quality": 4
+      "quality": 4,
+      "shelfLifeMultiplier": 2
     },
     "reputation": 0,
     "moraleDelta": 0,
@@ -1218,7 +980,6 @@ export const BUILDING_TEMPLATES_FOOD = [
     "notes": "Еда хранится значительно дольше. В менеджере это склад с высоким качеством хранения.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "strength"
   },
   {
     "id": "barn",
@@ -1266,13 +1027,6 @@ export const BUILDING_TEMPLATES_FOOD = [
     "requiredBuildingIds": [],
     "workersMin": 0,
     "workersMax": 1,
-    "suitableWorkerTypes": "Все с СИЛ, Все с ЭМП, Силач, Переговорщик",
-    "workerTypeEffects": {
-      "Все с СИЛ": 0.5,
-      "Все с ЭМП": 0.5,
-      "Силач": 1,
-      "Переговорщик": 1
-    },
     "workerRole": "",
     "functions": {
       "production": false,
@@ -1322,6 +1076,5 @@ export const BUILDING_TEMPLATES_FOOD = [
     "notes": "Сухой склад для зерна, еды и хозяйственных припасов.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "strength"
   }
-];
+]);

@@ -2,17 +2,10 @@ import { marketRandomUnit } from "./pricing.js";
 
 const INDEPENDENT_MERCHANT_ID = "independent-merchants";
 const INDEPENDENT_CARRIER_ID = "independent-carriers";
-const MERCHANT_QUOTE_FACTOR_MIN = 0.75;
-const MERCHANT_QUOTE_FACTOR_MAX = 1.25;
-const MERCHANT_VOLATILITY_MAX = 0.1;
 
 function finite(value, fallback = 0) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-function bounded(value, fallback, minimum, maximum) {
-  return Math.min(maximum, Math.max(minimum, finite(value, fallback)));
 }
 
 function normalized(value = "") {
@@ -24,7 +17,7 @@ function tagMatches(tag = "", selector = "") {
   const target = normalized(selector);
   if (!candidate || !target) return false;
   if (target === "all") return true;
-  return candidate === target || candidate.startsWith(`${target}.`) || candidate.startsWith(`${target}-`) || candidate.includes(target);
+  return candidate === target || candidate.startsWith(`${target}.`) || candidate.startsWith(`${target}-`);
 }
 
 function shareRow(organization = {}, role = "merchant", countryId = "") {
@@ -72,8 +65,8 @@ export function merchantProvidersForCountry({ organizations = [], countryId = ""
       sharePct: finite(presence.sharePct, 0),
       includeTags: organization.merchant.includeTags ?? [],
       excludeTags: organization.merchant.excludeTags ?? [],
-      priceFactor: bounded(organization.merchant.priceFactor, 1, MERCHANT_QUOTE_FACTOR_MIN, MERCHANT_QUOTE_FACTOR_MAX),
-      priceVolatility: bounded(organization.merchant.priceVolatility, 0.04, 0, MERCHANT_VOLATILITY_MAX),
+      priceFactor: Math.max(0.5, finite(organization.merchant.priceFactor, 1)),
+      priceVolatility: Math.max(0, finite(organization.merchant.priceVolatility, 0.04)),
       stockStability: Math.max(0.25, finite(organization.merchant.stockStability, 1))
     });
   }
@@ -90,7 +83,9 @@ function providerEligible(provider = {}, offer = {}) {
 
 function allocationRows(stock = 0, providers = [], seed = "") {
   const totalStock = Math.max(0, Math.floor(finite(stock, 0)));
-  if (!totalStock) return [];
+  // Keep the period's merchant prices even after the last unit is bought.
+  // Zero-stock rows cannot be purchased, but still bound same-market resale.
+  if (!totalStock) return providers.map((provider) => ({ provider, qty: 0 }));
   const rows = providers.map((provider) => {
     const stability = Math.max(0.25, finite(provider.stockStability, 1));
     const noiseRange = Math.max(0, Math.min(0.35, (1 / stability) * 0.08));
@@ -108,7 +103,7 @@ function allocationRows(stock = 0, providers = [], seed = "") {
     allocations[index].qty += 1;
     remaining -= 1;
   }
-  return allocations.filter((row) => row.qty > 0);
+  return allocations;
 }
 
 export function allocateQuoteToMerchantProviders({ offers = [], organizations = [], countryId = "", quoteKey = "", isGM = false } = {}) {
@@ -129,17 +124,9 @@ export function allocateQuoteToMerchantProviders({ offers = [], organizations = 
       const provider = allocation.provider;
       const variation = 1 + ((marketRandomUnit(`${quoteKey}|${offer.id}|${provider.id}|price`) * 2) - 1)
         * Math.max(0, finite(provider.priceVolatility, 0));
-      const providerFactor = bounded(
-        finite(provider.priceFactor, 1) * variation,
-        1,
-        MERCHANT_QUOTE_FACTOR_MIN,
-        MERCHANT_QUOTE_FACTOR_MAX
-      );
-      const baseAskCopper = Math.max(1, Math.round(finite(offer.unitPriceCopper ?? offer.askUnitCopper, 1)));
-      const bidFloorCopper = Math.max(0, Math.floor(finite(offer.bidUnitCopper ?? offer.bidCopper, 0)));
-      const unitPriceCopper = Math.max(bidFloorCopper + 1, Math.round(baseAskCopper * providerFactor));
-      const effectiveProviderFactor = unitPriceCopper / baseAskCopper;
-      const movementPercent = Math.round(((1 + finite(offer.movementPercent, 0) / 100) * effectiveProviderFactor - 1) * 100);
+      const providerFactor = Math.max(0.25, finite(provider.priceFactor, 1) * variation);
+      const unitPriceCopper = Math.max(1, Math.round(finite(offer.unitPriceCopper, 1) * providerFactor));
+      const movementPercent = Math.round(((1 + finite(offer.movementPercent, 0) / 100) * providerFactor - 1) * 100);
       result.push({
         ...offer,
         id: `${offer.id}::merchant:${provider.id}`,
@@ -157,7 +144,7 @@ export function allocateQuoteToMerchantProviders({ offers = [], organizations = 
       });
     }
   }
-  return { offers: result, providers };
+  return { offers: result.filter((offer) => offer.stock > 0), priceOffers: result, providers };
 }
 
 function carrierSupports(carrier = {}, transportMode = "", routeModes = []) {
@@ -192,32 +179,43 @@ export function carrierProvidersForRoute({ organizations = [], countryId = "", t
     .sort((a, b) => a.priceFactor - b.priceFactor || b.sharePct - a.sharePct || a.label.localeCompare(b.label, "ru"));
 }
 
+export function carrierProvidersForLogistics({ logistics = {}, ...options } = {}) {
+  const result = new Map();
+  for (const route of logistics.routeCandidates?.length ? logistics.routeCandidates : [logistics]) {
+    for (const provider of carrierProvidersForRoute({ ...options, transportMode: route.transportMode, routeModes: route.routeModes })) {
+      if (!result.has(provider.id)) result.set(provider.id, provider);
+    }
+  }
+  return [...result.values()].sort((a, b) => a.priceFactor - b.priceFactor || a.label.localeCompare(b.label, "ru"));
+}
+
 export function carrierCapacityForLogistics(logistics = {}, carrier = null) {
   const baseCapacityLoad = Math.max(0, finite(logistics?.baseCapacityLoad ?? logistics?.capacityLoad, 0));
-  const baseCapacityMassKg = Math.max(0, finite(logistics?.baseCapacityMassKg ?? logistics?.capacityMassKg, baseCapacityLoad * 10));
-  const baseCapacityVolumeL = Math.max(0, finite(logistics?.baseCapacityVolumeL ?? logistics?.capacityVolumeL, baseCapacityLoad * 20));
   const capacityFactor = Math.max(0.1, finite(carrier?.capacityFactor, 1));
   return {
     baseCapacityLoad,
-    baseCapacityMassKg,
-    baseCapacityVolumeL,
     capacityFactor,
-    capacityLoad: baseCapacityLoad > 0 ? baseCapacityLoad * capacityFactor : 0,
-    capacityMassKg: baseCapacityMassKg > 0 ? baseCapacityMassKg * capacityFactor : 0,
-    capacityVolumeL: baseCapacityVolumeL > 0 ? baseCapacityVolumeL * capacityFactor : 0
+    capacityLoad: baseCapacityLoad > 0 ? baseCapacityLoad * capacityFactor : 0
   };
 }
 
 export function applyCarrierToLogistics(logistics = {}, carrier = null) {
+  if (logistics.routeCandidates?.length) {
+    const compatible = logistics.routeCandidates.filter((route) => !carrier || carrierSupports(carrier, route.transportMode, route.routeModes));
+    const { routeCandidates: _candidates, ...base } = carrier && !carrierSupports(carrier, logistics.transportMode, logistics.routeModes)
+      ? (compatible[0] ?? logistics) : logistics;
+    const result = applyCarrierToLogistics(base, carrier);
+    result.routeCandidates = compatible.map((route) => applyCarrierToLogistics(route, carrier));
+    if (!compatible.length) { result.ok = false; result.reasons = [...(result.reasons ?? []), "Перевозчик не обслуживает допустимые маршруты."]; }
+    return result;
+  }
   const capacity = carrierCapacityForLogistics(logistics, carrier);
   if (!carrier) return {
     ...logistics,
     carrierId: "",
     carrierLabel: "",
     carrierCapacityFactor: capacity.capacityFactor,
-    capacityLoad: capacity.capacityLoad,
-    capacityMassKg: capacity.capacityMassKg,
-    capacityVolumeL: capacity.capacityVolumeL
+    capacityLoad: capacity.capacityLoad
   };
   const priceFactor = Math.max(0.5, finite(carrier.priceFactor, 1));
   const timeFactor = Math.max(0.5, finite(carrier.timeFactor, 1));
@@ -232,8 +230,6 @@ export function applyCarrierToLogistics(logistics = {}, carrier = null) {
     carrierRiskFactor: riskFactor,
     carrierCapacityFactor: capacity.capacityFactor,
     capacityLoad: capacity.capacityLoad,
-    capacityMassKg: capacity.capacityMassKg,
-    capacityVolumeL: capacity.capacityVolumeL,
     distanceFlatCopper: Math.max(0, Math.ceil(finite(logistics.distanceFlatCopper, 0) * priceFactor)),
     distanceLoadCopper: Math.max(0, finite(logistics.distanceLoadCopper, 0) * priceFactor),
     operatingTimeCopper: Math.max(0, Math.ceil(finite(logistics.operatingTimeCopper, 0) * priceFactor)),

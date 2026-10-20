@@ -1,0 +1,122 @@
+      {{#if building.showEditorLivestock}}
+        <fieldset class="fbls-building-editor-card wide-card fbls-production-workspace">
+          <legend>Стадо</legend>
+
+          <section class="fbls-production-panel top-contents-panel">
+            <header class="fbls-panel-header slim">
+              <div>
+                <h3><i class="fa-solid fa-cow"></i> {{building.livestockView.speciesLabel}}</h3>
+                <p>Каждое здание содержит отдельное стадо; животных нельзя вынести в склад «под открытым небом».</p>
+              </div>
+              {{#if canEdit}}
+                <label class="fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Отключённое стадо сохраняется, но не участвует в расчёте десятника.">
+                  <span>Включено</span>
+                  <input type="checkbox" data-type="checkbox" data-field="{{building.livestockView.enabledPath}}" {{#if building.livestockView.enabled}}checked{{/if}} />
+                </label>
+              {{/if}}
+            </header>
+
+            <div class="fbls-production-badges">
+              <span>{{building.livestockView.headcount}} / {{building.livestockView.capacity}} голов</span>
+              <span>свободно {{building.livestockView.free}}</span>
+              <span data-fbls-tooltip="Нейтральный ориентир мирового рынка; фактическую покупку, продажу или иной способ получения вы отыгрываете вручную.">базовая цена {{building.livestockView.marketPriceLabel}}/гол.</span>
+              <span>взрослеют за {{building.livestockView.maturityDays}} дн.</span>
+              <span>приплод: {{building.livestockView.breedingSeasonLabel}}</span>
+              {{#if building.livestockView.producesWool}}<span>стрижка: {{building.livestockView.shearingSeasonLabel}}</span>{{/if}}
+            </div>
+            <p class="fbls-muted-line">{{building.livestockView.feedRuleText}}</p>
+          </section>
+
+          <section class="fbls-production-panel full-width-lines">
+            <header class="fbls-panel-header slim"><h3>Поголовье</h3></header>
+            <article class="fbls-production-card">
+              <div class="fbls-production-card-grid">
+                {{#if building.livestockView.canSelectSpecies}}
+                  <label>
+                    <span>Профиль животных</span>
+                    {{#if canEdit}}
+                      <select class="fbls-control" data-field="{{building.livestockView.speciesIdPath}}">
+                        {{#each building.livestockView.speciesOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+                      </select>
+                    {{else}}<strong>{{building.livestockView.speciesLabel}}</strong>{{/if}}
+                  </label>
+                {{/if}}
+                <label>
+                  <span>Взрослые</span>
+                  {{#if canEdit}}<input class="fbls-control" type="number" min="0" max="{{building.livestockView.adultsMaximum}}" step="1" data-type="number" data-field="{{building.livestockView.adultsPath}}" value="{{building.livestockView.adults}}" />{{else}}<strong>{{building.livestockView.adults}}</strong>{{/if}}
+                </label>
+                <label>
+                  <span>Племенные самцы</span>
+                  {{#if canEdit}}<input class="fbls-control" type="number" min="0" max="{{building.livestockView.adults}}" step="1" data-type="number" data-field="{{building.livestockView.breedingMalesPath}}" value="{{building.livestockView.breedingMales}}" />{{else}}<strong>{{building.livestockView.breedingMales}}</strong>{{/if}}
+                </label>
+                <label><span>Молодняк</span><strong>{{building.livestockView.youngTotal}}</strong></label>
+                {{#if building.livestockView.producesWool}}<label><span>Готово к стрижке</span><strong>{{building.livestockView.woolReady}}</strong></label>{{/if}}
+                <label>
+                  <span>Приоритет корма</span>
+                  {{#if canEdit}}
+                    <select class="fbls-control" data-field="{{building.livestockView.feedPriorityPath}}">
+                      <option value="adults" {{#if building.livestockView.feedPriorityAdults}}selected{{/if}}>Сначала взрослые</option>
+                      <option value="young" {{#if building.livestockView.feedPriorityYoung}}selected{{/if}}>Сначала молодняк</option>
+                    </select>
+                  {{else}}<strong>{{#if building.livestockView.feedPriorityAdults}}Сначала взрослые{{else}}Сначала молодняк{{/if}}</strong>{{/if}}
+                </label>
+                <label>
+                  <span data-fbls-tooltip="Большее число получает ограниченный корм раньше других стад; при равенстве используется стабильный ID здания.">Приоритет GM</span>
+                  {{#if canEdit}}<input class="fbls-control" type="number" min="0" step="1" data-type="number" data-field="{{building.livestockView.gmPriorityPath}}" value="{{building.livestockView.gmPriority}}" />{{else}}<strong>{{building.livestockView.gmPriority}}</strong>{{/if}}
+                </label>
+                <label>
+                  <span>Склад продукции</span>
+                  {{#if canEdit}}
+                    <select class="fbls-control" data-field="{{building.livestockView.outputRoomIdPath}}">
+                      {{#each building.livestockView.outputRoomOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+                    </select>
+                  {{else}}<strong>{{building.livestockView.outputRoomId}}</strong>{{/if}}
+                </label>
+              </div>
+              <p class="fbls-muted-line">Ручное изменение взрослых и молодняка фиксирует уже отыгранную покупку, кражу, подарок или потерю. Система сама животных не продаёт и не убивает.</p>
+            </article>
+
+            {{#if building.livestockView.hasYoung}}
+              <div class="fbls-production-card-list">
+                {{#each building.livestockView.youngRows}}
+                  <article class="fbls-production-card">
+                    <header class="fbls-production-card-header">
+                      <div class="fbls-production-title"><h4>Когорта {{number}} · {{ageDays}} дн.</h4></div>
+                      {{#if @root.canEdit}}<button type="button" class="fbls-button icon-only danger fbls-button-role" data-action="delete-livestock-cohort" data-livestock-cohort-id="{{id}}" title="Удалить когорту" aria-label="Удалить когорту {{number}}"><i class="fa-solid fa-trash"></i></button>{{/if}}
+                    </header>
+                    <div class="fbls-production-card-grid">
+                      <label><span>Голов</span>{{#if @root.canEdit}}<input class="fbls-control" type="number" min="0" max="{{@root.building.livestockView.capacity}}" step="1" data-type="number" data-field="{{qtyPath}}" value="{{qty}}" />{{else}}<strong>{{qty}}</strong>{{/if}}</label>
+                      <label><span data-fbls-tooltip="4 QD = 1 день.">Возраст, QD</span>{{#if @root.canEdit}}<input class="fbls-control" type="number" min="0" max="{{@root.building.livestockView.maturityQd}}" step="1" data-type="number" data-field="{{ageQdPath}}" value="{{ageQd}}" />{{else}}<strong>{{ageQd}}</strong>{{/if}}</label>
+                      <label><span>Сезон рождения</span><strong>{{#if bornSeasonKey}}{{bornSeasonKey}}{{else}}ручной учёт{{/if}}</strong></label>
+                    </div>
+                  </article>
+                {{/each}}
+              </div>
+            {{else}}
+              <p class="fbls-muted-line">Молодняка пока нет.</p>
+            {{/if}}
+            {{#if canEdit}}<button type="button" class="fbls-button compact fbls-button-role" data-action="add-livestock-cohort" {{#unless building.livestockView.canAddYoung}}disabled{{/unless}}><i class="fa-solid fa-plus"></i> Добавить молодняк</button>{{/if}}
+          </section>
+
+          <section class="fbls-production-panel full-width-lines">
+            <header class="fbls-panel-header slim"><h3>Распоряжения на следующий десятник</h3></header>
+            <article class="fbls-production-card">
+              <div class="fbls-production-card-grid">
+                {{#if building.livestockView.producesEggs}}
+                  <label class="fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Яйца собираются в дни, обеспеченные обычным уходом; пропущенный сбор не копится."><span>Яйца</span>{{#if canEdit}}<input type="checkbox" data-type="checkbox" data-field="{{building.livestockView.eggsPath}}" {{#if building.livestockView.eggs}}checked{{/if}} />{{else}}<strong>{{#if building.livestockView.eggs}}Да{{else}}Нет{{/if}}</strong>{{/if}}</label>
+                {{/if}}
+                {{#if building.livestockView.producesMilk}}
+                  <label class="fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Доение входит в обычный ежедневный уход; пропущенный выпуск не копится."><span>Молоко</span>{{#if canEdit}}<input type="checkbox" data-type="checkbox" data-field="{{building.livestockView.milkPath}}" {{#if building.livestockView.milk}}checked{{/if}} />{{else}}<strong>{{#if building.livestockView.milk}}Да{{else}}Нет{{/if}}</strong>{{/if}}</label>
+                {{/if}}
+                {{#if building.livestockView.producesWool}}
+                  <label><span>Остричь голов</span>{{#if canEdit}}<input class="fbls-control" type="number" min="0" max="{{building.livestockView.adults}}" step="1" data-type="number" data-field="{{building.livestockView.shearQtyPath}}" value="{{building.livestockView.shearQty}}" />{{else}}<strong>{{building.livestockView.shearQty}}</strong>{{/if}}</label>
+                {{/if}}
+                <label><span>Забить взрослых</span>{{#if canEdit}}<input class="fbls-control" type="number" min="0" max="{{building.livestockView.adults}}" step="1" data-type="number" data-field="{{building.livestockView.slaughterQtyPath}}" value="{{building.livestockView.slaughterQty}}" />{{else}}<strong>{{building.livestockView.slaughterQty}}</strong>{{/if}}</label>
+                <label><span data-fbls-tooltip="Племенные самцы никогда не входят в забой без отдельного явного числа.">Из них племенных</span>{{#if canEdit}}<input class="fbls-control" type="number" min="0" max="{{building.livestockView.breedingMales}}" step="1" data-type="number" data-field="{{building.livestockView.slaughterBreedingMalesPath}}" value="{{building.livestockView.slaughterBreedingMales}}" />{{else}}<strong>{{building.livestockView.slaughterBreedingMales}}</strong>{{/if}}</label>
+              </div>
+              <p class="fbls-muted-line">Обычный уход требует {{building.livestockView.careWorkQdPerDay}} QD в день на всё здание независимо от заполненности. Стрижка и забой — дополнительные одноразовые распоряжения; после Apply они сбрасываются.</p>
+              <p class="fbls-muted-line">Выход:{{#if building.livestockView.producesEggs}} до {{building.livestockView.eggPerFullFlockDay}} Eggs/день при полном стаде;{{/if}}{{#if building.livestockView.producesMilk}} Milk {{#if building.livestockView.milkPerFullFlockDay}}до {{building.livestockView.milkPerFullFlockDay}}/день при полном стаде{{else}}{{building.livestockView.milkPerHeadDay}}/гол./день{{/if}};{{/if}}{{#if building.livestockView.producesWool}} Wool {{building.livestockView.woolPerHead}}/гол.;{{/if}} Meat {{building.livestockView.meatPerAdult}}/гол.; Tallow {{building.livestockView.tallowPerAdult}}/гол. Забой: {{building.livestockView.slaughterWorkQdPerHead}} QD/гол.</p>
+            </article>
+          </section>
+        </fieldset>
+      {{/if}}

@@ -1,6 +1,5 @@
 import { MODULE_ID } from "../data/constants.js";
 import { debugSkyholdLog } from "../data/debug.js";
-import { ALBUGRIR_TRILUNES_BY_NAME } from "../core/albugrir-calendar.js";
 
 let installed = false;
 let registered = false;
@@ -33,15 +32,16 @@ function normalizedMonthName(month = null) {
   return String(raw).trim().toLowerCase().replace(/ё/g, "е");
 }
 
-const SKYHOLD_SEASONS_BY_MONTH = Object.freeze(Object.fromEntries(
-  Object.entries(ALBUGRIR_TRILUNES_BY_NAME).map(([monthName, trilune]) => [monthName, {
-    key: trilune.technicalSeasonKey,
-    label: trilune.halfLabel,
-    short: trilune.short,
-    majorSeason: trilune.majorSeason,
-    majorSeasonLabel: trilune.majorSeasonLabel
-  }])
-));
+const SKYHOLD_SEASONS_BY_MONTH = Object.freeze({
+  "хладоход": { key: "winter", label: "Ухудно (2 половина)", short: "У-II" },
+  "теплорост": { key: "spring", label: "Зарость (1 половина)", short: "З-I" },
+  "теплоход": { key: "spring", label: "Зарость (1 половина)", short: "З-I" },
+  "зноерост": { key: "summer", label: "Зарость (2 половина)", short: "З-II" },
+  "зноеход": { key: "summer", label: "Зарость (2 половина)", short: "З-II" },
+  "дождерост": { key: "autumn", label: "Ухудно (1 половина)", short: "У-I" },
+  "дождеход": { key: "autumn", label: "Ухудно (1 половина)", short: "У-I" },
+  "хладорост": { key: "winter", label: "Ухудно (2 половина)", short: "У-II" }
+});
 
 export function resolveCalendariaSeasonText(text = "") {
   const normalized = String(text ?? "").trim().toLowerCase().replace(/ё/g, "е");

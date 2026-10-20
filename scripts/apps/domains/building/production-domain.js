@@ -1,19 +1,14 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
-import {
-  isLivestockResource,
-  livestockResourceOptions,
-  normalizeResourceId,
-  parseResourceCosts,
-  resourceIcon,
-  resourceLabel,
-  resourceOptions
-} from "../../../core/resources.js";
-import { materialGroup, materialGroupOptions } from "../../../core/material-groups.js";
+import { normalizeResourceId, resourceIcon, resourceLabel, resourceOptions } from "../../../core/resources.js";
 import { getCalendariaSnapshot } from "../../../integrations/calendaria-bridge.js";
-import { normalizeProductionCadence } from "../../../core/production-cadence.js";
-import { hospitalityDemandSnapshot, normalizeHospitalityService } from "../../../engines/economy/hospitality-service.js";
-import { normalizeTradeDemand, tradeDemandSnapshot } from "../../../engines/economy/trade.js";
-import { productionRecipeBlockerText, validateProductionRecipe } from "../../../core/economy-quantity-contract.js";
+import {
+  buildingConfirmedHarmActive,
+  buildingConfirmedSocialStatus,
+  scaleIntegerBuildingEffect
+} from "../../../engines/economy/building-service.js";
+import { politicsRuntimeEffects } from "../../../engines/politics/runtime-effects.js";
+import { productionTimingText, productionIdentityLocked } from "../../../engines/economy/production-timing.js";
+import { productionCapacity, productionBatchStates, productionOccupiedQty } from "../../../engines/economy/production-capacity.js";
 
 export const BuildingProductionDomain = {
 _productionSeasonDefs() {
@@ -90,28 +85,15 @@ _prepareBuildingContents(building, buildingIndex, holding, holdingIndexArg = nul
     const basePath = `${recordPath}.contents.${index}`;
     const qty = Math.max(0, this._safeNumber(item?.qty ?? item?.quantity ?? item?.count, 0));
     const capacity = Math.max(0, this._safeNumber(item?.capacity ?? item?.max ?? 0));
-    const resourceId = normalizeResourceId(item?.resourceId);
-    const stockLinked = isLivestockResource(resourceId);
-    const storageQty = stockLinked ? Math.max(0, this._storageQuantity?.(holding, { resourceId }) ?? 0) : 0;
     return {
       _index: index,
       id: String(item?.id ?? `content-${index}`),
       name: String(item?.name ?? item?.label ?? "Содержимое"),
-      resourceId: stockLinked ? resourceId : "",
-      resourceLabel: stockLinked ? resourceLabel(resourceId) : "Ручное содержимое",
-      resourceOptions: livestockResourceOptions(resourceId),
-      stockLinked,
-      resourceLocked: qty > 0,
-      storageQty,
-      storageQtyText: this._formatNumber?.(storageQty) ?? String(storageQty),
-      canTakeFromStorage: storageQty >= 1 && (!capacity || qty < capacity),
-      canReturnToStorage: qty >= 1,
       qty,
       capacity,
       notes: String(item?.notes ?? ""),
       line: capacity ? `${qty}/${capacity}` : String(qty),
       namePath: `${basePath}.name`,
-      resourceIdPath: `${basePath}.resourceId`,
       qtyPath: `${basePath}.qty`,
       capacityPath: `${basePath}.capacity`,
       notesPath: `${basePath}.notes`
@@ -140,18 +122,17 @@ _productionSourceOptions(selected = "workers") {
   ];
 },
 
-_productionCadenceOptions(selected = "day") {
-  const value = normalizeProductionCadence(selected, "day");
+_productionPeriodOptions(selected = "day") {
+  const value = String(selected ?? "day");
   return [
     { value: "qd", label: "QD", selected: value === "qd" },
     { value: "day", label: "День", selected: value === "day" },
-    { value: "tenday", label: "Десятник", selected: value === "tenday" },
-    { value: "season", label: "Главный сезон", selected: value === "season" },
-    { value: "year", label: "Год", selected: value === "year" }
+    { value: "tenday", label: "Десятник", selected: value === "tenday" }
   ];
 },
 
-_prepareProductionLines(building, buildingIndex, holding, storageRoomsArg = null, holdingIndexArg = null, basePathArg = "") {
+_prepareProductionLines(building, buildingIndex, holding, storageRoomsArg = null, holdingIndexArg = null, basePathArg = "", options = {}) {
+  const includeEditorOptions = options?.includeEditorOptions !== false;
   const source = Array.isArray(building?.productionLines) ? building.productionLines : [];
   const holdingIndex = Number.isInteger(holdingIndexArg) ? holdingIndexArg : this._holdingIndexForBuilding(building);
   const recordPath = basePathArg || `holdings.${holdingIndex}.buildings.list.${buildingIndex}`;
@@ -171,61 +152,32 @@ _prepareProductionLines(building, buildingIndex, holding, storageRoomsArg = null
     if (!roomOptionsCache.has(id)) {
       roomOptionsCache.set(id, this._storageRoomOptionsFromRooms?.(storageRooms, id) ?? this._storageRoomOptions?.(holding, id) ?? [{ value: "outdoors", label: "Под открытым небом", selected: true }]);
     }
-    return roomOptionsCache.get(id);
+    const choices = roomOptionsCache.get(id);
+    if (!choices.some((row) => row.value === "auto")) choices.unshift({ value: "auto", label: "Предпочтительные склады", selected: id === "auto" });
+    return choices;
   };
   return source.map((line, index) => {
     const base = this._safeNumber(line?.base, 0);
     const perWorker = this._safeNumber(line?.perWorker, 0);
     const outputQty = Math.max(0, this._safeNumber(line?.outputQty ?? line?.output ?? line?.quantity, base || perWorker || 1));
-    const legacyWorkQd = Math.max(1, this._safeNumber(line?.workQd ?? line?.workerQD ?? line?.cycleQd ?? line?.cycleQD, 1));
+    const workQd = Math.max(1, this._safeNumber(line?.workQd ?? line?.workerQD ?? line?.cycleQd ?? line?.cycleQD, 1));
     const active = line?.active !== false;
     const resourceId = normalizeResourceId(line?.resourceId, line?.resource);
     const resource = resourceId === "custom" ? (String(line?.resource ?? "").trim() || "Ресурс") : resourceLabel(resourceId);
     const formula = String(line?.formula ?? "").trim();
     const src = ["workers", "time", "content"].includes(String(line?.source ?? "")) ? String(line.source) : "workers";
-    const cadence = normalizeProductionCadence(line?.cadence ?? line?.period, "day");
-    const cadenceEvery = Math.max(1, Math.floor(this._safeNumber(line?.cadenceEvery, src === "workers" ? 1 : legacyWorkQd)));
-    const laborQdPerBatch = src === "workers" ? Math.max(1, this._safeNumber(line?.laborQdPerBatch, legacyWorkQd)) : Math.max(0, this._safeNumber(line?.laborQdPerBatch, 0));
-    const legacyMax = src === "workers" && cadence === "tenday" ? 1 : (src === "workers" ? 0 : 1);
-    const maxBatchesPerCadence = Math.max(0, Math.floor(this._safeNumber(line?.maxBatchesPerCadence, legacyMax)));
+    const period = ["qd", "day", "tenday"].includes(String(line?.period ?? "")) ? String(line.period) : "day";
     const contentId = String(line?.contentId ?? "");
     const content = contentsById.get(contentId);
     const contentName = content ? String(content.name ?? "Содержимое") : "содержимое";
-    const contentQuantity = Math.max(0, this._safeNumber(content?.qty ?? content?.quantity ?? content?.count, 0));
-    const contentUnitsPerBatch = line?.contentUnitsPerBatch === undefined || line?.contentUnitsPerBatch === null || line?.contentUnitsPerBatch === ""
-      ? 1
-      : Math.max(0, Math.floor(this._safeNumber(line.contentUnitsPerBatch, 0)));
-    const contentCohorts = contentUnitsPerBatch > 0 ? Math.floor(contentQuantity / contentUnitsPerBatch) : 0;
     const pendingQty = Math.max(0, this._safeNumber(line?.pendingQty, 0));
     const requiresCollection = Boolean(line?.requiresCollection);
-    const passive = src !== "workers" && Boolean(line?.passive);
-    const rawWip = line?.workInProgress && typeof line.workInProgress === "object" ? line.workInProgress : null;
-    const wipLaborRequiredQd = rawWip ? Math.max(1, this._safeNumber(rawWip?.laborRequiredQd, laborQdPerBatch || 1)) : 0;
-    const wipLaborDoneQd = rawWip ? Math.max(0, Math.min(wipLaborRequiredQd, this._safeNumber(rawWip?.laborDoneQd, 0))) : 0;
-    const hasWorkInProgress = Boolean(rawWip);
     const collectQd = Math.max(0, this._safeNumber(line?.collectQd, 0));
-    const daylightCollectionOnly = Boolean(line?.daylightCollectionOnly);
-    const daylightProductionOnly = Boolean(line?.daylightProductionOnly);
     const expenseMode = ["cycle", "unit"].includes(String(line?.expenseMode ?? "cycle")) ? String(line.expenseMode) : "cycle";
-    const expenses = String(line?.expenses ?? "");
-    const expenseItems = parseResourceCosts(expenses).map((item, expenseIndex) => {
-      const group = materialGroup(item?.resourceGroup ?? item?.resourceId);
-      const inputResourceId = group ? "" : normalizeResourceId(item?.resourceId, item?.name);
-      return {
-        _index: expenseIndex,
-        isGroup: Boolean(group),
-        resourceGroup: group?.id ?? "",
-        groupOptions: materialGroupOptions(group?.id),
-        resourceId: inputResourceId,
-        name: group?.label ?? (inputResourceId === "custom" ? String(item?.name ?? "Ресурс") : resourceLabel(inputResourceId)),
-        icon: group ? "fa-solid fa-layer-group" : resourceIcon(inputResourceId),
-        qty: Math.max(0, this._safeNumber(item?.qty, 1))
-      };
-    });
-    const recipeValidation = validateProductionRecipe(line, { parseResourceCosts });
-    const recipeQuantityBlocker = productionRecipeBlockerText(recipeValidation);
     const autoCollect = ["none", "building", "worker"].includes(String(line?.autoCollect ?? "none")) ? String(line.autoCollect) : "none";
     const overtime = Boolean(line?.overtime);
+    const wageDailyCopper = Math.max(0, Math.floor(this._safeNumber(line?.wageDailyCopper, 0)));
+    const operatingUpkeepMonthlyCopper = Math.max(0, Math.floor(this._safeNumber(line?.operatingUpkeepMonthlyCopper, 0)));
     const basePath = `${recordPath}.productionLines.${index}`;
     const storageRoomId = this._normalizeStorageRoomId?.(line?.storageRoomId ?? line?.roomId) ?? String(line?.storageRoomId ?? line?.roomId ?? "outdoors");
     const storageRoomLabel = roomLabelFor(storageRoomId);
@@ -235,33 +187,20 @@ _prepareProductionLines(building, buildingIndex, holding, storageRoomsArg = null
     const enabledSeasonOptions = seasonOptions.filter((item) => item.selected);
     const seasonShort = enabledSeasonOptions.length >= seasonOptions.length ? "Все" : enabledSeasonOptions.map((item) => item.short).join(" · ");
     const seasonTooltip = enabledSeasonOptions.length >= seasonOptions.length ? "Производство доступно во все сезоны." : `Сезоны производства: ${enabledSeasonOptions.map((item) => item.label).join(", ")}`;
-    const cadenceName = this._periodName(cadence);
-    const autoCollectOptions = this._autoCollectOptions(autoCollect);
-    const expenseModeOptions = this._expenseModeOptions(expenseMode);
-    const cadenceMultiplierText = cadenceEvery > 1 ? `${cadenceEvery} × ${cadenceName}` : cadenceName;
-    const limitText = maxBatchesPerCadence > 0 ? `до ${maxBatchesPerCadence} парт. / ${cadenceMultiplierText}` : "без календарного лимита";
-    const formatNumber = (value) => this._formatNumber?.(value) ?? String(Math.round(value * 100) / 100);
-    const nominalOutput = src === "content" && !formula ? outputQty * contentCohorts : outputQty;
-    const performanceValue = formula || formatNumber(nominalOutput);
-    const performanceLabel = formula
-      ? "формула выпуска"
-      : (src === "content" ? `${resource} за цикл сейчас` : `${resource} за партию`);
-    const driverText = src === "workers"
-      ? `${formatNumber(laborQdPerBatch)} рабоч. QD`
-      : (src === "content" ? `${contentCohorts} когорт × ${contentUnitsPerBatch} ${contentName}` : cadenceMultiplierText);
-    const driverLabel = src === "workers" ? "Труд на партию" : (src === "content" ? "Множитель" : "Интервал");
-    const cadenceProgressText = maxBatchesPerCadence > 0
-      ? `${maxBatchesPerCadence} / ${cadenceMultiplierText}`
-      : "Без лимита";
-    let cycleText = `${outputQty} за ${laborQdPerBatch} QD труда, ${limitText}`;
-    if (src === "time") cycleText = `${outputQty} / ${cadenceMultiplierText}`;
-    if (src === "content") cycleText = `${outputQty} × ${contentCohorts} полн. когорт (${contentUnitsPerBatch} ед.) / ${cadenceMultiplierText}`;
+    const periodName = this._periodName(period);
+    const autoCollectOptions = includeEditorOptions ? this._autoCollectOptions(autoCollect) : null;
+    const expenseModeOptions = includeEditorOptions ? this._expenseModeOptions(expenseMode) : null;
+    const periodMultiplierText = workQd > 1 ? `${workQd} ${periodName}` : periodName;
+    let cycleText = `${outputQty} за ${workQd} QD`;
+    if (src === "time") cycleText = `${outputQty} / ${periodMultiplierText}`;
+    if (src === "content") cycleText = `${outputQty} × ${contentName} / ${periodMultiplierText}`;
     if (src === "workers" && overtime) cycleText += ", переработка";
-    if (src === "workers" && daylightProductionOnly) cycleText += ", только при свете";
-    if (requiresCollection) cycleText += `, сбор ${collectQd || 0} QD${daylightCollectionOnly ? ", только при свете" : ""}`;
-    if (src !== "workers" && passive) cycleText += ", пассивно";
+    if (src === "workers" && line.waitDays > 0) cycleText += ` + ожидание ${line.waitDays} дн.`;
+    if (line.repeat === false) cycleText += ", без повторных запусков";
+    if (productionCapacity(line)) cycleText += `, от ${line.batchStartQty || 1} ЕД., вместимость ${line.batchCapacity} ЕД.`;
+    if (requiresCollection) cycleText += `, сбор ${collectQd || 0} QD`;
     cycleText += ` → ${storageRoomLabel}`;
-    return {
+    const prepared = {
       _index: index,
       id: String(line?.id ?? `prod-${index}`),
       active,
@@ -271,102 +210,93 @@ _prepareProductionLines(building, buildingIndex, holding, storageRoomsArg = null
       isTime: src === "time",
       isContent: src === "content",
       sourceLabel: this._sourceName(src),
-      sourceOptions: this._productionSourceOptions(src),
-      cadence,
-      cadenceLabel: cadenceName,
-      cadenceOptions: this._productionCadenceOptions(cadence),
-      cadenceEvery,
-      laborQdPerBatch,
-      maxBatchesPerCadence,
-      unlimitedBatches: maxBatchesPerCadence === 0,
+      period,
+      periodLabel: periodName,
+      periodCycleLabel: src === "workers" ? "QD/цикл" : `Время/цикл (${periodName})`,
+      periodCycleTooltip: src === "workers" ? "Сколько рабочих QD нужно на один цикл. Рабочие тратят это время на производство." : "Сколько выбранных периодов нужно на один цикл. Если период — День, значение 1 означает один раз за день; значение 2 — один раз за два дня.",
       contentId,
       contentName,
-      contentQuantity,
-      contentUnitsPerBatch,
-      contentCohorts,
-      contentOptions: this._contentOptions(building, contentId),
       resourceId,
       resource,
       resourceIcon: resourceIcon(resourceId),
-      resourceOptions: resourceOptions(resourceId, resource),
       isCustomResource: resourceId === "custom",
       base,
       perWorker,
       outputQty,
-      workQd: src === "workers" ? laborQdPerBatch : cadenceEvery,
+      workQd,
+      waitDays: Math.max(0, Number(line.waitDays) || 0),
+      repeat: line.repeat !== false,
+      batchProgressText: productionTimingText(line),
+      identityLocked: productionIdentityLocked(line),
+      batchCapacity: productionCapacity(line),
+      batchStartQty: Math.max(1, Number(line.batchStartQty) || 1),
+      fixedExpenses: String(line.fixedExpenses ?? ""),
+      occupiedQty: productionOccupiedQty(line),
+      freeCapacity: Math.max(0, productionCapacity(line) - productionOccupiedQty(line)),
+      productionBatches: productionBatchStates(line).map((batch) => ({
+        id: batch.workReservedInputs?.batchId ?? "", qty: batch.workReservedOutputQty,
+        progressText: productionTimingText({ ...batch, active: line.active })
+      })),
       formula,
-      expenses,
-      expenseItems,
-      hasExpenses: expenseItems.length > 0,
-      recipeQuantityBlocker,
-      hasRecipeQuantityBlocker: Boolean(recipeQuantityBlocker),
+      expenses: String(line?.expenses ?? ""),
       requiresCollection,
-      passive,
-      productionConfigurationError: recipeQuantityBlocker || (src === "content" && contentUnitsPerBatch <= 0
-        ? "Размер когорты должен быть целым числом не меньше 1."
-        : (src !== "workers" && !requiresCollection && !passive
-          ? "Выберите сбор или явный пассивный режим: иначе линия не выпускает ресурс."
-          : "")),
       collectQd,
-      daylightCollectionOnly,
-      daylightProductionOnly,
       autoCollect,
       overtime,
+      requiresGmConfirmation: line?.requiresGmConfirmation === true,
+      wageDailyCopper,
+      operatingUpkeepMonthlyCopper,
       storageRoomId,
       storageRoomLabel,
       seasons: this._normalizeProductionSeasons(line?.seasons),
-      seasonOptions,
       seasonLabel,
       seasonShort,
       seasonTooltip,
       hasSeasonHint: seasonShort !== "Все",
+      expenseMode,
+      pendingQty,
+      canCancelBatch: Boolean(line?.workInputsReserved || line?.workProgressUnits || line.waitingBatches?.length),
+      total: active ? outputQty : 0,
+      totalPreview: formula ? `${formula} / цикл` : cycleText,
+      cycleText
+    };
+    if (!includeEditorOptions) return prepared;
+    return {
+      ...prepared,
+      sourceOptions: this._productionSourceOptions(src),
+      periodOptions: this._productionPeriodOptions(period),
+      contentOptions: this._contentOptions(building, contentId),
+      resourceOptions: resourceOptions(resourceId, resource),
+      seasonOptions,
       storageRoomOptions: roomOptionsFor(storageRoomId),
       autoCollectLabel: autoCollectOptions.find((option) => option.selected)?.label ?? "Не собирать",
       autoCollectOptions,
-      expenseMode,
       expenseModeLabel: expenseModeOptions.find((option) => option.selected)?.label ?? "За цикл",
       expenseModeOptions,
-      pendingQty,
-      hasPending: pendingQty > 0,
-      hasWorkInProgress,
-      wipOutputQty: hasWorkInProgress ? Math.max(0, Math.floor(this._safeNumber(rawWip?.outputQty, 0))) : 0,
-      wipLaborRequiredQd,
-      wipLaborDoneQd,
-      wipProgressText: hasWorkInProgress ? `${formatNumber(wipLaborDoneQd)} / ${formatNumber(wipLaborRequiredQd)} эфф. QD` : "",
-      cadenceMultiplierText,
-      limitText,
-      cadenceProgressText,
-      performanceValue,
-      performanceLabel,
-      performanceIsFormula: Boolean(formula),
-      driverText,
-      driverLabel,
-      total: active ? outputQty : 0,
-      totalPreview: formula ? `${formula} / цикл` : cycleText,
-      cycleText,
       activePath: `${basePath}.active`,
       modePath: `${basePath}.mode`,
       sourcePath: `${basePath}.source`,
-      cadencePath: `${basePath}.cadence`,
-      cadenceEveryPath: `${basePath}.cadenceEvery`,
-      laborQdPerBatchPath: `${basePath}.laborQdPerBatch`,
-      maxBatchesPerCadencePath: `${basePath}.maxBatchesPerCadence`,
+      periodPath: `${basePath}.period`,
       contentIdPath: `${basePath}.contentId`,
-      contentUnitsPerBatchPath: `${basePath}.contentUnitsPerBatch`,
       resourceIdPath: `${basePath}.resourceId`,
       resourcePath: `${basePath}.resource`,
       basePath: `${basePath}.base`,
       perWorkerPath: `${basePath}.perWorker`,
       outputQtyPath: `${basePath}.outputQty`,
+      workQdPath: `${basePath}.workQd`,
+      waitDaysPath: `${basePath}.waitDays`,
+      repeatPath: `${basePath}.repeat`,
+      batchCapacityPath: `${basePath}.batchCapacity`,
+      batchStartQtyPath: `${basePath}.batchStartQty`,
+      fixedExpensesPath: `${basePath}.fixedExpenses`,
       formulaPath: `${basePath}.formula`,
       expensesPath: `${basePath}.expenses`,
       requiresCollectionPath: `${basePath}.requiresCollection`,
-      passivePath: `${basePath}.passive`,
       collectQdPath: `${basePath}.collectQd`,
-      daylightCollectionOnlyPath: `${basePath}.daylightCollectionOnly`,
-      daylightProductionOnlyPath: `${basePath}.daylightProductionOnly`,
       autoCollectPath: `${basePath}.autoCollect`,
       overtimePath: `${basePath}.overtime`,
+      wageDailyCopperPath: `${basePath}.wageDailyCopper`,
+      operatingUpkeepMonthlyCopperPath: `${basePath}.operatingUpkeepMonthlyCopper`,
       expenseModePath: `${basePath}.expenseMode`,
       storageRoomIdPath: `${basePath}.storageRoomId`,
       pendingQtyPath: `${basePath}.pendingQty`
@@ -395,7 +325,7 @@ _pendingProductionRows(building, holding = null, buildingIndex = 0, linesArg = n
     }));
 },
 
-_buildingIncomeSummary(building, holding = null, workerContext = null, workerEfficiencyArg = null) {
+_buildingIncomeSummary(building, holding = null, workerContext = null, workerEfficiencyArg = null, storageRoomsArg = null) {
   const effSummary = workerEfficiencyArg ?? this._buildingEffectiveWorkers(holding, building, workerContext);
   const eff = effSummary.total;
   const income = building?.income && typeof building.income === "object" ? building.income : {};
@@ -404,70 +334,60 @@ _buildingIncomeSummary(building, holding = null, workerContext = null, workerEff
   const formula = String(income.formula ?? "");
   const risk = this._safeNumber(income.risk, 0);
   const illegal = Boolean(income.illegal);
+  const wageDailyCopper = Math.max(0, Math.floor(this._safeNumber(income.wageDailyCopper, 0)));
+  const operatingUpkeepMonthlyCopper = Math.max(0, Math.floor(this._safeNumber(income.operatingUpkeepMonthlyCopper, 0)));
   const trade = income.trade && typeof income.trade === "object" ? income.trade : {};
-  const tradeDemandConfig = normalizeTradeDemand(trade, (value, fallback = 0) => this._safeNumber(value, fallback));
-  const tradeDemand = tradeDemandSnapshot({
-    population: (holding?.people?.list ?? []).filter((person) => !person?.dead).length,
-    reputation: this._reputationSummary?.(holding)?.total ?? 0,
-    connections: holding?.gm?.modifiers?.marketConnectionsLevel ?? 1,
-    periods: 1,
-    effectiveWorkers: eff,
-    trade: tradeDemandConfig,
-    safeNumber: (value, fallback = 0) => this._safeNumber(value, fallback)
-  });
-  const service = normalizeHospitalityService(income.service, (value, fallback = 0) => this._safeNumber(value, fallback));
-  const serviceDemand = hospitalityDemandSnapshot({
-    population: (holding?.people?.list ?? []).filter((person) => !person?.dead).length,
-    reputation: this._reputationSummary?.(holding)?.total ?? 0,
-    connections: holding?.gm?.modifiers?.marketConnectionsLevel ?? 1,
-    periods: 1,
-    effectiveWorkers: eff,
-    housingCapacity: building?.housing?.capacity,
-    service,
-    safeNumber: (value, fallback = 0) => this._safeNumber(value, fallback)
-  });
+  const selectedTradeRoomId = String(trade.roomId ?? trade.storageRoomId ?? "all") || "all";
+  const tradeRoomOptions = Array.isArray(storageRoomsArg)
+    ? [
+        { value: "all", label: "Все склады", selected: selectedTradeRoomId === "all" },
+        ...storageRoomsArg
+          .filter((room) => room.available || room.source === "base")
+          .map((room) => ({ value: room.id, label: room.label, selected: room.id === selectedTradeRoomId }))
+      ]
+    : (this._tradeStorageRoomOptions?.(holding, selectedTradeRoomId) ?? [{ value: "all", label: "Все склады", selected: true }]);
+  if (Array.isArray(storageRoomsArg) && selectedTradeRoomId !== "all" && !tradeRoomOptions.some((option) => option.value === selectedTradeRoomId)) {
+    tradeRoomOptions.push({ value: selectedTradeRoomId, label: `${selectedTradeRoomId} (нет в списке)`, selected: true });
+  }
   const tradeEfficiency = this._tradeEfficiencySummary?.(holding, building, workerContext) ?? {
     value: 1,
     text: "1",
-    title: "1 = 50% справочной цены каталога. Эффективность берётся от случайного назначенного торговца; фактическую продажу ограничивают спрос, бюджет, запас и труд."
+    title: "1 = 50% базовой цены, 2 = 100%, 3 = 150%."
   };
-  const total = base + perWorker * eff;
+  const maintenanceFactor = this._maintenanceEfficiencyFactor?.(building) ?? (this._safeNumber(building?.maintenance?.backlogTendays, 0) >= 2 ? 0.5 : 1);
+  const total = Math.floor((base + perWorker * eff) * maintenanceFactor);
   return {
     base,
     perWorker,
     formula,
     risk,
     illegal,
+    wageDailyCopper,
+    operatingUpkeepMonthlyCopper,
     total,
     effectiveWorkers: eff,
-    service: {
-      ...service,
-      ...serviceDemand,
-      expectedRevenue: Math.min(serviceDemand.demand, serviceDemand.capacity) * service.priceCopper,
-      demandText: `${serviceDemand.demand}`,
-      capacityText: `${serviceDemand.capacity}`,
-      hasInputResource: Boolean(service.inputResourceId && service.inputQtyPerService > 0),
-      inputResourceLabel: service.inputResourceId ? resourceLabel(normalizeResourceId(service.inputResourceId)) : "—"
-    },
     trade: {
       enabled: Boolean(trade.enabled),
-      ...tradeDemandConfig,
-      ...tradeDemand,
-      isSettlementDemand: tradeDemandConfig.demandModel === "settlement",
-      expectedBuyers: Math.min(tradeDemand.demand, tradeDemand.capacity),
-      demandModelOptions: [
-        { value: "settlement", label: "Спрос владения", selected: tradeDemandConfig.demandModel === "settlement" },
-        { value: "legacy", label: "Старые броски Репутации", selected: tradeDemandConfig.demandModel === "legacy" }
-      ],
       priceEfficiency: tradeEfficiency.value,
       priceEfficiencyText: tradeEfficiency.text,
       priceEfficiencyTitle: tradeEfficiency.title,
-      budgetFormula: String(trade.budgetFormula ?? "2d6*10"),
-      maxLotsPerBuyer: Math.max(1, Math.floor(this._safeNumber(trade.maxLotsPerBuyer, 1))),
-      roomId: String(trade.roomId ?? trade.storageRoomId ?? "all") || "all",
+      sourceIdsText: (trade.sourceIds ?? []).join(", "),
+      allowedTagsText: (trade.allowedTags ?? []).join(", "),
+      demandSource: String(trade.demandSource ?? ""),
+      demandBudgetBaseCopper: Math.max(0, Math.floor(this._safeNumber(trade.demandBudgetBaseCopper, 0))),
+      demandBudgetPerWorkerCopper: Math.max(0, Math.floor(this._safeNumber(trade.demandBudgetPerWorkerCopper, 0))),
+      throughputUnitsPerWorker: Math.max(0, Math.floor(this._safeNumber(trade.throughputUnitsPerWorker, 0))),
+      gmPriority: Math.max(0, Math.floor(this._safeNumber(trade.gmPriority, 500))),
+      roomId: selectedTradeRoomId,
       kind: ["all", "resources", "items"].includes(String(trade.kind ?? trade.saleKind ?? "all")) ? String(trade.kind ?? trade.saleKind ?? "all") : "all",
-      roomOptions: this._tradeStorageRoomOptions?.(holding, trade.roomId ?? trade.storageRoomId ?? "all") ?? [{ value: "all", label: "Все склады", selected: true }],
+      roomOptions: tradeRoomOptions,
       kindOptions: this._tradeKindOptions?.(trade.kind ?? trade.saleKind ?? "all") ?? [{ value: "all", label: "Все", selected: true }],
+      service: {
+        enabled: Boolean(trade.service?.enabled),
+        categoryTag: String(trade.service?.categoryTag ?? ""),
+        basePriceCopper: Math.max(0, Math.floor(this._safeNumber(trade.service?.basePriceCopper, 0))),
+        unitsPerWorker: Math.max(0, Math.floor(this._safeNumber(trade.service?.unitsPerWorker, 0)))
+      },
       notes: String(trade.notes ?? "")
     }
   };
@@ -483,35 +403,92 @@ _buildingDefenseSummary(building, holding = null, workerContext = null, statusAr
   const assigned = (building?.assignedWorkerIds ?? []).filter(Boolean).length;
   const effSummary = workerEfficiencyArg ?? (this._buildingEffectiveWorkers ? this._buildingEffectiveWorkers(holding, building, workerContext) : { total: assigned, detail: `${assigned} раб.` });
   const effectiveWorkers = Number.isFinite(Number(effSummary?.total)) ? Math.max(0, Number(effSummary.total)) : 0;
+  const maintenanceFactor = Math.max(0, Math.min(1, this._maintenanceEfficiencyFactor?.(building) ?? 1));
+  const structuralBase = Math.max(0, Math.floor(base * maintenanceFactor));
   const fromWorkers = workerStep > 0 ? Math.floor(effectiveWorkers / workerStep) * perStep : 0;
-  const total = effectiveWorkers > 0 ? Math.max(0, base + fromWorkers) : 0;
+  const total = Math.max(0, structuralBase + fromWorkers);
   const hasDefense = Boolean(base || perStep || workerStep);
   const effText = this._formatNumber ? this._formatNumber(effectiveWorkers) : String(Math.round(effectiveWorkers * 100) / 100);
   const detail = workerStep > 0
-    ? `${base} база + ${fromWorkers} за эфф. ${effText}/${workerStep} раб. (${effSummary?.detail || "нет деталей"})`
-    : (effectiveWorkers > 0 ? `${base} база, удерживается эфф. ${effText} раб.` : `${base} база, но нет гарнизона`);
-  return { base, perStep, workerStep, assigned, effectiveWorkers, fromWorkers, total, hasDefense, detail };
+    ? `${structuralBase} структура + ${fromWorkers} за эфф. ${effText}/${workerStep} оплаченных раб. (${effSummary?.detail || "нет деталей"})`
+    : `${structuralBase} структурная защита${maintenanceFactor < 1 ? ` (обслуживание ×${maintenanceFactor})` : ""}`;
+  return { base, structuralBase, perStep, workerStep, assigned, effectiveWorkers, fromWorkers, total, hasDefense, detail };
 },
 
-_reputationSummary(holding, moraleStateArg = null) {
-  let total = 0;
-  const buildings = [];
-  for (const building of holding?.buildings?.list ?? []) {
+_reputationSummary(holding, _moraleStateArg = null) {
+  const candidates = [];
+  for (const [index, building] of (holding?.buildings?.list ?? []).entries()) {
     if (this._buildingStatus(building).value !== "built") continue;
-    const value = this._safeNumber(building?.reputation, 0);
-    if (!value) continue;
+    const rawValue = this._safeNumber(building?.reputation, 0);
+    if (!rawValue) continue;
+    const socialStatus = rawValue > 0 ? buildingConfirmedSocialStatus(holding, building) : null;
+    if (rawValue > 0 && !socialStatus.active) continue;
+    if (rawValue < 0 && !buildingConfirmedHarmActive(holding, building)) continue;
+    const serviceFactor = rawValue > 0 ? socialStatus.maintenanceFactor : 1;
+    const activeValue = scaleIntegerBuildingEffect(rawValue, serviceFactor);
+    if (!activeValue) continue;
+    const templateId = String(building?.templateId ?? "").trim().toLowerCase();
+    const instanceId = String(building?.id ?? "").trim();
+    candidates.push({
+      building,
+      index,
+      rawValue,
+      activeValue,
+      serviceFactor,
+      templateId,
+      instanceId,
+      groupKey: templateId ? `template:${templateId}` : `instance:${instanceId || "legacy"}:${index}`,
+      stableKey: instanceId || `legacy-${String(index).padStart(8, "0")}`
+    });
+  }
+  candidates.sort((left, right) => {
+    if (left.groupKey < right.groupKey) return -1;
+    if (left.groupKey > right.groupKey) return 1;
+    if (left.stableKey < right.stableKey) return -1;
+    if (left.stableKey > right.stableKey) return 1;
+    return left.index - right.index;
+  });
+
+  let total = 0;
+  let undiminishedTotal = 0;
+  const buildings = [];
+  const groupRanks = new Map();
+  for (const candidate of candidates) {
+    const rank = (groupRanks.get(candidate.groupKey) ?? 0) + 1;
+    groupRanks.set(candidate.groupKey, rank);
+    const repeated = Boolean(candidate.templateId) && rank > 1;
+    const repeatAllowed = candidate.building?.repeatSettlementEffects === true;
+    const value = repeated && !repeatAllowed ? 0 : candidate.activeValue;
     total += value;
-    buildings.push({ name: building.name || "Здание", value });
+    undiminishedTotal += candidate.rawValue;
+    buildings.push({
+      id: candidate.instanceId,
+      name: candidate.building.name || "Здание",
+      rawValue: candidate.rawValue,
+      activeValue: candidate.activeValue,
+      serviceFactor: candidate.serviceFactor,
+      value,
+      rank,
+      repeated,
+      repeatAllowed,
+      templateId: candidate.templateId
+    });
   }
   const gmMod = this._gmSettlementModifiers(holding).reputation;
-  const moraleState = moraleStateArg ?? this._moraleState(this._moraleSnapshot(holding));
-  const moraleMod = this._safeNumber(moraleState?.modifiers?.reputation, 0);
-  const adjusted = Math.max(0, total + gmMod + moraleMod);
-  const modText = [gmMod ? `ГМ ${gmMod > 0 ? "+" : ""}${gmMod}` : "", moraleMod ? `довольство ${moraleMod}` : ""].filter(Boolean).join("; ");
+  const politicsMod = politicsRuntimeEffects(holding)?.reputation ?? 0;
+  const moraleMod = 0;
+  const adjusted = Math.max(0, total + gmMod + politicsMod);
+  const modText = gmMod ? `ГМ ${gmMod > 0 ? "+" : ""}${gmMod}` : "";
+  const signed = (value) => `${value > 0 ? "+" : ""}${value}`;
+  const buildingText = buildings.map((item) => {
+    if (item.repeated && !item.repeatAllowed) return `${item.name}: ${signed(item.rawValue)} → 0 (повтор шаблона)`;
+    if (item.value !== item.rawValue) return `${item.name}: ${signed(item.rawValue)} → ${signed(item.value)} (активность/обслуживание)`;
+    return `${item.name}: ${signed(item.value)}${item.repeated ? " (повтор разрешён явно)" : ""}`;
+  }).join("; ");
   const tooltip = buildings.length
-    ? `Репутация считается только от построенных зданий: ${buildings.map((item) => `${item.name}: ${item.value > 0 ? "+" : ""}${item.value}`).join("; ")}. База ${total}${modText ? `; ${modText}` : ""}. Итого ${adjusted}.`
+    ? `Репутация вычисляется только от действующих зданий. По умолчанию вклад даёт первый действующий экземпляр шаблона; повторы дают 0, если шаблон явно не разрешает исключение: ${buildingText}. База ${total}${modText ? `; ${modText}` : ""}. Итого ${adjusted}.`
     : `Построенные здания пока не дают репутацию.${modText ? ` Модификаторы: ${modText}. Итого ${adjusted}.` : ""}`;
-  return { base: 0, bonus: adjusted, total: adjusted, rawTotal: total, gmMod, moraleMod, buildings, bonusText: "", tooltip };
+  return { base: 0, bonus: adjusted, total: adjusted, rawTotal: total, undiminishedTotal, gmMod, politicsMod, moraleMod, buildings, bonusText: "", tooltip: `${tooltip}${politicsMod ? ` Политика ${signed(politicsMod)}.` : ""}` };
 },
 
 _defenseSummary(holding, moraleStateArg = null, workerContext = null) {
@@ -524,12 +501,13 @@ _defenseSummary(holding, moraleStateArg = null, workerContext = null) {
     buildings.push({ name: building.name || "Здание", value: summary.total, detail: summary.detail });
   }
   const gmMod = this._gmSettlementModifiers(holding).defense;
-  const moraleState = moraleStateArg ?? this._moraleState(this._moraleSnapshot(holding));
-  const moraleMod = this._safeNumber(moraleState?.modifiers?.defense, 0);
-  const adjusted = Math.max(0, total + gmMod + moraleMod);
+  const politicsMod = politicsRuntimeEffects(holding)?.defense ?? 0;
+  const moraleState = moraleStateArg ?? this._moraleState(this._calculateMorale(holding));
+  const moraleMod = moraleState.value < 0 ? -1 : 0;
+  const adjusted = Math.max(0, total + gmMod + politicsMod + moraleMod);
   const modText = [gmMod ? `ГМ ${gmMod > 0 ? "+" : ""}${gmMod}` : "", moraleMod ? `довольство ${moraleMod}` : ""].filter(Boolean).join("; ");
   const baseTooltip = buildings.length ? buildings.map((item) => `${item.name}: +${item.value} (${item.detail})`).join("; ") : "Построенные оборонные здания пока не дают защищенность.";
-  return { base: 0, bonus: adjusted, total: adjusted, rawTotal: total, gmMod, moraleMod, buildings, tooltip: `${baseTooltip}${modText ? ` Модификаторы: ${modText}.` : ""}` };
+  return { base: 0, bonus: adjusted, total: adjusted, rawTotal: total, gmMod, politicsMod, moraleMod, buildings, tooltip: `${baseTooltip}${modText ? ` Модификаторы: ${modText}.` : ""}${politicsMod ? ` Политика ${politicsMod > 0 ? "+" : ""}${politicsMod}.` : ""}` };
 },
 
 _productionLine(building, holdingArg = null, linesArg = null) {
@@ -555,7 +533,8 @@ _buildingProductionSummary(building, assignedCount = 0, holding = null, workerCo
   const flat = this._safeNumber(building?.productionAmount, 0);
   const formula = String(building?.productionFormula ?? "").trim();
   const eff = workerEfficiencyArg ?? this._buildingEffectiveWorkers(holding, building, workerContext);
-  const total = flat + per * eff.total;
+  const maintenanceFactor = this._maintenanceEfficiencyFactor?.(building) ?? (this._safeNumber(building?.maintenance?.backlogTendays, 0) >= 2 ? 0.5 : 1);
+  const total = Math.floor((flat + per * eff.total) * maintenanceFactor);
   return { resource: resource || "—", assignedCount, flat, per, formula, total, effectiveWorkers: eff.total, leaderBonus: eff.leaderBonus, isMoney: this._isMoneyResource(resource) };
 },
 
@@ -565,7 +544,7 @@ _buildingMoneyIncome(building, holdingArg = null, workerContext = null, linesArg
   const functions = this._buildingFunctions(building);
   let total = 0;
   const workerEfficiency = workerContext ? this._buildingEffectiveWorkers(holding, building, workerContext) : null;
-  if (functions.income) total += this._buildingIncomeSummary(building, holding, workerContext, workerEfficiency).total;
+  if (functions.income && !building?.income?.trade?.enabled) total += this._buildingIncomeSummary(building, holding, workerContext, workerEfficiency).total;
   const lines = Array.isArray(linesArg) ? linesArg : this._prepareProductionLines(building, 0, holding);
   for (const line of lines) {
     if (!line.active) continue;

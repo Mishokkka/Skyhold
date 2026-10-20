@@ -1,4 +1,3 @@
-import { TEMPLATE_CATALOG_VERSION } from "./building-templates.js";
 import { migrateData, normalizeCatalogPartition, normalizeHoldingsPartition, reconcileHoldingRegions } from "./normalizers.js";
 import { SKYHOLD_SCHEMA_VERSION } from "./schema-version.js";
 import { clone, toNumber } from "./utils.js";
@@ -45,7 +44,10 @@ export function prepareSkyholdCommit(data, {
   }
 
   next.meta.schemaVersion = SKYHOLD_SCHEMA_VERSION;
-  next.meta.templateCatalogVersion = TEMPLATE_CATALOG_VERSION;
+  next.meta.templateCatalogVersion = Math.max(0, toNumber(
+    next.meta.templateCatalogVersion,
+    data?.meta?.templateCatalogVersion
+  ));
   next.meta.lastUpdated = now;
   next.meta.revision = Math.max(0, toNumber(baseRevision, 0)) + 1;
   return { data: next, scope: effectiveScope };

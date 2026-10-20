@@ -44,7 +44,7 @@ export function resolveUniqueBuilding(building = {}) {
 }
 
 export function openUniqueBuilding({ holdingId, buildingId } = {}) {
-  const data = SkyholdData.get();
+  const data = SkyholdData.view();
   const { holding } = findReadableHoldingEntry(data, holdingId, { fallback: false });
   const building = (holding?.buildings?.list ?? []).find((item) => String(item?.id ?? "") === String(buildingId ?? ""));
   if (!holding || !building) return null;
@@ -54,4 +54,3 @@ export function openUniqueBuilding({ holdingId, buildingId } = {}) {
   app.render({ force: true, focus: true });
   return app;
 }
-

@@ -1,0 +1,109 @@
+      {{#if building.showEditorAgriculture}}
+        <fieldset class="fbls-building-editor-card wide-card fbls-production-workspace">
+          <legend>Сельское хозяйство</legend>
+
+          <section class="fbls-production-panel top-contents-panel">
+            <header class="fbls-panel-header slim">
+              <div>
+                <h3><i class="fa-solid fa-seedling"></i> {{building.agricultureView.kindLabel}} · {{building.agricultureView.phaseLabel}}</h3>
+                <p>{{building.agricultureView.statusText}}</p>
+              </div>
+              {{#if canEdit}}
+                <label class="fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Отключённый участок сохраняет состояние, но не участвует в следующем расчёте.">
+                  <span>Включено</span>
+                  <input type="checkbox" data-type="checkbox" data-agriculture-field="{{building.agricultureView.enabledPath}}" {{#if building.agricultureView.enabled}}checked{{/if}} />
+                </label>
+              {{/if}}
+            </header>
+            <div class="fbls-production-badges">
+              <span>{{building.agricultureView.phaseLabel}}</span>
+              {{#if building.agricultureView.hasActiveCrop}}<span>{{building.agricultureView.activeCrop.label}}</span>{{/if}}
+              {{#if building.agricultureView.isReady}}<span class="warn">на участке {{building.agricultureView.state.readyQty}} ед.</span>{{/if}}
+            </div>
+            <p class="fbls-muted-line">Семена абстрактны. Рост идёт по календарю без постоянного работника; посев и постепенный сбор тратят рабочие QD.</p>
+          </section>
+
+          <section class="fbls-production-panel full-width-lines">
+            <header class="fbls-panel-header slim"><h3>План участка</h3></header>
+            <article class="fbls-production-card">
+              <div class="fbls-production-card-grid">
+                <label>
+                  <span>Выбранная культура</span>
+                  {{#if canEdit}}<select class="fbls-control" data-agriculture-field="{{building.agricultureView.activeCropIdPath}}">{{#each building.agricultureView.activeCropOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{building.agricultureView.activeCrop.label}}</strong>{{/if}}
+                </label>
+                <label>
+                  <span>Склад урожая</span>
+                  {{#if canEdit}}<select class="fbls-control" data-agriculture-field="{{building.agricultureView.outputRoomIdPath}}">{{#each building.agricultureView.outputRoomOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{building.agricultureView.outputRoomId}}</strong>{{/if}}
+                </label>
+                <label>
+                  <span data-fbls-tooltip="Большее число обрабатывается раньше при общем плане; равенство разрешается стабильным ID здания.">Приоритет GM</span>
+                  {{#if canEdit}}<input class="fbls-control" type="number" min="0" step="1" data-type="number" data-agriculture-field="{{building.agricultureView.gmPriorityPath}}" value="{{building.agricultureView.gmPriority}}" />{{else}}<strong>{{building.agricultureView.gmPriority}}</strong>{{/if}}
+                </label>
+                <label class="fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Разрешить назначенным работникам начинать или продолжать посев в допустимый сезон."><span><i class="fa-solid fa-wheat-awn"></i> Сеять</span>{{#if canEdit}}<input type="checkbox" data-type="checkbox" data-agriculture-field="{{building.agricultureView.sowPath}}" {{#if building.agricultureView.sow}}checked{{/if}} />{{else}}<strong>{{#if building.agricultureView.sow}}Да{{else}}Нет{{/if}}</strong>{{/if}}</label>
+                <label class="fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Разрешить назначенным работникам постепенно переносить готовый урожай на склад."><span><i class="fa-solid fa-basket-shopping"></i> Собирать</span>{{#if canEdit}}<input type="checkbox" data-type="checkbox" data-agriculture-field="{{building.agricultureView.harvestPath}}" {{#if building.agricultureView.harvest}}checked{{/if}} />{{else}}<strong>{{#if building.agricultureView.harvest}}Да{{else}}Нет{{/if}}</strong>{{/if}}</label>
+              </div>
+            </article>
+          </section>
+
+          <section class="fbls-production-panel full-width-lines">
+            <header class="fbls-panel-header slim">
+              <div><h3>Культуры</h3></div>
+              {{#if canEdit}}<button type="button" class="fbls-button compact fbls-button-role" data-action="add-agriculture-crop"><i class="fa-solid fa-plus"></i> Культура</button>{{/if}}
+            </header>
+            <div class="fbls-production-card-list">
+              {{#each building.agricultureView.cropRows}}
+                <article class="fbls-production-card {{#if active}}active{{/if}}">
+                  <header class="fbls-production-card-header fbls-card-header">
+                    <div class="fbls-production-title"><h4>{{label}}</h4></div>
+                    <div class="fbls-production-badges"><span>{{outputQty}} {{resourceId}}</span><span>{{expiryLabel}}</span></div>
+                  </header>
+                  <div class="fbls-production-card-grid">
+                    <label><span>Название</span>{{#if @root.canEdit}}<input class="fbls-control" type="text" data-agriculture-field="{{labelPath}}" value="{{label}}" />{{else}}<strong>{{label}}</strong>{{/if}}</label>
+                    <label><span>Ресурс</span>{{#if @root.canEdit}}<button type="button" class="fbls-resource-picker-button fbls-control" data-action="pick-agriculture-resource" data-index="{{index}}"><span>{{resourceId}}</span><i class="fa-solid fa-chevron-right"></i></button>{{else}}<strong>{{resourceId}}</strong>{{/if}}</label>
+                    <label><span>Выход, ед.</span>{{#if @root.canEdit}}<input class="fbls-control" type="number" min="0" step="1" data-type="number" data-agriculture-field="{{outputQtyPath}}" value="{{outputQty}}" />{{else}}<strong>{{outputQty}}</strong>{{/if}}</label>
+                    <label><span>Закладка/посев, QD</span>{{#if @root.canEdit}}<input class="fbls-control" type="number" min="0" step="1" data-type="number" data-agriculture-field="{{sowingWorkQdPath}}" value="{{sowingWorkQd}}" />{{else}}<strong>{{sowingWorkQd}}</strong>{{/if}}</label>
+                    <label title="Рост, прошло QD"><span>Рост, QD</span>{{#if @root.canEdit}}<input aria-label="Рост, прошло QD" class="fbls-control" type="number" min="1" step="1" data-type="number" data-agriculture-field="{{growingQdPath}}" value="{{growingQd}}" />{{else}}<strong>{{growingQd}}</strong>{{/if}}</label>
+                    <label title="Сбор, прогресс QD"><span>Сбор, QD</span>{{#if @root.canEdit}}<input aria-label="Сбор, прогресс QD" class="fbls-control" type="number" min="1" step="1" data-type="number" data-agriculture-field="{{harvestWorkQdPath}}" value="{{harvestWorkQd}}" />{{else}}<strong>{{harvestWorkQd}}</strong>{{/if}}</label>
+                    <label><span>Гибель готового</span>{{#if @root.canEdit}}<select class="fbls-control" data-agriculture-field="{{expiryRulePath}}">{{#each expiryOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{expiryLabel}}</strong>{{/if}}</label>
+                    {{#if usesQdExpiry}}<label><span>Срок готового, QD</span>{{#if @root.canEdit}}<input class="fbls-control" type="number" min="1" step="1" data-type="number" data-agriculture-field="{{readyExpiryQdPath}}" value="{{readyExpiryQd}}" />{{else}}<strong>{{readyExpiryQd}}</strong>{{/if}}</label>{{/if}}
+                  </div>
+                  <div class="fbls-production-utility-row nonworkers">
+                    <div class="fbls-production-season-box">
+                      <span>Сезоны посева</span>
+                      <div class="fbls-production-season-pills">
+                        {{#each seasonOptions}}
+                          {{#if @root.canEdit}}<button type="button" class="fbls-season-pill fbls-choice-toggle {{#if selected}}active{{/if}}" data-action="toggle-agriculture-season" data-index="{{../index}}" data-season-id="{{seasonId}}" aria-pressed="{{#if selected}}true{{else}}false{{/if}}" aria-label="{{label}}: {{#if selected}}включён{{else}}выключен{{/if}}" title="{{label}}: {{#if selected}}включён{{else}}выключен{{/if}}"><em>{{short}}</em></button>{{else}}{{#if selected}}<span class="fbls-season-pill fbls-choice-toggle active"><em>{{short}}</em></span>{{/if}}{{/if}}
+                        {{/each}}
+                      </div>
+                    </div>
+                  </div>
+                  {{#if @root.canEdit}}<footer class="fbls-production-card-footer"><span>Смена выбранной культуры сбрасывает незавершённый цикл при следующем Preview.</span><button type="button" class="fbls-icon-button danger" data-action="delete-agriculture-crop" data-index="{{index}}" aria-label="Удалить культуру {{label}}"><i class="fa-solid fa-trash"></i></button></footer>{{/if}}
+                </article>
+              {{else}}
+                <p class="fbls-muted-line">Культуры не настроены.</p>
+              {{/each}}
+            </div>
+          </section>
+
+          <section class="fbls-production-panel full-width-lines">
+            <header class="fbls-panel-header slim"><h3>Состояние участка</h3></header>
+            <article class="fbls-production-card">
+              <div class="fbls-production-card-grid">
+                <label><span>Фаза</span>{{#if canEdit}}<select class="fbls-control" data-agriculture-field="{{building.agricultureView.phasePath}}">{{#each building.agricultureView.phaseOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{building.agricultureView.phaseLabel}}</strong>{{/if}}</label>
+                <label title="Посев, прогресс QD"><span>Посев, QD</span>{{#if canEdit}}<input aria-label="Посев, прогресс QD" class="fbls-control" type="number" min="0" step="1" data-type="number" data-agriculture-field="{{building.agricultureView.sowingProgressQdPath}}" value="{{building.agricultureView.state.sowingProgressQd}}" />{{else}}<strong>{{building.agricultureView.state.sowingProgressQd}}</strong>{{/if}}</label>
+                <label title="Рост, прошло QD"><span>Рост, QD</span>{{#if canEdit}}<input aria-label="Рост, прошло QD" class="fbls-control" type="number" min="0" step="1" data-type="number" data-agriculture-field="{{building.agricultureView.growingElapsedQdPath}}" value="{{building.agricultureView.state.growingElapsedQd}}" />{{else}}<strong>{{building.agricultureView.state.growingElapsedQd}}</strong>{{/if}}</label>
+                <label title="Готово, возраст QD"><span>Возраст, QD</span>{{#if canEdit}}<input aria-label="Готово, возраст QD" class="fbls-control" type="number" min="0" step="1" data-type="number" data-agriculture-field="{{building.agricultureView.readyAgeQdPath}}" value="{{building.agricultureView.state.readyAgeQd}}" />{{else}}<strong>{{building.agricultureView.state.readyAgeQd}}</strong>{{/if}}</label>
+                <label title="Сбор, прогресс QD"><span>Сбор, QD</span>{{#if canEdit}}<input aria-label="Сбор, прогресс QD" class="fbls-control" type="number" min="0" step="1" data-type="number" data-agriculture-field="{{building.agricultureView.harvestProgressQdPath}}" value="{{building.agricultureView.state.harvestProgressQd}}" />{{else}}<strong>{{building.agricultureView.state.harvestProgressQd}}</strong>{{/if}}</label>
+                <label><span>Сбор, всего QD</span>{{#if canEdit}}<input class="fbls-control" type="number" min="0" step="1" data-type="number" data-agriculture-field="{{building.agricultureView.harvestWorkQdTotalPath}}" value="{{building.agricultureView.state.harvestWorkQdTotal}}" />{{else}}<strong>{{building.agricultureView.state.harvestWorkQdTotal}}</strong>{{/if}}</label>
+                <label><span>Урожай цикла</span>{{#if canEdit}}<input class="fbls-control" type="number" min="0" step="1" data-type="number" data-agriculture-field="{{building.agricultureView.harvestTotalQtyPath}}" value="{{building.agricultureView.state.harvestTotalQty}}" />{{else}}<strong>{{building.agricultureView.state.harvestTotalQty}}</strong>{{/if}}</label>
+                <label><span>Уже перенесено</span>{{#if canEdit}}<input class="fbls-control" type="number" min="0" step="1" data-type="number" data-agriculture-field="{{building.agricultureView.harvestedQtyPath}}" value="{{building.agricultureView.state.harvestedQty}}" />{{else}}<strong>{{building.agricultureView.state.harvestedQty}}</strong>{{/if}}</label>
+                <label title="Осталось на участке"><span>На участке</span><strong>{{building.agricultureView.state.readyQty}}</strong></label>
+                <label><span>Сезон посева</span>{{#if canEdit}}<input class="fbls-control" type="text" data-agriculture-field="{{building.agricultureView.sowingSeasonKeyPath}}" value="{{building.agricultureView.state.sowingSeasonKey}}" />{{else}}<strong>{{building.agricultureView.state.sowingSeasonKey}}</strong>{{/if}}</label>
+                <label><span>Сезон готовности</span>{{#if canEdit}}<input class="fbls-control" type="text" data-agriculture-field="{{building.agricultureView.readySeasonKeyPath}}" value="{{building.agricultureView.state.readySeasonKey}}" />{{else}}<strong>{{building.agricultureView.state.readySeasonKey}}</strong>{{/if}}</label>
+                <label><span>Последний посев</span>{{#if canEdit}}<input class="fbls-control" type="text" data-agriculture-field="{{building.agricultureView.lastSownSeasonKeyPath}}" value="{{building.agricultureView.state.lastSownSeasonKey}}" />{{else}}<strong>{{building.agricultureView.state.lastSownSeasonKey}}</strong>{{/if}}</label>
+              </div>
+              <p class="fbls-muted-line">Эти поля нужны GM для исправления уже отыгранного состояния. Обычный цикл меняет их только через Preview/Apply десятника.</p>
+            </article>
+          </section>
+        </fieldset>
+      {{/if}}

@@ -31,7 +31,8 @@ _sanitizeTextBlock(value = "") {
 _bindInputGuards(root) {
   bindInputGuards(root, {
     textareaSanitizer: (value) => this._sanitizeTextBlock?.(value) ?? sanitizeTextBlock(value),
-    textareaSelectionMode: "clamp"
+    textareaSelectionMode: "clamp",
+    textareaSanitizeOnInput: false
   });
 },
 
@@ -44,7 +45,7 @@ _unbindGlobalInputGuard() {
 },
 
 _bindFloatingTooltips(root) {
-  bindFloatingTooltips(this, root, { followPointer: true });
+  bindFloatingTooltips(this, root);
 },
 
 

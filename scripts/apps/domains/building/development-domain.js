@@ -1,7 +1,7 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import { SkyholdData } from "../../../data/store.js";
 import { buildingOperationalState } from "../../../core/building-state.js";
-import { isWholeEconomyQuantity } from "../../../core/economy-quantity-contract.js";
+import { buildingConstructionPrerequisitesMet } from "../../../engines/economy/building-service.js";
 
 export const BuildingDevelopmentDomain = {
 _developmentParts(dev, basePath = "") {
@@ -27,8 +27,8 @@ _prepareMaterialCosts(building, buildingIndex, holdingIndexArg = null, basePathA
     _index: index,
     name: String(item?.name ?? ""),
     resourceId: String(item?.resourceId ?? item?.resource ?? item?.name ?? ""),
+    resourceGroup: String(item?.resourceGroup ?? ""),
     qty: this._safeNumber(item?.qty, 0),
-    quantityBlocked: Number(item?.qty) > 0 && !isWholeEconomyQuantity(item?.qty),
     namePath: `${recordPath}.materialCosts.${index}.name`,
     resourceIdPath: `${recordPath}.materialCosts.${index}.resourceId`,
     qtyPath: `${recordPath}.materialCosts.${index}.qty`
@@ -36,20 +36,30 @@ _prepareMaterialCosts(building, buildingIndex, holdingIndexArg = null, basePathA
 },
 
 _prepareRequiredBuildingRows(holding, building, buildingIndex, holdingIndexArg = null, basePathArg = "", options = {}) {
-  const ids = Array.isArray(building?.requiredBuildingIds) ? building.requiredBuildingIds : [];
+  const field = options?.mode === "any" ? "requiredAnyBuildingIds" : "requiredBuildingIds";
+  const ids = Array.isArray(building?.[field]) ? [...building[field]] : [];
   const holdingIndex = Number.isInteger(holdingIndexArg) ? holdingIndexArg : this._holdingIndex(holding);
   const recordPath = basePathArg || `holdings.${holdingIndex}.buildings.list.${buildingIndex}`;
   const buildings = holding?.buildings?.list ?? [];
+  if (options?.includeConstructionCenterGate && !ids.includes("construction-center")) ids.push("construction-center");
   return ids.map((value, index) => {
     const text = String(value ?? "");
-    const match = buildings.find((item) => item.id === text || item.name === text);
+    const match = buildings.find((item) => item.id === text || item.templateId === text || item.name === text);
     const status = match ? this._buildingStatus(match) : null;
+    const phase = building?.prerequisiteModes?.[text];
+    const phaseLabel = phase === "construction" ? "при создании проекта" : phase === "service" ? "действующая услуга" : "";
+    const phaseMet = phase === "construction" && !options?.isTemplate
+      ? true
+      : buildingConstructionPrerequisitesMet(holding, { requiredBuildingIds: [text], prerequisiteModes: { [text]: phase } });
+    const system = options?.includeConstructionCenterGate && text === "construction-center" && index >= (building?.[field]?.length ?? 0);
     return {
       _index: index,
       value: text,
-      label: match?.name ?? text,
-      met: Boolean(match && status?.value === "built"),
-      path: `${recordPath}.requiredBuildingIds.${index}`,
+      label: `${match?.name ?? text}${phaseLabel ? ` · ${phaseLabel}` : ""}`,
+      met: phase ? phaseMet : Boolean(match && status?.value === "built"),
+      system,
+      editable: !system,
+      path: system ? "" : `${recordPath}.${field}.${index}`,
       options: options?.isTemplate ? this._templatePrerequisiteOptions(building, text) : this._buildingPrerequisiteOptions(holding, building, text)
     };
   });
@@ -97,6 +107,7 @@ _buildingDevelopmentKey(building = {}) {
 
 _isDuplicateDevelopmentBuilding(holding, building) {
   if (!building || !buildingOperationalState(building).operational) return false;
+  if (building?.repeatSettlementEffects === true) return false;
   const b = this._devObject(building?.bonuses);
   const hasBonus = ["food", "technology", "culture", "war"].some((key) => this._safeNumber(b[key], 0) !== 0);
   if (!hasBonus) return false;
@@ -122,7 +133,7 @@ _developmentSummary(holding) {
     const hasBonus = ["food", "technology", "culture", "war"].some((key) => this._safeNumber(b[key], 0) !== 0);
     if (!hasBonus) continue;
     const devKey = this._buildingDevelopmentKey(building);
-    if (seen.has(devKey)) {
+    if (seen.has(devKey) && building?.repeatSettlementEffects !== true) {
       duplicates.push(building.name || "Здание");
       continue;
     }

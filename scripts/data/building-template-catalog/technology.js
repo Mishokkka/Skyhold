@@ -1,4 +1,6 @@
-export const BUILDING_TEMPLATES_TECHNOLOGY = [
+import { applyEconomicTemplateCalibration } from "../building-template-economy-calibration.js";
+
+export const BUILDING_TEMPLATES_TECHNOLOGY = applyEconomicTemplateCalibration([
   {
     "id": "lumbermill",
     "compendiumId": "QMq9l9vvf5ljDu52",
@@ -8,7 +10,7 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
     "icon": "fa-solid fa-tree",
     "img": "",
     "unlocked": true,
-    "description": "Ручная заготовка, распил и вывоз товарной древесины.",
+    "description": "Заготовка древесины.",
     "sourceRequirement": "-",
     "sourceRawMaterials": "-",
     "specialRequirements": "",
@@ -32,14 +34,7 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
     "requiredBuildingIds": [],
     "workersMin": 1,
     "workersMax": 12,
-    "suitableWorkerTypes": "Все с СИЛ, Все с РАЗ, Силач, Механик",
-    "workerTypeEffects": {
-      "Все с СИЛ": 0.5,
-      "Все с РАЗ": 0.5,
-      "Силач": 1,
-      "Механик": 1
-    },
-    "workerRole": "Лесоруб",
+    "workerRole": "",
     "functions": {
       "production": true,
       "income": false,
@@ -55,19 +50,16 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
         "name": "Древесина",
         "mode": "Древесина",
         "source": "workers",
-        "cadence": "day",
-        "cadenceEvery": 1,
+        "period": "qd",
         "resourceId": "wood",
         "resource": "Wood",
-        "outputQty": 4,
-        "laborQdPerBatch": 2,
-        "maxBatchesPerCadence": 0,
+        "outputQty": 2,
+        "workQd": 1,
         "expenseMode": "cycle",
         "expenses": "",
         "costsText": "",
         "requiresCollection": false,
         "collectQd": 0,
-        "daylightProductionOnly": true,
         "pendingQty": 0,
         "storageRoomId": "outdoors",
         "autoCollect": "none"
@@ -108,11 +100,10 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
     "moraleDelta": 0,
     "workerMoraleDelta": 0,
     "upkeep": 0,
-    "effect": "Обычный работник подготавливает 4 связки пиломатериала за рабочий день; на теньдень открытые работы останавливаются.",
-    "notes": "Одна связка — 10 кг пригодного к перевозке пиломатериала. Два QD включают валку, раскряжёвку, распил и вынос к складу.",
+    "effect": "Каждый работник производит Wood за Quarter Day.",
+    "notes": "Каждый работник производит Wood за Quarter Day.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "strength"
   },
   {
     "id": "quarry",
@@ -123,7 +114,7 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
     "icon": "fa-solid fa-cubes-stacked",
     "img": "",
     "unlocked": true,
-    "description": "Выемка, первичная обработка и вывоз строительного камня.",
+    "description": "Добыча камня для строительства.",
     "sourceRequirement": "-",
     "sourceRawMaterials": "-",
     "specialRequirements": "",
@@ -147,13 +138,7 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
     "requiredBuildingIds": [],
     "workersMin": 1,
     "workersMax": 12,
-    "suitableWorkerTypes": "Все с СИЛ, Силач, Строитель",
-    "workerTypeEffects": {
-      "Все с СИЛ": 0.5,
-      "Силач": 1,
-      "Строитель": 1
-    },
-    "workerRole": "Каменотёс",
+    "workerRole": "",
     "functions": {
       "production": true,
       "income": false,
@@ -169,19 +154,16 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
         "name": "Камень",
         "mode": "Камень",
         "source": "workers",
-        "cadence": "day",
-        "cadenceEvery": 1,
+        "period": "qd",
         "resourceId": "stone",
         "resource": "Stone",
-        "outputQty": 6,
-        "laborQdPerBatch": 2,
-        "maxBatchesPerCadence": 0,
+        "outputQty": 2,
+        "workQd": 1,
         "expenseMode": "cycle",
         "expenses": "",
         "costsText": "",
         "requiresCollection": false,
         "collectQd": 0,
-        "daylightProductionOnly": true,
         "pendingQty": 0,
         "storageRoomId": "outdoors",
         "autoCollect": "none"
@@ -222,11 +204,10 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
     "moraleDelta": 0,
     "workerMoraleDelta": 0,
     "upkeep": 0,
-    "effect": "Обычный работник подготавливает 6 строительных блоков за рабочий день; на теньдень открытая выемка останавливается.",
-    "notes": "Один блок — 20 кг обработанного камня. Два QD включают отделение породы, обтёску и вывоз к складу.",
+    "effect": "Каждый работник производит Stone за Quarter Day.",
+    "notes": "Каждый работник производит Stone за Quarter Day.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "strength"
   },
   {
     "id": "mine",
@@ -237,7 +218,7 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
     "icon": "fa-solid fa-mountain",
     "img": "",
     "unlocked": true,
-    "description": "Подземная добыча и сортировка железной руды с постоянным риском обвала.",
+    "description": "Добыча железной руды. Опасно, но выгодно.",
     "sourceRequirement": "The BUILDER talent",
     "sourceRawMaterials": "60 Wood",
     "specialRequirements": "Требуется строитель с Builder. Риск обвала оставлен как событие.",
@@ -268,14 +249,7 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
     "requiredBuildingIds": [],
     "workersMin": 2,
     "workersMax": 12,
-    "suitableWorkerTypes": "Все с СИЛ, Все с РАЗ, Силач, Механик",
-    "workerTypeEffects": {
-      "Все с СИЛ": 0.5,
-      "Все с РАЗ": 0.5,
-      "Силач": 1,
-      "Механик": 1
-    },
-    "workerRole": "Шахтёр",
+    "workerRole": "",
     "functions": {
       "production": true,
       "income": false,
@@ -291,13 +265,11 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
         "name": "Железная руда",
         "mode": "Железная руда",
         "source": "workers",
-        "cadence": "day",
-        "cadenceEvery": 1,
+        "period": "qd",
         "resourceId": "iron-ore",
         "resource": "Iron Ore",
-        "outputQty": 4,
-        "laborQdPerBatch": 2,
-        "maxBatchesPerCadence": 0,
+        "outputQty": 2,
+        "workQd": 1,
         "expenseMode": "cycle",
         "expenses": "",
         "costsText": "",
@@ -343,11 +315,10 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
     "moraleDelta": 0,
     "workerMoraleDelta": 0,
     "upkeep": 2,
-    "effect": "Обычный шахтёр добывает и сортирует 4 мешка Iron Ore за рабочий день.",
-    "notes": "Один мешок — 10 кг сортированной руды. Шахта может работать на теньдень при наличии ламп; обвалы и водоотлив остаются событиями и эксплуатационным риском.",
+    "effect": "Каждый шахтер производит Iron Ore за Quarter Day.",
+    "notes": "Каждый шахтер производит Iron Ore за Quarter Day.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "strength"
   },
   {
     "id": "forge",
@@ -358,7 +329,7 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
     "icon": "fa-solid fa-hammer",
     "img": "",
     "unlocked": true,
-    "description": "Выплавка крицы из железной руды и первичная проковка металла.",
+    "description": "Переработка руды и основа металлообработки.",
     "sourceRequirement": "the BUILDER talent",
     "sourceRawMaterials": "60 Iron and 400 Stone",
     "specialRequirements": "Требуется строитель с Builder.",
@@ -395,14 +366,7 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
     "requiredBuildingIds": [],
     "workersMin": 1,
     "workersMax": 6,
-    "suitableWorkerTypes": "Все с СИЛ, Все с РАЗ, Механик, Силач",
-    "workerTypeEffects": {
-      "Все с СИЛ": 0.5,
-      "Все с РАЗ": 0.5,
-      "Механик": 1,
-      "Силач": 1
-    },
-    "workerRole": "Кузнец",
+    "workerRole": "",
     "functions": {
       "production": true,
       "income": false,
@@ -418,16 +382,14 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
         "name": "Железо",
         "mode": "Железо",
         "source": "workers",
-        "cadence": "day",
-        "cadenceEvery": 1,
+        "period": "qd",
         "resourceId": "iron",
         "resource": "Iron",
         "outputQty": 12,
-        "laborQdPerBatch": 2,
-        "maxBatchesPerCadence": 0,
+        "workQd": 1,
         "expenseMode": "cycle",
-        "expenses": "Iron Ore 12, Charcoal 12",
-        "costsText": "Iron Ore 12, Charcoal 12",
+        "expenses": "Iron Ore 12",
+        "costsText": "Iron Ore 12",
         "requiresCollection": false,
         "collectQd": 0,
         "pendingQty": 0,
@@ -470,11 +432,10 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
     "moraleDelta": 0,
     "workerMoraleDelta": 0,
     "upkeep": 3,
-    "effect": "За рабочий день 12 мешков Iron Ore и 12 мешков Charcoal превращаются в 12 партий Iron.",
-    "notes": "120 кг сортированной руды и 60 кг древесного угля дают около 36 кг крицы и прутка. Потеря массы отражает пустую породу, шлак и угар; продажа ограничивается фактическим спросом рынка.",
+    "effect": "Iron Ore превращается в Iron.",
+    "notes": "Iron Ore превращается в Iron.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "strength"
   },
   {
     "id": "tannery",
@@ -485,7 +446,7 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
     "icon": "fa-solid fa-boot",
     "img": "",
     "unlocked": true,
-    "description": "Выделка шкур в кожу с применением воды, древесной коры и топлива.",
+    "description": "Выделка шкур в кожу.",
     "sourceRequirement": "-",
     "sourceRawMaterials": "100 Wood",
     "specialRequirements": "",
@@ -516,14 +477,7 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
     "requiredBuildingIds": [],
     "workersMin": 1,
     "workersMax": 4,
-    "suitableWorkerTypes": "Все с ЛОВ, Все с РАЗ, Ремесленник, Умелец",
-    "workerTypeEffects": {
-      "Все с ЛОВ": 0.5,
-      "Все с РАЗ": 0.5,
-      "Ремесленник": 1,
-      "Умелец": 1
-    },
-    "workerRole": "Кожевник",
+    "workerRole": "",
     "functions": {
       "production": true,
       "income": false,
@@ -539,22 +493,19 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
         "name": "Кожа",
         "mode": "Кожа",
         "source": "workers",
-        "cadence": "qd",
-        "cadenceEvery": 1,
+        "period": "qd",
         "resourceId": "leather",
         "resource": "Leather",
-        "outputQty": 6,
-        "laborQdPerBatch": 2,
-        "maxBatchesPerCadence": 0,
+        "outputQty": 12,
+        "workQd": 1,
         "expenseMode": "cycle",
-        "expenses": "Pelt 6, Wood 1",
-        "costsText": "Pelt 6, Wood 1",
+        "expenses": "Pelt 12",
+        "costsText": "Pelt 12",
         "requiresCollection": false,
         "collectQd": 0,
         "pendingQty": 0,
         "storageRoomId": "outdoors",
-        "autoCollect": "none",
-        "daylightProductionOnly": true
+        "autoCollect": "none"
       }
     ],
     "income": {
@@ -592,11 +543,10 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
     "moraleDelta": 0,
     "workerMoraleDelta": 0,
     "upkeep": 0,
-    "effect": "За полный рабочий день 6 Pelt и 1 Wood превращаются в 6 Leather.",
-    "notes": "Wood представляет кору и топливо; вода доступна из обязательного для мастерской источника и отдельно не складируется.",
+    "effect": "Pelt превращается в Leather.",
+    "notes": "Pelt превращается в Leather.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "agility"
   },
   {
     "id": "tailor-shop",
@@ -638,14 +588,7 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
     "requiredBuildingIds": [],
     "workersMin": 1,
     "workersMax": 4,
-    "suitableWorkerTypes": "Все с ЛОВ, Все с РАЗ, Ремесленник, Умелец",
-    "workerTypeEffects": {
-      "Все с ЛОВ": 0.5,
-      "Все с РАЗ": 0.5,
-      "Ремесленник": 1,
-      "Умелец": 1
-    },
-    "workerRole": "Портной",
+    "workerRole": "",
     "functions": {
       "production": true,
       "income": false,
@@ -661,22 +604,19 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
         "name": "Сукно",
         "mode": "Сукно",
         "source": "workers",
-        "cadence": "qd",
-        "cadenceEvery": 1,
-        "resourceId": "cloth-wool",
+        "period": "qd",
+        "resourceId": "cloth",
         "resource": "Cloth, Wool",
-        "outputQty": 2,
-        "laborQdPerBatch": 2,
-        "maxBatchesPerCadence": 0,
+        "outputQty": 12,
+        "workQd": 1,
         "expenseMode": "cycle",
-        "expenses": "Wool 4",
-        "costsText": "Wool 4",
+        "expenses": "Wool 12",
+        "costsText": "Wool 12",
         "requiresCollection": false,
         "collectQd": 0,
         "pendingQty": 0,
         "storageRoomId": "outdoors",
-        "autoCollect": "none",
-        "daylightProductionOnly": true
+        "autoCollect": "none"
       }
     ],
     "income": {
@@ -714,11 +654,10 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
     "moraleDelta": 0,
     "workerMoraleDelta": 0,
     "upkeep": 0,
-    "effect": "За полный рабочий день 4 Wool превращаются в 2 Cloth, Wool. Бонус к Crafting одежды.",
-    "notes": "Потеря четверти массы учитывает сортировку, мойку, прядение и ткачество; цена сукна включает ремесленную добавленную стоимость.",
+    "effect": "Wool превращается в Cloth, Wool. Бонус к Crafting одежды.",
+    "notes": "Wool превращается в Cloth, Wool. Бонус к Crafting одежды.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "agility"
   },
   {
     "id": "vault",
@@ -772,13 +711,6 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
     "requiredBuildingIds": [],
     "workersMin": 0,
     "workersMax": 1,
-    "suitableWorkerTypes": "Все с РАЗ, Все с ЭМП, Управленец, Переговорщик",
-    "workerTypeEffects": {
-      "Все с РАЗ": 0.5,
-      "Все с ЭМП": 0.5,
-      "Управленец": 1,
-      "Переговорщик": 1
-    },
     "workerRole": "",
     "functions": {
       "production": false,
@@ -828,7 +760,6 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
     "notes": "Ценности хранятся за железной дверью.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "strength"
   },
   {
     "id": "stables",
@@ -870,13 +801,6 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
     "requiredBuildingIds": [],
     "workersMin": 1,
     "workersMax": 4,
-    "suitableWorkerTypes": "Все с ЭМП, Все с ЛОВ, Переговорщик, Ловкач",
-    "workerTypeEffects": {
-      "Все с ЭМП": 0.5,
-      "Все с ЛОВ": 0.5,
-      "Переговорщик": 1,
-      "Ловкач": 1
-    },
     "workerRole": "",
     "functions": {
       "production": false,
@@ -886,16 +810,6 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
       "storage": false,
       "culture": false
     },
-    "contents": [
-      {
-        "id": "horses",
-        "name": "Лошади",
-        "resourceId": "horses",
-        "qty": 0,
-        "capacity": 12,
-        "notes": "Лошади приобретаются на рынке, поступают на склад и размещаются в Конюшне."
-      }
-    ],
     "productionLines": [],
     "income": {
       "base": 0,
@@ -932,11 +846,10 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
     "moraleDelta": 0,
     "workerMoraleDelta": 0,
     "upkeep": 0,
-    "effect": "Содержит до двенадцати ездовых или тягловых лошадей и позволяет размещать их со склада.",
-    "notes": "Лошади учитываются как отдельный рыночный и складской ресурс; разведение, продажа и потери управляются через содержимое и события.",
+    "effect": "Protects and feeds riding animals.",
+    "notes": "Protects and feeds riding animals.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "strength"
   },
   {
     "id": "construction-center",
@@ -978,13 +891,6 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
     "requiredBuildingIds": [],
     "workersMin": 1,
     "workersMax": 10,
-    "suitableWorkerTypes": "Все с СИЛ, Все с РАЗ, Строитель, Механик",
-    "workerTypeEffects": {
-      "Все с СИЛ": 0.5,
-      "Все с РАЗ": 0.5,
-      "Строитель": 1,
-      "Механик": 1
-    },
     "workerRole": "",
     "functions": {
       "production": false,
@@ -1034,7 +940,6 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
     "notes": "Открывает сложные строительные проекты и усиливает строительную организацию.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "strength"
   },
   {
     "id": "personnel-office",
@@ -1076,17 +981,10 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
     "requiredBuildingIds": [],
     "workersMin": 5,
     "workersMax": 8,
-    "suitableWorkerTypes": "Все с ЭМП, Все с РАЗ, Переговорщик, Управленец",
-    "workerTypeEffects": {
-      "Все с ЭМП": 0.5,
-      "Все с РАЗ": 0.5,
-      "Переговорщик": 1,
-      "Управленец": 1
-    },
     "workerRole": "",
     "functions": {
       "production": false,
-      "income": false,
+      "income": true,
       "defense": false,
       "housing": false,
       "storage": false,
@@ -1132,7 +1030,6 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
     "notes": "Уменьшает оплату рабочей силы на 10%.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "wits"
   },
   {
     "id": "pier",
@@ -1174,13 +1071,6 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
     "requiredBuildingIds": [],
     "workersMin": 1,
     "workersMax": 4,
-    "suitableWorkerTypes": "Все с ЛОВ, Все с СИЛ, Ловкач, Силач",
-    "workerTypeEffects": {
-      "Все с ЛОВ": 0.5,
-      "Все с СИЛ": 0.5,
-      "Ловкач": 1,
-      "Силач": 1
-    },
     "workerRole": "",
     "functions": {
       "production": false,
@@ -1230,7 +1120,6 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
     "notes": "Позволяет принимать корабли на базе.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "strength"
   },
   {
     "id": "lighthouse",
@@ -1267,11 +1156,6 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
     ],
     "workersMin": 1,
     "workersMax": 3,
-    "suitableWorkerTypes": "Все с РАЗ, Умелец",
-    "workerTypeEffects": {
-      "Все с РАЗ": 0.5,
-      "Умелец": 1
-    },
     "workerRole": "",
     "functions": {
       "production": false,
@@ -1321,7 +1205,6 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
     "notes": "Маяк. Функция ясна: навигация и морская безопасность.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "strength"
   },
   {
     "id": "dovecote",
@@ -1363,13 +1246,6 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
     "requiredBuildingIds": [],
     "workersMin": 0,
     "workersMax": 1,
-    "suitableWorkerTypes": "Все с ЛОВ, Все с ЭМП, Посыльный, Переговорщик",
-    "workerTypeEffects": {
-      "Все с ЛОВ": 0.5,
-      "Все с ЭМП": 0.5,
-      "Посыльный": 1,
-      "Переговорщик": 1
-    },
     "workerRole": "",
     "functions": {
       "production": false,
@@ -1379,16 +1255,6 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
       "storage": false,
       "culture": true
     },
-    "contents": [
-      {
-        "id": "pigeons",
-        "name": "Почтовые голуби",
-        "resourceId": "pigeons",
-        "qty": 0,
-        "capacity": 50,
-        "notes": "Голуби приобретаются на рынке, поступают на склад и размещаются в Голубятне."
-      }
-    ],
     "productionLines": [],
     "income": {
       "base": 0,
@@ -1426,10 +1292,9 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
     "workerMoraleDelta": 0,
     "upkeep": 0,
     "effect": "Позволяет выпускать голубей, которые летят домой в Голубятню.",
-    "notes": "Почтовые голуби учитываются как отдельный рыночный и складской ресурс; количество птиц задаётся в «Содержимом здания».",
+    "notes": "Позволяет выпускать голубей, которые летят домой в Голубятню.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "agility"
   },
   {
     "id": "warehouse",
@@ -1477,13 +1342,6 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
     "requiredBuildingIds": [],
     "workersMin": 0,
     "workersMax": 1,
-    "suitableWorkerTypes": "Все с СИЛ, Все с РАЗ, Силач, Умелец",
-    "workerTypeEffects": {
-      "Все с СИЛ": 0.5,
-      "Все с РАЗ": 0.5,
-      "Силач": 1,
-      "Умелец": 1
-    },
     "workerRole": "",
     "functions": {
       "production": false,
@@ -1533,6 +1391,5 @@ export const BUILDING_TEMPLATES_TECHNOLOGY = [
     "notes": "Универсальное складское помещение для материалов и товаров.",
     "templateVersion": 11,
     "visibility": "public",
-    "workerPrimaryAttribute": "strength"
   }
-];
+]);

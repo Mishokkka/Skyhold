@@ -1,5 +1,8 @@
+import { FloatingTooltipsMixin } from "../common/floating-tooltip.js";
+import { PendingFieldSavesMixin } from "../common/pending-field-saves.js";
 import { MODULE_ID } from "../../data/constants.js";
 import { SkyholdData } from "../../data/store.js";
+import { assertAvailableEntityId } from "../../data/entity-identity.js";
 import { normalizeEventRegionOptions } from "../../data/random-events.js";
 import { normalizeMarketEconomy } from "../../data/market/economy.js";
 import { fieldValue } from "../../core/helpers.js";
@@ -110,7 +113,7 @@ function rewriteRegionReferences(data, fromValue = "", toValue = "") {
   }
 }
 
-export class SkyholdRegionCatalogEditor extends RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2)) {
+export class SkyholdRegionCatalogEditor extends FloatingTooltipsMixin(PendingFieldSavesMixin(RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2)))) {
   constructor({ owner = null } = {}, options = {}) {
     super(options);
     this.owner = owner;
@@ -122,7 +125,7 @@ export class SkyholdRegionCatalogEditor extends RenderSchedulerMixin(HandlebarsA
 
   openRegion(regionId = "") {
     const id = String(regionId ?? "");
-    const exists = normalizeEventRegionOptions(SkyholdData.get()?.catalog?.eventRegions, { fallback: false })
+    const exists = normalizeEventRegionOptions(SkyholdData.view()?.catalog?.eventRegions, { fallback: false })
       .some((row) => String(row.value) === id);
     if (!exists) return false;
     this.regionId = id;
@@ -136,7 +139,7 @@ export class SkyholdRegionCatalogEditor extends RenderSchedulerMixin(HandlebarsA
 
   async _prepareContext(options) {
     const context = await super._prepareContext(options);
-    const data = SkyholdData.get();
+    const data = SkyholdData.view();
     let rows = regionCatalogRows(data?.catalog?.eventRegions, data?.catalog?.marketEconomy, this.regionId);
     if (!rows.some((row) => row.selected)) this.regionId = rows[0]?.value ?? "";
     rows = regionCatalogRows(data?.catalog?.eventRegions, data?.catalog?.marketEconomy, this.regionId);
@@ -189,16 +192,16 @@ export class SkyholdRegionCatalogEditor extends RenderSchedulerMixin(HandlebarsA
       if (!(target instanceof HTMLElement)) return;
       const transport = target.closest?.("[data-region-transport-mode]");
       if (transport && root.contains(transport)) {
-        this._onTransportModeChange(event, transport);
+        dispatchDelegatedAction(this, event, transport, (e) => this._onTransportModeChange(e, transport));
         return;
       }
       const specialty = target.closest?.("[data-region-specialty-id]");
       if (specialty && root.contains(specialty)) {
-        this._onSpecialtyChange(event, specialty);
+        dispatchDelegatedAction(this, event, specialty, (e) => this._onSpecialtyChange(e, specialty));
         return;
       }
       const field = target.closest?.("[data-region-catalog-field]");
-      if (field && root.contains(field)) this._onRegionCatalogFieldChange(event, field);
+      if (field && root.contains(field)) dispatchDelegatedAction(this, event, field, (e) => this._onRegionCatalogFieldChange(e, field));
     }, { signal: controller.signal });
     root.addEventListener("input", (event) => {
       const specialtyField = event.target?.closest?.("[data-region-specialty-search]");
@@ -260,7 +263,7 @@ export class SkyholdRegionCatalogEditor extends RenderSchedulerMixin(HandlebarsA
   }
 
   _refreshOwner() {
-    this.owner?.requestRender?.({ focus: false });
+    this._ownerNeedsRefresh = true;
   }
 
   async _onAddRegionOption(event) {
@@ -281,7 +284,7 @@ export class SkyholdRegionCatalogEditor extends RenderSchedulerMixin(HandlebarsA
       rows.push({ value, label: "Новая рыночная локация", aliases: [], countryId: economy.countries[0]?.id ?? value, marketSizeId: "town", marketSpecialtyIds: [], marketConditionId: "" });
       data.catalog.eventRegions = normalizeEventRegionOptions(rows, { fallback: false });
       return value;
-    }, { reason: "region-catalog:add" });
+    }, { reason: "region-catalog:add", scope: "catalog" });
     if (!saved) return;
     this.regionId = String(saved);
     this.activeSection = "overview";
@@ -306,7 +309,7 @@ export class SkyholdRegionCatalogEditor extends RenderSchedulerMixin(HandlebarsA
       data.catalog.eventRegions = nextRows;
       rewriteRegionReferences(data, removed.value, nextRows[0]?.value ?? "");
       return nextRows[0]?.value ?? "";
-    }, { reason: "region-catalog:delete" });
+    }, { reason: "region-catalog:delete", scope: "both" });
     this.regionId = String(saved ?? "");
     this._refreshOwner();
     this.requestRender({ focus: false });
@@ -326,12 +329,18 @@ export class SkyholdRegionCatalogEditor extends RenderSchedulerMixin(HandlebarsA
       const row = rows[index];
       if (!row) return skip(false);
       const previousValue = String(row.value ?? "");
+      if (key === "value") assertAvailableEntityId(rows, value, { key: "value", current: row });
       row[key] = MARKET_ARRAY_FIELDS.has(key) || MARKET_FACTOR_FIELDS.has(key) || ["marketEnabled", "marketAirshipOnly"].includes(key) ? value : String(value ?? "").trim();
       const nextRows = normalizeEventRegionOptions(rows, { fallback: false });
       data.catalog.eventRegions = nextRows;
       if (key === "value") rewriteRegionReferences(data, previousValue, nextRows[index]?.value ?? "");
       return key === "value" ? nextRows[index]?.value ?? previousValue : true;
-    }, { reason: `region-catalog:${key}` });
+    }, { reason: `region-catalog:${key}`, scope: key === "value" ? "both" : "catalog" }).catch((error) => {
+      if (error.code !== "conflict") throw error;
+      if (key === "value") field.value = regionId;
+      ui.notifications.warn(error.message);
+      return false;
+    });
     if (!saved) return;
     const nextRegionId = key === "value" ? String(saved) : regionId;
     this._syncEditedRegionUi({ key, value, regionId, nextRegionId });
@@ -383,7 +392,7 @@ export class SkyholdRegionCatalogEditor extends RenderSchedulerMixin(HandlebarsA
       row.marketTransportModes = [...modes];
       data.catalog.eventRegions = normalizeEventRegionOptions(rows, { fallback: false });
       return true;
-    }, { reason: `region-catalog:transport:${mode}` });
+    }, { reason: `region-catalog:transport:${mode}`, scope: "catalog" });
     if (saved) this._refreshOwner();
   }
 
@@ -393,18 +402,23 @@ export class SkyholdRegionCatalogEditor extends RenderSchedulerMixin(HandlebarsA
     const regionId = String(field.dataset.regionId ?? this.regionId);
     const specialtyId = String(field.dataset.regionSpecialtyId ?? "");
     if (!regionId || !specialtyId) return;
+    const checked = Boolean(field.checked);
     const saved = await SkyholdData.transaction((data, { skip }) => {
       const rows = normalizeEventRegionOptions(data?.catalog?.eventRegions, { fallback: false });
       const row = rows.find((item) => String(item.value) === regionId);
       if (!row) return skip(false);
       const specialtyIds = new Set(row.marketSpecialtyIds ?? []);
-      if (field.checked) specialtyIds.add(specialtyId);
+      if (checked) specialtyIds.add(specialtyId);
       else specialtyIds.delete(specialtyId);
       row.marketSpecialtyIds = [...specialtyIds];
       data.catalog.eventRegions = normalizeEventRegionOptions(rows, { fallback: false });
-      return true;
-    }, { reason: `region-catalog:specialty:${specialtyId}` });
-    if (saved) this._refreshOwner();
+      return { count: data.catalog.eventRegions.find((item) => item.value === regionId)?.marketSpecialtyIds?.length ?? 0 };
+    }, { reason: `region-catalog:specialty:${specialtyId}`, scope: "catalog" });
+    if (saved) {
+      this._refreshOwner();
+      const badge = this.element?.querySelector?.(".fbls-region-link-badge");
+      if (badge?.lastChild) badge.lastChild.textContent = ` ${saved.count} выбрано`;
+    }
   }
 
   async _onClose(options) {
@@ -412,6 +426,7 @@ export class SkyholdRegionCatalogEditor extends RenderSchedulerMixin(HandlebarsA
     this._delegatedAbortController?.abort?.();
     this._delegatedAbortController = null;
     unbindGlobalInputGuard(this);
+    if (this._ownerNeedsRefresh) this.owner?.requestRender?.({ focus: false });
   }
 }
 

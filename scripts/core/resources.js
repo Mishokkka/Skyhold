@@ -1,47 +1,105 @@
 import { makeId as makeGeneratedId } from "../utils/id.js";
 import { BUILTIN_RESOURCE_DEFS, RESOURCE_DEFS } from "../data/resources/builtin-resources.js";
-import { isLegacyRawMaterialItemBinding } from "../data/resources/legacy-raw-material-migration.js";
 import { readWorldResourceCatalogRows, worldResourceCatalogCacheKey } from "../data/resources/resource-catalog-settings.js";
-import { normalizeResourceEconomy } from "../data/resources/resource-economy-contract.js";
+import { parseCurrencyCopper } from "./currency.js";
 import { materialGroup } from "./material-groups.js";
-import { normalizeProductionCadence } from "./production-cadence.js";
-import { normalizeResourceLots } from "./resource-lots.js";
+import { syncResourceRowBatches } from "./resource-batches.js";
 
 export { BUILTIN_RESOURCE_DEFS, RESOURCE_DEFS };
-export { isLegacyRawMaterialItemBinding };
-export {
-  CARGO_POINT_CLASSES,
-  RESOURCE_ECONOMY_VERSION,
-  cargoPointsFromLegacy,
-  effectiveRationPointsPerUnit,
-  legacyLoadFromCargoPoints,
-  normalizeResourceEconomy,
-  resourceEconomyIssues,
-  resourceTradeReady,
-  validateResourceEconomyCatalog
-} from "../data/resources/resource-economy-contract.js";
 
-export const LIVESTOCK_RESOURCE_IDS = Object.freeze([
-  "cattle", "pigs", "sheep", "goats", "horses", "chickens", "geese", "rabbits", "pigeons"
-]);
-
-export const DIET_GROUP_IDS = Object.freeze(["staple", "protein", "dairy", "produce"]);
-
-export function isLivestockResource(...candidates) {
-  return LIVESTOCK_RESOURCE_IDS.includes(normalizeResourceId(...candidates));
-}
-
-export function livestockResourceOptions(currentId = "") {
-  const selected = normalizeResourceId(currentId);
-  return [
-    { value: "", label: "Ручное содержимое", selected: !LIVESTOCK_RESOURCE_IDS.includes(selected) },
-    ...LIVESTOCK_RESOURCE_IDS.map((id) => ({ value: id, label: resourceLabel(id), selected: selected === id }))
-  ];
-}
+const FOOD_TYPES = new Set(["grain", "protein", "dairy", "fruit", "vegetable"]);
+const LEGACY_FOOD_TYPE_ALIASES = Object.freeze({ meat: "protein" });
+const LEGACY_SHELF_LIFE_QD = Object.freeze({
+  day: 4,
+  days: 4,
+  "день": 4,
+  "дня": 4,
+  "дней": 4,
+  "дн": 4,
+  "сутки": 4,
+  "суток": 4,
+  tenday: 40,
+  tendays: 40,
+  "ten-day": 40,
+  "ten-days": 40,
+  "декада": 40,
+  "декады": 40,
+  "декад": 40,
+  "десятник": 40,
+  "десятника": 40,
+  "десятников": 40,
+  month: 120,
+  months: 120,
+  "месяц": 120,
+  "месяца": 120,
+  "месяцев": 120,
+  year: 1440,
+  years: 1440,
+  "год": 1440,
+  "года": 1440,
+  "лет": 1440
+});
 
 
 function clonePlain(value) {
   return JSON.parse(JSON.stringify(value));
+}
+
+function hasOwn(object, key) {
+  return Object.prototype.hasOwnProperty.call(object ?? {}, key);
+}
+
+function nonNegativeInteger(value, fallback = 0) {
+  if (value === undefined || value === null || value === "") return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, Math.min(Number.MAX_SAFE_INTEGER, Math.round(parsed))) : fallback;
+}
+
+function finiteNumber(value) {
+  if (value === undefined || value === null || value === "") return null;
+  const parsed = Number(String(value).replace(",", "."));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function floorNonNegativeQuantity(value, fallback = 0) {
+  const parsed = finiteNumber(value);
+  return parsed === null ? fallback : Math.max(0, Math.floor(parsed));
+}
+
+function ceilNonNegativeQuantity(value, fallback = 0) {
+  const parsed = finiteNumber(value);
+  return parsed === null ? fallback : Math.max(0, Math.ceil(parsed));
+}
+
+function normalizedBoolean(value, fallback = false) {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (typeof value === "string") return ["1", "true", "yes", "on", "да"].includes(value.trim().toLocaleLowerCase("ru"));
+  return Boolean(value);
+}
+
+function normalizeCategoryTagValue(value = "") {
+  const raw = String(value ?? "").normalize("NFKC").trim();
+  if (!raw) return "";
+  const known = materialGroup(raw);
+  if (known) return known.id;
+  return raw
+    .toLocaleLowerCase("ru")
+    .replace(/ё/g, "е")
+    .replace(/[\s_]+/g, "-")
+    .replace(/[^a-z0-9а-я.-]+/giu, "")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
+function legacyShelfLifeQd(value = "") {
+  const text = String(value ?? "").normalize("NFKC").toLocaleLowerCase("ru").replace(/ё/g, "е");
+  const match = text.match(/([-+]?\d+(?:[.,]\d+)?)\s*([a-zа-я]+(?:-[a-zа-я]+)?)/iu);
+  if (!match) return 0;
+  const amount = finiteNumber(match[1]);
+  const multiplier = LEGACY_SHELF_LIFE_QD[match[2]];
+  if (amount === null || !multiplier) return 0;
+  return nonNegativeInteger(amount * multiplier, 0);
 }
 
 export function normalizeKey(value) {
@@ -76,73 +134,51 @@ export function normalizeResourceCatalogRow(row = {}) {
   const marketTags = (Array.isArray(row.marketTags) ? row.marketTags : String(row.marketTags ?? "").split(/[,;\n]/))
     .map((item) => String(item ?? "").trim())
     .filter(Boolean);
-  const nutritionTags = (Array.isArray(row.nutritionTags) ? row.nutritionTags : String(row.nutritionTags ?? "").split(/[,;\n]/))
-    .map((item) => String(item ?? "").trim().toLowerCase())
-    .filter(Boolean);
-  const requestedDietGroup = String(row.dietGroup ?? "").trim().toLowerCase();
-  const legacyDietGroup = nutritionTags.includes("dairy")
-    ? "dairy"
-    : (nutritionTags.includes("staple")
-      ? "staple"
-      : (nutritionTags.includes("protein")
-        ? "protein"
-        : (nutritionTags.some((tag) => tag === "produce" || tag === "fresh") ? "produce" : "")));
-  const dietGroup = DIET_GROUP_IDS.includes(requestedDietGroup)
-    ? requestedDietGroup
-    : (Object.hasOwn(row, "dietGroup") ? "" : legacyDietGroup);
-  const isMoney = id === "money" || Boolean(row.isMoney);
-  const unitLabel = String(row.unitLabel ?? row.packageLabel ?? row.unit ?? (isMoney ? "монета" : "единица")).trim() || (isMoney ? "монета" : "единица");
-  const packageMassKg = Math.max(0, Number(row.packageMassKg ?? row.massKg ?? 0) || 0);
-  const packageVolumeL = Math.max(0, Number(row.packageVolumeL ?? row.volumeL ?? 0) || 0);
-  const economy = normalizeResourceEconomy({ ...row, packageMassKg, packageVolumeL }, { isMoney });
-  const stripLegacyItemBinding = isLegacyRawMaterialItemBinding(row);
+  const isMoney = id === "money" || normalizedBoolean(row.isMoney, false);
+  const categoryTagSource = hasOwn(row, "categoryTag") ? row.categoryTag : materialGroups[0];
+  const categoryTag = normalizeCategoryTagValue(categoryTagSource);
+  const canonicalPrice = finiteNumber(row.basePriceCopper);
+  const basePriceCopper = canonicalPrice === null
+    ? parseCurrencyCopper(row.cost, 0)
+    : nonNegativeInteger(canonicalPrice, 0);
+  const canonicalLoadPoints = finiteNumber(row.loadPoints);
+  const legacyUnitLoad = finiteNumber(row.load) ?? finiteNumber(row.weight);
+  const loadPoints = canonicalLoadPoints !== null
+    ? nonNegativeInteger(canonicalLoadPoints, isMoney ? 0 : 4)
+    : (legacyUnitLoad !== null ? nonNegativeInteger(legacyUnitLoad * 4, isMoney ? 0 : 4) : (isMoney ? 0 : 4));
+  const canonicalShelfLifeQd = finiteNumber(row.shelfLifeQd);
+  const legacyShelfLifeDays = finiteNumber(row.shelfLifeDays);
+  const shelfLifeQd = canonicalShelfLifeQd !== null
+    ? nonNegativeInteger(canonicalShelfLifeQd, 0)
+    : (legacyShelfLifeDays !== null ? nonNegativeInteger(legacyShelfLifeDays * 4, 0) : legacyShelfLifeQd(row.shelfLife));
+  const foodEdible = normalizedBoolean(row.foodEdible, false);
+  const legacyFoodType = String(row.foodType ?? "").trim().toLocaleLowerCase("ru");
+  const rawFoodType = LEGACY_FOOD_TYPE_ALIASES[legacyFoodType] ?? legacyFoodType;
+  const foodType = foodEdible && FOOD_TYPES.has(rawFoodType) ? rawFoodType : "";
 
   return {
     id,
     label,
     unit: isMoney ? "медн." : "ед.",
-    unitLabel,
-    // Economy V2 resources are indivisible FBL parties. A fractional step is
-    // retained only by an explicitly legacy row until the GM activates V2.
-    quantityStep: economy.legacyEconomy
-      ? Math.max(0.001, Number(row.quantityStep ?? row.unitStep ?? 1) || 1)
-      : 1,
-    priceBasis: String(row.priceBasis ?? unitLabel).trim() || unitLabel,
-    packageMassKg,
-    packageVolumeL,
-    economyVersion: economy.economyVersion,
-    legacyEconomy: economy.legacyEconomy,
-    legacyEconomyVersion: economy.legacyEconomyVersion,
-    referencePriceCopper: economy.referencePriceCopper,
-    tradable: economy.tradable,
-    tradeReady: economy.tradeReady,
-    tradeConfigurationError: economy.tradeConfigurationError,
-    tradeDisabledReason: economy.tradeDisabledReason,
-    cargoClass: economy.cargoClass,
-    cargoPoints: economy.cargoPoints,
-    legacyLoad: economy.legacyLoad,
-    loadMode: economy.loadMode,
-    load: economy.load,
-    rationPoints: economy.rationPoints,
-    foodValue: economy.foodValue,
-    dietGroup,
-    nutritionTags: [...new Set(nutritionTags)].slice(0, 40),
-    legacyShelfLifeDays: economy.legacyShelfLifeDays,
-    shelfLifeMode: economy.shelfLifeMode,
-    shelfLifeTendays: economy.shelfLifeTendays,
-    shelfLifeDays: economy.shelfLifeDays,
-    qualityTier: String(row.qualityTier ?? "common").trim().toLowerCase() || "common",
     icon: String(row.icon ?? "fa-solid fa-cube").trim() || "fa-solid fa-cube",
     img: String(row.img ?? row.image ?? "").trim(),
     category: String(row.category ?? "Пользовательское").trim() || "Пользовательское",
     aliases,
     materialGroups,
+    categoryTag,
     marketTags: [...new Set(marketTags)].slice(0, 80),
-    itemUuid: stripLegacyItemBinding ? "" : String(row.itemUuid ?? "").trim(),
-    itemId: stripLegacyItemBinding ? "" : String(row.itemId ?? "").trim(),
-    itemType: stripLegacyItemBinding ? "" : String(row.itemType ?? "").trim(),
-    legacyCost: economy.legacyCost,
-    cost: economy.cost,
+    itemUuid: String(row.itemUuid ?? "").trim(),
+    itemId: String(row.itemId ?? "").trim(),
+    itemType: String(row.itemType ?? "").trim(),
+    basePriceCopper,
+    loadPoints,
+    noAutoConsume: normalizedBoolean(row.noAutoConsume, false),
+    shelfLifeQd,
+    foodEdible,
+    foodType,
+    // Legacy fields remain inert but round-trip through safe normalization so
+    // old worlds and content packs do not lose source data before migration.
+    cost: String(row.cost ?? "").trim(),
     shelfLife: String(row.shelfLife ?? "").trim(),
     marketAccessDifficulty: Math.max(0, Math.min(100, Math.floor(Number(row.marketAccessDifficulty ?? row.accessDifficulty ?? 0) || 0))),
     useInProduction: row.useInProduction !== false,
@@ -175,15 +211,33 @@ function transliterate(value = "") {
   return String(value ?? "").replace(/[а-я]/g, (char) => map[char] ?? char);
 }
 
-export function getResourceCatalogRows({ rows = readWorldResourceCatalogRows(), includeHidden = false } = {}) {
+export function getResourceCatalogRows({ rows = activeResourceContext?.rows ?? readWorldResourceCatalogRows(), includeHidden = false } = {}) {
   const normalized = Array.isArray(rows) ? rows.map((row) => normalizeResourceCatalogRow(row)) : [];
   return includeHidden ? normalized : normalized.filter((row) => !row.hidden);
 }
 
+let normalizedBuiltinResourceDefsCache = null;
+let builtinResourceIndexCache = null;
+
+function normalizedBuiltinResourceDefs() {
+  normalizedBuiltinResourceDefsCache ??= BUILTIN_RESOURCE_DEFS.map((resource) => normalizeResourceCatalogRow(resource));
+  return normalizedBuiltinResourceDefsCache;
+}
+
+function builtinResourceIndex() {
+  // Most normalization work resolves only bundled resources. In Node checks
+  // (and before Foundry settings are available) there is no world cache key;
+  // rebuilding the full alias index for every production line or material row
+  // made catalog normalization grow linearly with both templates and costs.
+  // A resolved index is read-only in the same way as the keyed world index.
+  builtinResourceIndexCache ??= buildResourceIndex(allResourceDefs({ catalogRows: [] }));
+  return builtinResourceIndexCache;
+}
+
 export function allResourceDefs({ includeHidden = false, catalogRows } = {}) {
   const map = new Map();
-  for (const resource of BUILTIN_RESOURCE_DEFS) map.set(resource.id, clonePlain(resource));
-  for (const resource of getResourceCatalogRows({ rows: catalogRows ?? readWorldResourceCatalogRows(), includeHidden })) {
+  for (const resource of normalizedBuiltinResourceDefs()) map.set(resource.id, clonePlain(resource));
+  for (const resource of getResourceCatalogRows({ rows: catalogRows ?? activeResourceContext?.rows ?? readWorldResourceCatalogRows(), includeHidden })) {
     map.set(resource.id, { ...resource });
   }
   return Array.from(map.values());
@@ -191,6 +245,19 @@ export function allResourceDefs({ includeHidden = false, catalogRows } = {}) {
 
 let cachedWorldResourceIndex = null;
 let cachedWorldResourceIndexKey = "";
+let activeResourceContext = null;
+
+/** Scope synchronous normalization to its own draft, including hidden referenced resources. */
+export function withResourceCatalog(rows, normalize) {
+  const previous = activeResourceContext;
+  const catalogRows = Array.isArray(rows) ? rows : [];
+  activeResourceContext = { rows: catalogRows, index: buildResourceIndex(allResourceDefs({ catalogRows, includeHidden: true })) };
+  try {
+    return normalize();
+  } finally {
+    activeResourceContext = previous;
+  }
+}
 
 function buildResourceIndex(definitions = []) {
   const byId = new Map();
@@ -206,13 +273,17 @@ function buildResourceIndex(definitions = []) {
 
 function createResourceIndex(definitions = null) {
   if (Array.isArray(definitions)) return buildResourceIndex(definitions);
+  if (activeResourceContext) return activeResourceContext.index;
 
   const cacheKey = worldResourceCatalogCacheKey();
   if (cacheKey && cachedWorldResourceIndex && cacheKey === cachedWorldResourceIndexKey) {
     return cachedWorldResourceIndex;
   }
 
-  const index = buildResourceIndex(allResourceDefs());
+  const worldRows = readWorldResourceCatalogRows();
+  const index = worldRows.length
+    ? buildResourceIndex(allResourceDefs({ catalogRows: worldRows, includeHidden: true }))
+    : builtinResourceIndex();
   if (cacheKey) {
     cachedWorldResourceIndexKey = cacheKey;
     cachedWorldResourceIndex = index;
@@ -252,13 +323,18 @@ export function normalizeResourceId(...candidates) {
 }
 
 export function parseResourceCosts(text = "") {
-  const raw = String(text ?? "").trim();
+  const raw = String(text ?? "").split(/\r?\n/).map((line) => line.split("#")[0]).join("\n").trim();
   if (!raw) return [];
   return raw
-    .split(/[;,\n]/)
+    .split(/[;,\n]|\s+И\s+/i)
     .map((part) => part.trim())
     .filter(Boolean)
     .map((part) => {
+      const choices = part.split(/\s+ИЛИ\s+/i);
+      if (choices.length > 1) {
+        const alternatives = choices.flatMap((choice) => parseResourceCosts(choice));
+        return { resourceId: "custom", name: part, qty: 1, alternatives };
+      }
       const tail = part.match(/^(.*?)([-+]?\d+(?:[.,]\d+)?)\s*$/);
       const head = part.match(/^([-+]?\d+(?:[.,]\d+)?)\s+(.+)$/);
       let name = part;
@@ -271,36 +347,101 @@ export function parseResourceCosts(text = "") {
         name = head[2].trim();
       }
       if (!Number.isFinite(qty)) qty = 1;
+      qty = ceilNonNegativeQuantity(qty, 1);
       const group = materialGroup(name);
-      if (group) return { resourceGroup: group.id, resourceId: `group:${group.id}`, name: group.label, qty: Math.max(0, qty) };
+      if (group) return { resourceGroup: group.id, resourceId: `group:${group.id}`, name: group.label, qty };
       const resourceId = normalizeResourceId(name);
-      return { resourceId, name: resourceId === "custom" ? name : resourceLabel(resourceId), qty: Math.max(0, qty) };
+      return { resourceId, name: resourceId === "custom" ? name : resourceLabel(resourceId), qty };
     })
     .filter((item) => item.name && item.qty > 0);
-}
-
-export function serializeResourceCosts(items = []) {
-  if (!Array.isArray(items)) return "";
-  return items
-    .map((item) => {
-      const qty = Number(item?.qty ?? item?.quantity ?? 0);
-      if (!Number.isFinite(qty) || qty <= 0) return "";
-      const group = materialGroup(item?.resourceGroup ?? item?.resourceId);
-      const resourceId = normalizeResourceId(item?.resourceId, item?.name);
-      const name = group?.label
-        ?? (resourceId === "custom" ? String(item?.name ?? "").trim() : resourceId);
-      if (!name) return "";
-      const quantity = String(Math.round(qty * 1000) / 1000);
-      return `${name} ${quantity}`;
-    })
-    .filter(Boolean)
-    .join(", ");
 }
 
 export function resourceDef(...candidates) {
   const index = createResourceIndex();
   const key = normalizeResourceIdFromIndex(index, candidates);
   return index.byId.get(key) ?? null;
+}
+
+function resourceCandidateValues(candidates = []) {
+  return candidates.flatMap((candidate) => {
+    if (!candidate || typeof candidate !== "object") return [candidate];
+    return [candidate.resourceId, candidate.id, candidate.name, candidate.label];
+  }).filter((candidate) => candidate !== undefined && candidate !== null && candidate !== "");
+}
+
+function directCanonicalCandidate(candidates = [], key = "") {
+  return candidates.find((candidate) => candidate && typeof candidate === "object" && hasOwn(candidate, key)) ?? null;
+}
+
+function inlineDefinitionCandidate(candidates = []) {
+  return candidates.find((candidate) => candidate
+    && typeof candidate === "object"
+    && !String(candidate.resourceId ?? "").trim()
+    && (hasOwn(candidate, "id") || hasOwn(candidate, "label") || hasOwn(candidate, "category"))) ?? null;
+}
+
+function definitionForCandidates(candidates = []) {
+  const values = resourceCandidateValues(candidates);
+  return values.length ? resourceDef(...values) : null;
+}
+
+export function resourceBasePriceCopper(...candidates) {
+  const direct = directCanonicalCandidate(candidates, "basePriceCopper");
+  const directValue = direct ? finiteNumber(direct.basePriceCopper) : null;
+  if (directValue !== null) return nonNegativeInteger(directValue, 0);
+  const inline = inlineDefinitionCandidate(candidates);
+  if (inline) return parseCurrencyCopper(inline.cost, 0);
+  return nonNegativeInteger(definitionForCandidates(candidates)?.basePriceCopper, 0);
+}
+
+export function resourceLoadPoints(...candidates) {
+  const direct = directCanonicalCandidate(candidates, "loadPoints");
+  const directValue = direct ? finiteNumber(direct.loadPoints) : null;
+  if (directValue !== null) return nonNegativeInteger(directValue, 0);
+  const inline = inlineDefinitionCandidate(candidates);
+  if (inline) {
+    const legacyUnitLoad = finiteNumber(inline.load) ?? finiteNumber(inline.weight);
+    if (legacyUnitLoad !== null) return nonNegativeInteger(legacyUnitLoad * 4, 0);
+    return inline.isMoney === true || String(inline.id ?? "") === "money" ? 0 : 4;
+  }
+  const definition = definitionForCandidates(candidates);
+  const definitionValue = finiteNumber(definition?.loadPoints);
+  if (definitionValue !== null) return nonNegativeInteger(definitionValue, 0);
+  const values = resourceCandidateValues(candidates).map((value) => normalizeKey(value));
+  const money = Boolean(definition?.isMoney)
+    || candidates.some((candidate) => candidate && typeof candidate === "object" && candidate.isMoney === true)
+    || values.includes("money");
+  return money ? 0 : 4;
+}
+
+export function resourceUnitLoad(...candidates) {
+  return resourceLoadPoints(...candidates) / 4;
+}
+
+export function resourceShelfLifeQd(...candidates) {
+  const direct = directCanonicalCandidate(candidates, "shelfLifeQd");
+  const directValue = direct ? finiteNumber(direct.shelfLifeQd) : null;
+  if (directValue !== null) return nonNegativeInteger(directValue, 0);
+  const inline = inlineDefinitionCandidate(candidates);
+  if (inline) {
+    const legacyDays = finiteNumber(inline.shelfLifeDays);
+    if (legacyDays !== null) return nonNegativeInteger(legacyDays * 4, 0);
+    return legacyShelfLifeQd(inline.shelfLife);
+  }
+  return nonNegativeInteger(definitionForCandidates(candidates)?.shelfLifeQd, 0);
+}
+
+export function resourceCategoryTag(...candidates) {
+  const direct = directCanonicalCandidate(candidates, "categoryTag");
+  if (direct) return normalizeCategoryTagValue(direct.categoryTag);
+  const inline = inlineDefinitionCandidate(candidates);
+  if (inline) {
+    const groups = Array.isArray(inline.materialGroups ?? inline.groups)
+      ? (inline.materialGroups ?? inline.groups)
+      : String(inline.materialGroups ?? inline.groups ?? "").split(/[,;\n]/);
+    return normalizeCategoryTagValue(groups[0]);
+  }
+  return normalizeCategoryTagValue(definitionForCandidates(candidates)?.categoryTag);
 }
 
 export function resourceLabel(resource = "") {
@@ -316,31 +457,7 @@ export function resourceLabel(resource = "") {
 
 export function resourceUnit(...candidates) {
   const def = resourceDef(...candidates);
-  return def?.unitLabel ?? def?.unit ?? "ед.";
-}
-
-const COMPACT_RESOURCE_UNITS = new Map([
-  ["малый мешок", "мешок"],
-  ["партия заготовок", "партия"],
-  ["малый слиток", "слиток"],
-  ["крица или пакет прутков", "крица"],
-  ["часть шкуры", "шкура"],
-  ["продовольственная партия", "партия"],
-  ["сложенная шкура", "шкура"],
-  ["обработанный блок", "блок"],
-  ["брусок или горшок", "брусок"],
-  ["связка пиломатериала", "связка"],
-  ["спрессованная кипа", "кипа"]
-]);
-
-/** A display-only abbreviation; canonical package labels remain untouched. */
-export function compactResourceUnit(unit = "ед.") {
-  const full = String(unit ?? "").trim() || "ед.";
-  return COMPACT_RESOURCE_UNITS.get(full.toLowerCase()) ?? full;
-}
-
-export function resourceUnitShort(...candidates) {
-  return compactResourceUnit(resourceUnit(...candidates));
+  return def?.unit ?? "ед.";
 }
 
 export function resourceIcon(...candidates) {
@@ -377,59 +494,33 @@ export function resourceOptions(currentId = "", currentName = "", { includeMoney
   return options;
 }
 
-export function normalizeResourceRow(row = {}, { currentQd = 0, seedPerishableLots = true } = {}) {
+export function normalizeResourceRow(row = {}, { compactBatches = true } = {}) {
   const index = createResourceIndex();
   const id = normalizeResourceIdFromIndex(index, [row.resourceId, row.id, row.name, row.label]);
   const def = id !== "custom" ? index.byId.get(id) : null;
   const name = String(row.name ?? row.label ?? def?.label ?? "Ресурс").replace(/^(Другое|Custom)\s*[:：-]\s*/i, "");
-  const qty = Number(row.qty ?? row.quantity ?? row.count ?? 0) || 0;
-  // Recognized resources stay governed by the live authority catalog. Holding
-  // rows are quantities/lots, not price or cargo snapshots; otherwise an old
-  // row would silently override a later GM catalog correction.
-  const economy = normalizeResourceEconomy(def ?? row, { isMoney: id === "money" || def?.isMoney === true });
-  const shelfLifeDays = economy.shelfLifeDays;
-  const stripLegacyItemBinding = isLegacyRawMaterialItemBinding(row);
-  const quantityStep = id === "custom"
-    ? Math.max(0.001, Number(row.quantityStep ?? 1) || 1)
-    : Math.max(0.001, Number(def?.quantityStep ?? 1) || 1);
-  const fractionalRemainder = quantityStep >= 1 && qty > 0
-    ? Math.round((qty - Math.floor(qty)) * 1_000_000) / 1_000_000
-    : 0;
   const normalized = {
     id: String(row.rowId ?? row._rowId ?? row.uuid ?? row._id ?? row.key ?? row.id ?? makeGeneratedId("res", 12)),
     resourceId: id,
     name: id === "custom" ? name : def.label,
     img: String(id === "custom" ? (row.img ?? "") : (def?.img ?? row.img ?? "")),
-    itemUuid: stripLegacyItemBinding ? "" : String(row.itemUuid ?? def?.itemUuid ?? ""),
-    itemId: stripLegacyItemBinding ? "" : String(row.itemId ?? def?.itemId ?? ""),
-    itemType: stripLegacyItemBinding ? "" : String(row.itemType ?? def?.itemType ?? ""),
-    cost: economy.cost,
-    qty,
-    quantityStep,
-    ...(fractionalRemainder > 0.000001 ? { legacyRemainder: fractionalRemainder } : {}),
-    unit: id === "money" || def?.isMoney ? "медн." : (def?.unitLabel ?? row.unit ?? "ед."),
+    itemUuid: String(row.itemUuid ?? def?.itemUuid ?? ""),
+    itemId: String(row.itemId ?? def?.itemId ?? ""),
+    itemType: String(row.itemType ?? def?.itemType ?? ""),
+    cost: String(row.cost ?? def?.cost ?? ""),
+    qty: floorNonNegativeQuantity(row.qty ?? row.quantity ?? row.count, 0),
+    unit: id === "money" || def?.isMoney ? "медн." : "ед.",
     notes: String(row.notes ?? ""),
     roomId: String(row.roomId ?? row.storageRoomId ?? "outdoors"),
-    forSale: Boolean(row.forSale ?? row.sale ?? row.markedForSale ?? false)
+    forSale: Boolean(row.forSale ?? row.sale ?? row.markedForSale ?? false),
+    noAutoConsume: Boolean(row.noAutoConsume ?? false),
+    foodEdible: Boolean(row.foodEdible ?? false),
+    foodType: String(row.foodType ?? "").trim().toLowerCase(),
+    shelfLifeQd: nonNegativeInteger(row.shelfLifeQd, 0),
+    categoryTag: normalizeCategoryTagValue(row.categoryTag)
   };
-  if (id === "custom") {
-    normalized.economyVersion = economy.economyVersion;
-    normalized.referencePriceCopper = economy.referencePriceCopper;
-    normalized.tradable = economy.tradable;
-    normalized.cargoClass = economy.cargoClass;
-    normalized.cargoPoints = economy.cargoPoints;
-    normalized.rationPoints = economy.rationPoints;
-    normalized.shelfLifeTendays = economy.shelfLifeTendays;
-  }
-  const lots = normalizeResourceLots({ ...row, qty }, { currentQd, shelfLifeDays, seedMissing: seedPerishableLots });
-  if (lots.length) normalized.lots = lots;
-  for (const key of ["load", "weight", "foodValue"]) {
-    if (row[key] !== undefined && row[key] !== null && row[key] !== "") normalized[key] = Math.max(0, Number(row[key]) || 0);
-  }
-  normalized.load = economy.load;
-  normalized.foodValue = economy.foodValue;
-  if (row.category !== undefined && row.category !== null && row.category !== "") normalized.category = String(row.category);
-  return normalized;
+  if (hasOwn(row, "batches")) normalized.batches = row.batches;
+  return syncResourceRowBatches(normalized, { makeId: makeGeneratedId, compact: compactBatches });
 }
 
 
@@ -447,47 +538,6 @@ function normalizeProductionSeasons(value = null) {
   return enabled ? normalized : fallback;
 }
 
-function normalizeProductionWorkInProgress(value = null, line = {}, index = createResourceIndex()) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const laborRequiredQd = Math.max(1, Number(value?.laborRequiredQd ?? value?.requiredLaborQd ?? line?.laborQdPerBatch ?? 1) || 1);
-  const laborDoneQd = Math.max(0, Math.min(laborRequiredQd, Number(value?.laborDoneQd ?? value?.completedLaborQd ?? 0) || 0));
-  const resourceId = normalizeResourceIdFromIndex(index, [value?.resourceId, value?.resource, line?.resourceId, line?.resource]);
-  const def = resourceId !== "custom" ? index.byId.get(resourceId) : null;
-  const resource = resourceId === "custom"
-    ? String(value?.resource ?? line?.resource ?? "Ресурс")
-    : String(def?.label ?? value?.resource ?? line?.resource ?? resourceId);
-  const inputCosts = Array.isArray(value?.inputCosts) ? value.inputCosts.map((cost) => {
-    const inputResourceId = normalizeResourceIdFromIndex(index, [cost?.resourceId, cost?.name]);
-    const inputDef = inputResourceId !== "custom" ? index.byId.get(inputResourceId) : null;
-    return {
-      resourceId: inputResourceId,
-      name: inputResourceId === "custom" ? String(cost?.name ?? "Ресурс") : String(inputDef?.label ?? cost?.name ?? inputResourceId),
-      qty: Math.max(0, Number(cost?.qty ?? 0) || 0),
-      roomId: String(cost?.roomId ?? cost?.storageRoomId ?? "")
-    };
-  }).filter((cost) => cost.qty > 0) : [];
-  return {
-    schema: 1,
-    source: "workers",
-    startedQd: Math.max(0, Math.floor(Number(value?.startedQd ?? 0) || 0)),
-    cadenceKey: String(value?.cadenceKey ?? ""),
-    laborRequiredQd,
-    laborDoneQd,
-    // Preserve an old fractional WIP snapshot verbatim. Economy V2 validates
-    // it as a blocker at runtime; safe normalization must not silently repair
-    // authored state by rounding it down.
-    outputQty: Math.max(0, Number(value?.outputQty ?? 0) || 0),
-    resourceId,
-    resource,
-    storageRoomId: String(value?.storageRoomId ?? line?.storageRoomId ?? line?.roomId ?? "outdoors") || "outdoors",
-    requiresCollection: Boolean(value?.requiresCollection),
-    formula: String(value?.formula ?? line?.formula ?? ""),
-    formulaResult: String(value?.formulaResult ?? ""),
-    inputsCommitted: value?.inputsCommitted !== false,
-    inputCosts
-  };
-}
-
 export function normalizeProductionLine(line = {}, makeId = null) {
   const id = String(line?.id || makeId?.("prod") || makeGeneratedId("prod", 12));
   const index = createResourceIndex();
@@ -498,47 +548,23 @@ export function normalizeProductionLine(line = {}, makeId = null) {
   const legacyPerWorker = Number(line?.perWorker ?? 0) || 0;
   const rawSource = String(line?.source ?? line?.sourceType ?? line?.productionSource ?? "workers").trim().toLowerCase();
   const source = ["workers", "time", "content"].includes(rawSource) ? rawSource : "workers";
-  const legacyPeriod = String(line?.period ?? line?.periodType ?? "day").trim().toLowerCase();
-  const cadence = normalizeProductionCadence(line?.cadence ?? legacyPeriod, "day");
-  const outputQty = Math.max(0, Number((line?.outputQty ?? line?.output ?? line?.quantity ?? legacyBase) || legacyPerWorker || 1) || 1);
-  const legacyWorkQd = Math.max(1, Number(line?.workQd ?? line?.workerQD ?? line?.cycleQd ?? line?.cycleQD ?? 1) || 1);
-  const cadenceEvery = Math.max(1, Math.floor(Number(line?.cadenceEvery ?? (source === "workers" ? 1 : legacyWorkQd)) || 1));
-  const contentUnitsPerBatch = line?.contentUnitsPerBatch === undefined || line?.contentUnitsPerBatch === null || line?.contentUnitsPerBatch === ""
-    ? 1
-    : Math.max(0, Math.floor(Number(line.contentUnitsPerBatch) || 0));
-  const laborQdPerBatch = source === "workers"
-    ? Math.max(1, Number(line?.laborQdPerBatch ?? legacyWorkQd) || 1)
-    : Math.max(0, Number(line?.laborQdPerBatch ?? 0) || 0);
-  const legacyMaxBatches = source === "workers" && cadence === "tenday" ? 1 : (source === "workers" ? 0 : 1);
-  const maxBatchesPerCadence = Math.max(0, Math.floor(Number(line?.maxBatchesPerCadence ?? legacyMaxBatches) || 0));
+  const rawPeriod = String(line?.period ?? line?.periodType ?? "day").trim().toLowerCase();
+  const period = ["qd", "day", "tenday"].includes(rawPeriod) ? rawPeriod : "day";
+  const explicitOutput = line?.outputQty ?? line?.output ?? line?.quantity;
+  const outputQty = floorNonNegativeQuantity(explicitOutput ?? (legacyBase || legacyPerWorker || 1), 1);
+  const workQd = Math.max(1, ceilNonNegativeQuantity(line?.workQd ?? line?.workerQD ?? line?.cycleQd ?? line?.cycleQD, 1));
   const rawExpenseMode = String(line?.expenseMode ?? line?.costMode ?? "cycle").trim().toLowerCase();
   const expenseMode = ["cycle", "unit"].includes(rawExpenseMode) ? rawExpenseMode : "cycle";
   const rawAutoCollect = String(line?.autoCollect ?? line?.collectionMode ?? "none").trim().toLowerCase();
   const autoCollect = ["none", "building", "worker"].includes(rawAutoCollect) ? rawAutoCollect : "none";
-  const stripLegacyItemBinding = isLegacyRawMaterialItemBinding(line);
-  const requiresCollection = Boolean(line?.requiresCollection ?? line?.collect ?? false);
-  // Old time/content lines without a collection operation were implicitly
-  // passive. Preserve that authored behavior once, but make the resulting row
-  // explicit so new and edited lines cannot create output accidentally.
-  const passive = source !== "workers" && Boolean(line?.passive ?? !requiresCollection);
-  const workInProgress = normalizeProductionWorkInProgress(line?.workInProgress ?? line?.wip, line, index);
 
   return {
     id,
     active: line?.active !== false,
     mode: String(line?.mode ?? "Всегда"),
     source,
-    cadence,
-    cadenceEvery,
-    laborQdPerBatch,
-    maxBatchesPerCadence,
-    cadenceKey: String(line?.cadenceKey ?? ""),
-    batchesInCadence: Math.max(0, Math.floor(Number(line?.batchesInCadence ?? 0) || 0)),
-    // Временные алиасы для импортов и старых макросов. Движок использует
-    // только cadence/laborQdPerBatch/maxBatchesPerCadence.
-    period: cadence,
+    period,
     contentId: String(line?.contentId ?? line?.contentKey ?? line?.content ?? ""),
-    contentUnitsPerBatch,
     resourceId,
     resource: resourceId === "custom" ? resource : def.label,
     // Совместимость со старой схемой. Эти поля пока сохраняются,
@@ -546,23 +572,38 @@ export function normalizeProductionLine(line = {}, makeId = null) {
     base: legacyBase,
     perWorker: legacyPerWorker,
     outputQty,
-    workQd: source === "workers" ? laborQdPerBatch : cadenceEvery,
+    workQd,
+    waitDays: Number.isFinite(Number(line?.waitDays)) ? Math.max(0, Math.ceil(Number(line.waitDays) * 4) / 4) : 0,
+    repeat: line?.repeat !== false,
+    batchCapacity: floorNonNegativeQuantity(line?.batchCapacity, 0),
+    batchStartQty: Math.max(1, floorNonNegativeQuantity(line?.batchStartQty, 1)),
+    fixedExpenses: String(line?.fixedExpenses ?? ""),
+    ...(Array.isArray(line?.waitingBatches) ? { waitingBatches: JSON.parse(JSON.stringify(line.waitingBatches)) } : {}),
     formula: String(line?.formula ?? ""),
     expenses: String(line?.expenses ?? ""),
     expenseMode,
-    requiresCollection,
-    passive,
-    collectQd: Math.max(0, Number(line?.collectQd ?? line?.collectionQd ?? 0) || 0),
+    requiresCollection: Boolean(line?.requiresCollection ?? line?.collect ?? false),
+    collectQd: ceilNonNegativeQuantity(line?.collectQd ?? line?.collectionQd, 0),
     autoCollect,
-    daylightCollectionOnly: Boolean(line?.daylightCollectionOnly ?? line?.daylightOnly ?? false),
-    daylightProductionOnly: Boolean(line?.daylightProductionOnly ?? false),
     overtime: Boolean(line?.overtime ?? line?.overwork ?? false),
-    pendingQty: Math.max(0, Number(line?.pendingQty ?? line?.storedQty ?? line?.readyQty ?? 0) || 0),
-    workInProgress,
+    // Integer production work (1 QD = 10,000 units). Inputs are consumed when
+    // a batch is opened, so carried progress can never exist without funded raw materials.
+    workProgressUnits: floorNonNegativeQuantity(line?.workProgressUnits, 0),
+    workInputsReserved: Boolean(line?.workInputsReserved),
+    workReservedOutputQty: floorNonNegativeQuantity(line?.workReservedOutputQty, 0),
+    workReservedFormula: String(line?.workReservedFormula ?? ""),
+    ...(line?.workReservedInputs && typeof line.workReservedInputs === "object"
+      ? { workReservedInputs: JSON.parse(JSON.stringify(line.workReservedInputs)) } : {}),
+    ...(line?.productionBonusRemainder && typeof line.productionBonusRemainder === "object"
+      ? { productionBonusRemainder: { resourceId: String(line.productionBonusRemainder.resourceId ?? ""),
+        name: String(line.productionBonusRemainder.name ?? ""),
+        units: Number.isSafeInteger(line.productionBonusRemainder.units) && line.productionBonusRemainder.units >= 0 && line.productionBonusRemainder.units < 10_000
+          ? line.productionBonusRemainder.units : 0 } } : {}),
+    pendingQty: floorNonNegativeQuantity(line?.pendingQty ?? line?.storedQty ?? line?.readyQty, 0),
     storageRoomId: String(line?.storageRoomId ?? line?.roomId ?? "outdoors"),
     seasons: normalizeProductionSeasons(line?.seasons),
-    itemUuid: stripLegacyItemBinding ? "" : String(line?.itemUuid ?? def?.itemUuid ?? ""),
-    itemId: stripLegacyItemBinding ? "" : String(line?.itemId ?? def?.itemId ?? "")
+    itemUuid: String(line?.itemUuid ?? def?.itemUuid ?? ""),
+    itemId: String(line?.itemId ?? def?.itemId ?? "")
   };
 }
 

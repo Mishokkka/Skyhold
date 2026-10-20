@@ -9,74 +9,140 @@ function normalized(value = "") {
 
 export const MATERIAL_GROUPS = [
   {
-    id: "fuel",
-    label: "Горючее",
-    aliases: ["топливо", "горючий материал", "fuel"],
-    resourceIds: ["wood", "charcoal", "black-coal", "coke", "straw", "tallow"],
-    keywords: ["дров", "угол", "кокс", "солом", "топлив", "горюч", "масло", "жир", "wood", "coal", "coke", "straw", "fuel", "oil", "tallow"]
+    id: "masonry",
+    label: "Кладочные материалы",
+    aliases: ["кладка", "каменная кладка", "кирпич или камень", "masonry"],
+    resourceIds: ["stone", "bricks"]
   },
   {
-    id: "edible",
-    label: "Съедобное",
-    aliases: ["пищевое сырье", "еда", "продукты", "food", "edible"],
-    resourceIds: ["bread", "flour", "fruits", "grain", "herbs", "honey", "meat", "milk", "vegetables"],
-    keywords: ["молок", "мяс", "куриц", "птиц", "рыб", "яйц", "зерн", "мук", "хлеб", "овощ", "фрукт", "ягод", "гриб", "мед", "съедоб", "пищ", "food", "edible", "milk", "meat", "chicken", "poultry", "fish", "egg", "grain", "flour", "bread", "vegetable", "fruit", "honey"]
+    id: "ferrous",
+    label: "Чёрные металлы",
+    aliases: ["железо или сталь", "черные металлы", "чёрные металлы", "ferrous"],
+    resourceIds: ["iron", "steel"]
   },
   {
-    id: "construction",
-    label: "Стройматериал",
-    aliases: ["строительный материал", "материал для строительства", "building material"],
-    resourceIds: ["wood", "stone", "iron", "glass", "straw"],
-    keywords: ["древес", "доск", "кам", "кирпич", "глин", "цемент", "стекл", "желез", "балк", "wood", "timber", "stone", "brick", "clay", "glass", "iron"]
+    id: "nonferrous",
+    label: "Цветные металлы",
+    aliases: ["медь или цветные металлы", "цветной металл", "nonferrous"],
+    resourceIds: ["copper", "nonferrous-metals"]
   },
   {
-    id: "metal",
-    label: "Металл",
-    aliases: ["металлы", "metal"],
-    resourceIds: ["iron", "copper", "silver", "gold", "iron-ore"],
-    keywords: ["желез", "мед", "сереб", "золот", "сталь", "бронз", "олов", "руда", "iron", "copper", "silver", "gold", "steel", "bronze", "ore", "metal"]
+    id: "precious",
+    label: "Драгоценные металлы",
+    aliases: ["золото или серебро", "драгоценный металл", "precious"],
+    resourceIds: ["silver", "gold"]
   },
   {
     id: "textile",
-    label: "Текстиль",
-    aliases: ["ткань", "волокно", "textile", "cloth"],
-    resourceIds: ["cloth-silk", "cloth-wool", "wool"],
-    keywords: ["ткан", "шерст", "шелк", "льн", "хлоп", "нит", "пряж", "cloth", "wool", "silk", "linen", "cotton", "thread", "textile"]
+    label: "Обычный текстиль",
+    aliases: ["ткань или волокно", "текстиль", "textile"],
+    resourceIds: ["wool", "plant-fiber", "cloth", "pelt", "leather"]
   },
   {
-    id: "hide",
-    label: "Кожа или шкура",
-    aliases: ["кожа", "шкура", "hide", "leather"],
-    resourceIds: ["leather", "pelt"],
-    keywords: ["кож", "шкур", "мех", "leather", "pelt", "hide", "fur"]
+    id: "ingredient.grain",
+    label: "Зерновое сырьё",
+    aliases: ["зерновой ингредиент", "зерно или мука", "grain ingredient"],
+    resourceIds: ["grain", "flour"]
   },
   {
-    id: "medicinal",
+    id: "ingredient.protein",
+    label: "Белковое сырьё",
+    aliases: ["белковый ингредиент", "мясо рыба или яйца", "protein ingredient"],
+    resourceIds: ["meat", "fish", "eggs"]
+  },
+  {
+    id: "ingredient.fruit",
+    label: "Плодовое сырьё",
+    aliases: ["плодовый ингредиент", "овощи или фрукты", "fruit ingredient"],
+    resourceIds: ["vegetables", "fruits"]
+  },
+  {
+    id: "ingredient.sweet",
+    label: "Подсластитель",
+    aliases: ["сладкий ингредиент", "мед или сахар", "sweetener"],
+    resourceIds: ["honey", "sugar"]
+  },
+  {
+    id: "food.prepared",
+    label: "Готовая пища",
+    aliases: ["рацион", "готовая еда", "prepared food"],
+    resourceIds: ["bread", "food-grain", "food-protein", "food-dairy", "food-fruit", "preserved-meat", "aged-cheese", "dried-fruit"]
+  },
+  {
+    id: "alcohol",
+    label: "Алкоголь",
+    aliases: ["алкогольный напиток", "alcohol"],
+    resourceIds: [
+      "alcohol-brewed-cheap-weak", "alcohol-brewed-fine-weak", "alcohol-brewed-cheap-strong", "alcohol-brewed-fine-strong",
+      "alcohol-wine-cheap-weak", "alcohol-wine-fine-weak", "alcohol-wine-cheap-strong", "alcohol-wine-fine-strong",
+      "alcohol-general-cheap-weak", "alcohol-general-fine-weak", "alcohol-general-cheap-strong", "alcohol-general-fine-strong"
+    ]
+  },
+  {
+    id: "component",
+    label: "Компоненты",
+    aliases: ["детали", "components"],
+    resourceIds: ["components-simple", "components-complex", "components-high-tech"]
+  },
+  {
+    id: "tool",
+    label: "Инструменты",
+    aliases: ["инструмент", "tools"],
+    resourceIds: ["tools-simple", "tools-complex"]
+  },
+  {
+    id: "fuel",
+    label: "Промышленное топливо",
+    aliases: ["топливо", "fuel"],
+    resourceIds: ["fuel-solid", "fuel-liquid"]
+  },
+  {
+    id: "chemical",
+    label: "Химические материалы",
+    aliases: ["химикаты", "chemical"],
+    resourceIds: ["chemicals-simple", "chemicals-complex"]
+  },
+  {
+    id: "military",
+    label: "Военные припасы",
+    aliases: ["боеприпасы", "military supplies"],
+    resourceIds: ["military-supplies-simple", "military-supplies-complex"]
+  },
+  {
+    id: "armament",
+    label: "Вооружение отряда",
+    aliases: ["вооружение", "armament"],
+    resourceIds: ["armament-simple", "armament-complex", "armament-elite"]
+  },
+  {
+    id: "medicine",
+    label: "Медицинские товары",
+    aliases: ["медицина", "medicine"],
+    resourceIds: ["medical-supplies", "medicines"]
+  },
+  {
+    id: "medicine.raw",
     label: "Лекарственное сырьё",
-    aliases: ["лекарственное", "медицинское сырье", "medicine", "medicinal"],
-    resourceIds: ["herbs", "honey"],
-    keywords: ["трав", "лекар", "целеб", "медицин", "эликс", "herb", "medicine", "medicinal", "healing"]
+    aliases: ["лекарственные травы", "medicine raw"],
+    resourceIds: ["herbs"]
   },
   {
-    id: "liquid",
-    label: "Жидкость",
-    aliases: ["жидкости", "liquid"],
-    resourceIds: ["water", "milk", "honey", "tallow"],
-    keywords: ["вод", "молок", "масло", "жир", "сок", "настой", "жидк", "water", "milk", "oil", "juice", "liquid"]
+    id: "consumer",
+    label: "Бытовые товары",
+    aliases: ["товары быта", "consumer goods"],
+    resourceIds: ["household-goods-simple", "household-goods-fine"]
   },
   {
-    id: "organic",
-    label: "Органическое сырьё",
-    aliases: ["органика", "organic"],
-    resourceIds: ["wood", "straw", "wool", "leather", "pelt", "tallow", "herbs"],
-    keywords: ["древес", "солом", "шерст", "кож", "шкур", "жир", "трав", "органич", "wood", "straw", "wool", "leather", "pelt", "tallow", "herb", "organic"]
+    id: "luxury",
+    label: "Предметы роскоши",
+    aliases: ["роскошь", "luxury"],
+    resourceIds: ["silk", "tea", "coffee", "cocoa", "tobacco", "gemstones", "art-goods"]
   },
   {
-    id: "mineral",
-    label: "Минеральное сырьё",
-    aliases: ["минерал", "минеральное", "mineral"],
-    resourceIds: ["stone", "iron-ore", "black-coal", "coke", "glass", "copper", "iron"],
-    keywords: ["кам", "руд", "угол", "минерал", "стекл", "металл", "stone", "ore", "coal", "mineral", "glass", "metal"]
+    id: "animal.feed",
+    label: "Корм для животных",
+    aliases: ["корм", "фураж", "animal feed"],
+    resourceIds: ["animal-feed"]
   }
 ];
 
@@ -107,18 +173,11 @@ export function resourceMatchesMaterialGroup(resource = {}, groupValue = "", def
   const group = materialGroup(groupValue);
   if (!group) return false;
   const effective = { ...(definition ?? {}), ...(resource ?? {}) };
+  const categoryTag = normalized(effective.categoryTag);
+  if (categoryTag) return categoryTag === normalized(group.id);
   if (explicitGroups(effective).includes(group.id)) return true;
   const id = String(resource?.resourceId ?? resource?.id ?? definition?.id ?? "");
-  if ((group.resourceIds ?? []).includes(id)) return true;
-  const haystack = normalized([
-    resource?.name,
-    resource?.label,
-    resource?.category,
-    definition?.label,
-    definition?.category,
-    ...(definition?.aliases ?? [])
-  ].filter(Boolean).join(" "));
-  return (group.keywords ?? []).some((keyword) => haystack.includes(normalized(keyword)));
+  return (group.resourceIds ?? []).includes(id);
 }
 
 export function materialGroupHelpText() {

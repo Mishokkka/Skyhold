@@ -1,0 +1,381 @@
+/* Standalone ship-management window. The compact fleet register stays in the main owner. */
+.fbls-order-workspace {
+  --fbls-order-tracks: minmax(0, 1fr) minmax(0, 1.4fr) minmax(7rem, 0.75fr) 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: var(--fbls-gap-sm);
+}
+
+.fbls-order-list,
+.fbls-order-plan { min-width: 0; }
+
+.fbls-order-list { border: 1px solid var(--fbls-border-strong); border-radius: var(--fbls-radius-sm); }
+.fbls-order-list > .fbls-ship-order + .fbls-ship-order { border-top: 1px solid var(--fbls-border); }
+.fbls-order-list > .is-selected { box-shadow: inset 3px 0 var(--fbls-accent); background: var(--fbls-accent-bg); }
+.fbls-order-select { display: flex; align-items: center; gap: var(--fbls-gap-sm); min-width: 0; cursor: pointer; }
+.fbls-order-select > input { flex-shrink: 0; }
+.fbls-order-select > span { display: grid; min-width: 0; text-align: left; }
+.fbls-order-select:has(input:disabled) { cursor: not-allowed; }
+.fbl-skyhold-ship input[type="checkbox"] { border-color: var(--fbls-muted); }
+.fbl-skyhold-ship .fbls-order-plan .fbls-order-totals { grid-template-columns: repeat(4, minmax(0, 1fr)); padding: var(--fbls-gap-md); background: var(--fbls-surface-2); border-block: 1px solid var(--fbls-border); }
+.fbls-order-command { position: sticky; bottom: 0; z-index: 2; padding: var(--fbls-gap-md); border: 1px solid var(--fbls-border-strong); border-radius: var(--fbls-radius-sm); background: var(--fbls-surface-2); }
+.fbls-order-command .fbls-field { flex: 0 1 140px; }
+.fbls-order-command [data-ship-planned] { margin-left: auto; }
+.fbls-order-map-heading { padding: var(--fbls-gap-xs) var(--fbls-gap-sm); min-height: 32px; }
+.fbls-order-empty,
+.fbls-order-explanation { padding: var(--fbls-gap-sm); color: var(--fbls-muted); font-size: var(--fbls-type-compact-sm); }
+.fbls-route-view { position: relative; border: 1px solid var(--fbls-border-strong); border-radius: var(--fbls-radius-sm); overflow: hidden; }
+.fbls-route-view-tools { position: absolute; top: var(--fbls-gap-sm); right: var(--fbls-gap-sm); z-index: 1; padding: var(--fbls-gap-xs); border-radius: var(--fbls-radius-sm); background: var(--fbls-surface-1); }
+.fbls-route-pan > summary { display: grid; place-items: center; width: var(--fbls-control-height); min-height: var(--fbls-control-height); border: 1px solid var(--fbls-border-strong); border-radius: var(--fbls-radius-sm); background: var(--fbls-surface-2); list-style: none; }
+.fbls-route-pan > summary::-webkit-details-marker { display: none; }
+.fbls-route-pan > div { position: absolute; top: 100%; right: 0; padding: var(--fbls-gap-xs); background: var(--fbls-surface-1); border: 1px solid var(--fbls-border-strong); border-radius: var(--fbls-radius-sm); }
+.fbl-skyhold-ship .fbls-route-view-legend { position: absolute; bottom: var(--fbls-gap-sm); left: var(--fbls-gap-sm); padding: var(--fbls-gap-xs) var(--fbls-gap-sm); background: var(--fbls-surface-1); color: var(--fbls-muted); font-size: var(--fbls-type-compact-xs); pointer-events: none; }
+.fbls-order-plan dd { overflow-wrap: anywhere; }
+.fbls-order-stops { padding-left: 1.5rem; margin: 0; }
+.fbls-order-stops li { margin-bottom: var(--fbls-gap-sm); }
+.fbls-order-stops span,
+.fbls-order-legs span { display: block; color: var(--fbls-muted); }
+.fbls-order-legs p + p { margin-top: var(--fbls-gap-sm); }
+.fbls-route-view svg { display: block; width: 100%; height: clamp(320px, 48vh, 560px); background: var(--fbls-surface-1); touch-action: none; cursor: grab; }
+.fbls-route-view svg:active { cursor: grabbing; }
+.fbls-route-view-line { fill: none; stroke: var(--fbls-accent); stroke-width: 3; }
+.fbls-route-view-line.is-empty { stroke-dasharray: 7 5; }
+.fbls-route-view-line.is-network { stroke: var(--fbls-info); stroke-width: 3; }
+.fbls-route-view-line.is-highlighted { stroke: var(--fbls-text); stroke-width: 6; }
+.fbls-route-view-node circle { fill: var(--fbls-surface-2); stroke: var(--fbls-muted); stroke-width: 2; }
+.fbls-route-view-node.is-start circle { stroke: var(--fbls-accent); stroke-width: 4; }
+.fbls-route-view-node.is-final circle { stroke-dasharray: 3 2; }
+.fbls-route-view-node text { fill: var(--fbls-text); font-weight: 700; pointer-events: none; }
+.fbls-route-view-node [data-route-node-label] { paint-order: stroke; stroke: var(--fbls-surface-0); stroke-width: 3px; stroke-linejoin: round; }
+
+.fbls-voyage-progress {
+  display: block;
+  width: 100%;
+  height: 0.75rem;
+  accent-color: var(--fbls-accent);
+}
+
+.fbls-voyage-stops {
+  margin: 0;
+  padding-left: 1.75rem;
+}
+
+.fbls-voyage-stops > li {
+  padding: var(--fbls-gap-sm) var(--fbls-gap-md);
+  border-left: 2px solid var(--fbls-border-strong);
+  overflow-wrap: anywhere;
+}
+
+.fbls-voyage-stops > li.is-current {
+  border-left-color: var(--fbls-accent);
+  background: var(--fbls-accent-bg);
+}
+
+.fbls-voyage-stops > li.is-complete { border-left-color: var(--fbls-success); }
+.fbls-voyage-stops .fbls-card-header { flex-wrap: wrap; }
+
+.fbl-skyhold-ship .fbls-ship-window {
+  display: flex;
+  flex: 1 1 0;
+  container: ship-window / inline-size;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--fbls-text);
+  background: var(--fbls-surface-0);
+  font-size: var(--fbls-type-compact-md);
+  line-height: 1.35;
+}
+
+.fbl-skyhold-ship .fbls-ship-console {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.fbl-skyhold-ship h2,
+.fbl-skyhold-ship h3,
+.fbl-skyhold-ship p {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.fbl-skyhold-ship h2 { font-size: var(--fbls-type-title); }
+.fbl-skyhold-ship h3 { font-weight: 700; }
+.fbl-skyhold-ship small { font-size: var(--fbls-type-compact-sm); color: var(--fbls-muted); }
+
+.fbl-skyhold-ship .fbls-ship-heading {
+  flex: 0 0 auto;
+  padding: var(--fbls-gap-md) var(--fbls-gap-lg);
+  background: var(--fbls-surface-2);
+  border-bottom: 1px solid var(--fbls-border);
+  gap: var(--fbls-gap-md);
+}
+
+.fbl-skyhold-ship .fbls-ship-heading > .fbls-section-heading { flex: 1 1 auto; margin: 0; }
+
+.fbl-skyhold-ship .fbls-ship-heading p,
+.fbl-skyhold-ship .fbls-ship-section-head p {
+  margin-top: 2px;
+  color: var(--fbls-muted);
+  font-size: var(--fbls-type-compact-sm);
+}
+
+.fbl-skyhold-ship .fbls-ship-stats,
+.fbl-skyhold-ship .fbls-ship-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--fbls-gap-md);
+  margin: 0;
+}
+
+.fbl-skyhold-ship .fbls-ship-stats {
+  flex: 0 0 auto;
+  padding: var(--fbls-gap-sm) var(--fbls-gap-lg);
+  background: var(--fbls-surface-1);
+}
+
+.fbl-skyhold-ship .fbls-ship-stats > div,
+.fbl-skyhold-ship .fbls-ship-facts > div { min-width: 0; }
+
+.fbl-skyhold-ship dt { color: var(--fbls-muted); font-size: var(--fbls-type-compact-sm); font-weight: 400; }
+.fbl-skyhold-ship dd { margin: 0.15rem 0 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.fbl-skyhold-ship .fbls-ship-stats dd { font-size: var(--fbls-type-compact-md); margin: 0; }
+.fbl-skyhold-ship .fbls-ship-stats > div { display: flex; flex-wrap: wrap; align-items: center; gap: var(--fbls-gap-xs) var(--fbls-gap-sm); }
+
+.fbl-skyhold-ship .fbls-ship-tabs {
+  flex: 0 0 auto;
+  padding: var(--fbls-gap-xs) var(--fbls-gap-lg);
+  gap: var(--fbls-gap-xs);
+  border-bottom: 1px solid var(--fbls-border);
+  background: var(--fbls-surface-2);
+}
+
+.fbl-skyhold-ship .fbls-ship-tabs > button { flex: 1 1 0; min-width: 0; }
+
+.fbl-skyhold-ship .fbls-ship-panel {
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  padding: var(--fbls-gap-md) var(--fbls-gap-lg);
+}
+
+.fbl-skyhold-ship .fbls-ship-panel[hidden] { display: none; }
+.fbl-skyhold-ship .fbls-ship-panel > * + * { margin-top: var(--fbls-gap-md); }
+
+.fbl-skyhold-ship .fbls-ship-guidance {
+  flex: 0 0 auto;
+  padding: var(--fbls-gap-sm) var(--fbls-gap-lg);
+  gap: var(--fbls-gap-xs);
+  border-block: 1px solid var(--fbls-border);
+  background: var(--fbls-surface-2);
+}
+
+.fbl-skyhold-ship .fbls-ship-guidance .fbls-toolbar > strong {
+  flex: 1 1 240px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.fbl-skyhold-ship .fbls-ship-box,
+.fbl-skyhold-ship .fbls-ship-order {
+  border: 1px solid var(--fbls-border);
+  border-radius: var(--fbls-radius-sm);
+  background: var(--fbls-surface-1);
+}
+
+.fbl-skyhold-ship .fbls-ship-box { padding: var(--fbls-gap-md); }
+.fbl-skyhold-ship .fbls-order-list .fbls-ship-order { min-width: 0; border: 0; border-radius: 0; background: transparent; }
+.fbl-skyhold-ship .fbls-ship-box > * + * { margin-top: var(--fbls-gap-md); }
+.fbl-skyhold-ship .fbls-card-header > * { min-width: 0; }
+.fbl-skyhold-ship .fbls-ship-box.fbls-card-header > * { margin-top: 0; }
+
+.fbl-skyhold-ship summary { cursor: pointer; padding-block: var(--fbls-gap-xs); }
+.fbl-skyhold-ship summary:focus-visible,
+.fbl-skyhold-ship [data-fbls-tooltip]:focus-visible { outline: 2px solid var(--fbls-accent); outline-offset: 2px; }
+
+.fbl-skyhold-ship .fbls-ship-order > summary {
+  display: grid;
+  grid-template-columns: var(--fbls-order-tracks);
+  align-items: center;
+  gap: var(--fbls-gap-sm);
+  padding: var(--fbls-gap-sm) var(--fbls-gap-md);
+  min-height: 48px;
+  list-style: none;
+}
+
+.fbl-skyhold-ship .fbls-ship-order > summary:hover { background: var(--fbls-surface-2); }
+
+.fbl-skyhold-ship .fbls-ship-order > summary::-webkit-details-marker { display: none; }
+.fbl-skyhold-ship .fbls-ship-order > summary div,
+.fbl-skyhold-ship .fbls-ship-order > summary span { display: grid; min-width: 0; }
+.fbl-skyhold-ship .fbls-ship-order > summary .fbls-order-prices { text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.fbl-skyhold-ship .fbls-order-select strong,
+.fbl-skyhold-ship .fbls-order-destination strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fbl-skyhold-ship .fbls-order-prices { white-space: nowrap; }
+.fbl-skyhold-ship .fbls-ship-order[open] > summary { background: var(--fbls-surface-2); border-bottom: 1px solid var(--fbls-border); }
+.fbl-skyhold-ship .fbls-ship-order[open] > summary > i { transform: rotate(180deg); }
+
+.fbl-skyhold-ship .fbls-ship-order-body {
+  display: grid;
+  gap: var(--fbls-gap-md);
+  padding: var(--fbls-gap-lg);
+}
+
+.fbl-skyhold-ship .fbls-ship-route {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--fbls-gap-xs) var(--fbls-gap-md);
+  padding: var(--fbls-gap-sm);
+  border-radius: var(--fbls-radius-sm);
+  background: var(--fbls-surface-2);
+  font-size: var(--fbls-type-compact-sm);
+}
+
+.fbl-skyhold-ship .fbls-ship-route strong { color: var(--fbls-text-strong); }
+.fbl-skyhold-ship .fbls-ship-route span { color: var(--fbls-muted); }
+.fbl-skyhold-ship .fbls-ship-budget-detail { padding: 0 var(--fbls-gap-sm); }
+.fbl-skyhold-ship .fbls-ship-budget-detail .fbls-ship-facts { margin-block: var(--fbls-gap-sm); }
+
+.fbl-skyhold-ship .fbls-ship-risk-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--fbls-gap-sm);
+}
+
+.fbl-skyhold-ship .fbls-ship-risk-grid > div {
+  display: grid;
+  gap: 0.15rem;
+  padding: var(--fbls-gap-sm);
+  border-radius: var(--fbls-radius-sm);
+  background: var(--fbls-surface-2);
+  font-size: var(--fbls-type-compact-sm);
+}
+
+
+.fbl-skyhold-ship .fbls-ship-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; gap: var(--fbls-gap-md); }
+.fbl-skyhold-ship .fbls-ship-parameters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.fbl-skyhold-ship .fbls-ship-money-form { grid-template-columns: minmax(0, 1.5fr) minmax(5rem, 0.75fr) auto; }
+.fbl-skyhold-ship .fbls-ship-money-form:has([data-ship-reason]) { grid-template-columns: minmax(0, 1fr) minmax(5rem, 0.75fr) minmax(0, 1.5fr) auto; }
+.fbl-skyhold-ship .fbls-field { text-transform: none; letter-spacing: normal; font-size: var(--fbls-type-compact-sm); }
+.fbl-skyhold-ship .fbls-field > span { margin: 0; }
+
+.fbl-skyhold-ship input:not([type="checkbox"]),
+.fbl-skyhold-ship select {
+  width: 100%;
+  min-width: 0;
+  height: var(--fbls-control-height);
+  padding: 0 0.5rem;
+  border: 1px solid var(--fbls-border-strong);
+  border-radius: var(--fbls-radius-sm);
+  font: inherit;
+  box-shadow: none;
+}
+
+.fbl-skyhold-ship .fbls-button { min-height: var(--fbls-control-height); height: var(--fbls-control-height); width: auto; margin: 0; padding: 0.25rem 0.6rem; font-size: var(--fbls-type-compact-md); line-height: 1.25; }
+.fbl-skyhold-ship .fbls-ship-notice { padding: var(--fbls-gap-md); border-left: 2px solid var(--fbls-warning); background: var(--fbls-warning-soft); color: var(--fbls-text); }
+.fbl-skyhold-ship ul { margin: var(--fbls-gap-sm) 0; padding-left: 1.3rem; }
+.fbl-skyhold-ship .fbls-ship-roster { width: 100%; border-collapse: collapse; background: var(--fbls-surface-1); font-size: var(--fbls-type-compact-sm); }
+.fbl-skyhold-ship .fbls-ship-roster th,
+.fbl-skyhold-ship .fbls-ship-roster td { padding: 2px var(--fbls-gap-sm); border-bottom: 1px solid var(--fbls-border); text-align: left; color: var(--fbls-text); }
+.fbl-skyhold-ship .fbls-ship-roster th { background: var(--fbls-surface-2); color: var(--fbls-muted); }
+.fbl-skyhold-ship .fbls-ship-roster caption { text-align: left; padding: var(--fbls-gap-sm); font-weight: 600; color: var(--fbls-text); }
+.fbl-skyhold-ship .fbls-ship-roster td { overflow-wrap: anywhere; }
+.fbl-skyhold-ship .fbls-ship-ledger-row { display: flex; justify-content: space-between; gap: var(--fbls-gap-md); padding-block: var(--fbls-gap-xs); font-size: var(--fbls-type-compact-sm); }
+.fbl-skyhold-ship .fbls-ship-ledger-description { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.fbl-skyhold-ship .fbls-ship-ledger-row > strong { flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.fbl-skyhold-ship [data-fbls-tooltip] { cursor: help; }
+.fbl-skyhold-ship button[data-fbls-tooltip] { cursor: pointer; }
+
+@container ship-window (max-width: 620px) {
+  .fbl-skyhold-ship .fbls-ship-stats,
+  .fbl-skyhold-ship .fbls-ship-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fbl-skyhold-ship .fbls-order-plan .fbls-order-totals { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fbl-skyhold-ship .fbls-ship-order > summary { grid-template-columns: minmax(0, 1fr) minmax(7rem, auto) 16px; }
+  .fbl-skyhold-ship .fbls-order-select { grid-column: 1; }
+  .fbl-skyhold-ship .fbls-order-destination { grid-column: 1; grid-row: 2; padding-left: calc(16px + var(--fbls-gap-sm)); }
+  .fbl-skyhold-ship .fbls-order-prices { grid-column: 2; grid-row: 1 / 3; }
+  .fbl-skyhold-ship .fbls-ship-order > summary > i { grid-column: 3; grid-row: 1 / 3; }
+  .fbl-skyhold-ship .fbls-ship-parameters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fbl-skyhold-ship .fbls-ship-money-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fbl-skyhold-ship .fbls-ship-money-form:has([data-ship-reason]) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@container ship-window (max-width: 420px) {
+  .fbl-skyhold-ship .fbls-ship-form-grid,
+  .fbl-skyhold-ship .fbls-ship-money-form:has([data-ship-reason]),
+  .fbl-skyhold-ship .fbls-ship-risk-grid { grid-template-columns: minmax(0, 1fr); }
+  .fbl-skyhold-ship .fbls-ship-heading { align-items: start; flex-direction: column; }
+  .fbl-skyhold-ship .fbls-ship-tabs > button > i { display: none; }
+  .fbls-order-command [data-ship-planned] { flex-basis: 100%; }
+}
+
+.fbl-skyhold-ship .fbls-ship-crew-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(16rem, 100%), 1fr));
+  gap: var(--fbls-gap-sm);
+  max-height: 22rem;
+  overflow: auto;
+  padding: var(--fbls-gap-xs);
+  border: 1px solid var(--fbls-border);
+  border-radius: var(--fbls-radius-md);
+  background: var(--fbls-surface-1);
+}
+
+.fbl-skyhold-ship .fbls-ship-crew-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--fbls-gap-sm);
+  min-height: var(--fbls-control-height);
+  padding: var(--fbls-gap-sm);
+  border: 1px solid var(--fbls-border);
+  border-radius: var(--fbls-radius-sm);
+  background: var(--fbls-surface-2);
+  cursor: pointer;
+}
+
+.fbl-skyhold-ship .fbls-ship-crew-option[hidden] {
+  display: none;
+}
+
+.fbl-skyhold-ship .fbls-ship-crew-option:has(input:checked) {
+  border-color: var(--fbls-accent);
+}
+
+.fbl-skyhold-ship .fbls-ship-crew-option:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.fbl-skyhold-ship .fbls-ship-crew-option span:nth-child(2) {
+  display: grid;
+  min-width: 0;
+}
+
+.fbl-skyhold-ship .fbls-ship-crew-option small {
+  color: var(--fbls-muted);
+}
+
+.fbl-skyhold-ship .fbls-ship-crew-choice {
+  color: var(--fbls-accent);
+  font-size: var(--fbls-type-compact-md);
+  font-weight: 600;
+}
+
+
+.fbl-skyhold-ship .fbls-ship-crew-option strong { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.fbl-skyhold-ship .fbls-ship-map-panel[hidden] { display: none; }
+.fbl-skyhold-ship .fbls-ship-order[hidden],
+.fbl-skyhold-ship .fbls-ship-roster tr[hidden] { display: none; }
+.fbl-skyhold-ship .fbls-order-plan:has(.fbls-order-command) { padding-bottom: 0; }

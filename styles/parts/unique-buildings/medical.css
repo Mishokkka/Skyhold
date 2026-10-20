@@ -1,11 +1,23 @@
 .fbl-skyhold-unique-building .window-content,
 .fbl-skyhold-medical-app .window-content {
   padding: 0;
+  overflow: hidden;
   background: var(--fbls-surface-1);
 }
 
+.fbl-skyhold-medical-app .window-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .fbls-unique-medical {
-  min-height: 100%;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
   color: var(--fbls-text);
   background:
     radial-gradient(circle at 75% 0%, var(--fbls-panel-strong), transparent 38%),
@@ -48,6 +60,15 @@
   padding: 0;
 }
 
+.fbls-unique-medical > .fbls-unique-editor-tab,
+.fbls-unique-medical > .fbls-unique-medical-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
 .fbls-unique-editor-tab .fbls-building-editor-shell {
   min-height: calc(100% - 53px);
   padding: 14px 16px 18px;
@@ -80,6 +101,35 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.fbls-unique-medical-development-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.fbls-unique-medical-development-grid label {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.fbls-unique-medical-development-grid label > span {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.fbls-unique-medical-development-grid input,
+.fbls-unique-medical-development-grid strong {
+  min-height: 2rem;
+  text-align: center;
+}
+
+.fbls-unique-medical-development-grid .food i { color: var(--fbls-accent); }
+.fbls-unique-medical-development-grid .technology i { color: var(--fbls-info); }
+.fbls-unique-medical-development-grid .culture i { color: var(--fbls-culture); }
+.fbls-unique-medical-development-grid .war i { color: var(--fbls-danger); }
 
 .fbl-skyhold-unique-building input,
 .fbl-skyhold-unique-building select,
@@ -188,7 +238,7 @@
   color: var(--fbls-success);
   font-size: .72rem;
   font-weight: 700;
-  letter-spacing: .14em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
@@ -298,4 +348,5 @@
   .fbls-unique-medical-stats {
     grid-template-columns: 1fr 1fr;
   }
+
 }

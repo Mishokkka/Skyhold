@@ -14,7 +14,7 @@
   align-items: center;
   margin-right: auto;
   color: var(--fbls-muted);
-  font-size: 0.78rem;
+  font-size: var(--fbls-type-compact-sm);
   font-weight: 700;
 }
 

@@ -32,13 +32,16 @@ _eventEffectDependencies() {
 _eventAutomationSource(holding, scheduleId = "") {
   if (scheduleId) {
     const scheduled = (holding?.gm?.eventSchedule ?? []).find((row) => String(row?.id ?? "") === String(scheduleId));
-    return scheduled ? { ...scheduled, scheduleId: scheduled.id } : null;
+    if (!scheduled || ["applied", "done", "archived", "cancelled"].includes(scheduled.status)
+      || ["applied", "done"].includes(scheduled.effectStatus)) return null;
+    return { ...scheduled, scheduleId: scheduled.id };
   }
   const lastRoll = holding?.gm?.lastRoll;
-  if (!lastRoll || typeof lastRoll !== "object") return null;
+  if (!lastRoll || typeof lastRoll !== "object" || ["applied", "done"].includes(lastRoll.effectStatus)) return null;
   if (Array.isArray(lastRoll.events)) {
-    const pending = lastRoll.events.filter((row) => String(row?.effectStatus ?? "pending") === "pending");
-    return { ...lastRoll, effects: pending.flatMap((row) => row?.effects ?? []), scheduleId: "" };
+    const pending = lastRoll.events.filter((row) => row && String(row.effectStatus ?? "pending") === "pending");
+    if (!pending.length) return null;
+    return { ...lastRoll, effects: pending.flatMap((row) => Array.isArray(row.effects) ? row.effects : []), scheduleId: "" };
   }
   return { ...lastRoll, scheduleId: "" };
 },
@@ -101,7 +104,7 @@ async _onApplyEventEffects(event) {
   if (!game.user?.isGM) return;
   const scheduleId = String(event.currentTarget?.dataset?.eventScheduleId ?? "");
   const data = SkyholdData.get();
-  const holding = data.holdings.find((row) => String(row?.id ?? "") === String(this.activeHoldingId ?? "")) ?? data.holdings[0];
+  const holding = data.holdings.find((row) => String(row?.id ?? "") === String(this.activeHoldingId ?? ""));
   if (!holding) return;
   const source = this._eventAutomationSource(holding, scheduleId);
   if (!source) return ui.notifications.warn("Событие для применения не найдено.");
@@ -212,7 +215,7 @@ async _onScheduleLastEvent(event) {
   event.stopPropagation();
   if (!game.user?.isGM) return;
   const data = SkyholdData.get();
-  const holding = data.holdings.find((row) => String(row?.id ?? "") === String(this.activeHoldingId ?? "")) ?? data.holdings[0];
+  const holding = data.holdings.find((row) => String(row?.id ?? "") === String(this.activeHoldingId ?? ""));
   const source = this._eventAutomationSource(holding);
   if (!holding || !source?.eventId) return ui.notifications.warn("Сначала брось таблицу событий.");
   const scheduleId = makeId("event-schedule", 20);

@@ -1,10 +1,12 @@
 import { MODULE_ID } from "../data/constants.js";
+import { isResidentInPopulation } from "../data/resident-presence.js";
 import { canCurrentUserOpenSkyhold } from "../data/settings.js";
 import { HOLDING_TYPES } from "../data/schema/base-holding.js";
 import { getHoldingTypeLabel } from "../data/holding-factory.js";
 import { HoldingService } from "../data/holding-service.js";
 import { getSkyholdAuthorityState } from "../data/authority.js";
 import { holdingPermissionContext } from "../data/holding-permissions.js";
+import { politicsAvailability } from "../data/politics-availability.js";
 import { eventRegionOptionValue, normalizeEventRegionOptions } from "../data/random-events.js";
 
 import { registerSkyholdAppClass } from "./registry.js";
@@ -21,11 +23,13 @@ import { getCalendariaSeasonSnapshot, getCalendariaSnapshot, formatCalendariaDat
 import { assignDomainGroup } from "./domains/compose-domain.js";
 import { WindowFrameMixin } from "./common/window-frame.js";
 import { requestApplicationRender } from "./common/render-scheduler.js";
+import { bindTabNavigation } from "./common/tab-navigation.js";
+import { DisclosureState } from "./common/disclosure-state.js";
+import { fitResidentTraitChips } from "./common/resident-trait-chips.js";
 import { hasActiveProtectedSkyholdWindow } from "./common/window-focus-keeper.js";
 import { createDerivedContextCache, derivedContextKey } from "./common/derived-context-cache.js";
 import { bindImageFallbacks, capturePersistentImages, restorePersistentImages } from "./common/image-fallback.js";
 import { buildHoldingOperationTimeline } from "../data/operation-timeline.js";
-import { economyV2RuntimeStatus } from "../data/economy-v2-activation.js";
 import {
   countSkyholdPerformance,
   finishSkyholdPerformanceTimer,
@@ -57,6 +61,7 @@ function prepareRegionSelectOptions(regionOptions = [], currentValue = "", rawVa
 
 const SkyholdAppActions = {
   click: {
+    "open-workforce-planner": "_onOpenWorkforcePlanner",
     "open-building-template-browser": "_onOpenBuildingTemplateBrowser",
     "open-mass-combat-tag-editor": "_onOpenMassCombatTagEditor",
     "open-random-event-editor": "_onOpenRandomEventEditor",
@@ -64,9 +69,11 @@ const SkyholdAppActions = {
     "open-resource-catalog-editor": "_onOpenResourceCatalogEditor",
     "open-market-catalog-editor": "_onOpenMarketCatalogEditor",
     "open-content-pack-importer": "_onOpenContentPackImporter",
-    "activate-economy-v2": "_onActivateEconomyV2"
+    "open-ui-review": "_onOpenUiReview",
+    "open-laputa-migration-importer": "_onOpenLaputaMigrationImporter",
+    "open-building-catalog-migration": "_onOpenBuildingCatalogMigration"
   },
-  publicClick: ["open-building-template-browser"]
+  publicClick: ["open-building-template-browser", "open-workforce-planner"]
 };
 
 export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(ApplicationV2)) {
@@ -165,9 +172,7 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
     try {
       result = super.render(options);
     } catch (error) {
-      if (this._loadingOverlayTimer) window.clearTimeout(this._loadingOverlayTimer);
-      this._loadingOverlayTimer = null;
-      this._clearLoadingOverlay();
+      if (this._renderToken === token) this._clearLoadingOverlay();
       throw error;
     }
 
@@ -177,16 +182,9 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
       return result;
     }
 
-    const guardedResult = typeof result.catch === "function"
-      ? result.catch((error) => {
-        if (this._renderToken === token) this._clearLoadingOverlay();
-        throw error;
-      })
-      : result;
-
-    return guardedResult.finally(() => {
-      if (this._loadingOverlayTimer) window.clearTimeout(this._loadingOverlayTimer);
-      this._loadingOverlayTimer = null;
+    return result.finally(() => {
+      // Render can reject before _onRender, or after another render has begun.
+      if (this._renderToken === token) this._clearLoadingOverlay();
     });
   }
 
@@ -205,6 +203,8 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
     host.querySelector?.(".fbls-loading-window-overlay")?.remove?.();
     const overlay = document.createElement("div");
     overlay.className = "fbls-loading-overlay fbls-loading-window-overlay";
+    overlay.setAttribute("role", "status");
+    overlay.setAttribute("aria-label", "Загрузка");
     const img = shell?.querySelector?.("[data-loading-overlay] img")?.getAttribute?.("src") || "";
     if (img) {
       const image = document.createElement("img");
@@ -216,23 +216,32 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
       icon.classList.add("fa-solid", "fa-spinner", "fa-spin");
       overlay.appendChild(icon);
     }
+    const label = document.createElement("span");
+    label.textContent = "Загрузка…";
+    overlay.appendChild(label);
     host.appendChild(overlay);
-    if (globalThis.requestAnimationFrame) requestAnimationFrame(() => overlay.classList.add("active")); else overlay.classList.add("active");
+    this._loadingWindowOverlay = overlay;
+    const activate = () => {
+      if (this._loadingWindowOverlay === overlay) overlay.classList.add("active");
+    };
+    if (globalThis.requestAnimationFrame) requestAnimationFrame(activate); else activate();
   }
 
   _clearLoadingOverlay() {
+    if (this._loadingOverlayTimer) window.clearTimeout(this._loadingOverlayTimer);
+    this._loadingOverlayTimer = null;
     const shell = this.element?.querySelector?.(".fbls-shell") ?? this.element;
     shell?.classList?.remove?.("fbls-loading-active");
-    const inlineOverlay = shell?.querySelector?.("[data-loading-overlay]");
-    inlineOverlay?.removeAttribute?.("aria-busy");
-
+    shell?.querySelector?.("[data-loading-overlay]")?.setAttribute?.("aria-busy", "false");
     const appShell = this.element?.closest?.(".application, .app, .window-app") ?? this.element?.parentElement?.closest?.(".application, .app, .window-app");
     const host = appShell?.querySelector?.(".window-content") ?? this.element?.parentElement ?? this.element;
     host?.classList?.remove?.("fbls-loading-host");
-    const overlay = host?.querySelector?.(".fbls-loading-window-overlay");
-    if (!overlay) return;
-    overlay.classList.remove("active");
-    window.setTimeout(() => overlay.remove(), LOADING_OVERLAY_FADE_MS);
+    const overlays = new Set([this._loadingWindowOverlay, host?.querySelector?.(".fbls-loading-window-overlay")].filter(Boolean));
+    this._loadingWindowOverlay = null;
+    for (const overlay of overlays) {
+      overlay.classList.remove("active");
+      window.setTimeout(() => overlay.remove(), LOADING_OVERLAY_FADE_MS);
+    }
   }
 
   _captureScrollState() {
@@ -284,17 +293,16 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
     return measureSkyholdPerformance("SkyholdApp.prepareContext", async () => {
     const context = await super._prepareContext(options);
     const data = HoldingService.getDataView();
-    const economyStatus = economyV2RuntimeStatus(data);
+    this._activeTabContextCache.setGeneration(data?.meta?.revision ?? 0);
     const authority = getSkyholdAuthorityState();
-    const isGM = authority.isGM;
-    const canEdit = isGM && authority.writeAvailable;
+    const canEdit = authority.isGM;
 
-    const visibleHoldings = this._getVisibleHoldings(data, isGM);
+    const visibleHoldings = this._getVisibleHoldings(data, canEdit);
     const activeHolding = this._resolveActiveHolding(data, visibleHoldings);
     const holdingIndex = activeHolding ? data.holdings.findIndex((holding) => holding.id === activeHolding.id) : -1;
 
     const permissions = holdingPermissionContext(activeHolding, { authority });
-    if (!isGM && this.activeTab === "gm") this.activeTab = "overview";
+    if (!canEdit && this.activeTab === "gm") this.activeTab = "overview";
 
     const canEditOverview = permissions.canEditOverview;
     const canEditBuildings = permissions.canEditBuildings;
@@ -310,12 +318,11 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
       permissions.mayEditResidents && "жители",
       permissions.mayEditDefense && "оборона",
       permissions.mayEditBattleSetup && "подготовка боя",
-      permissions.mayEditSpecial && "особое"
+      permissions.mayEditSpecial && "особое",
+      permissions.mayManageShips && "корабли"
     ].filter(Boolean);
     const modeLabel = canEdit
       ? "Режим ГМа: редактирование включено."
-      : isGM
-        ? `Режим ГМа: только чтение; изменения сохраняет ${authority.activeGmName || "другая authority-сессия"}.`
       : !permissions.hasGrantedPlayerWrites
         ? "Режим игрока: только чтение."
         : permissions.writeAvailable
@@ -323,7 +330,7 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
           : "Режим игрока: права выданы, но запись недоступна без активного GM.";
 
     const contextLabels = this._contextLabels(activeHolding);
-    const tabs = this._prepareTabs(isGM, activeHolding, contextLabels);
+    const tabs = this._prepareTabs(canEdit, activeHolding, contextLabels);
     for (const tab of tabs) tab.active = tab.id === this.activeTab;
 
     // Cache the currently prepared data for helper methods that need object paths.
@@ -334,6 +341,8 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
     this._contextHoldingIndex = holdingIndex;
 
     if (this.activeStorageTab === "warehouses") this.activeStorageTab = "resources";
+    if (this.activeStorageTab === "market") { this.activeStorageTab = "resources"; this.activeTab = "external-market"; }
+    if (this.activeSpecialTab === "ships") { this.activeSpecialTab = "records"; this.activeTab = "external-market"; }
     if (this.activePeopleTab === "cemetery") this.activePeopleTab = "living";
     if (!this.activeSpecialTab) this.activeSpecialTab = "records";
 
@@ -344,6 +353,7 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
       defense: this.activeTab === "defense",
       special: this.activeTab === "special",
       storage: this.activeTab === "storage",
+      externalMarket: this.activeTab === "external-market",
       gm: this.activeTab === "gm"
     };
     const activeStorage = {
@@ -351,7 +361,6 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
       items: this.activeStorageTab === "items",
       warehouses: false,
       accounting: this.activeStorageTab === "accounting",
-      market: this.activeStorageTab === "market",
       log: this.activeStorageTab === "log"
     };
 
@@ -421,7 +430,7 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
       canEditSpecial,
       canEditOverview,
       modeLabel,
-      isPlayer: !isGM,
+      isPlayer: !canEdit,
       holding: activeHolding,
       holdingIndex,
       hasHolding: Boolean(activeHolding),
@@ -442,15 +451,6 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
       ],
       regionOptions: prepareRegionSelectOptions(eventRegionCatalog, currentRegionValue, rawRegionValue),
       currentRegionLabel,
-      economyActivation: {
-        active: economyStatus.active,
-        ready: economyStatus.ready,
-        needsActivation: !economyStatus.ready,
-        issueCount: economyStatus.issues.length,
-        version: economyStatus.version,
-        operationId: String(data?.meta?.economyActivation?.operationId ?? ""),
-        activatedAt: String(data?.meta?.economyActivation?.activatedAt ?? "")
-      },
       holdingIsGmOnly: activeHolding?.visibility === "gm",
       holdingVisibilityTitle: activeHolding?.visibility === "gm" ? "Владение скрыто от игроков. Нажмите, чтобы показать игрокам." : "Владение видно игрокам. Нажмите, чтобы скрыть от игроков.",
       holdingTypeLabel: activeHolding ? getHoldingTypeLabel(activeHolding.type) : "Нет владений",
@@ -460,13 +460,12 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
       activeStorage,
       storageRoomRailCollapsed: Boolean(this.storageRoomRailCollapsed),
       activeSpecial: {
-        records: this.activeSpecialTab === "records" || !["records", "fleet", "cemetery", "defense"].includes(this.activeSpecialTab),
-        fleet: this.activeSpecialTab === "fleet",
+        records: this.activeSpecialTab === "records" || !["records", "cemetery", "defense"].includes(this.activeSpecialTab),
         cemetery: this.activeSpecialTab === "cemetery",
         defense: false
       },
       residentFilters: this.residentFilters,
-      peopleTabs: [],
+      peopleTabs: active.people ? this._preparePeopleTabs(activeHolding) : [],
       peopleColspan: 9,
       cemeteryColspan: canManagePeople ? 6 : 5,
       cemeteryCount: (activeHolding?.people?.list ?? []).filter((person) => person?.dead).length,
@@ -477,14 +476,19 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
   }
 
   _prepareHeaderContext(holding, holdingIndex = -1, canEdit = false) {
-    const moraleSnapshot = this._moraleSnapshot(holding);
-    const moraleState = this._moraleState(moraleSnapshot);
+    const rawMorale = this._calculateMorale(holding);
+    const moraleState = this._moraleState(rawMorale);
     const development = this._developmentSummary(holding);
+    const politics = politicsAvailability(holding, development.totals.culture);
     this._contextDevelopment = development;
     return {
       totals: this._prepareHeaderTotals(holding),
-      moraleSnapshot,
       moraleState,
+      politicsEntry: {
+        available: politics.available,
+        label: politics.available ? "Политика" : "Контроль",
+        title: politics.available ? "Открыть Политику и Контроль" : "Открыть Контроль поселения"
+      },
       beliefSummary: this._beliefSummary(holding),
       calendarContext: this._calendarHeaderContext(holding, holdingIndex, canEdit),
       development,
@@ -493,7 +497,7 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
   }
 
   _prepareHeaderTotals(holding) {
-    const people = (holding?.people?.list ?? []).filter((person) => !person?.dead);
+    const people = (holding?.people?.list ?? []).filter((person) => isResidentInPopulation(person, holding));
     return {
       salary: 0,
       salaryTenDay: 0,
@@ -522,20 +526,6 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
     moraleState,
     headerTotals
   } = {}) {
-    const gmContextErrors = [];
-    const prepareGmSection = (section, fallback, prepare) => {
-      if (!active?.gm) return fallback;
-      try {
-        return prepare();
-      } catch (error) {
-        console.error(`FBL Skyhold | Failed to prepare GM section: ${section}`, error);
-        gmContextErrors.push({
-          section,
-          message: String(error?.message ?? error ?? "Неизвестная ошибка")
-        });
-        return fallback;
-      }
-    };
     const accountingActive = Boolean(active?.storage && activeStorage?.accounting);
     const needsWorkerContext = Boolean(active?.buildings || active?.defense || accountingActive);
     const workerContext = needsWorkerContext ? (this._economyWorkerContext?.(activeHolding) ?? null) : null;
@@ -547,11 +537,6 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
       ? this._defenseSummary(activeHolding, moraleState, workerContext)
       : { base: 0, bonus: 0, total: 0, rawTotal: 0, gmMod: 0, moraleMod: 0, buildings: [], tooltip: "" };
 
-    const emptyBuildingTemplates = { rows: [], available: [], locked: [], hasRows: false, availableCount: 0, lockedCount: 0 };
-    const buildingTemplates = active?.buildings
-      ? this._buildingTemplateContext(activeHolding, data, { developmentSummary: development })
-      : prepareGmSection("Шаблоны зданий", emptyBuildingTemplates, () => this._buildingTemplateContext(activeHolding, data, { developmentSummary: development }));
-
     return {
       rows: this._prepareRows(activeHolding, canManagePeople, this.activeTab, {
         canEditBuildings,
@@ -560,34 +545,31 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
       }),
       storageContext: active?.storage ? this._storageContext(activeHolding, canUseStorage, this.activeStorageRoomId) : null,
       specialTabs: active?.special ? this._prepareSpecialTabs(activeHolding) : [],
-      fleetCards: active?.special ? this._prepareFleetCards(activeHolding) : [],
+      shipsContext: active?.externalMarket
+        ? (await import("./ships-context.js")).prepareShipsContext(activeHolding, { revision: data.meta.revision, data }) : null,
       totals,
       finance,
-      tendayReadiness: active?.overview ? await this._tendayReadinessContext(activeHolding, { catalogRows: data?.catalog?.resources, workerContext }) : null,
+      tendayReadiness: active?.overview ? await this._tendayReadinessContext(activeHolding) : null,
       defenseSummary,
       defenseContext: active?.defense ? this._defenseContext(activeHolding) : null,
-      residentTransfer: prepareGmSection("Пересылка жителей", null, () => this._residentTransferContext(activeHolding, data)),
-      operationsTimeline: prepareGmSection("Журнал операций", [], () => buildHoldingOperationTimeline(activeHolding)),
+      residentTransfer: active?.gm ? this._residentTransferContext(activeHolding, data) : null,
+      operationsTimeline: active?.gm ? buildHoldingOperationTimeline(activeHolding) : [],
       constructionCrew: active?.buildings ? this._constructionCrew(activeHolding) : null,
       buildingTabs: active?.buildings ? this._prepareBuildingTabs(activeHolding) : [],
-      buildingTemplates,
+      buildingTemplates: (active?.buildings || active?.gm)
+        ? this._buildingTemplateContext(activeHolding, data, { developmentSummary: development })
+        : { rows: [], available: [], locked: [], hasRows: false, availableCount: 0, lockedCount: 0 },
       buildingCategoryOptions: active?.buildings ? this._buildingCategoryOptions() : [],
       residentFilterOptions: active?.people
         ? this._residentFilterOptions(activeHolding)
         : { types: [], work: [], home: [], morale: [] },
-      generator: prepareGmSection("Генератор жителей", null, () => this._prepareGeneratorContext(activeHolding)),
-      resourceCatalog: prepareGmSection(
-        "Каталог ресурсов",
-        { rows: [], builtins: "", builtinCount: 0, overrideCount: 0, customCount: 0, hasRows: false },
-        () => this._resourceCatalogContext(data, canEdit)
-      ),
-      marketCatalog: prepareGmSection(
-        "Каталог рынка",
-        { countryCount: 0, locationCount: 0, specialtyCount: 0, organizationCount: 0, marketCount: 0, activeMarketCount: 0, offerCount: 0, hasOverride: false },
-        () => this._marketCatalogContext(data)
-      ),
-      gmContextErrors,
-      hasGmContextErrors: gmContextErrors.length > 0
+      generator: active?.gm ? this._prepareGeneratorContext(activeHolding) : null,
+      resourceCatalog: active?.gm
+        ? this._resourceCatalogContext(data, canEdit)
+        : { rows: [], builtins: "", builtinCount: 0, hasRows: false },
+      marketCatalog: active?.gm
+        ? this._marketCatalogContext(data)
+        : { marketCount: 0, activeMarketCount: 0, offerCount: 0, hasOverride: false }
     };
   }
 
@@ -603,22 +585,19 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
       ? calendariaDateTimeToInput(lastDateTime)
       : String(stored.lastDateText ?? stored.lastDateKey ?? "").trim();
     const settlementSnapshot = getCalendariaSeasonSnapshot(lastDateTime, lastText);
-    const currentSeasonText = this._calendarSeasonText(snapshot?.season);
-    const settlementSeasonTextValue = this._calendarSeasonText(settlementSnapshot?.season);
+    const seasonText = this._calendarSeasonText(settlementSnapshot?.season);
     const currentFullText = snapshot.available ? snapshot.text : "Calendaria не найдена";
-    const settlementSeasonText = settlementSeasonTextValue
-      ? `Последний рассчитанный сезон на ${lastText}: ${settlementSeasonTextValue}.`
+    const settlementSeasonText = seasonText
+      ? `Сезон поселения на ${lastText}: ${seasonText}.`
       : "Сезон поселения не вычислен: дата последнего обновления не задана.";
     return {
       available: Boolean(snapshot.available),
       currentText: snapshot.available ? snapshot.text : "Calendaria не найдена",
-      seasonText: currentSeasonText,
+      seasonText,
       currentTitle: snapshot.available ? `Текущая дата Calendaria: ${currentFullText}. ${settlementSeasonText}` : "Calendaria не активна или не обнаружена.",
       lastText,
       lastInput,
-      lastTitle: lastDateTime
-        ? `Последний проведённый расчёт завершён на дате ${lastText}. Следующий десятник начнётся от этой даты; поле можно исправить вручную у GM.`
-        : "Дата последнего расчёта не задана. Первый десятник возьмёт живую дату Calendaria.",
+      lastTitle: lastDateTime ? `Последнее обновление поселения: ${lastText}` : "Дата последнего обновления поселения не задана.",
       canEdit,
       path: holdingIndex >= 0 ? `holdings.${holdingIndex}.gm.calendaria.lastDateText` : ""
     };
@@ -643,6 +622,7 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
       this._performanceRenderStartedAt = null;
       return;
     }
+    this._hydratedResidentWorkSelect = null;
     this._pendingExternalRerender = false;
     const windowFrame = this._pendingWindowFrame;
     this._pendingWindowFrame = null;
@@ -654,10 +634,20 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
     restorePersistentImages(root, this._pendingPersistentImages);
     this._pendingPersistentImages = null;
     bindImageFallbacks(root);
+    if (this.activeTab === "external-market") {
+      const { createShipViewState } = await import("./ships-view-state.js");
+      this._shipViewState ??= createShipViewState();
+      this._shipViewState.bind(root);
+    }
     this._bindDelegatedEvents(root, context);
+    this._gmDisclosures ??= new DisclosureState();
+    this._gmDisclosures.bind(root);
     this._syncResidentAppearanceTextareas(root);
     this._syncResidentTraitChips(root);
     this._applyResidentSearchFilter?.(root, this.residentFilters?.search ?? "");
+    this._storageSearchIndex = Array.isArray(context?.storageContext?.searchRows)
+      ? context.storageContext.searchRows
+      : [];
     this._applyStorageSearchFilter?.(root, this.storageSearchQuery ?? "");
     this._syncTitlebarRunbar({ canEdit: Boolean(context?.canEdit), hasHolding: Boolean(context?.hasHolding) });
     this._clearLoadingOverlay();
@@ -682,6 +672,11 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
   }
 
   _syncResidentAppearanceTextareas(root = this.element) {
+    if (this._residentAppearanceInputFrame !== null && this._residentAppearanceInputFrame !== undefined) {
+      globalThis.cancelAnimationFrame?.(this._residentAppearanceInputFrame);
+    }
+    this._residentAppearanceInputFrame = null;
+    this._residentAppearanceInputFields?.clear?.();
     this._residentAppearanceResizeObserver?.disconnect?.();
     this._residentAppearanceResizeObserver = null;
 
@@ -707,6 +702,23 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
     this._reserveResidentAppearanceSpace(field);
   }
 
+  _scheduleResidentAppearanceTextarea(field) {
+    if (!(field instanceof HTMLTextAreaElement)) return;
+    this._residentAppearanceInputFields ??= new Set();
+    this._residentAppearanceInputFields.add(field);
+    if (this._residentAppearanceInputFrame !== null && this._residentAppearanceInputFrame !== undefined) return;
+    const apply = () => {
+      this._residentAppearanceInputFrame = null;
+      const fields = [...this._residentAppearanceInputFields];
+      this._residentAppearanceInputFields.clear();
+      for (const target of fields) {
+        if (target?.isConnected) this._syncResidentAppearanceTextarea(target, { autosize: true });
+      }
+    };
+    if (globalThis.requestAnimationFrame) this._residentAppearanceInputFrame = requestAnimationFrame(apply);
+    else apply();
+  }
+
   _reserveResidentAppearanceSpace(field) {
     if (!(field instanceof HTMLTextAreaElement)) return;
     const label = field.closest?.(".person-appearance");
@@ -728,33 +740,120 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
   _syncResidentTraitChips(root = this.element) {
     this._residentTraitResizeObserver?.disconnect?.();
     this._residentTraitResizeObserver = null;
+    if (this._residentTraitResizeFrame !== null && this._residentTraitResizeFrame !== undefined) {
+      globalThis.cancelAnimationFrame?.(this._residentTraitResizeFrame);
+    }
+    this._residentTraitResizeFrame = null;
     const cells = Array.from(root?.querySelectorAll?.(".fbls-traits-cell") ?? []);
     if (!cells.length) return;
 
-    const apply = () => {
-      for (const cell of cells) {
-        const badges = Array.from(cell.querySelectorAll?.(".fbls-trait-badge") ?? []);
-        if (!badges.length || cell.clientWidth <= 0) continue;
-        for (const badge of badges) {
-          const full = String(badge.dataset.fullLabel ?? badge.title ?? badge.textContent ?? "").trim();
-          badge.classList.remove("compact-trait");
-          badge.textContent = full;
-        }
-        if (cell.scrollWidth <= cell.clientWidth + 1) continue;
-        for (const badge of badges) {
-          const short = String(badge.dataset.shortLabel ?? badge.dataset.fullLabel ?? badge.textContent ?? "?").trim();
-          badge.classList.add("compact-trait");
-          badge.textContent = short.slice(0, 1).toUpperCase() || "?";
-        }
+    const applyCells = fitResidentTraitChips;
+
+    const pendingCells = new Set();
+    const scheduleCells = (targetCells) => {
+      for (const cell of targetCells) if (cell?.isConnected) pendingCells.add(cell);
+      if (!pendingCells.size || this._residentTraitResizeFrame !== null) return;
+      if (!globalThis.requestAnimationFrame) {
+        const batch = [...pendingCells];
+        pendingCells.clear();
+        applyCells(batch);
+        return;
       }
+      this._residentTraitResizeFrame = requestAnimationFrame(() => {
+        this._residentTraitResizeFrame = null;
+        const batch = [...pendingCells];
+        pendingCells.clear();
+        applyCells(batch);
+      });
     };
 
-    apply();
-    if (globalThis.requestAnimationFrame) requestAnimationFrame(apply);
+    scheduleCells(cells);
     if (typeof globalThis.ResizeObserver === "function") {
-      this._residentTraitResizeObserver = new ResizeObserver(apply);
+      const observedWidths = new WeakMap();
+      this._residentTraitResizeObserver = new ResizeObserver((entries) => {
+        const changedCells = [];
+        for (const entry of entries) {
+          const width = Number(entry?.contentRect?.width);
+          const previousWidth = observedWidths.get(entry.target);
+          observedWidths.set(entry.target, width);
+          if (previousWidth !== undefined && (!Number.isFinite(width) || Math.abs(width - previousWidth) > 0.5)) changedCells.push(entry.target);
+        }
+        scheduleCells(changedCells);
+      });
       for (const cell of cells) this._residentTraitResizeObserver.observe(cell);
     }
+  }
+
+  _dehydrateResidentWorkSelect(select) {
+    if (!(select instanceof HTMLSelectElement) || select.dataset.residentWorkHydrated !== "true") return;
+    const selected = select.selectedOptions?.[0];
+    const option = select.ownerDocument.createElement("option");
+    option.value = select.value;
+    option.textContent = selected?.textContent ?? select.title ?? select.value;
+    option.selected = true;
+    select.replaceChildren(option);
+    delete select.dataset.residentWorkHydrated;
+  }
+
+  _hydrateResidentWorkSelect(select, root = this.element) {
+    if (!(select instanceof HTMLSelectElement) || !select.matches?.("[data-resident-work-select-lazy]")) return;
+    if (select.dataset.residentWorkHydrated === "true") return;
+
+    const previous = this._hydratedResidentWorkSelect;
+    if (previous && previous !== select) this._dehydrateResidentWorkSelect(previous);
+
+    const template = root?.querySelector?.("template[data-resident-work-option-catalog]");
+    const catalogOptions = Array.from(template?.content?.querySelectorAll?.("option") ?? []);
+    const initialOption = select.selectedOptions?.[0] ?? select.querySelector?.("option");
+    const currentValue = String(select.value ?? initialOption?.value ?? "");
+    const currentLabel = String(initialOption?.textContent ?? select.title ?? currentValue);
+    const canWork = select.dataset.residentCanWork === "true";
+    const freeLabel = String(select.dataset.residentFreeLabel ?? "Свободен");
+    const eligibleCatalogOptions = catalogOptions.filter((option) => {
+      const kind = String(option.dataset.residentWorkOptionKind ?? "");
+      const value = String(option.value ?? "");
+      if (kind === "building" && option.dataset.residentWorkOptionAvailable !== "true" && value !== currentValue) return false;
+      return canWork || (kind === "other" && currentValue === "other");
+    });
+    const catalogHasCurrent = eligibleCatalogOptions.some((option) => String(option.value ?? "") === currentValue);
+    const document = select.ownerDocument;
+    const options = [];
+    const values = new Set();
+    const addOption = (option) => {
+      const value = String(option?.value ?? "");
+      if (values.has(value)) return;
+      option.selected = value === currentValue;
+      values.add(value);
+      options.push(option);
+    };
+
+    const freeOption = document.createElement("option");
+    freeOption.value = "";
+    freeOption.textContent = freeLabel;
+    addOption(freeOption);
+
+    let preservedCurrent = null;
+    if (currentValue && !catalogHasCurrent) {
+      preservedCurrent = document.createElement("option");
+      preservedCurrent.value = currentValue;
+      preservedCurrent.textContent = currentLabel;
+    }
+    const addPreservedCurrent = () => {
+      if (preservedCurrent && !values.has(currentValue)) addOption(preservedCurrent);
+      preservedCurrent = null;
+    };
+
+    for (const source of eligibleCatalogOptions) {
+      const kind = String(source.dataset.residentWorkOptionKind ?? "");
+      if ((kind === "soldier" || kind === "other") && preservedCurrent) addPreservedCurrent();
+      addOption(source.cloneNode(true));
+    }
+    addPreservedCurrent();
+
+    select.replaceChildren(...options);
+    select.value = values.has(currentValue) ? currentValue : "";
+    select.dataset.residentWorkHydrated = "true";
+    this._hydratedResidentWorkSelect = select;
   }
 
   _bindDelegatedEvents(root, context = {}) {
@@ -762,8 +861,13 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
     const controller = new AbortController();
     this._delegatedAbortController = controller;
     const listenerOptions = { signal: controller.signal };
+    bindTabNavigation(this, root, listenerOptions);
 
+    // Populate the single active native select before its default popup action.
+    // focusin covers Tab/programmatic focus so keyboard selection stays unchanged.
     root.addEventListener("pointerdown", (event) => {
+      const residentWorkSelect = event.target?.closest?.("select[data-resident-work-select-lazy]");
+      if (residentWorkSelect && root.contains(residentWorkSelect)) this._hydrateResidentWorkSelect(residentWorkSelect, root);
       if (!this._pendingExternalRerender) return;
       const interactive = event.target?.closest?.("button, input, textarea, select, [contenteditable='true'], [data-action]");
       if (interactive) return;
@@ -771,6 +875,11 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
       globalThis.setTimeout?.(() => {
         if (this.rendered && !this._pendingExternalRerender) this.requestRender({ focus: false });
       }, 0);
+    }, listenerOptions);
+
+    root.addEventListener("focusin", (event) => {
+      const residentWorkSelect = event.target?.closest?.("select[data-resident-work-select-lazy]");
+      if (residentWorkSelect && root.contains(residentWorkSelect)) this._hydrateResidentWorkSelect(residentWorkSelect, root);
     }, listenerOptions);
 
     const canEdit = Boolean(context?.canEdit);
@@ -827,7 +936,6 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
         if (target.closest?.(".fbls-person-editor.v2")) return dispatch(event, target, "_onPersonEditorWorkAssignmentChange");
         return dispatch(event, target, "_onWorkAssignmentChange");
       }
-      if (target.matches?.("[data-suitable-type-add-field]")) return dispatch(event, target, "_onSuitableTypeAddChange");
       if (target.matches?.("[data-building-construction-crew]")) return dispatch(event, target, "_onBuildingConstructionCrewChange");
       if (target.matches?.("[data-generator-field]")) return dispatch(event, target, "_onGeneratorFieldChange");
       if (target.matches?.("[data-generator-person-field]")) return dispatch(event, target, "_onGeneratedPersonFieldChange");
@@ -835,7 +943,6 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
       if (target.matches?.("[data-storage-money-field]")) return dispatch(event, target, "_onStorageMoneyChange");
       if (target.matches?.("[data-storage-batch-select]")) return dispatch(event, target, "_onStorageBatchSelectionChange");
       if (target.matches?.("[data-calendaria-last-field]")) return dispatch(event, target, "_onCalendariaLastDateChange");
-      if (target.matches?.("[data-economy-v2-backup-file]")) return dispatch(event, target, "_onEconomyV2BackupFileChange");
     }, listenerOptions);
 
     root.addEventListener("input", (event) => {
@@ -847,7 +954,7 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
         return dispatch(event, target, "_onStorageSearchInput");
       }
       if (target instanceof HTMLTextAreaElement && target.matches?.(".fbls-person-editor.v2 .person-appearance textarea")) {
-        this._syncResidentAppearanceTextarea(target, { autosize: true });
+        this._scheduleResidentAppearanceTextarea(target);
       }
     }, listenerOptions);
 
@@ -912,6 +1019,9 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
   }
 
   async _onClose(options) {
+    this._gmDisclosures?.close();
+    this._renderToken = null;
+    this._clearLoadingOverlay();
     await super._onClose(options);
     this._hideTooltip();
     this._unbindGlobalInputGuard();
@@ -919,6 +1029,18 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
     this._delegatedAbortController = null;
     this._residentTraitResizeObserver?.disconnect?.();
     this._residentTraitResizeObserver = null;
+    if (this._residentTraitResizeFrame !== null && this._residentTraitResizeFrame !== undefined) {
+      globalThis.cancelAnimationFrame?.(this._residentTraitResizeFrame);
+    }
+    this._residentTraitResizeFrame = null;
+    this._residentAppearanceResizeObserver?.disconnect?.();
+    this._residentAppearanceResizeObserver = null;
+    if (this._residentAppearanceInputFrame !== null && this._residentAppearanceInputFrame !== undefined) {
+      globalThis.cancelAnimationFrame?.(this._residentAppearanceInputFrame);
+    }
+    this._residentAppearanceInputFrame = null;
+    this._residentAppearanceInputFields?.clear?.();
+    this._hydratedResidentWorkSelect = null;
     try { this._closeResidentContextMenu?.(); } catch (_error) {}
     try { this._closeBuildingContextMenu?.(); } catch (_error) {}
     try { this._closeStorageContextMenu?.(); } catch (_error) {}

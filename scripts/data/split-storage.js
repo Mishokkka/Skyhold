@@ -6,35 +6,30 @@ import { inspectStorageCommit, makeStorageCommitMeta, recoverStorageCommit, stab
 import { clone, makeId, toNumber } from "./utils.js";
 import { COMMIT_SCOPES, normalizeCommitScope } from "./commit-preparation.js";
 
-const DEFAULT_HOLDINGS_HASH = stableDataHash(DEFAULT_SKYHOLD_DATA.holdings);
-const DEFAULT_CATALOG_HASH = stableDataHash(DEFAULT_SKYHOLD_DATA.catalog);
-const TECHNICAL_META_FIELDS = new Set(["revision", "lastUpdated", "storageCommit"]);
+// World settings are JSON data. Hash their serializable shape so the legacy
+// hydration fallback still recognizes untouched defaults containing undefined
+// source properties after Foundry has round-tripped them.
+const DEFAULT_HOLDINGS_HASH = stableDataHash(clone(DEFAULT_SKYHOLD_DATA.holdings));
+const DEFAULT_CATALOG_HASH = stableDataHash(clone(DEFAULT_SKYHOLD_DATA.catalog));
 
-function semanticMetaHash(meta = {}) {
-  const semantic = Object.fromEntries(
-    Object.entries(meta && typeof meta === "object" ? meta : {})
-      .filter(([key]) => !TECHNICAL_META_FIELDS.has(key))
-  );
-  return stableDataHash(semantic);
+function freezeDataView(value) {
+  if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
+  for (const child of Object.values(value)) freezeDataView(child);
+  return Object.freeze(value);
 }
 
-function legacyHasRuntimeData(legacy) {
+function legacyHasRuntimeData(legacy, { holdingsHash, catalogHash } = {}) {
   if (!legacy || typeof legacy !== "object") return false;
   try {
-    return stableDataHash(legacy?.holdings ?? []) !== DEFAULT_HOLDINGS_HASH
-      || stableDataHash(legacy?.catalog ?? {}) !== DEFAULT_CATALOG_HASH;
+    return (holdingsHash ?? stableDataHash(legacy?.holdings ?? [])) !== DEFAULT_HOLDINGS_HASH
+      || (catalogHash ?? stableDataHash(legacy?.catalog ?? {})) !== DEFAULT_CATALOG_HASH;
   } catch (_error) {
     return true;
   }
 }
 
-function isDefaultSplitPayload(split) {
-  try {
-    return stableDataHash(split?.holdings ?? []) === DEFAULT_HOLDINGS_HASH
-      && stableDataHash(split?.catalog ?? {}) === DEFAULT_CATALOG_HASH;
-  } catch (_error) {
-    return false;
-  }
+function isDefaultSplitPayload({ holdingsHash = "", catalogHash = "" } = {}) {
+  return holdingsHash === DEFAULT_HOLDINGS_HASH && catalogHash === DEFAULT_CATALOG_HASH;
 }
 
 function completeCommitToken(meta = {}) {
@@ -45,14 +40,22 @@ function completeCommitToken(meta = {}) {
   return [revision, commit.writeId, commit.holdingsHash, commit.catalogHash].map((value) => String(value ?? "")).join(":");
 }
 
-export function createSkyholdSplitStorage({ settings = null } = {}) {
+function logicalMetadataHash(meta = {}) {
+  const logicalMeta = { ...meta };
+  // Commit bookkeeping alone is a no-op; catalog versions and migration
+  // operation markers remain persistent data even without partition changes.
+  delete logicalMeta.revision;
+  delete logicalMeta.lastUpdated;
+  delete logicalMeta.storageCommit;
+  return stableDataHash(logicalMeta);
+}
+
+export function createSkyholdSplitStorage({ settings = null, assertWriteAuthority = () => {} } = {}) {
   let cachedRevision = null;
   let cachedCommitToken = "";
   let cachedData = null;
   let cachedPartitionHashes = null;
   let persistedPartitionHashes = null;
-  let cachedSettingRevision = null;
-  let cachedSettingCommitToken = "";
   let warnedCommitProblem = "";
   const metrics = {
     cacheHits: 0,
@@ -88,6 +91,7 @@ export function createSkyholdSplitStorage({ settings = null } = {}) {
   }
 
   async function writeSetting(key, value) {
+    assertWriteAuthority();
     metrics.settingWrites += 1;
     metrics.writesByKey[key] = (metrics.writesByKey[key] ?? 0) + 1;
     countSkyholdPerformance("Foundry.settings.write");
@@ -103,21 +107,6 @@ export function createSkyholdSplitStorage({ settings = null } = {}) {
     console.warn(`FBL Skyhold | Split data commit is ${inspection.reason}${recoveryText}.`, inspection);
   }
 
-  function legacyMatchesCommitPrevious(legacy, commit = {}) {
-    if (!legacy || typeof legacy !== "object") return false;
-    const legacyRevision = Math.max(0, toNumber(legacy?.meta?.revision, 0));
-    if (legacyRevision !== Math.max(0, toNumber(commit?.previousRevision, 0))) return false;
-    return Boolean(commit?.previousHoldingsHash && commit?.previousCatalogHash)
-      && stableDataHash(legacy?.holdings ?? []) === String(commit.previousHoldingsHash)
-      && stableDataHash(legacy?.catalog ?? {}) === String(commit.previousCatalogHash);
-  }
-
-  function unrecoverableCommitError(inspection, splitRevision, legacyRevision) {
-    const error = new Error(`FBL Skyhold | Split storage revision ${splitRevision} cannot be recovered safely (${inspection.reason}); stale legacy revision ${legacyRevision} was refused.`);
-    error.code = "storage-recovery-required";
-    return error;
-  }
-
   function readSettings(providedMeta) {
     const split = {
       meta: clone(providedMeta ?? readSetting(SETTING_META) ?? DEFAULT_SKYHOLD_DATA.meta),
@@ -129,36 +118,48 @@ export function createSkyholdSplitStorage({ settings = null } = {}) {
       catalog: hashPartition("catalog", split.catalog)
     };
 
-    const legacy = readSetting(SETTING_DATA);
     const splitRevision = Math.max(0, toNumber(split?.meta?.revision, 0));
+    const commitInspection = inspectStorageCommit(split, {
+      holdingsHash: persistedPartitionHashes.holdings,
+      catalogHash: persistedPartitionHashes.catalog
+    });
+    const legacy = readSetting(SETTING_DATA);
     const legacyRevision = Math.max(0, toNumber(legacy?.meta?.revision, 0));
-    const splitLooksDefault = isDefaultSplitPayload(split);
-    const legacyLooksUsed = legacyHasRuntimeData(legacy);
-    const commitInspection = inspectStorageCommit(split);
 
     if (!commitInspection.ok) {
-      const recovery = recoverStorageCommit(split);
+      const recovery = recoverStorageCommit(split, {
+        inspection: commitInspection,
+        holdingsHash: persistedPartitionHashes.holdings,
+        catalogHash: persistedPartitionHashes.catalog
+      });
       if (recovery.ok) {
-        if (recovery.mode === "rollback" && legacyLooksUsed && legacyMatchesCommitPrevious(legacy, commitInspection.commit)) {
+        if (recovery.mode === "rollback"
+          && legacyRevision === recovery.data?.meta?.revision
+          && legacyHasRuntimeData(legacy)) {
           warnCommitProblem(commitInspection, splitRevision, legacyRevision, "legacy-rollback");
           return legacy;
         }
         warnCommitProblem(commitInspection, splitRevision, legacyRevision, recovery.mode);
         return recovery.data;
       }
-      if (legacyLooksUsed && legacyMatchesCommitPrevious(legacy, commitInspection.commit)) {
+      if (legacyHasRuntimeData(legacy)) {
         warnCommitProblem(commitInspection, splitRevision, legacyRevision, "legacy-fallback");
         return legacy;
       }
-      warnCommitProblem(commitInspection, splitRevision, legacyRevision, "recovery-required");
-      throw unrecoverableCommitError(commitInspection, splitRevision, legacyRevision);
+      warnCommitProblem(commitInspection, splitRevision, legacyRevision, "unrecoverable-split");
+      return split;
     }
 
     // Worlds that already have skyholdData keep working: the first write after this
     // version persists them into split settings. Revision wins after the split exists.
     // The equality fallback protects older saves that never had a revision bump.
     if (legacyRevision > splitRevision) return legacy;
-    if (legacyRevision === splitRevision && splitLooksDefault && legacyLooksUsed) return legacy;
+    if (legacyRevision === splitRevision
+      && isDefaultSplitPayload({
+        holdingsHash: persistedPartitionHashes.holdings,
+        catalogHash: persistedPartitionHashes.catalog
+      })
+      && legacyHasRuntimeData(legacy)) return legacy;
     return split;
   }
 
@@ -180,9 +181,7 @@ export function createSkyholdSplitStorage({ settings = null } = {}) {
     // `migrated` is a fresh private root. Cache it directly and clone only the
     // value crossing the storage boundary instead of cloning the same large
     // settlement twice on every cache miss.
-    cachedData = migrated;
-    cachedSettingRevision = rawRevision;
-    cachedSettingCommitToken = rawCommitToken;
+    cachedData = freezeDataView(migrated);
     cachedPartitionHashes = {
       holdings: hashPartition("holdings", migrated.holdings),
       catalog: hashPartition("catalog", migrated.catalog)
@@ -200,7 +199,12 @@ export function createSkyholdSplitStorage({ settings = null } = {}) {
     return resolveData({ cloneResult: false });
   }
 
-  async function persistData(data, { normalized = false, scope = COMMIT_SCOPES.BOTH, withStatus = false } = {}) {
+  async function persistData(data, {
+    normalized = false,
+    scope = COMMIT_SCOPES.BOTH,
+    withStatus = false,
+    forceRollbackSnapshot = false
+  } = {}) {
     const commitScope = normalizeCommitScope(scope);
     const previous = cachedData ?? getDataView();
     if (!normalized) metrics.normalizations += 1;
@@ -212,7 +216,7 @@ export function createSkyholdSplitStorage({ settings = null } = {}) {
           catalog: commitScope === COMMIT_SCOPES.HOLDINGS ? previous.catalog : clone(data?.catalog ?? {})
         }
       : measureSkyholdPerformance("SkyholdData.normalize", () => migrateData(data));
-    // The cache is never exposed by reference, and the previous root is only
+    // The shared view is frozen; the previous root is only
     // hashed or cloned for rollback below. Avoid a full eager clone here.
     if (!persistedPartitionHashes) {
       const storedHoldings = readSetting(SETTING_HOLDINGS) ?? DEFAULT_SKYHOLD_DATA.holdings;
@@ -234,27 +238,17 @@ export function createSkyholdSplitStorage({ settings = null } = {}) {
     };
     const holdingsDirty = nextHashes.holdings !== persistedPartitionHashes.holdings;
     const catalogDirty = nextHashes.catalog !== persistedPartitionHashes.catalog;
-    const metaDirty = semanticMetaHash(next.meta) !== semanticMetaHash(previous?.meta);
+    const metaDirty = logicalMetadataHash(next.meta) !== logicalMetadataHash(previous.meta);
     const splitMatchesLogicalPrevious = persistedPartitionHashes.holdings === logicalPreviousHashes.holdings
       && persistedPartitionHashes.catalog === logicalPreviousHashes.catalog;
-    if (!metaDirty && !holdingsDirty && !catalogDirty && splitMatchesLogicalPrevious) {
+    if (!holdingsDirty && !catalogDirty && !metaDirty && splitMatchesLogicalPrevious) {
       metrics.noOpWrites += 1;
       const result = clone(previous);
       return withStatus ? { changed: false, data: result, scope: commitScope } : result;
     }
-    const needsRollbackSnapshot = (holdingsDirty && catalogDirty) || !splitMatchesLogicalPrevious;
-
-    // A queue serializes one client only. Re-read the raw commit marker before
-    // the first write so a stale second client fails before touching settings.
-    const currentSettingMeta = readSetting(SETTING_META) ?? DEFAULT_SKYHOLD_DATA.meta;
-    const currentSettingRevision = Math.max(0, toNumber(currentSettingMeta?.revision, 0));
-    const currentSettingCommitToken = completeCommitToken(currentSettingMeta);
-    if (cachedSettingRevision !== null && (currentSettingRevision !== cachedSettingRevision || currentSettingCommitToken !== cachedSettingCommitToken)) {
-      const error = new Error(`FBL Skyhold | Storage changed since this client read it (expected revision ${cachedSettingRevision}, found ${currentSettingRevision}). Reload before retrying.`);
-      error.code = "storage-write-conflict";
-      error.retryable = true;
-      throw error;
-    }
+    const needsRollbackSnapshot = Boolean(forceRollbackSnapshot)
+      || (holdingsDirty && catalogDirty)
+      || !splitMatchesLogicalPrevious;
 
     // A one-partition write is recoverable from the previous/target hashes in meta.
     // When both partitions change (or legacy data has not hydrated split settings),
@@ -299,9 +293,7 @@ export function createSkyholdSplitStorage({ settings = null } = {}) {
     cachedPartitionHashes = nextHashes;
     cachedRevision = Math.max(0, toNumber(next?.meta?.revision, 0));
     cachedCommitToken = completeCommitToken(next.meta);
-    cachedSettingRevision = cachedRevision;
-    cachedSettingCommitToken = cachedCommitToken;
-    cachedData = next;
+    cachedData = freezeDataView(next);
     const result = clone(next);
     return withStatus ? { changed: true, data: result, scope: commitScope } : result;
   }

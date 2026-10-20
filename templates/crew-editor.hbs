@@ -1,4 +1,4 @@
-<div class="fbls-crew-editor-shell">
+<div class="fbls-crew-editor-shell" data-render-scroll-key="crew-editor">
   {{#if hasHolding}}
     <header class="fbls-editor-hero compact">
       <div>
@@ -10,12 +10,87 @@
       {{/if}}
     </header>
 
+    <details class="fbls-card fbls-crew-rules" data-construction-rules {{#if rulesOpen}}open{{/if}}>
+      <summary>Из чего складываются кубы — правила{{#if canEditRules}} и настройки ГМа{{/if}}</summary>
+      <div class="fbls-crew-rules-content fbls-stack">
+        <ol class="fbls-crew-rule-flow" aria-label="Порядок расчёта кубов">
+          <li><b>1. Личный труд</b><span>База + типы + черты → личный предел</span></li>
+          <li><b>2. Общий пул</b><span>Труд всех + координация + модификатор ГМа</span></li>
+          <li><b>3. Довольство</b><span>Изменяет общий пул перед броском</span></li>
+        </ol>
+        <div class="fbls-crew-rule-grid">
+          {{#each ruleGroups}}
+            <section class="fbls-crew-rule-panel fbls-stack">
+              <header class="fbls-card-header"><h3><i class="{{icon}}" aria-hidden="true"></i> {{title}}</h3><span class="fbls-muted-text">к6</span></header>
+              <p class="fbls-muted-text">{{description}}</p>
+              <div>
+                {{#each fields}}
+                  <label class="fbls-crew-rule" title="{{description}} Стандарт: {{default}}к6.">
+                    <span>{{label}}</span>
+                    {{#if ../../canEditRules}}<input type="number" step="1" min="{{min}}" max="{{max}}" value="{{value}}" data-construction-rule="{{key}}" aria-label="{{label}}, к6" />{{else}}<strong>{{value}}</strong>{{/if}}
+                  </label>
+                {{/each}}
+              </div>
+              {{#if traits}}
+                <div>
+                  {{#each ../traitRules}}
+                    <div class="fbls-crew-rule fbls-crew-trait-rule">
+                      <span>{{name}}</span>
+                      {{#if ../../canEditRules}}
+                        <input type="number" step="1" min="-20" max="20" value="{{dice}}" data-construction-rule="{{key}}" aria-label="Черта {{name}}, к6" />
+                        <button type="button" class="fbls-icon-button" data-action="remove-construction-trait" data-trait-name="{{name}}" aria-label="Убрать черту {{name}} из правил строительства" title="Убрать черту из расчёта строительства"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+                      {{else}}<strong>{{dice}}</strong>{{/if}}
+                    </div>
+                  {{else}}<p class="fbls-muted-text">Черты не изменяют кубы труда.</p>{{/each}}
+                </div>
+                {{#if ../canEditRules}}
+                  <label class="fbls-field"><span>Добавить черту в расчёт</span><select data-construction-trait-add aria-label="Добавить черту в расчёт строительства"><option value="">Выберите черту…</option>{{#each ../availableTraits}}<option value="{{name}}">{{name}}</option>{{/each}}</select></label>
+                  <p class="fbls-muted-text">Новая черта: +1к6. Значение можно изменить. Удаление исключает её только из расчёта труда, не у жителей.</p>
+                {{/if}}
+              {{/if}}
+              {{#if types}}
+                <label class="fbls-field">
+                  <span>Строительные типы</span>
+                  {{#if ../canEditRules}}<input type="text" data-construction-rule="professionalTypes" value="{{../rules.professionalTypes}}" aria-label="Строительные типы через запятую" />{{else}}<strong>{{#if ../rules.professionalTypes}}{{../rules.professionalTypes}}{{else}}Не заданы{{/if}}</strong>{{/if}}
+                  <small>Один бонус за совпадение с любым названием в списке. Через запятую; пустой список отключает бонус.</small>
+                </label>
+                <p class="fbls-muted-text">«Подходящие типы» выбираются отдельно у каждой бригады. Вклад человека — от 0 до указанного максимума.</p>
+              {{/if}}
+              {{#if team}}
+                <p>Координация: руководитель с чертой <b>Лидер</b> и минимум <b>2 рабочих</b> помимо него.</p>
+                <div class="fbls-crew-rule"><span>Модификатор ГМа</span><strong>{{../crewModifier}}</strong></div>
+                <p class="fbls-muted-text">Модификатор меняется во вкладке ГМа. Месячный переброс Builder действует отдельно от настроенных кубов за черты.</p>
+              {{/if}}
+            </section>
+          {{/each}}
+          <section class="fbls-crew-rule-panel fbls-stack">
+            <header class="fbls-card-header"><h3><i class="fa-solid fa-masks-theater" aria-hidden="true"></i> Довольство</h3></header>
+            <p class="fbls-muted-text">Применяется один раз ко всему пулу.</p>
+            <dl class="fbls-crew-morale-rules">
+              <div><dt>Бунты</dt><dd>½ пула − 3</dd></div>
+              <div><dt>Недовольство</dt><dd>½ пула − 2</dd></div>
+              <div><dt>Апатия</dt><dd>½ пула</dd></div>
+              <div><dt>Надежда</dt><dd>+1к6</dd></div>
+              <div><dt>Дом</dt><dd>+2к6</dd></div>
+              <div><dt>Остальные состояния</dt><dd>Без изменений</dd></div>
+            </dl>
+            <p class="fbls-muted-text">Половина округляется вверх; итог не ниже 0. Сложность проекта учитывается отдельно при строительном броске.</p>
+          </section>
+        </div>
+        <aside class="fbls-crew-rule-note"><strong>Кто может руководить</strong><span>Builder; Лидер и РАЗ или ЭМП 3+; РАЗ и ЭМП 4+; строительное прошлое и РАЗ или ЭМП 4+. Руководитель даёт труд, но не заменяет двух обязательных рабочих. Недоступные жители не участвуют.</span></aside>
+        <footer class="fbls-toolbar">
+          <p class="fbls-muted-text">Для всех бригад владения «{{holding.name}}».{{#if canEditRules}} Изменения сохраняются при завершении ввода; прошлые броски не меняются.{{/if}} Подробности и стандартные значения — при наведении на строку.</p>
+          {{#if canEditRules}}<button type="button" class="fbls-button compact" data-action="reset-construction-rules" title="Вернуть стандартные источники и значения кубов для всех стройбригад этого владения"><i class="fa-solid fa-rotate-left" aria-hidden="true"></i> Стандартные правила</button>{{/if}}
+        </footer>
+      </div>
+    </details>
+
     {{#each crews}}
       <section class="fbls-building-editor-card compact-crew-editor-card crew-card-v2">
         <header class="fbls-crew-headline fbls-card-header">
           <label class="fbls-crew-name"><span>Бригада</span>{{#if ../canEdit}}<input type="text" data-field="{{namePath}}" value="{{name}}" />{{else}}<strong>{{name}}</strong>{{/if}}</label>
           <div class="fbls-crew-summary" aria-label="Сводка бригады">
-            <span><i class="fa-solid fa-users"></i><b>{{count}}</b><small>состав</small></span>
+            <span><i class="fa-solid fa-users"></i><b>{{count}}</b><small>рабочих</small></span>
             <span><i class="fa-solid fa-dice-d6"></i><b>{{dice}}к6</b><small>пул</small></span>
             {{#if distributed}}<span class="distributed"><i class="fa-solid fa-building-circle-arrow-right"></i><b>В работе</b><small>распущена</small></span>{{/if}}
           </div>
@@ -32,27 +107,31 @@
 
         <div class="fbls-crew-editor-body">
           <aside class="fbls-crew-config-panel">
-            <label class="fbls-crew-leader"><span><i class="fa-solid fa-star"></i> Лидер</span>{{#if ../canEdit}}<select data-field="{{leaderPath}}">{{#each leaderOptions}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{name}}</option>{{/each}}</select>{{else}}<strong>{{leaderId}}</strong>{{/if}}</label>
-            <div class="fbls-suitable-editor">
-              <span class="fbls-field-title">Подходящие типы</span>
+            <label class="fbls-crew-leader"><span data-fbls-tooltip="Отдельная должность: руководитель не входит в рабочие слоты, но даёт собственные рабочие кубы по общим правилам строителей. Ставка 18 ММ/день. Черта Лидер даёт {{../rules.coordination}}к6 координации при двух рабочих; Builder позволяет месячный переброс."><i class="fa-solid fa-star"></i> Руководитель</span>{{#if ../canEdit}}<select data-field="{{leaderPath}}">{{#each leaderOptions}}<option value="{{id}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{name}}{{#if hint}} · {{hint}}{{/if}}</option>{{/each}}</select>{{else}}<strong>{{#if leader}}{{leader.name}}{{else}}Не назначен{{/if}}</strong>{{/if}}</label>
+            {{#if leader}}<p class="fbls-muted-text">{{leader.name}} · {{leader.type}} · {{leader.attributes}} · {{leaderReason}} · <span data-fbls-tooltip="{{leader.contributionReasons}}">{{leader.contribution}}к6 труда</span></p>{{else}}<p class="fbls-muted-text">Без отдельного руководителя строительный бросок недоступен.</p>{{/if}}
+            <div class="fbls-suitable-editor {{#unless ../canEdit}}is-readonly{{/unless}}">
+              <div class="fbls-field"><span class="fbls-field-title" data-fbls-tooltip="Подходящие типы работников">Типы</span>
+              <details class="fbls-selection-field" data-fbls-disclosure="crew-types-{{id}}">
+                <summary data-fbls-tooltip="{{suitableSelection.tooltip}}" aria-label="Подходящие типы: {{suitableSelection.tooltip}}"><span>{{suitableSelection.first}}</span><small {{#unless suitableSelection.additional}}hidden{{/unless}}>+{{suitableSelection.additional}}</small><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary>
               <div class="fbls-selected-traits">
                 {{#if hasSuitableTypeBadges}}
                   {{#each suitableTypeBadges}}
-                    <span class="fbls-trait-badge fbls-chip editor-chip">{{name}}<button type="button" class="fbls-chip-remove" data-action="remove-suitable-type" data-suitable-types-field="{{path}}" data-suitable-type="{{name}}" aria-label="Убрать подходящий тип {{name}}">×</button></span>
+                    <span class="fbls-worker-badge fbls-chip editor-chip" style="{{style}}">{{name}}{{#if ../../canEdit}}<button type="button" class="fbls-chip-remove" data-action="remove-suitable-type" data-suitable-types-field="{{path}}" data-suitable-type="{{name}}" aria-label="Убрать подходящий тип {{name}}">×</button>{{/if}}</span>
                   {{/each}}
                 {{else}}<span class="fbls-muted-text">Не заданы.</span>{{/if}}
               </div>
+              </details></div>
               {{#if ../canEdit}}
-                <select class="fbls-trait-picker" data-suitable-type-add-field="{{suitablePath}}">
-                  <option value="">Добавить подходящий тип...</option>
+                <label class="fbls-field"><span>Добавить</span><select class="fbls-control fbls-trait-picker" data-suitable-type-add-field="{{suitablePath}}" aria-label="Добавить подходящий тип">
+                  <option value="">Выберите тип</option>
                   {{#each suitableTypeOptions}}<option value="{{name}}" {{#if selected}}disabled{{/if}}>{{name}}{{#if selected}} ✓{{/if}}</option>{{/each}}
-                </select>
+                </select></label>
               {{/if}}
             </div>
           </aside>
 
           <section class="fbls-crew-roster-panel">
-            <h3><i class="fa-solid fa-helmet-safety"></i> Состав</h3>
+            <h3><i class="fa-solid fa-helmet-safety"></i> Рабочие (минимум 2)</h3>
             <div class="fbls-crew-slot-grid compact">
               {{#each slots}}
                 <label>
@@ -71,7 +150,7 @@
         <div class="fbls-crew-member-strip">
           {{#each members}}
             <article title="{{contributionReasons}}">
-              <i class="fa-solid {{#if isLeader}}fa-star{{else}}fa-user-gear{{/if}}"></i>
+              <i class="fa-solid fa-user-gear"></i>
               <span><strong>{{name}}</strong><small>{{type}} · {{attributes}}</small></span>
               <b>{{contribution}}к6</b>
             </article>
@@ -79,7 +158,7 @@
             <p class="fbls-empty"><i class="fa-solid fa-user-plus"></i> Выберите первого жителя в свободном слоте.</p>
           {{/each}}
         </div>
-        <footer class="fbls-crew-formula"><span>Довольство: {{moraleReason}}</span>{{#if leaderBonus}}<span>Лидер: +{{leaderBonus}}</span>{{/if}}<strong>{{rawDice}} {{#if moraleMod}}{{moraleMod}}{{/if}} = {{dice}}к6</strong></footer>
+        <footer class="fbls-crew-formula"><span>Довольство: {{moraleReason}}</span>{{#if leaderBonus}}<span>Координация Лидера: +{{leaderBonus}}</span>{{/if}}<strong>{{rawDice}} {{#if moraleMod}}{{moraleMod}}{{/if}} = {{dice}}к6</strong></footer>
       </section>
     {{/each}}
 {{else}}

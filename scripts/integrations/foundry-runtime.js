@@ -33,28 +33,6 @@ export function preloadFoundryTemplates(paths = []) {
   return loadTemplates(paths);
 }
 
-export function downloadFoundryJson(json = "", fileName = "fbl-skyhold-backup.json") {
-  const document = globalThis.document;
-  const Url = globalThis.URL;
-  const BlobClass = globalThis.Blob;
-  if (!document?.createElement || !Url?.createObjectURL || !BlobClass) {
-    throw new Error("FBL Skyhold | Browser download API is unavailable.");
-  }
-  const url = Url.createObjectURL(new BlobClass([String(json ?? "")], { type: "application/json;charset=utf-8" }));
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = String(fileName || "fbl-skyhold-backup.json");
-  anchor.hidden = true;
-  document.body?.append?.(anchor);
-  try {
-    anchor.click();
-  } finally {
-    anchor.remove?.();
-    globalThis.setTimeout?.(() => Url.revokeObjectURL(url), 0);
-  }
-  return true;
-}
-
 export function foundryChatSpeaker(options = {}) {
   const ChatMessage = requireApi(globalThis.foundry?.documents?.ChatMessage, "foundry.documents.ChatMessage");
   return ChatMessage.getSpeaker(options);

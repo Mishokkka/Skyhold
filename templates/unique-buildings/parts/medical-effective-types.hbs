@@ -1,25 +1,11 @@
 <section class="fbls-building-editor-card fbls-unique-medical-effective-editor">
   <h3><i class="fa-solid fa-heart-pulse"></i> Эффективность лазарета</h3>
   <div class="effective-types-box full-line">
-    <span data-fbls-tooltip="Какие типы работников считаются особенно подходящими врачами в этом лечебном здании. Число в чипе — бонус эффективности этого типа.">Эффективные типы врачей</span>
-    <div class="fbls-effective-type-line">
-      {{#if building.hasSuitableTypeBadges}}
-        {{#each building.suitableTypeBadges}}
-          <span class="fbls-type-effect-chip" style="{{style}}">
-            <em>{{name}}</em>
-            {{#if ../canEdit}}<input type="number" step="0.1" data-type="number" data-field="{{modifierPath}}" value="{{modifier}}" data-fbls-tooltip="Бонус эффективности, который этот тип работника получает в этом здании." />{{else}}<strong>{{modifier}}</strong>{{/if}}
-            {{#if ../canEdit}}<button type="button" class="fbls-chip-remove" data-action="remove-suitable-type" data-suitable-types-field="{{path}}" data-suitable-type="{{name}}" aria-label="Убрать подходящий тип {{name}}">×</button>{{/if}}
-          </span>
-        {{/each}}
-      {{else}}
-        <span class="fbls-muted-text">Нет.</span>
-      {{/if}}
-      {{#if canEdit}}
-        <select class="fbls-trait-picker inline-add" data-suitable-type-add-field="{{building.basePath}}.suitableWorkerTypes">
-          <option value="">Добавить тип...</option>
-          {{#each building.suitableTypeOptions}}<option value="{{name}}" {{#if selected}}disabled{{/if}}>{{name}}{{#if selected}} ✓{{/if}}</option>{{/each}}
-        </select>
-      {{/if}}
+    <span data-fbls-tooltip="Лечебная вместимость считается по реальным работникам. Медицинский специалист нужен для лечебной функции, но не превращается в дробные койки за счёт типажа.">Профиль лечебного штата</span>
+    <div class="fbls-effective-type-line fbls-stack">
+      <span><strong>Допуск:</strong> {{building.workerProfileSummary.admission}}</span>
+      <span><strong>Ключевой состав:</strong> {{building.workerProfileSummary.composition}}</span>
+      {{#if building.workerProfileSummary.reason}}<span class="fbls-muted-text">{{building.workerProfileSummary.reason}}</span>{{/if}}
     </div>
   </div>
 </section>

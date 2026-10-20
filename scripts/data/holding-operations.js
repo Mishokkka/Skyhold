@@ -1,8 +1,10 @@
 import { findHoldingIndex } from "./access-guard.js";
 import { mergeHoldingDefaults } from "./normalizers.js";
+import { assertAvailableEntityId } from "./entity-identity.js";
 
 export function addHoldingToData(data, holding) {
   if (!Array.isArray(data.holdings)) data.holdings = [];
+  assertAvailableEntityId(data.holdings, holding?.id);
   data.holdings.push(mergeHoldingDefaults(holding));
 }
 

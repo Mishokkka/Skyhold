@@ -10,13 +10,14 @@ import {
 import { SkyholdData } from "../../../data/store.js";
 import { bindGlobalInputGuard, bindInputGuards, unbindGlobalInputGuard } from "../../../utils/input-guards.js";
 import { RenderSchedulerMixin } from "../../common/render-scheduler.js";
+import { FloatingTooltipsMixin } from "../../common/floating-tooltip.js";
 import { tagsFromEventFacts } from "./context.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const THRESHOLD_FIELDS = new Set(["lowMax", "highMin"]);
 const THRESHOLD_KEYS = new Set(EVENT_THRESHOLD_KEYS.map(({ key }) => key));
 
-export class SkyholdRandomEventContextEditor extends RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2)) {
+export class SkyholdRandomEventContextEditor extends FloatingTooltipsMixin(RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2))) {
   constructor({ holdingId = "", owner = null } = {}, options = {}) {
     super(options);
     this.holdingId = String(holdingId ?? "");
@@ -25,7 +26,7 @@ export class SkyholdRandomEventContextEditor extends RenderSchedulerMixin(Handle
 
   async _prepareContext(options) {
     const context = await super._prepareContext(options);
-    const data = SkyholdData.get();
+    const data = SkyholdData.view();
     const holding = data.holdings.find((item) => String(item?.id ?? "") === this.holdingId) ?? data.holdings[0] ?? null;
     if (holding) this.holdingId = String(holding.id ?? "");
     const regionOptions = normalizeEventRegionOptions(data?.catalog?.eventRegions);

@@ -1,71 +1,33 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import {
-  resourceDef,
-  resourceTradeReady
+  normalizeResourceId,
+  resourceBasePriceCopper
 } from "../../../core/resources.js";
-import { formatCopperCurrency, parseCopperCurrency } from "../../../core/currency.js";
-import { compensationTypeLabel, personBoardFoodDaily, personShareRate } from "../../../core/compensation.js";
-import { buildingMaintenanceState } from "../../../core/building-maintenance.js";
-import { WAGE_CATALOG, normalizeWageIndex, wageCopperPerTenday } from "../../../data/labor/wage-catalog.js";
-import { normalizePayrollState } from "../../../data/labor/payroll-state.js";
+import { formatCopperCurrency } from "../../../core/currency.js";
+import { calculatePlannedWorkerWage, financeObligationOutstandingCopper } from "../../../engines/economy/finance-obligations.js";
+import { financePeriodIdentity, prepareFinancePeriod } from "../../../engines/economy/finance-period.js";
+import { isResidentInPopulation } from "../../../data/resident-presence.js";
 
 export const FinanceTreasuryDomain = {
-_prepareTotals(holding, _workerContext = null) {
-  if (!holding) return { salary: 0, cashWageDaily: 0, cashWageTenDay: 0, sharePayoutTenDay: 0, salaryTenDay: 0, salaryMonth: 0, boardFoodDaily: 0, boardFoodTenDay: 0, upkeepFixedTenDay: 0, upkeepLegacyMonth: 0, upkeepTenDay: 0, upkeepOperatingMonth: 0, repairReserveMonth: 0, upkeepMonth: 0, incomeTenDay: 0, projectedBalanceMonth: 0, salaryArrearsCopper: 0, upkeepArrearsCopper: 0, totalArrearsCopper: 0, population: 0, peopleRows: 0, buildingsRows: 0, specialRows: 0, storageRows: 0, payrollForecastReady: true, payrollForecastBlockers: [], payrollForecastFixedPeopleCount: 0, payrollForecastShareExcluded: false };
+_prepareLegacyTreasuryTotals(holding, workerContext = null) {
+  if (!holding) return { salary: 0, salaryTenDay: 0, salaryMonth: 0, upkeepMonth: 0, incomeTenDay: 0, projectedBalanceMonth: 0, population: 0, peopleRows: 0, buildingsRows: 0, specialRows: 0, storageRows: 0 };
 
-  const people = (holding.people?.list ?? []).filter((person) => !person?.dead);
+  const people = (holding.people?.list ?? []).filter((person) => isResidentInPopulation(person, holding));
   const buildings = holding.buildings?.list ?? [];
-  const payrollForecast = this._payrollForecast(holding, { qd: 40 });
-  const cashWageTenDay = payrollForecast.fixedDueCopper;
-  const cashWageDaily = cashWageTenDay / 10;
-  const maintenanceTotals = buildings.reduce((sum, building) => {
+  const salary = people.reduce((sum, row) => sum + this._safeNumber(row.salary, 0), 0);
+  const upkeepMonth = buildings.reduce((sum, building) => {
     if (this._buildingStatus(building).value !== "built") return sum;
-    const maintenance = buildingMaintenanceState(building, (value, fallback = 0) => this._safeNumber(value, fallback));
-    sum.operating += maintenance.operatingCopperMonthly;
-    sum.reserve += maintenance.repairReserveCopperMonthly;
-    if (maintenance.billingMode === "fixed-tenday") sum.fixedTenDay += maintenance.copperPerTenday;
-    else sum.legacyMonth += maintenance.totalCopperMonthly;
-    return sum;
-  }, { operating: 0, reserve: 0, fixedTenDay: 0, legacyMonth: 0 });
-  const upkeepMonth = maintenanceTotals.fixedTenDay * 3 + maintenanceTotals.legacyMonth;
-  const upkeepTenDay = maintenanceTotals.fixedTenDay + maintenanceTotals.legacyMonth / 3;
-  // Income and enterprise shares are ledger outcomes. Counting configured
-  // capacity here would create money before stock, demand and direct costs are known.
-  const incomeTenDay = 0;
-  const sharePayoutTenDay = payrollForecast.shareDueCopper;
-  const salaryTenDay = cashWageTenDay + sharePayoutTenDay;
-  const salaryMonth = salaryTenDay * 3;
-  const boardFoodDaily = people.reduce((sum, person) => sum + personBoardFoodDaily(person), 0);
-  const treasuryState = holding?.gm?.economy?.treasury ?? {};
-  const payrollState = normalizePayrollState(holding?.gm?.economy?.labor?.payroll);
-  const salaryArrearsCopper = Object.values(payrollState.accounts)
-    .reduce((sum, account) => sum + Math.max(0, Math.floor(this._safeNumber(account?.arrearsCopper, 0))), 0);
-  const upkeepArrearsCopper = Math.max(0, Math.floor(this._safeNumber(treasuryState.upkeepArrearsCopper, 0)));
+    return sum + this._safeNumber(building.upkeep, 0);
+  }, 0);
+  const incomeTenDay = buildings.reduce((sum, building) => sum + this._buildingMoneyIncome(building, holding, workerContext), 0);
 
   return {
-    salary: cashWageDaily,
-    cashWageDaily,
-    cashWageTenDay,
-    sharePayoutTenDay,
-    salaryTenDay,
-    salaryMonth,
-    boardFoodDaily,
-    boardFoodTenDay: boardFoodDaily * 10,
-    upkeepFixedTenDay: maintenanceTotals.fixedTenDay,
-    upkeepLegacyMonth: maintenanceTotals.legacyMonth,
-    upkeepTenDay,
-    upkeepOperatingMonth: maintenanceTotals.operating,
-    repairReserveMonth: maintenanceTotals.reserve,
+    salary,
+    salaryTenDay: salary * 10,
+    salaryMonth: salary * 30,
     upkeepMonth,
     incomeTenDay,
-    projectedBalanceMonth: incomeTenDay * 3 - salaryMonth - upkeepMonth,
-    salaryArrearsCopper,
-    upkeepArrearsCopper,
-    totalArrearsCopper: salaryArrearsCopper + upkeepArrearsCopper,
-    payrollForecastReady: payrollForecast.ready,
-    payrollForecastBlockers: payrollForecast.blockers,
-    payrollForecastFixedPeopleCount: payrollForecast.fixedPeopleCount,
-    payrollForecastShareExcluded: payrollForecast.shareForecastExcluded,
+    projectedBalanceMonth: incomeTenDay * 3 - salary * 30 - upkeepMonth,
     population: people.length,
     peopleRows: people.length,
     buildingsRows: buildings.length,
@@ -74,11 +36,112 @@ _prepareTotals(holding, _workerContext = null) {
   };
 },
 
+_canonicalFinanceProjection(holding) {
+  if (!holding || typeof this._financePlanInputs !== "function") return null;
+  const identity = financePeriodIdentity(holding, 40);
+  const inputs = this._financePlanInputs(holding, 40, identity);
+  const wageRows = inputs.workers.map((worker) => ({ worker, wage: calculatePlannedWorkerWage(worker) }));
+  const salaryTenDayCopper = wageRows.reduce((sum, row) => sum + (row.wage.ok ? row.wage.dueCopper : 0), 0);
+  const paidWorkerIds = wageRows.filter((row) => row.wage.ok && row.wage.dueCopper > 0).map((row) => row.wage.workerId);
+  const volunteerWorkerIds = wageRows.filter((row) => row.wage.ok && row.wage.volunteer).map((row) => row.wage.workerId);
+  const invalidWorkerIds = wageRows.filter((row) => !row.wage.ok).map((row) => row.wage.workerId).filter(Boolean);
+  let upkeepMonthCopper = 0;
+  for (const building of inputs.buildings) {
+    const blocker = inputs.oldBlockers.buildings?.[building.id] ?? {};
+    if (blocker.mothballed) continue;
+    upkeepMonthCopper += Math.max(0, Math.floor(this._safeNumber(building.baseUpkeepMonthlyCopper, 0)));
+    for (const fn of building.functions ?? []) {
+      if (fn?.active === false || this._safeNumber(blocker.baseDebtCopper, 0) > 0) continue;
+      if (this._safeNumber(blocker.operatingByFunction?.[fn.id]?.debtCopper, 0) > 0) continue;
+      upkeepMonthCopper += Math.max(0, Math.floor(this._safeNumber(fn.operatingUpkeepMonthlyCopper, 0)));
+    }
+  }
+
+  const prepared = prepareFinancePeriod({
+    finance: holding?.finance,
+    treasuryCopper: this._moneyCopper(holding),
+    workers: inputs.workers,
+    buildings: inputs.buildings,
+    periods: identity.periods,
+    periodKey: identity.periodKey,
+    periodIndex: identity.periodIndex,
+    operationId: `finance-projection:${String(holding?.id ?? "holding")}:${identity.periodKey}`,
+    createdAt: ""
+  });
+  const financeContext = typeof this._financeExecutionContext === "function"
+    ? this._financeExecutionContext(prepared, { oldBlockers: inputs.oldBlockers, plannedWorkers: inputs.workers, periodQd: 40 })
+    : null;
+  const workerContext = typeof this._economyWorkerContext === "function"
+    ? this._economyWorkerContext(holding, { financeContext })
+    : null;
+  const incomeTenDayCopper = (holding?.buildings?.list ?? []).reduce((sum, building) => {
+    if (financeContext && !this._financeFunctionAllowed(financeContext, building, "income")) return sum;
+    return sum + this._buildingMoneyIncome(building, holding, workerContext);
+  }, 0);
+  const currentDueCopper = prepared.currentObligations.reduce((sum, row) => sum + Math.max(0, this._safeNumber(row?.dueCopper, 0)), 0);
+  const currentOutstandingCopper = prepared.currentObligations.reduce((sum, row) => sum + financeObligationOutstandingCopper(row), 0);
+  return {
+    identity,
+    salaryTenDayCopper,
+    salaryMonthCopper: salaryTenDayCopper * 3,
+    upkeepMonthCopper,
+    incomeTenDayCopper,
+    paidWorkerIds,
+    volunteerWorkerIds,
+    invalidWorkerIds,
+    currentDueCopper,
+    currentOutstandingCopper,
+    projectedPaidCopper: prepared.paidCopper,
+    projectedTreasuryCopper: prepared.treasuryCopper,
+    blockedWorkerIds: [...(financeContext?.blockedWorkerIds ?? [])]
+  };
+},
+
+_prepareTotals(holding) {
+  if (!holding) return { salary: 0, salaryTenDay: 0, salaryMonth: 0, upkeepMonth: 0, incomeTenDay: 0, projectedBalanceMonth: 0, population: 0, peopleRows: 0, buildingsRows: 0, specialRows: 0, storageRows: 0 };
+  const people = (holding.people?.list ?? []).filter((person) => isResidentInPopulation(person, holding));
+  const buildings = holding.buildings?.list ?? [];
+  const projection = this._canonicalFinanceProjection(holding) ?? {
+    salaryTenDayCopper: 0,
+    salaryMonthCopper: 0,
+    upkeepMonthCopper: 0,
+    incomeTenDayCopper: 0,
+    paidWorkerIds: [],
+    volunteerWorkerIds: [],
+    invalidWorkerIds: [],
+    currentDueCopper: 0,
+    currentOutstandingCopper: 0,
+    projectedPaidCopper: 0,
+    projectedTreasuryCopper: this._moneyCopper(holding),
+    blockedWorkerIds: []
+  };
+  const salaryTenDay = Math.max(0, this._safeNumber(projection.salaryTenDayCopper, 0));
+  const salaryMonth = Math.max(0, this._safeNumber(projection.salaryMonthCopper, salaryTenDay * 3));
+  const upkeepMonth = Math.max(0, this._safeNumber(projection.upkeepMonthCopper, 0));
+  const incomeTenDay = Math.max(0, this._safeNumber(projection.incomeTenDayCopper, 0));
+  return {
+    salary: salaryTenDay / 10,
+    salaryTenDay,
+    salaryMonth,
+    upkeepMonth,
+    incomeTenDay,
+    projectedBalanceMonth: incomeTenDay * 3 - salaryMonth - upkeepMonth,
+    population: people.length,
+    peopleRows: people.length,
+    buildingsRows: buildings.length,
+    specialRows: holding.special?.list?.length ?? 0,
+    storageRows: holding.storage?.resources?.length ?? 0,
+    paidPeopleCount: projection.paidWorkerIds.length,
+    unpaidPeopleCount: Math.max(0, people.length - projection.paidWorkerIds.length),
+    financeProjection: projection
+  };
+},
+
 _financeSummary(holding, totalsArg = null, workerContext = null) {
   const totals = totalsArg ?? this._prepareTotals(holding, workerContext);
   const moneyBuildings = (holding?.buildings?.list ?? [])
-    .filter((building) => this._buildingStatus(building).value === "built" && this._buildingFunctions(building)?.income)
-    .map((building) => ({ building, income: 0 }));
+    .map((building) => ({ building, income: this._buildingMoneyIncome(building, holding, workerContext) }))
+    .filter((item) => item.income);
 
   const treasury = this._moneyContext(holding);
   const resources = Array.isArray(holding?.storage?.resources) ? holding.storage.resources : [];
@@ -88,7 +151,6 @@ _financeSummary(holding, totalsArg = null, workerContext = null) {
   let saleItemLots = 0;
   for (const row of resources) {
     if (!row?.forSale) continue;
-    if (!this._resourceTradeReady(row)) continue;
     const qty = Math.max(0, this._safeNumber(row.qty, row.quantity ?? 0));
     const price = Math.max(0, this._resourcePriceCopper(row));
     if (qty > 0 && price > 0) {
@@ -111,64 +173,23 @@ _financeSummary(holding, totalsArg = null, workerContext = null) {
   const incomeMonthCopper = totals.incomeTenDay * 3;
   const monthlyNetCopper = incomeMonthCopper - salaryMonthCopper - upkeepMonthCopper;
   const dailyBurn = (salaryMonthCopper + upkeepMonthCopper - incomeMonthCopper) / 30;
-  const totalArrearsCopper = Math.max(0, this._safeNumber(totals.totalArrearsCopper, 0));
-  const availableAfterDebt = Math.max(0, treasury.totalCopper - totalArrearsCopper);
-  const runwayDays = dailyBurn > 0
-    ? Math.floor(availableAfterDebt / dailyBurn)
-    : (totalArrearsCopper > treasury.totalCopper ? 0 : Infinity);
-  const people = (holding?.people?.list ?? []).filter((person) => !person?.dead);
-  const laborState = holding?.gm?.economy?.labor ?? {};
-  const wageIndex = normalizeWageIndex(laborState.wageIndex);
-  const payrollState = normalizePayrollState(laborState.payroll);
-  const peopleById = new Map((holding?.people?.list ?? []).map((person) => [String(person?.id ?? ""), person]));
-  const payrollArrearsRows = Object.values(payrollState.accounts)
-    .filter((account) => account.arrearsCopper > 0)
-    .map((account) => ({
-      personId: account.personId,
-      name: peopleById.get(account.personId)?.name || `Житель ${account.personId}`,
-      arrearsCopper: account.arrearsCopper,
-      arrearsText: this._formatCopperCurrency(account.arrearsCopper),
-      overdueTendays: account.overdueTendays
-    }))
-    .sort((left, right) => right.arrearsCopper - left.arrearsCopper || left.name.localeCompare(right.name, "ru"));
-  const payrollArrearsCopper = payrollArrearsRows.reduce((sum, row) => sum + row.arrearsCopper, 0);
-  const payrollDebtorCount = payrollArrearsRows.length;
-  const paidPeopleCount = Math.max(0, Math.floor(this._safeNumber(totals.payrollForecastFixedPeopleCount, 0)));
-  const sharePeopleCount = people.filter((person) => String(person?.compensationType ?? "") === "share" && personShareRate(person) > 0).length;
-  const compensatedPeopleCount = Math.min(people.length, paidPeopleCount + sharePeopleCount);
-  const unpaidPeopleCount = Math.max(0, people.length - compensatedPeopleCount);
-  const boardPeopleCount = people.filter((person) => personBoardFoodDaily(person) > 0).length;
-  const housingProvidedCount = people.filter((person) => person?.housingProvided).length;
-  const compensationCounts = Object.entries(people.reduce((counts, person) => {
-    const type = String(person?.compensationType ?? "dependent");
-    counts[type] = (counts[type] ?? 0) + 1;
-    return counts;
-  }, {})).map(([type, count]) => ({ type, label: compensationTypeLabel(type), count }));
+  const runwayDays = dailyBurn > 0 ? Math.floor(treasury.totalCopper / dailyBurn) : Infinity;
+  const people = (holding?.people?.list ?? []).filter((person) => isResidentInPopulation(person, holding));
+  const paidPeopleCount = Math.max(0, Math.floor(this._safeNumber(totals.paidPeopleCount, 0)));
+  const unpaidPeopleCount = Math.max(0, Math.floor(this._safeNumber(totals.unpaidPeopleCount, people.length - paidPeopleCount)));
   const ledgerRows = [
-    { label: "Фиксированные ставки Economy V2", amount: -Math.max(0, this._safeNumber(totals.cashWageTenDay, 0)) * 3, class: "expense" },
-    { label: "Эксплуатация зданий", amount: -Math.max(0, this._safeNumber(totals.upkeepOperatingMonth, upkeepMonthCopper)), class: "expense" },
-    { label: "Ремонтный резерв", amount: -Math.max(0, this._safeNumber(totals.repairReserveMonth, 0)), class: "expense" },
-    { label: "Долг по зарплате", amount: -Math.max(0, this._safeNumber(totals.salaryArrearsCopper, 0)), class: "expense" },
-    { label: "Долг по содержанию", amount: -Math.max(0, this._safeNumber(totals.upkeepArrearsCopper, 0)), class: "expense" },
-    { label: "Прогноз обязательств", amount: monthlyNetCopper, class: monthlyNetCopper >= 0 ? "income" : "expense" }
+    { label: "Зарплата", amount: -salaryMonthCopper, class: "expense" },
+    { label: "Содержание зданий", amount: -upkeepMonthCopper, class: "expense" },
+    { label: "Пассивный доход", amount: incomeMonthCopper, class: "income" },
+    { label: "Итоговый прогноз", amount: monthlyNetCopper, class: monthlyNetCopper >= 0 ? "income" : "expense" }
   ].filter((row) => row.amount !== 0).map((row) => ({ ...row, text: `${row.amount > 0 ? "+" : row.amount < 0 ? "−" : ""}${this._formatCopperCurrency(Math.abs(row.amount))}` }));
 
   return {
     ...totals,
     salaryText: this._formatCopperCurrency(totals.salary),
-    cashWageDailyText: this._formatCopperCurrency(totals.cashWageDaily),
-    cashWageTenDayText: this._formatCopperCurrency(totals.cashWageTenDay),
-    sharePayoutTenDayText: this._formatCopperCurrency(totals.sharePayoutTenDay),
     salaryTenDayText: this._formatCopperCurrency(totals.salaryTenDay),
     salaryMonthText: this._formatCopperCurrency(salaryMonthCopper),
-    upkeepOperatingMonthText: this._formatCopperCurrency(totals.upkeepOperatingMonth),
-    repairReserveMonthText: this._formatCopperCurrency(totals.repairReserveMonth),
-    upkeepTenDayText: this._formatCopperCurrency(totals.upkeepTenDay),
     upkeepMonthText: this._formatCopperCurrency(upkeepMonthCopper),
-    salaryArrearsText: this._formatCopperCurrency(totals.salaryArrearsCopper),
-    upkeepArrearsText: this._formatCopperCurrency(totals.upkeepArrearsCopper),
-    totalArrearsText: this._formatCopperCurrency(totalArrearsCopper),
-    hasArrears: totalArrearsCopper > 0,
     incomeTenDayText: this._formatCopperCurrency(totals.incomeTenDay),
     incomeMonthText: this._formatCopperCurrency(incomeMonthCopper),
     monthlyNetCopper,
@@ -182,32 +203,12 @@ _financeSummary(holding, totalsArg = null, workerContext = null) {
     saleResourceLots,
     saleItemLots,
     paidPeopleCount,
-    compensatedPeopleCount,
     unpaidPeopleCount,
-    payrollDebtorCount,
-    sharePeopleCount,
-    boardPeopleCount,
-    housingProvidedCount,
-    wageIndex,
-    wageIndexText: this._formatNumber?.(wageIndex) ?? String(wageIndex),
-    hasPayrollForecastBlockers: !totals.payrollForecastReady && (totals.payrollForecastBlockers?.length ?? 0) > 0,
-    wageTariffRows: WAGE_CATALOG.map((row) => ({
-      id: row.id,
-      label: row.label,
-      copper: wageCopperPerTenday(row.id, { wageIndex }),
-      text: this._formatCopperCurrency(wageCopperPerTenday(row.id, { wageIndex }))
-    })),
-    payrollArrearsCopper,
-    payrollArrearsText: this._formatCopperCurrency(payrollArrearsCopper),
-    payrollArrearsRows,
-    hasPayrollArrearsRows: payrollArrearsRows.length > 0,
-    boardFoodDailyText: this._formatNumber(totals.boardFoodDaily),
-    boardFoodTenDayText: this._formatNumber(totals.boardFoodTenDay),
-    compensationCounts,
     tradeBuildingCount: moneyBuildings.length,
     ledgerRows,
     hasLedgerRows: ledgerRows.length > 0,
     moneyBuildings: moneyBuildings.map(({ building, income }) => ({ name: building.name || "Без названия", income })),
+    controls: this._financeControlsContext?.(holding) ?? { canManage: false, rows: [], count: 0, hasRows: false },
     productionPreview: []
   };
 },
@@ -254,20 +255,34 @@ _formatCopperCurrency(value = 0) {
 },
 
 _parseCurrencyCost(value = "") {
-  return parseCopperCurrency(value);
-},
-
-_resourceDefinition(row = {}) {
-  return resourceDef(row.resourceId, row.id, row.name, row.label);
-},
-
-_resourceTradeReady(row = {}) {
-  return resourceTradeReady(this._resourceDefinition(row));
+  if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, Math.floor(value));
+  const text = String(value ?? "").trim();
+  if (!text) return 0;
+  let total = 0;
+  let matched = false;
+  const rx = /([-+]?\d+(?:[.,]\d+)?)\s*([a-zA-Zа-яА-Я]+)?/g;
+  for (const match of text.matchAll(rx)) {
+    const amount = Number(String(match[1]).replace(",", "."));
+    if (!Number.isFinite(amount) || amount <= 0) continue;
+    const unit = String(match[2] ?? "C").trim().toLowerCase();
+    let multiplier = 1;
+    if (["g", "gp", "gold", "з", "зм"].includes(unit)) multiplier = 100;
+    else if (["s", "sp", "silver", "с", "см"].includes(unit)) multiplier = 10;
+    else if (["c", "cp", "copper", "м", "мм"].includes(unit)) multiplier = 1;
+    total += amount * multiplier;
+    matched = true;
+  }
+  if (!matched) {
+    const fallback = Number(text.replace(",", ".").replace(/[^0-9.+-]/g, ""));
+    return Number.isFinite(fallback) ? Math.max(0, Math.floor(fallback)) : 0;
+  }
+  return Math.max(0, Math.floor(total));
 },
 
 _resourcePriceCopper(row = {}) {
-  const referencePrice = Number(this._resourceDefinition(row)?.referencePriceCopper);
-  return Number.isFinite(referencePrice) && referencePrice > 0 ? Math.floor(referencePrice) : 0;
+  const id = normalizeResourceId(row.resourceId, row.name);
+  if (id !== "custom") return resourceBasePriceCopper(id);
+  return this._parseCurrencyCost(row.basePriceCopper ?? row.cost ?? row.itemData?.system?.cost ?? "");
 },
 
 _itemPriceCopper(row = {}) {

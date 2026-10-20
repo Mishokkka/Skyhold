@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Лапута · План работ — макет окна</title>
+  <link rel="stylesheet" href="../../styles/parts/skyhold-variables.css">
+  <link rel="stylesheet" href="../../styles/parts/skyhold-ui-kit.css">
+  <link rel="stylesheet" href="workforce-planner.css">
+  <script src="workforce-planner.js" defer></script>
+</head>
+<body class="fbl-skyhold">
+  <div class="demo-tools"><span>Макет окна · условные данные</span><label for="population">Жителей в примере</label><select id="population"><option>20</option><option>50</option><option>100</option><option>200</option></select><span class="demo-hint">Без подключения к Foundry</span></div>
+  <main class="planner">
+    <header class="planner-header"><h1>План работ <span>Лапута</span></h1><span class="period">Ближайший десятник · 10 дней</span><div class="fbls-action-group"><button type="button" data-action="help" class="quiet-button">Справка</button><button type="button" data-action="reset" class="quiet-button">Сбросить</button></div></header>
+    <section id="metrics" class="metrics" aria-label="Сводка плана"></section>
+    <div class="fbls-toolbar planning-toolbar"><nav class="view-switch" aria-label="Представление плана"><button type="button" data-view="tasks" aria-pressed="true">Работы <span id="task-count">9</span></button><button type="button" data-view="workers" aria-pressed="false">Жители <span id="worker-count">20</span></button></nav><div class="fbls-action-group"><button type="button" data-action="trim" class="quiet-button">Пересмотреть простой</button><button type="button" data-action="suggest" class="accent-outline">Предложить распределение</button></div></div>
+    <div class="workspace">
+      <section class="workboard" aria-label="Список работ и жителей">
+        <div class="board-filters"><div id="filters" class="filter-group" aria-label="Фильтр списка"></div><div class="search-sort"><input id="search" type="search" placeholder="Найти работу или жителя" aria-label="Найти работу или жителя"><select id="sort" aria-label="Порядок списка"><option value="default">По порядку</option><option value="name">По имени / названию</option><option value="free">По свободным QD</option></select></div></div>
+        <div id="bulk-bar" class="bulk-bar" hidden><label><input id="select-matches" type="checkbox"> Все найденные</label><span id="selected-count">Выбрано 0</span><button type="button" data-action="bulk" disabled>Назначить группу…</button><button type="button" data-action="clear-selection" class="text-button">Снять выбор</button></div>
+        <div id="list-head" class="list-head"></div><div id="rows" class="rows" tabindex="0" aria-label="Прокручиваемый список"></div><div id="pagination" class="pagination"></div><div class="board-note" id="board-note"></div>
+      </section>
+      <aside id="details" class="details" aria-label="Подробности и назначения"></aside>
+    </div>
+    <footer class="planner-footer"><div class="draft-info"><strong id="draft-status">Исходный пример</strong><span id="draft-summary"></span></div><div class="fbls-action-group"><button type="button" data-action="undo" class="text-button" disabled>Отменить шаг</button><button type="button" data-action="check" class="quiet-button">Проверить</button><button type="button" data-action="save" class="primary-button">Сохранить в макете</button></div></footer>
+  </main>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <dialog id="review-dialog" aria-labelledby="dialog-title"><form method="dialog"><button type="submit" class="dialog-close" aria-label="Закрыть окно">×</button></form><h2 id="dialog-title"></h2><div id="dialog-body"></div><div id="dialog-actions" class="dialog-actions fbls-action-group"></div></dialog>
+</body>
+</html>

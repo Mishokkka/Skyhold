@@ -16,8 +16,8 @@ const NUMERIC_FIELDS = new Set([
   "defenderShaken", "defenderBroken", "attackerShaken", "attackerBroken"
 ]);
 
-const BOOLEAN_FIELDS = new Set(["useDefenseSquads", "raiseMilitia"]);
-const TEXT_FIELDS = new Set(["title", "enemyName", "objective", "roundThreat", "scale", "defenseMode", "accessMode", "defenderMobilization", "attackerPreset", "defenderStrategy", "attackerStrategy", "notes", "battleId", "phase", "outcome", "terminalReason", "startedAt", "resolvedAt", "resolvedBy"]);
+const BOOLEAN_FIELDS = new Set(["useDefenseSquads", "raiseMilitia", "useMedicalSupplies", "useMedicinesForHeavyCasualties", "militarySuppliesConsumed"]);
+const TEXT_FIELDS = new Set(["title", "enemyName", "objective", "roundThreat", "scale", "defenseMode", "accessMode", "defenderMobilization", "attackerPreset", "defenderStrategy", "attackerStrategy", "notes", "battleId", "phase", "outcome", "terminalReason", "startedAt", "resolvedAt", "resolvedBy", "militarySupplyBattleId"]);
 
 const DEFENDER_STRATEGIES = new Set(["holdFortifications", "deepDefense", "counterattack", "protectCivilians", "protectObjective", "fightingWithdrawal", "defense", "allOutDefense", "sally", "rally", "parley", "retreat"]);
 const ATTACKER_STRATEGIES = new Set(["frontalAssault", "probingAdvance", "raidWithdraw", "sabotage", "bombardment", "breakthrough", "attack", "allOutAssault", "deliberateAssault", "skirmish", "raid", "rally", "parley", "retreat"]);
@@ -62,6 +62,13 @@ export const MASS_COMBAT_RESET_STATE = Object.freeze({
   defenderMobilization: "watch",
   useDefenseSquads: true,
   raiseMilitia: false,
+  useMedicalSupplies: false,
+  useMedicinesForHeavyCasualties: false,
+  militarySupplyBattleId: "",
+  militarySuppliedSquadIds: [],
+  militaryUnsuppliedSquadIds: [],
+  militarySupplyCosts: [],
+  militarySuppliesConsumed: false,
   attackerPreset: "custom",
   defenderUnits: 0,
   defenderBS: 0,

@@ -38,6 +38,6 @@
 .fbls-storage-item-main small {
   display: block;
   color: var(--fbls-muted);
-  font-size: 0.72rem;
+  font-size: var(--fbls-type-compact-sm);
   margin-top: 0.08rem;
 }

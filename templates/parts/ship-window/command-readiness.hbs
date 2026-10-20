@@ -1,0 +1,13 @@
+{{#if hasCost}}
+<p class="fbls-muted-text">Время участка: {{durationDays}} дн.</p>
+<dl class="fbls-ship-facts">
+  <div><dt>Расходы участка</dt><dd>{{fblsShipGold operatingCopper}} ЗМ</dd></div>
+  <div><dt>Счёт стоянки к выходу</dt><dd>{{fblsShipGold portBillCopper}} ЗМ</dd></div>
+  <div><dt>{{#if atHome}}Нужно дома{{else}}Нужно на борту{{/if}}</dt><dd>{{fblsShipGold requiredCopper}} ЗМ</dd></div>
+  <div><dt>{{#if atHome}}Доступно дома{{else}}На борту{{/if}}</dt><dd>{{fblsShipGold availableCopper}} ЗМ</dd></div>
+</dl>
+<p class="fbls-muted-text">Стоянка рассчитана до времени этого отправления. {{#if atHome}}Учтены автоматический бюджет и подготовка.{{else}}Рекомендуемый запас на будущие расходы не ограничивает эту команду.{{/if}}</p>
+{{#if shortageCopper}}<p class="fbls-ship-notice">Для этого шага не хватает {{fblsShipGold shortageCopper}} ЗМ. {{fundsHint}}</p>{{/if}}
+{{/if}}
+{{#if blockers.length}}<ul class="fbls-ship-notice" aria-label="Причины недоступности команды">{{#each blockers}}<li>{{this}}</li>{{/each}}</ul>{{/if}}
+{{#if needsFunds}}<button type="button" class="fbls-button compact" data-action="ship-window-tab" data-ship-panel-target="finance"><i class="fa-solid fa-coins" aria-hidden="true"></i> Проверить деньги</button>{{/if}}

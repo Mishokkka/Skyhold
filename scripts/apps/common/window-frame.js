@@ -1,3 +1,5 @@
+import { forgetProtectedSkyholdWindow } from "./window-focus-keeper.js";
+
 const FRAME_KEYS = ["left", "top", "width", "height"];
 
 function frameValue(value, { requirePositive = false } = {}) {
@@ -21,22 +23,19 @@ function shouldPreserveMovingSize(app, position, frame, key) {
 
 export function WindowFrameMixin(Base) {
   return class WindowFrameApplication extends Base {
-    async render(options = {}) {
-      const frame = this.rendered ? this._captureWindowFrame() : null;
-      const result = await super.render(options);
-      if (frame) this._restoreWindowFrame(frame);
-      this._windowFrameHasRendered = true;
-      this._queueWindowFrameSync();
-      return result;
+    async _onClose(options) {
+      const frame = this._getWindowFrameElement();
+      try {
+        return await super._onClose(options);
+      } finally {
+        forgetProtectedSkyholdWindow(frame);
+      }
     }
 
     setPosition(position = {}) {
       const nextPosition = position ?? {};
       const hasPositionKey = (key) => Object.prototype.hasOwnProperty.call(nextPosition, key);
-      const moving = this._windowFrameHasRendered
-        && this.rendered
-        && this.element
-        && (hasPositionKey("left") || hasPositionKey("top"));
+      const moving = this.rendered && this.element && (hasPositionKey("left") || hasPositionKey("top"));
 
       if (moving) {
         const liveFrame = this._captureWindowFrame();
@@ -109,7 +108,6 @@ export function WindowFrameMixin(Base) {
     }
 
     _syncWindowFrameState() {
-      if (!this._windowFrameHasRendered) return null;
       const frame = this._captureWindowFrame();
       if (!frame) return null;
       this._lastWindowFrame = frame;

@@ -2,12 +2,13 @@ import { MODULE_ID } from "../../../data/constants.js";
 import { bindGlobalInputGuard, bindInputGuards, unbindGlobalInputGuard } from "../../../utils/input-guards.js";
 import { dispatchDelegatedAction } from "../../common/delegated-events.js";
 import { RenderSchedulerMixin } from "../../common/render-scheduler.js";
+import { FloatingTooltipsMixin } from "../../common/floating-tooltip.js";
 import { buildRequirementFromEditor, dependencyKindFromTarget, normalizeDependency } from "./form.js";
 import { SkyholdResourceCatalogEditor } from "../resource-catalog-editor.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
-export class SkyholdRandomEventRowEditor extends RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2)) {
+export class SkyholdRandomEventRowEditor extends FloatingTooltipsMixin(RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2))) {
   constructor({ owner = null, holdingId = "", tableKind = "general", rowId = "" } = {}, options = {}) {
     super(options);
     this.owner = owner;
@@ -29,6 +30,7 @@ export class SkyholdRandomEventRowEditor extends RenderSchedulerMixin(Handlebars
       rowId: this.rowId,
       tableTitle: prepared.tableContext?.title ?? "Событие",
       currentTable: prepared.tableContext,
+      saveStatus: this.owner?._saveStatus?.context,
       row
     };
   }
@@ -43,6 +45,7 @@ export class SkyholdRandomEventRowEditor extends RenderSchedulerMixin(Handlebars
     this._bindEvents(root);
     this.owner?._syncRequirementEditors?.(root);
     this.owner?._autoGrowTextareas?.(root);
+    this.owner?._syncSaveStatus?.();
   }
 
   _bindEvents(root) {
@@ -90,6 +93,7 @@ export class SkyholdRandomEventRowEditor extends RenderSchedulerMixin(Handlebars
 
     root.addEventListener("input", (event) => {
       const target = event.target;
+      if (target?.matches?.("[data-event-effect-field], [data-event-requirement-field], [data-event-requirement-logic]")) this.owner?._markDirty?.();
       const autogrow = target?.closest?.("[data-event-autogrow]");
       if (autogrow && root.contains(autogrow)) this.owner?._autoGrowTextarea?.(autogrow);
       const field = target?.closest?.("[data-event-field]");

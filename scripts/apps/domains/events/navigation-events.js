@@ -1,21 +1,48 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import { createHolding } from "../../../data/holding-factory.js";
 import { SkyholdData } from "../../../data/store.js";
+import { isResidentInPopulation } from "../../../data/resident-presence.js";
 import { findReadableHoldingEntry } from "../../../data/access-guard.js";
 import { normalizeBelief } from "../../../generators/resident-rules.js";
 import { SkyholdCrewEditor } from "../../editors/crew-editor.js";
-import { openMarketApp, openMassCombatApp } from "../../lazy-apps.js";
+import { openMarketApp, openMassCombatApp, openPoliticsApp, openPoliticsBalanceEditor } from "../../lazy-apps.js";
 import { escapeHtml, fieldValue, rollD6Pool } from "../../../core/helpers.js";
 import { createFoundryChatMessage, foundryChatSpeaker, foundryDialogV2, renderFoundryFilePicker } from "../../../integrations/foundry-runtime.js";
-import { MORALE_BANDS } from "../../../engines/morale/morale-snapshot.js";
-import { setStorageRowTotalQuantity } from "../../../engines/storage/reservations.js";
+import { filterStorageSearchRows } from "../../../engines/storage/search.js";
+
+function createStorageSearchResultButton(row = {}) {
+  const documentRef = globalThis.document;
+  if (!documentRef?.createElement) return null;
+  const button = documentRef.createElement("button");
+  button.type = "button";
+  button.dataset.action = "storage-search-result";
+  button.dataset.storageSubtab = String(row.subtab ?? "resources");
+  button.dataset.roomId = String(row.roomId ?? "outdoors");
+  button.dataset.storageTargetId = String(row.id ?? "");
+
+  const icon = documentRef.createElement("i");
+  icon.className = String(row.icon ?? "fa-solid fa-box");
+  const text = documentRef.createElement("span");
+  const title = documentRef.createElement("strong");
+  title.textContent = String(row.title ?? "");
+  const meta = documentRef.createElement("small");
+  meta.textContent = `${String(row.roomLabel ?? "")} · ${String(row.meta ?? "")}`;
+  text.append(title, meta);
+  const arrow = documentRef.createElement("i");
+  arrow.className = "fa-solid fa-arrow-right";
+  button.append(icon, text, arrow);
+  return button;
+}
 
 export const NavigationEventActions = {
   click: {
+    "people-subtab": "_onPeopleSubtab",
     tab: "_onTabClick",
     "building-category": "_onBuildingCategory",
     "special-subtab": "_onSpecialSubtab",
     "open-market": "_onOpenMarket",
+    "open-politics": "_onOpenPolitics",
+    "open-politics-balance": "_onOpenPoliticsBalance",
     "roll-holding-stat": "_onRollHoldingStat",
     "show-morale-help": "_onShowMoraleHelp",
     "open-crew-editor": "_onOpenCrewEditor",
@@ -29,10 +56,12 @@ export const NavigationEventActions = {
     "pick-file": "_onPickFile"
   },
   publicClick: [
+    "people-subtab",
     "tab",
     "building-category",
     "special-subtab",
     "open-market",
+    "open-politics",
     "roll-holding-stat",
     "show-morale-help",
     "open-crew-editor",
@@ -43,6 +72,20 @@ export const NavigationEventActions = {
 };
 
 export const NavigationEventDomain = {
+async _onOpenPolitics(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  if (!this.activeHoldingId) return;
+  await openPoliticsApp({ holdingId: this.activeHoldingId, owner: this });
+},
+
+async _onOpenPoliticsBalance(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  if (!game.user?.isGM || !this.activeHoldingId) return;
+  await openPoliticsBalanceEditor({ holdingId: this.activeHoldingId });
+},
+
 async _onOpenMarket(event) {
   event.preventDefault();
   event.stopPropagation();
@@ -93,11 +136,64 @@ async _onRollHoldingStat(event) {
 async _onShowMoraleHelp(event) {
   event.preventDefault();
   event.stopPropagation();
-  const rows = [
-    ...MORALE_BANDS
-  ].map((band) => ({ ...band, value: band.id }));
-  const content = `<div class="fbls-dialog-text"><table class="fbls-table compact"><thead><tr><th>Уровень</th><th>Диапазон</th><th>Эффект</th></tr></thead><tbody>${rows.map((row) => `<tr><td><strong>${escapeHtml(row.label)}</strong></td><td>${escapeHtml(row.range)}</td><td>${escapeHtml(row.notes)}</td></tr>`).join("")}</tbody></table></div>`;
-  await foundryDialogV2().wait({ window: { title: "Довольство: уровни" }, content, buttons: [{ action: "ok", label: "Закрыть", default: true }] });
+  const data = SkyholdData.get();
+  const { holding } = findReadableHoldingEntry(data, this.activeHoldingId, { fallback: false });
+  if (!holding) {
+    globalThis.ui?.notifications?.warn?.("Поселение недоступно.");
+    return;
+  }
+
+  const rawMorale = this._calculateMorale(holding);
+  const state = this._moraleState(rawMorale);
+  const control = this._controlSummary(holding, rawMorale);
+  const housingIndex = this._residentHousingIndex(holding);
+  const residents = (holding.people?.list ?? [])
+    .filter((person) => isResidentInPopulation(person, holding))
+    .map((person) => {
+      const morale = this._calculatePersonMorale(person, holding, { housingIndex });
+      return {
+        name: person?.name || "Житель",
+        total: morale.total,
+        breakdown: morale.breakdown?.slice?.(1) ?? []
+      };
+    });
+  const buildingSummary = this._buildingMoraleSummary(holding);
+  const peopleMorale = residents.reduce((sum, row) => sum + this._safeNumber(row.total, 0), 0);
+  const otherMorale = rawMorale - peopleMorale - buildingSummary.total;
+  const { renderMoraleDialog } = await import("../morale-dialog-presentation.js");
+  const levels = [
+    this._moraleState(-31),
+    this._moraleState(-20),
+    this._moraleState(-5),
+    this._moraleState(5),
+    this._moraleState(20),
+    this._moraleState(31)
+  ].map((row) => ({ ...row, current: row.css === state.css }));
+  const content = renderMoraleDialog({
+    holdingName: holding.name || "Поселение",
+    rawMorale,
+    state,
+    control,
+    levels,
+    sources: {
+      people: peopleMorale,
+      population: residents.length,
+      buildings: buildingSummary.total,
+      specialAndGm: otherMorale
+    },
+    isGm: Boolean(globalThis.game?.user?.isGM),
+    residents,
+    buildings: buildingSummary.sources
+  });
+  await foundryDialogV2().wait({
+    classes: ["fbl-skyhold", "fbl-skyhold-morale-dialog"],
+    window: { title: `Довольство — ${holding.name || "Поселение"}` },
+    position: { width: 760 },
+    content,
+    // DialogV2 requires an action even when this read-only window hides its footer.
+    buttons: [{ action: "close", label: "Закрыть" }],
+    rejectClose: false
+  });
 },
 
 _onBuildingCategory(event) {
@@ -110,7 +206,7 @@ _onBuildingCategory(event) {
 _onStorageSubtab(event) {
   event.preventDefault();
   const tab = event.currentTarget?.dataset?.storageTab || "resources";
-  this.activeStorageTab = ["resources", "items", "accounting", "market", "log"].includes(tab) ? tab : "resources";
+  this.activeStorageTab = ["resources", "items", "accounting", "log"].includes(tab) ? tab : "resources";
   this.requestRender();
 },
 
@@ -128,22 +224,27 @@ _onStorageSearchInput(event) {
 },
 
 _applyStorageSearchFilter(root = this.element, value = "") {
-  const search = String(value ?? "").trim().toLocaleLowerCase("ru");
+  const result = filterStorageSearchRows(this._storageSearchIndex ?? [], value);
   const panel = root?.querySelector?.("[data-storage-search-panel]");
-  const rows = Array.from(root?.querySelectorAll?.("[data-storage-search-row]") ?? []);
-  let visible = 0;
-  for (const row of rows) {
-    const haystack = String(row.dataset.storageSearchRow ?? row.textContent ?? "").toLocaleLowerCase("ru");
-    const show = Boolean(search) && haystack.includes(search);
-    row.hidden = !show;
-    if (show) visible += 1;
+  const list = root?.querySelector?.("[data-storage-search-list]");
+  if (list?.replaceChildren) {
+    const fragment = globalThis.document?.createDocumentFragment?.();
+    for (const row of result.rows) {
+      const button = createStorageSearchResultButton(row);
+      if (button) fragment?.append?.(button);
+    }
+    list.replaceChildren(fragment);
   }
-  if (panel) panel.hidden = !search;
+  if (panel) panel.hidden = !result.query;
   const count = root?.querySelector?.("[data-storage-search-count]");
-  if (count) count.textContent = String(visible);
+  if (count) count.textContent = String(result.total);
+  const summary = root?.querySelector?.("[data-storage-search-summary]");
+  if (summary) summary.textContent = result.truncated
+    ? `показаны первые ${result.rows.length} из ${result.total}`
+    : "по всем помещениям";
   const empty = root?.querySelector?.("[data-storage-search-empty]");
-  if (empty) empty.hidden = !search || visible > 0;
-  return visible;
+  if (empty) empty.hidden = !result.query || result.total > 0;
+  return result.total;
 },
 
 _onStorageSearchResult(event) {
@@ -179,7 +280,7 @@ _flashStorageSearchTarget(root = this.element) {
 _onPeopleSubtab(event) {
   event.preventDefault();
   event.stopPropagation();
-  this.activePeopleTab = "living";
+  this.activePeopleTab = event.currentTarget?.dataset?.peopleTab === "ship-crew" ? "ship-crew" : "living";
   this.editingPersonId = null;
   this.expandedPersonId = null;
   this.activeTab = "people";
@@ -190,7 +291,7 @@ _onSpecialSubtab(event) {
   event.preventDefault();
   event.stopPropagation();
   const tab = String(event.currentTarget?.dataset?.specialTab ?? "records");
-  this.activeSpecialTab = ["records", "fleet", "cemetery", "defense"].includes(tab) ? tab : "records";
+  this.activeSpecialTab = ["records", "cemetery", "defense"].includes(tab) ? tab : "records";
   this.editingPersonId = null;
   this.expandedPersonId = null;
   this.activeTab = "special";
@@ -242,39 +343,19 @@ async _onFieldChange(event) {
       await SkyholdData.transaction((data) => {
         foundry.utils.setProperty(data, path, value);
         return true;
-      }, { reason: `resource-catalog:field:${path}` });
-    } else if (/^holdings\.\d+\.storage\.resources\.\d+\.qty$/.test(path)) {
-      if (!game.user?.isGM) return;
-      const result = await SkyholdData.transaction((data) => {
-        const scopedPath = this._resolveActiveHoldingScopedPath(data, path);
-        if (!scopedPath) return SkyholdData.skipTransaction({ ok: false, message: "Активное владение изменилось; повтори правку." });
-        const match = scopedPath.match(/^holdings\.(\d+)\.storage\.resources\.(\d+)\.qty$/);
-        const holding = data.holdings?.[Number(match?.[1] ?? -1)];
-        const rowIndex = Number(match?.[2] ?? -1);
-        const row = holding?.storage?.resources?.[rowIndex];
-        if (!holding || !row) return SkyholdData.skipTransaction({ ok: false, message: "Строка склада больше не существует." });
-        const applied = setStorageRowTotalQuantity(holding, row, value, rowIndex);
-        return applied.ok ? applied : SkyholdData.skipTransaction(applied);
-      }, { reason: `storage:resource-quantity:${path}` });
-      if (!result?.ok) {
-        ui.notifications.warn(result?.message || "Количество не изменено.");
-        this.requestRender();
-        return;
-      }
+      }, { reason: `resource-catalog:field:${path}`, scope: "catalog" });
     } else if (/^holdings\.\d+\.gm\.defense\./.test(path) && this._sanitizeDefenseAssignments) {
       await SkyholdData.transaction((data) => {
         const scopedPath = this._resolveActiveHoldingScopedPath(data, path);
         if (!scopedPath) return SkyholdData.skipTransaction(false);
+        foundry.utils.setProperty(data, scopedPath, value);
         const match = scopedPath.match(/^holdings\.(\d+)\./);
         const holding = data.holdings?.[Number(match?.[1] ?? -1)];
         if (holding) {
-          const assignsResident = /\.gm\.defense\.(?:commanderId|squads\.\d+\.(?:sergeantId|memberIds\.\d+))$/.test(scopedPath);
-          if (assignsResident && value) this._clearPersonFromAssignments?.(holding, String(value));
-          foundry.utils.setProperty(data, scopedPath, value);
           this._sanitizeDefenseAssignments(holding);
           this._applyDefenseSalaries?.(holding);
-        } else foundry.utils.setProperty(data, scopedPath, value);
-      }, { reason: `field:${path}` });
+        }
+      }, { reason: `field:${path}`, scope: "holdings" });
     } else if (/^holdings\.\d+\.people\.list\.\d+\.salaryModifier$/.test(path) && this._applyPersonSalaryForAssignment) {
       await SkyholdData.transaction((data) => {
         const scopedPath = this._resolveActiveHoldingScopedPath(data, path);
@@ -285,7 +366,7 @@ async _onFieldChange(event) {
         const person = holding?.people?.list?.[Number(match?.[2] ?? -1)];
         const building = (holding?.buildings?.list ?? []).find((item) => String(item.id) === String(person?.workAssignment));
         if (holding && person) this._applyPersonSalaryForAssignment(holding, person, building ?? null);
-      }, { reason: `field:${path}` });
+      }, { reason: `field:${path}`, scope: "holdings" });
     } else {
       const updated = await this._updateActiveHoldingPath(path, value, { reason: `field:${path}` });
       if (!updated) return;

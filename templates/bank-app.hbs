@@ -1,0 +1,44 @@
+{{#if hasHolding}}
+<div class="fbls-stack">
+  <header class="fbls-card-header"><h2><i class="fa-solid fa-landmark"></i> Банки · {{holdingName}}</h2><strong>Казна: {{treasuryText}}</strong></header>
+  <p>Год — 240 дней. Проценты простые, начисляются на оставшийся основной долг. Комиссия удерживается при выдаче. Досрочное погашение уменьшает дальнейшие проценты; платежи выполняются вручную. Просрочка ухудшает отношение банка и закрывает новые займы.</p>
+  {{#if pending}}<div class="fbls-callout">Ответ на операцию не подтверждён. Повтор использует прежний идентификатор.<button type="button" data-action="bank-retry"><i class="fa-solid fa-rotate-right"></i> Повторить запрос</button></div>{{/if}}
+  {{#each banks}}
+  <section class="fbls-panel fbls-stack"><header class="fbls-card-header"><h3>{{name}}</h3><span class="fbls-chip">Отношение: {{relationship}}</span></header><p>{{description}}</p>
+    {{#each offers}}
+    <div class="fbls-card fbls-stack"><strong>{{name}} · {{rateText}}% годовых · {{termDays}} дней</strong>
+      <span>Общий лимит банка: {{limitText}}. Минимальное отношение: {{minimumRelationship}}.</span>
+      <label class="fbls-field"><span>Сумма займа, медные монеты</span><input type="number" min="1" max="{{limitCopper}}" step="1" data-loan-amount="{{key}}" value="{{amount}}" /></label>
+      {{#if message}}<p>{{message}}</p>{{else}}<p>В казну: {{receivedText}}. Комиссия: {{feeText}}. Вернуть к сроку: {{dueText}}. Полная стоимость при погашении в срок: {{costText}}.</p>{{/if}}
+      <button type="button" data-action="bank-borrow" data-bank-id="{{bankId}}" data-offer-id="{{id}}" {{#unless eligible}}disabled{{/unless}}><i class="fa-solid fa-file-signature"></i> Получить заём на этих условиях</button>
+    </div>{{/each}}
+  </section>
+  {{else}}<p>Банков пока нет. GM может добавить банк из шаблона и настроить предложения.</p>{{/each}}
+  <section class="fbls-panel fbls-stack"><h3>Действующие займы</h3>
+  {{#each loans}}<div class="fbls-card fbls-stack"><strong>{{bankName}} · {{offerName}}</strong><span>Долг: {{balanceText}} · {{rateText}}% годовых · {{#if overdue}}ПРОСРОЧЕН{{else}}до срока {{remainingDays}} дней{{/if}}</span>
+    <label class="fbls-field"><span>Платёж, медные монеты</span><input type="number" min="1" step="1" data-loan-payment="{{id}}" value="{{payment}}" /></label>
+    <button type="button" data-action="bank-repay" data-loan-id="{{id}}" {{#unless canPay}}disabled{{/unless}}><i class="fa-solid fa-coins"></i> Погасить указанную сумму</button>
+  </div>{{else}}<p>Непогашенных займов нет.</p>{{/each}}</section>
+  {{#if isGM}}<details class="fbls-panel" data-fbls-disclosure="bank-editor" {{#if dirty}}open{{/if}}><summary>Настройка банков · GM</summary>
+    <p>Шаблоны описывают исторические типы учреждений; ставки — игровые настройки. Изменение предложения не меняет уже заключённые договоры. Отношение растёт после полного погашения займа, действовавшего хотя бы 10 дней (или весь срок более короткого договора). Мгновенная выдача и возврат отношения не дают. Просрочка снижает его сразу и затем каждые 10 дней.</p>
+    <div class="fbls-toolbar"><label>Шаблон <select data-bank-preset>{{#each presets}}<option value="{{id}}">{{name}}</option>{{/each}}</select></label>
+      <button type="button" data-action="bank-add"><i class="fa-solid fa-plus"></i> Добавить банк</button>
+      <button type="button" data-action="bank-save"><i class="fa-solid fa-floppy-disk"></i> Сохранить каталог</button></div>
+    {{#each editors}}<fieldset class="fbls-stack" data-bank-id="{{id}}"><legend>{{name}}</legend>
+      <label>Название <input type="text" data-bank-field="name" value="{{name}}" /></label>
+      <label>Описание и условия поручительства <textarea data-bank-field="description">{{description}}</textarea></label>
+      <label><input type="checkbox" data-bank-field="active" {{#if active}}checked{{/if}} /> Банк выдаёт новые займы</label>
+      {{#each offers}}<fieldset data-offer-id="{{id}}" class="fbls-stack"><legend>{{name}}</legend>
+        <label>Название предложения <input type="text" data-bank-field="name" value="{{name}}" /></label>
+        <label>Годовая ставка, % <input type="number" min="0" max="100" step="0.01" data-bank-percent data-bank-field="annualRateBps" value="{{annualRatePct}}" /></label>
+        <label>Срок, дни <input type="number" min="1" max="2400" data-bank-field="termDays" value="{{termDays}}" /></label>
+        <label>Комиссия, % <input type="number" min="0" max="50" step="0.01" data-bank-percent data-bank-field="feeBps" value="{{feePct}}" /></label>
+        <label>Лимит банка на поселение, медные монеты <input type="number" min="1" max="100000000" data-bank-field="limitCopper" value="{{limitCopper}}" /></label>
+        <label>Минимальное отношение <input type="number" min="-100" max="100" data-bank-field="minimumRelationship" value="{{minimumRelationship}}" /></label>
+        <label><input type="checkbox" data-bank-field="active" {{#if active}}checked{{/if}} /> Предложение активно</label>
+      </fieldset>{{/each}}
+      <button type="button" data-action="bank-add-offer" data-bank-id="{{id}}"><i class="fa-solid fa-plus"></i> Добавить предложение</button>
+    </fieldset>{{/each}}
+  </details>{{/if}}
+</div>
+{{else}}<p>Поселение недоступно.</p>{{/if}}

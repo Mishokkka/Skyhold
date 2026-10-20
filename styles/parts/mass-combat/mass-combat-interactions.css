@@ -97,8 +97,8 @@
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-tags-anchor > .fbls-button {
-  min-height: 30px;
-  height: 30px;
+  min-height: var(--fbls-control-height);
+  height: var(--fbls-control-height);
   padding: 4px 8px;
   line-height: 1;
   white-space: nowrap;
@@ -164,8 +164,8 @@
 .fbl-skyhold-mass-combat .fbls-battle-tags-grid input {
   width: 38px;
   min-width: 0;
-  height: 22px;
-  min-height: 22px;
+  height: var(--fbls-control-height);
+  min-height: var(--fbls-control-height);
   padding: 1px 3px;
   text-align: center;
 }
@@ -211,7 +211,7 @@
   margin-top: 8px;
   padding: 7px 9px;
   font-size: 12px;
-  line-height: 1.28;
+  line-height: 1.25;
 }
 
 .fbl-skyhold-mass-combat .fbls-battle-card.score .fbls-battle-sources {

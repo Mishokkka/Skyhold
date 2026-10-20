@@ -22,7 +22,7 @@ export const EVENT_DEVELOPMENT_THRESHOLD_KEYS = [
 export const EVENT_THRESHOLD_KEYS = [
   ...EVENT_DEVELOPMENT_THRESHOLD_KEYS,
   { key: "population", label: "Население", lowTag: "low-population", highTag: "high-population", lowMax: 5, highMin: 15 },
-  { key: "morale", label: "Довольство", lowTag: "low-morale", highTag: "high-morale", lowMax: -0.001, highMin: 1.501 },
+  { key: "morale", label: "Довольство", lowTag: "low-morale", highTag: "high-morale", lowMax: -1, highMin: 16 },
   { key: "reputation", label: "Репутация", lowTag: "low-reputation", highTag: "high-reputation", lowMax: 0, highMin: 3 }
 ];
 
@@ -81,6 +81,7 @@ export const EVENT_DEVELOPMENT_OPTIONS = [
 export const EVENT_HOLDING_TYPE_OPTIONS = [
   { value: "sky-island", label: "Остров-летяга" },
   { value: "settlement", label: "Поселение" },
+  { value: "ship", label: "Корабль" },
   { value: "outpost", label: "Аванпост" },
   { value: "organization", label: "Организация" },
   { value: "skyhold", label: "Скайхолд/летяга" }
@@ -132,7 +133,7 @@ export const EVENT_DEVELOPMENT_FEATURE_OPTIONS = EVENT_THRESHOLD_FEATURE_OPTIONS
 export const EVENT_FEATURE_OPTIONS = [
   ...EVENT_THRESHOLD_FEATURE_OPTIONS,
   { value: "sky-island", label: "Небесный остров", description: "Владение является летящим островом или скайхолдом." },
-  { value: "ship", label: "Корабли/летяги", description: "Поселение содержит корабельный или иной летный контекст." },
+  { value: "ship", label: "Корабли/летяги", description: "Владение является кораблем или содержит корабельный/летный контекст." },
   { value: "settlement", label: "Поселение", description: "Владение является поселением или скайхолдом." },
   { value: "storage", label: "Есть склад", description: "Есть складская функция, складское здание или запасы." },
   { value: "housing", label: "Есть жилье", description: "Есть жилые места или вместимость жилья." },
@@ -216,6 +217,8 @@ function normalizeMarketSeasonalModifiers(value = {}) {
   }));
 }
 
+export const MAX_MARKET_LINKS_PER_REGION = 300;
+
 function normalizeMarketLinks(value = []) {
   const rows = Array.isArray(value) ? value : String(value ?? "").split(/[,;\n]+/);
   const result = [];
@@ -224,8 +227,10 @@ function normalizeMarketLinks(value = []) {
     const source = raw && typeof raw === "object" ? raw : {};
     const parts = typeof raw === "string" ? raw.split(":") : [];
     const regionId = String(source.regionId ?? source.targetId ?? source.id ?? parts[0] ?? "").trim();
-    if (!regionId || seen.has(regionId)) continue;
-    seen.add(regionId);
+    const routeId = String(source.routeId ?? "").trim().slice(0, 128);
+    const identity = `${regionId}\u0000${routeId}`;
+    if (!regionId || seen.has(identity)) continue;
+    seen.add(identity);
     const stringDistance = String(parts[1] ?? "").trim();
     const explicitStringKm = /(?:km|км)$/i.test(stringDistance)
       ? Number.parseFloat(stringDistance.replace(/(?:km|км)$/i, "").replace(",", "."))
@@ -239,7 +244,7 @@ function normalizeMarketLinks(value = []) {
       x: Math.min(12000, Math.max(0, toNumber(point?.x, 0))),
       y: Math.min(8000, Math.max(0, toNumber(point?.y, 0)))
     }));
-    result.push({
+    const link = {
       regionId,
       ursCost: Math.min(99, Math.max(1, Math.floor(toNumber(source.ursCost ?? source.accessCost ?? source.difficulty, 1)))),
       distanceKm: Math.min(100000, Math.max(1, distanceKm)),
@@ -247,9 +252,11 @@ function normalizeMarketLinks(value = []) {
       pathPoints,
       modes: normalizeMarketTransportModes(source.modes ?? parts[2] ?? []),
       seasonalModifiers: normalizeMarketSeasonalModifiers(source.seasonalModifiers ?? source.seasons)
-    });
+    };
+    if (routeId) link.routeId = routeId;
+    result.push(link);
   }
-  return result.slice(0, 100);
+  return result.slice(0, MAX_MARKET_LINKS_PER_REGION);
 }
 
 export function normalizeEventRegionOption(row = {}, index = 0) {
@@ -659,16 +666,11 @@ function normalizeRequirementNumber(value = 0) {
 
 export function normalizeEventRequirement(rule = {}, fallbackId = "") {
   if (!isPlainObject(rule)) return null;
-  const sourceType = normalizeRequirementType(rule.type ?? rule.kind ?? "feature");
+  const type = normalizeRequirementType(rule.type ?? rule.kind ?? "feature");
+  const operator = normalizeRequirementOperator(type, rule.operator ?? rule.op ?? "");
   const id = String(rule.id || fallbackId || makeId("req"));
   const key = String(rule.key ?? rule.stat ?? rule.field ?? "").trim();
   const rawValue = String(rule.value ?? rule.target ?? "").trim();
-  const legacyShipType = sourceType === "holding-type" && rawValue === "ship";
-  const type = legacyShipType ? "feature" : sourceType;
-  const sourceOperator = String(rule.operator ?? rule.op ?? "");
-  const operator = legacyShipType
-    ? (sourceOperator === "is-not" ? "absent" : "present")
-    : normalizeRequirementOperator(type, sourceOperator);
   const value = type === "feature" ? (LEGACY_FEATURE_VALUE_MAP.get(rawValue) ?? rawValue) : rawValue;
   const number = normalizeRequirementNumber(rule.number ?? rule.amount ?? rule.valueNumber ?? rule.threshold ?? rule.value ?? 0);
   return { id, type, operator, key, value, number };
@@ -894,12 +896,8 @@ export function normalizeEventTagThresholds(source = {}) {
   for (const { key } of EVENT_THRESHOLD_KEYS) {
     const fallback = DEFAULT_EVENT_TAG_THRESHOLDS[key];
     const row = isPlainObject(source?.[key]) ? source[key] : {};
-    let lowMax = toNumber(row.lowMax ?? row.low ?? row.maxLow, fallback.lowMax);
-    let highMin = toNumber(row.highMin ?? row.high ?? row.minHigh, fallback.highMin);
-    if (key === "morale" && lowMax === -1 && highMin === 16) {
-      lowMax = fallback.lowMax;
-      highMin = fallback.highMin;
-    }
+    const lowMax = toNumber(row.lowMax ?? row.low ?? row.maxLow, fallback.lowMax);
+    const highMin = toNumber(row.highMin ?? row.high ?? row.minHigh, fallback.highMin);
     result[key] = {
       lowMax,
       highMin: Math.max(highMin, lowMax + 1)
@@ -939,7 +937,7 @@ function collectHoldingText(holding = {}, people = [], allBuildings = []) {
     holding?.special?.notes,
     holding?.gm?.notes,
     ...people.map((person) => [person?.name, person?.culture, person?.belief, person?.background, person?.role, person?.notes, person?.traitsText].join(" ")),
-    ...allBuildings.map((building) => [building?.id, building?.templateId, building?.name, building?.type, building?.effect, building?.notes, building?.location].join(" "))
+    ...allBuildings.map((building) => [building?.id, building?.templateId, building?.name, building?.type, building?.effect, building?.notes].join(" "))
   ].map((value) => normalizeText(value)).join(" ");
 }
 
@@ -1014,6 +1012,7 @@ export function eventRequirementFacts(holding = {}, { regionOptions = null } = {
 
   if (type === "sky-island" || type === "skyhold") features.add("sky-island");
   if (type === "settlement" || type === "sky-island") features.add("settlement");
+  if (type === "ship") features.add("ship");
   applyThresholdFeature("population", people.length);
   applyThresholdFeature("morale", morale);
   applyThresholdFeature("reputation", reputation);
@@ -1060,7 +1059,6 @@ export function eventRequirementFacts(holding = {}, { regionOptions = null } = {
   }
   if (holding?.gm?.defense?.squads?.length) features.add("defense");
   if ((holding?.storage?.resources ?? []).length || (holding?.storage?.items ?? []).length) features.add("storage");
-  if ((holding?.special?.fleet?.vessels ?? []).length) features.add("ship");
   if (/school|школ|учен|библиот|archive|архив/i.test(text)) features.add("school");
   if (/market|trade|merchant|inn|tavern|рынок|торг|купец|трактир|таверн|постоял/i.test(text)) features.add("trade");
   if (/ship|sky|island|летяг|кораб|остров|небес/i.test(text)) features.add("ship");

@@ -1,12 +1,12 @@
-<div class="fbls-resource-editor-shell">
+<div class="fbls-body-text fbls-resource-editor-shell">
   <header class="fbls-resource-editor-toolbar fbls-toolbar">
-    <label><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-resource-search value="{{search}}" placeholder="Поиск по ID, названию, категории или алиасу" autocomplete="off" /></label>
+    <label class="fbls-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-resource-search value="{{search}}" placeholder="Поиск по ID, названию, категории или тегу" autocomplete="off" /></label>
     <span>Показано: <strong data-resource-visible-count>{{catalog.rows.length}}</strong></span>
     <span>Настроено: <strong>{{catalog.overrideCount}}</strong> · своих: <strong>{{catalog.customCount}}</strong></span>
     {{#if pickerMode}}
       <span class="fbls-resource-picker-hint"><i class="fa-solid fa-arrow-pointer"></i> Выберите материал</span>
     {{else}}
-      {{#if canEdit}}<button type="button" class="fbls-button" data-action="resource-add"><i class="fa-solid fa-plus"></i> Новый ресурс</button>{{/if}}
+      {{#if canEdit}}<button type="button" class="fbls-button fbls-button-role" data-action="resource-add"><i class="fa-solid fa-plus"></i> Новый ресурс</button>{{/if}}
     {{/if}}
   </header>
 
@@ -17,8 +17,8 @@
       <article class="fbls-resource-editor-row {{#if isOverride}}is-override{{else}}is-builtin{{/if}} {{#if selected}}is-selected{{/if}}" data-resource-search-text="{{searchText}}">
         <div class="fbls-resource-editor-preview">{{#if img}}<img src="{{img}}" alt="" data-fbls-image-fallback /><i class="{{icon}}" data-fbls-image-fallback-icon hidden></i>{{else}}<i class="{{icon}}"></i>{{/if}}</div>
         <div class="fbls-resource-editor-identity"><strong>{{label}}</strong><small>{{id}}</small></div>
-        <span class="fbls-resource-editor-category">{{category}}</span>
-        <span class="fbls-resource-editor-unit">{{unitLabel}}</span>
+        <span class="fbls-resource-editor-category" title="Раздел: {{category}}{{#if categoryTag}}; тег: {{categoryTag}}{{/if}}">{{category}}{{#if categoryTag}} · #{{categoryTag}}{{/if}}</span>
+        <span class="fbls-resource-editor-unit" title="{{loadTitle}}">{{priceText}}<br />Н {{loadValueText}}</span>
         <span class="fbls-resource-editor-state">{{#if isOverride}}{{#if isBuiltin}}настроен{{else}}свой{{/if}}{{else}}встроен{{/if}}</span>
         {{#if ../pickerMode}}
           <button type="button" class="fbls-icon-button fbls-resource-select-button" data-action="resource-select" data-resource-id="{{id}}" title="Выбрать {{label}}" aria-label="Выбрать ресурс {{label}}"><i class="fa-solid {{#if selected}}fa-check{{else}}fa-arrow-right{{/if}}"></i></button>

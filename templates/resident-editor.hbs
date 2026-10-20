@@ -1,0 +1,29 @@
+<section class="fbls-resident-editor-window">
+  {{#if canEdit}}
+    <header class="fbls-resident-editor-hero">
+      <span class="fbls-resident-editor-avatar" aria-hidden="true"><i class="fa-solid fa-user"></i></span>
+      <div class="fbls-resident-editor-heading">
+        <span>{{holdingName}}</span>
+        <h2>{{person.name}}</h2>
+      </div>
+      <div class="fbls-stack fbls-save-meta">
+        {{> "modules/fbl-skyhold/templates/parts/save-status.hbs"}}
+      <div class="fbls-resident-editor-summary" aria-label="Краткие сведения">
+        <span class="fbls-chip"><i class="fa-solid fa-hourglass-half" aria-hidden="true"></i>{{person.ageLine}}</span>
+        <span class="fbls-chip"><i class="fa-solid fa-briefcase" aria-hidden="true"></i>{{person.workLabel}}</span>
+        <span class="fbls-chip"><i class="fa-solid fa-house" aria-hidden="true"></i>{{person.homeLabel}}</span>
+      </div>
+      </div>
+    </header>
+    <div class="fbls-resident-editor-scroll" data-render-scroll-key="resident-editor-body">
+      {{#with person}}
+        {{> "modules/fbl-skyhold/templates/parts/skyhold-resident-editor.hbs"}}
+      {{/with}}
+    </div>
+  {{else}}
+    <div class="fbls-resident-editor-error">
+      <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+      <p>{{error}}</p>
+    </div>
+  {{/if}}
+</section>

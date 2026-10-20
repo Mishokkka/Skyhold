@@ -3,16 +3,20 @@ const LEDGER_DOMAINS = new Set([
   "food",
   "income",
   "trade",
-  "payroll",
   "treasury",
   "construction",
+  "agriculture",
+  "livestock",
   "market",
   "residents",
   "events",
-  "system"
+  "system",
+  "politics",
+  "services",
+  "bank"
 ]);
 
-const LEDGER_KINDS = new Set(["resource", "item", "money", "progress", "shipment", "ration-buffer", "notice"]);
+const LEDGER_KINDS = new Set(["resource", "item", "money", "progress", "shipment", "notice"]);
 
 function finiteNumber(value, fallback = 0) {
   const parsed = Number(value);
@@ -34,7 +38,7 @@ export function normalizeEconomyLedgerEntry(row = {}, index = 0) {
   let kind = LEDGER_KINDS.has(String(row?.kind ?? "")) ? String(row.kind) : "resource";
   const resourceId = shortText(row?.resourceId, 160);
   if (resourceId === "money") kind = "money";
-  const qty = finiteNumber(row?.qty, 0);
+  const qty = Math.trunc(finiteNumber(row?.qty, 0));
   return {
     id: shortText(row?.id, 200) || `ledger-${index + 1}`,
     domain,
@@ -68,25 +72,34 @@ export function appendEconomyLedger(report, rows = []) {
   if (!report || typeof report !== "object") return [];
   if (!Array.isArray(report.ledger)) report.ledger = [];
   const source = Array.isArray(rows) ? rows : [rows];
+  report.ledgerTotals ??= economyLedgerTotals(report.ledger);
+  report.ledgerCount ??= report.ledger.length;
+  const positiveSources = new Set(report.positiveLedgerSourceIds ?? report.ledger.filter((row) => row.qty > 0).map((row) => row.sourceId).filter(Boolean));
   const appended = [];
   for (const row of source) {
     if (!row || typeof row !== "object") continue;
     const normalized = normalizeEconomyLedgerEntry(row, report.ledger.length);
-    if (["resource", "item", "money", "ration-buffer"].includes(normalized.kind) && Math.abs(normalized.qty) < 0.0001) continue;
+    if (["resource", "item", "money"].includes(normalized.kind) && Math.abs(normalized.qty) < 0.0001) continue;
     report.ledger.push(normalized);
+    report.ledgerCount += 1;
+    if (normalized.qty > 0 && normalized.sourceId) positiveSources.add(normalized.sourceId);
+    const delta = economyLedgerTotals([normalized]);
+    for (const key of Object.keys(delta)) report.ledgerTotals[key] = (report.ledgerTotals[key] ?? 0) + delta[key];
     appended.push(normalized);
   }
   if (report.ledger.length > 600) report.ledger = report.ledger.slice(-600);
+  report.ledgerTruncated = report.ledgerCount > report.ledger.length;
+  report.positiveLedgerSourceIds = [...positiveSources];
   return appended;
 }
 
 function storageKind(entry) {
   if (entry?.meta?.storageKind) return shortText(entry.meta.storageKind, 120);
   if (entry.domain === "production") return entry.qty >= 0 ? "production" : "expense";
+  if (entry.domain === "agriculture") return entry.qty >= 0 ? "production" : "expense";
   if (entry.domain === "food") return "food";
   if (entry.domain === "income") return "income";
   if (entry.domain === "trade") return entry.kind === "money" ? "income" : "trade-sale";
-  if (entry.domain === "payroll") return "expense";
   if (entry.domain === "treasury") return "expense";
   if (entry.domain === "market") return entry.qty >= 0 ? "market-arrival" : "market-purchase";
   return entry.qty >= 0 ? "income" : "expense";
@@ -112,7 +125,8 @@ export function economyLedgerStorageRows(rows = [], { operationId = "", period =
 
 export function economyLedgerTotals(rows = []) {
   const totals = { resourcesIn: 0, resourcesOut: 0, itemsIn: 0, itemsOut: 0, moneyIn: 0, moneyOut: 0, decisions: 0 };
-  for (const entry of normalizeEconomyLedger(rows)) {
+  for (const entry of normalizeEconomyLedger(rows, { limit: Number.MAX_SAFE_INTEGER })) {
+    if (entry.meta?.internalTransfer || entry.meta?.displayOnly || entry.meta?.reportOnly) continue;
     if (entry.kind === "money") entry.qty >= 0 ? totals.moneyIn += entry.qty : totals.moneyOut += Math.abs(entry.qty);
     else if (entry.kind === "resource") entry.qty >= 0 ? totals.resourcesIn += entry.qty : totals.resourcesOut += Math.abs(entry.qty);
     else if (entry.kind === "item") entry.qty >= 0 ? totals.itemsIn += entry.qty : totals.itemsOut += Math.abs(entry.qty);

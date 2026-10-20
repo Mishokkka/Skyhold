@@ -1,0 +1,415 @@
+/* Current morale explanation dialog. The Foundry chrome reset stays in the bridge. */
+.fbl-skyhold-morale-dialog .fbls-morale-dialog__scroll {
+  box-sizing: border-box;
+  display: grid;
+  gap: var(--fbls-gap-lg);
+  max-height: min(76vh, 720px);
+  padding: var(--fbls-gap-lg);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  color: var(--fbls-text);
+  background: var(--fbls-surface-0);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-hero {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--fbls-gap-lg);
+  align-items: center;
+  padding: 0.8rem;
+  border: 1px solid var(--fbls-border-strong);
+  border-inline-start: 4px solid var(--fbls-info);
+  border-radius: var(--fbls-radius-lg);
+  background: var(--fbls-surface-2);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-hero.tone-riot,
+.fbl-skyhold-morale-dialog .fbls-morale-hero.tone-bad {
+  border-inline-start-color: var(--fbls-danger);
+  background: var(--fbls-danger-soft);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-hero.tone-low {
+  border-inline-start-color: var(--fbls-warning);
+  background: var(--fbls-warning-soft);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-hero.tone-hope {
+  border-inline-start-color: var(--fbls-success);
+  background: var(--fbls-success-soft);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-hero.tone-home {
+  border-inline-start-color: var(--fbls-accent);
+  background: var(--fbls-accent-soft);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-hero__value {
+  display: grid;
+  place-items: center;
+  width: 70px;
+  min-height: 70px;
+  border: 1px solid var(--fbls-border-strong);
+  border-radius: var(--fbls-radius-md);
+  background: var(--fbls-overlay-soft);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-hero__value i {
+  color: var(--fbls-accent);
+  font-size: 1.35rem;
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-hero__value strong {
+  color: var(--fbls-text-strong);
+  font-size: 1.55rem;
+  line-height: 1;
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-hero__copy {
+  min-width: 0;
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-hero__copy small,
+.fbl-skyhold-morale-dialog .fbls-morale-section > header small,
+.fbl-skyhold-morale-dialog .fbls-morale-source small,
+.fbl-skyhold-morale-dialog .fbls-morale-details li small {
+  display: block;
+  color: var(--fbls-muted);
+  font-size: var(--fbls-type-compact-sm);
+  font-weight: 500;
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-hero__copy h2 {
+  margin: 0.12rem 0 0.2rem;
+  color: var(--fbls-text-strong);
+  font-size: 1.28rem;
+  line-height: 1.1;
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-hero__copy p,
+.fbl-skyhold-morale-dialog .fbls-morale-level p,
+.fbl-skyhold-morale-dialog .fbls-morale-control__note {
+  margin: 0;
+  color: var(--fbls-text);
+  line-height: 1.35;
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-hero__range {
+  align-self: start;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--fbls-border-strong);
+  border-radius: 999px;
+  color: var(--fbls-text-strong);
+  background: var(--fbls-surface-3);
+  font-size: var(--fbls-type-compact-sm);
+  white-space: nowrap;
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-section {
+  display: grid;
+  gap: var(--fbls-gap-md);
+  padding: var(--fbls-gap-lg);
+  border: 1px solid var(--fbls-border);
+  border-radius: var(--fbls-radius-lg);
+  background: var(--fbls-surface-1);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-section > header {
+  display: flex;
+  gap: var(--fbls-gap-md);
+  align-items: baseline;
+  justify-content: space-between;
+  border-block-end: 1px solid var(--fbls-border);
+  padding-block-end: var(--fbls-gap-sm);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-section > header > span {
+  color: var(--fbls-text-strong);
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-section > header i {
+  width: 1.1rem;
+  color: var(--fbls-accent);
+  text-align: center;
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-sources {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--fbls-gap-sm);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-source {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--fbls-gap-sm);
+  align-items: center;
+  min-width: 0;
+  padding: 0.55rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: var(--fbls-radius-md);
+  background: var(--fbls-surface-2);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-source > i {
+  color: var(--fbls-info);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-source > span {
+  min-width: 0;
+  color: var(--fbls-text);
+  font-size: var(--fbls-type-compact-md);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-source > strong {
+  color: var(--fbls-text-strong);
+  font-size: 1rem;
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-equation {
+  display: flex;
+  gap: var(--fbls-gap-sm);
+  align-items: center;
+  justify-content: center;
+  color: var(--fbls-muted);
+  font-size: var(--fbls-type-compact-sm);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-equation span,
+.fbl-skyhold-morale-dialog .fbls-morale-equation strong {
+  min-width: 2rem;
+  padding: 0.2rem 0.42rem;
+  border-radius: 999px;
+  text-align: center;
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-equation span {
+  background: var(--fbls-panel);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-equation strong {
+  color: var(--fbls-on-accent);
+  background: var(--fbls-accent);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: var(--fbls-gap-md);
+  align-items: center;
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-control > article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.12rem var(--fbls-gap-sm);
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: var(--fbls-radius-md);
+  background: var(--fbls-surface-2);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-control > article.is-adjusted {
+  border-color: var(--fbls-success);
+  background: var(--fbls-success-soft);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-control article small,
+.fbl-skyhold-morale-dialog .fbls-morale-control article span {
+  color: var(--fbls-muted);
+  font-size: var(--fbls-type-compact-sm);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-control article span {
+  grid-column: 1 / -1;
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-control article strong {
+  color: var(--fbls-text-strong);
+  font-size: 1.1rem;
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-control > i {
+  color: var(--fbls-muted);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-control__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--fbls-gap-sm);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-control__facts span {
+  padding: 0.25rem 0.48rem;
+  border: 1px solid var(--fbls-border);
+  border-radius: 999px;
+  color: var(--fbls-muted);
+  background: var(--fbls-surface-2);
+  font-size: var(--fbls-type-compact-sm);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-control__facts b {
+  color: var(--fbls-text-strong);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-control__note {
+  padding-inline-start: 0.55rem;
+  border-inline-start: 2px solid var(--fbls-info);
+  color: var(--fbls-muted);
+  font-size: var(--fbls-type-compact-sm);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-levels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--fbls-gap-sm);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-level {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.3rem var(--fbls-gap-md);
+  padding: 0.55rem;
+  border: 1px solid var(--fbls-border);
+  border-inline-start: 3px solid var(--fbls-info);
+  border-radius: var(--fbls-radius-md);
+  background: var(--fbls-surface-2);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-level.tone-riot,
+.fbl-skyhold-morale-dialog .fbls-morale-level.tone-bad {
+  border-inline-start-color: var(--fbls-danger);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-level.tone-low {
+  border-inline-start-color: var(--fbls-warning);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-level.tone-hope {
+  border-inline-start-color: var(--fbls-success);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-level.tone-home {
+  border-inline-start-color: var(--fbls-accent);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-level.is-current {
+  border-color: var(--fbls-accent);
+  background: var(--fbls-accent-soft);
+  box-shadow: inset 0 0 0 1px var(--fbls-accent-border);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-level__title {
+  display: flex;
+  gap: var(--fbls-gap-sm);
+  align-items: center;
+  min-width: 0;
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-level__title i {
+  color: var(--fbls-accent);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-level__title strong,
+.fbl-skyhold-morale-dialog .fbls-morale-level > b {
+  color: var(--fbls-text-strong);
+  font-size: var(--fbls-type-compact-md);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-level__title span {
+  margin-inline-start: auto;
+  padding: 0.12rem 0.36rem;
+  border-radius: 999px;
+  color: var(--fbls-on-accent);
+  background: var(--fbls-accent);
+  font-size: var(--fbls-type-compact-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-level p {
+  grid-column: 1 / -1;
+  color: var(--fbls-muted);
+  font-size: var(--fbls-type-compact-sm);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-gm > header > span {
+  color: var(--fbls-warning);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-details {
+  border: 1px solid var(--fbls-border);
+  border-radius: var(--fbls-radius-md);
+  background: var(--fbls-surface-2);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-details summary {
+  display: flex;
+  gap: var(--fbls-gap-sm);
+  align-items: center;
+  min-height: var(--fbls-control-height);
+  padding: 0.35rem 0.55rem;
+  color: var(--fbls-text-strong);
+  cursor: pointer;
+  list-style: none;
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-details summary span {
+  margin-inline-start: auto;
+  color: var(--fbls-muted);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-details ul {
+  display: grid;
+  gap: 1px;
+  max-height: 220px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  border-block-start: 1px solid var(--fbls-border);
+  list-style: none;
+  scrollbar-gutter: stable;
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-details li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--fbls-gap-md);
+  align-items: center;
+  padding: 0.42rem 0.55rem;
+  background: var(--fbls-surface-1);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-details li > span {
+  min-width: 0;
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-details li strong,
+.fbl-skyhold-morale-dialog .fbls-morale-details li b {
+  color: var(--fbls-text-strong);
+}
+
+.fbl-skyhold-morale-dialog .fbls-morale-details li.is-empty {
+  display: block;
+  color: var(--fbls-muted);
+}
+
+@media (max-width: 720px) {
+  .fbl-skyhold-morale-dialog .fbls-morale-sources,
+  .fbl-skyhold-morale-dialog .fbls-morale-levels {
+    grid-template-columns: 1fr;
+  }
+
+  .fbl-skyhold-morale-dialog .fbls-morale-hero {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .fbl-skyhold-morale-dialog .fbls-morale-hero__range {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+}

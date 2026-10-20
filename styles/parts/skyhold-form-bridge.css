@@ -1,0 +1,68 @@
+/* Foundry native form adapter. Shared dimensions belong to the form tokens. */
+.fbl-skyhold.application, .fbl-skyhold.window-app { --input-height: var(--fbls-control-height); }
+
+.application.fbl-skyhold .fbls-control,
+.window-app.fbl-skyhold .fbls-control {
+  color: var(--fbls-text); -webkit-text-fill-color: var(--fbls-text);
+  background: var(--fbls-overlay); border: 1px solid var(--fbls-border);
+  font-family: inherit; font-size: var(--fbls-type-body); line-height: 1.25;
+}
+.application.fbl-skyhold .fbls-control:disabled, .application.fbl-skyhold .fbls-control[readonly],
+.window-app.fbl-skyhold .fbls-control:disabled, .window-app.fbl-skyhold .fbls-control[readonly] { color: var(--fbls-muted); -webkit-text-fill-color: var(--fbls-muted); }
+.application.fbl-skyhold .fbls-control:focus,
+.window-app.fbl-skyhold .fbls-control:focus { border-color: var(--fbls-accent-border); }
+.application.fbl-skyhold .fbls-control::placeholder,
+.window-app.fbl-skyhold .fbls-control::placeholder { color: var(--fbls-placeholder); opacity: 1; }
+.application.fbl-skyhold textarea.fbls-control,
+.window-app.fbl-skyhold textarea.fbls-control { line-height: 1.4; }
+.application.fbl-skyhold .fbls-search > input,
+.window-app.fbl-skyhold .fbls-search > input { color: var(--fbls-text); -webkit-text-fill-color: var(--fbls-text); background: transparent; border: 0; height: auto; min-height: 0; padding: 0; margin: 0; font: inherit; box-shadow: none; }
+.application.fbl-skyhold .fbls-button-role,
+.window-app.fbl-skyhold .fbls-button-role {
+  color: var(--fbls-button-text); -webkit-text-fill-color: var(--fbls-button-text);
+  background: var(--fbls-button-background); border-color: var(--fbls-button-border); font-weight: var(--fbls-button-weight);
+}
+
+:is(.application, .window-app).fbl-skyhold :is(
+  button.fbls-control,
+  input.fbls-control:not([type="checkbox"], [type="radio"], [type="range"], [type="hidden"], [type="color"], [type="file"]),
+  select.fbls-control:not([multiple], [size]:not([size="1"]))
+) {
+  box-sizing: border-box; height: var(--fbls-control-height); min-height: var(--fbls-control-height);
+  margin: 0; padding: 0.25rem 0.45rem; line-height: 1.25;
+}
+:is(.application, .window-app).fbl-skyhold .fbls-button-role {
+  box-sizing: border-box; height: var(--fbls-control-height); min-height: var(--fbls-control-height);
+  margin-block: 0; padding-block: 0.25rem; line-height: 1.25; white-space: nowrap;
+}
+
+:is(.application, .window-app).fbl-skyhold select.fbls-control:is([multiple], [size]:not([size="1"])) {
+  height: auto; min-height: var(--fbls-control-height); line-height: normal;
+}
+
+.application.fbl-skyhold .fbls-storage-global-search input,
+.window-app.fbl-skyhold .fbls-storage-global-search input { height: auto; min-height: 0; line-height: 1.25; padding: 0; margin: 0; }
+
+/* Native table padding would otherwise make a 32px control produce a 48px row. */
+:is(.application, .window-app).fbl-skyhold .fbls-mass-counter-matrix td { padding-block: 0.25rem; }
+
+/* Native single-line select geometry also covers controls without a role class. */
+:is(.application, .window-app).fbl-skyhold select:not([multiple], [size]:not([size="1"])) {
+  box-sizing: border-box; height: var(--fbls-control-height); min-height: var(--fbls-control-height);
+  margin-block: 0; padding: 0.25rem 0.45rem; font-size: var(--fbls-type-body); line-height: 1.25;
+}
+:is(.application, .window-app).fbl-skyhold select:is([multiple], [size]:not([size="1"])) {
+  height: auto; min-height: var(--fbls-control-height); line-height: normal;
+}
+
+/* The dense resident register retains its owner geometry under native form rules. */
+:is(.application, .window-app).fbl-skyhold .fbls-resident-list .fbls-person-row > td {
+  padding-block: var(--fbls-resident-cell-padding-block);
+}
+:is(.application, .window-app).fbl-skyhold .fbls-resident-list :is(select.fbls-resident-work-select, button.fbls-crew-shore-button) {
+  height: var(--fbls-resident-control-height); min-height: var(--fbls-resident-control-height);
+  margin-block: 0; padding-block: 0;
+}
+:is(.application, .window-app).fbl-skyhold .fbls-resident-list select.fbls-resident-work-select {
+  padding-inline: 0.28rem 1.25rem; font-size: var(--fbls-type-compact-md);
+}

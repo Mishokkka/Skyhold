@@ -1,0 +1,29 @@
+<div class="fbls-toolbar"><div><h3 class="fbls-heading-section">Паспорт и навигация</h3><p class="fbls-muted-text">Настройки ГМа · поля паспорта сохраняются после изменения</p></div><span class="fbls-chip">{{profileLabel}}</span></div>
+<div class="fbls-ship-box">
+  {{#if canConfigureCrew}}<div class="fbls-ship-form-grid">
+    <label class="fbls-field"><span>Название</span><input type="text" data-field="holdings.{{@root.holdingIndex}}.special.ships.list.{{index}}.name" value="{{name}}" data-fbls-tooltip="Название в списке кораблей, отчётах и жилье экипажа. Сохраняется после изменения поля." /></label>
+    <label class="fbls-field"><span>Командующий</span><input type="text" data-field="holdings.{{@root.holdingIndex}}.special.ships.list.{{index}}.commanderName" value="{{commanderName}}" data-fbls-tooltip="Имя командира для паспорта судна. Изменение подписи не меняет приписку жителей к команде." /></label>
+  </div>{{else}}<p class="fbls-muted-text">Название и командование меняются дома между рейсами.</p>{{/if}}
+  <p class="fbls-muted-text">{{profileLabel}}. Тайники входят в общую вместимость трюма.</p>
+  {{#if canConfigureCrew}}<div class="fbls-ship-form-grid fbls-ship-parameters">
+    <label class="fbls-field"><span>Скорость, км/день</span><input type="number" min="1" max="10000" step="1" data-field="holdings.{{@root.holdingIndex}}.special.ships.list.{{index}}.speedKmPerDay" value="{{speedKmPerDay}}" data-fbls-tooltip="Средняя скорость уже учитывает обычные ночные остановки. Погрузка и разгрузка добавляются ко времени пути." /></label>
+    <label class="fbls-field"><span>Трюм, ед.</span><input type="number" min="1" max="1000000" step="1" data-field="holdings.{{@root.holdingIndex}}.special.ships.list.{{index}}.capacityLoadPoints" value="{{capacityLoadPoints}}" data-fbls-tooltip="Общая вместимость в игровых единицах груза. Уже выданные предложения будут проверены заново при принятии." /></label>
+    <label class="fbls-field"><span>Тайники, ед.</span><input type="number" min="0" max="1000000" step="1" data-field="holdings.{{@root.holdingIndex}}.special.ships.list.{{index}}.hiddenCapacityLoadPoints" value="{{hiddenCapacityLoadPoints}}" data-fbls-tooltip="Часть общего трюма, пригодная для контрабанды. Значение не может превышать вместимость." /></label>
+  </div>{{else}}<dl class="fbls-ship-facts"><div><dt>Скорость</dt><dd>{{speedKmPerDay}} км/день</dd></div><div><dt>Трюм</dt><dd>{{capacityLoadPoints}} ед.</dd></div><div><dt>Тайники</dt><dd>{{hiddenCapacityLoadPoints}} ед.</dd></div></dl>{{/if}}
+</div>
+<div class="fbls-ship-box">
+  <label class="fbls-cluster fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Содержание корабля в поселении. Включает содержание корпуса, питание и жалованье отдыхающего на борту экипажа дома. Выключение прекращает новые начисления с текущего расчётного момента; прежние долги сохраняются. Расходы рейсов, чужих портов и моряков, направленных работать в поселение, не меняются."><input type="checkbox" data-field="holdings.{{@root.holdingIndex}}.special.ships.list.{{index}}.homeUpkeepEnabled" {{#if homeUpkeepEnabled}}checked{{/if}} /> <span>Содержание дома</span></label>
+</div>
+<details class="fbls-ship-box" data-ship-disclosure="home:{{@root.holding.id}}" data-ship-draft-scope="home:{{@root.holding.id}}">
+  <summary><strong>Домашняя точка · {{@root.holding.name}}</strong> · {{@root.shipHome.locationLabel}}</summary>
+  <p>Сейчас: {{@root.shipHome.locationLabel}}. Мировые заказы оплачивают другие поселения; продажа собственного груза оформляется во Внешней торговле.</p>
+  <div class="fbls-ship-form-grid">
+    <label class="fbls-field"><span>Воздушная связь на карте</span><select data-ship-home-route data-ship-draft="home-route" aria-label="Связь для домашней точки"><option value="">Выберите маршрут</option>{{#each @root.shipHome.routes}}<option value="{{key}}">{{label}}</option>{{/each}}</select></label>
+    <label class="fbls-field"><span>Положение от первого порта, %</span><input type="number" min="1" max="99" step="1" value="50" data-ship-home-percent data-ship-draft="home-percent" aria-label="Положение домашней точки вдоль связи" /></label>
+  </div>
+  <p class="fbls-muted-text">50% — середина нарисованного пути. Точка без рынка подключается к обоим портам. Изменится регион поселения; свободные предложения сбросятся. Перед сохранением будет показано подтверждение.</p>
+  {{#if @root.shipHome.blocker}}<p class="fbls-ship-notice">{{@root.shipHome.blocker}}</p>{{/if}}
+  {{#unless @root.shipHome.routes.length}}<p class="fbls-muted-text">Сначала разместите два открытых воздушных порта и соедините их в редакторе карты маршрутов рынка.</p>{{/unless}}
+  <div class="fbls-action-group"><button type="button" class="fbls-button compact" data-action="ship-place-home" {{#unless @root.shipHome.canPlace}}disabled{{/unless}}><i class="fa-solid fa-location-dot" aria-hidden="true"></i> Проверить и разместить</button></div>
+</details>
+<details class="fbls-ship-box" data-ship-disclosure="delete:{{id}}"><summary><strong>Удаление корабля</strong></summary><p>{{deleteReason}}</p><button type="button" class="fbls-button compact danger" data-action="ship-delete" data-fbls-tooltip="{{deleteReason}}" {{#unless canDelete}}disabled{{/unless}}><i class="fa-solid fa-trash" aria-hidden="true"></i> Удалить</button></details>

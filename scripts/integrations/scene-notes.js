@@ -126,7 +126,7 @@ async function createBuildingSceneNote(payload) {
     iconSize: BUILDING_NOTE_ICON_SIZE,
     fontFamily: BUILDING_NOTE_FONT_FAMILY,
     fontSize: BUILDING_NOTE_FONT_SIZE,
-    textColor: "#f2efe6",
+    textColor: "#f5eee2",
     textAnchor: 1,
     global: false,
     texture: { src: texture },

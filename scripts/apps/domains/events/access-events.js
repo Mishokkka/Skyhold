@@ -14,7 +14,7 @@ _canUseStorage() {
 },
 
 _canPlayerWriteFieldPath(path = "") {
-  if (game.user?.isGM) return this._activeHoldingPermissionContext().writeAvailable;
+  if (game.user?.isGM) return true;
   if (!this._activeHoldingPermissionContext().writeAvailable) return false;
   const text = String(path ?? "");
   const data = SkyholdData.get();

@@ -10,13 +10,15 @@ function dateText(value = "") {
 
 function operationIcon(type = "") {
   if (type === "worker-assignment") return "fa-solid fa-people-arrows";
+  if (type === "construction-cancellation") return "fa-solid fa-hammer-circle-xmark";
   if (type === "event-effect") return "fa-solid fa-wand-magic-sparkles";
   if (type === "event-schedule") return "fa-solid fa-calendar-days";
   if (type === "battle") return "fa-solid fa-shield-halved";
   if (type === "storage") return "fa-solid fa-boxes-stacked";
   if (type === "content-import") return "fa-solid fa-file-import";
   if (type === "market-purchase") return "fa-solid fa-store";
-  if (type === "market-export") return "fa-solid fa-arrow-up-from-bracket";
+  if (type === "market-outbound") return "fa-solid fa-truck-fast";
+  if (type === "ship-operation") return "fa-solid fa-ship";
   if (type === "tenday") return "fa-solid fa-calendar-check";
   return "fa-solid fa-clock-rotate-left";
 }

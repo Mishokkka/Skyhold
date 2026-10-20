@@ -41,7 +41,7 @@
                   <td>{{#if ../canEditSpecial}}<input type="text" data-field="holdings.{{../holdingIndex}}.special.list.{{_index}}.name" value="{{name}}" />{{else}}{{name}}{{/if}}</td>
                   <td>{{#if ../canEditSpecial}}<input type="text" data-field="holdings.{{../holdingIndex}}.special.list.{{_index}}.type" value="{{type}}" />{{else}}{{type}}{{/if}}</td>
                   <td>
-                    {{#if ../canEditSpecial}}
+                    {{#if @root.isGM}}
                       <select data-field="holdings.{{../holdingIndex}}.special.list.{{_index}}.visibility">
                         <option value="public" {{#unless isGmOnly}}selected{{/unless}}>Игроки</option>
                         <option value="gm" {{#if isGmOnly}}selected{{/if}}>Только ГМ</option>
@@ -58,66 +58,6 @@
               {{/each}}
             </tbody>
           </table>
-        {{/if}}
-
-        {{#if activeSpecial.fleet}}
-          <section class="fbls-fleet-overview" aria-label="Корабельное предприятие">
-            <header class="fbls-card-header">
-              <div>
-                <h3><i class="fa-solid fa-ship"></i> Корабли поселения</h3>
-                <p class="fbls-muted-text">Касса, резервы и рейсы каждого судна учитываются отдельно от казны.</p>
-              </div>
-              {{#if canEdit}}
-                <button type="button" class="fbls-button compact" data-action="create-fleet-vessel" aria-label="Добавить корабль поселения">
-                  <i class="fa-solid fa-plus"></i> Добавить корабль
-                </button>
-              {{/if}}
-            </header>
-
-            <div class="fbls-fleet-card-grid">
-              {{#each fleetCards}}
-                <article class="fbls-card fbls-fleet-card {{#if active}}is-active{{/if}}">
-                  <header class="fbls-card-header">
-                    <div>
-                      <h3>{{name}}</h3>
-                      <p>{{ownerName}}</p>
-                    </div>
-                    <span class="fbls-chip">{{statusLabel}}</span>
-                  </header>
-                  <dl class="fbls-fleet-summary">
-                    <div><dt>Местоположение</dt><dd>{{location}}</dd></div>
-                    <div><dt>Касса</dt><dd>{{cashText}}</dd></div>
-                    <div><dt>Доступно</dt><dd>{{availableText}}</dd></div>
-                    <div><dt>Состояние</dt><dd>{{condition}}%</dd></div>
-                  </dl>
-                  {{#if hasVoyage}}
-                    <div class="fbls-fleet-voyage-strip">
-                      <strong>{{voyageTitle}}</strong>
-                      <span>{{voyageEta}} · результат после резервов {{voyageResultText}}</span>
-                    </div>
-                  {{else}}
-                    <p class="fbls-muted-text">Активного рейса нет.</p>
-                  {{/if}}
-                  <div class="fbls-action-group">
-                    <button type="button" class="fbls-button" data-action="open-ship-enterprise" data-vessel-id="{{id}}" aria-label="Открыть управление кораблём {{name}}">
-                      <i class="fa-solid fa-route"></i> Управление рейсами
-                    </button>
-                  </div>
-                </article>
-              {{else}}
-                <article class="fbls-card fbls-fleet-empty">
-                  <i class="fa-solid fa-ship"></i>
-                  <h3>Кораблей пока нет</h3>
-                  <p>GM может добавить «Магнифик» или другое судно к этому поселению.</p>
-                  {{#if canEdit}}
-                    <button type="button" class="fbls-button" data-action="create-fleet-vessel">
-                      <i class="fa-solid fa-plus"></i> Добавить первый корабль
-                    </button>
-                  {{/if}}
-                </article>
-              {{/each}}
-            </div>
-          </section>
         {{/if}}
 
         {{#if activeSpecial.cemetery}}

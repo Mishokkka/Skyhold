@@ -14,9 +14,9 @@
 .fbls-generator-grid label {
   min-width: 0;
   color: var(--fbls-muted);
-  font-size: 0.69rem;
+  font-size: var(--fbls-type-compact-xs);
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.08em;
 }
 
 .fbls-generator-grid span {
@@ -33,7 +33,7 @@
 
 .fbls-generator-hint {
   color: var(--fbls-dim);
-  font-size: 0.78rem;
+  font-size: var(--fbls-type-compact-sm);
 }
 
 @media (max-width: 1180px) {

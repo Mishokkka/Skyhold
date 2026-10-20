@@ -1,5 +1,5 @@
 import { buildingOperationalState } from "../../core/building-state.js";
-import { moraleBandForScore } from "../../engines/morale/morale-snapshot.js";
+import { isResidentInPopulation } from "../../data/resident-presence.js";
 import {
   ATTACK_METHODS,
   DEFENDER_MOBILIZATIONS,
@@ -212,11 +212,13 @@ export function collectTags(sources = []) {
 
 export function defenseSquadProfile(holding, state = {}) {
   if (state.useDefenseSquads === false) return { enabled: false, squads: [], units: 0, bs: 0, dice: 0, tags: {}, effective: 0, sources: [], details: "отряды поселения отключены" };
-  const people = (holding?.people?.list ?? []).filter((person) => !person?.dead && !isInjuredResident(person));
+  const people = (holding?.people?.list ?? []).filter((person) => isResidentInPopulation(person, holding) && !isInjuredResident(person));
   const byId = new Map(people.map((person) => [String(person.id), person]));
   const squads = Array.isArray(holding?.gm?.defense?.squads) ? holding.gm.defense.squads : [];
   const counted = [];
   const sources = [];
+  const supplyPlanActive = Boolean(state?.battleId) && String(state?.militarySupplyBattleId ?? "") === String(state?.battleId ?? "");
+  const suppliedSquadIds = new Set((state?.militarySuppliedSquadIds ?? []).map((id) => String(id ?? "")));
   let effectiveTotal = 0;
   for (const squad of squads) {
     if (!squad?.equipped) continue;
@@ -229,6 +231,13 @@ export function defenseSquadProfile(holding, state = {}) {
     const sergeant = byId.get(sergeantId);
     const sergeantBonus = sergeant && isSergeantCandidate(sergeant) ? 0.10 : 0;
     if (sergeantBonus) effective *= 1 + sergeantBonus;
+    const supplied = supplyPlanActive && suppliedSquadIds.has(String(squad?.id ?? ""));
+    const tags = { ...(profile.tags ?? {}) };
+    if (supplyPlanActive && !supplied) {
+      delete tags.shooters;
+      delete tags.siege;
+    }
+    if (supplied) effective *= 1.20;
     effective = round2(effective);
     if (effective < FULL_UNIT_EFFICIENCY) continue;
     const source = makeSource({
@@ -237,19 +246,24 @@ export function defenseSquadProfile(holding, state = {}) {
       id: squad.id,
       label: squad.name || profile.label,
       baseEfficiency: effective,
-      tags: profile.tags,
+      tags,
       participantIds: combatantIds,
       threshold: FULL_UNIT_EFFICIENCY
     });
     source.sergeantBonus = sergeantBonus;
+    source.militarySupplied = supplied;
+    source.modifiers.push(supplyPlanActive
+      ? (supplied ? "Военные припасы: +20% огнестрельной эффективности" : "Без военных припасов: нет огнестрельного бонуса и тегов")
+      : "Боеприпасы будут распределены при первом броске боя");
     sources.push(source);
     effectiveTotal += effective;
-    counted.push({ id: String(squad.id ?? ""), name: squad.name || profile.label, type: profile.label, effective, dice: sourceDice(source), tags: profile.tags });
+    counted.push({ id: String(squad.id ?? ""), name: squad.name || profile.label, type: profile.label, effective, dice: sourceDice(source), tags, supplied });
   }
   const tags = collectTags(sources);
   const dice = sources.reduce((sum, source) => sum + sourceDice(source), 0);
   const units = counted.length;
-  return { enabled: true, squads: counted, units, bs: round1(effectiveTotal), dice, tags, effective: round2(effectiveTotal), sources, details: counted.length ? `${counted.length} полных отрядов, ${round1(effectiveTotal)} эфф., ${dice}к6.` : "полных экипированных отрядов нет" };
+  const suppliedCount = counted.filter((squad) => squad.supplied).length;
+  return { enabled: true, squads: counted, units, bs: round1(effectiveTotal), dice, tags, effective: round2(effectiveTotal), sources, details: counted.length ? `${counted.length} полных отрядов, ${round1(effectiveTotal)} эфф., ${dice}к6${supplyPlanActive ? `; с припасами ${suppliedCount}/${counted.length}` : ""}.` : "полных экипированных отрядов нет" };
 }
 
 function buildingCombatTag(building) {
@@ -259,7 +273,7 @@ function buildingCombatTag(building) {
 }
 
 export function defenseGarrisonProfile(holding, { buildingEffectiveWorkers = null } = {}) {
-  const people = (holding?.people?.list ?? []).filter((person) => !person?.dead && !isInjuredResident(person));
+  const people = (holding?.people?.list ?? []).filter((person) => isResidentInPopulation(person, holding) && !isInjuredResident(person));
   const byId = new Map(people.map((person) => [String(person.id), person]));
   const buildings = builtBuildings(holding).filter((building) => isDefenseBuilding(building));
   const ids = new Set();
@@ -349,7 +363,7 @@ export function fortificationProfile(holding, state = {}, { defenseTotal = 0, ha
 }
 
 function militiaSources(holding, state = {}, militaryIds = new Set()) {
-  const people = (holding?.people?.list ?? []).filter((person) => !person?.dead && !isInjuredResident(person));
+  const people = (holding?.people?.list ?? []).filter((person) => isResidentInPopulation(person, holding) && !isInjuredResident(person));
   const adults = people.filter((person) => isAdultResident(person));
   const civilians = adults.filter((person) => !militaryIds.has(String(person.id)) && !isSoldierResident(person) && !isMilitaryResident(person));
   const defenseConfig = holding?.gm?.defense ?? {};
@@ -383,7 +397,7 @@ export function autoDefenderProfile(holding, state = {}, {
   buildingEffectiveWorkers = null,
   calculateMorale = null
 } = {}) {
-  const people = (holding?.people?.list ?? []).filter((person) => !person?.dead && !isInjuredResident(person));
+  const people = (holding?.people?.list ?? []).filter((person) => isResidentInPopulation(person, holding) && !isInjuredResident(person));
   const adults = people.filter((person) => isAdultResident(person));
   const squadProfile = defenseSquadProfile(holding, state);
   const garrisonProfile = defenseGarrisonProfile(holding, { buildingEffectiveWorkers });
@@ -398,12 +412,8 @@ export function autoDefenderProfile(holding, state = {}, {
   const militia = militiaSources(holding, state, militaryIds);
   const sources = [...(squadProfile.sources ?? []), ...(militia.sources ?? [])];
   const regularEffective = sources.reduce((sum, source) => sum + source.baseEfficiency, 0);
-  const moraleResult = typeof calculateMorale === "function" ? calculateMorale(holding) : 0;
-  const moraleValue = asNumber(moraleResult?.score ?? moraleResult?.value ?? moraleResult, 0);
-  const moraleBand = moraleBandForScore(moraleValue);
-  const morale = moraleBand.id === "riot" || moraleBand.id === "discontent"
-    ? -2
-    : (moraleBand.id === "apathy" ? -1 : (moraleBand.id === "hope" ? 1 : (moraleBand.id === "home" ? 2 : 0)));
+  const moraleValue = asNumber(typeof calculateMorale === "function" ? calculateMorale(holding) : 0, 0);
+  const morale = moraleValue > 30 ? 2 : moraleValue > 15 ? 1 : moraleValue < -15 ? -2 : moraleValue < 0 ? -1 : 0;
   const manualRequested = String(state.defenderMobilization ?? "") === "manual";
   const tags = collectTags([...sources, ...(garrisonProfile.sources ?? [])]);
   const details = [

@@ -2,7 +2,10 @@ import { MODULE_ID } from "../data/constants.js";
 import { SkyholdData } from "../data/store.js";
 import { WindowFrameMixin } from "./common/window-frame.js";
 import { RenderSchedulerMixin } from "./common/render-scheduler.js";
+import { bindTabNavigation } from "./common/tab-navigation.js";
+import { focusApplicationContent } from "./common/window-focus-keeper.js";
 import { hydrateTendayOperation } from "../engines/tenday/operation-payload.js";
+import { normalizeFoodRationUnits } from "../engines/economy/food-rations.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const TABS = Object.freeze([
@@ -40,7 +43,7 @@ function preparedChange(change = {}, owner = null) {
     beforeText = `${beforeText}/${change.beforeTargetText ?? change.beforeTarget ?? "—"}`;
     afterText = `${afterText}/${change.afterTargetText ?? change.afterTarget ?? "—"}`;
   }
-  if (["money", "debt"].includes(change.key) && owner?._formatCopperCurrency) {
+  if (change.key === "money" && owner?._formatCopperCurrency) {
     beforeText = owner._formatCopperCurrency(change.before);
     afterText = owner._formatCopperCurrency(change.after);
   }
@@ -68,20 +71,54 @@ function eventEffectText(effect = {}, owner = null) {
   return `${effect?.name || effect?.resourceId || "Ресурс"} ${formatted}`;
 }
 
-function economySections(report = {}) {
+function financeReportRows(finance = {}, owner = null) {
+  const kindLabels = {
+    wage: "зарплата",
+    "building-base-upkeep": "базовое содержание",
+    "building-operating-upkeep": "эксплуатация",
+    "loan-payment": "платёж по договору",
+    other: "обязательство"
+  };
+  const currency = (value) => owner?._formatCopperCurrency?.(finiteNumber(value, 0)) ?? `${Math.max(0, Math.floor(finiteNumber(value, 0)))} ММ`;
+  return (finance?.obligations ?? []).map((row) => {
+    const recipient = String(row?.meta?.recipientName ?? row?.recipientId ?? "Получатель");
+    const kind = kindLabels[String(row?.kind ?? "other")] ?? kindLabels.other;
+    const due = currency(row?.dueCopper);
+    const paid = currency(row?.paidCopper);
+    const outstanding = Math.max(0, finiteNumber(row?.outstandingCopper, 0));
+    const state = outstanding > 0 ? `долг ${currency(outstanding)}` : "оплачено полностью";
+    const orphaned = row?.status === "orphaned" ? "; получатель удалён — нужно решение GM" : "";
+    return `${recipient}: ${kind} ${due}; выплачено ${paid}; ${state}${orphaned}.`;
+  });
+}
+
+function maintenanceReportRows(maintenance = {}) {
+  const rows = [];
+  const available = Math.max(0, Math.floor(finiteNumber(maintenance?.availablePoints, 0)));
+  const allocated = Math.max(0, Math.floor(finiteNumber(maintenance?.allocatedPoints, 0)));
+  const unused = Math.max(0, Math.floor(finiteNumber(maintenance?.unusedPoints, 0)));
+  if (available || allocated || unused) rows.push(`Очки: доступно ${available}, распределено ${allocated}, не перенесено ${unused}.`);
+  for (const building of maintenance?.buildings ?? []) {
+    const backlog = Math.max(0, Math.floor(finiteNumber(building?.backlogAfter, 0)));
+    const factor = Math.max(0, Math.min(1, finiteNumber(building?.efficiencyFactor, 1)));
+    const resolution = building?.needsResolution ? "; требуется решение GM" : "";
+    rows.push(`${building?.name || "Здание"}: распределено ${building?.allocatedPoints ?? 0} очк.; backlog ${backlog}; эффективность ${Math.round(factor * 100)}%${resolution}.`);
+  }
+  return rows;
+}
+
+function economySections(report = {}, owner = null) {
   return [
-    { key: "labor", title: "Трудовой пул", icon: "fa-solid fa-people-group", rows: report?.labor?.lines ?? [], warning: report?.labor?.ready === false },
+    { key: "ledger-truncated", title: "Сокращённый журнал", icon: "fa-solid fa-list", rows: report?.ledgerTruncated ? [`Показано ${report.ledger?.length ?? 0} из ${report.ledgerCount ?? 0} операций; денежные итоги включают весь период.`] : [] },
     { key: "food", title: "Питание", icon: "fa-solid fa-bowl-food", rows: report?.foodSummary?.lines ?? [] },
-    { key: "capital", title: "Капитал предприятий", icon: "fa-solid fa-landmark", rows: report?.capitalSummary?.lines ?? [], warning: (report?.capitalSummary?.blocked ?? 0) > 0 },
     { key: "production", title: "Произведено", icon: "fa-solid fa-gears", rows: report?.produced ?? [] },
-    { key: "spoilage", title: "Порча при хранении", icon: "fa-solid fa-bacterium", rows: report?.spoiled ?? [], warning: true },
     { key: "income", title: "Доход", icon: "fa-solid fa-coins", rows: report?.income ?? [] },
-    { key: "services", title: "Услуги", icon: "fa-solid fa-utensils", rows: report?.serviceSummary?.lines ?? [] },
     { key: "consumption", title: "Расходы производства", icon: "fa-solid fa-box-open", rows: report?.consumed ?? [] },
     { key: "construction", title: "Строительство и ремонт", icon: "fa-solid fa-person-digging", rows: report?.constructionSummary?.lines ?? [] },
     { key: "trade", title: "Торговля", icon: "fa-solid fa-shop", rows: report?.tradeSummary?.lines ?? [] },
-    { key: "payroll", title: "Оплата труда", icon: "fa-solid fa-file-invoice-dollar", rows: report?.payroll?.lines ?? [], warning: (report?.payroll?.arrearsCopper ?? 0) > 0 },
     { key: "treasury", title: "Казна", icon: "fa-solid fa-vault", rows: report?.treasurySummary?.lines ?? [] },
+    { key: "finance", title: "Денежные обязательства", icon: "fa-solid fa-file-invoice-dollar", rows: financeReportRows(report?.finance, owner) },
+    { key: "maintenance", title: "Трудовое обслуживание", icon: "fa-solid fa-screwdriver-wrench", rows: maintenanceReportRows(report?.maintenance) },
     { key: "work", title: "Другие процессы", icon: "fa-solid fa-list-check", rows: report?.work ?? [] },
     { key: "skipped", title: "Не выполнено", icon: "fa-solid fa-triangle-exclamation", rows: report?.skipped ?? [], warning: true },
     { key: "formulas", title: "Броски и формулы", icon: "fa-solid fa-square-root-variable", rows: report?.formulas ?? [], technical: true }
@@ -161,6 +198,7 @@ export class SkyholdTendayApp extends WindowFrameMixin(RenderSchedulerMixin(Hand
     if (workflow?._summarizeEconomyReport) prepared.report = workflow._summarizeEconomyReport(prepared.report);
     const app = new this({ workflow, holdingId: id, qd: prepared.qd, instanceKey });
     app.prepared = prepared;
+    app.rationUnitsPerResident = normalizeFoodRationUnits(prepared.rationUnitsPerResident ?? prepared?.report?.food?.selectedUnits, 10);
     app.result = { ok: true, operationId };
     app.phase = "history";
     this.instances.set(instanceKey, app);
@@ -179,6 +217,7 @@ export class SkyholdTendayApp extends WindowFrameMixin(RenderSchedulerMixin(Hand
     this.prepared = null;
     this.result = null;
     this.error = "";
+    this.rationUnitsPerResident = null;
     this._operationToken = null;
     this._dataHookId = globalThis.Hooks?.on?.("fblSkyholdDataChanged", () => this._onDataChanged());
   }
@@ -202,16 +241,25 @@ export class SkyholdTendayApp extends WindowFrameMixin(RenderSchedulerMixin(Hand
     try {
       const workflow = await this._getWorkflow();
       if (!workflow?._prepareTendayOperation) throw new Error("Workflow десятника недоступен.");
-      const cacheKey = `${this.holdingId}:${this.qd}`;
-      const cached = this.constructor.preparedCache.get(cacheKey);
       const dataView = SkyholdData.view();
-      const dataRevision = Math.max(0, Number(dataView?.meta?.revision) || 0);
-      const dependencyHash = cached?.dependencyHash && cached?.dataRevision === dataRevision
-        ? cached.dependencyHash
-        : (workflow._tendayDependencyHash?.(dataView, this.holdingId) ?? "");
+      const currentHolding = (dataView?.holdings ?? []).find((row) => String(row?.id ?? "") === this.holdingId) ?? null;
+      this.rationUnitsPerResident = normalizeFoodRationUnits(
+        this.rationUnitsPerResident ?? currentHolding?.gm?.food?.rationUnitsPerResident,
+        10
+      );
+      const cacheKey = this._preparedCacheKey();
+      const cached = this.constructor.preparedCache.get(cacheKey);
+      // World labor settings can change without advancing Skyhold's revision.
+      const dependencyHash = workflow._tendayDependencyHash?.(dataView, this.holdingId) ?? "";
       const prepared = cached?.dependencyHash && cached.dependencyHash === dependencyHash
         ? cached
-        : await workflow._prepareTendayOperation({ holdingId: this.holdingId, qd: this.qd, dataView, dependencyHash });
+        : await workflow._prepareTendayOperation({
+          holdingId: this.holdingId,
+          qd: this.qd,
+          rationUnitsPerResident: this.rationUnitsPerResident,
+          dataView,
+          dependencyHash
+        });
       if (this._operationToken !== token) return;
       if (!prepared?.ok) {
         this.prepared = null;
@@ -230,6 +278,10 @@ export class SkyholdTendayApp extends WindowFrameMixin(RenderSchedulerMixin(Hand
       if (this._operationToken === token) this._operationToken = null;
       this.requestRender({ focus: false });
     }
+  }
+
+  _preparedCacheKey() {
+    return `${this.holdingId}:${this.qd}:ration-${normalizeFoodRationUnits(this.rationUnitsPerResident, 10)}`;
   }
 
   _setError(error) {
@@ -264,7 +316,6 @@ export class SkyholdTendayApp extends WindowFrameMixin(RenderSchedulerMixin(Hand
         changeSet?.clock ? { ...preparedChange(changeSet.clock, owner), label: "Внутренние часы", beforeText: `${changeSet.clock.beforeText ?? changeSet.clock.before ?? 0} QD`, afterText: `${changeSet.clock.afterText ?? changeSet.clock.after ?? 0} QD` } : null,
         changeSet?.date ? preparedChange(changeSet.date, owner) : null,
         changeSet?.money && Math.abs(finiteNumber(changeSet.money.delta, 0)) > 0.0001 ? preparedChange(changeSet.money, owner) : null,
-        changeSet?.debt && Math.abs(finiteNumber(changeSet.debt.delta, 0)) > 0.0001 ? preparedChange(changeSet.debt, owner) : null,
         changeSet?.food && Math.abs(finiteNumber(changeSet.food.delta, 0)) > 0.0001 ? preparedChange(changeSet.food, owner) : null
       ].filter(Boolean),
       resources: (changeSet?.resources ?? []).map((row) => preparedChange(row, owner)),
@@ -273,7 +324,9 @@ export class SkyholdTendayApp extends WindowFrameMixin(RenderSchedulerMixin(Hand
       residents: (changeSet?.residents ?? []).map((row) => preparedEntity(row, owner)),
       development: (changeSet?.development ?? []).map((row) => preparedChange(row, owner)),
       modifiers: (changeSet?.modifiers ?? []).map((row) => preparedChange(row, owner)),
-      shipments: (changeSet?.shipments ?? []).map((row) => preparedEntity(row, owner))
+      politics: (changeSet?.politics ?? []).map((row) => preparedChange(row, owner)),
+      shipments: (changeSet?.shipments ?? []).map((row) => preparedEntity(row, owner)),
+      ships: (changeSet?.ships ?? []).map((row) => preparedEntity(row, owner))
     };
     const changeGroups = [
       { key: "core", title: "Ключевые значения", icon: "fa-solid fa-chart-line", rows: changes.core, simple: true },
@@ -283,11 +336,14 @@ export class SkyholdTendayApp extends WindowFrameMixin(RenderSchedulerMixin(Hand
       { key: "residents", title: "Жители", icon: "fa-solid fa-people-group", rows: changes.residents, entities: true },
       { key: "development", title: "Развитие", icon: "fa-solid fa-arrow-trend-up", rows: changes.development, simple: true },
       { key: "modifiers", title: "Модификаторы", icon: "fa-solid fa-sliders", rows: changes.modifiers, simple: true },
-      { key: "shipments", title: "Поставки", icon: "fa-solid fa-truck-fast", rows: changes.shipments, entities: true }
+      { key: "politics", title: "Политика", icon: "fa-solid fa-scale-balanced", rows: changes.politics, simple: true },
+      { key: "shipments", title: "Поставки", icon: "fa-solid fa-truck-fast", rows: changes.shipments, entities: true },
+      { key: "ships", title: "Корабли", icon: "fa-solid fa-ship", rows: changes.ships, entities: true }
     ].filter((group) => group.rows.length > 0);
     const eventPlans = (prepared?.events?.entries ?? []).map((entry) => ({
       index: entry.index,
       reputationDice: Math.max(0, finiteNumber(entry?.reputation?.reputation, 0)),
+      controlDice: Math.max(0, finiteNumber(entry?.control?.crimeDeficit, 0)),
       generalAvailable: Boolean(entry?.general)
     }));
     const liveDecisions = new Map((currentHolding?.gm?.lastRoll?.events ?? []).map((event) => [String(event?.decisionId ?? ""), event]));
@@ -308,10 +364,12 @@ export class SkyholdTendayApp extends WindowFrameMixin(RenderSchedulerMixin(Hand
         effectStatus,
         decisionStatus,
         isExternal: event.kind === "external",
-        kindLabel: event.kind === "external" ? "Внешнее событие" : "Общее событие",
+        isControl: event.kind === "control",
+        kindLabel: event.kind === "external" ? "Внешнее событие" : event.kind === "control" ? "Инцидент Контроля" : "Общее событие",
         visibilityLabel: event.visibility === "gm" ? "Только GM" : "Публичное",
         newcomerText: event.newcomer ? "да" : "нет",
-        hasGmText: Boolean(String(event.gmText ?? "").trim()),
+        gmText: game.user?.isGM ? event.gmText : "",
+        hasGmText: Boolean(game.user?.isGM && String(event.gmText ?? "").trim()),
         hasEffects,
         canApplyDecision: phase === "result" && hasEffects && effectStatus === "pending" && Boolean(liveDecision),
         canScheduleDecision: phase === "result" && hasEffects && effectStatus === "pending" && Boolean(liveDecision),
@@ -321,17 +379,15 @@ export class SkyholdTendayApp extends WindowFrameMixin(RenderSchedulerMixin(Hand
     });
     const attention = prepared ? attentionRows(prepared) : [];
     const status = resultStatus(prepared, phase);
-    const sections = economySections(report);
+    const sections = economySections(report, owner);
     const moneyDelta = finiteNumber(changeSet?.money?.delta, 0);
     const food = report?.food ?? {};
-    const commonTable = food?.commonTable ?? null;
-    const tableResidents = Math.max(0, finiteNumber(commonTable?.residentCount, 0));
-    const tableCoverage = tableResidents > 0
-      ? `стол ${Math.max(0, finiteNumber(commonTable?.coveredResidents, 0))}/${tableResidents}`
-      : "";
-    const foodMeta = finiteNumber(food.hungryResidentDays, 0) > 0
-      ? `Голод: ${finiteNumber(food.hungryResidentDays, 0)} чел.-дн.`
-      : [String(food.nutritionDiversityLabel ?? "").trim() || "Все накормлены", tableCoverage].filter(Boolean).join(" · ");
+    const hungerLevel = Math.max(0, Math.min(10, Math.floor(finiteNumber(food.hungerLevelAfter ?? food.hungerLevel, 0))));
+    const hungerFactor = Math.max(0.5, Math.min(1, finiteNumber(food.hungerFactor, 1 - hungerLevel * 0.05)));
+    const rationUnitsPerResident = normalizeFoodRationUnits(
+      prepared?.rationUnitsPerResident ?? food.selectedUnits ?? this.rationUnitsPerResident ?? currentHolding?.gm?.food?.rationUnitsPerResident,
+      10
+    );
     const construction = report?.construction ?? {};
     const eventCount = eventResults.length;
     const hasPrepared = Boolean(prepared);
@@ -349,6 +405,12 @@ export class SkyholdTendayApp extends WindowFrameMixin(RenderSchedulerMixin(Hand
       holdingName: prepared?.holdingName ?? currentHolding?.name ?? "Владение",
       holdingMissing: !currentHolding,
       hasPrepared,
+      rationUnitsPerResident,
+      rationOptions: [
+        { value: 5, label: "Скудный · 5 ед.", selected: rationUnitsPerResident === 5 },
+        { value: 10, label: "Обычный · 10 ед.", selected: rationUnitsPerResident === 10 },
+        { value: 15, label: "Усиленный · 15 ед.", selected: rationUnitsPerResident === 15 }
+      ],
       canApply: phase === "preview" && Boolean(currentHolding),
       operationId: prepared?.operationId ?? this.result?.operationId ?? "",
       periodLabel: prepared?.periodLabel ?? "десятник",
@@ -386,7 +448,9 @@ export class SkyholdTendayApp extends WindowFrameMixin(RenderSchedulerMixin(Hand
         moneyDelta: `${moneyDelta > 0 ? "+" : moneyDelta < 0 ? "−" : ""}${owner?._formatCopperCurrency?.(Math.abs(moneyDelta)) ?? Math.abs(moneyDelta)}`,
         moneyClass: moneyDelta > 0 ? "is-positive" : moneyDelta < 0 ? "is-negative" : "is-neutral",
         foodText: `${finiteNumber(food.eaten, 0)} / ${finiteNumber(food.needed, 0)}`,
-        hungerText: foodMeta,
+        hungerText: hungerLevel > 0
+          ? `Голод ${hungerLevel}/10 · ${Math.round(hungerFactor * 100)}%`
+          : "Все накормлены · 100%",
         constructionText: `${finiteNumber(construction.attempts, 0)} попыток`,
         constructionMeta: `${finiteNumber(construction.completed, 0)} завершено`,
         eventsText: phase === "result" || phase === "history" ? `${eventCount} событий` : `${eventPlans.length} общих проверок`,
@@ -405,6 +469,7 @@ export class SkyholdTendayApp extends WindowFrameMixin(RenderSchedulerMixin(Hand
     this._delegatedAbortController?.abort?.();
     const controller = new AbortController();
     this._delegatedAbortController = controller;
+    bindTabNavigation(this, root, { signal: controller.signal });
     root.addEventListener("click", (event) => {
       const element = event.target?.closest?.("[data-action]");
       if (!element || !root.contains(element)) return;
@@ -416,6 +481,20 @@ export class SkyholdTendayApp extends WindowFrameMixin(RenderSchedulerMixin(Hand
       if (action === "tenday-event-schedule") return this._onEventDecision(event, element, "schedule");
       if (action === "tenday-close") return this.close();
     }, { signal: controller.signal });
+    root.addEventListener("change", (event) => {
+      const select = event.target?.closest?.("[data-tenday-ration]");
+      if (!select || !root.contains(select) || this.phase !== "preview") return;
+      const next = normalizeFoodRationUnits(select.value, this.rationUnitsPerResident ?? 10);
+      if (next === this.rationUnitsPerResident) return;
+      this.rationUnitsPerResident = next;
+      this.prepared = null;
+      this.prepare();
+    }, { signal: controller.signal });
+    focusApplicationContent(this, {
+      root,
+      options,
+      preferredSelector: "[data-action='tenday-tab'][aria-selected='true'], [data-tenday-ration]:not([disabled]), [data-action='tenday-close']"
+    });
   }
 
   _onTab(event, element) {
@@ -449,7 +528,7 @@ export class SkyholdTendayApp extends WindowFrameMixin(RenderSchedulerMixin(Hand
         }
         return;
       }
-      this.constructor.preparedCache.delete(`${this.holdingId}:${this.qd}`);
+      this.constructor.preparedCache.delete(this._preparedCacheKey());
       this.result = result;
       this.phase = "result";
       this.error = "";

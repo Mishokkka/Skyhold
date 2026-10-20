@@ -1,17 +1,17 @@
-<section class="fbls-random-event-editor-shell">
+<section class="fbls-body-text fbls-random-event-editor-shell">
   {{#if hasHolding}}
     <header class="fbls-event-editor-header">
       <div class="fbls-event-editor-title">
         <span class="fbls-event-editor-mark"><i class="fa-solid fa-table-list"></i></span>
         <div>
-          <h2>Случайные события</h2>
+          <h2 class="fbls-heading-title">Случайные события</h2>
           <p>{{holdingName}}</p>
         </div>
       </div>
 
       <nav class="fbls-event-editor-tabs" aria-label="Таблицы событий">
         {{#each tables}}
-          <button type="button" class="fbls-event-tab {{#if active}}active{{/if}}" data-action="event-editor-table" data-event-table-kind="{{kind}}">
+          <button type="button" class="fbls-event-tab fbls-subnav-tab {{#if active}}active{{/if}}" data-action="event-editor-table" data-event-table-kind="{{kind}}">
             <i class="{{icon}}"></i>
             <span>{{rollTitle}}</span>
             <strong>{{eventCount}}</strong>
@@ -20,8 +20,8 @@
       </nav>
 
       <div class="fbls-event-editor-actions">
-        <span class="fbls-event-editor-dirty" data-event-dirty-status {{#unless dirty}}hidden{{/unless}}>Несохранено</span>
-        <button type="button" class="fbls-button compact primary" data-action="event-editor-save">
+        {{> "modules/fbl-skyhold/templates/parts/save-status.hbs"}}
+        <button type="button" class="fbls-button fbls-button-role compact primary" data-action="event-editor-save" data-save-trigger>
           <i class="fa-solid fa-floppy-disk"></i>
           Сохранить
         </button>
@@ -32,12 +32,12 @@
       <section class="fbls-event-board {{currentTable.kind}}">
         <div class="fbls-event-table-head">
           <div class="fbls-event-table-title">
-            <h3><i class="{{currentTable.icon}}"></i> {{currentTable.title}}</h3>
+            <h3 class="fbls-heading-section"><i class="{{currentTable.icon}}"></i> {{currentTable.title}}</h3>
             <p>{{currentTable.description}}</p>
           </div>
 
           <div class="fbls-event-table-actions">
-            <label class="fbls-event-search-field">
+            <label class="fbls-search fbls-event-search-field">
               <i class="fa-solid fa-magnifying-glass"></i>
               <input type="search" data-event-search value="{{search}}" placeholder="поиск" />
             </label>

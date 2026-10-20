@@ -1,33 +1,35 @@
-<section class="fbls-route-edge-editor-shell">
+<section class="fbls-body-text fbls-route-edge-editor-shell">
   {{#if edge}}
     <header class="fbls-route-edge-editor-hero">
-      <i class="fa-solid fa-route"></i><div><h2>{{edge.fromLabel}} — {{edge.toLabel}}</h2><p>{{edge.distanceKm}} км · {{edge.modesLabel}}</p></div>
-      <button type="button" class="fbls-icon-button danger" data-action="route-edge-delete" data-route-from="{{edge.fromId}}" data-route-to="{{edge.toId}}" title="Удалить связь" aria-label="Удалить связь {{edge.fromLabel}} — {{edge.toLabel}}"><i class="fa-solid fa-trash"></i></button>
+      <i class="fa-solid fa-route"></i><div><h2 class="fbls-heading-title">{{edge.fromLabel}} — {{edge.toLabel}}</h2><p>{{edge.distanceKm}} км · {{edge.routeLabel}}</p></div>
+      <button type="button" class="fbls-icon-button danger" data-action="route-edge-delete" data-route-from="{{edge.fromId}}" data-route-to="{{edge.toId}}" data-route-id="{{edge.routeId}}" title="Удалить связь" aria-label="Удалить связь {{edge.fromLabel}} — {{edge.toLabel}}"><i class="fa-solid fa-trash"></i></button>
     </header>
+    <button type="button" class="fbls-button fbls-button-role compact" data-action="route-edge-duplicate" data-route-from="{{edge.fromId}}" data-route-to="{{edge.toId}}" data-route-id="{{edge.routeId}}"><i class="fa-solid fa-copy"></i> Создать копию маршрута</button>
     <section class="fbls-route-edge-editor-card">
-      <header><h3>Дальность и геометрия</h3><span>{{edge.pathPointCount}} промежуточных точек</span></header>
-      <label><span>Сложность перехода, УРС</span><input type="number" min="1" max="99" step="1" data-type="number" data-route-edge-field="ursCost" data-route-from="{{edge.fromId}}" data-route-to="{{edge.toId}}" value="{{edge.ursCost}}" /></label>
-      <label><span>Расчёт дальности</span><select data-route-edge-field="distanceMode" data-route-from="{{edge.fromId}}" data-route-to="{{edge.toId}}"><option value="manual" {{#if edge.manualDistance}}selected{{/if}}>Вручную</option><option value="scaled" {{#if edge.automaticDistance}}selected{{/if}} {{#unless edge.scaleAvailable}}disabled{{/unless}}>Автоматически по масштабу карты</option></select></label>
-      <label><span>Дальность, км</span><input type="number" min="1" max="100000" step="1" data-type="number" data-route-edge-field="distanceKm" data-route-from="{{edge.fromId}}" data-route-to="{{edge.toId}}" value="{{edge.distanceKm}}" {{#if edge.automaticDistance}}disabled{{/if}} /></label>
+      <header><h3 class="fbls-heading-section">Дальность и геометрия</h3><span>{{edge.pathPointCount}} промежуточных точек</span></header>
+      <label class="fbls-field"><span>Сложность перехода, УРС</span><input class="fbls-control" type="number" min="1" max="99" step="1" data-type="number" data-route-edge-field="ursCost" data-route-from="{{edge.fromId}}" data-route-to="{{edge.toId}}" data-route-id="{{edge.routeId}}" value="{{edge.ursCost}}" /></label>
+      <label class="fbls-field"><span>Расчёт дальности</span><select class="fbls-control" data-route-edge-field="distanceMode" data-route-from="{{edge.fromId}}" data-route-to="{{edge.toId}}" data-route-id="{{edge.routeId}}"><option value="manual" {{#if edge.manualDistance}}selected{{/if}}>Вручную</option><option value="scaled" {{#if edge.scaledDistanceSelected}}selected{{/if}} {{#unless edge.scaleAvailable}}disabled{{/unless}}>Автоматически по масштабу карты{{#if edge.scaledDistancePaused}} · {{#if edge.scaleAvailable}}нет длины пути{{else}}нужна калибровка{{/if}}{{/if}}</option></select></label>
+      <label class="fbls-field"><span>Дальность, км</span><input class="fbls-control" type="number" min="1" max="100000" step="1" data-type="number" data-route-edge-field="distanceKm" data-route-from="{{edge.fromId}}" data-route-to="{{edge.toId}}" data-route-id="{{edge.routeId}}" value="{{edge.distanceKm}}" {{#if edge.automaticDistance}}disabled{{/if}} /></label>
       <button type="button" class="fbls-route-path-button" data-action="route-edge-path-edit"><i class="fa-solid fa-draw-polygon"></i><span><strong>Проложить ломаный маршрут на карте</strong><small>Повороты вокруг островов и препятствий задаются промежуточными точками.</small></span><i class="fa-solid fa-arrow-up-right-from-square"></i></button>
     </section>
     <section class="fbls-route-edge-editor-card">
-      <header><h3>Транспорт</h3></header>
+      <header><h3 class="fbls-heading-section">Транспорт</h3></header>
       <div class="fbls-route-mode-toggles">
-        <label><input type="checkbox" data-route-edge-field="mode" data-route-mode="caravan" data-route-from="{{edge.fromId}}" data-route-to="{{edge.toId}}" {{#if edge.caravan}}checked{{/if}} /><span><i class="fa-solid fa-cart-flatbed"></i> Караван</span></label>
-        <label><input type="checkbox" data-route-edge-field="mode" data-route-mode="rail" data-route-from="{{edge.fromId}}" data-route-to="{{edge.toId}}" {{#if edge.rail}}checked{{/if}} /><span><i class="fa-solid fa-train"></i> Железная дорога</span></label>
-        <label><input type="checkbox" data-route-edge-field="mode" data-route-mode="airship" data-route-from="{{edge.fromId}}" data-route-to="{{edge.toId}}" {{#if edge.airship}}checked{{/if}} /><span><i class="fa-solid fa-ship"></i> Воздушный корабль</span></label>
+        <label class="fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Караван"><input type="checkbox" data-route-edge-field="mode" data-route-mode="caravan" data-route-from="{{edge.fromId}}" data-route-to="{{edge.toId}}" data-route-id="{{edge.routeId}}" {{#if edge.caravan}}checked{{/if}} /><span><i class="fa-solid fa-cart-flatbed"></i> Караван</span></label>
+        <label class="fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Железная дорога"><input type="checkbox" data-route-edge-field="mode" data-route-mode="rail" data-route-from="{{edge.fromId}}" data-route-to="{{edge.toId}}" data-route-id="{{edge.routeId}}" {{#if edge.rail}}checked{{/if}} /><span><i class="fa-solid fa-train"></i> Ж/д</span></label>
+        <label class="fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Воздушный корабль"><input type="checkbox" data-route-edge-field="mode" data-route-mode="airship" data-route-from="{{edge.fromId}}" data-route-to="{{edge.toId}}" data-route-id="{{edge.routeId}}" {{#if edge.airship}}checked{{/if}} /><span><i class="fa-solid fa-ship"></i> Возд. корабль</span></label>
       </div>
     </section>
     <section class="fbls-route-edge-editor-card">
-      <header><h3>Сезонные условия</h3><select data-route-edge-season>{{#each edge.seasonOptions}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></header>
-      <label class="fbls-route-season-toggle"><input type="checkbox" data-route-edge-field="season-enabled" data-route-from="{{edge.fromId}}" data-route-to="{{edge.toId}}" {{#if edge.seasonalEnabled}}checked{{/if}} /><span>{{edge.selectedSeasonLabel}} влияет на маршрут</span></label>
+      <header><h3 class="fbls-heading-section">Сезонные условия</h3><select class="fbls-control" data-route-edge-season aria-label="Сезон для настройки маршрута">{{#each edge.seasonOptions}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></header>
+      <label class="fbls-route-season-toggle fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Сезон «{{edge.selectedSeasonLabel}}» влияет на маршрут. Применять множители цены, времени и риска."><input type="checkbox" data-route-edge-field="season-enabled" data-route-from="{{edge.fromId}}" data-route-to="{{edge.toId}}" data-route-id="{{edge.routeId}}" {{#if edge.seasonalEnabled}}checked{{/if}} /><span>Сезон: {{edge.selectedSeasonLabel}}</span></label>
       <div class="fbls-route-season-factor-grid">
-        <label><span>Цена ×</span><input type="number" min="0.25" max="4" step="0.05" data-route-edge-field="season-cost" data-route-from="{{edge.fromId}}" data-route-to="{{edge.toId}}" value="{{edge.seasonalCostFactor}}" /></label>
-        <label><span>Время ×</span><input type="number" min="0.25" max="4" step="0.05" data-route-edge-field="season-time" data-route-from="{{edge.fromId}}" data-route-to="{{edge.toId}}" value="{{edge.seasonalTimeFactor}}" /></label>
-        <label><span>Риск ×</span><input type="number" min="0.25" max="4" step="0.05" data-route-edge-field="season-risk" data-route-from="{{edge.fromId}}" data-route-to="{{edge.toId}}" value="{{edge.seasonalRiskFactor}}" /></label>
+        <label class="fbls-field"><span>Цена ×</span><input class="fbls-control" type="number" min="0.25" max="4" step="0.05" data-route-edge-field="season-cost" data-route-from="{{edge.fromId}}" data-route-to="{{edge.toId}}" data-route-id="{{edge.routeId}}" value="{{edge.seasonalCostFactor}}" /></label>
+        <label class="fbls-field"><span>Время ×</span><input class="fbls-control" type="number" min="0.25" max="4" step="0.05" data-route-edge-field="season-time" data-route-from="{{edge.fromId}}" data-route-to="{{edge.toId}}" data-route-id="{{edge.routeId}}" value="{{edge.seasonalTimeFactor}}" /></label>
+        <label class="fbls-field"><span>Риск ×</span><input class="fbls-control" type="number" min="0.25" max="4" step="0.05" data-route-edge-field="season-risk" data-route-from="{{edge.fromId}}" data-route-to="{{edge.toId}}" data-route-id="{{edge.routeId}}" value="{{edge.seasonalRiskFactor}}" /></label>
       </div>
-      {{#if edge.winterSelected}}<button type="button" class="fbls-route-season-preset" data-action="route-season-preset" data-route-from="{{edge.fromId}}" data-route-to="{{edge.toId}}"><i class="fa-solid fa-snowflake"></i> Исторический зимний шаблон</button>{{/if}}
+      <button {{#unless edge.winterSelected}}hidden{{/unless}} type="button" class="fbls-route-season-preset" data-action="route-season-preset" data-route-from="{{edge.fromId}}" data-route-to="{{edge.toId}}" data-route-id="{{edge.routeId}}"><i class="fa-solid fa-snowflake"></i> Исторический зимний шаблон</button>
+      <small>Шаблон: цена ×1,4 · время ×1,25 · риск ×1,2. Влияние включается флажком и действует только в соответствующий сезон календаря поселения.</small>
     </section>
   {{else}}<div class="fbls-empty">Связь больше не существует.</div>{{/if}}
 </section>

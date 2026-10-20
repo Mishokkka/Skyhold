@@ -5,6 +5,22 @@ function searchDependencies(dependencies = {}) {
   return dependencies;
 }
 
+export const STORAGE_SEARCH_RESULT_LIMIT = 50;
+
+export function filterStorageSearchRows(rows = [], value = "", { limit = STORAGE_SEARCH_RESULT_LIMIT } = {}) {
+  const query = String(value ?? "").trim().toLocaleLowerCase("ru");
+  const safeLimit = Math.max(1, Math.floor(Number(limit) || STORAGE_SEARCH_RESULT_LIMIT));
+  if (!query) return { query, rows: [], total: 0, truncated: false };
+  const matches = [];
+  let total = 0;
+  for (const row of rows) {
+    if (!String(row?.search ?? "").includes(query)) continue;
+    total += 1;
+    if (matches.length < safeLimit) matches.push(row);
+  }
+  return { query, rows: matches, total, truncated: total > matches.length };
+}
+
 export function buildStorageSearchRows({ resources = [], items = [], dependencies = {} } = {}) {
   const deps = searchDependencies(dependencies);
   const rows = [];

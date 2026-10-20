@@ -1,5 +1,4 @@
 import { normalizeResourceId, resourceDef, resourceLabel, resourceOptions } from "../../../../core/resources.js";
-import { formatForbiddenLandsCost } from "../../../../core/currency.js";
 import { makeId } from "../../../../data/utils.js";
 import { itemQuantity, itemQuantityUpdateData, setItemQuantityData } from "../../../../engines/storage/item-quantity.js";
 import { resolveFoundryUuid } from "../../../../integrations/foundry-runtime.js";
@@ -92,9 +91,8 @@ async _foundryItemDataForResource(resourceId = "custom", name = "Ресурс", 
     name: id === "custom" ? (name || "Ресурс") : resourceLabel(id),
     type: def?.itemType || "rawMaterial",
     img: def?.img || "icons/svg/item-bag.svg",
-    system: { quantity: 1, cost: def ? formatForbiddenLandsCost(def.referencePriceCopper) : "" }
+    system: { quantity: 1, cost: def?.cost || "" }
   };
-  if (def) source.system = { ...(source.system ?? {}), cost: formatForbiddenLandsCost(def.referencePriceCopper) };
   return this._setItemQuantityData(source, qty);
 },
 

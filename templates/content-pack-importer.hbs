@@ -1,7 +1,7 @@
-<section class="fbls-content-pack-shell">
+<section class="fbls-body-text fbls-content-pack-shell">
   <header class="fbls-content-pack-head">
     <div><h2><i class="fa-solid fa-box-open"></i> Content packs</h2><p>Выберите готовый набор или загрузите свой JSON. Все конфликты показываются до записи.</p></div>
-    {{#if hasPlan}}<button type="button" class="fbls-button compact" data-action="content-pack-clear"><i class="fa-solid fa-xmark"></i> Очистить</button>{{/if}}
+    {{#if hasPlan}}<button type="button" class="fbls-button fbls-button-role compact" data-action="content-pack-clear"><i class="fa-solid fa-xmark"></i> Очистить</button>{{/if}}
   </header>
 
   {{#unless hasPlan}}
@@ -23,7 +23,7 @@
     <span><strong>Свой content pack</strong><small>{{#if fileName}}{{fileName}}{{else}}Выберите JSON-файл с компьютера{{/if}}</small></span>
     <span class="fbls-content-pack-file-action"><i class="fa-solid fa-folder-open"></i> Выбрать JSON</span>
   </label>
-  {{#if error}}<p class="fbls-content-pack-error"><i class="fa-solid fa-triangle-exclamation"></i> {{error}}</p>{{/if}}
+  {{#if error}}<p class="fbls-callout is-error fbls-content-pack-error"><i class="fa-solid fa-triangle-exclamation"></i> {{error}}</p>{{/if}}
   {{#if hasPlan}}
     <article class="fbls-content-pack-summary">
       <div><strong>{{pack.name}}</strong><span>{{pack.id}} · source {{pack.source}} · v{{pack.version}}</span></div>
@@ -47,7 +47,7 @@
     </div>
     <footer class="fbls-content-pack-actions">
       <p>{{#if pack.install.replaceMarket}}Этот набор выполняет чистую установку экономики. Перед записью будет показано дополнительное подтверждение; материалы, склады и поселения не удаляются.{{else}}Конфликты по умолчанию сохраняют установленную запись.{{/if}}</p>
-      <button type="button" class="fbls-button primary" data-action="content-pack-import" {{#unless canImport}}disabled{{/unless}}><i class="fa-solid fa-file-import"></i> Импортировать</button>
+      <button type="button" class="fbls-button fbls-button-role primary" data-action="content-pack-import" {{#unless canImport}}disabled{{/unless}}><i class="fa-solid fa-file-import"></i> Импортировать</button>
     </footer>
   {{/if}}
 </section>

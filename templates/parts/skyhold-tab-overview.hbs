@@ -2,18 +2,6 @@
       <section class="fbls-panel fbls-overview compact">
         <article class="fbls-card fbls-tenday-readiness {{#if tendayReadiness.ready}}is-ready{{else}}needs-attention{{/if}}">
           <header><div><h2><i class="fa-solid fa-calendar-days"></i> Готовность к десятнику</h2><p>{{tendayReadiness.statusLabel}}</p></div><strong>{{tendayReadiness.foodAvailable}} / {{tendayReadiness.foodNeeded}} пищи</strong></header>
-          <div class="fbls-harvest-reserve {{#if tendayReadiness.harvestReserve.sufficient}}is-sufficient{{else}}is-short{{/if}}">
-            <span><i class="fa-solid fa-boxes-stacked"></i><small>Запас сейчас</small><strong>{{tendayReadiness.harvestReserve.coverageDaysText}} дн.</strong></span>
-            <span><i class="fa-solid fa-seedling"></i><small>Пополнение за десятник</small><strong>+{{tendayReadiness.foodProduced}} чел.-дн.</strong></span>
-            <span><i class="fa-solid fa-utensils"></i><small>Общий стол</small><strong>{{tendayReadiness.commonTable.coveredResidents}} / {{tendayReadiness.commonTable.residentCount}} жителей</strong></span>
-            <span><i class="fa-solid fa-apple-whole"></i><small>Разнообразие рациона</small><strong>{{tendayReadiness.qualifyingDietGroupCount}} / 3 групп</strong></span>
-            <span><i class="fa-solid fa-face-smile"></i><small>Бонус довольства</small><strong>{{#if tendayReadiness.commonTableBonusReady}}Будет +1{{else}}Нужны сытость, 3 группы и места{{/if}}</strong></span>
-            {{#if tendayReadiness.harvestReserve.hasHarvest}}
-              <span><i class="fa-solid fa-wheat-awn"></i><small>Сезонное зерно</small><strong>{{tendayReadiness.harvestReserve.dateLabel}} · через {{tendayReadiness.harvestReserve.daysUntilText}} дн.</strong></span>
-              <span><i class="fa-solid fa-shield-heart"></i><small>Надёжный резерв</small><strong>{{tendayReadiness.harvestReserve.usableText}} / {{tendayReadiness.harvestReserve.requiredText}} чел.-дн.</strong></span>
-              <span><i class="fa-solid fa-box"></i><small>Первая выдача зерна</small><strong>≈ {{tendayReadiness.harvestReserve.expectedHarvestText}} чел.-дн.</strong></span>
-            {{/if}}
-          </div>
           {{#if tendayReadiness.alerts.length}}
             <div class="fbls-tenday-alerts">
               {{#each tendayReadiness.alerts}}<div class="fbls-tenday-alert {{severity}}"><i class="{{icon}}"></i><span><strong>{{title}}</strong><small>{{text}}</small></span></div>{{/each}}

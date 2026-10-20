@@ -11,6 +11,13 @@ function positiveInteger(value, fallback = 1) {
 }
 
 export function itemQuantity(itemOrData = {}, adapter = FORBIDDEN_LANDS_ITEM_QUANTITY_ADAPTER) {
+  // A storage row can be exhausted. The system Item default still applies to
+  // documents without an explicit storage quantity, never to a stored zero.
+  const storedQuantity = itemOrData?.qty ?? itemOrData?.quantity;
+  if (storedQuantity !== undefined && storedQuantity !== null) {
+    const quantity = Number(storedQuantity);
+    return Number.isFinite(quantity) ? Math.max(0, Math.floor(quantity)) : 0;
+  }
   const system = itemOrData?.system ?? itemOrData?.itemData?.system ?? {};
   return positiveInteger(itemOrData?.qty ?? itemOrData?.quantity ?? system?.quantity, adapter.minimum);
 }

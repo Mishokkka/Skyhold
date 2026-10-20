@@ -27,8 +27,8 @@
   gap: 0.22rem;
   margin: 0;
   text-transform: uppercase;
-  letter-spacing: .045em;
-  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  font-size: var(--fbls-type-compact-sm);
   color: var(--fbls-muted);
 }
 
@@ -47,7 +47,7 @@
 
 .fbls-money-stepper button {
   width: 1.55rem;
-  min-height: 1.55rem;
+  min-height: var(--fbls-control-height);
   padding: 0;
   border-radius: 7px;
   border: 1px solid var(--fbls-border);
@@ -62,7 +62,7 @@
 }
 
 .fbls-money-stepper input {
-  min-height: 1.55rem;
+  min-height: var(--fbls-control-height);
   text-align: center;
   font-weight: 900;
   padding: 0.16rem 0.26rem;
@@ -105,7 +105,7 @@
   border-radius: 10px;
   background: var(--fbls-overlay-soft);
   color: var(--fbls-muted);
-  font-size: 0.78rem;
+  font-size: var(--fbls-type-compact-sm);
 }
 
 .fbls-building-storage-strip span:first-child {

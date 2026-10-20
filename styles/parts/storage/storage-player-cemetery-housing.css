@@ -12,7 +12,7 @@
   border-radius: 10px;
   background: var(--fbls-overlay-soft);
   color: var(--fbls-muted);
-  font-size: 0.78rem;
+  font-size: var(--fbls-type-compact-sm);
 }
 
 .fbls-building-housing-strip span:first-child,
@@ -55,9 +55,9 @@
 .fbls-housing-building-grid label span,
 .fbls-wide-label span {
   color: var(--fbls-muted);
-  font-size: 0.72rem;
+  font-size: var(--fbls-type-compact-sm);
   text-transform: uppercase;
-  letter-spacing: .045em;
+  letter-spacing: 0.04em;
 }
 
 @media (max-width: 860px) {

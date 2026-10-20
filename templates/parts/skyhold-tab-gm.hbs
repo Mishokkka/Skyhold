@@ -1,136 +1,12 @@
     {{#if active.gm}}
       <section class="fbls-panel fbls-gm-panel compact-gm">
-        {{#if hasGmContextErrors}}
-          <div class="fbls-notice is-warning" role="status">
-            <i class="fa-solid fa-triangle-exclamation"></i>
-            <div><strong>Часть данных GM не удалось подготовить</strong><span>Остальные инструменты доступны. Подробности записаны в консоль.</span></div>
-          </div>
-        {{/if}}
-        <div class="fbls-gm-dashboard">
-          <article class="fbls-card fbls-gm-card notes-card">
-            <h2><i class="fa-solid fa-note-sticky"></i> Заметки</h2>
-            <textarea data-field="holdings.{{holdingIndex}}.gm.notes" rows="5">{{holding.gm.notes}}</textarea>
-          </article>
-
-          <article class="fbls-card fbls-gm-card fbls-gm-loading-card">
-            <h2><i class="fa-solid fa-spinner"></i> Загрузка</h2>
-            <label class="fbls-file-picker-row"><span>Картинка затемнения</span><div><input type="text" data-field="holdings.{{holdingIndex}}.gm.loadingImage" value="{{holding.gm.loadingImage}}" placeholder="icons/svg/clockwork.svg" /><button type="button" class="fbls-icon-button" data-action="pick-file" data-file-picker-type="image" data-file-picker-target="holdings.{{holdingIndex}}.gm.loadingImage" title="Выбрать изображение" aria-label="Выбрать картинку затемнения"><i class="fa-solid fa-folder-open"></i></button></div></label>
-            <p class="fbls-muted-text compact">Пусто = стандартный крутящийся индикатор.</p>
-          </article>
-
-          <article class="fbls-card fbls-gm-card">
-            <h2><i class="fa-solid fa-landmark"></i> Экономика владения</h2>
-            <div class="fbls-gm-toggle-grid">
-              <label class="fbls-checkbox-label compact-check" data-fbls-tooltip="Владение предоставляет своим предприятиям землю и необходимые местные права пользования. Статья «Земля и права» остаётся видимой как справочная стоимость, но не входит в требуемый капитал зданий этого владения.">
-                <span>Земля и права принадлежат владению</span>
-                <input type="checkbox" data-type="checkbox" data-field="holdings.{{holdingIndex}}.gm.economy.landRightsProvided" {{#if holding.gm.economy.landRightsProvided}}checked{{/if}} />
-              </label>
-            </div>
-            <p class="fbls-muted-text compact">Включай, если земля, концессии и местные разрешения уже принадлежат владению и не требуют отдельного вложения для каждого предприятия.</p>
-          </article>
-
-          <article class="fbls-card fbls-gm-card">
-            <h2><i class="fa-solid fa-coins"></i> Economy V2</h2>
-            <label class="fbls-field">
-              <span>Индекс ставок</span>
-              <input type="number" min="0.5" max="2" step="0.05" data-type="number" data-field="holdings.{{holdingIndex}}.gm.economy.labor.wageIndex" value="{{holding.gm.economy.labor.wageIndex}}" />
-            </label>
-            <p class="fbls-muted-text compact">Умножает тарифы Economy V2 для обычного, квалифицированного и экспертного труда. Диапазон: 0,5–2,0.</p>
-            {{#if economyActivation.ready}}
-              <p><span class="fbls-status-pill ok"><i class="fa-solid fa-check"></i> Активна, версия {{economyActivation.version}}</span></p>
-              {{#if economyActivation.operationId}}<p class="fbls-muted-text compact">Операция: {{economyActivation.operationId}}</p>{{/if}}
-            {{else}}
-              <p class="fbls-muted-text compact">Явная миграция покажет изменения, потребует решения по нестандартным ресурсам, инициирует скачивание полной JSON-копии и только затем применит новый контракт. Нерешённых строк: {{economyActivation.issueCount}}.</p>
-              <button type="button" class="fbls-button compact primary" data-action="activate-economy-v2"><i class="fa-solid fa-arrow-up-right-dots"></i> Предпросмотр и активация</button>
-            {{/if}}
-            <label class="fbls-field">
-              <span>Восстановить полный backup JSON</span>
-              <input type="file" accept=".json,application/json" data-economy-v2-backup-file {{#unless writeAvailable}}disabled{{/unless}} />
-              <small>Файл сначала проходит строгую проверку и предпросмотр; запись требует двух явных подтверждений authority GM.</small>
-            </label>
-          </article>
-
-          <article class="fbls-card fbls-gm-card">
-            <h2><i class="fa-solid fa-users-gear"></i> Доступ игроков</h2>
-            <div class="fbls-gm-toggle-grid">
-              <label class="fbls-checkbox-label compact-check"><span>Редактировать здания</span><input type="checkbox" data-type="checkbox" data-field="holdings.{{holdingIndex}}.gm.playersCanEditBuildings" {{#if holding.gm.playersCanEditBuildings}}checked{{/if}} /></label>
-              <label class="fbls-checkbox-label compact-check"><span>Пользоваться хранилищем</span><input type="checkbox" data-type="checkbox" data-field="holdings.{{holdingIndex}}.gm.playersCanUseStorage" {{#if holding.gm.playersCanUseStorage}}checked{{/if}} /></label>
-              <label class="fbls-checkbox-label compact-check"><span>Редактировать обзор</span><input type="checkbox" data-type="checkbox" data-field="holdings.{{holdingIndex}}.gm.playersCanEditOverview" {{#if holding.gm.playersCanEditOverview}}checked{{/if}} /></label>
-              <label class="fbls-checkbox-label compact-check"><span>Редактировать жителей</span><input type="checkbox" data-type="checkbox" data-field="holdings.{{holdingIndex}}.gm.playersCanEditResidents" {{#if holding.gm.playersCanEditResidents}}checked{{/if}} /></label>
-              <label class="fbls-checkbox-label compact-check"><span>Оборона и отряды</span><input type="checkbox" data-type="checkbox" data-field="holdings.{{holdingIndex}}.gm.playersCanEditDefense" {{#if holding.gm.playersCanEditDefense}}checked{{/if}} /></label>
-              <label class="fbls-checkbox-label compact-check"><span>Выборы боя защитников</span><input type="checkbox" data-type="checkbox" data-field="holdings.{{holdingIndex}}.gm.playersCanEditBattle" {{#if holding.gm.playersCanEditBattle}}checked{{/if}} /></label>
-              <label class="fbls-checkbox-label compact-check"><span>Заметки Особого</span><input type="checkbox" data-type="checkbox" data-field="holdings.{{holdingIndex}}.gm.playersCanEditSpecial" {{#if holding.gm.playersCanEditSpecial}}checked{{/if}} /></label>
-              <label class="fbls-checkbox-label compact-check"><span>Управлять внешним рынком</span><input type="checkbox" data-type="checkbox" data-field="holdings.{{holdingIndex}}.gm.playersCanManageMarkets" {{#if holding.gm.playersCanManageMarkets}}checked{{/if}} /></label>
-            </div>
-          </article>
-
-          <article class="fbls-card fbls-gm-card fbls-gm-defense-card">
-            <h2><i class="fa-solid fa-shield-halved"></i> Оборона</h2>
-            <div class="fbls-gm-toggle-grid defense-flags">
-              <label class="fbls-checkbox-label compact-check"><span>Обучено</span><input type="checkbox" data-type="checkbox" data-field="holdings.{{holdingIndex}}.gm.defense.militiaTrained" {{#if holding.gm.defense.militiaTrained}}checked{{/if}} /></label>
-              <label class="fbls-checkbox-label compact-check"><span>Экипировано</span><input type="checkbox" data-type="checkbox" data-field="holdings.{{holdingIndex}}.gm.defense.militiaEquipped" {{#if holding.gm.defense.militiaEquipped}}checked{{/if}} /></label>
-              <label class="fbls-checkbox-label compact-check"><span>Лидер</span><input type="checkbox" data-type="checkbox" data-field="holdings.{{holdingIndex}}.gm.defense.militiaLeader" {{#if holding.gm.defense.militiaLeader}}checked{{/if}} /></label>
-            </div>
-            <p class="fbls-muted-text compact">Порог отряда ополчения: 20; экипировано: 15; обучено: 12; лидер: 8. Используется лучший доступный порог.</p>
-            <div class="fbls-gm-sound-grid">
-              <label class="fbls-file-picker-row"><span>Звук победы в раунде</span><div><input type="text" data-field="holdings.{{holdingIndex}}.gm.defense.victorySound" value="{{holding.gm.defense.victorySound}}" placeholder="sounds/victory.ogg" /><button type="button" class="fbls-icon-button" data-action="pick-file" data-file-picker-target="holdings.{{holdingIndex}}.gm.defense.victorySound" title="Выбрать аудиофайл" aria-label="Выбрать звук победы в раунде"><i class="fa-solid fa-folder-open"></i></button></div></label>
-              <label class="fbls-file-picker-row"><span>Звук ничьей в раунде</span><div><input type="text" data-field="holdings.{{holdingIndex}}.gm.defense.drawSound" value="{{holding.gm.defense.drawSound}}" placeholder="sounds/draw.ogg" /><button type="button" class="fbls-icon-button" data-action="pick-file" data-file-picker-target="holdings.{{holdingIndex}}.gm.defense.drawSound" title="Выбрать аудиофайл" aria-label="Выбрать звук ничьей в раунде"><i class="fa-solid fa-folder-open"></i></button></div></label>
-              <label class="fbls-file-picker-row"><span>Звук провала в раунде</span><div><input type="text" data-field="holdings.{{holdingIndex}}.gm.defense.defeatSound" value="{{holding.gm.defense.defeatSound}}" placeholder="sounds/defeat.ogg" /><button type="button" class="fbls-icon-button" data-action="pick-file" data-file-picker-target="holdings.{{holdingIndex}}.gm.defense.defeatSound" title="Выбрать аудиофайл" aria-label="Выбрать звук провала в раунде"><i class="fa-solid fa-folder-open"></i></button></div></label>
-            </div>
-          </article>
-
-          <article class="fbls-card fbls-gm-card fbls-gm-battle-tags-card">
-            <h2><i class="fa-solid fa-circle-nodes"></i> Баланс боя</h2>
-            <p class="fbls-muted-text compact">Теги отрядов и матрица контров для окна битвы за владение.</p>
-            <button type="button" class="fbls-button compact" data-action="open-mass-combat-tag-editor"><i class="fa-solid fa-table-cells"></i> Теги и контры</button>
-          </article>
-
-          <article class="fbls-card fbls-gm-card fbls-gm-mod-card">
-            <h2><i class="fa-solid fa-sliders"></i> Модификаторы поселения</h2>
-            <div class="fbls-gm-mod-grid dev-mods">
-              <label class="food"><span><i class="fa-solid fa-utensils"></i> Еда</span><input type="number" data-type="number" data-field="holdings.{{holdingIndex}}.gm.modifiers.food" value="{{holding.gm.modifiers.food}}" /></label>
-              <label class="technology"><span><i class="fa-solid fa-wrench"></i> Тех</span><input type="number" data-type="number" data-field="holdings.{{holdingIndex}}.gm.modifiers.technology" value="{{holding.gm.modifiers.technology}}" /></label>
-              <label class="culture"><span><i class="fa-solid fa-music"></i> Культ</span><input type="number" data-type="number" data-field="holdings.{{holdingIndex}}.gm.modifiers.culture" value="{{holding.gm.modifiers.culture}}" /></label>
-              <label class="war"><span><i class="fa-solid fa-shield-halved"></i> Война</span><input type="number" data-type="number" data-field="holdings.{{holdingIndex}}.gm.modifiers.war" value="{{holding.gm.modifiers.war}}" /></label>
-              <label><span><i class="fa-solid fa-shield"></i> Защ.</span><input type="number" data-type="number" data-field="holdings.{{holdingIndex}}.gm.modifiers.defense" value="{{holding.gm.modifiers.defense}}" /></label>
-              <label><span><i class="fa-solid fa-crown"></i> Реп.</span><input type="number" data-type="number" data-field="holdings.{{holdingIndex}}.gm.modifiers.reputation" value="{{holding.gm.modifiers.reputation}}" /></label>
-              <label><span><i class="fa-solid fa-face-smile"></i> Дов.</span><input type="number" data-type="number" data-field="holdings.{{holdingIndex}}.gm.modifiers.morale" value="{{holding.gm.modifiers.morale}}" /></label>
-              <label class="market-connections"><span data-fbls-tooltip="Ручной бюджет доступа к рынкам и товарам. Рынок требует по одному УРС за каждую связь маршрута; товар добавляет собственную сложность."><i class="fa-solid fa-route"></i> УРС</span><input type="number" min="0" step="1" data-type="number" data-field="holdings.{{holdingIndex}}.gm.modifiers.marketConnectionsLevel" value="{{holding.gm.modifiers.marketConnectionsLevel}}" /></label>
-            </div>
-            <p class="fbls-muted-text compact">Уровень рыночных связей: рынок виден при УРС не ниже числа переходов; товар требует ещё свой уровень сложности.</p>
-          </article>
-
-          <article class="fbls-card fbls-gm-card fbls-gm-mod-card">
-            <h2><i class="fa-solid fa-gauge-high"></i> Эффективность</h2>
-            <div class="fbls-gm-mod-grid eff-mods">
-              <label><span>Все здания</span><input type="number" step="0.1" data-type="number" data-field="holdings.{{holdingIndex}}.gm.efficiencyModifiers.all" value="{{holding.gm.efficiencyModifiers.all}}" /></label>
-              <label><span>Производство</span><input type="number" step="0.1" data-type="number" data-field="holdings.{{holdingIndex}}.gm.efficiencyModifiers.production" value="{{holding.gm.efficiencyModifiers.production}}" /></label>
-              <label><span>Стройбригады</span><input type="number" step="1" data-type="number" data-field="holdings.{{holdingIndex}}.gm.efficiencyModifiers.constructionCrew" value="{{holding.gm.efficiencyModifiers.constructionCrew}}" /></label>
-            </div>
-            <p class="fbls-muted-text compact">Эти значения применяются поверх автоматических эффектов довольства.</p>
-          </article>
-
-          <article class="fbls-card fbls-gm-card fbls-transfer-card">
-            <h2><i class="fa-solid fa-right-left"></i> Пересыл жителей</h2>
-            {{#if residentTransfer.hasTargets}}
-              <div class="fbls-transfer-grid">
-                <label><span>Житель</span><select data-transfer-resident>{{#each residentTransfer.residentOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
-                <label><span>Куда</span><select data-transfer-target>{{#each residentTransfer.targetOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
-                <button type="button" class="fbls-button compact" data-action="transfer-resident"><i class="fa-solid fa-paper-plane"></i> Переслать</button>
-              </div>
-            {{else}}
-              <p class="fbls-muted-text compact">Нет другого владения для пересылки.</p>
-            {{/if}}
-          </article>
-
-          <article class="fbls-card fbls-gm-card fbls-roll-card">
-            <h2><i class="fa-solid fa-dice-d6"></i> Быстрые броски</h2>
+        <div class="fbls-gm-command-groups">
+          <details class="fbls-card fbls-gm-command-group" data-gm-section="actions" open>
+            <summary><i class="fa-solid fa-dice-d6" aria-hidden="true"></i> Быстрые действия</summary>
             <div class="fbls-gm-roll-buttons">
               <button type="button" class="fbls-button compact" data-action="roll-event-table" data-event-table-kind="general"><i class="fa-solid fa-house-chimney"></i> Общее</button>
               <button type="button" class="fbls-button compact" data-action="roll-event-table" data-event-table-kind="external"><i class="fa-solid fa-globe"></i> Внешнее</button>
               <button type="button" class="fbls-button compact primary" data-action="open-random-event-editor"><i class="fa-solid fa-table-list"></i> Редактор событий</button>
-              <button type="button" class="fbls-button compact" data-action="open-region-catalog-editor"><i class="fa-solid fa-map-location-dot"></i> Регионы</button>
-              <button type="button" class="fbls-button compact" data-action="open-content-pack-importer"><i class="fa-solid fa-box-open"></i> Content packs</button>
             </div>
             {{#if holding.gm.lastRoll}}
               <div class="fbls-last-roll compact-last-roll">
@@ -156,8 +32,161 @@
                 {{/each}}
               </div>
             {{/if}}
-          </article>
+          </details>
+          <details class="fbls-card fbls-gm-command-group" data-gm-section="catalogs" open>
+            <summary><i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i> Каталоги</summary>
+        <article class="fbls-card fbls-resource-catalog-launcher">
+          <div>
+            <h2><i class="fa-solid fa-boxes-stacked"></i> Каталог ресурсов</h2>
+            <p>Встроенные: {{resourceCatalog.builtinCount}} · настроено: {{resourceCatalog.overrideCount}} · своих: {{resourceCatalog.customCount}}.</p>
+            <small>Иконки, WebP-изображения, алиасы и Item UUID редактируются в отдельном окне.</small>
+          </div>
+          <button type="button" class="fbls-button" data-action="open-resource-catalog-editor"><i class="fa-solid fa-arrow-up-right-from-square"></i> Открыть редактор</button>
+        </article>
+        <article class="fbls-card fbls-resource-catalog-launcher">
+          <div>
+            <h2><i class="fa-solid fa-shop"></i> Каталог внешнего рынка</h2>
+            <p>Государств: {{marketCatalog.countryCount}} · рынков-локаций: {{marketCatalog.locationCount}} · специализаций: {{marketCatalog.specialtyCount}} · организаций: {{marketCatalog.organizationCount}}.</p>
+            <small>Поставщики, Item UUID, базовые цены, волатильность, запас, масса, происхождение и видимость.</small>
+          </div>
+          <button type="button" class="fbls-button" data-action="open-market-catalog-editor"><i class="fa-solid fa-arrow-up-right-from-square"></i> Открыть редактор</button>
+        </article>
+            <div class="fbls-action-group"><button type="button" class="fbls-button compact" data-action="open-region-catalog-editor"><i class="fa-solid fa-map-location-dot"></i> Регионы</button></div>
+          </details>
+          <details class="fbls-card fbls-gm-command-group" data-gm-section="balance">
+            <summary><i class="fa-solid fa-sliders" aria-hidden="true"></i> Баланс</summary>
+            <div class="fbls-action-group">
+              <button type="button" class="fbls-button compact" data-action="open-politics-balance" title="Открыть редактор чисел, бонусов и собственных политических решений"><i class="fa-solid fa-sliders" aria-hidden="true"></i> Баланс и новые решения</button>
+              <button type="button" class="fbls-button compact" data-action="open-mass-combat-tag-editor"><i class="fa-solid fa-table-cells"></i> Теги и контры</button>
+            </div>
+          </details>
+          <details class="fbls-card fbls-gm-command-group" data-gm-section="service">
+            <summary><i class="fa-solid fa-toolbox" aria-hidden="true"></i> Служебные операции</summary>
+            <div class="fbls-action-group">
+              <button type="button" class="fbls-button compact" data-action="open-content-pack-importer"><i class="fa-solid fa-box-open"></i> Content packs</button>
+              <button type="button" class="fbls-button compact" data-action="open-building-catalog-migration"><i class="fa-solid fa-building-circle-check"></i> Миграция зданий</button>
+              <button type="button" class="fbls-button compact" data-action="open-laputa-migration-importer"><i class="fa-solid fa-shield-halved"></i> Миграция Лапуты</button>
+            </div>
+        <article class="fbls-card danger-zone compact-danger">
+          <h2><i class="fa-solid fa-triangle-exclamation"></i> Опасная зона</h2>
+          <button type="button" class="fbls-button danger compact" data-action="reset-data"><i class="fa-solid fa-rotate-left"></i> Сбросить данные</button>
+        </article>
+          </details>
         </div>
+        <div class="fbls-gm-dashboard">
+          <article class="fbls-card fbls-gm-card notes-card">
+            <h2><i class="fa-solid fa-note-sticky"></i> Заметки</h2>
+            <textarea data-field="holdings.{{holdingIndex}}.gm.notes" rows="5">{{holding.gm.notes}}</textarea>
+          </article>
+
+          <article class="fbls-card fbls-gm-card fbls-gm-loading-card">
+            <h2><i class="fa-solid fa-spinner"></i> Загрузка</h2>
+            <label class="fbls-file-picker-row"><span>Картинка затемнения</span><div><input type="text" data-field="holdings.{{holdingIndex}}.gm.loadingImage" value="{{holding.gm.loadingImage}}" placeholder="icons/svg/clockwork.svg" /><button type="button" class="fbls-icon-button" data-action="pick-file" data-file-picker-type="image" data-file-picker-target="holdings.{{holdingIndex}}.gm.loadingImage" title="Выбрать изображение" aria-label="Выбрать картинку затемнения"><i class="fa-solid fa-folder-open"></i></button></div></label>
+            <p class="fbls-muted-text compact">Пусто = стандартный крутящийся индикатор.</p>
+          </article>
+
+          <article class="fbls-card fbls-gm-card">
+            <h2><i class="fa-solid fa-users-gear"></i> Доступ игроков</h2>
+            <div class="fbls-gm-toggle-grid">
+              <label class="compact-check fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Видеть кабинет Политики"><span>Политика</span><input type="checkbox" data-type="checkbox" data-field="holdings.{{holdingIndex}}.gm.playersCanViewPolitics" {{#if holding.gm.playersCanViewPolitics}}checked{{/if}} /></label>
+              <label class="compact-check fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Принимать директивы"><span>Директивы</span><input type="checkbox" data-type="checkbox" data-field="holdings.{{holdingIndex}}.gm.playersCanUseDirectives" {{#if holding.gm.playersCanUseDirectives}}checked{{/if}} /></label>
+              <label class="compact-check fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Издавать указы и запрашивать Сведения"><span>Указы и сведения</span><input type="checkbox" data-type="checkbox" data-field="holdings.{{holdingIndex}}.gm.playersCanIssueDecrees" {{#if holding.gm.playersCanIssueDecrees}}checked{{/if}} /></label>
+              <label class="compact-check fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Отправлять корабли"><span>Корабли</span><input type="checkbox" data-type="checkbox" data-field="holdings.{{holdingIndex}}.gm.playersCanManageShips" {{#if holding.gm.playersCanManageShips}}checked{{/if}} /></label>
+              <label class="compact-check fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Редактировать здания"><span>Здания</span><input type="checkbox" data-type="checkbox" data-field="holdings.{{holdingIndex}}.gm.playersCanEditBuildings" {{#if holding.gm.playersCanEditBuildings}}checked{{/if}} /></label>
+              <label class="compact-check fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Пользоваться хранилищем"><span>Хранилище</span><input type="checkbox" data-type="checkbox" data-field="holdings.{{holdingIndex}}.gm.playersCanUseStorage" {{#if holding.gm.playersCanUseStorage}}checked{{/if}} /></label>
+              <label class="compact-check fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Редактировать обзор"><span>Обзор</span><input type="checkbox" data-type="checkbox" data-field="holdings.{{holdingIndex}}.gm.playersCanEditOverview" {{#if holding.gm.playersCanEditOverview}}checked{{/if}} /></label>
+              <label class="compact-check fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Редактировать жителей"><span>Жители</span><input type="checkbox" data-type="checkbox" data-field="holdings.{{holdingIndex}}.gm.playersCanEditResidents" {{#if holding.gm.playersCanEditResidents}}checked{{/if}} /></label>
+              <label class="compact-check fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Оборона и отряды"><span>Оборона</span><input type="checkbox" data-type="checkbox" data-field="holdings.{{holdingIndex}}.gm.playersCanEditDefense" {{#if holding.gm.playersCanEditDefense}}checked{{/if}} /></label>
+              <label class="compact-check fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Выборы боя защитников"><span>Выборы боя</span><input type="checkbox" data-type="checkbox" data-field="holdings.{{holdingIndex}}.gm.playersCanEditBattle" {{#if holding.gm.playersCanEditBattle}}checked{{/if}} /></label>
+              <label class="compact-check fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Заметки Особого"><span>Особое</span><input type="checkbox" data-type="checkbox" data-field="holdings.{{holdingIndex}}.gm.playersCanEditSpecial" {{#if holding.gm.playersCanEditSpecial}}checked{{/if}} /></label>
+            </div>
+          </article>
+
+          <article class="fbls-card fbls-gm-card fbls-gm-politics-card">
+            <h2><i class="fa-solid fa-landmark"></i> Политика</h2>
+            <label class="fbls-field"><span data-fbls-tooltip="Минимальное суммарное значение Культуры поселения для открытия разделов Политики. Дополнительно нужен работающий Дом собраний или Ратуша, если требование здания не отключено галочкой ниже.">Культура для открытия</span><input type="number" min="0" max="1000" step="1" data-type="number" data-field="holdings.{{holdingIndex}}.gm.politicsCultureThreshold" value="{{holding.gm.politicsCultureThreshold}}" /></label>
+            <label class="compact-check fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Не требовать Дом собраний / Ратушу. Для тестирования игнорирует требование работающего Дома собраний или Ратуши. Порог Культуры сохраняется."><span>Без Дома собраний</span><input type="checkbox" data-type="checkbox" data-field="holdings.{{holdingIndex}}.gm.politicsIgnoreInstitutionRequirement" {{#if holding.gm.politicsIgnoreInstitutionRequirement}}checked{{/if}} /></label>
+            <p class="fbls-muted-text compact">Порог Культуры действует и при включённой галочке. До открытия в окне доступен только Контроль.</p>
+          </article>
+
+          <article class="fbls-card fbls-gm-card fbls-gm-defense-card">
+            <h2><i class="fa-solid fa-shield-halved"></i> Оборона</h2>
+            <div class="fbls-gm-toggle-grid defense-flags">
+              <label class="compact-check fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Обучено"><span>Обучено</span><input type="checkbox" data-type="checkbox" data-field="holdings.{{holdingIndex}}.gm.defense.militiaTrained" {{#if holding.gm.defense.militiaTrained}}checked{{/if}} /></label>
+              <label class="compact-check fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Экипировано"><span>Экипировано</span><input type="checkbox" data-type="checkbox" data-field="holdings.{{holdingIndex}}.gm.defense.militiaEquipped" {{#if holding.gm.defense.militiaEquipped}}checked{{/if}} /></label>
+              <label class="compact-check fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Лидер"><span>Лидер</span><input type="checkbox" data-type="checkbox" data-field="holdings.{{holdingIndex}}.gm.defense.militiaLeader" {{#if holding.gm.defense.militiaLeader}}checked{{/if}} /></label>
+            </div>
+            <p class="fbls-muted-text compact">Порог отряда ополчения: 20; экипировано: 15; обучено: 12; лидер: 8. Используется лучший доступный порог.</p>
+            <div class="fbls-gm-sound-grid">
+              <label class="fbls-file-picker-row"><span>Звук победы в раунде</span><div><input type="text" data-field="holdings.{{holdingIndex}}.gm.defense.victorySound" value="{{holding.gm.defense.victorySound}}" placeholder="sounds/victory.ogg" /><button type="button" class="fbls-icon-button" data-action="pick-file" data-file-picker-target="holdings.{{holdingIndex}}.gm.defense.victorySound" title="Выбрать аудиофайл" aria-label="Выбрать звук победы в раунде"><i class="fa-solid fa-folder-open"></i></button></div></label>
+              <label class="fbls-file-picker-row"><span>Звук ничьей в раунде</span><div><input type="text" data-field="holdings.{{holdingIndex}}.gm.defense.drawSound" value="{{holding.gm.defense.drawSound}}" placeholder="sounds/draw.ogg" /><button type="button" class="fbls-icon-button" data-action="pick-file" data-file-picker-target="holdings.{{holdingIndex}}.gm.defense.drawSound" title="Выбрать аудиофайл" aria-label="Выбрать звук ничьей в раунде"><i class="fa-solid fa-folder-open"></i></button></div></label>
+              <label class="fbls-file-picker-row"><span>Звук провала в раунде</span><div><input type="text" data-field="holdings.{{holdingIndex}}.gm.defense.defeatSound" value="{{holding.gm.defense.defeatSound}}" placeholder="sounds/defeat.ogg" /><button type="button" class="fbls-icon-button" data-action="pick-file" data-file-picker-target="holdings.{{holdingIndex}}.gm.defense.defeatSound" title="Выбрать аудиофайл" aria-label="Выбрать звук провала в раунде"><i class="fa-solid fa-folder-open"></i></button></div></label>
+            </div>
+          </article>
+
+
+          <article class="fbls-card fbls-gm-card fbls-gm-mod-card">
+            <h2><i class="fa-solid fa-sliders"></i> Модификаторы поселения</h2>
+            <div class="fbls-gm-mod-grid dev-mods">
+              <label class="food"><span><i class="fa-solid fa-utensils"></i> Еда</span><input type="number" data-type="number" data-field="holdings.{{holdingIndex}}.gm.modifiers.food" value="{{holding.gm.modifiers.food}}" /></label>
+              <label class="technology"><span><i class="fa-solid fa-wrench"></i> Тех</span><input type="number" data-type="number" data-field="holdings.{{holdingIndex}}.gm.modifiers.technology" value="{{holding.gm.modifiers.technology}}" /></label>
+              <label class="culture"><span><i class="fa-solid fa-music"></i> Культ</span><input type="number" data-type="number" data-field="holdings.{{holdingIndex}}.gm.modifiers.culture" value="{{holding.gm.modifiers.culture}}" /></label>
+              <label class="war"><span><i class="fa-solid fa-shield-halved"></i> Война</span><input type="number" data-type="number" data-field="holdings.{{holdingIndex}}.gm.modifiers.war" value="{{holding.gm.modifiers.war}}" /></label>
+              <label><span><i class="fa-solid fa-shield"></i> Защ.</span><input type="number" data-type="number" data-field="holdings.{{holdingIndex}}.gm.modifiers.defense" value="{{holding.gm.modifiers.defense}}" /></label>
+              <label><span><i class="fa-solid fa-crown"></i> Реп.</span><input type="number" data-type="number" data-field="holdings.{{holdingIndex}}.gm.modifiers.reputation" value="{{holding.gm.modifiers.reputation}}" /></label>
+              <label><span><i class="fa-solid fa-face-smile"></i> Дов.</span><input type="number" data-type="number" data-field="holdings.{{holdingIndex}}.gm.modifiers.morale" value="{{holding.gm.modifiers.morale}}" /></label>
+              <label class="market-connections"><span data-fbls-tooltip="Ручной бюджет доступа к рынкам и товарам. Рынок требует по одному УРС за каждую связь маршрута; товар добавляет собственную сложность."><i class="fa-solid fa-route"></i> УРС</span><input type="number" min="0" step="1" data-type="number" data-field="holdings.{{holdingIndex}}.gm.modifiers.marketConnectionsLevel" value="{{holding.gm.modifiers.marketConnectionsLevel}}" /></label>
+            </div>
+            <p class="fbls-muted-text compact">Уровень рыночных связей: рынок виден при УРС не ниже числа переходов; товар требует ещё свой уровень сложности.</p>
+          </article>
+
+          <article class="fbls-card fbls-gm-card fbls-gm-mod-card">
+            <h2><i class="fa-solid fa-gauge-high"></i> Эффективность</h2>
+            <div class="fbls-gm-mod-grid eff-mods">
+              <label><span>Все здания</span><input type="number" step="0.1" data-type="number" data-field="holdings.{{holdingIndex}}.gm.efficiencyModifiers.all" value="{{holding.gm.efficiencyModifiers.all}}" /></label>
+              <label><span>Производство</span><input type="number" step="0.1" data-type="number" data-field="holdings.{{holdingIndex}}.gm.efficiencyModifiers.production" value="{{holding.gm.efficiencyModifiers.production}}" /></label>
+              <label><span>Стройбригады</span><input type="number" step="1" data-type="number" data-field="holdings.{{holdingIndex}}.gm.efficiencyModifiers.constructionCrew" value="{{holding.gm.efficiencyModifiers.constructionCrew}}" /></label>
+              <label><span data-fbls-tooltip="Автоматически пересчитывается после питания. GM может исправить уровень вручную для сюжетной ситуации.">Голод</span><input type="number" min="0" max="10" step="1" data-type="number" data-field="holdings.{{holdingIndex}}.gm.food.hungerLevel" value="{{holding.gm.food.hungerLevel}}" /></label>
+            </div>
+            <p class="fbls-muted-text compact">Каждый уровень голода снижает производительность и довольство на 5%, но не ниже 50%. Полный скудный рацион сразу сбрасывает голод.</p>
+          </article>
+
+          <article class="fbls-card fbls-gm-card fbls-gm-mod-card">
+            <h2><i class="fa-solid fa-basket-shopping"></i> Внутренний спрос</h2>
+            <p class="fbls-muted-text compact">Бюджеты покупателей внутри поселения: жителей, гостей Трактира и посетителей Рынка. За десятник работающие торговые здания продают им товары склада, отмеченные для продажи, и услуги; выручка поступает в казну. Это отдельный механизм от заказов внешнего рынка.</p>
+            <div class="fbls-gm-mod-grid">
+              <label><span data-fbls-tooltip="Базовый бюджет жителей на одного живого человека за десятник, до довольства и доли выплаченных зарплат.">ММ / жителя</span><input type="number" min="0" step="1" data-type="number" data-field="holdings.{{holdingIndex}}.gm.economy.internalDemand.populationBudgetPerResidentCopper" value="{{holding.gm.economy.internalDemand.populationBudgetPerResidentCopper}}" /></label>
+              <label><span data-fbls-tooltip="На сколько пунктов среднего довольства меняется коэффициент спроса на 1,0.">Шкала дов.</span><input type="number" min="1" step="1" data-type="number" data-field="holdings.{{holdingIndex}}.gm.economy.internalDemand.moraleScale" value="{{holding.gm.economy.internalDemand.moraleScale}}" /></label>
+              <label><span>Мин. дов.</span><input type="number" min="0" max="2" step="0.05" data-type="number" data-field="holdings.{{holdingIndex}}.gm.economy.internalDemand.minimumSatisfactionFactor" value="{{holding.gm.economy.internalDemand.minimumSatisfactionFactor}}" /></label>
+              <label><span>Макс. дов.</span><input type="number" min="0.5" max="2" step="0.05" data-type="number" data-field="holdings.{{holdingIndex}}.gm.economy.internalDemand.maximumSatisfactionFactor" value="{{holding.gm.economy.internalDemand.maximumSatisfactionFactor}}" /></label>
+              <label><span>Приор. жителей</span><input type="number" min="0" step="1" data-type="number" data-field="holdings.{{holdingIndex}}.gm.economy.internalDemand.priorities.population" value="{{holding.gm.economy.internalDemand.priorities.population}}" /></label>
+              <label><span>Приор. гостей</span><input type="number" min="0" step="1" data-type="number" data-field="holdings.{{holdingIndex}}.gm.economy.internalDemand.priorities.innVisitors" value="{{holding.gm.economy.internalDemand.priorities.innVisitors}}" /></label>
+              <label><span>Приор. рынка</span><input type="number" min="0" step="1" data-type="number" data-field="holdings.{{holdingIndex}}.gm.economy.internalDemand.priorities.marketFlow" value="{{holding.gm.economy.internalDemand.priorities.marketFlow}}" /></label>
+            </div>
+            <p class="fbls-muted-text compact">Бюджеты спроса существуют один десятник и не накапливаются. Недоплата зарплат уменьшает только спрос жителей; гости трактиров и внешний поток рынка не затрагиваются.</p>
+          </article>
+
+          <article class="fbls-card fbls-gm-card fbls-transfer-card">
+            <h2><i class="fa-solid fa-right-left"></i> Пересыл жителей</h2>
+            {{#if residentTransfer.hasTargets}}
+              <div class="fbls-transfer-grid">
+                <label><span>Житель</span><select data-transfer-resident>{{#each residentTransfer.residentOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                <label><span>Куда</span><select data-transfer-target>{{#each residentTransfer.targetOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                <button type="button" class="fbls-button compact" data-action="transfer-resident"><i class="fa-solid fa-paper-plane"></i> Переслать</button>
+              </div>
+            {{else}}
+              <p class="fbls-muted-text compact">Нет другого владения для пересылки.</p>
+            {{/if}}
+          </article>
+
+        </div>
+
+        <article class="fbls-card">
+          <div class="fbls-card-header">
+            <div><h2><i class="fa-solid fa-shapes" aria-hidden="true"></i> Согласование интерфейса</h2><p>Окно своих кораблей: вариант А внесён. Рабочие шаблоны и альтернативы доступны в сравнении. Прежние решения сохранены.</p></div>
+            <button type="button" class="fbls-button compact" data-action="open-ui-review"><i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i> Открыть сравнение</button>
+          </div>
+        </article>
 
         <article class="fbls-card fbls-operations-timeline-card">
           <div class="fbls-card-headline compact-headline">
@@ -205,7 +234,7 @@
               {{#each generator.preview}}
                 <section class="fbls-generated-person-card selective {{#unless selected}}muted{{/unless}} {{#if editing}}editing{{/if}}">
                   <div class="fbls-generated-person-summary">
-                    <label class="pick" title="Добавить этого жителя"><input type="checkbox" data-type="checkbox" data-generator-person-index="{{_index}}" data-generator-person-field="_selected" {{#if selected}}checked{{/if}} /><span></span></label>
+                    <label class="pick" title="Добавить этого жителя"><input type="checkbox" aria-label="Добавить жителя {{name}}" data-type="checkbox" data-generator-person-index="{{_index}}" data-generator-person-field="_selected" {{#if selected}}checked{{/if}} /><span></span></label>
                     <div class="identity">
                       <strong>{{name}}</strong>
                       <span>{{ageLine}} · {{raceLine}} · {{culture}}</span>
@@ -225,13 +254,12 @@
                       <label><span>Подвид</span><input type="text" data-generator-person-index="{{_index}}" data-generator-person-field="subrace" value="{{subrace}}" /></label>
                       <label><span>Верование</span><select data-generator-person-index="{{_index}}" data-generator-person-field="belief">{{#each beliefOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
                       <label class="background"><span>Прошлое</span><select data-generator-person-index="{{_index}}" data-generator-person-field="background">{{#each backgroundOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
-                      <label><span>СИЛ</span><input type="number" data-type="number" data-generator-person-index="{{_index}}" data-generator-person-field="attributes.strength" value="{{attributes.strength}}" /></label>
-                      <label><span>ЛОВ</span><input type="number" data-type="number" data-generator-person-index="{{_index}}" data-generator-person-field="attributes.agility" value="{{attributes.agility}}" /></label>
-                      <label><span>РАЗ</span><input type="number" data-type="number" data-generator-person-index="{{_index}}" data-generator-person-field="attributes.wits" value="{{attributes.wits}}" /></label>
-                      <label><span>ЭМП</span><input type="number" data-type="number" data-generator-person-index="{{_index}}" data-generator-person-field="attributes.empathy" value="{{attributes.empathy}}" /></label>
+                      <label><span>СИЛ</span><input type="number" min="1" max="6" step="1" data-type="number" data-generator-person-index="{{_index}}" data-generator-person-field="attributes.strength" value="{{attributes.strength}}" /></label>
+                      <label><span>ЛОВ</span><input type="number" min="1" max="6" step="1" data-type="number" data-generator-person-index="{{_index}}" data-generator-person-field="attributes.agility" value="{{attributes.agility}}" /></label>
+                      <label><span>РАЗ</span><input type="number" min="1" max="6" step="1" data-type="number" data-generator-person-index="{{_index}}" data-generator-person-field="attributes.wits" value="{{attributes.wits}}" /></label>
+                      <label><span>ЭМП</span><input type="number" min="1" max="6" step="1" data-type="number" data-generator-person-index="{{_index}}" data-generator-person-field="attributes.empathy" value="{{attributes.empathy}}" /></label>
                       <label><span>Дов. база</span><input type="number" data-type="number" data-generator-person-index="{{_index}}" data-generator-person-field="moraleBase" value="{{moraleBase}}" /></label>
-                      <label><span>Класс ставки</span><select data-generator-person-index="{{_index}}" data-generator-person-field="wageClassId">{{#each wageClassOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
-                      <label><span>Режим найма</span><select data-generator-person-index="{{_index}}" data-generator-person-field="employmentMode">{{#each employmentModeOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+                      <label><span>Оплата</span><input type="number" data-type="number" data-generator-person-index="{{_index}}" data-generator-person-field="salary" value="{{salary}}" /></label>
                       <label class="traits"><span>Черты</span><input type="text" data-generator-person-index="{{_index}}" data-generator-person-field="traitsText" value="{{traitsText}}" /></label>
                       <label class="appearance"><span>Внешность</span><textarea rows="2" data-generator-person-index="{{_index}}" data-generator-person-field="appearance">{{appearance}}</textarea></label>
                     </div>
@@ -244,27 +272,5 @@
           {{/if}}
         </article>
 
-        <article class="fbls-card fbls-resource-catalog-launcher">
-          <div>
-            <h2><i class="fa-solid fa-boxes-stacked"></i> Каталог ресурсов</h2>
-            <p>Встроенные: {{resourceCatalog.builtinCount}} · настроено: {{resourceCatalog.overrideCount}} · своих: {{resourceCatalog.customCount}}.</p>
-            <small>Иконки, WebP-изображения, алиасы и Item UUID редактируются в отдельном окне.</small>
-          </div>
-          <button type="button" class="fbls-button" data-action="open-resource-catalog-editor"><i class="fa-solid fa-arrow-up-right-from-square"></i> Открыть редактор</button>
-        </article>
-
-        <article class="fbls-card fbls-resource-catalog-launcher">
-          <div>
-            <h2><i class="fa-solid fa-shop"></i> Каталог внешнего рынка</h2>
-            <p>Государств: {{marketCatalog.countryCount}} · рынков-локаций: {{marketCatalog.locationCount}} · специализаций: {{marketCatalog.specialtyCount}} · организаций: {{marketCatalog.organizationCount}}.</p>
-            <small>Поставщики, Item UUID, базовые цены, волатильность, запас, масса, происхождение и видимость.</small>
-          </div>
-          <button type="button" class="fbls-button" data-action="open-market-catalog-editor"><i class="fa-solid fa-arrow-up-right-from-square"></i> Открыть редактор</button>
-        </article>
-
-        <article class="fbls-card danger-zone compact-danger">
-          <h2><i class="fa-solid fa-triangle-exclamation"></i> Опасная зона</h2>
-          <button type="button" class="fbls-button danger compact" data-action="reset-data"><i class="fa-solid fa-rotate-left"></i> Сбросить данные</button>
-        </article>
       </section>
     {{/if}}

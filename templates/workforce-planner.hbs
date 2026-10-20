@@ -1,0 +1,147 @@
+<section class="fbls-workforce" aria-label="План работ поселения">
+  {{#*inline "workforceGroupHeader"}}
+    <span class="fbls-workforce-building-icon" aria-hidden="true">{{#if img}}<img src="{{img}}" alt="" />{{else}}<i class="{{icon}}"></i>{{/if}}</span>
+    <span class="fbls-workforce-row-main"><strong>{{name}}</strong><span>{{#if multiple}}Работ: {{taskCount}}{{else}}{{#each tasks}}{{functionName}}{{/each}}{{/if}}</span></span>
+    <span class="fbls-workforce-group-plan"><span title="{{assignmentsText}}">{{#if assignmentsText}}{{assignmentsText}}{{else}}Никто не назначен{{/if}}</span>{{#if goal}}<span>Цели линий: {{goalQd}} / {{goal}} QD</span><progress max="{{goal}}" value="{{goalQd}}" aria-label="Выделено обычных QD к целям линий здания"></progress>{{/if}}</span>
+    <span class="fbls-workforce-row-numbers"><b>{{normalQd}} + {{overtimeQd}} QD</b>{{#if workersMax}}<span>Места {{staff}} / {{workersMax}}</span>{{/if}}{{#if warningCount}}<span class="fbls-workforce-warning" title="{{warningsText}}">Замечания: {{warningCount}}</span>{{/if}}</span>
+    {{#if multiple}}<i class="fa-solid fa-chevron-right fbls-workforce-expand" aria-hidden="true"></i>{{else}}<button type="button" class="fbls-button fbls-button-role fbls-workforce-open" data-action="workforce-task" data-key="{{key}}" title="Открыть работу: {{name}}" aria-label="Открыть работу: {{name}}"><i class="fa-solid fa-user-plus" aria-hidden="true"></i></button>{{/if}}
+    {{#if requirement}}<span class="fbls-workforce-minimum" title="{{requirement.note}}">{{requirement.label}}</span>{{/if}}
+    {{#if requiredText}}<span class="fbls-workforce-minimum {{#if requiredGap}}fbls-workforce-warning{{/if}}">{{requiredText}}</span>{{/if}}
+  {{/inline}}
+  {{#if hasHolding}}
+  <header class="fbls-workforce-head fbls-stack">
+    <div class="fbls-card-header"><strong>{{holdingName}} · следующий десятник</strong><span>{{adultCapacity.normalQd}} обычных QD взрослого · до {{adultCapacity.overtimeQd}} сверхурочных</span></div>
+    <div class="fbls-workforce-summary fbls-cluster">
+      <span class="fbls-chip">Свободно <b>{{model.free}}</b> QD</span>
+      <span class="fbls-chip">Назначено {{model.normalQd}} + {{model.overtimeQd}} сверх.</span>
+      <span class="fbls-chip">Уход: не хватает {{model.requiredGap}} эфф. QD</span>
+      <span class="fbls-chip">Цели: остаток {{model.chosenGap}} QD</span>
+      <span class="fbls-chip" title="Оплата запланированных гражданских назначений, без содержания зданий, армии и строительства">Оплата плана: {{model.wage}} ММ</span>
+    </div>
+    <div class="fbls-toolbar">
+      <div class="fbls-action-group" role="group" aria-label="Вид плана">
+        <button type="button" class="fbls-button fbls-button-role" data-action="workforce-view" data-view="tasks" aria-pressed="{{tasksView}}"><i class="fa-solid fa-list-check"></i> Работы</button>
+        <button type="button" class="fbls-button fbls-button-role" data-action="workforce-view" data-view="people" aria-pressed="{{peopleView}}"><i class="fa-solid fa-users"></i> Жители</button>
+      </div>
+      <input class="fbls-control" type="search" name="workforce-search" data-workforce-field="query" value="{{query}}" placeholder="Поиск" aria-label="Поиск работ или жителей" />
+      <select class="fbls-control" name="workforce-filter" data-workforce-field="filter" aria-label="Фильтр списка">{{#each filters}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+      <select class="fbls-control" name="workforce-sort" data-workforce-field="sort" aria-label="Сортировка">{{#each sortOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>
+    </div>
+    {{#if readonlyReason}}<p role="status">{{readonlyReason}}</p>{{/if}}
+    {{#if stale}}<div class="fbls-workforce-warning" role="status">Общий план изменился. Ваш черновик сохранён в окне. <button type="button" class="fbls-button fbls-button-role" data-action="workforce-refresh" {{#unless canEdit}}disabled{{/unless}}>Сверить с новыми данными</button></div>{{/if}}
+    {{#if pending}}<div class="fbls-workforce-warning" role="status">Ожидается подтверждение сохранения. <button type="button" class="fbls-button fbls-button-role" data-action="workforce-retry" {{#if busy}}disabled{{/if}}>Повторить тот же запрос</button></div>{{/if}}
+    {{#if error}}<p class="fbls-workforce-warning" role="alert">{{error}}</p>{{/if}}
+    {{#if model.invalidWages}}<p class="fbls-workforce-warning">У {{model.invalidWages}} жителей не определена корректная оплата. Нулевая ставка требует договорённости ГМа.</p>{{/if}}
+    {{#if message}}<p role="status">{{message}}</p>{{/if}}
+  </header>
+  <div class="fbls-workforce-body {{#if rail}}has-rail{{/if}}">
+    <main class="fbls-workforce-list" data-render-scroll-key="workforce-{{#if tasksView}}buildings{{else}}people{{/if}}">
+      {{#if peopleView}}<div class="fbls-toolbar fbls-workforce-selection">
+        <span>Выбрано {{selectedCount}}</span>
+        <button type="button" class="fbls-button fbls-button-role" data-action="workforce-select-all">Выбрать все найденные ({{total}})</button>
+        <button type="button" class="fbls-button fbls-button-role" data-action="workforce-clear-selection">Снять выбор</button>
+      </div>{{/if}}
+      <div class="fbls-workforce-list-head {{#if peopleView}}is-people{{/if}}" aria-hidden="true"><span>{{#if tasksView}}Здание / работы{{else}}Житель{{/if}}</span><span>{{#if tasksView}}Кто назначен / цель{{else}}Где работает{{/if}}</span><span>{{#if tasksView}}Выделено / места{{else}}Свободно QD{{/if}}</span></div>
+      {{#each rows}}
+        {{#if @root.tasksView}}
+        {{#if multiple}}
+        <details class="fbls-workforce-building {{#if active}}is-active{{/if}}" data-fbls-disclosure="workforce-building:{{id}}" {{#if @root.query}}open{{/if}}>
+          <summary class="fbls-workforce-group-header">{{> workforceGroupHeader this}}</summary>
+          {{#each tasks}}<article class="fbls-workforce-row fbls-workforce-line">
+            <div class="fbls-workforce-row-main"><strong>{{functionName}}</strong><span>{{categoryLabel}}{{#if goal}} · цель {{goal}} QD{{/if}}{{#if effectiveNeed}} · осталось {{effectiveNeed}} эфф. QD{{/if}}</span>{{#each warnings}}<span class="fbls-workforce-warning">{{this}}</span>{{/each}}</div>
+            <div class="fbls-workforce-row-numbers"><b>{{normalQd}} + {{overtimeQd}} QD</b></div>
+            <button type="button" class="fbls-button fbls-button-role" data-action="workforce-task" data-key="{{key}}" aria-label="Открыть {{name}}: {{functionName}}">{{#if assignable}}Назначить{{else}}Подробнее{{/if}}</button>
+          </article>{{/each}}
+        </details>
+        {{else}}
+        <article class="fbls-workforce-building {{#if active}}is-active{{/if}}"><div class="fbls-workforce-group-header">{{> workforceGroupHeader this}}</div></article>
+        {{/if}}
+        {{else}}
+        <article class="fbls-workforce-row fbls-workforce-person-row {{#if active}}is-active{{/if}}">
+          <label class="fbls-workforce-select"><input type="checkbox" data-workforce-field="selected" data-person-id="{{id}}" {{#if selected}}checked{{/if}} aria-label="Выбрать {{name}}" /></label>
+          <div class="fbls-workforce-row-main"><strong>{{name}}</strong><span>{{#if unavailable}}{{unavailable}}{{else}}Лимит {{capacity.normalQd}} + {{capacity.overtimeQd}} QD{{/if}}</span></div>
+          <div class="fbls-workforce-group-plan"><span title="{{assignmentsText}}">{{#if assignmentsText}}{{assignmentsText}}{{else}}{{#if unavailable}}Недоступен для распределения{{else}}Нет назначений{{/if}}{{/if}}</span>{{#unless unavailable}}{{#if capacity.normalQd}}<progress max="{{capacity.normalQd}}" value="{{normalQd}}" aria-label="Назначено {{normalQd}} из {{capacity.normalQd}} обычных QD: {{name}}"></progress>{{/if}}{{/unless}}</div>
+          <div class="fbls-workforce-row-numbers"><b>{{free}} / {{capacity.normalQd}}</b><span>{{#unless unavailable}}{{normalQd}} + {{overtimeQd}} занято{{/unless}}</span></div>
+          <button type="button" class="fbls-button fbls-button-role" data-action="workforce-person" data-person-id="{{id}}" aria-label="Открыть назначения {{name}}">План</button>
+        </article>
+        {{/if}}
+      {{else}}<p class="fbls-empty-state is-compact">Нет строк для выбранного фильтра.</p>{{/each}}
+    </main>
+    {{#if rail}}
+    <aside class="fbls-workforce-rail" aria-label="Редактор назначений">
+      <div class="fbls-card-header"><strong class="fbls-workforce-rail-title">{{#if tasksView}}<span class="fbls-workforce-building-icon" aria-hidden="true">{{#if task.img}}<img src="{{task.img}}" alt="" />{{else}}<i class="{{task.icon}}"></i>{{/if}}</span>{{task.name}}{{else}}{{person.name}}{{/if}}</strong><button type="button" class="fbls-button fbls-button-role" data-action="workforce-close-rail" title="Закрыть панель" aria-label="Закрыть панель"><i class="fa-solid fa-xmark"></i></button></div>
+      <div class="fbls-workforce-rail-scroll" data-render-scroll-key="workforce-rail-{{#if tasksView}}{{task.key}}{{else}}{{person.id}}{{/if}}">
+      {{#if tasksView}}
+        <h3>{{task.functionName}}</h3>
+        {{#if task.requirement}}<div class="fbls-workforce-requirement" title="{{task.requirement.note}}"><strong>{{task.requirement.label}}</strong>{{#if task.requirement.minQd}}<progress max="{{task.requirement.progressMax}}" value="{{task.requirement.qd}}" aria-label="Выделено {{task.requirement.qd}} из {{task.requirement.minQd}} QD для эффекта здания"></progress>{{/if}}<span>{{task.requirement.scopeLabel}}</span></div>{{/if}}
+        <details class="fbls-workforce-help" data-fbls-disclosure="task-help:{{task.key}}"><summary>Условия работы и расчёт QD</summary><p>{{task.note}}</p><p>QD в полях — полный объём назначения. Сверхурочные считаются отдельно. Эффективность — квалификация, без штрафов поселения.</p><p>Цель не ограничивает выпуск. Нулевая цель сохраняет назначения.</p></details>
+        {{#if task.dailyNeed}}<p>План QD по дням: {{#each task.daily}}<span class="fbls-chip is-compact" title="День {{@index}}">{{this}}</span> {{/each}}</p><p>Без учёта корма, болезни, финансов и поломок; эти условия проверяет расчёт десятника.</p>{{/if}}
+        {{#if task.assignable}}
+        <div class="fbls-toolbar"><label class="fbls-field" title="Цель обычного труда в QD; 0 — без цели. Назначения сохраняются.">Цель, QD <input class="fbls-control" type="number" name="workforce-goal" data-workforce-field="goal" min="0" max="10000" step="1" value="{{goalValue}}" {{#unless canEdit}}disabled{{/unless}} /></label><button type="button" class="fbls-button fbls-button-role" data-action="workforce-goal" {{#unless canEdit}}disabled{{/unless}}>Задать</button><button type="button" class="fbls-button fbls-button-role" data-action="workforce-fill" title="Предложить, как закрыть остаток этой задачи" {{#unless canEdit}}disabled{{/unless}}>Подобрать работников</button></div>
+        <div class="fbls-toolbar"><input class="fbls-control" type="search" name="workforce-candidate-search" data-workforce-field="candidateQuery" value="{{candidateQuery}}" placeholder="Найти жителя" aria-label="Найти кандидата" /><select class="fbls-control" name="workforce-candidate-filter" data-workforce-field="candidateFilter" aria-label="Фильтр кандидатов">{{#each candidateFilters}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></div>
+        <table class="fbls-table fbls-workforce-candidates" aria-label="Жители для назначения на работу">
+          <colgroup><col class="fbls-workforce-choice-col" /><col /><col class="fbls-workforce-qd-col" /><col class="fbls-workforce-qd-col" />{{#if task.overtimeAllowed}}<col class="fbls-workforce-qd-col" />{{/if}}<col class="fbls-workforce-actions-col" /></colgroup>
+          <thead><tr><th scope="col" aria-label="Выбор жителей"></th><th scope="col">Житель</th><th scope="col" title="Свободные обычные QD">Своб.</th><th scope="col" title="Полное назначение обычных QD на эту работу">QD</th>{{#if task.overtimeAllowed}}<th scope="col" title="Сверхурочные QD">Сверх.</th>{{/if}}<th scope="col" aria-label="Действия"></th></tr></thead>
+          <tbody>{{#each candidates}}
+            <tr>
+              <td><label class="fbls-workforce-select"><input type="checkbox" data-workforce-field="selected" data-person-id="{{id}}" {{#if selected}}checked{{/if}} aria-label="Выбрать {{name}}" /></label></td>
+              <td class="fbls-workforce-candidate-name"><button type="button" class="fbls-button fbls-button-role fbls-workforce-person-button" data-action="workforce-person" data-person-id="{{id}}" title="{{name}} — открыть план. {{assignmentText}}">{{name}}</button><span class="fbls-workforce-candidate-meta">{{efficiencyText}} · {{dailyRate}} ММ/д.</span>{{#if reason}}<span class="fbls-workforce-warning" title="{{reason}}">{{reason}}</span>{{/if}}</td>
+              <td class="fbls-workforce-number" title="Свободные обычные QD">{{free}}</td>
+              <td><input class="fbls-control" type="number" name="workforce-qd-{{id}}" aria-label="Обычные QD: {{name}}" min="0" max="{{capacity.normalQd}}" step="1" value="{{value}}" data-workforce-field="qd" data-person-id="{{id}}" {{#unless canAssign}}disabled{{/unless}} /></td>
+              {{#if @root.task.overtimeAllowed}}<td><input class="fbls-control" type="number" name="workforce-ot-{{id}}" aria-label="Сверхурочные QD: {{name}}" min="0" max="{{capacity.overtimeQd}}" step="1" value="{{overtimeValue}}" data-workforce-field="ot" data-person-id="{{id}}" {{#unless canAssign}}disabled{{/unless}} /></td>{{/if}}
+              <td><div class="fbls-action-group"><button type="button" class="fbls-button fbls-button-role" data-action="workforce-assign" data-person-id="{{id}}" title="Применить QD" aria-label="Применить назначение: {{name}}" {{#unless canAssign}}disabled{{/unless}}><i class="fa-solid fa-check" aria-hidden="true"></i></button><button type="button" class="fbls-button fbls-button-role" data-action="workforce-all-free" data-person-id="{{id}}" title="Добавить все свободные обычные QD" aria-label="Добавить все свободные QD: {{name}}" {{#unless canAssign}}disabled{{/unless}}><i class="fa-solid fa-angles-right" aria-hidden="true"></i></button></div></td>
+            </tr>
+          {{else}}<tr><td colspan="{{#if task.overtimeAllowed}}6{{else}}5{{/if}}"><p>{{candidateEmptyMessage}}</p><button type="button" class="fbls-button fbls-button-role" data-action="workforce-candidates-all">Показать всех жителей</button></td></tr>{{/each}}</tbody>
+        </table>
+        <div class="fbls-toolbar"><button type="button" class="fbls-button fbls-button-role" data-action="workforce-candidate-page" data-delta="-1" {{#unless candidatePrev}}disabled{{/unless}} aria-label="Предыдущие кандидаты">←</button><span>{{candidatePageLabel}} · {{candidateCount}} жителей</span><button type="button" class="fbls-button fbls-button-role" data-action="workforce-candidate-page" data-delta="1" {{#unless candidateNext}}disabled{{/unless}} aria-label="Следующие кандидаты">→</button></div>
+        {{/if}}
+      {{else}}
+        <p>Свободно {{person.free}} / {{person.capacity.normalQd}} QD · сверхурочно {{person.overtimeQd}} / {{person.capacity.overtimeQd}} · оплата {{person.wage}} ММ</p>
+        {{#unless person.unavailable}}{{#if person.capacity.normalQd}}<progress max="{{person.capacity.normalQd}}" value="{{person.normalQd}}" aria-label="Назначено {{person.normalQd}} обычных QD"></progress>{{/if}}{{/unless}}
+        {{#if person.unavailable}}<p class="fbls-workforce-warning">{{person.unavailable}}</p>{{/if}}
+        {{#if person.wageIssue}}<p class="fbls-workforce-warning">{{person.wageIssue}}</p>{{/if}}
+        {{#each person.allocations}}
+        <article class="fbls-workforce-candidate"><strong>{{name}} · {{functionName}}</strong>
+          <div class="fbls-toolbar fbls-workforce-allocation-controls">
+            <label class="fbls-field">QD<input class="fbls-control" type="number" name="person-qd-{{id}}" data-workforce-field="qd" data-person-id="{{@root.person.id}}" data-key="{{key}}" value="{{value}}" min="0" max="{{@root.person.capacity.normalQd}}" step="1" {{#unless canAssign}}disabled{{/unless}} /></label>
+            {{#if overtimeAllowed}}<label class="fbls-field">Сверх.<input class="fbls-control" type="number" name="person-ot-{{id}}" data-workforce-field="ot" data-person-id="{{@root.person.id}}" data-key="{{key}}" value="{{overtimeValue}}" min="0" max="{{@root.person.capacity.overtimeQd}}" step="1" {{#unless canAssign}}disabled{{/unless}} /></label>{{/if}}
+            <div class="fbls-action-group">
+              <button type="button" class="fbls-button fbls-button-role" data-action="workforce-assign" data-person-id="{{@root.person.id}}" data-key="{{key}}" title="Применить QD" aria-label="Применить QD: {{label}}" {{#unless canAssign}}disabled{{/unless}}><i class="fa-solid fa-check" aria-hidden="true"></i></button>
+              <button type="button" class="fbls-button fbls-button-role" data-action="workforce-person-transfer" data-key="{{key}}" title="Перенести QD на другую работу" aria-label="Перенести QD: {{label}}" {{#unless canAssign}}disabled{{/unless}}><i class="fa-solid fa-arrow-right-arrow-left" aria-hidden="true"></i></button>
+              <button type="button" class="fbls-button fbls-button-role" data-action="workforce-lock" data-person-id="{{@root.person.id}}" data-key="{{key}}" title="{{#if locked}}Открепить{{else}}Закрепить{{/if}} назначение" aria-label="Закрепление: {{label}}" aria-pressed="{{locked}}" {{#unless @root.canEdit}}disabled{{/unless}}><i class="fa-solid {{#if locked}}fa-lock{{else}}fa-lock-open{{/if}}" aria-hidden="true"></i></button>
+              <button type="button" class="fbls-button fbls-button-role" data-action="workforce-remove" data-person-id="{{@root.person.id}}" data-key="{{key}}" title="Снять назначение" aria-label="Снять: {{label}}" {{#unless canRemove}}disabled{{/unless}}><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+            </div>
+          </div>{{#if reason}}<p class="fbls-workforce-warning">{{reason}}</p>{{/if}}
+        </article>{{else}}<p>Нет гражданских назначений.</p>{{/each}}
+        {{#unless person.unavailable}}<div class="fbls-workforce-person-assignment fbls-stack">
+          <h3>{{#if person.transfer}}Перенести время{{else}}Назначить работу{{/if}}</h3>
+          <label class="fbls-field">Откуда взять QD<select class="fbls-control" name="person-source" data-workforce-field="personSource" {{#unless canEdit}}disabled{{/unless}}><option value="" {{#unless person.transfer}}selected{{/unless}}>Свободное время</option>{{#each person.sources}}<option value="{{key}}" {{#if selected}}selected{{/if}}>{{name}} · {{functionName}} ({{normalQd}} + {{overtimeQd}} QD)</option>{{/each}}</select></label>
+          <label class="fbls-field">Здание<select class="fbls-control" name="person-building" data-workforce-field="personBuildingId" {{#unless canEdit}}disabled{{/unless}}>{{#each person.buildings}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{name}}</option>{{/each}}</select></label>
+          <label class="fbls-field">Работа / линия<select class="fbls-control" name="person-target" data-workforce-field="personTargetKey" {{#unless canEdit}}disabled{{/unless}}>{{#each person.destinations}}<option value="{{key}}" {{#if selected}}selected{{/if}} {{#if reason}}disabled{{/if}}>{{name}}{{#if reason}} — {{reason}}{{/if}}</option>{{/each}}</select></label>
+          {{#if person.minimum}}<p title="{{person.minimum.note}}">{{person.minimum.label}}</p>{{/if}}
+          <div class="fbls-toolbar fbls-workforce-allocation-controls"><label class="fbls-field">QD (до {{person.available}})<input class="fbls-control" type="number" name="person-amount" data-workforce-field="personQd" value="{{person.amount}}" min="0" max="{{person.available}}" step="1" {{#unless person.canAssign}}disabled{{/unless}} /></label>{{#if person.overtimeAllowed}}<label class="fbls-field">Сверх. (до {{person.availableOt}})<input class="fbls-control" type="number" name="person-overtime" data-workforce-field="personOt" value="{{person.overtimeAmount}}" min="0" max="{{person.availableOt}}" step="1" {{#unless person.canAssign}}disabled{{/unless}} /></label>{{/if}}<button type="button" class="fbls-button fbls-button-role" data-action="workforce-person-assign" {{#unless person.canAssign}}disabled{{/unless}}>{{#if person.transfer}}Перенести{{else}}Добавить QD{{/if}}</button></div>
+          {{#if person.assignmentReason}}<p class="fbls-workforce-warning">{{person.assignmentReason}}</p>{{/if}}
+          <p>Изменения попадут в общий план после сохранения.</p>
+        </div>{{/unless}}
+        <button type="button" class="fbls-button fbls-button-role" data-action="workforce-resident-card" data-person-id="{{person.id}}">Карточка жителя</button>
+      {{/if}}
+      </div>
+      {{#if tasksView}}{{#if task.assignable}}{{#if selectedCount}}<div class="fbls-toolbar fbls-workforce-bulk"><span>Выбрано {{selectedCount}}</span><label class="fbls-field">Добавить каждому QD <input class="fbls-control" type="number" name="workforce-bulk-qd" data-workforce-field="bulkQd" min="0" max="{{adultCapacity.normalQd}}" step="1" value="{{bulkQd}}" /></label><button type="button" class="fbls-button fbls-button-role" data-action="workforce-preview-bulk" {{#unless canEdit}}disabled{{/unless}}>Показать распределение</button></div>{{/if}}{{/if}}{{/if}}
+    </aside>{{/if}}
+  </div>
+  {{#if preview}}<section class="fbls-workforce-preview" data-render-scroll-key="workforce-preview" aria-label="Предварительная проверка">
+    <div class="fbls-card-header"><strong>{{preview.title}}</strong><div class="fbls-action-group"><button type="button" class="fbls-button fbls-button-role" data-action="workforce-accept-preview" {{#unless canAcceptPreview}}disabled{{/unless}}>Принять в черновик</button><button type="button" class="fbls-button fbls-button-role" data-action="workforce-cancel-preview">Закрыть</button></div></div>
+    {{#if preview.changes.length}}<p>Проверьте назначения, примите их в черновик и нажмите «Сохранить план».</p>{{/if}}
+    {{#if preview.description}}<p>{{preview.description}} Свободно после подбора: {{preview.model.free}} QD.</p>{{/if}}
+    {{#if preview.model}}<p>Оплата: {{preview.wageBefore}} → {{preview.wageAfter}} ММ · замечаний после распределения {{preview.model.warnings}}.</p>{{/if}}
+    {{#each preview.changes}}<p><b>{{name}}</b> · {{task}}: {{before}} → {{after}}{{#if free}} · останется {{free}} QD{{/if}}</p>{{else}}<p>Изменений назначений нет.</p>{{/each}}
+    {{#each preview.skipped}}<p class="fbls-workforce-warning">{{this}}</p>{{/each}}
+  </section>{{/if}}
+  <footer class="fbls-workforce-footer fbls-stack">
+    <div class="fbls-toolbar fbls-workforce-paging"><button type="button" class="fbls-button fbls-button-role" data-action="workforce-page" data-delta="-1" {{#unless prev}}disabled{{/unless}} aria-label="Предыдущая страница">←</button><span>{{pageLabel}} · {{#if tasksView}}позиций{{else}}жителей{{/if}} {{total}} · по 25</span><button type="button" class="fbls-button fbls-button-role" data-action="workforce-page" data-delta="1" {{#unless next}}disabled{{/unless}} aria-label="Следующая страница">→</button><span>{{#if dirty}}Несохранённый черновик{{else}}Общий сохранённый план{{/if}}</span></div>
+    {{#if dirty}}<details data-fbls-disclosure="draft-changes"><summary>Проверить изменения ({{changes.length}} жителей)</summary><div class="fbls-workforce-changes">{{#each changes}}<p><b>{{name}}</b><br />Было: {{before}}<br />Будет: {{after}}</p>{{/each}}<p>Сохранение распространяется на назначения, цели и закрепления.</p></div></details>{{/if}}
+    <div class="fbls-toolbar"><button type="button" class="fbls-button fbls-button-role" data-action="workforce-suggest" {{#unless canEdit}}disabled{{/unless}}><i class="fa-solid fa-wand-magic-sparkles"></i> Предложить распределение</button><button type="button" class="fbls-button fbls-button-role" data-action="workforce-idle" {{#unless canEdit}}disabled{{/unless}}>Пересмотреть простой</button><button type="button" class="fbls-button fbls-button-role" data-action="workforce-undo" {{#unless canUndo}}disabled{{/unless}}>Отменить шаг</button><button type="button" class="fbls-button fbls-button-role" data-action="workforce-discard" {{#unless canEdit}}disabled{{/unless}}>Сбросить</button><button type="button" class="fbls-button fbls-button-role" data-action="workforce-tenday" title="Расчёт использует сохранённые назначения">Расчёт десятника</button><button type="button" class="fbls-button fbls-button-role fbls-workforce-save" data-action="workforce-save" {{#unless canSave}}disabled{{/unless}}><i class="fa-solid fa-floppy-disk"></i> Сохранить план</button></div>
+    <p>План повторяется каждый десятник. Свободные QD — резерв, не ошибка. Точный выпуск и события смотрите в расчёте после сохранения.</p>
+  </footer>
+  {{else}}<p class="fbls-empty-state">Поселение недоступно.</p>{{/if}}
+</section>
