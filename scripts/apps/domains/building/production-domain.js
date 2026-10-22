@@ -323,6 +323,9 @@ _pendingProductionRows(building, holding = null, buildingIndex = 0, linesArg = n
       lineIndex: line._index,
       resource: line.resource,
       qty: line.pendingQty,
+      manualCollectionBlocked: ["staff", "qd"].includes(buildingLaborMode(building)) && line.collectQd > 0,
+      collectionHint: ["staff", "qd"].includes(buildingLaborMode(building)) && line.collectQd > 0
+        ? `Сбор требует ${line.collectQd} QD. Назначьте эту линию в плане работ и проведите десятник.` : "Собрать готовый ресурс",
       label: `${line.resource}: ${line.pendingQty}`
     }));
 },

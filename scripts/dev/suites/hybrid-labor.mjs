@@ -8,6 +8,7 @@ import { checkHybridLaborPeriodic } from "../hybrid-labor-periodic-check.mjs";
 import { checkHybridService } from "../hybrid-service-check.mjs";
 import { checkHybridStaffSelection } from "../hybrid-staff-selection-check.mjs";
 import { checkHybridLaborMigrationWindow } from "../hybrid-labor-migration-window-check.mjs";
+import { checkHybridLaborReview } from "../hybrid-labor-review-check.mjs";
 
 export async function runHybridLaborSuite() {
   await checkHybridLaborData();
@@ -17,6 +18,7 @@ export async function runHybridLaborSuite() {
   await checkHybridLaborPlanner();
   checkHybridStaffSelection();
   await checkHybridLaborRuntime();
+  await checkHybridLaborReview();
   checkHybridLaborPeriodic();
   checkHybridService();
   return { suite: "hybrid-labor" };

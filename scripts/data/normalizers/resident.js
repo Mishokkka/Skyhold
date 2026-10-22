@@ -66,6 +66,11 @@ export function clearBuildingReferences(holding, building) {
     }
     if (person.staffAppointment?.buildingId === id) delete person.staffAppointment;
   }
+  for (const kind of ["goals", "locks", "productionGoals"]) {
+    if (Array.isArray(holding?.workforcePlan?.[kind])) {
+      holding.workforcePlan[kind] = holding.workforcePlan[kind].filter((row) => String(row?.sourceId ?? "") !== id);
+    }
+  }
   for (const candidate of holding?.buildings?.list ?? []) {
     if (!Array.isArray(candidate.requiredBuildingIds)) continue;
     candidate.requiredBuildingIds = candidate.requiredBuildingIds.filter((value) => {

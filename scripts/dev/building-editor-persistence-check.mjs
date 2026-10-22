@@ -12,13 +12,13 @@ import { SETTING_CATALOG, SETTING_HOLDINGS } from "../data/constants.js";
 import { SaveStatus } from "../apps/common/save-status.js";
 import { buildingPickerValues } from "../apps/domains/building-editor-pickers.js";
 import { assertProductionIdentityUnchanged, createProductionTiming } from "../engines/economy/production-timing.js";
-import { validateHybridLaborHolding, newHybridLaborIssues } from "../data/hybrid-labor.js";
+import { validateHybridLaborHolding, newHybridLaborIssues, buildingLaborMode, applyStaffAppointment } from "../data/hybrid-labor.js";
 import { buildWorkAllocationTargets } from "../data/work-allocations.js";
 
 export async function checkBuildingEditorPersistence() {
 // Run real editor methods without booting Foundry, then reload real split storage.
 const source = readFileSync(new URL("../apps/editors/building-editor.js", import.meta.url), "utf8");
-const names = new Set(["_resolveBuildingScopedPath", "_onFieldChange", "_onBuildingStringListChange", "_updateMutableBuilding", "_saveTransaction"]);
+const names = new Set(["_resolveBuildingScopedPath", "_onFieldChange", "_onLaborFieldChange", "_onBuildingStringListChange", "_updateMutableBuilding", "_saveTransaction"]);
 const methods = [];
 new Linter().verify(source, [{ plugins: { fixture: { rules: { extract: { create: () => ({
   MethodDefinition(node) {
@@ -58,11 +58,12 @@ const foundry = { utils: {
   },
   getProperty: (object, path) => path.split(".").reduce((row, key) => row?.[key], object)
 } };
-const Editor = new Function("SkyholdData", "foundry", "fieldValue", "buildingPickerValues", "requestSkyholdAppRender", "ui", "assertProductionIdentityUnchanged", "newHybridLaborIssues", "validateHybridLaborHolding", "buildWorkAllocationTargets",
+const warnings = [];
+const Editor = new Function("SkyholdData", "foundry", "fieldValue", "buildingPickerValues", "requestSkyholdAppRender", "ui", "assertProductionIdentityUnchanged", "newHybridLaborIssues", "validateHybridLaborHolding", "buildWorkAllocationTargets", "buildingLaborMode",
   `return class { ${methods.join("\n")} }`)(dataApi, foundry, fieldValue,
   buildingPickerValues, () => {},
-  { notifications: { error(message) { assert.fail(message); } } }, assertProductionIdentityUnchanged,
-  newHybridLaborIssues, validateHybridLaborHolding, buildWorkAllocationTargets);
+  { notifications: { error(message) { assert.fail(message); }, warn(message) { warnings.push(message); } } }, assertProductionIdentityUnchanged,
+  newHybridLaborIssues, validateHybridLaborHolding, buildWorkAllocationTargets, buildingLaborMode);
 const reload = () => createSkyholdSplitStorage({ settings }).getData();
 for (const template of [true, false]) {
   const editor = new Editor();
@@ -166,6 +167,27 @@ assert.equal(validateHybridLaborHolding(reload().holdings[0], { targets: buildWo
 writeCount = writes.length;
 await assert.rejects(editor._updateMutableBuilding(({ building }) => { building.productionLines = []; }), /недоступна/);
 assert.equal(writes.length, writeCount, "Deleting a restored contracted line is a new error and cannot persist");
+
+const priorGame = globalThis.game;
+try {
+  globalThis.game = { user: { isGM: true } };
+  editor.requestRender = () => {};
+  const modeEvent = { preventDefault() {}, currentTarget: { dataset: { buildingLaborField: "mode" }, value: "qd" } };
+  writeCount = writes.length;
+  await editor._onLaborFieldChange(modeEvent);
+  assert.equal(writes.length, writeCount, "A mode change cannot strand current staff contracts");
+  assert.match(warnings.at(-1), /Stale worker.*Сначала снимите/);
+  assert.equal(reload().holdings[0].buildings.list[buildingIndex].labor.mode, "staff");
+  await editor._updateMutableBuilding(({ holding }) => applyStaffAppointment(holding, "stale-worker", null));
+  await editor._onLaborFieldChange(modeEvent);
+  assert.equal(reload().holdings[0].buildings.list[buildingIndex].labor.mode, "qd");
+  assert.equal(reload().holdings[0].people.list.find((person) => person.id === "stale-worker").staffAppointment, undefined);
+  globalThis.game.user.isGM = false;
+  writeCount = writes.length;
+  modeEvent.currentTarget.value = "passive";
+  await editor._onLaborFieldChange(modeEvent);
+  assert.equal(writes.length, writeCount, "A player cannot change the building labor mode");
+} finally { globalThis.game = priorGame; }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

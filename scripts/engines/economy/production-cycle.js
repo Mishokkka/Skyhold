@@ -253,7 +253,7 @@ export async function runProductionCycle({
     if (capacity && affordableProductionBatch(limit, costsFor, (costs) => deps.storageCanPay(holding, costs)) >= minimum) return true;
     const costs = costsFor(capacity ? minimum : limit);
     const payment = deps.storageCanPay(holding, costs);
-    return payment.ok || deps.canCollectProductionInputs?.(holding, building, payment.missing ?? [], workerContext) === true;
+    return payment.ok || deps.canCollectProductionInputs?.(holding, building, payment.missing ?? [], workerContext, line) === true;
   };
 
   for (let step = 0; step < periodQd; step += 1) {

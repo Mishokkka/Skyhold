@@ -1,6 +1,7 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import { MODULE_ID } from "../../../data/constants.js";
 import { buildingLaborMode } from "../../../data/hybrid-labor.js";
+import { clearBuildingReferences } from "../../../data/normalizers/resident.js";
 import { requestConstructionOperation, SkyholdData } from "../../../data/store.js";
 import { makeId } from "../../../data/utils.js";
 import { traitBadges } from "../../../generators/trait-definitions.js";
@@ -331,6 +332,9 @@ async _executeBuildingContextAction(buildingId = "", action = "") {
     if (!confirmed) return;
     const deleted = await SkyholdData.updateHolding(holding.id, (freshHolding) => {
       const before = freshHolding.buildings?.list?.length ?? 0;
+      const removed = freshHolding.buildings?.list?.find((item) => String(item.id ?? "") === String(buildingId));
+      if (!removed) return SkyholdData.skipTransaction(false);
+      clearBuildingReferences(freshHolding, removed);
       if (!freshHolding.buildings) freshHolding.buildings = { list: [] };
       freshHolding.buildings.list = (freshHolding.buildings.list ?? []).filter((item) => String(item.id ?? "") !== String(buildingId));
       return freshHolding.buildings.list.length !== before;

@@ -562,9 +562,13 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(RenderSchedulerMixin
     if (!game.user?.isGM) return;
     const field = event.currentTarget, key = field.dataset.buildingLaborField;
     try {
-      await this._updateMutableBuilding(({ building }) => {
+      await this._updateMutableBuilding(({ holding, building }) => {
         if (key === "mode") {
           if (!["staff", "qd", "passive"].includes(field.value)) return SkyholdData.skipTransaction(false);
+          const staff = (holding?.people?.list ?? []).filter((person) => person.staffAppointment?.buildingId === building.id);
+          if (field.value !== "staff" && staff.length) {
+            throw new Error(`Смена режима затрагивает штат: ${staff.map((person) => person.name || person.id).join(", ")}. Сначала снимите этих сотрудников из штата в плане работ, затем смените режим.`);
+          }
           building.labor = { version: 1, mode: field.value, capacityQd: building.labor?.capacityQd ?? null };
           building.workersMin = 0;
           if (building.workerProfile) building.workerProfile.workersMin = 0;

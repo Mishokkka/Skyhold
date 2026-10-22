@@ -114,6 +114,7 @@ export async function checkHybridLaborPlanner() {
   assert.equal(workforceDraftError(holding, goalDraft, { isGM: true }), "");
   const goalModel = buildWorkforceModel(holding, goalDraft, service, { isGM: true });
   assert.equal(goalModel.taskMap.get(primary.key).effectiveNeed, 10);
+  assert.equal(goalModel.taskMap.get(primary.key).preparationWorkQd, 10);
   assert.equal(proposeWorkforceAssignments(holding, goalDraft, service, { isGM: true }).changes.length, 1);
 
   const inn = copy(assigned);
@@ -123,6 +124,27 @@ export async function checkHybridLaborPlanner() {
   const innRequirement = workforceTaskGroups(innModel)[0].requirement;
   assert.equal(innRequirement.minQd, 20);
   assert.equal(innRequirement.qd, 0, "Kitchen assignments cannot cover the hall's displayed labor requirement");
+  assert.ok(innModel.taskMap.get("workshop::culture").warnings.some((warning) => warning.includes("не назначена никому")),
+    "An uncovered hall must be visible even when all staff are assigned to the kitchen");
+  inn.people.list[0].staffAppointment.reserveFunctionId = "culture";
+  assert.ok(!buildWorkforceModel(inn, createWorkforceDraft(inn, service), service, { isGM: true })
+    .taskMap.get("workshop::culture").warnings.some((warning) => warning.includes("не назначена никому")));
+
+  for (const mode of ["staff", "qd"]) {
+    const collection = copy(assigned), building = collection.buildings.list[0], person = collection.people.list[0];
+    building.labor = { version: 1, mode, capacityQd: null };
+    Object.assign(building.productionLines[0], { requiresCollection: true, collectQd: 3, pendingQty: 4 });
+    if (mode === "qd") {
+      delete person.staffAppointment;
+      person.workAllocationMode = "explicit";
+      person.workAllocations = [{ sourceId: "workshop", functionId: "production:first", normalQd: 20, overtimeQd: 0 }];
+    }
+    for (const isGM of [true, false]) {
+      const task = buildWorkforceModel(collection, createWorkforceDraft(collection, service), service, { isGM }).taskMap.get(primary.key);
+      assert.ok(task.warnings.some((warning) => warning.includes("не хватает 1 QD")),
+        "GM and player see the indivisible daily collection shortfall before running a tenday");
+    }
+  }
 
   const paused = copy(assigned);
   paused.buildings.list[0].productionLines[0].active = false;

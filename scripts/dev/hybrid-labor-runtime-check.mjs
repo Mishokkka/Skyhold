@@ -306,6 +306,22 @@ export async function checkHybridLaborRuntime() {
     assert.equal(quantity(scopedFetch.holding, "grain"), 0);
     assert.equal(quantity(scopedFetch.holding, "stone"), 1);
 
+    for (const collectQd of [2, 3]) {
+      const fetch = hybridRuntimeFixture({ goal: 1 });
+      Object.assign(fetch.building.productionLines[0], { resourceId: "grain", expenses: "wood 2" });
+      const supplier = structuredClone(supply);
+      supplier.productionLines[0].collectQd = collectQd;
+      fetch.holding.buildings.list.push(supplier);
+      const fetchReport = await run(fetch, `staff-ingredient-collection-${collectQd}`);
+      assert.equal(quantity(fetch.holding, "grain"), collectQd === 2 ? 1 : 0);
+      assert.equal(quantity(fetch.holding, "stone"), collectQd === 2 ? 17 : 20,
+        "An impossible daily ingredient collection must release staff for their reserve function");
+      assert.equal(supplier.productionLines[0].pendingQty, collectQd === 2 ? 0 : 2);
+      assert.equal(fetch.holding.storage.moneyCopper, 9880, "Reserve work keeps the single staff wage");
+      if (collectQd === 3) assert.equal(fetchReport.skipped.filter((line) => line.includes("не хватает 1 QD")).length, 1,
+        "An impossible collection reports the daily shortfall once");
+    }
+
     const idle = hybridRuntimeFixture({ goal: null });
     idle.person.staffAppointment.reserveFunctionId = "";
     idle.building.productionLines[0].expenses = "grain 2";

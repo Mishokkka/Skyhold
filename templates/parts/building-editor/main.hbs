@@ -40,7 +40,7 @@
             <div class="fbls-pending-production main-pending-production">
               <div class="fbls-subhead"><span>Готово к сбору</span></div>
               {{#each building.pendingProductionRows}}
-                <div class="fbls-pending-production-row"><span>{{resource}}: <strong>{{qty}}</strong></span>{{#if ../canEdit}}<button type="button" class="fbls-button compact fbls-button-role" data-action="collect-production-line" data-index="{{lineIndex}}"><i class="fa-solid fa-hand-holding"></i> Собрать</button>{{/if}}</div>
+                <div class="fbls-pending-production-row"><span title="{{collectionHint}}">{{resource}}: <strong>{{qty}}</strong>{{#if manualCollectionBlocked}} · сбор через план работ{{/if}}</span>{{#if ../canEdit}}<button type="button" class="fbls-button compact fbls-button-role" data-action="collect-production-line" data-index="{{lineIndex}}" title="{{collectionHint}}" aria-label="{{collectionHint}}" {{#if manualCollectionBlocked}}disabled{{/if}}><i class="fa-solid fa-hand-holding" aria-hidden="true"></i> Собрать</button>{{/if}}</div>
               {{/each}}
             </div>
           {{/if}}

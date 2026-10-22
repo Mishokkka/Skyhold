@@ -1514,7 +1514,7 @@ _productionCycleDependencies({ holding: sourceHolding = null, lineOutputForCycle
       this._financeLineFunctionId(line, (building?.productionLines ?? []).indexOf(line))
     ),
     prepareStaffWorkerStep: (holding, budgets, workerContext, step, options) => this._prepareStaffWorkerStep(holding, budgets, workerContext, step, options),
-    canCollectProductionInputs: (holding, building, missing, workerContext) => this._canCollectStaffProductionInputs(holding, building, missing, workerContext),
+    canCollectProductionInputs: (holding, building, missing, workerContext, line) => this._canCollectStaffProductionInputs(holding, building, missing, workerContext, line),
     staffCanCollectLine: (building, line, workerContext) => this._staffCanCollectLine(building, line, workerContext),
     recordWorkerWork: (workerContext, entry, building, line, qd) => this._recordStaffWorkQd(workerContext, entry,
       this._financeLineFunctionId(line, (building.productionLines ?? []).indexOf(line)), qd),

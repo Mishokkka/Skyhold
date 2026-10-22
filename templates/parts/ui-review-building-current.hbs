@@ -24,6 +24,7 @@
     </div>
 
     <div class="fbls-building-head-meta">
+      {{#if laborLegacy}}<span class="fbls-chip is-compact" title="Здание сохраняет прежние правила труда до явного перехода ГМа">Старые правила</span>{{/if}}
       {{#if hasUpkeep}}<span class="fbls-head-chip fbls-chip upkeep" data-fbls-tooltip="Содержание, ММ"><i class="fa-solid fa-coins"></i><b>{{upkeepLine}}</b></span>{{/if}}
       {{#if hasWorkerCapacity}}<span class="fbls-head-chip fbls-chip workers" data-fbls-tooltip="Работники, занято/максимум"><i class="fa-solid fa-users"></i><b>{{workerCountLine}}</b></span>{{/if}}
       {{#if isMedicalBuilding}}<span class="fbls-head-chip fbls-chip medical" data-fbls-tooltip="Койкоместа, занято/всего"><i class="fa-solid fa-bed-pulse"></i><b>{{medicalSummary.used}}/{{medicalSummary.capacity}}</b></span>{{/if}}
@@ -84,7 +85,8 @@
         <div class="fbls-card-pending-production fbls-action-group">
           {{#each pendingProductionRows}}
             <span>{{resource}}: <strong>{{qty}}</strong></span>
-            {{#if ../../canEditBuildings}}<button type="button" class="fbls-button compact" data-review-inert-action="collect-building-production" data-building-id="{{../id}}" data-line-index="{{lineIndex}}"><i class="fa-solid fa-hand-holding"></i> Собрать</button>{{/if}}
+            {{#if manualCollectionBlocked}}<span title="{{collectionHint}}">Сбор через план работ</span>{{/if}}
+            {{#if ../../canEditBuildings}}<button type="button" class="fbls-button compact" data-review-inert-action="collect-building-production" data-building-id="{{../id}}" data-line-index="{{lineIndex}}" title="{{collectionHint}}" aria-label="{{collectionHint}}" {{#if manualCollectionBlocked}}disabled{{/if}}><i class="fa-solid fa-hand-holding" aria-hidden="true"></i> Собрать</button>{{/if}}
           {{/each}}
         </div>
       {{/if}}

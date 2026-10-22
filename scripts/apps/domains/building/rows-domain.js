@@ -10,6 +10,7 @@ import { buildingRequiresConstructionCenter } from "../../../data/building-devel
 import { buildingStaffingWorkerIds, explicitWorkAllocationsForBuilding } from "../../../data/work-allocations.js";
 import { buildingConstructionPrerequisitesMet, buildingNominalMorale, buildingWonderworkingActive } from "../../../engines/economy/building-service.js";
 import { isResidentInPopulation } from "../../../data/resident-presence.js";
+import { buildingLaborMode } from "../../../data/hybrid-labor.js";
 
 function cardSettlementEffects(app, holding) {
   return {
@@ -431,6 +432,7 @@ _prepareBuildingRow(holding, row, index, canEdit, storageRoomsArg = null, option
     return {
       _index: index,
       id: row?.id ?? "",
+      laborLegacy: buildingLaborMode(row) === "legacy",
       name: row?.name ?? "Здание",
       category,
       categoryLabel: this._buildingCategoryLabel(category),
@@ -520,6 +522,7 @@ _prepareBuildingRow(holding, row, index, canEdit, storageRoomsArg = null, option
 
   return {
     ...row,
+    laborLegacy: buildingLaborMode(row) === "legacy",
     _index: index,
     category,
     categoryLabel: this._buildingCategoryLabel(category),

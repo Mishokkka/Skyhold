@@ -99,6 +99,7 @@ export function buildWorkforceModel(holding, draft, service, { isGM = false, pre
     return { ...target, ...state, building, name: building?.name || "Поселение", functionName: fn?.name || target.label.split(" · ")[1] || "Трудовое обслуживание",
       laborMode, isStaff: laborMode === "staff" && target.kind !== "maintenance", capacityQd: buildingLaborCapacityQd(building),
       preparedUnits, hasProductionGoal: preparation.allowed, preparationWarning: preparation.warning,
+      preparationWorkQd: Math.round(preparation.effectiveNeed * 100) / 100,
       dailyRateCopper: target.buildingId ? target.dailyRateCopper : 12,
       goal, category: (goal || preparedUnits) && state.category === "optional" ? "chosen" : state.category,
       blocked: target.available === false ? target.blockedReason : blocked ? "Работа остановлена финансовыми обязательствами" : !supported ? "Функция отключена в здании" : "",
@@ -177,6 +178,26 @@ export function buildWorkforceModel(holding, draft, service, { isGM = false, pre
     if (task.blocked) task.warnings.push(task.blocked);
     if (task.preparationWarning) task.warnings.push(task.preparationWarning);
     if (task.inputBlocked && (task.goal || task.assignments.length)) task.warnings.push("Нет сырья для запуска по текущим запасам");
+    if (task.isStaff && task.staff > 0 && task.assignable && !["production", "maintenance"].includes(task.kind)
+      && !people.some((person) => !person.unavailable && person.appointment?.buildingId === task.buildingId
+        && [person.appointment.primaryFunctionId, person.appointment.reserveFunctionId].includes(task.functionId))) {
+      task.warnings.push("Эта служба не назначена никому в штате: ни как основная, ни как резервная работа");
+    }
+    const collectionLine = task.kind === "production" && (task.building?.productionLines ?? [])
+      .find((line, index) => task.functionId === `production:${line.id || `line-${index + 1}`}`);
+    if (["staff", "qd"].includes(task.laborMode) && collectionLine?.requiresCollection && collectionLine.pendingQty > 0 && collectionLine.collectQd > 0) {
+      const daily = task.isStaff ? Array(10).fill(0) : task.daily;
+      if (task.isStaff) for (const person of people) {
+        const appointment = person.appointment;
+        if (appointment?.buildingId !== task.buildingId
+          || ![appointment.primaryFunctionId, appointment.reserveFunctionId].includes(task.functionId)) continue;
+        for (const [step, slot] of slotsByPerson.get(person.id) ?? []) {
+          if (!slot.overtime || collectionLine.overtime === true) daily[Math.floor(step / 4)] += 1;
+        }
+      }
+      const needed = Math.ceil(collectionLine.collectQd), available = Math.max(0, ...daily);
+      if (needed > available) task.warnings.push(`Сбор требует ${needed} QD за один день; доступно не больше ${available}, не хватает ${needed - available} QD. Добавьте сборщиков или разрешённые сверхурочные.`);
+    }
     if (task.assignments.length && task.staff < task.minimum && task.kind !== "maintenance") task.warnings.push(`Минимум здания: ${task.staff} / ${task.minimum} жителей`);
     if (task.assignments.length && task.building && task.kind !== "maintenance") {
       const assignedPeople = people.filter((person) => staffByBuilding.get(task.buildingId)?.has(person.id)).map((row) => row.person);

@@ -71,22 +71,56 @@ _staffLivestockWorkRemaining(holding, building, workerContext, step) {
   return Math.max(0, desired - this._livestockAvailableWorkQd(holding, building, 4, workerContext, offset));
 },
 
-_canCollectStaffProductionInputs(holding, _building, missing, workerContext) {
+_canCollectStaffProductionInputs(holding, building, missing, workerContext, consumerLine) {
   if (!missing?.length) return false;
+  const finance = workerContext?.financeContext;
+  const functionId = this._financeLineFunctionId(consumerLine, (building.productionLines ?? []).indexOf(consumerLine));
+  const available = this._staffDailyCollectionBudget(building, functionId, workerContext);
   return missing.every((cost) => {
     const wanted = normalizeResourceId(cost.resourceId, cost.name);
     if (wanted === "money") return false;
     let pending = 0;
+    const blocked = [];
     for (const source of holding.buildings?.list ?? []) {
       if (this._buildingStatus(source).value !== "built") continue;
       for (const line of source.productionLines ?? []) {
         if (!line.requiresCollection || line.autoCollect !== "worker" || normalizeResourceId(line.resourceId, line.resource) !== wanted) continue;
         if (!this._financeFunctionAllowed(workerContext?.financeContext, source, this._financeLineFunctionId(line))) continue;
-        pending += number(line.pendingQty);
+        if (!number(line.pendingQty)) continue;
+        const needed = Math.ceil(number(line.collectQd));
+        if (needed > available) blocked.push({ source, line, needed });
+        else pending += number(line.pendingQty);
       }
     }
-    return pending >= Math.max(0, number(cost.qty) - number(cost.have));
+    if (pending >= Math.max(0, number(cost.qty) - number(cost.have))) return true;
+    finance.staffCollectionWarnings ??= new Set();
+    for (const { source, line, needed } of blocked) {
+      const key = `input:${building.id}::${functionId}::${source.id}::${line.id}`;
+      if (finance.staffCollectionWarnings.has(key)) continue;
+      finance.staffCollectionWarnings.add(key);
+      finance.staffReport?.skipped.push(`${building.name || "Здание"}: сбор сырья у ${source.name || "здания"} требует ${needed} QD за один день, доступно не больше ${available}; не хватает ${needed - available} QD. Проверьте бригаду или сверхурочные; сотрудник может выполнять резервную работу.`);
+    }
+    return false;
   });
+},
+
+/** Unspent funded slots, including today's accrued time; past days cannot fund collection. */
+_staffDailyCollectionBudget(building, functionId, workerContext) {
+  const finance = workerContext?.financeContext;
+  const firstDay = Math.floor(number(finance?.staffStep) / 4);
+  const daily = new Map();
+  for (const [workerId, appointment] of finance?.staffAppointmentsByWorkerId ?? []) {
+    if (String(appointment.buildingId) !== String(building.id)
+      || !staffAppointmentWorkFunctions(appointment).includes(functionId)) continue;
+    for (const [step, slot] of finance.plannedWorkSlotsByWorkerId.get(workerId) ?? []) {
+      if (Math.floor(step / 4) < firstDay || slot.functionId !== "staff"
+        || finance.staffReservedStepsByWorkerId.get(workerId)?.has(step)
+        || slot.overtime && !finance.staffOvertimeFunctionsByWorkerId.get(workerId)?.has(functionId)) continue;
+      const day = Math.floor(step / 4);
+      daily.set(day, (daily.get(day) ?? 0) + 1);
+    }
+  }
+  return Math.max(0, ...daily.values());
 },
 
 _staffCanCollectLine(building, line, workerContext) {
@@ -94,24 +128,13 @@ _staffCanCollectLine(building, line, workerContext) {
   if (!needed) return true;
   const finance = workerContext?.financeContext;
   const functionId = this._financeLineFunctionId(line, (building.productionLines ?? []).indexOf(line));
-  const daily = new Map();
-  for (const [workerId, appointment] of finance?.staffAppointmentsByWorkerId ?? []) {
-    if (String(appointment.buildingId) !== String(building.id)
-      || !staffAppointmentWorkFunctions(appointment).includes(functionId)) continue;
-    for (const [step, slot] of finance.plannedWorkSlotsByWorkerId.get(workerId) ?? []) {
-      if (finance.staffReservedStepsByWorkerId.get(workerId)?.has(step)
-        || slot.overtime && !finance.staffOvertimeFunctionsByWorkerId.get(workerId)?.has(functionId)) continue;
-      const day = Math.floor(step / 4);
-      daily.set(day, (daily.get(day) ?? 0) + 1);
-    }
-  }
-  const available = Math.max(0, ...daily.values());
+  const available = this._staffDailyCollectionBudget(building, functionId, workerContext);
   if (available >= needed) return true;
   finance.staffCollectionWarnings ??= new Set();
   const key = `${building.id}::${functionId}`;
   if (!finance.staffCollectionWarnings.has(key)) {
     finance.staffCollectionWarnings.add(key);
-    finance.staffReport?.skipped.push(`${building.name || "Здание"}: сбор требует ${needed} QD за один день, доступно не больше ${available}. Нужны дополнительные сборщики или разрешённые сверхурочные; незавершённый сбор между днями не переносится.`);
+    finance.staffReport?.skipped.push(`${building.name || "Здание"}: сбор требует ${needed} QD за один день, доступно не больше ${available}; не хватает ${needed - available} QD. Нужны дополнительные сборщики или разрешённые сверхурочные; незавершённый сбор между днями не переносится.`);
   }
   return false;
 },
