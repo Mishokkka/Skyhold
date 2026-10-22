@@ -71,7 +71,7 @@ export function workforceDraftError(holding, draft, { isGM = false } = {}) {
   try { next = applyWorkforceDraft(clone(holding), draft); } catch (error) { return error.message; }
   const error = workforceChangeError(holding, next, { isGM });
   if (error) return error;
-  const validation = validateHoldingWorkAllocations(next);
+  const validation = validateHoldingWorkAllocations(next, { previousHolding: holding });
   return validation.ok ? "" : isGM ? validation.issues[0].message : "План конфликтует с назначениями или вместимостью здания. Проверьте выделенные QD; скрытые назначения может проверить ГМ.";
 }
 

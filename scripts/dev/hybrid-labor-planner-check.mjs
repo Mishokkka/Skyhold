@@ -55,6 +55,13 @@ export async function checkHybridLaborPlanner() {
   const reversed = copy(assigned); reversed.buildings.list[0].productionLines.reverse();
   const reversedModel = buildWorkforceModel(reversed, createWorkforceDraft(reversed, service), service, { isGM: true });
   assert.equal(reversedModel.people[0].allocations[0].functionId, "production:first", "Line order cannot change the chosen primary task");
+  const damaged = copy(assigned);
+  damaged.buildings.list[0].productionLines.shift();
+  const independentDraft = createWorkforceDraft(damaged, service);
+  const availableTask = buildWorkforceModel(damaged, independentDraft, service, { isGM: true }).taskMap.get("workshop::production:second");
+  setWorkforceStaff(independentDraft, damaged.people.list[1], availableTask);
+  for (const isGM of [true, false]) assert.equal(workforceDraftError(damaged, independentDraft, { isGM }), "",
+    "The complete planner validation allows an unrelated hire while preserving a pre-existing broken contract");
   const before = { holdings: [holding], meta: { revision: 1 } }, after = { holdings: [assigned], meta: { revision: 1 } };
   assert.equal(validatePlayerPatch(before, buildPlayerPatch(before, after)).ok, true);
   const forged = copy(draft); forged.staffAppointments.p0.wageDailyCopper = 1;

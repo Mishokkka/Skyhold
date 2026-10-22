@@ -2,7 +2,7 @@ import { buildWorkAllocationTargets, workAllocationTargetKey, validateWorkAlloca
 import { isResidentInPopulation } from "./resident-presence.js";
 import { DEFAULT_NORMAL_LABOR_QD, residentLaborCapacity } from "./labor-budget.js";
 import { workerAdmission } from "../engines/workers/building-qualification.js";
-import { staffAppointmentFor, staffAppointmentWorkFunctions, validateHybridLaborHolding } from "./hybrid-labor.js";
+import { staffAppointmentFor, staffAppointmentWorkFunctions, validateHybridLaborHolding, newHybridLaborIssues } from "./hybrid-labor.js";
 
 export const WORKFORCE_PLAN_VERSION = 1;
 export const workforceKey = (row) => workAllocationTargetKey(row?.sourceId, row?.functionId);
@@ -131,5 +131,8 @@ export function workforceChangeError(before, after, { isGM = false } = {}) {
       || !isGM && (before.buildings?.list ?? []).some((building) => building.visibility === "gm"
         && ((building.assignedWorkerIds ?? []).includes(prior.id) || [building.id, building.name].includes(prior.workAssignment)))) return "Назначения жителя содержат скрытую работу; их меняет ГМ.";
   }
-  return validateHybridLaborHolding(after, { targets: byKey }).issues[0]?.message || "";
+  return newHybridLaborIssues(
+    validateHybridLaborHolding(before, { targets: buildWorkAllocationTargets(before) }).issues,
+    validateHybridLaborHolding(after, { targets: byKey }).issues
+  )[0]?.message || "";
 }

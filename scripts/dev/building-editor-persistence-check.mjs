@@ -12,7 +12,7 @@ import { SETTING_CATALOG, SETTING_HOLDINGS } from "../data/constants.js";
 import { SaveStatus } from "../apps/common/save-status.js";
 import { buildingPickerValues } from "../apps/domains/building-editor-pickers.js";
 import { assertProductionIdentityUnchanged, createProductionTiming } from "../engines/economy/production-timing.js";
-import { buildingLaborMode, validateHybridLaborHolding } from "../data/hybrid-labor.js";
+import { validateHybridLaborHolding, newHybridLaborIssues } from "../data/hybrid-labor.js";
 import { buildWorkAllocationTargets } from "../data/work-allocations.js";
 
 export async function checkBuildingEditorPersistence() {
@@ -58,11 +58,11 @@ const foundry = { utils: {
   },
   getProperty: (object, path) => path.split(".").reduce((row, key) => row?.[key], object)
 } };
-const Editor = new Function("SkyholdData", "foundry", "fieldValue", "buildingPickerValues", "requestSkyholdAppRender", "ui", "assertProductionIdentityUnchanged", "buildingLaborMode", "validateHybridLaborHolding", "buildWorkAllocationTargets",
+const Editor = new Function("SkyholdData", "foundry", "fieldValue", "buildingPickerValues", "requestSkyholdAppRender", "ui", "assertProductionIdentityUnchanged", "newHybridLaborIssues", "validateHybridLaborHolding", "buildWorkAllocationTargets",
   `return class { ${methods.join("\n")} }`)(dataApi, foundry, fieldValue,
   buildingPickerValues, () => {},
   { notifications: { error(message) { assert.fail(message); } } }, assertProductionIdentityUnchanged,
-  buildingLaborMode, validateHybridLaborHolding, buildWorkAllocationTargets);
+  newHybridLaborIssues, validateHybridLaborHolding, buildWorkAllocationTargets);
 const reload = () => createSkyholdSplitStorage({ settings }).getData();
 for (const template of [true, false]) {
   const editor = new Editor();
@@ -132,6 +132,40 @@ for (const template of [true, false]) {
   assert.equal(read().name, "Edited name");
   assert.deepEqual(read().serviceProjects[0].participantIds, ["external", "runa"], "read-only picker attempts cannot mutate project participation");
 }
+
+// A stale contract in one building must not lock all editors in the settlement.
+const damaged = reload();
+damaged.holdings[0].buildings.list.push({
+  id: "broken-employer", name: "Broken employer", constructionStatus: "built", workersMin: 0, workersMax: 1,
+  labor: { version: 1, mode: "staff", capacityQd: null }, assignedWorkerIds: ["stale-worker"],
+  functions: { production: true }, productionLines: []
+});
+damaged.holdings[0].people.list.push({ id: "stale-worker", name: "Stale worker", age: 30, workAssignment: "broken-employer",
+  staffAppointment: { version: 1, buildingId: "broken-employer", primaryFunctionId: "production:deleted",
+    reserveFunctionId: "", wageDailyCopper: 12, overtimeQd: 0, volunteer: false, volunteerReason: "" } });
+await storage.persistData(damaged);
+const editor = new Editor();
+editor._saveStatus = new SaveStatus();
+editor._canEditBuilding = () => true;
+let buildingIndex = 0;
+editor._getMutableBuilding = data => ({ holding: data.holdings[0], holdingIndex: 0, buildingIndex,
+  building: data.holdings[0].buildings.list[buildingIndex] });
+await editor._updateMutableBuilding(({ building }) => { building.name = "Unrelated edit"; });
+assert.equal(reload().holdings[0].buildings.list[0].name, "Unrelated edit");
+buildingIndex = damaged.holdings[0].buildings.list.length - 1;
+await editor._updateMutableBuilding(({ building }) => { building.name = "Renamed employer"; });
+assert.equal(reload().holdings[0].buildings.list[buildingIndex].name, "Renamed employer",
+  "Renaming the affected building must not turn an unchanged issue into a new one");
+let writeCount = writes.length;
+await assert.rejects(editor._updateMutableBuilding(({ building }) => { building.workersMax = 0; }), /штатных мест/);
+assert.equal(writes.length, writeCount, "An old broken reference cannot authorize a new capacity violation");
+await editor._updateMutableBuilding(({ building }) => {
+  building.productionLines.push({ id: "deleted", active: true, source: "workers", resourceId: "wood", outputQty: 1, workQd: 1 });
+});
+assert.equal(validateHybridLaborHolding(reload().holdings[0], { targets: buildWorkAllocationTargets(reload().holdings[0]) }).ok, true);
+writeCount = writes.length;
+await assert.rejects(editor._updateMutableBuilding(({ building }) => { building.productionLines = []; }), /недоступна/);
+assert.equal(writes.length, writeCount, "Deleting a restored contracted line is a new error and cannot persist");
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

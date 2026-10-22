@@ -1378,18 +1378,33 @@ async _collectLineToStorage(holding, building, line, budgets, report, { by = "bu
 
 async _autoCollectBuilding(holding, building, budgets, report, workerContext = null, financeContext = null) {
   for (const line of building?.productionLines ?? []) {
-    if (!line?.requiresCollection) continue;
+    if (!line?.requiresCollection || !(line.pendingQty > 0)) continue;
     const functionId = this._financeLineFunctionId(line, (building.productionLines ?? []).indexOf(line));
     const selectedStaff = [...(workerContext?.financeContext?.staffAppointmentsByWorkerId ?? [])].some(([workerId, appointment]) => (
       String(appointment.buildingId) === String(building.id)
       && workerContext.financeContext.staffCurrentFunctionByWorkerId?.get(workerId) === functionId
     ));
-    const selectedQd = buildingLaborMode(building) === "qd"
-      && this._assignedBuildingPeople(holding, building, workerContext, functionId).some((person) =>
-        this._workerBudgetEntriesForBuilding(person, budgets, building, workerContext, functionId).some((entry) => entry.available > 0));
+    const mode = buildingLaborMode(building);
+    const hybrid = mode === "staff" || mode === "qd";
+    const available = hybrid ? this._assignedBuildingPeople(holding, building, workerContext, functionId)
+      .flatMap((person) => this._workerBudgetEntriesForBuilding(person, budgets, building, workerContext, functionId))
+      .reduce((sum, entry) => sum + Math.max(0, this._safeNumber(entry.available, 0)), 0) : 0;
+    const selectedQd = mode === "qd" && available > 0;
     if (String(line.autoCollect ?? "none") !== "building" && !selectedStaff && !selectedQd) continue;
-    if (!this._financeFunctionAllowed(financeContext, building, this._financeLineFunctionId(line))) continue;
+    if (!this._financeFunctionAllowed(financeContext, building, functionId)) continue;
+    const collectionKey = `${building.id}::${functionId}`;
+    const collectQd = Math.max(0, Math.ceil(this._safeNumber(line.collectQd, 0)));
+    // A collection is indivisible. Wait for this day's funded QD to accrue;
+    // an intermediate step with only part of the budget is not a failed job.
+    if (hybrid && available + 0.0001 < collectQd) {
+      if (financeContext) {
+        financeContext.deferredCollections ??= new Map();
+        financeContext.deferredCollections.set(collectionKey, { building, line, collectQd });
+      }
+      continue;
+    }
     await this._collectLineToStorage(holding, building, line, budgets, report, { by: "building", workerContext });
+    financeContext?.deferredCollections?.delete(collectionKey);
   }
 },
 
@@ -1656,6 +1671,10 @@ async _runProductionAndLivestockForQd(holding, qd, report, { operationId = "", b
   });
   this._flushStaffAgricultureReport?.(holding, report, financeContext);
   this._finishStaffExecution(holding, report, financeContext);
+  for (const [key, { building, line, collectQd }] of financeContext?.deferredCollections ?? []) {
+    if (!(line.pendingQty > 0) || financeContext.staffCollectionWarnings?.has(key)) continue;
+    report.skipped.push(`${building.name || "Здание"} · ${resourceLabel(normalizeResourceId(line.resourceId, line.resource))}: сбор не завершён — требуется ${collectQd} QD за один день; осталось ${line.pendingQty} ЕД. Назначьте достаточно времени сборщикам.`);
+  }
 },
 
 async _runEconomyForQd(holding, periodQd = 40, { operationId = "", createdAt = "", data = null } = {}) {

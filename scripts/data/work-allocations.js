@@ -6,7 +6,7 @@ import { isPlainObject, makeId, toNumber } from "./utils.js";
 import { normalizeBuildingMaintenance, usesTechnicalMaintenance } from "./economy/maintenance.js";
 import { isResidentPresent } from "./resident-presence.js";
 import { normalLaborQdPerTenday, residentLaborCapacity } from "./labor-budget.js";
-import { buildingLaborMode, staffAppointmentFor, staffWorkerIdsForBuilding, validateHybridLaborHolding } from "./hybrid-labor.js";
+import { buildingLaborMode, staffAppointmentFor, staffWorkerIdsForBuilding, validateHybridLaborHolding, newHybridLaborIssues } from "./hybrid-labor.js";
 
 export const WORK_ALLOCATION_SCHEMA_VERSION = 1;
 export const WORK_ALLOCATION_MODE_LEGACY = "legacy";
@@ -293,7 +293,7 @@ export function buildingStaffingWorkerIds(holding = {}, buildingId = "") {
   return [...ids];
 }
 
-export function validateHoldingWorkAllocations(holding = {}) {
+export function validateHoldingWorkAllocations(holding = {}, { previousHolding = null } = {}) {
   const targets = buildWorkAllocationTargets(holding);
   const targetMap = new Map(targets.map((target) => [target.key, target]));
   const issues = [];
@@ -326,7 +326,10 @@ export function validateHoldingWorkAllocations(holding = {}) {
       issues.push({ code: "allocation-capacity", buildingId, buildingName: text(building?.name) || "Здание", message: `${text(building?.name) || "Здание"}: план использует ${assigned}/${workersMax} рабочих мест.` });
     }
   }
-  issues.push(...validateHybridLaborHolding(holding, { targets: targetMap }).issues);
+  const hybridIssues = validateHybridLaborHolding(holding, { targets: targetMap }).issues;
+  issues.push(...(previousHolding ? newHybridLaborIssues(
+    validateHybridLaborHolding(previousHolding, { targets: buildWorkAllocationTargets(previousHolding) }).issues, hybridIssues
+  ) : hybridIssues));
   return { ok: issues.length === 0, targets, targetMap, plans, issues };
 }
 

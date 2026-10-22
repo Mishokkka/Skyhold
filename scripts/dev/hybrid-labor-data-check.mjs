@@ -129,6 +129,10 @@ assert.equal(check(hugeGoal).ok, false, "server validation enforces the same upp
 assert.equal(productionPreparationGoal(hugeGoal, "staff", "production:logs"), null);
 goals.workforcePlan.productionGoals.push(clone(goals.workforcePlan.productionGoals[0]));
 assert.ok(check(goals).issues.some((issue) => issue.code === "production-goal-duplicate"));
+const moreDuplicates = clone(goals);
+moreDuplicates.workforcePlan.productionGoals.push(clone(goals.workforcePlan.productionGoals[0]));
+assert.ok(validateHoldingWorkAllocations(moreDuplicates, { previousHolding: goals }).issues.some((issue) => issue.code === "production-goal-duplicate"),
+  "An existing duplicate does not authorize a third identical goal");
 const timed = fixture();
 timed.buildings.list[0].productionLines[0] = { id: "time", active: true, source: "time", requiresCollection: true, collectQd: 1 };
 assert.ok(buildWorkAllocationTargets(timed).some((row) => row.key === "staff::production:time"), "time-only production can still require assigned collection labor");
@@ -147,6 +151,31 @@ assert.equal(validatePlayerPatch(beforeData, buildPlayerPatch(beforeData, forged
 const forbiddenMode = clone(beforeData);
 forbiddenMode.holdings[0].buildings.list[0].labor.mode = "qd";
 assert.equal(validatePlayerPatch(beforeData, buildPlayerPatch(beforeData, forbiddenMode)).ok, false, "player cannot change a building's employment model");
+const defenseOnly = clone(beforeData);
+Object.assign(defenseOnly.holdings[0].gm, { playersCanEditBuildings: false, playersCanEditDefense: true });
+const disguisedHire = clone(defenseOnly);
+disguisedHire.holdings[0].gm.defense.notes = "Defense note";
+applyStaffAppointment(disguisedHire.holdings[0], "a", appointment());
+assert.equal(validatePlayerPatch(defenseOnly, buildPlayerPatch(defenseOnly, disguisedHire)).ok, false,
+  "A defense note cannot authorize a hidden civilian hire without building permissions");
+const defenseStaff = clone(defenseOnly);
+applyStaffAppointment(defenseStaff.holdings[0], "a", appointment());
+const disguisedChange = clone(defenseStaff);
+disguisedChange.holdings[0].gm.defense.notes = "Another defense note";
+disguisedChange.holdings[0].people.list[0].staffAppointment.overtimeQd = 1;
+assert.equal(validatePlayerPatch(defenseStaff, buildPlayerPatch(defenseStaff, disguisedChange)).ok, false,
+  "Defense permissions cannot change an existing civilian contract either");
+const disguisedRelease = clone(defenseStaff);
+disguisedRelease.holdings[0].gm.defense.notes = "Not an enlistment";
+applyStaffAppointment(disguisedRelease.holdings[0], "a", null);
+assert.equal(validatePlayerPatch(defenseStaff, buildPlayerPatch(defenseStaff, disguisedRelease)).ok, false,
+  "Defense permissions cannot dismiss civilian employees without enlisting them");
+const enlisted = clone(defenseStaff);
+clearPersonFromAssignments(enlisted.holdings[0], "a");
+enlisted.holdings[0].people.list[0].workAssignment = "defenseCommander";
+enlisted.holdings[0].gm.defense.commanderId = "a";
+const enlistCheck = validatePlayerPatch(defenseStaff, buildPlayerPatch(defenseStaff, enlisted));
+assert.equal(enlistCheck.ok, true, enlistCheck.error);
 const paused = clone(afterData);
 paused.holdings[0].buildings.list[0].productionLines[0].active = false;
 let pausedTarget = buildWorkAllocationTargets(paused.holdings[0]).find((row) => row.sourceId === "staff");
@@ -171,6 +200,32 @@ assert.match(workforceChangeError(blockedHireBefore, blockedHireAfter, { isGM: t
 const deletedLine = clone(afterData.holdings[0]);
 deletedLine.buildings.list[0].productionLines = [];
 assert.equal(check(deletedLine).ok, false, "deleting a contracted function still requires an explicit resolution");
+const unrelatedPlan = clone(deletedLine);
+unrelatedPlan.people.list[1].workAllocationMode = "explicit";
+unrelatedPlan.people.list[1].workAllocations = [allocation("unrelated", 2)];
+for (const isGM of [true, false]) assert.equal(workforceChangeError(deletedLine, unrelatedPlan, { isGM }), "",
+  "An unchanged broken contract must not prevent planning another resident's valid work");
+const damagedData = { meta: { revision: 1 }, holdings: [deletedLine] };
+const repairedPlanData = { meta: { revision: 1 }, holdings: [unrelatedPlan] };
+const unrelatedCheck = validatePlayerPatch(damagedData, buildPlayerPatch(damagedData, repairedPlanData));
+assert.equal(unrelatedCheck.ok, true, unrelatedCheck.error);
+assert.equal(validateHoldingWorkAllocations(unrelatedPlan).ok, false,
+  "Execution still reports the full invalid state even when an unrelated edit is allowed");
+const excessive = fixture();
+excessive.buildings.list[1].labor.capacityQd = 5;
+excessive.people.list[0].workAllocationMode = "explicit";
+excessive.people.list[0].workAllocations = [allocation("too-much", 10)];
+const worse = clone(excessive); worse.people.list[0].workAllocations[0].normalQd = 11;
+assert.match(workforceChangeError(excessive, worse, { isGM: true }), /пределе/,
+  "An existing capacity error must not permit increasing the overload under the same issue code");
+const better = clone(excessive); better.people.list[0].workAllocations[0].normalQd = 8;
+assert.equal(workforceChangeError(excessive, better, { isGM: true }), "", "An explicit partial reduction is allowed");
+const lowerCap = clone(excessive); lowerCap.buildings.list[1].labor.capacityQd = 4;
+assert.match(workforceChangeError(excessive, lowerCap, { isGM: true }), /пределе/);
+const malformed = clone(afterData.holdings[0]); malformed.people.list[0].staffAppointment.overtimeQd = -1;
+const changedMalformed = clone(malformed); changedMalformed.people.list[0].staffAppointment.overtimeQd = -2;
+assert.match(workforceChangeError(malformed, changedMalformed, { isGM: true }), /некорректный договор/,
+  "An old format error cannot authorize changing malformed data under the same code");
 const legacySelector = { ...AssignmentDomain, _safeNumber: (value, fallback = 0) => Number(value) || fallback };
 const selectorHolding = fixture();
 selectorHolding.people.list[0].workAllocationMode = "explicit";

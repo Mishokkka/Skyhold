@@ -36,7 +36,7 @@ import { getMassCombatRelationTags } from "../mass-combat/tag-config.js";
 import { livestockHeadcount } from "../../engines/economy/livestock.js";
 import { renderFoundryFilePicker } from "../../integrations/foundry-runtime.js";
 import { SkyholdResourceCatalogEditor } from "./resource-catalog-editor.js";
-import { buildingLaborMode, validateHybridLaborHolding } from "../../data/hybrid-labor.js";
+import { buildingLaborMode, validateHybridLaborHolding, newHybridLaborIssues } from "../../data/hybrid-labor.js";
 import { buildWorkAllocationTargets } from "../../data/work-allocations.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -562,7 +562,7 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(RenderSchedulerMixin
     if (!game.user?.isGM) return;
     const field = event.currentTarget, key = field.dataset.buildingLaborField;
     try {
-      await this._updateMutableBuilding(({ building, holding }) => {
+      await this._updateMutableBuilding(({ building }) => {
         if (key === "mode") {
           if (!["staff", "qd", "passive"].includes(field.value)) return SkyholdData.skipTransaction(false);
           building.labor = { version: 1, mode: field.value, capacityQd: building.labor?.capacityQd ?? null };
@@ -578,9 +578,6 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(RenderSchedulerMixin
           if (value !== null && (!Number.isSafeInteger(value) || value < 0)) throw new Error("Предел QD должен быть целым неотрицательным числом; пустое поле означает отсутствие предела.");
           building.labor.capacityQd = value;
         } else return SkyholdData.skipTransaction(false);
-        const context = holding ?? { buildings: { list: [building] }, people: { list: [] } };
-        const validation = validateHybridLaborHolding(context, { targets: buildWorkAllocationTargets(context) });
-        if (!validation.ok) throw new Error(`${validation.issues[0].message} Сначала проверьте переход существующих назначений.`);
         return true;
       }, { reason: "building-editor:labor" });
       this.requestRender(); requestSkyholdAppRender();
@@ -1286,14 +1283,18 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(RenderSchedulerMixin
 
   _saveTransaction(updater, options) {
     return this._saveStatus.track(() => SkyholdData.transaction(async (data) => {
-      const before = (this._getMutableBuilding(data)?.building?.productionLines ?? []).map((line) => ({ ...line }));
+      const priorContext = this._getMutableBuilding(data);
+      const before = (priorContext?.building?.productionLines ?? []).map((line) => ({ ...line }));
+      const priorHolding = priorContext.holding ?? { buildings: { list: priorContext.building ? [priorContext.building] : [] }, people: { list: [] } };
+      const priorIssues = validateHybridLaborHolding(priorHolding, { targets: buildWorkAllocationTargets(priorHolding) }).issues;
       const result = await updater(data);
       assertProductionIdentityUnchanged(before, this._getMutableBuilding(data)?.building?.productionLines ?? []);
       const context = this._getMutableBuilding(data);
-      if (context.building && buildingLaborMode(context.building) !== "legacy") {
+      if (context.building) {
         const holding = context.holding ?? { buildings: { list: [context.building] }, people: { list: [] } };
         const validation = validateHybridLaborHolding(holding, { targets: buildWorkAllocationTargets(holding) });
-        if (!validation.ok) throw new Error(validation.issues[0].message);
+        const added = newHybridLaborIssues(priorIssues, validation.issues);
+        if (added.length) throw new Error(added[0].message);
       }
       return result;
     }, {

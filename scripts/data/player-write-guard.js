@@ -387,6 +387,21 @@ function validatePlayerPatchSemantics(current, proposed, action, holdingIndex, p
   if (duplicateIdError) return { ok: false, error: duplicateIdError };
   const identityError = validateRowIdentityChanges(holding, nextHolding);
   if (identityError) return { ok: false, error: identityError };
+  if (action === "defense") {
+    const priorPeople = new Map((holding.people?.list ?? []).map((person) => [String(person.id), person]));
+    const defense = nextHolding.gm?.defense ?? {};
+    const enlistedIds = new Set([defense.commanderId, ...(defense.squads ?? [])
+      .flatMap((squad) => [squad.sergeantId, ...(squad.memberIds ?? [])])].filter(Boolean).map(String));
+    for (const person of nextHolding.people?.list ?? []) {
+      const previous = priorPeople.get(String(person.id))?.staffAppointment ?? null;
+      const next = person.staffAppointment ?? null;
+      if (sameJson(previous, next)) continue;
+      // Defense may release a civilian contract only as part of enlisting its owner.
+      if (next || !enlistedIds.has(String(person.id))) {
+        return { ok: false, error: "Постоянное назначение в здание меняется через право на здания; оборона позволяет только снять его при переводе в отряд." };
+      }
+    }
+  }
   const workforceError = workforceChangeError(holding, nextHolding);
   if (workforceError) return { ok: false, error: workforceError };
   const oldOperationIds = new Set((holding.log ?? []).map((row) => row.operationId));
@@ -404,7 +419,7 @@ function validatePlayerPatchSemantics(current, proposed, action, holdingIndex, p
       }
     }
   }
-  const workAllocationCheck = validateHoldingWorkAllocations(nextHolding);
+  const workAllocationCheck = validateHoldingWorkAllocations(nextHolding, { previousHolding: holding });
   if (!workAllocationCheck.ok) return { ok: false, error: workAllocationCheck.issues[0]?.message || "Некорректный план рабочих QD." };
   const admissionIssues = holdingWorkerAdmissionIssues(nextHolding);
   if (admissionIssues.length) return { ok: false, error: admissionIssues[0].message };

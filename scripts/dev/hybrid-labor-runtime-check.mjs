@@ -126,13 +126,15 @@ export async function checkHybridLaborRuntime() {
     Object.assign(waiting.building.productionLines[0], {
       outputQty: 2, waitDays: 1, requiresCollection: true, collectQd: 2, autoCollect: "none"
     });
-    await run(waiting, "waiting-collection");
+    const waitingReport = await run(waiting, "waiting-collection");
     assert.equal(quantity(waiting.holding, "wood"), 2);
     assert.equal(quantity(waiting.holding, "stone"), 17,
       "Preparation plus two collection QD leave seventeen QD for reserve work");
     assert.equal(waiting.building.productionLines[0].pendingQty, 0);
     assert.equal(waiting.building.serviceState.workedQdByFunction["production:main"], 3);
     assert.equal(waiting.holding.storage.moneyCopper, 9880);
+    assert.equal(waitingReport.skipped.filter((line) => line.includes("не хватает рабочих QD для сбора")).length, 0,
+      "Waiting for the rest of today's funded collection budget is not a failed collection");
 
     const returning = hybridRuntimeFixture({ goal: 2 });
     Object.assign(returning.building.productionLines[0], { waitDays: 1 });
@@ -216,6 +218,22 @@ export async function checkHybridLaborRuntime() {
     assert.equal(invalid.holding.storage.moneyCopper, 10000,
       "An incompatible contract cannot silently lose its wage while still producing work");
 
+    for (const child of [true, false]) {
+      const excessiveOvertime = hybridRuntimeFixture();
+      excessiveOvertime.person.staffAppointment.overtimeQd = 1;
+      excessiveOvertime.building.productionLines[0].overtime = true;
+      if (child) Object.assign(excessiveOvertime.person, { age: 13, ageGroup: "Ре" });
+      else normalQd = 0;
+      const report = await run(excessiveOvertime, `invalid-overtime-${child}`);
+      assert.ok(report.finance.invalidWorkerIds.includes(excessiveOvertime.person.id),
+        "Overtime above the personal cap must be reported, not silently rewritten into a different contract");
+      assert.equal(excessiveOvertime.person.staffAppointment.overtimeQd, 1);
+      assert.equal(excessiveOvertime.holding.storage.moneyCopper, 10000);
+      assert.equal(quantity(excessiveOvertime.holding, "wood"), 0);
+      assert.equal(quantity(excessiveOvertime.holding, "stone"), 0);
+      normalQd = 20;
+    }
+
     const paused = hybridRuntimeFixture({ goal: 5 });
     paused.building.productionLines[0].active = false;
     await run(paused, "paused-primary");
@@ -250,10 +268,21 @@ export async function checkHybridLaborRuntime() {
     delete qdCollection.person.wageDailyOverrideCopper;
     qdCollection.person.workAllocationMode = "explicit";
     qdCollection.person.workAllocations = [{ sourceId: "workshop", functionId: "production:main", normalQd: 2, overtimeQd: 0 }];
-    await run(qdCollection, "paused-qd-collection");
+    const qdCollectionReport = await run(qdCollection, "paused-qd-collection");
+    assert.equal(qdCollectionReport.skipped.filter((line) => line.includes("не хватает рабочих QD для сбора")).length, 0);
+    assert.equal(qdCollectionReport.skipped.filter((line) => line.includes("сбор не завершён")).length, 0);
     assert.equal(quantity(qdCollection.holding, "wood"), 3);
     assert.equal(quantity(qdCollection.holding, "stone"), 0);
     assert.equal(qdCollection.holding.storage.moneyCopper, 9988);
+    const insufficientCollection = { ...qdCollection, holding: structuredClone(qdCollection.holding) };
+    insufficientCollection.building = insufficientCollection.holding.buildings.list[0];
+    insufficientCollection.person = insufficientCollection.holding.people.list[0];
+    Object.assign(insufficientCollection.building.productionLines[0], { pendingQty: 4, collectQd: 3 });
+    insufficientCollection.holding.gm.calendaria.lastQd = 40;
+    const insufficientReport = await run(insufficientCollection, "insufficient-qd-collection");
+    assert.equal(insufficientCollection.building.productionLines[0].pendingQty, 4);
+    assert.equal(insufficientReport.skipped.filter((line) => line.includes("сбор не завершён")).length, 1,
+      "An actually unfinished collection still gets one warning at period end");
 
     const scopedFetch = hybridRuntimeFixture({ goal: null });
     scopedFetch.building.labor.mode = "qd";
