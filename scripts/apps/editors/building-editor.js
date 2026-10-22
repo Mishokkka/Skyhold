@@ -36,6 +36,8 @@ import { getMassCombatRelationTags } from "../mass-combat/tag-config.js";
 import { livestockHeadcount } from "../../engines/economy/livestock.js";
 import { renderFoundryFilePicker } from "../../integrations/foundry-runtime.js";
 import { SkyholdResourceCatalogEditor } from "./resource-catalog-editor.js";
+import { buildingLaborMode, validateHybridLaborHolding } from "../../data/hybrid-labor.js";
+import { buildWorkAllocationTargets } from "../../data/work-allocations.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
@@ -215,6 +217,7 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(RenderSchedulerMixin
       field.addEventListener("change", (event) => this._onFieldChange(event));
     });
     root.querySelectorAll("[data-worker-profile-field]").forEach((field) => field.addEventListener("change", (event) => this._onWorkerProfileEdit(event)));
+    root.querySelectorAll("[data-building-labor-field]").forEach((field) => field.addEventListener("change", (event) => this._onLaborFieldChange(event)));
     root.querySelectorAll("[data-worker-choice-search]").forEach((field) => field.addEventListener("input", () => {
       const panel = field.closest(".fbls-worker-choice-panel");
       const query = field.value.toLowerCase().replaceAll("ё", "е").trim();
@@ -295,6 +298,13 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(RenderSchedulerMixin
   }
 
   _prepareEditorTabs(building, { holding, data } = {}) {
+    const laborMode = buildingLaborMode(building);
+    building.laborLegacy = laborMode === "legacy";
+    building.laborQd = laborMode === "qd";
+    building.laborStaffSlots = ["legacy", "staff"].includes(laborMode);
+    building.laborCapacityValue = building.labor?.capacityQd ?? "";
+    building.laborModeOptions = [["legacy", "Прежние правила"], ["staff", "Постоянный штат"], ["qd", "Задания по QD"], ["passive", "Без работников"]]
+      .map(([value, label]) => ({ value, label, selected: value === laborMode, disabled: value === "legacy" && laborMode !== "legacy" }));
     prepareProductionEconomics(this, building);
     building.workerProfileEditor = workerProfileEditorContext(building);
     this._workerProfileSignature = JSON.stringify(editableWorkerProfile(building));
@@ -545,6 +555,39 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(RenderSchedulerMixin
     }
 
     return "";
+  }
+
+  async _onLaborFieldChange(event) {
+    event.preventDefault();
+    if (!game.user?.isGM) return;
+    const field = event.currentTarget, key = field.dataset.buildingLaborField;
+    try {
+      await this._updateMutableBuilding(({ building, holding }) => {
+        if (key === "mode") {
+          if (!["staff", "qd", "passive"].includes(field.value)) return SkyholdData.skipTransaction(false);
+          building.labor = { version: 1, mode: field.value, capacityQd: building.labor?.capacityQd ?? null };
+          building.workersMin = 0;
+          if (building.workerProfile) building.workerProfile.workersMin = 0;
+          if (building.activation) building.activation.minWorkers = 0;
+          if (field.value === "passive") {
+            building.activation = { ...building.activation, minOperationalQd: 0, requiresMeaningfulResult: false };
+            building.minOperationalQd = 0;
+          }
+        } else if (key === "capacityQd" && buildingLaborMode(building) === "qd") {
+          const value = field.value.trim() === "" ? null : Number(field.value);
+          if (value !== null && (!Number.isSafeInteger(value) || value < 0)) throw new Error("Предел QD должен быть целым неотрицательным числом; пустое поле означает отсутствие предела.");
+          building.labor.capacityQd = value;
+        } else return SkyholdData.skipTransaction(false);
+        const context = holding ?? { buildings: { list: [building] }, people: { list: [] } };
+        const validation = validateHybridLaborHolding(context, { targets: buildWorkAllocationTargets(context) });
+        if (!validation.ok) throw new Error(`${validation.issues[0].message} Сначала проверьте переход существующих назначений.`);
+        return true;
+      }, { reason: "building-editor:labor" });
+      this.requestRender(); requestSkyholdAppRender();
+    } catch (error) {
+      ui.notifications.warn(error.message || "Не удалось изменить способ работы.");
+      this.requestRender();
+    }
   }
 
   async _onFieldChange(event) {
@@ -1246,6 +1289,12 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(RenderSchedulerMixin
       const before = (this._getMutableBuilding(data)?.building?.productionLines ?? []).map((line) => ({ ...line }));
       const result = await updater(data);
       assertProductionIdentityUnchanged(before, this._getMutableBuilding(data)?.building?.productionLines ?? []);
+      const context = this._getMutableBuilding(data);
+      if (context.building && buildingLaborMode(context.building) !== "legacy") {
+        const holding = context.holding ?? { buildings: { list: [context.building] }, people: { list: [] } };
+        const validation = validateHybridLaborHolding(holding, { targets: buildWorkAllocationTargets(holding) });
+        if (!validation.ok) throw new Error(validation.issues[0].message);
+      }
       return result;
     }, {
       ...options, scope: this.templateId ? "catalog" : "holdings"

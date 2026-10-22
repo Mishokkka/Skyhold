@@ -7,6 +7,7 @@ import {
 import { isResidentInPopulation } from "../../data/resident-presence.js";
 import { politicsRuntimeEffects } from "../politics/runtime-effects.js";
 import { isSheriffAppointment } from "../../data/control-appointments.js";
+import { buildingLaborMode } from "../../data/hybrid-labor.js";
 
 function text(value = "") {
   return String(value ?? "").trim();
@@ -32,11 +33,12 @@ function standaloneSheriff(holding = {}) {
   return candidates[0] ?? null;
 }
 
-function controlValue(control = {}, workforce = {}, kind = "general", factor = 1) {
+function controlValue(control = {}, workforce = {}, kind = "general", factor = 1, laborFactor = 1, hybrid = false) {
   const flat = whole(control?.[`${kind}Flat`]);
   const perWorker = whole(control?.[`${kind}PerWorker`]);
   const maximum = whole(control?.maximum);
-  let value = flat + (perWorker * whole(workforce?.count));
+  const workers = hybrid ? Math.max(0, Number(workforce?.equivalentWorkers) || 0) : whole(workforce?.count);
+  let value = flat * laborFactor + perWorker * workers;
   if (maximum > 0) value = Math.min(value, maximum);
   return Math.max(0, signedRound(value * Math.max(0, Math.min(1, Number(factor) || 0))));
 }
@@ -72,8 +74,11 @@ export function settlementControlSummary(holding = {}, { rawMorale = 0, includeP
     if (!status.active) continue;
     const factor = buildingServiceEffectFactor(holding, building, status.functionId);
     const workforce = buildingActiveWorkerSummary(holding, building, status.functionId);
-    const general = controlValue(control, workforce, "general", factor);
-    const unrestOnly = controlValue(control, workforce, "unrestOnly", factor);
+    const hybrid = buildingLaborMode(building) !== "legacy";
+    const general = controlValue(control, workforce, "general", hybrid ? status.maintenanceFactor : factor,
+      hybrid ? status.laborFactor : 1, hybrid);
+    const unrestOnly = controlValue(control, workforce, "unrestOnly", hybrid ? status.maintenanceFactor : factor,
+      hybrid ? status.laborFactor : 1, hybrid);
     if (!general && !unrestOnly) continue;
     const rawCapacity = whole(control.capacity);
     const capacity = rawCapacity > 0 ? Math.floor(rawCapacity * factor) : 0;

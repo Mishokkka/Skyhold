@@ -3,6 +3,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   DEFAULT_BUILDING_TEMPLATES,
+  BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION,
   TEMPLATE_CATALOG_VERSION
 } from "../data/building-templates.js";
 import {
@@ -60,10 +61,14 @@ export function checkBuildingDevelopmentTreeCharacterization() {
   );
   const bathhouse = ordinary.find((template) => template.id === "bathhouse");
   assert.equal(bathhouse?.operatingUpkeepMonthlyCopper, 144, "Bathhouse must keep the approved reduced monthly operating cost");
-  assert.deepEqual([bathhouse?.workersMin, bathhouse?.workersMax], [2, 2], "Bathhouse must keep its indivisible two-person staff");
+  const oldBathhouse = BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION.find((template) => template.id === "bathhouse");
+  assert.deepEqual([oldBathhouse?.workersMin, oldBathhouse?.workersMax], [2, 2], "Saved legacy Bathhouse retains its indivisible two-person staff until explicit transition");
+  assert.deepEqual([bathhouse?.labor.mode, bathhouse?.workersMin, bathhouse?.workersMax], ["staff", 0, 2], "New Bathhouse keeps two staff places and scales service by actual labor");
   assert.equal((bathhouse?.productionLines ?? []).some((line) => /fuel|топлив/i.test(`${line.resourceId} ${line.expenses}`)), false, "Bathhouse must not add automatic fuel consumption");
   const dovecote = ordinary.find((template) => template.id === "dovecote");
-  assert.deepEqual([dovecote?.workersMin, dovecote?.workersMax], [1, 1], "v16 provides a caretaker slot to support actual social activity");
+  const oldDovecote = BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION.find((template) => template.id === "dovecote");
+  assert.deepEqual([oldDovecote?.workersMin, oldDovecote?.workersMax], [1, 1], "Saved v16 Dovecote retains its historical caretaker until explicit transition");
+  assert.deepEqual([dovecote?.labor.mode, dovecote?.workersMin, dovecote?.workersMax], ["passive", 0, 0], "New Dovecote has no invented permanent staff");
   assert.equal((dovecote?.productionLines ?? []).length, 0, "Dovecote must not simulate pigeon resources or production");
   const centerHolding = { buildings: { list: [{
     id: "center-1",
@@ -108,7 +113,7 @@ export function checkBuildingDevelopmentTreeCharacterization() {
   ]);
   assert.deepEqual(totals, { food: 102, technology: 164, culture: 149, war: 113 });
 
-  const stored = structuredClone(DEFAULT_BUILDING_TEMPLATES);
+  const stored = structuredClone(BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION);
   const storedGatehouse = stored.find((template) => template.id === "gatehouse");
   storedGatehouse.templateVersion = TEMPLATE_CATALOG_VERSION - 1;
   storedGatehouse.requirements = { food: 999, technology: 999, culture: 999, war: 999 };
@@ -186,7 +191,7 @@ export function checkBuildingDevelopmentTreeCharacterization() {
 
   const currentVersionLaputa = migrateData({
     meta: { templateCatalogVersion: TEMPLATE_CATALOG_VERSION },
-    catalog: { buildings: structuredClone(DEFAULT_BUILDING_TEMPLATES) },
+    catalog: { buildings: structuredClone(BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION) },
     holdings: [{
       id: "laputa",
       name: "Лапута",

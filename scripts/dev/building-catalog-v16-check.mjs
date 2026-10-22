@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
-import { DEFAULT_BUILDING_TEMPLATES, TEMPLATE_CATALOG_VERSION } from "../data/building-templates.js";
+import { BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION, TEMPLATE_CATALOG_VERSION } from "../data/building-templates.js";
 import { buildingCatalogV15Templates } from "../data/building-template-revision-v15.js";
 import { normalizeCatalogPartition } from "../data/normalizers.js";
 import { normalizeResourceId } from "../core/resources.js";
 
 export function checkBuildingCatalogV16() {
-  const rows = DEFAULT_BUILDING_TEMPLATES;
+  // Saved catalogs retain these contracts until the separate, explicit labor
+  // transition. New hybrid templates are covered by building-labor-catalog-check.
+  const rows = BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION;
   const byId = new Map(rows.map((row) => [row.id, row]));
   assert.equal(TEMPLATE_CATALOG_VERSION, 19);
   assert.equal(rows.length, 126);

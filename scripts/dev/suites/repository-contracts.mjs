@@ -196,12 +196,12 @@ function checkEconomyEngineBoundaries() {
   ]) {
     assertNoEngineGlobals(engine, `economy ${name} engine must not access Foundry or DOM globals`);
     // Batch identities and resource shelf lives use the shared data utilities;
-    // staffing, batch capacity/timing and nutrition own the current calculations.
+    // Staffing, batch capacity/timing, shared preparation goals and nutrition own the calculations.
     // Keep this boundary exact rather than allowing arbitrary runtime/UI imports.
     const expectedImports = {
       "production cycle": [
         "../../data/utils.js", "../politics/runtime-effects.js", "../workers/minimum-staff.js",
-        "./production-batch-life.js", "./production-capacity.js", "./production-timing.js"
+        "./production-batch-life.js", "./production-capacity.js", "./production-goals.js", "./production-timing.js"
       ],
       "construction": ["../politics/runtime-effects.js"],
       "food consumption": ["../../data/resident-presence.js", "../politics/runtime-effects.js", "./nutrition.js"]
@@ -213,6 +213,7 @@ function checkEconomyEngineBoundaries() {
   for (const helper of [
     "scripts/engines/politics/runtime-effects.js", "scripts/data/resident-presence.js",
     "scripts/engines/workers/minimum-staff.js", "scripts/engines/economy/production-timing.js",
+    "scripts/engines/economy/production-goals.js", "scripts/engines/workers/staff-runtime.js",
     "scripts/engines/economy/nutrition.js", "scripts/core/production-expenses.js"
   ]) {
     const source = readFileSync(path.join(root, helper), "utf8");
@@ -1600,6 +1601,7 @@ export async function runRepositoryContracts() {
   const financeInternalDemandDomain = await import(pathToFileURL(path.join(root, "scripts/apps/domains/finance/internal-demand-domain.js")));
   const financeLivestockDomain = await import(pathToFileURL(path.join(root, "scripts/apps/domains/finance/livestock-domain.js")));
   const financeMaintenanceDomain = await import(pathToFileURL(path.join(root, "scripts/apps/domains/finance/maintenance-domain.js")));
+  const financeStaffDomain = await import(pathToFileURL(path.join(root, "scripts/apps/domains/finance/staff-domain.js")));
   const financeEconomyDomain = await import(pathToFileURL(path.join(root, "scripts/apps/domains/finance/economy-domain.js")));
   const holdingDomainModule = await import(pathToFileURL(path.join(root, "scripts/apps/domains/holding-domain.js")));
   const buildingDomain = await import(pathToFileURL(path.join(root, "scripts/apps/domains/building-domain.js")));
@@ -1970,6 +1972,7 @@ export async function runRepositoryContracts() {
     financeLivestockDomain.FinanceLivestockDomain,
     financeInternalDemandDomain.FinanceInternalDemandDomain,
     financeMaintenanceDomain.FinanceMaintenanceDomain,
+    financeStaffDomain.FinanceStaffDomain,
     financeEconomyDomain.FinanceEconomyDomain
   ];
   assert.equal(

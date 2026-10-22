@@ -240,7 +240,8 @@ export function checkWorkAllocationCharacterization() {
   assert.equal(budgets.get(forgeBudgetKey)?.available, 16);
   assert.equal(budgets.get(incomeBudgetKey)?.available, 8);
   const overspendIncome = qdHarness._spendBuildingWorkerQd({}, inn, budgets, 9, workerContext, "income");
-  assert.deepEqual(overspendIncome, { ok: false, spent: 8 }, "a function must not borrow the resident's QD allocated to another workplace");
+  assert.deepEqual(overspendIncome, { ok: false, spent: 0 }, "an incomplete collection must neither spend partial QD nor borrow another workplace's time");
+  assert.equal(budgets.get(incomeBudgetKey)?.available, 8, "failed collection preserves the allowed assignment's QD for another attempt");
   assert.equal(budgets.get(forgeBudgetKey)?.available, 16, "failed income work must leave forge QD untouched");
   assert.deepEqual(qdHarness._spendBuildingWorkerQd({}, workshop, budgets, 16, workerContext, "production:forge"), { ok: true, spent: 16 });
 

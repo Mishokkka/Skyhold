@@ -13,7 +13,9 @@ export async function executeWorkforcePlan(raw, { store = SkyholdData, getUser =
     || draft.edited.some((id) => typeof id !== "string" || !id || !Array.isArray(draft.allocations?.[id]) || draft.allocations[id].length > 24)) {
     return { ok: false, reason: "Некорректный план работ." };
   }
-  const requestSignature = JSON.stringify({ plan: draft.plan, edited: draft.edited, allocations: Object.fromEntries(draft.edited.map((id) => [id, draft.allocations[id]])) });
+  const requestSignature = JSON.stringify({ plan: draft.plan, edited: draft.edited,
+    allocations: Object.fromEntries(draft.edited.map((id) => [id, draft.allocations[id]])),
+    staffAppointments: Object.fromEntries(draft.edited.map((id) => [id, draft.staffAppointments?.[id] ?? null])) });
   if (requestSignature.length > 240000) return { ok: false, reason: "План слишком велик для одной операции." };
   return await store.updateHolding(holdingId, (holding, data) => {
     const user = getUser();

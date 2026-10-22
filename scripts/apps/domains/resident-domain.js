@@ -1019,7 +1019,7 @@ _buildingMoraleSummary(holding) {
     const templateId = String(building?.templateId ?? "").trim().toLocaleLowerCase("ru");
     const key = templateId ? `template:${templateId}` : `instance:${String(building?.id ?? index)}`;
     if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push({ building, raw, factor: status.maintenanceFactor, index });
+    groups.get(key).push({ building, raw, factor: status.maintenanceFactor * (status.laborFactor ?? 1), index });
   }
 
   let total = negative.reduce((sum, row) => sum + row.value, 0);

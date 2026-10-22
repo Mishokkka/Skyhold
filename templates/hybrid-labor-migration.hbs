@@ -1,0 +1,48 @@
+<section class="fbls-content-pack-shell">
+  <header class="fbls-content-pack-head">
+    <div><h2>{{name}} · способы труда</h2><p>{{summary}}</p></div>
+    <button type="button" class="fbls-button compact" data-action="hybrid-migration-refresh" title="Обновить предварительный расчёт" {{#if busy}}disabled{{/if}}><i class="fa-solid fa-arrows-rotate" aria-hidden="true"></i> Обновить расчёт</button>
+  </header>
+  <div class="fbls-migration-body" data-render-scroll-key="hybrid-labor-preview" tabindex="0" role="region" aria-label="Проверка перехода к двум способам труда">
+    <p>Выберите способ работы и разберите прежние назначения. Рецепты, оплаченные партии, казна и жители сохраняются. Просмотр ничего не записывает.</p>
+    {{#if status}}<p class="fbls-content-pack-summary">{{status}}</p>{{/if}}
+    {{#if error}}<p class="fbls-content-pack-error">{{error}}</p>{{/if}}
+    {{#if stale}}<p class="fbls-content-pack-error">Поселение изменилось в другом окне. Обновите расчёт и проверьте сохранённые здесь решения.</p>{{/if}}
+    <details open class="fbls-card"><summary>Способы работы построек</summary><div class="fbls-stack">
+      {{#each buildings}}<div class="fbls-toolbar">
+        <label class="fbls-field"><span>{{name}} · сейчас: {{previous}}</span><select class="fbls-control" data-hybrid-field="mode" data-scope="{{scope}}" data-id="{{id}}" aria-label="Способ работы: {{name}}">{{#each modeOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+        {{#if qd}}<label class="fbls-field"><span>Предел QD</span><input class="fbls-control" type="number" min="0" step="1" value="{{capacity}}" placeholder="Без предела" data-hybrid-field="capacity" data-scope="{{scope}}" data-id="{{id}}" aria-label="Предел QD: {{name}}" /></label>{{/if}}
+      </div>{{/each}}
+    </div></details>
+    {{#if people.length}}<details open class="fbls-card"><summary>Прежние назначения жителей</summary><p>Решение «одно задание QD» заменяет прежний план выбранной работой. Для сохранения нескольких строк выберите «сохранить все нынешние задания QD».</p><div class="fbls-stack">
+      {{#each people}}<article class="fbls-stack">
+        <label class="fbls-field"><span><strong>{{name}}</strong> · {{previous}}</span><select class="fbls-control" data-hybrid-field="decision" data-person-id="{{id}}" aria-label="Решение о прежней работе: {{name}}">{{#each choices}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+        {{#if staff}}<div class="fbls-toolbar">
+          <label class="fbls-field"><span>Основная работа</span><select class="fbls-control" data-hybrid-field="primary" data-person-id="{{id}}" aria-label="Основная работа: {{name}}">{{#each primaryOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+          <label class="fbls-field"><span>Резервная работа</span><select class="fbls-control" data-hybrid-field="reserve" data-person-id="{{id}}" aria-label="Резервная работа: {{name}}">{{#each reserveOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+        </div><div class="fbls-toolbar">
+          <label class="fbls-field"><span>Единая ставка, ММ/день</span><input class="fbls-control" type="number" min="0" step="1" value="{{wage}}" data-hybrid-field="wage" data-person-id="{{id}}" aria-label="Ставка: {{name}}" /></label>
+          <label class="fbls-field"><span>Сверхурочные QD</span><input class="fbls-control" type="number" min="0" step="1" value="{{overtime}}" data-hybrid-field="overtime" data-person-id="{{id}}" aria-label="Сверхурочные QD: {{name}}" /></label>
+          <label class="fbls-checkbox-label"><input type="checkbox" data-hybrid-field="volunteer" data-person-id="{{id}}" {{#if volunteer}}checked{{/if}} /> Бесплатная работа согласована ГМом</label>
+          {{#if volunteer}}<label class="fbls-field"><span>Причина</span><input class="fbls-control" type="text" value="{{reason}}" data-hybrid-field="reason" data-person-id="{{id}}" aria-label="Причина бесплатной работы: {{name}}" /></label>{{/if}}
+        </div>{{/if}}
+        {{#if qd}}<label class="fbls-field"><span>Обычные QD выбранного задания</span><input class="fbls-control" type="number" min="0" step="1" value="{{normal}}" data-hybrid-field="normal" data-person-id="{{id}}" aria-label="Обычные QD: {{name}}" /></label>{{/if}}
+      </article>{{/each}}
+    </div></details>{{/if}}
+    <div class="fbls-stack">
+      <label class="fbls-checkbox-label"><input type="checkbox" data-hybrid-field="clearUnavailable" {{#if clearUnavailable}}checked{{/if}} /> Снять цели и закрепления, работы которых исчезли при переходе</label>
+      <label class="fbls-checkbox-label"><input type="checkbox" data-hybrid-field="includeCatalog" {{#if includeCatalog}}checked{{/if}} /> Также перевести сохранённые шаблоны каталога, сохранив их рецепты и настройки</label>
+    </div>
+    {{#if includeCatalog}}<details class="fbls-card"><summary>Способы работы сохранённых шаблонов</summary><div class="fbls-stack">
+      {{#each catalogRows}}<div class="fbls-toolbar">
+        <label class="fbls-field"><span>{{name}} · сейчас: {{previous}}</span><select class="fbls-control" data-hybrid-field="mode" data-scope="{{scope}}" data-id="{{id}}" aria-label="Способ работы шаблона: {{name}}">{{#each modeOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+        {{#if qd}}<label class="fbls-field"><span>Предел QD</span><input class="fbls-control" type="number" min="0" step="1" value="{{capacity}}" placeholder="Без предела" data-hybrid-field="capacity" data-scope="{{scope}}" data-id="{{id}}" aria-label="Предел QD шаблона: {{name}}" /></label>{{/if}}
+      </div>{{/each}}
+    </div></details>{{/if}}
+    {{#if issues.length}}<article class="fbls-card"><h3>Что нужно решить</h3><div class="fbls-stack">{{#each issues}}<p class="fbls-content-pack-error">{{message}}</p>{{/each}}</div></article>{{/if}}
+  </div>
+  <footer class="fbls-content-pack-actions">
+    <p>Перед записью сохраняется копия для отката. Изменения применятся только к выбранному поселению{{#if includeCatalog}} и каталогу{{/if}}.</p>
+    <button type="button" class="fbls-button primary" data-action="hybrid-migration-apply" {{#unless canApply}}disabled{{/unless}}><i class="fa-solid fa-check" aria-hidden="true"></i> Применить показанный переход</button>
+  </footer>
+</section>

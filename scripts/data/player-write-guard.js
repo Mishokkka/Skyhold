@@ -59,7 +59,7 @@ export function validatePlayerPatch(current, patch, _userId = null) {
   if (!changes.length) return { ok: true, changes: [] };
   // A 200-resident plan is one atomic action. Keep the ordinary patch bound;
   // the larger bound applies only to the tightly validated workforce fields.
-  const workforcePaths = changes.every((change) => /^holdings\.\d+\.(?:workforcePlan(?:\.|$)|people\.list\.\d+\.(?:workAllocationMode|workAllocations|workAssignment)(?:\.|$)|buildings\.list\.\d+\.assignedWorkerIds(?:\.|$)|log(?:\.|$))/.test(change?.path ?? ""));
+  const workforcePaths = changes.every((change) => /^holdings\.\d+\.(?:workforcePlan(?:\.|$)|people\.list\.\d+\.(?:workAllocationMode|workAllocations|workAssignment|staffAppointment)(?:\.|$)|buildings\.list\.\d+\.assignedWorkerIds(?:\.|$)|log(?:\.|$))/.test(change?.path ?? ""));
   if (changes.length > (workforcePaths ? 4000 : MAX_PLAYER_CHANGE_PATHS)) return { ok: false, error: "Слишком много изменений за один запрос игрока." };
 
   const badChange = changes.find((change) => !change || typeof change !== "object" || !change.path || typeof change.path !== "string");
@@ -246,7 +246,7 @@ function patchActionForPath(path = "") {
   if (/^special\./.test(rest) && isPlayerSpecialPath(rest)) return "special";
   if (/^buildings\.|^constructionCrews|^constructionCrewIds(\.\d+)?$/.test(rest) && isPlayerBuildingPath(rest)) return "buildings";
   if (/^people\.list\.\d+\.(workAssignment|role|home)$/.test(rest)) return "buildings";
-  if (/^people\.list\.\d+\.(workAllocationMode|workAllocations)(\.|$)/.test(rest)) return "buildings";
+  if (/^people\.list\.\d+\.(workAllocationMode|workAllocations|staffAppointment)(\.|$)/.test(rest)) return "buildings";
   if (/^people\./.test(rest) && isPlayerResidentPath(rest)) return "residents";
   return "";
 }
@@ -255,13 +255,14 @@ function isPlayerActionSideEffect(action = "", path = "") {
   const rest = String(path ?? "").replace(/^holdings\.\d+\./, "");
   if (action === "defense") {
     return /^people\.list\.\d+\.(workAssignment|role|home)$/.test(rest)
+      || /^people\.list\.\d+\.staffAppointment(?:\.|$)/.test(rest)
       || /^buildings\.list\.\d+\.assignedWorkerIds(\.\d+)?$/.test(rest)
       || /^constructionCrews(\.\d+)?\.(memberIds|leaderId)(\.\d+)?$/.test(rest)
       || /^constructionCrewIds(\.\d+)?$/.test(rest);
   }
   if (action === "buildings") {
     return /^people\.list\.\d+\.(workAssignment|role|home)$/.test(rest)
-      || /^people\.list\.\d+\.(workAllocationMode|workAllocations)(\.|$)/.test(rest)
+      || /^people\.list\.\d+\.(workAllocationMode|workAllocations|staffAppointment)(\.|$)/.test(rest)
       || /^log(?:\.\d+)?(?:\.|$)/.test(rest);
   }
   if (action === "construction") return isPlayerConstructionRestPath(rest);
@@ -300,6 +301,7 @@ function isPlayerDefensePath(rest) {
   if (/^gm\.defense\.(commanderId|notes)$/.test(text)) return true;
   if (/^gm\.defense\.squads(\.\d+)?(\.|$)/.test(text)) return true;
   if (/^people\.list\.\d+\.(workAssignment|role|home)$/.test(text)) return true;
+  if (/^people\.list\.\d+\.staffAppointment(?:\.|$)/.test(text)) return true;
   if (/^buildings\.list\.\d+\.assignedWorkerIds(\.\d+)?$/.test(text)) return true;
   if (/^constructionCrews\.\d+\.(memberIds|leaderId)(?:\.\d+)?$/.test(text)) return true;
   if (/^constructionCrewIds(\.\d+)?$/.test(text)) return true;
@@ -349,7 +351,7 @@ function isPlayerBuildingPath(rest) {
   if (/^workforcePlan(?:\.|$)/.test(text)) return true;
   if (text.startsWith("gm.")) return false;
   if (/^people\.list\.\d+\.(workAssignment|role|home)$/.test(text)) return true;
-  if (/^people\.list\.\d+\.(workAllocationMode|workAllocations)(\.|$)/.test(text)) return true;
+  if (/^people\.list\.\d+\.(workAllocationMode|workAllocations|staffAppointment)(\.|$)/.test(text)) return true;
   if (/^buildings\.list\.\d+\.(name|visibility|img|image|icon|constructionCrewId)$/.test(text)) return true;
   if (/^buildings\.list\.\d+\.assignedWorkerIds(?:\.\d+)?$/.test(text)) return true;
   if (/^buildings\.list\.\d+\.productionLines\.\d+\.(active|storageRoomId)$/.test(text)) return true;

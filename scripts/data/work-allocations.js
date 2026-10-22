@@ -6,6 +6,7 @@ import { isPlainObject, makeId, toNumber } from "./utils.js";
 import { normalizeBuildingMaintenance, usesTechnicalMaintenance } from "./economy/maintenance.js";
 import { isResidentPresent } from "./resident-presence.js";
 import { normalLaborQdPerTenday, residentLaborCapacity } from "./labor-budget.js";
+import { buildingLaborMode, staffAppointmentFor, staffWorkerIdsForBuilding, validateHybridLaborHolding } from "./hybrid-labor.js";
 
 export const WORK_ALLOCATION_SCHEMA_VERSION = 1;
 export const WORK_ALLOCATION_MODE_LEGACY = "legacy";
@@ -147,12 +148,16 @@ function targetRow(building, functionId, label, {
 } = {}) {
   const sourceId = text(building?.id);
   const rate = whole(dailyRateCopper);
+  const state = buildingOperationalState(building);
   return {
     key: workAllocationTargetKey(sourceId, functionId),
     sourceId,
     functionId,
     buildingId: sourceId,
-    workersMax: whole(building?.workersMax),
+    workersMax: buildingLaborMode(building) === "qd" ? 0 : whole(building?.workersMax),
+    laborMode: buildingLaborMode(building),
+    available: state.operational,
+    blockedReason: state.operational ? "" : state.label,
     label: `${text(building?.name) || "Здание"} · ${label} · ${rate > 0 ? `${rate} ММ/день` : "ставка не задана"}`,
     overtimeAllowed: bool(overtimeAllowed),
     dailyRateCopper: rate,
@@ -164,24 +169,31 @@ export function buildWorkAllocationTargets(holding = {}, { includeMaintenance = 
   const targets = [];
   for (const building of holding?.buildings?.list ?? []) {
     const state = buildingOperationalState(building);
-    if (!text(building?.id) || !state.operational) continue;
+    const hybrid = ["staff", "qd", "passive"].includes(buildingLaborMode(building));
+    if (!text(building?.id) || !state.operational && !hybrid) continue;
     if (includeMaintenance && usesTechnicalMaintenance(building) && normalizeBuildingMaintenance(building.maintenance).requiredPoints > 0) {
       targets.push({ ...targetRow(building, MAINTENANCE_WORK_FUNCTION_ID, "Техобслуживание", { dailyRateCopper: 18, kind: "maintenance" }), workersMax: 0 });
     }
+    if (["passive", "invalid"].includes(buildingLaborMode(building))) continue;
     const medical = isMedicalBuilding(building);
     const productionEnabled = !medical && building?.functions?.production !== false;
     const agriculture = normalizeAgricultureBuilding(building?.agriculture, { building });
     const lines = productionEnabled && !agriculture && Array.isArray(building?.productionLines) ? building.productionLines : [];
     for (let index = 0; index < lines.length; index += 1) {
       const line = lines[index];
-      if (line?.active === false || text(line?.source || "workers") !== "workers") continue;
+      if (line?.active === false && !hybrid || (text(line?.source || "workers") !== "workers" && !(line?.requiresCollection && whole(line?.collectQd) > 0))) continue;
       const functionId = productionFunctionId(line, index);
       const label = text(line?.mode || line?.resource || line?.resourceId) || `Линия ${index + 1}`;
-      targets.push(targetRow(building, functionId, label, {
+      const target = targetRow(building, functionId, label, {
         overtimeAllowed: line?.overtime === true,
         dailyRateCopper: whole(line?.wageDailyCopper) || whole(building?.wageDailyCopper),
         kind: "production"
-      }));
+      });
+      const paused = line?.active === false;
+      const collectionAvailable = state.operational && line?.requiresCollection === true && whole(line?.collectQd) > 0 && Number(line?.pendingQty) > 0;
+      targets.push({ ...target, paused, collectionAvailable,
+        available: target.available && (!paused || collectionAvailable),
+        blockedReason: target.blockedReason || (paused && !collectionAvailable ? "Линия приостановлена" : "") });
     }
     if (productionEnabled && agriculture?.enabled) {
       targets.push(targetRow(building, "agriculture", agriculture.kind === "field" ? "Полевые работы" : "Работы в саду", {
@@ -210,7 +222,7 @@ export function buildWorkAllocationTargets(holding = {}, { includeMaintenance = 
       [isMedicalBuilding(building), "medical", "Медицинская помощь", "medical"]
     ];
     for (const [enabled, functionId, label, kind] of staffedFunctions) {
-      if (!enabled || whole(building?.workersMax) <= 0) continue;
+      if (!enabled || (buildingLaborMode(building) === "legacy" && whole(building?.workersMax) <= 0)) continue;
       targets.push(targetRow(building, functionId, label, {
         dailyRateCopper: whole(building?.wageDailyCopper),
         kind
@@ -224,6 +236,8 @@ export function buildWorkAllocationTargets(holding = {}, { includeMaintenance = 
       functionId: MAINTENANCE_WORK_FUNCTION_ID,
       buildingId: "",
       workersMax: 0,
+      available: true,
+      blockedReason: "",
       label: "Поселение · трудовое обслуживание",
       overtimeAllowed: false,
       dailyRateCopper: 0,
@@ -263,6 +277,10 @@ export function buildingStaffingWorkerIds(holding = {}, buildingId = "") {
   const id = text(buildingId);
   const building = (holding?.buildings?.list ?? []).find((row) => text(row?.id) === id);
   if (!id || !building) return [];
+  const mode = buildingLaborMode(building);
+  if (mode === "staff") return staffWorkerIdsForBuilding(holding, id);
+  if (mode === "qd") return explicitWorkerIdsForBuilding(holding, id);
+  if (mode === "passive" || mode === "invalid") return [];
   const explicitPersonIds = new Set((holding?.people?.list ?? [])
     .filter((person) => isResidentPresent(person) && text(person?.workAllocationMode) === WORK_ALLOCATION_MODE_EXPLICIT)
     .map((person) => text(person?.id))
@@ -283,6 +301,7 @@ export function validateHoldingWorkAllocations(holding = {}) {
   for (const person of holding?.people?.list ?? []) {
     if (!isResidentPresent(person)) continue;
     if (text(person?.workAllocationMode) !== WORK_ALLOCATION_MODE_EXPLICIT) continue;
+    if (staffAppointmentFor(person)) continue;
     const personId = text(person?.id);
     const capacity = residentLaborCapacity(person);
     const validation = validateWorkAllocationPlan(person?.workAllocations, {
@@ -299,6 +318,7 @@ export function validateHoldingWorkAllocations(holding = {}) {
   }
 
   for (const building of holding?.buildings?.list ?? []) {
+    if (buildingLaborMode(building) !== "legacy") continue;
     const buildingId = text(building?.id);
     const workersMax = whole(building?.workersMax);
     const assigned = buildingStaffingWorkerIds(holding, buildingId).length;
@@ -306,6 +326,7 @@ export function validateHoldingWorkAllocations(holding = {}) {
       issues.push({ code: "allocation-capacity", buildingId, buildingName: text(building?.name) || "Здание", message: `${text(building?.name) || "Здание"}: план использует ${assigned}/${workersMax} рабочих мест.` });
     }
   }
+  issues.push(...validateHybridLaborHolding(holding, { targets: targetMap }).issues);
   return { ok: issues.length === 0, targets, targetMap, plans, issues };
 }
 

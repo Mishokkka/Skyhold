@@ -1,5 +1,6 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import { MODULE_ID } from "../../../data/constants.js";
+import { buildingLaborMode } from "../../../data/hybrid-labor.js";
 import { requestConstructionOperation, SkyholdData } from "../../../data/store.js";
 import { makeId } from "../../../data/utils.js";
 import { traitBadges } from "../../../generators/trait-definitions.js";
@@ -179,7 +180,7 @@ async _onCollectBuildingProduction(event) {
     const building = (holding?.buildings?.list ?? []).find((item) => String(item.id ?? "") === buildingId);
     const line = building?.productionLines?.[lineIndex];
     if (!holding || !building || !line) return SkyholdData.skipTransaction(null);
-    const collected = this._collectProductionLine(holding, building, line, { ignoreWorkTime: true });
+    const collected = this._collectProductionLine(holding, building, line, { ignoreWorkTime: buildingLaborMode(building) === "legacy" });
     if (!collected?.ok) return SkyholdData.skipTransaction(collected);
     const entries = Array.isArray(collected.placements) && collected.placements.length
       ? collected.placements.map((item) => ({ kind: "collect", resourceId: collected.resourceId, name: collected.resourceName, qty: item.qty, roomId: item.roomId, source: collected.source, note: item.overflowFrom ? `Ручной сбор, переполнение: ${this._storageRoomLabel(holding, item.overflowFrom)}` : "Ручной сбор" }))
@@ -219,6 +220,7 @@ _fillBuildingWorkers(holding, buildingId, { mode = "free" } = {}) {
   const building = (holding?.buildings?.list ?? []).find((item) => String(item.id ?? "") === String(buildingId ?? ""));
   if (!building) return { assigned: 0, message: "Здание не найдено." };
   if (!this._isBuiltAssignableBuilding(building)) return { assigned: 0, message: "В это здание сейчас нельзя назначать работников." };
+  if (buildingLaborMode(building) !== "legacy") return { assigned: 0, message: "Распределите людей и их основные работы через «План работ»." };
   const max = Math.max(0, this._safeNumber(building.workersMax, 0));
   if (!Array.isArray(building.assignedWorkerIds)) building.assignedWorkerIds = [];
   while (building.assignedWorkerIds.length < max) building.assignedWorkerIds.push("");

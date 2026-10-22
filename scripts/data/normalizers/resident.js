@@ -3,6 +3,7 @@ import { isPlainObject, makeId, toBoolean, toNumber } from "../utils.js";
 import { normalizeMaintenancePointsPerTenday } from "../economy/maintenance.js";
 import { normalizePersonWorkAllocations } from "../work-allocations.js";
 import { normalizeWorkerTypeSet } from "./building.js";
+import { normalizeStaffAppointment } from "../hybrid-labor.js";
 
 const OBSOLETE_RESIDENT_SKILL_VALUES = new Set([
   "-", "нет", "none",
@@ -63,6 +64,7 @@ export function clearBuildingReferences(holding, building) {
     if (Array.isArray(person?.workAllocations)) {
       person.workAllocations = person.workAllocations.filter((row) => String(row?.sourceId ?? "") !== id);
     }
+    if (person.staffAppointment?.buildingId === id) delete person.staffAppointment;
   }
   for (const candidate of holding?.buildings?.list ?? []) {
     if (!Array.isArray(candidate.requiredBuildingIds)) continue;
@@ -128,6 +130,7 @@ export function normalizePerson(person) {
   person.volunteerLabor = toBoolean(person.volunteerLabor, false);
   person.volunteerReason = String(person.volunteerReason ?? "");
   normalizePersonWorkAllocations(person);
+  if (person.staffAppointment !== undefined) person.staffAppointment = normalizeStaffAppointment(person.staffAppointment);
   person.maintenancePointsPerTenday = normalizeMaintenancePointsPerTenday(person.maintenancePointsPerTenday);
   if (!isPlainObject(person.attributes)) person.attributes = {};
   for (const key of ["strength", "agility", "wits", "empathy"]) {

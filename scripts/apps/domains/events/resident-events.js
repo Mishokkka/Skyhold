@@ -11,6 +11,7 @@ import { syncSelectionSummary } from "../../common/selection-summary.js";
 import { residentTraitTooltip } from "../../common/resident-trait-chips.js";
 import { confirmBuildingWorkerAdmission } from "../../common/building-worker-admission.js";
 import { transferResidentBetweenHoldings, vacatePoliticsRepresentative } from "../../../data/resident-assignments.js";
+import { staffAppointmentFor } from "../../../data/hybrid-labor.js";
 
 const RESIDENT_CONTEXT_MENU_WIDTH = 230;
 const RESIDENT_CONTEXT_MENU_HEIGHT = 150;
@@ -824,7 +825,9 @@ async _savePersonEditorDraft(event) {
         // Saving unrelated resident fields must not vacate and requalify an existing foreman.
         const keepLeader = holding && person && String(person.workAllocationMode ?? "") !== WORK_ALLOCATION_MODE_EXPLICIT
           && keepsCrewLeadership(holding, person, value);
-        if (holding && person && !keepLeader) {
+        const keepStaff = holding && person && person.workAllocationMode !== WORK_ALLOCATION_MODE_EXPLICIT
+          && staffAppointmentFor(person)?.buildingId === value;
+        if (holding && person && !keepLeader && !keepStaff) {
           this._clearPersonFromAssignments?.(holding, person.id);
           if (String(person.workAllocationMode ?? "") === WORK_ALLOCATION_MODE_EXPLICIT) {
             person.workAssignment = "";

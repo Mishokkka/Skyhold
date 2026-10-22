@@ -5,7 +5,8 @@ import { splitList } from "../../core/helpers.js";
 import { buildingOperationalState } from "../../core/building-state.js";
 import { makeId } from "../../data/utils.js";
 import { clearPersonFromAssignments } from "../../data/resident-assignments.js";
-import { buildingStaffingWorkerIds, WORK_ALLOCATION_MODE_EXPLICIT } from "../../data/work-allocations.js";
+import { buildingStaffingWorkerIds, buildWorkAllocationTargets, WORK_ALLOCATION_MODE_EXPLICIT } from "../../data/work-allocations.js";
+import { applyStaffAppointment, buildingLaborMode, staffAppointmentFor } from "../../data/hybrid-labor.js";
 import {
   constructionLeaderCoordinationBonus,
   constructionLeaderQualification,
@@ -52,6 +53,7 @@ _clearPersonFromAssignments(holding, personId) {
 _setPersonFree(holding, personId) {
   const person = this._findPerson(holding, personId);
   if (!person) return;
+  if (staffAppointmentFor(person)) applyStaffAppointment(holding, personId, null);
   person.workAssignment = "";
   person.workAllocationMode = "legacy";
   person.role = this._isChildResident?.(person) ? "Ребенок" : "Свободен";
@@ -187,6 +189,11 @@ _assignPersonToBuilding(holding, personId, buildingId, options = {}) {
   const person = this._findPerson(holding, personId);
   const building = (holding?.buildings?.list ?? []).find((item) => String(item.id) === String(buildingId));
   if (!person || person.dead || this._safeNumber(person?.injuredDays, 0) > 0 || (this._canResidentWork && !this._canResidentWork(person, holding)) || !building) return false;
+  const laborMode = buildingLaborMode(building);
+  if (["qd", "passive", "invalid"].includes(laborMode)) {
+    globalThis.ui?.notifications?.warn?.("Для этого здания используйте задания в «Плане работ»; постоянные места не применяются.");
+    return false;
+  }
   const max = Math.max(0, this._safeNumber(building.workersMax, 0));
   if (max <= 0) return false;
   const admission = this._buildingWorkerAdmission?.(building, person) ?? { eligible: true, hard: false, overridden: false };
@@ -195,6 +202,34 @@ _assignPersonToBuilding(holding, personId, buildingId, options = {}) {
   if (!staffingIds.has(String(personId)) && staffingIds.size >= max) return false;
   const preserveAdmissionOverride = admission.hard && !admission.eligible
     && (admission.overridden || options.allowAdmissionOverride);
+  if (laborMode === "staff") {
+    const previous = staffAppointmentFor(person);
+    const targets = buildWorkAllocationTargets(holding).filter((row) => row.sourceId === String(building.id) && row.functionId !== "maintenance");
+    if (previous?.buildingId !== building.id && targets.length !== 1) {
+      globalThis.ui?.notifications?.warn?.("Выберите основную работу этого сотрудника в «Плане работ».");
+      return false;
+    }
+    if (previous?.buildingId !== building.id && targets[0].available === false) {
+      globalThis.ui?.notifications?.warn?.(targets[0].blockedReason || "Выбранная работа сейчас недоступна.");
+      return false;
+    }
+    const appointment = previous?.buildingId === building.id ? structuredClone(previous) : {
+      version: 1, buildingId: String(building.id), primaryFunctionId: targets[0].functionId, reserveFunctionId: "",
+      wageDailyCopper: Math.max(0, Number(person.wageDailyOverrideCopper ?? building.wageDailyCopper) || 0),
+      overtimeQd: 0, volunteer: person.volunteerLabor === true, volunteerReason: String(person.volunteerReason ?? "")
+    };
+    if (!Number.isSafeInteger(appointment.wageDailyCopper) || appointment.wageDailyCopper < 0
+      || appointment.wageDailyCopper === 0 && !appointment.volunteer
+      || appointment.volunteer && !String(appointment.volunteerReason).trim()) {
+      globalThis.ui?.notifications?.warn?.("Укажите ставку или согласуйте с ГМом причину бесплатной работы в «Плане работ».");
+      return false;
+    }
+    this._clearPersonFromAssignments(holding, personId);
+    person.workAssignment = "";
+    applyStaffAppointment(holding, personId, appointment);
+    if (preserveAdmissionOverride) building.workerAdmissionOverrideIds = [...new Set([...(building.workerAdmissionOverrideIds ?? []), String(personId)])];
+    return true;
+  }
   this._clearPersonFromAssignments(holding, personId);
   if (!Array.isArray(building.assignedWorkerIds)) building.assignedWorkerIds = [];
   while (building.assignedWorkerIds.length < max) building.assignedWorkerIds.push("");
@@ -231,6 +266,19 @@ _assignPersonToCrew(holding, personId, crewId = null) {
 _setBuildingSlot(holding, buildingId, slot, personId, options = {}) {
   const building = (holding?.buildings?.list ?? []).find((item) => String(item.id) === String(buildingId));
   if (!building) return false;
+  if (buildingLaborMode(building) !== "legacy") {
+    if (buildingLaborMode(building) !== "staff") return false;
+    const oldId = String(building.assignedWorkerIds?.[slot] ?? "");
+    if (!personId) {
+      if (oldId) this._setPersonFree(holding, oldId);
+      return true;
+    }
+    if (oldId && oldId !== String(personId)) {
+      globalThis.ui?.notifications?.warn?.("Сначала снимите прежнего сотрудника или замените его в «Плане работ».");
+      return false;
+    }
+    return this._assignPersonToBuilding(holding, personId, buildingId, options);
+  }
   const max = Math.max(0, this._safeNumber(building.workersMax, 0));
   if (max <= 0 || slot >= max) return false;
   const currentAssignedWorkerIds = Array.isArray(building.assignedWorkerIds) ? building.assignedWorkerIds : [];

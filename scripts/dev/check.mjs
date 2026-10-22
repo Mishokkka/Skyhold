@@ -5,6 +5,7 @@ import { runRepositoryContracts } from "./suites/repository-contracts.mjs";
 import { runStorageSuite } from "./suites/storage.mjs";
 import { runStructureSuite } from "./suites/structure.mjs";
 import { runUiContractSuite } from "./suites/ui-contract.mjs";
+import { runHybridLaborSuite } from "./suites/hybrid-labor.mjs";
 import { checkBuildingContextCharacterization } from "./building-context-characterization-check.mjs";
 
 async function run() {
@@ -16,6 +17,7 @@ async function run() {
   await runDataSuite();
   runCombatSuite();
   await checkBuildingContextCharacterization();
+  await runHybridLaborSuite();
 }
 
 run().catch((error) => {

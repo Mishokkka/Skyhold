@@ -12,6 +12,8 @@ import { SETTING_CATALOG, SETTING_HOLDINGS } from "../data/constants.js";
 import { SaveStatus } from "../apps/common/save-status.js";
 import { buildingPickerValues } from "../apps/domains/building-editor-pickers.js";
 import { assertProductionIdentityUnchanged, createProductionTiming } from "../engines/economy/production-timing.js";
+import { buildingLaborMode, validateHybridLaborHolding } from "../data/hybrid-labor.js";
+import { buildWorkAllocationTargets } from "../data/work-allocations.js";
 
 export async function checkBuildingEditorPersistence() {
 // Run real editor methods without booting Foundry, then reload real split storage.
@@ -56,10 +58,11 @@ const foundry = { utils: {
   },
   getProperty: (object, path) => path.split(".").reduce((row, key) => row?.[key], object)
 } };
-const Editor = new Function("SkyholdData", "foundry", "fieldValue", "buildingPickerValues", "requestSkyholdAppRender", "ui", "assertProductionIdentityUnchanged",
+const Editor = new Function("SkyholdData", "foundry", "fieldValue", "buildingPickerValues", "requestSkyholdAppRender", "ui", "assertProductionIdentityUnchanged", "buildingLaborMode", "validateHybridLaborHolding", "buildWorkAllocationTargets",
   `return class { ${methods.join("\n")} }`)(dataApi, foundry, fieldValue,
   buildingPickerValues, () => {},
-  { notifications: { error(message) { assert.fail(message); } } }, assertProductionIdentityUnchanged);
+  { notifications: { error(message) { assert.fail(message); } } }, assertProductionIdentityUnchanged,
+  buildingLaborMode, validateHybridLaborHolding, buildWorkAllocationTargets);
 const reload = () => createSkyholdSplitStorage({ settings }).getData();
 for (const template of [true, false]) {
   const editor = new Editor();

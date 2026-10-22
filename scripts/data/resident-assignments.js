@@ -16,6 +16,8 @@ export function vacatePoliticsRepresentative(holding, residentId, reason) {
 export function clearPersonFromAssignments(holding, personId) {
   const id = String(personId ?? "");
   if (!id || !holding || typeof holding !== "object") return false;
+  const person = (holding.people?.list ?? []).find((row) => String(row.id) === id);
+  if (person) delete person.staffAppointment;
   if (Array.isArray(holding.constructionCrewIds)) holding.constructionCrewIds = holding.constructionCrewIds.filter((value) => String(value) !== id);
 
   for (const building of holding?.buildings?.list ?? []) {

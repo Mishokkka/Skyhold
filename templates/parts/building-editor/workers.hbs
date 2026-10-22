@@ -1,13 +1,18 @@
       {{#if building.showEditorWorkers}}
         <fieldset class="fbls-building-editor-card worker-card wide-card worker-layout-v4">
           <legend>Работники <i class="fa-regular fa-circle-question fbls-help" tabindex="0" role="img" aria-label="Число работников влияет на обычные функции здания. Квалификация меняет только целочисленный прогресс производственных линий и не умножает доход, оборону, Репутацию, довольство или вместимость." data-fbls-tooltip="Число работников влияет на обычные функции здания. Квалификация меняет только целочисленный прогресс производственных линий и не умножает доход, оборону, Репутацию, довольство или вместимость."></i></legend>
+          <div class="fbls-toolbar">
+            <label class="fbls-field"><span>Способ работы</span><select class="fbls-control" aria-label="Способ работы здания" data-building-labor-field="mode" {{#unless isGM}}disabled{{/unless}}>{{#each building.laborModeOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{label}}</option>{{/each}}</select></label>
+            {{#if building.laborQd}}<label class="fbls-field"><span>Предел труда за десятник, QD</span><input class="fbls-control" type="number" min="0" step="1" value="{{building.laborCapacityValue}}" data-building-labor-field="capacityQd" aria-label="Предел труда здания за десятник; пустое поле без предела" placeholder="Без предела" {{#unless isGM}}disabled{{/unless}} /></label>{{/if}}
+          </div>
+          {{#if building.laborLegacy}}<p class="fbls-muted-text">Прежние назначения сохранены. Для смены способа работы сначала разберите их в предварительном просмотре перехода.</p>{{/if}}
           <div class="fbls-worker-top-row">
-            <label class="mini"><span>Мин.</span>{{#if canEdit}}<input class="fbls-control" type="number" data-type="number" data-field="{{building.basePath}}.workersMin" value="{{building.workersMin}}" />{{else}}<strong>{{building.workersMin}}</strong>{{/if}}</label>
-            <label class="mini"><span>Макс.</span>{{#if canEdit}}<input class="fbls-control" type="number" data-type="number" data-field="{{building.basePath}}.workersMax" value="{{building.workersMax}}" />{{else}}<strong>{{building.workersMax}}</strong>{{/if}}</label>
+            {{#if building.laborLegacy}}<label class="mini"><span>Мин.</span>{{#if isGM}}<input class="fbls-control" type="number" data-type="number" data-field="{{building.basePath}}.workersMin" value="{{building.workersMin}}" />{{else}}<strong>{{building.workersMin}}</strong>{{/if}}</label>{{/if}}
+            {{#if building.laborStaffSlots}}<label class="mini"><span>Мест штата</span>{{#if isGM}}<input class="fbls-control" type="number" min="0" step="1" data-type="number" data-field="{{building.basePath}}.workersMax" value="{{building.workersMax}}" />{{else}}<strong>{{building.workersMax}}</strong>{{/if}}</label>{{/if}}
             <label class="role" title="Название работника"><span data-fbls-tooltip="Название работника. Как будут называться занятые слоты этого здания: фермеры, врачи, стражники, рабочие. Это подпись, не отдельная профессия жителя.">Название</span>{{#if canEdit}}<input aria-label="Название работника" class="fbls-control" type="text" data-field="{{building.basePath}}.workerRole" value="{{building.workerRole}}" placeholder="Фермер, садовник, каменщик..." />{{else}}<strong>{{building.workerRoleLine}}</strong>{{/if}}</label>
             <label class="mini" title="Мод. ДОВ"><span>Мод. ДОВ</span>{{#if canEdit}}<input aria-label="Мод. ДОВ" class="fbls-control" type="number" data-type="number" data-field="{{building.basePath}}.workerMoraleDelta" value="{{building.workerMoraleDelta}}" />{{else}}<strong>{{building.workerMoraleDelta}}</strong>{{/if}}</label>
             <div class="fbls-worker-eff-total compact-number">
-              <span data-fbls-tooltip="Фактически работающие жители. Минимальный штат всегда считается по головам, а не по бонусам.">Работает</span>
+              <span data-fbls-tooltip="Назначенные жители. Постоянный штат ограничен местами; задания QD — пределом труда здания.">Работает</span>
               <strong data-fbls-tooltip="Производственный эквивалент: {{building.workerEfficiency.productionEquivalentText}} QD. {{building.workerEfficiency.detail}}">{{building.workerEfficiency.total}}</strong>
             </div>
           </div>
@@ -62,7 +67,7 @@
           <details class="fbls-worker-profile-help"><summary>Как считается эффективность</summary><p class="fbls-muted-text">Обычный работник — 100%. Для типа и прошлого действует первое совпадение сверху; для черт — первое положительное и первое отрицательное. Правила разных областей складываются. Эффективность меняет только производство, не число работников.</p></details>
           {{#unless building.isTemplate}}
           <div class="fbls-assigned-worker-area">
-            <span class="fbls-field-title">Назначенные работники · {{building.assignedCount}}/{{building.workersMax}}</span>
+            <span class="fbls-field-title">Назначенные работники · {{building.assignedCount}}{{#if building.laborStaffSlots}}/{{building.workersMax}}{{/if}}</span>
             {{#if building.hasPlannedWorkers}}
             <div class="fbls-cluster" aria-label="Работники по явному плану QD">
               {{#each building.plannedWorkerRows}}
@@ -70,11 +75,11 @@
               {{/each}}
             </div>
             {{/if}}
-            <div class="fbls-worker-slot-grid compact-slots">
+            {{#if building.laborStaffSlots}}<div class="fbls-worker-slot-grid compact-slots">
               {{#each building.workerSlots}}
                 <label><span>#{{slotNo}}</span>{{#if ../canEdit}}<select class="fbls-control" data-building-worker-field="{{path}}">{{#each options}}<option value="{{id}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{name}}{{#if hint}} · {{hint}}{{/if}}</option>{{/each}}</select>{{else}}<strong>{{label}}</strong>{{/if}}</label>
               {{/each}}
-            </div>
+            </div>{{/if}}
           </div>
           {{/unless}}
         </fieldset>

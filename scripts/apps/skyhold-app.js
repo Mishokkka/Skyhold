@@ -71,7 +71,8 @@ const SkyholdAppActions = {
     "open-content-pack-importer": "_onOpenContentPackImporter",
     "open-ui-review": "_onOpenUiReview",
     "open-laputa-migration-importer": "_onOpenLaputaMigrationImporter",
-    "open-building-catalog-migration": "_onOpenBuildingCatalogMigration"
+    "open-building-catalog-migration": "_onOpenBuildingCatalogMigration",
+    "open-hybrid-labor-migration": "_onOpenHybridLaborMigration"
   },
   publicClick: ["open-building-template-browser", "open-workforce-planner"]
 };

@@ -15,7 +15,7 @@ import { runTreasuryCosts } from "../engines/economy/treasury-costs.js";
 import { economyLedgerStorageRows, normalizeEconomyLedgerEntry } from "../engines/economy/ledger.js";
 import { buildTendayOperationPayload, hydrateTendayOperation } from "../engines/tenday/operation-payload.js";
 
-function makeHolding() {
+export function makeHolding() {
   const holding = clone(BASE_HOLDING);
   holding.id = "economy-characterization";
   holding.name = "Тестовое владение";
@@ -91,7 +91,7 @@ function comparableEconomyDraft(holding) {
   return comparable;
 }
 
-function createEconomyHarness() {
+export function createEconomyHarness() {
   return {
     ...FinanceDomain,
     _productionSeasonDefs: BuildingProductionDomain._productionSeasonDefs,

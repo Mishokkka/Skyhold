@@ -223,9 +223,6 @@ export function prepareFinancePeriod({
   const outstandingCopper = allocation.finance.obligations
     .reduce((sum, row) => sum + financeObligationOutstandingCopper(row), 0);
   const invalidWorkerIds = [...new Set(planned.issues
-    .filter((issue) => ["worker-id", "wage-rate"].includes(text(issue?.code))
-      || text(issue?.code).startsWith("work-")
-      || text(issue?.code).startsWith("allocation-"))
     .map((issue) => text(issue?.workerId))
     .filter(Boolean))];
   return {
