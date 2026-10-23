@@ -56,7 +56,79 @@ function livestockBuilding(id, speciesId, { adults = 0, breedingMales = 0, gmPri
   };
 }
 
+function checkLivestockSeasonBoundaries() {
+  const hadCalendaria = Object.hasOwn(globalThis, "CALENDARIA");
+  const priorCalendaria = globalThis.CALENDARIA;
+  const calendar = {
+    days: { hoursPerDay: 24 },
+    monthsArray: ["Хладоход", "Теплорост", "Теплоход", "Зноерост", "Зноеход", "Дождерост", "Дождеход", "Хладорост"]
+      .map((name, index) => ({ name, days: 30, numericRepresentation: index + 1 }))
+  };
+  const liveDateTime = { year: 882, month: 2, day: 15, hour: 0, minute: 0 };
+  globalThis.CALENDARIA = { api: {
+    getActiveCalendar: () => calendar,
+    getCurrentDateTime: () => liveDateTime,
+    addHours: (dateTime, hours) => {
+      const elapsedHours = (dateTime.month - 1) * 30 * 24 + (dateTime.day - 1) * 24 + dateTime.hour + hours;
+      return { ...dateTime, month: Math.floor(elapsedHours / (30 * 24)) + 1,
+        day: Math.floor(elapsedHours / 24) % 30 + 1, hour: elapsedHours % 24 };
+    }
+  } };
+  try {
+    const host = {
+      ...FinanceLivestockDomain,
+      _buildingStatus: () => ({ value: "built" }),
+      _buildingFunctions: () => ({ production: true }),
+      _financeFunctionAllowed: () => true,
+      _currentProductionSeasonKey: (snapshot) => snapshot?.season?.key ?? "",
+      _storageQuantity: () => 0,
+      _livestockAvailableWorkQd: () => 2
+    };
+    for (const [month, seasonId, grazing, milk] of [[1, "spring", true, 6], [7, "winter", false, 0]]) {
+      for (const stepOffset of [0, 4, 8]) {
+        const holding = {
+          gm: { calendaria: { lastDateTime: { year: 882, month, day: 30 - stepOffset / 4, hour: 18, minute: 0 } } },
+          buildings: { list: [livestockBuilding("goats", "goats", { adults: 12, breedingMales: 1, operations: { milk: true } })] }
+        };
+        const season = host._livestockSeasonContext(holding, stepOffset / 40);
+        assert.equal(season.seasonId, seasonId, `offset ${stepOffset}: the first elapsed QD is already in ${seasonId}`);
+        assert.equal(season.snapshot.dateTime.hour, 0, "The settled boundary at 18:00 is followed by the next day's first quarter");
+        const plan = host._planLivestockForQd(holding, 4, { operationId: `boundary-${month}-${stepOffset}`, stepOffset, cycleQd: 4 });
+        const cycle = plan.entries[0].cycles[0];
+        assert.equal(cycle.seasonId, seasonId);
+        assert.equal(cycle.feeding.grazing, grazing, "Daily feeding must use the elapsed day's actual season");
+        assert.equal(plan.totals.milk, milk, "Spring grazing funds milk; winter cannot borrow the previous autumn's grazing");
+        assert.equal(cycle.feeding.unfedAdults, grazing ? 0 : 12);
+        assert.equal(plan.entries[0].warnings.some((warning) => warning.includes("Не накормлено голов")), !grazing);
+      }
+    }
+    const sameSeason = {
+      gm: { calendaria: { lastDateTime: { year: 882, month: 2, day: 10, hour: 18, minute: 0 } } },
+      buildings: { list: [livestockBuilding("same-season", "goats", { adults: 12, breedingMales: 1, operations: { milk: true } })] }
+    };
+    for (const stepOffset of [0, 4, 8]) {
+      const plan = host._planLivestockForQd(sameSeason, 4, { stepOffset, cycleQd: 4 });
+      assert.equal(plan.totals.milk, 6, "Ordinary same-season daily output is unchanged");
+      assert.equal(plan.entries[0].cycles[0].feeding.grazing, true);
+    }
+    const fallback = host._livestockSeasonContext({ gm: { calendaria: {} } }, 0.1);
+    assert.equal(fallback.seasonId, "spring", "A missing settled date still falls back to the live Calendaria snapshot");
+    assert.deepEqual(fallback.snapshot.dateTime, liveDateTime);
+    delete globalThis.CALENDARIA;
+    const offlineHolding = { gm: { calendaria: { lastDateTime: liveDateTime, lastDateText: "15 Теплороста 882" } } };
+    for (const cycleIndex of [0, 0.1]) {
+      const offline = host._livestockSeasonContext(offlineHolding, cycleIndex);
+      assert.equal(offline.seasonKey, "882:spring", "Without the calendar API, retain the known date/year for the textual season fallback");
+      assert.deepEqual(offline.snapshot.dateTime, liveDateTime);
+    }
+  } finally {
+    if (hadCalendaria) globalThis.CALENDARIA = priorCalendaria;
+    else delete globalThis.CALENDARIA;
+  }
+}
+
 export function checkLivestockRuntimeCharacterization() {
+  checkLivestockSeasonBoundaries();
   assert.equal(workQdForLimit(40, 2), 20, "normal workers allocate exactly two QD per day");
   assert.equal(workQdForLimit(40, 3), 30, "overtime workers allocate exactly three QD per day");
   assert.equal(workQdForLimit(3, 2), 2, "work cannot be banked beyond the daily cap in a partial day");

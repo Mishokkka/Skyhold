@@ -11,10 +11,12 @@ import { checkHybridLaborMigrationWindow } from "../hybrid-labor-migration-windo
 import { checkHybridLaborReview } from "../hybrid-labor-review-check.mjs";
 import { checkHybridLaborFunctional } from "../hybrid-labor-functional-check.mjs";
 import { checkHybridLaborDeepReview } from "../hybrid-labor-deep-review-check.mjs";
+import { checkHybridLaborReferenceCleanup } from "../hybrid-labor-reference-cleanup-check.mjs";
 
 export async function runHybridLaborSuite() {
   await checkHybridLaborData();
   await checkHybridLaborMigration();
+  await checkHybridLaborReferenceCleanup();
   await checkHybridLaborMigrationWindow();
   checkBuildingLaborCatalog();
   await checkHybridLaborPlanner();

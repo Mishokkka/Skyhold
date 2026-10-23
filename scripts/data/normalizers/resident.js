@@ -27,6 +27,9 @@ function appendUniqueTrait(value = "", addition = "") {
 export function clearPersonReferences(holding, personId) {
   const id = String(personId ?? "");
   if (!id) return;
+  if (Array.isArray(holding?.workforcePlan?.locks)) {
+    holding.workforcePlan.locks = holding.workforcePlan.locks.filter((row) => String(row?.personId ?? "") !== id);
+  }
   for (const building of holding?.buildings?.list ?? []) {
     if (Array.isArray(building.assignedWorkerIds)) building.assignedWorkerIds = building.assignedWorkerIds.map((value) => String(value) === id ? "" : value);
     if (Array.isArray(building.workerAdmissionOverrideIds)) building.workerAdmissionOverrideIds = building.workerAdmissionOverrideIds.filter((value) => String(value) !== id);

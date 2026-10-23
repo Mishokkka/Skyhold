@@ -182,6 +182,20 @@ try {
   await editor._onLaborFieldChange(modeEvent);
   assert.equal(reload().holdings[0].buildings.list[buildingIndex].labor.mode, "qd");
   assert.equal(reload().holdings[0].people.list.find((person) => person.id === "stale-worker").staffAppointment, undefined);
+  await editor._updateMutableBuilding(({ holding, building }) => {
+    const person = holding.people.list.find((row) => row.id === "stale-worker");
+    person.workAllocationMode = "explicit";
+    person.workAllocations = [{ schemaVersion: 1, id: "mode-switch-qd", sourceId: building.id,
+      functionId: "production:deleted", normalQd: 4, overtimeQd: 0 }];
+  });
+  const plannedBeforeModeChange = reload();
+  modeEvent.currentTarget.value = "passive";
+  writeCount = writes.length;
+  await editor._onLaborFieldChange(modeEvent);
+  assert.match(warnings.at(-1), /не принимает обычные задания/);
+  assert.equal(writes.length, writeCount, "A QD-to-passive change cannot write any partition while planned work is assigned");
+  assert.deepEqual(reload(), plannedBeforeModeChange,
+    "A rejected editor mode switch must preserve the reloaded building and all residents' allocations");
   globalThis.game.user.isGM = false;
   writeCount = writes.length;
   modeEvent.currentTarget.value = "passive";

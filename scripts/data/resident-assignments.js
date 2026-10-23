@@ -59,6 +59,9 @@ export function transferResidentBetweenHoldings(source, target, residentId) {
     return { ok: false, message: "Перед переносом жителя верните его корабль и экипаж домой." };
   }
   clearPersonFromAssignments(source, id);
+  if (Array.isArray(source.workforcePlan?.locks)) {
+    source.workforcePlan.locks = source.workforcePlan.locks.filter((row) => String(row?.personId ?? "") !== id);
+  }
   vacatePoliticsRepresentative(source, id, "житель перенесён в другое владение");
   for (const ship of ships) {
     ship.crewResidentIds = (ship.crewResidentIds ?? []).filter((value) => value !== id);

@@ -169,8 +169,10 @@ export function planHybridLaborMigration({
   } catch (error) { add("labor-line-mapping", error.message); }
   const targets = new Map(buildWorkAllocationTargets(targetHolding).map((row) => [row.key, row]));
   if (clearUnavailablePlanReferences) {
+    const people = new Set((targetHolding.people?.list ?? []).map((person) => String(person.id)));
     for (const kind of ["goals", "locks", "productionGoals"]) if (Array.isArray(targetHolding.workforcePlan?.[kind])) {
-      targetHolding.workforcePlan[kind] = targetHolding.workforcePlan[kind].filter((row) => targets.has(workAllocationTargetKey(row.sourceId, row.functionId)));
+      targetHolding.workforcePlan[kind] = targetHolding.workforcePlan[kind].filter((row) => targets.has(workAllocationTargetKey(row.sourceId, row.functionId))
+        && (kind !== "locks" || people.has(String(row.personId))));
     }
   }
   issues.push(...migrationPlanReferenceIssues(targetHolding, targets));

@@ -9,6 +9,8 @@ import { returnCrewResidentToShip, embarkShipCrew, disembarkShipCrew } from "../
 import { isResidentInPopulation, isResidentRestingOnShip } from "../data/resident-presence.js";
 import { FinanceStaffDomain } from "../apps/domains/finance/staff-domain.js";
 import { DEFAULT_BUILDING_TEMPLATES } from "../data/building-templates.js";
+import { mergeHoldingDefaults } from "../data/normalizers.js";
+import { validateHoldingWorkAllocations } from "../data/work-allocations.js";
 
 const quantity = (holding, id) => (holding.storage.resources ?? []).filter((row) => row.resourceId === id).reduce((sum, row) => sum + row.qty, 0);
 async function run(f, operationId) {
@@ -21,6 +23,25 @@ export async function checkHybridLaborDeepReview() {
   globalThis.game = { user: { isGM: true }, settings: { get: () => undefined } };
   try {
     const service = getSkyholdWorkflowService();
+    {
+      const f = hybridRuntimeFixture({ goal: null });
+      Object.assign(f.building.productionLines[0], { outputQty: 10, workQd: 30 });
+      await run(f, "staff-funded-before-reload");
+      assert.equal(f.building.productionLines[0].workProgressUnits, 200000);
+      assert.equal(quantity(f.holding, "wood"), 0);
+      assert.equal(f.holding.storage.moneyCopper, 9880);
+      const reloaded = mergeHoldingDefaults(JSON.parse(JSON.stringify(f.holding)));
+      assert.equal(validateHoldingWorkAllocations(reloaded).ok, true);
+      assert.deepEqual(reloaded.people.list[0].staffAppointment, f.person.staffAppointment,
+        "JSON reload and normal loading must preserve the complete staff agreement");
+      assert.deepEqual(reloaded.buildings.list[0].productionLines[0].workReservedInputs,
+        f.building.productionLines[0].workReservedInputs, "Reload must preserve the funded recipe and its timing");
+      assert.equal(reloaded.buildings.list[0].productionLines[0].workProgressUnits, 200000);
+      reloaded.gm.calendaria.lastQd = 40;
+      await run({ ...f, holding: reloaded }, "staff-funded-after-reload");
+      assert.equal(quantity(reloaded, "wood"), 10, "The next tenday completes the paid partial batch after reload");
+      assert.equal(reloaded.storage.moneyCopper, 9760, "Each tenday charges the same agreement once across reload");
+    }
     for (const isGM of [true, false]) {
       const f = hybridRuntimeFixture();
       f.holding.visibility = "public"; f.holding.gm.playersCanEditBuildings = true;

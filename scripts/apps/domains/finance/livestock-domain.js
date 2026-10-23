@@ -58,9 +58,12 @@ _livestockSeasonContext(holding = {}, cycleIndex = 0) {
   const baseDateTime = calendar.lastDateTime && typeof calendar.lastDateTime === "object"
     ? calendar.lastDateTime
     : null;
-  const dateTime = baseDateTime && cycleIndex > 0
-    ? addCalendariaQd(baseDateTime, cycleIndex * 40)
-    : baseDateTime;
+  // The settled boundary precedes the first elapsed QD, including a daily
+  // cycle beginning at a season change. Keep the known date if no calendar
+  // API can advance it; a missing date still uses the live snapshot below.
+  const dateTime = baseDateTime
+    ? addCalendariaQd(baseDateTime, whole(cycleIndex * 40) + 1) ?? baseDateTime
+    : null;
   const snapshot = getCalendariaSeasonSnapshot(dateTime, calendar.lastDateText ?? calendar.lastDateKey)
     ?? getCalendariaSnapshot?.()
     ?? null;
