@@ -13,6 +13,7 @@ import {
   buildingConfirmedLeisureCapacity,
   buildingConfirmedServiceCapacity,
   buildingConfirmedSocialStatus,
+  buildingHousingComfort,
   scaleIntegerBuildingEffect
 } from "../../engines/economy/building-service.js";
 import { settlementControlSummary } from "../../engines/settlement/control.js";
@@ -874,7 +875,7 @@ _housingMorale(person, holding = null, housingIndex = null) {
   if (this._isNoHome(person?.home)) return { value: -3, reason: "без дома" };
   const home = this._findHomeBuilding(holding, person?.home, housingIndex);
   if (!home) return { value: -1, reason: "жилье не найдено" };
-  let comfort = this._safeNumber(home?.housing?.comfort, 0);
+  let comfort = buildingHousingComfort(holding, home);
   const homeText = `${home?.name ?? ""} ${home?.type ?? ""} ${home?.notes ?? ""} ${home?.effect ?? ""}`;
   if (comfort < 0 && /казарм|barrack/i.test(homeText) && this._isMilitaryResidentLike(person)) comfort = 0;
   const capacity = this._safeNumber(home?.housing?.capacity, 0);

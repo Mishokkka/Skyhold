@@ -62,9 +62,18 @@ _agricultureNeedsLabor(agriculture = {}, holding = {}) {
   return true;
 },
 
-_agricultureFinanceFunction(building = {}, holding = {}) {
+_agricultureFinanceFunction(building = {}, holding = {}, periodQd = 40) {
   const agriculture = normalizeAgricultureBuilding(building?.agriculture, { building });
-  if (!agriculture?.enabled || !this._agricultureNeedsLabor(agriculture, holding)) return null;
+  if (!agriculture?.enabled) return null;
+  if (!this._agricultureNeedsLabor(agriculture, holding)) {
+    const crop = agriculture.crops.find((row) => row.id === agriculture.activeCropId);
+    const upcoming = crop && planAgriculturePlot({
+      state: agriculture.state, crop, operations: agriculture.operations,
+      elapsedQd: whole(periodQd), availableWorkQd: 1_000_000,
+      calendarContextForOffset: (offset) => this._agricultureCalendarContext(holding, offset)
+    });
+    if (!(upcoming?.workQdUsed > 0)) return null;
+  }
   return {
     id: "agriculture",
     name: `Сезонные работы: ${String(building?.name ?? agriculture.kind)}`,

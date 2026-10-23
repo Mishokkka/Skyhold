@@ -187,16 +187,21 @@ export function buildWorkforceModel(holding, draft, service, { isGM = false, pre
       .find((line, index) => task.functionId === `production:${line.id || `line-${index + 1}`}`);
     if (["staff", "qd"].includes(task.laborMode) && collectionLine?.requiresCollection && collectionLine.pendingQty > 0 && collectionLine.collectQd > 0) {
       const daily = task.isStaff ? Array(10).fill(0) : task.daily;
+      const primaryDaily = Array(10).fill(0);
       if (task.isStaff) for (const person of people) {
         const appointment = person.appointment;
         if (appointment?.buildingId !== task.buildingId
           || ![appointment.primaryFunctionId, appointment.reserveFunctionId].includes(task.functionId)) continue;
         for (const [step, slot] of slotsByPerson.get(person.id) ?? []) {
-          if (!slot.overtime || collectionLine.overtime === true) daily[Math.floor(step / 4)] += 1;
+          if (!slot.overtime || collectionLine.overtime === true) {
+            daily[Math.floor(step / 4)] += 1;
+            if (appointment.primaryFunctionId === task.functionId) primaryDaily[Math.floor(step / 4)] += 1;
+          }
         }
       }
       const needed = Math.ceil(collectionLine.collectQd), available = Math.max(0, ...daily);
       if (needed > available) task.warnings.push(`Сбор требует ${needed} QD за один день; доступно не больше ${available}, не хватает ${needed - available} QD. Добавьте сборщиков или разрешённые сверхурочные.`);
+      else if (task.isStaff && needed > Math.max(0, ...primaryDaily)) task.warnings.push("Сбор зависит от резервных работников: их основные задачи могут занять всё время. Проверьте фактическую бригаду в прогнозе десятника.");
     }
     if (task.assignments.length && task.staff < task.minimum && task.kind !== "maintenance") task.warnings.push(`Минимум здания: ${task.staff} / ${task.minimum} жителей`);
     if (task.assignments.length && task.building && task.kind !== "maintenance") {

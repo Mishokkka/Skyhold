@@ -8,7 +8,7 @@ import { buildingAppearance } from "../../../core/building-appearance.js";
 import { maintenanceEfficiencyFactor, normalizeBuildingMaintenance } from "../../../data/economy/maintenance.js";
 import { buildingRequiresConstructionCenter } from "../../../data/building-development-tree.js";
 import { buildingStaffingWorkerIds, explicitWorkAllocationsForBuilding } from "../../../data/work-allocations.js";
-import { buildingConstructionPrerequisitesMet, buildingNominalMorale, buildingWonderworkingActive } from "../../../engines/economy/building-service.js";
+import { buildingConstructionPrerequisitesMet, buildingHousingComfort, buildingNominalMorale, buildingWonderworkingActive } from "../../../engines/economy/building-service.js";
 import { isResidentInPopulation } from "../../../data/resident-presence.js";
 import { buildingLaborMode } from "../../../data/hybrid-labor.js";
 
@@ -481,7 +481,7 @@ _prepareBuildingRow(holding, row, index, canEdit, storageRoomsArg = null, option
       },
       housing: {
         capacity: housingCapacity,
-        comfort: housingComfort,
+        comfort: buildingHousingComfort(holding, row),
         quality: housingQuality,
         used: housingUsed,
         free: housingFree,
@@ -615,6 +615,8 @@ _prepareBuildingRow(holding, row, index, canEdit, storageRoomsArg = null, option
     housing: {
       capacity: housingCapacity,
       comfort: housingComfort,
+      effectiveComfort: buildingHousingComfort(holding, row),
+      hasCaretakerComfort: Number.isFinite(housingData.staffedComfort) && housingData.staffedComfort !== housingComfort,
       quality: housingQuality,
       used: housingUsed,
       free: housingFree,

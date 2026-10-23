@@ -144,6 +144,15 @@ export async function checkHybridLaborPlanner() {
       assert.ok(task.warnings.some((warning) => warning.includes("не хватает 1 QD")),
         "GM and player see the indivisible daily collection shortfall before running a tenday");
     }
+    if (mode === "staff") {
+      building.functions.culture = true;
+      collection.people.list[1].staffAppointment = { ...person.staffAppointment, primaryFunctionId: "culture", reserveFunctionId: "production:first" };
+      for (const isGM of [true, false]) {
+        const task = buildWorkforceModel(collection, createWorkforceDraft(collection, service), service, { isGM }).taskMap.get(primary.key);
+        assert.ok(task.warnings.some((warning) => warning.includes("зависит от резервных работников")),
+          "Potential reserve helpers must not appear as an unconditional collection guarantee");
+      }
+    }
   }
 
   const paused = copy(assigned);

@@ -107,11 +107,16 @@ _canCollectStaffProductionInputs(holding, building, missing, workerContext, cons
 /** Unspent funded slots, including today's accrued time; past days cannot fund collection. */
 _staffDailyCollectionBudget(building, functionId, workerContext) {
   const finance = workerContext?.financeContext;
+  if (finance?.staffCollectionProbe) return Infinity;
   const firstDay = Math.floor(number(finance?.staffStep) / 4);
   const daily = new Map();
   for (const [workerId, appointment] of finance?.staffAppointmentsByWorkerId ?? []) {
     if (String(appointment.buildingId) !== String(building.id)
       || !staffAppointmentWorkFunctions(appointment).includes(functionId)) continue;
+    // A reserve role is not a promise to help: its owner may spend the whole
+    // day on a different primary job. Use this step's priority selection.
+    const selected = finance.staffCollectionCandidates ? finance.staffCollectionCandidates.get(workerId) : appointment.primaryFunctionId;
+    if (selected !== functionId && finance.staffSelectingWorkerId !== workerId) continue;
     for (const [step, slot] of finance.plannedWorkSlotsByWorkerId.get(workerId) ?? []) {
       if (Math.floor(step / 4) < firstDay || slot.functionId !== "staff"
         || finance.staffReservedStepsByWorkerId.get(workerId)?.has(step)
@@ -161,7 +166,7 @@ async _staffFunctionNeedsWork(holding, building, functionId, person, workerConte
     }
     if (!this._financeFunctionAllowed(finance, building, functionId)) return false;
   }
-  return ["culture", "income", "defense", "storage", "medical"].includes(functionId);
+  return ["culture", "income", "defense", "storage", "medical", "housing"].includes(functionId);
 },
 
 async _prepareStaffWorkerStep(holding, budgets, workerContext, step, { lineCanWork, report } = {}) {
@@ -172,20 +177,36 @@ async _prepareStaffWorkerStep(holding, budgets, workerContext, step, { lineCanWo
   finance.staffCurrentFunctionByWorkerId.clear();
   const people = workerContext.activePeopleById;
   const ordered = [...finance.staffAppointmentsByWorkerId].sort(([left], [right]) => left.localeCompare(right));
-  for (const [workerId, appointment] of ordered) {
-    const person = people.get(workerId);
-    const building = workerContext.buildingsByAssignment.get(String(appointment.buildingId));
-    if (!person || !building || this._buildingStatus(building).value !== "built") continue;
-    for (const functionId of staffAppointmentWorkFunctions(appointment)) {
-      const entry = this._workerBudgetEntry(holding, person, budgets, workerContext, building, functionId);
-      if (entry.available + 0.0001 < 1) continue;
-      if (!await this._staffFunctionNeedsWork(holding, building, functionId, person, workerContext, step, lineCanWork)) continue;
-      finance.staffCurrentFunctionByWorkerId.set(workerId, functionId);
-      if (["culture", "income", "defense", "storage", "medical", "livestock"].includes(functionId)) {
-        this._consumeStaffWorkerQd(workerContext, entry, functionId, 1);
+  const select = async (commit) => {
+    for (const [workerId, appointment] of ordered) {
+      const person = people.get(workerId);
+      const building = workerContext.buildingsByAssignment.get(String(appointment.buildingId));
+      if (!person || !building || this._buildingStatus(building).value !== "built") continue;
+      finance.staffSelectingWorkerId = workerId;
+      for (const functionId of staffAppointmentWorkFunctions(appointment)) {
+        const entry = this._workerBudgetEntry(holding, person, budgets, workerContext, building, functionId);
+        if (entry.available + 0.0001 < 1) continue;
+        if (!await this._staffFunctionNeedsWork(holding, building, functionId, person, workerContext, step, lineCanWork)) continue;
+        (commit ? finance.staffCurrentFunctionByWorkerId : finance.staffCollectionCandidates).set(workerId, functionId);
+        if (commit && ["culture", "income", "defense", "storage", "medical", "housing", "livestock"].includes(functionId)) {
+          this._consumeStaffWorkerQd(workerContext, entry, functionId, 1);
+        }
+        break;
       }
-      break;
     }
+  };
+  finance.staffCollectionCandidates = new Map();
+  try {
+    // First choose priorities without assuming that every reserve worker is
+    // available. Then test collection against that concrete prospective team.
+    finance.staffCollectionProbe = true;
+    await select(false);
+    finance.staffCollectionProbe = false;
+    await select(true);
+  } finally {
+    finance.staffCollectionProbe = false;
+    delete finance.staffSelectingWorkerId;
+    delete finance.staffCollectionCandidates;
   }
 },
 

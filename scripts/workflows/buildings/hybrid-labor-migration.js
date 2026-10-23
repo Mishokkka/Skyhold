@@ -10,6 +10,17 @@ const owns = (value, key) => Object.prototype.hasOwnProperty.call(value ?? {}, k
 const active = (row) => Number(row?.normalQd) > 0 || Number(row?.overtimeQd) > 0;
 const contains = (ids, id) => (ids ?? []).some((value) => String(value) === id);
 
+/** Do not recommend disabling a customized productive function just from its template id. */
+export function recommendedHybridLaborProfile(building, templateId = building?.templateId) {
+  const profile = proposedBuildingLaborProfile(templateId);
+  if (profile?.mode === "passive") {
+    const tasks = buildWorkAllocationTargets({ buildings: { list: [{ ...building,
+      labor: { version: 1, mode: "qd", capacityQd: null } }] } }, { includeMaintenance: false });
+    if (tasks.some((task) => ["production", "agriculture", "livestock", "income", "medical"].includes(task.kind))) return null;
+  }
+  return profile;
+}
+
 function migrationPlanReferenceIssues(holding, targets) {
   const issues = [];
   const people = new Set((holding.people?.list ?? []).map((person) => String(person.id)));
@@ -84,9 +95,9 @@ export function planHybridLaborMigration({
   for (const building of targetHolding.buildings?.list ?? []) {
     const supplied = owns(profiles, building.id);
     if (!supplied && buildingLaborMode(building) !== "legacy") continue;
-    const profile = supplied ? profiles[building.id] : proposedBuildingLaborProfile(building.templateId);
+    const profile = supplied ? profiles[building.id] : recommendedHybridLaborProfile(building);
     if (!profile) {
-      add("labor-profile-choice", `${building.name || "Здание"}: выберите способ работы пользовательского здания.`, { buildingId: building.id });
+      add("labor-profile-choice", `${building.name || "Здание"}: выберите способ работы. Рекомендация отсутствует или отключит производственные работы изменённого здания.`, { buildingId: building.id });
       continue;
     }
     building.labor = normalizeBuildingLabor(profile);
@@ -188,9 +199,9 @@ export function planHybridLaborCatalogMigration({ catalog, profiles = {} } = {})
   const targetCatalog = clone(catalog ?? {}), issues = [], changes = [];
   for (const template of targetCatalog.buildings ?? []) {
     if (!owns(profiles, template.id) && buildingLaborMode(template) !== "legacy") continue;
-    const profile = owns(profiles, template.id) ? profiles[template.id] : proposedBuildingLaborProfile(template.id);
+    const profile = owns(profiles, template.id) ? profiles[template.id] : recommendedHybridLaborProfile(template, template.id);
     if (!profile) {
-      issues.push({ code: "catalog-labor-profile", templateId: template.id, message: `${template.name || "Шаблон"}: выберите способ работы пользовательского шаблона.` });
+      issues.push({ code: "catalog-labor-profile", templateId: template.id, message: `${template.name || "Шаблон"}: выберите способ работы. Рекомендация отсутствует или отключит производственные работы изменённого шаблона.` });
       continue;
     }
     template.labor = normalizeBuildingLabor(profile);

@@ -219,6 +219,7 @@ export function buildWorkAllocationTargets(holding = {}, { includeMaintenance = 
       [functions.defense, "defense", "Оборона", "defense"],
       [functions.culture, "culture", "Услуги учреждения", "culture"],
       [functions.storage, "storage", "Охрана и работа склада", "storage"],
+      [functions.housing && ["staff", "qd"].includes(buildingLaborMode(building)), "housing", "Уход за жильём", "housing"],
       [isMedicalBuilding(building), "medical", "Медицинская помощь", "medical"]
     ];
     for (const [enabled, functionId, label, kind] of staffedFunctions) {

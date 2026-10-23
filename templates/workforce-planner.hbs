@@ -35,6 +35,7 @@
     {{#if error}}<p class="fbls-workforce-warning" role="alert">{{error}}</p>{{/if}}
     {{#if model.invalidWages}}<p class="fbls-workforce-warning">У {{model.invalidWages}} жителей не определена корректная оплата. Нулевая ставка требует договорённости ГМа.</p>{{/if}}
     {{#if message}}<p role="status">{{message}}</p>{{/if}}
+    {{#if unapplied}}<p class="fbls-workforce-warning" role="status">Есть неприменённые значения. Нажмите «Обновить назначение» или кнопку применения рядом с изменёнными QD и целями, затем сохраните план.</p>{{/if}}
   </header>
   <div class="fbls-workforce-body {{#if rail}}has-rail{{/if}}">
     <main class="fbls-workforce-list" data-render-scroll-key="workforce-{{#if tasksView}}buildings{{else}}people{{/if}}">

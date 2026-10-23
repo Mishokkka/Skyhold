@@ -357,7 +357,7 @@ _financePlanInputs(holding, periodQd, identity) {
       }
       const livestockFunction = this._livestockFinanceFunction(building);
       if (livestockFunction) functions.push(livestockFunction);
-      const agricultureFunction = this._agricultureFinanceFunction(building, holding);
+      const agricultureFunction = this._agricultureFinanceFunction(building, holding, periodQd);
       if (agricultureFunction) functions.push(agricultureFunction);
     }
     if (rawFunctions.income) {
@@ -378,6 +378,7 @@ _financePlanInputs(holding, periodQd, identity) {
       [rawFunctions.defense, "defense", "Оборона"],
       [rawFunctions.culture, "culture", "Услуги учреждения"],
       [rawFunctions.storage, "storage", "Охрана и работа склада"],
+      [rawFunctions.housing && ["staff", "qd"].includes(buildingLaborMode(building)), "housing", "Уход за жильём"],
       [isMedicalBuilding(building), "medical", "Медицинская помощь"]
     ];
     for (const [enabled, id, name] of staffedFunctions) {

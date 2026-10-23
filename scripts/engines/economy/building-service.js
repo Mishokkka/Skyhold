@@ -106,7 +106,17 @@ export function buildingServiceFunctionId(building = {}) {
   if (functions.defense === true) return "defense";
   if (functions.production === true) return "production";
   if (functions.storage === true) return "storage";
+  if (functions.housing === true) return "housing";
   return "culture";
+}
+
+/** Housing remains usable without a caretaker; only the funded service improves comfort. */
+export function buildingHousingComfort(holding = {}, building = {}) {
+  const base = Number(building.housing?.comfort) || 0;
+  const staffed = building.housing?.staffedComfort;
+  if (!["staff", "qd"].includes(buildingLaborMode(building)) || !Number.isFinite(staffed)) return base;
+  const status = buildingConfirmedSocialStatus(holding, building, "housing");
+  return status.active && status.laborFactor >= 1 ? staffed : base;
 }
 
 function workerAllocatedToFunction(person = {}, buildingId = "", functionId = "") {

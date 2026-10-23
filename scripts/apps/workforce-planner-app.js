@@ -62,7 +62,8 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
     this.base = copy(holding); this.revision = revision; this.draft = createWorkforceDraft(this.base, this.service);
     this.initial = copy(this.draft); this.history = []; this.preview = null; this.inputValues.clear();
   }
-  get dirty() { return this.draft && !same(this.initial, this.draft); }
+  get unapplied() { return this.inputValues.size > 0; }
+  get dirty() { return this.draft && (this.unapplied || !same(this.initial, this.draft)); }
   _change(callback) {
     if (!this.permissions?.canEditBuildings || this._busy || this.pending) return;
     const next = copy(this.draft); callback(next);
@@ -212,7 +213,7 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
       goalValue: task ? this.inputValues.get(`goal:${task.key}`) ?? task.goal ?? 0 : 0,
       productionGoalValue: task ? this.inputValues.get(`production-goal:${task.key}`) ?? task.preparedUnits ?? 0 : 0,
       preview: this.preview, canAcceptPreview: canEdit && this.preview && (this.preview.base || this.preview.discard || !same(this.preview.draft, this.draft)), dirty: this.dirty, pending: Boolean(this.pending), busy: this._busy, stale: this.stale,
-      canSave: canEdit && this.dirty && !error && !this.stale && !this.preview,
+      unapplied: this.unapplied, canSave: canEdit && this.dirty && !this.unapplied && !error && !this.stale && !this.preview,
       canUndo: canEdit && this.history.length > 0, error, message: this.message,
       changes: this.draft.edited.filter((id) => visibleIds.has(id)).map((id) => ({ name: model.people.find((row) => row.id === id).name,
         before: staffWorkDescription(this.initial.staffAppointments?.[id], model.taskMap) || this._allocationText(this.initial.allocations[id], model),
@@ -241,9 +242,11 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
       } else if (kind.startsWith("staff-")) {
         const value = field.type === "checkbox" ? field.checked : field.type === "number" ? Number(field.value) : field.value;
         this.inputValues.set(`${kind}:${field.dataset.personId}`, value);
+        if (event.type === "change") this.requestRender({ focus: false });
         return;
       } else if (["qd", "ot", "goal", "production-goal"].includes(kind)) {
         this.inputValues.set(["goal", "production-goal"].includes(kind) ? `${kind}:${this.targetKey}` : `${kind}:${field.dataset.personId}:${field.dataset.key || this.targetKey}`, Number(field.value));
+        if (event.type === "change") this.requestRender({ focus: false });
         return;
       } else if (["bulkQd", "personQd", "personOt"].includes(kind)) { this[kind] = Number(field.value); return; }
       else if (["personSource", "personBuildingId", "personTargetKey"].includes(kind)) {
@@ -293,6 +296,7 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
         const { loadResidentEditorClass } = await import("./lazy-apps.js");
         const Editor = await loadResidentEditorClass(); Editor.open({ holdingId: this.holdingId, personId: id });
       } else if (action === "tenday") {
+        if (this.dirty || this.pending) throw new Error("Сначала примените введённые значения и сохраните план. Расчёт десятника использует общий сохранённый план.");
         const { openTendayApp } = await import("./lazy-apps.js"); await openTendayApp({ holdingId: this.holdingId });
       } else if (action === "cancel-preview") this.preview = null;
       else if (action === "retry") await this._save(true);
@@ -387,7 +391,10 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
             wageBefore: model.wage, wageAfter: proposal.model.wage };
         } else if (action === "accept-preview" && this.preview) {
           const preview = this.preview;
-          if (preview.discard) this._reset(this.latest.holding, this.latest.revision);
+          if (preview.discard) {
+            this._reset(this.latest.holding, this.latest.revision);
+            if (preview.closeAfterDiscard) { await this.close({}); return; }
+          }
           else {
             if (preview.base) { this.base = preview.base; this.revision = preview.revision; this.initial = createWorkforceDraft(this.base, this.service); this.history = []; }
             this._change((draft) => Object.assign(draft, copy(preview.draft)));
@@ -404,6 +411,7 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
       if (["staff-save", "staff-remove"].includes(action)) {
         for (const field of ["primary", "reserve", "rate", "ot", "volunteer", "reason"]) this.inputValues.delete(`staff-${field}:${id}`);
       }
+      if (["goal", "production-goal"].includes(action) && task) this.inputValues.delete(`${action}:${task.key}`);
       if (action === "person-assign" && this.personSource) {
         const source = this.draft.allocations[this.personId]?.find((row) => workforceKey(row) === this.personSource);
         if (source) { this.personQd = Math.min(this.personQd, source.normalQd); this.personOt = Math.min(this.personOt, source.overtimeQd); }
@@ -439,6 +447,7 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
   }
   async _save(retry) {
     if (!retry) {
+      if (this.unapplied) throw new Error("Есть неприменённые значения. Нажмите «Обновить назначение» или кнопку применения рядом с изменёнными QD и целями.");
       if (!this.dirty || this.stale || this.preview) throw new Error("Сначала завершите проверку черновика.");
       const error = workforceDraftError(this.base, this.draft, this.permissions); if (error) throw new Error(error);
       this.pending = { holdingId: this.holdingId, operationId: makeId("workforce", 20), expectedRevision: this.revision, draft: copy(this.draft) };
@@ -458,7 +467,7 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
   async close(options) {
     if (this.pending || this._busy) { globalThis.ui?.notifications?.warn?.("Дождитесь подтверждения сохранения или повторите запрос в этом окне."); return this; }
     if (this.dirty && !this._closingApproved) {
-      this.preview = { title: "Закрыть окно с несохранённым черновиком?", discard: true, skipped: ["Сначала нажмите «Принять» для сброса или «Отмена», чтобы вернуться к редактированию."], changes: [] };
+      this.preview = { title: "Закрыть окно с несохранённым черновиком?", discard: true, closeAfterDiscard: true, skipped: ["«Принять» сбросит черновик и неприменённые значения и закроет окно. «Отмена» вернёт к редактированию."], changes: [] };
       this.requestRender({ focus: false }); return this;
     }
     this.listeners?.abort(); clearTimeout(this.searchTimer); this.disclosures.close(); this._unbindWindowFrameSync();

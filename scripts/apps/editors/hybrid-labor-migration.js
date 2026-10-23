@@ -5,7 +5,7 @@ import { buildingLaborMode, staffAppointmentFor } from "../../data/hybrid-labor.
 import { proposedBuildingLaborProfile } from "../../data/building-labor-catalog.js";
 import { buildWorkAllocationTargets } from "../../data/work-allocations.js";
 import { residentLaborCapacity } from "../../data/labor-budget.js";
-import { planHybridLaborMigration, planHybridLaborCatalogMigration } from "../../workflows/buildings/hybrid-labor-migration.js";
+import { planHybridLaborMigration, planHybridLaborCatalogMigration, recommendedHybridLaborProfile } from "../../workflows/buildings/hybrid-labor-migration.js";
 import { executeHybridLaborMigration } from "../hybrid-labor-migration-executor.js";
 import { RenderSchedulerMixin } from "../common/render-scheduler.js";
 import { WindowFrameMixin } from "../common/window-frame.js";
@@ -65,7 +65,7 @@ export class SkyholdHybridLaborMigration extends WindowFrameMixin(RenderSchedule
   }
   _buildingRow(building, catalog = false) {
     const profile = (catalog ? this.catalogProfiles : this.profiles)[building.id]
-      ?? (buildingLaborMode(building) === "legacy" ? proposedBuildingLaborProfile(catalog ? building.id : building.templateId) : building.labor);
+      ?? (buildingLaborMode(building) === "legacy" ? recommendedHybridLaborProfile(building, catalog ? building.id : building.templateId) : building.labor);
     return { id: building.id, name: building.name || building.id, scope: catalog ? "catalog" : "building",
       modeOptions: optionsFor(profile?.mode), qd: profile?.mode === "qd", capacity: profile?.capacityQd ?? "",
       previous: buildingLaborMode(building) === "legacy" ? "Прежние правила" : modes.find(([mode]) => mode === buildingLaborMode(building))?.[1] || "Требует проверки" };
