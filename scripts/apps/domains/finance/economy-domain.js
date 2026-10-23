@@ -1011,32 +1011,6 @@ _scaledCosts(costs = [], cycles = 1) {
   return scaleProductionCosts(costs, multiplier);
 },
 
-_affordableCycles(holding, costs = [], requestedCycles = 0) {
-  const requested = Math.max(0, Math.floor(requestedCycles));
-  if (!requested || !costs.length) return requested;
-  let low = 0;
-  let high = requested;
-  while (low < high) {
-    const candidate = Math.ceil((low + high) / 2);
-    const plan = this._storageCanPay(holding, this._scaledCosts(costs, candidate));
-    if (plan.ok) low = candidate;
-    else high = candidate - 1;
-  }
-  return low;
-},
-
-_productionPeriodQd(period = "day") {
-  const value = String(period ?? "day");
-  if (value === "qd") return 1;
-  if (value === "tenday") return 40;
-  return 4;
-},
-
-_periodOccurrences(period = "day", qd = 0) {
-  const step = Math.max(1, this._productionPeriodQd(period));
-  return Math.max(0, Math.floor(this._safeNumber(qd, 0) / step));
-},
-
 _lineContentQuantity(building, line) {
   const id = String(line?.contentId ?? "");
   if (!id) return 0;
@@ -1254,17 +1228,6 @@ _accrueWorkerBudgets(holding, budgets, workerContext = null, step = 0) {
   }
 },
 
-_availableEffectiveWorkQd(holding, building, budgets, workerContext = null, functionId = "") {
-  let total = 0;
-  for (const person of this._assignedBuildingPeople(holding, building, workerContext, functionId)) {
-    const budget = this._workerBudgetEntriesForBuilding(person, budgets, building, workerContext, functionId)
-      .reduce((sum, entry) => sum + this._safeNumber(entry.available, 0), 0);
-    if (budget <= 0) continue;
-    total += this._personBuildingEfficiency(holding, building, person, workerContext, { purpose: "production" }) * budget;
-  }
-  return Math.max(0, total);
-},
-
 _spendBuildingWorkerQd(holding, building, budgets, needed = 0, workerContext = null, functionId = "") {
   // Реальное рабочее время. Используется для сбора: 1 QD сбора всегда стоит 1 QD времени,
   // независимо от производственной эффективности работника.
@@ -1291,33 +1254,6 @@ _spendBuildingWorkerQd(holding, building, budgets, needed = 0, workerContext = n
   return { ok: rest <= 0.0001, spent };
 },
 
-_spendBuildingEffectiveWorkQd(holding, building, budgets, needed = 0, workerContext = null, functionId = "") {
-  // Производственное время. Эффективные работники покрывают больше эффективных QD
-  // тем же реальным временем.
-  let rest = Math.max(0, this._safeNumber(needed, 0));
-  let spentReal = 0;
-  let spentEffective = 0;
-  if (!rest) return { ok: true, spent: 0, spentEffective: 0 };
-  for (const person of this._assignedBuildingPeople(holding, building, workerContext, functionId)) {
-    if (rest <= 0) break;
-    for (const entry of this._workerBudgetEntriesForBuilding(person, budgets, building, workerContext, functionId)) {
-      if (rest <= 0) break;
-      const budget = this._safeNumber(entry.available, 0);
-      if (budget <= 0) continue;
-      const efficiency = Math.max(0.0001, this._personBuildingEfficiency(holding, building, person, workerContext, { purpose: "production" }));
-      const realNeeded = rest / efficiency;
-      const takeReal = Math.min(budget, realNeeded);
-      const takeEffective = takeReal * efficiency;
-      entry.available = budget - takeReal;
-      entry.spent += takeReal;
-      rest -= takeEffective;
-      spentReal += takeReal;
-      spentEffective += takeEffective;
-    }
-  }
-  return { ok: rest <= 0.0001, spent: spentReal, spentEffective };
-},
-
 _periodDueOnStep(period = "day", stepIndex = 0, cyclesPerTrigger = 1) {
   const p = String(period ?? "day");
   const unit = p === "qd" ? 1 : p === "tenday" ? 40 : 4;
@@ -1331,20 +1267,6 @@ _periodDueOnStep(period = "day", stepIndex = 0, cyclesPerTrigger = 1) {
 _costsForUnits(costs = [], units = 0) {
   const count = Math.max(0, Math.floor(this._safeNumber(units, 0)));
   return scaleProductionCosts(costs, count);
-},
-
-_affordableUnitsForCosts(holding, costs = [], requestedUnits = 0) {
-  const requested = Math.max(0, Math.floor(this._safeNumber(requestedUnits, 0)));
-  if (!requested || !costs.length) return requested;
-  let low = 0;
-  let high = requested;
-  while (low < high) {
-    const candidate = Math.ceil((low + high) / 2);
-    const plan = this._storageCanPay(holding, this._costsForUnits(costs, candidate));
-    if (plan.ok) low = candidate;
-    else high = candidate - 1;
-  }
-  return low;
 },
 
 async _lineOutputForCycle(line, context = {}) {
@@ -1538,7 +1460,6 @@ _productionCycleDependencies({ holding: sourceHolding = null, lineOutputForCycle
     tryCollectResourceForConsumer: (holding, building, resourceId, budgets, report, workerContext, line) => this._tryCollectResourceForConsumer(
       holding, building, resourceId, budgets, report, workerContext, financeContext,
       this._financeLineFunctionId(line, (building.productionLines ?? []).indexOf(line))),
-    affordableUnitsForCosts: (holding, costs, units) => this._affordableUnitsForCosts(holding, costs, units),
     formatNumber: (value) => this._formatNumber(value)
   };
 },

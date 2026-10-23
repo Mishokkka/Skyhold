@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 // V2 inserts an intrinsically narrow frame before its first positioning.
 // The real frame mixin must not mistake that initial layout for a user resize.
@@ -33,6 +35,7 @@ class OpeningApplication {
   async close(options) { await this._onClose(options); this.rendered = false; return this; }
 }
 
+export async function checkWorkforcePlannerWindow() {
 const previous = Object.fromEntries(["foundry", "game", "requestAnimationFrame"].map(key => [key, globalThis[key]]));
 const frames = [];
 try {
@@ -136,5 +139,13 @@ try {
   } finally { SkyholdData.updateHolding = originalUpdateHolding; }
   console.log("Workforce window: GM/player frame lifecycle and proposal acceptance before explicit save passed.");
 } finally {
-  Object.assign(globalThis, previous);
+  for (const [key, value] of Object.entries(previous)) {
+    if (value === undefined) delete globalThis[key];
+    else globalThis[key] = value;
+  }
+}
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  await checkWorkforcePlannerWindow();
 }

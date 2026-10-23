@@ -1,6 +1,6 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import { constructionContributionDetail, normalizeConstructionDiceRules } from "../../engines/workers/construction-dice.js";
-import { MILITARY_DAILY_RATES, militaryDailyWage } from "../../engines/economy/military-wages.js";
+import { militaryDailyWage } from "../../engines/economy/military-wages.js";
 import { splitList } from "../../core/helpers.js";
 import { buildingOperationalState } from "../../core/building-state.js";
 import { makeId } from "../../data/utils.js";
@@ -58,11 +58,6 @@ _setPersonFree(holding, personId) {
   person.workAllocationMode = "legacy";
   person.role = this._isChildResident?.(person) ? "Ребенок" : "Свободен";
   if (globalThis.game?.user?.isGM !== false) person.salary = 0;
-},
-
-_squadSalaryCopper(squad = {}) {
-  const type = String(squad?.type ?? "line") === "militia" ? "line" : String(squad?.type ?? "line");
-  return MILITARY_DAILY_RATES[type] ?? MILITARY_DAILY_RATES.line;
 },
 
 _applyDefenseSalaries(holding) {
@@ -506,15 +501,6 @@ _prepareConstructionCrew(holding, crew) {
     suitableLine: splitList(crew?.suitableWorkerTypes).join(", ") || "—",
     names: [leaderPerson ? `${leaderPerson.name} (руководитель)` : "руководитель не назначен", ...prepared.map((person) => `${person.name} (${person.contribution})`)].join(", ")
   };
-},
-
-_isConstructionCrew(person) {
-  const text = `${person?.role ?? ""} ${person?.background ?? ""} ${person?.traitsText ?? person?.traits ?? ""}`.toLowerCase();
-  return /(строй|строит|строитель|бригада|ремонт|плотник|каменщик|мастер|инженер|механик)/i.test(text);
-},
-
-_constructionContribution(person) {
-  return this._constructionContributionDetail(person).dice;
 },
 
 _constructionContributionDetail(person, suitableTypes = [], rules = {}) {

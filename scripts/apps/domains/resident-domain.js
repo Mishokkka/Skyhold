@@ -461,10 +461,6 @@ _preparePeopleTabs(holding) {
   return tabs;
 },
 
-_filterPeopleRows(people) {
-  return people.filter((person) => this._personMatchesResidentFilters(person));
-},
-
 _personMatchesResidentFilters(person) {
   const filters = this.residentFilters ?? {};
   const type = String(filters.type ?? "all");
@@ -836,28 +832,6 @@ _personNote(person) {
   return hiddenBits.join("\n");
 },
 
-_personDetails(person) {
-  const details = [];
-  const push = (label, value) => {
-    const text = String(value ?? "").trim();
-    if (text) details.push({ label, value: text });
-  };
-
-  push("Статус", person?.dead ? "Погиб" : person?.status);
-  if (person?.dead) {
-    push("Дата гибели", person?.deathDate);
-    push("Причина гибели", person?.deathNote);
-  }
-  push("Верование", person?.belief);
-  push("Социальное прошлое", person?.background);
-  push("Культура", person?.culture);
-  push("Характеристики", this._attributeSummary(person));
-  push("Внешность", person?.appearance);
-  push("Actor", person?.actorUuid);
-  push("Заметки", person?.notes);
-  return details;
-},
-
 _isNoHome(value) {
   const text = String(value ?? "").trim().toLowerCase();
   return !text || ["без жилья", "без дома", "нет дома", "нет жилья", "—", "-"].includes(text);
@@ -1164,11 +1138,6 @@ _traitMoraleModifier(person) {
 
 _traitBadges(value) {
   return traitBadges(value);
-},
-
-_hasTrait(person, name) {
-  const needle = String(name ?? "").trim().toLowerCase();
-  return this._parseTraits(person?.traitsText ?? person?.traits).some((trait) => trait.toLowerCase() === needle);
 },
 
 _parseTraits(value) {

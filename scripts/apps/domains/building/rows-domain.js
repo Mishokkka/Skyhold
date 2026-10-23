@@ -36,10 +36,6 @@ _buildingSpecialKind(building = {}) {
   return inferBuildingSpecialKind(building);
 },
 
-_isSpecialBuildingRecord(building = {}) {
-  return Boolean(this._buildingSpecialKind(building));
-},
-
 _isMedicalBuildingRecord(building = {}) {
   return isMedicalBuilding(building);
 },

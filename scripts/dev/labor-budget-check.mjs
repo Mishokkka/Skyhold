@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { MODULE_ID, SETTING_NORMAL_LABOR_QD } from "../data/constants.js";
 import { normalLaborQdPerTenday, residentLaborCapacity } from "../data/labor-budget.js";
 import { registerSettings } from "../data/settings.js";
@@ -13,6 +15,7 @@ import { getSkyholdWorkflowService } from "../workflows/skyhold-workflow-service
 import { mergeHoldingDefaults } from "../data/normalizers.js";
 import { buildPlayerPatch, validatePlayerPatch } from "../data/player-write-guard.js";
 
+export function checkLaborBudget() {
 const priorGame = globalThis.game;
 let configured = 20;
 const registered = new Map();
@@ -120,4 +123,9 @@ try {
 } finally {
   if (priorGame === undefined) delete globalThis.game;
   else globalThis.game = priorGame;
+}
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  checkLaborBudget();
 }

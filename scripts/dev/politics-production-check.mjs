@@ -50,7 +50,7 @@ function dependencies(rolls = []) {
     autoCollectBuilding: noop, assignedBuildingPeople: (holding) => holding.people.list,
     workerBudgetEntry: () => ({ available: 1, spent: 0 }), personBuildingEfficiency: () => 1,
     buildingCompositionStatus: () => ({ met: true }), storageQuantity: (holding, cost) => storage._storageQuantity(holding, cost),
-    tryCollectResourceForConsumer: noop, affordableUnitsForCosts: () => 0, formatNumber: String,
+    tryCollectResourceForConsumer: noop, formatNumber: String,
     appendLedger: (r, rows) => r.ledger.push(...(Array.isArray(rows) ? rows : [rows])),
     random: () => { randomCalls += 1; assert.ok(rolls.length, "unexpected completion roll"); return rolls.shift(); },
     randomCalls: () => randomCalls

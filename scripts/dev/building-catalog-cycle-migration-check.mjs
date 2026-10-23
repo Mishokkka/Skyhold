@@ -96,7 +96,7 @@ async function finishCarriedBatch(holding) {
     pushProductionPlacement: noop, autoCollectBuilding: noop, assignedBuildingPeople: () => [{ id: "worker" }],
     minimumStaffStatus: () => ({ met: true }), workerBudgetEntry: () => ({ available: 1, spent: 0 }),
     personBuildingEfficiency: () => 0.5, buildingCompositionStatus: () => ({ met: true }), storageQuantity: () => 0,
-    tryCollectResourceForConsumer: noop, affordableUnitsForCosts: () => 0, formatNumber: String
+    tryCollectResourceForConsumer: noop, formatNumber: String
   };
   await runProductionCycle({ holding, buildings: [building], qd: 1, dependencies,
     report: { produced: [], consumed: [], skipped: [], formulas: [], work: [] } });

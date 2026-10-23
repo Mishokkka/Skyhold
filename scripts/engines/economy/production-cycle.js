@@ -14,7 +14,7 @@ function productionDependencies(dependencies = {}) {
     "lineContentQuantity", "buildingEffectiveWorkers", "lineOutputForCycle", "parseResourceCosts", "costsForUnits",
     "scaledCosts", "storageCanPay", "storagePay", "normalizeStorageRoomId", "storageAddWithOverflow",
     "pushProductionPlacement", "autoCollectBuilding", "assignedBuildingPeople", "workerBudgetEntry",
-    "personBuildingEfficiency", "buildingCompositionStatus", "storageQuantity", "tryCollectResourceForConsumer", "affordableUnitsForCosts", "formatNumber"
+    "personBuildingEfficiency", "buildingCompositionStatus", "storageQuantity", "tryCollectResourceForConsumer", "formatNumber"
   ];
   for (const name of required) {
     if (typeof dependencies[name] !== "function") throw new TypeError(`FBL Skyhold | Production cycle requires dependency "${name}".`);

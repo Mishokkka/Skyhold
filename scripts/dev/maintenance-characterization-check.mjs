@@ -139,7 +139,6 @@ export async function checkMaintenanceCharacterization() {
         maintenanceEfficiencyFactor: () => 0.5,
         storageQuantity: () => 0,
         tryCollectResourceForConsumer: async () => 0,
-        affordableUnitsForCosts: () => 0,
         formatNumber: String
       }
     });

@@ -534,16 +534,6 @@ async _onDeleteRow(event) {
   }
 },
 
-async _onEditPerson(event) {
-  event.preventDefault();
-  if (!this._canManagePeople()) return;
-
-  const rowId = event.currentTarget?.dataset?.id;
-  if (!rowId) return;
-
-  await this._openResidentEditor(rowId, event.currentTarget);
-},
-
 async _openResidentEditor(personId = "", returnElement = null) {
   if (!this._canManagePeople() || !personId) return null;
   const holdingId = this.activeHoldingId;
