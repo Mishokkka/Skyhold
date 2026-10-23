@@ -10,6 +10,7 @@ const number = (value) => Math.max(0, Number(value) || 0);
 export const FinanceStaffDomain = {
 _recordStaffWorkQd(workerContext, entry, functionId, qd) {
   recordStaffWork(workerContext?.financeContext, entry, functionId, qd);
+  workerContext?.financeContext?.staffCollectionBudgetCache?.delete(entry?.workerId);
 },
 
 _consumeStaffWorkerQd(workerContext, entry, functionId, needed = 1) {
@@ -93,36 +94,57 @@ _canCollectStaffProductionInputs(holding, building, missing, workerContext, cons
       }
     }
     if (pending >= Math.max(0, number(cost.qty) - number(cost.have))) return true;
-    finance.staffCollectionWarnings ??= new Set();
+    if (finance.staffCollectionProbe) return false;
+    const warningAvailable = this._staffDailyCollectionBudget(building, functionId, workerContext, { priorityOffers: true });
+    finance.staffCollectionWarnings ??= new Map();
     for (const { source, line, needed } of blocked) {
+      if (needed <= warningAvailable) continue;
       const key = `input:${building.id}::${functionId}::${source.id}::${line.id}`;
       if (finance.staffCollectionWarnings.has(key)) continue;
-      finance.staffCollectionWarnings.add(key);
-      finance.staffReport?.skipped.push(`${building.name || "Здание"}: сбор сырья у ${source.name || "здания"} требует ${needed} QD за один день, доступно не больше ${available}; не хватает ${needed - available} QD. Проверьте бригаду или сверхурочные; сотрудник может выполнять резервную работу.`);
+      finance.staffCollectionWarnings.set(key, { line, message: `${building.name || "Здание"}: сбор сырья у ${source.name || "здания"} требует ${needed} QD за один день, доступно не больше ${warningAvailable}; не хватает ${needed - warningAvailable} QD. Проверьте бригаду или сверхурочные; сотрудник может выполнять резервную работу.` });
     }
     return false;
   });
 },
 
 /** Unspent funded slots, including today's accrued time; past days cannot fund collection. */
-_staffDailyCollectionBudget(building, functionId, workerContext) {
+_staffDailyCollectionBudget(building, functionId, workerContext, options = {}) {
   const finance = workerContext?.financeContext;
-  if (finance?.staffCollectionProbe) return Infinity;
+  const priorityOffers = options.priorityOffers ?? finance?.staffCollectionProbe === true;
   const firstDay = Math.floor(number(finance?.staffStep) / 4);
   const daily = new Map();
   for (const [workerId, appointment] of finance?.staffAppointmentsByWorkerId ?? []) {
-    if (String(appointment.buildingId) !== String(building.id)
-      || !staffAppointmentWorkFunctions(appointment).includes(functionId)) continue;
+    if (String(appointment.buildingId) !== String(building.id)) continue;
+    let cached = finance.staffCollectionBudgetCache?.get(workerId);
+    if (!cached) {
+      cached = { functions: staffAppointmentWorkFunctions(appointment) };
+      finance.staffCollectionBudgetCache?.set(workerId, cached);
+    }
+    if (!cached.functions.includes(functionId)) continue;
     // A reserve role is not a promise to help: its owner may spend the whole
     // day on a different primary job. Use this step's priority selection.
     const selected = finance.staffCollectionCandidates ? finance.staffCollectionCandidates.get(workerId) : appointment.primaryFunctionId;
-    if (selected !== functionId && finance.staffSelectingWorkerId !== workerId) continue;
-    for (const [step, slot] of finance.plannedWorkSlotsByWorkerId.get(workerId) ?? []) {
-      if (Math.floor(step / 4) < firstDay || slot.functionId !== "staff"
-        || finance.staffReservedStepsByWorkerId.get(workerId)?.has(step)
-        || slot.overtime && !finance.staffOvertimeFunctionsByWorkerId.get(workerId)?.has(functionId)) continue;
-      const day = Math.floor(step / 4);
-      daily.set(day, (daily.get(day) ?? 0) + 1);
+    if (finance.staffSelectingWorkerId !== workerId) {
+      if (priorityOffers) {
+        const functions = cached.functions, priority = functions.indexOf(selected);
+        // A worker offering a fallback may still join a higher-priority task;
+        // a worker with a viable primary never promises a lower reserve job.
+        if (priority >= 0 && functions.indexOf(functionId) > priority) continue;
+      } else if (selected !== functionId) continue;
+    }
+    if (!cached.days) {
+      cached.days = new Map();
+      for (const [step, slot] of finance.plannedWorkSlotsByWorkerId.get(workerId) ?? []) {
+        const day = Math.floor(step / 4);
+        if (day < firstDay || slot.functionId !== "staff" || finance.staffReservedStepsByWorkerId.get(workerId)?.has(step)) continue;
+        const counts = cached.days.get(day) ?? [0, 0];
+        counts[slot.overtime ? 1 : 0] += 1;
+        cached.days.set(day, counts);
+      }
+    }
+    const overtime = finance.staffOvertimeFunctionsByWorkerId.get(workerId)?.has(functionId);
+    for (const [day, [normal, extra]] of cached.days) {
+      daily.set(day, (daily.get(day) ?? 0) + normal + (overtime ? extra : 0));
     }
   }
   return Math.max(0, ...daily.values());
@@ -133,13 +155,18 @@ _staffCanCollectLine(building, line, workerContext) {
   if (!needed) return true;
   const finance = workerContext?.financeContext;
   const functionId = this._financeLineFunctionId(line, (building.productionLines ?? []).indexOf(line));
-  const available = this._staffDailyCollectionBudget(building, functionId, workerContext);
-  if (available >= needed) return true;
-  finance.staffCollectionWarnings ??= new Set();
   const key = `${building.id}::${functionId}`;
+  const available = this._staffDailyCollectionBudget(building, functionId, workerContext);
+  if (available >= needed) {
+    if (!finance.staffCollectionProbe) finance.staffCollectionWarnings?.delete(key);
+    return true;
+  }
+  if (finance.staffCollectionProbe) return false;
+  const warningAvailable = this._staffDailyCollectionBudget(building, functionId, workerContext, { priorityOffers: true });
+  if (warningAvailable >= needed) return false;
+  finance.staffCollectionWarnings ??= new Map();
   if (!finance.staffCollectionWarnings.has(key)) {
-    finance.staffCollectionWarnings.add(key);
-    finance.staffReport?.skipped.push(`${building.name || "Здание"}: сбор требует ${needed} QD за один день, доступно не больше ${available}; не хватает ${needed - available} QD. Нужны дополнительные сборщики или разрешённые сверхурочные; незавершённый сбор между днями не переносится.`);
+    finance.staffCollectionWarnings.set(key, { line, message: `${building.name || "Здание"}: сбор требует ${needed} QD за один день, доступно не больше ${warningAvailable}; не хватает ${needed - warningAvailable} QD. Нужны дополнительные сборщики или разрешённые сверхурочные; незавершённый сбор между днями не переносится.` });
   }
   return false;
 },
@@ -158,6 +185,10 @@ async _staffFunctionNeedsWork(holding, building, functionId, person, workerConte
     return Boolean(line && await lineCanWork(building, line, this._assignedBuildingPeople(holding, building, workerContext, functionId), step));
   }
   if (functionId === "culture" && building.fuelAlternatives?.length) {
+    if (finance.staffCollectionProbe) {
+      const fuel = building.fuelAlternatives.find((row) => String(row.resourceId) === String(building.fuelChoice)) ?? building.fuelAlternatives[0];
+      return this._storageCanPay(holding, [{ resourceId: fuel.resourceId, qty: Math.max(1, Math.ceil(number(fuel.qty))) }]).ok;
+    }
     finance.staffConsumablesStarted ??= new Set();
     const id = String(building.id);
     if (!finance.staffConsumablesStarted.has(id)) {
@@ -179,6 +210,7 @@ async _prepareStaffWorkerStep(holding, budgets, workerContext, step, { lineCanWo
   const ordered = [...finance.staffAppointmentsByWorkerId].sort(([left], [right]) => left.localeCompare(right));
   const select = async (commit) => {
     for (const [workerId, appointment] of ordered) {
+      if (!commit) finance.staffCollectionCandidates.set(workerId, null);
       const person = people.get(workerId);
       const building = workerContext.buildingsByAssignment.get(String(appointment.buildingId));
       if (!person || !building || this._buildingStatus(building).value !== "built") continue;
@@ -195,18 +227,27 @@ async _prepareStaffWorkerStep(holding, budgets, workerContext, step, { lineCanWo
       }
     }
   };
-  finance.staffCollectionCandidates = new Map();
+  finance.staffCollectionCandidates = new Map(ordered.map(([id, appointment]) => [id, appointment.primaryFunctionId]));
+  finance.staffCollectionBudgetCache = new Map();
   try {
-    // First choose priorities without assuming that every reserve worker is
-    // available. Then test collection against that concrete prospective team.
+    // Propagate fallback offers before spending: several workers must be able
+    // to leave an impossible primary collection and form a reserve team.
     finance.staffCollectionProbe = true;
-    await select(false);
+    const seen = new Set();
+    for (let attempt = 0; attempt <= ordered.length * 2; attempt++) {
+      const before = JSON.stringify([...finance.staffCollectionCandidates]);
+      if (seen.has(before)) break;
+      seen.add(before);
+      await select(false);
+      if (before === JSON.stringify([...finance.staffCollectionCandidates])) break;
+    }
     finance.staffCollectionProbe = false;
     await select(true);
   } finally {
     finance.staffCollectionProbe = false;
     delete finance.staffSelectingWorkerId;
     delete finance.staffCollectionCandidates;
+    delete finance.staffCollectionBudgetCache;
   }
 },
 
@@ -234,6 +275,9 @@ _settleStaffPersonnelCashback(holding, report, financeContext) {
 _finishStaffExecution(holding, report, financeContext) {
   if (!financeContext?.staffAppointmentsByWorkerId?.size) return;
   financeContext.staffExecutionComplete = true;
+  for (const { line, message } of financeContext.staffCollectionWarnings?.values() ?? []) {
+    if (line.pendingQty > 0) report.skipped.push(message);
+  }
   for (const [workerId, appointment] of financeContext.staffAppointmentsByWorkerId) {
     const rows = financeContext.staffWorkByWorkerId.get(workerId) ?? [];
     const worked = rows.reduce((sum, row) => sum + row.normalQd + row.overtimeQd, 0);

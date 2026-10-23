@@ -459,9 +459,10 @@ _financePlanInputs(holding, periodQd, identity) {
       const buildingId = String(staffAppointment.buildingId ?? "");
       const building = buildingsByAssignment.get(buildingId)
         ?? (holding?.buildings?.list ?? []).find((row) => String(row.id) === buildingId);
-      const planIssues = [...workAllocationCheck.issues, ...workAdmissionIssues].filter((issue) => (
-        String(issue?.personId ?? "") === workerId || String(issue?.buildingId ?? "") === buildingId
-      ));
+      const planIssues = [...workAllocationCheck.issues, ...workAdmissionIssues].filter((issue) => {
+        const personId = String(issue?.personId ?? issue?.workerId ?? "");
+        return personId ? personId === workerId : String(issue?.buildingId ?? "") === buildingId;
+      });
       if (!building || buildingLaborMode(building) !== "staff") {
         planIssues.push({ code: "staff-building", personId: workerId, message: "Постоянное назначение относится к недоступному штатному зданию." });
       }
@@ -484,10 +485,11 @@ _financePlanInputs(holding, periodQd, identity) {
     }
     if (String(person?.workAllocationMode ?? "") === WORK_ALLOCATION_MODE_EXPLICIT) {
       const validation = workAllocationCheck.plans.get(workerId) ?? { rows: [], issues: [] };
-      const planIssues = [...workAllocationCheck.issues, ...workAdmissionIssues].filter((issue) => (
-        String(issue?.personId ?? "") === workerId
-        || (issue?.buildingId && validation.rows.some((row) => String(row?.sourceId ?? "") === String(issue.buildingId)))
-      ));
+      const planIssues = [...workAllocationCheck.issues, ...workAdmissionIssues].filter((issue) => {
+        const personId = String(issue?.personId ?? issue?.workerId ?? "");
+        return personId ? personId === workerId
+          : issue?.buildingId && validation.rows.some((row) => String(row?.sourceId ?? "") === String(issue.buildingId));
+      });
       const assignments = [];
       for (const allocation of validation.rows) {
         const normalQd = Math.max(0, Math.floor(this._safeNumber(allocation?.normalQd, 0)));

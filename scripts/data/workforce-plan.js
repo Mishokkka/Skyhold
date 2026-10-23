@@ -69,7 +69,7 @@ export function workforceChangeError(before, after, { isGM = false } = {}) {
     if (!prior || same([prior.workAllocationMode, prior.workAllocations, prior.staffAppointment], [person.workAllocationMode, person.workAllocations, person.staffAppointment])) continue;
     if (!visible(prior, isGM)) return "Нельзя менять план скрытого жителя.";
     const oldAppointment = staffAppointmentFor(prior), appointment = staffAppointmentFor(person);
-    if (oldAppointment && !visible(buildings.get(oldAppointment.buildingId), isGM)) return "Назначения жителя содержат скрытую работу; их меняет ГМ.";
+    if (!isGM && oldAppointment && !visible(buildings.get(oldAppointment.buildingId), isGM)) return "Назначения жителя содержат скрытую работу; их меняет ГМ.";
     if (appointment) {
       const building = buildings.get(appointment.buildingId);
       if (!visible(building, isGM)) return "Нельзя назначать в скрытое или отсутствующее здание.";

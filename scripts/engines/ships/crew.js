@@ -147,6 +147,10 @@ function clearResidentSettlementAssignments(holding, residentId, person) {
   }
 
   if (text(person?.workAssignment)) cleared += 1;
+  if (person?.staffAppointment !== undefined) {
+    delete person.staffAppointment;
+    cleared += 1;
+  }
   if (Array.isArray(person?.workAllocations) && person.workAllocations.length) cleared += person.workAllocations.length;
   person.workAssignment = "";
   person.workAllocationMode = "legacy";

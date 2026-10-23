@@ -59,6 +59,8 @@ person.home = "house";
 person.workAssignment = "house";
 person.workAllocationMode = "explicit";
 person.workAllocations = [{ buildingId: "house", normalQd: 2, overtimeQd: 1 }];
+person.staffAppointment = { version: 1, buildingId: "house", primaryFunctionId: "housing", reserveFunctionId: "",
+  wageDailyCopper: 12, overtimeQd: 0, volunteer: false, volunteerReason: "" };
 holding.buildings.list[0].assignedWorkerIds = [person.id];
 holding.buildings.list[0].workerAdmissionOverrideIds = [person.id];
 holding.constructionCrews = [{
@@ -75,7 +77,7 @@ await assert.rejects(execute(returnOperation, { userId: "gm" }), /только �
 ship.location.kind = "home";
 const returnedToShip = await execute(returnOperation, { userId: "player", remote: true });
 assert.equal(returnedToShip.shoreDuty, false);
-assert.equal(returnedToShip.clearedAssignments, 13);
+assert.equal(returnedToShip.clearedAssignments, 14, "The staff contract is one additional assignment cleared by this fixture");
 assert.equal((await execute(returnOperation, { userId: "player", remote: true })).replay, true);
 assert.equal(commits, 2, "return retry never clears or bills twice");
 ({ holding, ship, person } = read());
@@ -84,6 +86,7 @@ assert.equal(person.shipAssignment.shoreDuty, undefined);
 assert.equal(person.shipAssignment.away, false);
 assert.equal(person.home, "");
 assert.equal(person.workAssignment, "");
+assert.equal(person.staffAppointment, undefined, "The authorized return-to-ship operation must release a permanent civilian contract");
 assert.equal(person.workAllocationMode, "legacy");
 assert.deepEqual(person.workAllocations, []);
 assert.deepEqual(holding.buildings.list[0].assignedWorkerIds, [""]);

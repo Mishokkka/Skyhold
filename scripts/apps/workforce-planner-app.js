@@ -447,8 +447,8 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
   }
   async _save(retry) {
     if (!retry) {
-      if (this.unapplied) throw new Error("Есть неприменённые значения. Нажмите «Обновить назначение» или кнопку применения рядом с изменёнными QD и целями.");
       if (!this.dirty || this.stale || this.preview) throw new Error("Сначала завершите проверку черновика.");
+      if (this.unapplied) throw new Error("Есть неприменённые значения. Нажмите «Обновить назначение» или кнопку применения рядом с изменёнными QD и целями.");
       const error = workforceDraftError(this.base, this.draft, this.permissions); if (error) throw new Error(error);
       this.pending = { holdingId: this.holdingId, operationId: makeId("workforce", 20), expectedRevision: this.revision, draft: copy(this.draft) };
     }
