@@ -3,7 +3,9 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import path from "node:path";
 import { preparationRoute } from "./building-preparation-revision-check.mjs";
-import { DEFAULT_BUILDING_TEMPLATES } from "../data/building-templates.js";
+// These fixed economic scenarios characterize worlds before the explicit labor transition.
+// Hybrid staffing and actual tenday execution are covered by the hybrid-labor suite.
+import { BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION as DEFAULT_BUILDING_TEMPLATES } from "../data/building-templates.js";
 import { usesTechnicalMaintenance } from "../data/economy/maintenance.js";
 import { allResourceDefs, parseResourceCosts } from "../core/resources.js";
 import { addResourceBatches, beginResourceBatchPeriod, finishResourceBatchPeriod, takeResourceBatches } from "../core/resource-batches.js";

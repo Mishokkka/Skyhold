@@ -13,6 +13,7 @@ import { registerSkyholdAppClass, getSkyholdAppClass } from "../apps/registry.js
 import { ResidentDomain } from "../apps/domains/resident-domain.js";
 import { BuildingProductionDomain } from "../apps/domains/building/production-domain.js";
 import { FinanceEconomyDomain } from "../apps/domains/finance/economy-domain.js";
+import { FinanceStaffDomain } from "../apps/domains/finance/staff-domain.js";
 import { settlementControlSummary } from "../engines/settlement/control.js";
 import { holdingMarketAccessLevel } from "../engines/market/logistics.js";
 import { buildTendayOperationPayload, hydrateTendayOperation } from "../engines/tenday/operation-payload.js";
@@ -144,7 +145,7 @@ export async function checkPoliticsRegressions() {
   assert.equal(finishPoliticsPeriod(services, stopped).skipped, true);
   let productionEffects = null;
   const noop = () => {};
-  const pipelineOwner = { ...serviceOwner,
+  const pipelineOwner = { ...serviceOwner, ...FinanceStaffDomain,
     _periodLabel: () => "десятник", _advanceMarketShipmentsForQd: noop, _advanceMarketOutboundForQd: noop,
     _prepareFinanceForQd: () => ({ operatingBlockedFunctionKeys: new Set(), blockedWorkerIds: new Set(), periodIdentity: { periodKey: "tenday:1" } }),
     _runMaintenanceForQd: () => ({ ok: true }), _prepareTechnicalServiceRestarts: noop, _economyWorkerContext: () => ({}),

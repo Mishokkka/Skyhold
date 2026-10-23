@@ -32,6 +32,7 @@ export function shipForResident(person = {}, holding = null) {
 }
 
 export function hasResidentSettlementWork(person = {}, holding = null) {
+  if (person.staffAppointment?.buildingId) return true;
   if (text(person.workAssignment) || (person.workAllocations ?? []).some((row) => Number(row.normalQd ?? row.qd) > 0 || Number(row.overtimeQd) > 0)) return true;
   if (!holding) return false;
   const id = text(person.id);

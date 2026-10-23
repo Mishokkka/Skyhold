@@ -8,6 +8,7 @@ import { normalizeInternalDemandTrade } from "../economy/internal-demand.js";
 import { normalizeBuildingMaintenance } from "../economy/maintenance.js";
 import { isPlainObject, makeId, toBoolean, toNumber } from "../utils.js";
 import { normalizeBuildingWorkerProfile, workerAdmission } from "../../engines/workers/building-qualification.js";
+import { buildingLaborMode, normalizeBuildingLabor } from "../hybrid-labor.js";
 
 function normalizeOptions(options = {}) {
   return { ...options, destructive: toBoolean(options.destructive, false) };
@@ -75,6 +76,7 @@ function guessConstructionStatus(status) {
 }
 
 export function normalizeBuilding(building, options = {}) {
+  if (building.labor !== undefined) building.labor = normalizeBuildingLabor(building.labor);
   const normalize = normalizeOptions(options);
   const hadWorkerProfile = isPlainObject(building?.workerProfile);
   building.id = String(building.id || makeId("building"));
@@ -463,6 +465,11 @@ export function normalizeBuilding(building, options = {}) {
     building.workersMax = Math.max(introducedWorkerProfile ? workerProfile.workersMax : building.workersMax, lastOccupiedSlot);
   } else {
     delete building.workerProfile;
+  }
+  if (["staff", "qd", "passive"].includes(buildingLaborMode(building))) {
+    building.workersMin = 0;
+    building.activation.minWorkers = 0;
+    if (building.workerProfile) building.workerProfile.workersMin = 0;
   }
   building.assignedWorkerIds = building.assignedWorkerIds.slice(0, Math.max(0, building.workersMax)).map((id) => String(id ?? ""));
   while (building.assignedWorkerIds.length < building.workersMax) building.assignedWorkerIds.push("");

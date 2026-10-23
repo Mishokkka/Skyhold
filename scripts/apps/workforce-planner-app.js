@@ -8,6 +8,7 @@ import { buildingAppearance } from "../core/building-appearance.js";
 import { getSkyholdWorkflowService } from "../workflows/skyhold-workflow-service.js";
 import { createWorkforceDraft, buildWorkforceModel, workforceCandidate, setWorkforceAllocation, reviseWorkforceAssignment, workforceDraftError, proposeWorkforceAssignments, proposeWorkforceIdleReview } from "./domains/workforce-planner.js";
 import { workforceTaskGroups } from "./domains/workforce-planner-view.js";
+import { setWorkforceStaff, removeWorkforceStaff, staffWorkDescription } from "./domains/workforce-staff.js";
 import { executeWorkforcePlan } from "./workforce-plan-executor.js";
 import { RenderSchedulerMixin } from "./common/render-scheduler.js";
 import { WindowFrameMixin } from "./common/window-frame.js";
@@ -19,7 +20,7 @@ const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const copy = (value) => structuredClone(value);
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const textMatch = (text, query) => String(text).toLocaleLowerCase("ru").includes(query.trim().toLocaleLowerCase("ru"));
-const actions = ["view", "page", "candidate-page", "candidates-all", "task", "person", "person-assign", "person-transfer", "close-rail", "select-all", "clear-selection", "goal", "assign", "all-free", "remove", "lock", "preview-bulk", "suggest", "fill", "idle", "accept-preview", "cancel-preview", "undo", "discard", "save", "retry", "refresh", "resident-card", "tenday"];
+const actions = ["view", "page", "candidate-page", "candidates-all", "task", "person", "person-assign", "person-transfer", "close-rail", "select-all", "clear-selection", "goal", "production-goal", "staff-hire", "staff-save", "staff-remove", "assign", "all-free", "remove", "lock", "preview-bulk", "suggest", "fill", "idle", "accept-preview", "cancel-preview", "undo", "discard", "save", "retry", "refresh", "resident-card", "tenday"];
 
 export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2))) {
   static instances = new Map();
@@ -61,7 +62,8 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
     this.base = copy(holding); this.revision = revision; this.draft = createWorkforceDraft(this.base, this.service);
     this.initial = copy(this.draft); this.history = []; this.preview = null; this.inputValues.clear();
   }
-  get dirty() { return this.draft && !same(this.initial, this.draft); }
+  get unapplied() { return this.inputValues.size > 0; }
+  get dirty() { return this.draft && (this.unapplied || !same(this.initial, this.draft)); }
   _change(callback) {
     if (!this.permissions?.canEditBuildings || this._busy || this.pending) return;
     const next = copy(this.draft); callback(next);
@@ -75,7 +77,7 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
         || this.filter === "idle" && (row.idle || !row.assignable)))
       : model.people.filter((row) => textMatch(row.name, this.query)
         && (this.filter === "all" || this.filter === "free" && row.free > 0 || this.filter === "unavailable" && row.unavailable
-          || this.filter === "assigned" && row.normalQd + row.overtimeQd > 0));
+          || this.filter === "assigned" && (row.isStaff || row.normalQd + row.overtimeQd > 0)));
     if (this.view === "tasks") rows = workforceTaskGroups(model, rows);
     rows = [...rows].sort((a, b) => this.sort === "free" ? (b.free ?? b.remaining ?? 0) - (a.free ?? a.remaining ?? 0) || a.name.localeCompare(b.name, "ru")
       : a.name.localeCompare(b.name, "ru") || String(a.key ?? a.id).localeCompare(String(b.key ?? b.id)));
@@ -83,6 +85,23 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
   }
   _personContext(model, person, canEdit) {
     if (!person) return null;
+    if (person.appointment) {
+      const appointment = person.appointment;
+      const choices = model.tasks.filter((task) => task.buildingId === appointment.buildingId && task.assignable);
+      const value = (kind, fallback) => this.inputValues.get(`staff-${kind}:${person.id}`) ?? fallback;
+      return { ...person, staffEditor: {
+        primaryKey: workforceKey({ sourceId: appointment.buildingId, functionId: appointment.primaryFunctionId }),
+        locked: person.allocations.some((row) => row.locked),
+        primary: choices.map((task) => ({ id: task.functionId, name: task.functionName, selected: task.functionId === value("primary", appointment.primaryFunctionId) })),
+        reserve: choices.map((task) => ({ id: task.functionId, name: task.functionName, selected: task.functionId === value("reserve", appointment.reserveFunctionId) })),
+        noReserve: !value("reserve", appointment.reserveFunctionId),
+        rate: value("rate", appointment.wageDailyCopper), overtime: value("ot", appointment.overtimeQd),
+        volunteer: value("volunteer", appointment.volunteer), reason: value("reason", appointment.volunteerReason),
+        canEdit: canEdit && !person.unavailable, canSetRate: canEdit && this.permissions.isGM,
+        canRemove: canEdit, hasUnknownPrimary: !choices.some((task) => task.functionId === appointment.primaryFunctionId),
+        hasUnknownReserve: appointment.reserveFunctionId && !choices.some((task) => task.functionId === appointment.reserveFunctionId)
+      } };
+    }
     const allocations = person.allocations.map((row) => {
       const task = model.taskMap.get(row.key);
       const reason = task ? workforceCandidate(model, person, task, this.service).reason : "Работа недоступна";
@@ -111,6 +130,7 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
       destinations: choices.map((row) => ({ key: row.key, name: row.functionName, reason: row.reason, selected: row.key === destination?.key })),
       assignmentReason: person.unavailable || destination?.reason || (!destination ? "Нет доступных работ" : ""),
       canAssign: canEdit && !person.unavailable && destination && !destination.reason,
+      staffDestination: destination?.isStaff === true,
       available, availableOt, amount: this.personQd, overtimeAmount: this.personOt,
       overtimeAllowed: destination?.overtimeAllowed, minimum: destination?.requirement };
   }
@@ -161,7 +181,7 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
     const task = model.tasks.find((row) => row.key === this.targetKey);
     const person = model.people.find((row) => row.id === this.personId);
     let candidates = task ? model.people.map((row) => workforceCandidate(model, row, task, this.service)).filter((row) => textMatch(row.name, this.candidateQuery)
-      && (this.candidateFilter === "all" || this.candidateFilter === "free" && row.free > 0 && !row.reason || this.candidateFilter === "selected" && this.selected.has(row.id))) : [];
+      && (this.candidateFilter === "all" || this.candidateFilter === "free" && (row.free > 0 || task.isStaff && row.isStaff && row.appointment.buildingId === task.buildingId) && !row.reason || this.candidateFilter === "selected" && this.selected.has(row.id))) : [];
     // Use the visible sort choice; partial assignments must not silently reorder
     // an alphabetical list or move its edited row to another page.
     candidates.sort((a, b) => (this.sort === "free" ? b.free - a.free : 0)
@@ -191,11 +211,13 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
       candidatePrev: this.candidatePage > 0, candidateNext: this.candidatePage + 1 < candidatePages,
       candidateFilters: [["free", "Свободные и подходящие"], ["all", "Все жители"], ["selected", "Выбранные"]].map(([value, label]) => ({ value, label, selected: value === this.candidateFilter })),
       goalValue: task ? this.inputValues.get(`goal:${task.key}`) ?? task.goal ?? 0 : 0,
+      productionGoalValue: task ? this.inputValues.get(`production-goal:${task.key}`) ?? task.preparedUnits ?? 0 : 0,
       preview: this.preview, canAcceptPreview: canEdit && this.preview && (this.preview.base || this.preview.discard || !same(this.preview.draft, this.draft)), dirty: this.dirty, pending: Boolean(this.pending), busy: this._busy, stale: this.stale,
-      canSave: canEdit && this.dirty && !error && !this.stale && !this.preview,
+      unapplied: this.unapplied, canSave: canEdit && this.dirty && !this.unapplied && !error && !this.stale && !this.preview,
       canUndo: canEdit && this.history.length > 0, error, message: this.message,
       changes: this.draft.edited.filter((id) => visibleIds.has(id)).map((id) => ({ name: model.people.find((row) => row.id === id).name,
-        before: this._allocationText(this.initial.allocations[id], model), after: this._allocationText(this.draft.allocations[id], model) })) };
+        before: staffWorkDescription(this.initial.staffAppointments?.[id], model.taskMap) || this._allocationText(this.initial.allocations[id], model),
+        after: staffWorkDescription(this.draft.staffAppointments?.[id], model.taskMap) || this._allocationText(this.draft.allocations[id], model) })) };
   }
   _allocationText(rows, model) {
     return (rows ?? []).filter((row) => row.normalQd || row.overtimeQd).map((row) => {
@@ -217,8 +239,14 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
       if (!kind) return;
       if (kind === "selected") {
         if (field.checked) this.selected.add(field.dataset.personId); else this.selected.delete(field.dataset.personId);
-      } else if (["qd", "ot", "goal"].includes(kind)) {
-        this.inputValues.set(kind === "goal" ? `goal:${this.targetKey}` : `${kind}:${field.dataset.personId}:${field.dataset.key || this.targetKey}`, Number(field.value));
+      } else if (kind.startsWith("staff-")) {
+        const value = field.type === "checkbox" ? field.checked : field.type === "number" ? Number(field.value) : field.value;
+        this.inputValues.set(`${kind}:${field.dataset.personId}`, value);
+        if (event.type === "change") this.requestRender({ focus: false });
+        return;
+      } else if (["qd", "ot", "goal", "production-goal"].includes(kind)) {
+        this.inputValues.set(["goal", "production-goal"].includes(kind) ? `${kind}:${this.targetKey}` : `${kind}:${field.dataset.personId}:${field.dataset.key || this.targetKey}`, Number(field.value));
+        if (event.type === "change") this.requestRender({ focus: false });
         return;
       } else if (["bulkQd", "personQd", "personOt"].includes(kind)) { this[kind] = Number(field.value); return; }
       else if (["personSource", "personBuildingId", "personTargetKey"].includes(kind)) {
@@ -268,12 +296,40 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
         const { loadResidentEditorClass } = await import("./lazy-apps.js");
         const Editor = await loadResidentEditorClass(); Editor.open({ holdingId: this.holdingId, personId: id });
       } else if (action === "tenday") {
+        if (this.dirty || this.pending) throw new Error("Сначала примените введённые значения и сохраните план. Расчёт десятника использует общий сохранённый план.");
         const { openTendayApp } = await import("./lazy-apps.js"); await openTendayApp({ holdingId: this.holdingId });
       } else if (action === "cancel-preview") this.preview = null;
       else if (action === "retry") await this._save(true);
       else {
         if (!this.permissions.canEditBuildings || this.pending) return;
-        if (action === "goal" && task?.assignable) this._change((draft) => {
+        if (action === "staff-hire" && task?.isStaff) {
+          const person = model.people.find((row) => row.id === id), candidate = workforceCandidate(model, person, task, this.service);
+          if (candidate.reason) throw new Error(candidate.reason);
+          if (!person.isStaff) this._change((draft) => setWorkforceStaff(draft, person.person, task));
+          this.personId = id; this.view = "people"; this.filter = "all"; this.query = "";
+        }
+        else if (action === "staff-remove") this._change((draft) => removeWorkforceStaff(draft, id));
+        else if (action === "staff-save") {
+          const person = model.people.find((row) => row.id === id), appointment = person?.appointment;
+          if (!appointment) throw new Error("Постоянное назначение больше не существует.");
+          const value = (kind, fallback) => this.inputValues.get(`staff-${kind}:${id}`) ?? fallback;
+          const primary = model.tasks.find((row) => row.buildingId === appointment.buildingId && row.functionId === value("primary", appointment.primaryFunctionId));
+          if (!primary) throw new Error("Выберите доступную основную работу.");
+          this._change((draft) => setWorkforceStaff(draft, person.person, primary, {
+            reserveFunctionId: value("reserve", appointment.reserveFunctionId), overtimeQd: value("ot", appointment.overtimeQd),
+            wageDailyCopper: this.permissions.isGM ? value("rate", appointment.wageDailyCopper) : appointment.wageDailyCopper,
+            volunteer: this.permissions.isGM ? value("volunteer", appointment.volunteer) : appointment.volunteer,
+            volunteerReason: this.permissions.isGM ? value("reason", appointment.volunteerReason) : appointment.volunteerReason
+          }));
+        }
+        else if (action === "production-goal" && task?.hasProductionGoal) this._change((draft) => {
+          const value = this.inputValues.get(`production-goal:${task.key}`) ?? task.preparedUnits;
+          if (!Number.isSafeInteger(value) || value < 0 || value > 1000000) throw new Error("Объём подготовки: целое число от 0 до 1000000 ЕД.; 0 — без ограничения.");
+          draft.plan.version = 2;
+          draft.plan.productionGoals = (draft.plan.productionGoals ?? []).filter((row) => workforceKey(row) !== task.key);
+          if (value) draft.plan.productionGoals.push({ sourceId: task.sourceId, functionId: task.functionId, preparedUnits: value });
+        });
+        else if (action === "goal" && task?.assignable) this._change((draft) => {
           const value = this.inputValues.get(`goal:${task.key}`) ?? task.goal;
           if (!Number.isSafeInteger(value) || value < 0 || value > 10000) throw new Error("Цель: целое число от 0 до 10000 QD.");
           draft.plan.goals = draft.plan.goals.filter((row) => workforceKey(row) !== task.key);
@@ -288,6 +344,14 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
             { ...this.planningOptions, personId: id, targetKey: task.key, normalQd: qd, overtimeQd: overtime }));
         });
         else if (action === "person-assign") this._change((draft) => {
+          const destination = model.taskMap.get(this.personTargetKey);
+          if (destination?.isStaff) {
+            const person = model.people.find((row) => row.id === this.personId);
+            const candidate = workforceCandidate(model, person, destination, this.service);
+            if (candidate.reason) throw new Error(candidate.reason);
+            setWorkforceStaff(draft, person.person, destination);
+            return;
+          }
           if (this.personQd + this.personOt <= 0) throw new Error("Укажите объём назначения больше нуля.");
           Object.assign(draft, reviseWorkforceAssignment(this.base, draft, this.service, { ...this.planningOptions,
             personId: this.personId, targetKey: this.personTargetKey, fromKey: this.personSource,
@@ -298,7 +362,9 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
           if (row) setWorkforceAllocation(draft, id, { ...row, key }, 0, 0);
         });
         else if (action === "lock") this._change((draft) => {
-          const row = draft.allocations[id]?.find((entry) => workforceKey(entry) === key); if (!row) return;
+          const appointment = draft.staffAppointments?.[id];
+          const row = draft.allocations[id]?.find((entry) => workforceKey(entry) === key)
+            ?? (appointment ? { sourceId: appointment.buildingId, functionId: appointment.primaryFunctionId } : null); if (!row) return;
           const lock = { personId: id, sourceId: row.sourceId, functionId: row.functionId }, lockId = workforceLockKey(lock);
           if (draft.plan.locks.some((entry) => workforceLockKey(entry) === lockId)) draft.plan.locks = draft.plan.locks.filter((entry) => workforceLockKey(entry) !== lockId);
           else draft.plan.locks.push(lock);
@@ -317,7 +383,7 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
               ...(action === "fill" ? { taskKeys: [task.key], useBuildingMinimum: true } : {}),
               ...(action === "preview-bulk" ? { taskKeys: [task.key], personIds: [...this.selected], qd: this.bulkQd } : {}) });
           const peopleCount = new Set(proposal.changes.map((row) => row.personId)).size;
-          const addedQd = proposal.changes.reduce((sum, row) => sum + Number(row.after) - Number(row.before), 0);
+          const addedQd = proposal.model.normalQd - model.normalQd;
           this.preview = { ...proposal, title: action === "idle" ? "Пересмотр простаивающих назначений" : proposal.changes.length
             ? `Подобрано: ${peopleCount} жителей · ${addedQd} QD` : "Подбор завершён: новых назначений нет",
             description: action === "idle" ? "Предложение освобождает только подтверждённый простой." : action === "preview-bulk" ? "Добавление указанного объёма выбранным жителям в пределах свободных QD."
@@ -325,7 +391,10 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
             wageBefore: model.wage, wageAfter: proposal.model.wage };
         } else if (action === "accept-preview" && this.preview) {
           const preview = this.preview;
-          if (preview.discard) this._reset(this.latest.holding, this.latest.revision);
+          if (preview.discard) {
+            this._reset(this.latest.holding, this.latest.revision);
+            if (preview.closeAfterDiscard) { await this.close({}); return; }
+          }
           else {
             if (preview.base) { this.base = preview.base; this.revision = preview.revision; this.initial = createWorkforceDraft(this.base, this.service); this.history = []; }
             this._change((draft) => Object.assign(draft, copy(preview.draft)));
@@ -339,6 +408,10 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
       if (["assign", "all-free"].includes(action)) {
         this.inputValues.delete(`qd:${id}:${task.key}`); this.inputValues.delete(`ot:${id}:${task.key}`);
       }
+      if (["staff-save", "staff-remove"].includes(action)) {
+        for (const field of ["primary", "reserve", "rate", "ot", "volunteer", "reason"]) this.inputValues.delete(`staff-${field}:${id}`);
+      }
+      if (["goal", "production-goal"].includes(action) && task) this.inputValues.delete(`${action}:${task.key}`);
       if (action === "person-assign" && this.personSource) {
         const source = this.draft.allocations[this.personId]?.find((row) => workforceKey(row) === this.personSource);
         if (source) { this.personQd = Math.min(this.personQd, source.normalQd); this.personOt = Math.min(this.personOt, source.overtimeQd); }
@@ -351,17 +424,21 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
     for (const id of this.draft.edited) {
       const person = this._model.people.find((row) => row.id === id);
       if (!person || !fresh.allocations[id]) throw new Error("Часть изменённых жителей недоступна. Сохраните сведения из черновика и сбросьте его.");
-      draft.allocations[id] = copy(this.draft.allocations[id]); draft.edited.push(id);
-      changes.push({ name: person.name, task: "Актуальные назначения → ваш черновик", before: this._allocationText(fresh.allocations[id], this._model), after: this._allocationText(draft.allocations[id], this._model) });
+      draft.allocations[id] = copy(this.draft.allocations[id]);
+      draft.staffAppointments[id] = copy(this.draft.staffAppointments?.[id] ?? null); draft.edited.push(id);
+      changes.push({ name: person.name, task: "Актуальные назначения → ваш черновик",
+        before: staffWorkDescription(fresh.staffAppointments?.[id], this._model.taskMap) || this._allocationText(fresh.allocations[id], this._model),
+        after: staffWorkDescription(draft.staffAppointments[id], this._model.taskMap) || this._allocationText(draft.allocations[id], this._model) });
     }
-    for (const [kind, keyFor] of [["goals", workforceKey], ["locks", workforceLockKey]]) {
-      const old = new Map(this.initial.plan[kind].map((row) => [keyFor(row), row])), next = new Map(this.draft.plan[kind].map((row) => [keyFor(row), row]));
+    for (const [kind, keyFor] of [["goals", workforceKey], ["locks", workforceLockKey], ["productionGoals", workforceKey]]) {
+      const old = new Map((this.initial.plan[kind] ?? []).map((row) => [keyFor(row), row])), next = new Map((this.draft.plan[kind] ?? []).map((row) => [keyFor(row), row]));
       for (const key of new Set([...old.keys(), ...next.keys()])) {
         if (same(old.get(key), next.get(key))) continue;
-        draft.plan[kind] = draft.plan[kind].filter((row) => keyFor(row) !== key);
+        if (kind === "productionGoals") draft.plan.version = 2;
+        draft.plan[kind] = (draft.plan[kind] ?? []).filter((row) => keyFor(row) !== key);
         if (next.has(key)) draft.plan[kind].push(copy(next.get(key)));
-        changes.push({ name: kind === "goals" ? "Цель QD" : "Закрепление", task: key,
-          before: JSON.stringify(fresh.plan[kind].find((row) => keyFor(row) === key) ?? "нет"), after: JSON.stringify(next.get(key) ?? "нет") });
+        changes.push({ name: kind === "goals" ? "Цель QD" : kind === "productionGoals" ? "Объём подготовки" : "Закрепление", task: key,
+          before: JSON.stringify((fresh.plan[kind] ?? []).find((row) => keyFor(row) === key) ?? "нет"), after: JSON.stringify(next.get(key) ?? "нет") });
       }
     }
     const error = workforceDraftError(holding, draft, this.permissions); if (error) throw new Error(error);
@@ -371,6 +448,7 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
   async _save(retry) {
     if (!retry) {
       if (!this.dirty || this.stale || this.preview) throw new Error("Сначала завершите проверку черновика.");
+      if (this.unapplied) throw new Error("Есть неприменённые значения. Нажмите «Обновить назначение» или кнопку применения рядом с изменёнными QD и целями.");
       const error = workforceDraftError(this.base, this.draft, this.permissions); if (error) throw new Error(error);
       this.pending = { holdingId: this.holdingId, operationId: makeId("workforce", 20), expectedRevision: this.revision, draft: copy(this.draft) };
     }
@@ -389,7 +467,7 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
   async close(options) {
     if (this.pending || this._busy) { globalThis.ui?.notifications?.warn?.("Дождитесь подтверждения сохранения или повторите запрос в этом окне."); return this; }
     if (this.dirty && !this._closingApproved) {
-      this.preview = { title: "Закрыть окно с несохранённым черновиком?", discard: true, skipped: ["Сначала нажмите «Принять» для сброса или «Отмена», чтобы вернуться к редактированию."], changes: [] };
+      this.preview = { title: "Закрыть окно с несохранённым черновиком?", discard: true, closeAfterDiscard: true, skipped: ["«Принять» сбросит черновик и неприменённые значения и закроет окно. «Отмена» вернёт к редактированию."], changes: [] };
       this.requestRender({ focus: false }); return this;
     }
     this.listeners?.abort(); clearTimeout(this.searchTimer); this.disclosures.close(); this._unbindWindowFrameSync();

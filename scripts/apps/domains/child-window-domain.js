@@ -104,5 +104,15 @@ async _onOpenBuildingCatalogMigration(event) {
   await ensureSkyholdStylesheet("secondary");
   const { SkyholdBuildingCatalogMigration } = await import("../editors/building-catalog-migration.js");
   new SkyholdBuildingCatalogMigration({ owner: this }).render({ force: true, focus: true });
+},
+
+async _onOpenHybridLaborMigration(event) {
+  stopEvent(event);
+  if (!game.user?.isGM) return;
+  const holdingId = activeHoldingId(this);
+  if (!holdingId) return;
+  await ensureSkyholdStylesheet("secondary");
+  const { SkyholdHybridLaborMigration } = await import("../editors/hybrid-labor-migration.js");
+  new SkyholdHybridLaborMigration({ holdingId, owner: this }).render({ force: true, focus: true });
 }
 };

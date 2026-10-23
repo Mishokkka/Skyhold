@@ -5,6 +5,7 @@ import { isResidentPresent } from "../../data/resident-presence.js";
 import { residentLaborCapacity } from "../../data/labor-budget.js";
 import { financeBuildingFunctionBlockState, financeWorkerBlockState } from "./finance-obligations.js";
 import { buildingCompositionStatus } from "../workers/building-qualification.js";
+import { buildingLaborMode, staffAppointmentWorkFunctions } from "../../data/hybrid-labor.js";
 
 function text(value = "") {
   return String(value ?? "").trim();
@@ -43,6 +44,8 @@ function currentAssignmentMatches(person = {}, building = {}, functionId = "") {
   const buildingId = text(building?.id);
   const workerId = text(person?.id);
   if (!buildingId || !workerId) return false;
+  if (person.staffAppointment) return text(person.staffAppointment.buildingId) === buildingId
+    && staffAppointmentWorkFunctions(person).some((id) => functionMatches(id, functionId));
   if (text(person?.workAllocationMode) === WORK_ALLOCATION_MODE_EXPLICIT) {
     return (person?.workAllocations ?? []).some((allocation) => (
       text(allocation?.sourceId) === buildingId
@@ -68,7 +71,7 @@ function traceFunctionQd(serviceState = {}, functionId = "") {
   if (!functionId) {
     const hasLines = entries.some(([id]) => id.startsWith("production:"));
     const unique = entries.filter(([id]) => id !== "maintenance" && !(hasLines && id === "production"));
-    return unique.length ? unique.reduce((sum, [, qd]) => sum + whole(qd), 0) : whole(serviceState.workedQd);
+    return entries.length ? unique.reduce((sum, [, qd]) => sum + whole(qd), 0) : whole(serviceState.workedQd);
   }
   const exact = entries.find(([recordedFunction]) => text(recordedFunction) === text(functionId));
   if (exact) return whole(exact[1]);
@@ -94,6 +97,8 @@ function traceFunctionWorkerIds(serviceState = {}, functionId = "") {
 
 export function buildingServiceFunctionId(building = {}) {
   const functions = building?.functions ?? {};
+  if (buildingLaborMode(building) !== "legacy" && functions.culture === true
+    && ["inn", "tavern"].includes(text(building.templateId || building.id))) return "culture";
   if (building?.activation?.anyWorkingFunction === true) return "";
   if (building?.activation?.requiresMeaningfulResult === true && functions.production === true) return "production";
   if (functions.culture === true) return "culture";
@@ -101,10 +106,22 @@ export function buildingServiceFunctionId(building = {}) {
   if (functions.defense === true) return "defense";
   if (functions.production === true) return "production";
   if (functions.storage === true) return "storage";
+  if (functions.housing === true) return "housing";
   return "culture";
 }
 
+/** Housing remains usable without a caretaker; only the funded service improves comfort. */
+export function buildingHousingComfort(holding = {}, building = {}) {
+  const base = Number(building.housing?.comfort) || 0;
+  const staffed = building.housing?.staffedComfort;
+  if (!["staff", "qd"].includes(buildingLaborMode(building)) || !Number.isFinite(staffed)) return base;
+  const status = buildingConfirmedSocialStatus(holding, building, "housing");
+  return status.active && status.laborFactor >= 1 ? staffed : base;
+}
+
 function workerAllocatedToFunction(person = {}, buildingId = "", functionId = "") {
+  if (person.staffAppointment) return text(person.staffAppointment.buildingId) === buildingId
+    && functionMatches(person.staffAppointment.primaryFunctionId, functionId);
   if (text(person?.workAllocationMode) !== WORK_ALLOCATION_MODE_EXPLICIT) return true;
   return (person?.workAllocations ?? []).some((allocation) => (
     text(allocation?.sourceId) === buildingId
@@ -115,6 +132,9 @@ function workerAllocatedToFunction(person = {}, buildingId = "", functionId = ""
 }
 
 function workerAllocatedQd(person = {}, buildingId = "", functionId = "") {
+  if (person.staffAppointment) return text(person.staffAppointment.buildingId) === buildingId
+    && functionMatches(person.staffAppointment.primaryFunctionId, functionId)
+    ? residentLaborCapacity(person).normalQd + whole(person.staffAppointment.overtimeQd) : 0;
   if (text(person?.workAllocationMode) !== WORK_ALLOCATION_MODE_EXPLICIT) return residentLaborCapacity(person).normalQd;
   return (person?.workAllocations ?? []).reduce((sum, allocation) => {
     if (text(allocation?.sourceId) !== buildingId) return sum;
@@ -158,6 +178,7 @@ function dependencyState(holding = {}, building = {}, visited = new Set(), funct
 }
 
 function hasActiveServiceContract(building = {}) {
+  if (buildingLaborMode(building) === "passive") return false;
   const activation = building?.activation ?? {};
   return Boolean(
     building?.service
@@ -181,31 +202,40 @@ export function buildingActiveWorkerSummary(holding = {}, building = {}, functio
   const candidateIds = recorded ?? new Set((building?.assignedWorkerIds ?? []).map((workerId) => text(workerId)).filter(Boolean));
   if (!recorded) {
     for (const person of people.values()) {
-      if (text(person?.workAllocationMode) !== WORK_ALLOCATION_MODE_EXPLICIT) continue;
+      if (!person.staffAppointment && text(person?.workAllocationMode) !== WORK_ALLOCATION_MODE_EXPLICIT) continue;
       if (workerAllocatedToFunction(person, buildingId, functionId)) candidateIds.add(text(person?.id));
     }
   }
   const workers = [];
-  let qd = 0;
+  let qd = 0, equivalentWorkers = 0;
   for (const id of candidateIds) {
     const person = people.get(id);
-    if (!id || !person || person.dead || whole(person?.injuredDays) > 0) continue;
+    if (!id || !person || person.dead || !isResidentPresent(person) || whole(person?.injuredDays) > 0) continue;
     if (financeWorkerBlockState({ finance: holding?.finance, workerId: id }).blocked) continue;
     if (!recorded && !workerAllocatedToFunction(person, buildingId, functionId)) continue;
     const workerQd = recorded ? 0 : workerAllocatedQd(person, buildingId, functionId);
     if (workerQd <= 0) continue;
     workers.push(person);
     qd += workerQd;
+    equivalentWorkers += Math.min(1, workerQd / 20);
   }
   if (recorded) {
     const activeWorkers = [...candidateIds]
       .map((id) => people.get(id))
-      .filter((person) => person && !person.dead && whole(person?.injuredDays) <= 0)
-      .filter((person) => !financeWorkerBlockState({ finance: holding?.finance, workerId: text(person?.id) }).blocked);
+      .filter((person) => person && !person.dead && isResidentPresent(person) && whole(person?.injuredDays) <= 0)
+      .filter((person) => !financeWorkerBlockState({ finance: holding?.finance, workerId: text(person?.id) }).blocked)
+      .filter((person) => buildingLaborMode(building) === "legacy" || currentAssignmentMatches(person, building, functionId));
     const recordedQd = functionId ? traceFunctionQd(building?.serviceState, functionId) : whole(building?.serviceState?.workedQd);
-    return { workers: activeWorkers, count: activeWorkers.length, qd: recordedQd };
+    const workerQd = building.serviceState?.workedQdByWorkerAndFunction;
+    const equivalent = workerQd ? activeWorkers.reduce((sum, person) => sum + Math.min(1,
+      traceFunctionQd({ workedQdByFunction: workerQd[text(person.id)] }, functionId) / 20), 0)
+      : Math.min(activeWorkers.length, recordedQd / 20);
+    const eligibleQd = workerQd ? activeWorkers.reduce((sum, person) => sum
+      + traceFunctionQd({ workedQdByFunction: workerQd[text(person.id)] }, functionId), 0)
+      : activeWorkers.length === candidateIds.size ? recordedQd : 0;
+    return { workers: activeWorkers, count: activeWorkers.length, qd: eligibleQd, equivalentWorkers: equivalent };
   }
-  return { workers, count: workers.length, qd };
+  return { workers, count: workers.length, qd, equivalentWorkers };
 }
 
 /**
@@ -218,6 +248,8 @@ export function buildingActiveWorkerSummary(holding = {}, building = {}, functio
 export function buildingConfirmedSocialStatus(holding = {}, building = {}, functionIdArg = "", options = {}) {
   const functionId = text(functionIdArg) || buildingServiceFunctionId(building);
   const base = buildingServiceBlockReasons(holding, building, functionId);
+  const laborMode = buildingLaborMode(building);
+  if (laborMode === "passive") return { ...base, periodKey: text(building?.serviceState?.periodKey) };
   const reasons = base.reasons.filter((reason) => !["workers-missing", "qd-missing", "result-missing", "service-stopped", "composition-missing"].includes(reason.code));
   const state = building?.serviceState ?? {};
   const completedIndex = completedTendayIndex(holding);
@@ -238,10 +270,12 @@ export function buildingConfirmedSocialStatus(holding = {}, building = {}, funct
     ? workers.reduce((sum, person) => sum + traceFunctionQd({ workedQdByFunction: workerQd[text(person.id)] }, functionId), 0)
     : workers.length === recordedIds.length ? traceFunctionQd(state, functionId) : 0;
   const leisure = options?.leisure === true ? building?.service?.leisure : null;
-  const minWorkers = Math.max(1, whole(building?.workersMin), whole(leisure?.minWorkers ?? building?.activation?.minWorkers));
+  const minWorkers = laborMode === "legacy" ? Math.max(1, whole(building?.workersMin), whole(leisure?.minWorkers ?? building?.activation?.minWorkers)) : 0;
   const minOperationalQd = whole(building?.activation?.minOperationalQd ?? building?.minOperationalQd);
   if (workers.length < minWorkers) reasons.push({ code: "workers-missing", text: `нужно работников: ${minWorkers}, подтверждено: ${workers.length}` });
-  if (qd < minOperationalQd || qd <= 0) reasons.push({ code: "qd-missing", text: `нужно фактических QD: ${Math.max(1, minOperationalQd)}, подтверждено: ${qd}` });
+  if (qd <= 0 || laborMode === "legacy" && qd < minOperationalQd) {
+    reasons.push({ code: "qd-missing", text: `нужно фактических QD: ${Math.max(1, minOperationalQd)}, подтверждено: ${qd}` });
+  }
   if (workers.length > 0 && !buildingCompositionStatus(building, workers, { excludeGroups: ["ЧУДОТВОРЕЦ"] }).met) {
     reasons.push({ code: "composition-missing", text: "не выполнено обязательное условие состава работников" });
   }
@@ -258,8 +292,11 @@ export function buildingConfirmedSocialStatus(holding = {}, building = {}, funct
     active: uniqueReasons.length === 0,
     reasons: uniqueReasons,
     functionId,
-    workforce: { workers, count: workers.length, qd },
+    workforce: { workers, count: workers.length, qd, equivalentWorkers: workerQd
+      ? workers.reduce((sum, person) => sum + Math.min(1, traceFunctionQd({ workedQdByFunction: workerQd[text(person.id)] }, functionId) / 20), 0)
+      : Math.min(workers.length, qd / 20) },
     maintenanceFactor: base.maintenanceFactor,
+    laborFactor: laborMode === "legacy" || minOperationalQd <= 0 ? 1 : Math.min(1, qd / minOperationalQd),
     periodKey: text(state?.periodKey)
   };
 }
@@ -300,23 +337,30 @@ export function buildingServiceBlockReasons(holding = {}, building = {}, functio
       : `не работают зависимости: ${dependencies.missing.join(", ")}`
   });
   const activation = building?.activation ?? {};
-  const anyFunction = activation.requiresMeaningfulResult === true;
+  const anyFunction = activation.requiresMeaningfulResult === true && (!functionId || functionId === "production");
   const workforce = buildingActiveWorkerSummary(holding, building, anyFunction ? "" : functionId);
-  const minWorkers = Math.max(whole(building?.workersMin), whole(activation.minWorkers));
+  const laborMode = buildingLaborMode(building);
+  const minWorkers = laborMode === "legacy" ? Math.max(whole(building?.workersMin), whole(activation.minWorkers)) : 0;
   if (workforce.count < minWorkers) reasons.push({ code: "workers-missing", text: `нужно работников: ${minWorkers}, действует: ${workforce.count}` });
-  const minOperationalQd = whole(activation.minOperationalQd ?? building?.minOperationalQd);
-  if (workforce.qd < minOperationalQd) reasons.push({ code: "qd-missing", text: `нужно QD: ${minOperationalQd}, выделено: ${workforce.qd}` });
-  if (activation.requiresMeaningfulResult === true && building?.serviceState?.meaningfulResult !== true) {
+  const minOperationalQd = laborMode === "passive" ? 0 : Math.max(
+    laborMode !== "legacy" && activeServiceContract ? 1 : 0, whole(activation.minOperationalQd ?? building?.minOperationalQd));
+  if (workforce.qd < (laborMode === "legacy" ? minOperationalQd : Math.min(1, minOperationalQd))) {
+    reasons.push({ code: "qd-missing", text: `нужно QD: ${minOperationalQd}, выделено: ${workforce.qd}` });
+  }
+  if (laborMode !== "passive" && activation.requiresMeaningfulResult === true
+    && (laborMode === "legacy" || anyFunction) && building?.serviceState?.meaningfulResult !== true) {
     reasons.push({ code: "result-missing", text: "за период нет содержательного результата функции" });
   }
-  if (workforce.count > 0 && !buildingCompositionStatus(building, workforce.workers, { excludeGroups: ["ЧУДОТВОРЕЦ"] }).met) {
+  if (laborMode !== "passive" && workforce.count > 0 && !buildingCompositionStatus(building, workforce.workers, { excludeGroups: ["ЧУДОТВОРЕЦ"] }).met) {
     reasons.push({ code: "composition-missing", text: "не выполнено обязательное условие состава работников" });
   }
   const maintenanceFactor = activeServiceContract
     ? Math.max(0, Math.min(1, maintenanceEfficiencyFactor(building?.maintenance)))
     : 1;
   if (maintenanceFactor <= 0) reasons.push({ code: "maintenance-stopped", text: "обслуживание полностью остановило функцию" });
-  return { reasons, workforce, functionId, maintenanceFactor, active: reasons.length === 0 };
+  const laborFactor = laborMode === "legacy" || laborMode === "passive" || minOperationalQd <= 0
+    ? 1 : Math.min(1, workforce.qd / minOperationalQd);
+  return { reasons, workforce, functionId, maintenanceFactor, laborFactor, active: reasons.length === 0 };
 }
 
 /**
@@ -326,27 +370,30 @@ export function buildingServiceBlockReasons(holding = {}, building = {}, functio
  */
 export function buildingServiceEffectFactor(holding = {}, building = {}, functionIdArg = "") {
   const status = buildingServiceBlockReasons(holding, building, functionIdArg);
-  return status.active ? status.maintenanceFactor : 0;
+  return status.active ? status.maintenanceFactor * status.laborFactor : 0;
 }
 
 export function buildingServiceCapacity(holding = {}, building = {}, functionIdArg = "") {
   const service = building?.service;
-  const serviceFactor = buildingServiceEffectFactor(holding, building, functionIdArg);
-  if (!service || serviceFactor <= 0) return 0;
+  const status = buildingServiceBlockReasons(holding, building, functionIdArg);
+  if (!service || !status.active) return 0;
   const functionId = text(functionIdArg) || buildingServiceFunctionId(building);
   const workforce = buildingActiveWorkerSummary(holding, building, functionId);
-  return serviceCapacityForWorkforce(service, building, workforce, serviceFactor);
+  return serviceCapacityForWorkforce(service, building, workforce, status.maintenanceFactor, status.laborFactor);
 }
 
-function serviceCapacityForWorkforce(service = {}, building = {}, workforce = {}, serviceFactor = 1) {
-  let capacity = whole(service.capacity);
+function serviceCapacityForWorkforce(service = {}, building = {}, workforce = {}, serviceFactor = 1, laborFactor = 1) {
+  const legacy = buildingLaborMode(building) === "legacy";
+  const workers = legacy ? workforce.count : Number(workforce.equivalentWorkers ?? 0);
+  let capacity = whole(service.capacity) * laborFactor;
   if (whole(service.capacityBase) || whole(service.capacityPerWorker)) {
-    capacity = whole(service.capacityBase) + workforce.count * whole(service.capacityPerWorker);
+    capacity = whole(service.capacityBase) * laborFactor + workers * whole(service.capacityPerWorker);
   }
   if (whole(service.capacityPerWorkerStep)) {
-    const minWorkers = whole(building?.activation?.minWorkers);
-    const extraWorkers = Math.max(0, workforce.count - minWorkers);
-    capacity = whole(service.capacityBase) + Math.floor(extraWorkers / Math.max(1, whole(service.workerStep, 1))) * whole(service.capacityPerWorkerStep);
+    const minWorkers = legacy ? whole(building?.activation?.minWorkers)
+      : whole(building?.activation?.minOperationalQd ?? building?.minOperationalQd) / 20;
+    const extraWorkers = Math.max(0, workers - minWorkers);
+    capacity = whole(service.capacityBase) * laborFactor + Math.floor(extraWorkers / Math.max(1, whole(service.workerStep, 1))) * whole(service.capacityPerWorkerStep);
   }
   const maximum = whole(service.maximumCapacity);
   if (maximum > 0) capacity = Math.min(capacity, maximum);
@@ -361,7 +408,7 @@ export function buildingConfirmedServiceCapacity(holding = {}, building = {}, fu
   if (!service) return 0;
   const status = buildingConfirmedSocialStatus(holding, building, functionIdArg);
   if (!status.active) return 0;
-  return serviceCapacityForWorkforce(service, building, status.workforce, status.maintenanceFactor);
+  return serviceCapacityForWorkforce(service, building, status.workforce, status.maintenanceFactor, status.laborFactor ?? 1);
 }
 
 export function buildingConfirmedLeisureCapacity(holding = {}, building = {}) {
@@ -390,16 +437,16 @@ export function buildingWonderworkingActive(holding = {}, building = {}) {
   const functionId = buildingServiceFunctionId(building);
   if (buildingServiceEffectFactor(holding, building, functionId) <= 0) return false;
   const buildingId = text(building?.id);
-  const candidateIds = new Set((building?.assignedWorkerIds ?? []).map((id) => text(id)).filter(Boolean));
+  const candidateIds = new Set(buildingActiveWorkerSummary(holding, building, functionId).workers.map((person) => text(person.id)));
   for (const person of people.values()) {
     if (text(person?.workAllocationMode) === WORK_ALLOCATION_MODE_EXPLICIT
       && workerAllocatedToFunction(person, buildingId, functionId)) candidateIds.add(text(person?.id));
   }
   const assigned = [...candidateIds]
     .map((id) => people.get(id))
-    .filter((person) => person && !person.dead && whole(person?.injuredDays) <= 0)
+    .filter((person) => person && !person.dead && isResidentPresent(person) && whole(person?.injuredDays) <= 0)
     .filter((person) => !financeWorkerBlockState({ finance: holding?.finance, workerId: text(person?.id) }).blocked)
-    .filter((person) => workerAllocatedToFunction(person, buildingId, functionId));
+    .filter((person) => currentAssignmentMatches(person, building, functionId));
   return buildingCompositionStatus(building, assigned).met;
 }
 

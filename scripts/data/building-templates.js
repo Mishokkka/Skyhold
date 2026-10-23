@@ -3,6 +3,7 @@ import { applyEconomicTemplateCalibration } from "./building-template-economy-ca
 import { APPROVED_BUILDING_TEMPLATE_MANIFEST } from "./building-template-manifest.js";
 import { APPROVED_BUILDING_TEMPLATE_IDS } from "./building-template-ids.js";
 import { applyApprovedBuildingWorkerProfile } from "../engines/workers/building-qualification.js";
+import { applyApprovedBuildingLaborProfile } from "./building-labor-catalog.js";
 
 export const TEMPLATE_CATALOG_VERSION = 19;
 export const DEPRECATED_TEMPLATE_IDS = new Set(["campfire","hut","storehouse","field","garden","lumberyard","mine","smithy","bakery","tavern","market","watchtower","shrine","fireplace"]);
@@ -33,7 +34,12 @@ const TEMPLATE_ROWS = [
   .map((template) => ({ ...template, templateVersion: TEMPLATE_CATALOG_VERSION }));
 const TEMPLATE_BY_ID = new Map(TEMPLATE_ROWS.map((template) => [String(template.id), template]));
 
-export const DEFAULT_BUILDING_TEMPLATES = TEMPLATE_ORDER
+// The catalog/recipe migration is independent of the explicit employment transition.
+// Both views use the same current source rows; there is no second historical catalog.
+export const BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION = TEMPLATE_ORDER
   .map((id) => TEMPLATE_BY_ID.get(id))
   .filter(Boolean)
   .map((template) => ({ ...template }));
+
+export const DEFAULT_BUILDING_TEMPLATES = BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION
+  .map(applyApprovedBuildingLaborProfile);

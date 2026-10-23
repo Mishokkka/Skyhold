@@ -5,6 +5,7 @@ import { createProductionTiming, productionTiming, productionTimingText, validPr
 import { makeId } from "../../data/utils.js";
 import { productionCapacity, productionBatchStates, productionOccupiedQty, waitingProductionBatches,
   productionBatchCosts, affordableProductionBatch, enqueueProductionBatch, stopProductionAfterDrain } from "./production-capacity.js";
+import { createProductionGoalTracker } from "./production-goals.js";
 
 function productionDependencies(dependencies = {}) {
   const required = [
@@ -13,7 +14,7 @@ function productionDependencies(dependencies = {}) {
     "lineContentQuantity", "buildingEffectiveWorkers", "lineOutputForCycle", "parseResourceCosts", "costsForUnits",
     "scaledCosts", "storageCanPay", "storagePay", "normalizeStorageRoomId", "storageAddWithOverflow",
     "pushProductionPlacement", "autoCollectBuilding", "assignedBuildingPeople", "workerBudgetEntry",
-    "personBuildingEfficiency", "buildingCompositionStatus", "storageQuantity", "tryCollectResourceForConsumer", "affordableUnitsForCosts", "formatNumber"
+    "personBuildingEfficiency", "buildingCompositionStatus", "storageQuantity", "tryCollectResourceForConsumer", "formatNumber"
   ];
   for (const name of required) {
     if (typeof dependencies[name] !== "function") throw new TypeError(`FBL Skyhold | Production cycle requires dependency "${name}".`);
@@ -41,6 +42,8 @@ export async function runProductionCycle({
   const deps = productionDependencies(dependencies);
   const periodQd = whole(deps.safeNumber(qd, 0));
   const compositionSkipped = new Set();
+  const preparation = createProductionGoalTracker(deps.linePreparationGoal);
+  const staffOutputQuotes = new Map();
   const workerLineSummaries = new Map();
   const releasedCapacityThisStep = new Map();
   const workerLineSummary = (building, line, resourceName, workTargetUnits) => {
@@ -124,9 +127,15 @@ export async function runProductionCycle({
     const free = capacity ? Math.max(0, capacity - productionOccupiedQty(line) - (releasedCapacityThisStep.get(line) ?? 0)) : Infinity;
     const minimum = Math.max(1, whole(line.batchStartQty, 1));
     if (capacity && free < minimum) return { ok: false, reason: "" };
+    const remainingGoal = preparation.remaining(building, line);
+    if (remainingGoal === 0) return { ok: false, reason: "" };
+    const formula = String(line.formula ?? "").trim();
+    if (remainingGoal !== null && formula && !/^\d+$/.test(formula)) {
+      return { ok: false, reason: `${resourceName}: количественная цель недоступна для случайного или вычисляемого выпуска.` };
+    }
     const timed = line.source === "time";
     const workerSummary = timed ? deps.buildingEffectiveWorkers(holding, building, workerContext) : null;
-    const output = await deps.lineOutputForCycle(line, {
+    const output = staffOutputQuotes.get(line) ?? await deps.lineOutputForCycle(line, {
       eff: workerSummary?.total ?? 1,
       workers: workerSummary?.assigned ?? assignedPeople.length,
       cycles: 1,
@@ -137,6 +146,12 @@ export async function runProductionCycle({
     const fullOutputQty = whole(output.qty * maintenanceFactor);
     if (!fullOutputQty) return { ok: false, reason: `${resourceName}: рецепт не даёт целого выхода.` };
     let outputQty = capacity ? Math.min(fullOutputQty, free) : fullOutputQty;
+    if (remainingGoal !== null) {
+      if (!capacity && outputQty > remainingGoal) {
+        return { ok: false, reason: `${resourceName}: остаток цели ${remainingGoal} ЕД. меньше неделимой партии ${outputQty} ЕД.` };
+      }
+      outputQty = Math.min(outputQty, remainingGoal);
+    }
     if (capacity && outputQty < minimum) return { ok: false, reason: `${resourceName}: максимальная партия меньше порога запуска ${minimum} ЕД.` };
     const costsPer = deps.parseResourceCosts(line.expenses);
     const fixedCosts = String(line.fixedExpenses ?? "").trim() ? deps.parseResourceCosts(line.fixedExpenses) : [];
@@ -145,13 +160,13 @@ export async function runProductionCycle({
     if (costs.some((cost) => Array.isArray(cost.alternatives))) {
       for (const candidate of costs.flatMap((cost) => cost.alternatives ?? [cost])) {
         if (deps.storageCanPay(holding, costs).ok) break;
-        await deps.tryCollectResourceForConsumer(holding, building, candidate.resourceId, budgets, report, workerContext);
+        await deps.tryCollectResourceForConsumer(holding, building, candidate.resourceId, budgets, report, workerContext, line);
       }
     }
     for (const cost of costs) {
       if (Array.isArray(cost.alternatives)) continue;
       if (deps.storageQuantity(holding, cost) < cost.qty) {
-        await deps.tryCollectResourceForConsumer(holding, building, cost.resourceId, budgets, report, workerContext);
+        await deps.tryCollectResourceForConsumer(holding, building, cost.resourceId, budgets, report, workerContext, line);
       }
     }
     if (capacity) {
@@ -175,6 +190,7 @@ export async function runProductionCycle({
       appendCosts(building, paid);
     }
     line.workInputsReserved = true;
+    staffOutputQuotes.delete(line);
     line.workReservedOutputQty = outputQty;
     line.workReservedFormula = String(output.formula ?? "");
     // Keep batch timing and the original output beside its funded-input receipt.
@@ -187,6 +203,7 @@ export async function runProductionCycle({
     const timing = line.workReservedInputs.timing;
     timing.parallel = capacity > 0;
     timing.workTargetUnits = Math.max(1, Math.ceil(timing.workTargetUnits * outputQty / fullOutputQty));
+    if (timed) preparation.complete(line, outputQty);
     if (output.formula) report.formulas.push(`${building.name || "Здание"} / ${resourceName}: ${output.formula}`);
     return { ok: true };
   };
@@ -199,6 +216,44 @@ export async function runProductionCycle({
     const receipt = batch.workReservedInputs ?? null;
     clearProductionBatch(batch);
     if (total) completeOutput(building, line, resourceId, resourceName, total, receipt);
+  };
+
+  const staffLineCanWork = async (building, line, assignedPeople, step) => {
+    if (!line || deps.lineFinanceAllowed?.(building, line) === false
+      || deps.buildingTechnicalReady?.(building, step) === false
+      || !deps.lineSeasonAllowed(line, deps.getSeasonSnapshot(holding, step) ?? null)) return false;
+    if (line.requiresCollection && whole(line.pendingQty) > 0) return deps.staffCanCollectLine?.(building, line, workerContext) ?? true;
+    if (line.active === false) return false;
+    const timing = productionTiming(line);
+    if (timing?.phase === "work") return true;
+    if (timing?.phase === "waiting" || line.source === "time" || line.source === "content") return false;
+    const goalRemaining = preparation.remaining(building, line);
+    const formula = String(line.formula ?? "").trim();
+    if (goalRemaining === 0 || goalRemaining !== null && formula && !/^\d+$/.test(formula)) return false;
+    const capacity = productionCapacity(line);
+    if (waitingProductionBatches(line).length && (!capacity || line.repeat === false)) return false;
+    const free = capacity ? Math.max(0, capacity - productionOccupiedQty(line) - (releasedCapacityThisStep.get(line) ?? 0)) : Infinity;
+    const minimum = Math.max(1, whole(line.batchStartQty, 1));
+    if (capacity && free < minimum) return false;
+    let output = staffOutputQuotes.get(line);
+    if (!output) {
+      output = await deps.lineOutputForCycle(line, {
+        eff: 1, workers: assignedPeople.length, cycles: 1, qd: 1,
+        workqd: Math.max(1, whole(line.workQd ?? line.workerQD ?? line.cycleQd ?? line.cycleQD, 1))
+      });
+      staffOutputQuotes.set(line, output);
+    }
+    const fullQty = whole(output.qty);
+    if (!fullQty || !capacity && goalRemaining !== null && fullQty > goalRemaining) return false;
+    const limit = Math.min(fullQty, free, goalRemaining ?? Infinity);
+    if (capacity && limit < minimum) return false;
+    const variable = deps.parseResourceCosts(line.expenses);
+    const fixed = String(line.fixedExpenses ?? "").trim() ? deps.parseResourceCosts(line.fixedExpenses) : [];
+    const costsFor = (qty) => productionBatchCosts(line, variable, fixed, qty, fullQty);
+    if (capacity && affordableProductionBatch(limit, costsFor, (costs) => deps.storageCanPay(holding, costs)) >= minimum) return true;
+    const costs = costsFor(capacity ? minimum : limit);
+    const payment = deps.storageCanPay(holding, costs);
+    return payment.ok || deps.canCollectProductionInputs?.(holding, building, payment.missing ?? [], workerContext, line) === true;
   };
 
   for (let step = 0; step < periodQd; step += 1) {
@@ -330,6 +385,7 @@ export async function runProductionCycle({
       }
     }
 
+    await deps.prepareStaffWorkerStep?.(holding, budgets, workerContext, step, { lineCanWork: staffLineCanWork, report });
     for (const building of buildings) {
       if (deps.buildingStatus(building).value === "built") await deps.autoCollectBuilding(holding, building, budgets, report, workerContext);
     }
@@ -388,6 +444,16 @@ export async function runProductionCycle({
             while (remainingUnits > 0 && line.active !== false && productionTiming(line)?.phase !== "waiting") {
               const reservation = await reserveBatch(building, line, assignedPeople, resourceName, step);
               if (!reservation.ok) { blockedReason = reservation.reason; break; }
+              // Fetching the ingredients can spend this worker's available QD.
+              // Charge actual production once, before any work or next batch:
+              // later ingredient collection cannot reuse a QD already underway.
+              if (!usedAnyWork) {
+                if (deps.safeNumber(entry.available, 0) + 0.0001 < 1) break;
+                entry.available = Math.max(0, deps.safeNumber(entry.available, 0) - 1);
+                entry.spent += 1;
+                lineSummary.qdSpent += 1;
+                deps.recordWorkerWork?.(workerContext, entry, building, line, 1);
+              }
               const target = productionTiming(line)?.workTargetUnits ?? workTargetUnits;
               const needed = target - whole(line.workProgressUnits);
               const used = Math.min(needed, remainingUnits);
@@ -396,6 +462,7 @@ export async function runProductionCycle({
               usedAnyWork = usedAnyWork || used > 0;
               if (line.workProgressUnits < target) continue;
 
+              preparation.complete(line, line.workReservedOutputQty);
               const batchTiming = productionTiming(line);
               if (batchTiming?.waitQd > 0) {
                 batchTiming.phase = "waiting";
@@ -406,9 +473,6 @@ export async function runProductionCycle({
               if (blockedReason) report.skipped.push(`${building.name || "Здание"}: ${blockedReason}`);
               break;
             }
-            entry.available = deps.safeNumber(entry.available, 0) - 1;
-            entry.spent += 1;
-            lineSummary.qdSpent += 1;
             if (blockedReason) {
               report.skipped.push(`${building.name || "Здание"}: остаток QD простаивает — ${blockedReason}`);
               break;
@@ -433,6 +497,13 @@ export async function runProductionCycle({
   }
 
   for (const building of buildings) for (const line of building.productionLines ?? []) {
+    const goal = preparation.goal(building, line);
+    if (goal !== null) {
+      const prepared = preparation.prepared(line);
+      const name = deps.resourceLabel(deps.normalizeResourceId(line.resourceId, line.resource));
+      report.work?.push?.(`${building.name || "Здание"} · ${name}: подготовлено ${prepared}/${goal} ЕД. по общей цели${prepared > goal ? "; начатая партия завершена целиком" : ""}.`);
+      if (prepared < goal) report.skipped.push(`${building.name || "Здание"} · ${name}: цель подготовки не выполнена, осталось ${goal - prepared} ЕД.; проверьте время, сырьё, вместимость и допустимый размер партии.`);
+    }
     for (const batch of productionBatchStates(line)) {
       if (productionTiming(batch)?.phase !== "waiting") continue;
       report.work?.push?.(`${building.name || "Здание"} · ${productionTiming(batch).resourceName} (${batch.workReservedOutputQty} ЕД.): ${productionTimingText(batch)}.`);

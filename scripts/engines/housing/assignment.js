@@ -1,4 +1,5 @@
 import { isResidentInPopulation } from "../../data/resident-presence.js";
+import { buildingHousingComfort } from "../economy/building-service.js";
 
 function text(value) {
   return String(value ?? "").trim();
@@ -24,7 +25,7 @@ export function assignResidentsToFreeHousing(holding = {}, { isResidentialBuildi
       id: text(building.id) || text(building.name),
       name: text(building.name) || text(building.id),
       capacity: Math.max(0, number(building?.housing?.capacity, 0)),
-      comfort: number(building?.housing?.comfort, 0),
+      comfort: buildingHousingComfort(holding, building),
       quality: number(building?.housing?.quality, 0),
       occupied: 0
     }));

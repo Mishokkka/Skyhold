@@ -16,6 +16,8 @@ export function vacatePoliticsRepresentative(holding, residentId, reason) {
 export function clearPersonFromAssignments(holding, personId) {
   const id = String(personId ?? "");
   if (!id || !holding || typeof holding !== "object") return false;
+  const person = (holding.people?.list ?? []).find((row) => String(row.id) === id);
+  if (person) delete person.staffAppointment;
   if (Array.isArray(holding.constructionCrewIds)) holding.constructionCrewIds = holding.constructionCrewIds.filter((value) => String(value) !== id);
 
   for (const building of holding?.buildings?.list ?? []) {
@@ -57,6 +59,9 @@ export function transferResidentBetweenHoldings(source, target, residentId) {
     return { ok: false, message: "Перед переносом жителя верните его корабль и экипаж домой." };
   }
   clearPersonFromAssignments(source, id);
+  if (Array.isArray(source.workforcePlan?.locks)) {
+    source.workforcePlan.locks = source.workforcePlan.locks.filter((row) => String(row?.personId ?? "") !== id);
+  }
   vacatePoliticsRepresentative(source, id, "житель перенесён в другое владение");
   for (const ship of ships) {
     ship.crewResidentIds = (ship.crewResidentIds ?? []).filter((value) => value !== id);

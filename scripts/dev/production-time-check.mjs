@@ -45,7 +45,7 @@ function dependencies() {
     autoCollectBuilding: noop, assignedBuildingPeople: (h) => h.people.list, workerBudgetEntry: () => budget,
     personBuildingEfficiency: () => 1, buildingCompositionStatus: () => ({ met: true }),
     storageQuantity: (h, cost) => storage._storageQuantity(h, cost), tryCollectResourceForConsumer: noop,
-    affordableUnitsForCosts: () => 0, formatNumber: String,
+    formatNumber: String,
     beforeStep: (h, step, r) => { setResourceBatchPeriodStep(h, step); expireProductionIngredients(h, r); },
     afterPeriod: (h) => setResourceBatchPeriodStep(h, null), budget
   };

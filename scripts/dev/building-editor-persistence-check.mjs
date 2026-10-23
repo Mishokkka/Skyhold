@@ -12,11 +12,13 @@ import { SETTING_CATALOG, SETTING_HOLDINGS } from "../data/constants.js";
 import { SaveStatus } from "../apps/common/save-status.js";
 import { buildingPickerValues } from "../apps/domains/building-editor-pickers.js";
 import { assertProductionIdentityUnchanged, createProductionTiming } from "../engines/economy/production-timing.js";
+import { validateHybridLaborHolding, newHybridLaborIssues, buildingLaborMode, applyStaffAppointment } from "../data/hybrid-labor.js";
+import { buildWorkAllocationTargets } from "../data/work-allocations.js";
 
 export async function checkBuildingEditorPersistence() {
 // Run real editor methods without booting Foundry, then reload real split storage.
 const source = readFileSync(new URL("../apps/editors/building-editor.js", import.meta.url), "utf8");
-const names = new Set(["_resolveBuildingScopedPath", "_onFieldChange", "_onBuildingStringListChange", "_updateMutableBuilding", "_saveTransaction"]);
+const names = new Set(["_resolveBuildingScopedPath", "_onFieldChange", "_onLaborFieldChange", "_onBuildingStringListChange", "_updateMutableBuilding", "_saveTransaction"]);
 const methods = [];
 new Linter().verify(source, [{ plugins: { fixture: { rules: { extract: { create: () => ({
   MethodDefinition(node) {
@@ -56,10 +58,12 @@ const foundry = { utils: {
   },
   getProperty: (object, path) => path.split(".").reduce((row, key) => row?.[key], object)
 } };
-const Editor = new Function("SkyholdData", "foundry", "fieldValue", "buildingPickerValues", "requestSkyholdAppRender", "ui", "assertProductionIdentityUnchanged",
+const warnings = [];
+const Editor = new Function("SkyholdData", "foundry", "fieldValue", "buildingPickerValues", "requestSkyholdAppRender", "ui", "assertProductionIdentityUnchanged", "newHybridLaborIssues", "validateHybridLaborHolding", "buildWorkAllocationTargets", "buildingLaborMode",
   `return class { ${methods.join("\n")} }`)(dataApi, foundry, fieldValue,
   buildingPickerValues, () => {},
-  { notifications: { error(message) { assert.fail(message); } } }, assertProductionIdentityUnchanged);
+  { notifications: { error(message) { assert.fail(message); }, warn(message) { warnings.push(message); } } }, assertProductionIdentityUnchanged,
+  newHybridLaborIssues, validateHybridLaborHolding, buildWorkAllocationTargets, buildingLaborMode);
 const reload = () => createSkyholdSplitStorage({ settings }).getData();
 for (const template of [true, false]) {
   const editor = new Editor();
@@ -129,6 +133,75 @@ for (const template of [true, false]) {
   assert.equal(read().name, "Edited name");
   assert.deepEqual(read().serviceProjects[0].participantIds, ["external", "runa"], "read-only picker attempts cannot mutate project participation");
 }
+
+// A stale contract in one building must not lock all editors in the settlement.
+const damaged = reload();
+damaged.holdings[0].buildings.list.push({
+  id: "broken-employer", name: "Broken employer", constructionStatus: "built", workersMin: 0, workersMax: 1,
+  labor: { version: 1, mode: "staff", capacityQd: null }, assignedWorkerIds: ["stale-worker"],
+  functions: { production: true }, productionLines: []
+});
+damaged.holdings[0].people.list.push({ id: "stale-worker", name: "Stale worker", age: 30, workAssignment: "broken-employer",
+  staffAppointment: { version: 1, buildingId: "broken-employer", primaryFunctionId: "production:deleted",
+    reserveFunctionId: "", wageDailyCopper: 12, overtimeQd: 0, volunteer: false, volunteerReason: "" } });
+await storage.persistData(damaged);
+const editor = new Editor();
+editor._saveStatus = new SaveStatus();
+editor._canEditBuilding = () => true;
+let buildingIndex = 0;
+editor._getMutableBuilding = data => ({ holding: data.holdings[0], holdingIndex: 0, buildingIndex,
+  building: data.holdings[0].buildings.list[buildingIndex] });
+await editor._updateMutableBuilding(({ building }) => { building.name = "Unrelated edit"; });
+assert.equal(reload().holdings[0].buildings.list[0].name, "Unrelated edit");
+buildingIndex = damaged.holdings[0].buildings.list.length - 1;
+await editor._updateMutableBuilding(({ building }) => { building.name = "Renamed employer"; });
+assert.equal(reload().holdings[0].buildings.list[buildingIndex].name, "Renamed employer",
+  "Renaming the affected building must not turn an unchanged issue into a new one");
+let writeCount = writes.length;
+await assert.rejects(editor._updateMutableBuilding(({ building }) => { building.workersMax = 0; }), /штатных мест/);
+assert.equal(writes.length, writeCount, "An old broken reference cannot authorize a new capacity violation");
+await editor._updateMutableBuilding(({ building }) => {
+  building.productionLines.push({ id: "deleted", active: true, source: "workers", resourceId: "wood", outputQty: 1, workQd: 1 });
+});
+assert.equal(validateHybridLaborHolding(reload().holdings[0], { targets: buildWorkAllocationTargets(reload().holdings[0]) }).ok, true);
+writeCount = writes.length;
+await assert.rejects(editor._updateMutableBuilding(({ building }) => { building.productionLines = []; }), /недоступна/);
+assert.equal(writes.length, writeCount, "Deleting a restored contracted line is a new error and cannot persist");
+
+const priorGame = globalThis.game;
+try {
+  globalThis.game = { user: { isGM: true } };
+  editor.requestRender = () => {};
+  const modeEvent = { preventDefault() {}, currentTarget: { dataset: { buildingLaborField: "mode" }, value: "qd" } };
+  writeCount = writes.length;
+  await editor._onLaborFieldChange(modeEvent);
+  assert.equal(writes.length, writeCount, "A mode change cannot strand current staff contracts");
+  assert.match(warnings.at(-1), /Stale worker.*Сначала снимите/);
+  assert.equal(reload().holdings[0].buildings.list[buildingIndex].labor.mode, "staff");
+  await editor._updateMutableBuilding(({ holding }) => applyStaffAppointment(holding, "stale-worker", null));
+  await editor._onLaborFieldChange(modeEvent);
+  assert.equal(reload().holdings[0].buildings.list[buildingIndex].labor.mode, "qd");
+  assert.equal(reload().holdings[0].people.list.find((person) => person.id === "stale-worker").staffAppointment, undefined);
+  await editor._updateMutableBuilding(({ holding, building }) => {
+    const person = holding.people.list.find((row) => row.id === "stale-worker");
+    person.workAllocationMode = "explicit";
+    person.workAllocations = [{ schemaVersion: 1, id: "mode-switch-qd", sourceId: building.id,
+      functionId: "production:deleted", normalQd: 4, overtimeQd: 0 }];
+  });
+  const plannedBeforeModeChange = reload();
+  modeEvent.currentTarget.value = "passive";
+  writeCount = writes.length;
+  await editor._onLaborFieldChange(modeEvent);
+  assert.match(warnings.at(-1), /не принимает обычные задания/);
+  assert.equal(writes.length, writeCount, "A QD-to-passive change cannot write any partition while planned work is assigned");
+  assert.deepEqual(reload(), plannedBeforeModeChange,
+    "A rejected editor mode switch must preserve the reloaded building and all residents' allocations");
+  globalThis.game.user.isGM = false;
+  writeCount = writes.length;
+  modeEvent.currentTarget.value = "passive";
+  await editor._onLaborFieldChange(modeEvent);
+  assert.equal(writes.length, writeCount, "A player cannot change the building labor mode");
+} finally { globalThis.game = priorGame; }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

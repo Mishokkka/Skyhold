@@ -4,7 +4,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
 
 import { marketOutboundRouteFromPurchasePlan } from "../apps/market/outbound-context.js";
-import { DEFAULT_BUILDING_TEMPLATES } from "../data/building-templates.js";
+// This calibrated scenario prices the existing-world staffing assumptions;
+// changing labor modes is covered by the explicit hybrid transition/runtime checks.
+import { BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION as DEFAULT_BUILDING_TEMPLATES } from "../data/building-templates.js";
 import { preparationMaintenanceNorms } from "./building-maintenance-proposal-check.mjs";
 import { APPROVED_BUILDING_TEMPLATE_ID_BY_NAME } from "../data/building-template-ids.js";
 import { DEFAULT_INTERNAL_DEMAND_CONFIG, internalDemandTradeDefaults } from "../data/economy/internal-demand.js";

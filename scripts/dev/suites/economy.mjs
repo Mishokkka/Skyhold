@@ -33,6 +33,7 @@ import { checkShipCapacityConsistency } from "../ship-capacity-consistency-check
 import { checkProductionReview } from "../production-review-regression-check.mjs";
 import { checkProductionCapacity } from "../production-capacity-check.mjs";
 import { checkProductionTime } from "../production-time-check.mjs";
+import { checkProductionWorkerBudgets } from "../production-worker-budget-check.mjs";
 import { checkInternalDemandCharacterization } from "../internal-demand-characterization-check.mjs";
 import { checkPreparationYear } from "../economy-preparation-year-check.mjs";
 import { checkPreparationSpecializations } from "../economy-preparation-specialization-check.mjs";
@@ -56,6 +57,7 @@ export async function runEconomySuite() {
   checkApprovedEconomy();
   await checkProductionReview();
   await checkProductionTime();
+  await checkProductionWorkerBudgets();
   await checkProductionCapacity();
   checkAgricultureCharacterization();
   checkConstructionStageCharacterization();

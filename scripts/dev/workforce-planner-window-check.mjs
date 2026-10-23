@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 // V2 inserts an intrinsically narrow frame before its first positioning.
 // The real frame mixin must not mistake that initial layout for a user resize.
@@ -6,9 +8,10 @@ class OpeningApplication {
   constructor(options = {}) {
     this.position = { left: null, top: null, ...this.constructor.DEFAULT_OPTIONS.position, ...options.position };
     this.bounds = { left: 0, top: 0, width: 200, height: 820 };
+    this.handlers = new Map();
     this.element = {
       querySelectorAll: () => [], querySelector: () => null,
-      addEventListener() {}, removeEventListener() {},
+      addEventListener: (name, callback) => this.handlers.set(name, callback), removeEventListener() {},
       getBoundingClientRect: () => ({ ...this.bounds })
     };
   }
@@ -32,6 +35,7 @@ class OpeningApplication {
   async close(options) { await this._onClose(options); this.rendered = false; return this; }
 }
 
+export async function checkWorkforcePlannerWindow() {
 const previous = Object.fromEntries(["foundry", "game", "requestAnimationFrame"].map(key => [key, globalThis[key]]));
 const frames = [];
 try {
@@ -45,6 +49,7 @@ try {
   const { SkyholdData } = await import("../data/store.js");
   const { mergeHoldingDefaults } = await import("../data/normalizers.js");
   const { buildWorkforceModel } = await import("../apps/domains/workforce-planner.js");
+  const { hybridRuntimeFixture } = await import("./hybrid-labor-runtime-check.mjs");
   for (const isGM of [true, false]) {
     game.user.isGM = isGM;
     for (const position of [undefined, { width: 960, height: 620 }]) {
@@ -103,8 +108,44 @@ try {
       await app._save(false);
       assert.equal(saves, savesBefore + 1, "an accepted draft reaches persistence only after explicit save");
     }
+    for (const isGM of [true, false]) {
+      game.user.isGM = isGM;
+      const { holding } = hybridRuntimeFixture();
+      const app = new SkyholdWorkforcePlanner({ holdingId: holding.id });
+      app.permissions = { isGM, canEditBuildings: true }; app.planningOptions = { isGM };
+      app.requestRender = () => {}; app._reset(holding, 8); app.latest = { holding, revision: 8 };
+      app._model = buildWorkforceModel(app.base, app.draft, app.service, app.planningOptions);
+      await app._onRender({}, {});
+      const field = { dataset: { workforceField: isGM ? "staff-rate" : "staff-ot", personId: "worker-0" },
+        type: "number", value: isGM ? "24" : "2" };
+      field.closest = () => field;
+      app.handlers.get("change")({ target: field, type: "change" });
+      assert.equal(app.dirty, true, "Unapplied GM/player form input must protect the draft from silent replacement or closing");
+      assert.equal(app.draft.staffAppointments["worker-0"].wageDailyCopper, 12);
+      await assert.rejects(app._save(false), /неприменённые значения/, "Global save must not silently persist the old displayed value");
+      const action = (name) => app._action({ preventDefault() {} }, { dataset: { action: `workforce-${name}`, personId: "worker-0" } });
+      await action("tenday");
+      assert.match(app.message, /сохраните план/, "Calculation must explain that the on-screen draft has not been saved");
+      await app.close({}); assert.equal(app.preview.closeAfterDiscard, true);
+      await action("cancel-preview"); await action("staff-save");
+      assert.equal(app.inputValues.size, 0, "Applying the row must remove its pending-input guard");
+      assert.equal(app.draft.staffAppointments["worker-0"].wageDailyCopper, isGM ? 24 : 12);
+      assert.equal(app.draft.staffAppointments["worker-0"].overtimeQd, isGM ? 0 : 2);
+      assert.equal(app.dirty, true);
+      await app.close({}); await action("accept-preview");
+      assert.equal(app.rendered, false, "Accepting close-time discard must actually close the window");
+      assert.equal(app.dirty, false);
+    }
   } finally { SkyholdData.updateHolding = originalUpdateHolding; }
   console.log("Workforce window: GM/player frame lifecycle and proposal acceptance before explicit save passed.");
 } finally {
-  Object.assign(globalThis, previous);
+  for (const [key, value] of Object.entries(previous)) {
+    if (value === undefined) delete globalThis[key];
+    else globalThis[key] = value;
+  }
+}
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  await checkWorkforcePlannerWindow();
 }

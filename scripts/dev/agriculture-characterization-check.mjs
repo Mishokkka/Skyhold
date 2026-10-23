@@ -285,7 +285,7 @@ export function checkAgricultureCharacterization() {
   }
   assert.doesNotMatch(`${templateSource}\n${JSON.stringify(fieldTemplate.agriculture)}\n${JSON.stringify(gardenTemplate.agriculture)}`, /seed(?:s|Resource|Qty)/i, "agriculture UI and persisted template config must not introduce a seed resource");
   assert.match(financeCompositionSource, /FinanceAgricultureDomain/, "the agriculture adapter must be composed into the real FinanceDomain");
-  assert.match(economyRuntimeSource, /_agricultureFinanceFunction\(building, holding\)/, "canonical agriculture labour must participate in wage and upkeep planning");
+  assert.match(economyRuntimeSource, /_agricultureFinanceFunction\(building, holding, periodQd\)/, "canonical agriculture labour must participate in wage and upkeep planning for the whole requested period");
   const agricultureRunIndex = economyRuntimeSource.indexOf("_runAgricultureForQd(holding");
   const productionRunIndex = economyRuntimeSource.indexOf("_runProductionAndLivestockForQd(holding, qd", agricultureRunIndex);
   assert.ok(agricultureRunIndex >= 0 && productionRunIndex > agricultureRunIndex, "tenday runtime must apply agriculture before generic production");
@@ -338,7 +338,8 @@ export function checkAgricultureCharacterization() {
   assert.equal(holding.received, 4, "finance adapter replay must never add harvest twice");
   assert.equal(host._agricultureFinanceFunction(holding.buildings.list[0], holding).id, "agriculture", "finance obligations must have one canonical agriculture function id when sowing labour is planned");
   holding.buildings.list[0].agriculture.state = { phase: "growing", cropId: "vegetables", growingElapsedQd: 1 };
-  assert.equal(host._agricultureFinanceFunction(holding.buildings.list[0], holding), null, "calendar-only growth must not create wages or an operating labour obligation");
+  holding.buildings.list[0].agriculture.crops[0].growingQd = 80;
+  assert.equal(host._agricultureFinanceFunction(holding.buildings.list[0], holding), null, "growth that cannot reach labour during the period must not create wages or an operating labour obligation");
   assert.deepEqual(host._nonAgricultureProductionBuildings([
     holding.buildings.list[0],
     { id: "sawmill", templateId: "lumbermill", productionLines: [{ id: "wood" }] }

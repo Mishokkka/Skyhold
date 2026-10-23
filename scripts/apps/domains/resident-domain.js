@@ -13,6 +13,7 @@ import {
   buildingConfirmedLeisureCapacity,
   buildingConfirmedServiceCapacity,
   buildingConfirmedSocialStatus,
+  buildingHousingComfort,
   scaleIntegerBuildingEffect
 } from "../../engines/economy/building-service.js";
 import { settlementControlSummary } from "../../engines/settlement/control.js";
@@ -460,10 +461,6 @@ _preparePeopleTabs(holding) {
   return tabs;
 },
 
-_filterPeopleRows(people) {
-  return people.filter((person) => this._personMatchesResidentFilters(person));
-},
-
 _personMatchesResidentFilters(person) {
   const filters = this.residentFilters ?? {};
   const type = String(filters.type ?? "all");
@@ -835,28 +832,6 @@ _personNote(person) {
   return hiddenBits.join("\n");
 },
 
-_personDetails(person) {
-  const details = [];
-  const push = (label, value) => {
-    const text = String(value ?? "").trim();
-    if (text) details.push({ label, value: text });
-  };
-
-  push("Статус", person?.dead ? "Погиб" : person?.status);
-  if (person?.dead) {
-    push("Дата гибели", person?.deathDate);
-    push("Причина гибели", person?.deathNote);
-  }
-  push("Верование", person?.belief);
-  push("Социальное прошлое", person?.background);
-  push("Культура", person?.culture);
-  push("Характеристики", this._attributeSummary(person));
-  push("Внешность", person?.appearance);
-  push("Actor", person?.actorUuid);
-  push("Заметки", person?.notes);
-  return details;
-},
-
 _isNoHome(value) {
   const text = String(value ?? "").trim().toLowerCase();
   return !text || ["без жилья", "без дома", "нет дома", "нет жилья", "—", "-"].includes(text);
@@ -874,7 +849,7 @@ _housingMorale(person, holding = null, housingIndex = null) {
   if (this._isNoHome(person?.home)) return { value: -3, reason: "без дома" };
   const home = this._findHomeBuilding(holding, person?.home, housingIndex);
   if (!home) return { value: -1, reason: "жилье не найдено" };
-  let comfort = this._safeNumber(home?.housing?.comfort, 0);
+  let comfort = buildingHousingComfort(holding, home);
   const homeText = `${home?.name ?? ""} ${home?.type ?? ""} ${home?.notes ?? ""} ${home?.effect ?? ""}`;
   if (comfort < 0 && /казарм|barrack/i.test(homeText) && this._isMilitaryResidentLike(person)) comfort = 0;
   const capacity = this._safeNumber(home?.housing?.capacity, 0);
@@ -1019,7 +994,7 @@ _buildingMoraleSummary(holding) {
     const templateId = String(building?.templateId ?? "").trim().toLocaleLowerCase("ru");
     const key = templateId ? `template:${templateId}` : `instance:${String(building?.id ?? index)}`;
     if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push({ building, raw, factor: status.maintenanceFactor, index });
+    groups.get(key).push({ building, raw, factor: status.maintenanceFactor * (status.laborFactor ?? 1), index });
   }
 
   let total = negative.reduce((sum, row) => sum + row.value, 0);
@@ -1163,11 +1138,6 @@ _traitMoraleModifier(person) {
 
 _traitBadges(value) {
   return traitBadges(value);
-},
-
-_hasTrait(person, name) {
-  const needle = String(name ?? "").trim().toLowerCase();
-  return this._parseTraits(person?.traitsText ?? person?.traits).some((trait) => trait.toLowerCase() === needle);
 },
 
 _parseTraits(value) {

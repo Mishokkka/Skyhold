@@ -6,6 +6,7 @@ import { FinanceInternalDemandDomain } from "./finance/internal-demand-domain.js
 import { FinanceLivestockDomain } from "./finance/livestock-domain.js";
 import { FinanceMaintenanceDomain } from "./finance/maintenance-domain.js";
 import { FinanceStorageDomain } from "./finance/storage-domain.js";
+import { FinanceStaffDomain } from "./finance/staff-domain.js";
 import { FinanceTradeDomain } from "./finance/trade-domain.js";
 import { FinanceTreasuryDomain } from "./finance/treasury-domain.js";
 import { composeDomainGroup } from "./compose-domain.js";
@@ -19,5 +20,6 @@ export const FinanceDomain = composeDomainGroup("FinanceDomain", [
   ["FinanceLivestockDomain", FinanceLivestockDomain],
   ["FinanceMaintenanceDomain", FinanceMaintenanceDomain],
   ["FinanceInternalDemandDomain", FinanceInternalDemandDomain],
+  ["FinanceStaffDomain", FinanceStaffDomain],
   ["FinanceEconomyDomain", FinanceEconomyDomain]
 ]);

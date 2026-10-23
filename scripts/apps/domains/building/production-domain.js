@@ -4,11 +4,13 @@ import { getCalendariaSnapshot } from "../../../integrations/calendaria-bridge.j
 import {
   buildingConfirmedHarmActive,
   buildingConfirmedSocialStatus,
+  buildingServiceBlockReasons,
   scaleIntegerBuildingEffect
 } from "../../../engines/economy/building-service.js";
 import { politicsRuntimeEffects } from "../../../engines/politics/runtime-effects.js";
 import { productionTimingText, productionIdentityLocked } from "../../../engines/economy/production-timing.js";
 import { productionCapacity, productionBatchStates, productionOccupiedQty } from "../../../engines/economy/production-capacity.js";
+import { buildingLaborMode } from "../../../data/hybrid-labor.js";
 
 export const BuildingProductionDomain = {
 _productionSeasonDefs() {
@@ -321,6 +323,9 @@ _pendingProductionRows(building, holding = null, buildingIndex = 0, linesArg = n
       lineIndex: line._index,
       resource: line.resource,
       qty: line.pendingQty,
+      manualCollectionBlocked: ["staff", "qd"].includes(buildingLaborMode(building)) && line.collectQd > 0,
+      collectionHint: ["staff", "qd"].includes(buildingLaborMode(building)) && line.collectQd > 0
+        ? `Сбор требует ${line.collectQd} QD. Назначьте эту линию в плане работ и проведите десятник.` : "Собрать готовый ресурс",
       label: `${line.resource}: ${line.pendingQty}`
     }));
 },
@@ -402,7 +407,10 @@ _buildingDefenseSummary(building, holding = null, workerContext = null, statusAr
   const workerStep = Math.max(0, this._safeNumber(defense.workerStep, 0));
   const assigned = (building?.assignedWorkerIds ?? []).filter(Boolean).length;
   const effSummary = workerEfficiencyArg ?? (this._buildingEffectiveWorkers ? this._buildingEffectiveWorkers(holding, building, workerContext) : { total: assigned, detail: `${assigned} раб.` });
-  const effectiveWorkers = Number.isFinite(Number(effSummary?.total)) ? Math.max(0, Number(effSummary.total)) : 0;
+  const defenseStatus = holding && buildingLaborMode(building) !== "legacy"
+    ? buildingServiceBlockReasons(holding, building, "defense") : null;
+  const effectiveWorkers = defenseStatus ? (defenseStatus.active ? defenseStatus.workforce.equivalentWorkers : 0)
+    : Number.isFinite(Number(effSummary?.total)) ? Math.max(0, Number(effSummary.total)) : 0;
   const maintenanceFactor = Math.max(0, Math.min(1, this._maintenanceEfficiencyFactor?.(building) ?? 1));
   const structuralBase = Math.max(0, Math.floor(base * maintenanceFactor));
   const fromWorkers = workerStep > 0 ? Math.floor(effectiveWorkers / workerStep) * perStep : 0;
@@ -424,7 +432,7 @@ _reputationSummary(holding, _moraleStateArg = null) {
     const socialStatus = rawValue > 0 ? buildingConfirmedSocialStatus(holding, building) : null;
     if (rawValue > 0 && !socialStatus.active) continue;
     if (rawValue < 0 && !buildingConfirmedHarmActive(holding, building)) continue;
-    const serviceFactor = rawValue > 0 ? socialStatus.maintenanceFactor : 1;
+    const serviceFactor = rawValue > 0 ? socialStatus.maintenanceFactor * (socialStatus.laborFactor ?? 1) : 1;
     const activeValue = scaleIntegerBuildingEffect(rawValue, serviceFactor);
     if (!activeValue) continue;
     const templateId = String(building?.templateId ?? "").trim().toLowerCase();

@@ -8,8 +8,9 @@ import { buildingAppearance } from "../../../core/building-appearance.js";
 import { maintenanceEfficiencyFactor, normalizeBuildingMaintenance } from "../../../data/economy/maintenance.js";
 import { buildingRequiresConstructionCenter } from "../../../data/building-development-tree.js";
 import { buildingStaffingWorkerIds, explicitWorkAllocationsForBuilding } from "../../../data/work-allocations.js";
-import { buildingConstructionPrerequisitesMet, buildingNominalMorale, buildingWonderworkingActive } from "../../../engines/economy/building-service.js";
+import { buildingConstructionPrerequisitesMet, buildingHousingComfort, buildingNominalMorale, buildingWonderworkingActive } from "../../../engines/economy/building-service.js";
 import { isResidentInPopulation } from "../../../data/resident-presence.js";
+import { buildingLaborMode } from "../../../data/hybrid-labor.js";
 
 function cardSettlementEffects(app, holding) {
   return {
@@ -33,10 +34,6 @@ function buildingTemplateLookup(data) {
 export const BuildingRowsDomain = {
 _buildingSpecialKind(building = {}) {
   return inferBuildingSpecialKind(building);
-},
-
-_isSpecialBuildingRecord(building = {}) {
-  return Boolean(this._buildingSpecialKind(building));
 },
 
 _isMedicalBuildingRecord(building = {}) {
@@ -431,6 +428,7 @@ _prepareBuildingRow(holding, row, index, canEdit, storageRoomsArg = null, option
     return {
       _index: index,
       id: row?.id ?? "",
+      laborLegacy: buildingLaborMode(row) === "legacy",
       name: row?.name ?? "Здание",
       category,
       categoryLabel: this._buildingCategoryLabel(category),
@@ -479,7 +477,7 @@ _prepareBuildingRow(holding, row, index, canEdit, storageRoomsArg = null, option
       },
       housing: {
         capacity: housingCapacity,
-        comfort: housingComfort,
+        comfort: buildingHousingComfort(holding, row),
         quality: housingQuality,
         used: housingUsed,
         free: housingFree,
@@ -520,6 +518,7 @@ _prepareBuildingRow(holding, row, index, canEdit, storageRoomsArg = null, option
 
   return {
     ...row,
+    laborLegacy: buildingLaborMode(row) === "legacy",
     _index: index,
     category,
     categoryLabel: this._buildingCategoryLabel(category),
@@ -612,6 +611,8 @@ _prepareBuildingRow(holding, row, index, canEdit, storageRoomsArg = null, option
     housing: {
       capacity: housingCapacity,
       comfort: housingComfort,
+      effectiveComfort: buildingHousingComfort(holding, row),
+      hasCaretakerComfort: Number.isFinite(housingData.staffedComfort) && housingData.staffedComfort !== housingComfort,
       quality: housingQuality,
       used: housingUsed,
       free: housingFree,

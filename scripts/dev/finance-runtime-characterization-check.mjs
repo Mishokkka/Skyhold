@@ -640,7 +640,7 @@ export async function checkFinanceRuntimeCharacterization() {
   assert.match(tendayAppSource, /title: "Денежные обязательства"/, "the GM Preview/History economy tab must expose the exact obligation rows");
 
   const productionSource = readFileSync(path.join(root, "scripts/engines/economy/production-cycle.js"), "utf8");
-  assert.equal((productionSource.match(/lineFinanceAllowed\?\./g) ?? []).length, 3, "time/waiting, content and worker production paths must all obey the function payment gate");
+  assert.equal((productionSource.match(/lineFinanceAllowed\?\./g) ?? []).length, 4, "time/waiting, content, worker production and dynamic staff task selection must all obey the function payment gate");
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

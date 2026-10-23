@@ -3,6 +3,9 @@ import { isPerishableFoodDefinition } from "../../core/perishable-food.js";
 import { buildingOperationalState } from "../../core/building-state.js";
 import { maintenanceEfficiencyFactor } from "../../data/economy/maintenance.js";
 import { financeBuildingFunctionBlockState, financeWorkerBlockState } from "../economy/finance-obligations.js";
+import { buildingLaborMode } from "../../data/hybrid-labor.js";
+import { isResidentPresent } from "../../data/resident-presence.js";
+import { buildingServiceEffectFactor } from "../economy/building-service.js";
 
 function normalizedList(value) {
   return (Array.isArray(value) ? value : String(value ?? "").split(/[,;\n]/))
@@ -50,6 +53,7 @@ export function storageProfileEffectFactor(holding = {}, building = {}) {
 
   const storage = building?.storage ?? {};
   if (storage.profileRequiresStaff === true) {
+    if (buildingLaborMode(building) !== "legacy") return buildingServiceEffectFactor(holding, building, "storage");
     const people = new Map((holding?.people?.list ?? []).map((person) => [String(person?.id ?? ""), person]));
     const staffed = (building?.assignedWorkerIds ?? []).filter((workerId) => {
       const id = String(workerId ?? "");
@@ -57,6 +61,7 @@ export function storageProfileEffectFactor(holding = {}, building = {}) {
       return id
         && person
         && !person.dead
+        && isResidentPresent(person)
         && Math.max(0, Number(person?.injuredDays) || 0) <= 0
         && !financeWorkerBlockState({ finance: holding?.finance, workerId: id }).blocked;
     }).length;

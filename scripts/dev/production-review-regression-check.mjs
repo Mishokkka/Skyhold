@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { DEFAULT_BUILDING_TEMPLATES } from "../data/building-templates.js";
+// These existing-world recipe and service regressions keep their pre-transition labor contracts.
+// Hybrid staff/QD behavior is exercised separately by the hybrid-labor suite.
+import { BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION as DEFAULT_BUILDING_TEMPLATES } from "../data/building-templates.js";
 import { DEFAULT_SKYHOLD_DATA } from "../data/defaults/default-skyhold-data.js";
 import { mergeHoldingDefaults } from "../data/normalizers.js";
 import { SkyholdData } from "../data/store.js";

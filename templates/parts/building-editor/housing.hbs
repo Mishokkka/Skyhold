@@ -1,6 +1,7 @@
       {{#if building.showEditorHousing}}
         <fieldset class="fbls-building-editor-card wide-card fbls-housing-building-card">
           <legend>Жилье</legend>
+          {{#if building.housing.hasCaretakerComfort}}<p>Текущий комфорт: {{building.housing.effectiveComfort}}. Улучшение от смотрителя требует подтверждённой работы; поле «Комфорт» задаёт базовое значение.</p>{{/if}}
           <div class="fbls-housing-building-grid">
             <label><span data-fbls-tooltip="Сколько живых жителей может нормально жить в этом здании. 0 означает без жесткого лимита.">Вместимость</span>{{#if canEdit}}<input class="fbls-control" type="number" data-type="number" data-field="{{building.housing.capacityPath}}" value="{{building.housing.capacity}}" />{{else}}<strong>{{building.housing.capacity}}</strong>{{/if}}</label>
             <label><span data-fbls-tooltip="Влияние жилья на довольство жителей, которые здесь живут. Может быть отрицательным.">Комфорт</span>{{#if canEdit}}<input class="fbls-control" type="number" data-type="number" data-field="{{building.housing.comfortPath}}" value="{{building.housing.comfort}}" />{{else}}<strong>{{building.housing.comfort}}</strong>{{/if}}</label>

@@ -1,5 +1,6 @@
 import {
   DEFAULT_BUILDING_TEMPLATES,
+  BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION,
   DEPRECATED_TEMPLATE_IDS,
   TEMPLATE_CATALOG_VERSION
 } from "../../data/building-templates.js";
@@ -11,7 +12,8 @@ import { workerAdmission } from "../../engines/workers/building-qualification.js
 import { sourceMaterialState } from "../../engines/economy/construction-stages.js";
 import { validProductionTiming } from "../../engines/economy/production-timing.js";
 import { usesTechnicalMaintenance } from "../../data/economy/maintenance.js";
-import { MAINTENANCE_WORK_SOURCE_ID, MAINTENANCE_WORK_FUNCTION_ID } from "../../data/work-allocations.js";
+import { MAINTENANCE_WORK_SOURCE_ID, MAINTENANCE_WORK_FUNCTION_ID, buildWorkAllocationTargets } from "../../data/work-allocations.js";
+import { buildingLaborMode, validateHybridLaborHolding } from "../../data/hybrid-labor.js";
 import { BUILDING_CATALOG_V14_TEMPLATES } from "../../data/building-template-v14-catalog.js";
 import { buildingCatalogV18Templates } from "../../data/building-template-revision-v18.js";
 import { buildingCatalogV17Templates } from "../../data/building-template-revision-v17.js";
@@ -71,6 +73,7 @@ const USER_INSTANCE_FIELDS = Object.freeze([
   "workerAdmissionOverrideIds",
   "serviceProjects"
 ]);
+const LABOR_DEPENDENT_FIELDS = ["workersMin", "workersMax", "workerProfile", "activation", "minOperationalQd", "activationConditionText", "workerRole"];
 const LIFECYCLE_FIELDS = Object.freeze([
   "status",
   "constructionStatus",
@@ -325,6 +328,10 @@ function migrateBuildingInstance(source, targetTemplate, targetId, people, issue
   next.id = text(source?.id);
   next.templateId = targetId;
   copyOwn(next, source, USER_INSTANCE_FIELDS);
+  // Catalog recipes and labor contracts have separate explicit migration previews.
+  // Even a full catalog replacement must not opt old instances into new employment rules.
+  if (own(source, "labor")) next.labor = clone(source.labor);
+  else delete next.labor;
   next.name = text(source?.name) || text(targetTemplate?.name) || "Здание";
   preserveConstructionState(source, next);
   preserveMaintenanceState(source, next);
@@ -447,6 +454,7 @@ export function planBuildingCatalogMigration({
   invariant(text(operationId), "operation-id", "Preview миграции требует operationId.");
   const source = rootDependency(currentData);
   const targetTemplates = DEFAULT_BUILDING_TEMPLATES;
+  const legacyTargets = new Map(BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION.map((row) => [row.id, row]));
   const targetVersion = TEMPLATE_CATALOG_VERSION;
   invariant(source.templateCatalogVersion <= targetVersion, "source-version-newer", "Каталог мира новее этой версии модуля; перенос на старые правила запрещён.");
   const baselineTemplates = source.templateCatalogVersion < 15 ? BUILDING_CATALOG_V14_TEMPLATES
@@ -469,6 +477,19 @@ export function planBuildingCatalogMigration({
     for (const target of targetData.catalog.buildings) {
       const saved = (currentData?.catalog?.buildings ?? []).find((row) => text(row.id) === text(target.id));
       const baseline = baselineTemplates.find((row) => row.id === target.id);
+      if (saved && targetById.has(text(target.id))) {
+        if ((replaceCatalog || whole(saved.templateVersion) < targetVersion) && buildingLaborMode(saved) === "legacy" && legacyTargets.has(target.id)) {
+          // Restore only labor-dependent defaults, preserving the normal catalog merge below.
+          const legacy = legacyTargets.get(target.id);
+          for (const field of LABOR_DEPENDENT_FIELDS) {
+            if (own(legacy, field)) target[field] = clone(legacy[field]);
+            else delete target[field];
+          }
+        }
+        if (own(saved, "labor")) target.labor = clone(saved.labor);
+        else delete target.labor;
+        targetById.set(text(target.id), target);
+      }
       if (replaceCatalog || !saved || !baseline) continue;
       if (whole(saved.templateVersion) >= targetVersion) {
         targetById.set(text(target.id), target);
@@ -520,6 +541,13 @@ export function planBuildingCatalogMigration({
       else counts.knownInstance += 1;
       const firstIssue = issues.length;
       const selectedTemplate = clone(targetById.get(resolution.targetId));
+      if (buildingLaborMode(prior) === "legacy" && buildingLaborMode(selectedTemplate) !== "legacy") {
+        const legacy = legacyTargets.get(resolution.targetId);
+        if (legacy) for (const field of LABOR_DEPENDENT_FIELDS) {
+          if (own(legacy, field)) selectedTemplate[field] = clone(legacy[field]);
+          else delete selectedTemplate[field];
+        }
+      }
       // A catalog migration is not a repair of already migrated custom rules.
       if (!replaceCatalog && whole(prior.templateVersion) < targetVersion) resolveCatalogMechanicalConflicts({ source: prior,
         baseline: (currentData?.catalog?.buildings ?? []).find((row) => text(row.id) === (text(prior.templateId) || resolution.targetId))
@@ -556,6 +584,9 @@ export function planBuildingCatalogMigration({
         decisions.push({ resolutionKey: issue.resolutionKey,
           detail: `${text(person.name) || text(person.id)}: старое общее обслуживание снято в проекте переноса; освобождено ${removed.reduce((sum, row) => sum + whole(row.normalQd) + whole(row.overtimeQd), 0)} QD. Новые технические назначения потребуются отдельно.` });
       } else issues.push(issue);
+    }
+    for (const issue of validateHybridLaborHolding(holding, { targets: buildWorkAllocationTargets(holding) }).issues) {
+      issues.push({ ...issue, holdingId: text(holding.id), holdingName: text(holding.name), detail: issue.message });
     }
   }
   const targetCatalogHash = stableDataHash(targetData.catalog);

@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { DEFAULT_BUILDING_TEMPLATES } from "../data/building-templates.js";
 import { mergeHoldingDefaults } from "../data/normalizers.js";
 import { getSkyholdWorkflowService } from "../workflows/skyhold-workflow-service.js";
@@ -9,7 +11,7 @@ import { buildPlayerPatch, validatePlayerPatch } from "../data/player-write-guar
 import { executeWorkforcePlan } from "../apps/workforce-plan-executor.js";
 import { buildingCompositionStatus } from "../engines/workers/building-qualification.js";
 
-const clone = (value) => structuredClone(value), service = getSkyholdWorkflowService();
+const clone = (value) => structuredClone(value);
 const template = (id) => clone(DEFAULT_BUILDING_TEMPLATES.find((row) => row.id === id));
 const resident = (id) => ({ id, name: id, age: 30, ageGroup: "Вз", race: "Человек", workAssignment: "", workAllocationMode: "legacy", workAllocations: [],
   attributes: { strength: 4, agility: 4, wits: 4, empathy: 4 }, visibility: "public" });
@@ -19,6 +21,8 @@ function fixture(count = 3) {
     productionLines: [{ id: "logs", active: true, source: "workers", mode: "Древесина", workQd: 2, resourceId: "wood", formula: "2", overtime: true }] };
   return mergeHoldingDefaults({ id: "test", name: "Тест", visibility: "public", buildings: { list: [building] }, people: { list: Array.from({ length: count }, (_, index) => resident(`p-${index}`)) }, gm: { playersCanEditBuildings: true } });
 }
+export async function checkWorkforcePlanner() {
+const service = getSkyholdWorkflowService();
 const holding = fixture(), original = JSON.stringify(holding), draft = createWorkforceDraft(holding, service);
 let model = buildWorkforceModel(holding, draft, service, { isGM: true });
 const task = model.taskMap.get("wood::production:logs");
@@ -335,3 +339,8 @@ assert.equal(validatePlayerPatch(staleData, buildPlayerPatch(beforeData, data)).
 assert.equal((await executeWorkforcePlan({ ...command, operationId: "save-2" }, { store, getUser: () => ({ isGM: true }) })).conflict, true);
 assert.equal((await executeWorkforcePlan({ ...command, operationId: "save-3", expectedRevision: 8 }, { store, getUser: () => ({ isGM: false }) })).ok, false, "player without authority cannot write locally");
 console.log(`Workforce planner: optional capacity, shared budgets, wages, locks, hidden data, legacy conversion, ${DEFAULT_BUILDING_TEMPLATES.length} templates, 200-resident authority patch and replay passed.`);
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  await checkWorkforcePlanner();
+}

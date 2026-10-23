@@ -1,5 +1,8 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import { MODULE_ID } from "../../../data/constants.js";
+import { applyStaffAppointment, buildingLaborMode } from "../../../data/hybrid-labor.js";
+import { buildWorkAllocationTargets } from "../../../data/work-allocations.js";
+import { clearBuildingReferences } from "../../../data/normalizers/resident.js";
 import { requestConstructionOperation, SkyholdData } from "../../../data/store.js";
 import { makeId } from "../../../data/utils.js";
 import { traitBadges } from "../../../generators/trait-definitions.js";
@@ -179,7 +182,7 @@ async _onCollectBuildingProduction(event) {
     const building = (holding?.buildings?.list ?? []).find((item) => String(item.id ?? "") === buildingId);
     const line = building?.productionLines?.[lineIndex];
     if (!holding || !building || !line) return SkyholdData.skipTransaction(null);
-    const collected = this._collectProductionLine(holding, building, line, { ignoreWorkTime: true });
+    const collected = this._collectProductionLine(holding, building, line, { ignoreWorkTime: buildingLaborMode(building) === "legacy" });
     if (!collected?.ok) return SkyholdData.skipTransaction(collected);
     const entries = Array.isArray(collected.placements) && collected.placements.length
       ? collected.placements.map((item) => ({ kind: "collect", resourceId: collected.resourceId, name: collected.resourceName, qty: item.qty, roomId: item.roomId, source: collected.source, note: item.overflowFrom ? `Ручной сбор, переполнение: ${this._storageRoomLabel(holding, item.overflowFrom)}` : "Ручной сбор" }))
@@ -208,6 +211,30 @@ _buildingProtectedAssignmentIds(holding) {
 _clearBuildingWorkers(holding, buildingId) {
   const building = (holding?.buildings?.list ?? []).find((item) => String(item.id ?? "") === String(buildingId ?? ""));
   if (!building) return { cleared: 0, message: "Здание не найдено." };
+  if (buildingLaborMode(building) !== "legacy") {
+    let cleared = 0, locked = 0;
+    const id = String(building.id);
+    for (const person of holding.people?.list ?? []) {
+      const locks = (holding.workforcePlan?.locks ?? []).filter((row) => row.personId === String(person.id) && row.sourceId === id);
+      if (person.staffAppointment?.buildingId === id) {
+        if (locks.length) { locked += 1; continue; }
+        applyStaffAppointment(holding, person.id, null);
+        person.role = "Свободен"; cleared += 1;
+      } else if (person.workAllocationMode === "explicit") {
+        const before = person.workAllocations ?? [];
+        person.workAllocations = before.filter((row) => {
+          if (String(row.sourceId) !== id) return true;
+          if (locks.some((lock) => lock.functionId === row.functionId)) { locked += 1; return true; }
+          return false;
+        });
+        if (before.length !== person.workAllocations.length) {
+          cleared += 1;
+          if (!person.workAllocations.length) person.role = "Свободен";
+        }
+      }
+    }
+    return { cleared, message: `Освобождено жителей: ${cleared}.${locked ? ` Сохранены закрепления: ${locked}; снимите их в «Плане работ».` : ""}` };
+  }
   const max = Math.max(0, this._safeNumber(building.workersMax, 0));
   const oldIds = (Array.isArray(building.assignedWorkerIds) ? building.assignedWorkerIds : []).map((id) => String(id ?? "")).filter(Boolean);
   for (const id of oldIds) this._setPersonFree(holding, id);
@@ -219,6 +246,7 @@ _fillBuildingWorkers(holding, buildingId, { mode = "free" } = {}) {
   const building = (holding?.buildings?.list ?? []).find((item) => String(item.id ?? "") === String(buildingId ?? ""));
   if (!building) return { assigned: 0, message: "Здание не найдено." };
   if (!this._isBuiltAssignableBuilding(building)) return { assigned: 0, message: "В это здание сейчас нельзя назначать работников." };
+  if (buildingLaborMode(building) !== "legacy") return { assigned: 0, message: "Распределите людей и их основные работы через «План работ»." };
   const max = Math.max(0, this._safeNumber(building.workersMax, 0));
   if (!Array.isArray(building.assignedWorkerIds)) building.assignedWorkerIds = [];
   while (building.assignedWorkerIds.length < max) building.assignedWorkerIds.push("");
@@ -267,6 +295,11 @@ async _executeBuildingContextAction(buildingId = "", action = "") {
   const building = (holding?.buildings?.list ?? []).find((item) => String(item.id ?? "") === String(buildingId));
   if (!holding || !building) return;
   const name = String(building?.name ?? "Здание");
+  if (action === "plan-work") {
+    const { openWorkforcePlanner } = await import("../../lazy-apps.js");
+    const targetKey = buildWorkAllocationTargets(holding).find((row) => row.buildingId === building.id)?.key;
+    return openWorkforcePlanner({ holdingId: holding.id, targetKey });
+  }
   if (action === "mothball" || action === "unmothball") {
     return this._onSetFinanceBuildingMothball?.({
       holdingId: String(holding.id ?? ""),
@@ -329,6 +362,9 @@ async _executeBuildingContextAction(buildingId = "", action = "") {
     if (!confirmed) return;
     const deleted = await SkyholdData.updateHolding(holding.id, (freshHolding) => {
       const before = freshHolding.buildings?.list?.length ?? 0;
+      const removed = freshHolding.buildings?.list?.find((item) => String(item.id ?? "") === String(buildingId));
+      if (!removed) return SkyholdData.skipTransaction(false);
+      clearBuildingReferences(freshHolding, removed);
       if (!freshHolding.buildings) freshHolding.buildings = { list: [] };
       freshHolding.buildings.list = (freshHolding.buildings.list ?? []).filter((item) => String(item.id ?? "") !== String(buildingId));
       return freshHolding.buildings.list.length !== before;
@@ -356,10 +392,13 @@ async _showBuildingActionMenu(buildingId = "", position = null) {
   if (!holding || !building) return;
   const cancellableProject = isCancellableConstructionProject(building);
   const mothballed = this._financeBuildingMothballed?.(holding, buildingId) === true;
+  const legacyLabor = buildingLaborMode(building) === "legacy";
   const items = [
-    { action: "clear", icon: "fa-solid fa-user-minus", label: "Убрать всех жителей" },
-    { action: "fill-free", icon: "fa-solid fa-user-plus", label: "Распределить сюда свободных жителей" },
-    { action: "fill-max", icon: "fa-solid fa-people-group", label: "Распределить сюда максимум жителей" },
+    { action: "clear", icon: "fa-solid fa-user-minus", label: legacyLabor ? "Убрать всех жителей" : "Убрать незакреплённых работников" },
+    ...(legacyLabor ? [
+      { action: "fill-free", icon: "fa-solid fa-user-plus", label: "Распределить сюда свободных жителей" },
+      { action: "fill-max", icon: "fa-solid fa-people-group", label: "Распределить сюда максимум жителей" }
+    ] : [{ action: "plan-work", icon: "fa-solid fa-list-check", label: "Открыть план работ" }]),
     game.user?.isGM && !cancellableProject
       ? mothballed
         ? { action: "unmothball", icon: "fa-solid fa-power-off", label: "Снять консервацию" }
