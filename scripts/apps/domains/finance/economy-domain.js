@@ -466,6 +466,12 @@ _financePlanInputs(holding, periodQd, identity) {
       if (!building || buildingLaborMode(building) !== "staff") {
         planIssues.push({ code: "staff-building", personId: workerId, message: "Постоянное назначение относится к недоступному штатному зданию." });
       }
+      const blocker = oldBlockers.buildings[buildingId] ?? {};
+      // A stopped employer suspends paid slots, not the permanent agreement.
+      // A debt on one actual function still leaves the reserve available.
+      const staffBlocked = blocker.mothballed || blocker.baseDebtCopper > 0
+        || blocker.operatingByFunction?.operation?.debtCopper > 0
+        || blocker.operatingByFunction?.staff?.debtCopper > 0;
       workers.push({
         ...workerBase,
         wageOverrideCopper: staffAppointment.wageDailyCopper,
@@ -474,7 +480,7 @@ _financePlanInputs(holding, periodQd, identity) {
         staffAppointment: clone(staffAppointment),
         staffOvertimeFunctions: (buildingPlanById.get(buildingId)?.functions ?? []).filter((fn) => fn.overtime).map((fn) => fn.id),
         planIssues,
-        assignments: [{
+        assignments: staffBlocked ? [] : [{
           sourceId: buildingId, functionId: "staff",
           normalQd: periodCapacity.normalQd,
           overtimeQd: Math.max(0, Math.floor(this._safeNumber(staffAppointment.overtimeQd, 0))),

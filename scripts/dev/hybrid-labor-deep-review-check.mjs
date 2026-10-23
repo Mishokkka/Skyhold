@@ -11,6 +11,8 @@ import { FinanceStaffDomain } from "../apps/domains/finance/staff-domain.js";
 import { DEFAULT_BUILDING_TEMPLATES } from "../data/building-templates.js";
 import { mergeHoldingDefaults } from "../data/normalizers.js";
 import { validateHoldingWorkAllocations } from "../data/work-allocations.js";
+import { financePeriodIdentity } from "../engines/economy/finance-period.js";
+import { makeFinanceObligation } from "../engines/economy/finance-obligations.js";
 
 const quantity = (holding, id) => (holding.storage.resources ?? []).filter((row) => row.resourceId === id).reduce((sum, row) => sum + row.qty, 0);
 async function run(f, operationId) {
@@ -23,6 +25,72 @@ export async function checkHybridLaborDeepReview() {
   globalThis.game = { user: { isGM: true }, settings: { get: () => undefined } };
   try {
     const service = getSkyholdWorkflowService();
+    for (const variant of ["mothball", "base", "operation", "staff", "production:main", "ingredients"]) {
+      const f = hybridRuntimeFixture();
+      f.holding.gm.calendaria.lastQd = 40;
+      f.building.baseUpkeepMonthlyCopper = 30;
+      f.building.operatingUpkeepMonthlyCopper = 60;
+      const agreement = structuredClone(f.person.staffAppointment);
+      if (variant === "mothball") f.holding.finance.buildingStates.workshop = { mothballed: true };
+      else if (variant === "ingredients") {
+        for (const line of f.building.productionLines) line.expenses = "ore 1";
+      } else f.holding.finance.obligations.push(makeFinanceObligation({
+        kind: variant === "base" ? "building-base-upkeep" : "building-operating-upkeep",
+        recipientKind: "building", recipientId: "workshop", sourceId: "workshop",
+        functionId: variant === "base" ? "" : variant, periodKey: "tenday:1", periodIndex: 1,
+        dueCopper: 30, operationId: `old-${variant}`
+      }));
+      SkyholdData.view = () => ({ holdings: [f.holding], catalog: {} });
+      const suspended = ["mothball", "base", "operation", "staff"].includes(variant);
+      const inputs = f.harness._financePlanInputs(f.holding, 40, financePeriodIdentity(f.holding, 40));
+      const worker = inputs.workers.find((row) => row.id === f.person.id);
+      assert.deepEqual(worker.staffAppointment, agreement, "A finance suspension must retain the staff agreement");
+      assert.equal(worker.assignments.length, suspended ? 0 : 1, `${variant}: only old building/staff blockers suspend planned paid QD`);
+      const beforeProjection = structuredClone(f.holding);
+      const projection = f.harness._canonicalFinanceProjection(f.holding);
+      assert.deepEqual(f.holding, beforeProjection, "Finance preview must not alter the agreement or settle old debts");
+      assert.equal(projection.salaryTenDayCopper, suspended ? 0 : 120, `${variant}: preview uses the same wage gate as settlement`);
+      const report = await run(f, `staff-finance-${variant}`);
+      const current = f.holding.finance.obligations.filter((row) => row.periodKey === "tenday:2");
+      const wages = current.filter((row) => row.kind === "wage");
+      assert.equal(wages.reduce((sum, row) => sum + row.dueCopper, 0), suspended ? 0 : 120);
+      assert.equal(wages.reduce((sum, row) => sum + row.paidCopper, 0), suspended ? 0 : 120);
+      assert.equal(quantity(f.holding, "wood"), 0);
+      assert.equal(quantity(f.holding, "stone"), variant === "production:main" ? 20 : 0,
+        "Function-specific primary debt allows the reserve; missing inputs and whole-contract suspension do no work");
+      assert.equal(f.building.serviceState.workedQd, variant === "production:main" ? 20 : 0);
+      assert.deepEqual(f.person.staffAppointment, agreement);
+      assert.equal(f.person.workAssignment, "workshop");
+      assert.ok(f.building.assignedWorkerIds.includes(f.person.id));
+      const currentDue = variant === "mothball" ? 0 : suspended ? 10 : 150;
+      assert.equal(current.reduce((sum, row) => sum + row.dueCopper, 0), currentDue,
+        "Mothball stops all accrual; an un-mothballed building retains base upkeep while suspended work adds no operating cost");
+      const oldDebt = ["mothball", "ingredients"].includes(variant) ? 0 : 30;
+      assert.equal(f.holding.storage.moneyCopper, 10000 - currentDue - oldDebt);
+      assert.equal(projection.projectedTreasuryCopper, f.holding.storage.moneyCopper);
+      if (variant === "ingredients") assert.ok(report.work.some((line) => line.includes("оплачиваемый простой 20 QD")),
+        "Ordinary ingredient shortage remains paid staff idle time");
+      const draft = createWorkforceDraft(f.holding, f.harness);
+      assert.deepEqual(draft.staffAppointments[f.person.id], agreement);
+      draft.edited.push(f.person.id);
+      draft.allocations[f.person.id] = [{ schemaVersion: 1, id: "external-during-suspension", sourceId: "elsewhere",
+        functionId: "culture", normalQd: 1, overtimeQd: 0 }];
+      assert.match(workforceDraftError(f.holding, draft, { isGM: true }), /Постоянная работа несовместима/,
+        "Suspension never releases a permanent worker for external assignments");
+      if (suspended) {
+        const balance = f.holding.storage.moneyCopper;
+        f.holding.gm.calendaria.lastQd = 80;
+        if (variant === "mothball") f.holding.finance.buildingStates.workshop.mothballed = false;
+        assert.equal(f.harness._canonicalFinanceProjection(f.holding).salaryTenDayCopper, 120,
+          "The next plan resumes the retained contract after debt settlement or an explicit end to mothball");
+        await run(f, `staff-finance-recovered-${variant}`);
+        assert.equal(quantity(f.holding, "wood"), 5);
+        assert.equal(quantity(f.holding, "stone"), 15);
+        assert.equal(f.building.serviceState.workedQd, 20);
+        assert.equal(f.holding.storage.moneyCopper, balance - 150);
+        assert.deepEqual(f.person.staffAppointment, agreement);
+      }
+    }
     {
       const f = hybridRuntimeFixture({ goal: null });
       Object.assign(f.building.productionLines[0], { outputQty: 10, workQd: 30 });
