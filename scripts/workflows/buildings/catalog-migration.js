@@ -541,7 +541,7 @@ export function planBuildingCatalogMigration({
       else counts.knownInstance += 1;
       const firstIssue = issues.length;
       const selectedTemplate = clone(targetById.get(resolution.targetId));
-      if (buildingLaborMode(prior) === "legacy") {
+      if (buildingLaborMode(prior) === "legacy" && buildingLaborMode(selectedTemplate) !== "legacy") {
         const legacy = legacyTargets.get(resolution.targetId);
         if (legacy) for (const field of LABOR_DEPENDENT_FIELDS) {
           if (own(legacy, field)) selectedTemplate[field] = clone(legacy[field]);

@@ -13,7 +13,7 @@ import { buildPlayerPatch, validatePlayerPatch } from "../data/player-write-guar
 import { planHybridLaborMigration, applyHybridLaborMigration, planHybridLaborCatalogMigration } from "../workflows/buildings/hybrid-labor-migration.js";
 import { executeHybridLaborMigration } from "../apps/hybrid-labor-migration-executor.js";
 import { planBuildingCatalogMigration } from "../workflows/buildings/catalog-migration.js";
-import { BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION, TEMPLATE_CATALOG_VERSION } from "../data/building-templates.js";
+import { BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION, DEFAULT_BUILDING_TEMPLATES, TEMPLATE_CATALOG_VERSION } from "../data/building-templates.js";
 import { stableDataHash } from "../data/storage-commit.js";
 import { AssignmentDomain } from "../apps/domains/assignment-domain.js";
 
@@ -343,6 +343,41 @@ const catalogSource = { meta: { revision: 1, templateCatalogVersion: TEMPLATE_CA
   ] }, people: { list: [] } }] };
 const normalCatalog = planBuildingCatalogMigration({ currentData: catalogSource, operationId: "normal-catalog" });
 assert.equal(normalCatalog.targetData.catalog.buildings.find((row) => row.id === "lumbermill").workersMax, 99, "current customized catalog rules survive a normal catalog preview");
+const customizedTemplate = clone(priorTemplate);
+Object.assign(customizedTemplate, { workersMin: 2, workerRole: "Custom millers", minOperationalQd: 7,
+  activationConditionText: "Custom service threshold" });
+customizedTemplate.workerProfile.workersMin = 2;
+Object.assign(customizedTemplate.activation, { minWorkers: 2, minOperationalQd: 7, requiresMeaningfulResult: true });
+const olderInstanceSource = clone(catalogSource);
+olderInstanceSource.catalog.buildings = [customizedTemplate];
+olderInstanceSource.holdings[0].buildings.list = [{ ...clone(customizedTemplate), id: "older-mill", templateId: "lumbermill",
+  templateVersion: TEMPLATE_CATALOG_VERSION - 1 }];
+const olderInstanceSnapshot = clone(olderInstanceSource);
+const customizedPreview = planBuildingCatalogMigration({ currentData: olderInstanceSource, operationId: "current-custom-catalog-old-instance" });
+assert.equal(customizedPreview.canApply, true, "A matching current legacy catalog and older instance need no invented conflict");
+const customizedInstance = customizedPreview.targetData.holdings[0].buildings.list[0];
+for (const field of ["workersMin", "workersMax", "workerProfile", "activation", "minOperationalQd", "activationConditionText", "workerRole"]) {
+  assert.deepEqual(customizedInstance[field], customizedTemplate[field], `${field}: current legacy catalog customization must reach the older instance`);
+}
+assert.equal(customizedInstance.labor, undefined);
+assert.deepEqual(olderInstanceSource, olderInstanceSnapshot, "Catalog Preview must not mutate saved custom rules");
+for (const templateId of ["inn", "well"]) {
+  const builtinLegacyTemplate = clone(BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION.find((row) => row.id === templateId));
+  const expectedLegacyRules = clone(builtinLegacyTemplate);
+  normalizeBuilding(expectedLegacyRules);
+  const builtinSource = clone(catalogSource);
+  builtinSource.catalog.buildings = [clone(DEFAULT_BUILDING_TEMPLATES.find((row) => row.id === templateId))];
+  builtinSource.holdings[0].buildings.list = [{ ...clone(builtinLegacyTemplate), id: `builtin-old-${templateId}`, templateId,
+    templateVersion: TEMPLATE_CATALOG_VERSION - 1 }];
+  const builtinPreview = planBuildingCatalogMigration({ currentData: builtinSource,
+    operationId: `builtin-hybrid-template-old-${templateId}`, replaceCatalog: true });
+  assert.equal(builtinPreview.canApply, true);
+  const builtinInstance = builtinPreview.targetData.holdings[0].buildings.list[0];
+  assert.equal(builtinInstance.labor, undefined, "A new built-in hybrid template cannot implicitly transition an existing instance");
+  for (const field of ["workersMin", "workersMax", "workerProfile", "activation", "minOperationalQd"]) {
+    assert.deepEqual(builtinInstance[field], expectedLegacyRules[field], `${templateId}: normalized legacy ${field} survives selection of a hybrid template`);
+  }
+}
 for (const replaceCatalog of [false, true]) {
   const catalogPreview = planBuildingCatalogMigration({ currentData: catalogSource, operationId: `old-catalog-${replaceCatalog}`, replaceCatalog });
   assert.equal(catalogPreview.targetData.catalog.buildings.find((row) => row.id === "lumbermill").labor, undefined,
