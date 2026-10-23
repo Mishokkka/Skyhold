@@ -8,6 +8,7 @@ import { getSkyholdWorkflowService } from "../workflows/skyhold-workflow-service
 import { returnCrewResidentToShip, embarkShipCrew, disembarkShipCrew } from "../engines/ships/crew.js";
 import { isResidentInPopulation, isResidentRestingOnShip } from "../data/resident-presence.js";
 import { FinanceStaffDomain } from "../apps/domains/finance/staff-domain.js";
+import { DEFAULT_BUILDING_TEMPLATES } from "../data/building-templates.js";
 
 const quantity = (holding, id) => (holding.storage.resources ?? []).filter((row) => row.resourceId === id).reduce((sum, row) => sum + row.qty, 0);
 async function run(f, operationId) {
@@ -120,6 +121,40 @@ export async function checkHybridLaborDeepReview() {
       assert.equal(f.holding.storage.moneyCopper, globalIssue ? 10000 : 9880,
         "A resident's malformed contract blocks that resident; an employer's overcapacity still blocks the entire invalid roster");
       if (!globalIssue) assert.ok(!report.skipped.some((row) => row.startsWith("Worker 1: работа остановлена")));
+    }
+
+    for (const withMessage of [true, false]) {
+      const f = hybridRuntimeFixture({ goal: null });
+      f.building.agriculture = structuredClone(DEFAULT_BUILDING_TEMPLATES.find((row) => row.id === "grain-field").agriculture);
+      Object.assign(f.building.agriculture, {
+        crops: [{ id: "grain", resourceId: "grain", outputQty: 8, sowingSeasons: ["spring"], sowingWorkQd: 1,
+          growingQd: 8, harvestWorkQd: 2, expiryRule: "qd", readyExpiryQd: 120, annualHarvestLimit: 1 }],
+        activeCropId: "grain", operations: { sow: false, harvest: true },
+        state: { phase: "ready", cropId: "grain", growingElapsedQd: 8, harvestYear: "1" }
+      });
+      Object.assign(f.person.staffAppointment, { primaryFunctionId: "agriculture", reserveFunctionId: "" });
+      f.harness._agricultureCalendarContext = () => ({ year: "1", seasonId: "spring", seasonKey: "1:spring" });
+      const apply = f.harness._applyAgriculturePeriodPlan;
+      let rejections = 0, failureMessage = "", livestockSteps = 0, finalizations = 0;
+      f.harness._applyAgriculturePeriodPlan = function (holding, plan) {
+        if (!plan.entries.length) return apply.call(this, holding, plan);
+        const stale = structuredClone(plan);
+        stale.entries[0].stateBeforeSignature += ":stale";
+        const result = apply.call(this, holding, stale);
+        assert.equal(result.ok, false, "The real agriculture apply must reject the stale state signature");
+        rejections += 1; failureMessage = result.message;
+        return withMessage ? result : { ...result, message: "" };
+      };
+      f.harness._runLivestockForQd = () => { livestockSteps += 1; return { ok: true }; };
+      f.harness._finishStaffExecution = () => { finalizations += 1; };
+      await assert.rejects(() => run(f, `staff-agriculture-rejection-${withMessage}`), (error) => {
+        assert.equal(error.message, withMessage ? failureMessage : "Не удалось рассчитать штатные сельскохозяйственные работы.");
+        return true;
+      }, "A rejected staff agriculture plan must abort the economy calculation");
+      assert.equal(rejections, 1, "A failed step must not be silently retried on subsequent steps");
+      assert.equal(livestockSteps, 0); assert.equal(finalizations, 0);
+      assert.equal(f.building.agriculture.state.phase, "ready");
+      assert.equal(quantity(f.holding, "grain"), 0);
     }
 
     for (const voyage of [false, true]) {

@@ -1663,7 +1663,10 @@ async _runProductionAndLivestockForQd(holding, qd, report, { operationId = "", b
     // The day's feed can be milled before the herd is fed. Milk and eggs are
     // delivered at day end and available to the next day's processing shift.
     afterStep: (step) => {
-      this._runStaffAgricultureStep?.(holding, step, report, { operationId, workerContext, financeContext, budgets });
+      const staffAgriculture = this._runStaffAgricultureStep?.(holding, step, report, { operationId, workerContext, financeContext, budgets });
+      if (staffAgriculture && !staffAgriculture.ok) {
+        throw new Error(staffAgriculture.message || "Не удалось рассчитать штатные сельскохозяйственные работы.");
+      }
       if ((step + 1) % 4) return;
       const livestockResult = this._runLivestockForQd(holding, 4, report, {
         operationId: operationId ? `${operationId}:livestock:day-${(step + 1) / 4}` : "",
