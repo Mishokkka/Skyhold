@@ -7,6 +7,15 @@
 - The module uses JavaScript ES modules and Foundry Application V2 patterns where already established.
 - Do not add production dependencies or change the storage format without explicit approval.
 
+## Trusted friendly table and audit boundary
+
+- The module is built for a trusted, friendly table. The GM and players use it in good faith and have no malicious intent.
+- Deliberate actions outside ordinary module use, such as reading hidden data through browser developer tools, inspecting settings/socket payloads, forging requests or intentionally exploiting internals, are outside the agreed threat model. Their possibility alone is not a bug, vulnerability finding or release blocker for this project.
+- GM-only visibility must work in ordinary module windows, dialogs, chat and supported player workflows. Accidental disclosure during normal use, unintended writes, data loss, duplicate actions and synchronization errors remain defects even at a trusted table.
+- Preserve existing permission checks, authority-GM routing, validation and recovery guarantees. This policy does not authorize removing them or masking ordinary-use failures.
+- Do not propose private/server-side storage, a new transport protocol or other adversarial hardening solely to prevent deliberate player inspection or misuse. Such hardening requires a separate user request.
+- ST-04 from the 2026-10-24 technical/UX audit is an accepted design characteristic under this model, not an open High defect. Reassess it only if there is an ordinary-use disclosure scenario or the user explicitly changes the trust model.
+
 ## Scope, authorization, and completion
 
 - For requested code changes, continue through implementation, relevant static checks, fixes for failures caused by the change, and diff review without asking for approval at each step.
