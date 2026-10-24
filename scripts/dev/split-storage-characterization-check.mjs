@@ -240,6 +240,46 @@ export async function checkSplitStorageCharacterization() {
     assert.equal(rolledBack.meta.revision, 20, "an interrupted commit before its partition write must recover the previous revision");
     assert.equal(rolledBack.holdings[0].name, "Before interrupted write", "rollback recovery must retain the previous partition payload");
 
+    const metadataHarness = settingsHarness(recoveryPrevious, { failWriteKey: SETTING_HOLDINGS });
+    const metadataStorage = createSkyholdSplitStorage({ settings: metadataHarness.settings });
+    const beforeMetadataWrite = metadataStorage.getData();
+    const metadataNext = clone(beforeMetadataWrite);
+    metadataNext.meta.revision += 1;
+    metadataNext.meta.lastImport = { source: "interrupted-import", holdingId: metadataNext.holdings[0].id };
+    metadataNext.holdings[0].name = "Import that did not persist";
+    await assert.rejects(metadataStorage.persistData(metadataNext, { normalized: true, scope: "holdings" }), /blocked setting write/);
+    const metadataRecovered = createSkyholdSplitStorage({ settings: metadataHarness.settings }).getData();
+    assert.deepEqual(metadataRecovered.meta.lastImport, beforeMetadataWrite.meta.lastImport,
+      "rollback before a single-partition write must not retain logical metadata from the rejected commit");
+    assert.equal(metadataRecovered.meta.revision, beforeMetadataWrite.meta.revision);
+    assert.equal(metadataRecovered.holdings[0].name, beforeMetadataWrite.holdings[0].name);
+    assert.equal(stableDataHash(metadataHarness.values.get(SETTING_DATA)), stableDataHash(beforeMetadataWrite),
+      "a partition commit that changes logical metadata must snapshot the complete previous root");
+
+    const pristinePrevious = committedDefaultRoot({ revision: 20 });
+    const pristineNext = clone(pristinePrevious);
+    pristineNext.meta.revision = 21;
+    pristineNext.meta.lastImport = { source: "unwritten-pristine-import" };
+    pristineNext.holdings[0].name = "Unwritten pristine holding";
+    const pristineMeta = interruptedMeta(pristinePrevious, pristineNext, { writeId: "pristine-metadata-rollback" });
+    const pristineHarness = settingsHarness({ meta: pristineMeta,
+      holdings: pristinePrevious.holdings, catalog: pristinePrevious.catalog }, { legacy: pristinePrevious });
+    const pristineRecovered = createSkyholdSplitStorage({ settings: pristineHarness.settings }).getData();
+    assert.equal(pristineRecovered.meta.lastImport, undefined,
+      "a matching pristine rollback snapshot must restore previous metadata even without customized partitions");
+    assert.equal(pristineRecovered.meta.revision, 20);
+
+    const stalePristine = clone(pristinePrevious);
+    stalePristine.meta.revision = 19;
+    const stalePristineHarness = settingsHarness({ meta: pristineMeta,
+      holdings: pristinePrevious.holdings, catalog: pristinePrevious.catalog }, { legacy: stalePristine });
+    assert.equal(createSkyholdSplitStorage({ settings: stalePristineHarness.settings }).getData().meta.revision, 20,
+      "a stale pristine snapshot must not replace the rollback revision");
+    const unrelatedPristineHarness = settingsHarness({ meta: rollbackMeta,
+      holdings: recoveryPrevious.holdings, catalog: recoveryPrevious.catalog }, { legacy: pristinePrevious });
+    assert.equal(createSkyholdSplitStorage({ settings: unrelatedPristineHarness.settings }).getData().holdings[0].name,
+      recoveryPrevious.holdings[0].name, "same-revision defaults must not replace unrelated non-default rollback partitions");
+
     const mixedNext = clone(recoveryPrevious);
     mixedNext.meta.revision = 21;
     mixedNext.holdings[0].name = "Mixed holding";

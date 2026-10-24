@@ -18,8 +18,10 @@ import { checkMagnifiqueCrewContent } from "../magnifique-crew-content-check.mjs
 import { checkPoliticsAvailability } from "../politics-availability-check.mjs";
 import { checkPoliticsRules } from "../politics-rules-check.mjs";
 import { checkAuditRegressions } from "../audit-regression-check.mjs";
+import { checkCoreSafety } from "../core-safety-check.mjs";
 
 export async function runDataSuite() {
+  checkCoreSafety();
   checkWorkerProfileEditor();
   checkPoliticsAvailability();
   checkPoliticsRules();

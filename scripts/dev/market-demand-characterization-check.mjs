@@ -119,6 +119,32 @@ export function checkMarketDemandCharacterization() {
   assert.equal(normalized[key].availableDemand, 5);
   assert.equal(normalized[key].reservedDemand, 5);
 
+  for (const outcome of ["consumed", "restored"]) {
+    const combinedDraft = holding();
+    const a = reserveMarketDemand({ holding: combinedDraft, marketId: "region", lines: [line(3)], operationId: "order-a" });
+    const b = reserveMarketDemand({ holding: combinedDraft, marketId: "region", lines: [line(4, 1)], operationId: "order-b" });
+    const reservations = [...a.reservations, ...b.reservations];
+    const beforeSettlement = structuredClone(combinedDraft);
+    const invalid = settleMarketDemandReservations({ holding: combinedDraft, reservations: [
+      ...a.reservations, { ...b.reservations[0], qty: 5 }
+    ], outcome, operationId: `invalid-${outcome}` });
+    assert.equal(invalid.ok, false);
+    assert.deepEqual(combinedDraft, beforeSettlement, "all reservations must validate before any settlement is written");
+
+    const settlement = settleMarketDemandReservations({ holding: combinedDraft, reservations, outcome, operationId: `combined-${outcome}` });
+    assert.equal(settlement.ok, true);
+    assert.equal(settlement.qty, 7);
+    const state = combinedDraft.special.market.demand[key];
+    assert.deepEqual(state.reservations, {}, "settling several orders in one resource pool must release every reservation");
+    assert.equal(state.reservedDemand, 0);
+    assert.equal(state.consumedOutstanding, outcome === "consumed" ? 7 : 0);
+    assert.equal(state.availableDemand, outcome === "consumed" ? 3 : 10);
+    const afterSettlement = structuredClone(combinedDraft);
+    const repeated = settleMarketDemandReservations({ holding: combinedDraft, reservations, outcome, operationId: `combined-${outcome}` });
+    assert.equal(repeated.replay, true);
+    assert.deepEqual(combinedDraft, afterSettlement, "replaying a combined settlement must not change demand");
+  }
+
   return true;
 }
 

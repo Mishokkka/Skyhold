@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   calendariaDateKey,
   calendariaDateTimeToInput,
@@ -26,6 +28,7 @@ function restoreGlobal(name, value, existed) {
   if (existed) globalThis[name] = value;
   else delete globalThis[name];
 }
+
 
 export function checkCalendariaCharacterization() {
   const calendar = {
@@ -88,6 +91,13 @@ export function checkCalendariaCharacterization() {
     );
     assert.equal(parseCalendariaDateInput("881-09-03 18:45"), null, "manual input must reject month 09 for an 8-month calendar");
     assert.equal(parseCalendariaDateInput("881-08-31 18:45"), null, "manual input must reject day 31 for a 30-day month");
+    assert.equal(parseCalendariaDateInput("881-08-18 24:00"), null, "manual input must reject the first hour outside a 24-hour day");
+    assert.equal(parseCalendariaDateInput("881-08-18 99:00"), null, "manual input must reject hours that would silently roll into another date");
+    assert.equal(parseCalendariaDateInput("881-08-18 23:59")?.hour, 23, "the last valid hour must remain available");
+    calendar.days.hoursPerDay = 30;
+    assert.equal(parseCalendariaDateInput("881-08-18 29:59")?.hour, 29, "custom calendars must allow every hour in their configured day");
+    assert.equal(parseCalendariaDateInput("881-08-18 30:00"), null, "custom calendars must reject their own day boundary");
+    calendar.days.hoursPerDay = 24;
 
     const snapshot = getCalendariaSnapshot();
     assert.equal(snapshot.dateKey, "881-8-18", "snapshot date keys must use human month numbers");
@@ -116,4 +126,9 @@ export function checkCalendariaCharacterization() {
   } finally {
     restoreGlobal("CALENDARIA", previousCalendaria, hadCalendaria);
   }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  checkCalendariaCharacterization();
+  console.log("FBL Skyhold Calendaria: date input, calendar bounds and production seasons passed.");
 }

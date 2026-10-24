@@ -148,16 +148,6 @@ export function marketRegionAccessCostMap({ holding = {}, regions = [], dependen
   return costs;
 }
 
-// Compatibility alias: callers historically consumed a hop map. Route access is
-// now weighted, but the return contract remains a Map<regionId, URS cost>.
-export function marketRegionHopMap(options = {}) {
-  return marketRegionAccessCostMap(options);
-}
-
-export function shortestMarketRouteDistance(fromId = "", toId = "", regions = [], { mode = "" } = {}) {
-  return shortestMarketRoute(fromId, toId, regions, { mode })?.distance ?? null;
-}
-
 export function shortestMarketRouteDistanceKm(fromId = "", toId = "", regions = [], { mode = "" } = {}) {
   return shortestMarketRoute(fromId, toId, regions, { mode })?.distanceKm ?? null;
 }

@@ -271,22 +271,6 @@ function reputationRollHtml(result = {}) {
   `;
 }
 
-function controlRollHtml(result = {}) {
-  const rolls = Array.isArray(result?.rolls) ? result.rolls : [];
-  const diceLine = rolls.length ? dicePoolHtml(rolls) : "0к6";
-  const ceiling = result?.institutionalCeiling === null || result?.institutionalCeiling === undefined
-    ? "нет полного институционального охвата"
-    : String(result.institutionalCeiling);
-  return `
-    <section class="fbls-chat-control-roll">
-      <h4>Проверка Контроля</h4>
-      <p><strong>Норматив:</strong> ${Number(result?.orderRequirement) || 0}; <strong>общий Контроль:</strong> ${Number(result?.generalControl) || 0}; <strong>только против беспорядков:</strong> ${Number(result?.unrestOnlyControl) || 0}.</p>
-      <p><strong>Недостаток охраны:</strong> ${Number(result?.crimeDeficit) || 0}к6; <strong>кости:</strong> ${diceLine}; <strong>инциденты:</strong> ${Number(result?.successes) || 0}.</p>
-      <p><strong>Сырое довольство:</strong> ${Number(result?.rawMorale) || 0}; <strong>для беспорядков:</strong> ${Number(result?.disorderMorale) || 0}; <strong>потолок:</strong> ${escapeHtml(ceiling)}.</p>
-    </section>
-  `;
-}
-
 export const GmEventActions = {
   click: {
     "add-defense-squad": "_onAddDefenseSquad",
@@ -598,93 +582,6 @@ async _postReputationEventRoll(holding) {
 
 _prepareTendayRandomEvents(holding, options = {}) {
   return prepareTendayRandomEvents(this, holding, options);
-},
-
-async _postPreparedTendayRandomEventsChat(holding, prepared = {}) {
-  if (!holding) return null;
-  const periodCount = Math.max(1, Math.floor(this._safeNumber?.(prepared.periods, 1) ?? 1));
-  const entries = Array.isArray(prepared.entries) ? prepared.entries : [];
-  const title = String(prepared.title || (periodCount > 1 ? `События ${periodCount} десятников` : "События десятника"));
-  await createFoundryChatMessage({
-    speaker: foundryChatSpeaker({ alias: holding.name || "Владение" }),
-    content: `
-      <div class="fbls-chat-card">
-        <h3>${escapeHtml(title)}</h3>
-        <p><strong>${escapeHtml(holding.name)}.</strong></p>
-        ${entries.map((entry) => `
-          <section>
-            ${periodCount > 1 ? `<h4>Десятник ${entry.index}</h4>` : ""}
-            <h4>Общее событие</h4>
-            ${eventResultHtml(entry.general, { gmDetails: isGmOnlyEvent(entry.general) })}
-            ${reputationRollHtml(entry.reputation)}
-            ${controlRollHtml(entry.control)}
-          </section>
-        `).join("")}
-      </div>
-    `,
-    ...eventChatOptions(tendayEventResults(entries))
-  });
-  this.requestRender?.();
-  return prepared;
-},
-
-async _postTenDayRandomEvents(holding, { periods = 1 } = {}) {
-  if (!holding) return null;
-  const operationId = makeId("tenday-events", 20);
-  const prepared = await SkyholdData.updateHolding(holding.id, (freshHolding, data) => {
-    return this._prepareTendayRandomEvents(freshHolding, {
-      periods,
-      operationId,
-      regionOptions: data?.catalog?.eventRegions
-    });
-  }, { fallback: false, reason: "gm:roll-tenday-events" });
-  if (!prepared) return null;
-  for (const warning of prepared.warnings ?? []) ui.notifications.warn(warning);
-  const current = SkyholdData.get()?.holdings?.find((row) => String(row?.id ?? "") === String(holding.id ?? "")) ?? holding;
-  await this._postPreparedTendayRandomEventsChat(current, prepared);
-  return prepared;
-},
-
-async _onRollReputationEvent(event) {
-  event.preventDefault();
-  event.stopPropagation();
-  if (!game.user?.isGM) return;
-
-  const data = SkyholdData.get();
-  const holding = data.holdings.find((item) => item.id === this.activeHoldingId);
-  if (!holding) return;
-  return this._postReputationEventRoll(holding);
-},
-
-async _onRollTendayEvents(event) {
-  event.preventDefault();
-  event.stopPropagation();
-  if (!game.user?.isGM) return;
-
-  const data = SkyholdData.get();
-  const holding = data.holdings.find((item) => item.id === this.activeHoldingId);
-  if (!holding) return;
-  return this._postTenDayRandomEvents(holding);
-},
-
-async _onImportLaputa(event) {
-  event.preventDefault();
-  if (!game.user?.isGM) return;
-
-  const confirmed = await this._confirmAction("Импорт Лапуты", "Импортировать данные Лапуты из встроенного снимка Лапута.xlsx? Текущие жители, здания, особое и хранилище Лапуты будут заменены. ID сцены, видимость и старые ГМ-заметки будут сохранены.");
-  if (!confirmed) return;
-
-  try {
-    await SkyholdData.importLaputa();
-    this.activeHoldingId = "laputa";
-    this.activeTab = "overview";
-    this.editingPersonId = null;
-    this.requestRender();
-    ui.notifications.info("Лапута импортирована из встроенных данных.");
-  } catch (error) {
-    console.error("FBL Skyhold | Failed to import Laputa", error);
-    ui.notifications.error("Не удалось импортировать Лапуту. Подробности в консоли.");
-  }
 },
 
 async _onResetData(event) {

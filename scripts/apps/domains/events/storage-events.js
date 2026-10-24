@@ -1,8 +1,8 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import { requestStorageOperation, SkyholdData } from "../../../data/store.js";
 import { clone } from "../../../data/utils.js";
-import { createSafeIcon, escapeHtml } from "../../../core/helpers.js";
-import { foundryDialogV2, foundryItemClass, renderFoundryDocumentSheet, resolveFoundryUuid } from "../../../integrations/foundry-runtime.js";
+import { createSafeIcon } from "../../../core/helpers.js";
+import { foundryItemClass, renderFoundryDocumentSheet, resolveFoundryUuid } from "../../../integrations/foundry-runtime.js";
 import { SkyholdResourceCatalogEditor } from "../../editors/resource-catalog-editor.js";
 import { SkyholdStorageActionDialog } from "../../storage-action-dialog.js";
 import { dispatchDelegatedAction } from "../../common/delegated-events.js";
@@ -450,162 +450,6 @@ async _openStorageDeleteDialog({ rowType = "resources", rowId = "", roomId = "ou
   if (removed) this.requestRender({ focus: false, skipLoadingOverlay: true });
 },
 
-async _onBatchMoveStorageRoom(event) {
-  event.preventDefault();
-  event.stopPropagation();
-  if (!this._canUseStorage()) return;
-  const button = event.currentTarget;
-  const rowType = String(button?.dataset?.storageBatchKind ?? "") === "items" ? "items" : "resources";
-  const root = button?.closest?.(".fbls-storage-resources-layout");
-  const fromRoomId = this._normalizeStorageRoomId(root?.querySelector?.("[data-storage-active-room]")?.dataset?.storageActiveRoom || this.activeStorageRoomId || "outdoors");
-  const toRoomId = this._normalizeStorageRoomId(root?.querySelector?.("[data-storage-batch-move-to]")?.value || "outdoors");
-  if (fromRoomId === toRoomId) {
-    ui.notifications.warn("Выбери другое помещение.");
-    return;
-  }
-  const visibleIds = new Set(Array.from(root?.querySelectorAll?.(`[data-storage-batch-select][data-storage-batch-kind="${rowType}"]`) ?? [])
-    .map((field) => String(field.dataset.storageBatchSelect ?? ""))
-    .filter(Boolean));
-  const rowIds = Array.from(this.storageBatchSelection?.[rowType] ?? []).filter((id) => visibleIds.has(String(id)));
-  if (!rowIds.length) {
-    ui.notifications.warn("Выбери хотя бы одну позицию.");
-    return;
-  }
-  const data = SkyholdData.get();
-  const holdingId = this._activeWritableHoldingId(data);
-  const source = (data?.holdings ?? []).find((holding) => String(holding?.id ?? "") === String(holdingId ?? ""));
-  if (!source) return this._warnNoActiveHolding();
-  const prepared = clone(source);
-  const preview = this._applyStorageBatchMove(prepared, {
-    rowType,
-    rowIds,
-    fromRoomId,
-    toRoomId,
-    operationId: "preview"
-  });
-  if (!preview.ok) {
-    ui.notifications.warn(preview.message);
-    return;
-  }
-  const targetLabel = this._storageRoomLabel(prepared, toRoomId);
-  const kindLabel = rowType === "items" ? "предметы" : "ресурсы";
-  const content = `<div class="fbls-dialog-text"><p>Переместить выбранные ${kindLabel} в <strong>${escapeHtml(targetLabel)}</strong>? Переполнение будет распределено обычными правилами склада.</p><ul>${preview.messages.slice(0, 10).map((message) => `<li>${escapeHtml(message)}</li>`).join("")}</ul>${preview.messages.length > 10 ? `<p>И ещё: ${preview.messages.length - 10}.</p>` : ""}</div>`;
-  const confirmed = await foundryDialogV2().confirm({
-    window: { title: "Пакетное перемещение" },
-    content,
-    modal: true
-  });
-  if (!confirmed) return;
-  const applied = await requestStorageOperation({
-    type: "batchMove",
-    holdingId,
-    expectedRevision: Math.max(0, Number(data?.meta?.revision) || 0),
-    rowType,
-    rowIds,
-    fromRoomId,
-    toRoomId
-  });
-  if (!applied) return;
-  if (!applied.ok) {
-    ui.notifications.warn(applied.message || "Не удалось выполнить пакетную операцию.");
-    return;
-  }
-  const selection = this.storageBatchSelection?.[rowType];
-  for (const rowId of rowIds) selection?.delete?.(rowId);
-  this.activeStorageRoomId = toRoomId;
-  this.activeStorageTab = rowType;
-  this._activeTabContextCache?.clear?.();
-  this.requestRender();
-  ui.notifications.info(`Перемещено позиций: ${applied.moved}.`);
-},
-
-async _onAdjustStorage(event) {
-  event.preventDefault();
-  event.stopPropagation();
-  if (!this._canUseStorage()) return;
-
-  const button = event.currentTarget;
-  const mode = button?.dataset?.mode === "spend" ? "spend" : "add";
-  const root = button.closest(".fbls-storage-adjust");
-  if (!root) return;
-
-  const resourceSelect = root.querySelector("[data-storage-adjust-resource]");
-  const customInput = root.querySelector("[data-storage-adjust-custom]");
-  const qtyInput = root.querySelector("[data-storage-adjust-qty]");
-  const noteInput = root.querySelector("[data-storage-adjust-note]");
-  const roomSelect = root.querySelector("[data-storage-adjust-room]");
-
-  const resourceId = String(resourceSelect?.value ?? "custom");
-  const name = resourceId === "custom" ? String(customInput?.value ?? "").trim() : "";
-  const rawQty = Math.abs(this._safeNumber(qtyInput?.value, 0));
-  const qty = mode === "spend" ? -rawQty : rawQty;
-  const note = String(noteInput?.value ?? "").trim();
-  const roomId = String(roomSelect?.value ?? "outdoors") || "outdoors";
-
-  try {
-    const result = await this._updateActiveHolding((holding) => {
-      const applied = this._applyManualStorageChange(holding, {
-        resourceId,
-        name,
-        qty,
-        note,
-        kind: mode === "spend" ? "manual-spend" : "manual-add",
-        roomId
-      });
-      return applied.ok ? applied : SkyholdData.skipTransaction(applied);
-    }, { reason: "storage:adjust" });
-    if (!result) return;
-    if (!result.ok) { ui.notifications.warn(result.message); return; }
-    this.activeTab = "storage";
-    this.activeStorageTab = "resources";
-    this.activeStorageRoomId = this._normalizeStorageRoomId(roomId);
-    this.requestRender();
-    ui.notifications.info(result.message);
-  } catch (error) {
-    console.error("FBL Skyhold | Failed to adjust storage", error);
-    ui.notifications.error("Не удалось изменить хранилище. Подробности в консоли.");
-  }
-},
-
-async _onMoveStorageResource(event) {
-  event.preventDefault();
-  event.stopPropagation();
-  if (!this._canUseStorage()) return;
-
-  const root = event.currentTarget?.closest?.(".fbls-storage-move");
-  if (!root) return;
-  const resourceSelect = root.querySelector("[data-storage-move-resource]");
-  const customInput = root.querySelector("[data-storage-move-custom]");
-  const qtyInput = root.querySelector("[data-storage-move-qty]");
-  const fromSelect = root.querySelector("[data-storage-move-from]");
-  const toSelect = root.querySelector("[data-storage-move-to]");
-  const noteInput = root.querySelector("[data-storage-move-note]");
-
-  const resourceId = String(resourceSelect?.value ?? "custom");
-  const name = resourceId === "custom" ? String(customInput?.value ?? "").trim() : "";
-  const qty = Math.max(0, this._safeNumber(qtyInput?.value, 0));
-  const fromRoomId = String(fromSelect?.value ?? "outdoors") || "outdoors";
-  const toRoomId = String(toSelect?.value ?? "outdoors") || "outdoors";
-  const note = String(noteInput?.value ?? "").trim();
-
-  try {
-    const result = await this._updateActiveHolding((holding) => {
-      const applied = this._applyStorageMove(holding, { resourceId, name, qty, fromRoomId, toRoomId, note });
-      return applied.ok ? applied : SkyholdData.skipTransaction(applied);
-    }, { reason: "storage:move-resource" });
-    if (!result) return;
-    if (!result.ok) { ui.notifications.warn(result.message); return; }
-    this.activeTab = "storage";
-    this.activeStorageTab = "resources";
-    this.activeStorageRoomId = this._normalizeStorageRoomId(toRoomId);
-    this.requestRender();
-    ui.notifications.info(result.message);
-  } catch (error) {
-    console.error("FBL Skyhold | Failed to move storage resource", error);
-    ui.notifications.error("Не удалось переместить ресурс. Подробности в консоли.");
-  }
-},
-
 _moneyDenomFactor(key = "copper") {
   if (key === "gold") return 100;
   if (key === "silver") return 10;
@@ -732,20 +576,6 @@ async _onStorageDrop(event) {
   }
 },
 
-async _onWithdrawStorageResource(event) {
-  event.preventDefault();
-  event.stopPropagation();
-  if (!this._canUseStorage()) return;
-  const button = event.currentTarget;
-  const card = button.closest(".fbls-storage-resource-card");
-  const resourceId = String(button.dataset.resourceId ?? "custom");
-  const name = String(button.dataset.resourceName ?? "");
-  const roomId = String(button.dataset.roomId ?? this.activeStorageRoomId ?? "outdoors");
-  const qty = Math.max(1, this._safeNumber(card?.querySelector("[data-storage-withdraw-qty]")?.value, 1));
-  const actor = this._storageDefaultActor();
-  return this._withdrawStoredResource({ row: { resourceId, name }, qty, actor, roomId });
-},
-
 async _withdrawStoredResource({ row = null, qty = 1, actor = null, roomId = "outdoors" } = {}) {
   const actorId = String(actor?.id ?? "");
   if (!actorId) return ui.notifications.warn("Не найден привязанный персонаж игрока.");
@@ -821,18 +651,6 @@ async _onOpenStorageItem(event) {
   }
 },
 
-async _onGiveStorageItem(event) {
-  event.preventDefault();
-  event.stopPropagation();
-  if (!this._canUseStorage()) return;
-  const button = event.currentTarget;
-  const card = button.closest(".fbls-storage-item-card");
-  const itemId = String(button.dataset.itemId ?? "");
-  const qty = Math.max(1, this._safeNumber(card?.querySelector("[data-storage-item-give-qty]")?.value, 1));
-  const actor = this._storageDefaultActor();
-  return this._giveStoredItem({ itemId, qty, actor, roomId: this.activeStorageRoomId });
-},
-
 async _giveStoredItem({ itemId = "", qty = 1, actor = null, roomId = "outdoors" } = {}) {
   const actorId = String(actor?.id ?? "");
   if (!actorId) return ui.notifications.warn("Не найден привязанный персонаж игрока.");
@@ -856,22 +674,6 @@ async _giveStoredItem({ itemId = "", qty = 1, actor = null, roomId = "outdoors" 
     console.error("FBL Skyhold | Failed to give stored item", error);
     ui.notifications.error("Не удалось выдать предмет. Подробности в консоли.");
   }
-},
-
-async _onCleanStorageZeros(event) {
-  event.preventDefault();
-  event.stopPropagation();
-  if (!game.user?.isGM) return;
-  const removed = await this._updateActiveHolding((holding) => {
-    if (!holding?.storage?.resources) return SkyholdData.skipTransaction(null);
-    const before = holding.storage.resources.length;
-    holding.storage.resources = holding.storage.resources.filter((row) => Math.abs(this._safeNumber(row.qty, 0)) > 0.0001);
-    return before - holding.storage.resources.length;
-  }, { reason: "storage:clean-zeros" });
-  if (removed === null) return;
-  this.activeTab = "storage";
-  this.requestRender();
-  ui.notifications.info(removed ? `Удалено нулевых ресурсов: ${removed}.` : "Нулевых ресурсов нет.");
 },
 
 async _onClearStorageLog(event) {

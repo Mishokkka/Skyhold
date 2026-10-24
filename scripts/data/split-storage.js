@@ -32,6 +32,11 @@ function isDefaultSplitPayload({ holdingsHash = "", catalogHash = "" } = {}) {
   return holdingsHash === DEFAULT_HOLDINGS_HASH && catalogHash === DEFAULT_CATALOG_HASH;
 }
 
+function legacyMatchesPartitionHashes(legacy, { holdings, catalog } = {}) {
+  return Boolean(legacy && Array.isArray(legacy.holdings) && legacy.catalog
+    && stableDataHash(legacy.holdings) === holdings && stableDataHash(legacy.catalog) === catalog);
+}
+
 function completeCommitToken(meta = {}) {
   const revision = Math.max(0, toNumber(meta?.revision, 0));
   const commit = meta?.storageCommit;
@@ -135,7 +140,9 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
       if (recovery.ok) {
         if (recovery.mode === "rollback"
           && legacyRevision === recovery.data?.meta?.revision
-          && legacyHasRuntimeData(legacy)) {
+          // A pristine snapshot also restores prior metadata when its payload
+          // matches both rolled-back partitions; unrelated defaults cannot.
+          && (legacyHasRuntimeData(legacy) || legacyMatchesPartitionHashes(legacy, persistedPartitionHashes))) {
           warnCommitProblem(commitInspection, splitRevision, legacyRevision, "legacy-rollback");
           return legacy;
         }
@@ -248,9 +255,12 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
     }
     const needsRollbackSnapshot = Boolean(forceRollbackSnapshot)
       || (holdingsDirty && catalogDirty)
+      || (metaDirty && (holdingsDirty || catalogDirty))
       || !splitMatchesLogicalPrevious;
 
     // A one-partition write is recoverable from the previous/target hashes in meta.
+    // Logical metadata needs its own previous snapshot when a partition also changes;
+    // restoring only the previous revision would retain the uncommitted metadata.
     // When both partitions change (or legacy data has not hydrated split settings),
     // preserve the last coherent logical root before starting the commit.
     if (needsRollbackSnapshot) await writeSetting(SETTING_DATA, clone(previous));

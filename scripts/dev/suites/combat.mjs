@@ -7,6 +7,7 @@ import { createRandomDecisionRecorder, createRandomDecisionReplay } from "../../
 import { resetMassCombatState } from "../../apps/mass-combat/state.js";
 import { battleTerminalState } from "../../apps/mass-combat/terminal.js";
 import { defenseSquadProfile } from "../../apps/mass-combat/sources.js";
+import { applySettlementBattleDamage } from "../../apps/mass-combat/damage.js";
 import { consumeDefenderMilitarySupplies, prepareDefenderMilitarySupplyPlan } from "../../apps/mass-combat/supplies.js";
 import * as massCombatResidents from "../../apps/mass-combat/residents.js";
 import { ResidentDomain } from "../../apps/domains/resident-domain.js";
@@ -38,6 +39,16 @@ export function runCombatSuite() {
   const secondArchive = archiveBattle(state, { outcome: terminal.outcome, terminalReason: terminal.reason, resolvedBy: "suite", resolvedAt: "2026-07-12T12:01:00.000Z" });
   assert.equal(firstArchive, secondArchive, "battle archive must be idempotent by battle id");
   assert.equal(state.archive.length, 1, "battle archive must not duplicate a resolved battle");
+
+  const damageBuilding = (id) => ({ id, name: id, constructionStatus: "built", buildTarget: 12, functions: { defense: true } });
+  const singleTarget = { buildings: { list: [damageBuilding("tower")] } };
+  const singleDamage = applySettlementBattleDamage(singleTarget, { battleId: "one-target", round: 1 }, 5, {}, { random: () => 0 });
+  assert.equal(singleDamage.records.length, 1, "a two-target damage result must stop when no undamaged candidate remains");
+  assert.equal(singleTarget.buildings.list[0].condition, "heavilyDamaged", "one building cannot receive both distinct target hits in the same round");
+  assert.equal(singleTarget.buildings.list[0].battleDamage, 5, "the damage log and repair cost must represent only one hit per building");
+  const twoTargets = { buildings: { list: [damageBuilding("tower"), damageBuilding("gate")] } };
+  const twoDamage = applySettlementBattleDamage(twoTargets, { battleId: "two-targets", round: 1 }, 5, {}, { random: () => 0 });
+  assert.deepEqual(twoDamage.records.map((row) => row.buildingId), ["tower", "gate"], "weighted target duplicates cannot redirect the second hit to the first building");
 
   const medicalHolding = () => ({
     people: { list: [
@@ -85,6 +96,17 @@ export function runCombatSuite() {
   assert.equal(medicinesHolding.people.list[0].dead, false, "doctor, supplies and Medicines must guarantee survival for a heavy casualty");
   assert.equal(medicinesResult.records[0]?.deathChance, 0, "the complete medical ladder must reduce heavy mortality to zero");
   assert.deepEqual(medicines, { "medical-supplies": 0, medicines: 0 }, "the complete medical ladder must spend both opted-in resources");
+
+  const minimumRecoveryHolding = medicalHolding();
+  const minimumRecoveryRolls = [0, 0.6, 0, 0, 0.9];
+  const minimumRecovery = applyDefenderResidentCasualties(minimumRecoveryHolding,
+    { battleId: "minimum-recovery", round: 1 }, 1, {}, { random: () => minimumRecoveryRolls.shift() ?? 0 });
+  assert.equal(minimumRecovery.records[0].condition, "heavy");
+  assert.equal(minimumRecoveryHolding.people.list[0].injuredDays, 7, "2d6 + 5 recovery must remain at least seven days when the random source returns zero");
+  const minimumInjuryHolding = medicalHolding();
+  const minimumInjury = applyDefenderResidentCasualties(minimumInjuryHolding,
+    { battleId: "minimum-injury", round: 1 }, 1, {}, { random: () => 0 });
+  assert.match(minimumInjury.records[0].note, /Травма d6=1, смерть d6=1;/, "zero random values must never appear as zero-sided injury or death rolls");
 
   const militaryHolding = {
     people: { list: Array.from({ length: 5 }, (_value, index) => ({

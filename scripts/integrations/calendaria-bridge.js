@@ -113,8 +113,11 @@ function isCalendariaDateInRange(dateTime = null, calendar = null) {
   if (daysInMonth && day > daysInMonth) return false;
   const hour = Number(value.hour ?? 0);
   const minute = Number(value.minute ?? 0);
-  if (!Number.isFinite(hour) || hour < 0) return false;
-  if (!Number.isFinite(minute) || minute < 0 || minute > 59) return false;
+  const source = calendar ?? activeCalendar();
+  const rawHoursPerDay = Number(source?.days?.hoursPerDay ?? source?.hoursPerDay ?? 24);
+  const hoursPerDay = Number.isFinite(rawHoursPerDay) && rawHoursPerDay > 0 ? rawHoursPerDay : 24;
+  if (!Number.isInteger(hour) || hour < 0 || hour >= hoursPerDay) return false;
+  if (!Number.isInteger(minute) || minute < 0 || minute > 59) return false;
   return true;
 }
 

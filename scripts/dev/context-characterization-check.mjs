@@ -1,3 +1,5 @@
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 import assert from "node:assert/strict";
 import { SkyholdData } from "../data/store.js";
 import { getSkyholdAppClass, registerSkyholdAppClass } from "../apps/registry.js";
@@ -212,4 +214,9 @@ export async function checkSkyholdContextCharacterization() {
     restoreGlobal("game", previousGame, hadGame);
     restoreGlobal("ui", previousUi, hadUi);
   }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  await checkSkyholdContextCharacterization();
+  console.log("FBL Skyhold context characterization passed.");
 }

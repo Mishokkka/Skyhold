@@ -33,6 +33,7 @@ export function clearPersonFromAssignments(holding, personId) {
     if (String(crew.distributedLeaderId ?? "") === id) crew.distributedLeaderId = "";
   }
   for (const squad of holding?.gm?.defense?.squads ?? []) {
+    if (!squad || typeof squad !== "object") continue;
     if (!Array.isArray(squad.memberIds)) squad.memberIds = [];
     squad.memberIds = squad.memberIds.map((value) => String(value) === id ? "" : value);
     if (String(squad.sergeantId ?? "") === id) squad.sergeantId = "";

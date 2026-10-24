@@ -170,8 +170,6 @@ _storageDefaultActor() {
   return null;
 },
 
-_storageDefaultActorId() { return String(this._storageDefaultActor()?.id ?? ""); },
-
 _storageTargetActorContext() {
   const actor = this._storageDefaultActor();
   return actor ? { id: String(actor.id ?? ""), name: String(actor.name ?? "Персонаж"), hasActor: true } : { id: "", name: "Нет привязанного персонажа", hasActor: false };

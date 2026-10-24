@@ -42,6 +42,20 @@ export function createSkyholdSocketApi({
   const ships = createShipSocketApi({ executeShipOperation, getData, writeTimeoutMs });
   const politics = createPoliticsSocketApi({ executePoliticsOperation, getData, writeTimeoutMs });
 
+  function emitRequest(pendingRequests, requestId, payload) {
+    try {
+      game.socket.emit(`module.${MODULE_ID}`, payload);
+      return true;
+    } catch (error) {
+      const pending = pendingRequests.get(requestId);
+      pendingRequests.delete(requestId);
+      clearTimeout(pending?.timeout);
+      pending?.reject(commandError(commandFailure({ operationId: requestId,
+        code: COMMAND_ERROR.SOCKET_UNAVAILABLE, message: error?.message, retryable: true })));
+      return false;
+    }
+  }
+
   function rememberPlayerOperation(key, result) {
     if (!key || !result?.ok) return;
     completedPlayerOperations.delete(key);
@@ -92,7 +106,7 @@ export function createSkyholdSocketApi({
         }
         pending.attempts += 1;
         pending.authorities.add(authorityGm.id);
-        game.socket.emit(`module.${MODULE_ID}`, {
+        if (!emitRequest(PENDING_PLAYER_WRITES, requestId, {
           type: "playerDataPatchRequest",
           requestId,
           operationId,
@@ -100,7 +114,7 @@ export function createSkyholdSocketApi({
           userId: game.user?.id ?? null,
           targetGmId: authorityGm.id,
           patch
-        });
+        })) return;
         pending.timeout = setTimeout(() => {
           if (pending.attempts < 2) {
             emitAttempt();
@@ -142,6 +156,9 @@ export function createSkyholdSocketApi({
     }
 
     const requestId = operation.operationId;
+    if (PENDING_STORAGE_OPERATIONS.has(requestId)) return Promise.reject(commandError(commandFailure({
+      operationId: requestId, code: COMMAND_ERROR.CONFLICT, message: "Операция уже ожидает ответа."
+    })));
     return new Promise((resolve, reject) => {
       const pending = { resolve, reject, timeout: null, attempts: 0, authorities: new Set() };
       const emitAttempt = () => {
@@ -153,13 +170,13 @@ export function createSkyholdSocketApi({
         }
         pending.attempts += 1;
         pending.authorities.add(targetGm.id);
-        game.socket.emit(`module.${MODULE_ID}`, {
+        if (!emitRequest(PENDING_STORAGE_OPERATIONS, requestId, {
           type: "playerStorageOperationRequest",
           requestId,
           userId: game.user?.id ?? null,
           targetGmId: targetGm.id,
           operation
-        });
+        })) return;
         pending.timeout = setTimeout(() => {
           if (pending.attempts < 2) {
             emitAttempt();
@@ -210,6 +227,9 @@ export function createSkyholdSocketApi({
     }
 
     const requestId = operation.operationId;
+    if (PENDING_MARKET_OPERATIONS.has(requestId)) return Promise.reject(commandError(commandFailure({
+      operationId: requestId, code: COMMAND_ERROR.CONFLICT, message: "Операция уже ожидает ответа."
+    })));
     return new Promise((resolve, reject) => {
       const pending = { resolve, reject, timeout: null, attempts: 0, authorities: new Set() };
       const emitAttempt = () => {
@@ -226,7 +246,7 @@ export function createSkyholdSocketApi({
         }
         pending.attempts += 1;
         pending.authorities.add(targetGm.id);
-        game.socket.emit(`module.${MODULE_ID}`, {
+        if (!emitRequest(PENDING_MARKET_OPERATIONS, requestId, {
           type: "playerMarketOperationRequest",
           requestId,
           operationId: operation.operationId,
@@ -235,7 +255,7 @@ export function createSkyholdSocketApi({
           userId: game.user?.id ?? null,
           targetGmId: targetGm.id,
           operation
-        });
+        })) return;
         pending.timeout = setTimeout(() => {
           if (pending.attempts < 2) {
             emitAttempt();
@@ -291,6 +311,9 @@ export function createSkyholdSocketApi({
     }
 
     const requestId = operation.operationId;
+    if (PENDING_CONSTRUCTION_OPERATIONS.has(requestId)) return Promise.reject(commandError(commandFailure({
+      operationId: requestId, code: COMMAND_ERROR.CONFLICT, message: "Операция уже ожидает ответа."
+    })));
     return new Promise((resolve, reject) => {
       const pending = { resolve, reject, timeout: null, attempts: 0, authorities: new Set() };
       const emitAttempt = () => {
@@ -307,7 +330,7 @@ export function createSkyholdSocketApi({
         }
         pending.attempts += 1;
         pending.authorities.add(targetGm.id);
-        game.socket.emit(`module.${MODULE_ID}`, {
+        if (!emitRequest(PENDING_CONSTRUCTION_OPERATIONS, requestId, {
           type: "playerConstructionOperationRequest",
           requestId,
           operationId: operation.operationId,
@@ -315,7 +338,7 @@ export function createSkyholdSocketApi({
           userId: game.user?.id ?? null,
           targetGmId: targetGm.id,
           operation
-        });
+        })) return;
         pending.timeout = setTimeout(() => {
           if (pending.attempts < 2) {
             emitAttempt();

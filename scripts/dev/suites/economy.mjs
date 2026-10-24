@@ -28,6 +28,7 @@ import { checkBankCharacterization } from "../bank-characterization-check.mjs";
 import { checkSharedMarkets } from "../shared-market-check.mjs";
 import { checkMarketCargoAging } from "../market-cargo-aging-check.mjs";
 import { checkMarketAuditFixes } from "../market-audit-fixes-check.mjs";
+import { checkMarketDemandCharacterization } from "../market-demand-characterization-check.mjs";
 import { checkShipCapacityConsistency } from "../ship-capacity-consistency-check.mjs";
 
 import { checkProductionReview } from "../production-review-regression-check.mjs";
@@ -52,6 +53,7 @@ export async function runEconomySuite() {
   checkSharedMarkets();
   checkMarketCargoAging();
   await checkMarketAuditFixes();
+  checkMarketDemandCharacterization();
   await checkShipCapacityConsistency();
   checkEconomyPeriodBoundaries();
   checkApprovedEconomy();

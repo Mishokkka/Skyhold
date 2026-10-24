@@ -1,5 +1,5 @@
-// Detached accounting model for characterization. This is NOT a world schema.
-// The future transaction adapter must read the current settlement balance each time.
+// Immutable accounting used by both voyage adapters. Each adapter supplies the
+// current settlement balance and writes the resulting balances to its draft.
 function money(value, name) {
   if (!Number.isSafeInteger(value) || value < 0 || value > 1_000_000_000) throw new RangeError(`${name} must be a non-negative safe integer no greater than 1000000000`);
   return value;

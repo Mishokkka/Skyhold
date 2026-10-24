@@ -6,7 +6,7 @@ import { FinanceEconomyDomain } from "../apps/domains/finance/economy-domain.js"
 import { ResidentDomain } from "../apps/domains/resident-domain.js";
 import { AssignmentDomain } from "../apps/domains/assignment-domain.js";
 import { ResidentGeneratorEventDomain } from "../apps/domains/events/resident/generator-events.js";
-import { normalizePerson } from "../data/normalizers/resident.js";
+import { clearPersonReferences, normalizePerson } from "../data/normalizers/resident.js";
 import { buildPlannedWorkSlots, validateWorkAllocationPlan } from "../data/work-allocations.js";
 import { plannedWorkerQd } from "../engines/economy/finance-period.js";
 import { generateResidents } from "../generators/resident-generator.js";
@@ -214,6 +214,28 @@ function checkBoundedEditors() {
   }
 }
 
+function checkDeletedResidentReferences() {
+  const holding = {
+    people: { list: [] },
+    buildings: { list: [{ assignedWorkerIds: ["removed", "retained"], workerAdmissionOverrideIds: ["removed", "retained"] }] },
+    constructionCrewIds: ["removed", "retained"],
+    constructionCrews: [{ leaderId: "removed", distributedLeaderId: "removed", memberIds: ["removed", "retained"], distributedIds: ["removed", "retained"] }],
+    workforcePlan: { locks: [{ personId: "removed" }, { personId: "retained" }] },
+    gm: { defense: { commanderId: "removed", squads: [null, { sergeantId: "removed", memberIds: ["removed", "retained"] }] } }
+  };
+  clearPersonReferences(holding, "removed");
+  assert.equal(holding.constructionCrews[0].distributedLeaderId, "", "deleting a resident must clear distributed crew leadership");
+  assert.equal(holding.constructionCrews[0].leaderId, "");
+  assert.deepEqual(holding.constructionCrews[0].memberIds, ["retained"]);
+  assert.deepEqual(holding.constructionCrews[0].distributedIds, ["retained"]);
+  assert.deepEqual(holding.constructionCrewIds, ["retained"]);
+  assert.deepEqual(holding.buildings.list[0].assignedWorkerIds, ["", "retained"], "building slot positions must survive deletion");
+  assert.deepEqual(holding.buildings.list[0].workerAdmissionOverrideIds, ["retained"]);
+  assert.deepEqual(holding.workforcePlan.locks, [{ personId: "retained" }]);
+  assert.equal(holding.gm.defense.commanderId, "");
+  assert.deepEqual(holding.gm.defense.squads, [null, { sergeantId: "", memberIds: ["", "retained"] }]);
+}
+
 export function checkResidentCharacterization() {
   checkAttributeContracts();
   checkGeneratedPopulation();
@@ -222,6 +244,7 @@ export function checkResidentCharacterization() {
   checkActorImport();
   checkChildWork();
   checkConstructionLeaderWork();
+  checkDeletedResidentReferences();
   checkBoundedEditors();
 }
 

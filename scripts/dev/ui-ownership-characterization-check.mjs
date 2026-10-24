@@ -70,6 +70,16 @@ export async function checkUiOwnership() {
     assert.equal((await wait).meta.revision, 9, "authenticated authority receipt must resolve the requesting GM");
     assert.equal(writes, 2);
 
+    for (const failAttempt of [1, 2]) {
+      let attempts = 0;
+      const disconnected = createGmWriteAuthority({ user: () => second, authority: () => gm,
+        socket: () => ({ emit() { if (++attempts === failAttempt) throw new Error("GM transport disconnected"); } }), timeoutMs: 5 });
+      await assert.rejects(disconnected.requestCommit(draft, { baseRevision: 8, scope: "holdings" }),
+        (error) => error?.code === "socket-unavailable" && /disconnected/.test(error.message),
+        "GM commits must reject the caller when the initial send or timed retry loses its transport");
+      assert.equal(attempts, failAttempt);
+    }
+
     const rows = [{ id: "a" }, { id: "b" }];
     assert.throws(() => assertAvailableEntityId(rows, "b", { current: rows[0] }), { code: "conflict" });
     assert.equal(assertAvailableEntityId(rows, " a ", { current: rows[0] }), "a");

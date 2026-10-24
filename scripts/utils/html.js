@@ -1,10 +1,5 @@
 export function escapeHtml(value) {
   const text = String(value ?? "");
-  if (globalThis.document?.createElement) {
-    const div = document.createElement("div");
-    div.innerText = text;
-    return div.innerHTML;
-  }
   return text
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")

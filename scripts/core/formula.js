@@ -4,7 +4,7 @@ export function rollInlineDice(expression = "", random = Math.random) {
     const count = Math.max(1, Math.min(100, Math.floor(Number(countRaw || 1) || 1)));
     const sides = Math.max(1, Math.min(1000, Math.floor(Number(sidesRaw) || 1)));
     let total = 0;
-    for (let index = 0; index < count; index += 1) total += Math.ceil(roll() * sides);
+    for (let index = 0; index < count; index += 1) total += Math.max(1, Math.ceil(roll() * sides));
     return String(total);
   });
 }

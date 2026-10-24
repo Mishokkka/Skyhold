@@ -20,6 +20,21 @@ import { worldMarketFixture } from "./world-ship-market-characterization-check.m
 import { generateWorldShipOffers, quoteWorldShipBundle } from "../engines/ships/world-market.js";
 
 const resource = { id: "wood", label: "Wood", basePriceCopper: 100, loadPoints: 4, categoryTag: "construction.simple" };
+for (const invalid of [
+  { id: "capacity", unitPriceCopper: 1, load: 2, capacityLoad: 1, capacityExceeded: true, amountExceeded: false },
+  { id: "amount", unitPriceCopper: 100_000, load: 1, capacityLoad: 5, capacityExceeded: false, amountExceeded: true }
+]) {
+  const plan = planMarketPurchase({ holding: { storage: { moneyCopper: 1_000_000_000 } },
+    quote: { deliveryMode: "scheduled", deliveryQd: 4, logistics: { ok: true, capacityLoad: invalid.capacityLoad },
+      offers: [{ id: invalid.id, stock: 1_000_000, unitPriceCopper: invalid.unitPriceCopper, load: invalid.load }] },
+    quantities: { [invalid.id]: 1_000_000 } });
+  assert.equal(plan.ok, false);
+  assert.equal(plan.capacityExceeded, invalid.capacityExceeded);
+  assert.equal(plan.amountExceeded, invalid.amountExceeded);
+  assert.equal(plan.lines[0].qty, 1_000_000, "invalid quote must preserve the requested cargo for its explanation");
+  assert.equal(plan.totalLoad, invalid.load * 1_000_000);
+  assert.deepEqual(plan.shipmentBatches, [], "a quote already known to be impossible must not allocate a million shipment batches");
+}
 const itemHolding = { gm: { calendaria: { lastQd: 40 } }, storage: { moneyCopper: 0, resources: [],
   items: [{ id: "item-1", name: "Tools", qty: 1, forSale: true, itemData: { system: { quantity: 1 } } }] } };
 const itemContext = { ...FinanceTradeDomain, ...FinanceInternalDemandDomain, _itemQuantity: itemQuantity,

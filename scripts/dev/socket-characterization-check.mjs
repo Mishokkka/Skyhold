@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { createSkyholdSocketApi } from "../data/socket.js";
 import { createStorageOperationExecutor } from "../apps/storage-operation-executor.js";
 import { DEFAULT_SKYHOLD_DATA } from "../data/defaults/default-skyhold-data.js";
@@ -8,6 +10,7 @@ import { buildPlayerPatch, validatePlayerPatch } from "../data/player-write-guar
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
+
 
 export async function checkSocketCharacterization() {
   const previousGame = globalThis.game;
@@ -472,6 +475,56 @@ export async function checkSocketCharacterization() {
         retryEmitted.push(payload);
       }
     };
+    for (const [method, type] of [
+      ["requestStorageOperation", "Storage"],
+      ["requestMarketOperation", "Market"],
+      ["requestConstructionOperation", "Construction"]
+    ]) {
+      retryEmitted.length = 0;
+      const operation = { operationId: `duplicate-${type.toLowerCase()}`, expectedRevision: current.meta.revision };
+      const original = retryApi[method](operation);
+      original.catch(() => {});
+      await assert.rejects(retryApi[method](operation), (error) => error?.code === "conflict",
+        `${type} must reject a duplicate pending ID without replacing its original caller`);
+      assert.equal(retryEmitted.length, 1, `${type} must emit the pending request only once`);
+      await retryApi.handleSkyholdSocketPayload({
+        type: `player${type}OperationResponse`, requestId: operation.operationId,
+        operationId: operation.operationId, gmId: "gm-1", userId: "player-1",
+        ok: true, result: { ok: true, operationId: operation.operationId }
+      }, "gm-1");
+      assert.equal((await original).operationId, operation.operationId,
+        `${type} must still resolve the original caller after a rejected duplicate`);
+      const transportOperation = { ...operation, operationId: `transport-${type.toLowerCase()}` };
+      globalThis.game.socket = { emit() { throw new Error("disconnected transport"); } };
+      await assert.rejects(retryApi[method](transportOperation),
+        (error) => error?.code === "socket-unavailable" && error?.retryable === true,
+        `${type} must report synchronous transport failures through its caller`);
+      globalThis.game.socket = { emit(_channel, payload) { retryEmitted.push(payload); } };
+      const afterFailure = retryApi[method](transportOperation);
+      afterFailure.catch(() => {});
+      await retryApi.handleSkyholdSocketPayload({
+        type: `player${type}OperationResponse`, requestId: transportOperation.operationId,
+        operationId: transportOperation.operationId, gmId: "gm-1", userId: "player-1",
+        ok: true, result: { ok: true }
+      }, "gm-1");
+      assert.equal((await afterFailure).ok, true, `${type} must release its pending ID after a transport failure`);
+      let attempts = 0;
+      globalThis.game.socket = { emit() { if (++attempts === 2) throw new Error("disconnected during retry"); } };
+      await assert.rejects(retryApi[method]({ ...operation, operationId: `retry-failure-${type.toLowerCase()}` }),
+        (error) => error?.code === "socket-unavailable",
+        `${type} must reject its promise when a timed retry loses the socket`);
+      globalThis.game.socket = { emit(_channel, payload) { retryEmitted.push(payload); } };
+    }
+    for (const failAttempt of [1, 2]) {
+      let attempts = 0;
+      globalThis.game.socket = { emit() { if (++attempts === failAttempt) throw new Error("patch transport disconnected"); } };
+      await assert.rejects(retryApi.requestGmDataPatch(proposed),
+        (error) => error?.code === "socket-unavailable" && error?.retryable === true,
+        "player patches must reject the caller if the initial send or timed retry loses its transport");
+      assert.equal(attempts, failAttempt);
+    }
+    globalThis.game.socket = { emit(_channel, payload) { retryEmitted.push(payload); } };
+    retryEmitted.length = 0;
     await assert.rejects(
       retryApi.requestStorageOperation({
         type: "withdrawResource",
@@ -602,4 +655,9 @@ export async function checkSocketCharacterization() {
     if (previousUi === undefined) delete globalThis.ui;
     else globalThis.ui = previousUi;
   }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  await checkSocketCharacterization();
+  console.log("FBL Skyhold sockets: player patches, operations, authentication, retries and transport failures passed.");
 }

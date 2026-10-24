@@ -39,11 +39,4 @@ _canManageDefense() {
   return this._activeHoldingPermissionContext().canEditDefense;
 },
 
-_canEditSpecialNotes() {
-  return this._activeHoldingPermissionContext().canEditSpecial;
-},
-
-_canEditBattleDefenders() {
-  return this._activeHoldingPermissionContext().canEditBattleSetup;
-}
 };

@@ -61,7 +61,8 @@ export function applySettlementBattleDamage(holding, state = {}, delta = 0, calc
 
   for (let i = 0; i < hits; i += 1) {
     const available = pool.filter((item) => !damaged.includes(item));
-    const target = available[Math.floor(random() * available.length)] ?? candidates[0];
+    if (!available.length) break;
+    const target = available[Math.floor(random() * available.length)] ?? available[0];
     if (!target) continue;
 
     const next = escalateBuildingBattleDamage(target, amount);

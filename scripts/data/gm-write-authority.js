@@ -79,8 +79,15 @@ export function createGmWriteAuthority({ getData, enqueueWrite, persistData, not
         }
         state.authorities.add(target.id);
         state.attempts += 1;
-        socket().emit(`module.${MODULE_ID}`, { ...request, type: "gmCommitRequest",
-          requestId: request.operationId, targetGmId: target.id });
+        try {
+          socket().emit(`module.${MODULE_ID}`, { ...request, type: "gmCommitRequest",
+            requestId: request.operationId, targetGmId: target.id });
+        } catch (error) {
+          pending.delete(request.operationId);
+          clearTimeout(state.timeout);
+          reject(failure(COMMAND_ERROR.SOCKET_UNAVAILABLE, error?.message || "Нет связи с ГМом, отвечающим за запись."));
+          return;
+        }
         state.timeout = setTimeout(() => {
           // A timeout may mean a completed write. Retry the same ID only at the same authority.
           if (state.attempts < 2 && authority()?.id === target.id) return send();
