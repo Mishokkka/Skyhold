@@ -49,13 +49,18 @@ async function preloadSkyholdTemplates() {
   await ensureSkyholdTemplateGroup("core");
 }
 
+function reportSkyholdOpenError(error) {
+  console.error("FBL Skyhold Manager | open() failed", error);
+  ui?.notifications?.error?.("FBL Skyhold: окно не открылось. Подробности в консоли.");
+  return null;
+}
+
 function openSkyhold() {
   try {
-    return SkyholdApp.open();
+    const result = SkyholdApp.open();
+    return typeof result?.catch === "function" ? result.catch(reportSkyholdOpenError) : result;
   } catch (error) {
-    console.error("FBL Skyhold Manager | open() failed", error);
-    ui?.notifications?.error?.("FBL Skyhold: окно не открылось. Подробности в консоли.");
-    return null;
+    return reportSkyholdOpenError(error);
   }
 }
 

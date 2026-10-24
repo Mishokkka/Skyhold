@@ -9,6 +9,8 @@ const BUILDING_NOTE_FONT_FAMILY = "Hans Hand";
 const BUILDING_NOTE_FONT_SIZE = 18;
 let buildingNoteTooltipTimer = null;
 let sceneNotesIntegrationInstalled = false;
+const buildingNoteInteractions = new WeakMap();
+const pendingBuildingNoteOpens = new WeakMap();
 
 function skyholdMarkerAsset(name) {
   return `modules/${MODULE_ID}/assets/markers/${name}.svg`;
@@ -168,8 +170,17 @@ export async function openBuildingNote(note) {
     return false;
   }
   const SkyholdBuildingEditor = await loadBuildingEditorClass();
-  new SkyholdBuildingEditor({ holdingId: String(holding.id ?? ""), buildingId: String(building.id ?? "") }).render({ force: true, focus: true });
+  await new SkyholdBuildingEditor({ holdingId: String(holding.id ?? ""), buildingId: String(building.id ?? "") }).render({ force: true, focus: true });
   return true;
+}
+
+function requestBuildingNoteOpen(note) {
+  if (pendingBuildingNoteOpens.has(note)) return;
+  const pending = openBuildingNote(note).catch((error) => {
+    console.error("FBL Skyhold | Failed to open building Note", error);
+    globalThis.ui?.notifications?.error?.("Не удалось открыть здание. Подробности в консоли.");
+  }).finally(() => pendingBuildingNoteOpens.delete(note));
+  pendingBuildingNoteOpens.set(note, pending);
 }
 
 function hideBuildingNoteTooltip() {
@@ -235,10 +246,32 @@ function shouldOpenBuildingNoteFromClick() {
 
 function installBuildingNoteInteractions() {
   Hooks.on("activateNote", (note) => {
-    if (!shouldOpenBuildingNoteFromClick()) return undefined;
-    if (openBuildingNote(note)) return false;
-    return undefined;
+    if (!buildingFlagsFromNote(note) || !shouldOpenBuildingNoteFromClick()) return undefined;
+    requestBuildingNoteOpen(note);
+    return false;
   });
+  // Unlinked Notes never reach Foundry's activateNote hook. Listen to their
+  // public pointer event without replacing the Note class or its permissions.
+  Hooks.on("drawNote", (note) => {
+    const previous = buildingNoteInteractions.get(note);
+    if (previous) note.off("pointertap", previous);
+    buildingNoteInteractions.delete(note);
+    if (!buildingFlagsFromNote(note)) return;
+    const onPointerTap = (event) => {
+      if (event.button !== 0 || event.detail !== 2 || note.document?.entry) return;
+      if (!shouldOpenBuildingNoteFromClick()) return;
+      requestBuildingNoteOpen(note);
+    };
+    note.on("pointertap", onPointerTap);
+    buildingNoteInteractions.set(note, onPointerTap);
+  });
+  Hooks.on("destroyNote", (note) => {
+    const listener = buildingNoteInteractions.get(note);
+    if (listener) note.off("pointertap", listener);
+    buildingNoteInteractions.delete(note);
+    hideBuildingNoteTooltip();
+  });
+  Hooks.on("canvasTearDown", hideBuildingNoteTooltip);
   Hooks.on("hoverNote", (note, hovered) => {
     if (!buildingFlagsFromNote(note)) return;
     if (hovered) showBuildingNoteTooltip(note);

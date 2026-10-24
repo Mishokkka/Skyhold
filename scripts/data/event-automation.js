@@ -1,6 +1,8 @@
 import { normalizeRandomEventEffects } from "./random-event-effects.js";
 import { makeId, toNumber } from "./utils.js";
 
+export const MAX_EVENT_SCHEDULE_ENTRIES = 80;
+
 function normalizeTendayEventBundle(rows = []) {
   const source = Array.isArray(rows) ? rows.filter((row) => row && typeof row === "object") : [];
   const events = source.slice(0, 40).map((row, index) => ({
@@ -54,10 +56,11 @@ export function normalizeEventScheduleEntry(entry = {}, { archived = false } = {
 }
 
 export function normalizeEventSchedule(rows = []) {
+  // Pending work is not an archive: enforce capacity when scheduling, never by
+  // deleting existing entries while loading or saving an older holding.
   return (Array.isArray(rows) ? rows : [])
     .filter((row) => row && typeof row === "object")
-    .map((row) => normalizeEventScheduleEntry(row))
-    .slice(-80);
+    .map((row) => normalizeEventScheduleEntry(row));
 }
 
 export function normalizeEventArchive(rows = []) {

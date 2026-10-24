@@ -3,10 +3,12 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { normalizeRandomEventEffect, normalizeRandomEventEffects } from "../data/random-event-effects.js";
-import { normalizeEventArchive, normalizeEventSchedule, normalizeLastEventRoll } from "../data/event-automation.js";
+import { MAX_EVENT_SCHEDULE_ENTRIES, normalizeEventArchive, normalizeEventSchedule, normalizeLastEventRoll } from "../data/event-automation.js";
 import { appendHoldingOperation } from "../data/operations.js";
 import { buildHoldingOperationTimeline } from "../data/operation-timeline.js";
 import { applyRandomEventEffects } from "../engines/events/effect-executor.js";
+import { EventAutomationDomain } from "../apps/domains/events/event-automation-events.js";
+import { SkyholdData } from "../data/store.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -81,6 +83,12 @@ export function checkEventAutomationCharacterization() {
 
   const schedule = normalizeEventSchedule([{ id: "schedule-1", eventId: "event-1", effects, dueQd: 40 }]);
   assert.equal(schedule[0].canApplyEffects, true, "scheduled events with effects must expose an apply action");
+  const oversizedSchedule = Array.from({ length: MAX_EVENT_SCHEDULE_ENTRIES + 1 }, (_, index) => ({
+    id: `pending-${index}`, eventId: `event-${index}`, effects, dueQd: 40
+  }));
+  const loadedSchedule = normalizeEventSchedule(oversizedSchedule);
+  assert.equal(loadedSchedule.length, oversizedSchedule.length, "loading an oversized legacy queue must preserve every pending event");
+  assert.deepEqual(loadedSchedule.map((entry) => entry.id), oversizedSchedule.map((entry) => entry.id), "normalization must preserve the oldest and newest pending events in order");
   const archive = normalizeEventArchive([{ ...schedule[0], archivedAt: "2026-07-12T13:00:00.000Z" }]);
   assert.equal(archive[0].status, "archived", "event archive must force terminal archive status");
   const lastRoll = normalizeLastEventRoll({ eventId: "event-1", effects });
@@ -106,7 +114,101 @@ export function checkEventAutomationCharacterization() {
   assert.match(adapter, /foundryDialogV2\(\)\.confirm/, "event effects and archive actions must use the V13/V14 dialog adapter");
 }
 
+export async function checkEventScheduleCapacity() {
+  const previousGame = globalThis.game;
+  const previousUi = globalThis.ui;
+  const originalGet = SkyholdData.get;
+  const originalUpdate = SkyholdData.updateHolding;
+  const originalSkip = SkyholdData.skipTransaction;
+  const skipped = Symbol("skipped event transaction");
+  let holding;
+  let commits = 0;
+  let attempts = 0;
+  const warnings = [];
+  const app = { ...EventAutomationDomain, activeHoldingId: "holding-1", requestRender() {} };
+  const event = { preventDefault() {}, stopPropagation() {} };
+  const fixture = (length) => {
+    const next = holdingFixture();
+    next.gm.eventSchedule = normalizeEventSchedule(Array.from({ length }, (_, index) => ({ id: `scheduled-${index}`, eventId: `old-${index}` })));
+    next.gm.lastRoll = {
+      eventId: "new-event", title: "Новое событие",
+      events: ["first", "second"].map((decisionId) => ({ decisionId, eventId: decisionId, title: decisionId, effectStatus: "pending", effects: [{ type: "money", amount: 1 }] }))
+    };
+    return next;
+  };
+  try {
+    globalThis.game = { user: { id: "gm", isGM: true } };
+    globalThis.ui = { notifications: { warn: (message) => warnings.push(message), info() {} } };
+    SkyholdData.get = () => ({ holdings: [structuredClone(holding)] });
+    SkyholdData.skipTransaction = (value) => ({ [skipped]: true, value });
+    SkyholdData.updateHolding = async (id, updater) => {
+      attempts++;
+      assert.equal(id, holding.id);
+      const draft = structuredClone(holding);
+      const result = updater(draft);
+      if (result?.[skipped]) return result.value;
+      commits++;
+      holding = draft;
+      return result;
+    };
+
+    holding = fixture(MAX_EVENT_SCHEDULE_ENTRIES - 1);
+    const [accepted, rejected] = await Promise.all([
+      app._scheduleTendayEventDecision({ holdingId: holding.id, decisionId: "first" }),
+      app._scheduleTendayEventDecision({ holdingId: holding.id, decisionId: "second" })
+    ]);
+    assert.equal(accepted.ok, true, "the last available schedule slot must accept an event");
+    assert.equal(rejected.capacityExceeded, true, "a second decision must recheck capacity inside its transaction");
+    assert.equal(commits, 1, "capacity rejection must not commit a second draft");
+    assert.equal(holding.gm.eventSchedule.length, MAX_EVENT_SCHEDULE_ENTRIES);
+    assert.equal(holding.gm.eventSchedule[0].id, "scheduled-0", "scheduling must not evict the oldest pending event");
+    assert.equal(holding.gm.lastRoll.events[1].effectStatus, "pending", "a rejected decision must remain available");
+
+    holding = fixture(MAX_EVENT_SCHEDULE_ENTRIES);
+    const before = structuredClone(holding);
+    await app._onScheduleLastEvent(event);
+    assert.deepEqual(holding, before, "the main-window scheduling action must preserve a full queue and its pending decisions");
+    assert.equal(commits, 1);
+    assert.match(warnings.at(-1), /Архивируйте/, "capacity feedback must explain how to free a slot");
+
+    holding = fixture(MAX_EVENT_SCHEDULE_ENTRIES - 1);
+    await app._onScheduleLastEvent(event);
+    assert.equal(holding.gm.eventSchedule.length, MAX_EVENT_SCHEDULE_ENTRIES);
+    assert.equal(commits, 2, "the main-window action must still schedule when capacity is available");
+    assert.equal(holding.gm.lastRoll.events.every((decision) => decision.effectStatus === "scheduled"), true);
+
+    holding = fixture(0);
+    for (const decision of holding.gm.lastRoll.events) {
+      decision.effects = normalizeRandomEventEffects(Array.from({ length: 21 }, () => ({ type: "money", amount: 1 })));
+    }
+    const beforeBundle = structuredClone(holding);
+    await app._onScheduleLastEvent(event);
+    assert.deepEqual(holding, beforeBundle, "a bundle exceeding one schedule entry's effect limit must not lose effects or mark decisions as scheduled");
+    assert.equal(commits, 2, "an oversized effect bundle must not commit");
+    assert.match(warnings.at(-1), /по отдельности/, "the GM must be told to schedule the decisions separately");
+    const individual = await app._scheduleTendayEventDecision({ holdingId: holding.id, decisionId: "first" });
+    assert.equal(individual.ok, true, "individual decisions remain schedulable after rejecting the oversized bundle");
+    assert.equal(holding.gm.eventSchedule[0].effects.length, 21);
+
+    globalThis.game.user = { id: "player", isGM: false };
+    const beforePlayer = structuredClone(holding);
+    const attemptsBeforePlayer = attempts;
+    const playerResult = await app._scheduleTendayEventDecision({ holdingId: holding.id, decisionId: "first" });
+    await app._onScheduleLastEvent(event);
+    assert.equal(playerResult.ok, false, "players must remain unable to schedule GM events");
+    assert.equal(attempts, attemptsBeforePlayer, "player scheduling must not enter persistence");
+    assert.deepEqual(holding, beforePlayer);
+  } finally {
+    SkyholdData.get = originalGet;
+    SkyholdData.updateHolding = originalUpdate;
+    SkyholdData.skipTransaction = originalSkip;
+    if (previousGame === undefined) delete globalThis.game; else globalThis.game = previousGame;
+    if (previousUi === undefined) delete globalThis.ui; else globalThis.ui = previousUi;
+  }
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   checkEventAutomationCharacterization();
-  console.log("FBL Skyhold event automation: schema, atomic effects, schedule/archive and timeline passed.");
+  await checkEventScheduleCapacity();
+  console.log("FBL Skyhold event automation: schema, atomic effects, schedule/archive, capacity preservation and timeline passed.");
 }
