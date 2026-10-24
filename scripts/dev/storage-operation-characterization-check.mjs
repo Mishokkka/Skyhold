@@ -1,3 +1,5 @@
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 import assert from "node:assert/strict";
 import { createStorageOperationExecutor } from "../apps/storage-operation-executor.js";
 import { clone } from "../data/utils.js";
@@ -180,6 +182,7 @@ function createHarness({ failPersist = false, failCompensation = false } = {}) {
   };
 }
 
+/** Exercises authoritative storage transfers, actor ownership and replay with isolated data and document fixtures. */
 export async function checkStorageOperationCharacterization() {
   for (const type of ["depositItem", "giveStoredItem"]) {
     const harness = createHarness({ failPersist: true, failCompensation: true });
@@ -457,4 +460,9 @@ export async function checkStorageOperationCharacterization() {
       else globalThis.fromUuid = previousFromUuid;
     }
   }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  await checkStorageOperationCharacterization();
+  console.log("FBL Skyhold storage-operation characterization passed.");
 }

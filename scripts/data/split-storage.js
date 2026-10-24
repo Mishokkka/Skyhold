@@ -32,6 +32,16 @@ function isDefaultSplitPayload({ holdingsHash = "", catalogHash = "" } = {}) {
   return holdingsHash === DEFAULT_HOLDINGS_HASH && catalogHash === DEFAULT_CATALOG_HASH;
 }
 
+/**
+ * Check whether a legacy snapshot carries exactly the currently inspected partition payloads.
+ * A pristine snapshot can still restore metadata; its revision must be checked by the caller.
+ * @returns {boolean} Whether both hashes match a structurally usable snapshot.
+ */
+function legacyMatchesPartitionHashes(legacy, { holdings, catalog } = {}) {
+  return Boolean(legacy && Array.isArray(legacy.holdings) && legacy.catalog
+    && stableDataHash(legacy.holdings) === holdings && stableDataHash(legacy.catalog) === catalog);
+}
+
 function completeCommitToken(meta = {}) {
   const revision = Math.max(0, toNumber(meta?.revision, 0));
   const commit = meta?.storageCommit;
@@ -40,6 +50,7 @@ function completeCommitToken(meta = {}) {
   return [revision, commit.writeId, commit.holdingsHash, commit.catalogHash].map((value) => String(value ?? "")).join(":");
 }
 
+/** Hash persisted logical metadata while ignoring revision, lastUpdated and commit bookkeeping. */
 function logicalMetadataHash(meta = {}) {
   const logicalMeta = { ...meta };
   // Commit bookkeeping alone is a no-op; catalog versions and migration
@@ -50,6 +61,12 @@ function logicalMetadataHash(meta = {}) {
   return stableDataHash(logicalMeta);
 }
 
+/**
+ * Create a cached split-settings store with read-only recovery and guarded commit writes.
+ * Callers serialize mutations; the supplied authority check runs before each settings write.
+ * @param {object} [options={}] Optional settings adapter and write-authority assertion.
+ * @returns {object} Cloned/frozen reads, persistence and diagnostic metrics.
+ */
 export function createSkyholdSplitStorage({ settings = null, assertWriteAuthority = () => {} } = {}) {
   let cachedRevision = null;
   let cachedCommitToken = "";
@@ -107,6 +124,12 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
     console.warn(`FBL Skyhold | Split data commit is ${inspection.reason}${recoveryText}.`, inspection);
   }
 
+  /**
+   * Read partition hashes and select split data, a recovered root or a legacy snapshot.
+   * Recovery never writes settings; unusable commit markers warn before fallback selection.
+   * @param {object} [providedMeta] Already-read metadata to avoid another settings read.
+   * @returns {object} Selected persisted root, before schema normalization.
+   */
   function readSettings(providedMeta) {
     const split = {
       meta: clone(providedMeta ?? readSetting(SETTING_META) ?? DEFAULT_SKYHOLD_DATA.meta),
@@ -135,7 +158,9 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
       if (recovery.ok) {
         if (recovery.mode === "rollback"
           && legacyRevision === recovery.data?.meta?.revision
-          && legacyHasRuntimeData(legacy)) {
+          // A pristine snapshot also restores prior metadata when its payload
+          // matches both rolled-back partitions; unrelated defaults cannot.
+          && (legacyHasRuntimeData(legacy) || legacyMatchesPartitionHashes(legacy, persistedPartitionHashes))) {
           warnCommitProblem(commitInspection, splitRevision, legacyRevision, "legacy-rollback");
           return legacy;
         }
@@ -199,6 +224,13 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
     return resolveData({ cloneResult: false });
   }
 
+  /**
+   * Commit data through rollback snapshot, start marker, dirty partitions and completion marker.
+   * No-op writes return the prior root; failures retain recoverable settings and do not advance cache.
+   * @param {object} data Proposed root; normalized commits preserve partitions outside the scope.
+   * @param {object} [options={}] Normalization, scope, status envelope and forced rollback snapshot.
+   * @returns {Promise<object>} Cloned saved data, or a changed/data/scope envelope when withStatus is set.
+   */
   async function persistData(data, {
     normalized = false,
     scope = COMMIT_SCOPES.BOTH,
@@ -248,9 +280,12 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
     }
     const needsRollbackSnapshot = Boolean(forceRollbackSnapshot)
       || (holdingsDirty && catalogDirty)
+      || (metaDirty && (holdingsDirty || catalogDirty))
       || !splitMatchesLogicalPrevious;
 
     // A one-partition write is recoverable from the previous/target hashes in meta.
+    // Logical metadata needs its own previous snapshot when a partition also changes;
+    // restoring only the previous revision would retain the uncommitted metadata.
     // When both partitions change (or legacy data has not hydrated split settings),
     // preserve the last coherent logical root before starting the commit.
     if (needsRollbackSnapshot) await writeSetting(SETTING_DATA, clone(previous));

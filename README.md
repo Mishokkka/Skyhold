@@ -240,10 +240,13 @@ GM-only visibility является политикой интерфейса и �
 | Foundry 13/14 и ленивые границы | npm run compat:check; npm run lazy:check |
 | UI и стили | npm run ui:check; npm run css:check |
 | JavaScript | npm run lint |
+| Все доменные *:check, составные suites и CSS | npm run check:all |
 | Производительность | npm run perf; npm run perf:check; npm run perf:budget |
 | Перед выпуском | npm run check; npm run css:check; npm run perf:budget |
 
 Проверки защищают импорты, адаптеры Foundry, шаблоны/контролы, чистые расчёты, normalizers, permissions, revision/idempotency и recovery. Node-проверки не подтверждают живой Foundry UI; сценарии собраны в [smoke matrix](docs/manual-foundry-smoke-matrix.md). Fixtures, observer и датированные замеры — в [performance baseline](docs/performance-baseline.md).
+
+`check:all` включает обычный `check` и различные Node-команды из существующих `*:check`; JavaScript lint и performance budget запускаются отдельно. Генераторы и упаковка в него не входят. Результаты аудита и границы покрытия — в [аудите кода и тестов от 24 октября 2026](docs/code-and-test-audit-2026-10-24.md).
 
 Тяжёлые окна рынка, десятника, боя, Политики, корабля, карты и редакторов подключают JS и owner-CSS при первом открытии; lazy:check защищает стартовый граф.
 

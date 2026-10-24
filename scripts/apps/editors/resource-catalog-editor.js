@@ -66,6 +66,11 @@ export class SkyholdResourceCatalogEditor extends FloatingTooltipsMixin(PendingF
     bindImageFallbacks(root);
   }
 
+  /**
+   * Replace catalog listeners for this render and delegate async actions through
+   * the shared error handler. Search updates local view state; handlers own edits.
+   * @param {HTMLElement} root Rendered catalog root that owns these listeners.
+   */
   _bindEvents(root) {
     this._resourceAbortController?.abort?.();
     const controller = new AbortController();
@@ -75,9 +80,9 @@ export class SkyholdResourceCatalogEditor extends FloatingTooltipsMixin(PendingF
       const element = event.target?.closest?.("[data-action]");
       if (!element || !root.contains(element)) return;
       const action = String(element.dataset.action ?? "");
-      if (action === "resource-edit") this._onEdit(event, element);
-      else if (action === "resource-add") this._onAdd(event);
-      else if (action === "resource-select") this._onSelect(event, element);
+      if (action === "resource-edit") return dispatchDelegatedAction(this, event, element, (e) => this._onEdit(e, element));
+      if (action === "resource-add") return dispatchDelegatedAction(this, event, element, "_onAdd");
+      if (action === "resource-select") return dispatchDelegatedAction(this, event, element, (e) => this._onSelect(e, element));
     }, options);
     root.addEventListener("input", (event) => {
       const field = event.target?.closest?.("[data-resource-search]");
@@ -147,12 +152,6 @@ export class SkyholdResourceCatalogEditor extends FloatingTooltipsMixin(PendingF
     }, { reason: "resource-editor:add", scope: "catalog" });
     if (!added) return;
     new SkyholdResourceRowEditor({ resourceId: id, owner: this }).render({ force: true, focus: true });
-  }
-
-  async _confirm(content) {
-    const DialogV2 = foundry?.applications?.api?.DialogV2;
-    if (DialogV2?.confirm) return DialogV2.confirm({ window: { title: "Каталог ресурсов" }, content: `<p>${content}</p>`, modal: true });
-    return window.confirm(content);
   }
 
   async _onClose(options) {

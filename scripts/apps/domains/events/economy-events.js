@@ -498,7 +498,4 @@ async _postTendaySummaryChat(holding, prepared = {}) {
   });
 },
 
-async _onRunTenDayEconomy(event) {
-  return this._onRunEconomyPeriod(event);
-}
 };

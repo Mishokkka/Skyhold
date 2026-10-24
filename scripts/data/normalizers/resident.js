@@ -4,6 +4,7 @@ import { normalizeMaintenancePointsPerTenday } from "../economy/maintenance.js";
 import { normalizePersonWorkAllocations } from "../work-allocations.js";
 import { normalizeWorkerTypeSet } from "./building.js";
 import { normalizeStaffAppointment } from "../hybrid-labor.js";
+import { clearPersonFromAssignments } from "../resident-assignments.js";
 
 const OBSOLETE_RESIDENT_SKILL_VALUES = new Set([
   "-", "нет", "none",
@@ -24,32 +25,21 @@ function appendUniqueTrait(value = "", addition = "") {
   return items.join(", ");
 }
 
+/**
+ * Remove deletion-related workforce locks and assignments from a caller-owned holding draft.
+ * The resident row is normally already removed; any retained matching row also loses its home.
+ * @param {object} holding Mutable holding; persistence and political/ship cleanup belong to the caller.
+ * @param {string} personId Deleted resident identity; an empty identity is a no-op.
+ * @returns {void}
+ */
 export function clearPersonReferences(holding, personId) {
   const id = String(personId ?? "");
   if (!id) return;
   if (Array.isArray(holding?.workforcePlan?.locks)) {
     holding.workforcePlan.locks = holding.workforcePlan.locks.filter((row) => String(row?.personId ?? "") !== id);
   }
-  for (const building of holding?.buildings?.list ?? []) {
-    if (Array.isArray(building.assignedWorkerIds)) building.assignedWorkerIds = building.assignedWorkerIds.map((value) => String(value) === id ? "" : value);
-    if (Array.isArray(building.workerAdmissionOverrideIds)) building.workerAdmissionOverrideIds = building.workerAdmissionOverrideIds.filter((value) => String(value) !== id);
-  }
+  clearPersonFromAssignments(holding, id);
   for (const person of holding?.people?.list ?? []) if (String(person?.id ?? "") === id) person.home = "";
-  for (const crew of holding?.constructionCrews ?? []) {
-    if (Array.isArray(crew.memberIds)) crew.memberIds = crew.memberIds.filter((value) => String(value) !== id);
-    if (Array.isArray(crew.distributedIds)) crew.distributedIds = crew.distributedIds.filter((value) => String(value) !== id);
-    if (String(crew.leaderId ?? "") === id) crew.leaderId = "";
-  }
-  if (Array.isArray(holding?.constructionCrewIds)) holding.constructionCrewIds = holding.constructionCrewIds.filter((value) => String(value) !== id);
-  const defense = holding?.gm?.defense;
-  if (defense && typeof defense === "object") {
-    if (String(defense.commanderId ?? "") === id) defense.commanderId = "";
-    for (const squad of defense.squads ?? []) {
-      if (!squad || typeof squad !== "object") continue;
-      if (String(squad.sergeantId ?? "") === id) squad.sergeantId = "";
-      if (Array.isArray(squad.memberIds)) squad.memberIds = squad.memberIds.map((value) => String(value ?? "") === id ? "" : value);
-    }
-  }
 }
 
 export function clearBuildingReferences(holding, building) {

@@ -1,3 +1,5 @@
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 import assert from "node:assert/strict";
 import { FinanceDomain } from "../apps/domains/finance-domain.js";
 import { normalizeResourceRow, resourceUnitLoad } from "../core/resources.js";
@@ -110,6 +112,7 @@ function storageLogState(holding) {
   return (holding?.storage?.log ?? []).map(({ id: _id, ts: _ts, ...row }) => row);
 }
 
+/** Verifies storage quantities, room allocation and append-only player patches through real storage-domain methods. */
 export function checkStorageCharacterization() {
   const storage = createStorageHarness();
   const woodLoad = resourceUnitLoad("wood");
@@ -475,4 +478,9 @@ export function checkStorageCharacterization() {
     rewritten.holdings[0].storage.log[0].note = "подмена";
     assert.equal(validatePlayerPatch(current, buildPlayerPatch(current, rewritten), "player").ok, false, "the player write guard must enforce append-only storage history");
   }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  await checkStorageCharacterization();
+  console.log("FBL Skyhold storage characterization passed.");
 }

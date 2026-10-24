@@ -41,6 +41,12 @@ export function escalateBuildingBattleDamage(building, amount = 1) {
   return next;
 }
 
+/**
+ * Damage eligible buildings on a holding draft, selecting each at most once per call.
+ * Mutates building condition/repair data and notes plus the battle state's damage log.
+ * The caller owns authority checks and persistence; a nonpositive delta changes nothing.
+ * @returns {object} Damaged building references, log records, and summary text.
+ */
 export function applySettlementBattleDamage(holding, state = {}, delta = 0, calc = {}, { random = Math.random } = {}) {
   const amount = Math.max(0, asInt(delta, 0));
   if (!amount) return { text: "", damaged: [] };
@@ -61,7 +67,8 @@ export function applySettlementBattleDamage(holding, state = {}, delta = 0, calc
 
   for (let i = 0; i < hits; i += 1) {
     const available = pool.filter((item) => !damaged.includes(item));
-    const target = available[Math.floor(random() * available.length)] ?? candidates[0];
+    if (!available.length) break;
+    const target = available[Math.floor(random() * available.length)] ?? available[0];
     if (!target) continue;
 
     const next = escalateBuildingBattleDamage(target, amount);

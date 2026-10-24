@@ -1,10 +1,10 @@
+/**
+ * Escape HTML metacharacters and both quote styles identically with or without a DOM.
+ * @param {*} value Value to stringify; null and undefined become empty text.
+ * @returns {string} Escaped text suitable for HTML text or a quoted attribute value.
+ */
 export function escapeHtml(value) {
   const text = String(value ?? "");
-  if (globalThis.document?.createElement) {
-    const div = document.createElement("div");
-    div.innerText = text;
-    return div.innerHTML;
-  }
   return text
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")

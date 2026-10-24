@@ -162,6 +162,12 @@ export function reserveMarketDemand({ holding = null, marketId = "", lines = [],
   return { ok: true, replay: false, reservations };
 }
 
+/**
+ * Settle demand on a holding draft after validating every reservation.
+ * Orders sharing a resource pool accumulate; invalid or replayed operations
+ * leave the draft unchanged. The caller owns authorization and persistence.
+ * @returns {object} Settlement totals, replay status, or a stale/invalid result.
+ */
 export function settleMarketDemandReservations({ holding = null, reservations = [], outcome = "consumed", operationId = "", currentTenday = null, updatedAt = "" } = {}) {
   const id = text(operationId);
   const selectedOutcome = outcome === "restored" ? "restored" : "consumed";
@@ -195,12 +201,16 @@ export function settleMarketDemandReservations({ holding = null, reservations = 
     const state = demand[row.key] ? withDerived(demand[row.key]) : null;
     const reserved = integer(state?.reservations?.[row.reservationOperationId]?.qty);
     if (!state || reserved < row.qty) return { ok: false, stale: true, key: row.key, message: "Market demand reservation changed before settlement." };
-    prepared.push({ row, state, reserved });
+    prepared.push(row);
   }
 
   const tenday = sharedMarketTenday(holding, currentTenday);
   const settled = [];
-  for (const { row, state, reserved } of prepared) {
+  for (const row of prepared) {
+    // Several original orders may share this resource pool. Keep the changes
+    // already made by earlier rows after validating the whole settlement above.
+    const state = withDerived(demand[row.key]);
+    const reserved = integer(state.reservations[row.reservationOperationId]?.qty);
     const reservationsNext = { ...state.reservations };
     if (reserved === row.qty) delete reservationsNext[row.reservationOperationId];
     else reservationsNext[row.reservationOperationId] = { ...reservationsNext[row.reservationOperationId], qty: reserved - row.qty };

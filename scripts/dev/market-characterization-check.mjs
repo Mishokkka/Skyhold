@@ -7,7 +7,7 @@ import { marketRouteDistanceKm, marketRoutePolylineLength, normalizeMarketRouteM
 import { MARKET_CHARTER_ETA_FACTOR, MARKET_DELIVERY_SERVICES, MARKET_EXPRESS_ETA_FACTOR, MARKET_EXPRESS_SURCHARGE_RATE, MARKET_FREIGHT_MAX_RATE, MARKET_FREIGHT_MIN_RATE, MARKET_STANDARD_ETA_FACTOR, marketHistoricalFreightRate, marketHistoricalInsuranceRate, marketLocationText, marketQuotePeriodKey, marketShipmentRiskProfile, planMarketPurchase, prepareMarketQuote, resolveMarketLocation, splitMarketShipmentLines } from "../engines/market/pricing.js";
 import { applyMarketDelivery } from "../engines/market/delivery.js";
 import { advanceMarketShipments, cancelMarketShipment, createMarketShipment, deliverMarketShipmentNow, marketShipmentCancellationQuote, resolveMarketShipmentRisk, retainMarketShipmentOrders } from "../engines/market/shipment.js";
-import { holdingMarketAccessLevel, marketRegionAccessCostMap, marketRegionHopMap, MARKET_TRANSPORT_TARIFFS, resolveMarketLogistics, shortestMarketRoute, shortestMarketRouteDistance, shortestMarketRouteDistanceKm } from "../engines/market/logistics.js";
+import { holdingMarketAccessLevel, marketRegionAccessCostMap, MARKET_TRANSPORT_TARIFFS, resolveMarketLogistics, shortestMarketRoute, shortestMarketRouteDistanceKm } from "../engines/market/logistics.js";
 import { allResourceDefs, normalizeResourceCatalogRow } from "../core/resources.js";
 import { copperCurrencyParts, formatCopperCurrency, formatCopperCurrencyCompact } from "../core/currency.js";
 import { normalizeStorageLogRow } from "../data/normalizers/storage.js";
@@ -170,7 +170,7 @@ assert.equal(logisticsRegions[0].marketLinks[1].distanceKm, 40, "legacy string d
 assert.equal(logisticsRegions[0].marketLinks[1].distanceMode, "scaled", "automatic distance mode must survive region normalization");
 assert.deepEqual(logisticsRegions[0].marketLinks[1].pathPoints, [{ x: 120, y: 80 }, { x: 240, y: 160 }], "route waypoints must survive region normalization");
 assert.equal(logisticsRegions[0].marketLinks[1].seasonalModifiers.winter.costFactor, 1.4, "editable edge season factors must survive normalization");
-assert.equal(shortestMarketRouteDistance("fletchenrand", "novand", logisticsRegions), 3, "editable region graph must determine route distance");
+assert.equal(shortestMarketRoute("fletchenrand", "novand", logisticsRegions).distance, 3, "editable region graph must determine route distance");
 assert.equal(shortestMarketRouteDistanceKm("fletchenrand", "novand", logisticsRegions), 120, "route graph must expose canonical real-world distance in kilometers");
 const novandRoute = shortestMarketRoute("fletchenrand", "novand", logisticsRegions, { metric: "hops" });
 assert.deepEqual(novandRoute.path, ["fletchenrand", "izauver", "novand"], "route graph must expose the traversed locations");
@@ -188,7 +188,7 @@ const developedHolding = {
 };
 assert.equal(holdingMarketAccessLevel(developedHolding).level, 3, "the GM-entered URS must be the market-access budget");
 assert.equal(holdingMarketAccessLevel(holding({ urs: 7 })).level, 7, "URS must not collapse all values of four or more into global access");
-assert.equal(marketRegionHopMap({ holding: developedHolding, regions: logisticsRegions, dependencies: { regionResolver: marketRegionForValue } }).get("novand"), 2, "the reusable reachability map must count graph links from the settlement region");
+assert.equal(marketRegionAccessCostMap({ holding: developedHolding, regions: logisticsRegions, dependencies: { regionResolver: marketRegionForValue } }).get("novand"), 2, "the reusable reachability map must sum URS costs from the settlement region");
 const weightedRegions = normalizeEventRegionOptions([
   { value: "weighted-a", label: "Weighted A", marketLinks: [{ regionId: "weighted-b", distanceKm: 10, ursCost: 4 }, { regionId: "weighted-c", distanceKm: 20, ursCost: 1 }] },
   { value: "weighted-b", label: "Weighted B", marketLinks: [] },

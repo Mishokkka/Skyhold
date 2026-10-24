@@ -28,6 +28,7 @@ import { checkBankCharacterization } from "../bank-characterization-check.mjs";
 import { checkSharedMarkets } from "../shared-market-check.mjs";
 import { checkMarketCargoAging } from "../market-cargo-aging-check.mjs";
 import { checkMarketAuditFixes } from "../market-audit-fixes-check.mjs";
+import { checkMarketDemandCharacterization } from "../market-demand-characterization-check.mjs";
 import { checkShipCapacityConsistency } from "../ship-capacity-consistency-check.mjs";
 
 import { checkProductionReview } from "../production-review-regression-check.mjs";
@@ -41,6 +42,7 @@ import { checkMaintenanceProposal } from "../building-maintenance-proposal-check
 import { checkPreparationRevision } from "../building-preparation-revision-check.mjs";
 import { checkArrivalProposal } from "../newcomer-arrival-proposal-check.mjs";
 
+/** Runs economy, production, market, ship and politics contracts without mutating a live Foundry world. */
 export async function runEconomySuite() {
   checkInternalDemandCharacterization();
   checkPreparationYear();
@@ -52,6 +54,7 @@ export async function runEconomySuite() {
   checkSharedMarkets();
   checkMarketCargoAging();
   await checkMarketAuditFixes();
+  checkMarketDemandCharacterization();
   await checkShipCapacityConsistency();
   checkEconomyPeriodBoundaries();
   checkApprovedEconomy();

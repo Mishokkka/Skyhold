@@ -11,8 +11,6 @@ import {
 } from "../../../../core/resources.js";
 import {
   buildStorageRooms,
-  decorateStorageRoom,
-  storageFillClass,
   storageRoomLabelFromRooms,
   storageRoomOptionsFromRooms,
   storageRoomsContext,
@@ -36,18 +34,10 @@ _storageRowLoad(row = {}) {
   return qty * this._storageUnitLoad(row);
 },
 
-_storageFillClass(options = {}) {
-  return storageFillClass(options);
-},
-
 _formatStorageLoad(value = 0) {
   const number = this._safeNumber(value, 0);
   if (Math.abs(number - Math.round(number)) < 0.0001) return this._formatNumber(Math.round(number));
   return this._formatNumber(Math.round(number * 100) / 100);
-},
-
-_decorateStorageRoom(room = {}) {
-  return decorateStorageRoom(room, { formatLoad: (value) => this._formatStorageLoad(value) });
 },
 
 _prepareStorageRows(holding, canEdit = false, roomsArg = null, rawRowsArg = null) {

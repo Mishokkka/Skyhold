@@ -2024,10 +2024,6 @@ _advanceMarketShipmentsForQd(holding, qd = 0, report = null) {
   return shipmentReport;
 },
 
-async _runTenDayEconomy(holding) {
-  return this._runEconomyForQd(holding, 40);
-},
-
 _foodConsumptionDependencies() {
   return {
     safeNumber: (value, fallback = 0) => this._safeNumber(value, fallback),

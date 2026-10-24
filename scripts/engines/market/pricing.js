@@ -351,6 +351,12 @@ export function marketShipmentRiskProfile({ logistics = {}, deliveryQd = 0, subt
   };
 }
 
+/**
+ * Build a purchase quote without reserving stock, spending money, or mutating inputs.
+ * Chooses the cheapest eligible route. Known capacity errors and, for ordinary purchases,
+ * over-limit goods totals retain cargo/error flags without allocating shipment batches.
+ * @returns {object} Cargo, delivery charges/schedule, balances, and validation flags.
+ */
 export function planMarketPurchase({ holding = {}, quote = {}, quantities = {}, targetRoomId = "outdoors", serviceLevel = "standard", transportOnly = false } = {}) {
   if (quote.logistics?.ok !== false && quote.logistics?.routeCandidates?.length) {
     const selected = (quote.offers ?? []).filter((offer) => Number(quantities?.[offer.id]) > 0);
@@ -394,7 +400,10 @@ export function planMarketPurchase({ holding = {}, quote = {}, quantities = {}, 
   const capacityExceeded = lines.length > 0 && bookingCapacityLoad > 0 && (scheduled
     ? lines.some((line) => Math.max(0, finiteNumber(line.load, 1)) > bookingCapacityLoad + 0.0001)
     : totalLoad > bookingCapacityLoad + 0.0001);
-  const batches = splitMarketShipmentLines(lines, scheduled ? bookingCapacityLoad : 0);
+  // Keep invalid quotes explanatory without materializing a batch per unit of
+  // cargo that cannot fit or whose goods alone exceed the payment limit.
+  const batches = capacityExceeded || (!transportOnly && !marketMoneyInRange(subtotalCopper))
+    ? [] : splitMarketShipmentLines(lines, scheduled ? bookingCapacityLoad : 0);
   const routeFlatCopper = Math.max(0, Math.ceil(finiteNumber(logistics.distanceFlatCopper, 0)));
   const loadRateCopper = Math.max(0, finiteNumber(logistics.distanceLoadCopper, 0));
   const freightRate = marketHistoricalFreightRate(logistics);

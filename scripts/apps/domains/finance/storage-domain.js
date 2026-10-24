@@ -87,25 +87,6 @@ _storageLogKindLabel(kind = "") {
   }
 },
 
-_productionPreview(holding) {
-  const result = [];
-  const storageRooms = this._storageRooms(holding, { includeUnavailable: true });
-  const workerContext = this._economyWorkerContext?.(holding) ?? null;
-  for (const building of holding?.buildings?.list ?? []) {
-    if (this._buildingStatus(building).value !== "built") continue;
-    const functions = this._buildingFunctions(building);
-    const lines = functions.production ? this._prepareProductionLines(building, 0, holding, storageRooms).filter((line) => line.active) : [];
-    const income = functions.income ? this._buildingIncomeSummary(building, holding, workerContext) : null;
-    if (!lines.length && !income?.total) continue;
-    result.push({
-      name: building.name || "Здание",
-      lines: lines.map((line) => ({ resource: line.resource, total: line.totalPreview ?? line.total, expenses: line.expenses || "" })),
-      income: income?.total ?? 0
-    });
-  }
-  return result;
-},
-
 _parseResourceCosts(text = "") {
   return parseResourceCosts(text);
 },

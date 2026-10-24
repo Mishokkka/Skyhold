@@ -103,6 +103,13 @@ function calendariaDaysInMonth(dateTime = null, calendar = null) {
   return Number.isFinite(Number(raw)) && Number(raw) > 0 ? Number(raw) : null;
 }
 
+/**
+ * Validate normalized public date components against the active or supplied calendar without rollover.
+ * Hours respect its day length (24 by default); minutes must be integers from zero through 59.
+ * @param {object|null} [dateTime=null] Public components or internal dayOfMonth components to normalize.
+ * @param {object|null} [calendar=null] Calendar override; missing month lengths leave the upper day bound open.
+ * @returns {boolean} Whether month/day/hour/minute components fit the known calendar bounds.
+ */
 function isCalendariaDateInRange(dateTime = null, calendar = null) {
   const value = normalizeCalendariaDateTime(dateTime, calendar);
   if (!value) return false;
@@ -113,8 +120,11 @@ function isCalendariaDateInRange(dateTime = null, calendar = null) {
   if (daysInMonth && day > daysInMonth) return false;
   const hour = Number(value.hour ?? 0);
   const minute = Number(value.minute ?? 0);
-  if (!Number.isFinite(hour) || hour < 0) return false;
-  if (!Number.isFinite(minute) || minute < 0 || minute > 59) return false;
+  const source = calendar ?? activeCalendar();
+  const rawHoursPerDay = Number(source?.days?.hoursPerDay ?? source?.hoursPerDay ?? 24);
+  const hoursPerDay = Number.isFinite(rawHoursPerDay) && rawHoursPerDay > 0 ? rawHoursPerDay : 24;
+  if (!Number.isInteger(hour) || hour < 0 || hour >= hoursPerDay) return false;
+  if (!Number.isInteger(minute) || minute < 0 || minute > 59) return false;
   return true;
 }
 

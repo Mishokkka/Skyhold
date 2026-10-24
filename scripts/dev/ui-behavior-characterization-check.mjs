@@ -140,7 +140,7 @@ assert.doesNotMatch(beforeSample, /\sdata-action=|\sdraggable=|\sdata-building-c
   "review samples must not dispatch building mutations or drag operations");
 
 const previous = { foundry: globalThis.foundry, game: globalThis.game, Handlebars: globalThis.Handlebars,
-  setTimeout: globalThis.setTimeout, clearTimeout: globalThis.clearTimeout };
+  setTimeout: globalThis.setTimeout, clearTimeout: globalThis.clearTimeout, ui: globalThis.ui };
 try {
   class Base { async _prepareContext() { return {}; } }
   globalThis.Handlebars = { partials: {}, registerHelper() {} };
@@ -150,6 +150,38 @@ try {
   globalThis.game = { user: { isGM: false } };
   const { SkyholdUiReviewApp } = await import("../apps/ui-review-app.js");
   const { SkyholdBuildingEditor } = await import("../apps/editors/building-editor.js");
+  const { SkyholdResourceCatalogEditor } = await import("../apps/editors/resource-catalog-editor.js");
+  const resourceEditor = new SkyholdResourceCatalogEditor();
+  const resourceListeners = new Map();
+  const resourceErrors = [], resourceLogs = [];
+  const originalConsoleError = console.error;
+  globalThis.ui = { notifications: { error: (message) => resourceErrors.push(message) } };
+  try {
+    console.error = (...args) => resourceLogs.push(args);
+    resourceEditor._bindEvents({
+      addEventListener(type, listener) { resourceListeners.set(type, listener); },
+      contains: () => true
+    });
+    for (const [action, method] of [["resource-add", "_onAdd"], ["resource-edit", "_onEdit"], ["resource-select", "_onSelect"]]) {
+      const element = { dataset: { action, resourceId: "wood" } };
+      const failure = new Error(`${action} failed`);
+      const rejected = Promise.reject(failure);
+      // Keep the fixture rejection observed even when an old listener drops it.
+      rejected.catch(() => {});
+      resourceEditor[method] = (event, target) => {
+        assert.equal(event.currentTarget, element, "resource actions must receive the clicked control");
+        if (method !== "_onAdd") assert.equal(target, element);
+        return rejected;
+      };
+      await resourceListeners.get("click")({ type: "click", target: { closest: () => element } });
+      assert.equal(resourceLogs.at(-1)?.[1], failure, "catalog action failures must be logged through the shared dispatcher");
+    }
+    assert.equal(resourceErrors.length, 3, "add, edit and picker failures must each notify the user once");
+  } finally {
+    console.error = originalConsoleError;
+    globalThis.ui = previous.ui;
+    resourceEditor._resourceAbortController?.abort();
+  }
   const realEditor = new SkyholdBuildingEditor();
   let scopedSaves = 0;
   realEditor._canEditBuilding = () => false;

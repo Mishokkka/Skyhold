@@ -1,3 +1,5 @@
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 import assert from "node:assert/strict";
 import { FinanceDomain } from "../apps/domains/finance-domain.js";
 import { BuildingProductionDomain } from "../apps/domains/building/production-domain.js";
@@ -232,6 +234,7 @@ async function withSkyholdCalendar(currentMonth, callback) {
   }
 }
 
+/** Checks real economy-domain calculations, period accounting and saved reports against deterministic settlement fixtures. */
 export async function checkEconomyCharacterization() {
   const economy = createEconomyHarness();
 
@@ -1245,4 +1248,9 @@ export async function checkEconomyCharacterization() {
     assert.equal(restored.operationId, "tenday:test", "hydrated history must retain the source operation id");
     assert.deepEqual(restored.report.ledger.map((row) => row.qty), [-3, -2, 10, -5], "hydrated history must preserve the exact signed ledger");
   }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  await checkEconomyCharacterization();
+  console.log("FBL Skyhold economy characterization passed.");
 }

@@ -10,6 +10,14 @@ import {
 } from "./residents.js";
 import { builtBuildings, isDefenseBuilding } from "./sources.js";
 
+/**
+ * Roll a positive-sided die from a [0, 1) draw, including one at the zero endpoint.
+ * @returns {number} Integer result from one through sides.
+ */
+function rollDie(random, sides = 6) {
+  return Math.max(1, Math.ceil(random() * sides));
+}
+
 export function medicalSupport(holding, { battleLost = false, medicalAssignments = null, medicalCapacityForBuilding = null } = {}) {
   const built = builtBuildings(holding);
   const medicalBuildings = built.filter((building) => isMedicalBuilding(building));
@@ -146,6 +154,12 @@ export function casualtySummaryFromRecords(records = [], compactNameList = defau
   return parts.join("; ") || "Новых потерь жителей не записано.";
 }
 
+/**
+ * Apply up to lossSteps casualties to distinct eligible defenders on a holding draft.
+ * Mutates resident conditions/assignments and the battle log; medical adapters may
+ * consume supplies. The caller owns authority checks and persistence of the draft.
+ * @returns {object} Casualty counts, records, consumed medicine totals, and summary text.
+ */
 export function applyDefenderResidentCasualties(holding, state = {}, lossSteps = 0, calc = {}, {
   random = Math.random,
   compactNameList = defaultCompactNameList,
@@ -205,9 +219,9 @@ export function applyDefenderResidentCasualties(holding, state = {}, lossSteps =
       }
     }
     const person = pool[Math.floor(random() * pool.length)] ?? alive[Math.floor(random() * alive.length)];
-    const injuryRoll = Math.ceil(random() * 6);
+    const injuryRoll = rollDie(random);
     let condition = conditions[clamp(injuryRoll - 1, 0, 5)] ?? "injured";
-    const days = condition === "heavy" ? Math.ceil(random() * 6) + Math.ceil(random() * 6) + 5 : condition === "injured" ? Math.ceil(random() * 6) + 2 : Math.ceil(random() * 3);
+    const days = condition === "heavy" ? rollDie(random) + rollDie(random) + 5 : condition === "injured" ? rollDie(random) + 2 : rollDie(random, 3);
     const treated = medical.used < medical.capacity;
     if (treated) medical.used += 1;
     let supplied = false;
@@ -238,7 +252,7 @@ export function applyDefenderResidentCasualties(holding, state = {}, lossSteps =
         medicineUsed = true;
       }
     }
-    const deathRoll = Math.ceil(random() * 6);
+    const deathRoll = rollDie(random);
     const deathChance = Math.max(0, (baseDeathChance[condition] ?? 2) - (treated ? 1 : 0) - (supplied ? 1 : 0) - (medicineUsed ? 1 : 0));
     const sourceText = selectedSlot?.sourceLabel ? ` Источник риска: ${selectedSlot.sourceLabel}.` : "";
     const treatmentText = [

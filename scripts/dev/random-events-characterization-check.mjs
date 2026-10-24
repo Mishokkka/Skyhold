@@ -1,3 +1,5 @@
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 import assert from "node:assert/strict";
 import {
   contextualRandomEventWeight,
@@ -35,6 +37,7 @@ function baseHolding() {
   };
 }
 
+/** Verifies contextual event requirements, weighted selection and editor models without applying events to a world. */
 export function checkRandomEventsCharacterization() {
   const holding = baseHolding();
   const tags = holdingRandomEventTags(holding);
@@ -155,4 +158,9 @@ export function checkRandomEventsCharacterization() {
   assert.equal(preparedRow.boostRules.length, 1, "full editor rows must expose prepared boost controls");
   assert.equal(prepareTableSummary("general", { rows: [previewRow] }, "general").active, true, "table summaries must preserve the active table");
   assert.ok(prepareTableControls([], customRegionOptions).regionOptions.some((option) => option.selected), "table controls must select a configured region default");
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  await checkRandomEventsCharacterization();
+  console.log("FBL Skyhold random-events characterization passed.");
 }

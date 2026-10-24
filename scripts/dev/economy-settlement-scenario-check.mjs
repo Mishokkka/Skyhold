@@ -15,8 +15,13 @@ import { planMarketOutboundSale } from "../engines/market/outbound.js";
 import { marketOutboundAvailableQuantity } from "../engines/market/outbound.js";
 import { createMarketOutboundShipment } from "../workflows/market/outbound-shipment.js";
 import { parseResourceCosts, resourceDef } from "../core/resources.js";
+import { applyStaffAppointment, buildingLaborMode, validateHybridLaborHolding } from "../data/hybrid-labor.js";
 
 const total = (h, id) => h.storage.resources.filter((r) => r.resourceId === id).reduce((sum, r) => sum + r.qty, 0);
+/**
+ * Simulates two game years through real economy and market domains with declared inputs and current labor contracts.
+ * Returns period/year accounting and restores the original game and data-view fixtures.
+ */
 export async function settlementScenario({ population = 12, demandFactor = 1, priceFactor = 1, missedSowing = false, relief = false } = {}) {
   const savedGame = globalThis.game, savedView = SkyholdData.view;
   globalThis.game = { user: { id: "gm", isGM: true }, settings: { get: () => undefined }, modules: new Map(), i18n: { localize: (s) => s } };
@@ -68,7 +73,12 @@ export async function settlementScenario({ population = 12, demandFactor = 1, pr
             batches: [{ id: "relief-batch-" + id, qty, ageQd: 0 }] });
         }
       }
-      for (const p of h.people.list) p.workAllocations = [];
+      for (const p of h.people.list) {
+        applyStaffAppointment(h, p.id, null);
+        p.workAllocationMode = "explicit";
+        p.workAllocations = [];
+      }
+      h.workforcePlan = { version: 2, goals: [], locks: [], productionGoals: [] };
       for (const b of h.buildings.list) b.assignedWorkerIds = [];
       const millLine = h.buildings.list.find((b) => b.templateId === "mill").productionLines[0];
       const bakeryLine = h.buildings.list.find((b) => b.templateId === "bakery").productionLines[0];
@@ -89,13 +99,29 @@ export async function settlementScenario({ population = 12, demandFactor = 1, pr
         heatingInputCost += cost;
         h.storage.resources.push({ id: `heating-${input.resourceId}-${period}`, resourceId: input.resourceId, qty, roomId: "outdoors" });
       }
+      /** Assigns one resident under the building's labor mode and records the reserved budget and shared output goal. */
       const job = (b, fn, qd) => {
         if (qd <= 0) return;
         const p = h.people.list[personIndex++];
         assert.ok(p, "The plan must fit the real population");
         const amount = Math.min(20, qd);
-        p.workAllocations = [{ id: "job-" + p.id, sourceId: b.id, functionId: fn, normalQd: amount, overtimeQd: 0 }];
-        b.assignedWorkerIds.push(p.id); plannedQd += amount;
+        if (buildingLaborMode(b) === "staff" && fn !== MAINTENANCE_WORK_FUNCTION_ID) {
+          applyStaffAppointment(h, p.id, { version: 1, buildingId: b.id, primaryFunctionId: fn,
+            reserveFunctionId: "", wageDailyCopper: 12, overtimeQd: 0, volunteer: false, volunteerReason: "" });
+          // A permanent employee reserves their whole normal budget, including
+          // idle time after a shared production goal has been reached.
+          plannedQd += 20;
+          if (fn.startsWith("production:") && ["mill", "bakery"].includes(b.templateId)) {
+            const line = b.productionLines.find((row) => fn === "production:" + row.id);
+            const preparedUnits = amount / line.workQd * line.outputQty;
+            const goal = h.workforcePlan.productionGoals.find((row) => row.sourceId === b.id && row.functionId === fn);
+            if (goal) goal.preparedUnits += preparedUnits;
+            else h.workforcePlan.productionGoals.push({ sourceId: b.id, functionId: fn, preparedUnits });
+          }
+        } else {
+          p.workAllocations = [{ id: "job-" + p.id, sourceId: b.id, functionId: fn, normalQd: amount, overtimeQd: 0 }];
+          plannedQd += amount;
+        }
       };
       for (const b of h.buildings.list) {
         if (b.maintenance.requiredPoints > 0) job(b, MAINTENANCE_WORK_FUNCTION_ID, b.maintenance.requiredPoints);
@@ -114,11 +140,13 @@ export async function settlementScenario({ population = 12, demandFactor = 1, pr
             else breadNeed -= amount;
           }
         }
-        if (["bathhouse", "meeting-house"].includes(b.templateId)) for (let i = 0; i < b.workersMin; i++) job(b, "culture", 20);
+        if (["bathhouse", "meeting-house"].includes(b.templateId)) for (let i = 0; i < Math.max(1, b.workersMin); i++) job(b, "culture", 20);
         if (["lumbermill", "quarry"].includes(b.templateId)) for (let i = 0; i < Math.max(1, b.workersMin); i++) job(b, "production:" + b.productionLines[0].id, 20);
       }
       assert.equal(flourNeed, 0, "the built mills must cover all planned flour work");
       assert.equal(breadNeed, 0, "the built bakeries must cover all planned bread work");
+      const labor = validateHybridLaborHolding(h);
+      assert.equal(labor.ok, true, JSON.stringify(labor.issues));
       beginPerishableStoragePeriod(h);
       const report = await app._runEconomyForQd(h, 40, { operationId: "year-" + period, createdAt: "2026-10-08", data: SkyholdData.view() });
       finishPerishableStoragePeriod({ holding: h, elapsedQd: 40, report, appendLedger: () => {}, formatNumber: String });
@@ -168,6 +196,7 @@ export async function settlementScenario({ population = 12, demandFactor = 1, pr
         .reduce((sum, order) => sum + order.revenueCopper, 0), years, periods };
   } finally { globalThis.game = savedGame; SkyholdData.view = savedView; }
 }
+/** Asserts food autonomy, paid upkeep and labor reserves across normal, stressed, missed-sowing and explicit-aid scenarios. */
 export async function checkSettlementScenarios() {
   const rows = [];
   for (const options of [{ population: 12 }, { population: 20 }, { population: 50 }, { population: 20, demandFactor: 0.5, priceFactor: 0.9 }, { population: 50, demandFactor: 0.5, priceFactor: 0.9 }, { population: 12, missedSowing: true }, { population: 12, missedSowing: true, relief: true }]) {

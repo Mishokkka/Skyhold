@@ -26,6 +26,12 @@ function resultForError(error, { operationId = "", revision = null } = {}) {
   });
 }
 
+/**
+ * Build player command transport and authenticated GM handlers around the injected store.
+ * Player mutations travel as patches or operations; the GM validates and persists them.
+ * @param {object} [options={}] Store callbacks, operation executors and response timeout.
+ * @returns {object} Request methods and a socket payload handler.
+ */
 export function createSkyholdSocketApi({
   getData,
   enqueueWrite,
@@ -42,6 +48,24 @@ export function createSkyholdSocketApi({
   const ships = createShipSocketApi({ executeShipOperation, getData, writeTimeoutMs });
   const politics = createPoliticsSocketApi({ executePoliticsOperation, getData, writeTimeoutMs });
 
+  /**
+   * Emit one pending request, rejecting its caller and releasing its ID on transport failure.
+   * @returns {boolean} Whether emit completed without a synchronous error, not a GM acknowledgement.
+   */
+  function emitRequest(pendingRequests, requestId, payload) {
+    try {
+      game.socket.emit(`module.${MODULE_ID}`, payload);
+      return true;
+    } catch (error) {
+      const pending = pendingRequests.get(requestId);
+      pendingRequests.delete(requestId);
+      clearTimeout(pending?.timeout);
+      pending?.reject(commandError(commandFailure({ operationId: requestId,
+        code: COMMAND_ERROR.SOCKET_UNAVAILABLE, message: error?.message, retryable: true })));
+      return false;
+    }
+  }
+
   function rememberPlayerOperation(key, result) {
     if (!key || !result?.ok) return;
     completedPlayerOperations.delete(key);
@@ -51,6 +75,12 @@ export function createSkyholdSocketApi({
     }
   }
 
+  /**
+   * Diff a proposed player root and ask the authority GM to validate the resulting patch.
+   * A no-op resolves locally; retries retain the operation ID and never write player settings.
+   * @param {object} data Proposed root based on the player's current snapshot.
+   * @returns {Promise<object>} Current or acknowledged data; rejects on transport or GM failure.
+   */
   function requestGmDataPatch(data) {
     const current = getData();
     const patch = buildPlayerPatch(current, data);
@@ -78,6 +108,7 @@ export function createSkyholdSocketApi({
     const requestId = operationId;
     return new Promise((resolve, reject) => {
       const pending = { resolve, reject, timeout: null, attempts: 0, authorities: new Set(), proposed: data };
+      /** Send the same patch ID to the current authority and arm its bounded retry timeout. */
       const emitAttempt = () => {
         const authorityGm = activeSkyholdGm();
         if (!authorityGm) {
@@ -92,7 +123,7 @@ export function createSkyholdSocketApi({
         }
         pending.attempts += 1;
         pending.authorities.add(authorityGm.id);
-        game.socket.emit(`module.${MODULE_ID}`, {
+        if (!emitRequest(PENDING_PLAYER_WRITES, requestId, {
           type: "playerDataPatchRequest",
           requestId,
           operationId,
@@ -100,7 +131,8 @@ export function createSkyholdSocketApi({
           userId: game.user?.id ?? null,
           targetGmId: authorityGm.id,
           patch
-        });
+        })) return;
+        /** Retry once after a missed acknowledgement, then reject and release the pending ID. */
         pending.timeout = setTimeout(() => {
           if (pending.attempts < 2) {
             emitAttempt();
@@ -121,6 +153,12 @@ export function createSkyholdSocketApi({
     });
   }
 
+  /**
+   * Execute a GM storage command locally or send a player command to the authority GM.
+   * Duplicate pending IDs reject without replacing the first caller; retries reuse that ID.
+   * @param {object} [rawOperation={}] Storage command, optionally carrying an operationId.
+   * @returns {Promise<object>} Executor result or matching GM acknowledgement.
+   */
   function requestStorageOperation(rawOperation = {}) {
     const operation = {
       ...rawOperation,
@@ -142,8 +180,12 @@ export function createSkyholdSocketApi({
     }
 
     const requestId = operation.operationId;
+    if (PENDING_STORAGE_OPERATIONS.has(requestId)) return Promise.reject(commandError(commandFailure({
+      operationId: requestId, code: COMMAND_ERROR.CONFLICT, message: "Операция уже ожидает ответа."
+    })));
     return new Promise((resolve, reject) => {
       const pending = { resolve, reject, timeout: null, attempts: 0, authorities: new Set() };
+      /** Send this storage command to the current GM, retaining its ID across one retry. */
       const emitAttempt = () => {
         const targetGm = activeSkyholdGm();
         if (!targetGm) {
@@ -153,13 +195,14 @@ export function createSkyholdSocketApi({
         }
         pending.attempts += 1;
         pending.authorities.add(targetGm.id);
-        game.socket.emit(`module.${MODULE_ID}`, {
+        if (!emitRequest(PENDING_STORAGE_OPERATIONS, requestId, {
           type: "playerStorageOperationRequest",
           requestId,
           userId: game.user?.id ?? null,
           targetGmId: targetGm.id,
           operation
-        });
+        })) return;
+        /** Retry a missed storage acknowledgement once, then reject and release the caller. */
         pending.timeout = setTimeout(() => {
           if (pending.attempts < 2) {
             emitAttempt();
@@ -175,6 +218,12 @@ export function createSkyholdSocketApi({
     });
   }
 
+  /**
+   * Submit a market command with its revision/source token, using the local executor for a GM.
+   * A player keeps one pending caller per operation ID and receives protocol errors on failure.
+   * @param {object} [rawOperation={}] Market command and its concurrency metadata.
+   * @returns {Promise<object>} Executor result or matching authority acknowledgement.
+   */
   function requestMarketOperation(rawOperation = {}) {
     const operation = {
       ...rawOperation,
@@ -210,8 +259,12 @@ export function createSkyholdSocketApi({
     }
 
     const requestId = operation.operationId;
+    if (PENDING_MARKET_OPERATIONS.has(requestId)) return Promise.reject(commandError(commandFailure({
+      operationId: requestId, code: COMMAND_ERROR.CONFLICT, message: "Операция уже ожидает ответа."
+    })));
     return new Promise((resolve, reject) => {
       const pending = { resolve, reject, timeout: null, attempts: 0, authorities: new Set() };
+      /** Resend unchanged market metadata to the selected authority and arm its timeout. */
       const emitAttempt = () => {
         const targetGm = activeSkyholdGm();
         if (!targetGm) {
@@ -226,7 +279,7 @@ export function createSkyholdSocketApi({
         }
         pending.attempts += 1;
         pending.authorities.add(targetGm.id);
-        game.socket.emit(`module.${MODULE_ID}`, {
+        if (!emitRequest(PENDING_MARKET_OPERATIONS, requestId, {
           type: "playerMarketOperationRequest",
           requestId,
           operationId: operation.operationId,
@@ -235,7 +288,8 @@ export function createSkyholdSocketApi({
           userId: game.user?.id ?? null,
           targetGmId: targetGm.id,
           operation
-        });
+        })) return;
+        /** Allow one identical retry before rejecting a market command without an acknowledgement. */
         pending.timeout = setTimeout(() => {
           if (pending.attempts < 2) {
             emitAttempt();
@@ -256,6 +310,12 @@ export function createSkyholdSocketApi({
     });
   }
 
+  /**
+   * Route construction rolls through the GM executor without replacing an existing pending ID.
+   * Player retries preserve the operation and expected revision so the executor can detect replay.
+   * @param {object} [rawOperation={}] Construction command and its expected revision.
+   * @returns {Promise<object>} Executor result or matching GM acknowledgement.
+   */
   function requestConstructionOperation(rawOperation = {}) {
     const operation = {
       ...rawOperation,
@@ -291,8 +351,12 @@ export function createSkyholdSocketApi({
     }
 
     const requestId = operation.operationId;
+    if (PENDING_CONSTRUCTION_OPERATIONS.has(requestId)) return Promise.reject(commandError(commandFailure({
+      operationId: requestId, code: COMMAND_ERROR.CONFLICT, message: "Операция уже ожидает ответа."
+    })));
     return new Promise((resolve, reject) => {
       const pending = { resolve, reject, timeout: null, attempts: 0, authorities: new Set() };
+      /** Send this construction ID to the current authority and allow one timed retry. */
       const emitAttempt = () => {
         const targetGm = activeSkyholdGm();
         if (!targetGm) {
@@ -307,7 +371,7 @@ export function createSkyholdSocketApi({
         }
         pending.attempts += 1;
         pending.authorities.add(targetGm.id);
-        game.socket.emit(`module.${MODULE_ID}`, {
+        if (!emitRequest(PENDING_CONSTRUCTION_OPERATIONS, requestId, {
           type: "playerConstructionOperationRequest",
           requestId,
           operationId: operation.operationId,
@@ -315,7 +379,8 @@ export function createSkyholdSocketApi({
           userId: game.user?.id ?? null,
           targetGmId: targetGm.id,
           operation
-        });
+        })) return;
+        /** Retry once with the original revision, then reject and remove the pending command. */
         pending.timeout = setTimeout(() => {
           if (pending.attempts < 2) {
             emitAttempt();
