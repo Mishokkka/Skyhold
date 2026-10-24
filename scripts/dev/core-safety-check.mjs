@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import { rollInlineDice } from "../core/formula.js";
 import { escapeAttribute, escapeHtml } from "../utils/html.js";
 
+/** Asserts browser/headless quote escaping and legal dice endpoints, then restores the original document global. */
 export function checkCoreSafety() {
   const value = `" autofocus onfocus="alert('test')" <&>`;
   const expected = "&quot; autofocus onfocus=&quot;alert(&#039;test&#039;)&quot; &lt;&amp;&gt;";

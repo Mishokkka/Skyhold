@@ -234,6 +234,7 @@ async function withSkyholdCalendar(currentMonth, callback) {
   }
 }
 
+/** Checks real economy-domain calculations, period accounting and saved reports against deterministic settlement fixtures. */
 export async function checkEconomyCharacterization() {
   const economy = createEconomyHarness();
 

@@ -10,6 +10,10 @@ import {
 } from "./residents.js";
 import { builtBuildings, isDefenseBuilding } from "./sources.js";
 
+/**
+ * Roll a positive-sided die from a [0, 1) draw, including one at the zero endpoint.
+ * @returns {number} Integer result from one through sides.
+ */
 function rollDie(random, sides = 6) {
   return Math.max(1, Math.ceil(random() * sides));
 }
@@ -150,6 +154,12 @@ export function casualtySummaryFromRecords(records = [], compactNameList = defau
   return parts.join("; ") || "Новых потерь жителей не записано.";
 }
 
+/**
+ * Apply up to lossSteps casualties to distinct eligible defenders on a holding draft.
+ * Mutates resident conditions/assignments and the battle log; medical adapters may
+ * consume supplies. The caller owns authority checks and persistence of the draft.
+ * @returns {object} Casualty counts, records, consumed medicine totals, and summary text.
+ */
 export function applyDefenderResidentCasualties(holding, state = {}, lossSteps = 0, calc = {}, {
   random = Math.random,
   compactNameList = defaultCompactNameList,

@@ -16,6 +16,7 @@ function countCalls(target, counts, name, result) {
   };
 }
 
+/** Exercises derived app contexts while restoring the data view, registered app class and platform globals afterward. */
 export async function checkSkyholdContextCharacterization() {
   const previousDataView = SkyholdData.view;
   const previousAppClass = getSkyholdAppClass();

@@ -37,6 +37,7 @@ function baseHolding() {
   };
 }
 
+/** Verifies contextual event requirements, weighted selection and editor models without applying events to a world. */
 export function checkRandomEventsCharacterization() {
   const holding = baseHolding();
   const tags = holdingRandomEventTags(holding);

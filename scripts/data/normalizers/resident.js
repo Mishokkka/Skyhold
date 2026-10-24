@@ -25,6 +25,13 @@ function appendUniqueTrait(value = "", addition = "") {
   return items.join(", ");
 }
 
+/**
+ * Remove deletion-related workforce locks and assignments from a caller-owned holding draft.
+ * The resident row is normally already removed; any retained matching row also loses its home.
+ * @param {object} holding Mutable holding; persistence and political/ship cleanup belong to the caller.
+ * @param {string} personId Deleted resident identity; an empty identity is a no-op.
+ * @returns {void}
+ */
 export function clearPersonReferences(holding, personId) {
   const id = String(personId ?? "");
   if (!id) return;

@@ -12,6 +12,7 @@ import { consumeDefenderMilitarySupplies, prepareDefenderMilitarySupplyPlan } fr
 import * as massCombatResidents from "../../apps/mass-combat/residents.js";
 import { ResidentDomain } from "../../apps/domains/resident-domain.js";
 
+/** Runs deterministic combat, casualty, medical-supply, unique-target damage and shared military-profile contracts. */
 export function runCombatSuite() {
   const state = resetMassCombatState({ archive: [] });
   state.battleId = "battle-suite-1";

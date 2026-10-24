@@ -13,6 +13,13 @@ export function vacatePoliticsRepresentative(holding, residentId, reason) {
   return true;
 }
 
+/**
+ * Mutate a holding draft to release a resident's civilian, construction and defense assignments.
+ * Slot positions and other residents survive; ship membership and political office are separate actions.
+ * @param {object} holding Caller-owned draft; this helper never persists it.
+ * @param {string} personId Resident identity to clear, whether or not the resident row still exists.
+ * @returns {boolean} False for an unusable holding/ID, otherwise true even when no reference existed.
+ */
 export function clearPersonFromAssignments(holding, personId) {
   const id = String(personId ?? "");
   if (!id || !holding || typeof holding !== "object") return false;

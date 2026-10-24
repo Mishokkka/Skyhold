@@ -59,6 +59,13 @@ export function createGmWriteAuthority({ getData, enqueueWrite, persistData, not
     return receipt;
   }
 
+  /**
+   * Commit an already prepared GM draft locally or ask the current authority GM to commit it.
+   * The caller already holds its write queue; remote retries retain one ID at the same authority.
+   * @param {object} data Prepared root whose revision is one above baseRevision.
+   * @param {object} [options={}] Commit scope, base revision and rollback-snapshot requirement.
+   * @returns {Promise<object>} Draft with acknowledged metadata; rejects on conflict or transport failure.
+   */
   function requestCommit(data, { scope, baseRevision, forceRollbackSnapshot = false } = {}) {
     if (!user()?.isGM) return Promise.reject(failure(COMMAND_ERROR.FORBIDDEN, "GM-коммит недоступен игроку."));
     const request = { operationId: makeId("gm-commit", 20), userId: user().id, data,
@@ -70,6 +77,7 @@ export function createGmWriteAuthority({ getData, enqueueWrite, persistData, not
     }
     return new Promise((resolve, reject) => {
       const state = { resolve, reject, request, attempts: 0, authorities: new Set(), timeout: null };
+      /** Send the existing commit ID, releasing pending state if authority or transport is lost. */
       const send = () => {
         const target = authority();
         if (!target?.isGM) {
@@ -88,6 +96,7 @@ export function createGmWriteAuthority({ getData, enqueueWrite, persistData, not
           reject(failure(COMMAND_ERROR.SOCKET_UNAVAILABLE, error?.message || "Нет связи с ГМом, отвечающим за запись."));
           return;
         }
+        /** Retry once only at the same authority; a lost reply may already represent a completed write. */
         state.timeout = setTimeout(() => {
           // A timeout may mean a completed write. Retry the same ID only at the same authority.
           if (state.attempts < 2 && authority()?.id === target.id) return send();

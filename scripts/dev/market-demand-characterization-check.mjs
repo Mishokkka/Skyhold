@@ -30,6 +30,7 @@ function line(qty, revision = 0, overrides = {}) {
   };
 }
 
+/** Verifies shared demand reservation, atomic multi-order settlement, replay and delayed recovery of consumed demand. */
 export function checkMarketDemandCharacterization() {
   const draft = holding();
   const first = reserveMarketDemand({ holding: draft, marketId: "region", lines: [line(4)], operationId: "reserve-a", currentTenday: 0 });

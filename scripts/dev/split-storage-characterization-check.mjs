@@ -88,6 +88,7 @@ function interruptedMeta(previous, next, { writeId = "interrupted" } = {}) {
   });
 }
 
+/** Checks partition caching, write scopes and coherent metadata recovery using settings fixtures with injected write failures. */
 export async function checkSplitStorageCharacterization() {
   const previousWarn = console.warn;
   console.warn = () => {};

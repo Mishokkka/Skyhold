@@ -18,6 +18,10 @@ import { parseResourceCosts, resourceDef } from "../core/resources.js";
 import { applyStaffAppointment, buildingLaborMode, validateHybridLaborHolding } from "../data/hybrid-labor.js";
 
 const total = (h, id) => h.storage.resources.filter((r) => r.resourceId === id).reduce((sum, r) => sum + r.qty, 0);
+/**
+ * Simulates two game years through real economy and market domains with declared inputs and current labor contracts.
+ * Returns period/year accounting and restores the original game and data-view fixtures.
+ */
 export async function settlementScenario({ population = 12, demandFactor = 1, priceFactor = 1, missedSowing = false, relief = false } = {}) {
   const savedGame = globalThis.game, savedView = SkyholdData.view;
   globalThis.game = { user: { id: "gm", isGM: true }, settings: { get: () => undefined }, modules: new Map(), i18n: { localize: (s) => s } };
@@ -95,6 +99,7 @@ export async function settlementScenario({ population = 12, demandFactor = 1, pr
         heatingInputCost += cost;
         h.storage.resources.push({ id: `heating-${input.resourceId}-${period}`, resourceId: input.resourceId, qty, roomId: "outdoors" });
       }
+      /** Assigns one resident under the building's labor mode and records the reserved budget and shared output goal. */
       const job = (b, fn, qd) => {
         if (qd <= 0) return;
         const p = h.people.list[personIndex++];
@@ -191,6 +196,7 @@ export async function settlementScenario({ population = 12, demandFactor = 1, pr
         .reduce((sum, order) => sum + order.revenueCopper, 0), years, periods };
   } finally { globalThis.game = savedGame; SkyholdData.view = savedView; }
 }
+/** Asserts food autonomy, paid upkeep and labor reserves across normal, stressed, missed-sowing and explicit-aid scenarios. */
 export async function checkSettlementScenarios() {
   const rows = [];
   for (const options of [{ population: 12 }, { population: 20 }, { population: 50 }, { population: 20, demandFactor: 0.5, priceFactor: 0.9 }, { population: 50, demandFactor: 0.5, priceFactor: 0.9 }, { population: 12, missedSowing: true }, { population: 12, missedSowing: true, relief: true }]) {

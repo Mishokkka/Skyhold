@@ -112,6 +112,7 @@ function storageLogState(holding) {
   return (holding?.storage?.log ?? []).map(({ id: _id, ts: _ts, ...row }) => row);
 }
 
+/** Verifies storage quantities, room allocation and append-only player patches through real storage-domain methods. */
 export function checkStorageCharacterization() {
   const storage = createStorageHarness();
   const woodLoad = resourceUnitLoad("wood");

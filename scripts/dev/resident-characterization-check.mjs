@@ -214,6 +214,7 @@ function checkBoundedEditors() {
   }
 }
 
+/** Ensures deletion clears only the removed resident's assignments while preserving other residents and slot positions. */
 function checkDeletedResidentReferences() {
   const holding = {
     people: { list: [] },
@@ -236,6 +237,7 @@ function checkDeletedResidentReferences() {
   assert.deepEqual(holding.gm.defense.squads, [null, { sergeantId: "", memberIds: ["", "retained"] }]);
 }
 
+/** Runs resident generation, import, work eligibility, editor bounds and deletion-reference regression contracts. */
 export function checkResidentCharacterization() {
   checkAttributeContracts();
   checkGeneratedPopulation();

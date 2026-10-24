@@ -42,6 +42,7 @@ import { checkMaintenanceProposal } from "../building-maintenance-proposal-check
 import { checkPreparationRevision } from "../building-preparation-revision-check.mjs";
 import { checkArrivalProposal } from "../newcomer-arrival-proposal-check.mjs";
 
+/** Runs economy, production, market, ship and politics contracts without mutating a live Foundry world. */
 export async function runEconomySuite() {
   checkInternalDemandCharacterization();
   checkPreparationYear();

@@ -351,6 +351,12 @@ export function marketShipmentRiskProfile({ logistics = {}, deliveryQd = 0, subt
   };
 }
 
+/**
+ * Build a purchase quote without reserving stock, spending money, or mutating inputs.
+ * Chooses the cheapest eligible route. Known capacity errors and, for ordinary purchases,
+ * over-limit goods totals retain cargo/error flags without allocating shipment batches.
+ * @returns {object} Cargo, delivery charges/schedule, balances, and validation flags.
+ */
 export function planMarketPurchase({ holding = {}, quote = {}, quantities = {}, targetRoomId = "outdoors", serviceLevel = "standard", transportOnly = false } = {}) {
   if (quote.logistics?.ok !== false && quote.logistics?.routeCandidates?.length) {
     const selected = (quote.offers ?? []).filter((offer) => Number(quantities?.[offer.id]) > 0);

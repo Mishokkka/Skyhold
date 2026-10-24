@@ -12,6 +12,7 @@ function clone(value) {
 }
 
 
+/** Checks authenticated GM/player commands, replay, pending-ID conflicts and transport failure cleanup using a fake socket. */
 export async function checkSocketCharacterization() {
   const previousGame = globalThis.game;
   const previousUi = globalThis.ui;

@@ -1,3 +1,10 @@
+/**
+ * Replace NdM tokens with roll totals, leaving arithmetic evaluation to the caller.
+ * Bounds each token to 100 dice with 1000 sides; a zero draw still rolls one.
+ * @param {string} [expression=""] Formula text containing optional dice tokens.
+ * @param {() => number} [random=Math.random] Draw source returning values in [0, 1).
+ * @returns {string} Formula text with dice tokens replaced by their totals.
+ */
 export function rollInlineDice(expression = "", random = Math.random) {
   const roll = typeof random === "function" ? random : Math.random;
   return String(expression ?? "").replace(/\b(\d*)d(\d+)\b/gi, (_match, countRaw, sidesRaw) => {

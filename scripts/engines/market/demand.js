@@ -162,6 +162,12 @@ export function reserveMarketDemand({ holding = null, marketId = "", lines = [],
   return { ok: true, replay: false, reservations };
 }
 
+/**
+ * Settle demand on a holding draft after validating every reservation.
+ * Orders sharing a resource pool accumulate; invalid or replayed operations
+ * leave the draft unchanged. The caller owns authorization and persistence.
+ * @returns {object} Settlement totals, replay status, or a stale/invalid result.
+ */
 export function settleMarketDemandReservations({ holding = null, reservations = [], outcome = "consumed", operationId = "", currentTenday = null, updatedAt = "" } = {}) {
   const id = text(operationId);
   const selectedOutcome = outcome === "restored" ? "restored" : "consumed";

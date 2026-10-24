@@ -15,6 +15,7 @@ import { stableDataHash } from "../data/storage-commit.js";
 import { RenderSchedulerMixin } from "../apps/common/render-scheduler.js";
 import { buildPlayerPatch } from "../data/player-write-guard.js";
 
+/** Verifies GM write authority, ownership, transport failures and render scheduling while restoring platform fixtures. */
 export async function checkUiOwnership() {
   const saved = { game: globalThis.game, foundry: globalThis.foundry, ui: globalThis.ui,
     frame: globalThis.requestAnimationFrame, hooks: globalThis.Hooks };

@@ -182,6 +182,7 @@ function createHarness({ failPersist = false, failCompensation = false } = {}) {
   };
 }
 
+/** Exercises authoritative storage transfers, actor ownership and replay with isolated data and document fixtures. */
 export async function checkStorageOperationCharacterization() {
   for (const type of ["depositItem", "giveStoredItem"]) {
     const harness = createHarness({ failPersist: true, failCompensation: true });

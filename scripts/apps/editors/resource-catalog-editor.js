@@ -66,6 +66,11 @@ export class SkyholdResourceCatalogEditor extends FloatingTooltipsMixin(PendingF
     bindImageFallbacks(root);
   }
 
+  /**
+   * Replace catalog listeners for this render and delegate async actions through
+   * the shared error handler. Search updates local view state; handlers own edits.
+   * @param {HTMLElement} root Rendered catalog root that owns these listeners.
+   */
   _bindEvents(root) {
     this._resourceAbortController?.abort?.();
     const controller = new AbortController();

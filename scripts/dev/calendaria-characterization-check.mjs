@@ -30,6 +30,7 @@ function restoreGlobal(name, value, existed) {
 }
 
 
+/** Verifies public month numbering, calendar time bounds and settlement seasons with an isolated Calendaria fixture. */
 export function checkCalendariaCharacterization() {
   const calendar = {
     days: { hoursPerDay: 24 },
