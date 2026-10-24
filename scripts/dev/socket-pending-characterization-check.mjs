@@ -16,11 +16,16 @@ export async function checkSocketPendingCharacterization() {
     globalThis.game = { user: { id: "player", isGM: false }, socket,
       users: { contents: [{ id: "player", isGM: false, active: true }, { id: "gm", isGM: true, active: true }] } };
     const api = createSkyholdSocketApi({ getData: () => ({ meta: { revision: 0 }, holdings: [] }) });
-    const acknowledge = async (request) => api.handleSkyholdSocketPayload({
+    const acknowledge = async (request, gmId = "gm") => api.handleSkyholdSocketPayload({
       type: request.type.replace(/Request$/, "Response"), requestId: request.requestId,
-      operationId: request.requestId, userId: "player", gmId: "gm", ok: true,
+      operationId: request.requestId, userId: "player", gmId, ok: true,
       result: { ok: true, operationId: request.requestId }
-    }, "gm");
+    }, gmId);
+    const runNextTimer = () => {
+      const [id, callback] = timers.entries().next().value;
+      timers.delete(id);
+      callback();
+    };
 
     for (const method of ["requestStorageOperation", "requestMarketOperation", "requestConstructionOperation"]) {
       const operation = { operationId: `pending-${method}`, expectedRevision: 0 };
@@ -52,6 +57,52 @@ export async function checkSocketPendingCharacterization() {
       const recovered = api[method](retryOperation);
       await acknowledge(emitted.at(-1));
       assert.equal((await recovered).ok, true, `${method}: transport failure must release the pending ID`);
+
+      const metadata = { operationId: `failover-${method}`, expectedRevision: 7, sourceToken: "source-before-retry" };
+      const failover = api[method](metadata);
+      const firstAuthorityRequest = emitted.at(-1);
+      const firstGm = game.users.contents.find((user) => user.id === "gm");
+      firstGm.active = false;
+      game.users.contents.push({ id: "next-gm", isGM: true, active: true });
+      runNextTimer();
+      const retriedRequest = emitted.at(-1);
+      assert.equal(retriedRequest.targetGmId, "next-gm", `${method}: retry must select the new authority`);
+      assert.deepEqual(retriedRequest.operation, metadata, `${method}: failover must preserve operation metadata`);
+      assert.equal(retriedRequest.requestId, firstAuthorityRequest.requestId);
+      if (method !== "requestStorageOperation") assert.equal(retriedRequest.expectedRevision, 7);
+      if (method === "requestMarketOperation") assert.equal(retriedRequest.sourceToken, metadata.sourceToken);
+      await acknowledge(firstAuthorityRequest);
+      assert.equal((await failover).ok, true, `${method}: a late acknowledgement from the first tried GM must still settle the caller`);
+      firstGm.active = true;
+      game.users.contents.pop();
+      assert.equal(timers.size, 0);
+
+      const expiredOperation = { operationId: `timeout-${method}`, expectedRevision: 0 };
+      const timedOut = assert.rejects(api[method](expiredOperation), (error) => {
+        assert.match(error.message, /timed out/);
+        assert.equal(error.code, method === "requestStorageOperation" ? undefined : "timeout", "retain the existing storage Error versus command-result contract");
+        return true;
+      });
+      const beforeRetry = emitted.length;
+      runNextTimer();
+      runNextTimer();
+      await timedOut;
+      assert.equal(emitted.length, beforeRetry + 1, `${method}: timeout allows exactly one retry`);
+      assert.equal(timers.size, 0);
+      const afterTimeout = api[method](expiredOperation);
+      await acknowledge(emitted.at(-1));
+      assert.equal((await afterTimeout).ok, true, `${method}: timeout must release the pending ID`);
+
+      const lostAuthority = assert.rejects(api[method]({ operationId: `offline-${method}` }), (error) => {
+        assert.match(error.message, /No active GM/);
+        assert.equal(error.code, method === "requestStorageOperation" ? undefined : "authority-offline");
+        return true;
+      });
+      firstGm.active = false;
+      runNextTimer();
+      await lostAuthority;
+      firstGm.active = true;
+      assert.equal(timers.size, 0, `${method}: losing authority must release the pending request`);
     }
 
     game.user = { id: "gm-secondary", isGM: true };

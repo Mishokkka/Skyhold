@@ -951,6 +951,36 @@ export async function checkEconomyCharacterization() {
     unavailable.buildings.list = [{ ...holding.buildings.list[0] }];
     await economy._runEconomyForQd(unavailable, 40);
     assert.equal(unavailable.storage.moneyCopper, 0, "a dead assigned resident must not unlock passive building income");
+
+    const direct = makeHolding();
+    const directReport = { income: [], formulas: [], skipped: [], ledger: [] };
+    const formulaRolls = [5.9, 8.3];
+    const rollArguments = [];
+    const incomePhase = {
+      ...economy,
+      _buildingStatus: () => ({ value: "built" }),
+      _financeFunctionAllowed: (_finance, building) => building.id !== "blocked",
+      _activeAssignedBuildingPeople: () => [{ id: "worker" }],
+      _buildingMinimumStaffStatus: () => ({ met: true }),
+      _plannedWorkerFunctionQd: () => 20,
+      _personBuildingEfficiency: () => 1,
+      _maintenanceEfficiencyFactor: () => 0.5,
+      _rollFormulaTotal: async (_formula, argumentsForRoll) => {
+        rollArguments.push(argumentsForRoll);
+        const total = formulaRolls.shift();
+        return { total, result: String(total) };
+      }
+    };
+    const source = { ...holding.buildings.list[0], id: "formula-income", income: { base: 100, perWorker: 0, formula: "2d6" } };
+    direct.buildings.list = [source, { ...source, id: "trading", income: { ...source.income, trade: { enabled: true } } },
+      { ...source, id: "blocked" }];
+    await incomePhase._runBuildingIncomeForQd(direct, 80, directReport, { workerContext: { financeContext: {} } });
+    assert.equal(direct.storage.moneyCopper, 6, "maintenance rounding is applied to each tenday formula roll before their total is credited");
+    assert.equal(directReport.ledger.filter((row) => row.domain === "income").length, 1, "trading and blocked buildings must not duplicate the fixed-income credit");
+    assert.equal(directReport.ledger.find((row) => row.domain === "income").qty, 6);
+    assert.equal(directReport.formulas.length, 2, "each complete tenday keeps its own formula result");
+    assert.ok(rollArguments.every((argumentsForRoll) => argumentsForRoll.cycles === 2 && argumentsForRoll.workers === 0.5));
+    assert.equal(directReport.skipped.length, 1, "unpaid income remains a visible skip while trading buildings use their own accounting");
   }
 
   {
