@@ -854,9 +854,12 @@ export async function checkEconomyCharacterization() {
     ];
     const readiness = await economy._tendayReadinessContext(holding);
     assert.equal(readiness.foodStored, 0, "tenday readiness must distinguish current food reserves from forecast output");
-    assert.equal(readiness.foodProduced, 20, "tenday readiness must forecast food produced through worker auto-collection chains");
-    assert.equal(readiness.foodAvailable, 20, "tenday readiness must include forecast food before comparing it with demand");
-    assert.equal(readiness.alerts.some((alert) => alert.key === "food"), false, "forecast production that covers demand must clear the food shortage alert");
+    const execution = clone(holding);
+    const executed = await economy._runEconomyForQd(execution, 40);
+    assert.equal(readiness.foodProduced, 18, "Milk arrives after the first day's staffed shift; processing has nine days of funded shifts");
+    assert.equal(readiness.foodAvailable, executed.food.availableBeforeConsumption,
+      "Readiness must use the same staffed shifts and ingredient collection chain as actual execution");
+    assert.equal(readiness.alerts.some((alert) => alert.key === "food"), true, "A two-unit forecast shortage must remain visible");
   }
 
   {

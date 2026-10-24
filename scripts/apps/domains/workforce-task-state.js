@@ -1,7 +1,7 @@
 import { normalizeAgricultureBuilding } from "../../data/agriculture.js";
 import { normalizeLivestockBuilding } from "../../data/livestock.js";
 import { livestockHeadcount } from "../../engines/economy/livestock.js";
-import { productionTiming, productionTimingText } from "../../engines/economy/production-timing.js";
+import { productionTiming, productionTimingText, PRODUCTION_WORK_UNITS } from "../../engines/economy/production-timing.js";
 import { productionCapacity, productionOccupiedQty, waitingProductionBatches, productionBatchCosts, affordableProductionBatch } from "../../engines/economy/production-capacity.js";
 import { buildingServiceFunctionId } from "../../engines/economy/building-service.js";
 import { buildingLaborMode } from "../../data/hybrid-labor.js";
@@ -20,10 +20,18 @@ export function workforceProductionGoalState(building, functionId, preparedUnits
   const currentWork = ongoing ? Math.max(0, (timing?.workTargetUnits ?? Number(line.workQd) * 10000) - Number(line.workProgressUnits || 0)) / 10000 : 0;
   const partial = productionCapacity(line) > 0;
   const minimum = partial ? Math.max(1, Number(line.batchStartQty) || 1) : fullQty;
-  const residual = remaining % fullQty;
+  const maximum = partial ? Math.min(fullQty, productionCapacity(line)) : fullQty;
+  if (remaining && maximum < minimum) return { allowed, effectiveNeed: currentWork,
+    warning: `Максимальная загрузка ${maximum} ЕД. меньше порога запуска ${minimum} ЕД.; новая партия не запустится.` };
+  const residual = remaining % maximum;
   const unsupportedRemainder = residual > 0 && residual < minimum;
-  const quantity = unsupportedRemainder ? remaining - residual : remaining;
-  return { allowed, effectiveNeed: currentWork + Math.max(0, Number(line.workQd) || 1) * quantity / fullQty,
+  const targetUnits = Math.max(1, Math.ceil(Number(line.workQd) || 1)) * PRODUCTION_WORK_UNITS;
+  // Match each possible equipment load, including the executor's integer-unit
+  // rounding. The recipe's full output can exceed the equipment's capacity.
+  const fullBatches = Math.floor(remaining / maximum);
+  const workUnits = fullBatches * Math.ceil(targetUnits * maximum / fullQty)
+    + (residual && !unsupportedRemainder ? Math.ceil(targetUnits * residual / fullQty) : 0);
+  return { allowed, effectiveNeed: currentWork + workUnits / PRODUCTION_WORK_UNITS,
     warning: unsupportedRemainder ? `Остаток цели ${residual} ЕД. меньше допустимой загрузки ${minimum} ЕД.; новая партия для него не запустится.`
       : ongoing > preparedUnits ? `Начатая партия на ${ongoing} ЕД. превышает цель; она будет завершена целиком.` : "" };
 }

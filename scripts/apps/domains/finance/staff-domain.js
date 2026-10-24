@@ -2,7 +2,6 @@ import { staffAppointmentWorkFunctions } from "../../../data/hybrid-labor.js";
 import { normalizeLivestockBuilding } from "../../../data/livestock.js";
 import { livestockHeadcount, planLivestockTenday } from "../../../engines/economy/livestock.js";
 import { appendStaffWork, recordStaffWork } from "../../../engines/workers/staff-runtime.js";
-import { normalizeResourceId } from "../../../core/resources.js";
 import { appendEconomyLedger } from "../../../engines/economy/ledger.js";
 
 const number = (value) => Math.max(0, Number(value) || 0);
@@ -72,39 +71,43 @@ _staffLivestockWorkRemaining(holding, building, workerContext, step) {
   return Math.max(0, desired - this._livestockAvailableWorkQd(holding, building, 4, workerContext, offset));
 },
 
-_canCollectStaffProductionInputs(holding, building, missing, workerContext, consumerLine) {
-  if (!missing?.length) return false;
+_canCollectStaffProductionInputs(holding, building, costs, workerContext, consumerLine) {
+  if (!costs?.length) return false;
   const finance = workerContext?.financeContext;
   const functionId = this._financeLineFunctionId(consumerLine, (building.productionLines ?? []).indexOf(consumerLine));
   const available = this._staffDailyCollectionBudget(building, functionId, workerContext);
-  return missing.every((cost) => {
-    const wanted = normalizeResourceId(cost.resourceId, cost.name);
-    if (wanted === "money") return false;
-    let pending = 0;
-    const blocked = [];
-    for (const source of holding.buildings?.list ?? []) {
-      if (this._buildingStatus(source).value !== "built") continue;
-      for (const line of source.productionLines ?? []) {
-        if (!line.requiresCollection || line.autoCollect !== "worker" || normalizeResourceId(line.resourceId, line.resource) !== wanted) continue;
-        if (!this._financeFunctionAllowed(workerContext?.financeContext, source, this._financeLineFunctionId(line))) continue;
-        if (!number(line.pendingQty)) continue;
-        const needed = Math.ceil(number(line.collectQd));
-        if (needed > available) blocked.push({ source, line, needed });
-        else pending += number(line.pendingQty);
-      }
+  const pending = [], blocked = [];
+  let pendingMoney = 0;
+  const ingredients = costs.flatMap((cost) => cost.alternatives ?? [cost]);
+  for (const source of holding.buildings?.list ?? []) {
+    if (this._buildingStatus(source).value !== "built") continue;
+    for (const line of source.productionLines ?? []) {
+      if (!line.requiresCollection || line.autoCollect !== "worker" || !number(line.pendingQty)) continue;
+      if (!this._financeFunctionAllowed(finance, source, this._financeLineFunctionId(line))) continue;
+      const resource = this._productionCollectionResource(line);
+      if (!ingredients.some((cost) => this._productionInputMatches(resource, cost))) continue;
+      const needed = Math.ceil(number(line.collectQd));
+      if (needed > available) blocked.push({ source, line, needed });
+      else if (resource.resourceId === "money") pendingMoney += number(line.pendingQty);
+      else pending.push({ ...resource, qty: number(line.pendingQty) });
     }
-    if (pending >= Math.max(0, number(cost.qty) - number(cost.have))) return true;
-    if (finance.staffCollectionProbe) return false;
-    const warningAvailable = this._staffDailyCollectionBudget(building, functionId, workerContext, { priorityOffers: true });
-    finance.staffCollectionWarnings ??= new Map();
-    for (const { source, line, needed } of blocked) {
-      if (needed <= warningAvailable) continue;
-      const key = `input:${building.id}::${functionId}::${source.id}::${line.id}`;
-      if (finance.staffCollectionWarnings.has(key)) continue;
-      finance.staffCollectionWarnings.set(key, { line, message: `${building.name || "Здание"}: сбор сырья у ${source.name || "здания"} требует ${needed} QD за один день, доступно не больше ${warningAvailable}; не хватает ${needed - warningAvailable} QD. Проверьте бригаду или сверхурочные; сотрудник может выполнять резервную работу.` });
-    }
-    return false;
-  });
+  }
+  // Let the inventory planner resolve the complete AND/OR recipe and material
+  // groups. A failed quote's first missing alternative is not the whole recipe.
+  const projected = { ...holding, storage: { ...holding.storage,
+    moneyCopper: number(holding.storage?.moneyCopper) + pendingMoney,
+    resources: [...(holding.storage?.resources ?? []), ...pending] } };
+  if (this._storageCanPay(projected, costs).ok) return true;
+  if (finance.staffCollectionProbe) return false;
+  const warningAvailable = this._staffDailyCollectionBudget(building, functionId, workerContext, { priorityOffers: true });
+  finance.staffCollectionWarnings ??= new Map();
+  for (const { source, line, needed } of blocked) {
+    if (needed <= warningAvailable) continue;
+    const key = `input:${building.id}::${functionId}::${source.id}::${line.id}`;
+    if (finance.staffCollectionWarnings.has(key)) continue;
+    finance.staffCollectionWarnings.set(key, { line, message: `${building.name || "Здание"}: сбор сырья у ${source.name || "здания"} требует ${needed} QD за один день, доступно не больше ${warningAvailable}; не хватает ${needed - warningAvailable} QD. Проверьте бригаду или сверхурочные; сотрудник может выполнять резервную работу.` });
+  }
+  return false;
 },
 
 /** Unspent funded slots, including today's accrued time; past days cannot fund collection. */
