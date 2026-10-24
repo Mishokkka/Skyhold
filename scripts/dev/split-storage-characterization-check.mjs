@@ -354,6 +354,27 @@ export async function checkSplitStorageCharacterization() {
     blockedNext.catalog.buildings[0].name = "Blocked dual catalog";
     await assert.rejects(blockedStorage.persistData(blockedNext), /blocked setting write/, "a dual commit must stop if its rollback snapshot cannot be preserved");
     assert.deepEqual(blockedHarness.writes, [SETTING_DATA], "a failed rollback snapshot must abort before start meta or partition writes");
+
+    const marketPrevious = committedRoot({ revision: 40 });
+    marketPrevious.meta.sharedMarkets = { enabled: true, version: 1, clockTenday: 1,
+      stock: { wood: { availableStock: 10 } }, demand: {} };
+    marketPrevious.holdings[0].storage.moneyCopper = 100;
+    marketPrevious.meta = makeStorageCommitMeta(marketPrevious.meta, {
+      writeId: "shared-market-before", previousRevision: 39,
+      holdings: marketPrevious.holdings, catalog: marketPrevious.catalog, complete: true
+    });
+    const marketHarness = settingsHarness(marketPrevious, { failWriteKey: SETTING_HOLDINGS });
+    const marketStorage = createSkyholdSplitStorage({ settings: marketHarness.settings });
+    const marketNext = marketStorage.getData();
+    marketNext.meta.revision += 1;
+    marketNext.meta.sharedMarkets.stock.wood.availableStock = 9;
+    marketNext.holdings[0].storage.moneyCopper = 90;
+    await assert.rejects(marketStorage.persistData(marketNext, { normalized: true, scope: "holdings" }), /blocked setting write/);
+    const marketRecovered = createSkyholdSplitStorage({ settings: marketHarness.settings }).getData();
+    assert.equal(marketRecovered.meta.revision, 40, "failed purchases must roll back to the previous revision");
+    assert.equal(marketRecovered.holdings[0].storage.moneyCopper, 100, "failed purchases must preserve the previous treasury");
+    assert.deepEqual(marketRecovered.meta.sharedMarkets, marketPrevious.meta.sharedMarkets,
+      "rollback must restore shared stock metadata together with the holding, not retain an uncommitted reservation");
   } finally {
     console.warn = previousWarn;
   }

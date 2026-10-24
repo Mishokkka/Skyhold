@@ -159,7 +159,7 @@ export class SkyholdUniqueBuildingApp extends WindowFrameMixin(RenderSchedulerMi
       if (!current.building || (requireHolding && !current.holding)) return SkyholdData.skipTransaction(null);
       const result = await updater(current);
       return result === undefined ? true : result;
-    }, { reason, scope: "holdings" });
+    }, { reason, scope: this.templateId ? "catalog" : "holdings" });
   }
 
   _resolveBuildingScopedPath(data, path = "") {
@@ -193,7 +193,7 @@ export class SkyholdUniqueBuildingApp extends WindowFrameMixin(RenderSchedulerMi
       if (!scopedPath) return SkyholdData.skipTransaction(false);
       foundry.utils.setProperty(data, scopedPath, value);
       return true;
-    }, { reason: `unique-building:field:${path}`, scope: "holdings" });
+    }, { reason: `unique-building:field:${path}`, scope: this.templateId ? "catalog" : "holdings" });
     if (!updated) return;
     this.requestRender();
     requestSkyholdAppRender();

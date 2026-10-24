@@ -144,6 +144,7 @@ export async function checkPoliticsRegressions() {
   assert.equal(stopped.effects.reputation, 0);
   assert.equal(finishPoliticsPeriod(services, stopped).skipped, true);
   let productionEffects = null;
+  const phaseOrder = [];
   const noop = () => {};
   const pipelineOwner = { ...serviceOwner, ...FinanceStaffDomain,
     _periodLabel: () => "десятник", _advanceMarketShipmentsForQd: noop, _advanceMarketOutboundForQd: noop,
@@ -152,13 +153,15 @@ export async function checkPoliticsRegressions() {
     _runInstitutionConsumables: FinanceEconomyDomain._runInstitutionConsumables, _runInstitutionResolutions: noop,
     _runAgricultureForQd: () => ({ ok: true }), _nonAgricultureProductionBuildings: (buildings) => buildings,
     _runProductionAndLivestockForQd: FinanceEconomyDomain._runProductionAndLivestockForQd,
-    _runProductionCycleForQd: (draft) => { productionEffects = politicsRuntimeEffects(draft); },
-    _runLivestockForQd: () => ({ ok: true }), _isFoodResource: () => false, _runFoodConsumptionForQd: noop,
-    _runConstructionCrewsForQd: noop, _runInternalDemandForQd: noop, _recordBuildingServiceActivity: noop
+    _runProductionCycleForQd: (draft) => { phaseOrder.push("production"); productionEffects = politicsRuntimeEffects(draft); },
+    _runBuildingIncomeForQd(...args) { phaseOrder.push("income"); return FinanceEconomyDomain._runBuildingIncomeForQd.apply(this, args); },
+    _runLivestockForQd: () => ({ ok: true }), _isFoodResource: () => false, _runFoodConsumptionForQd: () => phaseOrder.push("food"),
+    _runConstructionCrewsForQd: () => phaseOrder.push("construction"), _runInternalDemandForQd: noop, _recordBuildingServiceActivity: noop
   };
   const pipelineReport = await FinanceEconomyDomain._runEconomyForQd.call(pipelineOwner, pipelineHolding, 40);
   assert.equal(productionEffects.reputation, 0, "F14: the real economy orchestrator applies the service shutdown before production");
   assert.equal(pipelineReport.politics.influenceGained, 0);
+  assert.deepEqual(phaseOrder, ["production", "income", "food", "construction"], "extracted income must keep its position between production and consumption/construction");
   const final = holding();
   const finalPeriod = preparePoliticsPeriod(final, { context: available });
   refreshPoliticsPeriodEffects(final, finalPeriod, { context: { available: false } });

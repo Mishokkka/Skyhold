@@ -2,10 +2,13 @@ import { SkyholdData } from "../../../data/store.js";
 import { clone, makeId } from "../../../data/utils.js";
 import { stableDataHash } from "../../../data/storage-commit.js";
 import { appendHoldingOperation, findHoldingOperation } from "../../../data/operations.js";
-import { normalizeEventScheduleEntry } from "../../../data/event-automation.js";
+import { MAX_EVENT_SCHEDULE_ENTRIES, normalizeEventScheduleEntry } from "../../../data/event-automation.js";
 import { applyRandomEventEffects } from "../../../engines/events/effect-executor.js";
 import { escapeHtml } from "../../../core/helpers.js";
+import { isMoneyResource } from "../../../core/resources.js";
 import { foundryDialogV2 } from "../../../integrations/foundry-runtime.js";
+
+const SCHEDULE_FULL_MESSAGE = `В плане уже ${MAX_EVENT_SCHEDULE_ENTRIES} событий. Архивируйте обработанные события, прежде чем добавлять новые.`;
 
 export const EventAutomationActions = {
   click: {
@@ -21,6 +24,8 @@ _eventEffectDependencies() {
   return {
     safeNumber: (value, fallback = 0) => this._safeNumber(value, fallback),
     normalizeStorageRoomId: (roomId) => this._normalizeStorageRoomId(roomId),
+    storageResourceIdentity: (resource) => this._storageResourceIdentity(resource),
+    isMoneyResource: (resource) => isMoneyResource(resource.resourceId, resource.name),
     storageQuantity: (holding, resource) => this._storageQuantity(holding, resource),
     storageAdd: (holding, resource, qty) => this._storageAdd(holding, resource, qty),
     storageAddWithOverflow: (holding, resource, qty) => this._storageAddWithOverflow(holding, resource, qty),
@@ -188,6 +193,9 @@ async _scheduleTendayEventDecision({ holdingId = "", decisionId = "" } = {}) {
     if (!decision || String(decision.effectStatus ?? "pending") !== "pending") return SkyholdData.skipTransaction({ ok: false, message: "Решение уже обработано или не найдено." });
     if (!freshHolding.gm || typeof freshHolding.gm !== "object") freshHolding.gm = {};
     if (!Array.isArray(freshHolding.gm.eventSchedule)) freshHolding.gm.eventSchedule = [];
+    if (freshHolding.gm.eventSchedule.length >= MAX_EVENT_SCHEDULE_ENTRIES) {
+      return SkyholdData.skipTransaction({ ok: false, capacityExceeded: true, message: SCHEDULE_FULL_MESSAGE });
+    }
     const dueQd = Math.max(0, Number(freshHolding?.gm?.calendaria?.lastQd) || 0) + 40;
     const entry = normalizeEventScheduleEntry({
       id: scheduleId,
@@ -201,7 +209,6 @@ async _scheduleTendayEventDecision({ holdingId = "", decisionId = "" } = {}) {
       createdAt: new Date().toISOString()
     });
     freshHolding.gm.eventSchedule.push(entry);
-    freshHolding.gm.eventSchedule = freshHolding.gm.eventSchedule.slice(-80);
     decision.effectStatus = "scheduled";
     decision.scheduleId = scheduleId;
     this._refreshTendayDecisionStatus(freshHolding.gm.lastRoll);
@@ -229,6 +236,9 @@ async _onScheduleLastEvent(event) {
     if (Array.isArray(lastRoll.events) && !(pendingSource?.effects ?? []).some((effect) => Number(effect?.amount) !== 0)) return SkyholdData.skipTransaction({ ok: false, message: "Неразобранных эффектов нет." });
     const existing = freshHolding.gm.eventSchedule.find((row) => String(row?.id ?? "") === String(lastRoll.scheduleId ?? ""));
     if (existing) return SkyholdData.skipTransaction({ ok: true, duplicate: true, scheduleId: existing.id });
+    if (freshHolding.gm.eventSchedule.length >= MAX_EVENT_SCHEDULE_ENTRIES) {
+      return SkyholdData.skipTransaction({ ok: false, capacityExceeded: true, message: SCHEDULE_FULL_MESSAGE });
+    }
     const dueQd = Math.max(0, Number(freshHolding?.gm?.calendaria?.lastQd) || 0) + 40;
     const entry = normalizeEventScheduleEntry({
       id: scheduleId,
@@ -241,8 +251,10 @@ async _onScheduleLastEvent(event) {
       dueLabel: `Следующий десятник · QD ${dueQd}`,
       createdAt: new Date().toISOString()
     });
+    if (entry.effects.length < (pendingSource.effects ?? []).length) {
+      return SkyholdData.skipTransaction({ ok: false, capacityExceeded: true, message: "В одну запись плана не помещаются все эффекты. Запланируйте события по отдельности, чтобы сохранить каждое решение." });
+    }
     freshHolding.gm.eventSchedule.push(entry);
-    freshHolding.gm.eventSchedule = freshHolding.gm.eventSchedule.slice(-80);
     lastRoll.scheduleId = scheduleId;
     for (const decision of lastRoll.events ?? []) {
       if (String(decision?.effectStatus ?? "pending") !== "pending") continue;

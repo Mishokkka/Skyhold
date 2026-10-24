@@ -2,6 +2,7 @@ import { MODULE_ID } from "../data/constants.js";
 import { HoldingService } from "../data/holding-service.js";
 import { canReadHolding } from "../data/access-guard.js";
 import { loadBuildingEditorClass } from "../apps/lazy-apps.js";
+import { foundryDoubleClickThresholds } from "./foundry-runtime.js";
 
 const BUILDING_NOTE_TOOLTIP_DELAY_MS = 1000;
 const BUILDING_NOTE_ICON_SIZE = 32;
@@ -9,6 +10,8 @@ const BUILDING_NOTE_FONT_FAMILY = "Hans Hand";
 const BUILDING_NOTE_FONT_SIZE = 18;
 let buildingNoteTooltipTimer = null;
 let sceneNotesIntegrationInstalled = false;
+const buildingNoteInteractions = new WeakMap();
+const pendingBuildingNoteOpens = new WeakMap();
 
 function skyholdMarkerAsset(name) {
   return `modules/${MODULE_ID}/assets/markers/${name}.svg`;
@@ -44,10 +47,8 @@ function templateForBuilding(building = {}, data = null) {
   const catalog = source?.catalog?.buildings ?? [];
   const templateKey = String(building?.templateId ?? "").trim().toLowerCase();
   const nameKey = String(building?.name ?? "").trim().toLowerCase();
-  return catalog.find((item) => {
-    if (templateKey && String(item?.id ?? "").trim().toLowerCase() === templateKey) return true;
-    return nameKey && String(item?.name ?? "").trim().toLowerCase() === nameKey;
-  }) ?? null;
+  const exact = templateKey ? catalog.find((item) => String(item?.id ?? "").trim().toLowerCase() === templateKey) : null;
+  return exact ?? (nameKey ? catalog.find((item) => String(item?.name ?? "").trim().toLowerCase() === nameKey) : null) ?? null;
 }
 
 function buildingNoteTexture(building = {}, data = null) {
@@ -168,8 +169,17 @@ export async function openBuildingNote(note) {
     return false;
   }
   const SkyholdBuildingEditor = await loadBuildingEditorClass();
-  new SkyholdBuildingEditor({ holdingId: String(holding.id ?? ""), buildingId: String(building.id ?? "") }).render({ force: true, focus: true });
+  await new SkyholdBuildingEditor({ holdingId: String(holding.id ?? ""), buildingId: String(building.id ?? "") }).render({ force: true, focus: true });
   return true;
+}
+
+function requestBuildingNoteOpen(note) {
+  if (pendingBuildingNoteOpens.has(note)) return;
+  const pending = openBuildingNote(note).catch((error) => {
+    console.error("FBL Skyhold | Failed to open building Note", error);
+    globalThis.ui?.notifications?.error?.("Не удалось открыть здание. Подробности в консоли.");
+  }).finally(() => pendingBuildingNoteOpens.delete(note));
+  pendingBuildingNoteOpens.set(note, pending);
 }
 
 function hideBuildingNoteTooltip() {
@@ -235,10 +245,46 @@ function shouldOpenBuildingNoteFromClick() {
 
 function installBuildingNoteInteractions() {
   Hooks.on("activateNote", (note) => {
-    if (!shouldOpenBuildingNoteFromClick()) return undefined;
-    if (openBuildingNote(note)) return false;
-    return undefined;
+    if (!buildingFlagsFromNote(note) || !shouldOpenBuildingNoteFromClick()) return undefined;
+    requestBuildingNoteOpen(note);
+    return false;
   });
+  // Unlinked Notes never reach Foundry's activateNote hook. Listen to their
+  // public pointer event without replacing the Note class or its permissions.
+  Hooks.on("drawNote", (note) => {
+    const previous = buildingNoteInteractions.get(note);
+    if (previous) note.off("pointertap", previous);
+    buildingNoteInteractions.delete(note);
+    if (!buildingFlagsFromNote(note)) return;
+    let lastClick = null;
+    const onPointerTap = (event) => {
+      if (event.button !== 0 || note.document?.entry || !shouldOpenBuildingNoteFromClick()) {
+        lastClick = null;
+        return;
+      }
+      const click = { time: event.timeStamp, x: event.clientX, y: event.clientY };
+      if (![click.time, click.x, click.y].every(Number.isFinite)) { lastClick = null; return; }
+      const previousClick = lastClick;
+      lastClick = click;
+      if (!previousClick) return;
+      const elapsed = click.time - previousClick.time;
+      const { timeMs, distancePx } = foundryDoubleClickThresholds();
+      if (elapsed < 0 || elapsed > timeMs || Math.hypot(click.x - previousClick.x, click.y - previousClick.y) > distancePx) return;
+      // Pixi's detail counter uses 200ms. Match Foundry's tap interval instead,
+      // consuming each pair so a third tap cannot reopen the editor.
+      lastClick = null;
+      requestBuildingNoteOpen(note);
+    };
+    note.on("pointertap", onPointerTap);
+    buildingNoteInteractions.set(note, onPointerTap);
+  });
+  Hooks.on("destroyNote", (note) => {
+    const listener = buildingNoteInteractions.get(note);
+    if (listener) note.off("pointertap", listener);
+    buildingNoteInteractions.delete(note);
+    hideBuildingNoteTooltip();
+  });
+  Hooks.on("canvasTearDown", hideBuildingNoteTooltip);
   Hooks.on("hoverNote", (note, hovered) => {
     if (!buildingFlagsFromNote(note)) return;
     if (hovered) showBuildingNoteTooltip(note);

@@ -66,6 +66,37 @@ export function createSkyholdSocketApi({
     }
   }
 
+  /** Wait for one player operation, retaining its ID and accepting either tried authority. */
+  function requestPlayerOperation(operation, { requests, payload, offlineError, timeoutError }) {
+    const requestId = operation.operationId;
+    if (requests.has(requestId)) return Promise.reject(commandError(commandFailure({
+      operationId: requestId, code: COMMAND_ERROR.CONFLICT, message: "Операция уже ожидает ответа."
+    })));
+    return new Promise((resolve, reject) => {
+      const pending = { resolve, reject, timeout: null, attempts: 0, authorities: new Set() };
+      const rejectPending = (error) => {
+        requests.delete(requestId);
+        clearTimeout(pending.timeout);
+        reject(error);
+      };
+      const emitAttempt = () => {
+        const targetGm = activeSkyholdGm();
+        if (!targetGm) return rejectPending(offlineError());
+        pending.attempts += 1;
+        pending.authorities.add(targetGm.id);
+        if (!emitRequest(requests, requestId, {
+          ...payload, requestId, userId: game.user?.id ?? null, targetGmId: targetGm.id, operation
+        })) return;
+        pending.timeout = setTimeout(() => {
+          if (pending.attempts < 2) emitAttempt();
+          else rejectPending(timeoutError());
+        }, writeTimeoutMs);
+      };
+      requests.set(requestId, pending);
+      emitAttempt();
+    });
+  }
+
   function rememberPlayerOperation(key, result) {
     if (!key || !result?.ok) return;
     completedPlayerOperations.delete(key);
@@ -179,42 +210,11 @@ export function createSkyholdSocketApi({
       return Promise.reject(new Error("FBL Skyhold | No active GM is available for storage operation."));
     }
 
-    const requestId = operation.operationId;
-    if (PENDING_STORAGE_OPERATIONS.has(requestId)) return Promise.reject(commandError(commandFailure({
-      operationId: requestId, code: COMMAND_ERROR.CONFLICT, message: "Операция уже ожидает ответа."
-    })));
-    return new Promise((resolve, reject) => {
-      const pending = { resolve, reject, timeout: null, attempts: 0, authorities: new Set() };
-      /** Send this storage command to the current GM, retaining its ID across one retry. */
-      const emitAttempt = () => {
-        const targetGm = activeSkyholdGm();
-        if (!targetGm) {
-          PENDING_STORAGE_OPERATIONS.delete(requestId);
-          reject(new Error("FBL Skyhold | No active GM is available for storage operation retry."));
-          return;
-        }
-        pending.attempts += 1;
-        pending.authorities.add(targetGm.id);
-        if (!emitRequest(PENDING_STORAGE_OPERATIONS, requestId, {
-          type: "playerStorageOperationRequest",
-          requestId,
-          userId: game.user?.id ?? null,
-          targetGmId: targetGm.id,
-          operation
-        })) return;
-        /** Retry a missed storage acknowledgement once, then reject and release the caller. */
-        pending.timeout = setTimeout(() => {
-          if (pending.attempts < 2) {
-            emitAttempt();
-            return;
-          }
-          PENDING_STORAGE_OPERATIONS.delete(requestId);
-          reject(new Error("FBL Skyhold | GM storage operation timed out."));
-        }, writeTimeoutMs);
-      };
-
-      PENDING_STORAGE_OPERATIONS.set(requestId, pending);
-      emitAttempt();
+    return requestPlayerOperation(operation, {
+      requests: PENDING_STORAGE_OPERATIONS,
+      payload: { type: "playerStorageOperationRequest" },
+      offlineError: () => new Error("FBL Skyhold | No active GM is available for storage operation retry."),
+      timeoutError: () => new Error("FBL Skyhold | GM storage operation timed out.")
     });
   }
 
@@ -258,55 +258,14 @@ export function createSkyholdSocketApi({
       })));
     }
 
-    const requestId = operation.operationId;
-    if (PENDING_MARKET_OPERATIONS.has(requestId)) return Promise.reject(commandError(commandFailure({
-      operationId: requestId, code: COMMAND_ERROR.CONFLICT, message: "Операция уже ожидает ответа."
-    })));
-    return new Promise((resolve, reject) => {
-      const pending = { resolve, reject, timeout: null, attempts: 0, authorities: new Set() };
-      /** Resend unchanged market metadata to the selected authority and arm its timeout. */
-      const emitAttempt = () => {
-        const targetGm = activeSkyholdGm();
-        if (!targetGm) {
-          PENDING_MARKET_OPERATIONS.delete(requestId);
-          reject(commandError(commandFailure({
-            operationId: operation.operationId,
-            code: COMMAND_ERROR.AUTHORITY_OFFLINE,
-            message: "FBL Skyhold | No active GM is available for market operation retry.",
-            retryable: true
-          })));
-          return;
-        }
-        pending.attempts += 1;
-        pending.authorities.add(targetGm.id);
-        if (!emitRequest(PENDING_MARKET_OPERATIONS, requestId, {
-          type: "playerMarketOperationRequest",
-          requestId,
-          operationId: operation.operationId,
-          expectedRevision: operation.expectedRevision,
-          sourceToken: operation.sourceToken,
-          userId: game.user?.id ?? null,
-          targetGmId: targetGm.id,
-          operation
-        })) return;
-        /** Allow one identical retry before rejecting a market command without an acknowledgement. */
-        pending.timeout = setTimeout(() => {
-          if (pending.attempts < 2) {
-            emitAttempt();
-            return;
-          }
-          PENDING_MARKET_OPERATIONS.delete(requestId);
-          reject(commandError(commandFailure({
-            operationId: operation.operationId,
-            code: COMMAND_ERROR.TIMEOUT,
-            message: "FBL Skyhold | GM market operation timed out.",
-            retryable: true
-          })));
-        }, writeTimeoutMs);
-      };
-
-      PENDING_MARKET_OPERATIONS.set(requestId, pending);
-      emitAttempt();
+    return requestPlayerOperation(operation, {
+      requests: PENDING_MARKET_OPERATIONS,
+      payload: { type: "playerMarketOperationRequest", operationId: operation.operationId,
+        expectedRevision: operation.expectedRevision, sourceToken: operation.sourceToken },
+      offlineError: () => commandError(commandFailure({ operationId: operation.operationId, code: COMMAND_ERROR.AUTHORITY_OFFLINE,
+        message: "FBL Skyhold | No active GM is available for market operation retry.", retryable: true })),
+      timeoutError: () => commandError(commandFailure({ operationId: operation.operationId, code: COMMAND_ERROR.TIMEOUT,
+        message: "FBL Skyhold | GM market operation timed out.", retryable: true }))
     });
   }
 
@@ -350,54 +309,14 @@ export function createSkyholdSocketApi({
       })));
     }
 
-    const requestId = operation.operationId;
-    if (PENDING_CONSTRUCTION_OPERATIONS.has(requestId)) return Promise.reject(commandError(commandFailure({
-      operationId: requestId, code: COMMAND_ERROR.CONFLICT, message: "Операция уже ожидает ответа."
-    })));
-    return new Promise((resolve, reject) => {
-      const pending = { resolve, reject, timeout: null, attempts: 0, authorities: new Set() };
-      /** Send this construction ID to the current authority and allow one timed retry. */
-      const emitAttempt = () => {
-        const targetGm = activeSkyholdGm();
-        if (!targetGm) {
-          PENDING_CONSTRUCTION_OPERATIONS.delete(requestId);
-          reject(commandError(commandFailure({
-            operationId: operation.operationId,
-            code: COMMAND_ERROR.AUTHORITY_OFFLINE,
-            message: "FBL Skyhold | No active GM is available for construction operation retry.",
-            retryable: true
-          })));
-          return;
-        }
-        pending.attempts += 1;
-        pending.authorities.add(targetGm.id);
-        if (!emitRequest(PENDING_CONSTRUCTION_OPERATIONS, requestId, {
-          type: "playerConstructionOperationRequest",
-          requestId,
-          operationId: operation.operationId,
-          expectedRevision: operation.expectedRevision,
-          userId: game.user?.id ?? null,
-          targetGmId: targetGm.id,
-          operation
-        })) return;
-        /** Retry once with the original revision, then reject and remove the pending command. */
-        pending.timeout = setTimeout(() => {
-          if (pending.attempts < 2) {
-            emitAttempt();
-            return;
-          }
-          PENDING_CONSTRUCTION_OPERATIONS.delete(requestId);
-          reject(commandError(commandFailure({
-            operationId: operation.operationId,
-            code: COMMAND_ERROR.TIMEOUT,
-            message: "FBL Skyhold | GM construction operation timed out.",
-            retryable: true
-          })));
-        }, writeTimeoutMs);
-      };
-
-      PENDING_CONSTRUCTION_OPERATIONS.set(requestId, pending);
-      emitAttempt();
+    return requestPlayerOperation(operation, {
+      requests: PENDING_CONSTRUCTION_OPERATIONS,
+      payload: { type: "playerConstructionOperationRequest", operationId: operation.operationId,
+        expectedRevision: operation.expectedRevision },
+      offlineError: () => commandError(commandFailure({ operationId: operation.operationId, code: COMMAND_ERROR.AUTHORITY_OFFLINE,
+        message: "FBL Skyhold | No active GM is available for construction operation retry.", retryable: true })),
+      timeoutError: () => commandError(commandFailure({ operationId: operation.operationId, code: COMMAND_ERROR.TIMEOUT,
+        message: "FBL Skyhold | GM construction operation timed out.", retryable: true }))
     });
   }
 

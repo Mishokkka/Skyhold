@@ -3,7 +3,7 @@ import { checkWorkerProfileEditor } from "../worker-profile-editor-check.mjs";
 import { pathToFileURL } from "node:url";
 import { checkCalendariaCharacterization } from "../calendaria-characterization-check.mjs";
 import { checkContentPackCharacterization } from "../content-pack-characterization-check.mjs";
-import { checkEventAutomationCharacterization } from "../event-automation-characterization-check.mjs";
+import { checkEventAutomationCharacterization, checkEventScheduleCapacity } from "../event-automation-characterization-check.mjs";
 import { checkRandomEventsCharacterization } from "../random-events-characterization-check.mjs";
 import { checkWorkerPlannerCharacterization } from "../worker-planner-characterization-check.mjs";
 import { checkSocketCharacterization } from "../socket-characterization-check.mjs";
@@ -17,6 +17,7 @@ import { checkApprovedBuildingDevelopment } from "../building-approved-developme
 import { checkMagnifiqueCrewContent } from "../magnifique-crew-content-check.mjs";
 import { checkPoliticsAvailability } from "../politics-availability-check.mjs";
 import { checkPoliticsRules } from "../politics-rules-check.mjs";
+import { checkBuildingTemplateIdentity } from "../building-template-identity-check.mjs";
 import { checkAuditRegressions } from "../audit-regression-check.mjs";
 import { checkCoreSafety } from "../core-safety-check.mjs";
 
@@ -33,6 +34,7 @@ export async function runDataSuite() {
   checkRandomEventsCharacterization();
   checkWorkerPlannerCharacterization();
   checkEventAutomationCharacterization();
+  await checkEventScheduleCapacity();
   checkContentPackCharacterization();
   checkEconomyResourceCatalogCharacterization();
   checkBuildingDevelopmentTreeCharacterization();
@@ -41,6 +43,7 @@ export async function runDataSuite() {
   await checkSocketCharacterization();
   await checkSkyholdContextCharacterization();
   await checkAuditRegressions();
+  await checkBuildingTemplateIdentity();
   return { suite: "data" };
 }
 

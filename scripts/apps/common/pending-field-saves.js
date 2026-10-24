@@ -1,6 +1,6 @@
 class PendingFieldSaveError extends Error {}
 
-/** Keep an editor open when a field save fails during an attempted close. */
+/** Wait for field saves and retain editors whose save status still records a failure. */
 export function PendingFieldSavesMixin(Base) {
   return class PendingFieldSavesApplication extends Base {
     _trackFieldSave(result) {
@@ -15,6 +15,9 @@ export function PendingFieldSavesMixin(Base) {
         while (this._pendingFieldSaves?.size) await Promise.all([...this._pendingFieldSaves]);
       } catch (error) {
         throw new PendingFieldSaveError("Field save failed while closing", { cause: error });
+      }
+      if (this._saveStatus?.context.state === "error") {
+        throw new PendingFieldSaveError("Unresolved field save failure prevents closing");
       }
       return super._preClose(options);
     }

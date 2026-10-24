@@ -24,10 +24,6 @@ export function rollD6Pool(count) {
   return Array.from({ length: dice }, () => rollD6());
 }
 
-export function rollD66() {
-  return rollD6() * 10 + rollD6();
-}
-
 // Один источник правды для data-field. Иначе чекбоксы легко сохраняются как строка "on".
 export function fieldValue(field) {
   if (!field) return "";

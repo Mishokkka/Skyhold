@@ -24,6 +24,7 @@ import { bindFloatingTooltips, hideFloatingTooltip } from "../common/floating-to
 import { WindowFrameMixin } from "../common/window-frame.js";
 import { focusApplicationContent, restoreApplicationFocus } from "../common/window-focus-keeper.js";
 import { RenderSchedulerMixin } from "../common/render-scheduler.js";
+import { PendingFieldSavesMixin } from "../common/pending-field-saves.js";
 import {
   clearBuildingAudioTrack,
   pickBuildingAudioTrack,
@@ -111,7 +112,7 @@ function getActiveSkyholdManager({ warn = false } = {}) {
   return manager;
 }
 
-export class SkyholdBuildingEditor extends WindowFrameMixin(RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2))) {
+export class SkyholdBuildingEditor extends WindowFrameMixin(PendingFieldSavesMixin(RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2)))) {
   static instances = new Set();
 
   static rerenderOpen({ skipFocused = true } = {}) {
@@ -821,11 +822,12 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(RenderSchedulerMixin
     const index = Number(event.currentTarget?.dataset?.index ?? -1);
     const row = this._getMutableBuilding()?.building?.materialCosts?.[index];
     if (!Number.isInteger(index) || index < 0 || !row) return;
+    const rowId = row.id;
     SkyholdResourceCatalogEditor.pick({
       selectedId: row.resourceId,
       onSelect: async (resource) => {
         const updated = await this._updateMutableBuilding(({ building }) => {
-          const target = building?.materialCosts?.[index];
+          const target = building?.materialCosts?.find((candidate) => candidate.id === rowId);
           if (!target) return SkyholdData.skipTransaction(false);
           target.resourceId = String(resource.id ?? "custom");
           if (target.resourceId !== "custom") target.name = String(resource.label ?? resource.id ?? "Материал");
@@ -927,11 +929,12 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(RenderSchedulerMixin
     const index = Number(event.currentTarget?.dataset?.index ?? -1);
     const line = this._getMutableBuilding()?.building?.productionLines?.[index];
     if (!Number.isInteger(index) || index < 0 || !line) return;
+    const lineId = line.id;
     SkyholdResourceCatalogEditor.pick({
       selectedId: line.resourceId,
       onSelect: async (resource) => {
         const updated = await this._updateMutableBuilding(({ building }) => {
-          const target = building?.productionLines?.[index];
+          const target = building?.productionLines?.find((candidate) => candidate.id === lineId);
           if (!target) return SkyholdData.skipTransaction(false);
           target.resourceId = String(resource.id ?? "custom");
           if (target.resourceId !== "custom") target.resource = String(resource.label ?? resource.id ?? "Ресурс");
@@ -1232,13 +1235,20 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(RenderSchedulerMixin
     if (!this._canEditBuilding()) return;
     const projectIndex = Number(event.currentTarget?.dataset?.projectIndex);
     const costIndex = Number(event.currentTarget?.dataset?.costIndex);
-    const cost = this._getMutableBuilding()?.building?.serviceProjects?.[projectIndex]?.resourceCosts?.[costIndex];
+    const project = this._getMutableBuilding()?.building?.serviceProjects?.[projectIndex];
+    const cost = project?.resourceCosts?.[costIndex];
     if (![projectIndex, costIndex].every((value) => Number.isInteger(value) && value >= 0) || !cost) return;
+    const projectId = project.id;
+    // Cost rows have no persistent IDs. Reject an obsolete picker instead of
+    // interpreting its index against a reordered or edited list.
+    const costsSnapshot = JSON.stringify(project.resourceCosts);
     SkyholdResourceCatalogEditor.pick({
       selectedId: cost.resourceId,
       onSelect: async (resource) => {
         const updated = await this._updateMutableBuilding(({ building }) => {
-          const target = building?.serviceProjects?.[projectIndex]?.resourceCosts?.[costIndex];
+          const costs = building?.serviceProjects?.find((candidate) => candidate.id === projectId)?.resourceCosts;
+          if (JSON.stringify(costs) !== costsSnapshot) throw new Error("Список затрат проекта изменился. Откройте выбор ресурса заново.");
+          const target = costs?.[costIndex];
           if (!target) return SkyholdData.skipTransaction(false);
           target.resourceId = String(resource?.id ?? "wood");
           return true;
@@ -1286,7 +1296,7 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(RenderSchedulerMixin
   }
 
   _saveTransaction(updater, options) {
-    return this._saveStatus.track(() => SkyholdData.transaction(async (data) => {
+    return this._trackFieldSave(this._saveStatus.track(() => SkyholdData.transaction(async (data) => {
       const priorContext = this._getMutableBuilding(data);
       const before = (priorContext?.building?.productionLines ?? []).map((line) => ({ ...line }));
       const priorHolding = priorContext.holding ?? { buildings: { list: priorContext.building ? [priorContext.building] : [] }, people: { list: [] } };
@@ -1303,7 +1313,7 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(RenderSchedulerMixin
       return result;
     }, {
       ...options, scope: this.templateId ? "catalog" : "holdings"
-    }), { key: options.reason });
+    }), { key: options.reason }));
   }
 
   async _updateMutableBuilding(updater, { reason = "building-editor:update", requireHolding = false } = {}) {

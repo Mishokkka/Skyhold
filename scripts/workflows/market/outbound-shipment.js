@@ -1,4 +1,4 @@
-import { ageMarketCargo, cargoDeliveryQuantity, viableCargoValueRatio } from "../../engines/market/cargo-aging.js";
+import { ageMarketCargo, cargoDeliveryQuantity, viableCargoValueCopper } from "../../engines/market/cargo-aging.js";
 import {
   MAX_ACTIVE_OUTBOUND_ORDERS,
   activeMarketOutboundOrderCount,
@@ -319,7 +319,7 @@ function deliverOrder({ holding, order, deliveredAt, currentTenday = null, depen
   });
   const demand = settleOrderDemand({ holding, order, outcome: "consumed", operationId: demandOperationId, at: deliveredAt, currentTenday, reservations });
   if (!demand.ok) return { ok: false, order, demand, message: demand.message || "Outbound demand reservation could not be consumed." };
-  const revenueCopper = Math.floor(whole(order.revenueCopper) * viableCargoValueRatio(order));
+  const revenueCopper = viableCargoValueCopper(order, order.revenueCopper);
   order.actualRevenueCopper = revenueCopper;
   order.spoiledQty = (order.cargo ?? []).reduce((sum, row) => sum + whole(row.qty) - cargoDeliveryQuantity(row), 0);
   const revenueOperationId = text(order.revenueOperationId) || `${order.operationId || order.id}:revenue`;

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mergeHoldingDefaults } from "../data/normalizers.js";
-import { advanceMarketShipments, resolveMarketShipmentRisk } from "../engines/market/shipment.js";
-import { ageMarketCargo } from "../engines/market/cargo-aging.js";
+import { advanceMarketShipments, proposeMarketShipmentRisk, resolveMarketShipmentRisk } from "../engines/market/shipment.js";
+import { ageMarketCargo, marketInsurancePayoutCopper, viableCargoValueCopper } from "../engines/market/cargo-aging.js";
 import { planMarketOutboundSale } from "../engines/market/outbound.js";
 import { createMarketOutboundShipment, advanceMarketOutboundShipments } from "../workflows/market/outbound-shipment.js";
 import { marketDemandKey } from "../data/market/demand-state.js";
@@ -77,6 +77,34 @@ function inbound(ageQd = 3, shelfLifeQd = 20) {
   const cash = h.storage.moneyCopper;
   advanceMarketOutboundShipments({ holding: h, elapsedQd: 10, dependencies: deps });
   assert.equal(h.storage.moneyCopper, cash);
+}
+{
+  const h = { storage: { moneyCopper: 0, resources: [{ id: "food", resourceId: "food-fruit", qty: 100,
+    batches: [{ id: "old", qty: 71, ageQd: 30 }, { id: "new", qty: 29, ageQd: 0 }] }], log: [] },
+    special: { market: { demand: {}, outbound: { orders: [] } } } };
+  const plan = planMarketOutboundSale({ resources: h.storage.resources,
+    marketId: "port", lines: [{ id: "sale", resourceId: "food-fruit", qty: 100, unitPriceCopper: 1, demandBaseDemand: 100 }],
+    routes: [{ id: "route", deliveryQd: 10, freightCopper: 0, tariffCopper: 0 }] });
+  const created = createMarketOutboundShipment({ holding: h, plan, operationId: "exact-sale", dependencies: deps });
+  assert.equal(created.ok, true);
+  for (const row of created.order.cargoReservations) row.shelfLifeQd = 35;
+  const result = advanceMarketOutboundShipments({ holding: h, elapsedQd: 10, dependencies: deps });
+  assert.equal(result.delivered[0].revenueCopper, 29, "29 fresh units at one copper pay exactly 29, without float-ratio loss");
+  assert.equal(h.storage.moneyCopper, 29);
+
+  const order = { insuredValueCopper: 100, insuranceCoverageRate: 1, maximumInsurancePayoutCopper: 100,
+    cargo: [{ resourceId: "custom", qty: 71, unitPriceCopper: 1, ageQd: 35, shelfLifeQd: 35 },
+      { resourceId: "custom", qty: 29, unitPriceCopper: 1, ageQd: 10, shelfLifeQd: 35 }] };
+  assert.equal(marketInsurancePayoutCopper(order), 29, "full coverage preserves the exact viable cargo value");
+  assert.equal(viableCargoValueCopper(order, 7), 2, "genuinely fractional copper still rounds down");
+  assert.equal(viableCargoValueCopper({}, 7), 7, "legacy orders without cargo retain their accepted value");
+  assert.equal(viableCargoValueCopper({ cargo: [{ qty: 0, cargoValueCopper: 12 }] }, 7), 7,
+    "an empty legacy cargo row cannot turn its fallback unit price into a BigInt conversion error");
+  assert.equal(viableCargoValueCopper(order, Infinity), 0, "non-finite amounts use the same safe fallback as normalized orders");
+  Object.assign(order, { id: "exact-loss", status: "in-transit", riskStatus: "pending", riskLossChance: 0.08 });
+  const risk = proposeMarketShipmentRisk({ order, dependencies: { riskUnit: () => 0 } });
+  assert.equal(risk.proposal.insuredValueCopper, 29);
+  assert.equal(risk.proposal.proposedInsurancePayoutCopper, 29);
 }
 {
   const shipOrder = { cargo: [{ sourceType: "resource", resourceId: "custom", qty: 1, ageQd: 2, shelfLifeQd: 6 }] };

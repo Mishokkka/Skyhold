@@ -6,6 +6,7 @@ import { createStorageOperationExecutor } from "../apps/storage-operation-execut
 import { DEFAULT_SKYHOLD_DATA } from "../data/defaults/default-skyhold-data.js";
 import { migrateData } from "../data/normalizers.js";
 import { buildPlayerPatch, validatePlayerPatch } from "../data/player-write-guard.js";
+import { checkSocketPendingCharacterization } from "./socket-pending-characterization-check.mjs";
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -14,6 +15,7 @@ function clone(value) {
 
 /** Checks authenticated GM/player commands, replay, pending-ID conflicts and transport failure cleanup using a fake socket. */
 export async function checkSocketCharacterization() {
+  await checkSocketPendingCharacterization();
   const previousGame = globalThis.game;
   const previousUi = globalThis.ui;
 
