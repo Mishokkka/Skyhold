@@ -1,20 +1,20 @@
 /* FBL Skyhold: unlayered bridge for Foundry window chrome and native controls.
    Keep this file narrow; layered domain files still own the actual app UI. */
 
-.application.fbl-skyhold-building-catalog-migration .window-content {
+.application:is(.fbl-skyhold-building-catalog-migration, .fbl-skyhold-hybrid-labor-migration) .window-content {
   display: flex;
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
 }
 
-.application.fbl-skyhold-building-catalog-migration .fbls-content-pack-shell {
+.application:is(.fbl-skyhold-building-catalog-migration, .fbl-skyhold-hybrid-labor-migration) .fbls-content-pack-shell {
   flex: 1 1 0;
   min-height: 0;
   overflow: hidden;
 }
 
-.application.fbl-skyhold-building-catalog-migration button {
+.application:is(.fbl-skyhold-building-catalog-migration, .fbl-skyhold-hybrid-labor-migration) button {
   flex: 0 0 auto;
   width: auto;
   min-height: var(--fbls-control-height);

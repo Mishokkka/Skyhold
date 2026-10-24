@@ -9,11 +9,17 @@ import { planHybridLaborMigration, planHybridLaborCatalogMigration, recommendedH
 import { executeHybridLaborMigration } from "../hybrid-labor-migration-executor.js";
 import { RenderSchedulerMixin } from "../common/render-scheduler.js";
 import { WindowFrameMixin } from "../common/window-frame.js";
+import { DisclosureState } from "../common/disclosure-state.js";
 import { requestSkyholdAppRender } from "../registry.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const clone = (value) => structuredClone(value);
 const modes = [["staff", "Постоянный штат"], ["qd", "Задания по QD"], ["passive", "Без работников"]];
+const modeHelp = {
+  staff: "Жители закрепляются за постройкой: основная и резервная работа, единая дневная ставка.",
+  qd: "Работы назначаются в плане на десятник. Житель может распределить свои QD между разными заданиями.",
+  passive: "Постройка не использует штат и обычные задания QD. Содержание назначается отдельно."
+};
 const active = (row) => Number(row?.normalQd) > 0 || Number(row?.overtimeQd) > 0;
 const optionsFor = (selected) => [{ value: "", label: "Выберите способ", selected: !selected }, ...modes.map(([value, label]) => ({ value, label, selected: value === selected }))];
 
@@ -23,6 +29,7 @@ export class SkyholdHybridLaborMigration extends WindowFrameMixin(RenderSchedule
     this.holdingId = holdingId; this.owner = owner;
     this.profiles = {}; this.catalogProfiles = {}; this.decisions = {};
     this.includeCatalog = false; this.clearUnavailable = false; this.error = ""; this.status = "";
+    this.disclosures = new DisclosureState();
     this._refresh();
     this.dataHook = globalThis.Hooks?.on?.("fblSkyholdDataChanged", () => {
       this.stale = true;
@@ -30,8 +37,15 @@ export class SkyholdHybridLaborMigration extends WindowFrameMixin(RenderSchedule
     });
   }
   async render(...args) {
+    const focused = globalThis.document?.activeElement;
+    const focusKey = this.element?.contains?.(focused) && focused?.dataset?.hybridField ? { ...focused.dataset } : null;
     const first = !this.rendered, result = await super.render(...args);
     if (first && this.element) this._bindWindowFrameSync(this.element);
+    const activeElement = globalThis.document?.activeElement;
+    const focusMovedOutside = activeElement && activeElement !== focused && activeElement !== document.body
+      && activeElement !== document.documentElement && !this.element?.contains?.(activeElement);
+    if (focusKey && !focusMovedOutside) [...(this.element?.querySelectorAll?.("[data-hybrid-field]") ?? [])]
+      .find((field) => Object.entries(focusKey).every(([key, value]) => field.dataset[key] === value))?.focus({ preventScroll: true });
     return result;
   }
   _refresh() {
@@ -66,9 +80,13 @@ export class SkyholdHybridLaborMigration extends WindowFrameMixin(RenderSchedule
   _buildingRow(building, catalog = false) {
     const profile = (catalog ? this.catalogProfiles : this.profiles)[building.id]
       ?? (buildingLaborMode(building) === "legacy" ? recommendedHybridLaborProfile(building, catalog ? building.id : building.templateId) : building.labor);
+    const previousMode = buildingLaborMode(building);
+    const explicit = Object.hasOwn(catalog ? this.catalogProfiles : this.profiles, building.id);
     return { id: building.id, name: building.name || building.id, scope: catalog ? "catalog" : "building",
       modeOptions: optionsFor(profile?.mode), qd: profile?.mode === "qd", capacity: profile?.capacityQd ?? "",
-      previous: buildingLaborMode(building) === "legacy" ? "Прежние правила" : modes.find(([mode]) => mode === buildingLaborMode(building))?.[1] || "Требует проверки" };
+      modeHint: modeHelp[profile?.mode] || "Для этой постройки нет безопасной рекомендации. Выберите способ вручную.",
+      selectionLabel: !profile ? "Нужно выбрать" : explicit ? "Ваш выбор" : previousMode === "legacy" ? "Рекомендация" : "Текущий способ",
+      previous: previousMode === "legacy" ? "Прежние правила" : modes.find(([mode]) => mode === previousMode)?.[1] || "Требует проверки" };
   }
   _hasChanges() {
     return Boolean(this.plan && this.plan.sourceHash !== this.plan.targetHash
@@ -77,6 +95,7 @@ export class SkyholdHybridLaborMigration extends WindowFrameMixin(RenderSchedule
   async _prepareContext(options) {
     const context = await super._prepareContext(options), target = this.plan?.targetHolding ?? this.holding;
     const targets = buildWorkAllocationTargets(target), targetBuildings = target?.buildings?.list ?? [];
+    const buildingName = (id) => (this.holding?.buildings?.list ?? []).find((row) => row.id === id || row.name === id)?.name || id;
     const affectedIds = new Set((this.plan?.issues ?? []).map((row) => row.personId).filter(Boolean));
     const people = (this.holding?.people?.list ?? []).filter((person) => affectedIds.has(String(person.id)) || !person.dead && (
       this.decisions[person.id] || staffAppointmentFor(person)
@@ -93,9 +112,14 @@ export class SkyholdHybridLaborMigration extends WindowFrameMixin(RenderSchedule
         ...(person.dead ? [] : [
         ...((person.workAllocations ?? []).some(active) ? [{ value: "keep-qd", label: "Сохранить все нынешние задания QD" }] : []), ...staffOptions, ...qdOptions])];
       const functions = targets.filter((row) => row.sourceId === decision.buildingId);
-      return { id, name: person.name || id, previous: person.dead ? "Архивная запись: требуется только снятие старой ссылки" : current ? `Постоянный штат: ${current.buildingId}`
-        : person.workAllocationMode === "explicit" ? (person.workAllocations ?? []).filter(active).map((row) => `${row.sourceId}: ${row.normalQd}+${row.overtimeQd} QD`).join("; ")
-          : person.workAssignment || "Свободен",
+      return { id, name: person.name || id, previous: person.dead ? "Архивная запись: требуется только снятие старой ссылки" : current ? `Постоянный штат: ${buildingName(current.buildingId)}`
+        : person.workAllocationMode === "explicit" ? (person.workAllocations ?? []).filter(active).map((row) => `${buildingName(row.sourceId)}: ${row.normalQd}+${row.overtimeQd} QD`).join("; ") || "Без заданий QD"
+          : buildingName(person.workAssignment) || "Свободен",
+      decisionHint: decision.kind === "free" ? "Прежняя работа и задания QD будут сняты. Новая работа не назначается."
+        : decision.kind === "qd" ? "Прежний план будет заменён одним выбранным заданием QD. Штатное назначение снимается."
+          : decision.kind === "staff" ? "Будет сохранено штатное назначение с указанными ниже работами и ставкой."
+            : decision.kind === "keep-qd" ? "Все нынешние строки плана QD сохранятся, если совместимы с выбранными способами труда."
+              : "Существующее назначение сохранится только при совместимости. Препятствия показаны в итоговой проверке.",
       choices: choices.map((row) => ({ ...row, selected: row.value === selected })),
       staff: decision.kind === "staff", qd: decision.kind === "qd",
       primaryOptions: [{ value: "", label: "Выберите основную работу", selected: !decision.primaryFunctionId },
@@ -106,15 +130,22 @@ export class SkyholdHybridLaborMigration extends WindowFrameMixin(RenderSchedule
       volunteer: decision.volunteer === true, reason: decision.volunteerReason ?? "" };
     });
     const issues = [...(this.plan?.issues ?? []), ...(this.catalogPlan?.issues ?? [])];
+    const changedPeople = (this.plan?.targetHolding?.people?.list ?? []).filter((person, index) =>
+      JSON.stringify(person) !== JSON.stringify(this.holding?.people?.list?.[index])).length;
     return { ...context, name: this.holding?.name || "", buildings: (this.holding?.buildings?.list ?? []).map((row) => this._buildingRow(row)),
       people, includeCatalog: this.includeCatalog, clearUnavailable: this.clearUnavailable,
       catalogRows: this.includeCatalog ? (this.base.catalog?.buildings ?? []).map((row) => this._buildingRow(row, true)) : [],
-      issues, error: this.error, status: this.status, stale: this.stale, busy: this.busy,
+      issues, error: this.error, status: this.status, stale: this.stale, busy: this.busy, changedPeople,
+      readOnly: game.user?.isGM !== true || this.busy,
+      applyHint: this.busy ? "Сохраняется переход…" : this.stale ? "Сначала обновите расчёт: исходные данные изменились."
+        : game.user?.isGM !== true ? "Применить переход может только ГМ." : issues.length ? `Применение недоступно: решите вопросы ниже (${issues.length}).`
+          : !this._hasChanges() ? "Изменений для применения нет." : "План готов. Проверьте выбор и примените его одной записью.",
       canApply: game.user?.isGM === true && this.plan?.ok && (!this.catalogPlan || this.catalogPlan.ok) && this._hasChanges() && !this.stale && !this.busy,
       summary: `${this.plan?.changes.length ?? 0} построек · ${this.catalogPlan?.changes.length ?? 0} шаблонов · ${issues.length} препятствий` };
   }
   async _onRender(context, options) {
     await super._onRender(context, options);
+    this.disclosures.bind(this.element);
     this.listeners?.abort(); this.listeners = new AbortController();
     const signal = this.listeners.signal;
     this.element.addEventListener("change", (event) => this._change(event), { signal });
@@ -122,6 +153,11 @@ export class SkyholdHybridLaborMigration extends WindowFrameMixin(RenderSchedule
       const action = event.target.closest?.("[data-action]")?.dataset.action;
       if (action === "hybrid-migration-refresh") { event.preventDefault(); this._refresh(); this.requestRender({ focus: false }); }
       if (action === "hybrid-migration-apply") { event.preventDefault(); void this._apply(); }
+      if (action === "hybrid-migration-issues") {
+        event.preventDefault();
+        const issues = this.element.querySelector('[data-fbls-disclosure="migration-issues"]');
+        if (issues) { issues.open = true; issues.querySelector("summary")?.focus(); issues.scrollIntoView({ block: "nearest" }); }
+      }
     }, { signal });
   }
   _change(event) {
@@ -188,14 +224,14 @@ export class SkyholdHybridLaborMigration extends WindowFrameMixin(RenderSchedule
   }
   async _onClose(options) {
     await super._onClose(options);
-    this.listeners?.abort(); this._unbindWindowFrameSync();
+    this.listeners?.abort(); this.disclosures.close(); this._unbindWindowFrameSync();
     if (this.dataHook !== undefined) globalThis.Hooks?.off?.("fblSkyholdDataChanged", this.dataHook);
   }
 }
 
 SkyholdHybridLaborMigration.DEFAULT_OPTIONS = {
   classes: ["fbl-skyhold", "fbl-skyhold-content-pack-importer", "fbl-skyhold-hybrid-labor-migration"], tag: "section",
-  window: { title: "Переход к двум способам труда", icon: "fa-solid fa-people-arrows", resizable: true },
+  window: { title: "Настройка перехода к новым способам труда", icon: "fa-solid fa-people-arrows", resizable: true },
   position: { width: 1000, height: 760 }
 };
 SkyholdHybridLaborMigration.PARTS = { body: { template: `modules/${MODULE_ID}/templates/hybrid-labor-migration.hbs` } };
