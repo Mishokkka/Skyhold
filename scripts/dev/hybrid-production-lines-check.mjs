@@ -69,6 +69,42 @@ function addSupplier(f, { resourceId = "stone", resource = "", pendingQty = 2, c
 
 export async function checkHybridProductionInputs() {
   return withRuntime(async () => {
+    // Quotes must reserve one shared budget, in the recipe's collection order.
+    for (const [expenses, budget, suppliers, stored, expected] of [
+      ["wood 1; stone 1", 1, [["wood", 1], ["stone", 1]], [], false],
+      ["wood 1; stone 1", 2, [["wood", 1], ["stone", 1]], [], true],
+      ["wood 1; stone 1", 2, [["stone", 2], ["wood", 1], ["stone", 1]], [], true],
+      ["wood 1 ИЛИ stone 1; iron 1", 2, [["stone", 2], ["wood", 1], ["iron", 1]], [], true],
+      ["wood 1; stone 1", 1, [["wood", 1], ["stone", 1]], [{ resourceId: "wood", qty: 1 }], true],
+      ["wood 1 ИЛИ stone 1; wood 1", 2, [["wood", 1]], [], false],
+      ["money 1; wood 1", 1, [["money", 1], ["wood", 1]], [], false],
+      ["money 1; wood 1", 2, [["money", 1], ["wood", 1]], [], true]
+    ]) {
+      const f = fixture("staff");
+      f.holding.storage.resources = stored;
+      f.holding.storage.moneyCopper = 0;
+      for (const [resourceId, collectQd] of suppliers) addSupplier(f, { resourceId, collectQd, pendingQty: 1 });
+      f.harness._staffDailyCollectionBudget = () => budget;
+      const before = structuredClone(f.holding);
+      const costs = f.harness._parseResourceCosts(expenses);
+      assert.equal(f.harness._canCollectStaffProductionInputs(f.holding, f.building, costs,
+        { financeContext: { staffCollectionProbe: true } }, f.building.productionLines[0]), expected,
+      `${expenses}, ${budget} QD: collection quote respects the shared budget and actual ingredient order`);
+      assert.deepEqual(f.holding, before, "quoting collection must not consume stock, pending output or money");
+    }
+    {
+      const f = fixture("staff", { reverse: true });
+      Object.assign(f.building.productionLines.find((line) => line.id === "main"),
+        { resourceId: "cloth", expenses: "stone 1; iron 1" });
+      f.building.productionLines.find((line) => line.id === "reserve").resourceId = "wood";
+      const stone = addSupplier(f, { resourceId: "stone", collectQd: 2, pendingQty: 1 });
+      const iron = addSupplier(f, { resourceId: "iron", collectQd: 2, pendingQty: 1 });
+      await run(f, "inputs-shared-collection-budget");
+      assert.equal(quantity(f.holding, "wood"), 20, "uncollectible primary inputs must leave staff available for the reserve job");
+      assert.equal(quantity(f.holding, "cloth"), 0);
+      assert.equal(stone.pendingQty, 1);
+      assert.equal(iron.pendingQty, 1);
+    }
     for (const mode of ["staff", "qd"]) for (const [expenses, pendingQty, expected] of [
       ["wood 1 ИЛИ stone 1", 2, 2], ["masonry 1", 2, 2], ["wood 1 ИЛИ stone 1; stone 1", 2, 1]
     ]) {

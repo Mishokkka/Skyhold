@@ -76,8 +76,7 @@ _canCollectStaffProductionInputs(holding, building, costs, workerContext, consum
   const finance = workerContext?.financeContext;
   const functionId = this._financeLineFunctionId(consumerLine, (building.productionLines ?? []).indexOf(consumerLine));
   const available = this._staffDailyCollectionBudget(building, functionId, workerContext);
-  const pending = [], blocked = [];
-  let pendingMoney = 0;
+  const sources = [], blocked = [];
   const ingredients = costs.flatMap((cost) => cost.alternatives ?? [cost]);
   for (const source of holding.buildings?.list ?? []) {
     if (this._buildingStatus(source).value !== "built") continue;
@@ -87,16 +86,35 @@ _canCollectStaffProductionInputs(holding, building, costs, workerContext, consum
       const resource = this._productionCollectionResource(line);
       if (!ingredients.some((cost) => this._productionInputMatches(resource, cost))) continue;
       const needed = Math.ceil(number(line.collectQd));
-      if (needed > available) blocked.push({ source, line, needed });
-      else if (resource.resourceId === "money") pendingMoney += number(line.pendingQty);
-      else pending.push({ ...resource, qty: number(line.pendingQty) });
+      sources.push({ source, line, resource, needed });
     }
   }
-  // Let the inventory planner resolve the complete AND/OR recipe and material
-  // groups. A failed quote's first missing alternative is not the whole recipe.
   const projected = { ...holding, storage: { ...holding.storage,
-    moneyCopper: number(holding.storage?.moneyCopper) + pendingMoney,
-    resources: [...(holding.storage?.resources ?? []), ...pending] } };
+    moneyCopper: number(holding.storage?.moneyCopper), resources: [...(holding.storage?.resources ?? [])] } };
+  let reservedQd = 0;
+  const collected = new Set();
+  const collect = (cost) => {
+    for (const row of sources) {
+      if (collected.has(row.line) || !this._productionInputMatches(row.resource, cost)) continue;
+      if (reservedQd + row.needed > available) { blocked.push(row); continue; }
+      reservedQd += row.needed;
+      collected.add(row.line);
+      const qty = Math.floor(number(row.line.pendingQty));
+      if (row.resource.resourceId === "money") projected.storage.moneyCopper += qty;
+      else projected.storage.resources.push({ ...row.resource, qty });
+    }
+  };
+  // Match production-cycle's ingredient passes and the collector's source order.
+  // Each source spends the shared budget once; stocked AND inputs need no trip.
+  if (costs.some((cost) => Array.isArray(cost.alternatives))) {
+    for (const cost of ingredients) {
+      if (this._storageCanPay(projected, costs).ok) break;
+      collect(cost);
+    }
+  }
+  for (const cost of costs) {
+    if (!Array.isArray(cost.alternatives) && this._storageQuantity(projected, cost) < cost.qty) collect(cost);
+  }
   if (this._storageCanPay(projected, costs).ok) return true;
   if (finance.staffCollectionProbe) return false;
   const warningAvailable = this._staffDailyCollectionBudget(building, functionId, workerContext, { priorityOffers: true });
