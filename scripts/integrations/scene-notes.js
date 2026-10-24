@@ -2,6 +2,7 @@ import { MODULE_ID } from "../data/constants.js";
 import { HoldingService } from "../data/holding-service.js";
 import { canReadHolding } from "../data/access-guard.js";
 import { loadBuildingEditorClass } from "../apps/lazy-apps.js";
+import { foundryDoubleClickThresholds } from "./foundry-runtime.js";
 
 const BUILDING_NOTE_TOOLTIP_DELAY_MS = 1000;
 const BUILDING_NOTE_ICON_SIZE = 32;
@@ -257,9 +258,23 @@ function installBuildingNoteInteractions() {
     if (previous) note.off("pointertap", previous);
     buildingNoteInteractions.delete(note);
     if (!buildingFlagsFromNote(note)) return;
+    let lastClick = null;
     const onPointerTap = (event) => {
-      if (event.button !== 0 || event.detail !== 2 || note.document?.entry) return;
-      if (!shouldOpenBuildingNoteFromClick()) return;
+      if (event.button !== 0 || note.document?.entry || !shouldOpenBuildingNoteFromClick()) {
+        lastClick = null;
+        return;
+      }
+      const click = { time: event.timeStamp, x: event.clientX, y: event.clientY };
+      if (![click.time, click.x, click.y].every(Number.isFinite)) { lastClick = null; return; }
+      const previousClick = lastClick;
+      lastClick = click;
+      if (!previousClick) return;
+      const elapsed = click.time - previousClick.time;
+      const { timeMs, distancePx } = foundryDoubleClickThresholds();
+      if (elapsed < 0 || elapsed > timeMs || Math.hypot(click.x - previousClick.x, click.y - previousClick.y) > distancePx) return;
+      // Pixi's detail counter uses 200ms. Match Foundry's tap interval instead,
+      // consuming each pair so a third tap cannot reopen the editor.
+      lastClick = null;
       requestBuildingNoteOpen(note);
     };
     note.on("pointertap", onPointerTap);
