@@ -2,6 +2,8 @@ function requireDependencies(dependencies = {}) {
   const required = [
     "safeNumber",
     "normalizeStorageRoomId",
+    "storageResourceIdentity",
+    "isMoneyResource",
     "storageQuantity",
     "storageAdd",
     "storageAddWithOverflow",
@@ -37,14 +39,9 @@ export function applyRandomEventEffects({ holding, effects = [], dependencies } 
   const changes = [];
   const effectRows = Array.isArray(effects) ? effects : [];
 
-  const moneySpend = effectRows
+  let moneySpend = effectRows
     .filter((effect) => String(effect?.type ?? "") === "money")
     .reduce((sum, effect) => sum + Math.min(0, deps.safeNumber(effect?.amount, 0)), 0);
-  const treasury = Math.max(0, deps.safeNumber(holding.storage.moneyCopper, 0));
-  if (treasury + moneySpend < -0.0001) {
-    return { ok: false, changes: [], message: `В казне недостаточно денег: доступно ${deps.formatNumber(treasury)} медных.` };
-  }
-
   const resourceSpends = new Map();
   for (const effect of effectRows) {
     if (String(effect?.type ?? "") !== "resource" || deps.safeNumber(effect?.amount, 0) >= 0) continue;
@@ -53,9 +50,18 @@ export function applyRandomEventEffects({ holding, effects = [], dependencies } 
       name: String(effect?.name ?? "").trim(),
       roomId: deps.normalizeStorageRoomId(effect?.roomId ?? "outdoors")
     };
-    const key = `${resource.resourceId}:${resource.name.toLowerCase()}:${resource.roomId}`;
+    if (deps.isMoneyResource(resource)) {
+      moneySpend += deps.safeNumber(effect.amount, 0);
+      continue;
+    }
+    const identity = deps.storageResourceIdentity(resource);
+    const key = JSON.stringify([identity.id, identity.name, resource.roomId]);
     const requested = (resourceSpends.get(key)?.requested ?? 0) + Math.abs(deps.safeNumber(effect.amount, 0));
     resourceSpends.set(key, { resource, requested });
+  }
+  const treasury = Math.max(0, deps.safeNumber(holding.storage.moneyCopper, 0));
+  if (treasury + moneySpend < -0.0001) {
+    return { ok: false, changes: [], message: `В казне недостаточно денег: доступно ${deps.formatNumber(treasury)} медных.` };
   }
   for (const { resource, requested } of resourceSpends.values()) {
     const available = Math.max(0, deps.storageQuantity(holding, resource));

@@ -4071,5 +4071,5 @@ export async function runRepositoryContracts() {
 
   const cssAudit = checkCssHygiene(cssFiles);
 
-  console.log(`FBL Skyhold dev-check: ${jsFiles.length} JS files checked; ${hbsFiles.length} HBS files checked; ${cssAudit.totalFiles} CSS files checked; ${cssAudit.totalImportant} !important total. Largest CSS files: ${cssAudit.largest.join(", ")}. All tests passed.`);
+  console.log(`FBL Skyhold repository contracts: ${jsFiles.length} JS files checked; ${hbsFiles.length} HBS files checked; ${cssAudit.totalFiles} CSS files checked; ${cssAudit.totalImportant} !important total. Largest CSS files: ${cssAudit.largest.join(", ")}. Repository contracts passed.`);
 }

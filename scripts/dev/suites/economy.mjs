@@ -63,7 +63,7 @@ export async function runEconomySuite() {
   await checkProductionWorkerBudgets();
   await checkProductionCapacity();
   checkAgricultureCharacterization();
-  checkConstructionStageCharacterization();
+  await checkConstructionStageCharacterization();
   checkFoodBatchCharacterization();
   checkLivestockCharacterization();
   checkLivestockRuntimeCharacterization();

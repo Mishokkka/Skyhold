@@ -238,6 +238,22 @@ export async function checkBuildingContextCharacterization() {
     assert.ok(Array.isArray(editor.categoryOptions), "editor must retain category options");
     assert.ok(Array.isArray(editor.functionOptions), "editor must retain function options");
 
+    const originalTemplates = data.catalog.buildings;
+    try {
+      data.catalog.buildings = [
+        { id: "namesake", name: "Renamed building", img: "namesake.webp" },
+        { id: "exact-template", name: "Original template", img: "exact.webp" }
+      ];
+      const renamed = { ...source, templateId: "exact-template", name: "Renamed building", img: undefined, image: undefined };
+      const exactRow = app._prepareBuildingRow(holding, renamed, 0, true, rooms, { workerContext });
+      assert.equal(exactRow.img, "exact.webp", "direct editor context must prefer the exact template ID over an earlier matching name");
+      renamed.templateId = "missing-legacy-id";
+      const legacyRow = app._prepareBuildingRow(holding, renamed, 0, true, rooms, { workerContext });
+      assert.equal(legacyRow.img, "namesake.webp", "direct editor context retains the legacy name fallback for missing IDs");
+    } finally {
+      data.catalog.buildings = originalTemplates;
+    }
+
     const playerHidden = holding.buildings.list[2];
     const playerLegacyTemplate = holding.buildings.list[3];
     playerHidden.visibility = "gm";

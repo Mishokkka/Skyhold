@@ -306,24 +306,6 @@ export function getCalendariaSnapshot() {
   };
 }
 
-export function getCalendariaElapsedDays(fromDateTime, toDateTime = null) {
-  const api = calendariaApi();
-  if (!api?.daysBetween || !fromDateTime) return 0;
-  const from = normalizeCalendariaDateTime(fromDateTime, activeCalendar());
-  const target = normalizeCalendariaDateTime(toDateTime ?? safeCall(() => api.getCurrentDateTime(), null), activeCalendar());
-  const value = safeCall(() => api.daysBetween(from, target), 0);
-  return Number.isFinite(Number(value)) ? Number(value) : 0;
-}
-
-export function getCalendariaElapsedHours(fromDateTime, toDateTime = null) {
-  const api = calendariaApi();
-  if (!api?.hoursBetween || !fromDateTime) return 0;
-  const from = normalizeCalendariaDateTime(fromDateTime, activeCalendar());
-  const target = normalizeCalendariaDateTime(toDateTime ?? safeCall(() => api.getCurrentDateTime(), null), activeCalendar());
-  const value = safeCall(() => api.hoursBetween(from, target), 0);
-  return Number.isFinite(Number(value)) ? Number(value) : 0;
-}
-
 function emitCalendariaBridgeEvent(sourceHook, args = []) {
   lastSnapshot = getCalendariaSnapshot();
   globalThis.Hooks?.callAll?.("fblSkyholdCalendariaChanged", {

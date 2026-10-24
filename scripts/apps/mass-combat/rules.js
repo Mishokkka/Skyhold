@@ -1,12 +1,8 @@
 import {
   COUNTER_STRENGTH,
   DEFAULT_MASS_COMBAT_TAGS,
-  DEFAULT_MASS_COMBAT_TAG_COUNTERS,
-  getMassCombatTagCounters,
   tagLabel
 } from "./tag-config.js";
-
-export const TAGS = DEFAULT_MASS_COMBAT_TAGS;
 
 export const LEGACY_TAG_FIELD_MAP = {
   fire: "shooters",
@@ -17,8 +13,6 @@ export const LEGACY_TAG_FIELD_MAP = {
 };
 
 export { COUNTER_STRENGTH };
-export const TAG_COUNTERS = DEFAULT_MASS_COMBAT_TAG_COUNTERS;
-
 export const ATTACK_METHODS = {
   frontalAssault: {
     label: "Лобовой штурм",
@@ -399,18 +393,6 @@ export function militiaQualityText(defense = {}) {
   return flags.length ? flags.join(", ") : "20 чел./отряд";
 }
 
-export function strengthRatioBonus(own, enemy) {
-  const a = Math.max(0, asNumber(own, 0));
-  const b = Math.max(0, asNumber(enemy, 0));
-  if (a <= 0) return 0;
-  if (b <= 0) return a >= 10 ? 3 : a >= 5 ? 2 : 1;
-  const ratio = a / b;
-  if (ratio >= 3) return 3;
-  if (ratio >= 2) return 2;
-  if (ratio >= 1.5) return 1;
-  return 0;
-}
-
 function capitalized(key = "") { return `${key[0]?.toUpperCase() ?? ""}${key.slice(1)}`; }
 
 export function tagValue(state, side, key) {
@@ -425,58 +407,11 @@ export function tagValue(state, side, key) {
   return 0;
 }
 
-export function bestTagAdvantage(state, ownSide, strategy = {}) {
-  const enemySide = ownSide === "defender" ? "attacker" : "defender";
-  let best = { value: 0, label: "", detail: "" };
-  for (const key of (strategy?.tags ?? [])) {
-    const own = tagValue(state, ownSide, key);
-    const enemy = tagValue(state, enemySide, key);
-    const value = own > enemy ? Math.min(2, Math.ceil((own - enemy) / 2)) : 0;
-    if (value > best.value) best = { value, label: tagLabel(key, { includeSystem: false }), detail: `${own}:${enemy}` };
-  }
-  return best;
-}
-
-export function tagCounterPressure(state, ownSide) {
-  const enemySide = ownSide === "defender" ? "attacker" : "defender";
-  let score = 0;
-  const parts = [];
-  for (const [ownKey, countered] of Object.entries(getMassCombatTagCounters())) {
-    const own = tagValue(state, ownSide, ownKey);
-    if (own <= 0) continue;
-    for (const [enemyKey, pct] of Object.entries(countered)) {
-      const enemy = tagValue(state, enemySide, enemyKey);
-      if (enemy <= 0) continue;
-      score += Math.min(own, enemy) * pct;
-      parts.push(`${tagLabel(ownKey)} против ${tagLabel(enemyKey)}: ${own}:${enemy}`);
-    }
-  }
-  return { value: Math.min(2, Math.floor(score)), score, detail: parts.join("; ") || "контр-типов нет" };
-}
-
 export function commandPercentFromEffectiveness(effectiveness = 0) {
   const steps = clamp(asNumber(effectiveness, 0), 0, 5);
   return Math.min(0.25, steps * 0.05);
 }
 
-export function applyPercentBonus(baseDice = 0, percent = 0) {
-  const base = Math.max(0, asNumber(baseDice, 0));
-  const pct = Math.max(0, asNumber(percent, 0));
-  if (!base || !pct) return 0;
-  return Math.max(0, Math.ceil(base * pct - 1e-9));
-}
-
 export function stateValue(state, key, fallback = 0) {
   return asNumber(state?.[key], fallback);
-}
-
-export function battleSourceState(value, label = "") {
-  const number = asNumber(value, 0);
-  return { value: number, label, signed: toSigned(number) };
-}
-
-export function poolDiceFromStrength(effectiveness) {
-  const value = Math.max(0, asNumber(effectiveness, 0));
-  if (value < 5) return 0;
-  return Math.max(1, Math.floor(value / 5));
 }

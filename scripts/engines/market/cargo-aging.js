@@ -1,6 +1,9 @@
 import { resourceDef } from "../../core/resources.js";
 
-const whole = (value) => Math.max(0, Math.floor(Number(value) || 0));
+const whole = (value) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : 0;
+};
 
 /** Freeze shelf life when cargo is packed; saved legacy cargo is resolved once. */
 export function cargoShelfLife(cargo = {}) {
@@ -23,15 +26,17 @@ export function cargoDeliveryQuantity(cargo = {}) {
   return expired ? 0 : Math.max(0, whole(cargo.qty) - whole(cargo.spoiledQty));
 }
 
-export function viableCargoValueRatio(order = {}) {
-  let total = 0;
-  let viable = 0;
+/** Prorate whole copper before division; floating ratios can lose a whole coin. */
+export function viableCargoValueCopper(order = {}, amountCopper = 0) {
+  let total = 0n;
+  let viable = 0n;
   for (const cargo of order.cargo ?? []) {
-    const unitPrice = Math.max(1, whole(cargo.unitPriceCopper ?? cargo.cargoValueCopper / cargo.qty));
-    total += whole(cargo.qty) * unitPrice;
-    viable += cargoDeliveryQuantity(cargo) * unitPrice;
+    const unitPrice = BigInt(Math.max(1, whole(cargo.unitPriceCopper ?? cargo.cargoValueCopper / cargo.qty)));
+    total += BigInt(whole(cargo.qty)) * unitPrice;
+    viable += BigInt(cargoDeliveryQuantity(cargo)) * unitPrice;
   }
-  return total > 0 ? viable / total : 1;
+  const amount = whole(amountCopper);
+  return total > 0n ? Number(BigInt(amount) * viable / total) : amount;
 }
 
 export function marketInsuranceLimitCopper(order = {}) {
@@ -47,7 +52,7 @@ export function marketInsuranceLimitCopper(order = {}) {
 
 /** Current public value; an already proposed loss has its own saved event value. */
 export function marketInsurancePayoutCopper(order = {}) {
-  return Math.floor(marketInsuranceLimitCopper(order) * viableCargoValueRatio(order));
+  return viableCargoValueCopper(order, marketInsuranceLimitCopper(order));
 }
 
 /** GM-only event value. A delay changed to loss is assessed now, not at the old proposal. */

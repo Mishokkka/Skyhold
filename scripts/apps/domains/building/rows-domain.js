@@ -236,10 +236,10 @@ _prepareBuildingRow(holding, row, index, canEdit, storageRoomsArg = null, option
   if (!templateSource && rowNameKey && templateLookup?.byName instanceof Map) templateSource = templateLookup.byName.get(rowNameKey);
   if (!templateSource) {
     const dataForTemplateLookup = this._contextData ?? SkyholdData.get();
-    templateSource = (dataForTemplateLookup?.catalog?.buildings ?? []).find((item) => {
-      if (templateKey && String(item?.id ?? "").trim().toLowerCase() === templateKey) return true;
-      return rowNameKey && String(item?.name ?? "").trim().toLowerCase() === rowNameKey;
-    }) ?? null;
+    const templates = dataForTemplateLookup?.catalog?.buildings ?? [];
+    templateSource = (templateKey ? templates.find((item) => String(item?.id ?? "").trim().toLowerCase() === templateKey) : null)
+      ?? (rowNameKey ? templates.find((item) => String(item?.name ?? "").trim().toLowerCase() === rowNameKey) : null)
+      ?? null;
   }
   const { icon, img } = buildingAppearance(row, templateSource, categoryInfo?.icon);
   const devUnlocked = this._requirementsMet(requirements, development.totals);

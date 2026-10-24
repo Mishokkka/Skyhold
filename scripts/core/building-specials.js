@@ -36,11 +36,6 @@ export function inferBuildingSpecialKind(building = {}) {
   return "";
 }
 
-export function getSpecialBuildingDefinition(building = {}) {
-  const kind = inferBuildingSpecialKind(building);
-  return kind ? SPECIAL_BUILDING_KINDS[kind] : null;
-}
-
 export function isSpecialBuilding(building = {}) {
   return Boolean(inferBuildingSpecialKind(building));
 }

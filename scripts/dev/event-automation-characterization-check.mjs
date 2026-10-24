@@ -9,6 +9,8 @@ import { buildHoldingOperationTimeline } from "../data/operation-timeline.js";
 import { applyRandomEventEffects } from "../engines/events/effect-executor.js";
 import { EventAutomationDomain } from "../apps/domains/events/event-automation-events.js";
 import { SkyholdData } from "../data/store.js";
+import { FinanceStorageDomain } from "../apps/domains/finance/storage-domain.js";
+import { isMoneyResource } from "../core/resources.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -29,12 +31,17 @@ function holdingFixture() {
 
 function dependencies() {
   const room = (value) => String(value || "outdoors");
-  const find = (holding, resource) => holding.storage.resources.find((row) => row.resourceId === resource.resourceId && room(row.roomId) === room(resource.roomId));
+  const find = (holding, resource) => holding.storage.resources.find((row) =>
+    FinanceStorageDomain._storageResourceMatches.call(FinanceStorageDomain, row, resource) && room(row.roomId) === room(resource.roomId));
   return {
     safeNumber: (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback,
     normalizeStorageRoomId: room,
-    storageQuantity: (holding, resource) => Number(find(holding, resource)?.qty ?? 0),
+    storageResourceIdentity: FinanceStorageDomain._storageResourceIdentity,
+    isMoneyResource: (resource) => isMoneyResource(resource.resourceId, resource.name),
+    storageQuantity: (holding, resource) => isMoneyResource(resource.resourceId, resource.name)
+      ? holding.storage.moneyCopper : Number(find(holding, resource)?.qty ?? 0),
     storageAdd: (holding, resource, qty) => {
+      if (isMoneyResource(resource.resourceId, resource.name)) { holding.storage.moneyCopper += qty; return null; }
       const row = find(holding, resource) ?? { id: `${resource.resourceId}-${room(resource.roomId)}`, ...resource, qty: 0 };
       if (!holding.storage.resources.includes(row)) holding.storage.resources.push(row);
       row.qty += qty;
@@ -80,6 +87,43 @@ export function checkEventAutomationCharacterization() {
   });
   assert.equal(rejected.ok, false, "executor must reject unaffordable resource effects");
   assert.equal(insufficient.overview.development.food, 2, "failed effect batches must not partially mutate earlier effects");
+
+  for (const alias of [{ resourceId: "wood", name: "Дрова" }, { resourceId: "Древесина", name: "" }]) {
+    const aliased = holdingFixture();
+    const before = structuredClone(aliased);
+    const result = applyRandomEventEffects({ holding: aliased, effects: [
+      { type: "development", key: "food", amount: 5 },
+      { type: "resource", resourceId: "wood", name: "Древесина", amount: -3 },
+      { type: "resource", ...alias, amount: -3 }
+    ], dependencies: dependencies() });
+    assert.equal(result.ok, false, "resource aliases share one available stock in preflight");
+    assert.deepEqual(result.changes, [], "unaffordable alias batches must be rejected before any changes");
+    assert.deepEqual(aliased, before, "alias overdraw cannot partially apply development or consume stock");
+  }
+  {
+    const mixedMoney = holdingFixture();
+    const before = structuredClone(mixedMoney);
+    const result = applyRandomEventEffects({ holding: mixedMoney, effects: [
+      { type: "money", amount: -12 },
+      { type: "resource", resourceId: "money", name: "Монеты", roomId: "vault", amount: -12 }
+    ], dependencies: dependencies() });
+    assert.equal(result.ok, false, "money effects and money resource aliases share one treasury");
+    assert.deepEqual(mixedMoney, before, "mixed treasury overdraw is rejected atomically");
+  }
+  {
+    const separate = holdingFixture();
+    separate.storage.resources.push({ resourceId: "custom", name: "Красная краска", qty: 2, roomId: "outdoors" },
+      { resourceId: "custom", name: "Синяя краска", qty: 2, roomId: "outdoors" },
+      { resourceId: "wood", name: "Древесина", qty: 2, roomId: "warehouse" });
+    const result = applyRandomEventEffects({ holding: separate, effects: [
+      { type: "resource", resourceId: "custom", name: "Красная краска", amount: -2 },
+      { type: "resource", resourceId: "custom", name: "Синяя краска", amount: -2 },
+      { type: "resource", resourceId: "wood", amount: -5 },
+      { type: "resource", resourceId: "wood", roomId: "warehouse", amount: -2 }
+    ], dependencies: dependencies() });
+    assert.equal(result.ok, true, "distinct custom names and storage rooms keep separate inventories");
+    assert.ok(separate.storage.resources.every((row) => row.qty === 0));
+  }
 
   const schedule = normalizeEventSchedule([{ id: "schedule-1", eventId: "event-1", effects, dueQd: 40 }]);
   assert.equal(schedule[0].canApplyEffects, true, "scheduled events with effects must expose an apply action");

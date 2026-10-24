@@ -248,7 +248,7 @@ Patch-запросы классифицируются по типу действ
 
 Проверки защищают импорты, адаптеры Foundry, шаблоны/контролы, чистые расчёты, normalizers, permissions, revision/idempotency и recovery. Node-проверки не подтверждают живой Foundry UI; сценарии собраны в [smoke matrix](docs/manual-foundry-smoke-matrix.md). Fixtures, observer и датированные замеры — в [performance baseline](docs/performance-baseline.md).
 
-`check:all` включает обычный `check` и различные Node-команды из существующих `*:check`; JavaScript lint и performance budget запускаются отдельно. Генераторы и упаковка в него не входят. Результаты аудита и границы покрытия — в [аудите кода и тестов от 24 октября 2026](docs/code-and-test-audit-2026-10-24.md).
+`check:all` запускает JavaScript lint, обычный `check` и различные Node-команды из существующих `*:check`; performance budget запускается отдельно. Генераторы и упаковка в него не входят. Результаты аудита и границы покрытия — в [аудите кода и тестов от 24 октября 2026](docs/code-and-test-audit-2026-10-24.md) и [дополнении к PR № 6](docs/pr6-additional-audit-2026-10-24.md).
 
 Тяжёлые окна рынка, десятника, боя, Политики, корабля, карты и редакторов подключают JS и owner-CSS при первом открытии; lazy:check защищает стартовый граф.
 

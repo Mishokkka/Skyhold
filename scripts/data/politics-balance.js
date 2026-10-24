@@ -44,8 +44,6 @@ export const POLITICS_CORE_FIELDS = Object.freeze([
   { id: "representativeInfluenceCultureMin", label: "Культура представителя для Влияния", base: 2, min: 0, max: 3 }
 ]);
 
-const EFFECT_IDS = new Set(POLITICS_EFFECT_FIELDS.map((field) => field.id));
-const PARAMETER_IDS = new Set(POLITICS_PARAMETER_FIELDS.map((field) => field.id));
 export const POLITICS_REQUIREMENTS = Object.freeze([
   { id: "market", label: "Работающий Рынок" },
   { id: "route", label: "Доступный маршрут" },
@@ -127,10 +125,6 @@ const BUILTIN_ROWS = [
 
 export const POLITICS_BUILTIN_ROWS = Object.freeze(BUILTIN_ROWS);
 
-export function createDefaultPoliticsBalance() {
-  return { version: POLITICS_BALANCE_VERSION, core: {}, rows: {}, custom: [] };
-}
-
 /** Loading is non-destructive: unknown future keys and rows survive normal commits. */
 export function normalizePoliticsBalance(value) {
   const source = isPlainObject(value) ? clone(value) : {};
@@ -193,10 +187,3 @@ export function resolvedPoliticsCatalog(balance = {}) {
 export function politicsCatalogRow(balance, id) {
   return resolvedPoliticsCatalog(balance).find((row) => row.id === String(id ?? "")) ?? null;
 }
-
-export function politicsEditableField(id) {
-  return [...POLITICS_EFFECT_FIELDS, ...POLITICS_PARAMETER_FIELDS].find((field) => field.id === id) ?? null;
-}
-
-export function isPoliticsEffectField(id) { return EFFECT_IDS.has(id); }
-export function isPoliticsParameterField(id) { return PARAMETER_IDS.has(id); }

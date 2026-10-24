@@ -157,11 +157,6 @@ export function materialGroup(value = "") {
   return GROUP_BY_ID.get(String(value ?? "")) ?? GROUP_BY_ALIAS.get(normalized(value)) ?? null;
 }
 
-export function materialGroupOptions(selected = "") {
-  const selectedId = materialGroup(selected)?.id ?? "";
-  return MATERIAL_GROUPS.map((group) => ({ ...group, selected: group.id === selectedId }));
-}
-
 function explicitGroups(resource = {}) {
   const values = resource.materialGroups ?? resource.groups ?? [];
   return (Array.isArray(values) ? values : String(values ?? "").split(/[,;\n]/))
@@ -178,8 +173,4 @@ export function resourceMatchesMaterialGroup(resource = {}, groupValue = "", def
   if (explicitGroups(effective).includes(group.id)) return true;
   const id = String(resource?.resourceId ?? resource?.id ?? definition?.id ?? "");
   return (group.resourceIds ?? []).includes(id);
-}
-
-export function materialGroupHelpText() {
-  return MATERIAL_GROUPS.map((group) => group.label).join(", ");
 }

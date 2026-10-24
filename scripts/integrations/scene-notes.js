@@ -47,10 +47,8 @@ function templateForBuilding(building = {}, data = null) {
   const catalog = source?.catalog?.buildings ?? [];
   const templateKey = String(building?.templateId ?? "").trim().toLowerCase();
   const nameKey = String(building?.name ?? "").trim().toLowerCase();
-  return catalog.find((item) => {
-    if (templateKey && String(item?.id ?? "").trim().toLowerCase() === templateKey) return true;
-    return nameKey && String(item?.name ?? "").trim().toLowerCase() === nameKey;
-  }) ?? null;
+  const exact = templateKey ? catalog.find((item) => String(item?.id ?? "").trim().toLowerCase() === templateKey) : null;
+  return exact ?? (nameKey ? catalog.find((item) => String(item?.name ?? "").trim().toLowerCase() === nameKey) : null) ?? null;
 }
 
 function buildingNoteTexture(building = {}, data = null) {

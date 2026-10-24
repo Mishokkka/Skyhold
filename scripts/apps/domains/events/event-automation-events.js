@@ -5,6 +5,7 @@ import { appendHoldingOperation, findHoldingOperation } from "../../../data/oper
 import { MAX_EVENT_SCHEDULE_ENTRIES, normalizeEventScheduleEntry } from "../../../data/event-automation.js";
 import { applyRandomEventEffects } from "../../../engines/events/effect-executor.js";
 import { escapeHtml } from "../../../core/helpers.js";
+import { isMoneyResource } from "../../../core/resources.js";
 import { foundryDialogV2 } from "../../../integrations/foundry-runtime.js";
 
 const SCHEDULE_FULL_MESSAGE = `В плане уже ${MAX_EVENT_SCHEDULE_ENTRIES} событий. Архивируйте обработанные события, прежде чем добавлять новые.`;
@@ -23,6 +24,8 @@ _eventEffectDependencies() {
   return {
     safeNumber: (value, fallback = 0) => this._safeNumber(value, fallback),
     normalizeStorageRoomId: (roomId) => this._normalizeStorageRoomId(roomId),
+    storageResourceIdentity: (resource) => this._storageResourceIdentity(resource),
+    isMoneyResource: (resource) => isMoneyResource(resource.resourceId, resource.name),
     storageQuantity: (holding, resource) => this._storageQuantity(holding, resource),
     storageAdd: (holding, resource, qty) => this._storageAdd(holding, resource, qty),
     storageAddWithOverflow: (holding, resource, qty) => this._storageAddWithOverflow(holding, resource, qty),

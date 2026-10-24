@@ -1,4 +1,4 @@
-import { ageMarketCargo, cargoDeliveryQuantity, cargoShelfLife, marketLossInsurancePayoutCopper, marketInsurancePayoutCopper, viableCargoValueRatio } from "./cargo-aging.js";
+import { ageMarketCargo, cargoDeliveryQuantity, cargoShelfLife, marketLossInsurancePayoutCopper, marketInsurancePayoutCopper, viableCargoValueCopper } from "./cargo-aging.js";
 import { marketShipmentSchedule } from "./shipment-schedule.js";
 import { marketPurchasePaymentEntry } from "./purchase-payment.js";
 
@@ -433,7 +433,7 @@ export function proposeMarketShipmentRisk({ order, proposedAt = new Date().toISO
 
   // Date and value refer to the same checkpoint. Later GM deliberation cannot reprice this loss.
   ageMarketCargo(order, elapsedQd);
-  const insuredValueCopper = Math.floor(Math.max(0, Number(order.insuredValueCopper ?? order.subtotalCopper) || 0) * viableCargoValueRatio(order));
+  const insuredValueCopper = viableCargoValueCopper(order, order.insuredValueCopper ?? order.subtotalCopper);
   const insuranceCoverageRate = bounded(order.insuranceCoverageRate, 0, 0, 1);
   const calculatedPayoutCopper = Math.floor(insuredValueCopper * insuranceCoverageRate);
   const maximumInsurancePayoutCopper = Math.max(0, Math.floor(Number(order.maximumInsurancePayoutCopper) || calculatedPayoutCopper));

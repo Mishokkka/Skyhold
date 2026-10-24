@@ -362,13 +362,6 @@ export function splitResourceBatchParts(rawBatches = [], qty = 0) {
   return { batches: taken, remainingBatches: rest, takenQty: resourceBatchTotal(taken), shortfall: remaining };
 }
 
-export function oldestResourceBatchAgeQd(row = {}) {
-  const batches = normalizeResourceBatches(hasOwn(row, "batches") ? row.batches : null, {
-    fallbackQty: hasOwn(row, "batches") ? 0 : row.qty
-  });
-  return batches[0]?.ageQd ?? 0;
-}
-
 export function resourceBatchInventory(row = {}, { compact = true, protectedBatchIds = new Set() } = {}) {
   return normalizeResourceBatches(hasOwn(row, "batches") ? row.batches : null, {
     fallbackQty: hasOwn(row, "batches") ? 0 : row.qty,
