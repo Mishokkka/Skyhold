@@ -10,6 +10,7 @@ import { prepareSkyholdCommit } from "../data/commit-preparation.js";
 import { createSkyholdSplitStorage } from "../data/split-storage.js";
 import { SETTING_CATALOG, SETTING_HOLDINGS } from "../data/constants.js";
 import { SaveStatus } from "../apps/common/save-status.js";
+import { PendingFieldSavesMixin } from "../apps/common/pending-field-saves.js";
 import { buildingPickerValues } from "../apps/domains/building-editor-pickers.js";
 import { assertProductionIdentityUnchanged, createProductionTiming } from "../engines/economy/production-timing.js";
 import { validateHybridLaborHolding, newHybridLaborIssues, buildingLaborMode, applyStaffAppointment } from "../data/hybrid-labor.js";
@@ -59,11 +60,12 @@ const foundry = { utils: {
   getProperty: (object, path) => path.split(".").reduce((row, key) => row?.[key], object)
 } };
 const warnings = [];
-const Editor = new Function("SkyholdData", "foundry", "fieldValue", "buildingPickerValues", "requestSkyholdAppRender", "ui", "assertProductionIdentityUnchanged", "newHybridLaborIssues", "validateHybridLaborHolding", "buildWorkAllocationTargets", "buildingLaborMode",
+const EditorMethods = new Function("SkyholdData", "foundry", "fieldValue", "buildingPickerValues", "requestSkyholdAppRender", "ui", "assertProductionIdentityUnchanged", "newHybridLaborIssues", "validateHybridLaborHolding", "buildWorkAllocationTargets", "buildingLaborMode",
   `return class { ${methods.join("\n")} }`)(dataApi, foundry, fieldValue,
   buildingPickerValues, () => {},
   { notifications: { error(message) { assert.fail(message); }, warn(message) { warnings.push(message); } } }, assertProductionIdentityUnchanged,
   newHybridLaborIssues, validateHybridLaborHolding, buildWorkAllocationTargets, buildingLaborMode);
+const Editor = PendingFieldSavesMixin(EditorMethods);
 const reload = () => createSkyholdSplitStorage({ settings }).getData();
 for (const template of [true, false]) {
   const editor = new Editor();

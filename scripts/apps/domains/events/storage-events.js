@@ -105,17 +105,21 @@ _onPickStorageResource(event) {
   const button = event.currentTarget;
   const scope = String(button?.dataset?.storagePickerScope ?? "");
   const index = Number(button?.dataset?.storageResourceIndex ?? -1);
+  const data = scope === "row" ? SkyholdData.get() : null;
+  const holdingId = data ? this._activeWritableHoldingId(data) : "";
+  const rowId = data?.holdings?.find((holding) => String(holding.id) === holdingId)?.storage?.resources?.[index]?.id;
+  if (scope === "row" && (!holdingId || !rowId)) return;
   SkyholdResourceCatalogEditor.pick({
     selectedId: String(button?.dataset?.resourceId ?? ""),
     onSelect: async (resource) => {
       if (scope === "row" && Number.isInteger(index) && index >= 0) {
-        const updated = await this._updateActiveHolding((holding) => {
-          const row = holding?.storage?.resources?.[index];
+        const updated = await SkyholdData.updateHolding(holdingId, (holding) => {
+          const row = holding?.storage?.resources?.find((candidate) => candidate.id === rowId);
           if (!row) return SkyholdData.skipTransaction(false);
           row.resourceId = String(resource.id ?? "custom");
           if (row.resourceId !== "custom") row.name = String(resource.label ?? "");
           return true;
-        }, { reason: "storage:pick-row-resource" });
+        }, { fallback: false, reason: "storage:pick-row-resource" });
         if (updated) this.requestRender({ focus: false });
         return;
       }

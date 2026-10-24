@@ -5,6 +5,17 @@ function requireApi(value, label) {
   throw new Error(`FBL Skyhold | Foundry API is unavailable: ${label}`);
 }
 
+/** Read public canvas double-click limits, with V13/V14 defaults when the optional API is absent. */
+export function foundryDoubleClickThresholds() {
+  const manager = globalThis.foundry?.canvas?.interaction?.MouseInteractionManager;
+  const timeMs = manager?.DOUBLE_CLICK_TIME_MS;
+  const distancePx = manager?.DOUBLE_CLICK_DISTANCE_PX;
+  return {
+    timeMs: Number.isFinite(timeMs) && timeMs >= 0 ? timeMs : 250,
+    distancePx: Number.isFinite(distancePx) && distancePx >= 0 ? distancePx : 5
+  };
+}
+
 export function foundryDialogV2() {
   return requireApi(globalThis.foundry?.applications?.api?.DialogV2, "foundry.applications.api.DialogV2");
 }

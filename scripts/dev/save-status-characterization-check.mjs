@@ -83,7 +83,11 @@ const globals = { foundry: globalThis.foundry, game: globalThis.game, ui: global
 const methods = { get: SkyholdData.get, transaction: SkyholdData.transaction, updateHolding: SkyholdData.updateHolding };
 const originalError = console.error;
 try {
-  class Base { async _prepareContext() { return {}; } }
+  class Base {
+    async _prepareContext() { return {}; }
+    async _preClose() {}
+    async close(options) { await this._preClose(options); this.closed = true; return this; }
+  }
   globalThis.foundry = { applications: { api: { ApplicationV2: Base, HandlebarsApplicationMixin: Parent => Parent } },
     utils: { setProperty(object, path, value) {
       const parts = path.split(".");
@@ -104,6 +108,26 @@ try {
   SkyholdData.transaction = async () => true;
   await building._saveTransaction(() => true, options);
   assert.equal(building._saveStatus.context.state, "saved");
+  const pendingSave = deferred();
+  SkyholdData.transaction = () => pendingSave.promise;
+  const failedSave = building._saveTransaction(() => true, options);
+  const failedSaveAssertion = assert.rejects(failedSave, /offline/);
+  const pendingClose = building.close();
+  await Promise.resolve();
+  assert.notEqual(building.closed, true, "closing the building editor must wait for an in-flight autosave");
+  pendingSave.reject(new Error("offline"));
+  await Promise.all([failedSaveAssertion, pendingClose]);
+  assert.notEqual(building.closed, true, "an autosave failure during close must retain the building draft");
+  assert.equal(building._saveStatus.context.state, "error");
+  const retrySave = deferred();
+  SkyholdData.transaction = () => retrySave.promise;
+  const retry = building._saveTransaction(() => true, options);
+  const retryClose = building.close();
+  await Promise.resolve();
+  assert.notEqual(building.closed, true);
+  retrySave.resolve(true);
+  await Promise.all([retry, retryClose]);
+  assert.equal(building.closed, true, "successful retry permits closing after confirmation");
   SkyholdBuildingEditor.instances.delete(building);
 
   const { SkyholdResidentEditor } = await import("../apps/editors/resident-editor.js");

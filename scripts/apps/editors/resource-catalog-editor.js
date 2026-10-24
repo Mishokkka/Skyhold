@@ -94,16 +94,24 @@ export class SkyholdResourceCatalogEditor extends FloatingTooltipsMixin(PendingF
 
   async _onSelect(event, element) {
     event.preventDefault();
-    if (!this.picker) return;
+    if (!this.picker || this._selectingResource) return;
     const id = String(element.dataset.resourceId ?? "");
     const resource = id === "custom"
       ? { id: "custom", label: "Другой материал…", category: "Особое", unit: "ед.", icon: "fa-solid fa-pen", img: "" }
       : prepareResourceCatalogEditor(SkyholdData.view()?.catalog?.resources, { canEdit: false }).rows
         .find((row) => String(row.id) === id);
     if (!resource) return;
-    const callback = this.picker.onSelect;
-    if (typeof callback === "function") await callback(resource);
-    await this.close();
+    this._selectingResource = true;
+    const buttons = [...(this.element?.querySelectorAll?.("[data-action='resource-select']") ?? [])];
+    for (const button of buttons) button.disabled = true;
+    try {
+      const callback = this.picker.onSelect;
+      if (typeof callback === "function") await callback(resource);
+      await this.close();
+    } finally {
+      this._selectingResource = false;
+      for (const button of buttons) button.disabled = false;
+    }
   }
 
   _applySearch(root, value = "") {
@@ -137,7 +145,7 @@ export class SkyholdResourceCatalogEditor extends FloatingTooltipsMixin(PendingF
     if (!game.user?.isGM) return;
     const id = String(element.dataset.resourceId ?? "");
     if (!id || !await this._ensureEditableResource(id)) return;
-    new SkyholdResourceRowEditor({ resourceId: id, owner: this }).render({ force: true, focus: true });
+    await new SkyholdResourceRowEditor({ resourceId: id, owner: this }).render({ force: true, focus: true });
   }
 
   async _onAdd(event) {
@@ -151,7 +159,7 @@ export class SkyholdResourceCatalogEditor extends FloatingTooltipsMixin(PendingF
       return true;
     }, { reason: "resource-editor:add", scope: "catalog" });
     if (!added) return;
-    new SkyholdResourceRowEditor({ resourceId: id, owner: this }).render({ force: true, focus: true });
+    await new SkyholdResourceRowEditor({ resourceId: id, owner: this }).render({ force: true, focus: true });
   }
 
   async _onClose(options) {

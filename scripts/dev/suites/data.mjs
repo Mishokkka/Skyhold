@@ -3,7 +3,7 @@ import { checkWorkerProfileEditor } from "../worker-profile-editor-check.mjs";
 import { pathToFileURL } from "node:url";
 import { checkCalendariaCharacterization } from "../calendaria-characterization-check.mjs";
 import { checkContentPackCharacterization } from "../content-pack-characterization-check.mjs";
-import { checkEventAutomationCharacterization } from "../event-automation-characterization-check.mjs";
+import { checkEventAutomationCharacterization, checkEventScheduleCapacity } from "../event-automation-characterization-check.mjs";
 import { checkRandomEventsCharacterization } from "../random-events-characterization-check.mjs";
 import { checkWorkerPlannerCharacterization } from "../worker-planner-characterization-check.mjs";
 import { checkSocketCharacterization } from "../socket-characterization-check.mjs";
@@ -33,6 +33,7 @@ export async function runDataSuite() {
   checkRandomEventsCharacterization();
   checkWorkerPlannerCharacterization();
   checkEventAutomationCharacterization();
+  await checkEventScheduleCapacity();
   checkContentPackCharacterization();
   checkEconomyResourceCatalogCharacterization();
   checkBuildingDevelopmentTreeCharacterization();

@@ -160,13 +160,13 @@ export async function runProductionCycle({
     if (costs.some((cost) => Array.isArray(cost.alternatives))) {
       for (const candidate of costs.flatMap((cost) => cost.alternatives ?? [cost])) {
         if (deps.storageCanPay(holding, costs).ok) break;
-        await deps.tryCollectResourceForConsumer(holding, building, candidate.resourceId, budgets, report, workerContext, line);
+        await deps.tryCollectResourceForConsumer(holding, building, candidate.resourceId, budgets, report, workerContext, line, candidate);
       }
     }
     for (const cost of costs) {
       if (Array.isArray(cost.alternatives)) continue;
       if (deps.storageQuantity(holding, cost) < cost.qty) {
-        await deps.tryCollectResourceForConsumer(holding, building, cost.resourceId, budgets, report, workerContext, line);
+        await deps.tryCollectResourceForConsumer(holding, building, cost.resourceId, budgets, report, workerContext, line, cost);
       }
     }
     if (capacity) {
@@ -253,7 +253,7 @@ export async function runProductionCycle({
     if (capacity && affordableProductionBatch(limit, costsFor, (costs) => deps.storageCanPay(holding, costs)) >= minimum) return true;
     const costs = costsFor(capacity ? minimum : limit);
     const payment = deps.storageCanPay(holding, costs);
-    return payment.ok || deps.canCollectProductionInputs?.(holding, building, payment.missing ?? [], workerContext, line) === true;
+    return payment.ok || deps.canCollectProductionInputs?.(holding, building, costs, workerContext, line) === true;
   };
 
   for (let step = 0; step < periodQd; step += 1) {
@@ -400,6 +400,9 @@ export async function runProductionCycle({
         const source = timing?.source ?? (["workers", "time", "content"].includes(String(line.source ?? "")) ? String(line.source) : "workers");
         if (source !== "workers") continue;
         if (timing?.phase === "waiting" || completedThisStep.has(line)) continue;
+        // Keep this day's QD for the selected collection. Spending each new
+        // slot on another batch would prevent an indivisible collection forever.
+        if (whole(line.pendingQty) > 0 && deps.lineCollectionTakesPriority?.(building, line)) continue;
         const assignedPeople = deps.assignedBuildingPeople(holding, building, workerContext, line);
         if (!assignedPeople.length) continue;
         const staffing = stepStaffing.get(building) ?? minimumStaffStatus(building, assignedPeople);
