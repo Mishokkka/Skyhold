@@ -760,7 +760,9 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
       this._focusOutbound = false;
       if (!focusMarketOutboundOrder(root, orderId)) globalThis.ui?.notifications?.warn?.(orderId
         ? "Продажа уже недоступна в списке. Обновите окно корабля."
-        : "Отметьте товары «к продаже» в хранилище, чтобы подготовить продажу.");
+        : context.hasMarket
+          ? "Отметьте товары «к продаже» в хранилище, чтобы подготовить продажу."
+          : "Нет доступного рынка для продажи. Проверьте УРС поселения и связи с рынками.");
     }
   }
 

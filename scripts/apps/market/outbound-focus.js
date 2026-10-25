@@ -1,8 +1,8 @@
-/** Focus a referenced sale without changing the current market or shopping drafts. */
+/** Open and focus a sale or its composer; return false when that exact target is absent. */
 export function focusMarketOutboundOrder(root, orderId) {
   const row = orderId ? [...(root?.querySelectorAll?.("[data-market-outbound-order]") ?? [])]
     .find((node) => node.dataset.marketOutboundOrder === String(orderId))
-    : root?.querySelector?.("[data-market-outbound-compose]") ?? root?.querySelector?.("[data-market-outbound-section]");
+    : root?.querySelector?.("[data-market-outbound-compose]");
   if (!row) return false;
   if (row.tagName === "DETAILS") row.open = true;
   for (let parent = row.parentElement; parent && root.contains(parent); parent = parent.parentElement) {

@@ -7,6 +7,7 @@ import { focusMarketOutboundOrder } from "../apps/market/outbound-focus.js";
 
 globalThis.foundry = { applications: { api: { ApplicationV2: class {
   async _prepareContext() { return {}; }
+  async _onRender() {}
   render() { return this; }
 }, HandlebarsApplicationMixin: (Base) => Base } } };
 globalThis.game = { user: { id: "gm", isGM: true }, settings: { get: () => undefined }, modules: new Map() };
@@ -25,7 +26,7 @@ async function contextFor({ rows = [], orders = [], gm = true, quantities = {}, 
   const app = new SkyholdMarketApp({ holdingId: holding.id });
   app.outboundQuantities = { ...quantities };
   app.requestRender = () => {};
-  app._marketSnapshot = () => ({ data: { catalog: {} }, holding, markets: [], market: { label: "Порт" }, quote: null, outbound });
+  app._marketSnapshot = () => ({ data: { catalog: {} }, holding, markets: [], market: demand ? { label: "Порт" } : null, quote: null, outbound });
   const before = JSON.stringify(holding);
   const context = await app._prepareContext({});
   assert.equal(JSON.stringify(holding), before, "Opening or folding a market cannot change world data");
@@ -107,6 +108,69 @@ assert.equal(focusMarketOutboundOrder({ contains: () => true, querySelectorAll: 
 assert.equal(orders.open, true);
 assert.equal(order.focused, true);
 states.close();
+
+class MarketRoot extends globalThis.EventTarget {
+  constructor({ composer = null, orders = [], archive = false } = {}) {
+    super();
+    this.composer = composer;
+    this.orders = orders;
+    this.section = composer || orders.length || archive ? { focus() { this.focused = true; } } : null;
+  }
+  contains() { return true; }
+  querySelector(selector) {
+    if (selector === "[data-market-outbound-compose]") return this.composer;
+    if (selector === "[data-market-outbound-section]") return this.section;
+    return null;
+  }
+  querySelectorAll(selector) {
+    if (selector === "[data-market-outbound-order]") return this.orders;
+    if (selector === "details[data-gm-section], details[data-fbls-disclosure]") return this.composer ? [this.composer] : [];
+    return [];
+  }
+}
+
+const warnings = [];
+globalThis.ui = { notifications: { warn: (message) => warnings.push(message) } };
+for (const gm of [true, false]) {
+  for (const status of ["booked", "delivered"]) {
+    const { context, app } = await contextFor({ gm, orders: [{ id: "existing-sale", status }] });
+    app.element = new MarketRoot({ orders: status === "booked" ? [{ dataset: { marketOutboundOrder: "existing-sale" } }] : [], archive: status === "delivered" });
+    app._focusOutbound = true;
+    warnings.length = 0;
+    await app._onRender(context, {});
+    assert.equal(warnings.length, 1, "Existing sales/archive cannot stand in for a missing new-sale composer");
+    assert.match(warnings[0], /Отметьте товары/);
+    assert.equal(app.element.section.focused, undefined, "Do not focus unrelated tracking when new-sale navigation fails");
+    await app._onRender(context, {});
+    assert.equal(warnings.length, 1, "The navigation warning is consumed once");
+  }
+  const { context, app } = await contextFor({ gm, demand: null, rows: [{ resourceId: "wood", qty: 2, forSale: true }] });
+  assert.equal(context.hasMarket, false);
+  app.element = new MarketRoot();
+  app._focusOutbound = true;
+  warnings.length = 0;
+  await app._onRender(context, {});
+  assert.match(warnings[0], /Нет доступного рынка/, "An unreachable market must not be mistaken for unmarked stock");
+
+  app._focusOutboundOrderId = "missing-sale";
+  await app._onRender(context, {});
+  assert.match(warnings[1], /Продажа уже недоступна/, "A missing referenced order keeps its distinct explanation");
+}
+
+const { app: renderedApp, context: renderedContext } = await contextFor({ rows: [{ resourceId: "wood", qty: 2, forSale: true }] });
+renderedApp.element = new MarketRoot({ composer: new Detail("market-outbound-compose") });
+renderedApp._focusOutbound = true;
+warnings.length = 0;
+await renderedApp._onRender(renderedContext, {});
+assert.equal(renderedApp.element.composer.open, true);
+assert.equal(warnings.length, 0);
+renderedApp.element = new MarketRoot({ composer: new Detail("market-outbound-compose") });
+await renderedApp._onRender(renderedContext, {});
+assert.equal(renderedApp.element.composer.open, true, "The actual render hook restores the expanded composer");
+renderedApp.element.composer.open = false;
+renderedApp.element = new MarketRoot({ composer: new Detail("market-outbound-compose") });
+await renderedApp._onRender(renderedContext, {});
+assert.equal(renderedApp.element.composer.open, false, "The actual render hook also preserves an explicit collapse");
 
 const template = readFileSync(new URL("../../templates/market-app.hbs", import.meta.url), "utf8");
 assert.match(template, /\{\{#if outboundShowSection\}\}\s*<section[^>]+data-market-outbound-section/);
