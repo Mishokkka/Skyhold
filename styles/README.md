@@ -33,7 +33,7 @@ CSS is split by ownership. Edit the narrowest file that owns the UI area. New wo
 - `parts/storage/*` - storage domain subparts in cascade order: overview, rooms and money, room tabs and production utilities, logistics and capacity, compact tools, Foundry item storage, player access, recipient header, calendar trade controls and sale availability.
 - `parts/current/*` - current high-level component owners for building cards, building editor, production editor, construction actions, economy, defense squads and storage refinements.
 - `parts/economy/*` - economy and accounting layouts.
-- `parts/economy/bank-window.css` - standalone bank forms and their bounded scroll area.
+- `parts/economy/bank-window.css` - bank header, offers and loan cards, GM catalog forms and their bounded scroll area.
 - `parts/mass-combat/*` - mass combat window, detail tables, action popovers, dedicated reference windows and chat summary styles.
 - `parts/market/market.css`, `parts/market/market-checkout.css` and `parts/market/market-outbound.css` - external market catalog/header, inbound delivery/checkout rail and outbound FIFO-sale lifecycle; the Storage-tab entry remains with the market shell owner.
 - `parts/market/market-catalog.css` - owner of the standalone GM editor for base offers, country characters, specialties and organizations.

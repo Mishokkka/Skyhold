@@ -24,7 +24,10 @@
   line-height: 1.25;
 }
 
-.application.fbl-skyhold-bank .window-content { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.application.fbl-skyhold-bank .window-content {
+  display: flex; flex-direction: column; min-height: 0; overflow: hidden; padding: 0; gap: 0;
+  color: var(--fbls-text); background: var(--fbls-surface-0);
+}
 
 /* Foundry themes own the ApplicationV2 root background.  Every Skyhold window
    must therefore establish its dark canvas at the bridge boundary instead of
@@ -445,6 +448,7 @@
   .fbl-skyhold-building-editor,
   .fbl-skyhold-crew-editor,
   .fbl-skyhold-resident-editor,
+  .fbl-skyhold-bank,
   .fbl-skyhold-template-browser,
   .fbl-skyhold-market-catalog-editor,
   .fbl-skyhold-region-catalog-editor,
@@ -490,6 +494,7 @@
   .fbl-skyhold-building-editor,
   .fbl-skyhold-crew-editor,
   .fbl-skyhold-resident-editor,
+  .fbl-skyhold-bank,
   .fbl-skyhold-template-browser,
   .fbl-skyhold-market-catalog-editor,
   .fbl-skyhold-region-catalog-editor,
@@ -506,6 +511,7 @@
   .fbl-skyhold-building-editor,
   .fbl-skyhold-crew-editor,
   .fbl-skyhold-resident-editor,
+  .fbl-skyhold-bank,
   .fbl-skyhold-template-browser,
   .fbl-skyhold-market-catalog-editor,
   .fbl-skyhold-region-catalog-editor,
@@ -531,6 +537,7 @@
   .fbl-skyhold-building-editor,
   .fbl-skyhold-crew-editor,
   .fbl-skyhold-resident-editor,
+  .fbl-skyhold-bank,
   .fbl-skyhold-template-browser,
   .fbl-skyhold-market-catalog-editor,
   .fbl-skyhold-region-catalog-editor,
@@ -553,6 +560,7 @@
   .fbl-skyhold-building-editor,
   .fbl-skyhold-crew-editor,
   .fbl-skyhold-resident-editor,
+  .fbl-skyhold-bank,
   .fbl-skyhold-template-browser,
   .fbl-skyhold-market-catalog-editor,
   .fbl-skyhold-region-catalog-editor,
@@ -573,6 +581,7 @@
   .fbl-skyhold-building-editor,
   .fbl-skyhold-crew-editor,
   .fbl-skyhold-resident-editor,
+  .fbl-skyhold-bank,
   .fbl-skyhold-template-browser,
   .fbl-skyhold-market-catalog-editor,
   .fbl-skyhold-region-catalog-editor,

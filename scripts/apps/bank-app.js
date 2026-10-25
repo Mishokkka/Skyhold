@@ -17,7 +17,7 @@ export class SkyholdBankApp extends RenderSchedulerMixin(HandlebarsApplicationMi
   static instances = new Map();
   static DEFAULT_OPTIONS = {
     id: "fbls-banks", classes: ["fbl-skyhold", "fbls-secondary", "fbl-skyhold-bank"], tag: "div",
-    window: { title: "Банки поселения", resizable: true }, position: { width: 820, height: 700 },
+    window: { title: "Банки поселения", resizable: true }, position: { width: 1040, height: 760 },
     actions: Object.fromEntries(["bank-borrow", "bank-repay", "bank-retry", "bank-add", "bank-save", "bank-add-offer"]
       .map((id) => [id, function(event, target) { return this._action(event, target); }]))
   };
@@ -63,7 +63,7 @@ export class SkyholdBankApp extends RenderSchedulerMixin(HandlebarsApplicationMi
       remainingDays: Math.max(0, (loan.termDays * 4 - loan.elapsedQd) / 4), overdue: loan.status === "overdue",
       rateText: (loan.annualRateBps / 100).toFixed(2), canPay: canTransact && !this._busy && !this._pendingOperation
     }));
-    return { ...base, hasHolding: true, holdingName: holding.name, isGM: permissions.isGM, banks, loans,
+    return { ...base, hasHolding: true, holdingName: holding.name, isGM: permissions.isGM, canTransact, banks, loans,
       treasuryText: money(holding.storage?.moneyCopper), pending: Boolean(this._pendingOperation),
       presets: BANK_PRESETS, editors: (this._draftBanks ?? bankCatalog(data)).map((bank) => ({ ...bank, offers: bank.offers.map((offer) => ({ ...offer, annualRatePct: offer.annualRateBps / 100, feePct: offer.feeBps / 100 })) })), dirty: Boolean(this._draftBanks) };
   }

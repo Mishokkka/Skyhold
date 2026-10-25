@@ -48,6 +48,7 @@ try {
   } } };
   const { SkyholdBuildingEditor } = await import("../apps/editors/building-editor.js");
   const { SkyholdBuildingTemplateEditor } = await import("../apps/editors/template-browser.js");
+  const { SkyholdApp } = await import("../apps/skyhold-app.js");
   for (const isGM of [true, false]) {
     game.user.isGM = isGM;
     for (const Editor of [SkyholdBuildingEditor, SkyholdBuildingTemplateEditor]) {
@@ -78,11 +79,35 @@ try {
       }
     }
   }
+  // Exercise the real manager lifecycle too: its first _onRender used to
+  // capture the intrinsic frame and overwrite the same mutable position.
+  for (const isGM of [true, false]) {
+    game.user.isGM = isGM;
+    for (const opening of [{}, { position: { width: 1180, height: 680 } }]) {
+      const app = new SkyholdApp(opening);
+      for (const method of ["_bindInputGuards", "_bindGlobalInputGuard", "_bindFloatingTooltips", "_bindDelegatedEvents", "_syncResidentAppearanceTextareas", "_syncResidentTraitChips", "_applyResidentSearchFilter", "_applyStorageSearchFilter", "_syncTitlebarRunbar", "_clearLoadingOverlay", "_flashStorageSearchTarget"]) app[method] = () => {};
+      const expected = opening.position ?? SkyholdApp.DEFAULT_OPTIONS.position;
+      await app.render({ force: true });
+      assert.equal(app.bounds.width, expected.width, "manager opening must retain its configured width after _onRender");
+      assert.equal(app.bounds.height, expected.height);
+      assert.equal(app._lastWindowFrame.width, expected.width, "only the positioned manager frame may be remembered");
+      assert.ok(app._windowFrameSyncHandler);
+      app.setPosition({ width: 1040, height: 650 });
+      frames.splice(0).forEach(callback => callback());
+      app.setPosition({ left: 80, top: 90 });
+      app.activeTab = "people";
+      await app.render({ force: true, skipLoadingOverlay: true });
+      assert.deepEqual(app.bounds, { width: 1040, height: 650, left: 80, top: 90 }, "tab rerenders and moving must preserve the manager's chosen frame");
+      app._unbindWindowFrameSync();
+      app._gmDisclosures?.close();
+      frames.splice(0).forEach(callback => callback());
+    }
+  }
   assert.equal(new Set(BUILDING_EDITOR_TABS.map(tab => tab.id)).size, 12);
   for (const tab of BUILDING_EDITOR_TABS) {
     assert.ok(tab.label && tab.shortLabel && tab.icon, "every abbreviated tab needs its full accessible label and icon");
   }
-  console.log("Building editor window: GM/player, instance/template, default/custom opening dimensions, centering and resized rerenders passed.");
+  console.log("Building editor and manager windows: GM/player, default/custom opening dimensions, positioned-frame capture, centering and resized rerenders passed.");
 } finally {
   Object.assign(globalThis, previous);
 }

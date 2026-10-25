@@ -148,6 +148,7 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
   }
 
   render(options = {}) {
+    const firstRender = !this.rendered;
     this._performanceRenderStartedAt = startSkyholdPerformanceTimer();
     countSkyholdPerformance("SkyholdApp.render.requests");
     const showOverlay = this.rendered && this.element && options?.skipLoadingOverlay !== true;
@@ -180,10 +181,16 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
     if (!result?.finally) {
       if (this._loadingOverlayTimer) window.clearTimeout(this._loadingOverlayTimer);
       this._loadingOverlayTimer = null;
+      if (firstRender && this.element) this._bindWindowFrameSync(this.element);
       return result;
     }
 
-    return result.finally(() => {
+    return result.then((value) => {
+      // ApplicationV2 positions the frame after _onRender. Measuring earlier
+      // replaces the configured opening width with the intrinsic DOM width.
+      if (firstRender && this.element) this._bindWindowFrameSync(this.element);
+      return value;
+    }).finally(() => {
       // Render can reject before _onRender, or after another render has begun.
       if (this._renderToken === token) this._clearLoadingOverlay();
     });
@@ -628,7 +635,12 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
     const windowFrame = this._pendingWindowFrame;
     this._pendingWindowFrame = null;
 
-    this._bindWindowFrameSync(root);
+    if (options?.isFirstRender) {
+      // Match the editor lifecycle: size the intrinsic frame before V2's
+      // final positioning, without recording its temporary coordinates.
+      const { width, height } = options.position ?? this.position;
+      this.setPosition({ width, height });
+    } else this._bindWindowFrameSync(root);
     this._bindInputGuards(root);
     this._bindGlobalInputGuard(root);
     this._bindFloatingTooltips(root);
@@ -1075,7 +1087,7 @@ SkyholdApp.DEFAULT_OPTIONS = {
     resizable: true
   },
   position: {
-    width: 1232,
+    width: 1400,
     height: 760
   }
 };
