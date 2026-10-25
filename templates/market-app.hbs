@@ -317,64 +317,83 @@
       </aside>
     </div>
 
-    <section class="fbls-market-outbound" aria-labelledby="fbls-market-outbound-title" data-market-outbound-section tabindex="-1">
-      <header class="fbls-card-header">
-        <div>
-          <span class="fbls-market-eyebrow">Торговля поселения</span>
-          <h3 id="fbls-market-outbound-title"><i class="fa-solid fa-arrow-up-from-bracket"></i> Исходящая продажа</h3>
-          <small>Только реальные ресурсы с отметкой «к продаже». Бронь закрепляет точные FIFO-партии; выручка приходит после доставки.</small>
-        </div>
-        <span class="fbls-chip">Выбрано {{outboundSelectedUnits}} ед.</span>
-      </header>
-
-      {{#if outboundHasOffers}}
-        <div class="fbls-market-outbound-grid">
+    {{#if outboundShowSection}}
+    <section class="fbls-market-outbound" aria-label="Продажи поселения" data-market-outbound-section data-render-scroll-key="market-outbound" tabindex="-1">
+      {{#if outboundHasForSaleStock}}
+      <details class="fbls-market-outbound-compose" data-market-outbound-compose data-fbls-disclosure="market-outbound-compose" tabindex="-1">
+        <summary>
+          <span><i class="fa-solid fa-chevron-right fbls-market-disclosure-icon" aria-hidden="true"></i> <strong>Продажа со склада</strong> <small>Товаров: {{outboundStockCount}}</small></span>
+          {{#if outboundHasSelection}}<span class="fbls-chip is-compact">Выбрано {{outboundSelectedUnits}} ед. · {{outboundRevenueText}}</span>{{else}}<small>Выбрать товары</small>{{/if}}
+        </summary>
+        <div class="fbls-market-outbound-body">
+          <div class="fbls-market-outbound-stock">
+            <div class="fbls-card-header"><strong>1. Товары к продаже</strong><small>Рынок: {{marketLabel}}</small></div>
+            {{#if outboundHasOffers}}
+            <div class="fbls-market-outbound-grid" role="group" aria-label="Количество товаров к продаже" data-render-scroll-key="market-outbound-stock">
           {{#each outboundOffers}}
             <article class="fbls-market-outbound-offer {{#if selected}}is-selected{{/if}}">
-              <div class="fbls-market-outbound-image">{{#if img}}<img src="{{img}}" alt="" data-fbls-image-fallback /><i class="{{icon}}" data-fbls-image-fallback-icon hidden></i>{{else}}<i class="{{icon}}"></i>{{/if}}</div>
-              <div><strong>{{name}}</strong><small>{{availabilityText}}</small></div>
-              <span><small>Цена</small><b>{{priceText}}</b></span>
-              <div class="fbls-market-quantity">
-                <button type="button" data-action="market-outbound-quantity-step" data-resource-id="{{resourceId}}" data-step="-1" data-available="{{available}}" title="ЛКМ: −1 · ПКМ: убрать всё" aria-label="Уменьшить продажу {{name}}" {{#unless ../canPurchase}}disabled{{/unless}}><i class="fa-solid fa-minus"></i></button>
-                <input type="number" min="0" max="{{available}}" step="1" value="{{qty}}" data-market-outbound-quantity data-resource-id="{{resourceId}}" aria-label="Количество для продажи {{name}}" {{#unless ../canPurchase}}disabled{{/unless}} />
-                <button type="button" data-action="market-outbound-quantity-step" data-resource-id="{{resourceId}}" data-step="1" data-available="{{available}}" title="ЛКМ: +1 · ПКМ: выбрать максимум" aria-label="Увеличить продажу {{name}}" {{#unless ../canPurchase}}disabled{{/unless}}><i class="fa-solid fa-plus"></i></button>
+              <div class="fbls-market-outbound-product">
+                <div class="fbls-market-outbound-image">{{#if img}}<img src="{{img}}" alt="" data-fbls-image-fallback /><i class="{{icon}}" data-fbls-image-fallback-icon hidden></i>{{else}}<i class="{{icon}}" aria-hidden="true"></i>{{/if}}</div>
+                <div><strong>{{name}}</strong><small>{{availabilityText}}</small>{{#unless available}}<small>Нет свободного товара или спроса</small>{{/unless}}</div>
               </div>
-              <span class="fbls-market-line-total">{{lineText}}</span>
+              <span class="fbls-market-outbound-price" title="Цена покупателя за единицу">{{priceText}} / ед.</span>
+              <div class="fbls-market-quantity">
+                <button type="button" data-action="market-outbound-quantity-step" data-resource-id="{{resourceId}}" data-step="-1" data-available="{{available}}" title="ЛКМ: −1 · ПКМ: убрать всё" aria-label="Уменьшить продажу {{name}}" {{#unless canSelect}}disabled{{/unless}}><i class="fa-solid fa-minus" aria-hidden="true"></i></button>
+                <input type="number" min="0" max="{{available}}" step="1" value="{{qty}}" data-market-outbound-quantity data-resource-id="{{resourceId}}" aria-label="Количество для продажи {{name}}" {{#unless canSelect}}disabled{{/unless}} />
+                <button type="button" data-action="market-outbound-quantity-step" data-resource-id="{{resourceId}}" data-step="1" data-available="{{available}}" title="Добавить одну единицу" aria-label="Увеличить продажу {{name}}" {{#unless canSelect}}disabled{{/unless}}><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
+                <button type="button" class="fbls-market-outbound-max" data-action="market-outbound-quantity-step" data-resource-id="{{resourceId}}" data-step="{{available}}" data-available="{{available}}" title="Выбрать максимум с учётом свободного запаса и спроса" aria-label="Продать максимум {{name}}" {{#unless canSelect}}disabled{{/unless}}>Макс.</button>
+              </div>
+              <span class="fbls-market-line-total" title="Выручка за выбранное количество">{{lineText}}</span>
             </article>
           {{/each}}
+            </div>
+            {{else}}
+            <p class="fbls-market-outbound-note">Этот рынок не покупает отмеченные товары. Выберите другой рынок.</p>
+            {{/if}}
+            {{#if outboundUnavailableForSaleCount}}<p class="fbls-market-outbound-note">Без спроса на этом рынке: {{outboundUnavailableForSaleCount}}.</p>{{/if}}
+          </div>
+          <div class="fbls-market-outbound-checkout">
+            <strong>2. Доставка и итог</strong>
+            {{#if outboundHasSelection}}
+            <div class="fbls-toolbar">
+              <label class="fbls-field"><span>Кто доставит</span><select data-market-outbound-ship aria-label="Корабль для исходящей продажи" {{#unless canPurchase}}disabled{{/unless}}>{{#each outboundShipOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{label}}</option>{{/each}}</select></label>
+              <label class="fbls-market-outbound-insurance fbls-checkbox-label fbls-choice-toggle"><input type="checkbox" data-market-outbound-insurance {{#if outboundInsuranceEnabled}}checked{{/if}} {{#unless canPurchase}}disabled{{/unless}} /> <span>Страховка</span></label>
+            </div>
+            <dl class="fbls-market-outbound-totals">
+              <div><dt>Расходы рынка сейчас</dt><dd>{{outboundUpfrontText}}</dd></div>
+              {{#if outboundOwnShipSelected}}<div tabindex="0" data-fbls-tooltip="Перевод из казны в бортовой кошелёк с учётом имеющихся денег. Включает обратный путь и запас на стоянку; неиспользованный остаток вернётся после рейса."><dt>На борт ⓘ</dt><dd>{{outboundShipTransferText}}</dd></div>{{/if}}
+              <div><dt>Выручка при доставке</dt><dd>{{outboundRevenueText}}</dd></div>
+              <div><dt>Казна после отправки</dt><dd>{{outboundBalanceText}}</dd></div>
+              <div><dt>Срок доставки</dt><dd>{{outboundDeliveryText}}</dd></div>
+            </dl>
+            <details class="fbls-market-outbound-breakdown" data-fbls-disclosure="market-outbound-breakdown">
+              <summary>Покупатели и расходы подробнее</summary>
+              <dl>
+                <div><dt>Перевозчик</dt><dd>{{outboundCarrierText}}</dd></div>
+                <div><dt>Ввоз в рынок покупателя</dt><dd>{{outboundImportTaxText}}</dd></div>
+                <div><dt>Вывоз из поселения</dt><dd>{{outboundExportTaxText}}</dd></div>
+                {{#if outboundOwnShipSelected}}<div tabindex="0" data-fbls-tooltip="Провизия, жалованье, содержание и портовая обработка груза. Списываются из бортового бюджета; резерв на обратный путь в эту сумму не входит."><dt>Расходы рейса ⓘ</dt><dd>{{outboundShipOperatingText}}</dd></div>{{/if}}
+              </dl>
+              {{#if outboundBuyerText}}<p><strong>Покупатели:</strong> {{outboundBuyerText}}</p>{{/if}}
+            </details>
+            {{#if outboundPlanReason}}<p class="fbls-market-error"><i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i> {{outboundPlanReason}}</p>{{/if}}
+            <div class="fbls-action-group">
+              <button type="button" class="fbls-button ghost" data-action="market-outbound-clear">Сбросить выбор</button>
+              <button type="button" class="fbls-button primary" data-action="market-outbound-book" {{#unless outboundCanBook}}disabled{{/unless}}><i class="fa-solid fa-file-signature" aria-hidden="true"></i> Продать {{outboundSelectedUnits}} ед.</button>
+            </div>
+            <p class="fbls-market-outbound-note">Товар резервируется при подтверждении. Выручка поступит {{#if outboundOwnShipSelected}}на борт{{else}}в казну{{/if}} после доставки.</p>
+            {{else}}
+            <p class="fbls-market-outbound-note">Укажите количество у нужных товаров. Здесь появятся доставка, расходы и выручка.</p>
+            {{/if}}
+          </div>
         </div>
-      {{else}}
-        <div class="fbls-empty">
-          {{#if outboundHasForSaleStock}}На этом рынке нет спроса на отмеченные к продаже ресурсы.{{else}}Отметьте ресурсы «к продаже» в хранилище — без реального товара исходящая сделка не создаётся.{{/if}}
-        </div>
+      </details>
       {{/if}}
-      {{#if outboundUnavailableForSaleCount}}<p class="fbls-market-outbound-note"><i class="fa-solid fa-circle-info"></i> Для {{outboundUnavailableForSaleCount}} отмеченных ресурсов этот рынок не публикует спрос.</p>{{/if}}
-
-      <div class="fbls-market-outbound-checkout">
-        <label class="fbls-field"><span>Доставка</span><select data-market-outbound-ship title="Собственный корабль отправляется из поселения с выбранным складским товаром. Фрахт не платится; содержание рейса и место в трюме рассчитываются отдельно." aria-label="Корабль для исходящей продажи" {{#unless canPurchase}}disabled{{/unless}}>{{#each outboundShipOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{label}}</option>{{/each}}</select></label>
-        <label class="fbls-market-outbound-insurance fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Страховать груз"><input type="checkbox" data-market-outbound-insurance {{#if outboundInsuranceEnabled}}checked{{/if}} {{#unless canPurchase}}disabled{{/unless}} /> <span>Страховать груз</span></label>
-        <dl>
-          <div><dt>Перевозчик</dt><dd>{{outboundCarrierText}}</dd></div>
-          <div><dt>Срок</dt><dd>{{outboundDeliveryText}}</dd></div>
-          <div><dt>Рыночные расходы сейчас</dt><dd>{{outboundUpfrontText}}</dd></div>
-          <div><dt>Ввоз в рынок покупателя</dt><dd>{{outboundImportTaxText}}</dd></div>
-          <div><dt>Вывоз из поселения</dt><dd>{{outboundExportTaxText}}</dd></div>
-          {{#if outboundOwnShipSelected}}<div tabindex="0" data-fbls-tooltip="Перевод из казны поселения в бортовой кошелёк с учётом уже имеющихся денег. Включает обратный путь и запас на стоянку; остаток вернётся после возвращения корабля."><dt>Перевод на борт ⓘ</dt><dd>{{outboundShipTransferText}}</dd></div>
-          <div tabindex="0" data-fbls-tooltip="Провизия, жалованье, содержание и портовая обработка груза. Списываются из бортового бюджета при отправлении; резерв на обратный путь в эту сумму не входит."><dt>Расходы рейса ⓘ</dt><dd>{{outboundShipOperatingText}}</dd></div>{{/if}}
-          <div><dt>Выручка при доставке</dt><dd>{{outboundRevenueText}}</dd></div>
-          <div><dt>Остаток казны</dt><dd>{{outboundBalanceText}}</dd></div>
-        </dl>
-        {{#if outboundBuyerText}}<p><strong>Покупатели:</strong> {{outboundBuyerText}}</p>{{/if}}
-        {{#if outboundPlanReason}}<p class="fbls-market-error"><i class="fa-solid fa-triangle-exclamation"></i> {{outboundPlanReason}}</p>{{/if}}
-        <div class="fbls-action-group">
-          <button type="button" class="fbls-button ghost" data-action="market-outbound-clear" {{#unless outboundHasSelection}}disabled{{/unless}}>Очистить</button>
-          <button type="button" class="fbls-button primary" data-action="market-outbound-book" {{#unless outboundCanBook}}disabled{{/unless}}><i class="fa-solid fa-file-signature"></i> Заключить сделку</button>
-        </div>
-      </div>
 
       {{#if hasOutboundOrders}}
+        <details class="fbls-market-outbound-tracking" data-fbls-disclosure="market-outbound-orders">
+          <summary><span><i class="fa-solid fa-chevron-right fbls-market-disclosure-icon" aria-hidden="true"></i> <strong>Текущие продажи</strong> <small>{{outboundOrders.length}}</small></span>{{#if outboundNeedsAttention}}<span class="fbls-chip is-compact">Нужно решение GM</span>{{/if}}</summary>
         <div class="fbls-market-outbound-orders">
-          <h4><i class="fa-solid fa-boxes-packing"></i> Исходящие заказы</h4>
           {{#each outboundOrders}}
             <article class="fbls-market-shipment {{status}}" data-market-outbound-order="{{id}}" tabindex="-1" aria-label="Исходящая продажа: {{marketLabel}}">
               <header><strong>{{marketLabel}}</strong><span>{{statusLabel}}</span></header>
@@ -400,14 +419,16 @@
             </article>
           {{/each}}
         </div>
+        </details>
       {{/if}}
       {{#if hasOutboundArchive}}
-        <details class="fbls-market-outbound-archive">
-          <summary><span><i class="fa-solid fa-box-archive"></i> Архив исходящих продаж</span><b>{{outboundArchive.length}}</b></summary>
+        <details class="fbls-market-outbound-archive" data-fbls-disclosure="market-outbound-archive">
+          <summary><span><i class="fa-solid fa-chevron-right fbls-market-disclosure-icon" aria-hidden="true"></i> Архив продаж</span><b>{{outboundArchive.length}}</b></summary>
           {{#each outboundArchive}}<article class="fbls-market-outbound-archive-row {{status}}"><header><strong>{{marketLabel}}</strong><span>{{statusLabel}}</span></header><p>{{cargoText}}</p><small>{{dateText}} · выручка {{revenueText}} · {{statusText}}</small></article>{{/each}}
         </details>
       {{/if}}
     </section>
+    {{/if}}
   </div>
 {{else}}
   <div class="fbls-empty">Поселение недоступно.</div>

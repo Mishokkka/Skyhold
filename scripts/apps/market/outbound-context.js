@@ -94,6 +94,7 @@ export function prepareMarketOutboundContext({
     plan: null,
     selectedUnits: 0,
     hasForSaleStock: false,
+    forSaleResourceCount: 0,
     unavailableForSaleCount: 0
   };
   if (!holding || !quote) return empty;
@@ -176,6 +177,7 @@ export function prepareMarketOutboundContext({
     plan,
     selectedUnits: lines.reduce((sum, line) => sum + line.qty, 0),
     hasForSaleStock: storageRows.length > 0,
+    forSaleResourceCount: stockResourceIds.size,
     unavailableForSaleCount: Math.max(0, stockResourceIds.size - new Set(offers.map((row) => row.resourceId)).size)
   };
 }
