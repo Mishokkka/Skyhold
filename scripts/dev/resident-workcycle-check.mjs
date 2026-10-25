@@ -256,6 +256,33 @@ export async function checkEffectiveCarePlanning() {
   assert.equal(report.finance.paidCopper, 60, "Only the ten physical QD are assigned and paid");
 }
 
+export async function checkRoundedEfficiencyReserve() {
+  for (const backlog of [0, 2]) for (const pending of [false, true]) {
+    const f = fixture("staff"), spent = observeSpent(f);
+    f.person.staffAppointment.reserveFunctionId = "income";
+    f.building.functions.income = true;
+    f.building.income = { base: 100, wageDailyCopper: 12 };
+    f.building.workerProfile = { modifiers: { types: [{ match: "type:Разнорабочий", percent: -99 }], backgrounds: [], traits: [] } };
+    f.holding.gm.efficiencyModifiers = { production: -0.99 };
+    f.building.maintenance = { schemaVersion: 1, requiredPoints: 1, backlogTendays: backlog };
+    const line = f.building.productionLines[0];
+    if (pending) Object.assign(line, { active: false, requiresCollection: true, pendingQty: 8, collectQd: 2, autoCollect: "none" });
+    const report = await run(f, `rounded-efficiency-${backlog}-${pending}`);
+    assert.equal(f.harness._personBuildingEfficiency(f.holding, f.building, f.person), 0.0001,
+      "Real profile and GM modifiers leave one positive work unit before maintenance");
+    const worked = f.building.serviceState.workedQdByFunction;
+    const productionTime = pending ? 2 : backlog ? 0 : 20;
+    assert.equal(worked["production:main"] ?? 0, productionTime,
+      "A rounded-zero productive QD cannot select preparation; one surviving unit must still progress");
+    assert.equal(worked.income ?? 0, 20 - productionTime,
+      "Every physical QD freed from impossible preparation can perform the reserve job");
+    assert.equal(line.workProgressUnits ?? 0, pending || backlog ? 0 : 20);
+    assert.equal(quantity(f.holding, "wood"), pending ? 8 : 0, "Collection stays available even when preparation rounds to zero");
+    assert.equal(spent(), 20, "Preparation, collection and reserve share the same twenty physical QD");
+    assert.equal(report.finance.paidCopper, 120, "Reserve work does not create a second wage");
+  }
+}
+
 export async function checkProductionSeasonBoundary() {
   const previous = globalThis.CALENDARIA;
   const months = ["Хладоход", "Теплорост", "Теплоход", "Зноерост", "Зноеход", "Дождерост", "Дождеход", "Хладорост"]
@@ -397,6 +424,7 @@ export async function checkResidentWorkcycle(only = "") {
     if (!only || only === "planner") checkPlannerWorkUnits();
     if (!only || only === "efficiency") await checkPhysicalAndEffectiveQd();
     if (!only || only === "zero") await checkZeroEfficiencyReserve();
+    if (!only || only === "rounded-zero") await checkRoundedEfficiencyReserve();
     if (!only || only === "care") await checkEffectiveCarePlanning();
     if (!only || only === "season") await checkProductionSeasonBoundary();
     if (!only || only === "agriculture-efficiency") await checkAgricultureEfficiency();

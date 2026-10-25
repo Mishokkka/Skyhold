@@ -208,8 +208,13 @@ async _staffFunctionNeedsWork(holding, building, functionId, person, workerConte
     const line = (building.productionLines ?? []).find((value, index) => this._financeLineFunctionId(value, index) === functionId);
     // Zero productive work cannot hold a worker away from an available reserve.
     // Collection still uses ordinary time and is possible at zero productivity.
-    if (line && (line.source ?? "workers") === "workers" && !(line.requiresCollection && number(line.pendingQty) > 0)
-      && this._personBuildingEfficiency(holding, building, person, workerContext) <= 0) return false;
+    if (line && (line.source ?? "workers") === "workers" && !(line.requiresCollection && number(line.pendingQty) > 0)) {
+      // Match the executor's integer work units after the equipment penalty.
+      const efficiency = this._personBuildingEfficiency(holding, building, person, workerContext);
+      const qualificationWorkUnits = Math.max(0, Math.round(efficiency * 10_000));
+      const maintenanceBasisPoints = Math.max(0, Math.round((this._maintenanceEfficiencyFactor?.(building) ?? 1) * 10_000));
+      if (Math.floor(qualificationWorkUnits * maintenanceBasisPoints / 10_000) === 0) return false;
+    }
     return Boolean(line && await lineCanWork(building, line, this._assignedBuildingPeople(holding, building, workerContext, functionId), step));
   }
   if (functionId === "culture" && building.fuelAlternatives?.length) {
