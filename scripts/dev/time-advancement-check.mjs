@@ -17,6 +17,7 @@ import { departShip } from "../engines/ships/runtime.js";
 import { previewSharedMarketMigration, applySharedMarketMigration } from "../data/market/shared-migration.js";
 import { reserveMarketStock } from "../engines/market/stock.js";
 import { reserveMarketDemand, settleMarketDemandReservations } from "../engines/market/demand.js";
+import { buildTendayOperationPayload, hydrateTendayOperation } from "../engines/tenday/operation-payload.js";
 
 function calendarFixture(hoursPerDay = 24) {
   const months = ["Хладоход", "Теплорост", "Теплоход", "Зноерост", "Зноеход", "Дождерост", "Дождеход", "Хладорост"];
@@ -117,6 +118,14 @@ async function checkBatches() {
     assert.deepEqual(after.storage.resources.map(({ resourceId, qty }) => ({ resourceId, qty })),
       expected.storage.resources.map(({ resourceId, qty }) => ({ resourceId, qty })));
     assert.deepEqual(after.finance, expected.finance, "wage periods and upkeep remainders must match separate tendays");
+    const passports = new Set(batch.report.finance.obligations.map((row) => row.id));
+    assert.ok(batch.report.finance.payments.every((row) => passports.has(row.obligationId)), "every payment in the batch retains its obligation details");
+    assert.equal(batch.report.finance.obligations.reduce((sum, row) => sum + row.paidCopper, 0), batch.report.finance.paidCopper,
+      "for a fresh payroll the detailed rows and batch total must agree");
+    const saved = buildTendayOperationPayload(batch);
+    assert.equal(saved.economy.finance.obligations.length, batch.report.finance.obligations.length, "history retains every period's financial details");
+    const history = hydrateTendayOperation({ operationId: batch.operationId, payload: saved });
+    assert.deepEqual(history.report.finance.obligations, batch.report.finance.obligations, "reopened history preserves complete obligation passports");
   }
 }
 
@@ -334,6 +343,13 @@ function checkReportFlows() {
   assert.equal(combined.market.inTransit.length, 1, "a final transit snapshot must not duplicate the same order per period");
   assert.equal(combined.marketDemandRecovery.recoveredQty, 3);
   assert.equal(combined.marketDemandRecovery.recovered.length, 2);
+  const debtPeriods = [
+    { report: { work: [], ledger: [], finance: { obligations: [{ id: "old-debt", paidCopper: 0, outstandingCopper: 10 }, { id: "first-period", paidCopper: 5, outstandingCopper: 0 }] } } },
+    { report: { work: [], ledger: [], finance: { obligations: [{ id: "old-debt", paidCopper: 10, outstandingCopper: 0 }, { id: "last-period", paidCopper: 7, outstandingCopper: 0 }] } } }
+  ];
+  const finance = combineTendayReports(debtPeriods).finance;
+  assert.equal(finance.obligations.length, 3, "a carried obligation is represented once, alongside both periods");
+  assert.equal(finance.obligations.find((row) => row.id === "old-debt").outstandingCopper, 0, "the latest settlement of carried debt wins");
 }
 
 export async function checkTimeAdvancement() {

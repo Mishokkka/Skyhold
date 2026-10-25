@@ -25,6 +25,13 @@ export function combineTendayReports(periods, dependencies = {}) {
       if (reports.some((report) => Array.isArray(report[domain]?.[key]))) combined[domain][key] = reports.flatMap((report) => report[domain]?.[key] ?? []);
     }
   }
+  if (combined.finance) {
+    // Payments cover the entire batch, so their obligation passports must too.
+    // A carried debt can appear repeatedly; keep its final paid/outstanding state.
+    const obligations = new Map();
+    for (const report of reports) for (const row of report.finance?.obligations ?? []) obligations.set(row.id, row);
+    combined.finance.obligations = [...obligations.values()].map((row) => clone(row));
+  }
   // Deliveries and losses are flows; transit/decision queues describe the final boundary.
   for (const domain of ["market", "marketOutbound"]) {
     if (!reports.some((report) => report[domain])) continue;
