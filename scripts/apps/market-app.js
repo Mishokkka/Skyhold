@@ -31,6 +31,7 @@ import { bindImageFallbacks, capturePersistentImages, restorePersistentImages } 
 import { bindFloatingTooltips, hideFloatingTooltip } from "./common/floating-tooltip.js";
 import { restoreApplicationFocus } from "./common/window-focus-keeper.js";
 import { focusMarketOutboundOrder } from "./market/outbound-focus.js";
+import { DisclosureState } from "./common/disclosure-state.js";
 import { groupMarketOffers, marketOfferGroupTotals, merchantAbbreviation, merchantTone } from "./market/offer-groups.js";
 import { marketShipmentRiskContext } from "./market/shipment-context.js";
 import { marketPurchaseCostPresentation, marketShipmentFinancialRiskText } from "./market/purchase-cost-presentation.js";
@@ -227,11 +228,13 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     this.landedPricesOpen = false;
     this.outboundQuantities = {};
     this.outboundInsuranceEnabled = true;
+    this._outboundDisclosures = new DisclosureState();
     this.ownShipId = "";
     this._outboundOperationPending = false;
   }
 
   render(options = {}) {
+    this._outboundDisclosures.capture();
     if (this.rendered && this.element) this._pendingPersistentImages = capturePersistentImages(this.element);
     return super.render(options);
   }
@@ -460,6 +463,7 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     const outboundPlan = outbound?.plan ?? null;
     const outboundOffers = (outbound?.offers ?? []).map((offer) => ({
       ...offer,
+      canSelect: Boolean(permissions.isGM && permissions.canUseStorage && offer.available > 0),
       priceText: formatCopperCurrency(offer.unitPriceCopper),
       lineText: formatCopperCurrency(offer.unitPriceCopper * offer.qty),
       availabilityText: `${offer.availableStock} на складе · спрос ${offer.availableDemand}`
@@ -541,7 +545,7 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
       carrierLabel: quote?.logistics?.carrierLabel || "Независимые перевозчики",
       canPurchase: Boolean(holding && permissions.isGM),
       canOrder: Boolean(holding && permissions.isGM && quote?.logistics?.ok !== false),
-      readOnlyReason: permissions.isGM ? "" : "Покупки на внешнем рынке подтверждает GM.",
+      readOnlyReason: permissions.isGM ? "" : "Сделки на внешнем рынке подтверждает GM.",
       logisticsOk: quote?.logistics?.ok !== false,
       logisticsReason: (quote?.logistics?.reasons ?? []).join(" "),
       transportLabel: quote?.logistics?.transportLabel ?? "—",
@@ -682,6 +686,9 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
       outboundOffers,
       outboundHasOffers: outboundOffers.length > 0,
       outboundHasForSaleStock: Boolean(outbound?.hasForSaleStock),
+      outboundShowSection: Boolean(outbound?.hasForSaleStock || outboundOrders.length || outboundArchive.length),
+      outboundStockCount: Math.max(0, Number(outbound?.forSaleResourceCount) || 0),
+      outboundNeedsAttention: outboundOrders.some((order) => order.canResolveRisk),
       outboundUnavailableForSaleCount: Math.max(0, Number(outbound?.unavailableForSaleCount) || 0),
       outboundSelectedUnits: Math.max(0, Number(outbound?.selectedUnits) || 0),
       outboundHasSelection: Math.max(0, Number(outbound?.selectedUnits) || 0) > 0,
@@ -696,7 +703,7 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
               || Boolean(ship.activeVoyage || ship.orderBundle) }))
       ],
       outboundOwnShipSelected: Boolean(this.ownShipId),
-      outboundCanBook: Boolean(permissions.canUseStorage && (!this.ownShipId || permissions.canManageShips) && outboundPlan?.ok),
+      outboundCanBook: Boolean(permissions.isGM && permissions.canUseStorage && (!this.ownShipId || permissions.canManageShips) && outboundPlan?.ok),
       outboundPlanReason: (outboundPlan?.reasons ?? []).join(" "),
       outboundRevenueText: formatCopperCurrency(outboundPlan?.revenueCopper ?? 0),
       outboundUpfrontText: formatCopperCurrency(outboundPlan?.upfrontCopper ?? 0),
@@ -732,6 +739,7 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     this._marketAbortController?.abort?.();
     const controller = new AbortController();
     this._marketAbortController = controller;
+    this._outboundDisclosures.bind(root);
     const listenerOptions = { signal: controller.signal };
     root.addEventListener("click", (event) => dispatchDelegatedAction(this, event, event.target, () => this._onClick(event, root)), listenerOptions);
     root.addEventListener("contextmenu", (event) => this._onContextMenu(event, root), listenerOptions);
@@ -750,7 +758,9 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
       const orderId = this._focusOutboundOrderId;
       this._focusOutboundOrderId = "";
       this._focusOutbound = false;
-      if (!focusMarketOutboundOrder(root, orderId)) globalThis.ui?.notifications?.warn?.("Продажа уже недоступна в списке. Обновите окно корабля.");
+      if (!focusMarketOutboundOrder(root, orderId)) globalThis.ui?.notifications?.warn?.(orderId
+        ? "Продажа уже недоступна в списке. Обновите окно корабля."
+        : "Отметьте товары «к продаже» в хранилище, чтобы подготовить продажу.");
     }
   }
 
@@ -1342,6 +1352,7 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
   async _onClose(options) {
     await super._onClose(options);
     this._marketAbortController?.abort?.();
+    this._outboundDisclosures.close();
     hideFloatingTooltip(this);
     SkyholdMarketApp.instances.delete(this.holdingId);
     restoreApplicationFocus(this);
