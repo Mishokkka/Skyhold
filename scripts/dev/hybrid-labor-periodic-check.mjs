@@ -48,7 +48,7 @@ function agriculturalFixture({ efficiency = 1, sow = 1, grow = 100, harvest = 2 
   const report = { produced: [], work: [], skipped: [], ledger: [] };
   const step = (offset, work = 0) => {
     entry.available += work;
-    return host._runStaffAgricultureStep(holding, offset, report, { operationId: "period", workerContext, financeContext });
+    return host._runScheduledAgricultureStep(holding, offset, report, { operationId: "period", workerContext, financeContext });
   };
   return { host, holding, building, person, financeContext, workerContext, entry, report, step };
 }
@@ -62,14 +62,14 @@ export function checkHybridLaborPeriodic() {
     });
     assert.equal(ordinary.plan.entries.length, 0, "A staff field must not also receive the aggregate QD period");
     assert.deepEqual(f.building.agriculture, initial);
-    assert.equal(f.host._staffAgricultureWorkAvailable(f.holding, f.building, f.workerContext, 0), true);
+    assert.equal(f.host._scheduledAgricultureWorkAvailable(f.holding, f.building, f.workerContext, 0), true);
     assert.equal(f.step(0, 1).ok, true);
     assert.equal(f.building.agriculture.state.phase, "empty", "Half an effective QD must carry until the next actual work slot");
     assert.equal(f.step(1, 1).ok, true);
     assert.equal(f.building.agriculture.state.phase, "growing");
     assert.equal(f.financeContext.spent, 2);
     assert.equal(f.entry.available, 0, "Sowing cannot lend the same personal time to a production line");
-    assert.equal(f.host._staffAgricultureWorkAvailable(f.holding, f.building, f.workerContext, 2), false);
+    assert.equal(f.host._scheduledAgricultureWorkAvailable(f.holding, f.building, f.workerContext, 2), false);
     const age = f.building.agriculture.state.growingElapsedQd;
     f.step(2, 0);
     assert.equal(f.building.agriculture.state.growingElapsedQd, age + 1, "Calendar growth continues without workers");
@@ -77,10 +77,10 @@ export function checkHybridLaborPeriodic() {
     f.step(2, 0);
     assert.deepEqual(f.building.agriculture, after, "A replayed step cannot advance the crop twice");
     assert.equal(f.financeContext.spent, 2);
-    f.host._flushStaffAgricultureReport(f.holding, f.report, f.financeContext);
+    f.host._flushScheduledAgricultureReport(f.holding, f.report, f.financeContext);
     assert.equal(f.report.agriculture.buildings.length, 1, "A period yields one readable report row per field");
     assert.equal(f.report.agriculture.workQdUsed, 1);
-    f.host._flushStaffAgricultureReport(f.holding, f.report, f.financeContext);
+    f.host._flushScheduledAgricultureReport(f.holding, f.report, f.financeContext);
     assert.equal(f.report.agriculture.buildings.length, 1);
   }
   {
@@ -91,7 +91,7 @@ export function checkHybridLaborPeriodic() {
     assert.equal(f.entry.available, 1);
     f.financeContext.staffCurrentFunctionByWorkerId.set("farmer", "agriculture");
     f.host._agricultureCalendarContext = () => ({ year: "1", seasonId: "winter", seasonKey: "1:winter" });
-    assert.equal(f.host._staffAgricultureWorkAvailable(f.holding, f.building, f.workerContext, 1), false);
+    assert.equal(f.host._scheduledAgricultureWorkAvailable(f.holding, f.building, f.workerContext, 1), false);
     f.step(1, 0);
     assert.equal(f.financeContext.spent, 0, "Work outside the actual sowing season is not consumed");
   }
@@ -99,7 +99,7 @@ export function checkHybridLaborPeriodic() {
     const f = agriculturalFixture({ efficiency: 3, sow: 1 });
     f.step(0, 1);
     assert.equal(f.financeContext.spent, 1);
-    assert.equal(f.financeContext.staffAgricultureRuntime.get("plot").units, 0, "Efficiency left after sowing cannot prepay future harvesting or another task");
+    assert.equal(f.financeContext.scheduledAgricultureRuntime.get("plot").units, 0, "Efficiency left after sowing cannot prepay future harvesting or another task");
     f.building.agriculture.state = {
       ...f.building.agriculture.state, phase: "ready", cropId: "grain",
       harvestWorkQdTotal: 2, harvestProgressQd: 0, harvestTotalQty: 8, harvestedQty: 0, readyQty: 8,
@@ -115,7 +115,7 @@ export function checkHybridLaborPeriodic() {
     f.building.agriculture.state = { phase: "growing", cropId: "grain", growingElapsedQd: 1, harvestYear: "1" };
     f.step(0, 1);
     assert.equal(f.building.agriculture.state.phase, "ready");
-    assert.equal(f.financeContext.staffAgricultureRuntime.get("plot").units, 5000, "Half a harvesting QD survives the growing-to-ready transition");
+    assert.equal(f.financeContext.scheduledAgricultureRuntime.get("plot").units, 5000, "Half a harvesting QD survives the growing-to-ready transition");
     f.step(1, 1);
     assert.equal(f.holding.received, 4);
     assert.equal(f.financeContext.spent, 2);

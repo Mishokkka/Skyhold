@@ -237,7 +237,7 @@ export async function checkHybridLaborDeepReview() {
       f.harness._runLivestockForQd = () => { livestockSteps += 1; return { ok: true }; };
       f.harness._finishStaffExecution = () => { finalizations += 1; };
       await assert.rejects(() => run(f, `staff-agriculture-rejection-${withMessage}`), (error) => {
-        assert.equal(error.message, withMessage ? failureMessage : "Не удалось рассчитать штатные сельскохозяйственные работы.");
+        assert.equal(error.message, withMessage ? failureMessage : "Не удалось рассчитать сельскохозяйственные работы по плану.");
         return true;
       }, "A rejected staff agriculture plan must abort the economy calculation");
       assert.equal(rejections, 1, "A failed step must not be silently retried on subsequent steps");

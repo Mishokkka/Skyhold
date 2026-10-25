@@ -306,6 +306,7 @@ export function checkFoodBatchCharacterization() {
   assert.equal(settlementHungerFactor(hungerHolding), 0.9);
   const seasonalOwner = {
     _agricultureWorkUnitsPerQd: FinanceAgricultureDomain._agricultureWorkUnitsPerQd,
+    _livestockWorkUnitsPerQd: FinanceLivestockDomain._livestockWorkUnitsPerQd,
     _activeAssignedBuildingPeople: () => [{ id: "worker" }],
     _personDailyWorkQdLimit: () => 2,
     _maintenanceEfficiencyFactor: () => 1

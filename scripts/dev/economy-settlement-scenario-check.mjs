@@ -125,7 +125,10 @@ export async function settlementScenario({ population = 12, demandFactor = 1, pr
       };
       for (const b of h.buildings.list) {
         if (b.maintenance.requiredPoints > 0) job(b, MAINTENANCE_WORK_FUNCTION_ID, b.maintenance.requiredPoints);
-        if (b.agriculture && app._agricultureNeedsLabor(b.agriculture, h) && !(missedSowing && period < 6)) job(b, "agriculture", 20);
+        // Reserve harvest slots when the crop ripens during this tenday too.
+        // Waiting for a ready crop at the next period boundary loses up to nine
+        // days of its shelf life; scheduled work cannot be applied retroactively.
+        if (b.agriculture && app._agricultureFinanceFunction(b, h, 40) && !(missedSowing && period < 6)) job(b, "agriculture", 20);
         if (["mill", "bakery"].includes(b.templateId)) {
           const line = b.productionLines[0];
           const slots = Math.max(0, b.workersMax - b.assignedWorkerIds.length);

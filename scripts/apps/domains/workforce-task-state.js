@@ -70,6 +70,11 @@ export function workforceTaskState(holding, target, building, service, available
       return state;
     }
     state.category = "chosen"; state.finite = true;
+    if (phase === "growing") {
+      state.effectiveNeed = Math.max(0, Number(crop?.harvestWorkQd) || 0);
+      state.note = `Предстоящий сбор: ${state.effectiveNeed} эффективных QD. Урожай созревает в течение десятника; ранние слоты до созревания не выполняют сбор. Подбор оценивает объём труда, точные сроки проверяет расчёт десятника.`;
+      return state;
+    }
     state.effectiveNeed = ["ready", "harvesting"].includes(phase)
       ? Math.max(0, agriculture.state.harvestWorkQdTotal - agriculture.state.harvestProgressQd)
       : Math.max(0, Number(crop?.sowingWorkQd ?? 0) - agriculture.state.sowingProgressQd);
@@ -82,8 +87,8 @@ export function workforceTaskState(holding, target, building, service, available
     if (!heads) { state.note = "Стадо пусто: обязательного ухода нет."; return state; }
     state.category = "required";
     state.dailyNeed = Math.max(1, Number(livestock.profile.careWorkQdPerDay) || 1);
-    state.need = state.dailyNeed * 10;
-    state.note = `${heads} животных; уход ежедневно по ${state.dailyNeed} QD. Доение / яйца следуют правилам ухода; стрижка и убой требуют дополнительного труда. Нужны также корм и исправное здание.`;
+    state.effectiveNeed = state.dailyNeed * 10;
+    state.note = `${heads} животных; уход ежедневно по ${state.dailyNeed} эффективных QD. Фактическое время зависит от производительности работников. Доение / яйца следуют правилам ухода; стрижка и убой требуют дополнительного труда. Нужны также корм и исправное здание.`;
     return state;
   }
   if (target.kind === "production") {

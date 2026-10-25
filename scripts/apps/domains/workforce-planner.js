@@ -16,8 +16,11 @@ const shown = (row, isGM) => isGM || row.visibility !== "gm";
 const hasWork = (row) => row.normalQd > 0 || row.overtimeQd > 0;
 
 function effectiveLabor(service, holding, task, person) {
-  if (!task.building || task.kind === "maintenance") return 1;
-  let units = Math.floor(service._personBuildingEfficiency(holding, task.building, person) * 10000);
+  if (!task.building || !["production", "agriculture", "livestock"].includes(task.kind)) return 1;
+  const line = task.kind === "production" && (task.building.productionLines ?? [])
+    .find((row, index) => task.functionId === `production:${row.id || `line-${index + 1}`}`);
+  if (line && ["time", "content"].includes(line.source)) return 1; // This task is collection, not preparation.
+  let units = Math.round(service._personBuildingEfficiency(holding, task.building, person) * 10000);
   if (["agriculture", "livestock"].includes(task.kind)) units = Math.round(units * Math.max(0, 1 + (politicsRuntimeEffects(holding)?.productionPercent ?? 0) / 100));
   return Math.floor(units * Math.round((service._maintenanceEfficiencyFactor?.(task.building) ?? 1) * 10000) / 10000) / 10000;
 }
@@ -273,7 +276,9 @@ export function workforceCandidate(model, person, task, service) {
     || (task.laborMode === "qd" && task.capacityQd !== null && !existing
       && model.tasks.filter((row) => row.buildingId === task.buildingId && row.kind !== "maintenance").reduce((sum, row) => sum + row.totalQd, 0) >= task.capacityQd ? "Предел труда здания исчерпан" : "")
     || (!rate.ok ? "Нужна ставка или договорённость о бесплатной работе" : "");
-  return { ...person, reason, efficiency, effectiveLabor: effectiveLabor(service, model.holding, task, person.person), efficiencyText: `${Math.round(efficiency * 100)}%`, dailyRate: rate.dueCopper,
+  const productiveLabor = effectiveLabor(service, model.holding, task, person.person);
+  return { ...person, reason, efficiency, effectiveLabor: productiveLabor, efficiencyText: `${Math.round(efficiency * 100)}%`,
+    effectiveLaborText: `${productiveLabor.toLocaleString("ru-RU", { maximumFractionDigits: 4 })} эфф. QD / QD`, dailyRate: rate.dueCopper,
     existingNormal: existing?.normalQd ?? 0, existingOvertime: existing?.overtimeQd ?? 0,
     assignmentText: person.allocations.filter(hasWork).map((row) => `${row.label.split(" · ").slice(0, 2).join(" · ")}: ${row.normalQd}+${row.overtimeQd}`).join("; ") };
 }

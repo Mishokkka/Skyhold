@@ -1408,7 +1408,9 @@ _productionCycleDependencies({ holding: sourceHolding = null, lineOutputForCycle
           ?? getCalendariaSnapshot?.()
           ?? null;
       }
-      const dateTime = step > 0 ? addCalendariaQd(lastDateTime, step) : lastDateTime;
+      // lastDateTime is already settled; step zero is the first elapsed QD,
+      // consistently with agriculture and livestock at season boundaries.
+      const dateTime = addCalendariaQd(lastDateTime, step + 1) ?? lastDateTime;
       return getCalendariaSeasonSnapshot(dateTime, calendar.lastDateText ?? calendar.lastDateKey);
     },
     buildingStatus: (building) => this._buildingStatus(building),
@@ -1614,9 +1616,9 @@ async _runProductionAndLivestockForQd(holding, qd, report, { operationId = "", b
     // The day's feed can be milled before the herd is fed. Milk and eggs are
     // delivered at day end and available to the next day's processing shift.
     afterStep: (step) => {
-      const staffAgriculture = this._runStaffAgricultureStep?.(holding, step, report, { operationId, workerContext, financeContext, budgets });
-      if (staffAgriculture && !staffAgriculture.ok) {
-        throw new Error(staffAgriculture.message || "Не удалось рассчитать штатные сельскохозяйственные работы.");
+      const agriculture = this._runScheduledAgricultureStep?.(holding, step, report, { operationId, workerContext, financeContext, budgets });
+      if (agriculture && !agriculture.ok) {
+        throw new Error(agriculture.message || "Не удалось рассчитать сельскохозяйственные работы по плану.");
       }
       if ((step + 1) % 4) return;
       const livestockResult = this._runLivestockForQd(holding, 4, report, {
@@ -1626,7 +1628,7 @@ async _runProductionAndLivestockForQd(holding, qd, report, { operationId = "", b
       if (!livestockResult.ok) throw new Error(livestockResult.message || "Не удалось рассчитать животноводство.");
     }
   });
-  this._flushStaffAgricultureReport?.(holding, report, financeContext);
+  this._flushScheduledAgricultureReport?.(holding, report, financeContext);
   this._finishStaffExecution(holding, report, financeContext);
   for (const [key, { building, line, collectQd }] of financeContext?.deferredCollections ?? []) {
     if (!(line.pendingQty > 0) || financeContext.staffCollectionWarnings?.has(key)) continue;
