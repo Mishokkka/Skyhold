@@ -5,6 +5,8 @@ import { openBankDeposit } from "../engines/economy/bank-deposits.js";
 
 globalThis.foundry = { applications: { api: { ApplicationV2: class {
   constructor(options) { this.id = options.id; }
+  // Foundry V13/V14 owns this getter; application view state must not replace it.
+  get state() { return 0; }
   async _prepareContext() { return {}; }
   async _onRender() {}
   render() { return this; }
@@ -28,14 +30,14 @@ const before = JSON.stringify(data);
 let context = await app._prepareContext({});
 assert.equal(JSON.stringify(data), before, "opening the window is read-only");
 assert.equal(context.comparison.selected.principal, 1011);
-app.state.page = 999; await app._prepareContext({}); assert.equal(app.state.page, 0, "a shortened catalog clamps the stored page, preserving navigation");
+app._bankViewState.page = 999; await app._prepareContext({}); assert.equal(app._bankViewState.page, 0, "a shortened catalog clamps the stored page, preserving navigation");
 await action(app, "bank-review"); assert.equal(writes, 0, "review never submits an operation");
 assert.equal(app._confirmation.operation.amountCopper, 1011);
 data.meta.revision++;
 assert.equal((await app._prepareContext({})).confirmationStale, true, "render cannot silently refresh a reviewed contract");
 await action(app, "bank-cancel");
 
-app.state.tab = "admin"; context = await app._prepareContext({});
+app._bankViewState.tab = "admin"; context = await app._prepareContext({});
 assert.equal(context.editor.bank.id, "merchant");
 assert.equal(context.saveStatus.state, "saved");
 const buttons = [{ disabled: true }, { disabled: true }], listeners = {}, status = { textContent: "", dataset: {}, setAttribute() {} };
@@ -60,7 +62,7 @@ await action(app, "bank-save"); assert.equal(writes, 1); assert.ok(app._draftBan
 await action(app, "bank-discard");
 
 game.user = { id: "player", isGM: false };
-app.state.tab = "admin"; context = await app._prepareContext({});
+app._bankViewState.tab = "admin"; context = await app._prepareContext({});
 assert.equal(context.admin, false); assert.equal(context.editor, null); assert.equal(context.canTransact, true);
 await action(app, "bank-add"); assert.equal(app._draftBanks, null, "player cannot create a draft");
 game.users = []; context = await app._prepareContext({}); assert.equal(context.canTransact, false); assert.match(context.readonlyMessage, /нет активного GM/);
@@ -68,9 +70,9 @@ data.holdings[0].gm.playersCanUseStorage = false; context = await app._prepareCo
 game.user = gm; game.users = [gm]; data.holdings[0].gm.playersCanUseStorage = true;
 
 openBankDeposit({ data, holding: data.holdings[0], bankId: "merchant", offerId: "reserve", amountCopper: 1000, operationId: "storage-contract" });
-app.state.tab = "contracts"; app.state.contractKind = "deposits"; context = await app._prepareContext({});
-assert.equal(app.state.contractId, "storage-contract", "the first visible contract accepts a custom amount without an extra selection click");
-app.state.payment = 300; context = await app._prepareContext({}); assert.equal(context.contracts.payment.operation.amountCopper, 300);
+app._bankViewState.tab = "contracts"; app._bankViewState.contractKind = "deposits"; context = await app._prepareContext({});
+assert.equal(app._bankViewState.contractId, "storage-contract", "the first visible contract accepts a custom amount without an extra selection click");
+app._bankViewState.payment = 300; context = await app._prepareContext({}); assert.equal(context.contracts.payment.operation.amountCopper, 300);
 await action(app, "bank-review");
 let rejectPending, seenId;
 registerMarketOperationExecutor((operation) => { seenId = operation.operationId; return new Promise((_resolve, reject) => { rejectPending = reject; }); });
@@ -151,7 +153,7 @@ SkyholdBankApp.instances.clear(); SkyholdBankApp.sessions.clear();
   holding.special.banking.deposits.push({ id: "second-storage", bankName: "Второй банк", offerName: "Хранение", kind: "storage", status: "active", principalCopper: 500, annualRateBps: 0 });
   holding.special.banking.deposits.find((row) => row.id === "storage-contract").status = "closed";
   const changed = new SkyholdBankApp({ holdingId: "village" }); changed.requestRender = () => {};
-  Object.assign(changed.state, { tab: "contracts", contractKind: "deposits", contractId: "storage-contract", payment: 200 });
+  Object.assign(changed._bankViewState, { tab: "contracts", contractKind: "deposits", contractId: "storage-contract", payment: 200 });
   const visible = await changed._prepareContext({});
   assert.equal(visible.contracts.payment.amount, 500);
   changed._review();
@@ -160,7 +162,7 @@ SkyholdBankApp.instances.clear(); SkyholdBankApp.sessions.clear();
 }
 for (const outcome of ["saved-closed", "saved-reopened", "failed-reopened", "newer-edit"]) {
   SkyholdBankApp.instances.clear(); SkyholdBankApp.sessions.clear();
-  const original = new SkyholdBankApp({ holdingId: "village" }); original.requestRender = () => {}; original.state.tab = "admin";
+  const original = new SkyholdBankApp({ holdingId: "village" }); original.requestRender = () => {}; original._bankViewState.tab = "admin";
   SkyholdBankApp.instances.set("village", original);
   await original._prepareContext({}); original._ensureDraft(); original._draftBanks[0].name = `Каталог ${outcome}`;
   let complete;
@@ -192,7 +194,7 @@ for (const outcome of ["saved-closed", "saved-reopened", "failed-reopened", "new
 }
 SkyholdBankApp.instances.clear(); SkyholdBankApp.sessions.clear();
 {
-  const unrelated = new SkyholdBankApp({ holdingId: "village" }); unrelated.requestRender = () => {}; unrelated.state.tab = "admin";
+  const unrelated = new SkyholdBankApp({ holdingId: "village" }); unrelated.requestRender = () => {}; unrelated._bankViewState.tab = "admin";
   await unrelated._prepareContext({}); unrelated._ensureDraft(); unrelated._draftBanks[0].name = "Неотправленная правка";
   unrelated._pendingOperation = { type: "bank-deposit", operationId: "uncertain-money" };
   SkyholdData.transaction = async () => { throw Object.assign(new Error("GM catalog conflict"), { code: "conflict" }); };
@@ -211,7 +213,7 @@ SkyholdBankApp.instances.clear(); SkyholdBankApp.sessions.clear();
   handlers.change({ target: field, type: "change" });
   await new Promise((resolve) => setTimeout(resolve, 10));
   assert.equal(renderCalls, 0, "blur/change must not replace the held action button");
-  assert.equal(pointerApp.state.amount, 777, "the current amount is available to the subsequent click");
+  assert.equal(pointerApp._bankViewState.amount, 777, "the current amount is available to the subsequent click");
   handlers.pointerup();
   await new Promise((resolve) => setTimeout(resolve, 10));
   assert.equal(renderCalls, 1, "release flushes the queued render after the click dispatch");

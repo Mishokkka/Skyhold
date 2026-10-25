@@ -44,11 +44,12 @@ export class SkyholdBankApp extends FloatingTooltipsMixin(RenderSchedulerMixin(H
   }
   constructor({ holdingId } = {}, options = {}) {
     super({ ...options, id: `fbls-banks-${holdingId}` }); this.holdingId = holdingId;
-    this.state = { tab: "borrow", amount: 1000, days: 60, query: "", sort: "value", availableOnly: false, page: 0,
+    // ApplicationV2.state is its read-only render lifecycle, not our view model.
+    this._bankViewState = { tab: "borrow", amount: 1000, days: 60, query: "", sort: "value", availableOnly: false, page: 0,
       contractKind: "loans", history: false, contractPage: 0, contractId: "", payment: null, editorId: "", editorQuery: "", editorPage: 0 };
     const session = this.constructor.sessions.get(holdingId);
     if (session) {
-      Object.assign(this.state, session.state); this._draftBanks = session.draft; this._catalogToken = session.token; this._pendingOperation = session.pending;
+      Object.assign(this._bankViewState, session.state); this._draftBanks = session.draft; this._catalogToken = session.token; this._pendingOperation = session.pending;
       this._catalogSave = session.saving; this._busy = Boolean(this._catalogSave || this.constructor.inFlight.has(this._pendingOperation?.operationId));
     }
     this._disclosures = new DisclosureState();
@@ -67,31 +68,31 @@ export class SkyholdBankApp extends FloatingTooltipsMixin(RenderSchedulerMixin(H
     const { holding } = findReadableHoldingEntry(data, this.holdingId);
     if (!holding) { this._view = null; return { ...base, hasHolding: false }; }
     const permissions = holdingPermissionContext(holding), canTransact = permissions.canUseStorage;
-    if (!permissions.isGM && this.state.tab === "admin") this.state.tab = "borrow";
+    if (!permissions.isGM && this._bankViewState.tab === "admin") this._bankViewState.tab = "borrow";
     const model = prepareBankingModel(data, holding), sourceToken = bankTermsToken(data, holding);
     this._view = { data, holding, model, revision: data.meta?.revision, sourceToken, canTransact };
     const blocked = Boolean(this._busy || this._pendingOperation), deposits = (bankState(holding).deposits ?? []).filter((row) => row.status !== "closed");
     const placed = deposits.reduce((n, row) => n + row.principalCopper, 0);
     const projected = deposits.reduce((n, row) => n + (row.kind === "term" ? depositInterestAtTerm(row.principalCopper, row.annualRateBps, row.termDays) : 0), 0);
-    const borrow = this.state.tab === "borrow", deposit = this.state.tab === "deposit", contractsTab = this.state.tab === "contracts", admin = this.state.tab === "admin" && permissions.isGM;
-    const comparison = borrow || deposit ? prepareBankComparison({ ...this._view, state: this.state, canTransact, blocked }) : null;
-    const contracts = contractsTab ? prepareBankContracts({ holding, state: this.state, canTransact, blocked }) : null;
-    const editor = admin ? bankEditorContext(this._draftBanks ?? model.banks, this.state) : null;
-    if (comparison) this.state.page = comparison.page;
-    if (contracts) this.state.contractPage = contracts.page;
-    if (editor) this.state.editorPage = editor.page;
+    const borrow = this._bankViewState.tab === "borrow", deposit = this._bankViewState.tab === "deposit", contractsTab = this._bankViewState.tab === "contracts", admin = this._bankViewState.tab === "admin" && permissions.isGM;
+    const comparison = borrow || deposit ? prepareBankComparison({ ...this._view, state: this._bankViewState, canTransact, blocked }) : null;
+    const contracts = contractsTab ? prepareBankContracts({ holding, state: this._bankViewState, canTransact, blocked }) : null;
+    const editor = admin ? bankEditorContext(this._draftBanks ?? model.banks, this._bankViewState) : null;
+    if (comparison) this._bankViewState.page = comparison.page;
+    if (contracts) this._bankViewState.contractPage = contracts.page;
+    if (editor) this._bankViewState.editorPage = editor.page;
     if (contracts?.payment) {
-      if (this.state.contractId !== contracts.payment.id) this.state.payment = null;
-      this.state.contractId = contracts.payment.id;
+      if (this._bankViewState.contractId !== contracts.payment.id) this._bankViewState.payment = null;
+      this._bankViewState.contractId = contracts.payment.id;
     }
-    if (editor?.bank) this.state.editorId = editor.bank.id;
+    if (editor?.bank) this._bankViewState.editorId = editor.bank.id;
     const confirmationStale = this._confirmation && (this._confirmation.operation.sourceToken !== sourceToken || this._confirmation.operation.expectedRevision !== data.meta?.revision);
     return { ...base, hasHolding: true, holdingName: holding.name, isGM: permissions.isGM, canTransact, blocked, busy: this._busy,
       readonlyMessage: !permissions.mayUseStorage ? "ГМ не разрешил распоряжаться казной этого поселения." : !canTransact ? permissions.authorityStatus.detail : "",
-      state: this.state, sortRate: this.state.sort === "rate", borrow, deposit, contractsTab, admin, comparison, contracts, editor, dirty: Boolean(this._draftBanks), editorError: this._editorError,
+      state: this._bankViewState, sortRate: this._bankViewState.sort === "rate", borrow, deposit, contractsTab, admin, comparison, contracts, editor, dirty: Boolean(this._draftBanks), editorError: this._editorError,
       saveStatus: this._catalogStatus(), bankCount: model.banks.length, treasuryText: money(holding.storage?.moneyCopper), placedText: money(placed), projectedText: money(projected),
       pending: Boolean(this._pendingOperation), confirmation: this._confirmation, confirmationStale, canConfirm: canTransact && !blocked && !confirmationStale,
-      presets: BANK_PRESETS, history: this.state.history, loanContracts: this.state.contractKind === "loans", depositContracts: this.state.contractKind === "deposits" };
+      presets: BANK_PRESETS, history: this._bankViewState.history, loanContracts: this._bankViewState.contractKind === "loans", depositContracts: this._bankViewState.contractKind === "deposits" };
   }
   async _onRender(context, options) {
     await super._onRender(context, options); this._listeners?.abort(); this._listeners = new AbortController();
@@ -128,8 +129,8 @@ export class SkyholdBankApp extends FloatingTooltipsMixin(RenderSchedulerMixin(H
       }
       if (field.dataset.bankViewField) {
         const key = field.dataset.bankViewField;
-        this.state[key] = field.type === "checkbox" ? field.checked : field.type === "number" ? Number(field.value) : field.value;
-        if (key === "editorQuery") this.state.editorPage = 0; else this.state.page = 0;
+        this._bankViewState[key] = field.type === "checkbox" ? field.checked : field.type === "number" ? Number(field.value) : field.value;
+        if (key === "editorQuery") this._bankViewState.editorPage = 0; else this._bankViewState.page = 0;
         this._confirmation = null;
         if (event.type === "change") this.requestRender({ focus: false });
       }
@@ -147,12 +148,12 @@ export class SkyholdBankApp extends FloatingTooltipsMixin(RenderSchedulerMixin(H
     if (!globalThis.game?.user?.isGM) return;
     if (action === "bank-discard") { this._draftBanks = null; this._editorError = ""; return; }
     this._ensureDraft();
-    let bank = this._draftBanks.find((row) => row.id === this.state.editorId) ?? this._draftBanks[0];
+    let bank = this._draftBanks.find((row) => row.id === this._bankViewState.editorId) ?? this._draftBanks[0];
     if (action === "bank-add") {
       const preset = BANK_PRESETS.find((row) => row.id === this.element?.querySelector("[data-bank-preset]")?.value) ?? BANK_PRESETS[0];
-      bank = normalizeBank({ ...structuredClone(preset), id: makeId("bank", 16) }); this._draftBanks.push(bank); this.state.editorId = bank.id;
+      bank = normalizeBank({ ...structuredClone(preset), id: makeId("bank", 16) }); this._draftBanks.push(bank); this._bankViewState.editorId = bank.id;
     }
-    if (action === "bank-clone" && bank) { bank = { ...structuredClone(bank), id: makeId("bank", 16), name: `${bank.name.slice(0, 150)} · копия` }; this._draftBanks.push(bank); this.state.editorId = bank.id; }
+    if (action === "bank-clone" && bank) { bank = { ...structuredClone(bank), id: makeId("bank", 16), name: `${bank.name.slice(0, 150)} · копия` }; this._draftBanks.push(bank); this._bankViewState.editorId = bank.id; }
     if (action === "bank-add-offer" && bank) {
       const key = target.dataset.group === "depositOffers" ? "depositOffers" : "offers", rows = bank[key] ??= [];
       if (rows.length >= 20) throw new Error("Достигнут предел 20 предложений этого вида.");
@@ -198,11 +199,11 @@ export class SkyholdBankApp extends FloatingTooltipsMixin(RenderSchedulerMixin(H
   _review() {
     const view = this._view;
     if (!view?.canTransact) throw new Error("Операции с казной сейчас недоступны.");
-    const product = ["borrow", "deposit"].includes(this.state.tab);
-    const details = product ? prepareBankComparison({ ...view, state: this.state, canTransact: true, blocked: false }).selected
-      : prepareBankContracts({ holding: view.holding, state: this.state, canTransact: true, blocked: false }).payment;
+    const product = ["borrow", "deposit"].includes(this._bankViewState.tab);
+    const details = product ? prepareBankComparison({ ...view, state: this._bankViewState, canTransact: true, blocked: false }).selected
+      : prepareBankContracts({ holding: view.holding, state: this._bankViewState, canTransact: true, blocked: false }).payment;
     if (!details?.canReview) throw new Error(details?.message || "Проверьте предложение и сумму операции.");
-    const label = product ? this.state.tab === "borrow" ? "Получить заём" : "Разместить деньги" : details.deposits ? "Снять деньги со вклада" : "Внести платёж";
+    const label = product ? this._bankViewState.tab === "borrow" ? "Получить заём" : "Разместить деньги" : details.deposits ? "Снять деньги со вклада" : "Внести платёж";
     this._confirmation = { label, bankName: details.bankName, name: details.name ?? details.offerName,
       message: details.early ? "Досрочное закрытие: начисленные проценты не выплачиваются." : details.terms,
       amountText: money(details.operation.amountCopper), totalText: details.totalText, treasuryAfterText: details.treasuryAfterText,
@@ -234,8 +235,8 @@ export class SkyholdBankApp extends FloatingTooltipsMixin(RenderSchedulerMixin(H
     }
     if (!result?.ok) throw new Error("Банковская операция не подтверждена.");
     this._clearPendingOperation(operationId);
-    this._confirmation = null; this.state.payment = null; this.state.tab = "contracts"; this.state.history = false;
-    this.state.contractKind = result.depositId ? "deposits" : "loans"; this.state.contractId = result.depositId ?? result.loanId; this.state.contractPage = 0;
+    this._confirmation = null; this._bankViewState.payment = null; this._bankViewState.tab = "contracts"; this._bankViewState.history = false;
+    this._bankViewState.contractKind = result.depositId ? "deposits" : "loans"; this._bankViewState.contractId = result.depositId ?? result.loanId; this._bankViewState.contractPage = 0;
     requestSkyholdAppRender(); SkyholdBankApp.rerenderOpen();
   }
   /** A late reply also settles the matching request retained by a reopened window. */
@@ -255,16 +256,16 @@ export class SkyholdBankApp extends FloatingTooltipsMixin(RenderSchedulerMixin(H
     if (this._busy || !ACTIONS.includes(action)) return;
     try {
       if (EDIT_ACTIONS.includes(action)) { await this._edit(action, target); return; }
-      if (action === "bank-tab") { this.state.tab = target.dataset.tab; this._confirmation = null; }
-      if (action === "bank-select") { this.state.selected = target.dataset.key; this._confirmation = null; }
-      if (action === "bank-page") { const key = target.dataset.scope === "contracts" ? "contractPage" : target.dataset.scope === "editor" ? "editorPage" : "page"; this.state[key] = Math.max(0, this.state[key] + Number(target.dataset.delta)); }
-      if (action === "bank-editor-select") this.state.editorId = target.dataset.bankId;
-      if (action === "bank-contract-kind") { this.state.contractKind = target.dataset.kind; this.state.contractId = ""; this.state.payment = null; this.state.contractPage = 0; this._confirmation = null; }
-      if (action === "bank-history") { this.state.history = !this.state.history; this.state.contractId = ""; this.state.contractPage = 0; this._confirmation = null; }
-      if (action === "bank-contract") { this.state.contractId = target.dataset.id; this.state.payment = null; this._confirmation = null; }
+      if (action === "bank-tab") { this._bankViewState.tab = target.dataset.tab; this._confirmation = null; }
+      if (action === "bank-select") { this._bankViewState.selected = target.dataset.key; this._confirmation = null; }
+      if (action === "bank-page") { const key = target.dataset.scope === "contracts" ? "contractPage" : target.dataset.scope === "editor" ? "editorPage" : "page"; this._bankViewState[key] = Math.max(0, this._bankViewState[key] + Number(target.dataset.delta)); }
+      if (action === "bank-editor-select") this._bankViewState.editorId = target.dataset.bankId;
+      if (action === "bank-contract-kind") { this._bankViewState.contractKind = target.dataset.kind; this._bankViewState.contractId = ""; this._bankViewState.payment = null; this._bankViewState.contractPage = 0; this._confirmation = null; }
+      if (action === "bank-history") { this._bankViewState.history = !this._bankViewState.history; this._bankViewState.contractId = ""; this._bankViewState.contractPage = 0; this._confirmation = null; }
+      if (action === "bank-contract") { this._bankViewState.contractId = target.dataset.id; this._bankViewState.payment = null; this._confirmation = null; }
       if (action === "bank-payment-max") {
-        const payment = prepareBankContracts({ holding: this._view.holding, state: this.state }).payment;
-        this.state.contractId = payment.id; this.state.payment = payment.deposits ? payment.principalCopper : target.dataset.cash ? Math.min(bankLoanBalance(payment), this._view.holding.storage?.moneyCopper ?? 0) : bankLoanBalance(payment); this._confirmation = null;
+        const payment = prepareBankContracts({ holding: this._view.holding, state: this._bankViewState }).payment;
+        this._bankViewState.contractId = payment.id; this._bankViewState.payment = payment.deposits ? payment.principalCopper : target.dataset.cash ? Math.min(bankLoanBalance(payment), this._view.holding.storage?.moneyCopper ?? 0) : bankLoanBalance(payment); this._confirmation = null;
       }
       if (action === "bank-review") { if (this._pendingOperation) throw new Error("Сначала повторите неподтверждённую операцию с тем же идентификатором."); this._review(); }
       if (action === "bank-cancel") this._confirmation = null;
@@ -280,7 +281,7 @@ export class SkyholdBankApp extends FloatingTooltipsMixin(RenderSchedulerMixin(H
   async close(options) {
     this._listeners?.abort(); this._disclosures.close();
     this._pressedAction = false; this._deferredRenderOptions = null;
-    this.constructor.sessions.set(this.holdingId, { state: { ...this.state }, draft: this._draftBanks, token: this._catalogToken, pending: this._pendingOperation, saving: this._catalogSave });
+    this.constructor.sessions.set(this.holdingId, { state: { ...this._bankViewState }, draft: this._draftBanks, token: this._catalogToken, pending: this._pendingOperation, saving: this._catalogSave });
     if (this.constructor.instances.get(this.holdingId) === this) this.constructor.instances.delete(this.holdingId);
     return super.close(options);
   }

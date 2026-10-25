@@ -3,12 +3,19 @@ import { readFileSync } from "node:fs";
 import { SkyholdData } from "../data/store.js";
 import { showSharedMarketMigration } from "../apps/market/shared-market-migration-dialog.js";
 
-globalThis.foundry = { applications: { api: { ApplicationV2: class {}, HandlebarsApplicationMixin: (Base) => Base } } };
+const renderedBanks = [], loadedTemplates = [];
+globalThis.foundry = { applications: { api: { ApplicationV2: class {
+  constructor(options = {}) { this.id = options.id; }
+  get state() { return 0; }
+  async _prepareContext() { return {}; }
+  render(options) { renderedBanks.push({ app: this, options }); return this; }
+}, HandlebarsApplicationMixin: (Base) => Base }, handlebars: { loadTemplates: async (paths) => { loadedTemplates.push(...paths); return paths; } } } };
 globalThis.game = { user: { id: "gm", isGM: true }, modules: new Map(), settings: { get() {} } };
 globalThis.ui = { notifications: { info() {} } };
 const { NavigationEventActions, NavigationEventDomain } = await import("../apps/domains/events/navigation-events.js");
 const { SkyholdBankApp } = await import("../apps/bank-app.js");
 let opened;
+const openBank = SkyholdBankApp.open;
 SkyholdBankApp.open = (options) => { opened = options; };
 const event = { preventDefault() {}, stopPropagation() {} };
 assert.equal(NavigationEventActions.click["open-banks"], "_onOpenBanks");
@@ -24,6 +31,26 @@ for (const isGM of [true, false]) {
   await NavigationEventDomain._onOpenBanks.call({ activeHoldingId: "" }, event);
   assert.equal(opened, null);
 }
+// Exercise the actual first-button path through lazy loading and construction.
+// The routing-only spy above cannot catch collisions with ApplicationV2 getters.
+SkyholdBankApp.open = openBank;
+const previousView = SkyholdData.view;
+SkyholdData.view = () => ({ meta: { revision: 1 }, catalog: { banks: [] }, holdings: [
+  { id: "village", name: "Поселение", visibility: "public", special: {}, storage: { moneyCopper: 0 } }
+] });
+for (const isGM of [true, false]) {
+  game.user.isGM = isGM; SkyholdBankApp.instances.clear();
+  const beforeOpen = renderedBanks.length;
+  await NavigationEventDomain._onOpenBanks.call({ activeHoldingId: "village" }, event);
+  assert.equal(renderedBanks.length, beforeOpen + 1, "the first bank button reaches the real application render call");
+  const { app, options } = renderedBanks.at(-1);
+  assert.equal(app.holdingId, "village"); assert.equal(app.state, 0, "Foundry retains ownership of its render state");
+  assert.deepEqual(options, { force: true, focus: true });
+  const context = await app._prepareContext({});
+  assert.equal(context.hasHolding, true); assert.equal(context.borrow, true); assert.equal(context.isGM, isGM);
+}
+assert.ok(loadedTemplates.includes("modules/fbl-skyhold/templates/parts/save-status.hbs"));
+SkyholdBankApp.instances.clear(); SkyholdData.view = previousView;
 
 let data = { meta: {}, holdings: [{ id: "village", special: {} }] };
 let writes = 0, confirmations = 0, confirmed = false, changeDuringConfirmation = false;
