@@ -88,16 +88,19 @@ _livestockAvailableWorkQd(holding, building, periodQd = 40, workerContext = null
       realQd = [...slots].filter(([step, slot]) => step >= stepOffset && step < stepOffset + periodQd
         && slot.sourceId === String(building.id) && slot.functionId === "livestock").length;
     }
-    const efficiency = this._personBuildingEfficiency
-      ? this._personBuildingEfficiency(holding, building, person, workerContext, { purpose: "production" })
-      : settlementHungerFactor(holding);
-    const politicalFactor = Math.max(0, 1 + (politicsRuntimeEffects(holding)?.productionPercent ?? 0) / 100);
-    const qualificationWorkUnits = Math.max(0, Math.round(efficiency * politicalFactor * 10_000));
-    const maintenanceBasisPoints = Math.max(0, Math.round((this._maintenanceEfficiencyFactor?.(building) ?? 1) * 10_000));
-    const workUnitsPerQd = Math.floor((qualificationWorkUnits * maintenanceBasisPoints) / 10_000);
-    return sum + workUnitsPerQd * realQd;
+    return sum + this._livestockWorkUnitsPerQd(holding, building, person, workerContext) * realQd;
   }, 0);
   return Math.floor(workUnits / 10_000);
+},
+
+_livestockWorkUnitsPerQd(holding, building, person, workerContext = null) {
+  const efficiency = this._personBuildingEfficiency
+    ? this._personBuildingEfficiency(holding, building, person, workerContext, { purpose: "production" })
+    : settlementHungerFactor(holding);
+  const politicalFactor = Math.max(0, 1 + (politicsRuntimeEffects(holding)?.productionPercent ?? 0) / 100);
+  const qualificationWorkUnits = Math.max(0, Math.round(efficiency * politicalFactor * 10_000));
+  const maintenanceBasisPoints = Math.max(0, Math.round((this._maintenanceEfficiencyFactor?.(building) ?? 1) * 10_000));
+  return Math.floor((qualificationWorkUnits * maintenanceBasisPoints) / 10_000);
 },
 
 _livestockPeriodDependencies(holding, { workerContext = null, financeContext = null, stepOffset = null, cycleQd = 40 } = {}) {
@@ -220,7 +223,7 @@ _appendLivestockReport(holding, report, plan, applied) {
     if (meat > 0) report.produced?.push?.(`${entry.buildingName}: Meat +${meat}.`);
     if (tallow > 0) report.produced?.push?.(`${entry.buildingName}: Tallow +${tallow}.`);
     if (entry.born > 0 || entry.matured > 0) report.work?.push?.(`${entry.buildingName}: приплод +${entry.born}, повзрослело ${entry.matured}.`);
-    if (entry.workQdUsed > 0) report.work?.push?.(`${entry.buildingName}: уход, дойка, стрижка и забой заняли ${entry.workQdUsed} QD.`);
+    if (entry.workQdUsed > 0) report.work?.push?.(`${entry.buildingName}: уход, дойка, стрижка и забой — выполнено ${entry.workQdUsed} эффективных QD.`);
     for (const warning of entry.warnings) report.skipped?.push?.(`${entry.buildingName}: ${warning}`);
     appendEconomyLedger(report, entry.resourceChanges.map((change) => ({
       domain: "livestock",

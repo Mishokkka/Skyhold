@@ -163,11 +163,11 @@ export async function runProductionCycle({
         await deps.tryCollectResourceForConsumer(holding, building, candidate.resourceId, budgets, report, workerContext, line, candidate);
       }
     }
-    for (const cost of costs) {
-      if (Array.isArray(cost.alternatives)) continue;
-      if (deps.storageQuantity(holding, cost) < cost.qty) {
-        await deps.tryCollectResourceForConsumer(holding, building, cost.resourceId, budgets, report, workerContext, line, cost);
-      }
+    // Quote the whole recipe: variable and fixed costs may share one stock.
+    // Independent quantity checks would miss their combined shortfall.
+    for (const cost of deps.storageCanPay(holding, costs).missing ?? []) {
+      if (deps.storageCanPay(holding, costs).ok) break;
+      await deps.tryCollectResourceForConsumer(holding, building, cost.resourceId, budgets, report, workerContext, line, cost);
     }
     if (capacity) {
       outputQty = affordableProductionBatch(outputQty, costsFor, (candidate) => deps.storageCanPay(holding, candidate));

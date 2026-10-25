@@ -152,15 +152,17 @@ _agriculturePeriodDependencies(holding, { workerContext = null, financeContext =
 },
 
 _planAgricultureForQd(holding, qd = 40, { operationId = "", workerContext = null, financeContext = null } = {}) {
+  // Both modern labor modes run on funded calendar slots. Only legacy/passive
+  // plots use an aggregate period; future QD cannot prepay today's sowing.
   return planAgriculturePeriod({
-    buildings: (holding?.buildings?.list ?? []).filter((building) => buildingLaborMode(building) !== "staff"),
+    buildings: (holding?.buildings?.list ?? []).filter((building) => !["staff", "qd"].includes(buildingLaborMode(building))),
     elapsedQd: qd,
     operationId,
     dependencies: this._agriculturePeriodDependencies(holding, { workerContext, financeContext })
   });
 },
 
-_staffAgricultureStepPlan(holding, building, step, availableWorkQd = 0, operationId = "") {
+_scheduledAgricultureStepPlan(holding, building, step, availableWorkQd = 0, operationId = "") {
   const agriculture = normalizeAgricultureBuilding(building?.agriculture, { building });
   if (!agriculture?.enabled) return null;
   const crop = agriculture.crops.find((row) => row.id === agriculture.activeCropId);
@@ -176,42 +178,42 @@ _staffAgricultureStepPlan(holding, building, step, availableWorkQd = 0, operatio
   });
 },
 
-_staffAgricultureWorkAvailable(holding, building, workerContext = null, step = 0) {
-  if (buildingLaborMode(building) !== "staff" || !this._isAgricultureBuilding(building)
+_scheduledAgricultureWorkAvailable(holding, building, workerContext = null, step = 0) {
+  if (!["staff", "qd"].includes(buildingLaborMode(building)) || !this._isAgricultureBuilding(building)
     || this._buildingStatus(building).value !== "built"
     || !this._buildingFunctions(building).production
     || !this._financeFunctionAllowed(workerContext?.financeContext, building, "agriculture")
     || this._technicalMaintenanceReady?.(building, workerContext?.financeContext, step) === false) return false;
   // This is a pure probe of the real operation, including season changes,
   // expiry and annual limits. Its event offsets are not a future schedule.
-  return (this._staffAgricultureStepPlan(holding, building, step, 1_000_000)?.workQdUsed ?? 0) > 0;
+  return (this._scheduledAgricultureStepPlan(holding, building, step, 1_000_000)?.workQdUsed ?? 0) > 0;
 },
 
-_runStaffAgricultureStep(holding, step, _report = null, {
+_runScheduledAgricultureStep(holding, step, _report = null, {
   operationId = "", workerContext = null, financeContext = workerContext?.financeContext, budgets = new Map()
 } = {}) {
   if (!financeContext) return { ok: true, entries: 0 };
-  financeContext.staffAgricultureRuntime ??= new Map();
+  financeContext.scheduledAgricultureRuntime ??= new Map();
   let entries = 0;
   for (const building of holding?.buildings?.list ?? []) {
-    if (buildingLaborMode(building) !== "staff" || !this._isAgricultureBuilding(building)
+    if (!["staff", "qd"].includes(buildingLaborMode(building)) || !this._isAgricultureBuilding(building)
       || this._buildingStatus(building).value !== "built" || !this._buildingFunctions(building).production) continue;
     const id = text(building.id);
-    let runtime = financeContext.staffAgricultureRuntime.get(id);
+    let runtime = financeContext.scheduledAgricultureRuntime.get(id);
     if (!runtime) {
       runtime = { units: 0, steps: new Set(), plans: [], flushed: false };
-      financeContext.staffAgricultureRuntime.set(id, runtime);
+      financeContext.scheduledAgricultureRuntime.set(id, runtime);
     }
     if (runtime.steps.has(step)) continue;
     const agriculture = normalizeAgricultureBuilding(building.agriculture, { building });
-    const stepOperationId = `${text(operationId) || `staff-agriculture:${whole(holding?.gm?.calendaria?.lastQd)}`}:step:${step}`;
+    const stepOperationId = `${text(operationId) || `scheduled-agriculture:${whole(holding?.gm?.calendaria?.lastQd)}`}:step:${step}`;
     if (agriculture.state.lastOperationId === `${stepOperationId}:${id}`) {
       runtime.steps.add(step);
       continue;
     }
     const allowed = this._financeFunctionAllowed(financeContext, building, "agriculture");
-    const ready = this._staffAgricultureWorkAvailable(holding, building, workerContext, step);
-    const probe = ready ? this._staffAgricultureStepPlan(holding, building, step, 1_000_000) : null;
+    const ready = this._scheduledAgricultureWorkAvailable(holding, building, workerContext, step);
+    const probe = ready ? this._scheduledAgricultureStepPlan(holding, building, step, 1_000_000) : null;
     const workKind = probe?.events?.find((event) => event.workQd > 0)?.kind ?? "";
     const needUnits = whole(probe?.workQdUsed) * 10_000;
     if (!needUnits) runtime.units = 0;
@@ -220,15 +222,21 @@ _runStaffAgricultureStep(holding, step, _report = null, {
     if (ready && compositionMet) {
       for (const person of people) {
         if (runtime.units >= needUnits) break;
-        if (financeContext.staffCurrentFunctionByWorkerId?.get(text(person.id)) !== "agriculture") continue;
+        if (buildingLaborMode(building) === "staff"
+          && financeContext.staffCurrentFunctionByWorkerId?.get(text(person.id)) !== "agriculture") continue;
         const entry = this._workerBudgetEntry(holding, person, budgets, workerContext, building, "agriculture");
         const workUnits = this._agricultureWorkUnitsPerQd(holding, building, person, workerContext);
-        if (!entry?.staff || workUnits <= 0) continue;
+        if (!entry || workUnits <= 0) continue;
         // A paid quarter is indivisible between tasks. High efficiency may
         // finish the stage early, but does not manufacture a second free QD.
         while (entry.available >= 1 && runtime.units < needUnits) {
-          const consumed = this._consumeStaffWorkerQd(workerContext, entry, "agriculture", 1);
-          if (!consumed.ok || consumed.spent !== 1) break;
+          if (entry.staff) {
+            const consumed = this._consumeStaffWorkerQd(workerContext, entry, "agriculture", 1);
+            if (!consumed.ok || consumed.spent !== 1) break;
+          } else {
+            entry.available -= 1;
+            entry.spent += 1;
+          }
           runtime.units += workUnits;
         }
       }
@@ -260,8 +268,8 @@ _runStaffAgricultureStep(holding, step, _report = null, {
   return { ok: true, entries };
 },
 
-_flushStaffAgricultureReport(holding, report, financeContext) {
-  for (const runtime of financeContext?.staffAgricultureRuntime?.values?.() ?? []) {
+_flushScheduledAgricultureReport(holding, report, financeContext) {
+  for (const runtime of financeContext?.scheduledAgricultureRuntime?.values?.() ?? []) {
     if (runtime.flushed || !runtime.plans.length) continue;
     const plans = runtime.plans;
     const entries = plans.flatMap((plan) => plan.entries);
@@ -347,7 +355,7 @@ _appendAgricultureReport(holding, report, plan, applied) {
     target.buildings.push(row);
     target.warnings.push(...entry.warnings.map((warning) => `${entry.buildingName}: ${warning}`));
     if (produced > 0) report.produced?.push?.(`${entry.buildingName}: ${entry.cropLabel || entry.resourceId} +${produced}.`);
-    if (entry.workQdUsed > 0) report.work?.push?.(`${entry.buildingName}: посев и сбор заняли ${entry.workQdUsed} QD.`);
+    if (entry.workQdUsed > 0) report.work?.push?.(`${entry.buildingName}: посев и сбор — выполнено ${entry.workQdUsed} эффективных QD.`);
     if (["ready", "harvesting"].includes(entry.stateAfter?.phase)) report.work?.push?.(`${entry.buildingName}: на участке ждёт сбора ${whole(entry.stateAfter.readyQty)} ед. ${entry.cropLabel}.`);
     for (const warning of entry.warnings) report.skipped?.push?.(`${entry.buildingName}: ${warning}`);
     appendEconomyLedger(report, entry.resourceChanges.map((change) => ({

@@ -112,8 +112,9 @@ _canCollectStaffProductionInputs(holding, building, costs, workerContext, consum
       collect(cost);
     }
   }
-  for (const cost of costs) {
-    if (!Array.isArray(cost.alternatives) && this._storageQuantity(projected, cost) < cost.qty) collect(cost);
+  for (const cost of this._storageCanPay(projected, costs).missing ?? []) {
+    if (this._storageCanPay(projected, costs).ok) break;
+    collect(cost);
   }
   if (this._storageCanPay(projected, costs).ok) return true;
   if (finance.staffCollectionProbe) return false;
@@ -198,11 +199,22 @@ async _staffFunctionNeedsWork(holding, building, functionId, person, workerConte
   if (functionId === "maintenance") return false; // The period adapter reserves these slots before equipment starts.
   if (!this._technicalMaintenanceReady(building, finance, step)) return false;
   if (functionId === "agriculture") {
-    return this._staffAgricultureWorkAvailable?.(holding, building, workerContext, step) === true;
+    return this._agricultureWorkUnitsPerQd(holding, building, person, workerContext) > 0
+      && this._scheduledAgricultureWorkAvailable?.(holding, building, workerContext, step) === true;
   }
-  if (functionId === "livestock") return this._staffLivestockWorkRemaining(holding, building, workerContext, step) > 0;
+  if (functionId === "livestock") return this._livestockWorkUnitsPerQd(holding, building, person, workerContext) > 0
+    && this._staffLivestockWorkRemaining(holding, building, workerContext, step) > 0;
   if (functionId.startsWith("production:")) {
     const line = (building.productionLines ?? []).find((value, index) => this._financeLineFunctionId(value, index) === functionId);
+    // Zero productive work cannot hold a worker away from an available reserve.
+    // Collection still uses ordinary time and is possible at zero productivity.
+    if (line && (line.source ?? "workers") === "workers" && !(line.requiresCollection && number(line.pendingQty) > 0)) {
+      // Match the executor's integer work units after the equipment penalty.
+      const efficiency = this._personBuildingEfficiency(holding, building, person, workerContext);
+      const qualificationWorkUnits = Math.max(0, Math.round(efficiency * 10_000));
+      const maintenanceBasisPoints = Math.max(0, Math.round((this._maintenanceEfficiencyFactor?.(building) ?? 1) * 10_000));
+      if (Math.floor(qualificationWorkUnits * maintenanceBasisPoints / 10_000) === 0) return false;
+    }
     return Boolean(line && await lineCanWork(building, line, this._assignedBuildingPeople(holding, building, workerContext, functionId), step));
   }
   if (functionId === "culture" && building.fuelAlternatives?.length) {

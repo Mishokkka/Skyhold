@@ -49,7 +49,11 @@ export function planStorageCosts({ holding = {}, costs = [], dependencies = {} }
   const concreteCosts = [];
   const missing = [];
 
-  for (const rawCost of costs ?? []) {
+  // Reserve exact ingredients before interchangeable groups, including recipes
+  // without OR clauses. Otherwise a group can take the sole exact ingredient
+  // even though another material could satisfy the group.
+  const orderedCosts = [...(costs ?? [])].sort((a, b) => Number(Boolean(a.resourceGroup)) - Number(Boolean(b.resourceGroup)));
+  for (const rawCost of orderedCosts) {
     const amount = Math.max(0, Math.ceil(deps.safeNumber(rawCost?.qty, 0)));
     if (!amount) continue;
     if (deps.isMoneyResource(rawCost?.resourceId, rawCost?.id, rawCost?.name)) {
