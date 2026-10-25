@@ -51,6 +51,15 @@
           </div>
           <button type="button" class="fbls-button" data-action="open-market-catalog-editor"><i class="fa-solid fa-arrow-up-right-from-square"></i> Открыть редактор</button>
         </article>
+        {{#if sharedMarketMigrationAvailable}}
+        <article class="fbls-card fbls-resource-catalog-launcher">
+          <div>
+            <h2><i class="fa-solid fa-globe" aria-hidden="true"></i> Единые остатки и спрос рынков</h2>
+            <p>Однократный переход от отдельных запасов каждого поселения к общим для мира. Сначала откроется предварительная проверка; применение потребует подтверждения.</p>
+          </div>
+          <button type="button" class="fbls-button" data-action="shared-market-preview"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i> Проверить переход</button>
+        </article>
+        {{/if}}
             <div class="fbls-action-group"><button type="button" class="fbls-button compact" data-action="open-region-catalog-editor"><i class="fa-solid fa-map-location-dot"></i> Регионы</button></div>
           </details>
           <details class="fbls-card fbls-gm-command-group" data-gm-section="balance">

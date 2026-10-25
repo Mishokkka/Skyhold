@@ -5,7 +5,7 @@ import { isResidentInPopulation } from "../../../data/resident-presence.js";
 import { findReadableHoldingEntry } from "../../../data/access-guard.js";
 import { normalizeBelief } from "../../../generators/resident-rules.js";
 import { SkyholdCrewEditor } from "../../editors/crew-editor.js";
-import { openMarketApp, openMassCombatApp, openPoliticsApp, openPoliticsBalanceEditor } from "../../lazy-apps.js";
+import { openMarketApp, openBankApp, openMassCombatApp, openPoliticsApp, openPoliticsBalanceEditor } from "../../lazy-apps.js";
 import { escapeHtml, fieldValue, rollD6Pool } from "../../../core/helpers.js";
 import { createFoundryChatMessage, foundryChatSpeaker, foundryDialogV2, renderFoundryFilePicker } from "../../../integrations/foundry-runtime.js";
 import { filterStorageSearchRows } from "../../../engines/storage/search.js";
@@ -41,6 +41,8 @@ export const NavigationEventActions = {
     "building-category": "_onBuildingCategory",
     "special-subtab": "_onSpecialSubtab",
     "open-market": "_onOpenMarket",
+    "open-banks": "_onOpenBanks",
+    "shared-market-preview": "_onSharedMarketPreview",
     "open-politics": "_onOpenPolitics",
     "open-politics-balance": "_onOpenPoliticsBalance",
     "roll-holding-stat": "_onRollHoldingStat",
@@ -61,6 +63,7 @@ export const NavigationEventActions = {
     "building-category",
     "special-subtab",
     "open-market",
+    "open-banks",
     "open-politics",
     "roll-holding-stat",
     "show-morale-help",
@@ -91,6 +94,21 @@ async _onOpenMarket(event) {
   event.stopPropagation();
   if (!this.activeHoldingId) return;
   await openMarketApp({ holdingId: this.activeHoldingId });
+},
+
+async _onOpenBanks(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  if (!this.activeHoldingId) return;
+  await openBankApp({ holdingId: this.activeHoldingId });
+},
+
+async _onSharedMarketPreview(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  if (!game.user?.isGM) return;
+  const { showSharedMarketMigration } = await import("../../market/shared-market-migration-dialog.js");
+  await showSharedMarketMigration();
 },
 
 _onOpenCrewEditor(event) {

@@ -41,6 +41,7 @@ export function quoteBankLoan({ data, holding, bankId, offerId, amountCopper, mo
   if (bankRelationship(holding, bank.id) < offer.minimumRelationship) return { ok: false, message: "Отношение банка ниже необходимого." };
   const feeCopper = Math.ceil(principal * offer.feeBps / 10000);
   if (principal <= feeCopper) return { ok: false, message: "Комиссия поглощает всю выдачу. Увеличьте сумму займа." };
+  if (whole(holding.storage?.moneyCopper) + principal - feeCopper > 1000000000) return { ok: false, message: "Сумма превышает допустимый размер казны." };
   const interestAtTermCopper = Number((BigInt(principal) * BigInt(offer.annualRateBps) * BigInt(offer.termDays * 4) + DENOMINATOR - 1n) / DENOMINATOR);
   return { ok: true, bank, offer, principalCopper: principal, feeCopper, receivedCopper: principal - feeCopper,
     interestAtTermCopper, totalAtTermCopper: principal + interestAtTermCopper,

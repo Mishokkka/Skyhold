@@ -13,6 +13,33 @@ const open = (data, offerId = "term", amountCopper = 1000) => openBankDeposit({ 
 export async function checkBankDeposits() {
   {
     const data = fixture(), holding = data.holdings[0];
+    holding.storage.moneyCopper = 1000000000;
+    const request = { data, holding, bankId: "merchant", offerId: "working-capital", amountCopper: 1000 };
+    assert.equal(quoteBankLoan(request).ok, false, "Quote rejects treasury overflow before confirmation");
+    const comparison = prepareBankComparison({ data, holding, model: prepareBankingModel(data, holding),
+      state: { tab: "borrow", amount: 1000, days: 60 }, canTransact: true });
+    assert.equal(comparison.selected.canReview, false);
+    assert.match(comparison.selected.message, /размер казны/);
+    holding.storage.moneyCopper = 999999010;
+    assert.equal(quoteBankLoan(request).ok, true, "Net proceeds, after the fee, may exactly fill the treasury");
+    issueBankLoan({ ...request, operationId: "exact-treasury-limit" });
+    assert.equal(holding.storage.moneyCopper, 1000000000);
+  }
+  for (const rate of [0, 1, 299, 10000]) for (const days of [1, 60, 2400]) for (const amount of [1, 999, 1000000]) {
+    const data = fixture(), holding = data.holdings[0];
+    holding.storage.moneyCopper = amount;
+    Object.assign(data.catalog.banks[0].depositOffers[1], { annualRateBps: rate, termDays: days });
+    open(data, "term", amount);
+    const split = structuredClone(holding), elapsed = days * 4 + 13;
+    advanceBankDeposits(holding, elapsed);
+    for (let left = elapsed; left > 0;) { const step = Math.min(left, left % 17 + 1); advanceBankDeposits(split, step); left -= step; }
+    assert.deepEqual(split, holding, "Arbitrary period partitions conserve interest and the maturity boundary");
+    const expected = Number(BigInt(amount) * BigInt(rate) * BigInt(days) / 2400000n);
+    assert.equal(withdrawBankDeposit({ holding, depositId: "deposit-term", amountCopper: amount }).interestCopper, expected);
+    assert.equal(holding.storage.moneyCopper, amount + expected, "Whole-term payout matches an independent day-based formula");
+  }
+  {
+    const data = fixture(), holding = data.holdings[0];
     assert.equal(quoteBankLoan({ data, holding, bankId: "merchant", offerId: "working-capital", amountCopper: 1 }).ok, false);
     const noLoan = JSON.stringify(holding);
     assert.throws(() => issueBankLoan({ data, holding, bankId: "merchant", offerId: "working-capital", amountCopper: 1, operationId: "zero-proceeds" }));

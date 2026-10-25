@@ -164,11 +164,25 @@ export class SkyholdBankApp extends RenderSchedulerMixin(HandlebarsApplicationMi
     }
     if (!this._pendingOperation) return;
     this._busy = true; this.requestRender({ focus: false });
+    const operationId = this._pendingOperation.operationId;
     const result = await requestMarketOperation(this._pendingOperation);
     if (!result?.ok) throw new Error("Банковская операция не подтверждена.");
-    this._pendingOperation = null; this._confirmation = null; this.state.payment = null; this.state.tab = "contracts"; this.state.history = false;
+    this._clearPendingOperation(operationId);
+    this._confirmation = null; this.state.payment = null; this.state.tab = "contracts"; this.state.history = false;
     this.state.contractKind = result.depositId ? "deposits" : "loans"; this.state.contractId = result.depositId ?? result.loanId; this.state.contractPage = 0;
     requestSkyholdAppRender(); SkyholdBankApp.rerenderOpen();
+  }
+  /** A late reply also settles the matching request retained by a reopened window. */
+  _clearPendingOperation(operationId) {
+    if (!operationId) return;
+    for (const app of new Set([this, this.constructor.instances.get(this.holdingId)])) {
+      if (app?._pendingOperation?.operationId !== operationId) continue;
+      app._pendingOperation = null;
+      if (app._confirmation?.operation?.operationId === operationId) app._confirmation = null;
+      if (app !== this) app.requestRender({ focus: false });
+    }
+    const session = this.constructor.sessions.get(this.holdingId);
+    if (session?.pending?.operationId === operationId) session.pending = null;
   }
   async _action(event, target) {
     event.preventDefault(); const action = target.dataset.action;
@@ -190,7 +204,7 @@ export class SkyholdBankApp extends RenderSchedulerMixin(HandlebarsApplicationMi
       if (action === "bank-cancel") this._confirmation = null;
       if (action === "bank-confirm" || action === "bank-retry") await this._submit(action === "bank-retry");
     } catch (error) {
-      if (["conflict", "invalid", "forbidden", "execution-failed"].includes(error?.code)) { this._pendingOperation = null; this._confirmation = null; }
+      if (["conflict", "invalid", "forbidden", "execution-failed"].includes(error?.code)) { this._clearPendingOperation(this._pendingOperation?.operationId); this._confirmation = null; }
       if (action === "bank-save") this._editorError = error.message;
       globalThis.ui?.notifications?.warn?.(error.message || "Операция не выполнена.");
     } finally { this._busy = false; this.requestRender({ focus: false }); }

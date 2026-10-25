@@ -31,8 +31,6 @@
     {{#if hiddenOfferCount}}<div class="fbls-market-notice"><i class="fa-solid fa-lock"></i> За текущим пределом УРС скрыто товаров: {{hiddenOfferCount}}.</div>{{/if}}
 
     <div class="fbls-market-toolbar fbls-toolbar">
-      {{#if isGM}}<button type="button" data-action="market-shared-preview"><i class="fa-solid fa-globe"></i> Общий рынок</button>{{/if}}
-      <button type="button" data-action="market-open-banks"><i class="fa-solid fa-landmark"></i> Банки</button>
       <label>Рынок-локация
         <select data-market-provider>
           {{#each marketOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}

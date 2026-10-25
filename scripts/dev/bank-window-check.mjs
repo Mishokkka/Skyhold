@@ -83,4 +83,36 @@ assert.equal(reopened._pendingOperation.operationId, seenId, "close/reopen prese
 registerMarketOperationExecutor(async (operation) => { assert.equal(operation.operationId, seenId); return { ok: true, depositId: "storage-contract", replay: true }; });
 await reopened._prepareContext({}); await action(reopened, "bank-retry");
 assert.equal(reopened._pendingOperation, null);
+
+for (const outcome of ["success-closed", "success-reopened", "rejected-reopened", "timeout-reopened", "newer-request"]) {
+  SkyholdBankApp.instances.clear(); SkyholdBankApp.sessions.clear();
+  const original = new SkyholdBankApp({ holdingId: "village" }); original.requestRender = () => {};
+  SkyholdBankApp.instances.set("village", original);
+  await original._prepareContext({}); original._review();
+  let finish, fail;
+  registerMarketOperationExecutor(() => new Promise((resolve, reject) => { finish = resolve; fail = reject; }));
+  const inFlight = action(original, "bank-confirm"); await Promise.resolve();
+  const pendingId = original._pendingOperation.operationId;
+  await original.close();
+  let next;
+  if (outcome !== "success-closed") {
+    next = new SkyholdBankApp({ holdingId: "village" }); next.requestRender = () => {};
+    SkyholdBankApp.instances.set("village", next);
+    assert.equal(next._pendingOperation.operationId, pendingId);
+  }
+  if (outcome === "newer-request") {
+    next._pendingOperation = { operationId: "newer-operation" };
+    SkyholdBankApp.sessions.get("village").pending = next._pendingOperation;
+  }
+  if (outcome === "rejected-reopened") fail(Object.assign(new Error("stale"), { code: "conflict" }));
+  else if (outcome === "timeout-reopened") fail(Object.assign(new Error("uncertain"), { code: "timeout" }));
+  else finish({ ok: true, loanId: "settled-contract" });
+  await inFlight;
+  if (!next) next = new SkyholdBankApp({ holdingId: "village" });
+  const expectedId = outcome === "newer-request" ? "newer-operation" : outcome === "timeout-reopened" ? pendingId : null;
+  assert.equal(next._pendingOperation?.operationId ?? null, expectedId, outcome);
+  assert.equal(SkyholdBankApp.sessions.get("village").pending?.operationId ?? null, expectedId, "Saved session follows the same settlement");
+  assert.equal((await next._prepareContext({})).blocked, Boolean(expectedId));
+}
+SkyholdBankApp.instances.clear(); SkyholdBankApp.sessions.clear();
 console.log("Bank window checks passed: review/staleness, editor validation/conflicts/drafts, GM/player/offline, first-contract payment, busy feedback and close/reopen retry.");
