@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
 import { mixedMarketRouteFixture } from "./fixtures/mixed-market-route.mjs";
 import { exportRouteNetwork, parseRouteNetwork, mergeRouteNetwork } from "../apps/editors/route-network-transfer.js";
-import { authorityMarketLogistics } from "../apps/market/authority-context.js";
+import { authorityMarketLogistics, prepareMarketAuthorityContext } from "../apps/market/authority-context.js";
+import { worldMarketFixture } from "./world-ship-market-characterization-check.mjs";
+import { getSkyholdWorkflowService } from "../workflows/skyhold-workflow-service.js";
 import { checkCalendariaCharacterization } from "./calendaria-characterization-check.mjs";
 import { normalizeEventRegionOptions } from "../data/random-events.js";
 import { SkyholdData } from "../data/store.js";
 
 globalThis.foundry = { applications: { api: {
-  ApplicationV2: class {}, HandlebarsApplicationMixin: (Base) => Base
+  ApplicationV2: class { async _prepareContext() { return {}; } }, HandlebarsApplicationMixin: (Base) => Base
 } } };
 const { graphContext, SkyholdRouteGraphEditor, SkyholdRouteEdgeEditor } = await import("../apps/editors/route-graph-editor.js");
 const { SkyholdMarketApp } = await import("../apps/market-app.js");
@@ -164,4 +166,30 @@ try {
   neutralRows[0].marketLinks[0].seasonalModifiers.winter = { enabled: false, costFactor: 1, timeFactor: 1, riskFactor: 1 };
   assert.equal(graphContext(neutralRows).edges[0].seasonalCostFactor, 1, "existing custom neutral values must remain untouched");
 } finally { SkyholdData.view = previousView; SkyholdData.transaction = previousTransaction; }
-console.log("Route network: JSON round trip, merge, invalid input, limits, calendar GM/player logistics and stable editor DOM passed.");
+const workflow = getSkyholdWorkflowService(), previousRooms = workflow._storageRooms, previousGame = globalThis.game;
+try {
+  workflow._storageRooms = () => [{ id: "outdoors", label: "Снаружи" }];
+  for (const isGM of [true, false]) {
+    const { data, holding } = worldMarketFixture(); holding.type = "village"; holding.gm.modifiers.marketConnectionsLevel = 3;
+    data.catalog.eventRegions = normalizeEventRegionOptions([
+      { value: "home", label: "Дом", countryId: "public", marketTransportModes: ["rail", "caravan"], marketLinks: [
+        { regionId: "a", routeId: "train", distanceKm: 80, modes: ["rail"] },
+        { regionId: "a", routeId: "road", distanceKm: 160, modes: ["caravan"] }
+      ] }, { value: "a", label: "Рынок", countryId: "public", marketTransportModes: ["rail", "caravan"] }
+    ], { fallback: false });
+    const gm = { id: "gm", isGM: true, active: true }, player = { id: "player", isGM: false, active: true };
+    globalThis.game = { user: isGM ? gm : player, users: { contents: [gm, player] }, modules: new Map(), settings: { get() {} } };
+    const initial = prepareMarketAuthorityContext({ data, holding, marketId: "a", isGM });
+    const offer = initial.quote.offers.find((row) => row.resourceId === "test-freight"), quantities = { [offer.id]: 2 };
+    const view = prepareMarketAuthorityContext({ data, holding, marketId: "a", isGM, quantities });
+    assert.equal(view.quote.logistics.transportMode, "rail"); assert.equal(view.plan.logistics.transportMode, "caravan");
+    const app = new SkyholdMarketApp({ holdingId: holding.id }); app.quantities = quantities;
+    app._marketSnapshot = () => ({ ...view, data, holding }); app._enrichMarketQuoteItems = async (quote) => quote;
+    const context = await app._prepareContext({});
+    assert.equal(context.transportLabel, view.plan.logistics.transportLabel, "the route panel must describe the transport actually charged for");
+    assert.equal(context.routeDistanceText, "1 перех. · 160 км");
+    app.quantities = {}; const empty = await app._prepareContext({});
+    assert.equal(empty.transportLabel, view.quote.logistics.transportLabel, "an empty cart retains the preliminary route");
+  }
+} finally { workflow._storageRooms = previousRooms; globalThis.game = previousGame; }
+console.log("Route network: round trip, merge, GM/player logistics, selected-route presentation and stable editor DOM passed.");

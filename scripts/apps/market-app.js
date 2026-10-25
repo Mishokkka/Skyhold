@@ -512,7 +512,8 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
         dateText: shipmentDateText(order.deliveredAt || order.lostAt || order.cancelledAt || order.createdAt)
       }));
     const regionLabels = new Map((data?.catalog?.eventRegions ?? []).map((row) => [String(row.value ?? ""), String(row.label ?? row.value ?? "")]));
-    const routePathText = (quote?.logistics?.routePath ?? []).map((id) => regionLabels.get(String(id)) ?? String(id)).join(" → ");
+    const routeLogistics = plan && !plan.empty ? (plan.logistics ?? quote?.logistics) : quote?.logistics;
+    const routePathText = (routeLogistics?.routePath ?? []).map((id) => regionLabels.get(String(id)) ?? String(id)).join(" → ");
     const merchantTones = new Map((quote?.merchantProviders ?? []).map((provider, index) => [String(provider.id ?? ""), index % 6]));
     const shipmentBatches = Array.isArray(plan?.shipmentBatches) ? plan.shipmentBatches : [];
     const selectedBatchIndex = Math.min(Math.max(0, Math.floor(Number(this.batchPreviewIndex) || 0)), Math.max(0, shipmentBatches.length - 1));
@@ -538,23 +539,23 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
       })),
       carrierOptions: (quote?.carriers ?? []).map((carrier) => ({
         value: carrier.id,
-        label: `${carrier.label} · до ${loadText(carrierCapacityForLogistics(quote?.logistics, carrier).capacityLoad)} · цена ×${Number(carrier.priceFactor || 1).toFixed(2)}`,
+        label: `${carrier.label} · до ${loadText(carrierCapacityForLogistics(routeLogistics, carrier).capacityLoad)} · цена ×${Number(carrier.priceFactor || 1).toFixed(2)}`,
         selected: carrier.id === quote?.selectedCarrierId
       })),
       hasCarrierChoice: (quote?.carriers ?? []).length > 1,
-      carrierLabel: quote?.logistics?.carrierLabel || "Независимые перевозчики",
+      carrierLabel: routeLogistics?.carrierLabel || "Независимые перевозчики",
       canPurchase: Boolean(holding && permissions.isGM),
-      canOrder: Boolean(holding && permissions.isGM && quote?.logistics?.ok !== false),
+      canOrder: Boolean(holding && permissions.isGM && routeLogistics?.ok !== false),
       readOnlyReason: permissions.isGM ? "" : "Сделки на внешнем рынке подтверждает GM.",
-      logisticsOk: quote?.logistics?.ok !== false,
-      logisticsReason: (quote?.logistics?.reasons ?? []).join(" "),
-      transportLabel: quote?.logistics?.transportLabel ?? "—",
-      routeDistanceText: quote?.logistics ? `${quote.logistics.hops} перех. · ${quote.logistics.distanceText}` : "—",
+      logisticsOk: routeLogistics?.ok !== false,
+      logisticsReason: (routeLogistics?.reasons ?? []).join(" "),
+      transportLabel: routeLogistics?.transportLabel ?? "—",
+      routeDistanceText: routeLogistics ? `${routeLogistics.hops} перех. · ${routeLogistics.distanceText}` : "—",
       routePathText: routePathText || "—",
-      marketAccessText: quote?.logistics ? `УРС ${quote.logistics.accessLevel} · рынок ${quote.logistics.requiredAccessLevel}` : "—",
-      routeRiskText: quote?.logistics ? `×${Number(quote.logistics.riskFactor || 1).toFixed(2)}` : "—",
-      routeSeasonText: quote?.logistics?.seasonalEdgeCount
-        ? `${marketSeasonLabel(quote.logistics.seasonId)} · ${quote.logistics.seasonalEdgeCount} участ.`
+      marketAccessText: routeLogistics ? `УРС ${routeLogistics.accessLevel} · рынок ${routeLogistics.requiredAccessLevel}` : "—",
+      routeRiskText: routeLogistics ? `×${Number(routeLogistics.riskFactor || 1).toFixed(2)}` : "—",
+      routeSeasonText: routeLogistics?.seasonalEdgeCount
+        ? `${marketSeasonLabel(routeLogistics.seasonId)} · ${routeLogistics.seasonalEdgeCount} участ.`
         : "нет активной надбавки",
       treasuryText: formatCopperCurrencyCompact(plan?.treasuryCopper ?? holding?.storage?.moneyCopper ?? 0),
       treasuryParts: copperCurrencyParts(plan?.treasuryCopper ?? holding?.storage?.moneyCopper ?? 0),
