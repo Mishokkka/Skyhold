@@ -99,7 +99,7 @@
 .fbl-skyhold-route-edge-editor .window-title { color: var(--fbls-accent); -webkit-text-fill-color: var(--fbls-accent); }
 .fbl-skyhold-route-edge-editor .window-content { padding: 0; color: var(--fbls-text, var(--fbls-text)); background: var(--fbls-surface-0); }
 .fbl-skyhold-route-edge-editor * { box-sizing: border-box; }
-.fbls-route-edge-editor-shell { display: grid; align-content: start; gap: 0.45rem; min-height: 100%; padding: 0.6rem; background: radial-gradient(circle at 30% 0%, var(--fbls-panel-strong), transparent 38%), var(--fbls-surface-0); }
+.fbls-route-edge-editor-shell { display: grid; align-content: start; gap: 0.45rem; height: 100%; min-height: 0; min-width: 0; overflow: auto; scrollbar-gutter: stable; padding: 0.6rem; background: radial-gradient(circle at 30% 0%, var(--fbls-panel-strong), transparent 38%), var(--fbls-surface-0); }
 .fbls-route-edge-editor-hero { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 0.55rem; padding: 0.25rem; }
 .fbls-route-edge-editor-hero > i { display: grid; place-items: center; width: 2.2rem; height: 2.2rem; border-radius: 10px; color: var(--fbls-on-accent); background: var(--fbls-accent); }
 .fbls-route-edge-editor-hero > div { display: grid; min-width: 0; }

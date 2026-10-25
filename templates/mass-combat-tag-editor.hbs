@@ -6,12 +6,13 @@
         <p>{{editor.tagCount}} тегов, {{editor.relationCount}} активных связей.</p>
       </div>
       <div class="fbls-mass-tag-editor-actions">
-        <button type="button" class="fbls-button compact" data-action="add-mass-tag"><i class="fa-solid fa-plus"></i> Тег</button>
-        <button type="button" class="fbls-button compact danger" data-action="reset-mass-tags"><i class="fa-solid fa-rotate-left"></i> Сброс</button>
-        <button type="button" class="fbls-button compact primary" data-action="save-mass-tags"><i class="fa-solid fa-floppy-disk"></i> Сохранить</button>
+        <button type="button" class="fbls-button fbls-button-role compact" data-action="add-mass-tag"><i class="fa-solid fa-plus"></i> Тег</button>
+        <button type="button" class="fbls-button fbls-button-role compact danger" data-action="reset-mass-tags"><i class="fa-solid fa-rotate-left"></i> Сброс</button>
+        <button type="button" class="fbls-button fbls-button-role compact primary" data-action="save-mass-tags"><i class="fa-solid fa-floppy-disk"></i> Сохранить</button>
       </div>
     </header>
 
+    <div class="fbls-mass-tag-editor-body" data-render-scroll-key="mass-tag-editor-body" tabindex="0" role="region" aria-label="Настройка тегов и матрицы контр">
     <section class="fbls-mass-tag-editor-panel">
       <h3><i class="fa-solid fa-tags"></i> Теги</h3>
       <div class="fbls-mass-icon-picker" data-mass-icon-picker hidden>
@@ -21,10 +22,10 @@
             <div><strong>Иконка тега</strong><em data-mass-icon-picker-value>fa-solid fa-circle</em></div>
           </div>
           <label><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-mass-icon-search placeholder="Поиск: щит, конница, fa-horse…" /></label>
-          <button type="button" class="fbls-button compact primary" data-action="apply-mass-tag-icon"><i class="fa-solid fa-check"></i> Применить</button>
+          <button type="button" class="fbls-button fbls-button-role compact primary" data-action="apply-mass-tag-icon"><i class="fa-solid fa-check"></i> Применить</button>
           <button type="button" class="fbls-icon-button" data-action="close-mass-tag-icon-picker" title="Закрыть каталог" aria-label="Закрыть каталог иконок"><i class="fa-solid fa-xmark"></i></button>
         </header>
-        <div class="fbls-mass-icon-grid">
+        <div class="fbls-mass-icon-grid" data-render-scroll-key="mass-tag-icons">
           {{#each editor.iconOptions}}
             <button type="button" data-action="select-mass-tag-icon" data-icon-class="{{value}}" data-icon-search="{{search}}" title="{{label}} · {{value}}">
               <i class="{{value}}"></i><span>{{label}}</span>
@@ -32,7 +33,7 @@
           {{/each}}
         </div>
       </div>
-      <div class="fbls-mass-tag-table-wrap">
+      <div class="fbls-mass-tag-table-wrap" data-render-scroll-key="mass-tag-table" tabindex="0" role="region" aria-label="Теги: таблица с горизонтальной прокруткой">
         <table class="fbls-mass-tag-table">
           <thead>
             <tr>
@@ -49,15 +50,15 @@
               <tr data-tag-key="{{key}}" data-tag-system="{{#if locked}}true{{else}}false{{/if}}" class="{{#if locked}}system{{/if}}">
                 <td class="center"><label class="fbls-checkbox-label fbls-choice-toggle icon-only" data-fbls-tooltip="Включить тег {{label}}"><input type="checkbox" aria-label="Включить тег {{label}}" data-tag-field="enabled" {{#if enabledChecked}}checked{{/if}} {{#if locked}}disabled{{/if}} /></label></td>
                 <td><code>{{key}}</code></td>
-                <td><input type="text" data-tag-field="label" value="{{label}}" /></td>
-                <td><input type="text" data-tag-field="short" value="{{short}}" /></td>
+                <td><input type="text" data-tag-field="label" value="{{label}}" aria-label="Название тега {{key}}" /></td>
+                <td><input type="text" data-tag-field="short" value="{{short}}" aria-label="Краткое название тега {{key}}" /></td>
                 <td>
                   <div class="fbls-mass-icon-field">
                     <button type="button" data-action="open-mass-tag-icon-picker" data-icon-preview title="Выбрать иконку из каталога" aria-label="Выбрать иконку тега {{label}}"><i class="{{icon}}"></i></button>
                     <input type="text" data-tag-field="icon" value="{{icon}}" aria-label="Класс Font Awesome" />
                   </div>
                 </td>
-                <td><input type="text" data-tag-field="hint" value="{{hint}}" /></td>
+                <td><textarea rows="2" data-tag-field="hint" aria-label="Описание тега {{key}}">{{hint}}</textarea></td>
               </tr>
             {{/each}}
           </tbody>
@@ -67,7 +68,8 @@
 
     <section class="fbls-mass-tag-editor-panel">
       <h3><i class="fa-solid fa-table-cells"></i> Матрица контров</h3>
-      <div class="fbls-mass-counter-matrix-wrap">
+      <p class="fbls-mass-counter-help">Строка — кто контрит, столбец — кого. Значение — сила контры в процентах, от 0 до 100. Таблицу можно прокручивать в обе стороны; заголовки остаются на месте.</p>
+      <div class="fbls-mass-counter-matrix-wrap" data-render-scroll-key="mass-counter-matrix" tabindex="0" role="region" aria-label="Матрица контр: строки — источники, столбцы — цели">
         <table class="fbls-mass-counter-matrix">
           <thead>
             <tr>
@@ -82,7 +84,7 @@
               <tr>
                 <th title="{{source.label}}"><i class="{{source.icon}}"></i><span>{{source.short}}</span></th>
                 {{#each cells}}
-                  <td><input type="number" min="0" max="100" step="5" value="{{value}}" data-counter-source="{{sourceKey}}" data-counter-target="{{targetKey}}" {{#if disabled}}disabled{{/if}} /></td>
+                  <td><input type="number" min="0" max="100" step="5" value="{{value}}" aria-label="Контра {{sourceKey}} против {{targetKey}}, процентов" data-counter-source="{{sourceKey}}" data-counter-target="{{targetKey}}" {{#if disabled}}disabled{{/if}} /></td>
                 {{/each}}
               </tr>
             {{/each}}
@@ -90,6 +92,7 @@
         </table>
       </div>
     </section>
+    </div>
   {{else}}
     <p class="fbls-empty">Редактор тегов доступен только ГМу.</p>
   {{/if}}

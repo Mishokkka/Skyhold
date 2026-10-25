@@ -16,7 +16,7 @@
     {{#each catalog.rows}}
       <article class="fbls-resource-editor-row {{#if isOverride}}is-override{{else}}is-builtin{{/if}} {{#if selected}}is-selected{{/if}}" data-resource-search-text="{{searchText}}">
         <div class="fbls-resource-editor-preview">{{#if img}}<img src="{{img}}" alt="" data-fbls-image-fallback /><i class="{{icon}}" data-fbls-image-fallback-icon hidden></i>{{else}}<i class="{{icon}}"></i>{{/if}}</div>
-        <div class="fbls-resource-editor-identity"><strong>{{label}}</strong><small>{{id}}</small></div>
+        <div class="fbls-resource-editor-identity"><strong title="{{label}}">{{label}}</strong><small title="{{id}}">{{id}}</small></div>
         <span class="fbls-resource-editor-category" title="Раздел: {{category}}{{#if categoryTag}}; тег: {{categoryTag}}{{/if}}">{{category}}{{#if categoryTag}} · #{{categoryTag}}{{/if}}</span>
         <span class="fbls-resource-editor-unit" title="{{loadTitle}}">{{priceText}}<br />Н {{loadValueText}}</span>
         <span class="fbls-resource-editor-state">{{#if isOverride}}{{#if isBuiltin}}настроен{{else}}свой{{/if}}{{else}}встроен{{/if}}</span>

@@ -12,6 +12,7 @@
 }
 
 .fbls-unique-medical {
+  container: medical-window / inline-size;
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
@@ -338,7 +339,7 @@
   background: var(--fbls-danger-soft);
 }
 
-@media (max-width: 720px) {
+@container medical-window (max-width: 720px) {
   .fbls-unique-medical-compact-hero,
   .fbls-unique-medical-grid,
   .fbls-unique-medical-settings-line {

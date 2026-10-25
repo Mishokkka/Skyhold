@@ -66,10 +66,12 @@
 }
 
 .fbls-market-shell {
+  container: market-window / inline-size;
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  overflow: auto;
   color: var(--fbls-text);
   background:
     radial-gradient(circle at 12% 0%, var(--fbls-info-soft), transparent 34%),
@@ -575,7 +577,7 @@
 .fbls-market-archive-row li { display: flex; justify-content: space-between; gap: 7px; color: var(--fbls-accent); font-size: var(--fbls-type-compact-xs); }
 .fbls-market-archive-row time { color: var(--fbls-muted, var(--fbls-muted)); text-align: right; }
 
-@media (max-width: 860px) {
+@container market-window (max-width: 860px) {
   .fbls-market-header { grid-template-columns: 1fr; }
   .fbls-market-identity { grid-template-columns: 1fr; }
   .fbls-market-treasury { justify-items: start; }

@@ -33,6 +33,7 @@ CSS is split by ownership. Edit the narrowest file that owns the UI area. New wo
 - `parts/storage/*` - storage domain subparts in cascade order: overview, rooms and money, room tabs and production utilities, logistics and capacity, compact tools, Foundry item storage, player access, recipient header, calendar trade controls and sale availability.
 - `parts/current/*` - current high-level component owners for building cards, building editor, production editor, construction actions, economy, defense squads and storage refinements.
 - `parts/economy/*` - economy and accounting layouts.
+- `parts/economy/bank-window.css` - standalone bank forms and their bounded scroll area.
 - `parts/mass-combat/*` - mass combat window, detail tables, action popovers, dedicated reference windows and chat summary styles.
 - `parts/market/market.css`, `parts/market/market-checkout.css` and `parts/market/market-outbound.css` - external market catalog/header, inbound delivery/checkout rail and outbound FIFO-sale lifecycle; the Storage-tab entry remains with the market shell owner.
 - `parts/market/market-catalog.css` - owner of the standalone GM editor for base offers, country characters, specialties and organizations.
@@ -60,7 +61,7 @@ There are no active versioned CSS areas. If old behavior needs to be restored, r
 - Keep the CSS tree at 0 `!important`.
 - Treat `parts/skyhold-variables.css` as the only owner of literal colors. Domain and component files use semantic `--fbls-*` tokens; they do not introduce local `hex`, `rgb`, `white`, or `black` values.
 - Use the four shared surface levels, the shared text hierarchy, the single gold accent, and the semantic success/warning/danger/info/culture colors. A local palette is allowed only for a materially different visual language, such as the blueprint grid, and its readable text still comes from the shared hierarchy.
-- Use `--fbls-placeholder` for every placeholder. Readable palette tokens must keep at least 4.5:1 contrast on every supported shared surface and raised panel.
+- Use `--fbls-placeholder` for every placeholder, including its text-fill color. Keep it visibly darker than entered text and at least 4.5:1 against supported field backgrounds. Other readable palette tokens must keep at least 4.5:1 contrast on every supported shared surface and raised panel.
 - Keep primary navigation and mouse-first workflow controls at a practical target of at least 32x32 CSS pixels unless a denser table control has a larger clickable label/container.
 - Put native form role conflicts in `parts/skyhold-form-bridge.css`; put Foundry/ApplicationV2/window-content and native select menu conflicts in `parts/skyhold-foundry-bridge.css` instead of adding `!important` to layered owner files.
 - Prefer existing classes over creating new near-duplicates.

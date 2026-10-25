@@ -1,6 +1,8 @@
 /* FBL Skyhold: settlement header component owner.
    Owns the holding selector band, Calendaria widgets, population, and top statline. */
 
+.fbl-skyhold-app .fbls-shell { container: skyhold-header / inline-size; }
+
 .fbls-hero.compact {
   padding: 0.45rem 0.65rem 0.55rem;
   border-bottom: 1px solid var(--fbls-border);
@@ -474,7 +476,7 @@
   color: var(--fbls-text);
 }
 
-@media (max-width: 1120px) {
+@container skyhold-header (max-width: 1120px) {
   .fbls-header-control-band {
     flex-wrap: wrap;
   }
@@ -484,7 +486,7 @@
   }
 }
 
-@media (max-width: 1050px) {
+@container skyhold-header (max-width: 1050px) {
   .fbls-header-statline {
     grid-template-columns: 1fr;
   }
@@ -498,7 +500,7 @@
   }
 }
 
-@media (max-width: 760px) {
+@container skyhold-header (max-width: 760px) {
   .fbls-authority-strip {
     grid-template-columns: auto minmax(0, 1fr);
   }

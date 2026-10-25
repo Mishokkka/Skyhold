@@ -1,7 +1,7 @@
 /* FBL Skyhold mass-combat tag and counter matrix editor. */
 .fbl-skyhold-mass-tag-editor {
   color-scheme: dark;
-  min-width: 820px;
+  min-width: 0;
   color: var(--fbls-battle-text, var(--fbls-text));
 }
 
@@ -24,15 +24,25 @@
 }
 
 .fbls-mass-tag-editor-shell {
-  display: grid;
+  display: flex;
+  flex-direction: column;
+  container: mass-tag-editor / inline-size;
   gap: 12px;
-  flex: 0 0 auto;
-  min-height: max-content;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   padding: 12px;
   background: var(--fbls-battle-shell-bg,
     radial-gradient(circle at 14% 0%, var(--fbls-accent-soft), transparent 30%),
     linear-gradient(180deg, var(--fbls-overlay-strong), var(--fbls-surface-0)));
 }
+
+.fbls-mass-tag-editor-body { display: flex; flex: 1 1 0; flex-direction: column; gap: 12px; min-height: 0; overflow: auto; scrollbar-gutter: stable; }
+.fbls-mass-tag-editor-body > section { flex: 0 0 auto; }
+.fbls-mass-tag-editor-head { flex: 0 0 auto; flex-wrap: wrap; }
+.fbls-mass-tag-editor-head > div:first-child { flex: 1 1 15rem; min-width: 0; }
+.fbls-mass-counter-help { margin: 0; color: var(--fbls-muted); font-size: var(--fbls-type-compact-sm); overflow-wrap: anywhere; }
 
 .fbls-mass-tag-editor-head,
 .fbls-mass-tag-editor-panel {
@@ -124,7 +134,7 @@
   border: 1px solid var(--fbls-accent-border);
   border-radius: 9px;
   background: var(--fbls-accent);
-  color: var(--fbls-accent);
+  color: var(--fbls-on-accent);
   font-size: 18px;
 }
 
@@ -239,7 +249,7 @@
   border: 1px solid var(--fbls-accent-border);
   border-radius: 7px;
   background: var(--fbls-accent);
-  color: var(--fbls-accent);
+  color: var(--fbls-on-accent);
 }
 
 .fbls-mass-icon-field > button:hover,
@@ -262,6 +272,15 @@
   width: 100%;
   border-collapse: collapse;
 }
+
+.fbls-mass-tag-table { min-width: 950px; table-layout: fixed; }
+.fbls-mass-tag-table th:first-child { width: 48px; }
+.fbls-mass-tag-table th:nth-child(2) { width: 110px; }
+.fbls-mass-tag-table th:nth-child(4) { width: 95px; }
+.fbls-mass-tag-table th:nth-child(5) { width: 230px; }
+.fbls-mass-tag-table th:last-child { width: 240px; }
+.fbls-mass-tag-table code { overflow-wrap: anywhere; }
+.fbls-mass-tag-table textarea { width: 100%; min-height: 3.5rem; resize: vertical; color: var(--fbls-text); background: var(--fbls-overlay); border: 1px solid var(--fbls-border); border-radius: 7px; }
 
 .fbls-mass-tag-table th,
 .fbls-mass-tag-table td,
@@ -319,6 +338,8 @@
 .fbls-mass-counter-matrix {
   border-collapse: separate;
   border-spacing: 0;
+  width: max-content;
+  min-width: 100%;
 }
 
 .fbls-mass-counter-matrix thead {
@@ -330,7 +351,7 @@
   top: 0;
   z-index: 20;
   border-bottom: 1px solid var(--fbls-border);
-  background: var(--fbls-accent);
+  background: var(--fbls-surface-2);
   background-clip: padding-box;
   box-shadow: 0 2px 0 var(--fbls-overlay-strong);
   text-align: center;
@@ -342,7 +363,7 @@
   z-index: 10;
   min-width: 86px;
   border-right: 1px solid var(--fbls-border);
-  background: var(--fbls-accent);
+  background: var(--fbls-surface-2);
   background-clip: padding-box;
 }
 
@@ -352,7 +373,7 @@
   left: 0;
   z-index: 30;
   min-width: 110px;
-  background: var(--fbls-accent);
+  background: var(--fbls-surface-2);
   background-clip: padding-box;
 }
 
@@ -403,14 +424,11 @@
   text-align: center;
 }
 
-@media (max-width: 860px) {
-  .fbl-skyhold-mass-tag-editor {
-    min-width: 0;
-  }
-
+@container mass-tag-editor (max-width: 760px) {
   .fbls-mass-tag-editor-head {
-    align-items: stretch;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
   }
 
   .fbls-mass-tag-editor-actions {

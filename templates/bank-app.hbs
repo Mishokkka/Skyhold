@@ -1,5 +1,5 @@
 {{#if hasHolding}}
-<div class="fbls-stack">
+<div class="fbls-stack fbls-bank-shell" data-render-scroll-key="bank-content" tabindex="0" role="region" aria-label="Банки и займы поселения">
   <header class="fbls-card-header"><h2><i class="fa-solid fa-landmark"></i> Банки · {{holdingName}}</h2><strong>Казна: {{treasuryText}}</strong></header>
   <p>Год — 240 дней. Проценты простые, начисляются на оставшийся основной долг. Комиссия удерживается при выдаче. Досрочное погашение уменьшает дальнейшие проценты; платежи выполняются вручную. Просрочка ухудшает отношение банка и закрывает новые займы.</p>
   {{#if pending}}<div class="fbls-callout">Ответ на операцию не подтверждён. Повтор использует прежний идентификатор.<button type="button" data-action="bank-retry"><i class="fa-solid fa-rotate-right"></i> Повторить запрос</button></div>{{/if}}

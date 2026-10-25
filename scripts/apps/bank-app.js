@@ -16,7 +16,7 @@ const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 export class SkyholdBankApp extends RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2)) {
   static instances = new Map();
   static DEFAULT_OPTIONS = {
-    id: "fbls-banks", classes: ["fbl-skyhold", "fbls-secondary"], tag: "div",
+    id: "fbls-banks", classes: ["fbl-skyhold", "fbls-secondary", "fbl-skyhold-bank"], tag: "div",
     window: { title: "Банки поселения", resizable: true }, position: { width: 820, height: 700 },
     actions: Object.fromEntries(["bank-borrow", "bank-repay", "bank-retry", "bank-add", "bank-save", "bank-add-offer"]
       .map((id) => [id, function(event, target) { return this._action(event, target); }]))

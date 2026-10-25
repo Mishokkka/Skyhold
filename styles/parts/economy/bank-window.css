@@ -1,0 +1,10 @@
+/* Standalone bank window; its entire form stays within one scroll area. */
+.fbl-skyhold-bank .fbls-bank-shell { flex: 1 1 0; min-height: 0; min-width: 0; overflow: auto; scrollbar-gutter: stable; padding: 0.7rem; }
+.fbl-skyhold-bank .fbls-bank-shell > * { flex-shrink: 0; min-width: 0; }
+.fbl-skyhold-bank .fbls-bank-shell h2 { font-size: var(--fbls-type-title); }
+.fbl-skyhold-bank .fbls-bank-shell p,
+.fbl-skyhold-bank .fbls-bank-shell strong,
+.fbl-skyhold-bank .fbls-bank-shell label { overflow-wrap: anywhere; }
+.fbl-skyhold-bank fieldset { min-width: 0; }
+.fbl-skyhold-bank input,
+.fbl-skyhold-bank select { max-width: 100%; min-width: 0; }

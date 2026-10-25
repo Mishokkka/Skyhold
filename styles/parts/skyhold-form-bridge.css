@@ -1,5 +1,5 @@
 /* Foundry native form adapter. Shared dimensions belong to the form tokens. */
-.fbl-skyhold.application, .fbl-skyhold.window-app { --input-height: var(--fbls-control-height); }
+.fbl-skyhold.application, .fbl-skyhold.window-app { --input-height: var(--fbls-control-height); --input-placeholder-color: var(--fbls-placeholder); }
 
 .application.fbl-skyhold .fbls-control,
 .window-app.fbl-skyhold .fbls-control {
@@ -11,8 +11,12 @@
 .window-app.fbl-skyhold .fbls-control:disabled, .window-app.fbl-skyhold .fbls-control[readonly] { color: var(--fbls-muted); -webkit-text-fill-color: var(--fbls-muted); }
 .application.fbl-skyhold .fbls-control:focus,
 .window-app.fbl-skyhold .fbls-control:focus { border-color: var(--fbls-accent-border); }
+.application.fbl-skyhold input::placeholder,
+.application.fbl-skyhold textarea::placeholder,
+.window-app.fbl-skyhold input::placeholder,
+.window-app.fbl-skyhold textarea::placeholder,
 .application.fbl-skyhold .fbls-control::placeholder,
-.window-app.fbl-skyhold .fbls-control::placeholder { color: var(--fbls-placeholder); opacity: 1; }
+.window-app.fbl-skyhold .fbls-control::placeholder { color: var(--fbls-placeholder); -webkit-text-fill-color: var(--fbls-placeholder); opacity: 1; }
 .application.fbl-skyhold textarea.fbls-control,
 .window-app.fbl-skyhold textarea.fbls-control { line-height: 1.4; }
 .application.fbl-skyhold .fbls-search > input,

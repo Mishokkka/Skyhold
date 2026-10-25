@@ -110,7 +110,7 @@ for (const file of files) {
 const surfaces = ["--fbls-surface-0", "--fbls-surface-1", "--fbls-surface-2", "--fbls-surface-3"];
 const raised = ["--fbls-surface-soft", "--fbls-panel", "--fbls-panel-strong"];
 const readable = [
-  "--fbls-text-strong", "--fbls-text", "--fbls-muted", "--fbls-dim", "--fbls-placeholder",
+  "--fbls-text-strong", "--fbls-text", "--fbls-muted", "--fbls-dim",
   "--fbls-accent", "--fbls-success", "--fbls-warning", "--fbls-danger", "--fbls-info", "--fbls-culture"
 ];
 
@@ -130,6 +130,26 @@ for (const foregroundName of readable) {
     const ratio = contrast(foreground, background.color);
     if (ratio < MIN_CONTRAST) failures.push(`${foregroundName} on ${background.name}: ${ratio.toFixed(2)} < ${MIN_CONTRAST}`);
   }
+}
+
+// Placeholders are secondary hints inside fields, not text printed on raised cards.
+// Keep 4.5:1 on the actual field surfaces and a deliberate luminance gap from values.
+const placeholder = palette.resolve("--fbls-placeholder");
+if (placeholder.a < 1) failures.push("--fbls-placeholder must resolve to an opaque color");
+const fieldBackgrounds = [
+  ...surfaces.map((name) => ({ name, color: palette.resolve(name) })),
+  ...backgrounds.map(({ name, color }) => ({ name: `field overlay over ${name}`, color: blend(palette.resolve("--fbls-overlay"), color) }))
+];
+for (const background of fieldBackgrounds) {
+  const ratio = contrast(placeholder, background.color);
+  if (ratio < MIN_CONTRAST) failures.push(`--fbls-placeholder on ${background.name}: ${ratio.toFixed(2)} < ${MIN_CONTRAST}`);
+}
+if (luminance(placeholder) > luminance(palette.resolve("--fbls-text")) * 0.6) {
+  failures.push("--fbls-placeholder must remain noticeably darker than entered text");
+}
+const formBridge = fs.readFileSync(path.join(STYLES_ROOT, "parts", "skyhold-form-bridge.css"), "utf8");
+if (!/::placeholder[^{}]*\{[^}]*-webkit-text-fill-color:\s*var\(--fbls-placeholder\)/.test(formBridge)) {
+  failures.push("The native form bridge must override inherited text fill for placeholders");
 }
 
 const onAccent = palette.resolve("--fbls-on-accent");

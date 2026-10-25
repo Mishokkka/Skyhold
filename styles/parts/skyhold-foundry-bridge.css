@@ -24,6 +24,8 @@
   line-height: 1.25;
 }
 
+.application.fbl-skyhold-bank .window-content { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+
 /* Foundry themes own the ApplicationV2 root background.  Every Skyhold window
    must therefore establish its dark canvas at the bridge boundary instead of
    relying on the active Foundry theme. */
@@ -356,8 +358,7 @@
 .window-app.fbl-skyhold-mass-tag-editor .application-content,
 .application.fbl-skyhold-mass-tag-editor .window-content:not(:has(.application-content)),
 .window-app.fbl-skyhold-mass-tag-editor .window-content:not(:has(.application-content)) {
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 .application.fbl-skyhold-mass-reference,
