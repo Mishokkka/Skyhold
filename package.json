@@ -47,7 +47,7 @@
     "ships:balance": "node scripts/dev/ship-balance-report.mjs",
     "routes:check": "node scripts/dev/route-network-runtime-check.mjs && node scripts/dev/route-graph-model-characterization-check.mjs && node scripts/dev/route-graph-viewport-characterization-check.mjs && node scripts/dev/parallel-market-routes-check.mjs && node scripts/dev/route-graph-editor-check.mjs",
     "market:shared:check": "node scripts/dev/shared-market-check.mjs",
-    "bank:check": "node scripts/dev/bank-characterization-check.mjs",
+    "bank:check": "node scripts/dev/bank-characterization-check.mjs && node scripts/dev/bank-window-check.mjs",
     "economy:scenarios:check": "node scripts/dev/economy-settlement-scenario-check.mjs",
     "market:check": "node scripts/dev/market-characterization-check.mjs && node scripts/dev/market-economy-characterization-check.mjs && node scripts/dev/market-stock-characterization-check.mjs && node scripts/dev/market-demand-characterization-check.mjs && node scripts/dev/market-outbound-characterization-check.mjs && node scripts/dev/market-outbound-runtime-characterization-check.mjs && node scripts/dev/market-operation-characterization-check.mjs && node scripts/dev/market-shipment-resolution-characterization-check.mjs && node scripts/dev/ship-owned-outbound-check.mjs && node scripts/dev/market-review-regression-check.mjs && node scripts/dev/market-inbound-delivery-check.mjs && node scripts/dev/market-shipment-schedule-check.mjs && node scripts/dev/market-purchase-cost-presentation-check.mjs && node scripts/dev/market-cargo-aging-check.mjs && node scripts/dev/market-audit-fixes-check.mjs",
     "materials:check": "node scripts/dev/material-group-characterization-check.mjs",

@@ -2,6 +2,7 @@ import { SkyholdData } from "../data/store.js";
 import { canReadHolding } from "../data/access-guard.js";
 import { appendHoldingOperation, findHoldingOperation } from "../data/operations.js";
 import { bankTermsToken, issueBankLoan, repayBankLoan } from "../engines/economy/banking.js";
+import { openBankDeposit, withdrawBankDeposit } from "../engines/economy/bank-deposits.js";
 
 function fail(message, code = "invalid") { return Object.assign(new Error(message), { code }); }
 export function createBankOperationExecutor({
@@ -14,7 +15,8 @@ export function createBankOperationExecutor({
     const op = { type: String(raw.type ?? ""), operationId: String(raw.operationId ?? ""), holdingId: String(raw.holdingId ?? ""),
       expectedRevision: Number(raw.expectedRevision), sourceToken: String(raw.sourceToken ?? ""), bankId: String(raw.bankId ?? ""),
       offerId: String(raw.offerId ?? ""), loanId: String(raw.loanId ?? ""), amountCopper: Number(raw.amountCopper) };
-    if (!["bank-borrow", "bank-repay"].includes(op.type) || !/^[a-zA-Z0-9:_-]{6,160}$/.test(op.operationId)
+    if (["bank-deposit", "bank-withdraw"].includes(op.type)) op.depositId = String(raw.depositId ?? "");
+    if (!["bank-borrow", "bank-repay", "bank-deposit", "bank-withdraw"].includes(op.type) || !/^[a-zA-Z0-9:_-]{6,160}$/.test(op.operationId)
       || !op.holdingId || !op.sourceToken || !Number.isSafeInteger(op.expectedRevision) || op.expectedRevision < 0
       || !Number.isSafeInteger(op.amountCopper) || op.amountCopper <= 0 || op.amountCopper > 100000000) throw fail("Некорректная банковская операция.");
     const user = getUser(userId);
@@ -31,21 +33,24 @@ export function createBankOperationExecutor({
       const at = now();
       let result;
       try {
-        result = op.type === "bank-borrow"
-          ? issueBankLoan({ data, holding, ...op, createdAt: at })
-          : repayBankLoan({ holding, ...op });
+        const operations = { "bank-borrow": issueBankLoan, "bank-repay": repayBankLoan, "bank-deposit": openBankDeposit, "bank-withdraw": withdrawBankDeposit };
+        result = operations[op.type]({ data, holding, ...op, createdAt: at, closedAt: at });
       } catch (error) {
         throw fail(error.message || "Банк отклонил операцию.", "invalid");
       }
       result.operationId = op.operationId;
       holding.storage.log ??= [];
-      const cashRows = op.type === "bank-borrow"
-        ? [{ qty: result.principalCopper, name: "Получен банковский заём" }, { qty: -result.feeCopper, name: "Комиссия банка" }]
-        : [{ qty: -result.paidCopper, name: "Погашение банковского займа" }];
+      const cashRows = {
+        "bank-borrow": [{ qty: result.principalCopper, name: "Получен банковский заём" }, { qty: -result.feeCopper, name: "Комиссия банка" }],
+        "bank-repay": [{ qty: -result.paidCopper, name: "Погашение банковского займа" }],
+        "bank-deposit": [{ qty: -result.placedCopper, name: "Деньги размещены в банке" }],
+        "bank-withdraw": [{ qty: result.principalCopper, name: "Возврат банковского вклада" }, { qty: result.interestCopper, name: "Доход по вкладу" }]
+      }[op.type];
+      const titles = { "bank-borrow": "Банковский заём", "bank-repay": "Погашение займа", "bank-deposit": "Открытие вклада", "bank-withdraw": "Снятие вклада" };
       holding.storage.log.push(...cashRows.filter((row) => row.qty).map((row) => ({ ...row, kind: "bank", resourceId: "money", roomId: "treasury",
-        source: "Банк", note: op.type === "bank-borrow" ? "Заём подлежит возврату; это финансирование, а не прибыль." : "Погашение тела и начисленных процентов.", ts: at, operationId: op.operationId })));
+        source: "Банк", note: op.type === "bank-borrow" ? "Заём подлежит возврату; это финансирование, а не прибыль." : titles[op.type], ts: at, operationId: op.operationId })));
       appendHoldingOperation(holding, { type: "bank", operationId: op.operationId, createdAt: at,
-        title: op.type === "bank-borrow" ? "Банковский заём" : "Погашение займа",
+        title: titles[op.type],
         payload: { signature, userId, result } });
       return result;
     }, { reason: op.type });
