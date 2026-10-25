@@ -5,9 +5,10 @@ import { normalizeEventRegionOptions } from "../data/random-events.js";
 import { resolveMarketLogistics, shortestMarketRoute } from "../engines/market/logistics.js";
 import { marketShipmentRiskProfile, planMarketPurchase } from "../engines/market/pricing.js";
 import { createMarketOutboundOrder } from "../engines/market/outbound.js";
-import { carrierProvidersForLogistics, applyCarrierToLogistics } from "../engines/market/providers.js";
-import { prepareMarketAuthorityContext } from "../apps/market/authority-context.js";
+import { carrierProvidersForLogistics, carrierProvidersForRoute, applyCarrierToLogistics } from "../engines/market/providers.js";
+import { prepareMarketAuthorityContext, authorityOutboundRoutes } from "../apps/market/authority-context.js";
 import { worldMarketFixture } from "./world-ship-market-characterization-check.mjs";
+import { checkMarketMixedChoice } from "./market-mixed-choice-check.mjs";
 
 function fixture(legs) {
   const { data, holding, ship } = worldMarketFixture();
@@ -226,10 +227,47 @@ function candidatePricing() {
   }
 }
 
+function modeShareFallback() {
+  const organization = { id: "regional", label: "Региональный", carrier: { enabled: true, modes: ["rail", "caravan"],
+    countryShares: [{ countryId: "public", sharePct: 20, modeShares: { rail: 70, caravan: null } }] } };
+  const provider = carrierProvidersForRoute({ organizations: [organization], countryId: "public", transportMode: "multimodal",
+    routeModes: ["rail", "caravan"], isGM: true }).find((row) => row.id === organization.id);
+  assert.equal(provider.sharePct, 20, "an unspecified mode share inherits the country's general share before taking the bottleneck");
+}
+
+function carrierPresence() {
+  const { data, holding, regions } = fixture([["rail", "caravan"]]); holding.type = "village";
+  const organization = { id: "regional", label: "Региональный", visibility: "public", carrier: { enabled: true, modes: ["rail", "caravan"],
+    countryShares: [{ countryId: "public", sharePct: 100, modeShares: { rail: 100, caravan: 0 } }] } };
+  data.catalog.marketEconomy.organizations = [organization];
+  const logistics = resolveMarketLogistics({ holding, market: { regionId: "a", transportModes: ["rail", "caravan"] }, regions });
+  for (const isGM of [true, false]) {
+    const providers = carrierProvidersForLogistics({ organizations: [organization], countryId: "public", logistics, isGM });
+    for (const [id, mode] of [["regional", "rail"], ["independent-carriers", "caravan"]]) {
+      const carrier = providers.find((row) => row.id === id), selected = applyCarrierToLogistics(logistics, carrier);
+      assert.ok(selected.routeCandidates.length > 0);
+      assert.ok(selected.routeCandidates.every((route) => route.routeModes.every((value) => value === mode)), "a provider cannot borrow a route with zero local presence from another provider");
+      const denied = logistics.routeCandidates.find((route) => !route.routeModes.includes(mode));
+      assert.equal(applyCarrierToLogistics(denied, carrier).ok, false, "a direct candidate also checks the provider's local presence");
+      const initial = prepareMarketAuthorityContext({ data, holding, marketId: "a", carrierId: id, isGM });
+      const offer = initial.quote.offers.find((row) => row.resourceId === "test-freight");
+      const view = prepareMarketAuthorityContext({ data, holding, marketId: "a", carrierId: id, isGM,
+        quantities: { [offer.id]: 2 }, outboundQuantities: { "test-freight": 2 } });
+      assert.equal(view.plan.ok, true); assert.deepEqual(view.plan.logistics.routeModes, [mode]);
+      assert.equal(view.plan.logistics.carrierSharePct, 100);
+      const outbound = authorityOutboundRoutes({ data, holding, market: view.market, economy: view.economy, resources: view.resources,
+        offers: view.outbound.offers, carriers: view.quote.carriers, isGM }).filter((route) => route.carrierId === id);
+      assert.ok(outbound.length > 0);
+      assert.ok(outbound.every((route) => route.routeModes.every((value) => value === mode)), "outbound authority uses the same provider-specific availability as purchases");
+    }
+  }
+}
+
 const cases = { "own-ship": ownShip, candidates, "last-mile": lastMile, "last-mile-carrier": lastMileCarrier, "access-override": accessOverride,
-  "selected-modes": selectedModes, "aerial-dominance": aerialDominance, "candidate-pricing": candidatePricing };
+  "selected-modes": selectedModes, "aerial-dominance": aerialDominance, "candidate-pricing": candidatePricing,
+  "mixed-choice": checkMarketMixedChoice, "mode-share-fallback": modeShareFallback, "carrier-presence": carrierPresence };
 export function checkMarketRouteSelection() { for (const check of Object.values(cases)) check(); }
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   if (process.argv[2]) cases[process.argv[2]](); else checkMarketRouteSelection();
-  console.log("Market route selection: explicit-mode restrictions/transit, aerial-entry dominance, exhaustive pricing, effective URS, GM/player planning, carrier compatibility and airship risk passed.");
+  console.log("Market route selection: exhaustive multimodal choice, explicit restrictions/transit, aerial dominance, URS, GM/player planning, route-specific carrier presence and inherited shares passed.");
 }
