@@ -82,6 +82,17 @@ try {
   assert.equal(guarded._actionClickController.signal.aborted, false, "a vetoed close must retain interaction listeners");
   assert.equal(guarded._pressedAction, true);
   vetoClose = false; await guarded.close(); assert.equal(guarded._actionClickController.signal.aborted, true);
+  const folderRow = (text) => ({ dataset: { regionSearchText: text }, hidden: false });
+  const a = folderRow("гавань"), b = folderRow("остров");
+  const folder = (name, open, row) => ({ dataset: { fblsDisclosure: `region-folder:${name}` }, open, hidden: false, querySelectorAll: () => [row] });
+  const originalFolders = [folder("Гавани", false, a), folder("Острова", true, b)];
+  const rootFor = (folders) => ({ querySelectorAll: (selector) => selector === "[data-region-folder]" ? folders : selector === "[data-region-search-text]" ? [a, b] : [], querySelector: () => null });
+  app._applySearch(rootFor(originalFolders), "гавань"); assert.equal(originalFolders[0].open, true);
+  const renderedFolders = [folder("Гавани", true, a), folder("Острова", true, b)];
+  app._applySearch(rootFor(renderedFolders), "гавань");
+  app._applySearch(rootFor(renderedFolders), "");
+  assert.equal(renderedFolders[0].open, false, "clearing a search restores the folder collapsed before search, including across a render");
+  assert.equal(renderedFolders[1].open, true);
 } finally {
   SkyholdData.view = originalView;
   SkyholdData.transaction = originalTransaction;

@@ -274,6 +274,14 @@ export class SkyholdRegionCatalogEditor extends FloatingTooltipsMixin(PendingFie
 
   _applySearch(root, value = "") {
     const query = String(value ?? "").trim().toLocaleLowerCase("ru");
+    const folders = [...(root?.querySelectorAll?.("[data-region-folder]") ?? [])];
+    if (query) {
+      this._folderSearchState ??= new Map();
+      for (const folder of folders) {
+        const key = folder.dataset.fblsDisclosure;
+        if (!this._folderSearchState.has(key)) this._folderSearchState.set(key, folder.open);
+      }
+    }
     let visible = 0;
     for (const card of root?.querySelectorAll?.("[data-region-search-text]") ?? []) {
       const show = !query || String(card.dataset.regionSearchText ?? "").includes(query);
@@ -282,10 +290,15 @@ export class SkyholdRegionCatalogEditor extends FloatingTooltipsMixin(PendingFie
     }
     const count = root?.querySelector?.("[data-region-visible-count]");
     if (count) count.textContent = String(visible);
-    for (const folder of root?.querySelectorAll?.("[data-region-folder]") ?? []) {
+    for (const folder of folders) {
       folder.hidden = ![...folder.querySelectorAll("[data-region-search-text]")].some((row) => !row.hidden);
       if (query && !folder.hidden) folder.open = true;
+      else if (!query && this._folderSearchState?.has(folder.dataset.fblsDisclosure)) {
+        folder.open = this._folderSearchState.get(folder.dataset.fblsDisclosure);
+        this._disclosures.states.set(folder.dataset.fblsDisclosure, folder.open);
+      }
     }
+    if (!query) this._folderSearchState = null;
   }
 
   async _saveOrder(change) {
