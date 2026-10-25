@@ -220,6 +220,9 @@ export class SkyholdTendayApp extends WindowFrameMixin(RenderSchedulerMixin(Hand
     this.rationUnitsPerResident = null;
     this._operationToken = null;
     this._dataHookId = globalThis.Hooks?.on?.("fblSkyholdDataChanged", () => this._onDataChanged());
+    this._calendarHookId = globalThis.Hooks?.on?.("fblSkyholdCalendariaChanged", () => {
+      if (this.rendered && this.phase === "preview") this.requestRender({ focus: false });
+    });
   }
 
   async _getWorkflow() {
@@ -252,6 +255,7 @@ export class SkyholdTendayApp extends WindowFrameMixin(RenderSchedulerMixin(Hand
       // World labor settings can change without advancing Skyhold's revision.
       const dependencyHash = workflow._tendayDependencyHash?.(dataView, this.holdingId) ?? "";
       const prepared = cached?.dependencyHash && cached.dependencyHash === dependencyHash
+        && workflow._isPreparedTendayCurrent(cached, dataView)
         ? cached
         : await workflow._prepareTendayOperation({
           holdingId: this.holdingId,
@@ -588,6 +592,8 @@ export class SkyholdTendayApp extends WindowFrameMixin(RenderSchedulerMixin(Hand
     this._unbindWindowFrameSync();
     if (this._dataHookId !== undefined && this._dataHookId !== null) globalThis.Hooks?.off?.("fblSkyholdDataChanged", this._dataHookId);
     this._dataHookId = null;
+    if (this._calendarHookId !== undefined && this._calendarHookId !== null) globalThis.Hooks?.off?.("fblSkyholdCalendariaChanged", this._calendarHookId);
+    this._calendarHookId = null;
     if (SkyholdTendayApp.instances.get(this.instanceKey) === this) SkyholdTendayApp.instances.delete(this.instanceKey);
   }
 }

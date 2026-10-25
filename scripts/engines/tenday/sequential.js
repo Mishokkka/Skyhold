@@ -3,9 +3,9 @@ import { economyLedgerTotals } from "../economy/ledger.js";
 import { summarizeEconomyReport } from "../economy/report.js";
 
 const ARRAYS = ["produced", "consumed", "skipped", "income", "formulas", "work", "ledger"];
-const SUMS = { food: ["needed", "eaten", "hungryResidentDays"], construction: ["attempts", "completed"],
+const SUMS = { food: ["needed", "eaten", "hungryResidentDays", "expiredQty"], construction: ["attempts", "completed"],
   trade: ["buyers", "sold", "revenue"], treasury: ["spent"],
-  politics: ["influenceGained"], marketStockRecovery: ["recoveredQty"],
+  politics: ["influenceGained"], marketStockRecovery: ["recoveredQty"], marketDemandRecovery: ["recoveredQty"],
   finance: ["planned", "paidCopper", "personnelOfficeCashbackCopper", "personnelOfficeCashbackBaseCopper", "personnelOfficeCostCopper", "personnelOfficeNetSavingCopper"],
   agriculture: ["producedQty", "expiredQty", "workQdUsed"],
   maintenance: ["availablePoints", "allocatedPoints", "unusedPoints", "allocatedTechnicalQd"],
@@ -21,8 +21,19 @@ export function combineTendayReports(periods, dependencies = {}) {
     if (!reports.some((report) => report[domain])) continue;
     combined[domain] ??= {};
     for (const key of keys) combined[domain][key] = reports.reduce((sum, report) => sum + (Number(report[domain]?.[key]) || 0), 0);
-    for (const key of ["lines", "purchases", "charges", "unpaidDirectiveIds", "expiredDecreeIds", "payments", "planningSkipped", "upkeepSkipped", "issues", "buildings", "warnings"]) {
+    for (const key of ["lines", "purchases", "charges", "unpaidDirectiveIds", "expiredDecreeIds", "payments", "planningSkipped", "upkeepSkipped", "issues", "buildings", "warnings", "recovered"]) {
       if (reports.some((report) => Array.isArray(report[domain]?.[key]))) combined[domain][key] = reports.flatMap((report) => report[domain]?.[key] ?? []);
+    }
+  }
+  // Deliveries and losses are flows; transit/decision queues describe the final boundary.
+  for (const domain of ["market", "marketOutbound"]) {
+    if (!reports.some((report) => report[domain])) continue;
+    combined[domain] ??= {};
+    combined[domain].advancedQd = periods.length * 40;
+    for (const key of ["dispatched", "delivered", "delayed", "lost"]) {
+      if (reports.some((report) => Array.isArray(report[domain]?.[key]))) {
+        combined[domain][key] = reports.flatMap((report) => report[domain]?.[key] ?? []);
+      }
     }
   }
   if (combined.politics) combined.politics.periods = periods.map((period) => ({ periodIndex: period.clock.beforePeriod + 1,
@@ -47,7 +58,7 @@ export async function prepareSequentialTendays(app, { holdingId, qd, data, ratio
   let draftData = data;
   for (let index = 0; index < count; index++) {
     const prepared = await app._prepareTendayOperation({ holdingId, qd: 40, dataView: draftData,
-      rationUnitsPerResident, operationId: `${operationId}-p${index + 1}`, preparedAt });
+      rationUnitsPerResident, operationId: `${operationId}-p${index + 1}`, preparedAt, pendingEventsCollected: true });
     if (!prepared.ok) return { ...prepared, message: `Десятник ${index + 1}/${count}: ${prepared.message}` };
     periods.push(prepared);
     draftData = { ...draftData, meta: { ...draftData.meta,

@@ -257,6 +257,7 @@ export function timestampForCalendariaDate(dateTime = null) {
   const normalized = normalizeCalendariaDateTime(dateTime, activeCalendar());
   if (!isCalendariaDateInRange(normalized)) return null;
   const value = safeCall(() => api.dateToTimestamp(normalized), null);
+  if (value === null || value === undefined || value === "") return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
@@ -265,21 +266,19 @@ export function addCalendariaQd(dateTime = null, qd = 0) {
   const api = calendariaApi();
   const calendar = activeCalendar();
   const start = normalizeCalendariaDateTime(dateTime, calendar);
-  if (!api || !start) return null;
+  if (!api || !start || !isCalendariaDateInRange(start, calendar)) return null;
   const hours = (Number(qd) || 0) * (getCalendariaHoursPerDay() / 4);
   const advanced = api.addHours
     ? safeCall(() => api.addHours(start, hours), null)
     : null;
-  if (advanced) return normalizeCalendariaDateTime(advanced, calendar);
+  if (advanced && isCalendariaDateInRange(advanced, calendar)) return normalizeCalendariaDateTime(advanced, calendar);
   const timestamp = timestampForCalendariaDate(start);
-  if (Number.isFinite(Number(timestamp)) && api.timestampToDate) {
+  if (timestamp !== null && Number.isFinite(timestamp) && api.timestampToDate) {
     const secondsPerHour = (calendar?.days?.secondsPerMinute ?? 60) * (calendar?.days?.minutesPerHour ?? 60);
     const fromTimestamp = safeCall(() => api.timestampToDate(Number(timestamp) + hours * secondsPerHour), null);
-    if (fromTimestamp) return normalizeCalendariaDateTime(fromTimestamp, calendar);
+    if (fromTimestamp && isCalendariaDateInRange(fromTimestamp, calendar)) return normalizeCalendariaDateTime(fromTimestamp, calendar);
   }
-  const fallback = clonePlain(start);
-  fallback.hour = Number(fallback.hour ?? 0) + hours;
-  return normalizeCalendariaDateTime(fallback, calendar);
+  return null;
 }
 
 export function getCalendariaSnapshot() {
