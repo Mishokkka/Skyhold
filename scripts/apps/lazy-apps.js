@@ -41,7 +41,7 @@ export async function openMarketApp(options = {}) {
 }
 
 export async function openBankApp(options = {}) {
-  await ensureSkyholdStylesheet("secondary");
+  await Promise.all([ensureSkyholdStylesheet("secondary"), ensureSkyholdTemplateGroup("bankWindow")]);
   const module = await import("./bank-app.js");
   return rememberAppClass(module.SkyholdBankApp).open(options);
 }

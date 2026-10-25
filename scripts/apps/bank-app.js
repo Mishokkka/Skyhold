@@ -14,11 +14,14 @@ import { bindTabNavigation } from "./common/tab-navigation.js";
 import { RenderSchedulerMixin } from "./common/render-scheduler.js";
 import { restoreApplicationFocus } from "./common/window-focus-keeper.js";
 import { requestSkyholdAppRender } from "./registry.js";
+import { saveStatusContext, syncSaveStatus } from "./common/save-status.js";
+import { FloatingTooltipsMixin } from "./common/floating-tooltip.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const EDIT_ACTIONS = ["bank-add", "bank-save", "bank-discard", "bank-clone", "bank-add-offer", "bank-remove-offer"];
 const ACTIONS = [...EDIT_ACTIONS, "bank-tab", "bank-select", "bank-page", "bank-review", "bank-confirm", "bank-cancel", "bank-retry", "bank-contract-kind", "bank-history", "bank-contract", "bank-payment-max", "bank-editor-select"];
-export class SkyholdBankApp extends RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2)) {
+export class SkyholdBankApp extends FloatingTooltipsMixin(RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2))) {
+  static inFlight = new Set();
   static instances = new Map();
   static sessions = new Map();
   static DEFAULT_OPTIONS = {
@@ -46,7 +49,7 @@ export class SkyholdBankApp extends RenderSchedulerMixin(HandlebarsApplicationMi
     const session = this.constructor.sessions.get(holdingId);
     if (session) {
       Object.assign(this.state, session.state); this._draftBanks = session.draft; this._catalogToken = session.token; this._pendingOperation = session.pending;
-      this._catalogSave = session.saving; this._busy = Boolean(this._catalogSave);
+      this._catalogSave = session.saving; this._busy = Boolean(this._catalogSave || this.constructor.inFlight.has(this._pendingOperation?.operationId));
     }
     this._disclosures = new DisclosureState();
   }
@@ -55,6 +58,9 @@ export class SkyholdBankApp extends RenderSchedulerMixin(HandlebarsApplicationMi
     // target alive until release, including when the user holds the button.
     if (this._pressedAction) { this._deferredRenderOptions = { ...this._deferredRenderOptions, ...options }; return null; }
     return super.requestRender(options);
+  }
+  _catalogStatus() {
+    return saveStatusContext("manual", this._catalogSave ? "saving" : this._editorError ? "error" : this._draftBanks ? "dirty" : "saved");
   }
   async _prepareContext(options) {
     const base = await super._prepareContext(options), data = SkyholdData.view();
@@ -83,7 +89,7 @@ export class SkyholdBankApp extends RenderSchedulerMixin(HandlebarsApplicationMi
     return { ...base, hasHolding: true, holdingName: holding.name, isGM: permissions.isGM, canTransact, blocked, busy: this._busy,
       readonlyMessage: !permissions.mayUseStorage ? "ГМ не разрешил распоряжаться казной этого поселения." : !canTransact ? permissions.authorityStatus.detail : "",
       state: this.state, sortRate: this.state.sort === "rate", borrow, deposit, contractsTab, admin, comparison, contracts, editor, dirty: Boolean(this._draftBanks), editorError: this._editorError,
-      bankCount: model.banks.length, treasuryText: money(holding.storage?.moneyCopper), placedText: money(placed), projectedText: money(projected),
+      saveStatus: this._catalogStatus(), bankCount: model.banks.length, treasuryText: money(holding.storage?.moneyCopper), placedText: money(placed), projectedText: money(projected),
       pending: Boolean(this._pendingOperation), confirmation: this._confirmation, confirmationStale, canConfirm: canTransact && !blocked && !confirmationStale,
       presets: BANK_PRESETS, history: this.state.history, loanContracts: this.state.contractKind === "loans", depositContracts: this.state.contractKind === "deposits" };
   }
@@ -111,8 +117,7 @@ export class SkyholdBankApp extends RenderSchedulerMixin(HandlebarsApplicationMi
       if (field.dataset.bankField && globalThis.game?.user?.isGM && !this._busy) {
         this._ensureDraft();
         for (const button of this.element.querySelectorAll('[data-action="bank-save"], [data-action="bank-discard"]')) button.disabled = false;
-        const status = this.element.querySelector("[data-bank-draft-status]");
-        if (status) status.textContent = "Есть несохранённые изменения";
+        syncSaveStatus(this.element, { context: this._catalogStatus() });
         const bank = this._draftBanks.find((row) => row.id === field.closest("[data-bank-id]")?.dataset.bankId);
         const group = field.closest("[data-offer-group]")?.dataset.offerGroup, id = field.closest("[data-offer-id]")?.dataset.offerId;
         const row = id ? bank?.[group]?.find((offer) => offer.id === id) : bank;
@@ -131,7 +136,7 @@ export class SkyholdBankApp extends RenderSchedulerMixin(HandlebarsApplicationMi
     };
     this.element?.addEventListener("input", update, { signal: this._listeners.signal });
     this.element?.addEventListener("change", update, { signal: this._listeners.signal });
-    if (this._busy) for (const field of this.element?.querySelectorAll("button, input, select, textarea") ?? []) field.disabled = true;
+    if (this._busy) for (const field of this.element?.querySelectorAll(".fbls-bank-shell :is(button, input, select, textarea)") ?? []) field.disabled = true;
     restoreApplicationFocus(this, options);
   }
   _ensureDraft() {
@@ -212,9 +217,21 @@ export class SkyholdBankApp extends RenderSchedulerMixin(HandlebarsApplicationMi
       this._pendingOperation = this._confirmation.operation;
     }
     if (!this._pendingOperation) return;
-    this._busy = true; this.requestRender({ focus: false });
     const operationId = this._pendingOperation.operationId;
-    const result = await requestMarketOperation(this._pendingOperation);
+    // A reopened window shares the original wait, rather than submitting it again.
+    if (this.constructor.inFlight.has(operationId)) return;
+    this.constructor.inFlight.add(operationId);
+    this._busy = true; this.requestRender({ focus: false });
+    let result;
+    try { result = await requestMarketOperation(this._pendingOperation); }
+    finally {
+      this.constructor.inFlight.delete(operationId);
+      for (const app of new Set([this, this.constructor.instances.get(this.holdingId)])) {
+        if (app?._pendingOperation?.operationId !== operationId) continue;
+        app._busy = Boolean(app._catalogSave);
+        if (app !== this) app.requestRender({ focus: false });
+      }
+    }
     if (!result?.ok) throw new Error("Банковская операция не подтверждена.");
     this._clearPendingOperation(operationId);
     this._confirmation = null; this.state.payment = null; this.state.tab = "contracts"; this.state.history = false;

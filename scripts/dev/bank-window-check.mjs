@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { BANK_PRESETS } from "../data/banks.js";
-import { SkyholdData, registerMarketOperationExecutor } from "../data/store.js";
+import { SkyholdData, registerMarketOperationExecutor, handleSkyholdSocketPayload } from "../data/store.js";
 import { openBankDeposit } from "../engines/economy/bank-deposits.js";
 
 globalThis.foundry = { applications: { api: { ApplicationV2: class {
@@ -37,18 +37,20 @@ await action(app, "bank-cancel");
 
 app.state.tab = "admin"; context = await app._prepareContext({});
 assert.equal(context.editor.bank.id, "merchant");
-const buttons = [{ disabled: true }, { disabled: true }], listeners = {}, status = { textContent: "" };
-app.element = { ownerDocument: {}, querySelectorAll: (selector) => selector.includes('data-action="bank-save"') ? buttons : [],
+assert.equal(context.saveStatus.state, "saved");
+const buttons = [{ disabled: true }, { disabled: true }], listeners = {}, status = { textContent: "", dataset: {}, setAttribute() {} };
+app.element = { ownerDocument: {}, querySelectorAll: (selector) => selector.includes('data-action="bank-save"') ? buttons : selector === "[data-save-status]" ? [status] : [],
   querySelector: () => status, addEventListener: (name, fn) => { listeners[name] = fn; } };
 await app._onRender(context, {});
 const field = { dataset: { bankField: "name" }, type: "text", value: "Мой банк", closest: (selector) => selector.includes("data-bank-view-field") ? field : selector === "[data-bank-id]" ? { dataset: { bankId: "merchant" } } : null };
 listeners.input({ target: field, type: "input" });
 assert.equal(buttons[0].disabled, false, "first edit immediately enables Save without replacing the focused input");
-assert.match(status.textContent, /несохранённые/);
+assert.match(status.textContent, /Есть изменения/); assert.equal(status.dataset.saveState, "dirty");
 await action(app, "bank-tab", { tab: "borrow" }); await action(app, "bank-tab", { tab: "admin" });
 assert.equal((await app._prepareContext({})).editor.bank.name, "Мой банк");
 app._draftBanks[0].offers[0].annualRateBps = 25000;
 await action(app, "bank-save"); assert.equal(writes, 0); assert.match(app._editorError, /ставку/);
+assert.equal((await app._prepareContext({})).saveStatus.state, "error", "a rejected catalog save must not look saved");
 assert.equal(app._draftBanks[0].offers[0].annualRateBps, 25000);
 await action(app, "bank-discard"); assert.equal((await app._prepareContext({})).editor.bank.name, BANK_PRESETS[0].name);
 app._ensureDraft(); app._draftBanks[0].name = "Сохранённый банк";
@@ -114,6 +116,34 @@ for (const outcome of ["success-closed", "success-reopened", "rejected-reopened"
   assert.equal(SkyholdBankApp.sessions.get("village").pending?.operationId ?? null, expectedId, "Saved session follows the same settlement");
   assert.equal((await next._prepareContext({})).blocked, Boolean(expectedId));
 }
+{
+  SkyholdBankApp.instances.clear(); SkyholdBankApp.sessions.clear();
+  const player = { id: "player", isGM: false, active: true }, emitted = [];
+  game.user = player; game.users = { contents: [gm, player], get: (id) => [gm, player].find((row) => row.id === id) };
+  game.socket.emit = (_channel, payload) => emitted.push(payload);
+  const original = new SkyholdBankApp({ holdingId: "village" }); original.requestRender = () => {};
+  SkyholdBankApp.instances.set("village", original);
+  await original._prepareContext({}); original._review();
+  const inFlight = action(original, "bank-confirm"); await Promise.resolve();
+  const operationId = original._pendingOperation.operationId;
+  await original.close();
+  const next = new SkyholdBankApp({ holdingId: "village" }); next.requestRender = () => {};
+  SkyholdBankApp.instances.set("village", next); await next._prepareContext({});
+  await action(next, "bank-retry");
+  const retainedId = next._pendingOperation?.operationId;
+  const sessionId = SkyholdBankApp.sessions.get("village").pending?.operationId;
+  const waiting = (await next._prepareContext({})).busy;
+  // Complete the actual player socket wait before checking the captured retry state.
+  await handleSkyholdSocketPayload({ type: "playerMarketOperationResponse", requestId: operationId, operationId,
+    userId: player.id, gmId: gm.id, ok: true, result: { ok: true, loanId: "player-contract" } }, gm.id);
+  await inFlight;
+  assert.equal(retainedId, operationId, "retry during an existing player request must retain the original operation ID");
+  assert.equal(sessionId, operationId, "the saved session retains the request until its actual response");
+  assert.equal(waiting, true, "a reopened window shows the request that is still in flight");
+  assert.equal(emitted.length, 1, "reopening and retrying cannot emit a second monetary request");
+  assert.equal(next._pendingOperation, null); assert.equal(next._busy, false, "the actual reply releases the reopened window");
+  game.user = gm; game.users = [gm]; game.socket.emit = () => {};
+}
 SkyholdBankApp.instances.clear(); SkyholdBankApp.sessions.clear();
 // A selected contract may disappear after another client completes it.
 {
@@ -145,6 +175,7 @@ for (const outcome of ["saved-closed", "saved-reopened", "failed-reopened", "new
   if (outcome !== "saved-closed") {
     next = new SkyholdBankApp({ holdingId: "village" }); next.requestRender = () => {}; SkyholdBankApp.instances.set("village", next);
     assert.equal(next._busy, true, "reopened editor waits for the existing catalog write");
+    assert.equal((await next._prepareContext({})).saveStatus.state, "saving");
     if (outcome === "newer-edit") next._draftBanks[0].name = "Более новая правка";
   }
   complete(); await saving;
