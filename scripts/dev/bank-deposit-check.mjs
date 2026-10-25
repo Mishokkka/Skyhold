@@ -7,6 +7,8 @@ import { createBankOperationExecutor } from "../apps/bank-operation-executor.js"
 import { mergeHoldingDefaults } from "../data/normalizers.js";
 import { prepareBankComparison, bankEditorContext } from "../apps/domains/finance/bank-context.js";
 import { createEconomyHarness, makeHolding } from "./economy-characterization-check.mjs";
+import { formatCopperCurrencyCompact as money } from "../core/currency.js";
+import { checkBankWorkflowIntegration } from "./bank-workflow-integration-check.mjs";
 
 const fixture = () => ({ meta: { revision: 1 }, catalog: { banks: [structuredClone(BANK_PRESETS[0])] }, holdings: [mergeHoldingDefaults({ id: "village", visibility: "public", gm: { playersCanUseStorage: true }, storage: { moneyCopper: 10000 } })] });
 const open = (data, offerId = "term", amountCopper = 1000) => openBankDeposit({ data, holding: data.holdings[0], bankId: "merchant", offerId, amountCopper, operationId: `deposit-${offerId}` });
@@ -138,6 +140,14 @@ export async function checkBankDeposits() {
   }
   {
     const data = fixture(), holding = data.holdings[0];
+    holding.special.banking = { relationships: { merchant: -30 } };
+    const model = prepareBankingModel(data, holding);
+    const comparison = prepareBankComparison({ data, holding, model, state: { tab: "borrow", amount: 1000, days: 60 }, canTransact: true });
+    assert.equal(comparison.selected.canReview, false);
+    assert.equal(comparison.selected.feeText, money(11), "unavailable offers retain their real commission in the passport");
+  }
+  {
+    const data = fixture(), holding = data.holdings[0];
     data.catalog.banks = Array.from({ length: 100 }, (_, i) => ({ ...structuredClone(BANK_PRESETS[0]), id: `bank-${i}`, offers: Array.from({ length: 20 }, (_, j) => ({ ...BANK_PRESETS[0].offers[0], id: `offer-${j}` })) }));
     const model = prepareBankingModel(data, holding), state = { tab: "borrow", amount: 1000, days: 60 };
     const comparison = prepareBankComparison({ data, holding, model, state, canTransact: true });
@@ -146,6 +156,7 @@ export async function checkBankDeposits() {
     const withLoan = fixture(); issueBankLoan({ data: withLoan, holding: withLoan.holdings[0], bankId: "merchant", offerId: "working-capital", amountCopper: 1000, operationId: "existing-loan" });
     assert.equal(withLoan.holdings[0].special.banking.loans.length, 1);
   }
+  await checkBankWorkflowIntegration();
   console.log("Bank deposit checks passed: storage, maturity, early closure, frozen terms, limits, rounding, authority/replay, failed writes, economy and large catalogs.");
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await checkBankDeposits();

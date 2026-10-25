@@ -115,4 +115,77 @@ for (const outcome of ["success-closed", "success-reopened", "rejected-reopened"
   assert.equal((await next._prepareContext({})).blocked, Boolean(expectedId));
 }
 SkyholdBankApp.instances.clear(); SkyholdBankApp.sessions.clear();
+// A selected contract may disappear after another client completes it.
+{
+  const holding = data.holdings[0];
+  holding.special.banking.deposits.push({ id: "second-storage", bankName: "Второй банк", offerName: "Хранение", kind: "storage", status: "active", principalCopper: 500, annualRateBps: 0 });
+  holding.special.banking.deposits.find((row) => row.id === "storage-contract").status = "closed";
+  const changed = new SkyholdBankApp({ holdingId: "village" }); changed.requestRender = () => {};
+  Object.assign(changed.state, { tab: "contracts", contractKind: "deposits", contractId: "storage-contract", payment: 200 });
+  const visible = await changed._prepareContext({});
+  assert.equal(visible.contracts.payment.amount, 500);
+  changed._review();
+  assert.equal(changed._confirmation.operation.depositId, "second-storage");
+  assert.equal(changed._confirmation.operation.amountCopper, 500, "confirmation must match the visible amount, not a draft from the closed contract");
+}
+for (const outcome of ["saved-closed", "saved-reopened", "failed-reopened", "newer-edit"]) {
+  SkyholdBankApp.instances.clear(); SkyholdBankApp.sessions.clear();
+  const original = new SkyholdBankApp({ holdingId: "village" }); original.requestRender = () => {}; original.state.tab = "admin";
+  SkyholdBankApp.instances.set("village", original);
+  await original._prepareContext({}); original._ensureDraft(); original._draftBanks[0].name = `Каталог ${outcome}`;
+  let complete;
+  SkyholdData.transaction = (updater) => new Promise((resolve, reject) => {
+    complete = () => {
+      if (outcome === "failed-reopened") { reject(new Error("catalog write failed")); return; }
+      const draft = structuredClone(data); updater(draft); draft.meta.revision++; data = draft; resolve();
+    };
+  });
+  const saving = action(original, "bank-save"); await Promise.resolve(); await original.close();
+  let next;
+  if (outcome !== "saved-closed") {
+    next = new SkyholdBankApp({ holdingId: "village" }); next.requestRender = () => {}; SkyholdBankApp.instances.set("village", next);
+    assert.equal(next._busy, true, "reopened editor waits for the existing catalog write");
+    if (outcome === "newer-edit") next._draftBanks[0].name = "Более новая правка";
+  }
+  complete(); await saving;
+  next ??= new SkyholdBankApp({ holdingId: "village" }); next.requestRender = () => {};
+  const result = await next._prepareContext({});
+  assert.equal(result.busy, false, outcome);
+  assert.equal(result.dirty, ["failed-reopened", "newer-edit"].includes(outcome), outcome);
+  if (outcome === "failed-reopened") assert.match(next._editorError, /catalog write failed/);
+  if (outcome === "newer-edit") {
+    SkyholdData.transaction = async (updater) => { const draft = structuredClone(data); updater(draft); data = draft; };
+    await action(next, "bank-save");
+    assert.equal(data.catalog.banks[0].name, "Более новая правка", "a newer draft survives and uses the committed base token");
+  }
+}
+SkyholdBankApp.instances.clear(); SkyholdBankApp.sessions.clear();
+{
+  const unrelated = new SkyholdBankApp({ holdingId: "village" }); unrelated.requestRender = () => {}; unrelated.state.tab = "admin";
+  await unrelated._prepareContext({}); unrelated._ensureDraft(); unrelated._draftBanks[0].name = "Неотправленная правка";
+  unrelated._pendingOperation = { type: "bank-deposit", operationId: "uncertain-money" };
+  SkyholdData.transaction = async () => { throw Object.assign(new Error("GM catalog conflict"), { code: "conflict" }); };
+  await action(unrelated, "bank-save");
+  assert.equal(unrelated._pendingOperation?.operationId, "uncertain-money", "an unrelated catalog failure must not forget an uncertain money operation");
+}
+{
+  const pointerApp = new SkyholdBankApp({ holdingId: "village" }), handlers = {};
+  let renderCalls = 0;
+  pointerApp.render = () => { renderCalls++; return pointerApp; };
+  pointerApp.element = { ownerDocument: {}, querySelectorAll: () => [], addEventListener: (name, fn) => { handlers[name] = fn; } };
+  await pointerApp._onRender({}, {});
+  const target = { disabled: false, closest() { return this; } };
+  const field = { dataset: { bankViewField: "amount" }, type: "number", value: "777", closest() { return this; } };
+  handlers.pointerdown({ button: 0, target });
+  handlers.change({ target: field, type: "change" });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(renderCalls, 0, "blur/change must not replace the held action button");
+  assert.equal(pointerApp.state.amount, 777, "the current amount is available to the subsequent click");
+  handlers.pointerup();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(renderCalls, 1, "release flushes the queued render after the click dispatch");
+  handlers.pointerdown({ button: 0, target }); pointerApp.requestRender({ focus: false }); handlers.pointercancel();
+  await new Promise((resolve) => setTimeout(resolve, 10)); assert.equal(renderCalls, 2, "cancelled gestures also release queued renders");
+  await pointerApp.close();
+}
 console.log("Bank window checks passed: review/staleness, editor validation/conflicts/drafts, GM/player/offline, first-contract payment, busy feedback and close/reopen retry.");

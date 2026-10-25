@@ -44,8 +44,17 @@ export class SkyholdBankApp extends RenderSchedulerMixin(HandlebarsApplicationMi
     this.state = { tab: "borrow", amount: 1000, days: 60, query: "", sort: "value", availableOnly: false, page: 0,
       contractKind: "loans", history: false, contractPage: 0, contractId: "", payment: null, editorId: "", editorQuery: "", editorPage: 0 };
     const session = this.constructor.sessions.get(holdingId);
-    if (session) { Object.assign(this.state, session.state); this._draftBanks = session.draft; this._catalogToken = session.token; this._pendingOperation = session.pending; }
+    if (session) {
+      Object.assign(this.state, session.state); this._draftBanks = session.draft; this._catalogToken = session.token; this._pendingOperation = session.pending;
+      this._catalogSave = session.saving; this._busy = Boolean(this._catalogSave);
+    }
     this._disclosures = new DisclosureState();
+  }
+  requestRender(options = {}) {
+    // A blur/change can occur between pointerdown and click. Keep that click's
+    // target alive until release, including when the user holds the button.
+    if (this._pressedAction) { this._deferredRenderOptions = { ...this._deferredRenderOptions, ...options }; return null; }
+    return super.requestRender(options);
   }
   async _prepareContext(options) {
     const base = await super._prepareContext(options), data = SkyholdData.view();
@@ -65,7 +74,10 @@ export class SkyholdBankApp extends RenderSchedulerMixin(HandlebarsApplicationMi
     if (comparison) this.state.page = comparison.page;
     if (contracts) this.state.contractPage = contracts.page;
     if (editor) this.state.editorPage = editor.page;
-    if (contracts?.payment) this.state.contractId = contracts.payment.id;
+    if (contracts?.payment) {
+      if (this.state.contractId !== contracts.payment.id) this.state.payment = null;
+      this.state.contractId = contracts.payment.id;
+    }
     if (editor?.bank) this.state.editorId = editor.bank.id;
     const confirmationStale = this._confirmation && (this._confirmation.operation.sourceToken !== sourceToken || this._confirmation.operation.expectedRevision !== data.meta?.revision);
     return { ...base, hasHolding: true, holdingName: holding.name, isGM: permissions.isGM, canTransact, blocked, busy: this._busy,
@@ -78,6 +90,21 @@ export class SkyholdBankApp extends RenderSchedulerMixin(HandlebarsApplicationMi
   async _onRender(context, options) {
     await super._onRender(context, options); this._listeners?.abort(); this._listeners = new AbortController();
     this._disclosures.bind(this.element); bindTabNavigation(this, this.element, { signal: this._listeners.signal });
+    const release = () => {
+      this._pressedAction = false;
+      const options = this._deferredRenderOptions; this._deferredRenderOptions = null;
+      if (options) this.requestRender(options);
+    };
+    this.element?.addEventListener("pointerdown", (event) => {
+      if (event.button !== 0) return;
+      const button = event.target.closest?.("button[data-action]");
+      this._pressedAction = Boolean(button && !button.disabled);
+    }, { capture: true, signal: this._listeners.signal });
+    for (const name of ["pointerup", "pointercancel"]) {
+      this.element?.addEventListener(name, release, { signal: this._listeners.signal });
+      this.element?.ownerDocument?.addEventListener?.(name, release, { signal: this._listeners.signal });
+    }
+    globalThis.window?.addEventListener?.("blur", release, { signal: this._listeners.signal });
     const update = (event) => {
       const field = event.target.closest("[data-bank-view-field], [data-bank-field]");
       if (!field) return;
@@ -133,12 +160,34 @@ export class SkyholdBankApp extends RenderSchedulerMixin(HandlebarsApplicationMi
       const invalid = [...(this.element?.querySelectorAll("[data-bank-field]") ?? [])].find((field) => !field.checkValidity()), error = validateBankCatalog(this._draftBanks);
       if (invalid || error) { invalid?.reportValidity(); throw new Error(error || "Проверьте заполнение полей редактора."); }
       const draft = this._draftBanks.map(normalizeBank), token = this._catalogToken;
+      const save = { draft: this._draftBanks, sourceHash: stableDataHash(this._draftBanks), savedToken: stableDataHash(draft) };
+      this._catalogSave = save;
       this._busy = true; this.requestRender({ focus: false });
-      await SkyholdData.transaction((data) => {
-        if (stableDataHash(bankCatalog(data)) !== token) throw new Error("Общий каталог изменился в другом окне. Черновик сохранён здесь; отмените изменения, чтобы загрузить актуальный каталог.");
-        data.catalog.banks = draft;
-      }, { reason: "bank-catalog", scope: "catalog" });
-      this._draftBanks = null; this._editorError = ""; SkyholdBankApp.rerenderOpen();
+      try {
+        await SkyholdData.transaction((data) => {
+          if (stableDataHash(bankCatalog(data)) !== token) throw new Error("Общий каталог изменился в другом окне. Черновик сохранён здесь; отмените изменения, чтобы загрузить актуальный каталог.");
+          data.catalog.banks = draft;
+        }, { reason: "bank-catalog", scope: "catalog" });
+        this._settleCatalogSave(save);
+        SkyholdBankApp.rerenderOpen();
+      } catch (error) { this._settleCatalogSave(save, error); throw error; }
+    }
+  }
+  _settleCatalogSave(save, error = null) {
+    const unchanged = stableDataHash(save.draft) === save.sourceHash;
+    for (const app of new Set([this, this.constructor.instances.get(this.holdingId)])) {
+      if (app?._catalogSave !== save) continue;
+      app._catalogSave = null; app._busy = false; app._editorError = error?.message ?? "";
+      if (!error && app._draftBanks === save.draft) {
+        if (unchanged) app._draftBanks = null;
+        app._catalogToken = save.savedToken;
+      }
+      if (app !== this) app.requestRender({ focus: false });
+    }
+    const session = this.constructor.sessions.get(this.holdingId);
+    if (session?.saving === save) {
+      session.saving = null;
+      if (!error && session.draft === save.draft) { if (unchanged) session.draft = null; session.token = save.savedToken; }
     }
   }
   _review() {
@@ -204,14 +253,17 @@ export class SkyholdBankApp extends RenderSchedulerMixin(HandlebarsApplicationMi
       if (action === "bank-cancel") this._confirmation = null;
       if (action === "bank-confirm" || action === "bank-retry") await this._submit(action === "bank-retry");
     } catch (error) {
-      if (["conflict", "invalid", "forbidden", "execution-failed"].includes(error?.code)) { this._clearPendingOperation(this._pendingOperation?.operationId); this._confirmation = null; }
+      if (["bank-confirm", "bank-retry"].includes(action) && ["conflict", "invalid", "forbidden", "execution-failed"].includes(error?.code)) {
+        this._clearPendingOperation(this._pendingOperation?.operationId); this._confirmation = null;
+      }
       if (action === "bank-save") this._editorError = error.message;
       globalThis.ui?.notifications?.warn?.(error.message || "Операция не выполнена.");
     } finally { this._busy = false; this.requestRender({ focus: false }); }
   }
   async close(options) {
     this._listeners?.abort(); this._disclosures.close();
-    this.constructor.sessions.set(this.holdingId, { state: { ...this.state }, draft: this._draftBanks, token: this._catalogToken, pending: this._pendingOperation });
+    this._pressedAction = false; this._deferredRenderOptions = null;
+    this.constructor.sessions.set(this.holdingId, { state: { ...this.state }, draft: this._draftBanks, token: this._catalogToken, pending: this._pendingOperation, saving: this._catalogSave });
     if (this.constructor.instances.get(this.holdingId) === this) this.constructor.instances.delete(this.holdingId);
     return super.close(options);
   }

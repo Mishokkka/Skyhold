@@ -26,11 +26,12 @@ export function prepareBankComparison({ data, holding, model, state, canTransact
       const depositIncome = deposit ? depositInterestAtTerm(amount, offer.annualRateBps, offer.termDays) : 0;
       const income = deposit && days >= offer.termDays ? depositIncome : 0;
       const interest = deposit ? 0 : loanInterestForDays(principal, offer.annualRateBps, days);
+      const fee = deposit ? 0 : Math.ceil(principal * offer.feeBps / 10000);
       const total = deposit ? amount + income : principal + interest;
-      const value = deposit ? income : (quote.feeCopper ?? Math.ceil(principal * offer.feeBps / 10000)) + interest;
+      const value = deposit ? income : fee + interest;
       rows.push({ key: bankProductKey(bank.id, offer.id), bankId: bank.id, offerId: offer.id, bankName: bank.name, name: offer.name,
         description: bank.description, relationship: bankRelationship(holding, bank.id), rateText: pct(offer.annualRateBps), termText: offer.kind === "storage" ? "В любой момент" : `${offer.termDays} дн.`,
-        amountText: money(principal), receivedText: money(deposit ? amount : principal - Math.ceil(principal * offer.feeBps / 10000)), feeText: money(quote.feeCopper ?? 0),
+        amountText: money(principal), receivedText: money(deposit ? amount : principal - fee), feeText: money(fee),
         totalText: money(total), valueText: money(value), termTotalText: money(deposit ? amount + depositIncome : principal + loanInterestForDays(principal, offer.annualRateBps, offer.termDays)),
         message, eligible, canReview: eligible && canTransact && !blocked, value, rate: offer.annualRateBps, deposit,
         early: deposit && offer.kind !== "storage" && days < offer.termDays, storage: offer.kind === "storage", principal,
