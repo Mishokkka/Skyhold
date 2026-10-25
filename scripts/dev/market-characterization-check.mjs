@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { mixedMarketRouteFixture } from "./fixtures/mixed-market-route.mjs";
 import { DEFAULT_EXTERNAL_MARKET } from "../data/market/default-market.js";
 import { effectiveMarketCatalog, marketCatalogSummary, normalizeMarketCatalog } from "../data/market/market-catalog.js";
 import { marketLocationForHolding, marketRegionFactors, marketRegionForValue } from "../data/market/region-market.js";
@@ -316,6 +317,23 @@ const localGroundMarket = { ...novandMarket, regionId: "fletchenrand", accessLev
 const skyIslandRoute = resolveMarketLogistics({ holding: skyIslandHolding, market: localGroundMarket, regions: logisticsRegions, dependencies: logisticsDependencies });
 assert.equal(skyIslandRoute.ok, false);
 assert.match(skyIslandRoute.reasons.join(" "), /воздушн/i, "sky-island delivery must be locked when the provider cannot hire an airship");
+const { regions: transferRegions, holding: transferHolding, market: transferMarket } = mixedMarketRouteFixture();
+const transferRoute = resolveMarketLogistics({ holding: transferHolding, market: transferMarket, regions: transferRegions });
+assert.equal(transferRoute.ok, true, "a ground-only supplier can hand cargo to airship carriers at an intermediate transfer port");
+assert.deepEqual(transferRoute.routeModes, ["airship", "airship", "airship", "caravan"]);
+assert.equal(transferRoute.requiredAccessLevel, 4); assert.equal(transferRoute.transportMode, "multimodal");
+const transferQuote = prepareMarketQuote({ holding: { ...developedHolding, ...transferHolding }, market: { ...novandMarket, ...transferMarket }, resources,
+  location: resolveMarketLocation(developedHolding, DEFAULT_EXTERNAL_MARKET.locationProfiles), logistics: transferRoute });
+const transferPlan = planMarketPurchase({ holding: developedHolding, quote: transferQuote, quantities: { "novand-wine-offer": 2 } });
+assert.equal(transferPlan.inaccessible, false); assert.equal(transferPlan.ok, true, "mixed delivery must proceed beyond reachability to a valid purchase plan");
+assert.ok(transferPlan.routeCopper > 0, "all mixed delivery legs remain paid");
+for (const direction of ["inbound", "outbound"]) {
+  assert.equal(resolveMarketLogistics({ holding: transferHolding, market: transferMarket, regions: transferRegions, direction }).ok, true);
+}
+assert.equal(resolveMarketLogistics({ holding: transferHolding, market: transferMarket, regions: transferRegions, accessLevel: 3 }).ok, false, "transfers still require the URS of the entire route");
+const noTransfer = structuredClone(transferRegions); noTransfer[3].marketTransportModes = ["caravan"];
+assert.equal(resolveMarketLogistics({ holding: transferHolding, market: transferMarket, regions: noTransfer }).ok, false, "a transfer port must support both adjacent transport modes");
+assert.equal(resolveMarketLogistics({ holding: transferHolding, market: { ...transferMarket, transportModes: ["rail"] }, regions: transferRegions }).ok, false, "supplier restrictions still apply to its own terminal leg");
 const buildingAccessHolding = { ...developedHolding, overview: { ...developedHolding.overview, development: { technology: 0, culture: 0 } }, buildings: { list: [{ name: "Большой воздушный порт", lifecycle: "active", condition: "intact", marketAccessLevel: 4 }] } };
 assert.equal(holdingMarketAccessLevel(buildingAccessHolding).level, 3, "buildings must not silently replace the manually entered URS");
 const logisticsQuote = prepareMarketQuote({ holding: developedHolding, market: novandMarket, resources, location: resolveMarketLocation(developedHolding, DEFAULT_EXTERNAL_MARKET.locationProfiles), logistics: novandLogistics });

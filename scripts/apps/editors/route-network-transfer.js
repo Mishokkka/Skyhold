@@ -64,7 +64,7 @@ export function mergeRouteNetwork(catalog, source) {
   for (const row of network.eventRegions) {
     const links = [...(byId.get(row.value)?.marketLinks ?? []), ...row.marketLinks];
     if (links.length > MAX_MARKET_LINKS_PER_REGION) throw new Error("Объединение превышает лимит 300 связей рынка. Данные не изменены.");
-    byId.set(row.value, { ...row, marketLinks: links });
+    byId.set(row.value, { ...byId.get(row.value), ...row, marketLinks: links });
   }
   const eventRegions = [...byId.values()];
   const economy = normalizeMarketEconomy(catalog.marketEconomy, { locations: existing });

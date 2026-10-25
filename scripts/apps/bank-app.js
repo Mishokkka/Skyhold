@@ -16,11 +16,12 @@ import { restoreApplicationFocus } from "./common/window-focus-keeper.js";
 import { requestSkyholdAppRender } from "./registry.js";
 import { saveStatusContext, syncSaveStatus } from "./common/save-status.js";
 import { FloatingTooltipsMixin } from "./common/floating-tooltip.js";
+import { HeldActionRenderMixin } from "./common/held-action-render.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const EDIT_ACTIONS = ["bank-add", "bank-save", "bank-discard", "bank-clone", "bank-add-offer", "bank-remove-offer"];
 const ACTIONS = [...EDIT_ACTIONS, "bank-tab", "bank-select", "bank-page", "bank-review", "bank-confirm", "bank-cancel", "bank-retry", "bank-contract-kind", "bank-history", "bank-contract", "bank-payment-max", "bank-editor-select"];
-export class SkyholdBankApp extends FloatingTooltipsMixin(RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2))) {
+export class SkyholdBankApp extends FloatingTooltipsMixin(HeldActionRenderMixin(RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2)))) {
   static inFlight = new Set();
   static instances = new Map();
   static sessions = new Map();
@@ -53,12 +54,6 @@ export class SkyholdBankApp extends FloatingTooltipsMixin(RenderSchedulerMixin(H
       this._catalogSave = session.saving; this._busy = Boolean(this._catalogSave || this.constructor.inFlight.has(this._pendingOperation?.operationId));
     }
     this._disclosures = new DisclosureState();
-  }
-  requestRender(options = {}) {
-    // A blur/change can occur between pointerdown and click. Keep that click's
-    // target alive until release, including when the user holds the button.
-    if (this._pressedAction) { this._deferredRenderOptions = { ...this._deferredRenderOptions, ...options }; return null; }
-    return super.requestRender(options);
   }
   _catalogStatus() {
     return saveStatusContext("manual", this._catalogSave ? "saving" : this._editorError ? "error" : this._draftBanks ? "dirty" : "saved");
@@ -97,21 +92,6 @@ export class SkyholdBankApp extends FloatingTooltipsMixin(RenderSchedulerMixin(H
   async _onRender(context, options) {
     await super._onRender(context, options); this._listeners?.abort(); this._listeners = new AbortController();
     this._disclosures.bind(this.element); bindTabNavigation(this, this.element, { signal: this._listeners.signal });
-    const release = () => {
-      this._pressedAction = false;
-      const options = this._deferredRenderOptions; this._deferredRenderOptions = null;
-      if (options) this.requestRender(options);
-    };
-    this.element?.addEventListener("pointerdown", (event) => {
-      if (event.button !== 0) return;
-      const button = event.target.closest?.("button[data-action]");
-      this._pressedAction = Boolean(button && !button.disabled);
-    }, { capture: true, signal: this._listeners.signal });
-    for (const name of ["pointerup", "pointercancel"]) {
-      this.element?.addEventListener(name, release, { signal: this._listeners.signal });
-      this.element?.ownerDocument?.addEventListener?.(name, release, { signal: this._listeners.signal });
-    }
-    globalThis.window?.addEventListener?.("blur", release, { signal: this._listeners.signal });
     const update = (event) => {
       const field = event.target.closest("[data-bank-view-field], [data-bank-field]");
       if (!field) return;
@@ -280,7 +260,6 @@ export class SkyholdBankApp extends FloatingTooltipsMixin(RenderSchedulerMixin(H
   }
   async close(options) {
     this._listeners?.abort(); this._disclosures.close();
-    this._pressedAction = false; this._deferredRenderOptions = null;
     this.constructor.sessions.set(this.holdingId, { state: { ...this._bankViewState }, draft: this._draftBanks, token: this._catalogToken, pending: this._pendingOperation, saving: this._catalogSave });
     if (this.constructor.instances.get(this.holdingId) === this) this.constructor.instances.delete(this.holdingId);
     return super.close(options);

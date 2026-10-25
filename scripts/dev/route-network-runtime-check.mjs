@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { mixedMarketRouteFixture } from "./fixtures/mixed-market-route.mjs";
 import { exportRouteNetwork, parseRouteNetwork, mergeRouteNetwork } from "../apps/editors/route-network-transfer.js";
 import { authorityMarketLogistics } from "../apps/market/authority-context.js";
 import { checkCalendariaCharacterization } from "./calendaria-characterization-check.mjs";
@@ -18,6 +19,8 @@ const rows = [
   { value: "b", label: "B", marketMapX: 400, marketMapY: 100, marketLinks: [] }
 ];
 const catalog = { eventRegions: rows, marketRouteMap: { worldWidth: 1000, worldHeight: 600, kmPerPixel: 2 } };
+const organizedCatalog = structuredClone(catalog); organizedCatalog.eventRegions[0].catalogFolder = "Мои гавани";
+assert.equal(mergeRouteNetwork(organizedCatalog, exportRouteNetwork(catalog)).eventRegions[0].catalogFolder, "Мои гавани", "merging an older route map must not erase local folders");
 const normalizedRows = normalizeEventRegionOptions(rows, { fallback: false });
 assert.deepEqual(graphContext(normalizedRows, "", catalog.marketRouteMap, "winter", { normalizedRegions: true }).edges,
   graphContext(rows, "", catalog.marketRouteMap, "winter").edges,
@@ -47,6 +50,17 @@ assert.throws(() => mergeRouteNetwork(catalog, overflow), /лимит 300/);
 assert.deepEqual(network, original);
 
 checkCalendariaCharacterization();
+const mixed = mixedMarketRouteFixture();
+for (const isGM of [false, true]) for (const direction of ["inbound", "outbound"]) {
+  const input = { holding: mixed.holding, market: mixed.market, data: { catalog: { eventRegions: mixed.regions } }, isGM, direction };
+  const authority = authorityMarketLogistics(input).logistics;
+  assert.equal(authority.ok, true, "GM/player authority must accept a transfer from caravan to airship");
+  assert.deepEqual(authority.routeModes, ["airship", "airship", "airship", "caravan"]);
+  if (direction === "inbound") {
+    const displayed = SkyholdMarketApp.prototype._marketLogistics.call({ carrierId: "" }, input.holding, input.data, input.market, { isGM }).logistics;
+    assert.deepEqual(displayed, authority, "the window and authority must agree on mixed delivery");
+  }
+}
 const holding = { overview: { region: "a" }, gm: { calendaria: { lastDateText: "18 Хладорост, 881" } } };
 const market = { regionId: "b", transportModes: ["caravan"] };
 for (const isGM of [false, true]) {

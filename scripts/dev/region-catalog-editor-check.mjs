@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { SkyholdData } from "../data/store.js";
+import { normalizeEventRegionOptions } from "../data/random-events.js";
+import { regionCatalogGroups, moveCatalogRegion, moveCatalogFolder, placeCatalogRegion } from "../apps/domains/region-catalog-order.js";
+import { HeldActionRenderMixin } from "../apps/common/held-action-render.js";
 
 globalThis.foundry = { applications: { api: {
-  ApplicationV2: class { async _onClose() {} }, HandlebarsApplicationMixin: (Base) => Base
+  ApplicationV2: class { get state() { return 0; } async _prepareContext() { return {}; } async _preClose() {} async _onClose() {} }, HandlebarsApplicationMixin: (Base) => Base
 } } };
 const { SkyholdRegionCatalogEditor } = await import("../apps/editors/region-catalog-editor.js");
 const data = { catalog: { eventRegions: [{ value: "port", label: "Port", marketSpecialtyIds: [], marketLinks: [] }] } };
@@ -18,7 +21,7 @@ try {
   const app = new SkyholdRegionCatalogEditor({ owner: { requestRender: () => ownerRenders++ } });
   app.regionId = "port";
   const badge = { lastChild: { textContent: "" } };
-  app.element = { querySelector: () => badge };
+  app.element = { querySelector: () => badge, querySelectorAll: () => [] };
   const field = { dataset: { regionId: "port", regionSpecialtyId: "coastal-fishery" }, checked: true };
   await app._onSpecialtyChange({ preventDefault() {} }, field);
   assert.deepEqual(data.catalog.eventRegions[0].marketSpecialtyIds, ["coastal-fishery"]);
@@ -30,6 +33,55 @@ try {
   for (const key of ["region-list", "region-detail", "region-specialties"]) {
     assert.ok(template.includes('data-render-scroll-key="' + key + '"'), key + " scroll must survive renders");
   }
+  const rows = normalizeEventRegionOptions([
+    { value: "a", label: "A", catalogFolder: " Гавани ", marketLinks: [{ regionId: "b", modes: ["caravan"] }] },
+    { value: "b", label: "B" }, { value: "c", label: "C", catalogFolder: "Гавани" }, { value: "d", label: "D", catalogFolder: "Острова" }
+  ], { fallback: false });
+  const links = structuredClone(rows[0].marketLinks);
+  assert.deepEqual(regionCatalogGroups(rows).map((row) => row.name), ["Гавани", "", "Острова"]);
+  assert.equal(moveCatalogRegion(rows, "c", -1), true);
+  assert.deepEqual(regionCatalogGroups(rows)[0].rows.map((row) => row.value), ["c", "a"]);
+  assert.equal(moveCatalogFolder(rows, "Острова", -1), true);
+  assert.deepEqual(regionCatalogGroups(rows).map((row) => row.name), ["Гавани", "Острова", ""]);
+  assert.equal(placeCatalogRegion(rows, "b", { beforeId: "a" }), true);
+  assert.equal(rows.find((row) => row.value === "b").catalogFolder, "Гавани");
+  assert.deepEqual(regionCatalogGroups(rows)[0].rows.map((row) => row.value), ["c", "b", "a"]);
+  const beforeNoop = structuredClone(rows);
+  assert.equal(placeCatalogRegion(rows, "a", { beforeId: "a" }), false);
+  assert.equal(placeCatalogRegion(rows, "a", { beforeId: "deleted" }), false);
+  assert.deepEqual(rows, beforeNoop, "stale targets cannot lose or move a location");
+  assert.equal(placeCatalogRegion(rows, "a", { folder: "" }), true);
+  const restored = normalizeEventRegionOptions(JSON.parse(JSON.stringify(rows)), { fallback: false });
+  assert.deepEqual(restored, rows, "folders and order survive save/load normalization");
+  assert.deepEqual(restored.find((row) => row.value === "a").marketLinks, links, "organization must not rewrite route links");
+  data.catalog.eventRegions = restored; app.regionId = "b"; app.requestRender = () => {};
+  await app._onRegionCatalogFieldChange({ preventDefault() {} }, { dataset: { regionId: "b", regionCatalogField: "catalogFolder" }, type: "text", value: "Новая папка" });
+  assert.equal(data.catalog.eventRegions.find((row) => row.value === "b").catalogFolder, "Новая папка");
+  const context = await app._prepareContext({});
+  assert.equal(context.selectedRegion.value, "b"); assert.equal(app.state, 0);
+  assert.ok(context.selectedRegion.marketSpecialtyGroups.length > 1);
+  assert.ok(context.selectedRegion.marketSpecialtyGroups.every((group) => group.rows.every((row) => row.category === group.label)));
+  globalThis.game.user.isGM = false;
+  const playerBefore = JSON.stringify(data);
+  await app._saveOrder((current) => moveCatalogRegion(current, "b", -1));
+  await app._onRegionCatalogFieldChange({ preventDefault() {} }, { dataset: { regionId: "b", regionCatalogField: "catalogFolder" }, type: "text", value: "Чужая папка" });
+  assert.equal(JSON.stringify(data), playerBefore, "players cannot reorganize the world catalog");
+  globalThis.game.user.isGM = true;
+  const regularTransaction = SkyholdData.transaction; let finishSave, closed = false;
+  SkyholdData.transaction = (callback) => new Promise((resolve) => { finishSave = () => resolve(regularTransaction(callback)); });
+  const savingOrder = app._saveOrder((current) => placeCatalogRegion(current, "b", { folder: "После закрытия" }));
+  const closing = app._preClose({}).then(() => { closed = true; });
+  await Promise.resolve(); assert.equal(closed, false, "close must wait for a pending drag/drop or arrow write");
+  finishSave(); await Promise.all([savingOrder, closing]);
+  assert.equal(closed, true); assert.equal(data.catalog.eventRegions.find((row) => row.value === "b").catalogFolder, "После закрытия");
+  SkyholdData.transaction = regularTransaction;
+  let vetoClose = true;
+  const Guarded = HeldActionRenderMixin(class { async close() { if (vetoClose) throw new Error("pending save"); return this; } });
+  const guarded = new Guarded(); guarded._actionClickController = new AbortController(); guarded._pressedAction = true;
+  await assert.rejects(guarded.close(), /pending save/);
+  assert.equal(guarded._actionClickController.signal.aborted, false, "a vetoed close must retain interaction listeners");
+  assert.equal(guarded._pressedAction, true);
+  vetoClose = false; await guarded.close(); assert.equal(guarded._actionClickController.signal.aborted, true);
 } finally {
   SkyholdData.view = originalView;
   SkyholdData.transaction = originalTransaction;

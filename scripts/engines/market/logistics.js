@@ -236,18 +236,20 @@ export function resolveMarketLogistics({ holding = {}, market = {}, regions = []
   const routeRequired = Boolean(origin && destination && !sameRegion);
   const access = Number.isFinite(accessLevel) ? { level: Math.max(0, Math.floor(accessLevel)), source: "УРС с действующими политическими источниками" } : holdingMarketAccessLevel(holding);
   const byId = new Map(regions.map((region) => [String(region.value), region]));
+  const modesForEdge = (fromId, edge) => {
+    const fromRegion = byId.get(fromId), toRegion = byId.get(edge.to);
+    const mustFly = fromRegion?.marketAirshipOnly || toRegion?.marketAirshipOnly
+      || (fromRegion?.marketLandmassId && toRegion?.marketLandmassId && fromRegion.marketLandmassId !== toRegion.marketLandmassId);
+    // A supplier controls its terminal leg. Carriers can change at intermediate ports.
+    const atMarket = fromId === origin?.value || edge.to === origin?.value;
+    return (edge.modes?.length ? edge.modes : Object.keys(TRANSPORT)).filter((mode) => TRANSPORT[mode]
+      && (!atMarket || marketModes.has(mode)) && (!mustFly || mode === "airship")
+      && (!fromRegion?.marketTransportModes || fromRegion.marketTransportModes.includes(mode))
+      && (!toRegion?.marketTransportModes || toRegion.marketTransportModes.includes(mode)));
+  };
   const search = selectedRoute || !routeRequired ? { routes: [], limited: false } : marketTransportRoutes({
     graph: routeGraph(regions), from: destination.value, to: origin.value, maxAccess: access.level,
-    modesForEdge: (fromId, edge) => {
-      const fromRegion = byId.get(fromId);
-      const toRegion = byId.get(edge.to);
-      const mustFly = fromRegion?.marketAirshipOnly || toRegion?.marketAirshipOnly
-        || (fromRegion?.marketLandmassId && toRegion?.marketLandmassId && fromRegion.marketLandmassId !== toRegion.marketLandmassId);
-      return (edge.modes?.length ? edge.modes : [...marketModes]).filter((mode) => TRANSPORT[mode] && marketModes.has(mode)
-        && (!mustFly || mode === "airship")
-        && (!fromRegion?.marketTransportModes || fromRegion.marketTransportModes.includes(mode))
-        && (!toRegion?.marketTransportModes || toRegion.marketTransportModes.includes(mode)));
-    },
+    modesForEdge,
     termsForEdge: (edge, transport) => {
       const terms = TRANSPORT[transport];
       const seasonal = edgeSeasonalModifier(edge, seasonId);
@@ -260,14 +262,15 @@ export function resolveMarketLogistics({ holding = {}, market = {}, regions = []
   });
   const graphRoute = selectedRoute ?? search.routes.sort((a, b) => a.accessCost - b.accessCost || a.distanceKm - b.distanceKm
     || a.time - b.time || a.mask - b.mask)[0] ?? null;
-  const routeModes = (graphRoute?.edges ?? []).map((edge) => {
+  const routeModes = (graphRoute?.edges ?? []).map((edge, index) => {
     if (edge.selectedMode) return edge.selectedMode;
-    const candidates = (edge.modes?.length ? edge.modes : ["caravan", "rail", "airship"]).filter((mode) => marketModes.has(mode));
+    const candidates = modesForEdge(edge.from ?? graphRoute.path[index], edge);
     if (candidates.includes("rail")) return "rail";
     if (candidates.includes("caravan")) return "caravan";
     return candidates.includes("airship") ? "airship" : "";
   }).filter(Boolean);
-  const airshipLastMile = ["sky-island", "ship"].includes(String(holding?.type ?? "")) && marketModes.has("airship");
+  const airshipAvailable = marketModes.has("airship") || routeModes.includes("airship");
+  const airshipLastMile = ["sky-island", "ship"].includes(String(holding?.type ?? "")) && airshipAvailable;
   const usedModes = [...new Set([...routeModes, ...(airshipLastMile ? ["airship"] : [])])];
   let transportMode = usedModes.length > 1 ? "multimodal" : (usedModes[0] ?? "");
   if (!routeRequired && !transportMode) {
@@ -294,7 +297,7 @@ export function resolveMarketLogistics({ holding = {}, market = {}, regions = []
   if (origin && !originFactors.enabled) reasons.push("Торговля в регионе поставщика отключена.");
   if (destination && !destinationFactors.enabled) reasons.push("Регион поселения закрыт для торговли.");
   if (routeRequired && !graphRoute) reasons.push("Между регионом поселения и рынком нет связи на карте маршрутов.");
-  if (airshipRequired && !marketModes.has("airship")) reasons.push("Для доставки к поселению или между материками нужен воздушный корабль, но поставщик его не предлагает.");
+  if (airshipRequired && !airshipAvailable) reasons.push("Для доставки к поселению или между материками нужен воздушный корабль, но на маршруте нет доступного воздушного перевозчика.");
   if (crossLandmass && graphRoute && !routeModes.includes("airship")) reasons.push("Межматериковая часть маршрута не имеет воздушной связи.");
   if (!transportMode) reasons.push("Нет общего способа доставки между регионами.");
   if (access.level < requiredAccessLevel) reasons.push(`Для этого рынка нужен УРС ${requiredAccessLevel}, у поселения УРС ${access.level}.`);

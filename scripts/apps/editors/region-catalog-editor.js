@@ -10,11 +10,18 @@ import { dispatchDelegatedAction } from "../common/delegated-events.js";
 import { RenderSchedulerMixin } from "../common/render-scheduler.js";
 import { bindGlobalInputGuard, bindInputGuards, unbindGlobalInputGuard } from "../../utils/input-guards.js";
 import { openRouteGraphApp } from "../lazy-apps.js";
+import { HeldActionRenderMixin } from "../common/held-action-render.js";
+import { rememberApplicationFocusReturn, restoreApplicationFocus } from "../common/window-focus-keeper.js";
+import { DisclosureState } from "../common/disclosure-state.js";
+import { regionCatalogGroups, moveCatalogRegion, moveCatalogFolder, placeCatalogRegion } from "../domains/region-catalog-order.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
-const REGION_FIELDS = new Set(["value", "label", "aliases", "countryId", "marketSizeId", "marketSpecialtyIds", "marketConditionId", "marketTags", "marketProfile", "marketPriceFactor", "marketAvailabilityFactor", "marketDeliveryFactor", "marketTimeFactor", "marketRiskFactor", "marketExportFactor", "marketImportFactor", "marketTaxRate", "marketStatus", "marketEnabled", "marketLandmassId", "marketAirshipOnly", "marketTransportModes", "marketLinks", "marketMapX", "marketMapY", "marketNotes"]);
+const REGION_FIELDS = new Set(["value", "label", "catalogFolder", "aliases", "countryId", "marketSizeId", "marketSpecialtyIds", "marketConditionId", "marketTags", "marketProfile", "marketPriceFactor", "marketAvailabilityFactor", "marketDeliveryFactor", "marketTimeFactor", "marketRiskFactor", "marketExportFactor", "marketImportFactor", "marketTaxRate", "marketStatus", "marketEnabled", "marketLandmassId", "marketAirshipOnly", "marketTransportModes", "marketLinks", "marketMapX", "marketMapY", "marketNotes"]);
 const MARKET_FACTOR_FIELDS = new Set(["marketPriceFactor", "marketAvailabilityFactor", "marketDeliveryFactor", "marketTimeFactor", "marketRiskFactor", "marketExportFactor", "marketImportFactor", "marketTaxRate"]);
 const MARKET_ARRAY_FIELDS = new Set(["aliases", "marketSpecialtyIds", "marketTags", "marketTransportModes", "marketLinks"]);
+const SPECIALTY_ICONS = { "Сельское хозяйство": "fa-wheat-awn", "Промыслы": "fa-fish", "Добыча": "fa-gem",
+  "Пищевая переработка": "fa-bread-slice", "Промышленность": "fa-industry", "Кораблестроение": "fa-ship",
+  "Логистика": "fa-route", "Город и институты": "fa-building-columns", "Торговый режим": "fa-scale-balanced" };
 const MARKET_TRANSPORT_MODES = [
   { value: "caravan", label: "Караван", icon: "fa-solid fa-cart-flatbed" },
   { value: "rail", label: "Железная дорога", icon: "fa-solid fa-train" },
@@ -74,7 +81,7 @@ function regionCatalogRows(regionOptions = [], economySource = null, selectedId 
       marketProfileLabel: profile.label,
       marketLinkCount: Array.isArray(option.marketLinks) ? option.marketLinks.length : 0,
       marketTransportOptions: MARKET_TRANSPORT_MODES.map((row) => ({ ...row, selected: modes.has(row.value) })),
-      searchText: [option.value, option.label, country?.label, size?.label, condition?.label, ...specialtyLabels, ...(option.aliases ?? [])].filter(Boolean).join(" ").toLocaleLowerCase("ru")
+      searchText: [option.value, option.label, option.catalogFolder, country?.label, size?.label, condition?.label, ...specialtyLabels, ...(option.aliases ?? [])].filter(Boolean).join(" ").toLocaleLowerCase("ru")
     };
   });
 }
@@ -113,7 +120,7 @@ function rewriteRegionReferences(data, fromValue = "", toValue = "") {
   }
 }
 
-export class SkyholdRegionCatalogEditor extends FloatingTooltipsMixin(PendingFieldSavesMixin(RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2)))) {
+export class SkyholdRegionCatalogEditor extends FloatingTooltipsMixin(PendingFieldSavesMixin(HeldActionRenderMixin(RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2))))) {
   constructor({ owner = null } = {}, options = {}) {
     super(options);
     this.owner = owner;
@@ -121,6 +128,7 @@ export class SkyholdRegionCatalogEditor extends FloatingTooltipsMixin(PendingFie
     this.activeSection = "overview";
     this.search = "";
     this.specialtySearch = "";
+    this._disclosures = new DisclosureState();
   }
 
   openRegion(regionId = "") {
@@ -144,10 +152,22 @@ export class SkyholdRegionCatalogEditor extends FloatingTooltipsMixin(PendingFie
     if (!rows.some((row) => row.selected)) this.regionId = rows[0]?.value ?? "";
     rows = regionCatalogRows(data?.catalog?.eventRegions, data?.catalog?.marketEconomy, this.regionId);
     const selectedRegion = rows.find((row) => row.selected) ?? null;
+    if (selectedRegion) {
+      const groups = new Map();
+      for (const row of selectedRegion.marketSpecialtyOptions) {
+        const category = row.category || "Прочее";
+        if (!groups.has(category)) groups.set(category, { label: category, key: `region-specialties:${category}`, rows: [] });
+        groups.get(category).rows.push({ ...row, icon: `fa-solid ${SPECIALTY_ICONS[category] ?? "fa-industry"}` });
+      }
+      selectedRegion.marketSpecialtyGroups = [...groups.values()];
+    }
     return {
       ...context,
       canEdit: Boolean(game.user?.isGM),
       rows,
+      groups: regionCatalogGroups(rows),
+      folderListId: `${this.id ?? "region-catalog"}-folders`,
+      folders: [...new Set(rows.map((row) => row.catalogFolder).filter(Boolean))],
       selectedRegion,
       search: this.search,
       specialtySearch: this.specialtySearch,
@@ -167,6 +187,7 @@ export class SkyholdRegionCatalogEditor extends FloatingTooltipsMixin(PendingFie
     bindInputGuards(root);
     bindGlobalInputGuard(this, root);
     this._bindEvents(root);
+    restoreApplicationFocus(this, { root });
   }
 
   _bindEvents(root) {
@@ -178,7 +199,8 @@ export class SkyholdRegionCatalogEditor extends FloatingTooltipsMixin(PendingFie
       "region-catalog-delete": "_onDeleteRegionOption",
       "region-graph-open": "_onOpenRouteGraph",
       "region-catalog-select": "_onSelectRegion",
-      "region-editor-section": "_onSelectSection"
+      "region-editor-section": "_onSelectSection",
+      "region-catalog-move": "_onMoveRegion", "region-folder-move": "_onMoveFolder"
     };
 
     root.addEventListener("click", (event) => {
@@ -215,6 +237,23 @@ export class SkyholdRegionCatalogEditor extends FloatingTooltipsMixin(PendingFie
       this.search = String(field.value ?? "");
       this._applySearch(root, this.search);
     }, { signal: controller.signal });
+    root.addEventListener("dragstart", (event) => {
+      const row = event.target.closest?.("[draggable][data-region-id]");
+      if (!game.user?.isGM || !row || !root.contains(row) || !event.dataTransfer) return;
+      event.dataTransfer.setData("application/x-fbl-skyhold-region", row.dataset.regionId);
+      event.dataTransfer.effectAllowed = "move";
+    }, { signal: controller.signal });
+    root.addEventListener("dragover", (event) => {
+      if (game.user?.isGM && event.target.closest?.("[data-region-folder]") && [...(event.dataTransfer?.types ?? [])].includes("application/x-fbl-skyhold-region")) event.preventDefault();
+    }, { signal: controller.signal });
+    root.addEventListener("drop", (event) => {
+      const folder = event.target.closest?.("[data-region-folder]"), id = event.dataTransfer?.getData("application/x-fbl-skyhold-region");
+      if (!game.user?.isGM || !folder || !root.contains(folder) || !id) return;
+      event.preventDefault();
+      const target = event.target.closest?.("[draggable][data-region-id]");
+      dispatchDelegatedAction(this, event, folder, () => this._saveOrder((rows) => placeCatalogRegion(rows, id, { beforeId: target?.dataset.regionId, folder: folder.dataset.regionFolder })));
+    }, { signal: controller.signal });
+    this._disclosures.bind(root);
     this._applySearch(root, this.search);
     this._applySpecialtySearch(root, this.specialtySearch);
   }
@@ -228,6 +267,7 @@ export class SkyholdRegionCatalogEditor extends FloatingTooltipsMixin(PendingFie
       card.hidden = !show;
       if (show) visible += 1;
     }
+    for (const group of root?.querySelectorAll?.("[data-region-specialty-group]") ?? []) group.hidden = ![...group.querySelectorAll("[data-region-specialty-search-text]")].some((row) => !row.hidden);
     const count = root?.querySelector?.("[data-region-specialty-visible-count]");
     if (count) count.textContent = String(visible);
   }
@@ -242,16 +282,45 @@ export class SkyholdRegionCatalogEditor extends FloatingTooltipsMixin(PendingFie
     }
     const count = root?.querySelector?.("[data-region-visible-count]");
     if (count) count.textContent = String(visible);
+    for (const folder of root?.querySelectorAll?.("[data-region-folder]") ?? []) {
+      folder.hidden = ![...folder.querySelectorAll("[data-region-search-text]")].some((row) => !row.hidden);
+      if (query && !folder.hidden) folder.open = true;
+    }
+  }
+
+  async _saveOrder(change) {
+    if (!game.user?.isGM) return;
+    const saved = await this._trackFieldSave(SkyholdData.transaction((data, { skip }) => {
+      const rows = normalizeEventRegionOptions(data.catalog?.eventRegions, { fallback: false });
+      if (!change(rows)) return skip(false);
+      data.catalog.eventRegions = rows;
+      return true;
+    }, { reason: "region-catalog:order", scope: "catalog" }));
+    if (saved) { this._refreshOwner(); this.requestRender({ focus: false }); }
+  }
+
+  async _onMoveRegion(event) {
+    event.preventDefault(); const target = event.target.closest("[data-action]");
+    rememberApplicationFocusReturn(this, target.closest(".fbls-region-list-row")?.querySelector('[data-action="region-catalog-select"]'));
+    return this._saveOrder((rows) => moveCatalogRegion(rows, target.dataset.regionId, Number(target.dataset.delta)));
+  }
+
+  async _onMoveFolder(event) {
+    event.preventDefault(); const target = event.target.closest("[data-action]");
+    rememberApplicationFocusReturn(this, target.closest("[data-region-folder]")?.querySelector("summary"));
+    return this._saveOrder((rows) => moveCatalogFolder(rows, target.dataset.folder, Number(target.dataset.delta)));
   }
 
   _onSelectRegion(event) {
     event.preventDefault();
+    rememberApplicationFocusReturn(this, event.currentTarget);
     this.regionId = String(event.currentTarget?.dataset?.regionId ?? "");
     this.requestRender({ focus: false });
   }
 
   _onSelectSection(event) {
     event.preventDefault();
+    rememberApplicationFocusReturn(this, event.currentTarget);
     const section = String(event.currentTarget?.dataset?.section ?? "overview");
     this.activeSection = ["overview", "economy", "logistics"].includes(section) ? section : "overview";
     this.requestRender({ focus: false });
@@ -346,6 +415,7 @@ export class SkyholdRegionCatalogEditor extends FloatingTooltipsMixin(PendingFie
     this._syncEditedRegionUi({ key, value, regionId, nextRegionId });
     if (key === "value") this.regionId = nextRegionId;
     this._refreshOwner();
+    if (key === "catalogFolder") this.requestRender({ focus: false });
   }
 
   _syncEditedRegionUi({ key, value, regionId, nextRegionId }) {
@@ -424,6 +494,7 @@ export class SkyholdRegionCatalogEditor extends FloatingTooltipsMixin(PendingFie
   async _onClose(options) {
     await super._onClose(options);
     this._delegatedAbortController?.abort?.();
+    this._disclosures.close();
     this._delegatedAbortController = null;
     unbindGlobalInputGuard(this);
     if (this._ownerNeedsRefresh) this.owner?.requestRender?.({ focus: false });
