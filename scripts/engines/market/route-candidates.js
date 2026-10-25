@@ -4,7 +4,7 @@ const MAX_SEARCH_LABELS = 20_000;
 // Keep the nondominated transport alternatives. Price depends on access,
 // distance, mode, operating time, load and insurance, so a single shortest
 // path cannot stand in for the eventual quote of a real consignment.
-export function marketTransportRoutes({ graph, from, to, maxAccess, modesForEdge, termsForEdge } = {}) {
+export function marketTransportRoutes({ graph, from, to, maxAccess, modesForEdge, termsForEdge, preserveFirstMode = false } = {}) {
   if (from === to) return { routes: [], limited: false };
   const risks = new Set([...graph.values()].flatMap((edges) => edges.map((edge) => termsForEdge(edge, "caravan").risk)));
   const uniformRisk = risks.size <= 1;
@@ -32,7 +32,8 @@ export function marketTransportRoutes({ graph, from, to, maxAccess, modesForEdge
           mask: current.mask | MODE_BITS[mode], flat: current.flat + terms.flat, load: current.load + terms.load,
           time: current.time + terms.time, operating: current.operating + terms.operating,
           risk: current.risk + edge.distanceKm * terms.risk };
-        const key = `${edge.to}:${next.mask}`;
+        // A floating holding's first leg changes feasibility and last-mile charges.
+        const key = `${edge.to}:${next.mask}:${preserveFirstMode ? next.edges[0].selectedMode : ""}`;
         const bucket = labels.get(key) ?? [];
         if (bucket.some((previous) => !previous.discarded && dominates(previous, next))) continue;
         for (const previous of bucket) if (dominates(next, previous)) previous.discarded = true;

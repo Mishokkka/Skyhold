@@ -3,7 +3,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { normalizeEventRegionOptions } from "../data/random-events.js";
 import { resolveMarketLogistics, shortestMarketRoute } from "../engines/market/logistics.js";
-import { marketShipmentRiskProfile } from "../engines/market/pricing.js";
+import { marketShipmentRiskProfile, planMarketPurchase } from "../engines/market/pricing.js";
 import { createMarketOutboundOrder } from "../engines/market/outbound.js";
 import { carrierProvidersForLogistics, applyCarrierToLogistics } from "../engines/market/providers.js";
 import { prepareMarketAuthorityContext } from "../apps/market/authority-context.js";
@@ -123,9 +123,113 @@ function accessOverride() {
   assert.equal(resolveMarketLogistics({ ...args, accessLevel: 1 }).ok, false);
 }
 
-const cases = { "own-ship": ownShip, candidates, "last-mile": lastMile, "last-mile-carrier": lastMileCarrier, "access-override": accessOverride };
+function selectedModes() {
+  for (const blockedId of ["home", "relay-0", "a"]) {
+    const { data, holding, ship, regions } = fixture([["airship"], ["airship"]]);
+    const directRoute = shortestMarketRoute("home", "a", regions, { mode: "airship" });
+    const { directMode: _directMode, ...selectedRoute } = directRoute;
+    regions.find((row) => row.value === blockedId).marketTransportModes = ["caravan"];
+    const logistics = resolveMarketLogistics({ holding, market: { regionId: "a", transportModes: ["airship"] }, regions, selectedRoute, singleRoute: true });
+    assert.equal(logistics.ok, false, `a selected mode cannot bypass ${blockedId}'s transport restriction`);
+    const transit = blockedId === "relay-0";
+    assert.equal(resolveMarketLogistics({ holding, market: { regionId: "a", transportModes: ["airship"] }, regions,
+      selectedRoute: directRoute, singleRoute: true }).ok, transit, "revalidating a direct flight preserves transit but rejects a newly restricted endpoint");
+    assert.equal(Boolean(shortestMarketRoute("home", "a", regions, { mode: "airship" })), transit, "direct flight checks endpoint ports, preserving a flight over a non-port transit point");
+    if (transit) regions[1].marketEnabled = false;
+    for (const isGM of [true, false]) {
+      const view = prepareMarketAuthorityContext({ data, holding, marketId: "a", ownShipId: ship.id,
+        outboundQuantities: { "test-freight": 2 }, isGM });
+      assert.equal(view.outbound.plan.ok, transit, "GM/player own-ship sale rejects restricted endpoints but permits non-port overflight");
+    }
+  }
+  const { data, holding, ship, regions } = fixture([["airship"], ["airship"]]);
+  const selectedRoute = shortestMarketRoute("home", "a", regions, { mode: "airship" });
+  const args = { holding, regions, selectedRoute, singleRoute: true };
+  assert.equal(resolveMarketLogistics({ ...args, market: { regionId: "a", transportModes: ["caravan"] } }).ok, false, "a selected mode cannot bypass the supplier's terminal restrictions");
+  selectedRoute.edges[0].modes = ["caravan"];
+  assert.equal(resolveMarketLogistics({ ...args, market: { regionId: "a", transportModes: ["airship"] } }).ok, false, "a selected mode cannot bypass the edge's transport restrictions");
+  regions[1].marketTransportModes = ["caravan"];
+  regions[0].marketLinks[0].modes = ["caravan"];
+  regions[0].marketLinks.push({ regionId: "detour", distanceKm: 120, modes: ["airship"] });
+  regions.push({ ...structuredClone(regions[1]), value: "detour", label: "Обход", marketTransportModes: ["airship"],
+    marketLinks: [{ regionId: "a", distanceKm: 120, modes: ["airship"] }] });
+  const detour = shortestMarketRoute("home", "a", regions, { mode: "airship" });
+  assert.deepEqual(detour.path, ["home", "detour", "a"], "a forbidden shortcut must not hide a longer permissible flight");
+  assert.equal(detour.distanceKm, 240);
+  for (const isGM of [true, false]) {
+    const view = prepareMarketAuthorityContext({ data, holding, marketId: "a", ownShipId: ship.id,
+      outboundQuantities: { "test-freight": 2 }, isGM });
+    assert.equal(view.outbound.plan.ok, true); assert.deepEqual(view.outbound.plan.route.routePath, detour.path);
+  }
+  const legacy = fixture([["airship"], ["airship"], ["caravan"]]);
+  const legacyRoute = shortestMarketRoute("home", "a", legacy.regions);
+  legacy.regions[2].marketTransportModes = ["caravan"];
+  const rejected = resolveMarketLogistics({ holding: legacy.holding, market: { regionId: "a", transportModes: ["caravan"] },
+    regions: legacy.regions, selectedRoute: legacyRoute, singleRoute: true });
+  assert.equal(rejected.ok, false, "a legacy route without selectedMode also rejects an unsupported transfer");
+  assert.deepEqual(rejected.routeModes, ["airship", "", "caravan"], "an unavailable middle leg cannot shift cost attribution to the next edge");
+}
+
+function aerialDominance() {
+  // The 1 km rail shortcut is cheaper in EVERY search metric, including load,
+  // but cannot serve a floating holding. It must not erase the 4-leg air entry.
+  const { data, holding, regions } = fixture([["airship"], ["rail"], ["airship"], ["caravan"]]);
+  regions[0].marketLinks.push({ regionId: "relay-1", distanceKm: 1, modes: ["rail"] });
+  const market = { regionId: "a", transportModes: ["caravan"] };
+  const ground = resolveMarketLogistics({ holding: { ...holding, type: "village" }, market, regions, accessLevel: 3 });
+  assert.equal(ground.ok, true); assert.deepEqual(ground.routePath, ["home", "relay-1", "relay-2", "a"], "ordinary ground holdings retain the cheaper shortcut at URS 3");
+  for (const type of ["sky-island", "ship"]) {
+    const logistics = resolveMarketLogistics({ holding: { ...holding, type }, market, regions });
+    assert.equal(logistics.ok, true, "a cheaper ground entry cannot dominate the only admissible aerial entry");
+    assert.deepEqual(logistics.routePath, ["home", "relay-0", "relay-1", "relay-2", "a"]);
+    assert.deepEqual(logistics.routeModes, ["airship", "rail", "airship", "caravan"]);
+    assert.equal(resolveMarketLogistics({ holding: { ...holding, type }, market, regions, accessLevel: 3 }).ok, false, "the valid detour must still have sufficient URS");
+  }
+  for (const isGM of [true, false]) {
+    const initial = prepareMarketAuthorityContext({ data, holding, marketId: "a", isGM });
+    const offer = initial.quote.offers.find((row) => row.resourceId === "test-freight");
+    const view = prepareMarketAuthorityContext({ data, holding, marketId: "a", isGM,
+      quantities: { [offer.id]: 2 }, outboundQuantities: { "test-freight": 2 } });
+    assert.equal(view.plan.ok, true); assert.equal(view.outbound.plan.ok, true);
+    assert.equal(view.plan.logistics.routeModes[0], "airship");
+    assert.equal(view.outbound.plan.route.routeModes[0], "airship");
+  }
+  const equal = fixture([["rail", "airship"], ["rail", "airship"], ["caravan"]]);
+  const logistics = resolveMarketLogistics({ holding: equal.holding, market, regions: equal.regions });
+  assert.ok(logistics.routeCandidates.some((route) => route.routeModes.join() === "airship,rail,caravan"), "equal aggregate metrics do not make ground/air entries interchangeable");
+}
+
+function candidatePricing() {
+  const legs = [["rail", "airship"], ["rail", "airship"], ["caravan"]];
+  const { holding, regions } = fixture(legs);
+  regions.at(-1).marketTransportModes = ["caravan", "airship"];
+  const path = shortestMarketRoute("home", "a", regions);
+  const assignments = legs.reduce((rows, modes) => rows.flatMap((prefix) => modes.map((mode) => [...prefix, mode])), [[]]);
+  for (const type of ["village", "sky-island", "ship"]) for (const localAir of [false, true]) {
+    const subject = { ...holding, type }, market = { regionId: "a", transportModes: localAir ? ["caravan", "airship"] : ["caravan"] };
+    const logistics = resolveMarketLogistics({ holding: subject, market, regions });
+    // Enumerate every mode assignment, bypassing the search's dominance pruning.
+    const all = assignments.map((modes) => resolveMarketLogistics({ holding: subject, market, regions, singleRoute: true,
+      selectedRoute: { ...path, edges: path.edges.map((edge, index) => ({ ...edge, selectedMode: modes[index] })) }
+    })).filter((route) => route.ok);
+    for (const serviceLevel of ["standard", "express", "charter"]) for (const load of [1, 25]) for (const unitPriceCopper of [30, 100_000]) {
+      const plan = (route) => planMarketPurchase({ holding: subject, serviceLevel, quantities: { test: 2 }, quote: {
+        offers: [{ id: "test", stock: 2, unitPriceCopper, load }], location: {}, logistics: route,
+        deliveryMode: "scheduled", deliveryBaseQd: 1, deliveryQd: 1 + route.travelQd
+      } });
+      const expected = all.map(plan).filter((row) => row.ok).sort((a, b) => a.totalCopper - b.totalCopper || a.deliveryQd - b.deliveryQd)[0];
+      const actual = plan(logistics);
+      assert.ok(expected, `${type}/${localAir}/${serviceLevel}/${load}/${unitPriceCopper}: the exhaustive fixture has at least one eligible shipment`);
+      assert.deepEqual([actual.ok, actual.totalCopper, actual.deliveryQd], [true, expected.totalCopper, expected.deliveryQd],
+        `${type}/${localAir}/${serviceLevel}/${load}/${unitPriceCopper}: search must preserve the cheapest admissible purchase, including last-mile costs and insurance`);
+    }
+  }
+}
+
+const cases = { "own-ship": ownShip, candidates, "last-mile": lastMile, "last-mile-carrier": lastMileCarrier, "access-override": accessOverride,
+  "selected-modes": selectedModes, "aerial-dominance": aerialDominance, "candidate-pricing": candidatePricing };
 export function checkMarketRouteSelection() { for (const check of Object.values(cases)) check(); }
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   if (process.argv[2]) cases[process.argv[2]](); else checkMarketRouteSelection();
-  console.log("Market route selection: airship risk, admissible alternatives, effective URS, GM/player planning and last-mile carrier compatibility/shares passed.");
+  console.log("Market route selection: explicit-mode restrictions/transit, aerial-entry dominance, exhaustive pricing, effective URS, GM/player planning, carrier compatibility and airship risk passed.");
 }
