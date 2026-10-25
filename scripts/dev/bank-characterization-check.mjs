@@ -4,6 +4,7 @@ import { bankTermsToken, quoteBankLoan, issueBankLoan, advanceBankLoans, repayBa
 import { createBankOperationExecutor } from "../apps/bank-operation-executor.js";
 import { mergeHoldingDefaults } from "../data/normalizers.js";
 import { pathToFileURL } from "node:url";
+import { checkBankDeposits } from "./bank-deposit-check.mjs";
 export async function checkBankCharacterization() {
 function fixture() { const holding = { id: "village", visibility: "all", gm: { playersCanUseStorage: true }, storage: { moneyCopper: 0 }, special: {} };
   return { meta: { revision: 1 }, catalog: { banks: [structuredClone(BANK_PRESETS[0])] }, holdings: [holding] }; }
@@ -76,6 +77,7 @@ function fixture() { const holding = { id: "village", visibility: "all", gm: { p
   assert.equal(bankRelationship(holding, "private"), 0, "instant borrow-return cannot farm bank relationship");
 }
 console.log("Bank checks passed: 240-day interest, split periods, frozen terms, persistence, repayment, arrears, authority, replay and stale requests.");
+await checkBankDeposits();
 
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await checkBankCharacterization();

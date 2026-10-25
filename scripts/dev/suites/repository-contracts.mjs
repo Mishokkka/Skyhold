@@ -549,7 +549,7 @@ function checkMarketBoundaries() {
   assert.match(marketTemplate, /fbls-market-offer-columns/, "market offers must expose compact table headings");
   assert.match(marketTemplate, /fbls-market-facts/, "market header must characterize the market in one compact fact grid");
   assert.doesNotMatch(marketTemplate, /\{\{locationText\}\}|title="Локация"/, "market header must never expose the settlement location");
-  assert.match(marketTemplate, /title="Страна"[\s\S]{0,300}title="Размер рынка"[\s\S]{0,300}title="Состояние рынка"/, "market header facts must contain country, size and state in that order");
+  assert.match(marketTemplate, /title="Страна: {{marketCountryLabel}}"[\s\S]{0,300}title="Размер рынка: {{marketSizeLabel}}"[\s\S]{0,300}title="Состояние рынка: {{marketConditionLabel}}"/, "market header facts must preserve full country, size and state values in that order");
   assert.match(marketTemplate, /fbls-market-cart-section delivery[\s\S]+fbls-market-cart-section route[\s\S]+fbls-market-cart-section costs/, "market checkout must separate delivery, route and cost decisions");
   assert.match(marketTemplate, /fbls-market-cart-section costs[\s\S]{0,5000}data-market-delivery-breakdown/, "the expanded delivery formula must live directly beside the displayed delivery cost");
   assert.match(marketTemplate, /Итого доставка[\s\S]{0,180}totalFormulaText/, "the expanded delivery formula must visibly reconcile to the delivery total");

@@ -1,74 +1,68 @@
-/* Bank offers, outstanding loans and the GM catalog editor. */
+/* Bank comparison, settlement contracts and the selected world-catalog editor. */
 .fbl-skyhold-bank .fbls-bank-shell {
   display: flex; flex: 1 1 0; flex-direction: column; container: bank-window / inline-size;
   min-height: 0; min-width: 0; overflow: hidden; color-scheme: dark;
-  color: var(--fbls-text); background: var(--fbls-surface-0);
-  font-size: var(--fbls-type-body); line-height: 1.4;
+  color: var(--fbls-text); background: var(--fbls-surface-0); font-size: var(--fbls-type-body); line-height: 1.4;
 }
-.fbl-skyhold-bank .fbls-bank-shell * { box-sizing: border-box; }
-.fbl-skyhold-bank .fbls-bank-header {
-  flex: 0 0 auto; align-items: center; padding: 0.85rem 1rem;
-  border-bottom: 1px solid var(--fbls-border); background: var(--fbls-surface-1);
-}
+.fbl-skyhold-bank .fbls-bank-shell * { box-sizing: border-box; min-width: 0; }
+.fbl-skyhold-bank .fbls-bank-header { flex: 0 0 auto; padding: 0.8rem 1rem; border-bottom: 1px solid var(--fbls-border); background: var(--fbls-surface-1); }
 .fbl-skyhold-bank .fbls-bank-identity { display: flex; align-items: center; gap: 0.75rem; }
-.fbl-skyhold-bank .fbls-bank-mark {
-  display: grid; place-items: center; flex: 0 0 2.8rem; height: 2.8rem;
-  border: 1px solid var(--fbls-accent-border); border-radius: var(--fbls-radius-md);
-  color: var(--fbls-accent); background: var(--fbls-accent-soft); font-size: var(--fbls-type-title);
-}
+.fbl-skyhold-bank .fbls-bank-mark { display: grid; place-items: center; flex: 0 0 2.8rem; height: 2.8rem; border: 1px solid var(--fbls-accent-border); border-radius: var(--fbls-radius-md); color: var(--fbls-accent); background: var(--fbls-accent-soft); font-size: var(--fbls-type-title); }
 .fbl-skyhold-bank .fbls-bank-identity p { margin: 0.2rem 0 0; color: var(--fbls-muted); }
-.fbl-skyhold-bank .fbls-bank-treasury { display: grid; gap: 0.15rem; text-align: right; }
-.fbl-skyhold-bank .fbls-bank-treasury > span { color: var(--fbls-muted); font-size: var(--fbls-type-compact-sm); }
-.fbl-skyhold-bank .fbls-bank-treasury > strong { color: var(--fbls-accent); font-size: var(--fbls-type-title); }
-.fbl-skyhold-bank .fbls-bank-content {
-  flex: 1 1 0; gap: 0.85rem; min-height: 0; overflow: auto; scrollbar-gutter: stable; padding: 1rem;
+.fbl-skyhold-bank .fbls-bank-assets { display: flex; flex-wrap: wrap; gap: 0.6rem 1.2rem; margin: 0; }
+.fbl-skyhold-bank .fbls-bank-assets dt { color: var(--fbls-muted); font-size: var(--fbls-type-compact-sm); }
+.fbl-skyhold-bank .fbls-bank-assets dd { margin: 0.15rem 0 0; color: var(--fbls-accent); font-weight: 700; }
+.fbl-skyhold-bank .fbls-bank-nav { flex: 0 0 auto; justify-content: flex-start; padding: 0.5rem 1rem; border-bottom: 1px solid var(--fbls-border); }
+.fbl-skyhold-bank .fbls-button-role[aria-pressed="true"] {
+  --fbls-button-border: var(--fbls-accent-border);
+  --fbls-button-background: var(--fbls-accent-soft);
+  --fbls-button-text: var(--fbls-accent);
 }
+.fbl-skyhold-bank .fbls-bank-content { flex: 1 1 0; gap: 0.85rem; min-height: 0; overflow: auto; scrollbar-gutter: stable; padding: 1rem; }
 .fbl-skyhold-bank .fbls-bank-content > * { flex-shrink: 0; min-width: 0; }
-.fbl-skyhold-bank .fbls-bank-overview { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(16rem, 0.85fr); align-items: start; gap: 1rem; }
-.fbl-skyhold-bank .fbls-bank-card { padding: 0.75rem; background: var(--fbls-surface-1); }
-.fbl-skyhold-bank .fbls-bank-card.is-overdue { border-color: var(--fbls-danger-border); }
-.fbl-skyhold-bank .fbls-bank-overdue { color: var(--fbls-danger); background: var(--fbls-danger-soft); }
-.fbl-skyhold-bank .fbls-bank-offer { padding: 0.7rem; border: 1px solid var(--fbls-border); border-radius: var(--fbls-radius-sm); background: var(--fbls-overlay-soft); }
+.fbl-skyhold-bank .fbls-bank-filters { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: end; gap: 0.7rem; }
+.fbl-skyhold-bank .fbls-bank-workspace { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(18rem, 0.9fr); align-items: start; gap: 1rem; }
+.fbl-skyhold-bank .fbls-bank-card { padding: 0.8rem; background: var(--fbls-surface-1); }
+.fbl-skyhold-bank .fbls-bank-result { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0.5rem; padding: 0.65rem; border-bottom: 1px solid var(--fbls-border); }
+.fbl-skyhold-bank .fbls-bank-result.is-selected { background: var(--fbls-accent-soft); border-radius: var(--fbls-radius-sm); }
+.fbl-skyhold-bank .fbls-bank-result > .fbls-bank-quote { grid-column: 1 / -1; grid-row: 2; }
+.fbl-skyhold-bank .fbls-bank-result > button { grid-column: 2; grid-row: 1; }
 .fbl-skyhold-bank .fbls-bank-note,
 .fbl-skyhold-bank .fbls-bank-description { margin: 0; color: var(--fbls-muted); }
 .fbl-skyhold-bank .fbls-bank-description { white-space: pre-wrap; }
 .fbl-skyhold-bank .fbls-bank-quote { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; margin: 0; padding: 0.6rem; border-radius: var(--fbls-radius-sm); background: var(--fbls-overlay); }
 .fbl-skyhold-bank .fbls-bank-quote dt { color: var(--fbls-muted); font-size: var(--fbls-type-compact-sm); }
 .fbl-skyhold-bank .fbls-bank-quote dd { margin: 0.15rem 0 0; color: var(--fbls-text-strong); font-weight: 700; }
-.fbl-skyhold-bank .fbls-bank-balance { grid-column: 1 / -1; }
-.fbl-skyhold-bank .fbls-bank-balance dd { font-size: var(--fbls-type-section); }
+.fbl-skyhold-bank .fbls-bank-confirmation { padding: 0.8rem; border-color: var(--fbls-accent-border); background: var(--fbls-surface-1); }
 .fbl-skyhold-bank .fbls-bank-details { padding: 0.75rem; background: var(--fbls-surface-1); }
 .fbl-skyhold-bank .fbls-bank-details > summary { color: var(--fbls-text-strong); cursor: pointer; font-weight: 700; }
 .fbl-skyhold-bank .fbls-bank-details > summary > i { margin-right: 0.35rem; color: var(--fbls-accent); }
-.fbl-skyhold-bank .fbls-bank-details > summary .fbls-chip { margin-left: 0.4rem; }
-.fbl-skyhold-bank .fbls-bank-details[open] > summary { margin-bottom: 0.75rem; }
 .fbl-skyhold-bank .fbls-bank-details > p { margin: 0.6rem 0 0; color: var(--fbls-muted); }
-.fbl-skyhold-bank .fbls-bank-settings { gap: 0.8rem; }
-.fbl-skyhold-bank .fbls-bank-editor-toolbar { align-items: end; }
-.fbl-skyhold-bank .fbls-bank-editor-toolbar > label { flex: 1 1 16rem; }
 .fbl-skyhold-bank .fbls-bank-editor-card { min-width: 0; margin: 0; padding: 0.75rem; border: 1px solid var(--fbls-border); border-radius: var(--fbls-radius-sm); background: var(--fbls-surface-soft); }
 .fbl-skyhold-bank .fbls-bank-editor-card legend { max-width: 100%; }
-.fbl-skyhold-bank .fbls-bank-terms-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 0.7rem; }
-.fbl-skyhold-bank .fbls-bank-editor-card textarea { width: 100%; min-height: 5rem; resize: vertical; }
+.fbl-skyhold-bank .fbls-bank-terms-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; gap: 0.7rem; }
+.fbl-skyhold-bank .fbls-bank-workspace textarea { width: 100%; min-height: 5rem; resize: vertical; }
 .fbl-skyhold-bank .fbls-bank-pending { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.6rem; border-color: var(--fbls-warning); background: var(--fbls-warning-soft); }
 .fbl-skyhold-bank .fbls-bank-pending p { flex: 1 1 18rem; margin: 0; }
+.fbl-skyhold-bank .fbls-bank-pager { justify-content: space-between; }
+.fbl-skyhold-bank .fbls-bank-pager > button { flex-shrink: 0; white-space: nowrap; }
 .fbl-skyhold-bank .fbls-bank-shell p,
 .fbl-skyhold-bank .fbls-bank-shell strong,
 .fbl-skyhold-bank .fbls-bank-shell label,
 .fbl-skyhold-bank .fbls-bank-shell legend,
 .fbl-skyhold-bank .fbls-bank-shell h2,
 .fbl-skyhold-bank .fbls-bank-shell h3,
-.fbl-skyhold-bank .fbls-bank-shell dd { overflow-wrap: anywhere; }
+.fbl-skyhold-bank .fbls-bank-shell dd,
+.fbl-skyhold-bank .fbls-bank-shell dt,
+.fbl-skyhold-bank .fbls-bank-shell button { overflow-wrap: anywhere; }
 .fbl-skyhold-bank .fbls-bank-shell input,
 .fbl-skyhold-bank .fbls-bank-shell select { max-width: 100%; min-width: 0; }
-
-@container bank-window (max-width: 850px) {
-  .fbl-skyhold-bank .fbls-bank-overview { grid-template-columns: minmax(0, 1fr); }
-}
-@container bank-window (max-width: 600px) {
-  .fbl-skyhold-bank .fbls-bank-terms-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@container bank-window (max-width: 760px) {
+  .fbl-skyhold-bank .fbls-bank-workspace { grid-template-columns: minmax(0, 1fr); }
+  .fbl-skyhold-bank .fbls-bank-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @container bank-window (max-width: 440px) {
+  .fbl-skyhold-bank .fbls-bank-filters,
   .fbl-skyhold-bank .fbls-bank-terms-grid { grid-template-columns: minmax(0, 1fr); }
-  .fbl-skyhold-bank .fbls-bank-treasury { text-align: left; }
+  .fbl-skyhold-bank .fbls-bank-nav { gap: 0.35rem; }
 }

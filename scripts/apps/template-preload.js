@@ -63,6 +63,9 @@ export const SKYHOLD_TEMPLATE_GROUPS = Object.freeze({
     template("parts/mass-combat/details.hbs"),
     template("parts/mass-combat/progress.hbs")
   ]),
+  bankWindow: Object.freeze([
+    template("parts/save-status.hbs")
+  ]),
   uiReview: Object.freeze([
     template("ship-app.hbs"),
     template("parts/ui-review-ships.hbs"),

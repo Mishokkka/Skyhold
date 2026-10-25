@@ -577,7 +577,8 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
         : { rows: [], builtins: "", builtinCount: 0, hasRows: false },
       marketCatalog: active?.gm
         ? this._marketCatalogContext(data)
-        : { marketCount: 0, activeMarketCount: 0, offerCount: 0, hasOverride: false }
+        : { marketCount: 0, activeMarketCount: 0, offerCount: 0, hasOverride: false },
+      sharedMarketMigrationAvailable: canEdit && !data.meta?.sharedMarkets?.enabled
     };
   }
 

@@ -1726,6 +1726,14 @@ async _runEconomyForQd(holding, periodQd = 40, { operationId = "", createdAt = "
         status: row.overdue ? "pending" : "", meta: { loanId: row.loanId } });
     }
   }
+  if (holding.special?.banking?.deposits?.some((row) => row.status === "active" && row.kind === "term")) {
+    const { advanceBankDeposits } = await import("../../../engines/economy/bank-deposits.js");
+    for (const row of advanceBankDeposits(holding, qd)) {
+      const text = `${row.bankName}: начислено ${row.interestCopper} ММ по вкладу; сумма ${row.totalCopper} ММ${row.matured ? "; срок завершён, доступно снятие" : ""}.`;
+      report.treasury.lines.push(text);
+      appendEconomyLedger(report, { domain: "bank", kind: "notice", name: "Состояние вклада", note: text, meta: { depositId: row.depositId } });
+    }
+  }
   const buildings = holding?.buildings?.list ?? [];
   const budgets = new Map();
 

@@ -7,6 +7,7 @@ import { clone, makeId } from "../../../data/utils.js";
 import { stableDataHash } from "../../../data/storage-commit.js";
 import { appendHoldingOperation } from "../../../data/operations.js";
 import { mergeHoldingDefaults } from "../../../data/normalizers.js";
+import { normalizeLastEventRoll } from "../../../data/event-automation.js";
 import { adjustResidentAttributesForAgeTransition, ageGroupFromAge, ageThresholdsFor, raceKeyFromResident } from "../../../generators/resident-rules.js";
 import { financeBuildingFunctionBlockState, financeWorkerBlockState } from "../../../engines/economy/finance-obligations.js";
 import { addCalendariaQd, calendariaDateKey, formatCalendariaDateTime, getCalendariaSnapshot, parseCalendariaDateInput, timestampForCalendariaDate } from "../../../integrations/calendaria-bridge.js";
@@ -30,9 +31,7 @@ import {
 } from "../../../engines/economy/perishable-storage.js";
 import { normalizeFoodRationUnits } from "../../../engines/economy/food-rations.js";
 import { openTendayApp, openTendayHistory } from "../../lazy-apps.js";
-import { politicsDecisionContext } from "../../politics-decision-context.js";
 import { prepareSequentialTendays } from "../../../engines/tenday/sequential.js";
-import { politicsPeriodTracked } from "../../../engines/politics/period.js";
 
 export const EconomyEventActions = {
   click: {
@@ -79,21 +78,53 @@ _isPreparedTendayCurrent(prepared = {}, suppliedData = null) {
   if (!prepared?.holdingId || !prepared?.dependencyHash) return false;
   const data = suppliedData ?? SkyholdData.view();
   // External world settings are included in the hash, not the data revision.
-  return this._tendayDependencyHash(data, prepared.holdingId) === prepared.dependencyHash;
+  return this._tendayDependencyHash(data, prepared.holdingId) === prepared.dependencyHash
+    && this._checkPreparedTendayCalendar(prepared, data).ok;
+},
+
+_checkPreparedTendayCalendar(prepared, data) {
+  const holding = data?.holdings?.find((row) => String(row.id) === String(prepared.holdingId));
+  const gate = this._checkCalendariaEconomyAdvance(holding, prepared.qd);
+  if (!gate.ok) return gate;
+  const wasAvailable = Boolean(prepared.calendariaGate?.snapshot?.available);
+  if (wasAvailable !== Boolean(gate.snapshot?.available)) {
+    return { ok: false, message: "Подключение Calendaria изменилось после расчёта. Подготовь десятник заново." };
+  }
+  if (wasAvailable && (gate.targetTimestamp !== prepared.calendarAdvance?.timestamp
+    || calendariaDateKey(gate.targetDateTime) !== calendariaDateKey(prepared.calendarAdvance?.dateTime))) {
+    return { ok: false, message: "Дата расчёта Calendaria изменилась. Подготовь десятник заново." };
+  }
+  return { ok: true };
 },
 
 async _prepareTendayOperation({ holdingId = "", qd = 40, rationUnitsPerResident = null, dataView = null, dependencyHash: suppliedDependencyHash = "",
-  operationId: suppliedOperationId = "", preparedAt: suppliedPreparedAt = "" } = {}) {
+  operationId: suppliedOperationId = "", preparedAt: suppliedPreparedAt = "", pendingEventsCollected = false } = {}) {
   if (!game.user?.isGM) return { ok: false, message: "Провести десятник может только GM." };
   const periodQd = normalizeTendayQd(qd);
   const data = dataView ?? SkyholdData.view();
   const id = String(holdingId ?? "");
   const source = (data?.holdings ?? []).find((holding) => String(holding?.id ?? "") === id);
   if (!source) return { ok: false, missing: true, message: "Владение для расчёта не найдено." };
-  if (periodQd > 40 && politicsPeriodTracked(source, politicsDecisionContext(source, this, { data }))) {
-    const prepared = await prepareSequentialTendays(this, { holdingId: id, qd: periodQd, data, rationUnitsPerResident,
+  const lastRoll = normalizeLastEventRoll(source.gm?.lastRoll);
+  if (!pendingEventsCollected && lastRoll?.canApplyEffects && !lastRoll.scheduleId) {
+    return { ok: false, blocked: true, message: "У предыдущих событий остались неприменённые эффекты. Примени их или перенеси в план событий на вкладке GM перед следующим десятником." };
+  }
+  const calendariaGate = this._checkCalendariaEconomyAdvance(source, periodQd);
+  if (!calendariaGate.ok) return { ok: false, blocked: true, message: calendariaGate.message, calendariaGate };
+  if (periodQd > 40) {
+    const batchData = calendariaGate.startDateTime ? { ...data, holdings: data.holdings.map((holding) => {
+      if (String(holding.id) !== id) return holding;
+      const draft = clone(holding);
+      this._commitCalendariaEconomyAdvance(draft, { snapshot: calendariaGate.snapshot,
+        targetDateTime: calendariaGate.startDateTime, targetTimestamp: timestampForCalendariaDate(calendariaGate.startDateTime) });
+      return draft;
+    }) } : data;
+    const prepared = await prepareSequentialTendays(this, { holdingId: id, qd: periodQd, data: batchData, rationUnitsPerResident,
       operationId: suppliedOperationId || makeId("tenday", 20), preparedAt: suppliedPreparedAt || new Date().toISOString() });
     if (!prepared.ok) return prepared;
+    prepared.sourceHash = stableDataHash(source);
+    prepared.dependencyHash = String(suppliedDependencyHash || this._tendayDependencyHash(data, id));
+    prepared.calendariaGate = calendariaGate;
     prepared.changeSet = buildTendayChangeSet(source, prepared.preparedHolding, {
       isFoodResource: (row) => this._isFoodResource(row), roomLabel: (holding, roomId) => this._storageRoomLabel(holding, roomId),
       formatNumber: (value) => this._formatNumber(value)
@@ -116,8 +147,10 @@ async _prepareTendayOperation({ holdingId = "", qd = 40, rationUnitsPerResident 
     10
   );
   previewHolding.gm.food.rationUnitsPerResident = selectedRationUnits;
-  const calendariaGate = this._checkCalendariaEconomyAdvance(previewHolding, periodQd);
-  if (!calendariaGate.ok) return { ok: false, blocked: true, message: calendariaGate.message, calendariaGate };
+  if (calendariaGate.startDateTime) {
+    this._commitCalendariaEconomyAdvance(previewHolding, { snapshot: calendariaGate.snapshot,
+      targetDateTime: calendariaGate.startDateTime, targetTimestamp: timestampForCalendariaDate(calendariaGate.startDateTime) });
+  }
 
   beginPerishableStoragePeriod(previewHolding);
   let rawReport;
@@ -169,6 +202,9 @@ async _prepareTendayOperation({ holdingId = "", qd = 40, rationUnitsPerResident 
       regionOptions: data?.catalog?.eventRegions
     })
     : { periods: eventPeriods, entries: [], events: [], warnings: ["Модуль событий недоступен."] };
+  if ((events.events?.length ?? 0) > 40) {
+    return { ok: false, blocked: true, message: "За период выпало больше 40 событий. Расчёт не записан: уменьшите число внешних проверок, чтобы сохранить все решения." };
+  }
   const preparedHolding = mergeHoldingDefaults(previewHolding);
   const dueEvents = dueTendaySchedule(preparedHolding, clock.after);
   const changeSet = buildTendayChangeSet(sourceSnapshot, preparedHolding, {
@@ -229,6 +265,8 @@ async _applyPreparedTendayOperation(prepared = {}) {
     if (!dependencyHash || dependencyHash !== prepared.dependencyHash) {
       return SkyholdData.skipTransaction({ ok: false, stale: true, message: "Владение или влияющий каталог изменились после расчёта. Подготовь десятник заново." });
     }
+    const calendarCheck = this._checkPreparedTendayCalendar(prepared, data);
+    if (!calendarCheck.ok) return SkyholdData.skipTransaction({ ...calendarCheck, stale: true });
     const applied = applyPreparedTenday(holding, prepared.preparedHolding, prepared.sourceHash, { hash: stableDataHash, clone });
     if (!applied.ok) {
       return SkyholdData.skipTransaction({ ok: false, stale: true, message: "Владение изменилось после расчёта. Подготовь десятник заново." });
@@ -387,12 +425,19 @@ _checkCalendariaEconomyAdvance(holding, qd = 0) {
   if (!snapshot.available) return { ok: true, snapshot, targetDateTime: null, targetTimestamp: null };
   const calendar = holding?.gm?.calendaria ?? {};
   const lastDateTime = calendar.lastDateTime && typeof calendar.lastDateTime === "object" ? calendar.lastDateTime : null;
-  const lastTimestamp = Number(calendar.lastTimestamp);
-  if (!lastDateTime || !Number.isFinite(lastTimestamp) || snapshot.timestamp === null || snapshot.timestamp === undefined) {
-    return { ok: true, snapshot, targetDateTime: null, targetTimestamp: null };
+  if (!snapshot.dateTime || !Number.isFinite(snapshot.timestamp)) {
+    return { ok: false, snapshot, message: "Calendaria не смогла определить текущую дату. Проверь календарь и повтори расчёт." };
+  }
+  if (!lastDateTime) {
+    const startDateTime = addCalendariaQd(snapshot.dateTime, -qd);
+    if (!startDateTime) return { ok: false, snapshot, message: "Calendaria не смогла определить начало периода. Укажи дату последнего обновления." };
+    return { ok: true, snapshot, startDateTime, targetDateTime: snapshot.dateTime, targetTimestamp: snapshot.timestamp };
   }
   const targetDateTime = addCalendariaQd(lastDateTime, qd);
   const targetTimestamp = timestampForCalendariaDate(targetDateTime);
+  if (!targetDateTime || !Number.isFinite(targetTimestamp)) {
+    return { ok: false, snapshot, message: "Calendaria не смогла рассчитать дату следующего десятника. Проверь дату последнего обновления и календарь." };
+  }
   if (Number.isFinite(targetTimestamp) && Number.isFinite(Number(snapshot.timestamp)) && targetTimestamp > Number(snapshot.timestamp) + 0.0001) {
     return {
       ok: false,
@@ -416,9 +461,9 @@ _commitCalendariaEconomyAdvance(holding, gate = {}) {
   if (previous && dateTime && Number.isFinite(Number(previous.year)) && Number.isFinite(Number(dateTime.year)) && Number(dateTime.year) > Number(previous.year)) {
     aging = this._advanceResidentAges(holding, Math.max(1, Math.floor(Number(dateTime.year) - Number(previous.year))));
   }
-  const timestamp = Number.isFinite(Number(gate.targetTimestamp)) ? Number(gate.targetTimestamp) : snapshot.timestamp;
+  const timestamp = Number.isFinite(gate.targetTimestamp) ? gate.targetTimestamp : snapshot.timestamp;
   holding.gm.calendaria.lastDateTime = dateTime ? (foundry?.utils?.deepClone?.(dateTime) ?? JSON.parse(JSON.stringify(dateTime))) : null;
-  holding.gm.calendaria.lastTimestamp = Number.isFinite(Number(timestamp)) ? Number(timestamp) : null;
+  holding.gm.calendaria.lastTimestamp = Number.isFinite(timestamp) ? timestamp : null;
   holding.gm.calendaria.lastDateKey = calendariaDateKey(dateTime);
   holding.gm.calendaria.lastDateText = dateTime ? formatCalendariaDateTime(dateTime) : "";
   return { available: true, aging, dateTime, timestamp: holding.gm.calendaria.lastTimestamp };
@@ -450,7 +495,7 @@ async _onCalendariaLastDateChange(event) {
       if (parsed) {
         const timestamp = timestampForCalendariaDate(parsed);
         holding.gm.calendaria.lastDateTime = parsed;
-        holding.gm.calendaria.lastTimestamp = Number.isFinite(Number(timestamp)) ? Number(timestamp) : null;
+        holding.gm.calendaria.lastTimestamp = Number.isFinite(timestamp) ? timestamp : null;
         holding.gm.calendaria.lastDateKey = calendariaDateKey(parsed);
         holding.gm.calendaria.lastDateText = formatCalendariaDateTime(parsed);
         return { warnTextDate: false };

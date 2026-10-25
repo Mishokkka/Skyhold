@@ -770,13 +770,7 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     const element = event.target?.closest?.("[data-action]");
     if (!element || !root.contains(element)) return;
     const action = String(element.dataset.action ?? "");
-    if (action === "market-open-banks") {
-      event.preventDefault();
-      return import("./lazy-apps.js").then(({ openBankApp }) => openBankApp({ holdingId: this.holdingId }));
-    } else if (action === "market-shared-preview") {
-      event.preventDefault();
-      return this._onSharedMarketPreview();
-    } else if (action === "market-select-merchant") {
+    if (action === "market-select-merchant") {
       event.preventDefault();
       const sourceOfferId = String(element.dataset.sourceOfferId ?? "");
       if (sourceOfferId) this.merchantSelections[sourceOfferId] = String(element.dataset.providerId ?? "");
@@ -948,22 +942,6 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     }
     const count = root.querySelector?.("[data-market-visible-count]");
     if (count) count.textContent = String(visible);
-  }
-
-  async _onSharedMarketPreview() {
-    if (!globalThis.game?.user?.isGM) return;
-    const { previewSharedMarketMigration, applySharedMarketMigration } = await import("../data/market/shared-migration.js");
-    const preview = previewSharedMarketMigration(SkyholdData.view());
-    if (preview.active) return ui.notifications?.info?.("Единые остатки и спрос уже действуют для всех поселений.");
-    const notices = [...(preview.warnings ?? []), ...(preview.blockers ?? [])].map((row) => `<p>${escapeHtml(row)}</p>`).join("");
-    const content = `<p>Объединить внешние рынки всех поселений: ${preview.stockCount} остатков, ${preview.demandCount} записей спроса.</p><p>Существующие поставки и брони сохранятся. Запасы будут восстанавливаться по общему игровому времени, без повторного восстановления при проведении второго поселения. Раздельные записи сохранятся как исторические данные и перестанут использоваться.</p>${notices}`;
-    if (!preview.ok) return foundryDialogV2().prompt({ window: { title: "Общий рынок: переход пока невозможен" }, content, modal: true });
-    const confirmed = await foundryDialogV2().confirm({ window: { title: "Общий рынок: применить переход" }, content, modal: true });
-    if (!confirmed) return;
-    await SkyholdData.transaction((data) => applySharedMarketMigration(data, preview.sourceToken),
-      { reason: "shared-market-migration", scope: "holdings", forceRollbackSnapshot: true });
-    requestSkyholdAppRender();
-    this.requestRender({ focus: false });
   }
 
   async _onBuy() {

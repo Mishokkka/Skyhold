@@ -6,6 +6,7 @@ import { checkConstructionStageCharacterization } from "../construction-stage-ch
 import { checkEconomyCharacterization } from "../economy-characterization-check.mjs";
 import { checkEconomyBalanceScenario } from "../economy-balance-scenario-check.mjs";
 import { checkTendayCharacterization } from "../tenday-characterization-check.mjs";
+import { checkTimeAdvancement } from "../time-advancement-check.mjs";
 import { checkFoodBatchCharacterization } from "../food-batch-characterization-check.mjs";
 import { checkFinanceRuntimeCharacterization } from "../finance-runtime-characterization-check.mjs";
 import { checkFinanceControlsCharacterization } from "../finance-controls-characterization-check.mjs";
@@ -74,6 +75,7 @@ export async function runEconomySuite() {
   checkReputationCharacterization();
   checkEconomyBalanceScenario();
   checkTendayCharacterization();
+  await checkTimeAdvancement();
   checkPoliticsPeriod();
   await checkPoliticsRegressions();
   await checkPoliticsProduction();
