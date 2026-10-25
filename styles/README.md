@@ -24,6 +24,7 @@ CSS is split by ownership. Edit the narrowest file that owns the UI area. New wo
 - `parts/skyhold-current-owners.css` - index for current high-level owner files.
 - `parts/skyhold-gm.css` - main app GM tab: dashboard masonry, GM toggles, generated residents, defense controls and resource catalog layout.
 - `parts/skyhold-content-pack.css` - only owner of the content-pack importer window and preview/conflict rows.
+- `parts/hybrid-labor-migration.css` - labor transition preview, current/selected modes, resident decisions and bounded scroll area; native window sizing stays in the Foundry bridge.
 - `parts/skyhold-resident-list.css` - only owner of the People tab list: filters, resident table, details rows, injury/dead badges and actor drop zone.
 - `parts/skyhold-resident-editor-v2.css` - only owner of the expanded resident editor layout. Do not add extra resident-editor final stylesheets.
 - `parts/residents/*` - resident generator and shared trait picker support.

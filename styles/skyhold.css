@@ -15,4 +15,5 @@
 @import url("./parts/unique-buildings/fasti-shop.css") layer(skyhold.domains);
 @import url("./parts/skyhold-storage.css") layer(skyhold.domains);
 @import url("./parts/skyhold-content-pack.css") layer(skyhold.tools);
+@import url("./parts/hybrid-labor-migration.css") layer(skyhold.tools);
 @import url("./parts/skyhold-morale-dialog.css") layer(skyhold.tools);
