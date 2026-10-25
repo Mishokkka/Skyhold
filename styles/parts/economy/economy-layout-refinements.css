@@ -106,8 +106,15 @@
 
 @media (max-width: 950px) {
     .fbls-build-main-row { grid-template-columns: 1fr 1fr; }
-  .fbl-skyhold-crew-editor .fbls-crew-headline { grid-template-columns: 1fr auto; }
-  .fbl-skyhold-crew-editor .fbls-crew-summary { grid-row: 2; }
-  .fbl-skyhold-crew-editor .fbls-crew-editor-body { grid-template-columns: 1fr; }
   .fbls-two-textareas { grid-template-columns: 1fr; }
 }
+
+@container crew-window (max-width: 760px) {
+  .fbl-skyhold-crew-editor .fbls-crew-headline { grid-template-columns: minmax(0, 1fr) auto; }
+  .fbl-skyhold-crew-editor .fbls-crew-name { grid-column: 1 / -1; }
+  .fbl-skyhold-crew-editor .fbls-crew-summary { grid-row: 2; }
+  .fbl-skyhold-crew-editor .fbls-crew-actions { flex-wrap: wrap; }
+  .fbl-skyhold-crew-editor .fbls-crew-editor-body { grid-template-columns: minmax(0, 1fr); }
+}
+
+.fbl-skyhold-finance-dialog code { white-space: normal; overflow-wrap: anywhere; word-break: break-word; }

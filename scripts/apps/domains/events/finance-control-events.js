@@ -68,6 +68,7 @@ async _promptFinanceReason({ title = "Финансовое решение", mess
       </label>
     </form>`;
   const value = await foundryDialogV2().prompt({
+    classes: ["fbl-skyhold", "fbl-skyhold-finance-dialog"],
     window: { title },
     content,
     ok: {
@@ -101,7 +102,7 @@ async _promptFinanceTransfer({ obligation, targets = [] } = {}) {
       </label>
     </form>`;
   return foundryDialogV2().prompt({
-    classes: ["fbl-skyhold"],
+    classes: ["fbl-skyhold", "fbl-skyhold-finance-dialog"],
     window: { title: "Передать денежное обязательство" },
     content,
     ok: {

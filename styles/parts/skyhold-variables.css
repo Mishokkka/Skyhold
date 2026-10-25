@@ -14,7 +14,7 @@
   --fbls-text: #eee7d9;
   --fbls-muted: #b8b1a5;
   --fbls-dim: var(--fbls-muted);
-  --fbls-placeholder: var(--fbls-dim);
+  --fbls-placeholder: #9f978a;
   --fbls-on-accent: #171a1c;
   --fbls-overlay-soft: rgba(0, 0, 0, 0.18);
   --fbls-overlay: rgba(0, 0, 0, 0.28);

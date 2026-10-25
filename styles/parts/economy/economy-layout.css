@@ -62,6 +62,7 @@
 }
 
 .fbls-crew-editor-shell {
+  container: crew-window / inline-size;
   height: 100%;
   overflow: auto;
   padding: 0.65rem;

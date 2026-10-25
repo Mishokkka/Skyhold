@@ -1,7 +1,7 @@
-<section class="fbls-body-text fbls-route-edge-editor-shell">
+<section class="fbls-body-text fbls-route-edge-editor-shell" data-render-scroll-key="route-edge-content" tabindex="0" role="region" aria-label="Настройки маршрута">
   {{#if edge}}
     <header class="fbls-route-edge-editor-hero">
-      <i class="fa-solid fa-route"></i><div><h2 class="fbls-heading-title">{{edge.fromLabel}} — {{edge.toLabel}}</h2><p>{{edge.distanceKm}} км · {{edge.routeLabel}}</p></div>
+      <i class="fa-solid fa-route"></i><div><h2 class="fbls-heading-title" title="{{edge.fromLabel}} — {{edge.toLabel}}">{{edge.fromLabel}} — {{edge.toLabel}}</h2><p title="{{edge.distanceKm}} км · {{edge.routeLabel}}">{{edge.distanceKm}} км · {{edge.routeLabel}}</p></div>
       <button type="button" class="fbls-icon-button danger" data-action="route-edge-delete" data-route-from="{{edge.fromId}}" data-route-to="{{edge.toId}}" data-route-id="{{edge.routeId}}" title="Удалить связь" aria-label="Удалить связь {{edge.fromLabel}} — {{edge.toLabel}}"><i class="fa-solid fa-trash"></i></button>
     </header>
     <button type="button" class="fbls-button fbls-button-role compact" data-action="route-edge-duplicate" data-route-from="{{edge.fromId}}" data-route-to="{{edge.toId}}" data-route-id="{{edge.routeId}}"><i class="fa-solid fa-copy"></i> Создать копию маршрута</button>

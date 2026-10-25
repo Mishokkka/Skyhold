@@ -116,7 +116,7 @@ export function checkUiContract({ root = DEFAULT_ROOT, hbsFiles = null } = {}) {
   const routeCss = readFileSync(path.join(root, "styles/parts/market/route-graph.css"), "utf8");
   const foundryBridgeCss = readFileSync(path.join(root, "styles/parts/skyhold-foundry-bridge.css"), "utf8");
   const financeDialogs = readFileSync(path.join(root, "scripts/apps/domains/events/finance-control-events.js"), "utf8");
-  if (!/prompt\(\{\s*classes: \["fbl-skyhold"\],\s*window: \{ title: "Передать денежное обязательство"/.test(financeDialogs)) failures.push("the dynamically created finance-transfer select must opt into the common Skyhold native theme");
+  if (!/prompt\(\{\s*classes: \["fbl-skyhold", "fbl-skyhold-finance-dialog"\],\s*window: \{ title: "Передать денежное обязательство"/.test(financeDialogs)) failures.push("the finance-transfer select must retain the common Skyhold theme and the financial dialog owner");
   const tendayWindowCss = readFileSync(path.join(root, "styles/parts/tenday/tenday-window.css"), "utf8");
   const residentEditorTemplate = readFileSync(path.join(root, "templates/parts/skyhold-resident-editor.hbs"), "utf8");
   const uniqueBuildingEditorTemplate = readFileSync(path.join(root, "templates/unique-buildings/parts/editor-tabs.hbs"), "utf8");
