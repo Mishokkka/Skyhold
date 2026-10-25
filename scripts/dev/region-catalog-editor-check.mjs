@@ -50,6 +50,22 @@ try {
   assert.equal(placeCatalogRegion(rows, "a", { beforeId: "a" }), false);
   assert.equal(placeCatalogRegion(rows, "a", { beforeId: "deleted" }), false);
   assert.deepEqual(rows, beforeNoop, "stale targets cannot lose or move a location");
+  const interleaved = () => normalizeEventRegionOptions([
+    { value: "first", catalogFolder: "X" }, { value: "second", catalogFolder: "Y" }, { value: "third", catalogFolder: "X" }
+  ], { fallback: false });
+  for (const target of [{ folder: "Y" }, { beforeId: "second" }, { folder: "New" }, { folder: "" }]) {
+    const moved = interleaved();
+    assert.equal(placeCatalogRegion(moved, "first", target), true);
+    assert.deepEqual(regionCatalogGroups(moved).slice(0, 2).map((group) => group.name), ["X", "Y"], "moving a first child retains the surviving folder order");
+    assert.deepEqual([...moved.map((row) => row.value)].sort(), ["first", "second", "third"]);
+  }
+  data.catalog.eventRegions = interleaved(); app.requestRender = () => {};
+  const beforeFolderNoop = structuredClone(data.catalog.eventRegions);
+  await app._onRegionCatalogFieldChange({ preventDefault() {} }, { dataset: { regionId: "first", regionCatalogField: "catalogFolder" }, type: "text", value: " X " });
+  assert.deepEqual(data.catalog.eventRegions, beforeFolderNoop, "an unchanged normalized folder name cannot reorder its locations");
+  await app._onRegionCatalogFieldChange({ preventDefault() {} }, { dataset: { regionId: "first", regionCatalogField: "catalogFolder" }, type: "text", value: "Y" });
+  assert.deepEqual(regionCatalogGroups(data.catalog.eventRegions).map((group) => group.name), ["X", "Y"], "editing a folder name uses the same ordering as drag/drop");
+  assert.deepEqual(regionCatalogGroups(data.catalog.eventRegions)[1].rows.map((row) => row.value), ["second", "first"]);
   assert.equal(placeCatalogRegion(rows, "a", { folder: "" }), true);
   const restored = normalizeEventRegionOptions(JSON.parse(JSON.stringify(rows)), { fallback: false });
   assert.deepEqual(restored, rows, "folders and order survive save/load normalization");

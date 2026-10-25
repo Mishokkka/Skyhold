@@ -13,7 +13,7 @@ import { openRouteGraphApp } from "../lazy-apps.js";
 import { HeldActionRenderMixin } from "../common/held-action-render.js";
 import { rememberApplicationFocusReturn, restoreApplicationFocus } from "../common/window-focus-keeper.js";
 import { DisclosureState } from "../common/disclosure-state.js";
-import { regionCatalogGroups, moveCatalogRegion, moveCatalogFolder, placeCatalogRegion } from "../domains/region-catalog-order.js";
+import { regionFolderName, regionCatalogGroups, moveCatalogRegion, moveCatalogFolder, placeCatalogRegion } from "../domains/region-catalog-order.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const REGION_FIELDS = new Set(["value", "label", "catalogFolder", "aliases", "countryId", "marketSizeId", "marketSpecialtyIds", "marketConditionId", "marketTags", "marketProfile", "marketPriceFactor", "marketAvailabilityFactor", "marketDeliveryFactor", "marketTimeFactor", "marketRiskFactor", "marketExportFactor", "marketImportFactor", "marketTaxRate", "marketStatus", "marketEnabled", "marketLandmassId", "marketAirshipOnly", "marketTransportModes", "marketLinks", "marketMapX", "marketMapY", "marketNotes"]);
@@ -412,7 +412,9 @@ export class SkyholdRegionCatalogEditor extends FloatingTooltipsMixin(PendingFie
       if (!row) return skip(false);
       const previousValue = String(row.value ?? "");
       if (key === "value") assertAvailableEntityId(rows, value, { key: "value", current: row });
-      row[key] = MARKET_ARRAY_FIELDS.has(key) || MARKET_FACTOR_FIELDS.has(key) || ["marketEnabled", "marketAirshipOnly"].includes(key) ? value : String(value ?? "").trim();
+      if (key === "catalogFolder") {
+        if (regionFolderName(value) !== regionFolderName(row.catalogFolder)) placeCatalogRegion(rows, regionId, { folder: value });
+      } else row[key] = MARKET_ARRAY_FIELDS.has(key) || MARKET_FACTOR_FIELDS.has(key) || ["marketEnabled", "marketAirshipOnly"].includes(key) ? value : String(value ?? "").trim();
       const nextRows = normalizeEventRegionOptions(rows, { fallback: false });
       data.catalog.eventRegions = nextRows;
       if (key === "value") rewriteRegionReferences(data, previousValue, nextRows[index]?.value ?? "");

@@ -391,7 +391,7 @@ export function resolveMarketLogistics({ holding = {}, market = {}, regions = []
   };
   if (!singleRoute && search.routes.length) {
     const candidates = search.routes.map((route) => resolveMarketLogistics({
-      holding, market, regions, seasonId, dependencies, direction, selectedRoute: route, singleRoute: true
+      holding, market, regions, seasonId, dependencies, direction, accessLevel, selectedRoute: route, singleRoute: true
     })).filter((route) => route.ok);
     // Keep search-limit failures: a partial search cannot establish the cheapest route.
     if (!result.ok && !search.limited && candidates.length) return { ...candidates[0], routeCandidates: candidates };

@@ -154,6 +154,9 @@ function carrierSupports(carrier = {}, transportMode = "", routeModes = []) {
   return !transportMode || modes.has(transportMode);
 }
 
+// Capacity modes include service outside graph edges, such as an aerial last mile.
+const requiredCarrierModes = (route) => route.capacityModes?.length ? route.capacityModes : route.routeModes;
+
 export function carrierProvidersForRoute({ organizations = [], countryId = "", transportMode = "", routeModes = [], isGM = false } = {}) {
   const providers = [];
   for (const organization of organizations ?? []) {
@@ -182,7 +185,7 @@ export function carrierProvidersForRoute({ organizations = [], countryId = "", t
 export function carrierProvidersForLogistics({ logistics = {}, ...options } = {}) {
   const result = new Map();
   for (const route of logistics.routeCandidates?.length ? logistics.routeCandidates : [logistics]) {
-    for (const provider of carrierProvidersForRoute({ ...options, transportMode: route.transportMode, routeModes: route.routeModes })) {
+    for (const provider of carrierProvidersForRoute({ ...options, transportMode: route.transportMode, routeModes: requiredCarrierModes(route) })) {
       if (!result.has(provider.id)) result.set(provider.id, provider);
     }
   }
@@ -201,8 +204,8 @@ export function carrierCapacityForLogistics(logistics = {}, carrier = null) {
 
 export function applyCarrierToLogistics(logistics = {}, carrier = null) {
   if (logistics.routeCandidates?.length) {
-    const compatible = logistics.routeCandidates.filter((route) => !carrier || carrierSupports(carrier, route.transportMode, route.routeModes));
-    const { routeCandidates: _candidates, ...base } = carrier && !carrierSupports(carrier, logistics.transportMode, logistics.routeModes)
+    const compatible = logistics.routeCandidates.filter((route) => !carrier || carrierSupports(carrier, route.transportMode, requiredCarrierModes(route)));
+    const { routeCandidates: _candidates, ...base } = carrier && !carrierSupports(carrier, logistics.transportMode, requiredCarrierModes(logistics))
       ? (compatible[0] ?? logistics) : logistics;
     const result = applyCarrierToLogistics(base, carrier);
     result.routeCandidates = compatible.map((route) => applyCarrierToLogistics(route, carrier));

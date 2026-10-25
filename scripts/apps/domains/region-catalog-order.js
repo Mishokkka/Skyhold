@@ -36,10 +36,14 @@ export function placeCatalogRegion(rows, id, { beforeId = "", folder = "" } = {}
   if (source < 0 || beforeId === id) return false;
   const target = beforeId ? rows.find((row) => row.value === beforeId) : null;
   if (beforeId && !target) return false;
+  const folders = new Map([...new Set(rows.map((row) => regionFolderName(row.catalogFolder)))].map((name, index) => [name, index]));
   const [row] = rows.splice(source, 1), name = regionFolderName(target ? target.catalogFolder : folder);
   if (name) row.catalogFolder = name; else delete row.catalogFolder;
   const lastPeer = rows.findLastIndex((peer) => regionFolderName(peer.catalogFolder) === name);
   const index = target ? rows.indexOf(target) : lastPeer < 0 ? rows.length : lastPeer + 1;
   rows.splice(index, 0, row);
+  // Moving a folder's first child must not reorder its remaining children as a group.
+  rows.sort((a, b) => (folders.get(regionFolderName(a.catalogFolder)) ?? folders.size)
+    - (folders.get(regionFolderName(b.catalogFolder)) ?? folders.size));
   return true;
 }

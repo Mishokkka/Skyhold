@@ -5,6 +5,7 @@ import { normalizeEventRegionOptions } from "../data/random-events.js";
 import { resolveMarketLogistics, shortestMarketRoute } from "../engines/market/logistics.js";
 import { marketShipmentRiskProfile } from "../engines/market/pricing.js";
 import { createMarketOutboundOrder } from "../engines/market/outbound.js";
+import { carrierProvidersForLogistics, applyCarrierToLogistics } from "../engines/market/providers.js";
 import { prepareMarketAuthorityContext } from "../apps/market/authority-context.js";
 import { worldMarketFixture } from "./world-ship-market-characterization-check.mjs";
 
@@ -82,9 +83,49 @@ function lastMile() {
   }
 }
 
-const cases = { "own-ship": ownShip, candidates, "last-mile": lastMile };
+function lastMileCarrier() {
+  const { data, holding, regions } = fixture([["caravan"]]);
+  regions.at(-1).marketTransportModes = ["caravan", "airship"];
+  const logistics = resolveMarketLogistics({ holding, market: { regionId: "a", transportModes: ["caravan", "airship"] }, regions });
+  const organization = (id, modes, modeShares) => ({ id, label: id, active: true, visibility: "public", carrier: {
+    enabled: true, modes, countryShares: [{ countryId: "public", sharePct: 100, modeShares }]
+  } });
+  data.catalog.marketEconomy.organizations = [organization("ground-only", ["caravan"]),
+    organization("through-carrier", ["caravan", "airship"], { caravan: 80, airship: 30 })];
+  assert.deepEqual(logistics.routeModes, ["caravan"]);
+  assert.deepEqual(logistics.capacityModes, ["caravan", "airship"]);
+  for (const isGM of [true, false]) {
+    const carriers = carrierProvidersForLogistics({ organizations: data.catalog.marketEconomy.organizations, countryId: "public", logistics, isGM });
+    assert.equal(carriers.some((row) => row.id === "ground-only"), false, "the selected carrier must also support the aerial last mile");
+    assert.equal(carriers.find((row) => row.id === "through-carrier").sharePct, 30, "market share includes the extra air service");
+    const initial = prepareMarketAuthorityContext({ data, holding, marketId: "a", carrierId: "ground-only", isGM });
+    assert.notEqual(initial.quote.logistics.carrierId, "ground-only", "authority must recalculate an incompatible carrier choice");
+    const offer = initial.quote.offers.find((row) => row.resourceId === "test-freight");
+    const view = prepareMarketAuthorityContext({ data, holding, marketId: "a", carrierId: "through-carrier", isGM,
+      quantities: { [offer.id]: 2 }, outboundQuantities: { "test-freight": 2 } });
+    assert.equal(view.plan.ok, true); assert.equal(view.quote.logistics.carrierId, "through-carrier");
+    assert.equal(view.outbound.plan.ok, true);
+  }
+  const groundCarrier = { id: "ground-only", modes: ["caravan"] };
+  assert.equal(applyCarrierToLogistics(logistics, groundCarrier).ok, false, "route substitution also validates the aerial last mile");
+}
+
+function accessOverride() {
+  const { holding, regions } = fixture([["rail", "airship"], ["caravan"]]);
+  holding.gm.modifiers.marketConnectionsLevel = 1;
+  const args = { holding, market: { regionId: "a", transportModes: ["caravan"] }, regions };
+  const logistics = resolveMarketLogistics({ ...args, accessLevel: 2 });
+  assert.equal(logistics.ok, true, "an admissible alternative must retain the effective political URS supplied by its caller");
+  assert.deepEqual(logistics.routeModes, ["airship", "caravan"]);
+  assert.equal(logistics.accessLevel, 2);
+  assert.ok(logistics.routeCandidates.length > 0);
+  assert.ok(logistics.routeCandidates.every((route) => route.accessLevel === 2));
+  assert.equal(resolveMarketLogistics({ ...args, accessLevel: 1 }).ok, false);
+}
+
+const cases = { "own-ship": ownShip, candidates, "last-mile": lastMile, "last-mile-carrier": lastMileCarrier, "access-override": accessOverride };
 export function checkMarketRouteSelection() { for (const check of Object.values(cases)) check(); }
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   if (process.argv[2]) cases[process.argv[2]](); else checkMarketRouteSelection();
-  console.log("Market route selection: explicit airship mode/risk, admissible alternatives, GM/player planning and paid aerial last mile passed.");
+  console.log("Market route selection: airship risk, admissible alternatives, effective URS, GM/player planning and last-mile carrier compatibility/shares passed.");
 }
