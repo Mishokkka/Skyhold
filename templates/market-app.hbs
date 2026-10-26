@@ -41,6 +41,7 @@
         </div>
       </div>
       <div class="fbls-market-treasury">
+        <button type="button" class="fbls-button" data-action="market-transport-orders"><i class="fa-solid fa-route" aria-hidden="true"></i> Перевозки</button>
         <span><i class="fa-solid fa-coins"></i> Казна</span>
         <span class="fbls-market-money prominent" aria-label="{{treasuryText}}">{{#each treasuryParts}}<span class="{{tone}}"><b>{{value}}</b><i>{{label}}</i></span>{{/each}}</span>
       </div>
@@ -116,6 +117,12 @@
 
       <aside class="fbls-market-cart" data-render-scroll-key="market-cart">
         <header class="fbls-market-cart-head"><div><i class="fa-solid fa-cart-shopping"></i><span><small>Оформление</small><h3>Заказ</h3></span></div><strong>{{selectedCount}} ед.</strong></header>
+        {{#if transportV2}}
+        <section class="fbls-market-cart-section"><p>Выберите товары. В следующем окне можно сравнить срок и цену доставки и добавить собственный корабль.</p>
+          <label class="fbls-field"><span>Помещение для прибытия</span><select data-market-room {{#unless canOrder}}disabled{{/unless}}>{{#each rooms}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>
+          <button type="button" class="fbls-button primary" data-action="market-buy" {{#unless canConfirm}}disabled{{/unless}}>Рассчитать перевозку</button>
+        </section>
+        {{else}}
 
         <section class="fbls-market-cart-section delivery">
           <header><i class="fa-solid fa-truck-fast"></i><div><strong>Доставка</strong><small>{{carrierLabel}}</small></div></header>
@@ -350,6 +357,7 @@
             </div>
           </details>
         {{/if}}
+        {{/if}}
       </aside>
     </div>
 
@@ -390,6 +398,10 @@
           </div>
           <div class="fbls-market-outbound-checkout">
             <strong>2. Доставка и итог</strong>
+            {{#if transportV2}}
+            <p>Цена, сроки и выбор своего корабля рассчитываются для всего выбранного груза.</p>
+            <button type="button" class="fbls-button primary" data-action="market-outbound-book" {{#unless outboundCanBook}}disabled{{/unless}}>Рассчитать перевозку</button>
+            {{else}}
             {{#if outboundHasSelection}}
             <div class="fbls-toolbar">
               <label class="fbls-field"><span>Кто доставит</span><select data-market-outbound-ship aria-label="Корабль для исходящей продажи" {{#unless canPurchase}}disabled{{/unless}}>{{#each outboundShipOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{label}}</option>{{/each}}</select></label>
@@ -424,6 +436,7 @@
             <p class="fbls-market-outbound-note">Товар резервируется при подтверждении. Выручка поступит {{#if outboundOwnShipSelected}}на борт{{else}}в казну{{/if}} после доставки.</p>
             {{else}}
             <p class="fbls-market-outbound-note">Укажите количество у нужных товаров. Здесь появятся доставка, расходы и выручка.</p>
+            {{/if}}
             {{/if}}
           </div>
         </div>

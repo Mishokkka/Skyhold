@@ -37,6 +37,7 @@ CSS is split by ownership. Edit the narrowest file that owns the UI area. New wo
 - `parts/mass-combat/*` - mass combat window, detail tables, action popovers, dedicated reference windows and chat summary styles.
 - `parts/market/market.css`, `parts/market/market-checkout.css` and `parts/market/market-outbound.css` - external market catalog/header, inbound delivery/checkout rail and outbound FIFO-sale lifecycle; the Storage-tab entry remains with the market shell owner.
 - `parts/market/market-catalog.css` - owner of the standalone GM editor for base offers, country characters, specialties and organizations.
+- `parts/market/transport-window.css` - owner of the transport planner, accepted orders and shared-run incident controls.
 - `parts/market/region-catalog.css` - only owner of the standalone card-based market-location editor.
 - `parts/market/route-graph.css` - owner of the visual GM route graph and route-edge popout editors.
 - `parts/ships/ship-window.css` - owner of the standalone ship window and crew picker; compact fleet rows remain in `parts/current/skyhold-current-ships.css`.

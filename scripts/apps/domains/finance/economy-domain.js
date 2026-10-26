@@ -1743,6 +1743,17 @@ async _runEconomyForQd(holding, periodQd = 40, { operationId = "", createdAt = "
   if (worldShips && data) worldShips.refreshWorldShipHomeEconomy(data, holding, { report });
   const residentPresenceDaysById = worldShips?.worldShipPresenceDays(holding, periodStartQd, periodStartQd + qd) ?? null;
 
+  if (data?.meta?.transportV2?.enabled) {
+    const { advanceTransportShipments } = await import("../../../workflows/transport/orders.js");
+    const transport = advanceTransportShipments(data, holding, periodStartQd + qd, this, { log: false });
+    for (const row of transport) {
+      report.work.push(`Перевозка ${row.orderId}: получено ${row.receivedQty} ед.; расходы доставки ${row.spentCopper} ММ.`);
+    }
+    appendEconomyLedger(report, transport.entries.map((entry) => ({ ...entry, domain: "market",
+      kind: entry.resourceId === "money" ? "money" : "resource",
+      meta: { internalTransfer: entry.kind === "transfer", storageKind: entry.kind } })));
+  }
+
   // Logistics is resolved at the boundary of the elapsed period. Cargo that
   // reaches the settlement during that period is therefore available to the
   // production, food, construction, and trade phases resolved below.

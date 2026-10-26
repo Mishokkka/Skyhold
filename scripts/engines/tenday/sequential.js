@@ -69,7 +69,8 @@ export async function prepareSequentialTendays(app, { holdingId, qd, data, ratio
     if (!prepared.ok) return { ...prepared, message: `Десятник ${index + 1}/${count}: ${prepared.message}` };
     periods.push(prepared);
     draftData = { ...draftData, meta: { ...draftData.meta,
-      ...(prepared.preparedSharedMarkets ? { sharedMarkets: prepared.preparedSharedMarkets } : {}) },
+      ...(prepared.preparedSharedMarkets ? { sharedMarkets: prepared.preparedSharedMarkets } : {}),
+      ...(prepared.preparedSharedTransport ? { transportV2: prepared.preparedSharedTransport } : {}) },
       holdings: draftData.holdings.map((holding) => String(holding.id) === String(holdingId) ? prepared.preparedHolding : holding) };
   }
   const first = periods[0];

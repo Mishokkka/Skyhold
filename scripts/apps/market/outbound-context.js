@@ -1,4 +1,5 @@
 import { normalizeMarketOutboundState } from "../../data/market/outbound-state.js";
+import { transportCargoReservations } from "../../data/transport/state.js";
 import { overlayMarketQuoteDemand } from "../../engines/market/demand.js";
 import {
   marketOutboundAvailableQuantity,
@@ -104,6 +105,9 @@ export function prepareMarketOutboundContext({
     .map((row) => [text(row?.id ?? row?.resourceId), row]));
   const storageRows = (holding?.storage?.resources ?? []).filter((row) => row?.forSale && whole(row?.qty) > 0);
   const outboundState = normalizeMarketOutboundState(holding?.special?.market?.outbound);
+  // The old market and the new planner observe the same protected warehouse lots.
+  outboundState.orders.push({ id: "transport-v2-reservations", status: "booked", dispatchStatus: "booked",
+    cargoReservations: transportCargoReservations(holding) });
   const grouped = resourceOfferGroups(quote.outboundOffers ?? []);
   const demandQuote = overlayMarketQuoteDemand({
     holding,

@@ -37,6 +37,10 @@ let apiInstalled = false;
 registerStorageOperationExecutor(executeStorageOperation);
 registerConstructionOperationExecutor(executeConstructionOperation);
 registerMarketOperationExecutor(async (operation, context) => {
+  if (String(operation?.type ?? "").startsWith("transport-")) {
+    const { executeTransportOperation } = await import("./apps/transport-operation-executor.js");
+    return executeTransportOperation(operation, context);
+  }
   if (["bank-borrow", "bank-repay", "bank-deposit", "bank-withdraw"].includes(operation?.type)) {
     const { executeBankOperation } = await import("./apps/bank-operation-executor.js");
     return executeBankOperation(operation, context);

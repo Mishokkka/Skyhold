@@ -537,7 +537,7 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     const outboundPlan = outbound?.plan ?? null;
     const outboundOffers = (outbound?.offers ?? []).map((offer) => ({
       ...offer,
-      canSelect: Boolean(permissions.isGM && permissions.canUseStorage && offer.available > 0),
+      canSelect: Boolean((permissions.isGM || data.meta?.transportV2?.enabled) && permissions.canUseStorage && offer.available > 0),
       priceText: formatCopperCurrency(offer.unitPriceCopper),
       lineText: formatCopperCurrency(offer.unitPriceCopper * offer.qty),
       availabilityText: `${offer.availableStock} на складе · спрос ${offer.availableDemand}`
@@ -624,8 +624,9 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
       hasCarrierChoice: (quote?.carriers ?? []).length > 1,
       carrierLabel: routeView.carrierText || routeLogistics?.carrierLabel || "Независимые перевозчики",
       routeLegs: routeView.legs,
-      canPurchase: Boolean(holding && permissions.isGM),
-      canOrder: Boolean(holding && permissions.isGM && routeLogistics?.ok !== false),
+      transportV2: data.meta?.transportV2?.enabled === true,
+      canPurchase: Boolean(holding && (permissions.isGM || data.meta?.transportV2?.enabled && permissions.canUseStorage)),
+      canOrder: Boolean(holding && (permissions.isGM || data.meta?.transportV2?.enabled && permissions.canUseStorage) && (data.meta?.transportV2?.enabled || routeLogistics?.ok !== false)),
       readOnlyReason: permissions.isGM ? "" : "Сделки на внешнем рынке подтверждает GM.",
       logisticsOk: routeLogistics?.ok !== false,
       logisticsReason: (routeLogistics?.reasons ?? []).join(" "),
@@ -760,7 +761,7 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
       deliveryBreakdownOpen: this.deliveryBreakdownOpen,
       landedPricesOpen: this.landedPricesOpen,
       insufficientFunds: Boolean(plan?.insufficientFunds),
-      canConfirm: Boolean(permissions.canUseStorage && plan?.ok),
+      canConfirm: Boolean(permissions.canUseStorage && (data.meta?.transportV2?.enabled ? Object.values(this.quantities).some((qty) => qty > 0) : plan?.ok)),
       shipments,
       hasShipments: shipments.length > 0,
       activeShipmentCount: activeShipmentOrders.length,
@@ -790,7 +791,8 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
       outboundOwnShipSelected: Boolean(this.ownShipId),
       outboundTransportOptions,
       outboundTransportPicker: picker(outboundTransportOptions, outbound?.selectedTransportId, "outbound", Boolean(holding && permissions.isGM)),
-      outboundCanBook: Boolean(permissions.isGM && permissions.canUseStorage && (!this.ownShipId || permissions.canManageShips) && outboundPlan?.ok),
+      outboundCanBook: Boolean(permissions.canUseStorage && (data.meta?.transportV2?.enabled ? Object.values(this.outboundQuantities).some((qty) => qty > 0)
+        : permissions.isGM && (!this.ownShipId || permissions.canManageShips) && outboundPlan?.ok)),
       outboundPlanReason: (outboundPlan?.reasons ?? []).join(" "),
       outboundRevenueText: formatCopperCurrency(outboundPlan?.revenueCopper ?? 0),
       outboundUpfrontText: formatCopperCurrency(outboundPlan?.upfrontCopper ?? 0),
@@ -855,6 +857,23 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     }
   }
 
+  _onContextMenu(event, root) {
+    const element = event.target?.closest?.('[data-action="market-quantity-step"], [data-action="market-outbound-quantity-step"]');
+    if (!element || !root.contains(element) || element.disabled) return;
+    event.preventDefault();
+    if (element.dataset.action === "market-outbound-quantity-step") {
+      const resourceId = String(element.dataset.resourceId ?? "");
+      const available = Math.max(0, Number(element.dataset.available) || 0);
+      const step = Number(element.dataset.step) || 0;
+      this._setOutboundQuantity(resourceId, step > 0 ? available : 0, available);
+      return;
+    }
+    const offerId = String(element.dataset.offerId ?? "");
+    const stock = Math.max(0, Number(element.dataset.stock) || 0);
+    const step = Number(element.dataset.step) || 0;
+    this._setMarketQuantity(offerId, step > 0 ? stock : 0, stock);
+  }
+
   _onClick(event, root) {
     const element = event.target?.closest?.("[data-action]");
     if (!element || !root.contains(element)) return;
@@ -878,6 +897,9 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
       this.quantities = {};
       this.batchPreviewIndex = 0;
       this.requestRender({ focus: false });
+    } else if (action === "market-transport-orders") {
+      event.preventDefault();
+      return import("./lazy-apps.js").then(({ openTransportApp }) => openTransportApp({ holdingId: this.holdingId }));
     } else if (action === "market-buy") {
       event.preventDefault();
       return this._onBuy();
@@ -910,23 +932,6 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
       event.preventDefault();
       return this._onResolveOutboundRisk(element);
     }
-  }
-
-  _onContextMenu(event, root) {
-    const element = event.target?.closest?.('[data-action="market-quantity-step"], [data-action="market-outbound-quantity-step"]');
-    if (!element || !root.contains(element) || element.disabled) return;
-    event.preventDefault();
-    if (element.dataset.action === "market-outbound-quantity-step") {
-      const resourceId = String(element.dataset.resourceId ?? "");
-      const available = Math.max(0, Number(element.dataset.available) || 0);
-      const step = Number(element.dataset.step) || 0;
-      this._setOutboundQuantity(resourceId, step > 0 ? available : 0, available);
-      return;
-    }
-    const offerId = String(element.dataset.offerId ?? "");
-    const stock = Math.max(0, Number(element.dataset.stock) || 0);
-    const step = Number(element.dataset.step) || 0;
-    this._setMarketQuantity(offerId, step > 0 ? stock : 0, stock);
   }
 
   _onTransportPickerAction(element, action) {
@@ -1096,6 +1101,11 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     this._buyOperationPending = true;
     try {
       const snapshot = this._marketSnapshot();
+      if (snapshot.data?.meta?.transportV2?.enabled) {
+        const { openTransportApp } = await import("./lazy-apps.js");
+        return openTransportApp({ holdingId: this.holdingId, request: { direction: "inbound", marketId: snapshot.market?.id,
+          quantities: structuredClone(this.quantities), targetRoomId: this.targetRoomId } });
+      }
       if (!holdingPermissionContext(snapshot.holding).canUseStorage) {
         return ui.notifications?.warn?.("Для рыночной покупки нужны права на хранилище и активный GM.");
       }
@@ -1156,6 +1166,11 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
   async _onBookOutbound() {
     if (this._outboundOperationPending) return;
     const snapshot = this._marketSnapshot();
+    if (snapshot.data?.meta?.transportV2?.enabled) {
+      const { openTransportApp } = await import("./lazy-apps.js");
+      return openTransportApp({ holdingId: this.holdingId, request: { direction: "outbound", marketId: snapshot.market?.id,
+        quantities: structuredClone(this.outboundQuantities), ownShipId: this.ownShipId } });
+    }
     const permissions = holdingPermissionContext(snapshot.holding);
     if (!permissions.canUseStorage) {
       return ui.notifications?.warn?.("Для исходящей продажи нужны права на хранилище и активный GM.");

@@ -390,6 +390,7 @@ export function createMarketOperationExecutor({
       }
       const replay = replayResult(holding, operation, userId);
       if (replay) return skipTransaction(replay);
+      if (data.meta?.transportV2?.enabled) throw marketOperationError("Откройте новый расчёт перевозки перед подтверждением заказа.", COMMAND_ERROR.CONFLICT);
       const currentRevision = Math.max(0, Math.floor(Number(data?.meta?.revision) || 0));
       if (operation.expectedRevision !== currentRevision) {
         throw marketOperationError("Market data changed after preview.", COMMAND_ERROR.CONFLICT, {

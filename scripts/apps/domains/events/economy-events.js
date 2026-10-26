@@ -139,6 +139,9 @@ async _prepareTendayOperation({ holdingId = "", qd = 40, rationUnitsPerResident 
   const sourceSnapshot = clone(source);
   const previewHolding = clone(source);
   const sharedMarketDraft = data?.meta?.sharedMarkets?.enabled ? clone(data.meta.sharedMarkets) : null;
+  const sharedTransportDraft = data?.meta?.transportV2?.enabled ? clone(data.meta.transportV2) : null;
+  const executionData = sharedTransportDraft ? { ...data, meta: { ...data.meta, transportV2: sharedTransportDraft },
+    holdings: data.holdings.map((row) => row.id === previewHolding.id ? previewHolding : row) } : data;
   bindSharedMarketHolding(previewHolding, sharedMarketDraft);
   if (!previewHolding.gm || typeof previewHolding.gm !== "object") previewHolding.gm = {};
   if (!previewHolding.gm.food || typeof previewHolding.gm.food !== "object") previewHolding.gm.food = {};
@@ -155,7 +158,7 @@ async _prepareTendayOperation({ holdingId = "", qd = 40, rationUnitsPerResident 
   beginPerishableStoragePeriod(previewHolding);
   let rawReport;
   try {
-    rawReport = await this._runEconomyForQd(previewHolding, periodQd, { operationId, createdAt: preparedAt, data });
+    rawReport = await this._runEconomyForQd(previewHolding, periodQd, { operationId, createdAt: preparedAt, data: executionData });
     finishPerishableStoragePeriod({
       holding: previewHolding,
       elapsedQd: periodQd,
@@ -232,6 +235,7 @@ async _prepareTendayOperation({ holdingId = "", qd = 40, rationUnitsPerResident 
     dataRevision: Math.max(0, Number(data?.meta?.revision) || 0),
     preparedHolding,
     ...(sharedMarketDraft ? { preparedSharedMarkets: sharedMarketDraft } : {}),
+    ...(sharedTransportDraft ? { preparedSharedTransport: sharedTransportDraft } : {}),
     report,
     recovery,
     calendarAdvance,
@@ -272,6 +276,7 @@ async _applyPreparedTendayOperation(prepared = {}) {
       return SkyholdData.skipTransaction({ ok: false, stale: true, message: "Владение изменилось после расчёта. Подготовь десятник заново." });
     }
     if (prepared.preparedSharedMarkets) data.meta.sharedMarkets = clone(prepared.preparedSharedMarkets);
+    if (prepared.preparedSharedTransport) data.meta.transportV2 = clone(prepared.preparedSharedTransport);
     appendHoldingOperation(holding, {
       operationId: prepared.operationId,
       type: "tenday",

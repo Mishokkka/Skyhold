@@ -184,6 +184,7 @@ export function createShipOperationExecutor({
       } else {
         ship = ships.list.find((row) => row.id === operation.shipId);
         if (!ship) fail("Корабль не найден.");
+        if (ship.transportOrderId) fail("Корабль занят транспортным заказом. Управляйте им в окне перевозок.", COMMAND_ERROR.CONFLICT);
         const clockQd = holding.gm?.calendaria?.lastQd ?? 0;
         const shipClockQd = ship.navigationMode === "world" ? worldShipTimelineQd(holding, ship) : clockQd;
         if (ship.navigationMode === "world" && shipClockQd > clockQd) {

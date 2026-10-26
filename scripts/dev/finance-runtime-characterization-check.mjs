@@ -634,7 +634,8 @@ export async function checkFinanceRuntimeCharacterization() {
   assert.doesNotMatch(runSource, /_runTreasuryCostsForQd/, "the legacy treasury pass must stay disconnected from runtime to prevent double payment");
 
   const eventsSource = readFileSync(path.join(root, "scripts/apps/domains/events/economy-events.js"), "utf8");
-  assert.match(eventsSource, /_runEconomyForQd\(previewHolding, periodQd, \{ operationId, createdAt: preparedAt, data \}\)/, "Preview binds finance to its operation id and supplies the catalog snapshot for automatic crew upkeep");
+  assert.match(eventsSource, /_runEconomyForQd\(previewHolding, periodQd, \{ operationId, createdAt: preparedAt, data: executionData \}\)/, "Preview binds finance to its operation id and supplies the catalog snapshot with isolated shared transport state");
+  assert.match(eventsSource, /transportV2: sharedTransportDraft/, "Shared transport mutations stay in the preview draft until Apply");
 
   const tendayAppSource = readFileSync(path.join(root, "scripts/apps/tenday-app.js"), "utf8");
   assert.match(tendayAppSource, /title: "Денежные обязательства"/, "the GM Preview/History economy tab must expose the exact obligation rows");
