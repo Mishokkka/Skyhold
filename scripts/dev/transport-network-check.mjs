@@ -185,7 +185,7 @@ function independentBoundaryDominance() {
 }
 
 // Enumerate every simple path, edge mode and local provider without production graph/pruning helpers.
-function exhaustivePlans(input, direction) {
+export function exhaustivePlans(input, direction) {
   const byId = new Map(input.regions.map((row) => [row.value, row])), graph = new Map(input.regions.map((row) => [row.value, []]));
   for (const row of input.regions) for (const link of row.marketLinks) {
     graph.get(row.value).push({ ...link, from: row.value, to: link.regionId });

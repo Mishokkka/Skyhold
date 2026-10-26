@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { worldMarketFixture } from "./world-ship-market-characterization-check.mjs";
 import { getSkyholdWorkflowService } from "../workflows/skyhold-workflow-service.js";
 import { registerMarketOperationExecutor } from "../data/store.js";
-import { marketAuthoritySourceToken } from "../apps/market/authority-context.js";
+import { authorityMarketLogistics, marketAuthoritySourceToken, prepareMarketAuthorityContext } from "../apps/market/authority-context.js";
 import { marketTransportPicker } from "../apps/market/transport-picker.js";
+import { normalizeMarketEconomy } from "../data/market/economy.js";
+import { planMarketPurchase } from "../engines/market/pricing.js";
 
 const manyOptions = [{ value: "auto-carriers", label: "Автоматически", automatic: true }, ...Array.from({ length: 80 }, (_, index) => ({
   value: `chain-${index}`, label: `Вариант ${index + 1}`, searchText: `общий префикс из 29 участков конечная компания-${index} гавань-${index}`
@@ -46,6 +48,44 @@ assert.equal(marketTransportPlanView(transportPlan, { hiddenCountryIds: new Set(
 assert.equal(marketTransportPlanView(transportPlan, { hiddenRegionIds: new Set(["market"]) }).legs[0].hidden, true);
 
 const workflow = getSkyholdWorkflowService(), previousRooms = workflow._storageRooms, previousGame = globalThis.game, previousUi = globalThis.ui;
+function staleChainRecalculations() {
+  for (const direction of ["inbound", "outbound"]) for (const change of ["route", "service", "disconnected"]) {
+    const { data, holding } = worldMarketFixture();
+    holding.type = "village"; holding.gm.modifiers.marketConnectionsLevel = 10;
+    holding.storage.resources = [{ id: "stock", resourceId: "test-freight", forSale: true, qty: 20,
+      batches: [{ id: "lot", qty: 20, ageQd: 0 }] }];
+    data.catalog.marketEconomy.organizations = [{ id: "firm", label: "Выбранная компания", active: true, visibility: "public",
+      carrier: { enabled: true, modes: ["airship"], countryShares: [{ countryId: "public", sharePct: 100 }] } }];
+    const initial = prepareMarketAuthorityContext({ data, holding, marketId: "a", isGM: true });
+    const options = { holding, data, market: initial.market, resources: initial.resources, isGM: true };
+    const selected = authorityMarketLogistics({ ...options, direction }).carriers.find((row) => row.chain).id;
+    const app = new SkyholdMarketApp({ holdingId: holding.id });
+    if (direction === "inbound") app.carrierId = selected; else app.outboundCarrierId = selected;
+    app.outboundQuantities = { "test-freight": 2 };
+    if (change === "service") data.catalog.marketEconomy.organizations[0].active = false;
+    else if (change === "disconnected") for (const region of data.catalog.eventRegions) region.marketLinks = [];
+    else data.catalog.eventRegions[0].marketLinks[0].routeId = "replacement";
+    const calculate = () => {
+      const economy = normalizeMarketEconomy(data.catalog.marketEconomy, { locations: data.catalog.eventRegions });
+      const quote = app._marketQuote(holding, data, initial.market, { ...options, economy });
+      if (direction === "outbound") return app._marketOutboundContext({ ...options, economy, quote }).plan;
+      return planMarketPurchase({ holding, quote, quantities: { [quote.offers[0].id]: 2 }, serviceLevel: "standard" });
+    };
+    for (let pass = 0; pass < 2; pass++) {
+      const blocked = calculate();
+      assert.equal(direction === "inbound" ? app.carrierId : app.outboundCarrierId, selected,
+        `${direction}/${change}: repeated recalculation must retain the unavailable explicit chain`);
+      assert.equal(blocked.ok, false, "recalculation cannot authorize an unchosen replacement");
+    }
+    const replacement = authorityMarketLogistics({ ...options, direction }).carriers.find((row) => row.chain);
+    for (const carrierId of ["auto-carriers", replacement?.id].filter(Boolean)) {
+      const button = { dataset: { action: "market-select-transport", direction, carrierId } };
+      app.requestRender = () => {};
+      app._onClick({ preventDefault() {}, target: { closest: () => button } }, { contains: () => true });
+      assert.equal(calculate().ok, change !== "disconnected", "only an explicit choice can restore an available plan");
+    }
+  }
+}
 try {
   globalThis.ui = { notifications: { warn() {}, info() {} } };
   workflow._storageRooms = () => [{ id: "outdoors", label: "Снаружи" }];
@@ -127,6 +167,7 @@ try {
     assert.equal(focusEvents.length, 2, "a later focus in another control is never stolen");
     app.outboundCarrierId = "transport:reverse-chain";
     if (isGM) {
+      staleChainRecalculations();
       const outboundPlan = { ok: true, marketId: "a", marketLabel: "Рынок", planToken: "outbound-token", lines: [{ qty: 2 }], buyerAllocations: [], upfrontCopper: 10, revenueCopper: 30 };
       app._marketSnapshot = () => ({ data, holding, sourceHash: "incoming-source", outbound: { plan: outboundPlan, selectedUnits: 2 } });
       foundry.applications.api.DialogV2 = { confirm: async () => true };

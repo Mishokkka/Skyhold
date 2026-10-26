@@ -861,21 +861,7 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     const action = String(element.dataset.action ?? "");
     if (action === "market-select-transport" || action === "market-transport-page") {
       event.preventDefault();
-      if (element.disabled) return;
-      const direction = element.dataset.direction === "outbound" ? "outbound" : "inbound";
-      clearTimeout(this._transportSearchTimer);
-      if (action === "market-select-transport") {
-        if (!game.user?.isGM) return;
-        const id = String(element.dataset.carrierId || "auto-carriers");
-        if (direction === "outbound") this.outboundCarrierId = id;
-        else { this.carrierId = id; this.batchPreviewIndex = 0; }
-        this._transportControlFocus = { direction, carrierId: id };
-      } else {
-        const step = Number(element.dataset.step) > 0 ? 1 : -1;
-        this.transportBrowsing[direction].page = Math.max(0, this.transportBrowsing[direction].page + step);
-        this._transportControlFocus = { direction, step };
-      }
-      this.requestRender({ focus: false });
+      return this._onTransportPickerAction(element, action);
     } else if (action === "market-select-merchant") {
       event.preventDefault();
       const sourceOfferId = String(element.dataset.sourceOfferId ?? "");
@@ -941,6 +927,24 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     const stock = Math.max(0, Number(element.dataset.stock) || 0);
     const step = Number(element.dataset.step) || 0;
     this._setMarketQuantity(offerId, step > 0 ? stock : 0, stock);
+  }
+
+  _onTransportPickerAction(element, action) {
+    if (element.disabled) return;
+    const direction = element.dataset.direction === "outbound" ? "outbound" : "inbound";
+    clearTimeout(this._transportSearchTimer);
+    if (action === "market-select-transport") {
+      if (!game.user?.isGM) return;
+      const id = String(element.dataset.carrierId || "auto-carriers");
+      if (direction === "outbound") this.outboundCarrierId = id;
+      else { this.carrierId = id; this.batchPreviewIndex = 0; }
+      this._transportControlFocus = { direction, carrierId: id };
+    } else {
+      const step = Number(element.dataset.step) > 0 ? 1 : -1;
+      this.transportBrowsing[direction].page = Math.max(0, this.transportBrowsing[direction].page + step);
+      this._transportControlFocus = { direction, step };
+    }
+    this.requestRender({ focus: false });
   }
 
   _setMarketQuantity(offerId, value, stock) {

@@ -65,7 +65,7 @@
     "suite:combat": "node scripts/dev/suites/combat.mjs",
     "suite:ui": "node scripts/dev/suites/ui-contract.mjs",
     "package": "npm run check && npm run css:check && npm run perf:budget && node scripts/dev/package.mjs",
-    "transport:check": "node scripts/dev/transport-network-check.mjs && node scripts/dev/transport-plan-state-check.mjs && node scripts/dev/transport-authority-check.mjs && node scripts/dev/transport-route-ui-check.mjs"
+    "transport:check": "node scripts/dev/transport-network-check.mjs && node scripts/dev/transport-search-check.mjs && node scripts/dev/transport-search-oracle-check.mjs && node scripts/dev/transport-plan-state-check.mjs && node scripts/dev/transport-authority-check.mjs && node scripts/dev/transport-route-ui-check.mjs"
   },
   "devDependencies": {
     "eslint": "^9.29.0"

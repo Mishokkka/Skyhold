@@ -134,10 +134,13 @@ export function planMarketTransport({ holding = {}, market = {}, regions = [], o
     logistics, transportPlan: logistics.transportPlan, capacityLoad: logistics.capacityLoad, travelQd: logistics.travelQd, priceFactor: 1, capacityFactor: 1 }));
   const chosen = descriptors.find((row) => row.id === carrierId);
   const selected = chosen ? [chosen.logistics] : candidates;
-  const carrier = chosen ?? (preferredCompany && candidates.length ? { id: preferredCompany, label: candidates[0].carrierLabel } : automatic);
+  const staleChain = carrierId?.startsWith("transport:") && !chosen;
+  // Callers persist this descriptor across recalculations, including unsuccessful ones.
+  const carrier = chosen ?? (staleChain ? { id: carrierId, label: "Выбранный план недоступен", unavailable: true }
+    : preferredCompany && candidates.length ? { id: preferredCompany, label: candidates[0].carrierLabel } : automatic);
   if (!selected.length || !base.ok && !base.sameRegion) return { logistics: { ...base, ok: false,
     reasons: base.reasons?.length ? base.reasons : ["Нет доступной цепочки перевозчиков для маршрута."], routeCandidates: [] }, carriers: [automatic, ...descriptors], carrier };
   base = { ...selected[0], routeCandidates: selected };
-  if (carrierId?.startsWith("transport:") && !chosen) base = { ...base, ok: false, reasons: ["Выбранный маршрут изменился или больше недоступен. Выберите другой вариант."], routeCandidates: [] };
+  if (staleChain) base = { ...base, ok: false, reasons: ["Выбранный маршрут изменился или больше недоступен. Выберите другой вариант."], routeCandidates: [] };
   return { logistics: base, carriers: [automatic, ...descriptors], carrier };
 }
