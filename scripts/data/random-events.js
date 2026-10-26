@@ -277,6 +277,7 @@ export function normalizeEventRegionOption(row = {}, index = 0) {
   return {
     value,
     label,
+    ...(String(source.catalogFolder ?? "").trim() ? { catalogFolder: String(source.catalogFolder).trim().slice(0, 120) } : {}),
     aliases: splitAliases(source.aliases ?? source.alias ?? source.patternText ?? ""),
     countryId: String(source.countryId ?? source.marketCountryId ?? value).trim().slice(0, 160) || value,
     marketSizeId: String(source.marketSizeId ?? source.sizeProfileId ?? "town").trim().slice(0, 160) || "town",

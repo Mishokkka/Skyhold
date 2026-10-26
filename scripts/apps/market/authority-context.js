@@ -13,9 +13,8 @@ import { planMarketPurchase, prepareMarketOutboundQuote, prepareMarketQuote, mar
   marketShipmentRiskProfile, MARKET_INSURANCE_COVERAGE_RATE } from "../../engines/market/pricing.js";
 import {
   allocateQuoteToMerchantProviders,
-  applyCarrierToLogistics,
-  carrierProvidersForLogistics
 } from "../../engines/market/providers.js";
+import { AUTO_CARRIERS, planMarketTransport } from "../../engines/market/transport-planner.js";
 import { overlayMarketQuoteStock } from "../../engines/market/stock.js";
 import { getCalendariaSeasonSnapshot } from "../../integrations/calendaria-bridge.js";
 import { marketOutboundRouteFromPurchasePlan, prepareMarketOutboundContext } from "./outbound-context.js";
@@ -52,6 +51,7 @@ export function marketPurchasePlanToken(plan = {}) {
     serviceLevel: String(plan?.serviceLevel ?? ""),
     carrierId: String(plan?.carrierId ?? ""),
     deliveryMode: String(plan?.deliveryMode ?? ""),
+    transportPlan: plan?.logistics?.transportPlan ?? null,
     totalCopper: Math.max(0, Math.floor(Number(plan?.totalCopper) || 0)),
     deliveryQd: Math.max(0, Math.floor(Number(plan?.deliveryQd) || 0)),
     lines: (Array.isArray(plan?.lines) ? plan.lines : []).map((line) => ({
@@ -117,10 +117,14 @@ export function authorityMarketLogistics({
   if (!market) return { logistics: null, carriers: [], carrier: null };
   const locations = data?.catalog?.eventRegions ?? [];
   const economy = preparedEconomy ?? normalizeMarketEconomy(data?.catalog?.marketEconomy, { locations });
-  const baseLogistics = resolveMarketLogistics({
+  return planMarketTransport({
     holding,
     market,
     regions: locations,
+    organizations: economy.organizations,
+    countries: economy.countries,
+    carrierId: carrierId || AUTO_CARRIERS,
+    isGM,
     seasonId: marketSeasonId(holding),
     direction,
     dependencies: {
@@ -128,14 +132,6 @@ export function authorityMarketLogistics({
       regionResolver: marketRegionForValue
     }
   });
-  const carriers = carrierProvidersForLogistics({
-    organizations: economy.organizations,
-    countryId: market.countryId,
-    logistics: baseLogistics,
-    isGM
-  });
-  const carrier = carriers.find((row) => row.id === String(carrierId ?? "")) ?? carriers[0] ?? null;
-  return { logistics: applyCarrierToLogistics(baseLogistics, carrier), carriers, carrier };
 }
 
 export function authorityMarketQuote({
@@ -175,7 +171,10 @@ export function authorityMarketQuote({
     market,
     resources,
     location: market.locationProfile,
-    logistics,
+    // Offer discovery must not inherit a pinned inbound chain's access cost.
+    // The selected outbound/own-ship route validates the full URS requirement later.
+    logistics: { ...logistics, routeAccessLevel: marketRegionAccessCostMap({ holding, regions: locations,
+      dependencies: { regionResolver: marketRegionForValue } }).get(String(market.regionId)) ?? logistics.routeAccessLevel },
     inboundOffers: allocated.priceOffers
   });
   return {
@@ -189,13 +188,16 @@ export function authorityMarketQuote({
   };
 }
 
-export function authorityOutboundRoutes({ holding, data, market, economy, resources, offers = [], carriers = [], isGM = false } = {}) {
+export function authorityOutboundRoutes({ holding, data, market, economy, resources, offers = [], carriers = [], isGM = false,
+  carrierId = AUTO_CARRIERS, preparedLogistics = null } = {}) {
   const selected = offers.filter((offer) => Math.max(0, Math.floor(Number(offer?.qty) || 0)) > 0);
   if (!holding || !market || !selected.length) return [];
-  const routeCarriers = carriers.length ? carriers : [null];
+  const transport = preparedLogistics ?? authorityMarketLogistics({ holding, data, market, carrierId, isGM, economy, direction: "outbound" }).logistics;
+  const routeCarriers = transport?.transportPlan || transport?.routeCandidates?.some((row) => row.transportPlan)
+    ? [{ id: "", label: "Составная перевозка", prepared: transport }] : carriers.length ? carriers : [null];
   const routes = [];
   for (const carrier of routeCarriers) {
-    const { logistics } = authorityMarketLogistics({
+    const { logistics } = carrier?.prepared ? { logistics: carrier.prepared } : authorityMarketLogistics({
       holding,
       data,
       market,
@@ -241,10 +243,10 @@ export function authorityOutboundRoutes({ holding, data, market, economy, resour
         serviceLevel: "standard",
         transportOnly: true
       });
-      const route = marketOutboundRouteFromPurchasePlan(routePlan, carrier);
+      const route = marketOutboundRouteFromPurchasePlan(routePlan, candidate.transportPlan ? null : carrier);
       if (route) routes.push({ ...route, distanceKm: candidate.distanceKm,
         id: `${route.id}:${stableDataHash([route.routePath, route.routeModes, candidate.distanceKm, candidate.routeAccessCost,
-          candidate.distanceFlatCopper, candidate.distanceLoadCopper, candidate.riskFactor])}` });
+          candidate.distanceFlatCopper, candidate.distanceLoadCopper, candidate.riskFactor, candidate.transportPlan?.key])}` });
     }
   }
   return routes;
@@ -325,6 +327,7 @@ export function authorityMarketOutboundContext({
   quantities = {},
   insuranceEnabled = true,
   ownShipId = "",
+  carrierId = AUTO_CARRIERS,
   isGM = false
 } = {}) {
   if (!holding || !market || !quote) return prepareMarketOutboundContext();
@@ -350,6 +353,7 @@ export function authorityMarketOutboundContext({
     resources,
     offers: preliminary.offers,
     carriers: quote.carriers ?? [],
+    carrierId,
     isGM
   });
   const ownShip = ownShipId ? authorityOwnShipOutboundRoute({ holding, data, market, offers: preliminary.offers, ownShipId }) : null;
@@ -374,6 +378,7 @@ export function prepareMarketAuthorityContext({
   holding,
   marketId = "",
   carrierId = "",
+  outboundCarrierId = AUTO_CARRIERS,
   quantities = {},
   targetRoomId = "outdoors",
   serviceLevel = "standard",
@@ -402,6 +407,7 @@ export function prepareMarketAuthorityContext({
     quantities: outboundQuantities,
     insuranceEnabled: outboundInsuranceEnabled,
     ownShipId,
+    carrierId: outboundCarrierId,
     isGM
   });
   return {

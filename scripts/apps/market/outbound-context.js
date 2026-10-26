@@ -62,6 +62,7 @@ export function marketOutboundRouteFromPurchasePlan(plan = {}, carrier = null) {
     routePath: Array.isArray(plan.logistics?.routePath) ? [...plan.logistics.routePath] : [],
     routeModes: Array.isArray(plan.logistics?.routeModes) ? [...plan.logistics.routeModes] : [],
     transportMode: text(plan.logistics?.transportMode),
+    ...(plan.logistics?.transportPlan ? { transportPlan: structuredClone(plan.logistics.transportPlan) } : {}),
     freightCopper: whole(plan.routeCopper) + whole(plan.handlingCopper) + whole(plan.expressSurchargeCopper),
     tariffCopper: whole(plan.taxCopper),
     importTaxCopper: whole(plan.importTaxCopper),

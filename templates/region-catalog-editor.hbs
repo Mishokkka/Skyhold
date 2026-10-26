@@ -15,12 +15,20 @@
       <label class="fbls-search fbls-region-search"><i class="fa-solid fa-magnifying-glass"></i><input class="fbls-control" type="search" data-region-search value="{{search}}" placeholder="Найти локацию, страну…" autocomplete="off" /></label>
       <div class="fbls-region-sidebar-meta"><span>Рынки-локации</span><strong data-region-visible-count>{{rows.length}}</strong></div>
       <nav class="fbls-region-card-list" data-render-scroll-key="region-list" aria-label="Рыночные локации мира">
+        {{#each groups}}
+        <details class="fbls-region-folder" data-region-folder="{{name}}" data-fbls-disclosure="{{key}}" open>
+          <summary aria-label="Папка {{label}}"><i class="fa-solid fa-folder" aria-hidden="true"></i><strong>{{label}}</strong><span class="fbls-chip is-compact">{{rows.length}}</span></summary>
+          {{#if @root.canEdit}}<div class="fbls-toolbar fbls-region-folder-tools"><small>Порядок папки</small><div class="fbls-action-group"><button type="button" class="fbls-icon-button" data-action="region-folder-move" data-folder="{{name}}" data-delta="-1" aria-label="Папку {{label}} выше" title="Папку выше" {{#unless canMoveUp}}disabled{{/unless}}><i class="fa-solid fa-arrow-up" aria-hidden="true"></i></button><button type="button" class="fbls-icon-button" data-action="region-folder-move" data-folder="{{name}}" data-delta="1" aria-label="Папку {{label}} ниже" title="Папку ниже" {{#unless canMoveDown}}disabled{{/unless}}><i class="fa-solid fa-arrow-down" aria-hidden="true"></i></button></div></div>{{/if}}
         {{#each rows}}
-          <button type="button" class="fbls-region-card {{#if selected}}active{{/if}} {{#unless marketEnabled}}is-disabled{{/unless}}" data-action="region-catalog-select" data-region-id="{{value}}" data-region-search-text="{{searchText}}">
+        <div class="fbls-region-list-row" data-region-id="{{value}}" data-region-search-text="{{searchText}}" {{#if @root.canEdit}}draggable="true"{{/if}}>
+          <button type="button" class="fbls-region-card {{#if selected}}active{{/if}} {{#unless marketEnabled}}is-disabled{{/unless}}" data-action="region-catalog-select" data-id="{{value}}" data-region-id="{{value}}" data-fbls-tooltip="{{label}} · {{countryLabel}}">
             <span class="fbls-region-card-state {{marketStatus}}"><i class="fa-solid {{#if marketEnabled}}fa-check{{else}}fa-pause{{/if}}"></i></span>
             <span class="fbls-region-card-copy"><strong>{{label}}</strong><small>{{countryLabel}} · {{marketSizeLabel}}</small></span>
             <span class="fbls-region-card-meta"><em>{{marketConditionLabel}}</em><small><i class="fa-solid fa-route"></i> {{marketLinkCount}}</small></span>
           </button>
+          {{#if @root.canEdit}}<div class="fbls-action-group fbls-region-order-actions"><button type="button" class="fbls-icon-button" data-action="region-catalog-move" data-region-id="{{value}}" data-delta="-1" aria-label="{{label}} выше в папке" title="Локацию выше" {{#unless canMoveUp}}disabled{{/unless}}><i class="fa-solid fa-arrow-up" aria-hidden="true"></i></button><button type="button" class="fbls-icon-button" data-action="region-catalog-move" data-region-id="{{value}}" data-delta="1" aria-label="{{label}} ниже в папке" title="Локацию ниже" {{#unless canMoveDown}}disabled{{/unless}}><i class="fa-solid fa-arrow-down" aria-hidden="true"></i></button></div>{{/if}}
+        </div>
+        {{/each}}</details>
         {{else}}<p class="fbls-empty">Рыночных локаций пока нет.</p>{{/each}}
       </nav>
     </aside>
@@ -34,9 +42,9 @@
         </header>
 
         <nav class="fbls-region-detail-tabs" aria-label="Разделы редактора локации">
-          <button type="button" class="{{#if section.overview}}active{{/if}}" data-action="region-editor-section" data-section="overview"><i class="fa-solid fa-address-card"></i> Основное</button>
-          <button type="button" class="{{#if section.economy}}active{{/if}}" data-action="region-editor-section" data-section="economy"><i class="fa-solid fa-chart-line"></i> Локальные коэффициенты</button>
-          <button type="button" class="{{#if section.logistics}}active{{/if}}" data-action="region-editor-section" data-section="logistics"><i class="fa-solid fa-route"></i> Логистика</button>
+          <button type="button" class="{{#if section.overview}}active{{/if}}" data-action="region-editor-section" data-id="overview" data-section="overview"><i class="fa-solid fa-address-card"></i> Основное</button>
+          <button type="button" class="{{#if section.economy}}active{{/if}}" data-action="region-editor-section" data-id="economy" data-section="economy"><i class="fa-solid fa-chart-line"></i> Локальные коэффициенты</button>
+          <button type="button" class="{{#if section.logistics}}active{{/if}}" data-action="region-editor-section" data-id="logistics" data-section="logistics"><i class="fa-solid fa-route"></i> Логистика</button>
         </nav>
 
         <div class="fbls-region-detail-scroll" data-render-scroll-key="region-detail">
@@ -47,6 +55,8 @@
                 <label class="fbls-field"><span>Название локации</span><input class="fbls-control" type="text" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="label" value="{{selectedRegion.label}}" /></label>
                 <label class="fbls-field"><span>Стабильный ID</span><input class="fbls-control" type="text" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="value" value="{{selectedRegion.value}}" /></label>
                 <label class="fbls-field"><span>Синонимы</span><input class="fbls-control" type="text" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="aliases" value="{{selectedRegion.aliasesText}}" placeholder="через запятую" /></label>
+                <label class="fbls-field fbls-field-wide"><span>Папка в списке</span><input class="fbls-control" type="text" maxlength="120" list="{{folderListId}}" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="catalogFolder" value="{{selectedRegion.catalogFolder}}" placeholder="Без папки" /><datalist id="{{folderListId}}">{{#each folders}}<option value="{{this}}"></option>{{/each}}</datalist></label>
+                <p class="fbls-field-wide fbls-muted-text">Введите имя новой папки или перетащите локацию в существующую. Пустое поле — без папки.</p>
               </div>
             </section>
 
@@ -68,10 +78,12 @@
             <section class="fbls-region-panel">
               <header><div><h4>Специализации рынка</h4><p>Можно сочетать несколько модификаторов: например «рыболовный порт», «коптильни» и «военно-морская база».</p></div><span class="fbls-region-link-badge"><i class="fa-solid fa-wand-magic-sparkles"></i> {{selectedRegion.marketSpecialtyCount}} выбрано</span></header>
               <label class="fbls-search fbls-region-specialty-search"><i class="fa-solid fa-magnifying-glass"></i><input class="fbls-control" type="search" data-region-specialty-search value="{{specialtySearch}}" placeholder="Найти специализацию…" /><small>Показано: <b data-region-specialty-visible-count>{{selectedRegion.marketSpecialtyOptions.length}}</b></small></label>
-              <div class="fbls-region-specialty-grid" data-render-scroll-key="region-specialties">
-                {{#each selectedRegion.marketSpecialtyOptions}}
-                  <label class="{{#if selected}}is-selected{{/if}}" data-region-specialty-search-text="{{label}} {{category}} {{description}} {{id}}"><input type="checkbox" data-type="checkbox" data-region-id="{{../selectedRegion.value}}" data-region-specialty-id="{{id}}" {{#if selected}}checked{{/if}} /><span class="fbls-choice-card"><i class="fa-solid fa-industry"></i><strong>{{label}}</strong><small>{{category}} · {{description}}</small></span></label>
-                {{/each}}
+              <div class="fbls-region-specialties" data-render-scroll-key="region-specialties">
+                {{#each selectedRegion.marketSpecialtyGroups}}
+                <section class="fbls-region-specialty-group" data-region-specialty-group><h5>{{label}} <span class="fbls-chip is-compact">{{rows.length}}</span></h5><div class="fbls-region-specialty-grid">
+                {{#each rows}}
+                  <label class="{{#if selected}}is-selected{{/if}}" data-fbls-tooltip="{{category}} · {{description}}" data-region-specialty-search-text="{{label}} {{category}} {{description}} {{id}}"><input type="checkbox" data-type="checkbox" data-region-id="{{@root.selectedRegion.value}}" data-region-specialty-id="{{id}}" {{#if selected}}checked{{/if}} /><span class="fbls-choice-card is-dense"><i class="{{icon}}" aria-hidden="true"></i><strong>{{label}}</strong></span></label>
+                {{/each}}</div></section>{{/each}}
               </div>
             </section>
           {{/if}}

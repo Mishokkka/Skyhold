@@ -418,9 +418,9 @@ function checkMarketBoundaries() {
     // These helpers own game-date quotes, bounded money, conserved purchase
     // receipts, dated cargo and alternative routes; they are active contracts.
     const expectedImports = {
-      pricing: ["../../core/economy-calendar.js", "../../data/market/money-limits.js"],
+      pricing: ["../../core/economy-calendar.js", "../../data/market/money-limits.js", "../../data/market/transport-plan.js"],
       delivery: ["./purchase-payment.js"],
-      shipment: ["./cargo-aging.js", "./shipment-schedule.js", "./purchase-payment.js"],
+      shipment: ["./cargo-aging.js", "./shipment-schedule.js", "./purchase-payment.js", "../../data/market/transport-plan.js"],
       logistics: ["../politics/runtime-effects.js", "./route-candidates.js"]
     }[name];
     assert.deepEqual(imports, expectedImports, `market ${name} engine may only import its declared domain helpers`);
@@ -428,7 +428,7 @@ function checkMarketBoundaries() {
     assertNoEngineGlobals(engine, `market ${name} engine must not access Foundry or UI globals`);
   }
   for (const helper of [
-    "scripts/core/economy-calendar.js", "scripts/data/market/money-limits.js",
+    "scripts/core/economy-calendar.js", "scripts/data/market/money-limits.js", "scripts/data/market/transport-plan.js",
     "scripts/engines/market/purchase-payment.js", "scripts/engines/market/route-candidates.js"
   ]) {
     const source = readFileSync(path.join(root, helper), "utf8");

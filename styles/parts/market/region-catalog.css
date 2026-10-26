@@ -1,4 +1,16 @@
 /* Region catalog studio owner. Route canvas remains owned by route-graph.css. */
+.fbl-skyhold-region-catalog-editor .fbls-region-folder { min-width: 0; border-bottom: 1px solid var(--fbls-border); }
+.fbl-skyhold-region-catalog-editor .fbls-region-folder > summary { display: flex; align-items: center; gap: var(--fbls-gap-xs); min-height: var(--fbls-control-height); padding: 0.3rem; cursor: pointer; color: var(--fbls-text); }
+.fbl-skyhold-region-catalog-editor .fbls-region-folder > summary > strong { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.fbl-skyhold-region-catalog-editor .fbls-region-folder > summary > i { color: var(--fbls-accent); }
+.fbl-skyhold-region-catalog-editor .fbls-region-folder-tools { padding-inline: 0.3rem; color: var(--fbls-muted); }
+.fbl-skyhold-region-catalog-editor .fbls-region-list-row { display: flex; align-items: center; min-width: 0; gap: 0.2rem; margin-bottom: 0.3rem; }
+.fbl-skyhold-region-catalog-editor .fbls-region-list-row > .fbls-region-card { flex: 1; min-width: 0; }
+.fbl-skyhold-region-catalog-editor .fbls-region-order-actions { flex-direction: column; flex-wrap: nowrap; gap: 0; }
+.fbl-skyhold-region-catalog-editor .fbls-region-folder-tools button,
+.fbl-skyhold-region-catalog-editor .fbls-region-order-actions button { width: var(--fbls-control-height); height: var(--fbls-control-height); min-height: var(--fbls-control-height); padding: 0; }
+.fbl-skyhold-region-catalog-editor .fbls-region-list-row[hidden],
+.fbl-skyhold-region-catalog-editor .fbls-region-folder[hidden] { display: none; }
 .application.fbl-skyhold-region-catalog-editor { min-width: 38rem; min-height: 34rem; }
 .application.fbl-skyhold-region-catalog-editor .window-content { padding: 0; overflow: hidden; background: var(--fbls-surface-0); }
 
@@ -93,16 +105,17 @@
 .fbl-skyhold-region-catalog-editor .fbls-region-transport input { position: static; grid-column: 1; margin: 0; }
 .fbl-skyhold-region-catalog-editor .fbls-region-transport span { display: flex; grid-column: 2; align-items: center; gap: 0.42rem; min-width: 0; padding: 0; border: 0; color: inherit; background: transparent; font-size: var(--fbls-type-compact-xs); }
 .fbl-skyhold-region-catalog-editor .fbls-region-link-badge { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0.42rem; border-radius: 999px; color: var(--fbls-accent); background: var(--fbls-accent-soft); font-size: var(--fbls-type-compact-xs); white-space: nowrap; }
-.fbl-skyhold-region-catalog-editor .fbls-region-specialty-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 0.38rem; max-height: 22rem; overflow: auto; padding: 0.08rem; }
+.fbl-skyhold-region-catalog-editor .fbls-region-specialties { display: grid; gap: var(--fbls-gap-sm); max-height: 22rem; overflow: auto; padding: 0.08rem; }
+.fbl-skyhold-region-catalog-editor .fbls-region-specialty-group h5 { display: flex; align-items: center; gap: var(--fbls-gap-xs); margin: 0 0 0.35rem; color: var(--fbls-muted); font-size: var(--fbls-type-compact-sm); }
+.fbl-skyhold-region-catalog-editor .fbls-region-specialty-group[hidden] { display: none; }
+.fbl-skyhold-region-catalog-editor .fbls-region-specialty-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); gap: 0.25rem; }
 .fbl-skyhold-region-catalog-editor .fbls-region-specialty-search input::placeholder { color: var(--fbls-placeholder); }
 .fbl-skyhold-region-catalog-editor .fbls-region-specialty-grid > label[hidden] { display: none; }
 .fbl-skyhold-region-catalog-editor .fbls-region-specialty-grid > label { position: relative; display: block; min-width: 0; margin: 0; cursor: pointer; }
 .fbl-skyhold-region-catalog-editor .fbls-region-specialty-grid input { position: absolute; width: 1px; height: 1px; opacity: 0; }
-.fbl-skyhold-region-catalog-editor .fbls-region-specialty-grid label > span { display: grid; grid-template-columns: auto minmax(0,1fr); grid-template-rows: auto auto; align-items: center; gap: 2px 0.4rem; }
+.fbl-skyhold-region-catalog-editor .fbls-region-specialty-grid label > span { display: grid; grid-template-columns: auto minmax(0,1fr); min-height: var(--fbls-control-height); align-items: center; gap: 0.35rem; }
 .fbl-skyhold-region-catalog-editor .fbls-region-specialty-grid label > span > i { grid-row: 1 / -1; color: var(--fbls-muted); }
-.fbl-skyhold-region-catalog-editor .fbls-region-specialty-grid label strong,
-.fbl-skyhold-region-catalog-editor .fbls-region-specialty-grid label small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fbl-skyhold-region-catalog-editor .fbls-region-specialty-grid label small { color: var(--fbls-muted); font-size: 0.59rem; }
+.fbl-skyhold-region-catalog-editor .fbls-region-specialty-grid label strong { min-width: 0; overflow-wrap: anywhere; font-size: var(--fbls-type-compact-xs); line-height: 1.2; }
 .fbl-skyhold-region-catalog-editor .fbls-region-specialty-grid label:hover > span { border-color: var(--fbls-accent-border); }
 .fbl-skyhold-region-catalog-editor .fbls-region-route-callout { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 0.55rem; width: 100%; padding: 0.55rem 0.62rem; border: 1px dashed var(--fbls-accent-border); border-radius: 8px; color: var(--fbls-text); background: var(--fbls-accent-soft); text-align: left; }
 .fbl-skyhold-region-catalog-editor .fbls-region-route-callout:hover { border-style: solid; background: var(--fbls-accent-soft); }

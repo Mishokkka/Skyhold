@@ -1,5 +1,6 @@
 import { economyDayIndex } from "../../core/economy-calendar.js";
 import { marketMoneyInRange, MAX_MARKET_OPERATION_COPPER } from "../../data/market/money-limits.js";
+import { allocateMarketTransportCharges } from "../../data/market/transport-plan.js";
 
 const KIND_LABELS = {
   material: "Материалы",
@@ -33,6 +34,7 @@ const FREIGHT_TRANSPORT_FACTORS = Object.freeze({
   airship: 1.15,
   multimodal: 1.1
 });
+export const marketTransportFreightFactor = (mode) => FREIGHT_TRANSPORT_FACTORS[String(mode ?? "")] ?? 1;
 
 const RISK_TRANSPORT_FACTORS = Object.freeze({
   rail: 0.5,
@@ -92,7 +94,9 @@ export function marketHistoricalFreightRate(logistics = {}) {
   const transportFactor = FREIGHT_TRANSPORT_FACTORS[String(logistics.transportMode ?? "")] ?? 1;
   const regionalFactor = clamp(finiteNumber(logistics.deliveryFactor, 1), 0.5, 2);
   const carrierFactor = clamp(finiteNumber(logistics.carrierPriceFactor, 1), 0.5, 2);
-  return clamp((MARKET_FREIGHT_BASE_RATE + distancePremium + accessPremium) * transportFactor * regionalFactor * carrierFactor, MARKET_FREIGHT_MIN_RATE, MARKET_FREIGHT_MAX_RATE);
+  const factor = logistics.transportPlan?.version === 1 ? finiteNumber(logistics.transportPlan.freightFactor, 1)
+    : transportFactor * regionalFactor * carrierFactor;
+  return clamp((MARKET_FREIGHT_BASE_RATE + distancePremium + accessPremium) * factor, MARKET_FREIGHT_MIN_RATE, MARKET_FREIGHT_MAX_RATE);
 }
 
 export function marketHistoricalInsuranceRate({ location = {}, logistics = {} } = {}) {
@@ -361,8 +365,9 @@ export function planMarketPurchase({ holding = {}, quote = {}, quantities = {}, 
   if (quote.logistics?.ok !== false && quote.logistics?.routeCandidates?.length) {
     const selected = (quote.offers ?? []).filter((offer) => Number(quantities?.[offer.id]) > 0);
     const difficulty = Math.max(0, ...selected.map((offer) => finiteNumber(offer.accessDifficulty, 0)));
-    const reference = quote.logistics.routeCandidates.find((route) => route.routePath.join("|") === quote.logistics.routePath.join("|")
-      && route.routeModes.join("|") === quote.logistics.routeModes.join("|"));
+    const reference = quote.logistics.routeCandidates.find((route) => quote.logistics.transportPlan
+      ? route.transportPlan?.key === quote.logistics.transportPlan.key
+      : route.routePath.join("|") === quote.logistics.routePath.join("|") && route.routeModes.join("|") === quote.logistics.routeModes.join("|"));
     const capacityOverride = reference && quote.logistics.capacityLoad !== reference.capacityLoad ? quote.logistics.capacityLoad : null;
     const plans = quote.logistics.routeCandidates.filter((route) => route.ok !== false
       && route.routeAccessCost + difficulty <= route.accessLevel).map((candidate) => {
@@ -420,8 +425,11 @@ export function planMarketPurchase({ holding = {}, quote = {}, quantities = {}, 
   const hasDirectionalTaxes = Object.hasOwn(logistics, "importTaxRate");
   const importTaxRate = hasDirectionalTaxes ? Math.max(0, finiteNumber(logistics.importTaxRate, 0)) : taxRate;
   const exportTaxRate = Math.max(0, finiteNumber(logistics.exportTaxRate, 0));
-  const fullVesselLoadCopper = hasCapacityLimit ? Math.max(0, Math.ceil(physicalCapacityLoad * loadRateCopper)) : 0;
-  const fullOneWayOperatingCopper = routeFlatCopper + fullVesselLoadCopper;
+  const physicalLegs = logistics.transportPlan?.version === 1 ? logistics.transportPlan.legs : null;
+  const fullVesselLoadCopper = physicalLegs ? physicalLegs.reduce((sum, leg) => sum + leg.capacityLoad * leg.loadCopperPerUnit, 0)
+    : hasCapacityLimit ? Math.max(0, Math.ceil(physicalCapacityLoad * loadRateCopper)) : 0;
+  const fullOneWayOperatingCopper = physicalLegs ? physicalLegs.reduce((sum, leg) => sum + leg.dispatchCopper
+    + leg.distanceCopper + leg.operatingCopper + leg.hireCopper, 0) + fullVesselLoadCopper : routeFlatCopper + fullVesselLoadCopper;
 
   for (const [index, batch] of batches.entries()) {
     batch.index = index;
@@ -438,8 +446,21 @@ export function planMarketPurchase({ holding = {}, quote = {}, quantities = {}, 
       : routeFlatCopper + batch.loadCopper;
     // Rideshare pays its occupied share of a revenue-producing one-way service.
     // A charter reserves the whole vehicle and must also fund its return/repositioning.
-    batch.operationalFreightCopper = Math.max(0, Math.ceil(batch.fullOneWayOperatingCopper * batch.capacityShare * batch.operatingLegFactor));
+    const transportLegs = logistics.transportPlan?.version === 1 ? logistics.transportPlan.legs : null;
+    const legOperating = transportLegs?.map((leg) => {
+      const capacity = Math.max(0.1, finiteNumber(leg.capacityLoad, 1));
+      const fare = Number(leg.dispatchCopper || 0) + Number(leg.distanceCopper || 0) + Number(leg.operatingCopper || 0)
+        + Number(leg.hireCopper || 0) + capacity * Number(leg.loadCopperPerUnit || 0);
+      return fare * (service.fullFixedFare ? 1 : clamp(batch.totalLoad / capacity, 0.02, 1)) * batch.operatingLegFactor;
+    });
+    if (transportLegs) batch.fullOneWayOperatingCopper = transportLegs.reduce((sum, leg) => sum + Number(leg.dispatchCopper || 0)
+      + Number(leg.distanceCopper || 0) + Number(leg.operatingCopper || 0) + Number(leg.hireCopper || 0)
+      + Number(leg.capacityLoad || 0) * Number(leg.loadCopperPerUnit || 0), 0);
+    batch.operationalFreightCopper = Math.max(0, Math.ceil(legOperating
+      ? legOperating.reduce((sum, amount) => sum + amount, 0)
+      : batch.fullOneWayOperatingCopper * batch.capacityShare * batch.operatingLegFactor));
     batch.routeCopper = Math.max(batch.valueFreightCopper, batch.operationalFreightCopper);
+    if (legOperating) batch.transportLegCosts = allocateMarketTransportCharges(batch.routeCopper, legOperating);
     batch.handlingCopper = Math.max(0, Math.ceil((handlingFlatCopper + batch.totalLoad * handlingLoadRateCopper) * deliveryFactor));
     batch.insuranceCopper = Math.max(0, Math.ceil(batch.subtotalCopper * insuranceRate));
     batch.importTaxCopper = Math.max(0, Math.ceil(batch.subtotalCopper * importTaxRate));
@@ -530,6 +551,13 @@ export function planMarketPurchase({ holding = {}, quote = {}, quantities = {}, 
     deliveryCopper,
     subtotalCopper
   };
+  const billedLogistics = logistics.transportPlan?.version === 1 ? { ...logistics, transportPlan: {
+    ...logistics.transportPlan,
+    legs: logistics.transportPlan.legs.map((leg, index) => ({ ...leg,
+      chargedCopper: batches.reduce((total, batch) => total + (batch.transportLegCosts?.[index] ?? 0), 0) })),
+    billing: { batchCount: batches.length, freightCopper: routeCopper, insuranceCopper, taxCopper, handlingCopper,
+      expressSurchargeCopper, deliveryCopper, serviceLevel: service.id }
+  } } : logistics;
   return {
     ok: lines.length > 0 && totalCopper > 0 && treasuryCopper >= totalCopper && logistics?.ok !== false && !capacityExceeded && !amountExceeded,
     amountExceeded,
@@ -553,7 +581,7 @@ export function planMarketPurchase({ holding = {}, quote = {}, quantities = {}, 
     firstDeliveryQd,
     deliveryQd,
     dispatchIntervalQd,
-    logistics,
+    logistics: billedLogistics,
     carrierId: String(logistics?.carrierId ?? ""),
     carrierLabel: String(logistics?.carrierLabel ?? ""),
     merchantProviderIds,

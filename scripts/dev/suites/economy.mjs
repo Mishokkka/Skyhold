@@ -30,6 +30,7 @@ import { checkSharedMarkets } from "../shared-market-check.mjs";
 import { checkMarketCargoAging } from "../market-cargo-aging-check.mjs";
 import { checkMarketAuditFixes } from "../market-audit-fixes-check.mjs";
 import { checkMarketDemandCharacterization } from "../market-demand-characterization-check.mjs";
+import { checkMarketRouteSelection } from "../market-route-selection-check.mjs";
 import { checkShipCapacityConsistency } from "../ship-capacity-consistency-check.mjs";
 
 import { checkProductionReview } from "../production-review-regression-check.mjs";
@@ -56,6 +57,7 @@ export async function runEconomySuite() {
   checkMarketCargoAging();
   await checkMarketAuditFixes();
   checkMarketDemandCharacterization();
+  checkMarketRouteSelection();
   await checkShipCapacityConsistency();
   checkEconomyPeriodBoundaries();
   checkApprovedEconomy();

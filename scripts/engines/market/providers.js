@@ -27,8 +27,12 @@ function shareRow(organization = {}, role = "merchant", countryId = "") {
 function carrierShare(row = {}, transportMode = "", routeModes = []) {
   const modeShares = row?.modeShares ?? {};
   const modes = transportMode === "multimodal" ? [...new Set(routeModes)] : [transportMode].filter(Boolean);
-  const explicit = modes.map((mode) => modeShares[mode]).filter((value) => value !== null && value !== undefined && Number.isFinite(Number(value)));
-  return explicit.length ? Math.min(...explicit.map(Number)) : Math.max(0, finite(row?.sharePct, 0));
+  const fallback = Math.max(0, finite(row?.sharePct, 0));
+  const shares = modes.map((mode) => {
+    const value = modeShares[mode];
+    return value === null || value === undefined || value === "" ? fallback : Math.max(0, finite(value, fallback));
+  });
+  return shares.length ? Math.min(...shares) : fallback;
 }
 
 function normalizedShares(providers = [], independentLabel = "Независимые торговцы") {
@@ -154,6 +158,15 @@ function carrierSupports(carrier = {}, transportMode = "", routeModes = []) {
   return !transportMode || modes.has(transportMode);
 }
 
+// Capacity modes include service outside graph edges, such as an aerial last mile.
+const requiredCarrierModes = (route) => route.capacityModes?.length ? route.capacityModes : route.routeModes;
+const carrierRouteKey = (route) => `${route.transportMode ?? ""}:${[...new Set(requiredCarrierModes(route) ?? [])].sort().join(",")}`;
+const CARRIER_ROUTE_UNAVAILABLE = "Перевозчик не обслуживает допустимые маршруты.";
+function carrierSupportsLogistics(carrier, route) {
+  return carrierSupports(carrier, route.transportMode, requiredCarrierModes(route))
+    && (!carrier.routeShares || finite(carrier.routeShares[carrierRouteKey(route)], 0) > 0);
+}
+
 export function carrierProvidersForRoute({ organizations = [], countryId = "", transportMode = "", routeModes = [], isGM = false } = {}) {
   const providers = [];
   for (const organization of organizations ?? []) {
@@ -182,8 +195,10 @@ export function carrierProvidersForRoute({ organizations = [], countryId = "", t
 export function carrierProvidersForLogistics({ logistics = {}, ...options } = {}) {
   const result = new Map();
   for (const route of logistics.routeCandidates?.length ? logistics.routeCandidates : [logistics]) {
-    for (const provider of carrierProvidersForRoute({ ...options, transportMode: route.transportMode, routeModes: route.routeModes })) {
-      if (!result.has(provider.id)) result.set(provider.id, provider);
+    for (const provider of carrierProvidersForRoute({ ...options, transportMode: route.transportMode, routeModes: requiredCarrierModes(route) })) {
+      if (!result.has(provider.id)) result.set(provider.id, { ...provider, routeShares: {} });
+      // Presence and the independent residual are calculated separately for each transport mix.
+      result.get(provider.id).routeShares[carrierRouteKey(route)] = provider.sharePct;
     }
   }
   return [...result.values()].sort((a, b) => a.priceFactor - b.priceFactor || a.label.localeCompare(b.label, "ru"));
@@ -201,12 +216,12 @@ export function carrierCapacityForLogistics(logistics = {}, carrier = null) {
 
 export function applyCarrierToLogistics(logistics = {}, carrier = null) {
   if (logistics.routeCandidates?.length) {
-    const compatible = logistics.routeCandidates.filter((route) => !carrier || carrierSupports(carrier, route.transportMode, route.routeModes));
-    const { routeCandidates: _candidates, ...base } = carrier && !carrierSupports(carrier, logistics.transportMode, logistics.routeModes)
+    const compatible = logistics.routeCandidates.filter((route) => !carrier || carrierSupportsLogistics(carrier, route));
+    const { routeCandidates: _candidates, ...base } = carrier && !carrierSupportsLogistics(carrier, logistics)
       ? (compatible[0] ?? logistics) : logistics;
     const result = applyCarrierToLogistics(base, carrier);
     result.routeCandidates = compatible.map((route) => applyCarrierToLogistics(route, carrier));
-    if (!compatible.length) { result.ok = false; result.reasons = [...(result.reasons ?? []), "Перевозчик не обслуживает допустимые маршруты."]; }
+    if (!compatible.length) { result.ok = false; result.reasons = [...new Set([...(result.reasons ?? []), CARRIER_ROUTE_UNAVAILABLE])]; }
     return result;
   }
   const capacity = carrierCapacityForLogistics(logistics, carrier);
@@ -222,9 +237,10 @@ export function applyCarrierToLogistics(logistics = {}, carrier = null) {
   const riskFactor = Math.max(0.25, finite(carrier.riskFactor, 1));
   return {
     ...logistics,
+    ...(!carrierSupportsLogistics(carrier, logistics) ? { ok: false, reasons: [...(logistics.reasons ?? []), CARRIER_ROUTE_UNAVAILABLE] } : {}),
     carrierId: String(carrier.id ?? ""),
     carrierLabel: String(carrier.label ?? "Перевозчик"),
-    carrierSharePct: Math.max(0, finite(carrier.sharePct, 0)),
+    carrierSharePct: Math.max(0, finite(carrier.routeShares ? carrier.routeShares[carrierRouteKey(logistics)] : carrier.sharePct, 0)),
     carrierPriceFactor: priceFactor,
     carrierTimeFactor: timeFactor,
     carrierRiskFactor: riskFactor,

@@ -13,6 +13,18 @@
 
 .fbls-market-cart h3 { margin: 0; }
 
+.fbls-market-legs { display: grid; gap: var(--fbls-gap-xs); margin: 0.5rem 0; padding-inline-start: 1.25rem; min-width: 0; max-height: min(24rem, 42vh); overflow: auto; scrollbar-gutter: stable; }
+.fbls-market-legs > li { min-width: 0; padding: 0.3rem; border-bottom: 1px solid var(--fbls-border); overflow-wrap: anywhere; }
+.fbls-market-legs .fbls-card-header { flex-wrap: wrap; gap: var(--fbls-gap-xs); }
+.fbls-market-legs strong { min-width: 0; font-size: var(--fbls-type-compact-xs); }
+.fbls-market-legs small { display: block; color: var(--fbls-muted); font-size: var(--fbls-type-compact-xs); line-height: 1.35; }
+.fbls-market-transport-details { min-width: 0; margin-block: 0.4rem; }
+.fbls-market-transport-details > summary { min-height: 32px; padding: 0.4rem 0; cursor: pointer; color: var(--fbls-muted); font-size: var(--fbls-type-compact-xs); }
+.fbls-market-transport-details > summary:focus-visible,
+.fbls-market-legs:focus-visible { outline: 2px solid var(--fbls-accent); outline-offset: -2px; }
+.fbls-market-archive-row .fbls-market-legs { list-style: decimal; padding-inline-start: 1.25rem; border-top: 0; }
+.fbls-market-archive-row .fbls-market-legs > li { display: list-item; color: var(--fbls-text); }
+
 .fbls-market-cart-head {
   display: flex;
   align-items: center;
@@ -89,6 +101,47 @@
   padding-block: 1px;
   font-size: var(--fbls-type-compact-xs);
 }
+
+/* Shared selection field, with an inline paged comparison instead of unbounded option labels. */
+.fbls-market-transport-picker { width: 100%; min-width: 0; }
+.fbls-market-transport-picker > summary { min-height: 32px; width: 100%; }
+.fbls-market-outbound-checkout .fbls-toolbar > .fbls-market-transport-field { flex: 1 0 100%; width: 100%; }
+.fbls-market-transport-panel {
+  display: grid;
+  gap: var(--fbls-gap-sm);
+  min-width: 0;
+  max-height: min(28rem, 52vh);
+  overflow: auto;
+  scrollbar-gutter: stable;
+  padding: 0.5rem;
+  margin-top: var(--fbls-gap-xs);
+  border: 1px solid var(--fbls-border);
+  border-radius: var(--fbls-radius-sm);
+  background: var(--fbls-surface-1);
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+  line-height: 1.4;
+}
+.fbls-market-transport-panel .fbls-field { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--fbls-gap-xs); min-width: 0; margin: 0; }
+.fbls-market-transport-panel input { min-width: 0; width: 100%; min-height: 32px; }
+.fbls-market-transport-panel .fbls-market-transport-help,
+.fbls-market-transport-panel .fbls-market-transport-status { margin: 0; color: var(--fbls-muted); font-size: var(--fbls-type-compact-xs); line-height: 1.4; overflow-wrap: anywhere; }
+.fbls-market-transport-auto { display: flex; gap: var(--fbls-gap-xs); align-items: center; min-width: 0; width: 100%; min-height: 32px; height: auto; padding: 0.4rem; text-align: left; white-space: normal; }
+.fbls-market-transport-auto > span { min-width: 0; overflow-wrap: anywhere; }
+.fbls-market-transport-auto[aria-pressed="true"] { border-color: var(--fbls-accent); background: var(--fbls-accent-soft); }
+.fbls-market-transport-choices { display: grid; gap: var(--fbls-gap-sm); min-width: 0; }
+.fbls-market-transport-choice { display: grid; gap: var(--fbls-gap-xs); min-width: 0; padding: 0.5rem; border: 1px solid var(--fbls-border); border-radius: var(--fbls-radius-sm); background: var(--fbls-surface-soft); }
+.fbls-market-transport-choice.is-selected { border-color: var(--fbls-accent); background: var(--fbls-accent-soft); }
+.fbls-market-transport-choice .fbls-card-header { flex-wrap: wrap; gap: var(--fbls-gap-xs); min-width: 0; }
+.fbls-market-transport-choice .fbls-card-header > strong { min-width: 0; font-size: var(--fbls-type-compact-sm); overflow-wrap: anywhere; }
+.fbls-market-transport-choice button { min-height: 32px; height: auto; margin: 0; white-space: normal; }
+.fbls-market-transport-choice > p { margin: 0; color: var(--fbls-muted); font-size: var(--fbls-type-compact-xs); line-height: 1.4; overflow-wrap: anywhere; }
+.fbls-market-transport-meta { min-width: 0; gap: var(--fbls-gap-xs); }
+.fbls-market-transport-meta .fbls-chip { max-width: 100%; height: auto; white-space: normal; overflow-wrap: anywhere; }
+.fbls-market-transport-pages { display: grid; grid-template-columns: 32px minmax(0, 1fr) 32px; align-items: center; min-width: 0; }
+.fbls-market-transport-pages > span { min-width: 0; color: var(--fbls-muted); font-size: var(--fbls-type-compact-xs); text-align: center; overflow-wrap: anywhere; }
+.fbls-market-transport-pages > button { flex: 0 0 32px; min-width: 32px; min-height: 32px; margin: 0; }
 
 .fbls-market-capacity {
   display: grid;
@@ -285,14 +338,14 @@
   font-size: var(--fbls-type-compact-xs);
 }
 
-.fbls-market-cart .fbls-action-group {
+.fbls-market-cart .fbls-action-group:not(.fbls-market-transport-pages) {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 5px;
   margin: 0;
 }
 
-.fbls-market-cart .fbls-action-group button { min-height: 30px; }
+.fbls-market-cart .fbls-action-group:not(.fbls-market-transport-pages) button { min-height: 30px; }
 
 @media (max-width: 860px) {
   .fbls-market-cart { border-top: 1px solid var(--fbls-border); border-left: 0; }
