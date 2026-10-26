@@ -6,6 +6,7 @@ import { authorityMarketLogistics, marketAuthoritySourceToken, prepareMarketAuth
 import { marketTransportPicker } from "../apps/market/transport-picker.js";
 import { normalizeMarketEconomy } from "../data/market/economy.js";
 import { planMarketPurchase } from "../engines/market/pricing.js";
+import { transportOfferAccessFixture } from "./fixtures/transport-offer-access.mjs";
 
 const manyOptions = [{ value: "auto-carriers", label: "Автоматически", automatic: true }, ...Array.from({ length: 80 }, (_, index) => ({
   value: `chain-${index}`, label: `Вариант ${index + 1}`, searchText: `общий префикс из 29 участков конечная компания-${index} гавань-${index}`
@@ -26,6 +27,21 @@ globalThis.foundry = { applications: { api: {
   ApplicationV2: class { get state() { return 0; } async _prepareContext() { return {}; } }, HandlebarsApplicationMixin: (Base) => Base
 } } };
 const { SkyholdMarketApp, marketTransportPlanView } = await import("../apps/market-app.js");
+for (const isGM of [true, false]) {
+  const { data, holding } = transportOfferAccessFixture();
+  const initial = prepareMarketAuthorityContext({ data, holding, marketId: "a", isGM });
+  const app = new SkyholdMarketApp({ holdingId: holding.id });
+  app.outboundQuantities = { "test-freight": 2 };
+  const args = { data, holding, market: initial.market, economy: initial.economy, resources: initial.resources, isGM };
+  const calculate = () => app._marketOutboundContext({ ...args, quote: app._marketQuote(holding, data, initial.market, args) });
+  const automatic = calculate();
+  app.carrierId = initial.quote.carriers.find((row) => row.logistics?.routeAccessCost === 2).id;
+  const pinned = calculate();
+  assert.equal(pinned.plan?.ok, true, "the actual window must retain outbound goods after choosing a restrictive inbound chain");
+  assert.deepEqual(pinned.offers, automatic.offers);
+  assert.equal(pinned.plan.planToken, automatic.plan.planToken);
+  assert.equal(app.outboundCarrierId, "auto-carriers");
+}
 const transportPlan = { version: 1, key: "chain-one", direction: "inbound", legs: [
   { id: "leg-public", fromRegionId: "market", toRegionId: "relay", fromCountryId: "country-a", toCountryId: "country-b", fromLabel: "Рынок", toLabel: "Перевалка", mode: "caravan",
     carrierId: "company-a", carrierLabel: "Караванщики", visibility: "public", distanceKm: 80, travelQd: 2.25, capacityLoad: 400 },

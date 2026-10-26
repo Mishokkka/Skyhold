@@ -171,7 +171,10 @@ export function authorityMarketQuote({
     market,
     resources,
     location: market.locationProfile,
-    logistics,
+    // Offer discovery must not inherit a pinned inbound chain's access cost.
+    // The selected outbound/own-ship route validates the full URS requirement later.
+    logistics: { ...logistics, routeAccessLevel: marketRegionAccessCostMap({ holding, regions: locations,
+      dependencies: { regionResolver: marketRegionForValue } }).get(String(market.regionId)) ?? logistics.routeAccessLevel },
     inboundOffers: allocated.priceOffers
   });
   return {

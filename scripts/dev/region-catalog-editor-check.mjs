@@ -14,7 +14,13 @@ const originalView = SkyholdData.view;
 const originalTransaction = SkyholdData.transaction;
 const originalGame = globalThis.game;
 SkyholdData.view = () => data;
-SkyholdData.transaction = async (callback) => callback(data, { skip: (value) => value });
+let committedTransactions = 0;
+SkyholdData.transaction = async (callback) => {
+  let skipped = false;
+  const result = await callback(data, { skip: (value) => { skipped = true; return value; } });
+  if (!skipped) committedTransactions++;
+  return result;
+};
 globalThis.game = { user: { isGM: true } };
 let ownerRenders = 0;
 try {
@@ -61,8 +67,10 @@ try {
   }
   data.catalog.eventRegions = interleaved(); app.requestRender = () => {};
   const beforeFolderNoop = structuredClone(data.catalog.eventRegions);
+  const commitsBeforeFolderNoop = committedTransactions;
   await app._onRegionCatalogFieldChange({ preventDefault() {} }, { dataset: { regionId: "first", regionCatalogField: "catalogFolder" }, type: "text", value: " X " });
   assert.deepEqual(data.catalog.eventRegions, beforeFolderNoop, "an unchanged normalized folder name cannot reorder its locations");
+  assert.equal(committedTransactions, commitsBeforeFolderNoop, "an unchanged folder must skip persistence and world revision changes");
   await app._onRegionCatalogFieldChange({ preventDefault() {} }, { dataset: { regionId: "first", regionCatalogField: "catalogFolder" }, type: "text", value: "Y" });
   assert.deepEqual(regionCatalogGroups(data.catalog.eventRegions).map((group) => group.name), ["X", "Y"], "editing a folder name uses the same ordering as drag/drop");
   assert.deepEqual(regionCatalogGroups(data.catalog.eventRegions)[1].rows.map((row) => row.value), ["second", "first"]);

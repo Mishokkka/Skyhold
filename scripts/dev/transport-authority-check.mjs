@@ -6,6 +6,7 @@ import { worldMarketFixture } from "./world-ship-market-characterization-check.m
 import { createMarketOperationExecutor } from "../apps/market-operation-executor.js";
 import { authorityMarketLogistics, marketAuthoritySourceToken, marketPurchasePlanToken, prepareMarketAuthorityContext } from "../apps/market/authority-context.js";
 import { AUTO_CARRIERS } from "../engines/market/transport-planner.js";
+import { transportOfferAccessFixture } from "./fixtures/transport-offer-access.mjs";
 
 function fixture() {
   const { data, holding } = worldMarketFixture(); holding.type = "village"; holding.gm.modifiers.marketConnectionsLevel = 4;
@@ -81,6 +82,31 @@ function explicitKey(data, type, isGM) {
 }
 
 export async function checkTransportAuthority() {
+  for (const isGM of [true, false]) {
+    const { data, holding } = transportOfferAccessFixture();
+    const args = { data, holding, marketId: "a", isGM, outboundQuantities: { "test-freight": 2 }, outboundInsuranceEnabled: false };
+    const auto = prepareMarketAuthorityContext(args);
+    const inboundDetour = auto.quote.carriers.find((row) => row.logistics?.routeAccessCost === 2).id;
+    const pinned = prepareMarketAuthorityContext({ ...args, carrierId: inboundDetour });
+    assert.equal(pinned.quote.offers.length, 0, "the pinned inbound detour cannot carry difficulty-2 goods at URS 3");
+    assert.deepEqual(pinned.quote.outboundOffers, auto.quote.outboundOffers, "inbound access cannot remove outbound demand");
+    assert.equal(pinned.outbound.plan.ok, true);
+    assert.equal(pinned.outbound.plan.planToken, auto.outbound.plan.planToken, "outbound confirmation is independent of the inbound chain");
+    const outgoing = authorityMarketLogistics({ ...args, market: auto.market, economy: auto.economy, direction: "outbound" });
+    const outboundDetour = outgoing.carriers.find((row) => row.logistics?.routeAccessCost === 2).id;
+    const blocked = prepareMarketAuthorityContext({ ...args, outboundCarrierId: outboundDetour });
+    assert.equal(blocked.outbound.plan.ok, false, "discovering goods must not bypass the selected outbound route's URS requirement");
+    const state = harness(data), actor = { userId: isGM ? "gm" : "player", remote: !isGM };
+    const operation = { type: "outbound", operationId: `directional-access-${isGM}`, holdingId: holding.id,
+      expectedRevision: data.meta.revision, marketId: "a", carrierId: AUTO_CARRIERS,
+      sourceToken: marketAuthoritySourceToken({ data, holding, marketId: "a", carrierId: AUTO_CARRIERS }),
+      planToken: pinned.outbound.plan.planToken, quantities: args.outboundQuantities, insuranceEnabled: false };
+    const execute = state.makeExecutor();
+    assert.equal((await execute(operation, actor)).ok, true);
+    assert.equal(holding.storage.moneyCopper - state.data.holdings[0].storage.moneyCopper, pinned.outbound.plan.upfrontCopper);
+    assert.equal((await execute(operation, actor)).replay, true);
+    assert.equal(state.commits, 1);
+  }
   for (const isGM of [true, false]) for (const type of ["purchase", "outbound"]) {
     const state = harness(fixture()), key = explicitKey(state.data, type, isGM);
     const { view, operation } = operationFor(state.data, type, isGM, key, `transport-${type}-${isGM}`);

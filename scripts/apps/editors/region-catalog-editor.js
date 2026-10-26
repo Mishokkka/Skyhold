@@ -413,7 +413,8 @@ export class SkyholdRegionCatalogEditor extends FloatingTooltipsMixin(PendingFie
       const previousValue = String(row.value ?? "");
       if (key === "value") assertAvailableEntityId(rows, value, { key: "value", current: row });
       if (key === "catalogFolder") {
-        if (regionFolderName(value) !== regionFolderName(row.catalogFolder)) placeCatalogRegion(rows, regionId, { folder: value });
+        if (regionFolderName(value) === regionFolderName(row.catalogFolder)) return skip(false);
+        placeCatalogRegion(rows, regionId, { folder: value });
       } else row[key] = MARKET_ARRAY_FIELDS.has(key) || MARKET_FACTOR_FIELDS.has(key) || ["marketEnabled", "marketAirshipOnly"].includes(key) ? value : String(value ?? "").trim();
       const nextRows = normalizeEventRegionOptions(rows, { fallback: false });
       data.catalog.eventRegions = nextRows;
