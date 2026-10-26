@@ -1,6 +1,7 @@
 import { ageMarketCargo, cargoDeliveryQuantity, cargoShelfLife, marketLossInsurancePayoutCopper, marketInsurancePayoutCopper, viableCargoValueCopper } from "./cargo-aging.js";
 import { marketShipmentSchedule } from "./shipment-schedule.js";
 import { marketPurchasePaymentEntry } from "./purchase-payment.js";
+import { marketTransportPlanForOrder } from "../../data/market/transport-plan.js";
 
 function requireFunctions(dependencies = {}, names = []) {
   for (const name of names) {
@@ -164,6 +165,7 @@ function marketShipmentBatchPlans(plan = {}) {
     const lines = Array.isArray(batch.lines) ? batch.lines : [];
     return {
       ...plan,
+      ...(Object.hasOwn(batch, "transportLegCosts") ? { transportLegCosts: batch.transportLegCosts } : {}),
       lines,
       merchantProviderIds: [...new Set(lines.map((line) => String(line?.providerId ?? "")).filter(Boolean))],
       subtotalCopper: Math.max(0, Number(batch.subtotalCopper) || 0),
@@ -195,6 +197,11 @@ function createShipmentOrder({ plan, prepared, id, parentOperationId, createdAt,
   const deliveryQd = Math.max(1, Math.floor(Number(plan.deliveryQd) || 1));
   const riskPending = Number(plan.riskLossChance) > 0 || Number(plan.riskDelayChance) > 0;
   const riskSeed = shipmentRiskSeed({ id, createdAt, plan });
+  const transportPlan = marketTransportPlanForOrder(plan.logistics?.transportPlan, {
+    transportLegCosts: plan.transportLegCosts, batchCount: 1, freightCopper: plan.routeCopper,
+    insuranceCopper: plan.insuranceCopper, taxCopper: plan.taxCopper, handlingCopper: plan.handlingCopper,
+    expressSurchargeCopper: plan.expressSurchargeCopper, deliveryCopper: plan.deliveryCopper, serviceLevel: plan.serviceLevel
+  });
   return {
     id,
     operationId: id,
@@ -224,6 +231,7 @@ function createShipmentOrder({ plan, prepared, id, parentOperationId, createdAt,
     routeDistanceKm: Math.max(0, Number(plan.logistics?.distanceKm) || 0),
     routeHops: Math.max(0, Number(plan.logistics?.hops) || 0),
     routePath: Array.isArray(plan.logistics?.routePath) ? [...plan.logistics.routePath] : [],
+    ...(transportPlan ? { transportPlan } : {}),
     transportMode: String(plan.logistics?.transportMode ?? ""),
     carrierId: String(plan.carrierId ?? plan.logistics?.carrierId ?? ""),
     carrierLabel: String(plan.carrierLabel ?? plan.logistics?.carrierLabel ?? ""),

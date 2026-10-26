@@ -1,6 +1,7 @@
 import { MAX_OUTBOUND_CARGO_ROWS } from "../../data/market/outbound-state.js";
 import { marketMoneyInRange, MAX_MARKET_OPERATION_COPPER } from "../../data/market/money-limits.js";
 import { marketOutboundBatchPlans } from "./outbound-batches.js";
+import { allocateMarketTransportCharges, marketTransportPlanForOrder } from "../../data/market/transport-plan.js";
 
 const TERMINAL_OUTBOUND_STATUSES = new Set(["delivered", "lost", "cancelled"]);
 
@@ -297,6 +298,7 @@ export function marketOutboundPlanToken(plan = {}) {
   return JSON.stringify({
     marketId: text(plan.marketId),
     routeId: text(plan.route?.id),
+    transportPlan: plan.route?.transportPlan ?? null,
     cargo: (plan.cargoReservations ?? []).map((row) => [row.rowId, row.batchId, row.qty, row.reservedAgeQd]),
     demand: (plan.lines ?? []).map((line) => [line.demandId, line.qty, line.demandStateRevision]),
     upfrontCopper: whole(plan.upfrontCopper, 0, Number.MAX_SAFE_INTEGER),
@@ -370,9 +372,25 @@ export function planMarketOutboundSale({
     riskMaxDelayQd: route?.riskMaxDelayQd ?? 1
   };
   try {
+    if (plan.route?.transportPlan) plan.route = { ...plan.route,
+      transportPlan: outboundTransportSnapshot(plan, plan.route, Math.max(1, plan.route.shipmentBatches?.length ?? 1)) };
     plan.shipmentBatches = marketOutboundBatchPlans(plan);
     if (plan.shipmentBatches.length) plan.maximumInsurancePayoutCopper = plan.shipmentBatches
       .reduce((sum, batch) => sum + batch.maximumInsurancePayoutCopper, 0);
+    if (plan.route?.transportPlan && plan.shipmentBatches.length) {
+      const parts = plan.shipmentBatches.map((batch) => batch.route.transportPlan);
+      const transportLegCosts = plan.route.transportPlan.legs.map((leg, index) => parts.reduce((sum, part) => {
+        if (part.legs[index]?.id !== leg.id) throw new Error("Участки исходящих рейсов не совпадают.");
+        return sum + part.legs[index].chargedCopper;
+      }, 0));
+      const sum = (field) => parts.reduce((value, part) => value + part.billing[field], 0);
+      plan.route = { ...plan.route, transportPlan: marketTransportPlanForOrder(plan.route.transportPlan, {
+        transportLegCosts, batchCount: parts.length, freightCopper: sum("freightCopper"),
+        insuranceCopper: plan.insuranceCopper, taxCopper: plan.tariffCopper, handlingCopper: sum("handlingCopper"),
+        expressSurchargeCopper: sum("expressSurchargeCopper"), deliveryCopper: plan.upfrontCopper,
+        serviceLevel: plan.route.serviceLevel ?? "standard"
+      }) };
+    }
   } catch (error) {
     plan.shipmentBatches = [];
     plan.ok = false;
@@ -424,6 +442,23 @@ export function applyMarketOutboundDispatch({ resources = [], cargoReservations 
   return { ok: true, cargo, dispatchedQty: cargo.reduce((sum, row) => sum + whole(row?.qty), 0) };
 }
 
+function outboundTransportSnapshot(plan, route, batchCount = 1) {
+  const sourceBatch = plan.batchCount > 1 ? route.shipmentBatches?.[plan.batchIndex]
+    : route.shipmentBatches?.length === 1 ? route.shipmentBatches[0] : null;
+  const billed = route.transportPlan?.billing;
+  const freightParts = allocateMarketTransportCharges(plan.freightCopper, [
+    sourceBatch?.routeCopper ?? billed?.freightCopper ?? plan.freightCopper,
+    sourceBatch?.handlingCopper ?? billed?.handlingCopper ?? 0,
+    sourceBatch?.expressSurchargeCopper ?? billed?.expressSurchargeCopper ?? 0
+  ]);
+  return marketTransportPlanForOrder(route.transportPlan, {
+    transportLegCosts: plan.transportLegCosts ?? sourceBatch?.transportLegCosts, batchCount, freightCopper: freightParts[0],
+    insuranceCopper: plan.insuranceCopper, taxCopper: plan.tariffCopper, handlingCopper: freightParts[1],
+    expressSurchargeCopper: freightParts[2], deliveryCopper: plan.upfrontCopper,
+    serviceLevel: plan.serviceLevel ?? route.serviceLevel ?? "standard", allowReallocation: true
+  });
+}
+
 export function createMarketOutboundOrder({ plan = {}, operationId = "", createdAt = "" } = {}) {
   const id = text(operationId);
   if (!id || !plan?.ok) return null;
@@ -434,6 +469,7 @@ export function createMarketOutboundOrder({ plan = {}, operationId = "", created
   const deliveryQd = Math.max(1, whole(plan.deliveryQd, 1, 100_000));
   const riskPending = decimal(plan.riskLossChance, 0, 0, 0.08) > 0 || decimal(plan.riskDelayChance, 0, 0, 0.45) > 0;
   const route = plan.route ?? {};
+  const transportPlan = outboundTransportSnapshot(plan, route);
   return {
     id,
     operationId: id,
@@ -453,6 +489,7 @@ export function createMarketOutboundOrder({ plan = {}, operationId = "", created
     carrierId: text(route.carrierId),
     carrierLabel: text(route.carrierLabel ?? route.label),
     routePath: Array.isArray(route.routePath) ? [...route.routePath] : [],
+    ...(transportPlan ? { transportPlan } : {}),
     routeModes: Array.isArray(route.routeModes) ? [...route.routeModes] : [],
     transportMode: text(route.transportMode),
     deliveryQd,

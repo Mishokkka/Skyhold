@@ -1,3 +1,5 @@
+import { savedMarketTransportPlanFields } from "./transport-plan.js";
+
 export const MAX_ACTIVE_OUTBOUND_ORDERS = 300;
 export const MAX_TERMINAL_OUTBOUND_ORDERS = 200;
 const MAX_OPERATION_IDS = 120;
@@ -86,6 +88,7 @@ function normalizeOrder(raw = {}, index = 0) {
   const cargo = cargoRows(raw.cargo ?? cargoReservations);
   return {
     ...raw,
+    ...savedMarketTransportPlanFields(raw),
     id,
     operationId: operationId || id,
     ...(raw.ownShipId ? { ownShipId: text(raw.ownShipId, 128) } : {}),

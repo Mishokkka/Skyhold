@@ -41,6 +41,33 @@ import { authorityMarketLogistics, authorityMarketQuote, authorityOutboundRoutes
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
+const TRANSPORT_MODE_NAMES = { caravan: "Караван", rail: "Железная дорога", airship: "Воздушный корабль" };
+const TRANSPORT_NUMBER_FORMAT = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 });
+
+/** Role-safe presentation of immutable transport terms; never looks up current prices. */
+export function marketTransportPlanView(transportPlan, { isGM = false, hiddenCarrierIds = new Set(), hiddenCountryIds = new Set(), hiddenRegionIds = new Set() } = {}) {
+  if (transportPlan?.version !== 1 || !Array.isArray(transportPlan.legs)
+    || transportPlan.legs.some((leg) => !leg || typeof leg !== "object")) return { legs: [], pathText: "", carrierText: "", choiceText: "", transportText: "" };
+  const decimal = (value) => TRANSPORT_NUMBER_FORMAT.format(Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : 0);
+  const legs = transportPlan.legs.map((leg, index) => {
+    const hidden = leg.visibility === "gm" || hiddenCarrierIds.has(leg.carrierId) || hiddenCountryIds.has(leg.fromCountryId)
+      || hiddenCountryIds.has(leg.toCountryId) || hiddenRegionIds.has(leg.fromRegionId) || hiddenRegionIds.has(leg.toRegionId);
+    if (!isGM && hidden) return { number: index + 1, hidden: true, fromLabel: "Скрытый участок", toLabel: "",
+      modeLabel: "", carrierLabel: "", distanceText: "", timeText: "", capacityText: "", transferText: "", chargedText: "" };
+    return { number: index + 1, hidden: false, fromLabel: String(leg.fromLabel || "Пункт отправления"), toLabel: String(leg.toLabel || "Пункт назначения"),
+      modeLabel: leg.kind === "last-mile" ? "Местный воздушный участок" : String(leg.modeLabel || TRANSPORT_MODE_NAMES[leg.mode] || "Перевозка"),
+      carrierLabel: String(leg.carrierLabel || "Независимые перевозчики"), distanceText: `${decimal(leg.distanceKm)} км`, timeText: `${decimal(leg.travelQd)} QD`,
+      capacityText: loadText(leg.capacityLoad), transferText: Number.isFinite(leg.transferQd) && leg.transferQd > 0 ? `перегрузка ${decimal(leg.transferQd)} QD` : "",
+      chargedText: Number.isFinite(leg.chargedCopper) ? `за перевозку: ${formatCopperCurrencyCompact(leg.chargedCopper)}` : "" };
+  });
+  const carriers = [...new Set(legs.map((leg) => leg.carrierLabel).filter(Boolean))];
+  const hidden = legs.some((leg) => leg.hidden);
+  return { legs, pathText: legs.map((leg) => leg.hidden ? "Скрытый участок" : `${leg.fromLabel} → ${leg.toLabel}`).join(" · "),
+    carrierText: hidden || carriers.length > 1 ? "Составная перевозка" : carriers[0] || "",
+    choiceText: legs.map((leg) => leg.hidden ? "Скрытый участок" : `${leg.modeLabel} · ${leg.carrierLabel}`).join(" → "),
+    transportText: [...new Set(legs.map((leg) => leg.hidden ? "Скрытый участок" : leg.modeLabel))].join(" + ") };
+}
+
 function prepareLine(line, quantity = 0) {
   const qty = Math.max(0, Math.min(Math.floor(Number(quantity) || 0), line.stock));
   const movementPercent = Number(line.movementPercent) || 0;
@@ -123,8 +150,8 @@ function marketBatchPreview(batch = {}, plan = {}, selected = false) {
     departureText: Number(batch.departureQd) > 0 ? `через ${batch.departureQd} QD` : "ближайшее отправление",
     transportText: `${Math.max(0, Number(batch.transportQd) || 0)} QD`,
     loadText: bookingCapacity > 0 ? `${loadText(actualLoad)} / ${loadText(bookingCapacity)}` : loadText(actualLoad),
-    capacityShareText: percentText(batch.capacityShare),
-    billableLoadText: loadText(billableLoad),
+    capacityShareText: plan.logistics?.transportPlan ? "по участкам" : percentText(batch.capacityShare),
+    billableLoadText: plan.logistics?.transportPlan ? "по участкам" : loadText(billableLoad),
     billsFullCapacity: billableLoad > actualLoad + 0.0001,
     cargo: (batch.lines ?? []).map((line) => ({
       name: String(line.name ?? "Товар"),
@@ -222,6 +249,7 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     this.marketId = "";
     this.merchantSelections = {};
     this.carrierId = "";
+    this.outboundCarrierId = "auto-carriers";
     this.serviceLevel = "standard";
     this.batchPreviewIndex = 0;
     this.deliveryBreakdownOpen = true;
@@ -298,14 +326,19 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
       quantities: this.outboundQuantities,
       insuranceEnabled: this.outboundInsuranceEnabled
     });
-    const routes = this._marketOutboundRoutes({
+    const transport = this.ownShipId ? null : authorityMarketLogistics({ holding, data, market, economy, isGM,
+      direction: "outbound", carrierId: this.outboundCarrierId });
+    if (transport?.carrier?.id) this.outboundCarrierId = String(transport.carrier.id);
+    const routes = this.ownShipId ? [] : this._marketOutboundRoutes({
       holding,
       data,
       market,
       economy,
       resources,
       offers: preliminary.offers,
-      carriers: quote.carriers ?? [],
+      carriers: transport?.carriers ?? [],
+      carrierId: this.outboundCarrierId,
+      preparedLogistics: transport?.logistics,
       isGM
     });
     const ownShip = this.ownShipId ? authorityOwnShipOutboundRoute({
@@ -324,7 +357,8 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
       result.plan.ok = false;
       result.plan.reasons = [...new Set([...result.plan.reasons, ownShip.reason])];
     }
-    return { ...validateOwnShipOutboundFunding(holding, result, ownShip), ownShip };
+    return { ...validateOwnShipOutboundFunding(holding, result, ownShip), ownShip,
+      transportChoices: transport?.carriers ?? [], selectedTransportId: this.outboundCarrierId };
   }
 
   _marketSnapshot({ isGM = Boolean(game.user?.isGM), includePlan = true } = {}) {
@@ -405,6 +439,25 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
       this.merchantSelections[group.sourceOfferId] = String(selectedOffer.providerId ?? "");
     }
     if (quote) plan = planMarketPurchase({ holding, quote, quantities: this.quantities, targetRoomId: this.targetRoomId, serviceLevel: this.serviceLevel });
+    const hiddenCarrierIds = new Set((data?.catalog?.marketEconomy?.organizations ?? []).filter((row) => row.visibility === "gm").map((row) => String(row.id)));
+    const hiddenCountryIds = new Set((data?.catalog?.marketEconomy?.countries ?? []).filter((row) => row.visibility === "gm").map((row) => String(row.id)));
+    const hiddenRegionIds = new Set((data?.catalog?.eventRegions ?? []).filter((row) => hiddenCountryIds.has(String(row.countryId))).map((row) => String(row.value)));
+    const transportPrivacy = { isGM: permissions.isGM, hiddenCarrierIds, hiddenCountryIds, hiddenRegionIds };
+    const transportViews = new Map();
+    const transportView = (snapshot) => {
+      if (!transportViews.has(snapshot)) transportViews.set(snapshot, marketTransportPlanView(snapshot, transportPrivacy));
+      return transportViews.get(snapshot);
+    };
+    const carrierText = (order) => transportView(order.transportPlan).carrierText
+      || (!permissions.isGM && hiddenCarrierIds.has(String(order.carrierId)) ? "Перевозчик" : String(order.carrierLabel ?? "")) || "Независимые перевозчики";
+    const legacyPath = (ids) => (ids ?? []).map((id) => !permissions.isGM && hiddenRegionIds.has(String(id)) ? "Скрытый участок" : String(id)).join(" → ");
+    const transportOption = (carrier, selectedId, logistics) => ({
+      value: carrier.id,
+      label: carrier.automatic ? "Автоматически · самый выгодный план" : carrier.chain || carrier.transportPlan
+        ? `${transportView(carrier.transportPlan).choiceText || (permissions.isGM ? carrier.label : "План перевозки")} · ${Math.max(0, Number(carrier.transportPlan?.distanceKm) || 0)} км · база ${Math.ceil(Math.max(0, Number(carrier.travelQd) || 0))} QD · до ${loadText(carrier.capacityLoad)}`
+        : `${carrier.label} · до ${loadText(carrierCapacityForLogistics(logistics, carrier).capacityLoad)} · цена ×${Number(carrier.priceFactor || 1).toFixed(2)}`,
+      selected: carrier.id === selectedId
+    });
     const selectedCount = plan?.lines?.reduce((sum, line) => sum + line.qty, 0) ?? 0;
     const activeShipmentOrders = (holding?.special?.market?.orders ?? [])
       .filter((order) => ["pending", "in-transit", "delayed", "needsResolution"].includes(String(order?.status ?? "")));
@@ -437,8 +490,9 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
             : "",
           financialRiskText: marketShipmentFinancialRiskText(order),
           totalText: formatCopperCurrency(order.totalCopper),
-          routeText: (order.routePath ?? []).map((id) => String(id)).join(" → "),
-          carrierText: String(order.carrierLabel ?? "") || "Независимые перевозчики",
+          routeLegs: transportView(order.transportPlan).legs,
+          routeText: transportView(order.transportPlan).pathText || legacyPath(order.routePath),
+          carrierText: carrierText(order),
           cargoText: (order.cargo ?? order.lines ?? []).map((line) => `${line.name || "Товар"} ×${line.qty || 0}`).slice(0, 4).join(" · ")
         };
       });
@@ -448,14 +502,16 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
       .slice()
       .reverse()
       .map((order) => ({
+        id: String(order.id ?? order.operationId ?? ""),
         status: String(order.status ?? "delivered"),
         marketLabel: String(order.marketLabel ?? "Внешний рынок"),
         statusLabel: shipmentStatusLabel(order.status),
         statusText: shipmentRiskText(order),
         orderedText: shipmentDateText(order.orderedAt),
         totalText: formatCopperCurrency(order.totalCopper),
-        routeText: (order.routePath ?? []).map((id) => String(id)).join(" → ") || "Локальная доставка",
-        carrierText: String(order.carrierLabel ?? "") || "Независимые перевозчики",
+        routeLegs: transportView(order.transportPlan).legs,
+        routeText: transportView(order.transportPlan).pathText || legacyPath(order.routePath) || "Локальная доставка",
+        carrierText: carrierText(order),
         batchText: Number(order.batchCount) > 1 ? `партия ${Math.max(1, Number(order.batchIndex) + 1)} из ${order.batchCount}` : "одна партия",
         cargoText: (order.cargo ?? order.lines ?? []).map((line) => `${line.name || "Товар"} ×${line.qty || 0}`).slice(0, 6).join(" · "),
         timeline: shipmentTimeline(order)
@@ -485,7 +541,8 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
           marketLabel: String(order.marketLabel ?? "Внешний рынок"),
           cargoText: (order.cargoReservations ?? order.cargo ?? order.lines ?? []).map((line) => `${line.name || line.resourceId || "Товар"} ×${Math.max(0, Number(line.qty) || 0)}`).slice(0, 6).join(" · "),
           buyerText: (order.buyerAllocations ?? []).map((row) => `${row.buyerLabel || row.buyerId || "Покупатель"} ×${Math.max(0, Number(row.qty) || 0)}`).slice(0, 6).join(" · "),
-          routeText: String(order.carrierLabel ?? order.routeLabel ?? order.routeId ?? "Перевозчик"),
+          routeLegs: transportView(order.transportPlan).legs,
+          routeText: carrierText(order),
           remainingText: `${Math.max(0, Number(order.remainingQd) || 0)} QD`,
           upfrontText: formatCopperCurrency(order.upfrontCopper),
           revenueText: formatCopperCurrency(order.revenueCopper),
@@ -503,17 +560,22 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
       .slice(-20)
       .reverse()
       .map((order) => ({
+        id: String(order.id ?? order.operationId ?? ""),
         status: String(order.status ?? "delivered"),
         statusLabel: outboundShipmentStatusLabel(order.status),
         marketLabel: String(order.marketLabel ?? "Внешний рынок"),
         cargoText: (order.cargo ?? order.cargoReservations ?? order.lines ?? []).map((line) => `${line.name || line.resourceId || "Товар"} ×${Math.max(0, Number(line.qty) || 0)}`).slice(0, 6).join(" · "),
         revenueText: formatCopperCurrency(order.revenueCopper),
         statusText: shipmentRiskText(order),
-        dateText: shipmentDateText(order.deliveredAt || order.lostAt || order.cancelledAt || order.createdAt)
+        dateText: shipmentDateText(order.deliveredAt || order.lostAt || order.cancelledAt || order.createdAt),
+        routeLegs: transportView(order.transportPlan).legs
       }));
     const regionLabels = new Map((data?.catalog?.eventRegions ?? []).map((row) => [String(row.value ?? ""), String(row.label ?? row.value ?? "")]));
     const routeLogistics = plan && !plan.empty ? (plan.logistics ?? quote?.logistics) : quote?.logistics;
-    const routePathText = (routeLogistics?.routePath ?? []).map((id) => regionLabels.get(String(id)) ?? String(id)).join(" → ");
+    const routeView = transportView(routeLogistics?.transportPlan);
+    const outboundRouteView = transportView(outboundPlan?.route?.transportPlan);
+    const routePathText = routeView.pathText || (routeLogistics?.routePath ?? []).map((id) => !permissions.isGM && hiddenRegionIds.has(String(id))
+      ? "Скрытый участок" : regionLabels.get(String(id)) ?? String(id)).join(" → ");
     const merchantTones = new Map((quote?.merchantProviders ?? []).map((provider, index) => [String(provider.id ?? ""), index % 6]));
     const shipmentBatches = Array.isArray(plan?.shipmentBatches) ? plan.shipmentBatches : [];
     const selectedBatchIndex = Math.min(Math.max(0, Math.floor(Number(this.batchPreviewIndex) || 0)), Math.max(0, shipmentBatches.length - 1));
@@ -537,19 +599,17 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
         ...provider,
         shareText: `${Math.round(Number(provider.sharePct ?? 0))}%`
       })),
-      carrierOptions: (quote?.carriers ?? []).map((carrier) => ({
-        value: carrier.id,
-        label: `${carrier.label} · до ${loadText(carrierCapacityForLogistics(routeLogistics, carrier).capacityLoad)} · цена ×${Number(carrier.priceFactor || 1).toFixed(2)}`,
-        selected: carrier.id === quote?.selectedCarrierId
-      })),
+      carrierOptions: (quote?.carriers ?? []).map((carrier) => transportOption(carrier, quote?.selectedCarrierId, routeLogistics)),
       hasCarrierChoice: (quote?.carriers ?? []).length > 1,
-      carrierLabel: routeLogistics?.carrierLabel || "Независимые перевозчики",
+      carrierLabel: routeView.carrierText || routeLogistics?.carrierLabel || "Независимые перевозчики",
+      routeLegs: routeView.legs,
       canPurchase: Boolean(holding && permissions.isGM),
       canOrder: Boolean(holding && permissions.isGM && routeLogistics?.ok !== false),
       readOnlyReason: permissions.isGM ? "" : "Сделки на внешнем рынке подтверждает GM.",
       logisticsOk: routeLogistics?.ok !== false,
       logisticsReason: (routeLogistics?.reasons ?? []).join(" "),
-      transportLabel: routeLogistics?.transportLabel ?? "—",
+      transportLabel: !permissions.isGM && routeView.legs.some((leg) => leg.hidden) ? routeView.transportText
+        : routeLogistics?.transportLabel || routeView.transportText || "—",
       routeDistanceText: routeLogistics ? `${routeLogistics.hops} перех. · ${routeLogistics.distanceText}` : "—",
       routePathText: routePathText || "—",
       marketAccessText: routeLogistics ? `УРС ${routeLogistics.accessLevel} · рынок ${routeLogistics.requiredAccessLevel}` : "—",
@@ -655,17 +715,20 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
         distanceText: `${Number(plan?.deliveryBreakdown?.distanceKm ?? 0)} км · ${Math.max(0, Number(plan?.deliveryBreakdown?.hops) || 0)} перех. · УРС ${Math.max(0, Number(plan?.deliveryBreakdown?.accessCost) || 0)}`,
         dispatchText: formatCopperCurrencyCompact(plan?.deliveryBreakdown?.dispatchCopper ?? 0),
         distanceTariffText: formatCopperCurrencyCompact((plan?.deliveryBreakdown?.routeDistanceCopper ?? 0) + (plan?.deliveryBreakdown?.configuredDistanceFlatCopper ?? 0)),
-        factorText: `регион ×${Number(plan?.deliveryBreakdown?.distanceFactor ?? 1).toFixed(2)} · перевозчик ×${Number(plan?.deliveryBreakdown?.carrierPriceFactor ?? 1).toFixed(2)}`,
+        factorText: routeLogistics?.transportPlan ? "Условия региона, сезона и компании учтены отдельно по участкам"
+          : `регион ×${Number(plan?.deliveryBreakdown?.distanceFactor ?? 1).toFixed(2)} · перевозчик ×${Number(plan?.deliveryBreakdown?.carrierPriceFactor ?? 1).toFixed(2)}`,
         airshipHireText: formatCopperCurrencyCompact(plan?.deliveryBreakdown?.airshipHireCopper ?? 0),
         operatingTimeText: formatCopperCurrencyCompact(plan?.deliveryBreakdown?.operatingTimeCopper ?? 0),
-        fullVesselLoadText: `${loadText(plan?.deliveryBreakdown?.physicalCapacityLoad ?? 0)} × ${Number(plan?.deliveryBreakdown?.loadRateCopper ?? 0).toFixed(3)} М/ед. = ${formatCopperCurrencyCompact(plan?.deliveryBreakdown?.fullVesselLoadCopper ?? 0)}`,
+        fullVesselLoadText: routeLogistics?.transportPlan ? `Сумма по вместимости и ставке каждого участка = ${formatCopperCurrencyCompact(plan?.deliveryBreakdown?.fullVesselLoadCopper ?? 0)}`
+          : `${loadText(plan?.deliveryBreakdown?.physicalCapacityLoad ?? 0)} × ${Number(plan?.deliveryBreakdown?.loadRateCopper ?? 0).toFixed(3)} М/ед. = ${formatCopperCurrencyCompact(plan?.deliveryBreakdown?.fullVesselLoadCopper ?? 0)}`,
         fullOneWayOperatingText: formatCopperCurrencyCompact(plan?.deliveryBreakdown?.fullOneWayOperatingCopper ?? 0),
         operatingLegsText: Number(plan?.deliveryBreakdown?.operatingLegFactor ?? 1) > 1 ? "2 плеча: доставка + возврат/перегон" : "1 плечо; обратный рейс оплачивает другой груз",
-        capacityShareText: plan?.hasCapacityLimit
+        capacityShareText: routeLogistics?.transportPlan ? `Доля груза рассчитывается отдельно на каждом участке · ${marketTripCountText(plan?.batchCount)}` : plan?.hasCapacityLimit
           ? `${percentText(plan?.deliveryBreakdown?.capacityShare ?? 0)} полной сметы · ${marketTripCountText(plan?.batchCount)}`
           : "без лимита · полная операционная смета",
         valueFreightFormulaText: `сумма по ${marketTripCountText(plan?.batchCount)} при ставке ${percentText(plan?.deliveryBreakdown?.freightRate ?? 0)} = ${formatCopperCurrencyCompact(plan?.deliveryBreakdown?.valueFreightCopper ?? 0)}`,
-        operationalFormulaText: `${formatCopperCurrencyCompact(plan?.deliveryBreakdown?.fullOneWayOperatingCopper ?? 0)} × суммарная доля ${percentText(plan?.deliveryBreakdown?.capacityShare ?? 0)} × ${Number(plan?.deliveryBreakdown?.operatingLegFactor ?? 1)} плеч. = ${formatCopperCurrencyCompact(plan?.deliveryBreakdown?.operationalFreightCopper ?? 0)}`,
+        operationalFormulaText: routeLogistics?.transportPlan ? `Сумма долей груза по каждому участку и партии = ${formatCopperCurrencyCompact(plan?.deliveryBreakdown?.operationalFreightCopper ?? 0)}`
+          : `${formatCopperCurrencyCompact(plan?.deliveryBreakdown?.fullOneWayOperatingCopper ?? 0)} × суммарная доля ${percentText(plan?.deliveryBreakdown?.capacityShare ?? 0)} × ${Number(plan?.deliveryBreakdown?.operatingLegFactor ?? 1)} плеч. = ${formatCopperCurrencyCompact(plan?.deliveryBreakdown?.operationalFreightCopper ?? 0)}`,
         routeTotalFormulaText: `сумма большего тарифа каждой партии = ${formatCopperCurrencyCompact(plan?.deliveryBreakdown?.routeCopper ?? 0)}`,
         handlingFormulaText: `погрузка каждой из ${marketTripCountText(plan?.batchCount)} + массовый тариф = ${formatCopperCurrencyCompact(plan?.deliveryBreakdown?.handlingCopper ?? 0)}`,
         insuranceFormulaText: `${formatCopperCurrencyCompact(plan?.deliveryBreakdown?.subtotalCopper ?? 0)} × ${percentText(plan?.deliveryBreakdown?.insuranceRate ?? 0)} = ${formatCopperCurrencyCompact(plan?.deliveryBreakdown?.insuranceCopper ?? 0)}`,
@@ -704,6 +767,7 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
               || Boolean(ship.activeVoyage || ship.orderBundle) }))
       ],
       outboundOwnShipSelected: Boolean(this.ownShipId),
+      outboundTransportOptions: (outbound?.transportChoices ?? []).map((carrier) => transportOption(carrier, outbound?.selectedTransportId, outboundPlan?.route)),
       outboundCanBook: Boolean(permissions.isGM && permissions.canUseStorage && (!this.ownShipId || permissions.canManageShips) && outboundPlan?.ok),
       outboundPlanReason: (outboundPlan?.reasons ?? []).join(" "),
       outboundRevenueText: formatCopperCurrency(outboundPlan?.revenueCopper ?? 0),
@@ -720,7 +784,8 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
       outboundDeliveryText: outboundPlan?.shipmentBatches?.length > 1
         ? `${outboundPlan.shipmentBatches.length} партии; приход ${outboundPlan.shipmentBatches[0].deliveryQd}–${outboundPlan.deliveryQd} QD`
         : (outboundPlan?.deliveryQd ? `${outboundPlan.deliveryQd} QD` : "—"),
-      outboundCarrierText: String(outboundPlan?.route?.label ?? outboundPlan?.route?.carrierLabel ?? "—"),
+      outboundCarrierText: outboundRouteView.carrierText || String(outboundPlan?.route?.label ?? outboundPlan?.route?.carrierLabel ?? "—"),
+      outboundRouteLegs: outboundRouteView.legs,
       outboundBuyerText: (outboundPlan?.buyerAllocations ?? []).map((row) => `${row.buyerLabel || row.buyerId || "Покупатель"} ×${Math.max(0, Number(row.qty) || 0)}`).slice(0, 8).join(" · "),
       outboundOrders,
       hasOutboundOrders: outboundOrders.length > 0,
@@ -872,6 +937,7 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     if (provider && root.contains(provider)) {
       this.marketId = String(provider.value ?? "");
       this.carrierId = "";
+      this.outboundCarrierId = "auto-carriers";
       this.batchPreviewIndex = 0;
       this.quantities = {};
       this.outboundQuantities = {};
@@ -895,6 +961,12 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     const outboundShip = event.target?.closest?.("[data-market-outbound-ship]");
     if (outboundShip && root.contains(outboundShip)) {
       this.ownShipId = String(outboundShip.value ?? "");
+      this.requestRender({ focus: false });
+      return;
+    }
+    const outboundCarrier = event.target?.closest?.("[data-market-outbound-carrier]");
+    if (outboundCarrier && root.contains(outboundCarrier)) {
+      this.outboundCarrierId = String(outboundCarrier.value || "auto-carriers");
       this.requestRender({ focus: false });
       return;
     }
@@ -1039,10 +1111,10 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
         operationId,
         holdingId: this.holdingId,
         expectedRevision: Math.max(0, Math.floor(Number(snapshot.data?.meta?.revision) || 0)),
-        sourceToken: snapshot.sourceHash,
+        sourceToken: marketAuthoritySourceToken({ data: snapshot.data, holding: snapshot.holding, marketId: plan.marketId, carrierId: this.outboundCarrierId }),
         planToken: String(plan.planToken ?? ""),
         marketId: plan.marketId,
-        carrierId: this.carrierId,
+        carrierId: this.outboundCarrierId,
         ownShipId: this.ownShipId,
         quantities: this.outboundQuantities,
         insuranceEnabled: this.outboundInsuranceEnabled

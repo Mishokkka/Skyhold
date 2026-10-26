@@ -6,6 +6,8 @@ import { applyMarketDelivery } from "../engines/market/delivery.js";
 import { reserveMarketStock } from "../engines/market/stock.js";
 import { resolveFoundryUuid } from "../integrations/foundry-runtime.js";
 import { createMarketOutboundShipment, dispatchMarketOutboundShipment } from "../workflows/market/outbound-shipment.js";
+import { AUTO_CARRIERS } from "../engines/market/transport-planner.js";
+import { marketTransportPlanSnapshot } from "../data/market/transport-plan.js";
 import { departWorldShip, advanceWorldShips } from "../engines/ships/world-voyage.js";
 import { embarkShipCrew } from "../engines/ships/crew.js";
 import { getSkyholdWorkflowService } from "../workflows/skyhold-workflow-service.js";
@@ -201,6 +203,7 @@ function appendInstantPurchaseOrder(holding, plan, itemDocuments, operationId, c
     routeDistanceKm: Math.max(0, Number(plan.logistics?.distanceKm) || 0),
     routeHops: Math.max(0, Number(plan.logistics?.hops) || 0),
     routePath: Array.isArray(plan.logistics?.routePath) ? [...plan.logistics.routePath] : [],
+    ...(plan.logistics?.transportPlan ? { transportPlan: marketTransportPlanSnapshot(plan.logistics.transportPlan) } : {}),
     transportMode: String(plan.logistics?.transportMode ?? ""),
     carrierId: plan.carrierId,
     carrierLabel: plan.carrierLabel,
@@ -416,7 +419,8 @@ export function createMarketOperationExecutor({
         data,
         holding,
         marketId: operation.marketId,
-        carrierId: operation.carrierId,
+        carrierId: operation.type === "purchase" ? operation.carrierId : AUTO_CARRIERS,
+        outboundCarrierId: operation.type === "outbound" ? operation.carrierId : AUTO_CARRIERS,
         quantities: operation.type === "purchase" ? operation.quantities : {},
         targetRoomId: operation.targetRoomId,
         serviceLevel: operation.serviceLevel,

@@ -23,6 +23,7 @@ import { normalizeMarketRouteMap } from "./market/route-map.js";
 import { normalizeMarketStockState } from "./market/stock-state.js";
 import { normalizeMarketDemandState } from "./market/demand-state.js";
 import { normalizeMarketOutboundState } from "./market/outbound-state.js";
+import { savedMarketTransportPlanFields } from "./market/transport-plan.js";
 import { normalizeFinanceObligationsState } from "./finance/obligations.js";
 import { normalizeInternalDemandConfig } from "./economy/internal-demand.js";
 import { normalizeShipsState } from "./ships.js";
@@ -508,6 +509,7 @@ export function mergeHoldingDefaults(holding, options = {}) {
         routeDistanceKm: Math.max(0, toNumber(row.routeDistanceKm, toNumber(row.routeDistance, 0) * 40)),
         routeHops: Math.max(0, Math.floor(toNumber(row.routeHops, 0))),
         routePath: Array.isArray(row.routePath) ? row.routePath.map((id) => String(id ?? "")).filter(Boolean).slice(0, 100) : [],
+        ...savedMarketTransportPlanFields(row),
         transportMode: ["caravan", "rail", "airship", "multimodal"].includes(String(row.transportMode ?? "")) ? String(row.transportMode) : "",
         carrierId: String(row.carrierId ?? ""),
         carrierLabel: String(row.carrierLabel ?? ""),

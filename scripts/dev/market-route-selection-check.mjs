@@ -192,8 +192,9 @@ function aerialDominance() {
     const view = prepareMarketAuthorityContext({ data, holding, marketId: "a", isGM,
       quantities: { [offer.id]: 2 }, outboundQuantities: { "test-freight": 2 } });
     assert.equal(view.plan.ok, true); assert.equal(view.outbound.plan.ok, true);
-    assert.equal(view.plan.logistics.routeModes[0], "airship");
-    assert.equal(view.outbound.plan.route.routeModes[0], "airship");
+    // A real local aerial tail is now a separate company/leg, even when the supplier only offers ground service.
+    assert.equal(view.plan.logistics.transportPlan.legs.at(-1).mode, "airship");
+    assert.equal(view.outbound.plan.route.transportPlan.legs[0].mode, "airship");
   }
   const equal = fixture([["rail", "airship"], ["rail", "airship"], ["caravan"]]);
   const logistics = resolveMarketLogistics({ holding: equal.holding, market, regions: equal.regions });

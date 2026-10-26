@@ -1,5 +1,6 @@
 import { MARKET_DELIVERY_SERVICES } from "./pricing.js";
 import { MAX_ACTIVE_OUTBOUND_ORDERS } from "../../data/market/outbound-state.js";
+import { allocateMarketTransportCharges, marketTransportPlanForOrder } from "../../data/market/transport-plan.js";
 
 const whole = (value) => Math.max(0, Math.floor(Number(value) || 0));
 
@@ -62,6 +63,7 @@ export function marketOutboundBatchPlans(plan = {}) {
     const risk = batch.riskProfile ?? {};
     return {
       ...plan,
+      ...(Object.hasOwn(batch, "transportLegCosts") ? { transportLegCosts: batch.transportLegCosts } : {}),
       direction: "outbound",
       shipmentBatches: undefined,
       lines,
@@ -100,6 +102,16 @@ export function marketOutboundBatchPlans(plan = {}) {
     const coverage = Math.max(0, Math.min(1, Number(batch.insuranceCoverageRate) || 0));
     batch.maximumInsurancePayoutCopper = Math.min(maximums[index], Math.floor(insured[index] * coverage));
     batch.upfrontCopper = batch.freightCopper + batch.tariffCopper + batch.insuranceCopper;
+    if (plan.route?.transportPlan) {
+      const sourceBatch = source[index];
+      const [freightCopper, handlingCopper, expressSurchargeCopper] = allocateMarketTransportCharges(batch.freightCopper,
+        [whole(sourceBatch.routeCopper), whole(sourceBatch.handlingCopper), whole(sourceBatch.expressSurchargeCopper)]);
+      batch.route = { ...plan.route, transportPlan: marketTransportPlanForOrder(plan.route.transportPlan, {
+        transportLegCosts: sourceBatch.transportLegCosts, batchCount: 1, freightCopper,
+        insuranceCopper: batch.insuranceCopper, taxCopper: batch.tariffCopper, handlingCopper, expressSurchargeCopper,
+        deliveryCopper: batch.upfrontCopper, serviceLevel: batch.serviceLevel, allowReallocation: true
+      }) };
+    }
   });
   return batches;
 }
