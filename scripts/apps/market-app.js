@@ -37,6 +37,7 @@ import { marketShipmentRiskContext } from "./market/shipment-context.js";
 import { marketPurchaseCostPresentation, marketShipmentFinancialRiskText } from "./market/purchase-cost-presentation.js";
 import { marketShipmentSchedule } from "../engines/market/shipment-schedule.js";
 import { prepareMarketOutboundContext } from "./market/outbound-context.js";
+import { marketTransportPicker } from "./market/transport-picker.js";
 import { authorityMarketLogistics, authorityMarketQuote, authorityOutboundRoutes, authorityOwnShipOutboundRoute, marketAuthoritySourceToken, marketPurchasePlanToken, validateOwnShipOutboundFunding } from "./market/authority-context.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -250,6 +251,7 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     this.merchantSelections = {};
     this.carrierId = "";
     this.outboundCarrierId = "auto-carriers";
+    this.transportBrowsing = { inbound: { query: "", page: 0 }, outbound: { query: "", page: 0 } };
     this.serviceLevel = "standard";
     this.batchPreviewIndex = 0;
     this.deliveryBreakdownOpen = true;
@@ -262,6 +264,11 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
   }
 
   render(options = {}) {
+    const active = globalThis.document?.activeElement;
+    if (active?.matches?.("[data-market-transport-search]") && this.element?.contains?.(active)) {
+      this._transportSearchFocus = { previous: active, direction: active.dataset.marketTransportSearch,
+        start: active.selectionStart, end: active.selectionEnd };
+    }
     this._outboundDisclosures.capture();
     if (this.rendered && this.element) this._pendingPersistentImages = capturePersistentImages(this.element);
     return super.render(options);
@@ -451,13 +458,24 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     const carrierText = (order) => transportView(order.transportPlan).carrierText
       || (!permissions.isGM && hiddenCarrierIds.has(String(order.carrierId)) ? "Перевозчик" : String(order.carrierLabel ?? "")) || "Независимые перевозчики";
     const legacyPath = (ids) => (ids ?? []).map((id) => !permissions.isGM && hiddenRegionIds.has(String(id)) ? "Скрытый участок" : String(id)).join(" → ");
-    const transportOption = (carrier, selectedId, logistics) => ({
-      value: carrier.id,
-      label: carrier.automatic ? "Автоматически · самый выгодный план" : carrier.chain || carrier.transportPlan
-        ? `${transportView(carrier.transportPlan).choiceText || (permissions.isGM ? carrier.label : "План перевозки")} · ${Math.max(0, Number(carrier.transportPlan?.distanceKm) || 0)} км · база ${Math.ceil(Math.max(0, Number(carrier.travelQd) || 0))} QD · до ${loadText(carrier.capacityLoad)}`
-        : `${carrier.label} · до ${loadText(carrierCapacityForLogistics(logistics, carrier).capacityLoad)} · цена ×${Number(carrier.priceFactor || 1).toFixed(2)}`,
-      selected: carrier.id === selectedId
-    });
+    const transportOption = (carrier, selectedId, logistics, index) => {
+      const view = transportView(carrier.transportPlan);
+      const distanceText = `${TRANSPORT_NUMBER_FORMAT.format(Math.max(0, Number(carrier.transportPlan?.distanceKm) || 0))} км`;
+      const timeText = `${TRANSPORT_NUMBER_FORMAT.format(Math.max(0, Number(carrier.travelQd) || 0))} QD`;
+      const capacityText = loadText(carrier.capacityLoad ?? carrierCapacityForLogistics(logistics, carrier).capacityLoad);
+      const label = carrier.automatic ? "Автоматически · самый выгодный план" : carrier.chain || carrier.transportPlan
+        ? `Вариант ${index} · ${distanceText} · база ${timeText} · до ${capacityText}` : String(carrier.label);
+      return { value: carrier.id, label, shortLabel: `Вариант ${index}`, automatic: Boolean(carrier.automatic), selected: carrier.id === selectedId,
+        distanceText, timeText, capacityText, legs: view.legs,
+        summaryText: `${view.legs.length} уч. · ${view.transportText}`,
+        searchText: `${label} ${view.pathText} ${view.choiceText}` };
+    };
+    const picker = (options, selectedId, direction, canSelect) => {
+      const state = this.transportBrowsing[direction];
+      const context = marketTransportPicker({ options, selectedId, direction, canSelect, ...state });
+      state.page = context.page;
+      return context;
+    };
     const selectedCount = plan?.lines?.reduce((sum, line) => sum + line.qty, 0) ?? 0;
     const activeShipmentOrders = (holding?.special?.market?.orders ?? [])
       .filter((order) => ["pending", "in-transit", "delayed", "needsResolution"].includes(String(order?.status ?? "")));
@@ -581,6 +599,8 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     const selectedBatchIndex = Math.min(Math.max(0, Math.floor(Number(this.batchPreviewIndex) || 0)), Math.max(0, shipmentBatches.length - 1));
     this.batchPreviewIndex = selectedBatchIndex;
     const shipmentBatchPreviews = shipmentBatches.map((batch, index) => marketBatchPreview(batch, plan, index === selectedBatchIndex));
+    const carrierOptions = (quote?.carriers ?? []).map((carrier, index) => transportOption(carrier, quote?.selectedCarrierId, routeLogistics, index));
+    const outboundTransportOptions = (outbound?.transportChoices ?? []).map((carrier, index) => transportOption(carrier, outbound?.selectedTransportId, outboundPlan?.route, index));
     return {
       ...context,
       holding,
@@ -599,7 +619,8 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
         ...provider,
         shareText: `${Math.round(Number(provider.sharePct ?? 0))}%`
       })),
-      carrierOptions: (quote?.carriers ?? []).map((carrier) => transportOption(carrier, quote?.selectedCarrierId, routeLogistics)),
+      carrierOptions,
+      transportPicker: picker(carrierOptions, quote?.selectedCarrierId, "inbound", Boolean(holding && permissions.isGM)),
       hasCarrierChoice: (quote?.carriers ?? []).length > 1,
       carrierLabel: routeView.carrierText || routeLogistics?.carrierLabel || "Независимые перевозчики",
       routeLegs: routeView.legs,
@@ -767,7 +788,8 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
               || Boolean(ship.activeVoyage || ship.orderBundle) }))
       ],
       outboundOwnShipSelected: Boolean(this.ownShipId),
-      outboundTransportOptions: (outbound?.transportChoices ?? []).map((carrier) => transportOption(carrier, outbound?.selectedTransportId, outboundPlan?.route)),
+      outboundTransportOptions,
+      outboundTransportPicker: picker(outboundTransportOptions, outbound?.selectedTransportId, "outbound", Boolean(holding && permissions.isGM)),
       outboundCanBook: Boolean(permissions.isGM && permissions.canUseStorage && (!this.ownShipId || permissions.canManageShips) && outboundPlan?.ok),
       outboundPlanReason: (outboundPlan?.reasons ?? []).join(" "),
       outboundRevenueText: formatCopperCurrency(outboundPlan?.revenueCopper ?? 0),
@@ -806,6 +828,7 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     const controller = new AbortController();
     this._marketAbortController = controller;
     this._outboundDisclosures.bind(root);
+    this._restoreTransportFocus(root);
     const listenerOptions = { signal: controller.signal };
     root.addEventListener("click", (event) => dispatchDelegatedAction(this, event, event.target, () => this._onClick(event, root)), listenerOptions);
     root.addEventListener("contextmenu", (event) => this._onContextMenu(event, root), listenerOptions);
@@ -836,7 +859,24 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     const element = event.target?.closest?.("[data-action]");
     if (!element || !root.contains(element)) return;
     const action = String(element.dataset.action ?? "");
-    if (action === "market-select-merchant") {
+    if (action === "market-select-transport" || action === "market-transport-page") {
+      event.preventDefault();
+      if (element.disabled) return;
+      const direction = element.dataset.direction === "outbound" ? "outbound" : "inbound";
+      clearTimeout(this._transportSearchTimer);
+      if (action === "market-select-transport") {
+        if (!game.user?.isGM) return;
+        const id = String(element.dataset.carrierId || "auto-carriers");
+        if (direction === "outbound") this.outboundCarrierId = id;
+        else { this.carrierId = id; this.batchPreviewIndex = 0; }
+        this._transportControlFocus = { direction, carrierId: id };
+      } else {
+        const step = Number(element.dataset.step) > 0 ? 1 : -1;
+        this.transportBrowsing[direction].page = Math.max(0, this.transportBrowsing[direction].page + step);
+        this._transportControlFocus = { direction, step };
+      }
+      this.requestRender({ focus: false });
+    } else if (action === "market-select-merchant") {
       event.preventDefault();
       const sourceOfferId = String(element.dataset.sourceOfferId ?? "");
       if (sourceOfferId) this.merchantSelections[sourceOfferId] = String(element.dataset.providerId ?? "");
@@ -935,6 +975,8 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     }
     const provider = event.target?.closest?.("[data-market-provider]");
     if (provider && root.contains(provider)) {
+      clearTimeout(this._transportSearchTimer);
+      this.transportBrowsing = { inbound: { query: "", page: 0 }, outbound: { query: "", page: 0 } };
       this.marketId = String(provider.value ?? "");
       this.carrierId = "";
       this.outboundCarrierId = "auto-carriers";
@@ -998,10 +1040,38 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
   }
 
   _onInput(event, root) {
+    const transport = event.target?.closest?.("[data-market-transport-search]");
+    if (transport && root.contains(transport)) {
+      const direction = transport.dataset.marketTransportSearch === "outbound" ? "outbound" : "inbound";
+      this.transportBrowsing[direction] = { query: String(transport.value ?? ""), page: 0 };
+      clearTimeout(this._transportSearchTimer);
+      this._transportSearchTimer = setTimeout(() => this.requestRender({ focus: false }), 200);
+      return;
+    }
     const search = event.target?.closest?.("[data-market-search]");
     if (!search || !root.contains(search)) return;
     this.search = String(search.value ?? "");
     this._applyFilters(root);
+  }
+
+  _restoreTransportFocus(root) {
+    const search = this._transportSearchFocus, control = this._transportControlFocus;
+    this._transportSearchFocus = null;
+    this._transportControlFocus = null;
+    const doc = root.ownerDocument ?? globalThis.document;
+    const active = doc?.activeElement;
+    if (active && active !== doc.body && active !== search?.previous && active.isConnected) return;
+    if (search && !search.previous.isConnected) {
+      const input = root.querySelector(`[data-market-transport-search="${search.direction}"]`);
+      input?.focus({ preventScroll: true });
+      input?.setSelectionRange(search.start, search.end);
+    } else if (control) {
+      const selector = control.carrierId ? '[data-action="market-select-transport"]' : '[data-action="market-transport-page"]';
+      const button = [...root.querySelectorAll(selector)].find((row) => row.dataset.direction === control.direction && !row.disabled
+        && (control.carrierId ? row.dataset.carrierId === control.carrierId : Number(row.dataset.step) === control.step));
+      const fallback = root.querySelector(`[data-market-transport-search="${control.direction}"]`);
+      (button ?? fallback)?.focus({ preventScroll: true });
+    }
   }
 
   _applyFilters(root) {
@@ -1404,6 +1474,7 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
 
   async _onClose(options) {
     await super._onClose(options);
+    clearTimeout(this._transportSearchTimer);
     this._marketAbortController?.abort?.();
     this._outboundDisclosures.close();
     hideFloatingTooltip(this);

@@ -3,6 +3,22 @@ import { worldMarketFixture } from "./world-ship-market-characterization-check.m
 import { getSkyholdWorkflowService } from "../workflows/skyhold-workflow-service.js";
 import { registerMarketOperationExecutor } from "../data/store.js";
 import { marketAuthoritySourceToken } from "../apps/market/authority-context.js";
+import { marketTransportPicker } from "../apps/market/transport-picker.js";
+
+const manyOptions = [{ value: "auto-carriers", label: "Автоматически", automatic: true }, ...Array.from({ length: 80 }, (_, index) => ({
+  value: `chain-${index}`, label: `Вариант ${index + 1}`, searchText: `общий префикс из 29 участков конечная компания-${index} гавань-${index}`
+}))];
+const lastPage = marketTransportPicker({ options: manyOptions, selectedId: "chain-79", page: 99, canSelect: true });
+assert.equal(lastPage.rows.length, 2, "all eighty alternatives remain reachable with six per page");
+assert.equal(lastPage.rows.at(-1).value, "chain-79"); assert.equal(lastPage.hasNext, false);
+assert.equal(lastPage.rows.at(-1).selected, true);
+assert.equal(lastPage.selectedText, "Вариант 80", "paging cannot change the selected agreement");
+const searched = marketTransportPicker({ options: manyOptions, selectedId: "chain-79", query: "КОМПАНИЯ-37 гавань-37", page: 99, canSelect: true });
+assert.deepEqual(searched.rows.map(row => row.value), ["chain-37"], "late legs remain searchable through a common long prefix");
+assert.equal(searched.page, 0); assert.equal(searched.selectedText, "Вариант 80");
+const empty = marketTransportPicker({ options: manyOptions, selectedId: "chain-79", query: "нет совпадений" });
+assert.equal(empty.rows.length, 0); assert.equal(empty.automatic.value, "auto-carriers"); assert.equal(empty.automatic.disabled, true);
+assert.equal(marketTransportPicker({ options: manyOptions, selectedId: "removed" }).selectedText.includes("недоступен"), true);
 
 globalThis.foundry = { applications: { api: {
   ApplicationV2: class { get state() { return 0; } async _prepareContext() { return {}; } }, HandlebarsApplicationMixin: (Base) => Base
@@ -61,6 +77,13 @@ try {
     assert.equal(context.routeLegs.length, 2);
     assert.equal(context.shipments.find((row) => row.id === "accepted-in").routeLegs.length, 2); assert.equal(context.outboundOrders[0].routeLegs.length, 2);
     assert.equal(context.outboundTransportOptions[0].selected, true);
+    assert.equal(context.transportPicker.automatic.disabled, !isGM);
+    assert.equal(context.transportPicker.rows[0].disabled, !isGM);
+    assert.ok(context.carrierOptions[1].label.length < 100, "a route control never embeds all company names in its title");
+    quote.logistics.ok = false;
+    const staleContext = await app._prepareContext({});
+    assert.equal(staleContext.transportPicker.rows[0].disabled, !isGM, "a GM can recover from a stale/blocked plan by choosing another chain");
+    quote.logistics.ok = true;
     if (!isGM) {
       const shown = { options: context.carrierOptions, label: context.carrierLabel, transport: context.transportLabel,
         path: context.routePathText, legs: context.routeLegs, shipments: context.shipments, outbound: context.outboundOrders };
@@ -75,6 +98,34 @@ try {
     const outboundField = { value: "transport:reverse-chain", closest: (selector) => selector === "[data-market-outbound-carrier]" ? outboundField : null };
     app._onChange({ target: outboundField }, { contains: () => true });
     assert.equal(app.outboundCarrierId, "transport:reverse-chain"); assert.equal(app.carrierId, "transport:chain-one");
+    const click = (action, direction, extra = {}) => {
+      const button = { dataset: { action, direction, ...extra }, disabled: false };
+      app._onClick({ preventDefault() {}, target: { closest: () => button } }, { contains: () => true });
+    };
+    const previousIncoming = app.carrierId, previousOutgoing = app.outboundCarrierId;
+    click("market-select-transport", "inbound", { carrierId: "transport:new-in" });
+    assert.equal(app.carrierId, isGM ? "transport:new-in" : previousIncoming);
+    assert.equal(app.outboundCarrierId, previousOutgoing);
+    click("market-select-transport", "outbound", { carrierId: "transport:new-out" });
+    assert.equal(app.outboundCarrierId, isGM ? "transport:new-out" : previousOutgoing);
+    click("market-transport-page", "outbound", { step: "1" });
+    assert.equal(app.transportBrowsing.outbound.page, 1); assert.equal(app.transportBrowsing.inbound.page, 0);
+    const searchField = { dataset: { marketTransportSearch: "outbound" }, value: "Гавань компания", closest: () => searchField };
+    app._onInput({ target: searchField }, { contains: () => true });
+    clearTimeout(app._transportSearchTimer);
+    assert.deepEqual(app.transportBrowsing.outbound, { page: 0, query: "Гавань компания" });
+    assert.equal(app.transportBrowsing.inbound.query, "");
+    const previousInput = { isConnected: false }, body = {}, focusEvents = [];
+    const newInput = { focus: () => focusEvents.push("focus"), setSelectionRange: (start, end) => focusEvents.push([start, end]) };
+    app._transportSearchFocus = { previous: previousInput, direction: "outbound", start: 3, end: 7 };
+    const focusRoot = { ownerDocument: { body, activeElement: body }, querySelector: () => newInput };
+    app._restoreTransportFocus(focusRoot);
+    assert.deepEqual(focusEvents, ["focus", [3, 7]], "search retains focus/caret after replacement of the whole window body");
+    app._transportSearchFocus = { previous: previousInput, direction: "outbound", start: 0, end: 0 };
+    focusRoot.ownerDocument.activeElement = { isConnected: true };
+    app._restoreTransportFocus(focusRoot);
+    assert.equal(focusEvents.length, 2, "a later focus in another control is never stolen");
+    app.outboundCarrierId = "transport:reverse-chain";
     if (isGM) {
       const outboundPlan = { ok: true, marketId: "a", marketLabel: "Рынок", planToken: "outbound-token", lines: [{ qty: 2 }], buyerAllocations: [], upfrontCopper: 10, revenueCopper: 30 };
       app._marketSnapshot = () => ({ data, holding, sourceHash: "incoming-source", outbound: { plan: outboundPlan, selectedUnits: 2 } });

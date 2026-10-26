@@ -1,3 +1,27 @@
+{{#*inline "marketTransportPicker"}}
+  <summary aria-label="{{heading}}" title="{{selectedText}}"><span>{{selectedText}}</span><i class="fa-solid fa-chevron-down" aria-hidden="true"></i></summary>
+  <div class="fbls-market-transport-panel" data-render-scroll-key="market-transport-picker-{{direction}}">
+    <p class="fbls-market-transport-help">Выбирается вся цепочка перевозки. Компании указаны в участках; итоговые цена и срок — в расчёте заказа после выбора.</p>
+    {{#if automatic}}<button type="button" class="fbls-button ghost fbls-market-transport-auto" data-action="market-select-transport" data-direction="{{direction}}" data-carrier-id="{{automatic.value}}" aria-pressed="{{automatic.selected}}" {{#if automatic.disabled}}disabled{{/if}}><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i><span>{{automatic.label}}</span></button>{{/if}}
+    <label class="fbls-field"><span>Компания или локация</span><input type="search" value="{{query}}" data-market-transport-search="{{direction}}" placeholder="Найти среди вариантов" aria-label="Поиск: {{heading}}" autocomplete="off" /></label>
+    <p class="fbls-market-transport-status" role="status" aria-live="polite">{{totalText}}</p>
+    <div class="fbls-market-transport-choices">
+      {{#each rows}}
+        <article class="fbls-market-transport-choice {{#if selected}}is-selected{{/if}}">
+          <header class="fbls-card-header"><strong>{{#if shortLabel}}{{shortLabel}}{{else}}{{label}}{{/if}}</strong><button type="button" class="fbls-button ghost" data-action="market-select-transport" data-direction="{{../direction}}" data-carrier-id="{{value}}" aria-label="Выбрать {{label}}" aria-pressed="{{selected}}" {{#if disabled}}disabled{{/if}}>{{#if selected}}Выбрано{{else}}Выбрать{{/if}}</button></header>
+          <div class="fbls-cluster fbls-market-transport-meta"><span class="fbls-chip is-compact">{{distanceText}}</span><span class="fbls-chip is-compact">База {{timeText}}</span><span class="fbls-chip is-compact">До {{capacityText}}</span></div>
+          <p>{{summaryText}}</p>
+          {{#if legs}}<details class="fbls-market-transport-details" data-fbls-disclosure="market-transport-option-{{../direction}}:{{value}}"><summary>Участки и перевозчики</summary>
+            <ol class="fbls-market-legs" tabindex="0" aria-label="Участки {{label}}">{{#each legs}}<li>{{#if hidden}}<strong>Скрытый участок</strong>{{else}}
+              <div class="fbls-card-header"><strong>{{fromLabel}} → {{toLabel}}</strong><span class="fbls-chip is-compact">{{modeLabel}}</span></div>
+              <small>{{carrierLabel}} · {{distanceText}} · базовое время {{timeText}}{{#if transferText}} (в т. ч. {{transferText}}){{/if}} · до {{capacityText}}</small>{{/if}}</li>{{/each}}</ol>
+          </details>{{/if}}
+        </article>
+      {{else}}<p class="fbls-market-transport-help">{{emptyText}}</p>{{/each}}
+    </div>
+    <nav class="fbls-action-group fbls-market-transport-pages" aria-label="Страницы вариантов перевозки"><button type="button" class="fbls-button ghost" data-action="market-transport-page" data-direction="{{direction}}" data-step="-1" aria-label="Предыдущая страница вариантов" {{#unless hasPrevious}}disabled{{/unless}}><i class="fa-solid fa-chevron-left" aria-hidden="true"></i></button><span>{{pageText}}</span><button type="button" class="fbls-button ghost" data-action="market-transport-page" data-direction="{{direction}}" data-step="1" aria-label="Следующая страница вариантов" {{#unless hasNext}}disabled{{/unless}}><i class="fa-solid fa-chevron-right" aria-hidden="true"></i></button></nav>
+  </div>
+{{/inline}}
 {{#if hasHolding}}
   <div class="fbls-market-shell">
     <header class="fbls-market-header">
@@ -101,11 +125,9 @@
                 {{#each rooms}}<option value="{{id}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
               </select>
             </label>
-            <label class="fbls-field"><span>План перевозки</span>
-              <select data-market-carrier {{#unless canOrder}}disabled{{/unless}}>
-                {{#each carrierOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
-              </select>
-            </label>
+            <div class="fbls-field"><span>План перевозки</span>
+              <details class="fbls-selection-field fbls-market-transport-picker" data-market-carrier-picker data-fbls-disclosure="market-transport-picker-inbound">{{> marketTransportPicker transportPicker heading="План входящей перевозки"}}</details>
+            </div>
             {{#if scheduledDelivery}}
               <label class="fbls-field"><span>Режим</span>
                 <select data-market-service-level {{#unless canOrder}}disabled{{/unless}}>
@@ -186,7 +208,7 @@
               {{#if scheduledDelivery}}<div><dt>Макс. задержка</dt><dd>{{riskMaxDelayText}}</dd></div>{{/if}}
               {{#if hasInsurance}}<div><dt>Покрытие</dt><dd>{{insuranceCoverageText}} · до {{insuranceMaximumPayoutText}}</dd></div>{{/if}}
             </dl>
-            {{#if routeLegs}}<ol class="fbls-market-legs" aria-label="Участки перевозки">
+            {{#if routeLegs}}<ol class="fbls-market-legs" tabindex="0" aria-label="Участки перевозки">
               {{#each routeLegs}}<li>{{#if hidden}}<strong>Скрытый участок</strong>{{else}}
                 <div class="fbls-card-header"><strong>{{fromLabel}} → {{toLabel}}</strong><span class="fbls-chip is-compact">{{modeLabel}}</span></div>
                 <small>{{carrierLabel}} · {{distanceText}} · базовое время {{timeText}}{{#if transferText}} (в т. ч. {{transferText}}){{/if}} · до {{capacityText}}{{#if chargedText}} · {{chargedText}}{{/if}}</small>
@@ -274,7 +296,7 @@
                 {{#if timingText}}<p class="fbls-market-delivery-note">{{timingText}}</p>{{/if}}
                 <p class="fbls-market-delivery-note">{{financialRiskText}}</p>
                 {{#if routeLegs}}<details class="fbls-market-transport-details" data-fbls-disclosure="market-transport-in:{{id}}"><summary>Участки перевозки</summary>
-                  <ol class="fbls-market-legs" aria-label="Сохранённые участки поставки">{{#each routeLegs}}<li>{{#if hidden}}<strong>Скрытый участок</strong>{{else}}
+                  <ol class="fbls-market-legs" tabindex="0" aria-label="Сохранённые участки поставки">{{#each routeLegs}}<li>{{#if hidden}}<strong>Скрытый участок</strong>{{else}}
                     <div class="fbls-card-header"><strong>{{fromLabel}} → {{toLabel}}</strong><span class="fbls-chip is-compact">{{modeLabel}}</span></div>
                     <small>{{carrierLabel}} · {{distanceText}} · базовое время {{timeText}}{{#if transferText}} (в т. ч. {{transferText}}){{/if}} · до {{capacityText}}{{#if chargedText}} · {{chargedText}}{{/if}}</small>{{/if}}</li>{{/each}}</ol>
                 </details>{{/if}}
@@ -317,7 +339,7 @@
                   <p>{{cargoText}}</p>
                   <small>{{batchText}} · {{routeText}} · {{carrierText}} · {{totalText}}</small>
                   {{#if routeLegs}}<details class="fbls-market-transport-details" data-fbls-disclosure="market-transport-in:{{id}}"><summary>Участки перевозки</summary>
-                    <ol class="fbls-market-legs" aria-label="Сохранённые участки поставки">{{#each routeLegs}}<li>{{#if hidden}}<strong>Скрытый участок</strong>{{else}}
+                    <ol class="fbls-market-legs" tabindex="0" aria-label="Сохранённые участки поставки">{{#each routeLegs}}<li>{{#if hidden}}<strong>Скрытый участок</strong>{{else}}
                       <div class="fbls-card-header"><strong>{{fromLabel}} → {{toLabel}}</strong><span class="fbls-chip is-compact">{{modeLabel}}</span></div>
                       <small>{{carrierLabel}} · {{distanceText}} · базовое время {{timeText}}{{#if transferText}} (в т. ч. {{transferText}}){{/if}} · до {{capacityText}}{{#if chargedText}} · {{chargedText}}{{/if}}</small>{{/if}}</li>{{/each}}</ol>
                   </details>{{/if}}
@@ -371,8 +393,8 @@
             {{#if outboundHasSelection}}
             <div class="fbls-toolbar">
               <label class="fbls-field"><span>Кто доставит</span><select data-market-outbound-ship aria-label="Корабль для исходящей продажи" {{#unless canPurchase}}disabled{{/unless}}>{{#each outboundShipOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{label}}</option>{{/each}}</select></label>
-              {{#unless outboundOwnShipSelected}}{{#if outboundTransportOptions.length}}<label class="fbls-field"><span>План перевозки</span><select data-market-outbound-carrier aria-label="План исходящей перевозки" {{#unless canPurchase}}disabled{{/unless}}>{{#each outboundTransportOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>{{/if}}{{/unless}}
               <label class="fbls-market-outbound-insurance fbls-checkbox-label fbls-choice-toggle"><input type="checkbox" data-market-outbound-insurance {{#if outboundInsuranceEnabled}}checked{{/if}} {{#unless canPurchase}}disabled{{/unless}} /> <span>Страховка</span></label>
+              {{#unless outboundOwnShipSelected}}<div class="fbls-field fbls-market-transport-field"><span>План перевозки</span><details class="fbls-selection-field fbls-market-transport-picker" data-market-outbound-carrier-picker data-fbls-disclosure="market-transport-picker-outbound">{{> marketTransportPicker outboundTransportPicker heading="План исходящей перевозки"}}</details></div>{{/unless}}
             </div>
             <dl class="fbls-market-outbound-totals">
               <div><dt>Расходы рынка сейчас</dt><dd>{{outboundUpfrontText}}</dd></div>
@@ -389,7 +411,7 @@
                 <div><dt>Вывоз из поселения</dt><dd>{{outboundExportTaxText}}</dd></div>
                 {{#if outboundOwnShipSelected}}<div tabindex="0" data-fbls-tooltip="Провизия, жалованье, содержание и портовая обработка груза. Списываются из бортового бюджета; резерв на обратный путь в эту сумму не входит."><dt>Расходы рейса ⓘ</dt><dd>{{outboundShipOperatingText}}</dd></div>{{/if}}
               </dl>
-              {{#if outboundRouteLegs}}<ol class="fbls-market-legs" aria-label="Участки исходящей перевозки">{{#each outboundRouteLegs}}<li>{{#if hidden}}<strong>Скрытый участок</strong>{{else}}
+              {{#if outboundRouteLegs}}<ol class="fbls-market-legs" tabindex="0" aria-label="Участки исходящей перевозки">{{#each outboundRouteLegs}}<li>{{#if hidden}}<strong>Скрытый участок</strong>{{else}}
                 <div class="fbls-card-header"><strong>{{fromLabel}} → {{toLabel}}</strong><span class="fbls-chip is-compact">{{modeLabel}}</span></div>
                 <small>{{carrierLabel}} · {{distanceText}} · базовое время {{timeText}}{{#if transferText}} (в т. ч. {{transferText}}){{/if}} · до {{capacityText}}{{#if chargedText}} · {{chargedText}}{{/if}}</small>{{/if}}</li>{{/each}}</ol>{{/if}}
               {{#if outboundBuyerText}}<p><strong>Покупатели:</strong> {{outboundBuyerText}}</p>{{/if}}
@@ -422,7 +444,7 @@
               {{#if timingText}}<p>{{timingText}}</p>{{/if}}
               <small>{{financialRiskText}}</small>
               {{#if routeLegs}}<details class="fbls-market-transport-details" data-fbls-disclosure="market-transport-out:{{id}}"><summary>Участки перевозки</summary>
-                <ol class="fbls-market-legs" aria-label="Сохранённые участки продажи">{{#each routeLegs}}<li>{{#if hidden}}<strong>Скрытый участок</strong>{{else}}
+                <ol class="fbls-market-legs" tabindex="0" aria-label="Сохранённые участки продажи">{{#each routeLegs}}<li>{{#if hidden}}<strong>Скрытый участок</strong>{{else}}
                   <div class="fbls-card-header"><strong>{{fromLabel}} → {{toLabel}}</strong><span class="fbls-chip is-compact">{{modeLabel}}</span></div>
                   <small>{{carrierLabel}} · {{distanceText}} · базовое время {{timeText}}{{#if transferText}} (в т. ч. {{transferText}}){{/if}} · до {{capacityText}}{{#if chargedText}} · {{chargedText}}{{/if}}</small>{{/if}}</li>{{/each}}</ol>
               </details>{{/if}}
@@ -449,7 +471,7 @@
           <summary><span><i class="fa-solid fa-chevron-right fbls-market-disclosure-icon" aria-hidden="true"></i> Архив продаж</span><b>{{outboundArchive.length}}</b></summary>
           {{#each outboundArchive}}<article class="fbls-market-outbound-archive-row {{status}}"><header><strong>{{marketLabel}}</strong><span>{{statusLabel}}</span></header><p>{{cargoText}}</p><small>{{dateText}} · выручка {{revenueText}} · {{statusText}}</small>
             {{#if routeLegs}}<details class="fbls-market-transport-details" data-fbls-disclosure="market-transport-out:{{id}}"><summary>Участки перевозки</summary>
-              <ol class="fbls-market-legs" aria-label="Сохранённые участки продажи">{{#each routeLegs}}<li>{{#if hidden}}<strong>Скрытый участок</strong>{{else}}
+              <ol class="fbls-market-legs" tabindex="0" aria-label="Сохранённые участки продажи">{{#each routeLegs}}<li>{{#if hidden}}<strong>Скрытый участок</strong>{{else}}
                 <div class="fbls-card-header"><strong>{{fromLabel}} → {{toLabel}}</strong><span class="fbls-chip is-compact">{{modeLabel}}</span></div>
                 <small>{{carrierLabel}} · {{distanceText}} · базовое время {{timeText}}{{#if transferText}} (в т. ч. {{transferText}}){{/if}} · до {{capacityText}}{{#if chargedText}} · {{chargedText}}{{/if}}</small>{{/if}}</li>{{/each}}</ol>
             </details>{{/if}}
