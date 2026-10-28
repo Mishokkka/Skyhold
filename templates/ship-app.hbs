@@ -6,6 +6,7 @@
       <div class="fbls-section-heading"><h2 class="fbls-heading-title"><i class="fa-solid fa-ship" aria-hidden="true"></i> {{name}}</h2><p>{{#if isWorld}}{{locationLabel}} · {{statusLabel}} · {{profileLabel}}{{else}}{{#if away}}В рейсе{{else}}В поселении{{/if}} · Прежние рейсы{{/if}} · {{conditionLabel}}{{#if commanderName}} · {{commanderName}}{{/if}}</p></div>
     </header>
     {{#if isWorld}}
+    {{#if transportBusy}}<p role="status">{{transportStageText}}. {{nextAction}}.</p>{{/if}}
     <nav class="fbls-ship-tabs fbls-action-group" aria-label="Разделы корабля">
       {{#each @root.shipWindowTabs}}<button type="button" class="fbls-subnav-tab {{#if active}}active{{/if}}" data-action="ship-window-tab" data-ship-window-tab="{{id}}" aria-pressed="{{active}}" tabindex="{{#if active}}0{{else}}-1{{/if}}"><i class="{{icon}}" aria-hidden="true"></i> {{label}}</button>{{/each}}
     </nav>

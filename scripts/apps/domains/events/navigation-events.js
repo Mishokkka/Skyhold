@@ -531,7 +531,7 @@ async _onDeleteHolding(event) {
     this.requestRender();
   } catch (error) {
     console.error("FBL Skyhold | Failed to delete holding", error);
-    ui.notifications.error("Не удалось удалить владение. Подробности в консоли.");
+    ui.notifications.error(error.code === "transport-obligations" ? error.message : "Не удалось удалить владение. Подробности в консоли.");
   }
 }
 };

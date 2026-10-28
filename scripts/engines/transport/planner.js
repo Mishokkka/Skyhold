@@ -4,6 +4,10 @@ const copy = (value) => JSON.parse(JSON.stringify(value));
 const slotId = (service, departure, vehicle = "regular") => `${service.id}:${vehicle}:${departure}`;
 const occupied = (run) => run.status !== "cancelled";
 
+export class TransportPlanningUnavailableError extends Error {
+  constructor(code, message) { super(message); this.name = "TransportPlanningUnavailableError"; this.code = code; }
+}
+
 function validateEmptyPath(service, kind) {
   if (service[`${kind}Available`] === false || (service[`${kind}AccessCost`] ?? 0) > (service.emptyAccessLimit ?? Infinity)) {
     throw new Error("Пустой перегон собственного корабля недоступен по маршруту или УРС.");
@@ -92,7 +96,7 @@ export function planTransportChain({ cargo, services, startQd = 0, runs = [], ho
       readyQd = Math.max(readyQd, startQd + (service.approachQd ?? 0));
     }
     while (waiting.length) {
-      if (stages.reduce((sum, stage) => sum + stage.runs.length, 0) + stageRuns.length >= TRANSPORT_LIMITS.runs) throw new Error("Слишком много отправлений. Уменьшите заказ.");
+      if (stages.reduce((sum, stage) => sum + stage.runs.length, 0) + stageRuns.length >= TRANSPORT_LIMITS.runs) throw new TransportPlanningUnavailableError("run-limit", "Слишком много отправлений. Уменьшите заказ.");
       if (waiting.some((lot) => lot.unitLoad > service.capacity)) throw new Error("Одна единица товара больше вместимости транспорта.");
       const full = takeTransportCargo(waiting, service.capacity);
       const fullLoad = cargoLoad(full.taken);
@@ -108,7 +112,7 @@ export function planTransportChain({ cargo, services, startQd = 0, runs = [], ho
       const baseQd = (timed.loadingQd ?? 0) + service.travelQd + (timed.unloadingQd ?? 0);
       const slot = service.kind === "regular" ? regularSlot(service, readyQd, workingRuns, horizon)
         : charterSlot(timed, readyQd, workingRuns, horizon, baseQd + returnQd);
-      if (!slot) throw new Error("Нет свободного транспорта в горизонте планирования.");
+      if (!slot) throw new TransportPlanningUnavailableError("no-slot", "Нет свободного транспорта в горизонте планирования.");
       const packed = takeTransportCargo(waiting, slot.free);
       if (!packed.taken.length) {
         // A partly occupied scheduled vehicle cannot hold an indivisible unit; skip it in this search only.
@@ -119,7 +123,7 @@ export function planTransportChain({ cargo, services, startQd = 0, runs = [], ho
       }
       const load = cargoLoad(packed.taken);
       const arrivalQd = slot.existing?.arrivalQd ?? slot.departureQd + service.travelQd + (timed.unloadingQd ?? 0);
-      if (arrivalQd > horizon) throw new Error("Доставка выходит за горизонт планирования.");
+      if (arrivalQd > horizon) throw new TransportPlanningUnavailableError("horizon", "Доставка выходит за горизонт планирования.");
       const start = slot.startQd ?? slot.departureQd - (timed.loadingQd ?? 0);
       const charge = runCharge(service, load, arrivalQd + returnQd - start, returnQd);
       storageCopper += transportRateCharge(load * Math.max(0, start - readyQd),

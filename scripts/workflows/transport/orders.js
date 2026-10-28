@@ -8,6 +8,7 @@ import { stableDataHash } from "../../data/storage-commit.js";
 import { beginTransportShip, advanceTransportShip, recordTransportShipIncome } from "./ships.js";
 import { ensureTransportState } from "../../data/transport/state.js";
 import { sharedMarketEventTenday } from "../../data/market/shared-context.js";
+import { recordTransportClock, transportHoldingQd, transportLocalQd } from "../../data/transport/clock.js";
 
 function check(result) { if (!result?.ok) throw new Error(result?.message || "Не удалось исполнить рыночную операцию."); return result; }
 
@@ -25,13 +26,15 @@ export function cancelTransportShipment(data, holding, order) {
 
 export function advanceTransportShipments(data, holding, targetQd, workflow, { log = true, deferInternalDemand = false } = {}) {
   const state = ensureTransportState(data);
+  const commonTargetQd = transportHoldingQd(data, holding, targetQd);
+  recordTransportClock(data, holding);
   const entries = [];
   const cashBefore = holding.storage.moneyCopper;
   check(recoverMarketDemand({ holding, currentTenday: Math.floor(targetQd / 40) }));
   const before = new Map((holding.special?.transportV2?.orders ?? []).map((order) => [order.id,
     { spent: order.money.spentCopper, insurance: order.insurancePaidCopper }]));
   const advanceShip = (order) => {
-    const result = advanceTransportShip(data, holding, order, targetQd);
+    const result = advanceTransportShip(data, holding, order, commonTargetQd);
     for (const expense of result?.expenses ?? []) {
       for (const [roomId, amount] of [["treasury", expense.treasuryPaidCopper], [`ship:${expense.shipId}`, expense.onboardPaidCopper]]) {
         if (amount) entries.push({ kind: "expense", resourceId: "money", name: "Содержание корабля после перевозки", qty: -amount,
@@ -40,7 +43,7 @@ export function advanceTransportShipments(data, holding, targetQd, workflow, { l
     }
     return result;
   };
-  const report = advanceTransportOrders({ state, holding, targetQd, dependencies: {
+  const report = advanceTransportOrders({ state, holding, targetQd: commonTargetQd, dependencies: {
     dispatchCargo(order, cargo, atQd) {
       const available = cargo.map((lot) => {
         const spoiled = Math.min(lot.qty, order.sourceSpoiledPending?.[lot.lotId] ?? 0);
@@ -51,7 +54,7 @@ export function advanceTransportShipments(data, holding, targetQd, workflow, { l
       // Warehouse batches already reflect all completed economy periods. Add only the open interval.
       for (const lot of cargo) {
         const actual = dispatched.cargo.find((row) => row.lotId === lot.lotId);
-        if (actual) lot.ageQd = actual.ageQd + Math.max(0, atQd - Number(holding.gm?.calendaria?.lastQd ?? 0));
+        if (actual) lot.ageQd = actual.ageQd + Math.max(0, transportLocalQd(order, atQd) - Number(holding.gm?.calendaria?.lastQd ?? 0));
         lot.ageAtQd = atQd;
         entries.push({ kind: "transport", resourceId: lot.resourceId, name: lot.name, qty: -lot.qty,
           roomId: lot.roomId ?? "outdoors", source: "Отправление груза", operationId: order.id });
@@ -64,7 +67,7 @@ export function advanceTransportShipments(data, holding, targetQd, workflow, { l
         const reservations = (order.demandReservations ?? []).map(row => ({ ...row,
           qty: Math.min(row.qty - (row.settledQty ?? 0), shipped.get(row.demandId) ?? 0), consumedQty: received.get(row.demandId) ?? 0 }));
         check(settleMarketDemandReservations({ holding, reservations, outcome: "consumed",
-          operationId: `${order.id}:receipt:${receipt.runId}`, occurredTenday: sharedMarketEventTenday(holding, atQd), currentTenday: Math.floor(targetQd / 40) }));
+          operationId: `${order.id}:receipt:${receipt.runId}`, occurredTenday: sharedMarketEventTenday(holding, transportLocalQd(order, atQd)), currentTenday: Math.floor(targetQd / 40) }));
         for (const [index, row] of (order.demandReservations ?? []).entries()) row.settledQty = (row.settledQty ?? 0) + reservations[index].qty;
         const revenue = cargoValue(cargo);
         if (order.commercial.revenueOnBoard) recordTransportShipIncome(holding, order, revenue, atQd);
@@ -90,7 +93,7 @@ export function advanceTransportShipments(data, holding, targetQd, workflow, { l
         } else {
           const placements = workflow._storageAddWithOverflow(holding, { ...lot, roomId: order.commercial.targetRoomId,
             arrivalShelfLifeQd: lot.shelfLifeQd,
-            batches: [{ qty: lot.qty, ageQd: lot.ageQd + Math.max(0, targetQd - atQd), internalDemandAvailableFromQd: availableFromQd }] }, lot.qty);
+            batches: [{ qty: lot.qty, ageQd: lot.ageQd + Math.max(0, commonTargetQd - atQd), internalDemandAvailableFromQd: availableFromQd }] }, lot.qty);
           for (const placement of placements ?? [{ qty: lot.qty, roomId: order.commercial.targetRoomId }]) {
             if (placement.qty) entries.push({ kind: "transport-purchase", resourceId: lot.resourceId, name: lot.name, qty: placement.qty,
               roomId: placement.roomId, source: order.commercial.marketLabel, operationId: order.id });

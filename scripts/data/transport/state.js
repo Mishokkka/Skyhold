@@ -1,3 +1,5 @@
+import { transportEpochQd } from "./clock.js";
+
 export const transportOrders = (holding) => holding?.special?.transportV2?.orders ?? [];
 export const activeTransportOrder = (order) => !["delivered", "lost", "cancelled"].includes(order.status);
 
@@ -25,5 +27,7 @@ export function ensureTransportState(data) {
   data.meta.transportV2 ??= { version: 2,
     clockQd: Math.max(0, ...(data.holdings ?? []).map((holding) => Number(holding.gm?.calendaria?.lastQd ?? 0))), runs: [] };
   delete data.meta.transportV2.enabled;
+  const epoch = transportEpochQd(data);
+  if (epoch !== null) data.meta.transportV2.calendarEpochQd = epoch;
   return data.meta.transportV2;
 }

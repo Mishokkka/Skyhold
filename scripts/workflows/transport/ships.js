@@ -4,6 +4,7 @@ import { beginShipOuting, ensurePartialShipOuting, planShipOutingLeg, recordShip
 import { recordFleetFunds } from "../../engines/ships/fleet-accounting.js";
 import { advanceWorldShips, worldShipPortDebtCopper } from "../../engines/ships/world-voyage.js";
 import { ownedTransportActualCosts, prepareOwnedTransportAbort } from "../../engines/transport/owned-costs.js";
+import { transportLocalQd } from "../../data/transport/clock.js";
 
 const shipFor = (holding, order) => {
   const ship = holding.special?.ships?.list?.find((row) => row.id === order.ownShipId);
@@ -19,13 +20,13 @@ function point(data, holding, regionId) {
 
 export function beginTransportShip(data, holding, order) {
   if (order.shipStarted) return;
-  const ship = shipFor(holding, order), clock = order.plan.startQd;
+  const ship = shipFor(holding, order), clock = transportLocalQd(order, order.plan.startQd);
   order.shipOrigin = structuredClone(ship.location);
   if (ship.location.kind === "home") beginShipOuting(ship, { voyageId: order.id, clockQd: clock,
     budgetCopper: order.plan.ownExpensesCopper + order.money.reserveCopper - order.money.boardCopper });
   else ensurePartialShipOuting(ship, { voyageId: order.id, clockQd: clock });
   planShipOutingLeg(ship, { id: order.id, startedAtQd: clock, quote: { from: ship.location,
-    to: point(data, holding, order.plan.shipReleaseLocation), durationQd: Math.max(1, order.plan.shipReleaseQd - clock),
+    to: point(data, holding, order.plan.shipReleaseLocation), durationQd: Math.max(1, order.plan.shipReleaseQd - order.plan.startQd),
     operatingCopper: order.plan.ownExpensesCopper, rewardCopper: 0 } });
   embarkShipCrew(holding, ship, clock);
   ship.status = "away"; ship.timelineQd = clock; ship.portBilling = null;
@@ -35,6 +36,7 @@ export function beginTransportShip(data, holding, order) {
 }
 
 export function recordTransportShipIncome(holding, order, amountCopper, atQd) {
+  atQd = transportLocalQd(order, atQd);
   const ship = shipFor(holding, order);
   ship.onboardCopper += amountCopper;
   const receipt = { id: `${order.id}:sale:${atQd}`, kind: "income", externalDeltaCopper: amountCopper };
@@ -44,6 +46,7 @@ export function recordTransportShipIncome(holding, order, amountCopper, atQd) {
 
 export function advanceTransportShip(data, holding, order, targetQd) {
   if (order.shipReleased) return;
+  targetQd = transportLocalQd(order, targetQd);
   const ship = shipFor(holding, order);
   const stages = order.stages.filter((stage) => stage.service.kind === "owned");
   const ownRuns = stages.flatMap((stage) => stage.runs);
@@ -86,7 +89,7 @@ export function advanceTransportShip(data, holding, order, targetQd) {
   }
   const last = [...ownRuns].sort((a, b) => b.releaseQd - a.releaseQd)[0];
   const sharedLast = data.meta.transportV2.runs.find((run) => run.id === last?.id);
-  const releaseQd = order.shipAbort?.releaseQd ?? Math.max(last.releaseQd, sharedLast?.releaseQd ?? 0);
+  const releaseQd = transportLocalQd(order, order.shipAbort?.releaseQd ?? Math.max(last.releaseQd, sharedLast?.releaseQd ?? 0));
   ship.timelineQd = Math.max(ship.timelineQd, Math.min(targetQd, releaseQd));
   if (targetQd < releaseQd || !completed) return;
   const destination = point(data, holding, order.shipAbort?.location ?? last.releaseLocation);

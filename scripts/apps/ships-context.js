@@ -9,7 +9,7 @@ import { isMagnifiqueShip } from "../engines/ships/crew-roster.js";
 import { hasResidentSettlementWork, isResidentAway, isResidentRestingOnShip, residentShipAssignment } from "../data/resident-presence.js";
 import { shipCrewReadiness } from "../engines/ships/crew-readiness.js";
 import { shipMoneySummary, shipOutingSummary } from "../engines/ships/summary.js";
-import { prepareShipManagementState } from "./domains/ship-management-state.js";
+import { prepareShipManagementState, shipTransportState } from "./domains/ship-management-state.js";
 import { prepareShipVoyagePresentation } from "./domains/ship-voyage-presentation.js";
 import { prepareShipFinancePresentation } from "./domains/ship-finance-presentation.js";
 import { shipPresentationTimelineQd } from "./domains/ship-command-availability.js";
@@ -170,7 +170,7 @@ function currentOffersForShip(ships, ship, period) {
 
 function overviewShipRow(holding, ship, index, { permissions, period, data }) {
   const isWorld = ship.navigationMode === "world";
-  const inTransit = Boolean(ship.activeVoyage);
+  const inTransit = Boolean(ship.activeVoyage || shipTransportState(holding, ship).inTransit);
   const awaitingOutcome = inTransit && ship.activeVoyage?.awaitingOutcome === true;
   const atHome = isWorld && ship.location?.kind === "home" && !inTransit;
   const readiness = isWorld ? shipCrewReadiness(holding, ship, { catalog: data?.catalog }) : null;
@@ -250,7 +250,7 @@ export function prepareShipWindowContext(holding, { revision = 0, data = null, s
     if (String(offer?.period) !== String(period) || offer?.consumedBy) continue;
     const ship = selectedShips.find((row) => row.id === offer.shipId);
     if (!ship) continue;
-    if (ship.orderBundle) continue;
+    if (ship.orderBundle || ship.transportOrderId) continue;
     if (ship.navigationMode === "world" && (offer.mode !== "world" || !sameLocation(offer.from, ship.location))) continue;
     if (ship.navigationMode !== "world" && offer.mode === "world") continue;
     try {
@@ -270,7 +270,8 @@ export function prepareShipWindowContext(holding, { revision = 0, data = null, s
     const index = (ships.list ?? []).findIndex((row) => String(row?.id ?? "") === String(ship.id ?? ""));
     const isWorld = ship.navigationMode === "world";
     const isLegacy = !isWorld;
-    const inTransit = Boolean(ship.activeVoyage);
+    const transport = shipTransportState(holding, ship);
+    const inTransit = Boolean(ship.activeVoyage || transport.inTransit);
     const awaitingOutcome = inTransit && ship.activeVoyage?.awaitingOutcome === true;
     const outcome = inTransit && ship.activeVoyage?.outcome
       ? { ...ship.activeVoyage.outcome, delayDays: Number(ship.activeVoyage.outcome.delayQd ?? 0) / 4 } : null;
@@ -278,7 +279,7 @@ export function prepareShipWindowContext(holding, { revision = 0, data = null, s
     const atHome = isWorld && ship.location?.kind === "home" && !inTransit;
     const ownSale = (holding.special?.market?.outbound?.orders ?? []).find((order) => order.ownShipId === ship.id
       && !["delivered", "lost", "cancelled"].includes(order.status)) ?? null;
-    const atForeignPort = isWorld && ship.location?.kind === "market" && !inTransit && !ship.orderBundle && !ownSale;
+    const atForeignPort = isWorld && ship.location?.kind === "market" && !inTransit && !ship.orderBundle && !ownSale && !transport.busy;
     const readiness = isWorld ? shipCrewReadiness(holding, ship, { catalog: data?.catalog }) : null;
     let profile = null;
     try { profile = isWorld ? getShipProfile(ship.profileId) : null; } catch (_error) { profile = null; }
@@ -300,7 +301,7 @@ export function prepareShipWindowContext(holding, { revision = 0, data = null, s
     const moneySummary = isWorld ? shipMoneySummary(holding, ship, { returnOffer, clockQd: shipQd }) : null;
     const availableOffers = offersByShip.get(ship.id) ?? [];
     const management = isWorld ? prepareShipManagementState(holding, ship, { permissions, readiness, money: moneySummary, offers: availableOffers, returnOffer }) : null;
-    const relocationPorts = isWorld && !inTransit && !ship.orderBundle && !ownSale
+    const relocationPorts = isWorld && !inTransit && !ship.orderBundle && !ownSale && !transport.busy
       ? worldContext.ports.filter((port) => port.regionId !== ship.location?.regionId
         && port.regionId !== worldContext.home?.regionId)
         .map((port) => ({ id: port.id, label: port.label })) : [];
@@ -351,27 +352,27 @@ export function prepareShipWindowContext(holding, { revision = 0, data = null, s
         : Number(ship.activeVoyage?.quote?.contract?.cargo?.loadPoints ?? 0),
       crewOptions: options, hasCrewOptions: options.length > 0,
       crewRoster: crewRoster(holding, ship),
-      canEditPlan: permissions.isGM && !inTransit && !bundle && !ownSale,
+      canEditPlan: permissions.isGM && !inTransit && !bundle && !ownSale && !transport.busy,
       canAdopt: permissions.isGM && isLegacy && ship.status === "docked" && !ship.activeVoyage,
-      canConfigureCrew: permissions.isGM && atHome,
+      canConfigureCrew: permissions.isGM && atHome && !transport.busy,
       canDelete: permissions.isGM && !ownSale && !shipRemovalBlocker(holding, ship),
       deleteReason: ownSale ? "Дождитесь исхода продажи собственного товара" : shipRemovalBlocker(holding, ship) || "Удалить корабль; жители и их работа сохранятся",
-      canInstallMagnifiqueCrew: permissions.isGM && atHome && isMagnifiqueShip(ship)
+      canInstallMagnifiqueCrew: permissions.isGM && atHome && !transport.busy && isMagnifiqueShip(ship)
         && magnifiqueRosterVersion < MAGNIFIQUE_CREW_VERSION,
       magnifiqueCrewInstalled: isMagnifiqueShip(ship) && magnifiqueRosterVersion >= MAGNIFIQUE_CREW_VERSION,
-      canAdjust: isWorld ? (!management.commands.clockBlocked && (atHome
+      canAdjust: isWorld ? (!transport.busy && !management.commands.clockBlocked && (atHome
         ? permissions.canManageShips && ship.status === "docked" && !bundle && !ownSale
         : permissions.isGM && ship.status === "away" && Boolean(inTransit || ship.location?.kind === "market")))
         : permissions.isGM && ship.status === "away",
       canDepart: Boolean(permissions.canManageShips && isLegacy && ship.status === "docked" && ship.condition === "ready" && quote && !ship.activeVoyage),
-      canDepartOffer: Boolean(permissions.canManageShips && !inTransit && !bundle && !ownSale && ship.condition === "ready" && (!isWorld || readiness.ready)),
-      canDepartBundle: Boolean(permissions.canManageShips && isWorld && !inTransit && !bundle && !ownSale
+      canDepartOffer: Boolean(permissions.canManageShips && !transport.busy && !inTransit && !bundle && !ownSale && ship.condition === "ready" && (!isWorld || readiness.ready)),
+      canDepartBundle: Boolean(permissions.canManageShips && isWorld && !transport.busy && !inTransit && !bundle && !ownSale
         && ship.condition === "ready" && readiness.ready && availableOffers.length >= 2),
-      canGenerateWorld: Boolean(permissions.canManageShips && isWorld && !management.commands.clockBlocked && !inTransit && !bundle && !ownSale && ship.condition === "ready" && !worldOffersGenerated),
-      canRerollWorld: Boolean(permissions.isGM && isWorld && !management.commands.clockBlocked && !inTransit && !bundle && !ownSale && ship.condition === "ready" && worldOffersGenerated),
+      canGenerateWorld: Boolean(permissions.canManageShips && isWorld && !transport.busy && !management.commands.clockBlocked && !inTransit && !bundle && !ownSale && ship.condition === "ready" && !worldOffersGenerated),
+      canRerollWorld: Boolean(permissions.isGM && isWorld && !transport.busy && !management.commands.clockBlocked && !inTransit && !bundle && !ownSale && ship.condition === "ready" && worldOffersGenerated),
       worldOffersGenerated,
       canReturnHome: Boolean(management?.commands.returnHome?.allowed),
-      canRelocate: Boolean(permissions.canManageShips && isWorld && !inTransit && !bundle && !ownSale
+      canRelocate: Boolean(permissions.canManageShips && isWorld && !transport.busy && !inTransit && !bundle && !ownSale
         && !management.commands.clockBlocked && ship.condition === "ready" && readiness.ready && relocationPorts.length),
       relocationPorts,
       canResolve: isWorld ? Boolean(management.commands.resolveWorld?.allowed) : Boolean(permissions.canManageShips && awaitingOutcome),

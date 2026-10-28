@@ -1,5 +1,5 @@
 import { cargoValue, transportInteger, transportMoney, shipTransportFunding } from "./quantities.js";
-import { planTransportChain, validateTransportPlan } from "./planner.js";
+import { planTransportChain, validateTransportPlan, TransportPlanningUnavailableError } from "./planner.js";
 import { activeTransportOrder, transportOrders } from "../../data/transport/state.js";
 import { deterministicUnit as deterministicMarketShipmentUnit } from "../../core/seeded-unit.js";
 
@@ -46,7 +46,8 @@ function waitForVehicle(state, planned) {
 function rebookStageRemainder(state, order, stage, readyQd) {
   const started = new Set(stage.receipts.map((row) => row.runId));
   const pending = stage.runs.filter((run) => !started.has(run.id));
-  releaseRuns(state, order, stage.index, started);
+  const draft = { ...state, runs: clone(state.runs) };
+  releaseRuns(draft, order, stage.index, started);
   const service = { ...stage.service, approachQd: 0, approachCopper: 0,
     approachAvailable: true, approachAccessCost: 0,
     returnAtEnd: stage.service.returnAtEnd && order.stages[stage.index + 1]?.service.kind !== "owned" };
@@ -54,32 +55,35 @@ function rebookStageRemainder(state, order, stage, readyQd) {
     const existing = lots.find((row) => row.lotId === lot.lotId);
     if (existing) existing.qty += lot.qty; else lots.push({ ...lot });
     return lots;
-  }, []), services: [service], startQd: readyQd, runs: state.runs }).stages[0];
+  }, []), services: [service], startQd: readyQd, runs: draft.runs }).stages[0];
+  reserveRuns(draft, order, [{ ...stage, runs: replanned.runs }]);
+  state.runs = draft.runs;
   stage.runs = [...stage.runs.filter((run) => started.has(run.id)), ...replanned.runs];
-  reserveRuns(state, order, [{ ...stage, runs: replanned.runs }]);
   for (const next of order.stages.slice(stage.index + 1)) next.needsRebooking = true;
   order.history.push({ kind: "vehicle-rebooked", qd: readyQd });
 }
 
 /** Runs, treasury and ship wallet must be saved by the caller's single authoritative transaction. */
-export function bookTransportOrder({ state, holding, plan, services, id, direction, commercial = {}, ship = null }) {
+export function bookTransportOrder({ state, holding, plan, services, id, direction, commercial = {}, ship = null, clockOffsetQd = 0 }) {
   if (state?.version !== 2) throw new Error("Не подготовлено состояние перевозок.");
   if (!id || transportOrders(holding).some((order) => order.id === id)) throw new Error("Заказ с этим номером уже существует.");
   if (!["inbound", "outbound"].includes(direction)) throw new Error("Неизвестное направление заказа.");
-  validateTransportPlan(plan, { services, runs: state.runs, startQd: state.clockQd });
+  if (plan.startQd < state.clockQd) throw new Error("Дата заказа раньше общей даты перевозок.");
+  validateTransportPlan(plan, { services, runs: state.runs });
   if (plan.ownShipId && (!ship || ship.id !== plan.ownShipId || ship.transportOrderId || ship.activeVoyage || ship.orderBundle)) throw new Error("Собственный корабль занят.");
   const own = shipTransportFunding({ expensesCopper: plan.ownExpensesCopper, reserveCopper: plan.ownShipId ? commercial.reserveCopper ?? 0 : 0,
     onboardCopper: ship?.onboardCopper ?? 0 });
   const paidCommercial = transportMoney([direction === "inbound" ? cargoValue(plan.cargo) : 0, commercial.taxCopper ?? 0, commercial.insuranceCopper ?? 0]);
   const treasury = transportMoney([paidCommercial, plan.totalCopper - plan.ownExpensesCopper, own.treasuryCopper]);
   if ((holding.storage?.moneyCopper ?? 0) < treasury) throw new Error(`В казне нужно ${treasury} ММ.`);
-  const order = { id, holdingId: holding.id, version: 2, direction, status: "booked", plan: clone(plan), cargo: clone(plan.cargo),
+  const order = { id, holdingId: holding.id, version: 2, clockOffsetQd, direction, status: "booked", plan: clone(plan), cargo: clone(plan.cargo),
     commercial: clone(commercial), dispatched: {}, stages: clone(plan.stages).map((stage) => ({ ...stage, status: "booked", receipts: [], received: [] })),
     stageIndex: 0, lastProcessedQd: plan.startQd, received: [], lostQty: 0, spoiledQty: 0, insurancePaidCopper: 0,
     money: { treasuryCopper: treasury, boardCopper: own.fromShipCopper, commercialSpentCopper: paidCommercial,
       escrowCopper: plan.totalCopper + own.reserveCopper, spentCopper: 0, reserveCopper: own.reserveCopper, refundedCopper: 0 },
     ownShipId: plan.ownShipId, history: [{ kind: "booked", qd: plan.startQd }] };
   reserveRuns(state, order, order.stages);
+  state.clockQd = Math.max(state.clockQd, plan.startQd);
   holding.storage.moneyCopper -= treasury;
   if (plan.ownShipId) { ship.onboardCopper -= own.fromShipCopper; ship.transportOrderId = id; }
   holding.special ??= {}; holding.special.transportV2 ??= { version: 2, orders: [] };
@@ -124,17 +128,36 @@ function spend(order, amount) {
 }
 
 function rebookRemaining(state, order, index, cargo, readyQd) {
-  releaseRuns(state, order, index);
+  const draft = { ...state, runs: clone(state.runs) };
+  releaseRuns(draft, order, index);
   // The ship's approach was accepted at booking and is already underway or complete.
   const services = order.plan.stages.slice(index).map((stage) => ({ ...stage.service, approachQd: 0, approachCopper: 0,
     approachAvailable: true, approachAccessCost: 0 }));
-  const remaining = planTransportChain({ cargo, services, startQd: readyQd, runs: state.runs });
+  const remaining = planTransportChain({ cargo, services, startQd: readyQd, runs: draft.runs });
   // Hired contracts keep their original price when a carrier misses a connection.
   const stages = remaining.stages.map((stage, offset) => ({ ...stage, index: index + offset, status: "booked", receipts: [], received: [],
     totalCopper: order.plan.stages[index + offset].totalCopper }));
+  reserveRuns(draft, order, stages);
+  state.runs = draft.runs;
   order.stages.splice(index, order.stages.length - index, ...stages);
-  reserveRuns(state, order, stages);
   order.history.push({ kind: "rebooked", qd: readyQd });
+}
+
+function attemptRebooking(order, atQd, rebook) {
+  try {
+    rebook();
+    delete order.replanFailure;
+    return true;
+  } catch (error) {
+    if (!(error instanceof TransportPlanningUnavailableError)) throw error;
+    const message = error.code === "run-limit" ? "Для оставшегося груза пока недостаточно свободной вместимости в допустимом числе отправлений." : error.message;
+    if (order.replanFailure?.code !== error.code || order.replanFailure?.stage !== order.stageIndex) {
+      order.history.push({ kind: "rebooking-wait", qd: atQd, stage: order.stageIndex, reason: message });
+    }
+    order.replanFailure = { code: error.code, stage: order.stageIndex, message };
+    order.status = "waitingCarrier";
+    return false;
+  }
 }
 
 function evaluateIncident(run) {
@@ -206,7 +229,7 @@ export function advanceTransportOrders({ state, holding, targetQd, dependencies 
         }
         const ready = Math.max(...prior.receipts.map((row) => row.arrivalQd));
         if (stage.needsRebooking || ready > Math.min(...stage.runs.map((run) => run.startQd)) || totalQty(cargo) !== totalQty(stage.runs.flatMap((run) => run.cargo))) {
-          rebookRemaining(state, order, order.stageIndex, cargo, Math.max(ready, order.lastProcessedQd));
+          if (!attemptRebooking(order, targetQd, () => rebookRemaining(state, order, order.stageIndex, cargo, Math.max(ready, order.lastProcessedQd)))) break;
           stage = order.stages[order.stageIndex];
         }
       }
@@ -219,7 +242,7 @@ export function advanceTransportOrders({ state, holding, targetQd, dependencies 
           const vehicle = waitForVehicle(state, physical);
           if (vehicle.pending) { order.status = "waitingCarrier"; break; }
           if (vehicle.readyQd > physical.startQd) {
-            rebookStageRemainder(state, order, stage, vehicle.readyQd);
+            if (!attemptRebooking(order, targetQd, () => rebookStageRemainder(state, order, stage, Math.max(vehicle.readyQd, order.lastProcessedQd)))) break;
             replanned = true; break;
           }
           const cargo = scheduled.cargo.map((lot) => ageLot(lot, physical.departureQd, order.plan.startQd));

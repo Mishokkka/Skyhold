@@ -3,7 +3,8 @@ import { SkyholdData, requestMarketOperation } from "../data/store.js";
 import { findReadableHoldingEntry } from "../data/access-guard.js";
 import { holdingPermissionContext } from "../data/holding-permissions.js";
 import { makeId } from "../data/utils.js";
-import { transportOrders } from "../data/transport/state.js";
+import { activeTransportOrder, transportOrders } from "../data/transport/state.js";
+import { transportHoldingQd } from "../data/transport/clock.js";
 import { TRANSPORT_SERVICE_DEFAULTS } from "../engines/transport/services.js";
 import { prepareTransportContext, transportSourceToken } from "./domains/transport-context.js";
 import { formatCopperCurrencyCompact as money } from "../core/currency.js";
@@ -43,7 +44,7 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
   }
   static rerenderOpen() { for (const app of this.instances.values()) app.requestRender({ focus: false }); }
   constructor(options = {}) {
-    super(options); this.holdingId = options.holdingId; this._disclosures = new DisclosureState();
+    super({ ...options, id: `fbls-transport-${options.holdingId}` }); this.holdingId = options.holdingId; this._disclosures = new DisclosureState();
     this._pending = this.constructor.sessions.get(this.holdingId) ?? null;
   }
   async _prepareContext(options) {
@@ -52,7 +53,7 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
     const { holding } = findReadableHoldingEntry(data, this.holdingId);
     if (!holding) return { ...base, hasHolding: false };
     const permissions = holdingPermissionContext(holding);
-    const clockQd = Math.max(data.meta?.transportV2?.clockQd ?? 0, holding.gm?.calendaria?.lastQd ?? 0);
+    const clockQd = Math.max(data.meta?.transportV2?.clockQd ?? 0, transportHoldingQd(data, holding));
     let quote = null, quoteError = "";
     if (this.request) {
       try { quote = prepareTransportContext({ data, holding, request: this.request, isGM: permissions.isGM }); }
@@ -100,6 +101,7 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
     const orders = [...transportOrders(holding)].reverse().map((order) => ({ id: order.id,
       market: !permissions.isGM && hiddenRegions.has(order.commercial.marketRegionId) ? "Скрытый рынок" : order.commercial.marketLabel,
       status: statuses[order.status] || order.status, direction: order.direction === "outbound" ? "Продажа" : "Покупка",
+      waitingReason: order.replanFailure?.message ?? "",
       cost: money(order.status === "cancelled" ? 0 : order.money.spentCopper + order.commercial.taxCopper + order.commercial.insuranceCopper), escrow: money(order.money.escrowCopper),
       received: order.received.reduce((sum, lot) => sum + lot.qty, 0), total: order.cargo.reduce((sum, lot) => sum + lot.qty, 0),
       fundingNeeded: order.fundingNeededCopper ? money(order.fundingNeededCopper) : "", canFund: permissions.canUseStorage && permissions.canManageShips,
@@ -108,7 +110,7 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
       shipReturnBlocked: order.shipAbort?.returnBlocked,
       shipTiming: shipTiming(order),
       arrival: days(Math.max(...order.stages.flatMap((stage) => stage.runs.map((run) => run.arrivalQd))) - clockQd),
-      canCancel: permissions.canUseStorage && !order.shipStarted && !order.history.some((row) => row.kind === "departed") && order.status === "booked",
+      canCancel: permissions.canUseStorage && !order.shipStarted && !order.history.some((row) => row.kind === "departed") && activeTransportOrder(order),
       stages: order.stages.map((stage) => ({ path: path(stage), count: stage.runs.length, price: money(stage.totalCopper), invoice: stageInvoice(stage) })) }));
     const incidents = permissions.isGM ? (data.meta?.transportV2?.runs ?? []).filter((run) => run.incident?.status === "pending")
       .map((run) => ({ id: run.id, label: run.serviceLabel, orders: run.claims.length,
@@ -216,7 +218,8 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
     } finally { this.constructor.inFlight.delete(operation.operationId); this._busy = false; this.constructor.rerenderOpen(); }
   }
   async close(options) {
-    this._listeners?.abort(); this._disclosures.close(); this.constructor.instances.delete(this.holdingId);
+    this._listeners?.abort(); this._disclosures.close();
+    if (this.constructor.instances.get(this.holdingId) === this) this.constructor.instances.delete(this.holdingId);
     return super.close(options);
   }
 }

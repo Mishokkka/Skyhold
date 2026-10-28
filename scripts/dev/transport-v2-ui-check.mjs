@@ -6,8 +6,14 @@ import { prepareTransportContext } from "../apps/domains/transport-context.js";
 import { bookTransportOrder } from "../engines/transport/runtime.js";
 import { ensureTransportState } from "../data/transport/state.js";
 
+const applications = new Map();
 globalThis.foundry = { applications: { api: {
-  ApplicationV2: class { render() {} async close() {} async _prepareContext() { return {}; } },
+  ApplicationV2: class {
+    constructor(options) { this.id = options.id; }
+    render() { applications.set(this.id, this); }
+    async close() { if (applications.get(this.id) === this) applications.delete(this.id); }
+    async _prepareContext() { return {}; }
+  },
   HandlebarsApplicationMixin: (base) => base
 } } };
 const gm = { id: "gm", isGM: true, active: true }, player = { id: "player", isGM: false, active: true };
@@ -22,6 +28,12 @@ const market = prepareMarketAuthorityContext({ data, holding, isGM: true }).mark
 const offer = prepareMarketAuthorityContext({ data, holding, marketId: market.id, isGM: true }).quote.offers.find((row) => row.resourceId === "test-freight");
 const request = { marketId: market.id, quantities: { [offer.id]: 2 }, insurance: false };
 let app = SkyholdTransportApp.open({ holdingId: holding.id, request });
+const other = SkyholdTransportApp.open({ holdingId: "other-holding" });
+assert.notEqual(app.id, other.id, "Application V2 registry keys are unique per holding");
+assert.equal(applications.size, 2);
+await other.close();
+assert.equal(applications.get(app.id), app, "closing one holding leaves the other window registered");
+SkyholdTransportApp.rerenderOpen();
 assert.equal((await app._prepareContext({})).canConfirm, true);
 game.user = player;
 assert.equal((await app._prepareContext({})).canConfirm, true, "authorized players can request an authority-GM booking");
@@ -31,6 +43,9 @@ game.socket = { emit() {} };
 const quote = prepareTransportContext({ data, holding, request, isGM: true });
 const order = bookTransportOrder({ state: data.meta.transportV2, holding, plan: quote.plan, services: quote.services,
   id: "visibility-order", direction: "inbound", commercial: quote.commercial });
+order.status = "waitingCarrier";
+assert.equal((await app._prepareContext({})).orders[0].canCancel, true, "an unstarted hired order may be cancelled while waiting for a vehicle");
+order.status = "booked";
 data.catalog.marketEconomy.countries[0].visibility = "gm";
 holding.special.market.orders = [{ id: "historical", status: "delivered", countryId: data.catalog.marketEconomy.countries[0].id,
   marketLabel: "PRIVATE MARKET", cargo: [{ name: "Cloth", qty: 2 }] }];

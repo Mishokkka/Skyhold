@@ -1,3 +1,5 @@
+import { MAX_MARKET_OPERATION_COPPER } from "../../data/market/money-limits.js";
+
 /** One storage load = four ship points. Persist thousandths of a point. */
 export const TRANSPORT_LOAD_SCALE = 4000;
 export const TRANSPORT_LIMITS = Object.freeze({ runs: 512, paths: 256, stages: 8, horizonQd: 1440 });
@@ -20,7 +22,7 @@ export function cargoLoad(cargo) {
 }
 
 export function cargoValue(cargo) {
-  return transportInteger(cargo.reduce((sum, lot) => sum + lot.qty * transportInteger(lot.unitCopper, "цена единицы"), 0), "стоимость груза");
+  return transportInteger(cargo.reduce((sum, lot) => sum + lot.qty * transportInteger(lot.unitCopper, "цена единицы"), 0), "стоимость груза", 0, MAX_MARKET_OPERATION_COPPER);
 }
 
 /** Deterministic oldest-first packing; indivisible inventory units never become fractional. */
@@ -37,13 +39,13 @@ export function takeTransportCargo(cargo, capacity) {
 }
 
 export function transportMoney(parts) {
-  return transportInteger(parts.reduce((sum, value) => sum + transportInteger(value, "сумма"), 0), "итоговая сумма", 0, 1000000000);
+  return transportInteger(parts.reduce((sum, value) => sum + transportInteger(value, "сумма"), 0), "итоговая сумма", 0, MAX_MARKET_OPERATION_COPPER);
 }
 
 export function transportRateCharge(amount, milliCopper, scale = 1000) {
   const numerator = BigInt(transportInteger(amount, "объём тарифа")) * BigInt(transportInteger(milliCopper, "тариф"));
   const divisor = BigInt(transportInteger(scale, "масштаб тарифа", 1));
-  return transportInteger(Number((numerator + divisor - 1n) / divisor), "начисление", 0, 1000000000);
+  return transportInteger(Number((numerator + divisor - 1n) / divisor), "начисление", 0, MAX_MARKET_OPERATION_COPPER);
 }
 
 export function shipTransportFunding({ expensesCopper, reserveCopper = 0, onboardCopper = 0 }) {

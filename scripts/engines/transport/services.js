@@ -51,7 +51,7 @@ export function transportServicesFromRoutes(routes = [], rawConfiguration = {}, 
       const fullCopper = Math.ceil(group.dispatchCopper + group.hireCopper + group.distanceCopper + group.operatingCopper
         + group.capacityLoad * group.loadCopperPerUnit);
       const base = { from: source, to: destination, fromLabel: group.fromLabel, toLabel: group.toLabel, companyId: group.carrierId,
-        ...transportHandlingTerms([from, to].filter(id => id !== homeRegionId).map(id => handling.get(id))),
+        ...transportHandlingTerms((from === to ? [from] : [from, to].filter(id => id !== homeRegionId)).map(id => handling.get(id))),
         label: `${group.carrierLabel} · ${group.modeLabel}`, mode: group.mode, visibility: group.visibility,
         capacity: transportLoad(group.capacityLoad), travelQd, loadingQd: 1, unloadingQd: 1,
         storageMilliCopperPerLoadQd: config.storageMilliCopperPerLoadQd, riskBps: Math.min(10000, Math.round(config.riskBps * (group.riskFactor ?? 1))),

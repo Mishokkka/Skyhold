@@ -12,6 +12,7 @@ import { reserveMarketDemand } from "../engines/market/demand.js";
 import { resolveMarketItemDocuments } from "./market-operation-executor.js";
 import { getSkyholdWorkflowService } from "../workflows/skyhold-workflow-service.js";
 import { advanceWorldShips } from "../engines/ships/world-voyage.js";
+import { transportHoldingQd } from "../data/transport/clock.js";
 
 const fail = (message, code = "invalid") => Object.assign(new Error(message), { code });
 const types = new Set(["transport-book", "transport-cancel", "transport-advance", "transport-incident", "transport-configure", "transport-ship-sync", "transport-fund"]);
@@ -41,7 +42,7 @@ export function createTransportOperationExecutor({ transaction = (updater, optio
         const config = validateTransportConfiguration(op.configuration);
         data.catalog.transportV2 = config;
       } else {
-        data.meta.transportV2.clockQd = Math.max(data.meta.transportV2.clockQd, Number(holding.gm?.calendaria?.lastQd ?? 0));
+        data.meta.transportV2.clockQd = Math.max(data.meta.transportV2.clockQd, transportHoldingQd(data, holding));
         const engine = workflow();
         if (op.type === "transport-book") {
           if (op.request?.ownShipId && !user.isGM && !holding.gm?.playersCanManageShips) throw fail("Нет права управлять кораблём.", "forbidden");
@@ -62,7 +63,8 @@ export function createTransportOperationExecutor({ transaction = (updater, optio
           const stock = reserve({ holding, marketId: context.commercial.marketId, lines: context.lines, operationId: `${op.operationId}:market` });
           if (!stock.ok) throw fail(stock.message || "Запасы или спрос рынка изменились.", "conflict");
           const order = bookTransportOrder({ state: data.meta.transportV2, holding, plan: context.plan, services: context.services,
-            id: op.operationId, direction: op.request.direction === "outbound" ? "outbound" : "inbound", commercial: context.commercial, ship: context.ship });
+            id: op.operationId, direction: op.request.direction === "outbound" ? "outbound" : "inbound", commercial: context.commercial, ship: context.ship,
+            clockOffsetQd: context.clockOffsetQd });
           if (order.direction === "outbound") order.demandReservations = stock.reservations;
           else order.stockReservations = stock.reservations;
           startTransportShip(data, holding, order);

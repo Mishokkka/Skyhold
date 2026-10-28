@@ -1,7 +1,7 @@
 import { prepareMarketAuthorityContext, authorityMarketLogistics } from "../market/authority-context.js";
 import { transportServicesFromRoutes, validateTransportConfiguration } from "../../engines/transport/services.js";
 import { findTransportPlans, planTransportChain, transportChainMatchesConstraints } from "../../engines/transport/planner.js";
-import { cargoValue, shipTransportFunding, transportLoad, transportOperatingCharge } from "../../engines/transport/quantities.js";
+import { cargoValue, shipTransportFunding, transportLoad, transportMoney, transportOperatingCharge } from "../../engines/transport/quantities.js";
 import { stableDataHash } from "../../data/storage-commit.js";
 import { findHoldingRegion } from "../../engines/market/logistics.js";
 import { cargoShelfLife } from "../../engines/market/cargo-aging.js";
@@ -9,6 +9,7 @@ import { buildShipWorldContext, worldShipTransportTerms } from "../../engines/sh
 import { worldShipTimelineQd, worldShipPortDebtCopper } from "../../engines/ships/world-voyage.js";
 import { shipCapacityLoadPoints } from "../../engines/ships/profiles.js";
 import { shipCrewReadiness } from "../../engines/ships/crew-readiness.js";
+import { transportClockOffsetQd, transportHoldingQd } from "../../data/transport/clock.js";
 
 export function transportSourceToken(data, holding) {
   return stableDataHash({ holding, markets: data?.meta?.sharedMarkets, transport: data?.meta?.transportV2, catalog: data?.catalog });
@@ -44,10 +45,17 @@ function ownServices(data, holding, ship, points, request, clockQd) {
   const world = buildShipWorldContext(data, holding), capacityPoints = shipCapacityLoadPoints(ship);
   const position = ship.location?.regionId ?? world.home.regionId;
   const services = [];
+  const emptyQuotes = new Map();
   const emptyTerms = (from, to) => {
     if (from === to) return null;
-    try { return worldShipTransportTerms(data, holding, ship, from, to, { context: world }); }
-    catch (_error) { return null; }
+    const key = JSON.stringify([from, to]);
+    if (!emptyQuotes.has(key)) {
+      let terms = null;
+      try { terms = worldShipTransportTerms(data, holding, ship, from, to, { context: world }); }
+      catch (_error) { /* Cache unavailable pairs too, only for this quote. */ }
+      emptyQuotes.set(key, terms);
+    }
+    return emptyQuotes.get(key);
   };
   for (const from of points) for (const to of points) {
     if (from === to) continue;
@@ -101,13 +109,14 @@ export function prepareTransportContext({ data, holding, request = {}, isGM = fa
   const from = direction === "inbound" ? context.market.regionId : endpoint;
   const to = direction === "inbound" ? endpoint : context.market.regionId;
   const state = data.meta?.transportV2;
-  const startQd = Math.max(Number(state?.clockQd ?? 0), Number(holding.gm?.calendaria?.lastQd ?? 0));
-  if (Number(holding.gm?.calendaria?.lastQd ?? 0) < startQd) throw new Error("Дата поселения отстаёт от общей даты перевозок. Проведите недостающие периоды перед новым заказом.");
+  const clockOffsetQd = transportClockOffsetQd(data, holding);
+  const startQd = transportHoldingQd(data, holding);
+  if (startQd < Number(state?.clockQd ?? 0)) throw new Error("Дата поселения отстаёт от общей даты перевозок. Проведите недостающие периоды перед новым заказом.");
   const ship = request.ownShipId ? holding.special?.ships?.list?.find((row) => row.id === request.ownShipId) : null;
   if (request.ownShipId && !ship) throw new Error("Выбранный корабль не найден.");
   if (ship) {
     const points = [...new Set([home, context.market.regionId, ...services.flatMap((row) => [row.from, row.to])])].filter((id) => !id.endsWith(":holding")).slice(0, 24);
-    services.push(...ownServices(data, holding, ship, points, { ...request, riskBps: configuration.riskBps, accessLimit: logistics?.accessLevel ?? 0 }, startQd).map((service) => ({ ...service,
+    services.push(...ownServices(data, holding, ship, points, { ...request, riskBps: configuration.riskBps, accessLimit: logistics?.accessLevel ?? 0 }, startQd - clockOffsetQd).map((service) => ({ ...service,
       from: service.from === home && direction === "outbound" ? endpoint : service.from,
       to: service.to === home && direction === "inbound" ? endpoint : service.to })));
   }
@@ -130,13 +139,14 @@ export function prepareTransportContext({ data, holding, request = {}, isGM = fa
   const insuranceCopper = request.insurance === false ? 0 : Math.ceil(valueCopper * configuration.insuranceBps / 10000);
   const funding = shipTransportFunding({ expensesCopper: plan.ownExpensesCopper, reserveCopper: ship ? Number(request.reserveCopper ?? 0) : 0,
     onboardCopper: ship?.onboardCopper ?? 0 });
-  const treasuryCopper = (direction === "inbound" ? valueCopper : 0) + taxCopper + insuranceCopper
-    + plan.totalCopper - plan.ownExpensesCopper + funding.treasuryCopper;
+  const totalCopper = transportMoney([plan.totalCopper, taxCopper, insuranceCopper]);
+  const treasuryCopper = transportMoney([direction === "inbound" ? valueCopper : 0, taxCopper, insuranceCopper,
+    plan.totalCopper - plan.ownExpensesCopper, funding.treasuryCopper]);
   const commercial = { marketId: context.market.id, marketRegionId: context.market.regionId,
     marketLabel: context.quote.marketLabel ?? context.market.label ?? context.market.name, targetRoomId: request.targetRoomId ?? "outdoors",
     lines, taxCopper, insuranceCopper, insuranceCoverageBps: insuranceCopper ? configuration.insuranceCoverageBps : 0, reserveCopper: funding.reserveCopper,
     revenueOnBoard: direction === "outbound" && plan.stages.at(-1).service.kind === "owned" };
-  return { plan, services, commercial, ship, lines, search, treasuryCopper, valueCopper, totalCopper: plan.totalCopper + taxCopper + insuranceCopper,
+  return { plan, services, commercial, ship, lines, search, treasuryCopper, valueCopper, totalCopper, clockOffsetQd,
     warnings: cargo.filter((lot) => lot.shelfLifeQd > 0 && lot.ageQd + plan.arrivalQd - startQd >= lot.shelfLifeQd)
       .map((lot) => `${lot.name || lot.resourceId}: срок хранения истечёт до прибытия. Порча не покрывается страховкой.`),
     affordable: treasuryCopper <= (holding.storage.moneyCopper ?? 0), sourceToken: transportSourceToken(data, holding),
