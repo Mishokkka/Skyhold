@@ -37,10 +37,14 @@ export function previewSharedMarketMigration(data = {}) {
     const reservedDemand = Object.values(reservations).reduce((sum, row) => sum + whole(row.qty), 0);
     if (reservedDemand > baseDemand) blockers.push(`${key}: обещано ${reservedDemand}, единый спрос ${baseDemand}. Завершите часть поставок перед объединением.`);
     const consumedOutstanding = Math.min(Math.max(0, baseDemand - reservedDemand), rows.reduce((sum, row) => sum + row.consumedOutstanding, 0));
+    const recoveryDurationTendays = Math.max(...rows.map((row) => row.recoveryDurationTendays));
     demand[key] = { ...rows[0], baseDemand, reservations, reservedDemand, consumedOutstanding,
       availableDemand: Math.max(0, baseDemand - reservedDemand - consumedOutstanding),
       recoveryStartedTenday: clockTenday, recoveryStartConsumed: consumedOutstanding, lastRecoveryTenday: clockTenday,
-      recoveryDurationTendays: Math.max(...rows.map((row) => row.recoveryDurationTendays)),
+      // The migration already restarts recovery at its shared clock (as for stock).
+      // Rebuild the dated cohort from ALL outstanding balances, including legacy rows.
+      recoveryLots: consumedOutstanding ? [{ qty: consumedOutstanding, startedTenday: clockTenday, durationTendays: recoveryDurationTendays }] : [],
+      recoveryDurationTendays,
       revision: Math.max(...rows.map((row) => row.revision)) + 1,
       reservationOperationIds: histories(rows, "reservationOperationIds"), consumptionOperationIds: histories(rows, "consumptionOperationIds"),
       restorationOperationIds: histories(rows, "restorationOperationIds") };

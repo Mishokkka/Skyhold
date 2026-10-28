@@ -40,6 +40,12 @@ export async function openMarketApp(options = {}) {
   return rememberAppClass(module.SkyholdMarketApp).open(options);
 }
 
+export async function openTransportApp(options = {}) {
+  await ensureSkyholdStylesheet("secondary");
+  const module = await import("./transport-app.js");
+  return rememberAppClass(module.SkyholdTransportApp).open(options);
+}
+
 export async function openBankApp(options = {}) {
   await Promise.all([ensureSkyholdStylesheet("secondary"), ensureSkyholdTemplateGroup("bankWindow")]);
   const module = await import("./bank-app.js");

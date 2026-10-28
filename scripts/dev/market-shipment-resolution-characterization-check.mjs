@@ -192,14 +192,17 @@ assert.equal(normalized.riskStatus, "needsResolution");
 assert.equal(normalized.riskProposal.outcome, "lost");
 assert.equal(normalized.riskSeed, unresolved.order.riskSeed);
 
-const marketAppSource = readFileSync(path.join(root, "scripts/apps/market-app.js"), "utf8");
-const marketTemplate = readFileSync(path.join(root, "templates/market-app.hbs"), "utf8");
-assert.match(marketAppSource, /async _onResolveShipmentRisk[\s\S]*?if \(!game\.user\?\.isGM\)/, "shipment resolution action must reject non-GM clients");
-assert.match(marketAppSource, /async _onResolveShipmentRisk[\s\S]*?SkyholdData\.updateHolding\(/, "shipment resolution must commit through the authority holding transaction");
-assert.match(marketAppSource, /riskResolutionId[\s\S]*?stale: true/, "shipment resolution must reject a stale event snapshot");
-assert.match(marketTemplate, /\{\{#if canResolveRisk\}\}[\s\S]*data-action="market-resolve-shipment-risk"/, "full resolution controls must render only from the GM permission context");
-for (const outcome of ["proposal", "clear", "delayed", "lost"]) {
-  assert.ok(marketTemplate.includes(`data-risk-outcome="${outcome}"`), `GM UI must expose ${outcome} resolution`);
+// Runtime now resolves physical transport incidents rather than each old shipment separately.
+const appSource = readFileSync(path.join(root, "scripts/apps/transport-app.js"), "utf8");
+const executorSource = readFileSync(path.join(root, "scripts/apps/transport-operation-executor.js"), "utf8");
+const template = readFileSync(path.join(root, "templates/transport-app.hbs"), "utf8");
+assert.match(executorSource, /const gmOnly = \[[^\]]*"transport-incident"/, "physical incident resolution is GM-only");
+assert.match(executorSource, /if \(gmOnly && !user\.isGM\) throw/, "authority rejects non-GM resolution");
+assert.ok(executorSource.indexOf("return transaction(") < executorSource.indexOf("resolveTransportIncident("), "incident resolution is transactional");
+assert.match(executorSource, /op\.expectedRevision !== data\.meta\.revision \|\| op\.sourceToken !== transportSourceToken/, "incident resolution rejects stale shared event state");
+assert.match(appSource, /const incidents = permissions\.isGM \?/, "players never receive incident controls in their normal window context");
+for (const outcome of ["success", "delay", "loss"]) {
+  assert.ok(template.includes(`data-action="transport-incident-${outcome}"`), `GM UI must expose ${outcome} resolution`);
 }
 
 console.log("FBL Skyhold shipment resolution: deterministic proposal, isolated blocking, explicit manual-delivery waiver, hidden player context, GM overrides and deferred replay-safe insurance passed.");

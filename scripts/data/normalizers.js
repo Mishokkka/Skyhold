@@ -27,6 +27,7 @@ import { savedMarketTransportPlanFields } from "./market/transport-plan.js";
 import { normalizeFinanceObligationsState } from "./finance/obligations.js";
 import { normalizeInternalDemandConfig } from "./economy/internal-demand.js";
 import { normalizeShipsState } from "./ships.js";
+import { ensureTransportState, transportCargoReservations } from "./transport/state.js";
 
 export { clearBuildingReferences, clearPersonReferences };
 
@@ -156,10 +157,13 @@ export function migrateData(stored, options = {}) {
     // an unknown legacy version; defaults are supplied by new-world creation.
     migrated.meta.templateCatalogVersion = storedTemplateVersion;
     migrated.meta.revision = Math.max(0, toNumber(migrated.meta.revision, 0));
+    ensureTransportState(migrated);
     return migrated;
   }
 
-  return migrateLegacySettlement(stored, normalize);
+  const migrated = migrateLegacySettlement(stored, normalize);
+  ensureTransportState(migrated);
+  return migrated;
 }
 
 export function normalizeCatalogPartition(storedCatalog, options = {}) {
@@ -613,13 +617,15 @@ export function mergeHoldingDefaults(holding, options = {}) {
   const normalizedResources = merged.storage.resources.map((row) => normalizeResourceRow(row, { compactBatches: false }));
   const regularResources = [];
   const regularResourceIndex = new Map();
+  const transportSourceRows = new Set(transportCargoReservations(merged).map(lot => lot.rowId));
   for (const row of normalizedResources) {
     if (normalizeResourceId(row.resourceId, row.name) === "money") merged.storage.moneyCopper += toNumber(row.qty, 0);
     else {
       const key = storageResourceKey(row);
       const existing = regularResourceIndex.get(key);
-      if (!existing) {
-        regularResourceIndex.set(key, row);
+      if (!existing || transportSourceRows.has(row.id) || transportSourceRows.has(existing.id)) {
+        // An accepted transport contract retains its source row/batch until dispatch or expiry.
+        if (!existing) regularResourceIndex.set(key, row);
         regularResources.push(row);
       } else {
         remapOutboundStorageRowId(merged, row.id, existing.id);

@@ -65,7 +65,7 @@
                   <td class="fbls-resident-work-cell">
                     {{#if restingOnShip}}
                       {{#if ../canManagePeople}}
-                        <button type="button" class="fbls-button compact fbls-crew-shore-button" data-action="crew-shore-duty" data-resident-id="{{id}}" data-ship-id="{{assignedShipId}}" data-holding-id="{{../holding.id}}" data-revision="{{../data.meta.revision}}" title="Считать обычным жителем до возвращения на корабль" aria-label="В поселение: {{name}}"><i class="fa-solid fa-person-walking" aria-hidden="true"></i> В поселение</button>
+                        <button type="button" class="fbls-button compact fbls-crew-shore-button" data-action="crew-shore-duty" data-resident-id="{{id}}" data-ship-id="{{assignedShipId}}" data-holding-id="{{../holding.id}}" data-revision="{{../data.meta.revision}}" {{#if transportBusy}}disabled{{/if}} title="{{#if transportBusy}}Дождитесь завершения транспортного заказа корабля{{else}}Считать обычным жителем до возвращения на корабль{{/if}}" aria-label="В поселение: {{name}}"><i class="fa-solid fa-person-walking" aria-hidden="true"></i> В поселение</button>
                       {{else}}На отдыхе{{/if}}
                     {{else}}
                     {{#if ../canManagePeople}}

@@ -1,9 +1,17 @@
 import { shipNextAction } from "../../engines/ships/summary.js";
 import { prepareShipCommandAvailability, shipPresentationTimelineQd } from "./ship-command-availability.js";
+import { transportOrders } from "../../data/transport/state.js";
+
+export function shipTransportState(holding, ship) {
+  const busy = Boolean(ship.transportOrderId);
+  const order = busy ? transportOrders(holding).find(row => row.id === ship.transportOrderId) : null;
+  return { busy, order, inTransit: busy && !order?.shipArrived };
+}
 
 /** Shared, read-only presentation. The fleet overview must not compose markets. */
 export function prepareShipManagementState(holding, ship, { permissions, readiness, money, offers = [], returnOffer = null } = {}) {
-  const inTransit = Boolean(ship.activeVoyage);
+  const transport = shipTransportState(holding, ship);
+  const inTransit = Boolean(ship.activeVoyage || transport.inTransit);
   const atHome = ship.location?.kind === "home" && !inTransit;
   const atForeignPort = ship.location?.kind === "market" && !inTransit;
   const settlementQd = Number(holding.gm?.calendaria?.lastQd ?? 0);
@@ -19,7 +27,7 @@ export function prepareShipManagementState(holding, ship, { permissions, readine
   const delayed = soloDelayed || bundle?.status === "final-delay"
     || bundle?.status === "at-port" && settlementQd < Number(bundle.delayUntilQd ?? 0);
   const awaitingOutcome = ship.activeVoyage?.awaitingOutcome === true;
-  const statusLabel = ownSale ? (inTransit && !awaitingOutcome ? "Везёт товар поселения" : "Ожидает исхода продажи")
+  let statusLabel = ownSale ? (inTransit && !awaitingOutcome ? "Везёт товар поселения" : "Ожидает исхода продажи")
     : delayed ? "Задержан в порту" : bundle?.status === "awaiting-outcome" ? "Заказы ждут итога"
       : awaitingOutcome ? "Ожидает итога" : inTransit ? "В пути" : atHome ? "В поселении" : "В чужом порту";
   const permissionReason = !permissions || permissions.canManageShips ? "" : !permissions.mayManageShips
@@ -46,21 +54,34 @@ export function prepareShipManagementState(holding, ship, { permissions, readine
     nextAction = commands.continueBundle.needsFunds ? "Пополнить бортовые деньги перед следующим участком"
       : "Проверить возможность продолжения маршрута с ГМом";
   }
-  const residentPermissionReason = !permissions || permissions.canEditResidents ? "" : !permissions.mayEditResidents
+  const residentPermissionReason = transport.busy ? "Экипаж занят перевозкой; дождитесь освобождения корабля."
+    : !permissions || permissions.canEditResidents ? "" : !permissions.mayEditResidents
     ? "Для береговой работы нужно отдельное разрешение ГМа."
     : "Береговая работа временно недоступна: нужен активный ГМ и соединение с ним.";
   const departureIssues = [];
-  if (!inTransit && !bundle && !ownSale) {
+  if (!inTransit && !bundle && !ownSale && !transport.busy) {
     if (ship.condition !== "ready") departureIssues.push("Корабль требует обслуживания; необходимо решение ГМа.");
     if (readiness && !readiness.ready) departureIssues.push(...readiness.issues.map((issue) => issue.message));
     if (commandMoney?.obligationsCopper > commandMoney?.balanceCopper) departureIssues.push("Не хватает доступных денег для оплаты счетов к отправлению.");
     if (commands.clockIssue) departureIssues.push(commands.clockIssue);
   }
   if (money?.calculationValid === false) departureIssues.push("Финансовые данные требуют проверки ГМа; свободные средства не рассчитаны.");
+  const transportStageText = transport.order ? transport.order.stageIndex < transport.order.stages.length
+    ? `Участок ${transport.order.stageIndex + 1} из ${transport.order.stages.length}`
+    : "Груз обработан; завершение рейса и расчётов" : "";
+  if (transport.busy) {
+    statusLabel = transport.order?.fundingNeededCopper ? "Ожидает оплаты перевозки"
+      : transport.order?.status === "needsResolution" ? "Перевозка ждёт решения ГМа"
+        : transport.order?.status === "waitingCarrier" ? "Ожидает транспорта"
+          : transport.order?.shipArrived ? "Перевозка завершает расчёт" : "Выполняет перевозку";
+    nextAction = transport.order?.fundingNeededCopper ? "Открыть «Перевозки своего груза» и покрыть дополнительные расходы"
+      : "Открыть «Перевозки своего груза» для состояния заказа и дальнейших действий";
+  }
   return {
+    transportBusy: transport.busy, transportStageText,
     ownSale, statusLabel, nextAction, permissionReason, residentPermissionReason, departureIssues, worldOffersGenerated, commands,
     needsCrewAttention: Boolean(readiness && !readiness.ready),
     needsMoneyAttention: Boolean(money?.shortageCopper || money?.calculationValid === false),
-    canManageResidents: Boolean(permissions?.canEditResidents)
+    canManageResidents: Boolean(permissions?.canEditResidents && !transport.busy)
   };
 }

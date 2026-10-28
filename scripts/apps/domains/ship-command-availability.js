@@ -21,6 +21,7 @@ export function prepareShipCommandAvailability(holding, ship, { permissions, per
   if (permissions && !permissions.canManageShips && !permissionReason) commonIssues.unshift("Управление кораблём недоступно.");
   const result = { clockIssue, clockBlocked: Boolean(clockIssue), departurePortBillCopper: null,
     continueBundle: null, resolveBundle: null, resolveWorld: null, returnHome: null };
+  if (ship.transportOrderId) return result;
   if (!ship.activeVoyage && !ship.orderBundle && ship.location?.kind === "market") {
     try { result.departurePortBillCopper = worldShipPortDebtCopper(ship, shipQd); }
     catch (_error) { /* Unknown billing is explained by the departure command, without repairing it. */ }

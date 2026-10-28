@@ -82,12 +82,13 @@ for (const serviceLevel of ["standard", "express", "charter"]) {
 
 assert.equal(marketPurchaseCostPresentation({}).hasLandedLines, false);
 assert.equal(marketPurchaseCostPresentation({ totalCopper: 1, deliveryCopper: 1, lines: [] }).allocationValid, false);
-const appSource = readFileSync(new URL("../apps/market-app.js", import.meta.url), "utf8");
-const template = readFileSync(new URL("../../templates/market-app.hbs", import.meta.url), "utf8");
-assert.match(appSource, /landedDetails[\s\S]*?"toggle"[\s\S]*?this\.landedPricesOpen = Boolean\(landedDetails\.open\)/);
-assert.match(template, /data-market-landed-prices \{\{#if landedPricesOpen\}\}open/);
-assert.match(template, /Цена товаров с доставкой/);
-assert.match(template, /Не покрывается при полной утрате/);
-assert.match(appSource, /canCancel: Boolean\(permissions\.isGM && cancellation\.cancellable\)/, "financial explanations preserve GM-only cancellation");
+// The new checkout presents one order total and inspectable physical departures.
+const appSource = readFileSync(new URL("../apps/transport-app.js", import.meta.url), "utf8");
+const template = readFileSync(new URL("../../templates/transport-app.hbs", import.meta.url), "utf8");
+assert.match(appSource, /this\._disclosures\.bind\(this\.element\)/);
+assert.match(template, /data-fbls-disclosure="transport-departures:/);
+assert.match(template, /selected\.value[\s\S]*selected\.treasury/);
+assert.match(template, /selected\.coveragePercent[\s\S]*порча и расходы доставки не страхуются/);
+assert.match(appSource, /canCancel: permissions\.canUseStorage && !order\.shipStarted/, "financial explanations retain granted cancellation rights and departure lock");
 
 console.log("Market purchase cost presentation: mass/value attribution, exact copper conservation, batching, average unit price, saved coverage privacy and retained disclosure state passed.");

@@ -48,6 +48,20 @@ export function marketDemandRecoveryDuration(marketId = "", demandId = "") {
   return 2 + (stableSeed(`${marketId}|${demandId}|market-demand-recovery`) % 5);
 }
 
+/** Dated partial sales share one recovery cohort per game-date/duration, not per FIFO lot. */
+export function normalizeDemandRecoveryLots(rows = []) {
+  const groups = new Map();
+  for (const row of rows) {
+    const qty = boundedInteger(row?.qty), startedTenday = boundedInteger(row?.startedTenday);
+    const durationTendays = boundedInteger(row?.durationTendays, 2, 2, 6);
+    if (!qty) continue;
+    const key = `${startedTenday}:${durationTendays}`;
+    const prior = groups.get(key);
+    groups.set(key, { qty: boundedInteger(qty + (prior?.qty ?? 0)), startedTenday, durationTendays });
+  }
+  return [...groups.values()].sort((a, b) => a.startedTenday - b.startedTenday || a.durationTendays - b.durationTendays);
+}
+
 export function normalizeMarketDemandState(value = {}) {
   const source = value && typeof value === "object" && !Array.isArray(value)
     ? (value.entries && typeof value.entries === "object" && !Array.isArray(value.entries) ? value.entries : value)
@@ -72,6 +86,7 @@ export function normalizeMarketDemandState(value = {}) {
       availableDemand: Math.max(0, baseDemand - reservedDemand - consumedOutstanding),
       reservedDemand,
       consumedOutstanding,
+      ...(Array.isArray(raw.recoveryLots) ? { recoveryLots: normalizeDemandRecoveryLots(raw.recoveryLots) } : {}),
       reservations,
       recoveryStartedTenday: boundedInteger(raw.recoveryStartedTenday),
       recoveryStartConsumed: Math.min(baseDemand, boundedInteger(raw.recoveryStartConsumed, consumedOutstanding)),

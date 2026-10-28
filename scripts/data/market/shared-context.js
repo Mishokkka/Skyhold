@@ -1,4 +1,5 @@
-import { economyDayIndex } from "../../core/economy-calendar.js";
+import { economyCalendarQd } from "../../core/economy-calendar.js";
+import { getCalendariaHoursPerDay } from "../../integrations/calendaria-bridge.js";
 
 const owners = new WeakMap();
 export function bindSharedMarketHolding(holding, state) {
@@ -20,9 +21,16 @@ export function sharedMarketTenday(holding, localPeriod = null) {
   const requested = localPeriod === null || localPeriod === undefined ? local : Math.max(0, Math.floor(Number(localPeriod) || 0));
   const state = owners.get(holding);
   if (!state) return requested;
-  const days = economyDayIndex(holding);
-  const dated = days === null ? local : Math.floor(days / 10);
+  const calendarQd = economyCalendarQd(holding, getCalendariaHoursPerDay());
+  const dated = calendarQd === null ? local : Math.floor(calendarQd / 40);
   return Math.max(Number(state.clockTenday) || 0, dated + Math.max(0, requested - local));
+}
+/** An anchored transport date remains valid when the stored calendar stops while local economy advances. */
+export function sharedMarketEventTenday(holding, qd, absoluteEventQd = null) {
+  const localQd = Math.max(0, Number(holding?.gm?.calendaria?.lastQd) || 0);
+  if (owners.has(holding) && Number.isSafeInteger(absoluteEventQd)) return Math.max(0, Math.floor(absoluteEventQd / 40));
+  const calendarQd = owners.has(holding) ? economyCalendarQd(holding, getCalendariaHoursPerDay()) : null;
+  return Math.max(0, Math.floor((calendarQd === null ? qd : calendarQd + qd - localQd) / 40));
 }
 export function writeMarketState(holding, key, value, tenday = null) {
   const state = owners.get(holding);
@@ -34,7 +42,7 @@ export function writeMarketState(holding, key, value, tenday = null) {
     holding.special.market[key] = value;
   }
 }
-export function advanceSharedMarketClock(holding) {
+export function advanceSharedMarketClock(holding, targetQd = null, absoluteEventQd = null) {
   const state = owners.get(holding);
-  if (state) state.clockTenday = sharedMarketTenday(holding);
+  if (state) state.clockTenday = Math.max(sharedMarketTenday(holding), targetQd === null ? 0 : sharedMarketEventTenday(holding, targetQd, absoluteEventQd));
 }

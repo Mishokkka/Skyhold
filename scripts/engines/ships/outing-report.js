@@ -181,7 +181,8 @@ export function recordShipOutingFunds(ship, receipt = {}, { clockQd, reason = ""
   const port = category === "port" || receiptId.includes(":idle:market:");
   const actualExternal = internal ? 0 : external;
   return update(ship, (report) => {
-    if (actualExternal > 0) report.incomeCopper = add(report.incomeCopper, actualExternal, "внешние поступления");
+    if (actualExternal > 0 && kind === "expense-refund") report.expenseCopper = Math.max(0, report.expenseCopper - actualExternal);
+    else if (actualExternal > 0) report.incomeCopper = add(report.incomeCopper, actualExternal, "внешние поступления");
     if (actualExternal < 0) {
       const expense = Math.abs(actualExternal);
       report.expenseCopper = add(report.expenseCopper, expense, "фактические расходы");

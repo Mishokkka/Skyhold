@@ -258,6 +258,7 @@ function normalizedQuote(ship, offer) {
 }
 
 function ensureWorldReady(ship, bundleId = null) {
+  if (ship?.transportOrderId) throw new Error("Корабль занят транспортным заказом. Управляйте им в окне перевозок.");
   if (ship?.navigationMode !== "world") throw new Error("Корабль ещё не подключён к мировому рынку.");
   if (ship?.condition !== "ready" || ship?.activeVoyage) throw new Error("Корабль занят или требует ремонта.");
   if (ship.orderBundle && ship.orderBundle.id !== bundleId) throw new Error("Сначала завершите принятые составные заказы.");
@@ -696,11 +697,13 @@ export function resolveWorldShipBundleStop(holding, ship, { operationId: supplie
 }
 
 /** Advance deterministic world travel and idle upkeep. This function never rolls outcomes. */
-export function advanceWorldShips(holding, targetQd, { shipId = null } = {}) {
+export function advanceWorldShips(holding, targetQd, { shipId = null, transportOrderId = null } = {}) {
   const target = integer(targetQd, "время", 0, Number.MAX_SAFE_INTEGER);
   const report = { returned: [], arrived: [], underway: [], awaiting: [], blocked: [], expenses: [] };
   for (const ship of holding.special?.ships?.list ?? []) {
     if (ship?.navigationMode !== "world" || (shipId && ship.id !== shipId)) continue;
+    if (ship.transportOrderId && !(ship.transportOrderId === transportOrderId && ship.portBilling
+      && ship.location?.kind !== "transit" && !ship.activeVoyage && !ship.orderBundle)) continue;
     try {
       const timeline = worldShipTimelineQd(holding, ship);
       if (target < timeline) throw new Error("Дата поселения раньше уже обработанного времени корабля.");

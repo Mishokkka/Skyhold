@@ -1,3 +1,5 @@
+import { transportCargoReservations, expireTransportReservation } from "../data/transport/state.js";
+
 export const MAX_RESOURCE_BATCHES = 8;
 export const INTERNAL_DEMAND_BATCH_COOLDOWN_QD = 40;
 
@@ -223,7 +225,8 @@ export function reservedResourceBatchQuantities(holding, row = {}) {
   if (!rowId) return new Map();
   const terminal = new Set(["delivered", "lost", "cancelled"]);
   const result = new Map();
-  for (const order of holding?.special?.market?.outbound?.orders ?? []) {
+  for (const order of [...(holding?.special?.market?.outbound?.orders ?? []),
+    { status: "booked", dispatchStatus: "booked", cargoReservations: transportCargoReservations(holding) }]) {
     if (terminal.has(String(order?.status ?? "")) || String(order?.dispatchStatus ?? "booked") !== "booked") continue;
     for (const cargo of order?.cargoReservations ?? order?.cargo ?? []) {
       if (String(cargo?.rowId ?? cargo?.storageRowId ?? "") !== rowId) continue;
@@ -414,6 +417,7 @@ export function finishResourceBatchPeriod(holding, {
       const kept = [];
       for (const batch of row.batches) {
         if (batch.ageQd >= effectiveShelfLifeQd) {
+          expireTransportReservation(holding, String(row.id ?? ""), batch.id);
           expired.push({
             rowId: String(row.id ?? ""),
             resourceId: String(row.resourceId ?? row.id ?? "custom"),

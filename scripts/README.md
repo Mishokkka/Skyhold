@@ -16,7 +16,7 @@
 | Схема, обычная загрузка, старые данные | `data/schema/`, `data/normalizers.js`, `data/normalizers/`; явные миграции — `workflows/buildings/`, `workflows/economy/` |
 | Хозяйственный период и его фазы | `apps/domains/events/economy-events.js`, `apps/domains/finance/economy-domain.js`, `engines/tenday/` |
 | Производство, еда, расходы, сельское хозяйство | `engines/economy/`; адаптеры состояния и сервисов — `apps/domains/finance/` |
-| Рынок и доставка | `engines/market/`, `data/market/`, `workflows/market/outbound-shipment.js`; UI — `apps/market-app.js` |
+| Рынок и доставка | Цены/запасы — `engines/market/`, `data/market/`; перевозки — `engines/transport/`, `workflows/transport/`, `data/transport/`; UI — `apps/market-app.js`, `apps/transport-app.js` |
 | Корабль и экипаж | `engines/ships/`, `apps/ship-operation-executor.js`, `apps/ships-context.js`, `apps/ship-app.js` |
 | Рабочие, штат, QD и план | `data/hybrid-labor.js`, `work-allocations.js`, `workforce-plan.js`, `engines/workers/`, `apps/domains/workforce-planner.js` |
 | Политика и её влияние на расчёты | `engines/politics/`, `data/politics-*.js`, `apps/politics-decision-context.js` |

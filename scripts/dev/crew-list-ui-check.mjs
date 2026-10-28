@@ -21,6 +21,9 @@ assert.equal(ui._canReturnResidentToShip({ ...sailor, shipAssignment: { shipId: 
 ship.activeVoyage = { id: "flight" };
 assert.equal(ui._canReturnResidentToShip(sailor, holding), false);
 ship.activeVoyage = null;
+ship.transportOrderId = "transport-returned-awaiting-payment";
+assert.equal(ui._canReturnResidentToShip(sailor, holding), false, "a physically returned ship still needs to complete its transport assignment");
+delete ship.transportOrderId;
 ui._canManagePeople = () => false;
 assert.equal(ui._canReturnResidentToShip(sailor, holding), false);
 ui._canManagePeople = () => true;

@@ -139,6 +139,12 @@ export class SkyholdShipApp extends WindowFrameMixin(RenderSchedulerMixin(Handle
 
     root.addEventListener("click", (event) => {
       const button = event.target?.closest?.("[data-action]");
+      if (button && root.contains(button) && button.dataset.action === "ship-open-transport") {
+        event.preventDefault();
+        dispatchDelegatedAction(this, event, button,
+          () => import("./lazy-apps.js").then(({ openTransportApp }) => openTransportApp({ holdingId: this.holdingId })));
+        return;
+      }
       if (button && root.contains(button) && button.dataset.action === "ship-place-home") {
         dispatchDelegatedAction(this, event, button, (delegated) => placeShipHome(this, delegated));
         return;
@@ -266,7 +272,7 @@ export class SkyholdShipApp extends WindowFrameMixin(RenderSchedulerMixin(Handle
         const holding = data.holdings?.find((row) => String(row?.id ?? "") === this.holdingId);
         const ship = holding?.special?.ships?.list?.find((row) => String(row?.id ?? "") === this.shipId);
         if (!ship) throw new Error("Корабль больше не найден.");
-        if ((ship.activeVoyage || ship.orderBundle) && tail !== "homeUpkeepEnabled") throw new Error("Настройки нельзя менять во время активного рейса.");
+        if ((ship.activeVoyage || ship.orderBundle || ship.transportOrderId) && tail !== "homeUpkeepEnabled") throw new Error("Настройки нельзя менять во время активного рейса.");
         if (tail === "homeUpkeepEnabled" && ship.navigationMode !== "world") throw new Error("Подключите корабль к мировому рынку.");
         if (["speedKmPerDay", "capacityLoadPoints", "hiddenCapacityLoadPoints"].includes(tail)
           && (ship.location?.kind !== "home" || ship.status !== "docked")) throw new Error("Параметры корабля меняются только дома между рейсами.");

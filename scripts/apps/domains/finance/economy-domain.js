@@ -18,9 +18,7 @@ import {
 import {
   availableResourceBatchInventory,
   availableResourceRowQuantity,
-  internalDemandBatchClockQd,
   isResourceBatchPeriodActive,
-  nextInternalDemandBatchAvailabilityQd,
   syncResourceRowBatches,
   setResourceBatchPeriodStep,
   takeResourceBatchById
@@ -68,9 +66,6 @@ import {
 } from "../../../engines/economy/finance-obligations.js";
 import { financePeriodIdentity, plannedWorkerQd, prepareFinancePeriod } from "../../../engines/economy/finance-period.js";
 import { appendEconomyLedger, economyLedgerTotals, normalizeEconomyLedger } from "../../../engines/economy/ledger.js";
-import { advanceMarketShipments } from "../../../engines/market/shipment.js";
-import { recoverMarketDemand } from "../../../engines/market/demand.js";
-import { advanceMarketOutboundShipments } from "../../../workflows/market/outbound-shipment.js";
 import { addCalendariaQd, getCalendariaSeasonSnapshot, getCalendariaSnapshot } from "../../../integrations/calendaria-bridge.js";
 import { clone } from "../../../data/utils.js";
 import { beginPerishableStoragePeriod, cancelPerishableStoragePeriod, expireProductionIngredients } from "../../../engines/economy/perishable-storage.js";
@@ -1743,21 +1738,22 @@ async _runEconomyForQd(holding, periodQd = 40, { operationId = "", createdAt = "
   if (worldShips && data) worldShips.refreshWorldShipHomeEconomy(data, holding, { report });
   const residentPresenceDaysById = worldShips?.worldShipPresenceDays(holding, periodStartQd, periodStartQd + qd) ?? null;
 
+  if (data) {
+    const { advanceTransportShipments } = await import("../../../workflows/transport/orders.js");
+    const transport = advanceTransportShipments(data, holding, periodStartQd + qd, this, { log: false, deferInternalDemand: true });
+    for (const row of transport) {
+      report.work.push(`Перевозка ${row.orderId}: получено ${row.receivedQty} ед.; расходы доставки ${row.spentCopper} ММ.`);
+    }
+    appendEconomyLedger(report, transport.entries.map((entry) => ({ ...entry, domain: "market",
+      kind: entry.resourceId === "money" ? "money" : "resource",
+      meta: { internalTransfer: entry.kind === "transfer", storageKind: entry.kind } })));
+  }
+
   // Logistics is resolved at the boundary of the elapsed period. Cargo that
   // reaches the settlement during that period is therefore available to the
   // production, food, construction, and trade phases resolved below.
-  this._advanceMarketShipmentsForQd(holding, qd, report);
-  // Own outbound consignments must observe the ship at this boundary. Other
-  // world ships keep their usual end-of-period economy phase below.
-  if (worldShips) {
-    const ownSaleShipIds = new Set((holding.special?.market?.outbound?.orders ?? [])
-      .filter((order) => order.ownShipId && !["delivered", "lost", "cancelled"].includes(order.status))
-      .map((order) => order.ownShipId));
-    for (const shipId of ownSaleShipIds) {
-      worldShips.advanceWorldShipEconomy(holding, periodStartQd + qd, report, appendEconomyLedger, { shipId });
-    }
-  }
-  this._advanceMarketOutboundForQd(holding, qd, report, { advancedAt: createdAt });
+  // Transport owns its assigned ships. Other world voyages keep their usual
+  // end-of-period economy phase below.
   if ((holding.special?.ships?.list ?? []).some((ship) => ship?.activeVoyage)) {
     const { advanceShipVoyages } = await import("../../../engines/ships/runtime.js");
     const ships = advanceShipVoyages(holding, (holding.gm?.calendaria?.lastQd ?? 0) + qd);
@@ -1851,216 +1847,6 @@ async _runEconomyForQd(holding, periodQd = 40, { operationId = "", createdAt = "
   if (report.politics.influenceGained) report.work.push(`Политика: Влияние +${report.politics.influenceGained}.`);
   if (report.politics.expiredDecreeIds.length) report.work.push(`Политика: закончились указы ${report.politics.expiredDecreeIds.join(", ")}.`);
   return report;
-},
-
-_marketShipmentDependencies({ deferInternalDemand = false } = {}) {
-  return {
-    addMoney: (holding, amount) => this._addMoney(holding, amount),
-    storageAddWithOverflow: (holding, resource, qty) => this._storageAddWithOverflow(holding, resource, qty),
-    appendStorageLog: (holding, entries) => this._appendStorageLog(holding, entries),
-    formatCurrency: (value) => this._formatCopperCurrency(value),
-    internalDemandAvailableFromQd: (holding) => deferInternalDemand
-      ? nextInternalDemandBatchAvailabilityQd(holding)
-      : internalDemandBatchClockQd(holding)
-  };
-},
-
-_advanceMarketOutboundForQd(holding, qd = 0, report = null, { advancedAt = "" } = {}) {
-  const timestamp = String(advancedAt ?? "").trim() || new Date().toISOString();
-  const completedTendays = Math.max(0, Math.floor(this._safeNumber(qd, 0) / 40));
-  const targetTenday = Math.max(0, Math.floor((Number(holding.gm?.calendaria?.lastQd) || 0) / 40)) + completedTendays;
-  // Сначала восстанавливаем спрос, который был потреблён до начала этого
-  // периода. Поставка, доставленная на текущей границе, затем запускает свой
-  // новый цикл и не получает бесплатный тик восстановления в тот же Apply.
-  const demandRecovery = recoverMarketDemand({
-    holding,
-    currentTenday: targetTenday,
-    updatedAt: timestamp
-  });
-  if (!demandRecovery.ok) throw new Error(demandRecovery.message || "Не удалось восстановить внешний спрос.");
-  const outboundReport = advanceMarketOutboundShipments({
-    holding,
-    elapsedQd: qd,
-    currentTenday: targetTenday,
-    advancedAt: timestamp,
-    dependencies: this._marketShipmentDependencies()
-  });
-  if (!outboundReport.ok) throw new Error(outboundReport.message || "Не удалось обработать исходящие рыночные поставки.");
-  if (report) {
-    report.marketOutbound = outboundReport;
-    report.marketDemandRecovery = demandRecovery;
-    for (const dispatch of outboundReport.dispatched ?? []) {
-      report.work.push(`Рынок: исходящий груз ${dispatch.orderId} отправлен, ${dispatch.qty} ед. снято с точных FIFO-партий.`);
-    }
-    for (const incident of outboundReport.needsResolution ?? []) {
-      if (incident.newEvent) appendHoldingOperation(holding, {
-        operationId: incident.operationId,
-        type: "market-outbound",
-        createdAt: timestamp,
-        title: "Событие с исходящей поставкой",
-        summary: "Эта партия ожидает отдельного решения GM; остальные операции периода продолжаются.",
-        payload: { orderId: incident.orderId, needsResolution: true, automatic: true }
-      });
-      report.work.push(`Рынок: исходящая поставка ${incident.orderId} ожидает решения GM.`);
-      if (incident.newEvent) appendEconomyLedger(report, {
-        domain: "market",
-        kind: "shipment",
-        name: "Исходящая поставка",
-        qty: 0,
-        sourceId: incident.orderId,
-        status: "needsResolution",
-        operationId: incident.operationId,
-        note: "Событие ожидает решения GM"
-      });
-    }
-    for (const delivery of outboundReport.delivered ?? []) {
-      const deliveryOperationId = String(delivery.operationId ?? `${delivery.orderId}:revenue`);
-      appendHoldingOperation(holding, {
-        operationId: deliveryOperationId,
-        type: "market-outbound",
-        createdAt: timestamp,
-        title: `Доставлена исходящая продажа: ${delivery.marketLabel || "внешний рынок"}`,
-        summary: `Выручка ${this._formatCopperCurrency(delivery.revenueCopper)} поступила ${delivery.ownShipId ? "на борт корабля" : "в казну"}; внешний спрос потреблён.`,
-        payload: { orderId: delivery.orderId, revenueCopper: delivery.revenueCopper, demandQty: delivery.demandQty, ownShipId: delivery.ownShipId, automatic: true }
-      });
-      report.work.push(`Рынок: исходящая продажа ${delivery.orderId} доставлена; выручка ${this._formatCopperCurrency(delivery.revenueCopper)}.`);
-      if (!delivery.ownShipId) appendEconomyLedger(report, {
-        domain: "market",
-        kind: "money",
-        resourceId: "money",
-        name: "Выручка исходящей продажи",
-        qty: delivery.revenueCopper,
-        roomId: "treasury",
-        sourceId: delivery.orderId,
-        status: "delivered",
-        operationId: deliveryOperationId,
-        note: "Оплата после доставки",
-        meta: { alreadyLogged: true, storageKind: "market-outbound-revenue" }
-      });
-    }
-    for (const blocked of outboundReport.blocked ?? []) report.skipped.push(`Исходящая поставка ${blocked.orderId}: ${blocked.message || "операция устарела"}.`);
-    if (demandRecovery.recoveredQty > 0) report.work.push(`Внешний спрос восстановился на ${demandRecovery.recoveredQty} ед.`);
-  }
-  return { outbound: outboundReport, demandRecovery };
-},
-
-_advanceMarketShipmentsForQd(holding, qd = 0, report = null) {
-  const shipmentReport = advanceMarketShipments({
-    holding,
-    elapsedQd: qd,
-    deliveredAt: new Date().toISOString(),
-    dependencies: this._marketShipmentDependencies({ deferInternalDemand: true })
-  });
-  if (!shipmentReport.ok) throw new Error(shipmentReport.message || "Не удалось обработать прибытие рыночной поставки.");
-  if (report) {
-    report.market = shipmentReport;
-    for (const incident of shipmentReport.needsResolution ?? []) {
-      if (incident.newEvent) appendHoldingOperation(holding, {
-        operationId: incident.operationId,
-        type: "market-purchase",
-        createdAt: incident.proposedAt,
-        title: `Событие с поставкой: ${incident.marketLabel}`,
-        summary: "Эта партия остановлена и ожидает отдельного решения GM. Остальные поставки и расчёт периода продолжаются.",
-        payload: { orderId: incident.orderId, orderOperationId: incident.orderOperationId, needsResolution: true, automatic: true }
-      });
-      report.work.push(`Рынок: с поставкой «${incident.marketLabel}» произошло событие; только эта партия ожидает решения GM.`);
-      if (incident.newEvent) appendEconomyLedger(report, {
-        domain: "market",
-        kind: "shipment",
-        name: incident.marketLabel,
-        qty: 0,
-        sourceId: incident.orderOperationId,
-        source: incident.marketLabel,
-        status: "needsResolution",
-        operationId: incident.operationId,
-        note: "Событие ожидает решения GM"
-      });
-    }
-    for (const delay of shipmentReport.delayed) {
-      appendHoldingOperation(holding, {
-        operationId: delay.operationId,
-        type: "market-purchase",
-        createdAt: delay.delayedAt,
-        title: `Задержана поставка: ${delay.marketLabel}`,
-        summary: `Маршрутное происшествие увеличило срок на ${delay.delayQd} QD. Груз продолжит движение автоматически.`,
-        payload: { orderId: delay.orderId, orderOperationId: delay.orderOperationId, delayQd: delay.delayQd, automatic: true }
-      });
-      report.work.push(`Рынок: поставка «${delay.marketLabel}» задержана на ${delay.delayQd} QD.`);
-      appendEconomyLedger(report, {
-        domain: "market",
-        kind: "shipment",
-        name: delay.marketLabel,
-        qty: delay.delayQd,
-        sourceId: delay.orderOperationId,
-        source: delay.marketLabel,
-        status: "delayed",
-        operationId: delay.operationId,
-        note: `Задержка ${delay.delayQd} QD`
-      });
-    }
-    for (const loss of shipmentReport.lost) {
-      appendHoldingOperation(holding, {
-        operationId: loss.operationId || `${loss.orderOperationId}:loss`,
-        type: "market-purchase",
-        createdAt: loss.lostAt,
-        title: `Утрачена поставка: ${loss.marketLabel}`,
-        summary: loss.payoutCopper > 0
-          ? `Груз утрачен. Страховая выплата: ${this._formatCopperCurrency(loss.payoutCopper)}.`
-          : "Груз утрачен без страховой выплаты.",
-        payload: { orderId: loss.orderId, orderOperationId: loss.orderOperationId, payoutCopper: loss.payoutCopper, automatic: true }
-      });
-      report.work.push(`Рынок: поставка «${loss.marketLabel}» утрачена${loss.payoutCopper > 0 ? `, страховка ${this._formatCopperCurrency(loss.payoutCopper)}` : ""}.`);
-      appendEconomyLedger(report, [{
-        domain: "market",
-        kind: "shipment",
-        name: loss.marketLabel,
-        qty: -Math.max(1, loss.cargoCount || 1),
-        sourceId: loss.orderOperationId,
-        source: loss.marketLabel,
-        status: "lost",
-        operationId: loss.operationId,
-        note: "Груз утрачен"
-      }, ...(loss.payoutCopper > 0 ? [{
-        domain: "market",
-        kind: "money",
-        resourceId: "money",
-        name: "Страховая выплата",
-        qty: loss.payoutCopper,
-        roomId: "treasury",
-        source: loss.marketLabel,
-        status: "paid",
-        operationId: loss.operationId,
-        note: "Выплата за утраченный груз",
-        meta: { alreadyLogged: true, storageKind: "market-insurance" }
-      }] : [])]);
-    }
-    for (const arrival of shipmentReport.delivered) {
-      appendHoldingOperation(holding, {
-        operationId: arrival.operationId,
-        type: "market-purchase",
-        createdAt: arrival.deliveredAt,
-        title: `Прибыла поставка: ${arrival.marketLabel}`,
-        summary: `${arrival.delivered.length} грузовых позиций доставлено после прохождения QD.`,
-        payload: { orderId: arrival.orderId, orderOperationId: arrival.orderOperationId, automatic: true }
-      });
-      report.work.push(`Рынок: прибыла поставка «${arrival.marketLabel}», грузовых позиций ${arrival.delivered.length}.`);
-      appendEconomyLedger(report, arrival.delivered.map((cargo) => ({
-        domain: "market",
-        kind: cargo.sourceType === "item" ? "item" : "resource",
-        resourceId: cargo.sourceType === "item" ? "" : String(arrival.storageEntries?.find((entry) => entry.name === cargo.name && entry.roomId === cargo.roomId)?.resourceId ?? "custom"),
-        name: cargo.name,
-        qty: cargo.qty,
-        roomId: cargo.roomId,
-        sourceId: arrival.orderOperationId,
-        source: arrival.marketLabel,
-        status: "delivered",
-        operationId: arrival.operationId,
-        note: "Прибытие рыночной поставки",
-        meta: { alreadyLogged: true, storageKind: "market-arrival" }
-      })));
-    }
-  }
-  return shipmentReport;
 },
 
 _foodConsumptionDependencies() {

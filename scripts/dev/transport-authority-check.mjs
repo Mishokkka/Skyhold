@@ -3,7 +3,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { normalizeEventRegionOptions } from "../data/random-events.js";
 import { worldMarketFixture } from "./world-ship-market-characterization-check.mjs";
-import { createMarketOperationExecutor } from "../apps/market-operation-executor.js";
+import { createMarketOperationExecutor } from "./fixtures/legacy-market-executor.mjs";
 import { authorityMarketLogistics, marketAuthoritySourceToken, marketPurchasePlanToken, prepareMarketAuthorityContext } from "../apps/market/authority-context.js";
 import { AUTO_CARRIERS } from "../engines/market/transport-planner.js";
 import { transportOfferAccessFixture } from "./fixtures/transport-offer-access.mjs";

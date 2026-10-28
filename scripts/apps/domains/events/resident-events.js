@@ -596,7 +596,7 @@ async _executeResidentContextAction(personId = "", action = "") {
 _canReturnResidentToShip(person, holding) {
   if (!this._canManagePeople() || !person || person.dead || isResidentAway(person) || isResidentRestingOnShip(person, holding)) return false;
   const ship = shipForResident(person, holding);
-  return Boolean(ship?.navigationMode === "world" && ship.location?.kind === "home" && !ship.activeVoyage && ship.status !== "away");
+  return Boolean(ship?.navigationMode === "world" && ship.location?.kind === "home" && !ship.activeVoyage && !ship.transportOrderId && ship.status !== "away");
 },
 
 async _showResidentActionMenu(personId = "", position = null) {

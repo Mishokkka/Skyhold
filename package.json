@@ -65,7 +65,8 @@
     "suite:combat": "node scripts/dev/suites/combat.mjs",
     "suite:ui": "node scripts/dev/suites/ui-contract.mjs",
     "package": "npm run check && npm run css:check && npm run perf:budget && node scripts/dev/package.mjs",
-    "transport:check": "node scripts/dev/transport-network-check.mjs && node scripts/dev/transport-search-check.mjs && node scripts/dev/transport-search-oracle-check.mjs && node scripts/dev/transport-plan-state-check.mjs && node scripts/dev/transport-authority-check.mjs && node scripts/dev/transport-route-ui-check.mjs"
+    "transport:check": "node scripts/dev/transport-network-check.mjs && node scripts/dev/transport-search-check.mjs && node scripts/dev/transport-search-oracle-check.mjs && node scripts/dev/transport-plan-state-check.mjs && node scripts/dev/transport-authority-check.mjs && node scripts/dev/transport-route-ui-check.mjs && npm run transport:v2:check",
+    "transport:v2:check": "node scripts/dev/transport-v2-check.mjs && node scripts/dev/transport-v2-runtime-check.mjs && node scripts/dev/transport-v2-integration-check.mjs && node scripts/dev/transport-v2-period-check.mjs && node scripts/dev/transport-v2-owned-check.mjs && node scripts/dev/transport-v2-boundary-check.mjs && node scripts/dev/transport-v2-ui-check.mjs && node scripts/dev/transport-v2-review-check.mjs && node scripts/dev/transport-v2-audit-check.mjs && node scripts/dev/transport-v2-system-boundaries-check.mjs && node scripts/dev/transport-v2-calendar-period-check.mjs && node scripts/dev/transport-v2-final-review-check.mjs && node scripts/dev/transport-v2-retention-check.mjs"
   },
   "devDependencies": {
     "eslint": "^9.29.0"
