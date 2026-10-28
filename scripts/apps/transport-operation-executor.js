@@ -2,7 +2,7 @@ import { SkyholdData } from "../data/store.js";
 import { COMMIT_SCOPES } from "../data/commit-preparation.js";
 import { canReadHolding } from "../data/access-guard.js";
 import { appendHoldingOperation, findHoldingOperation } from "../data/operations.js";
-import { previewTransportActivation } from "../data/transport/state.js";
+import { ensureTransportState } from "../data/transport/state.js";
 import { prepareTransportContext, transportSourceToken } from "./domains/transport-context.js";
 import { validateTransportConfiguration } from "../engines/transport/services.js";
 import { bookTransportOrder, resolveTransportIncident } from "../engines/transport/runtime.js";
@@ -14,7 +14,7 @@ import { getSkyholdWorkflowService } from "../workflows/skyhold-workflow-service
 import { advanceWorldShips } from "../engines/ships/world-voyage.js";
 
 const fail = (message, code = "invalid") => Object.assign(new Error(message), { code });
-const types = new Set(["transport-book", "transport-cancel", "transport-advance", "transport-incident", "transport-activate", "transport-configure", "transport-ship-sync", "transport-fund"]);
+const types = new Set(["transport-book", "transport-cancel", "transport-advance", "transport-incident", "transport-configure", "transport-ship-sync", "transport-fund"]);
 export function createTransportOperationExecutor({ transaction = (updater, options) => SkyholdData.transaction(updater, { ...options, scope: COMMIT_SCOPES.BOTH }),
   getUser = (id) => globalThis.game?.users?.get?.(id) ?? (globalThis.game?.user?.id === id ? globalThis.game.user : null),
   workflow = () => getSkyholdWorkflowService(), resolveItems = resolveMarketItemDocuments } = {}) {
@@ -33,19 +33,14 @@ export function createTransportOperationExecutor({ transaction = (updater, optio
         return skip({ ...previous.payload.result, replay: true });
       }
       if (op.expectedRevision !== data.meta.revision || op.sourceToken !== transportSourceToken(data, holding)) throw fail("Данные изменились. Обновите расчёт перевозки.", "conflict");
-      const gmOnly = ["transport-activate", "transport-configure", "transport-advance", "transport-incident", "transport-ship-sync"].includes(op.type);
+      const gmOnly = ["transport-configure", "transport-advance", "transport-incident", "transport-ship-sync"].includes(op.type);
       if (gmOnly && !user.isGM) throw fail("Эта операция доступна ГМ.", "forbidden");
       let result = { ok: true, operationId: op.operationId };
-      if (["transport-activate", "transport-configure"].includes(op.type)) {
+      ensureTransportState(data);
+      if (op.type === "transport-configure") {
         const config = validateTransportConfiguration(op.configuration);
-        if (op.type === "transport-activate") {
-          const preview = previewTransportActivation(data);
-          if (preview.alreadyEnabled || !preview.canActivate) throw fail(preview.blockers.join(" ") || "Перевозки уже включены.");
-          data.meta.transportV2 = { enabled: true, version: 2, clockQd: preview.clockQd, runs: [] };
-        }
         data.catalog.transportV2 = config;
       } else {
-        if (!data.meta.transportV2?.enabled) throw fail("Перевозки v2 ещё не включены ГМ.");
         data.meta.transportV2.clockQd = Math.max(data.meta.transportV2.clockQd, Number(holding.gm?.calendaria?.lastQd ?? 0));
         const engine = workflow();
         if (op.type === "transport-book") {

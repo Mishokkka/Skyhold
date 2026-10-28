@@ -61,6 +61,13 @@ const manifest = JSON.parse(readFileSync(path.join(root, "module.json"), "utf8")
 const jsEntry = path.join(root, manifest.esmodules[0]);
 const staticJs = reachable([jsEntry], staticJsImports);
 const runtimeJs = walk(path.join(root, "scripts"), (file) => file.endsWith(".js"));
+for (const file of runtimeJs) {
+  assert.ok(staticJsImports(file).every(imported => !normalize(imported).startsWith("scripts/dev/")),
+    `${normalize(file)} must not import historical development fixtures`);
+}
+const transportRuntime = reachable([path.join(root, "scripts/engines/transport/runtime.js")], staticJsImports);
+assert.ok(![...transportRuntime].some(file => normalize(file) === "scripts/engines/market/shipment.js"),
+  "the new transport executor must not load the retired shipment executor");
 
 const lazyModules = [
   "scripts/apps/mass-combat.js",

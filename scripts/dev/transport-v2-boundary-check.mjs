@@ -5,16 +5,41 @@ import { bookTransportOrder, resolveTransportIncident } from "../engines/transpo
 import { transportServicesFromRoutes } from "../engines/transport/services.js";
 import { startTransportShip, advanceTransportShipments } from "../workflows/transport/orders.js";
 import { buildShipWorldContext, worldShipTransportTerms } from "../engines/ships/world-market.js";
-import { previewTransportActivation } from "../data/transport/state.js";
 import { normalizeSkyholdData } from "../data/normalizers.js";
+import { ensureTransportState } from "../data/transport/state.js";
+import { appendHoldingOperation } from "../data/operations.js";
+import { createMarketOperationExecutor } from "../apps/market-operation-executor.js";
 
 const world = worldMarketFixture(), { data, holding, ship } = world;
-assert.equal(normalizeSkyholdData(data).meta.transportV2, undefined, "loading a legacy world must not activate v2");
-assert.equal(previewTransportActivation(data).canActivate, true);
-ship.activeVoyage = { id: "legacy" };
-assert.equal(previewTransportActivation(data).canActivate, false, "legacy accepted voyage must drain before activation");
-delete ship.activeVoyage;
-const state = data.meta.transportV2 = { version: 2, enabled: true, clockQd: 0, runs: [] };
+const normalized = normalizeSkyholdData(data);
+assert.equal(normalized.meta.transportV2.version, 2, "transport is available immediately after loading");
+assert.equal(Object.hasOwn(normalized.meta.transportV2, "enabled"), false, "there is no activation or opt-out flag");
+assert.equal(data.meta.transportV2, undefined, "normalization does not write back to the input or world");
+const disabled = structuredClone(normalized);
+disabled.meta.transportV2.enabled = false;
+assert.equal(Object.hasOwn(normalizeSkyholdData(disabled).meta.transportV2, "enabled"), false,
+  "a saved experimental switch cannot disable the sole transport runtime");
+const archived = worldMarketFixture();
+archived.holding.gm.playersCanUseStorage = true; archived.holding.visibility = "public";
+const legacy = { type: "purchase", operationId: "legacy-receipt", holdingId: archived.holding.id,
+  expectedRevision: 1, sourceToken: "old-source", planToken: "old-plan", marketId: "a", carrierId: "auto-carriers",
+  ownShipId: "", targetRoomId: "outdoors", serviceLevel: "standard", quantities: { cloth: 1 }, insuranceEnabled: true };
+const retired = createMarketOperationExecutor({ getData: () => archived.data,
+  getUser: id => ({ id, isGM: id === "gm" }) });
+const unchanged = structuredClone(archived.data);
+for (const userId of ["gm", "player"]) {
+  await assert.rejects(retired(legacy, { userId, remote: userId === "player" }), error => error.code === "conflict");
+  assert.deepEqual(archived.data, unchanged, "retired checkout cannot spend money, reserve stock or write data");
+}
+appendHoldingOperation(archived.holding, { type: "market-purchase", operationId: legacy.operationId,
+  payload: { signature: JSON.stringify(legacy), userId: "gm", orderId: "old-order" } });
+assert.equal((await retired(legacy, { userId: "gm" })).replay, true, "a committed historical receipt remains replayable");
+await assert.rejects(retired(legacy, { userId: "player", remote: true }), error => error.code === "conflict");
+await assert.rejects(retired({ ...legacy, quantities: { cloth: 2 } }, { userId: "gm" }), error => error.code === "conflict");
+archived.holding.gm.playersCanUseStorage = false;
+await assert.rejects(retired(legacy, { userId: "player", remote: true }), error => error.code === "forbidden");
+assert.equal(ensureTransportState(archived.data).version, 2);
+const state = data.meta.transportV2 = { version: 2, clockQd: 0, runs: [] };
 const cargo = [{ lotId: "cloth", qty: 20, unitLoad: 4000, unitCopper: 5, resourceId: "test-freight", ageQd: 0 }];
 const services = [
   { id: "feeder", kind: "regular", from: "a", to: "b", capacity: 80000, travelQd: 4, firstQd: 4, intervalQd: 4, dispatchCopper: 10, riskBps: 10000 },
@@ -38,7 +63,7 @@ assert.equal(holding.storage.moneyCopper, before - 100 - 10 - 4);
 assert.equal(order.money.escrowCopper, 0);
 
 const itemWorld = worldMarketFixture();
-itemWorld.data.meta.transportV2 = { version: 2, enabled: true, clockQd: 0, runs: [] };
+itemWorld.data.meta.transportV2 = { version: 2, clockQd: 0, runs: [] };
 const itemServices = [{ ...services[0], capacity: 8000, riskBps: 0 }];
 const items = [{ ...cargo[0], qty: 3, sourceType: "item", item: { id: "snapshot", name: "Tool", itemData: { system: { quantity: 3 } } } }];
 const itemPlan = planTransportChain({ cargo: items, services: itemServices });
@@ -69,4 +94,4 @@ const normal = worldShipTransportTerms(seasonal.data, seasonal.holding, seasonal
 context.seasonId = "winter";
 const winter = worldShipTransportTerms(seasonal.data, seasonal.holding, seasonal.ship, "home", "a", { context });
 assert.equal(winter.durationQd, normal.durationQd * 2, "owned transport uses the route's actual seasonal time factor");
-console.log("transport-v2 boundaries: opt-in activation, partial-loss repacking/refund, split Item snapshots, transit rounding and seasonal own travel passed");
+console.log("transport-v2 boundaries: automatic transport model, partial-loss repacking/refund, split Item snapshots, transit rounding and seasonal own travel passed");

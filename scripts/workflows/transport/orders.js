@@ -1,11 +1,12 @@
 import { advanceTransportOrders, cancelTransportOrder } from "../../engines/transport/runtime.js";
 import { applyMarketOutboundDispatch } from "../../engines/market/outbound.js";
 import { restoreMarketStockReservations } from "../../engines/market/stock.js";
-import { settleMarketDemandReservations } from "../../engines/market/demand.js";
+import { settleMarketDemandReservations, recoverMarketDemand } from "../../engines/market/demand.js";
 import { internalDemandBatchClockQd } from "../../core/resource-batches.js";
 import { cargoValue } from "../../engines/transport/quantities.js";
 import { stableDataHash } from "../../data/storage-commit.js";
 import { beginTransportShip, advanceTransportShip, recordTransportShipIncome } from "./ships.js";
+import { ensureTransportState } from "../../data/transport/state.js";
 
 function check(result) { if (!result?.ok) throw new Error(result?.message || "Не удалось исполнить рыночную операцию."); return result; }
 
@@ -22,9 +23,10 @@ export function cancelTransportShipment(data, holding, order) {
 }
 
 export function advanceTransportShipments(data, holding, targetQd, workflow, { log = true } = {}) {
-  const state = data?.meta?.transportV2;
+  const state = ensureTransportState(data);
   const entries = [];
   const cashBefore = holding.storage.moneyCopper;
+  check(recoverMarketDemand({ holding, currentTenday: Math.floor(targetQd / 40) }));
   const before = new Map((holding.special?.transportV2?.orders ?? []).map((order) => [order.id,
     { spent: order.money.spentCopper, insurance: order.insurancePaidCopper }]));
   const advanceShip = (order) => {
@@ -98,7 +100,7 @@ export function advanceTransportShipments(data, holding, targetQd, workflow, { l
       for (const lot of order.received) received.set(lot.resourceId, (received.get(lot.resourceId) ?? 0) + lot.qty);
       check(settleMarketDemandReservations({ holding,
         reservations: order.demandReservations.map((row) => ({ ...row, consumedQty: received.get(row.demandId) ?? 0 })),
-        outcome: "consumed", operationId: `${order.id}:demand-settle` }));
+        outcome: "consumed", currentTenday: Math.floor(targetQd / 40), operationId: `${order.id}:demand-settle` }));
     }
   } });
   for (const order of holding.special?.transportV2?.orders ?? []) {

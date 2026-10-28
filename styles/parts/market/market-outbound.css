@@ -117,31 +117,9 @@
 .fbls-market-outbound-checkout dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px 12px; margin: 0; }
 .fbls-market-outbound-checkout dt { color: var(--fbls-muted); font-size: var(--fbls-type-compact-xs); }
 .fbls-market-outbound-checkout dd { margin: 0; font-weight: 800; overflow-wrap: anywhere; }
-.fbls-market-outbound-totals { padding: 8px 0; border-block: 1px solid var(--fbls-border); }
-.fbls-market-outbound-breakdown > summary { min-height: 32px; cursor: pointer; font-size: var(--fbls-type-compact-sm); }
+
 .fbls-market-outbound-checkout p,
 .fbls-market-outbound-note { margin: 0; }
-.fbls-market-outbound-insurance { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
-.fbls-market-outbound-insurance input { width: 18px; height: 18px; margin: 0; }
-
-.fbls-market-outbound-orders {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
-  gap: 8px;
-  padding-bottom: 10px;
-}
-
-.fbls-market-outbound-archive-row {
-  margin-bottom: 6px;
-  padding: 7px;
-  border: 1px solid var(--fbls-border);
-  border-radius: var(--fbls-radius-sm);
-  background: var(--fbls-surface-soft);
-}
-.fbls-market-outbound-archive-row header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.fbls-market-outbound-archive-row.lost { border-color: var(--fbls-danger-border); }
-.fbls-market-outbound-archive-row.cancelled { border-color: var(--fbls-accent-border); }
-.fbls-market-outbound-archive-row p { margin: 5px 0; }
 
 @container market-window (max-width: 1000px) {
   .fbls-market-outbound-body { grid-template-columns: 1fr; }

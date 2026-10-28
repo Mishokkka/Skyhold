@@ -5,7 +5,7 @@ import { bookTransportOrder, resolveTransportIncident } from "../engines/transpo
 import { startTransportShip, advanceTransportShipments } from "../workflows/transport/orders.js";
 
 const { data, holding, ship } = worldMarketFixture();
-const state = data.meta.transportV2 = { version: 2, enabled: true, clockQd: 0, runs: [] };
+const state = data.meta.transportV2 = { version: 2, clockQd: 0, runs: [] };
 const cargo = [{ lotId: "cloth", resourceId: "test-freight", qty: 10, unitLoad: 4000, unitCopper: 5, ageQd: 0 }];
 const services = [
   { id: "first", from: "a", to: "b", kind: "regular", capacity: 400000, firstQd: 4, intervalQd: 4, travelQd: 4, dispatchCopper: 10, riskBps: 10000 },
@@ -33,7 +33,7 @@ assert.equal(ship.lastOuting.expenseCopper, 24);
 assert.equal(holding.storage.moneyCopper, beforeCash - 50 - 10 - 24);
 
 const delayed = worldMarketFixture();
-const delayState = delayed.data.meta.transportV2 = { version: 2, enabled: true, clockQd: 0, runs: [] };
+const delayState = delayed.data.meta.transportV2 = { version: 2, clockQd: 0, runs: [] };
 const direct = [{ ...services[1], id: "direct", shipId: delayed.ship.id, from: "a", to: "home", riskBps: 10000,
   approachQd: 4, approachCopper: 4, abortReturnQd: 4, travelQd: 4 }];
 const directPlan = planTransportChain({ cargo, services: direct });
@@ -61,7 +61,7 @@ assert.equal(delayedOrder.money.escrowCopper, 0);
 assert.equal(delayed.holding.storage.moneyCopper, cashAtArrival - 12, "funding and idle expenses are each charged exactly once");
 const funded = worldMarketFixture();
 funded.ship.onboardCopper = 100;
-const fundedState = funded.data.meta.transportV2 = { version: 2, enabled: true, clockQd: 0, runs: [] };
+const fundedState = funded.data.meta.transportV2 = { version: 2, clockQd: 0, runs: [] };
 const fundedServices = direct.map((service) => ({ ...service, shipId: funded.ship.id }));
 const fundedPlan = planTransportChain({ cargo, services: fundedServices });
 const initialTreasury = funded.holding.storage.moneyCopper;

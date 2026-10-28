@@ -139,7 +139,7 @@ async _prepareTendayOperation({ holdingId = "", qd = 40, rationUnitsPerResident 
   const sourceSnapshot = clone(source);
   const previewHolding = clone(source);
   const sharedMarketDraft = data?.meta?.sharedMarkets?.enabled ? clone(data.meta.sharedMarkets) : null;
-  const sharedTransportDraft = data?.meta?.transportV2?.enabled ? clone(data.meta.transportV2) : null;
+  const sharedTransportDraft = clone(data?.meta?.transportV2 ?? { version: 2, clockQd: Number(source.gm?.calendaria?.lastQd ?? 0), runs: [] });
   const executionData = sharedTransportDraft ? { ...data, meta: { ...data.meta, transportV2: sharedTransportDraft },
     holdings: data.holdings.map((row) => row.id === previewHolding.id ? previewHolding : row) } : data;
   bindSharedMarketHolding(previewHolding, sharedMarketDraft);

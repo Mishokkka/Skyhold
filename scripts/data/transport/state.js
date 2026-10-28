@@ -19,15 +19,11 @@ export function expireTransportReservation(holding, rowId, batchId) {
   }
 }
 
-/** No defaults are installed while loading a world; activation is an explicit GM operation. */
-export function previewTransportActivation(data) {
-  const blockers = [];
-  for (const holding of data?.holdings ?? []) {
-    const legacy = [...(holding.special?.market?.orders ?? []), ...(holding.special?.market?.outbound?.orders ?? [])];
-    if (legacy.some((order) => !["delivered", "lost", "cancelled"].includes(order.status))) blockers.push(`${holding.name}: завершите существующие рыночные перевозки.`);
-    if ((holding.special?.ships?.list ?? []).some((ship) => ship.activeVoyage || ship.orderBundle)) blockers.push(`${holding.name}: завершите принятые корабельные рейсы.`);
-  }
-  const dates = [...new Set((data?.holdings ?? []).map((holding) => Number(holding.gm?.calendaria?.lastQd ?? 0)))];
-  if (dates.length > 1) blockers.push("Поселения находятся на разных датах. Согласуйте текущую дату логистики перед включением.");
-  return { canActivate: !blockers.length, blockers, clockQd: Math.max(0, ...dates), alreadyEnabled: data?.meta?.transportV2?.enabled === true };
+/** Transport is the only runtime model. This initializes an in-memory draft, never a world setting. */
+export function ensureTransportState(data) {
+  data.meta ??= {};
+  data.meta.transportV2 ??= { version: 2,
+    clockQd: Math.max(0, ...(data.holdings ?? []).map((holding) => Number(holding.gm?.calendaria?.lastQd ?? 0))), runs: [] };
+  delete data.meta.transportV2.enabled;
+  return data.meta.transportV2;
 }

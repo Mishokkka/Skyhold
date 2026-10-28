@@ -236,7 +236,6 @@
   flex: 1 1 280px;
 }
 
-
 .fbls-market-layout {
   display: grid;
   flex: 1 1 auto;
@@ -471,111 +470,6 @@
   font-size: var(--fbls-type-compact-sm);
   white-space: nowrap;
 }
-
-.fbls-market-shipments {
-  display: grid;
-  gap: 8px;
-  margin-top: 4px;
-  padding-top: 8px;
-  border-top: 1px solid var(--fbls-border);
-}
-
-.fbls-market-shipments h4 {
-  margin: 0 0 2px;
-  color: var(--fbls-accent);
-}
-
-.fbls-market-shipments > small {
-  color: var(--fbls-muted);
-  font-size: var(--fbls-type-compact-xs);
-  line-height: 1.25;
-}
-
-.fbls-market-shipment {
-  padding: 9px;
-  border: 1px solid var(--fbls-info);
-  border-radius: var(--fbls-radius-sm);
-  background: var(--fbls-info-soft);
-}
-
-.fbls-market-shipment.delayed {
-  border-color: var(--fbls-accent-border);
-  background: var(--fbls-accent-soft);
-}
-
-.fbls-market-shipment.lost {
-  border-color: var(--fbls-danger-border);
-  background: var(--fbls-danger-soft);
-}
-
-.fbls-market-shipment.lost header span { color: var(--fbls-danger); }
-
-.fbls-market-shipment header,
-.fbls-market-shipment footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.fbls-market-shipment header span {
-  color: var(--fbls-info);
-  font-size: var(--fbls-type-compact-sm);
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-.fbls-market-shipment p {
-  margin: 7px 0;
-  color: var(--fbls-muted, var(--fbls-muted));
-  font-size: var(--fbls-type-compact-sm);
-  line-height: 1.35;
-}
-
-.fbls-market-shipment .fbls-market-shipment-risk {
-  color: var(--fbls-accent);
-  font-size: var(--fbls-type-compact-sm);
-}
-
-.fbls-market-shipment footer small {
-  color: var(--fbls-muted, var(--fbls-muted));
-}
-
-.fbls-market-shipment-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
-.fbls-market-shipment-actions .danger { border-color: var(--fbls-danger-border); color: var(--fbls-danger); }
-
-.fbls-market-archive {
-  margin-top: 14px;
-  border-top: 1px solid var(--fbls-border);
-}
-
-.fbls-market-archive > summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 13px 0 7px;
-  color: var(--fbls-accent);
-  cursor: pointer;
-}
-
-.fbls-market-archive > summary span { display: inline-flex; align-items: center; gap: 7px; font-weight: 800; }
-.fbls-market-archive > summary b { min-width: 1.6rem; padding: 2px 6px; border-radius: 99px; color: var(--fbls-on-accent); background: var(--fbls-accent); text-align: center; }
-.fbls-market-archive-list { display: grid; gap: 8px; }
-.fbls-market-archive-row { padding: 9px; border: 1px solid var(--fbls-border); border-radius: var(--fbls-radius-sm); background: var(--fbls-surface-soft); }
-.fbls-market-archive-row.lost { border-color: var(--fbls-danger-border); }
-.fbls-market-archive-row.cancelled { border-color: var(--fbls-accent-border); }
-.fbls-market-archive-row header { display: flex; align-items: start; justify-content: space-between; gap: 8px; }
-.fbls-market-archive-row header div { display: grid; min-width: 0; }
-.fbls-market-archive-row header small,
-.fbls-market-archive-row > small { color: var(--fbls-muted, var(--fbls-muted)); font-size: var(--fbls-type-compact-xs); }
-.fbls-market-archive-row header span { color: var(--fbls-info); font-size: var(--fbls-type-compact-xs); font-weight: 800; text-transform: uppercase; }
-.fbls-market-archive-row.lost header span { color: var(--fbls-danger); }
-.fbls-market-archive-row.cancelled header span { color: var(--fbls-accent); }
-.fbls-market-archive-row p { margin: 6px 0; color: var(--fbls-muted, var(--fbls-muted)); font-size: var(--fbls-type-compact-sm); line-height: 1.35; }
-.fbls-market-archive-row ol { display: grid; gap: 3px; margin: 7px 0 0; padding: 7px 0 0; border-top: 1px solid var(--fbls-border); list-style: none; }
-.fbls-market-archive-row li { display: flex; justify-content: space-between; gap: 7px; color: var(--fbls-accent); font-size: var(--fbls-type-compact-xs); }
-.fbls-market-archive-row time { color: var(--fbls-muted, var(--fbls-muted)); text-align: right; }
 
 @container market-window (max-width: 860px) {
   .fbls-market-header { grid-template-columns: 1fr; }

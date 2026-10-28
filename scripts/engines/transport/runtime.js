@@ -1,7 +1,7 @@
 import { cargoValue, transportInteger, transportMoney, shipTransportFunding } from "./quantities.js";
 import { planTransportChain, validateTransportPlan } from "./planner.js";
 import { activeTransportOrder, transportOrders } from "../../data/transport/state.js";
-import { deterministicMarketShipmentUnit } from "../market/shipment.js";
+import { deterministicUnit as deterministicMarketShipmentUnit } from "../../core/seeded-unit.js";
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const totalQty = (cargo) => cargo.reduce((sum, lot) => sum + lot.qty, 0);
@@ -59,7 +59,7 @@ function rebookStageRemainder(state, order, stage, readyQd) {
 
 /** Runs, treasury and ship wallet must be saved by the caller's single authoritative transaction. */
 export function bookTransportOrder({ state, holding, plan, services, id, direction, commercial = {}, ship = null }) {
-  if (!state?.enabled || state.version !== 2) throw new Error("Перевозки v2 не включены.");
+  if (state?.version !== 2) throw new Error("Не подготовлено состояние перевозок.");
   if (!id || transportOrders(holding).some((order) => order.id === id)) throw new Error("Заказ с этим номером уже существует.");
   if (!["inbound", "outbound"].includes(direction)) throw new Error("Неизвестное направление заказа.");
   validateTransportPlan(plan, { services, runs: state.runs, startQd: state.clockQd });
@@ -154,7 +154,7 @@ export function resolveTransportIncident(state, runId, { outcome, delayQd = 0, l
 
 /** Pure world draft executor; dependencies handle storage placement and ship lifecycle. */
 export function advanceTransportOrders({ state, holding, targetQd, dependencies = {} }) {
-  if (!state?.enabled) return [];
+  if (state?.version !== 2) return [];
   transportInteger(targetQd, "дата исполнения");
   state.clockQd = Math.max(state.clockQd, targetQd);
   const report = [];

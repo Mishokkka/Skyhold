@@ -27,6 +27,7 @@ import { savedMarketTransportPlanFields } from "./market/transport-plan.js";
 import { normalizeFinanceObligationsState } from "./finance/obligations.js";
 import { normalizeInternalDemandConfig } from "./economy/internal-demand.js";
 import { normalizeShipsState } from "./ships.js";
+import { ensureTransportState } from "./transport/state.js";
 
 export { clearBuildingReferences, clearPersonReferences };
 
@@ -156,10 +157,13 @@ export function migrateData(stored, options = {}) {
     // an unknown legacy version; defaults are supplied by new-world creation.
     migrated.meta.templateCatalogVersion = storedTemplateVersion;
     migrated.meta.revision = Math.max(0, toNumber(migrated.meta.revision, 0));
+    ensureTransportState(migrated);
     return migrated;
   }
 
-  return migrateLegacySettlement(stored, normalize);
+  const migrated = migrateLegacySettlement(stored, normalize);
+  ensureTransportState(migrated);
+  return migrated;
 }
 
 export function normalizeCatalogPartition(storedCatalog, options = {}) {

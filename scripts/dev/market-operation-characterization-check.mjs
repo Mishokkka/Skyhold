@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createMarketOperationExecutor, resolveMarketItemDocuments } from "../apps/market-operation-executor.js";
+import { createMarketOperationExecutor, resolveMarketItemDocuments } from "./fixtures/legacy-market-executor.mjs";
 import { marketAuthoritySourceToken, marketPurchasePlanToken } from "../apps/market/authority-context.js";
 import { createSkyholdSocketApi } from "../data/socket.js";
 import { planMarketOutboundSale } from "../engines/market/outbound.js";

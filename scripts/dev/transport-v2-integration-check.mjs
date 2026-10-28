@@ -7,13 +7,14 @@ import { advanceTransportShipments } from "../workflows/transport/orders.js";
 import { TRANSPORT_SERVICE_DEFAULTS } from "../engines/transport/services.js";
 import { normalizeSkyholdData } from "../data/normalizers.js";
 import { reservedResourceBatchQuantities } from "../core/resource-batches.js";
+import { ensureTransportState } from "../data/transport/state.js";
 
 function fixture() {
   const { data, holding, ship } = worldMarketFixture();
   holding.type = "village"; holding.visibility = "public";
   holding.gm.playersCanUseStorage = true; holding.gm.playersCanManageShips = true;
   holding.gm.modifiers.marketConnectionsLevel = 6;
-  data.meta.transportV2 = { version: 2, enabled: true, clockQd: 0, runs: [] };
+  ensureTransportState(data);
   data.catalog.transportV2 = { ...TRANSPORT_SERVICE_DEFAULTS, riskBps: 0 };
   return { data, holding, ship };
 }

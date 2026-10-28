@@ -4,6 +4,7 @@ import { SkyholdData, registerMarketOperationExecutor } from "../data/store.js";
 import { prepareMarketAuthorityContext } from "../apps/market/authority-context.js";
 import { prepareTransportContext } from "../apps/domains/transport-context.js";
 import { bookTransportOrder } from "../engines/transport/runtime.js";
+import { ensureTransportState } from "../data/transport/state.js";
 
 globalThis.foundry = { applications: { api: {
   ApplicationV2: class { render() {} async close() {} async _prepareContext() { return {}; } },
@@ -15,7 +16,7 @@ const { SkyholdTransportApp } = await import("../apps/transport-app.js");
 const { data, holding } = worldMarketFixture();
 holding.type = "village"; holding.visibility = "public"; holding.gm.playersCanUseStorage = true;
 holding.gm.modifiers.marketConnectionsLevel = 6;
-data.meta.transportV2 = { version: 2, enabled: true, clockQd: 0, runs: [] };
+ensureTransportState(data);
 SkyholdData.view = () => data;
 const market = prepareMarketAuthorityContext({ data, holding, isGM: true }).markets.find((row) => row.regionId === "a");
 const offer = prepareMarketAuthorityContext({ data, holding, marketId: market.id, isGM: true }).quote.offers.find((row) => row.resourceId === "test-freight");
@@ -31,11 +32,16 @@ const quote = prepareTransportContext({ data, holding, request, isGM: true });
 const order = bookTransportOrder({ state: data.meta.transportV2, holding, plan: quote.plan, services: quote.services,
   id: "visibility-order", direction: "inbound", commercial: quote.commercial });
 data.catalog.marketEconomy.countries[0].visibility = "gm";
+holding.special.market.orders = [{ id: "historical", status: "delivered", countryId: data.catalog.marketEconomy.countries[0].id,
+  marketLabel: "PRIVATE MARKET", cargo: [{ name: "Cloth", qty: 2 }] }];
 const hidden = await app._prepareContext({});
 assert.equal(hidden.orders[0].market, "Скрытый рынок");
 assert.ok(hidden.orders[0].stages.every((stage) => stage.path === "Скрытый участок"));
+assert.equal(hidden.archive[0].market, "Скрытый рынок");
+assert.deepEqual(Object.keys(hidden.archive[0]).sort(), ["cargo", "direction", "market", "status"], "legacy history is read-only");
 game.user = gm;
 assert.equal((await app._prepareContext({})).orders[0].market, order.commercial.marketLabel);
+assert.equal((await app._prepareContext({})).archive[0].market, "PRIVATE MARKET");
 data.catalog.marketEconomy.countries[0].visibility = "public";
 await app._prepareContext({});
 let resolve, calls = 0;

@@ -7,7 +7,7 @@ import { beginResourceBatchPeriod, finishResourceBatchPeriod, takeResourceBatche
 import { SkyholdWorkflowService } from "../workflows/skyhold-workflow-service.js";
 import { SkyholdData } from "../data/store.js";
 
-const state = { version: 2, enabled: true, clockQd: 0, runs: [] };
+const state = { version: 2, clockQd: 0, runs: [] };
 const services = [{ id: "slow", from: "A", to: "B", kind: "regular", capacity: 400000, travelQd: 4, firstQd: 80, intervalQd: 40, dispatchCopper: 10 }];
 const holding = { id: "test", storage: { moneyCopper: 1000, resources: [{ id: "r1", resourceId: "food", qty: 20,
   batches: [{ id: "b1", qty: 20, ageQd: 0 }] }], log: [] }, special: {}, gm: { calendaria: { lastQd: 0 } } };
@@ -31,7 +31,7 @@ assert.equal(order.insurancePaidCopper, 0);
 
 globalThis.game = { user: { id: "gm", isGM: true }, settings: { get: () => undefined }, modules: new Map(), users: [], time: { worldTime: 0 } };
 const world = worldMarketFixture();
-world.data.meta.transportV2 = { version: 2, enabled: true, clockQd: 0, runs: [] };
+world.data.meta.transportV2 = { version: 2, clockQd: 0, runs: [] };
 world.holding.special.ships.list = [];
 world.holding.people.list = [];
 const fast = [{ ...services[0], firstQd: 4 }];

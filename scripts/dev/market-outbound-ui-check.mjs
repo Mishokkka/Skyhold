@@ -16,11 +16,13 @@ const quote = { marketId: "port", marketLabel: "Порт", outboundOffers: [
   { id: "wood", resourceId: "wood", name: "Древесина", demand: 12, unitPriceCopper: 10 }
 ] };
 
-async function contextFor({ rows = [], orders = [], gm = true, quantities = {}, demand = quote } = {}) {
-  globalThis.game.user = { id: gm ? "gm" : "player", isGM: gm };
+async function contextFor({ rows = [], orders = [], transportOrders = [], gm = true, quantities = {}, demand = quote } = {}) {
+  globalThis.game.user = { id: gm ? "gm" : "player", isGM: gm, active: true };
+  globalThis.game.users = { contents: [game.user, { id: "authority", isGM: true, active: true }] };
+  globalThis.game.socket = { emit() {} };
   const holding = mergeHoldingDefaults({ id: "village", name: "Поселение", visibility: "public",
     gm: { playersCanUseStorage: true }, storage: { moneyCopper: 1000, resources: rows },
-    special: { market: { outbound: { orders } } } });
+    special: { market: { outbound: { orders } }, transportV2: { version: 2, orders: transportOrders } } });
   const outbound = prepareMarketOutboundContext({ holding, quote: demand, quantities,
     routes: [{ id: "courier", ok: true, freightCopper: 1, deliveryQd: 2 }] });
   const app = new SkyholdMarketApp({ holdingId: holding.id });
@@ -45,8 +47,9 @@ for (const gm of [true, false]) {
   assert.equal(context.outboundShowSection, true);
   assert.equal(context.outboundStockCount, 1, "Multiple storage rows count as one kind of goods");
   assert.equal(context.outboundSelectedUnits, 12, "The draft remains capped by shared demand");
-  assert.equal(context.outboundOffers[0].canSelect, gm, "Player storage permissions cannot enable GM-only market controls");
-  assert.equal(context.outboundCanBook, gm, "Only the GM can confirm a valid sale");
+  assert.equal(app.outboundQuantities.wood, 12, "checkout submits the shown quantity after demand clamps the selection");
+  assert.equal(context.outboundOffers[0].canSelect, true, "Authorized players can select stock for the shared checkout");
+  assert.equal(context.outboundCanBook, true, "Authorized players can open transport checkout");
   const max = { dataset: { action: "market-outbound-quantity-step", resourceId: "wood", step: "12", available: "12" } };
   if (context.outboundOffers[0].canSelect) {
     app.outboundQuantities.wood = 1;
@@ -62,21 +65,21 @@ for (const gm of [true, false]) {
 
   const reserved = await contextFor({ gm, quantities: { wood: 2 },
     rows: [{ id: "reserved-row", resourceId: "wood", qty: 2, forSale: true, batches: [{ id: "batch", qty: 2 }] }],
-    orders: [{ id: "reserved-sale", status: "booked", dispatchStatus: "booked",
-      cargoReservations: [{ rowId: "reserved-row", resourceId: "wood", batchId: "batch", qty: 2 }] }] });
+    transportOrders: [{ id: "reserved-sale", status: "booked", direction: "outbound", dispatched: {},
+      cargo: [{ rowId: "reserved-row", resourceId: "wood", batchId: "batch", qty: 2 }] }] });
   assert.equal(reserved.context.outboundHasForSaleStock, true, "Reserved stock remains marked for sale until dispatch");
   assert.equal(reserved.context.outboundOffers[0].available, 0);
   assert.equal(reserved.context.outboundOffers[0].canSelect, false, "Reserved stock cannot be selected twice");
   assert.equal(reserved.context.outboundHasSelection, false);
-  assert.equal(reserved.context.hasOutboundOrders, true);
+  assert.equal(reserved.context.hasOutboundOrders, undefined, "tracking lives in the transport window");
+  assert.equal(reserved.context.outboundCanBook, false, "fully reserved selection cannot open a payable checkout");
 
   for (const status of ["booked", "needsResolution", "delivered"]) {
     const { context: tracking } = await contextFor({ gm, orders: [{ id: "sale", status, riskStatus: status, marketLabel: "Порт", revenueCopper: 100 }] });
     assert.equal(tracking.outboundHasForSaleStock, false, "Existing orders do not expose an empty sale composer");
-    assert.equal(tracking.outboundShowSection, true, "Orders and archive remain reachable after the last stock leaves storage");
-    assert.equal(tracking.hasOutboundArchive, status === "delivered");
-    assert.equal(tracking.hasOutboundOrders, status !== "delivered");
-    assert.equal(tracking.outboundNeedsAttention, gm && status === "needsResolution");
+    assert.equal(tracking.outboundShowSection, false, "empty stock does not show the composer; tracking uses the permanent transport button");
+    assert.equal(tracking.hasOutboundArchive, undefined);
+    assert.equal(tracking.hasOutboundOrders, undefined);
   }
 }
 
@@ -175,7 +178,8 @@ assert.equal(renderedApp.element.composer.open, false, "The actual render hook a
 const template = readFileSync(new URL("../../templates/market-app.hbs", import.meta.url), "utf8");
 assert.match(template, /\{\{#if outboundShowSection\}\}\s*<section[^>]+data-market-outbound-section/);
 assert.match(template, /\{\{#if outboundHasForSaleStock\}\}\s*<details[^>]+data-market-outbound-compose/);
-assert.match(template, /\{\{#if outboundHasSelection\}\}[\s\S]*data-market-outbound-ship/);
-assert.match(template, /<\/details>\s*\{\{\/if\}\}\s*\{\{#if hasOutboundOrders\}\}/, "Tracking is outside the stock-gated composer");
+assert.match(template, /data-action="market-outbound-book"/);
+assert.doesNotMatch(template, /data-market-outbound-ship/, "ship selection belongs to transport checkout");
+assert.ok(template.indexOf('data-action="market-transport-orders"') < template.indexOf("{{#if outboundShowSection}}"), "transport tracking is always reachable without for-sale stock");
 assert.doesNotMatch(template.match(/<details[^>]+data-market-outbound-compose[^>]*>/)?.[0] ?? "", /\sopen(?:\s|>)/);
 console.log("Market outbound UI: conditional stock, GM/player controls, capped Max, independent tracking, retained folds and ship navigation passed.");
