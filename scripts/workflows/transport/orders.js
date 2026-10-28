@@ -2,11 +2,12 @@ import { advanceTransportOrders, cancelTransportOrder } from "../../engines/tran
 import { applyMarketOutboundDispatch } from "../../engines/market/outbound.js";
 import { restoreMarketStockReservations } from "../../engines/market/stock.js";
 import { settleMarketDemandReservations, recoverMarketDemand } from "../../engines/market/demand.js";
-import { internalDemandBatchClockQd } from "../../core/resource-batches.js";
+import { internalDemandBatchClockQd, nextInternalDemandBatchAvailabilityQd } from "../../core/resource-batches.js";
 import { cargoValue } from "../../engines/transport/quantities.js";
 import { stableDataHash } from "../../data/storage-commit.js";
 import { beginTransportShip, advanceTransportShip, recordTransportShipIncome } from "./ships.js";
 import { ensureTransportState } from "../../data/transport/state.js";
+import { sharedMarketEventTenday } from "../../data/market/shared-context.js";
 
 function check(result) { if (!result?.ok) throw new Error(result?.message || "Не удалось исполнить рыночную операцию."); return result; }
 
@@ -22,7 +23,7 @@ export function cancelTransportShipment(data, holding, order) {
   } });
 }
 
-export function advanceTransportShipments(data, holding, targetQd, workflow, { log = true } = {}) {
+export function advanceTransportShipments(data, holding, targetQd, workflow, { log = true, deferInternalDemand = false } = {}) {
   const state = ensureTransportState(data);
   const entries = [];
   const cashBefore = holding.storage.moneyCopper;
@@ -56,8 +57,15 @@ export function advanceTransportShipments(data, holding, targetQd, workflow, { l
           roomId: lot.roomId ?? "outdoors", source: "Отправление груза", operationId: order.id });
       }
     },
-    receiveCargo(order, cargo, atQd) {
+    receiveCargo(order, cargo, atQd, receipt) {
       if (order.direction === "outbound") {
+        const quantities = lots => lots.reduce((totals, lot) => totals.set(lot.resourceId, (totals.get(lot.resourceId) ?? 0) + lot.qty), new Map());
+        const shipped = quantities(receipt.cargo), received = quantities(cargo);
+        const reservations = (order.demandReservations ?? []).map(row => ({ ...row,
+          qty: Math.min(row.qty - (row.settledQty ?? 0), shipped.get(row.demandId) ?? 0), consumedQty: received.get(row.demandId) ?? 0 }));
+        check(settleMarketDemandReservations({ holding, reservations, outcome: "consumed",
+          operationId: `${order.id}:receipt:${receipt.runId}`, occurredTenday: sharedMarketEventTenday(holding, atQd), currentTenday: Math.floor(targetQd / 40) }));
+        for (const [index, row] of (order.demandReservations ?? []).entries()) row.settledQty = (row.settledQty ?? 0) + reservations[index].qty;
         const revenue = cargoValue(cargo);
         if (order.commercial.revenueOnBoard) recordTransportShipIncome(holding, order, revenue, atQd);
         else holding.storage.moneyCopper += revenue;
@@ -66,7 +74,7 @@ export function advanceTransportShipments(data, holding, targetQd, workflow, { l
         return;
       }
       for (const lot of cargo) {
-        const availableFromQd = internalDemandBatchClockQd(holding);
+        const availableFromQd = deferInternalDemand ? nextInternalDemandBatchAvailabilityQd(holding) : internalDemandBatchClockQd(holding);
         if (lot.sourceType === "item") {
           if (!lot.item) throw new Error("В договоре отсутствует сохранённый предмет.");
           holding.storage.items ??= [];
@@ -96,11 +104,9 @@ export function advanceTransportShipments(data, holding, targetQd, workflow, { l
     completeOrder(order) {
       if (order.ownShipId) advanceShip(order);
       if (order.direction !== "outbound") return;
-      const received = new Map();
-      for (const lot of order.received) received.set(lot.resourceId, (received.get(lot.resourceId) ?? 0) + lot.qty);
       check(settleMarketDemandReservations({ holding,
-        reservations: order.demandReservations.map((row) => ({ ...row, consumedQty: received.get(row.demandId) ?? 0 })),
-        outcome: "consumed", currentTenday: Math.floor(targetQd / 40), operationId: `${order.id}:demand-settle` }));
+        reservations: (order.demandReservations ?? []).map(row => ({ ...row, qty: row.qty - (row.settledQty ?? 0) })),
+        outcome: "restored", currentTenday: Math.floor(targetQd / 40), operationId: `${order.id}:demand-settle` }));
     }
   } });
   for (const order of holding.special?.transportV2?.orders ?? []) {

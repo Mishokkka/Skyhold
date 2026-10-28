@@ -1740,7 +1740,7 @@ async _runEconomyForQd(holding, periodQd = 40, { operationId = "", createdAt = "
 
   if (data) {
     const { advanceTransportShipments } = await import("../../../workflows/transport/orders.js");
-    const transport = advanceTransportShipments(data, holding, periodStartQd + qd, this, { log: false });
+    const transport = advanceTransportShipments(data, holding, periodStartQd + qd, this, { log: false, deferInternalDemand: true });
     for (const row of transport) {
       report.work.push(`Перевозка ${row.orderId}: получено ${row.receivedQty} ед.; расходы доставки ${row.spentCopper} ММ.`);
     }

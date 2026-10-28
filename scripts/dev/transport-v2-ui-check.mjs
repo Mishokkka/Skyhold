@@ -43,6 +43,15 @@ game.user = gm;
 assert.equal((await app._prepareContext({})).orders[0].market, order.commercial.marketLabel);
 assert.equal((await app._prepareContext({})).archive[0].market, "PRIVATE MARKET");
 data.catalog.marketEconomy.countries[0].visibility = "public";
+const physical = data.meta.transportV2.runs[0];
+physical.incident = { status: "pending" };
+physical.claims.push({ holdingId: holding.id, orderId: "incoming", stage: 1, manifestReady: false, load: 1 });
+assert.equal((await app._prepareContext({})).incidents[0].awaitingCargo, holding.name,
+  "GM sees which holding must resolve its connecting cargo before a shared loss");
+game.user = player;
+assert.deepEqual((await app._prepareContext({})).incidents, [], "incident coordination remains GM-only");
+game.user = gm;
+physical.incident = null; physical.claims.pop();
 await app._prepareContext({});
 let resolve, calls = 0;
 registerMarketOperationExecutor(() => { calls++; return new Promise((done) => { resolve = done; }); });

@@ -4,6 +4,12 @@ const copy = (value) => JSON.parse(JSON.stringify(value));
 const slotId = (service, departure, vehicle = "regular") => `${service.id}:${vehicle}:${departure}`;
 const occupied = (run) => run.status !== "cancelled";
 
+function validateEmptyPath(service, kind) {
+  if (service[`${kind}Available`] === false || (service[`${kind}AccessCost`] ?? 0) > (service.emptyAccessLimit ?? Infinity)) {
+    throw new Error("Пустой перегон собственного корабля недоступен по маршруту или УРС.");
+  }
+}
+
 function checkService(service) {
   if (!service?.id || !service.from || !service.to || service.from === service.to) throw new Error("Не заданы разные пункты перевозки.");
   if (!["regular", "charter", "owned"].includes(service.kind)) throw new Error("Неизвестный вид перевозки.");
@@ -52,7 +58,8 @@ function runCharge(service, load, occupiedQd, returnQd = 0) {
   const loadCopper = transportRateCharge(load, service.loadMilliCopper ?? (service.loadCopper ?? 0) * 1000, TRANSPORT_LOAD_SCALE * 1000);
   const operatingCopper = service.kind === "regular" ? 0 : transportOperatingCharge(service, occupiedQd - returnQd)
     + transportOperatingCharge(service, returnQd, true);
-  const handlingCopper = transportRateCharge(load, service.handlingMilliCopper ?? (service.handlingCopper ?? 0) * 1000, TRANSPORT_LOAD_SCALE * 1000);
+  const handlingCopper = (service.handlingFlatCopper ?? 0)
+    + transportRateCharge(load, service.handlingMilliCopper ?? (service.handlingCopper ?? 0) * 1000, TRANSPORT_LOAD_SCALE * 1000);
   const gross = transportMoney([dispatchCopper, loadCopper, operatingCopper, handlingCopper]);
   const discountBps = transportInteger(service.discountBps ?? 0, "скидка", 0, 10000);
   const discountCopper = Math.floor((dispatchCopper + loadCopper) * discountBps / 10000);
@@ -80,7 +87,10 @@ export function planTransportChain({ cargo, services, startQd = 0, runs = [], ho
       ownedId = service.shipId;
     } else if (ownedId) ownedEnded = true;
     let waiting = copy(cargo), stageRuns = [], storageCopper = 0;
-    if (service.kind === "owned" && previous?.kind !== "owned") readyQd = Math.max(readyQd, startQd + (service.approachQd ?? 0));
+    if (service.kind === "owned" && previous?.kind !== "owned") {
+      validateEmptyPath(service, "approach");
+      readyQd = Math.max(readyQd, startQd + (service.approachQd ?? 0));
+    }
     while (waiting.length) {
       if (stages.reduce((sum, stage) => sum + stage.runs.length, 0) + stageRuns.length >= TRANSPORT_LIMITS.runs) throw new Error("Слишком много отправлений. Уменьшите заказ.");
       if (waiting.some((lot) => lot.unitLoad > service.capacity)) throw new Error("Одна единица товара больше вместимости транспорта.");
@@ -92,6 +102,7 @@ export function planTransportChain({ cargo, services, startQd = 0, runs = [], ho
       const last = full.remaining.length === 0;
       // Charter machines return to their published hub; owned ship returns between shuttles or by explicit final choice.
       const finalOwnReturn = service.kind === "owned" && last && service.returnAtEnd && services[index + 1]?.kind !== "owned";
+      if (service.kind === "owned" && (finalOwnReturn || !last)) validateEmptyPath(service, finalOwnReturn ? "endReturn" : "return");
       const returnQd = service.kind === "regular" ? 0 : finalOwnReturn ? service.endReturnQd ?? service.returnQd ?? 0
         : (service.kind === "charter" || !last ? service.returnQd ?? 0 : 0);
       const baseQd = (timed.loadingQd ?? 0) + service.travelQd + (timed.unloadingQd ?? 0);
@@ -145,6 +156,11 @@ export function planTransportChain({ cargo, services, startQd = 0, runs = [], ho
     shipReleaseQd: lastOwn?.releaseQd ?? null, shipReleaseLocation: lastOwn?.releaseLocation ?? "" };
 }
 
+export function transportChainMatchesConstraints(chain, { pins = {}, excluded = [] } = {}) {
+  return Object.entries(pins).every(([from, id]) => chain.some(service => service.from === from && service.id === id))
+    && chain.every(service => service.enabled !== false && !excluded.includes(service.id) && !excluded.includes(service.companyId));
+}
+
 export function findTransportPlans({ from, to, services = [], cargo, startQd = 0, runs = [], priority = "cost", pins = {}, excluded = [], ownShipId = "", maxPaths = TRANSPORT_LIMITS.paths, accessLimit = Infinity }) {
   const plans = [], failures = new Set();
   const candidates = [...services].sort((a, b) => Number(b.kind === "owned") - Number(a.kind === "owned")
@@ -154,6 +170,7 @@ export function findTransportPlans({ from, to, services = [], cargo, startQd = 0
     if (searched >= maxPaths || expanded++ >= maxPaths * TRANSPORT_LIMITS.stages) { limited = true; return; }
     if (location === to) {
       if (ownShipId && !chain.some((service) => service.shipId === ownShipId)) return;
+      if (!transportChainMatchesConstraints(chain, { pins, excluded })) return;
       searched++;
       try { plans.push(planTransportChain({ cargo, services: chain, startQd, runs })); }
       catch (error) { failures.add(error.message); }
@@ -180,9 +197,10 @@ export function findTransportPlans({ from, to, services = [], cargo, startQd = 0
 }
 
 /** Confirmation validates a submitted chain independently of the search heuristic. */
-export function validateTransportPlan(plan, { services, runs = [], startQd = plan?.startQd } = {}) {
+export function validateTransportPlan(plan, { services, runs = [], startQd = plan?.startQd, pins = {}, excluded = [] } = {}) {
   const selected = plan?.stages?.map((stage) => services.find((service) => service.id === stage.service.id));
   if (!selected?.length || selected.some((service) => !service)) throw new Error("Услуга перевозки больше недоступна.");
+  if (!transportChainMatchesConstraints(selected, { pins, excluded })) throw new Error("Маршрут не соблюдает закрепления или исключения перевозчиков.");
   const fresh = planTransportChain({ cargo: plan.cargo, services: selected, startQd, runs });
   if (JSON.stringify(fresh) !== JSON.stringify(plan)) throw new Error("Условия или свободные места изменились. Обновите расчёт.");
   return fresh;

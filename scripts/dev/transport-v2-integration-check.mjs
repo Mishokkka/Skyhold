@@ -58,8 +58,13 @@ assert.deepEqual(reloaded.meta.transportV2, stored.meta.transportV2);
 assert.deepEqual(reloaded.catalog.transportV2, stored.catalog.transportV2);
 assert.deepEqual(reloaded.holdings[0].special.transportV2, stored.holdings[0].special.transportV2);
 const destination = stored.holdings[0];
+stored.catalog.transportV2 = { ...stored.catalog.transportV2, riskBps: 10000, regularIntervalQd: 400 };
+stored.catalog.marketEconomy.settings = { handlingFlatCopper: 10000, handlingLoadCopper: 1000 };
 advanceTransportShipments(stored, destination, preview.plan.arrivalQd, workflow);
 assert.equal(destination.special.transportV2.orders[0].status, "delivered");
+assert.deepEqual(destination.special.transportV2.orders[0].plan, preview.plan,
+  "catalog edits after authoritative booking cannot change accepted prices, handling, dates or incident risk");
+assert.equal(destination.special.transportV2.orders[0].money.spentCopper, preview.plan.totalCopper);
 assert.equal(destination.storage.resources.filter((row) => row.resourceId === "test-freight").reduce((sum, row) => sum + row.qty, 0), 10);
 advanceTransportShipments(stored, destination, preview.plan.arrivalQd, workflow);
 assert.equal(destination.storage.resources.filter((row) => row.resourceId === "test-freight").reduce((sum, row) => sum + row.qty, 0), 10);

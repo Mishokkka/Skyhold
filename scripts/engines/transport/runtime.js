@@ -17,7 +17,10 @@ function reserveRuns(state, order, stages) {
     }
     if (run.status === "cancelled" || run.reservedLoad + planned.reservedLoad > run.capacity) throw new Error("Место на рейсе уже занято.");
     run.reservedLoad += planned.reservedLoad;
-    run.claims.push({ holdingId: order.holdingId, orderId: order.id, stage: stage.index, load: planned.reservedLoad });
+    run.claims.push({ holdingId: order.holdingId, orderId: order.id, stage: stage.index, load: planned.reservedLoad,
+      manifestReady: stage.index === 0,
+      cargo: planned.cargo.map(lot => ({ lotId: lot.lotId, qty: lot.qty, ageQd: lot.ageQd ?? 0,
+        ageAtQd: lot.ageAtQd ?? order.plan.startQd, shelfLifeQd: lot.shelfLifeQd ?? 0, spoiledQty: lot.spoiledQty ?? 0 })) });
   }
 }
 
@@ -45,6 +48,7 @@ function rebookStageRemainder(state, order, stage, readyQd) {
   const pending = stage.runs.filter((run) => !started.has(run.id));
   releaseRuns(state, order, stage.index, started);
   const service = { ...stage.service, approachQd: 0, approachCopper: 0,
+    approachAvailable: true, approachAccessCost: 0,
     returnAtEnd: stage.service.returnAtEnd && order.stages[stage.index + 1]?.service.kind !== "owned" };
   const replanned = planTransportChain({ cargo: pending.flatMap((run) => run.cargo).reduce((lots, lot) => {
     const existing = lots.find((row) => row.lotId === lot.lotId);
@@ -121,7 +125,9 @@ function spend(order, amount) {
 
 function rebookRemaining(state, order, index, cargo, readyQd) {
   releaseRuns(state, order, index);
-  const services = order.plan.stages.slice(index).map((stage) => ({ ...stage.service, approachQd: 0, approachCopper: 0 }));
+  // The ship's approach was accepted at booking and is already underway or complete.
+  const services = order.plan.stages.slice(index).map((stage) => ({ ...stage.service, approachQd: 0, approachCopper: 0,
+    approachAvailable: true, approachAccessCost: 0 }));
   const remaining = planTransportChain({ cargo, services, startQd: readyQd, runs: state.runs });
   // Hired contracts keep their original price when a carrier misses a connection.
   const stages = remaining.stages.map((stage, offset) => ({ ...stage, index: index + offset, status: "booked", receipts: [], received: [],
@@ -139,16 +145,38 @@ function evaluateIncident(run) {
   }
 }
 
+const lossKey = (holdingId, orderId, stage, lotId) => JSON.stringify([holdingId, orderId, stage, lotId]);
+
+/** Allocate one integer physical loss, independent of FIFO splitting and holding execution order. */
+function allocateRunLoss(run, lossBps) {
+  let scaled = 0n;
+  const allocations = {};
+  const lots = run.claims.flatMap(claim => (claim.cargo ?? []).map(lot => ({ ...lot,
+    key: lossKey(claim.holdingId, claim.orderId, claim.stage, lot.lotId) }))).sort((a, b) => a.key.localeCompare(b.key));
+  for (const lot of lots) {
+    const age = lot.ageQd + Math.max(0, run.arrivalQd - lot.ageAtQd);
+    const qty = lot.shelfLifeQd > 0 && age >= lot.shelfLifeQd ? 0 : Math.max(0, lot.qty - lot.spoiledQty);
+    const next = scaled + BigInt(qty) * BigInt(lossBps);
+    allocations[lot.key] = Number(next / 10000n - scaled / 10000n);
+    scaled = next;
+  }
+  return allocations;
+}
+
 /** A physical run has one outcome, shared by every holding and order aboard it. */
 export function resolveTransportIncident(state, runId, { outcome, delayQd = 0, lossBps = 0, atQd = state.clockQd } = {}) {
   const run = runFor(state, runId);
   if (!run?.incident || run.incident.status !== "pending") throw new Error("Этот рейс не ожидает решения.");
   if (!["success", "delay", "loss"].includes(outcome)) throw new Error("Неизвестный исход.");
   transportInteger(delayQd, "задержка", 0, 1440); transportInteger(lossBps, "потери", 0, 10000);
+  if (outcome === "loss" && run.claims.some(claim => claim.stage > 0 && claim.manifestReady !== true)) {
+    throw new Error("Сначала обработайте предыдущие участки связанных заказов: состав груза на общем рейсе ещё не определён.");
+  }
   const previous = run.arrivalQd;
   run.arrivalQd = Math.max(previous, atQd) + (outcome === "delay" ? delayQd : 0);
   run.releaseQd += run.arrivalQd - previous;
   run.incident = { status: "resolved", outcome, lossBps: outcome === "loss" ? lossBps : 0, atQd: run.arrivalQd };
+  if (outcome === "loss") run.incident.lossAllocations = allocateRunLoss(run, lossBps);
   return run;
 }
 
@@ -196,6 +224,10 @@ export function advanceTransportOrders({ state, holding, targetQd, dependencies 
           }
           const cargo = scheduled.cargo.map((lot) => ageLot(lot, physical.departureQd, order.plan.startQd));
           if (stage.index === 0 && order.direction === "outbound") dependencies.dispatchCargo?.(order, cargo, physical.departureQd);
+          const claim = physical.claims.find(row => row.holdingId === order.holdingId && row.orderId === order.id && row.stage === stage.index);
+          if (claim) claim.manifestReady = true;
+          if (claim && !physical.incident?.lossAllocations) claim.cargo = cargo.map(lot => ({ lotId: lot.lotId, qty: lot.qty,
+            ageQd: lot.ageQd, ageAtQd: lot.ageAtQd, shelfLifeQd: lot.shelfLifeQd ?? 0, spoiledQty: lot.spoiledQty ?? 0 }));
           if (!stage.receipts.length) spend(order, stage.totalCopper + (stage.index === 0 ? order.plan.approachCopper : 0));
           if (stage.index === 0) for (const lot of cargo) order.dispatched[lot.lotId] = (order.dispatched[lot.lotId] ?? 0) + lot.qty;
           receipt = { runId: scheduled.id, cargo, departureQd: physical.departureQd, status: "travelling" };
@@ -212,12 +244,16 @@ export function advanceTransportOrders({ state, holding, targetQd, dependencies 
           const lot = ageLot(original, physical.arrivalQd, order.plan.startQd);
           const expired = lot.shelfLifeQd > 0 && lot.ageQd >= lot.shelfLifeQd;
           const insurableQty = expired ? 0 : Math.max(0, lot.qty - (lot.spoiledQty ?? 0));
-          const lost = Math.floor(insurableQty * (physical.incident?.lossBps ?? 0) / 10000);
+          const lost = Math.min(insurableQty, physical.incident?.lossAllocations?.[lossKey(order.holdingId, order.id, stage.index, lot.lotId)] ?? 0);
           const spoiled = expired ? lot.qty - lost : Math.min(lot.qty - lost, lot.spoiledQty ?? 0);
           order.lostQty += lost;
           order.spoiledQty += spoiled;
           if (!expired && lost && order.commercial.insuranceCoverageBps) {
-            const payout = Math.floor(lost * lot.unitCopper * order.commercial.insuranceCoverageBps / 10000);
+            // Carry fractions of a copper across lots and receipts of the same insurance policy.
+            const covered = BigInt(order.insuranceRemainder ?? 0)
+              + BigInt(lost * lot.unitCopper) * BigInt(order.commercial.insuranceCoverageBps);
+            const payout = Number(covered / 10000n);
+            order.insuranceRemainder = Number(covered % 10000n);
             order.insurancePaidCopper += payout;
             holding.storage.moneyCopper += payout;
           }
@@ -226,7 +262,7 @@ export function advanceTransportOrders({ state, holding, targetQd, dependencies 
         receipt.status = "arrived"; receipt.arrivalQd = physical.arrivalQd;
         stage.received.push(...delivered);
         if (stage.index === order.stages.length - 1) {
-          dependencies.receiveCargo?.(order, delivered, physical.arrivalQd);
+          dependencies.receiveCargo?.(order, delivered, physical.arrivalQd, receipt);
           order.received.push(...delivered);
         }
         physical.status = "arrived";

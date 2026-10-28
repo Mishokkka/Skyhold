@@ -71,3 +71,11 @@ export function transportWaitingCharge(service, durationQd) {
   return service.dailyCosts ? transportPeriodCosts(durationQd, service.dailyCosts).totalCopper
     : transportRateCharge(durationQd, service.waitingMilliCopperPerQd ?? service.operatingMilliCopperPerQd ?? 0);
 }
+
+/** One loading/unloading operation per physical endpoint; transit-only points have no handling. */
+export function transportHandlingTerms(profiles = []) {
+  return {
+    handlingFlatCopper: transportMoney(profiles.map(profile => Math.ceil(profile?.deliveryFlatCopper ?? 0))),
+    handlingMilliCopper: transportInteger(profiles.reduce((sum, profile) => sum + Math.ceil((profile?.deliveryLoadCopper ?? 0) * 1000), 0), "обработка груза")
+  };
+}

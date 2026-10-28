@@ -24,6 +24,12 @@ export function sharedMarketTenday(holding, localPeriod = null) {
   const dated = days === null ? local : Math.floor(days / 10);
   return Math.max(Number(state.clockTenday) || 0, dated + Math.max(0, requested - local));
 }
+/** Convert an actual transport receipt date without moving it to another holding's later clock. */
+export function sharedMarketEventTenday(holding, qd) {
+  const localQd = Math.max(0, Number(holding?.gm?.calendaria?.lastQd) || 0);
+  const days = owners.has(holding) ? economyDayIndex(holding) : null;
+  return Math.max(0, Math.floor((days === null ? qd : days * 4 + qd - localQd) / 40));
+}
 export function writeMarketState(holding, key, value, tenday = null) {
   const state = owners.get(holding);
   if (state) {

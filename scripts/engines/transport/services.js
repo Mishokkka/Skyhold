@@ -1,5 +1,5 @@
 import { stableDataHash } from "../../data/storage-commit.js";
-import { transportLoad, transportInteger } from "./quantities.js";
+import { transportLoad, transportInteger, transportHandlingTerms } from "./quantities.js";
 
 export const TRANSPORT_SERVICE_DEFAULTS = Object.freeze({
   regularIntervalQd: 40, regularFirstQd: 4, charterVehicles: 1, charterPreparationQd: 1,
@@ -17,8 +17,9 @@ export function validateTransportConfiguration(raw = {}) {
 }
 
 /** Collapse transit-only nodes before rounding movement or charging dispatch. */
-export function transportServicesFromRoutes(routes = [], rawConfiguration = {}, regions = []) {
+export function transportServicesFromRoutes(routes = [], rawConfiguration = {}, regions = [], { markets = [], homeRegionId = "" } = {}) {
   const config = validateTransportConfiguration(rawConfiguration), result = new Map();
+  const handling = new Map(markets.map(market => [market.regionId, market.locationProfile]));
   for (const route of routes) {
     const groups = [];
     for (const leg of route.transportPlan?.legs ?? []) {
@@ -36,6 +37,7 @@ export function transportServicesFromRoutes(routes = [], rawConfiguration = {}, 
         for (const field of ["movementQd", "distanceKm", "distanceCopper", "operatingCopper", "loadCopperPerUnit"]) previous[field] += Number(leg[field] ?? 0);
         previous.routeIds.push(leg.routeId);
         previous.accessCost += accessCost;
+        previous.riskFactor = Math.max(previous.riskFactor ?? 1, leg.riskFactor ?? 1);
       } else groups.push({ ...leg, routeIds: [leg.routeId], accessCost });
     }
     for (const group of groups) {
@@ -49,6 +51,7 @@ export function transportServicesFromRoutes(routes = [], rawConfiguration = {}, 
       const fullCopper = Math.ceil(group.dispatchCopper + group.hireCopper + group.distanceCopper + group.operatingCopper
         + group.capacityLoad * group.loadCopperPerUnit);
       const base = { from: source, to: destination, fromLabel: group.fromLabel, toLabel: group.toLabel, companyId: group.carrierId,
+        ...transportHandlingTerms([from, to].filter(id => id !== homeRegionId).map(id => handling.get(id))),
         label: `${group.carrierLabel} · ${group.modeLabel}`, mode: group.mode, visibility: group.visibility,
         capacity: transportLoad(group.capacityLoad), travelQd, loadingQd: 1, unloadingQd: 1,
         storageMilliCopperPerLoadQd: config.storageMilliCopperPerLoadQd, riskBps: Math.min(10000, Math.round(config.riskBps * (group.riskFactor ?? 1))),

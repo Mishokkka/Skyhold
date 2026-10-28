@@ -51,6 +51,7 @@
   {{#each incidents}}
   <article class="fbls-panel" data-transport-incident="{{id}}">
     <strong>{{label}}: требуется решение для {{orders}} заказов на рейсе</strong>
+    {{#if awaitingCargo}}<p role="status">Для распределения утраты сначала обработайте предыдущие участки связанных заказов: {{awaitingCargo}}. Груз, не попавший на этот рейс, исключается из расчёта.</p>{{/if}}
     <div class="fbls-cluster">
       <label class="fbls-field">Задержка, дни<input type="number" min="0.25" max="360" step="0.25" data-transport-incident-field="delayDays" value="{{delayDays}}" /></label>
       <label class="fbls-field">Утрачено груза, %<input type="number" min="0" max="100" step="0.01" data-transport-incident-field="lossPercent" value="{{lossPercent}}" /></label>
@@ -58,11 +59,11 @@
     <div class="fbls-action-group">
       <button type="button" class="fbls-button" data-action="transport-incident-success" data-run="{{id}}">Груз цел</button>
       <button type="button" class="fbls-button" data-action="transport-incident-delay" data-run="{{id}}">Применить задержку</button>
-      <button type="button" class="fbls-button" data-action="transport-incident-loss" data-run="{{id}}">Применить утрату</button>
+      <button type="button" class="fbls-button" data-action="transport-incident-loss" data-run="{{id}}" {{#if awaitingCargo}}disabled{{/if}}>Применить утрату</button>
     </div>
   </article>
   {{/each}}
-  {{#each orders}}<article class="fbls-panel fbls-stack"><div class="fbls-card-header"><strong>{{direction}} · {{market}}</strong><span class="fbls-chip">{{status}}</span></div><p>Получено {{received}} из {{total}} ед. Доставка и сборы: {{cost}}. Осталось в резерве: {{escrow}}.</p>{{#if shipStatus}}<p>{{shipStatus}}. {{shipTiming}}</p>{{/if}}{{#if fundingNeeded}}<p role="status">Дополнительные расходы судна: требуется ещё {{fundingNeeded}}.</p>{{#if canFund}}<button type="button" class="fbls-button" data-action="transport-fund" data-order="{{id}}">Добавить {{fundingNeeded}} из казны и продолжить</button>{{/if}}{{/if}}<details data-fbls-disclosure="transport-order:{{id}}"><summary>Маршрут заказа</summary><ol>{{#each stages}}<li>{{path}} · отправлений: {{count}} · {{price}}</li>{{/each}}</ol></details>{{#if canCancel}}<button type="button" class="fbls-button" data-action="transport-cancel" data-order="{{id}}">Отменить до отправления и вернуть деньги</button>{{/if}}</article>{{/each}}
+  {{#each orders}}<article class="fbls-panel fbls-stack"><div class="fbls-card-header"><strong>{{direction}} · {{market}}</strong><span class="fbls-chip">{{status}}</span></div><p>Получено {{received}} из {{total}} ед. Доставка и сборы: {{cost}}. Осталось в резерве: {{escrow}}.</p>{{#if shipStatus}}<p>{{shipStatus}}. {{shipTiming}}</p>{{/if}}{{#if shipReturnBlocked}}<p role="status">Груз утрачен до завершения собственного участка. Возврат домой из текущего порта недоступен по маршруту или УРС; корабль остаётся в порту с обычным содержанием. Дальнейший маршрут задаётся в окне корабля.</p>{{/if}}{{#if fundingNeeded}}<p role="status">Дополнительные расходы судна: требуется ещё {{fundingNeeded}}.</p>{{#if canFund}}<button type="button" class="fbls-button" data-action="transport-fund" data-order="{{id}}">Добавить {{fundingNeeded}} из казны и продолжить</button>{{/if}}{{/if}}<details data-fbls-disclosure="transport-order:{{id}}"><summary>Маршрут заказа</summary><ol>{{#each stages}}<li>{{path}} · отправлений: {{count}} · {{price}}</li>{{/each}}</ol></details>{{#if canCancel}}<button type="button" class="fbls-button" data-action="transport-cancel" data-order="{{id}}">Отменить до отправления и вернуть деньги</button>{{/if}}</article>{{/each}}
 
   {{#if archive}}<details class="fbls-panel" data-fbls-disclosure="transport-history"><summary>История прежних заказов</summary>
     {{#each archive}}<article><strong>{{direction}} · {{market}}</strong><span>{{status}}</span><p>{{cargo}}</p></article>{{/each}}

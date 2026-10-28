@@ -94,7 +94,7 @@ export function advanceTransportShip(data, holding, order, targetQd) {
     ship.location = destination;
     ship.status = destination.kind === "home" ? "docked" : "away";
     if (destination.kind === "home") disembarkShipCrew(holding, ship, releaseQd);
-    ship.idleUpkeepCopperPerDay = stages.at(-1)?.service.idleUpkeepCopperPerDay ?? ship.idleUpkeepCopperPerDay;
+    ship.idleUpkeepCopperPerDay = order.shipAbort?.idleUpkeepCopperPerDay ?? stages.at(-1)?.service.idleUpkeepCopperPerDay ?? ship.idleUpkeepCopperPerDay;
     const dailyCopper = destination.kind === "home" ? (ship.homeUpkeepEnabled === false ? 0 : ship.homeUpkeepCopperPerDay ?? 0) : ship.idleUpkeepCopperPerDay ?? 0;
     ship.portBilling = { scope: destination.kind, sinceQd: releaseQd, lastCalculatedQd: releaseQd, dailyCopper, carriedCopper: 0, chargedCopper: 0 };
     order.shipArrived = true;

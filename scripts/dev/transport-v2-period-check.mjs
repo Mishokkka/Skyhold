@@ -30,17 +30,31 @@ assert.equal(order.spoiledQty, 10);
 assert.equal(order.insurancePaidCopper, 0);
 
 globalThis.game = { user: { id: "gm", isGM: true }, settings: { get: () => undefined }, modules: new Map(), users: [], time: { worldTime: 0 } };
+globalThis.foundry = { utils: { deepClone: structuredClone } };
 const world = worldMarketFixture();
 world.data.meta.transportV2 = { version: 2, clockQd: 0, runs: [] };
 world.holding.special.ships.list = [];
 world.holding.people.list = [];
+world.holding.storage.resources = [{ id: "sale-wood", resourceId: "wood", roomId: "outdoors", forSale: true,
+  qty: 2, batches: [{ id: "local-wood", qty: 2, ageQd: 0 }] }];
 const fast = [{ ...services[0], firstQd: 4 }];
 const purchased = [{ ...cargo[0], resourceId: "wood", shelfLifeQd: 0, qty: 10, name: "Wood" }];
 const purchasedPlan = planTransportChain({ cargo: purchased, services: fast });
 bookTransportOrder({ state: world.data.meta.transportV2, holding: world.holding, services: fast, plan: purchasedPlan,
   id: "period-purchase", direction: "inbound", commercial: { targetRoomId: "outdoors" } });
+const itemCargo = [{ ...purchased[0], lotId: "imported-item", qty: 1, sourceType: "item", item: {
+  name: "Imported tool", qty: 1, forSale: true, itemData: { system: { quantity: 1, cost: "10 C" } }
+} }];
+bookTransportOrder({ state: world.data.meta.transportV2, holding: world.holding, services: fast,
+  plan: planTransportChain({ cargo: itemCargo, services: fast, runs: world.data.meta.transportV2.runs }),
+  id: "period-item", direction: "inbound", commercial: { targetRoomId: "outdoors" } });
 const before = structuredClone(world.data);
 const workflow = new SkyholdWorkflowService();
+const demandPhases = [], runDemand = workflow._runInternalDemandForQd;
+workflow._runInternalDemandForQd = function(draft, ...args) {
+  demandPhases.push({ clockQd: draft.gm.calendaria.lastQd, candidates: this._internalDemandCandidates(draft) });
+  return runDemand.call(this, draft, ...args);
+};
 const prepared = await workflow._prepareTendayOperation({ holdingId: world.holding.id, dataView: world.data,
   operationId: "period-preview", preparedAt: "2026-10-26T00:00:00.000Z" });
 assert.equal(prepared.ok, true, prepared.message);
@@ -48,8 +62,11 @@ assert.deepEqual(world.data, before, "preview must not mutate the original holdi
 assert.equal(prepared.preparedHolding.special.transportV2.orders[0].status, "delivered");
 assert.equal(prepared.preparedHolding.storage.resources.find((row) => row.resourceId === "wood").batches[0].ageQd, 40,
   "arrival during a period includes subsequent warehouse age, exactly once");
-assert.equal(prepared.preparedHolding.storage.log.filter((row) => row.kind === "transport-purchase").length, 1,
+assert.equal(prepared.preparedHolding.storage.log.filter((row) => row.kind === "transport-purchase").length, 2,
   "the period ledger must not duplicate the transport storage log");
+assert.equal(demandPhases[0].candidates.reduce((sum, row) => sum + row.qty, 0), 2,
+  "actual period calculation can sell the existing stock, but neither imported resources nor Items");
+assert.equal(prepared.preparedHolding.storage.items[0].internalDemandAvailableFromQd, 40);
 assert.equal(prepared.preparedSharedTransport.clockQd, 40);
 globalThis.ui = { notifications: { warn() {}, info() {}, error() {} } };
 let committed = structuredClone(before);
@@ -71,6 +88,9 @@ assert.equal((await workflow._applyPreparedTendayOperation(prepared)).replay, tr
 assert.deepEqual(committed, after);
 const next = await workflow._prepareTendayOperation({ holdingId: world.holding.id, dataView: committed,
   operationId: "next-preview", pendingEventsCollected: true });
+assert.equal(next.ok, true, next.message);
+assert.equal(demandPhases.at(-1).candidates.reduce((sum, row) => sum + row.qty, 0), 13,
+  "the next actual period admits both imported resources and the imported Item");
 committed.meta.transportV2.clockQd++;
 assert.equal((await workflow._applyPreparedTendayOperation(next)).stale, true, "a changed shared transport clock invalidates a prepared period");
 const multiple = await workflow._prepareTendayOperation({ holdingId: world.holding.id, qd: 80, dataView: after,

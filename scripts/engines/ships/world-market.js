@@ -13,6 +13,7 @@ import { calculateShipCosts, getShipProfile, shipCapacityLoadPoints } from "./pr
 import { shipIdleReserveCopper } from "./fleet-accounting.js";
 import { bundleOutcomeReserves } from "./bundle-accounting.js";
 import { laborWageRate } from "../economy/labor-wage-rate.js";
+import { transportHandlingTerms } from "../transport/quantities.js";
 
 // Customer consignments aggregate wholesale lots, not the retail stock purchasable by the settlement.
 const WHOLESALE_LOTS = 20;
@@ -263,7 +264,6 @@ export function worldShipTransportTerms(data, holding, ship, fromRegionId, toReg
   const crew = crewEconomics(holding, ship);
   const dailyCopper = crew.crewDailyCopper + crew.crewCount * rationPrice(world, portForPoint(world, from))
     + getShipProfile(ship.profileId).upkeepDailyCopper;
-  const atDestination = portForPoint(world, to);
   const handlingCapacity = (port) => Math.max(1, Math.floor(250 * (PORT_HANDLING_CAPACITY.get(port?.sizeProfileId) ?? 1)
     / Number(port?.factors?.time ?? 1) * 4000));
   return { ...route, from: point(from), to: point(to),
@@ -272,8 +272,7 @@ export function worldShipTransportTerms(data, holding, ship, fromRegionId, toReg
     operatingMilliCopperPerQd: dailyCopper * 250,
     dailyCosts: { foodCopper: crew.crewCount * rationPrice(world, portForPoint(world, from)), crewCopper: crew.crewDailyCopper,
       upkeepCopper: getShipProfile(ship.profileId).upkeepDailyCopper },
-    handlingFlatCopper: to.kind === "home" ? 0 : money(atDestination.locationProfile?.deliveryFlatCopper ?? 0),
-    handlingMilliCopper: to.kind === "home" ? 0 : Math.ceil((atDestination.locationProfile?.deliveryLoadCopper ?? 0) * 1000),
+    ...transportHandlingTerms([from, to].filter(port => port.kind !== "home").map(port => portForPoint(world, port).locationProfile)),
     idleUpkeepCopperPerDay: costsFor(world, holding, ship, from, to, { durationQd: 4 }).dailyCopper };
 }
 

@@ -1,6 +1,6 @@
 import { prepareMarketAuthorityContext, authorityMarketLogistics } from "../market/authority-context.js";
 import { transportServicesFromRoutes, validateTransportConfiguration } from "../../engines/transport/services.js";
-import { findTransportPlans, planTransportChain } from "../../engines/transport/planner.js";
+import { findTransportPlans, planTransportChain, transportChainMatchesConstraints } from "../../engines/transport/planner.js";
 import { cargoValue, shipTransportFunding, transportLoad, transportOperatingCharge } from "../../engines/transport/quantities.js";
 import { stableDataHash } from "../../data/storage-commit.js";
 import { findHoldingRegion } from "../../engines/market/logistics.js";
@@ -44,26 +44,35 @@ function ownServices(data, holding, ship, points, request, clockQd) {
   const world = buildShipWorldContext(data, holding), capacityPoints = shipCapacityLoadPoints(ship);
   const position = ship.location?.regionId ?? world.home.regionId;
   const services = [];
+  const emptyTerms = (from, to) => {
+    if (from === to) return null;
+    try { return worldShipTransportTerms(data, holding, ship, from, to, { context: world }); }
+    catch (_error) { return null; }
+  };
   for (const from of points) for (const to of points) {
     if (from === to) continue;
     try {
       const terms = worldShipTransportTerms(data, holding, ship, from, to, { context: world, loadPoints: capacityPoints });
-      const approach = from === position ? null : worldShipTransportTerms(data, holding, ship, position, from, { context: world });
-      const back = worldShipTransportTerms(data, holding, ship, to, from, { context: world });
-      const home = to === world.home.regionId ? null : worldShipTransportTerms(data, holding, ship, to, world.home.regionId, { context: world });
-      const abortReturn = from === world.home.regionId ? null : worldShipTransportTerms(data, holding, ship, from, world.home.regionId, { context: world });
+      const approach = emptyTerms(position, from), back = emptyTerms(to, from);
+      const home = emptyTerms(to, world.home.regionId), abortReturn = emptyTerms(from, world.home.regionId);
       services.push({ id: `owned:${ship.id}:${from}:${to}`, label: ship.name, companyId: `owned:${ship.id}`, kind: "owned", shipId: ship.id,
         from, to, fromLabel: terms.from.label, toLabel: terms.to.label, capacity: capacityPoints * 1000, vehicles: 1,
         travelQd: Math.max(1, terms.durationQd), loadingQd: terms.loadingQd, unloadingQd: terms.unloadingQd,
         loadingCapacity: terms.loadingCapacity, unloadingCapacity: terms.unloadingCapacity,
-        returnQd: back.durationQd, endReturnQd: home?.durationQd ?? 0, endReturnLocation: world.home.regionId,
+        returnQd: back?.durationQd ?? 0, endReturnQd: home?.durationQd ?? 0, endReturnLocation: world.home.regionId,
+        emptyAccessLimit: request.accessLimit,
+        approachAvailable: from === position || Boolean(approach), approachAccessCost: approach?.accessCost ?? 0,
+        returnAvailable: Boolean(back), returnAccessCost: back?.accessCost ?? 0,
+        endReturnAvailable: to === world.home.regionId || Boolean(home), endReturnAccessCost: home?.accessCost ?? 0,
+        abortReturnAvailable: from === world.home.regionId || Boolean(abortReturn), abortReturnAccessCost: abortReturn?.accessCost ?? 0,
         abortReturnQd: abortReturn?.durationQd ?? 0,
         returnAtEnd: request.returnHome === true, approachQd: approach?.durationQd ?? 0,
         approachCopper: approach ? transportOperatingCharge(approach, approach.durationQd) : 0,
-        dispatchCopper: terms.handlingFlatCopper, handlingMilliCopper: terms.handlingMilliCopper,
+        handlingFlatCopper: terms.handlingFlatCopper, handlingMilliCopper: terms.handlingMilliCopper,
         operatingMilliCopperPerQd: terms.operatingMilliCopperPerQd, idleUpkeepCopperPerDay: terms.idleUpkeepCopperPerDay,
-        returnOperatingMilliCopperPerQd: back.operatingMilliCopperPerQd,
-        dailyCosts: terms.dailyCosts, returnDailyCosts: back.dailyCosts,
+        startIdleUpkeepCopperPerDay: Object.values(terms.dailyCosts).reduce((sum, cost) => sum + cost, 0),
+        returnOperatingMilliCopperPerQd: back?.operatingMilliCopperPerQd ?? terms.operatingMilliCopperPerQd,
+        dailyCosts: terms.dailyCosts, returnDailyCosts: back?.dailyCosts ?? terms.dailyCosts,
         waitingMilliCopperPerQd: from === world.home.regionId && ship.homeUpkeepEnabled === false ? 0 : terms.operatingMilliCopperPerQd,
         accessCost: terms.accessCost, riskBps: request.riskBps ?? 300 });
     } catch (_error) { /* An unavailable pair is not a service; the selected complete chain is validated below. */ }
@@ -84,9 +93,9 @@ export function prepareTransportContext({ data, holding, request = {}, isGM = fa
     ?? context.outbound?.offers?.find((offer) => offer.resourceId === line.resourceId)?.accessDifficulty ?? 0)));
   const routes = (logistics?.routeCandidates?.length ? logistics.routeCandidates : logistics?.ok ? [logistics] : [])
     .filter((route) => route.routeAccessCost + difficulty <= route.accessLevel);
-  let services = transportServicesFromRoutes(routes, configuration, data.catalog.eventRegions);
   const home = findHoldingRegion(holding, data.catalog.eventRegions)?.value;
   if (!home) throw new Error("У поселения не определена локация.");
+  let services = transportServicesFromRoutes(routes, configuration, data.catalog.eventRegions, { markets: context.markets, homeRegionId: home });
   const localService = services.some((service) => service.from === `${home}:holding` || service.to === `${home}:holding`);
   const endpoint = localService ? `${home}:holding` : home;
   const from = direction === "inbound" ? context.market.regionId : endpoint;
@@ -98,7 +107,7 @@ export function prepareTransportContext({ data, holding, request = {}, isGM = fa
   if (request.ownShipId && !ship) throw new Error("Выбранный корабль не найден.");
   if (ship) {
     const points = [...new Set([home, context.market.regionId, ...services.flatMap((row) => [row.from, row.to])])].filter((id) => !id.endsWith(":holding")).slice(0, 24);
-    services.push(...ownServices(data, holding, ship, points, { ...request, riskBps: configuration.riskBps }, startQd).map((service) => ({ ...service,
+    services.push(...ownServices(data, holding, ship, points, { ...request, riskBps: configuration.riskBps, accessLimit: logistics?.accessLevel ?? 0 }, startQd).map((service) => ({ ...service,
       from: service.from === home && direction === "outbound" ? endpoint : service.from,
       to: service.to === home && direction === "inbound" ? endpoint : service.to })));
   }
@@ -109,6 +118,7 @@ export function prepareTransportContext({ data, holding, request = {}, isGM = fa
   if (request.serviceIds?.length) {
     const selected = request.serviceIds.map((id) => services.find((row) => row.id === id));
     if (selected.some((row) => !row)) throw new Error("Выбранная услуга больше недоступна.");
+    if (!transportChainMatchesConstraints(selected, request)) throw new Error("Маршрут не соблюдает закрепления или исключения перевозчиков.");
     plan = planTransportChain({ cargo, services: selected, startQd, runs: state?.runs ?? [] });
     if (plan.stages[0].from !== from || plan.stages.at(-1).to !== to) throw new Error("Маршрут не соединяет рынок и поселение.");
     if (plan.ownShipId !== String(request.ownShipId ?? "")) throw new Error("План не соответствует выбранному кораблю.");

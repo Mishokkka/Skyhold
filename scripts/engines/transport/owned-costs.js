@@ -31,10 +31,14 @@ export function prepareOwnedTransportAbort(order, state) {
     run: state.runs.find((run) => run.id === receipt.runId) }))).filter((row) => row.run).sort((a, b) => a.run.releaseQd - b.run.releaseQd).at(-1);
   const decidedQd = order.finishedQd;
   const freeQd = Math.max(decidedQd, completed?.run.releaseQd ?? order.plan.startQd + (first.service.approachQd ?? 0));
-  const returnHome = first.service.returnAtEnd;
-  const returnQd = returnHome ? completed ? completed.stage.service.endReturnQd ?? 0 : first.service.abortReturnQd ?? 0 : 0;
   const service = completed?.stage.service ?? first.service;
-  order.shipAbort = { decidedQd, releaseQd: freeQd + returnQd,
+  const returnKind = completed ? "endReturn" : "abortReturn";
+  const returnBlocked = Boolean(first.service.returnAtEnd && (service[`${returnKind}Available`] === false
+    || (service[`${returnKind}AccessCost`] ?? 0) > (service.emptyAccessLimit ?? Infinity)));
+  const returnHome = first.service.returnAtEnd && !returnBlocked;
+  const returnQd = returnHome ? completed ? completed.stage.service.endReturnQd ?? 0 : first.service.abortReturnQd ?? 0 : 0;
+  order.shipAbort = { decidedQd, releaseQd: freeQd + returnQd, returnBlocked,
     location: returnHome ? service.endReturnLocation : completed?.run.to ?? first.from,
+    idleUpkeepCopperPerDay: completed ? service.idleUpkeepCopperPerDay : service.startIdleUpkeepCopperPerDay ?? service.idleUpkeepCopperPerDay,
     returnCopper: transportOperatingCharge(service, returnQd, Boolean(completed)) };
 }

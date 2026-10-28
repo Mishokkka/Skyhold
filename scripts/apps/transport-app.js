@@ -105,12 +105,15 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
       fundingNeeded: order.fundingNeededCopper ? money(order.fundingNeededCopper) : "", canFund: permissions.canUseStorage && permissions.canManageShips,
       shipStatus: order.ownShipId ? order.shipReleased ? "Корабль свободен" : order.shipArrived
         ? "Корабль прибыл; ожидает расчёта, содержание продолжается" : "Корабль занят этим заказом" : "",
+      shipReturnBlocked: order.shipAbort?.returnBlocked,
       shipTiming: shipTiming(order),
       arrival: days(Math.max(...order.stages.flatMap((stage) => stage.runs.map((run) => run.arrivalQd))) - clockQd),
       canCancel: permissions.canUseStorage && !order.shipStarted && !order.history.some((row) => row.kind === "departed") && order.status === "booked",
       stages: order.stages.map((stage) => ({ path: path(stage), count: stage.runs.length, price: money(stage.totalCopper), invoice: stageInvoice(stage) })) }));
     const incidents = permissions.isGM ? (data.meta?.transportV2?.runs ?? []).filter((run) => run.incident?.status === "pending")
       .map((run) => ({ id: run.id, label: run.serviceLabel, orders: run.claims.length,
+        awaitingCargo: [...new Set(run.claims.filter(claim => claim.stage > 0 && claim.manifestReady !== true)
+          .map(claim => data.holdings.find(row => row.id === claim.holdingId)?.name ?? claim.holdingId))].join(", "),
         delayDays: this._incidentFields?.[run.id]?.delayDays ?? 1, lossPercent: this._incidentFields?.[run.id]?.lossPercent ?? 100 })) : [];
     const archive = [...(holding.special?.market?.orders ?? []).map((row) => ({ ...row, direction: "Покупка" })),
       ...(holding.special?.market?.outbound?.orders ?? []).map((row) => ({ ...row, direction: "Продажа" }))]
