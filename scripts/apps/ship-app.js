@@ -141,7 +141,8 @@ export class SkyholdShipApp extends WindowFrameMixin(RenderSchedulerMixin(Handle
       const button = event.target?.closest?.("[data-action]");
       if (button && root.contains(button) && button.dataset.action === "ship-open-transport") {
         event.preventDefault();
-        void import("./lazy-apps.js").then(({ openTransportApp }) => openTransportApp({ holdingId: this.holdingId }));
+        dispatchDelegatedAction(this, event, button,
+          () => import("./lazy-apps.js").then(({ openTransportApp }) => openTransportApp({ holdingId: this.holdingId })));
         return;
       }
       if (button && root.contains(button) && button.dataset.action === "ship-place-home") {

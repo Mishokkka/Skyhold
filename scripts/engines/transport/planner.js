@@ -34,6 +34,8 @@ function regularSlot(service, readyQd, runs, horizon) {
     const id = slotId(service, departure);
     const existing = runs.find((run) => run.id === id && occupied(run));
     if (existing?.blocked || existing?.incident) continue;
+    if (existing && (existing.startQd < readyQd || existing.kind !== service.kind
+      || existing.from !== service.from || existing.to !== service.to)) continue;
     const free = Math.min(service.capacity, existing?.capacity ?? service.capacity) - (existing?.reservedLoad ?? 0);
     if (free > 0) return { id, departureQd: departure, free, vehicle: "regular", existing };
   }
@@ -124,7 +126,7 @@ export function planTransportChain({ cargo, services, startQd = 0, runs = [], ho
       const load = cargoLoad(packed.taken);
       const arrivalQd = slot.existing?.arrivalQd ?? slot.departureQd + service.travelQd + (timed.unloadingQd ?? 0);
       if (arrivalQd > horizon) throw new TransportPlanningUnavailableError("horizon", "Доставка выходит за горизонт планирования.");
-      const start = slot.startQd ?? slot.departureQd - (timed.loadingQd ?? 0);
+      const start = slot.existing?.startQd ?? slot.startQd ?? slot.departureQd - (timed.loadingQd ?? 0);
       const charge = runCharge(service, load, arrivalQd + returnQd - start, returnQd);
       storageCopper += transportRateCharge(load * Math.max(0, start - readyQd),
         service.storageMilliCopperPerLoadQd ?? (service.storageCopperPerLoadQd ?? storageRate) * 1000, TRANSPORT_LOAD_SCALE * 1000);
@@ -133,6 +135,9 @@ export function planTransportChain({ cargo, services, startQd = 0, runs = [], ho
         startQd: start, departureQd: slot.departureQd, arrivalQd, releaseQd: arrivalQd + returnQd,
         releaseLocation: finalOwnReturn ? service.endReturnLocation ?? service.from : returnQd ? service.from : service.to, capacity: service.capacity, reservedLoad: load,
         cargo: packed.taken, charge, status: "booked", riskBps: service.riskBps ?? 0 };
+      if (slot.existing) {
+        for (const key of ["startQd", "departureQd", "arrivalQd", "releaseQd", "releaseLocation", "capacity", "riskBps"]) run[key] = slot.existing[key];
+      }
       const shared = workingRuns.find((row) => row.id === run.id && occupied(row));
       if (shared) shared.reservedLoad += load;
       else workingRuns.push(copy(run));

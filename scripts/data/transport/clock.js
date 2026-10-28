@@ -1,13 +1,9 @@
-import { economyDayIndex } from "../../core/economy-calendar.js";
+import { economyCalendarQd } from "../../core/economy-calendar.js";
 import { getCalendariaHoursPerDay } from "../../integrations/calendaria-bridge.js";
 
 /** Calendar coordinate, independent of a holding's age. Stored dates use public month/day numbers. */
 export function transportCalendarQd(holding) {
-  const calendar = holding?.gm?.calendaria ?? {};
-  const day = economyDayIndex({ gm: { calendaria: { lastDateTime: calendar.lastDateTime, lastDateKey: calendar.lastDateKey } } });
-  const date = calendar.lastDateTime;
-  const hour = Number(date?.hour ?? 0) + Number(date?.minute ?? 0) / 60 + Number(date?.second ?? 0) / 3600;
-  return day === null ? null : day * 4 + Math.floor(hour * 4 / getCalendariaHoursPerDay());
+  return economyCalendarQd(holding, getCalendariaHoursPerDay());
 }
 
 /** Anchor existing schedules once; never replace local economy counters or rewrite accepted runs. */

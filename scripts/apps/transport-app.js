@@ -114,7 +114,7 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
       stages: order.stages.map((stage) => ({ path: path(stage), count: stage.runs.length, price: money(stage.totalCopper), invoice: stageInvoice(stage) })) }));
     const incidents = permissions.isGM ? (data.meta?.transportV2?.runs ?? []).filter((run) => run.incident?.status === "pending")
       .map((run) => ({ id: run.id, label: run.serviceLabel, orders: run.claims.length,
-        awaitingCargo: [...new Set(run.claims.filter(claim => claim.stage > 0 && claim.manifestReady !== true)
+        awaitingCargo: [...new Set(run.claims.filter(claim => claim.manifestReady !== true)
           .map(claim => data.holdings.find(row => row.id === claim.holdingId)?.name ?? claim.holdingId))].join(", "),
         delayDays: this._incidentFields?.[run.id]?.delayDays ?? 1, lossPercent: this._incidentFields?.[run.id]?.lossPercent ?? 100 })) : [];
     const archive = [...(holding.special?.market?.orders ?? []).map((row) => ({ ...row, direction: "Покупка" })),

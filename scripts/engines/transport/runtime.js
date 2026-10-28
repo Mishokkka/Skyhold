@@ -18,7 +18,7 @@ function reserveRuns(state, order, stages) {
     if (run.status === "cancelled" || run.reservedLoad + planned.reservedLoad > run.capacity) throw new Error("Место на рейсе уже занято.");
     run.reservedLoad += planned.reservedLoad;
     run.claims.push({ holdingId: order.holdingId, orderId: order.id, stage: stage.index, load: planned.reservedLoad,
-      manifestReady: stage.index === 0,
+      manifestReady: stage.index === 0 && order.direction === "inbound",
       cargo: planned.cargo.map(lot => ({ lotId: lot.lotId, qty: lot.qty, ageQd: lot.ageQd ?? 0,
         ageAtQd: lot.ageAtQd ?? order.plan.startQd, shelfLifeQd: lot.shelfLifeQd ?? 0, spoiledQty: lot.spoiledQty ?? 0 })) });
   }
@@ -106,11 +106,12 @@ export function cancelTransportOrder({ state, holding, order, refundCommercial =
   return { ok: true };
 }
 
-function availableForNext(stage) {
+function availableForNext(stage, readyQd, fallbackQd) {
   const merged = new Map();
-  for (const lot of stage.received) {
+  for (const received of stage.received) {
+    const lot = ageLot(received, readyQd, fallbackQd);
     const previous = merged.get(lot.lotId);
-    if (previous) { previous.qty += lot.qty; previous.ageQd = Math.max(previous.ageQd, lot.ageQd); previous.ageAtQd = Math.max(previous.ageAtQd, lot.ageAtQd); }
+    if (previous) { previous.qty += lot.qty; previous.ageQd = Math.max(previous.ageQd, lot.ageQd); }
     else merged.set(lot.lotId, { ...lot });
   }
   return [...merged.values()];
@@ -192,8 +193,8 @@ export function resolveTransportIncident(state, runId, { outcome, delayQd = 0, l
   if (!run?.incident || run.incident.status !== "pending") throw new Error("Этот рейс не ожидает решения.");
   if (!["success", "delay", "loss"].includes(outcome)) throw new Error("Неизвестный исход.");
   transportInteger(delayQd, "задержка", 0, 1440); transportInteger(lossBps, "потери", 0, 10000);
-  if (outcome === "loss" && run.claims.some(claim => claim.stage > 0 && claim.manifestReady !== true)) {
-    throw new Error("Сначала обработайте предыдущие участки связанных заказов: состав груза на общем рейсе ещё не определён.");
+  if (outcome === "loss" && run.claims.some(claim => claim.manifestReady !== true)) {
+    throw new Error("Сначала обработайте отправления и предыдущие участки связанных заказов: состав груза на общем рейсе ещё не определён.");
   }
   const previous = run.arrivalQd;
   run.arrivalQd = Math.max(previous, atQd) + (outcome === "delay" ? delayQd : 0);
@@ -221,17 +222,21 @@ export function advanceTransportOrders({ state, holding, targetQd, dependencies 
       let stage = order.stages[order.stageIndex];
       const prior = order.stages[order.stageIndex - 1];
       if (!stage.receipts.length && prior) {
-        const cargo = availableForNext(prior);
+        const ready = Math.max(...prior.receipts.map((row) => row.arrivalQd));
+        const cargo = availableForNext(prior, ready, order.plan.startQd);
         if (!cargo.length) {
           releaseRuns(state, order, order.stageIndex);
           order.abortedFromStage = order.stageIndex;
           order.stageIndex = order.stages.length; break;
         }
-        const ready = Math.max(...prior.receipts.map((row) => row.arrivalQd));
         if (stage.needsRebooking || ready > Math.min(...stage.runs.map((run) => run.startQd)) || totalQty(cargo) !== totalQty(stage.runs.flatMap((run) => run.cargo))) {
           if (!attemptRebooking(order, targetQd, () => rebookRemaining(state, order, order.stageIndex, cargo, Math.max(ready, order.lastProcessedQd)))) break;
           stage = order.stages[order.stageIndex];
         }
+        // The accepted estimate stays frozen; every physical manifest follows received cargo,
+        // including warehouse compaction and ageing when no timetable change was needed.
+        const received = new Map(cargo.map(lot => [lot.lotId, lot]));
+        for (const run of stage.runs) run.cargo = run.cargo.map(lot => ({ ...received.get(lot.lotId), qty: lot.qty }));
       }
       let replanned = false;
       for (const scheduled of stage.runs) {

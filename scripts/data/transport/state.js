@@ -3,6 +3,31 @@ import { transportEpochQd } from "./clock.js";
 export const transportOrders = (holding) => holding?.special?.transportV2?.orders ?? [];
 export const activeTransportOrder = (order) => !["delivered", "lost", "cancelled"].includes(order.status);
 
+/** Drop operational records only after every consumer has passed them. Order receipts retain history. */
+export function pruneCompletedTransportRuns(data) {
+  const state = data.meta?.transportV2;
+  if (!state || !Array.isArray(data.holdings)) return;
+  const orders = new Map();
+  let cutoff = state.clockQd;
+  for (const holding of data.holdings) for (const order of transportOrders(holding)) {
+    orders.set(JSON.stringify([holding.id, order.id]), order);
+    if (!activeTransportOrder(order)) continue;
+    // Lagging orders may still join an old departure or need an old vehicle's return date.
+    cutoff = Math.min(cutoff, order.lastProcessedQd);
+    for (const stage of order.stages) for (const run of stage.runs) {
+      if (!stage.receipts.some(receipt => receipt.runId === run.id && receipt.status === "arrived")) cutoff = Math.min(cutoff, run.startQd);
+    }
+  }
+  state.runs = state.runs.filter(run => {
+    if (run.status !== "arrived" || run.releaseQd > cutoff || run.incident?.status === "pending") return true;
+    return !run.claims.length || run.claims.some(claim => {
+      const order = orders.get(JSON.stringify([claim.holdingId, claim.orderId]));
+      return !order || activeTransportOrder(order) || order.fundingNeededCopper > 0
+        || (order.ownShipId && (!order.shipReleased || !order.shipCostsReconciled));
+    });
+  });
+}
+
 export function transportCargoReservations(holding) {
   return transportOrders(holding).filter((order) => activeTransportOrder(order) && order.direction === "outbound")
     .flatMap((order) => (order.cargo ?? []).map((lot) => ({ ...lot, qty: Math.max(0, lot.qty - (order.dispatched?.[lot.lotId] ?? 0)

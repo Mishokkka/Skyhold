@@ -63,6 +63,9 @@ physical.incident = { status: "pending" };
 physical.claims.push({ holdingId: holding.id, orderId: "incoming", stage: 1, manifestReady: false, load: 1 });
 assert.equal((await app._prepareContext({})).incidents[0].awaitingCargo, holding.name,
   "GM sees which holding must resolve its connecting cargo before a shared loss");
+physical.claims.at(-1).stage = 0;
+assert.equal((await app._prepareContext({})).incidents[0].awaitingCargo, holding.name,
+  "an outbound first leg must also read actual warehouse cargo before loss allocation");
 game.user = player;
 assert.deepEqual((await app._prepareContext({})).incidents, [], "incident coordination remains GM-only");
 game.user = gm;

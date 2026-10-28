@@ -51,7 +51,7 @@
   {{#each incidents}}
   <article class="fbls-panel" data-transport-incident="{{id}}">
     <strong>{{label}}: требуется решение для {{orders}} заказов на рейсе</strong>
-    {{#if awaitingCargo}}<p role="status">Для распределения утраты сначала обработайте предыдущие участки связанных заказов: {{awaitingCargo}}. Груз, не попавший на этот рейс, исключается из расчёта.</p>{{/if}}
+    {{#if awaitingCargo}}<p role="status">Для распределения утраты сначала обработайте отправления и предыдущие участки связанных заказов: {{awaitingCargo}}. Груз, не попавший на этот рейс, исключается из расчёта.</p>{{/if}}
     <div class="fbls-cluster">
       <label class="fbls-field">Задержка, дни<input type="number" min="0.25" max="360" step="0.25" data-transport-incident-field="delayDays" value="{{delayDays}}" /></label>
       <label class="fbls-field">Утрачено груза, %<input type="number" min="0" max="100" step="0.01" data-transport-incident-field="lossPercent" value="{{lossPercent}}" /></label>

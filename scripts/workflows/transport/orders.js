@@ -6,8 +6,8 @@ import { internalDemandBatchClockQd, nextInternalDemandBatchAvailabilityQd } fro
 import { cargoValue } from "../../engines/transport/quantities.js";
 import { stableDataHash } from "../../data/storage-commit.js";
 import { beginTransportShip, advanceTransportShip, recordTransportShipIncome } from "./ships.js";
-import { ensureTransportState } from "../../data/transport/state.js";
-import { sharedMarketEventTenday } from "../../data/market/shared-context.js";
+import { ensureTransportState, pruneCompletedTransportRuns } from "../../data/transport/state.js";
+import { sharedMarketEventTenday, advanceSharedMarketClock } from "../../data/market/shared-context.js";
 import { recordTransportClock, transportHoldingQd, transportLocalQd } from "../../data/transport/clock.js";
 
 function check(result) { if (!result?.ok) throw new Error(result?.message || "Не удалось исполнить рыночную операцию."); return result; }
@@ -28,6 +28,8 @@ export function advanceTransportShipments(data, holding, targetQd, workflow, { l
   const state = ensureTransportState(data);
   const commonTargetQd = transportHoldingQd(data, holding, targetQd);
   recordTransportClock(data, holding);
+  const absoluteQd = qd => Number.isSafeInteger(state.calendarEpochQd) ? state.calendarEpochQd + qd : null;
+  advanceSharedMarketClock(holding, targetQd, absoluteQd(commonTargetQd));
   const entries = [];
   const cashBefore = holding.storage.moneyCopper;
   check(recoverMarketDemand({ holding, currentTenday: Math.floor(targetQd / 40) }));
@@ -62,12 +64,15 @@ export function advanceTransportShipments(data, holding, targetQd, workflow, { l
     },
     receiveCargo(order, cargo, atQd, receipt) {
       if (order.direction === "outbound") {
-        const quantities = lots => lots.reduce((totals, lot) => totals.set(lot.resourceId, (totals.get(lot.resourceId) ?? 0) + lot.qty), new Map());
+        const quantities = lots => lots.reduce((totals, lot) => {
+          const key = lot.demandId ?? lot.resourceId;
+          return totals.set(key, (totals.get(key) ?? 0) + lot.qty);
+        }, new Map());
         const shipped = quantities(receipt.cargo), received = quantities(cargo);
         const reservations = (order.demandReservations ?? []).map(row => ({ ...row,
           qty: Math.min(row.qty - (row.settledQty ?? 0), shipped.get(row.demandId) ?? 0), consumedQty: received.get(row.demandId) ?? 0 }));
         check(settleMarketDemandReservations({ holding, reservations, outcome: "consumed",
-          operationId: `${order.id}:receipt:${receipt.runId}`, occurredTenday: sharedMarketEventTenday(holding, transportLocalQd(order, atQd)), currentTenday: Math.floor(targetQd / 40) }));
+          operationId: `${order.id}:receipt:${receipt.runId}`, occurredTenday: sharedMarketEventTenday(holding, transportLocalQd(order, atQd), absoluteQd(atQd)), currentTenday: Math.floor(targetQd / 40) }));
         for (const [index, row] of (order.demandReservations ?? []).entries()) row.settledQty = (row.settledQty ?? 0) + reservations[index].qty;
         const revenue = cargoValue(cargo);
         if (order.commercial.revenueOnBoard) recordTransportShipIncome(holding, order, revenue, atQd);
@@ -131,6 +136,7 @@ export function advanceTransportShipments(data, holding, targetQd, workflow, { l
   if (transfer) entries.push({ kind: "transfer", resourceId: "money", name: "Возврат транспортного резерва и бортовых денег", qty: transfer,
     roomId: "treasury", source: "Перевозки", note: "Внутренний перевод, не торговая прибыль." });
   if (log && entries.length) workflow._appendStorageLog(holding, entries);
+  pruneCompletedTransportRuns(data);
   report.entries = entries;
   return report;
 }
