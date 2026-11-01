@@ -59,8 +59,14 @@ for (const shared of [false, true]) {
     advanceTransportOrders({ state, holding: a, targetQd: first.stages[0].runs[0].releaseQd, dependencies });
   }
   const runs = structuredClone(state.runs);
+  const otherHolding = structuredClone(b);
   deleteHoldingFromData(data, a.id);
-  assert.deepEqual(state.runs, runs, "deletion of completed ownership must not erase another holding's physical run");
+  assert.deepEqual(b, otherHolding, "deletion must not alter another holding's order or receipts");
+  if (shared) assert.equal(state.runs.length, 0, "both owners completed; all released physical records can now retire");
+  else assert.deepEqual(state.runs, runs.map(run => ({ ...run,
+    reservedLoad: run.reservedLoad - run.claims.filter(claim => claim.holdingId === a.id).reduce((sum, claim) => sum + claim.load, 0),
+    claims: run.claims.filter(claim => claim.holdingId !== a.id)
+  })), "only the deleted completed claim retires; the lagging holding keeps the physical schedule and its own claim");
   assert.equal(data.holdings.length, 1);
 }
 

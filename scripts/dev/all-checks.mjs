@@ -7,9 +7,14 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const { scripts } = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
 const commands = new Map();
-for (const [name, command] of Object.entries(scripts)) {
-  if (name !== "check" && !name.endsWith(":check")) continue;
+function collect(name, ancestors = new Set()) {
+  assert.ok(typeof scripts[name] === "string", `Unknown check script: ${name}`);
+  assert.ok(!ancestors.has(name), `Recursive check script: ${name}`);
+  const stack = new Set([...ancestors, name]);
+  const command = scripts[name];
   for (const segment of command.split("&&")) {
+    const nested = segment.match(/^\s*npm\s+run\s+([\w:-]+)\s*$/);
+    if (nested) { collect(nested[1], stack); continue; }
     const match = segment.match(/^\s*node\s+(scripts\/dev\/[\w/-]+\.mjs)([^&]*)$/);
     assert.ok(match, `${name}: unsupported check command: ${segment.trim()}`);
     const args = [match[1], ...match[2].trim().split(/\s+/).filter(Boolean)];
@@ -17,6 +22,7 @@ for (const [name, command] of Object.entries(scripts)) {
     commands.set(JSON.stringify(args), args);
   }
 }
+for (const name of Object.keys(scripts)) if (name === "check" || name.endsWith(":check")) collect(name);
 
 let completed = 0;
 const failures = [];

@@ -1,7 +1,7 @@
 import { findHoldingIndex } from "./access-guard.js";
 import { mergeHoldingDefaults } from "./normalizers.js";
 import { assertAvailableEntityId } from "./entity-identity.js";
-import { activeTransportOrder, transportOrders } from "./transport/state.js";
+import { activeTransportOrder, transportOrders, pruneCompletedTransportRuns } from "./transport/state.js";
 
 export function addHoldingToData(data, holding) {
   if (!Array.isArray(data.holdings)) data.holdings = [];
@@ -24,7 +24,18 @@ export function deleteHoldingFromData(data, holdingId) {
   const committedRun = (transport?.runs ?? []).some((run) => run.claims.some((claim) => claim.holdingId === holdingId)
     && (run.status === "booked" || run.incident?.status === "pending" || run.releaseQd > transport.clockQd));
   if (unfinished || committedRun) throw Object.assign(new Error("Сначала завершите перевозки поселения, расчёты и возвращение транспорта либо отмените ещё не начатые заказы."), { code: "transport-obligations" });
+  // Retire only known completed claims while their owner still exists. Unknown
+  // references retain the recovery guard in pruneCompletedTransportRuns.
+  const completedIds = new Set(transportOrders(holding).map(order => order.id));
+  for (const run of transport?.runs ?? []) {
+    run.claims = run.claims.filter(claim => {
+      if (claim.holdingId !== holdingId || !completedIds.has(claim.orderId)) return true;
+      run.reservedLoad -= claim.load;
+      return false;
+    });
+  }
   data.holdings = data.holdings.filter((row) => row.id !== holdingId);
+  pruneCompletedTransportRuns(data);
 }
 
 export async function updateHoldingInData(data, holdingId, updater, { fallback = false, skip = null } = {}) {

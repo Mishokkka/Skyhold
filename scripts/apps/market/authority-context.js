@@ -112,7 +112,7 @@ export function authorityMarketLogistics({
   carrierId = "",
   isGM = false,
   economy: preparedEconomy = null,
-  direction = "inbound"
+  direction = "inbound", preservePhysicalRoutes = false
 } = {}) {
   if (!market) return { logistics: null, carriers: [], carrier: null };
   const locations = data?.catalog?.eventRegions ?? [];
@@ -127,6 +127,7 @@ export function authorityMarketLogistics({
     isGM,
     seasonId: marketSeasonId(holding),
     direction,
+    preservePhysicalRoutes,
     dependencies: {
       regionFactors: (region) => marketLocationFactors(region, economy, locations),
       regionResolver: marketRegionForValue

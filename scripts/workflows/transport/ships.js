@@ -11,10 +11,12 @@ const shipFor = (holding, order) => {
   if (!ship) throw new Error("Корабль транспортного заказа не найден.");
   return ship;
 };
-function point(data, holding, regionId) {
-  regionId = String(regionId).replace(/:holding$/, "");
+function point(data, holding, regionId, order) {
   const home = buildShipWorldContext(data, holding, { offerLocationIds: [] }).home;
-  return regionId === home.regionId ? home : { kind: "market", id: regionId, regionId,
+  const homeEndpoint = order.plan.stages.find(stage => stage.service.kind === "owned")?.service.endReturnLocation ?? home.regionId;
+  if (regionId === homeEndpoint) return home;
+  regionId = String(regionId).replace(/:holding$/, "");
+  return { kind: "market", id: regionId, regionId,
     label: data.catalog.eventRegions.find((row) => row.value === regionId)?.label ?? regionId };
 }
 
@@ -26,7 +28,7 @@ export function beginTransportShip(data, holding, order) {
     budgetCopper: order.plan.ownExpensesCopper + order.money.reserveCopper - order.money.boardCopper });
   else ensurePartialShipOuting(ship, { voyageId: order.id, clockQd: clock });
   planShipOutingLeg(ship, { id: order.id, startedAtQd: clock, quote: { from: ship.location,
-    to: point(data, holding, order.plan.shipReleaseLocation), durationQd: Math.max(1, order.plan.shipReleaseQd - order.plan.startQd),
+    to: point(data, holding, order.plan.shipReleaseLocation, order), durationQd: Math.max(1, order.plan.shipReleaseQd - order.plan.startQd),
     operatingCopper: order.plan.ownExpensesCopper, rewardCopper: 0 } });
   embarkShipCrew(holding, ship, clock);
   ship.status = "away"; ship.timelineQd = clock; ship.portBilling = null;
@@ -92,7 +94,7 @@ export function advanceTransportShip(data, holding, order, targetQd) {
   const releaseQd = transportLocalQd(order, order.shipAbort?.releaseQd ?? Math.max(last.releaseQd, sharedLast?.releaseQd ?? 0));
   ship.timelineQd = Math.max(ship.timelineQd, Math.min(targetQd, releaseQd));
   if (targetQd < releaseQd || !completed) return;
-  const destination = point(data, holding, order.shipAbort?.location ?? last.releaseLocation);
+  const destination = point(data, holding, order.shipAbort?.location ?? last.releaseLocation, order);
   if (!order.shipArrived) {
     ship.location = destination;
     ship.status = destination.kind === "home" ? "docked" : "away";

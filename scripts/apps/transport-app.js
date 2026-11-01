@@ -63,23 +63,25 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
     const hiddenCountries = new Set((data.catalog?.marketEconomy?.countries ?? []).filter((row) => row.visibility === "gm").map((row) => row.id));
     const hiddenRegions = new Set((data.catalog?.eventRegions ?? []).filter((row) => hiddenCountries.has(row.countryId)).map((row) => row.value));
     const hiddenCompanies = new Set((data.catalog?.marketEconomy?.organizations ?? []).filter((row) => row.visibility === "gm").map((row) => row.id));
-    const path = (stage) => !permissions.isGM && (stage.service.visibility === "gm" || hiddenRegions.has(stage.from)
-      || hiddenRegions.has(stage.to) || hiddenCompanies.has(stage.service.companyId)) ? "Скрытый участок"
+    const regionId = id => String(id).replace(/:holding$/, "");
+    const pointLabel = id => !permissions.isGM && hiddenRegions.has(regionId(id)) ? "скрытый порт"
+      : String(id).endsWith(":holding") ? holding.name : data.catalog.eventRegions.find(row => row.value === id)?.label ?? id;
+    const path = (stage) => !permissions.isGM && (stage.service.visibility === "gm" || hiddenRegions.has(regionId(stage.from))
+      || hiddenRegions.has(regionId(stage.to)) || hiddenCompanies.has(stage.service.companyId)) ? "Скрытый участок"
       : `${stage.service.fromLabel || stage.from} → ${stage.service.toLabel || stage.to}`;
     const shipTiming = (order) => {
       if (!order.ownShipId || order.shipArrived || order.status === "cancelled") return "";
       const last = order.stages.filter((stage) => stage.service.kind === "owned").flatMap((stage) => stage.runs).at(-1);
       const physical = data.meta.transportV2.runs.find((run) => run.id === last?.id) ?? last;
       const destination = order.shipAbort?.location ?? physical.releaseLocation;
-      const label = !permissions.isGM && hiddenRegions.has(destination) ? "скрытый порт"
-        : data.catalog.eventRegions.find((row) => row.value === destination)?.label ?? destination;
+      const label = pointLabel(destination);
       return `Ожидаемое освобождение через ${days((order.shipAbort?.releaseQd ?? physical.releaseQd) - clockQd)}: ${label}; при происшествии срок уточняется`;
     };
     const selected = quote ? {
       delivery: money(quote.totalCopper), value: money(quote.valueCopper), treasury: money(quote.treasuryCopper),
       arrival: days(quote.plan.arrivalQd - quote.plan.startQd), firstArrival: days(quote.plan.firstArrivalQd - quote.plan.startQd),
       splitArrival: quote.plan.firstArrivalQd !== quote.plan.arrivalQd, shipRelease: quote.ship ? days(quote.plan.shipReleaseQd - quote.plan.startQd) : "",
-      shipReleaseLocation: data.catalog.eventRegions.find((row) => row.value === quote.plan.shipReleaseLocation)?.label ?? quote.plan.shipReleaseLocation,
+      shipReleaseLocation: pointLabel(quote.plan.shipReleaseLocation),
       ownExpenses: money(quote.plan.ownExpensesCopper), reserve: money(quote.commercial.reserveCopper),
       approach: quote.ship ? money(quote.plan.approachCopper) : "",
       tax: money(quote.commercial.taxCopper), insurance: money(quote.commercial.insuranceCopper),
@@ -104,6 +106,8 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
       waitingReason: order.replanFailure?.message ?? "",
       cost: money(order.status === "cancelled" ? 0 : order.money.spentCopper + order.commercial.taxCopper + order.commercial.insuranceCopper), escrow: money(order.money.escrowCopper),
       received: order.received.reduce((sum, lot) => sum + lot.qty, 0), total: order.cargo.reduce((sum, lot) => sum + lot.qty, 0),
+      lost: order.lostQty ?? 0, spoiled: order.spoiledQty ?? 0,
+      insurancePaid: order.insurancePaidCopper ? money(order.insurancePaidCopper) : "",
       fundingNeeded: order.fundingNeededCopper ? money(order.fundingNeededCopper) : "", canFund: permissions.canUseStorage && permissions.canManageShips,
       shipStatus: order.ownShipId ? order.shipReleased ? "Корабль свободен" : order.shipArrived
         ? "Корабль прибыл; ожидает расчёта, содержание продолжается" : "Корабль занят этим заказом" : "",

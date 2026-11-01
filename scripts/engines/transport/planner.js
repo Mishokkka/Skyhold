@@ -22,12 +22,12 @@ function checkService(service) {
     transportInteger(service[field] ?? 0, field);
   }
   if (service.kind === "regular") transportInteger(service.intervalQd, "интервал отправлений", 1);
-  else transportInteger(service.vehicles ?? 1, "число машин", 1, 1000);
+  else transportInteger(service.vehicles ?? 1, "число машин", 1, TRANSPORT_LIMITS.vehicles);
   if (service.kind === "owned" && !service.shipId) throw new Error("Не выбран собственный корабль.");
   transportInteger(service.riskBps ?? 0, "вероятность происшествия", 0, 10000);
 }
 
-function regularSlot(service, readyQd, runs, horizon) {
+function regularSlot(service, readyQd, runs, horizon, cargo) {
   let departure = Math.max(service.firstQd ?? 0, readyQd + (service.loadingQd ?? 0));
   departure = (service.firstQd ?? 0) + Math.ceil((departure - (service.firstQd ?? 0)) / service.intervalQd) * service.intervalQd;
   for (; departure <= horizon; departure += service.intervalQd) {
@@ -37,7 +37,7 @@ function regularSlot(service, readyQd, runs, horizon) {
     if (existing && (existing.startQd < readyQd || existing.kind !== service.kind
       || existing.from !== service.from || existing.to !== service.to)) continue;
     const free = Math.min(service.capacity, existing?.capacity ?? service.capacity) - (existing?.reservedLoad ?? 0);
-    if (free > 0) return { id, departureQd: departure, free, vehicle: "regular", existing };
+    if (free >= 0 && cargo.some(lot => lot.unitLoad <= free)) return { id, departureQd: departure, free, vehicle: "regular", existing };
   }
   return null;
 }
@@ -112,7 +112,7 @@ export function planTransportChain({ cargo, services, startQd = 0, runs = [], ho
       const returnQd = service.kind === "regular" ? 0 : finalOwnReturn ? service.endReturnQd ?? service.returnQd ?? 0
         : (service.kind === "charter" || !last ? service.returnQd ?? 0 : 0);
       const baseQd = (timed.loadingQd ?? 0) + service.travelQd + (timed.unloadingQd ?? 0);
-      const slot = service.kind === "regular" ? regularSlot(service, readyQd, workingRuns, horizon)
+      const slot = service.kind === "regular" ? regularSlot(service, readyQd, workingRuns, horizon, waiting)
         : charterSlot(timed, readyQd, workingRuns, horizon, baseQd + returnQd);
       if (!slot) throw new TransportPlanningUnavailableError("no-slot", "Нет свободного транспорта в горизонте планирования.");
       const packed = takeTransportCargo(waiting, slot.free);

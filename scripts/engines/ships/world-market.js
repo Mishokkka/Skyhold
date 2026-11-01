@@ -185,8 +185,8 @@ export function configureWorldShipEconomy(data, holding, ship, options = {}) {
   return quote;
 }
 
-function routeTerms(context, ship, from, to) {
-  const route = shortestMarketRoute(from.regionId, to.regionId, context.regions, { mode: "airship" });
+function routeTerms(context, ship, from, to, { maxAccess = Infinity, includeRisk = false } = {}) {
+  const route = shortestMarketRoute(from.regionId, to.regionId, context.regions, { mode: "airship", maxAccess });
   if (!route) throw new Error(`Нет воздушного маршрута: ${from.label} → ${to.label}.`);
   const speedKmPerDay = Number(ship.speedKmPerDay || getShipProfile(ship.profileId).speedKmPerDay);
   if (!Number.isFinite(speedKmPerDay) || speedKmPerDay <= 0) throw new Error("Укажите положительную скорость корабля.");
@@ -195,7 +195,20 @@ function routeTerms(context, ship, from, to) {
     + edge.distanceKm * edgeSeasonalModifier(edge, context.seasonId).timeFactor, 0) : route.distanceKm;
   const durationQd = Math.ceil(timedDistanceKm * 4 / speedKmPerDay);
   if (durationQd > 100000) throw new Error("Маршрут слишком продолжительный.");
-  return { distanceKm: route.distanceKm, speedKmPerDay, durationQd, path: route.path, accessCost: route.accessCost };
+  const result = { distanceKm: route.distanceKm, speedKmPerDay, durationQd, path: route.path, accessCost: route.accessCost };
+  if (includeRisk) {
+    const economy = contextMarketSources.get(context)?.economy;
+    const factors = new Map();
+    const riskAt = (id) => {
+      if (!factors.has(id)) factors.set(id, marketLocationFactors(context.regions.find(region => region.value === id),
+        economy, context.regions, { normalizedEconomy: true }).risk);
+      return factors.get(id);
+    };
+    const edges = route.edges.length ? route.edges : [{ from: from.regionId, to: to.regionId }];
+    result.riskFactor = Math.max(0.25, ...edges.map(edge => riskAt(edge.from) * riskAt(edge.to)
+      * edgeSeasonalModifier(edge, context.seasonId).riskFactor));
+  }
+  return result;
 }
 
 function portHandlingQd(port, loadPoints) {
@@ -255,12 +268,13 @@ function costsFor(context, holding, ship, from, to, route, cargo = null) {
 }
 
 /** Shared physical inputs for transport orders; customer rewards remain independent market offers. */
-export function worldShipTransportTerms(data, holding, ship, fromRegionId, toRegionId, { context = null, loadPoints = 0 } = {}) {
+export function worldShipTransportTerms(data, holding, ship, fromRegionId, toRegionId,
+  { context = null, loadPoints = 0, maxAccess = Infinity, fromHome = true, toHome = true } = {}) {
   const world = context ?? buildShipWorldContext(data, holding);
-  const findPort = (id) => id === world.home.regionId ? world.home : world.ports.find((port) => port.regionId === id);
-  const from = findPort(fromRegionId), to = findPort(toRegionId);
+  const findPort = (id, atHome) => id === world.home.regionId && atHome ? world.home : world.ports.find((port) => port.regionId === id);
+  const from = findPort(fromRegionId, fromHome), to = findPort(toRegionId, toHome);
   if (!from || !to) throw new Error("Для погрузки и выгрузки своего судна нужны доступные порты.");
-  const route = routeTerms(world, ship, from, to);
+  const route = routeTerms(world, ship, from, to, { maxAccess, includeRisk: true });
   const crew = crewEconomics(holding, ship);
   const dailyCopper = crew.crewDailyCopper + crew.crewCount * rationPrice(world, portForPoint(world, from))
     + getShipProfile(ship.profileId).upkeepDailyCopper;

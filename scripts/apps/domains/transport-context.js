@@ -36,22 +36,26 @@ function selectedCargo(context, request) {
   return { cargo, lines };
 }
 
-function ownServices(data, holding, ship, points, request, clockQd) {
+function ownServices(data, holding, ship, points, request, clockQd, world = buildShipWorldContext(data, holding)) {
   if (ship.navigationMode !== "world" || ship.condition !== "ready" || ship.activeVoyage || ship.orderBundle || ship.transportOrderId) throw new Error("Корабль занят или не готов к рейсу.");
   const readiness = shipCrewReadiness(holding, ship, { catalog: data.catalog });
   if (!readiness.ready) throw new Error(readiness.issues.map((row) => row.message).join(" "));
   if (worldShipTimelineQd(holding, ship) !== clockQd) throw new Error("Сначала явно доведите время корабля до текущей даты логистики.");
   if (worldShipPortDebtCopper(ship, clockQd) > 0) throw new Error("Сначала оплатите накопленное содержание корабля.");
-  const world = buildShipWorldContext(data, holding), capacityPoints = shipCapacityLoadPoints(ship);
-  const position = ship.location?.regionId ?? world.home.regionId;
+  const capacityPoints = shipCapacityLoadPoints(ship);
+  const home = request.homeEndpoint ?? world.home.regionId;
+  const position = !ship.location || ship.location.kind === "home" ? home : ship.location.regionId;
   const services = [];
+  const quote = (from, to, loadPoints, maxAccess) => worldShipTransportTerms(data, holding, ship,
+    from === home ? world.home.regionId : from, to === home ? world.home.regionId : to,
+    { context: world, loadPoints, maxAccess, fromHome: from === home, toHome: to === home });
   const emptyQuotes = new Map();
   const emptyTerms = (from, to) => {
     if (from === to) return null;
     const key = JSON.stringify([from, to]);
     if (!emptyQuotes.has(key)) {
       let terms = null;
-      try { terms = worldShipTransportTerms(data, holding, ship, from, to, { context: world }); }
+      try { terms = quote(from, to, 0, request.accessLimit); }
       catch (_error) { /* Cache unavailable pairs too, only for this quote. */ }
       emptyQuotes.set(key, terms);
     }
@@ -60,29 +64,37 @@ function ownServices(data, holding, ship, points, request, clockQd) {
   for (const from of points) for (const to of points) {
     if (from === to) continue;
     try {
-      const terms = worldShipTransportTerms(data, holding, ship, from, to, { context: world, loadPoints: capacityPoints });
-      const approach = emptyTerms(position, from), back = emptyTerms(to, from);
-      const home = emptyTerms(to, world.home.regionId), abortReturn = emptyTerms(from, world.home.regionId);
-      services.push({ id: `owned:${ship.id}:${from}:${to}`, label: ship.name, companyId: `owned:${ship.id}`, kind: "owned", shipId: ship.id,
-        from, to, fromLabel: terms.from.label, toLabel: terms.to.label, capacity: capacityPoints * 1000, vehicles: 1,
-        travelQd: Math.max(1, terms.durationQd), loadingQd: terms.loadingQd, unloadingQd: terms.unloadingQd,
-        loadingCapacity: terms.loadingCapacity, unloadingCapacity: terms.unloadingCapacity,
-        returnQd: back?.durationQd ?? 0, endReturnQd: home?.durationQd ?? 0, endReturnLocation: world.home.regionId,
-        emptyAccessLimit: request.accessLimit,
-        approachAvailable: from === position || Boolean(approach), approachAccessCost: approach?.accessCost ?? 0,
-        returnAvailable: Boolean(back), returnAccessCost: back?.accessCost ?? 0,
-        endReturnAvailable: to === world.home.regionId || Boolean(home), endReturnAccessCost: home?.accessCost ?? 0,
-        abortReturnAvailable: from === world.home.regionId || Boolean(abortReturn), abortReturnAccessCost: abortReturn?.accessCost ?? 0,
-        abortReturnQd: abortReturn?.durationQd ?? 0,
-        returnAtEnd: request.returnHome === true, approachQd: approach?.durationQd ?? 0,
-        approachCopper: approach ? transportOperatingCharge(approach, approach.durationQd) : 0,
-        handlingFlatCopper: terms.handlingFlatCopper, handlingMilliCopper: terms.handlingMilliCopper,
-        operatingMilliCopperPerQd: terms.operatingMilliCopperPerQd, idleUpkeepCopperPerDay: terms.idleUpkeepCopperPerDay,
-        startIdleUpkeepCopperPerDay: Object.values(terms.dailyCosts).reduce((sum, cost) => sum + cost, 0),
-        returnOperatingMilliCopperPerQd: back?.operatingMilliCopperPerQd ?? terms.operatingMilliCopperPerQd,
-        dailyCosts: terms.dailyCosts, returnDailyCosts: back?.dailyCosts ?? terms.dailyCosts,
-        waitingMilliCopperPerQd: from === world.home.regionId && ship.homeUpkeepEnabled === false ? 0 : terms.operatingMilliCopperPerQd,
-        accessCost: terms.accessCost, riskBps: request.riskBps ?? 300 });
+      // Preserve shorter and lower-access paths: a later hired/owned leg can
+      // need the remaining access even when this pair alone fits the limit.
+      let maxAccess = request.cargoAccessLimit;
+      while (maxAccess >= 0) {
+        const terms = quote(from, to, capacityPoints, maxAccess);
+        const approach = emptyTerms(position, from), back = emptyTerms(to, from);
+        const homeReturn = emptyTerms(to, home), abortReturn = emptyTerms(from, home);
+        const variant = maxAccess === request.cargoAccessLimit ? "" : `:access:${terms.accessCost}`;
+        services.push({ id: `owned:${ship.id}:${from}:${to}${variant}`, label: `${ship.name} · ${terms.distanceKm} км · УРС ${terms.accessCost}`,
+          companyId: `owned:${ship.id}`, kind: "owned", shipId: ship.id,
+          from, to, fromLabel: terms.from.label, toLabel: terms.to.label, capacity: capacityPoints * 1000, vehicles: 1,
+          travelQd: Math.max(1, terms.durationQd), loadingQd: terms.loadingQd, unloadingQd: terms.unloadingQd,
+          loadingCapacity: terms.loadingCapacity, unloadingCapacity: terms.unloadingCapacity,
+          returnQd: back?.durationQd ?? 0, endReturnQd: homeReturn?.durationQd ?? 0, endReturnLocation: home,
+          emptyAccessLimit: request.accessLimit,
+          approachAvailable: from === position || Boolean(approach), approachAccessCost: approach?.accessCost ?? 0,
+          returnAvailable: Boolean(back), returnAccessCost: back?.accessCost ?? 0,
+          endReturnAvailable: to === home || Boolean(homeReturn), endReturnAccessCost: homeReturn?.accessCost ?? 0,
+          abortReturnAvailable: from === home || Boolean(abortReturn), abortReturnAccessCost: abortReturn?.accessCost ?? 0,
+          abortReturnQd: abortReturn?.durationQd ?? 0,
+          returnAtEnd: request.returnHome === true, approachQd: approach?.durationQd ?? 0,
+          approachCopper: approach ? transportOperatingCharge(approach, approach.durationQd) : 0,
+          handlingFlatCopper: terms.handlingFlatCopper, handlingMilliCopper: terms.handlingMilliCopper,
+          operatingMilliCopperPerQd: terms.operatingMilliCopperPerQd, idleUpkeepCopperPerDay: terms.idleUpkeepCopperPerDay,
+          startIdleUpkeepCopperPerDay: Object.values(terms.dailyCosts).reduce((sum, cost) => sum + cost, 0),
+          returnOperatingMilliCopperPerQd: back?.operatingMilliCopperPerQd ?? terms.operatingMilliCopperPerQd,
+          dailyCosts: terms.dailyCosts, returnDailyCosts: back?.dailyCosts ?? terms.dailyCosts,
+          waitingMilliCopperPerQd: from === home && ship.homeUpkeepEnabled === false ? 0 : terms.operatingMilliCopperPerQd,
+          accessCost: terms.accessCost, riskBps: Math.min(10000, Math.round((request.riskBps ?? 300) * terms.riskFactor)) });
+        maxAccess = terms.accessCost - 1;
+      }
     } catch (_error) { /* An unavailable pair is not a service; the selected complete chain is validated below. */ }
   }
   return services;
@@ -96,7 +108,7 @@ export function prepareTransportContext({ data, holding, request = {}, isGM = fa
   if (!context.market) throw new Error("Этот рынок недоступен поселению.");
   const { cargo, lines } = selectedCargo(context, { ...request, direction });
   const configuration = validateTransportConfiguration(data.catalog?.transportV2);
-  const { logistics } = authorityMarketLogistics({ data, holding, market: context.market, direction, isGM });
+  const { logistics } = authorityMarketLogistics({ data, holding, market: context.market, direction, isGM, preservePhysicalRoutes: true });
   const difficulty = Math.max(0, ...lines.map((line) => Number(line.accessDifficulty
     ?? context.outbound?.offers?.find((offer) => offer.resourceId === line.resourceId)?.accessDifficulty ?? 0)));
   const routes = (logistics?.routeCandidates?.length ? logistics.routeCandidates : logistics?.ok ? [logistics] : [])
@@ -104,21 +116,40 @@ export function prepareTransportContext({ data, holding, request = {}, isGM = fa
   const home = findHoldingRegion(holding, data.catalog.eventRegions)?.value;
   if (!home) throw new Error("У поселения не определена локация.");
   let services = transportServicesFromRoutes(routes, configuration, data.catalog.eventRegions, { markets: context.markets, homeRegionId: home });
+  const ship = request.ownShipId ? holding.special?.ships?.list?.find((row) => row.id === request.ownShipId) : null;
+  if (request.ownShipId && !ship) throw new Error("Выбранный корабль не найден.");
+  const world = ship ? buildShipWorldContext(data, holding) : null;
+  if (ship) {
+    // A usable mixed route need not be a complete hired route. The own ship can
+    // bridge a gap in carrier coverage to a port with a valid hired connection.
+    const known = new Set([home, context.market.regionId, ...services.flatMap(service => [service.from, service.to])]
+      .map(id => id.replace(/:holding$/, "")));
+    const transfers = world.ports.filter(port => !known.has(port.regionId)).slice(0, Math.max(0, 24 - known.size));
+    const connections = [];
+    for (const port of transfers) {
+      const atPort = { ...holding, type: "village", overview: { ...holding.overview, region: port.regionId } };
+      for (const endpoints of [{ holding, market: port }, { holding: atPort, market: context.market }]) {
+        const leg = authorityMarketLogistics({ data, ...endpoints, direction, isGM, preservePhysicalRoutes: true }).logistics;
+        connections.push(...(leg?.routeCandidates?.length ? leg.routeCandidates : leg?.ok ? [leg] : [])
+          .filter(route => route.routeAccessCost + difficulty <= route.accessLevel));
+      }
+    }
+    const extra = transportServicesFromRoutes(connections, configuration, data.catalog.eventRegions, { markets: context.markets, homeRegionId: home });
+    services = [...new Map([...extra, ...services].map(service => [service.id, service])).values()];
+  }
   const localService = services.some((service) => service.from === `${home}:holding` || service.to === `${home}:holding`);
-  const endpoint = localService ? `${home}:holding` : home;
+  const endpoint = localService || context.market.regionId === home ? `${home}:holding` : home;
   const from = direction === "inbound" ? context.market.regionId : endpoint;
   const to = direction === "inbound" ? endpoint : context.market.regionId;
   const state = data.meta?.transportV2;
   const clockOffsetQd = transportClockOffsetQd(data, holding);
   const startQd = transportHoldingQd(data, holding);
   if (startQd < Number(state?.clockQd ?? 0)) throw new Error("Дата поселения отстаёт от общей даты перевозок. Проведите недостающие периоды перед новым заказом.");
-  const ship = request.ownShipId ? holding.special?.ships?.list?.find((row) => row.id === request.ownShipId) : null;
-  if (request.ownShipId && !ship) throw new Error("Выбранный корабль не найден.");
   if (ship) {
-    const points = [...new Set([home, context.market.regionId, ...services.flatMap((row) => [row.from, row.to])])].filter((id) => !id.endsWith(":holding")).slice(0, 24);
-    services.push(...ownServices(data, holding, ship, points, { ...request, riskBps: configuration.riskBps, accessLimit: logistics?.accessLevel ?? 0 }, startQd - clockOffsetQd).map((service) => ({ ...service,
-      from: service.from === home && direction === "outbound" ? endpoint : service.from,
-      to: service.to === home && direction === "inbound" ? endpoint : service.to })));
+    const points = [...new Set([endpoint, context.market.regionId, ...services.flatMap((row) => [row.from, row.to])])].slice(0, 24);
+    services.push(...ownServices(data, holding, ship, points, { ...request, riskBps: configuration.riskBps,
+      accessLimit: logistics?.accessLevel ?? 0, cargoAccessLimit: (logistics?.accessLevel ?? 0) - difficulty,
+      homeEndpoint: endpoint }, startQd - clockOffsetQd, world));
   }
   services = services.filter((service) => isGM || service.visibility !== "gm");
   const search = findTransportPlans({ from, to, services, cargo, startQd, runs: state?.runs ?? [], priority: request.priority,

@@ -46,6 +46,12 @@ const order = bookTransportOrder({ state: data.meta.transportV2, holding, plan: 
 order.status = "waitingCarrier";
 assert.equal((await app._prepareContext({})).orders[0].canCancel, true, "an unstarted hired order may be cancelled while waiting for a vehicle");
 order.status = "booked";
+order.lostQty = 1; order.spoiledQty = 2; order.insurancePaidCopper = 34;
+const quantities = (await app._prepareContext({})).orders[0];
+assert.equal(quantities.lost, 1); assert.equal(quantities.spoiled, 2); assert.ok(quantities.insurancePaid);
+// Local endpoint labels must not leak implementation IDs or evade visibility.
+const localEndpoint = order.stages[0].to;
+order.stages[0].to = "home:holding";
 data.catalog.marketEconomy.countries[0].visibility = "gm";
 holding.special.market.orders = [{ id: "historical", status: "delivered", countryId: data.catalog.marketEconomy.countries[0].id,
   marketLabel: "PRIVATE MARKET", cargo: [{ name: "Cloth", qty: 2 }] }];
@@ -54,6 +60,7 @@ assert.equal(hidden.orders[0].market, "Скрытый рынок");
 assert.ok(hidden.orders[0].stages.every((stage) => stage.path === "Скрытый участок"));
 assert.equal(hidden.archive[0].market, "Скрытый рынок");
 assert.deepEqual(Object.keys(hidden.archive[0]).sort(), ["cargo", "direction", "market", "status"], "legacy history is read-only");
+order.stages[0].to = localEndpoint;
 game.user = gm;
 assert.equal((await app._prepareContext({})).orders[0].market, order.commercial.marketLabel);
 assert.equal((await app._prepareContext({})).archive[0].market, "PRIVATE MARKET");

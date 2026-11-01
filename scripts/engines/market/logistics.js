@@ -161,10 +161,10 @@ export function shortestMarketRouteDistanceKm(fromId = "", toId = "", regions = 
   return shortestMarketRoute(fromId, toId, regions, { mode })?.distanceKm ?? null;
 }
 
-export function shortestMarketRoute(fromId = "", toId = "", regions = [], { mode = "", allowedModes = [], metric = "distance" } = {}) {
+export function shortestMarketRoute(fromId = "", toId = "", regions = [], { mode = "", allowedModes = [], metric = "distance", maxAccess = Infinity } = {}) {
   const from = String(fromId ?? "").trim();
   const to = String(toId ?? "").trim();
-  if (!from || !to) return null;
+  if (!from || !to || maxAccess < 0) return null;
   const byId = new Map(regions.map((region) => [String(region.value), region]));
   const permittedModes = allowedModes.length ? new Set(allowedModes) : null;
   if (from === to) {
@@ -173,13 +173,17 @@ export function shortestMarketRoute(fromId = "", toId = "", regions = [], { mode
     return { distance: 0.5, distanceKm: KM_PER_ROUTE_UNIT / 2, hops: 0, accessCost: 0, path: [from], edges: [], ...(mode ? { directMode: mode } : {}) };
   }
   const graph = routeGraph(regions);
-  const routes = new Map([[from, { score: 0, distance: 0, distanceKm: 0, hops: 0, accessCost: 0, path: [from], edges: [] }]]);
+  const routes = new Map([[from, [{ score: 0, distance: 0, distanceKm: 0, hops: 0, accessCost: 0, path: [from], edges: [] }]]]);
   const visited = new Set();
+  // A shorter prefix can consume more access than a longer one. Retain both
+  // until the access-constrained destination is reached.
+  const dominates = (a, b) => (!Number.isFinite(maxAccess) || a.accessCost <= b.accessCost)
+    && (a.score < b.score || (a.score === b.score && a.distanceKm <= b.distanceKm));
   while (true) {
     let current = "";
     let currentRoute = null;
-    for (const [id, route] of routes) {
-      if (visited.has(id)) continue;
+    for (const [id, alternatives] of routes) for (const route of alternatives) {
+      if (visited.has(route)) continue;
       if (!currentRoute || route.score < currentRoute.score || (route.score === currentRoute.score && route.distanceKm < currentRoute.distanceKm)) {
         current = id;
         currentRoute = route;
@@ -187,7 +191,7 @@ export function shortestMarketRoute(fromId = "", toId = "", regions = [], { mode
     }
     if (!current) break;
     if (current === to) return mode ? { ...currentRoute, directMode: mode } : currentRoute;
-    visited.add(current);
+    visited.add(currentRoute);
     for (const edge of graph.get(current) ?? []) {
       // A single-mode journey need not stop at transit points (e.g. a flight over a non-port).
       const modes = edgeTransportModes(edge, byId.get(current), byId.get(edge.to), {
@@ -198,10 +202,9 @@ export function shortestMarketRoute(fromId = "", toId = "", regions = [], { mode
       const distance = distanceKm / KM_PER_ROUTE_UNIT;
       const hops = currentRoute.hops + 1;
       const accessCost = currentRoute.accessCost + edge.ursCost;
+      if (accessCost > maxAccess) continue;
       const score = metric === "hops" ? hops : (metric === "access" ? accessCost : distanceKm);
-      const previous = routes.get(edge.to);
-      if (previous && (previous.score < score || (previous.score === score && previous.distanceKm <= distanceKm))) continue;
-      routes.set(edge.to, {
+      const candidate = {
         score,
         distance,
         distanceKm,
@@ -209,7 +212,10 @@ export function shortestMarketRoute(fromId = "", toId = "", regions = [], { mode
         accessCost,
         path: [...currentRoute.path, edge.to],
         edges: [...currentRoute.edges, { from: current, ...edge, ...(mode ? { selectedMode: mode } : {}) }]
-      });
+      };
+      const previous = routes.get(edge.to) ?? [];
+      if (previous.some(route => dominates(route, candidate))) continue;
+      routes.set(edge.to, [...previous.filter(route => !dominates(candidate, route)), candidate]);
     }
   }
   return null;
@@ -269,6 +275,7 @@ export function resolveMarketLogistics({ holding = {}, market = {}, regions = []
   const search = selectedRoute || !routeRequired ? { routes: [], limited: false } : marketTransportRoutes({
     graph: routeGraph(regions), from: destination.value, to: origin.value, maxAccess: access.level,
     modesForEdge, preserveFirstMode: needsAerialDelivery, servicesForEdge: transportNetwork?.servicesForEdge,
+    preservePhysicalRoutes: transportNetwork?.preservePhysicalRoutes,
     termsForEdge: transportNetwork?.termsForEdge ?? ((edge, transport) => {
       const terms = TRANSPORT[transport];
       const seasonal = edgeSeasonalModifier(edge, seasonId);

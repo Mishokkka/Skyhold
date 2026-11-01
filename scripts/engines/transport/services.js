@@ -1,5 +1,5 @@
 import { stableDataHash } from "../../data/storage-commit.js";
-import { transportLoad, transportInteger, transportHandlingTerms } from "./quantities.js";
+import { transportLoad, transportInteger, transportHandlingTerms, TRANSPORT_LIMITS } from "./quantities.js";
 
 export const TRANSPORT_SERVICE_DEFAULTS = Object.freeze({
   regularIntervalQd: 40, regularFirstQd: 4, charterVehicles: 1, charterPreparationQd: 1,
@@ -9,7 +9,8 @@ export const TRANSPORT_SERVICE_DEFAULTS = Object.freeze({
 
 export function validateTransportConfiguration(raw = {}) {
   const config = { ...TRANSPORT_SERVICE_DEFAULTS, ...raw };
-  for (const field of ["regularIntervalQd", "charterVehicles", "commercialLoadBps"]) transportInteger(config[field], field, 1, 10000);
+  for (const field of ["regularIntervalQd", "commercialLoadBps"]) transportInteger(config[field], field, 1, 10000);
+  transportInteger(config.charterVehicles, "число машин", 1, TRANSPORT_LIMITS.vehicles);
   for (const field of ["regularFirstQd", "charterPreparationQd", "storageMilliCopperPerLoadQd", "insuranceBps", "insuranceCoverageBps", "riskBps"]) transportInteger(config[field], field, 0, 10000);
   if (config.commercialLoadBps > 10000) throw new Error("Коммерческая загрузка не может превышать 100%.");
   config.overrides ??= {};

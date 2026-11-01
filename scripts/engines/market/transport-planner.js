@@ -12,7 +12,7 @@ const sameService = (a, b) => a && b && a.mode === b.mode && a.carrierId === b.c
 
 /** Country presence is the dispatch country's service market. A permitted link authorizes arrival across its border. */
 export function planMarketTransport({ holding = {}, market = {}, regions = [], organizations = [], countries = [], isGM = false,
-  seasonId = "", direction = "inbound", dependencies = {}, accessLevel = null, carrierId = AUTO_CARRIERS } = {}) {
+  seasonId = "", direction = "inbound", dependencies = {}, accessLevel = null, carrierId = AUTO_CARRIERS, preservePhysicalRoutes = false } = {}) {
   const byId = new Map(regions.map((row) => [String(row.value), row]));
   const companies = new Map(organizations.map((row) => [String(row.id), row]));
   const countryRows = new Map(countries.map((row) => [String(row.id), row]));
@@ -57,6 +57,7 @@ export function planMarketTransport({ holding = {}, market = {}, regions = [], o
   };
   const localAvailable = Boolean(home?.marketTransportModes?.includes("airship") && providers(localId, "airship").length);
   const network = {
+    preservePhysicalRoutes,
     localAirshipAvailable: localAvailable,
     servicesForEdge: (from, edge, mode) => {
       const dispatch = direction === "outbound" ? from : edge.to;

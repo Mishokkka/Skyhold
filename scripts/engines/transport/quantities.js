@@ -2,7 +2,7 @@ import { MAX_MARKET_OPERATION_COPPER } from "../../data/market/money-limits.js";
 
 /** One storage load = four ship points. Persist thousandths of a point. */
 export const TRANSPORT_LOAD_SCALE = 4000;
-export const TRANSPORT_LIMITS = Object.freeze({ runs: 512, paths: 256, stages: 8, horizonQd: 1440 });
+export const TRANSPORT_LIMITS = Object.freeze({ runs: 512, paths: 256, stages: 8, horizonQd: 1440, vehicles: 10000 });
 
 export function transportInteger(value, label, minimum = 0, maximum = Number.MAX_SAFE_INTEGER) {
   if (!Number.isSafeInteger(value) || value < minimum || value > maximum) throw new RangeError(`Некорректно: ${label}.`);

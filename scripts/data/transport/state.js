@@ -20,7 +20,7 @@ export function pruneCompletedTransportRuns(data) {
   }
   state.runs = state.runs.filter(run => {
     if (run.status !== "arrived" || run.releaseQd > cutoff || run.incident?.status === "pending") return true;
-    return !run.claims.length || run.claims.some(claim => {
+    return run.claims.some(claim => {
       const order = orders.get(JSON.stringify([claim.holdingId, claim.orderId]));
       return !order || activeTransportOrder(order) || order.fundingNeededCopper > 0
         || (order.ownShipId && (!order.shipReleased || !order.shipCostsReconciled));

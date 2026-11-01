@@ -342,7 +342,7 @@ export function prepareShipWindowContext(holding, { revision = 0, data = null, s
       canContinueBundle: Boolean(management?.commands.continueBundle?.allowed),
       bundleDelayDays: Math.max(0, Number(bundle?.delayUntilQd ?? 0) - Number(holding.gm?.calendaria?.lastQd ?? 0)) / 4,
       outingReport,
-      financePresentation: isWorld ? prepareShipFinancePresentation(holding, ship, { money: moneySummary, outingReport, ownSale }) : null,
+      financePresentation: isWorld ? prepareShipFinancePresentation(holding, ship, { money: moneySummary, outingReport, ownSale, data, isGM: permissions.isGM }) : null,
       nextAction: management?.nextAction ?? "",
       statusLabel: management?.statusLabel ?? (ship.status === "away" ? "В рейсе" : "В поселении"),
       conditionLabel: ship.condition === "ready" ? "Исправен" : "Требуется обслуживание",
