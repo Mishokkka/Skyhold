@@ -168,7 +168,9 @@ export function prepareTransportContext({ data, holding, request = {}, isGM = fa
     if (plan.ownShipId !== String(request.ownShipId ?? "")) throw new Error("План не соответствует выбранному кораблю.");
     if (plan.stages.reduce((sum, stage) => sum + (stage.service.accessCost ?? 0), 0) + difficulty > (logistics?.accessLevel ?? 0)) throw new Error("Недостаточно УРС для выбранного маршрута и товара.");
   }
-  if (!plan) throw new Error(search.failures[0] ?? "Для выбранного груза нет доступной перевозки.");
+  if (!plan) throw new Error(search.limited
+    ? "Поиск достиг лимита вариантов без подходящего плана. Это не означает, что маршрута нет. Уточните закрепления или исключите часть перевозчиков и повторите расчёт."
+    : search.failures[0] ?? "Для выбранного груза нет доступной перевозки.");
   const valueCopper = cargoValue(cargo);
   const taxCopper = Math.ceil(valueCopper * (Number(logistics?.importTaxRate ?? 0) + Number(logistics?.exportTaxRate ?? 0)));
   const insuranceCopper = request.insurance === false ? 0 : Math.ceil(valueCopper * configuration.insuranceBps / 10000);

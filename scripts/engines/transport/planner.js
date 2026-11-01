@@ -195,7 +195,9 @@ export function findTransportPlans({ from, to, services = [], cargo, startQd = 0
         || (pins[location] && pins[location] !== service.id)
         || (service.kind === "owned" && (service.shipId !== ownShipId || ownEnded))) continue;
       visit(service.to, [...chain, service], new Set([...visited, service.to]));
-      if (searched >= maxPaths) break;
+      // Let the next eligible branch report exhaustion. Reaching the budget on
+      // the final branch alone does not mean any candidate was omitted.
+      if (limited) break;
     }
   }
   visit(from, [], new Set([from]));

@@ -99,6 +99,13 @@ export function createTransportOperationExecutor({ transaction = (updater, optio
           if (!ship || ship.activeVoyage || ship.orderBundle || ship.transportOrderId) throw fail("Сначала завершите текущий рейс корабля.");
           const advanced = advanceWorldShips(holding, Number(holding.gm?.calendaria?.lastQd ?? 0), { shipId: ship.id });
           if (advanced.blocked.length) throw fail(advanced.blocked.map((row) => row.message).join(" "));
+          const entries = advanced.expenses.flatMap(expense => [
+            ["treasury", expense.treasuryPaidCopper], [`ship:${expense.shipId}`, expense.onboardPaidCopper]
+          ].filter(([, amount]) => amount > 0).map(([roomId, amount]) => ({
+            kind: "expense", resourceId: "money", name: "Содержание корабля при синхронизации времени", qty: -amount,
+            roomId, source: expense.name, operationId: op.operationId
+          })));
+          if (entries.length) engine._appendStorageLog(holding, entries);
         }
         if (op.type !== "transport-ship-sync") advanceTransportShipments(data, holding, Number(holding.gm?.calendaria?.lastQd ?? 0), engine);
       }
