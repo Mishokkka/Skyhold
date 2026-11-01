@@ -7,11 +7,12 @@ import { bindSharedMarkets } from "../data/market/shared-context.js";
 import { previewSharedMarketMigration } from "../data/market/shared-migration.js";
 import { marketDemandKey, marketDemandRecoveryDuration } from "../data/market/demand-state.js";
 import { normalizeSkyholdData } from "../data/normalizers.js";
-import { prepareMarketAuthorityContext } from "../apps/market/authority-context.js";
+import { prepareMarketAuthorityContext, authorityMarketLogistics } from "../apps/market/authority-context.js";
 import { prepareTransportContext, transportSourceToken } from "../apps/domains/transport-context.js";
 import { createTransportOperationExecutor } from "../apps/transport-operation-executor.js";
 import { planTransportChain } from "../engines/transport/planner.js";
-import { bookTransportOrder } from "../engines/transport/runtime.js";
+import { transportServicesFromRoutes } from "../engines/transport/services.js";
+import { bookTransportOrder, canCancelTransportOrder } from "../engines/transport/runtime.js";
 import { worldShipTransportTerms } from "../engines/ships/world-market.js";
 import { transportOperatingCharge } from "../engines/transport/quantities.js";
 import { SkyholdWorkflowService } from "../workflows/skyhold-workflow-service.js";
@@ -54,6 +55,13 @@ function simulation(source, { resolveItems } = {}) {
       assert.equal((await execute(operation, options)).replay, true);
       assert.deepEqual(data, before, "saved command results are idempotent");
       return operation;
+    },
+    async reject(id, type, extra, userId, pattern) {
+      const before = structuredClone(data), holding = this.holding(id);
+      await assert.rejects(execute({ type, operationId: `cross-system-${++sequence}`, holdingId: id,
+        expectedRevision: data.meta.revision, sourceToken: transportSourceToken(data, holding), ...extra },
+      { userId, remote: userId !== "gm" }), pattern);
+      assert.deepEqual(data, before, "a rejected command cannot change money, stock, claims or journals");
     },
     async advance(id, qd) {
       await this.edit(draft => { draft.holdings.find(h => h.id === id).gm.calendaria.lastQd = qd; });
@@ -221,5 +229,123 @@ await check("I2 real Item bookings preserve snapshots and per-run quantities thr
   }
 });
 
+await check("R5 cancellation follows common departures rather than a lagging holding's local history", async () => {
+  for (const isGM of [true, false]) for (const direction of ["inbound", "outbound"]) {
+    for (const phase of ["before", "departure", "arrived"]) {
+      const f = withoutFleet(transportFixture()), b = structuredClone(f.holding);
+      b.id = "lagging-cancellation"; f.data.holdings.push(b);
+      const sim = simulation(f.data), userId = isGM ? "gm" : "player";
+      const request = transportRequest(f, "a", { direction }, isGM);
+      const context = prepareTransportContext({ data: sim.data, holding: sim.holding(f.holding.id), request, isGM });
+      const regular = context.services.find(row => row.kind === "regular" && row.from === context.from && row.to === context.to);
+      request.serviceIds = [regular.id];
+      const book = async id => {
+        const quote = prepareTransportContext({ data: sim.data, holding: sim.holding(id), request, isGM });
+        const op = await sim.command(id, "transport-book", { request, planToken: quote.planToken }, userId);
+        return sim.holding(id).special.transportV2.orders.find(order => order.id === op.operationId);
+      };
+      const initialCash = sim.holding(b.id).storage.moneyCopper;
+      const aOrder = await book(f.holding.id), bOrder = await book(b.id);
+      const bookedRun = bOrder.stages[0].runs[0];
+      assert.equal(bookedRun.id, aOrder.stages[0].runs[0].id);
+      const targetQd = phase === "before" ? bookedRun.departureQd - 1 : phase === "departure" ? bookedRun.departureQd : bookedRun.arrivalQd + 1;
+      await sim.advance(f.holding.id, targetQd); sim.reload();
+      const current = sim.holding(b.id).special.transportV2.orders[0];
+      assert.equal(sim.holding(b.id).gm.calendaria.lastQd, 0);
+      assert.equal(current.status, "booked");
+      assert.equal(current.history.some(row => row.kind === "departed"), false);
+      assert.equal(canCancelTransportOrder(sim.data.meta.transportV2, current), phase === "before");
+      if (phase === "before") {
+        await sim.command(b.id, "transport-cancel", { orderId: current.id }, userId);
+        assert.equal(sim.holding(b.id).storage.moneyCopper, initialCash, "a truly future departure still refunds in full");
+        const physical = sim.data.meta.transportV2.runs.find(run => run.id === bookedRun.id);
+        assert.equal(physical.claims.length, 1);
+        assert.equal(physical.reservedLoad, aOrder.stages[0].runs[0].reservedLoad);
+      } else {
+        await sim.reject(b.id, "transport-cancel", { orderId: current.id }, userId, /уже началась/);
+        await sim.advance(b.id, 40);
+        const delivered = sim.holding(b.id).special.transportV2.orders[0];
+        assert.equal(delivered.status, "delivered");
+        assert.equal(delivered.received.reduce((sum, lot) => sum + lot.qty, 0), 10);
+      }
+    }
+  }
+});
+
+await check("R6 nonselected ground alternatives cannot change a direct flight to a floating holding", async () => {
+  for (const isGM of [true, false]) for (const type of ["sky-island", "ship"]) {
+    for (const direction of ["inbound", "outbound"]) {
+      const results = [];
+      for (const mixed of [false, true]) {
+        const f = withoutFleet(transportFixture()); f.holding.type = type;
+        if (mixed) {
+          for (const region of f.data.catalog.eventRegions.filter(row => ["home", "a"].includes(row.value))) region.marketTransportModes = ["airship", "caravan"];
+          f.data.catalog.eventRegions[0].marketLinks[0].modes = ["airship", "caravan"];
+        }
+        const sim = simulation(f.data), request = transportRequest(f, "a", { direction }, isGM);
+        const quote = () => prepareTransportContext({ data: sim.data, holding: sim.holding(f.holding.id), request, isGM });
+        const initial = quote();
+        const direct = initial.services.find(row => row.kind === "regular" && row.mode === "airship"
+          && row.from === initial.from && row.to === initial.to);
+        assert.ok(direct, "the direct flight must connect to the actual holding endpoint");
+        request.pins = { [direct.from]: direct.id };
+        const preview = quote();
+        assert.equal(preview.plan.stages.length, 1, "a direct flight needs no additional local carriage");
+        if (mixed) {
+          const ground = initial.services.find(row => row.kind === "regular" && row.mode === "caravan");
+          request.pins = { [ground.from]: ground.id };
+          const groundPlan = quote().plan;
+          assert.equal(groundPlan.stages.length, 2, "ground cargo still requires its real local air leg");
+          assert.equal(groundPlan.stages[direction === "inbound" ? 1 : 0].service.mode, "airship");
+          request.pins = { [direct.from]: direct.id };
+        }
+        const operation = await sim.command(f.holding.id, "transport-book", { request, planToken: preview.planToken }, isGM ? "gm" : "player");
+        sim.reload(); await sim.advance(f.holding.id, 80);
+        const order = sim.holding(f.holding.id).special.transportV2.orders.find(row => row.id === operation.operationId);
+        assert.equal(order.status, "delivered"); assert.equal(order.received.reduce((sum, lot) => sum + lot.qty, 0), 10);
+        results.push({ services: preview.plan.stages.map(stage => stage.service.id), total: preview.totalCopper,
+          arrival: preview.plan.arrivalQd, freight: order.money.spentCopper });
+      }
+      assert.deepEqual(results[1], results[0], "adding an unused route cannot change the selected flight or its execution");
+    }
+  }
+});
+
+await check("R7 holding attachment preserves accepted regional endpoints, overrides and shared fleet occupancy", async () => {
+  for (const isGM of [true, false]) for (const direction of ["inbound", "outbound"]) for (const kind of ["regular", "charter"]) {
+    const f = withoutFleet(transportFixture()); f.holding.type = "sky-island";
+    const b = structuredClone(f.holding); b.id = "new-endpoint"; f.data.holdings.push(b);
+    const request = transportRequest(f, "a", { direction }, isGM);
+    const initial = prepareTransportContext({ ...f, request, isGM });
+    const service = initial.services.find(row => row.kind === kind && row.from === initial.from && row.to === initial.to);
+    f.data.catalog.transportV2.overrides = { [service.id]: { capacity: 80000, dispatchCopper: 123 } };
+    request.serviceIds = [service.id];
+    const quoted = prepareTransportContext({ ...f, request, isGM });
+    const market = prepareMarketAuthorityContext({ ...f, marketId: request.marketId, isGM });
+    const { logistics } = authorityMarketLogistics({ ...f, market: market.market, direction, isGM, preservePhysicalRoutes: true });
+    const legacyService = transportServicesFromRoutes(logistics.routeCandidates, f.data.catalog.transportV2,
+      f.data.catalog.eventRegions, { markets: market.markets, homeRegionId: "home" }).find(row => row.id === service.id);
+    assert.ok(legacyService, "service identity must match the original regional representation");
+    const legacyPlan = planTransportChain({ cargo: quoted.plan.cargo, services: [legacyService] });
+    const legacyOrder = bookTransportOrder({ state: f.data.meta.transportV2, holding: f.holding, id: "legacy-endpoint",
+      plan: legacyPlan, services: [legacyService], direction, commercial: quoted.commercial });
+    const sim = simulation(f.data); sim.reload(true);
+    const preservedPlan = structuredClone(legacyOrder.plan);
+    const quote = () => prepareTransportContext({ data: sim.data, holding: sim.holding(b.id), request, isGM });
+    const fresh = quote(), stage = fresh.plan.stages[0];
+    assert.equal(stage.service.id, legacyService.id, "holding attachment preserves the published service identity");
+    assert.equal(stage.service.capacity, 80000); assert.equal(stage.service.dispatchCopper, 123);
+    if (kind === "regular") assert.equal(stage.runs[0].id, legacyPlan.stages[0].runs[0].id, "the existing half-full departure remains joinable");
+    else assert.ok(stage.runs[0].startQd >= legacyPlan.stages[0].runs[0].releaseQd, "the existing charter vehicle remains occupied");
+    await sim.command(b.id, "transport-book", { request, planToken: fresh.planToken }, isGM ? "gm" : "player");
+    assert.deepEqual(sim.holding(f.holding.id).special.transportV2.orders[0].plan, preservedPlan, "an accepted estimate is never rewritten");
+    if (kind === "regular") {
+      assert.equal(sim.data.meta.transportV2.runs.length, 1);
+      assert.equal(sim.data.meta.transportV2.runs[0].reservedLoad, 80000);
+      assert.ok(quote().plan.stages[0].runs[0].departureQd > stage.runs[0].departureQd, "a full legacy departure cannot be booked a third time");
+    }
+  }
+});
+
 if (failures.length) throw new Error(`Transport cross-system regressions failed: ${failures.join("; ")}`);
-console.log("Transport cross-system review: historical capacity, physical ship location, undated shared demand, incident status and authority replay passed.");
+console.log("Transport cross-system review: historical capacity, physical ship location, shared clocks, incident/cancellation state, holding endpoints and authority replay passed.");

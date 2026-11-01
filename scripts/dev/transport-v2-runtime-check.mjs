@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { planTransportChain } from "../engines/transport/planner.js";
-import { bookTransportOrder, cancelTransportOrder, advanceTransportOrders, resolveTransportIncident } from "../engines/transport/runtime.js";
+import { bookTransportOrder, canCancelTransportOrder, cancelTransportOrder, advanceTransportOrders, resolveTransportIncident } from "../engines/transport/runtime.js";
 import { reservedResourceBatchQuantities } from "../core/resource-batches.js";
 
 const cargo = [{ lotId: "grain", rowId: "r1", batchId: "b1", resourceId: "grain", qty: 60, unitLoad: 4000, unitCopper: 5, ageQd: 0, shelfLifeQd: 100 }];
@@ -32,6 +32,24 @@ assert.equal(cancelledHolding.storage.moneyCopper, 10000);
 assert.equal(reservedResourceBatchQuantities(cancelledHolding, { id: "r1" }).size, 0);
 cancelTransportOrder({ state: cancelState, holding: cancelledHolding, order: cancelled });
 assert.equal(cancelledHolding.storage.moneyCopper, 10000);
+
+// A charter waiting for its actual vehicle is different from an unprocessed
+// regular departure. Known return times include the queued loading interval.
+{
+  const fleet = newState(), a = newHolding("a"), b = newHolding("b");
+  const charter = [{ ...services[0], id: "cancel-charter", kind: "charter", firstQd: 0, loadingQd: 2, returnQd: 4, vehicles: 1 }];
+  bookTransportOrder({ state: fleet, holding: a, services: charter, plan: planTransportChain({ cargo, services: charter }), id: "first-charter", direction: "inbound" });
+  const queued = bookTransportOrder({ state: fleet, holding: b, services: charter,
+    plan: planTransportChain({ cargo, services: charter, runs: fleet.runs }), id: "queued-charter", direction: "inbound" });
+  fleet.clockQd = queued.stages[0].runs[0].departureQd;
+  assert.equal(canCancelTransportOrder(fleet, queued), true, "an unresolved preceding vehicle still blocks the queued charter");
+  const preceding = fleet.runs[0]; preceding.status = "arrived";
+  assert.equal(canCancelTransportOrder(fleet, queued), false, "a known returned vehicle permits departure at the booked time");
+  preceding.releaseQd = fleet.clockQd + 10;
+  assert.equal(canCancelTransportOrder(fleet, queued), true, "a known delayed return keeps the queued departure in the future");
+  fleet.clockQd = preceding.releaseQd + charter[0].loadingQd;
+  assert.equal(canCancelTransportOrder(fleet, queued), false, "the common date also bounds a delayed departure");
+}
 
 const shared = newState(), left = newHolding("left"), right = newHolding("right");
 const risky = [{ ...services[0], riskBps: 10000 }];

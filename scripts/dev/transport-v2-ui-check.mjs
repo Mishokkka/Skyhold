@@ -46,6 +46,16 @@ const order = bookTransportOrder({ state: data.meta.transportV2, holding, plan: 
 order.status = "waitingCarrier";
 assert.equal((await app._prepareContext({})).orders[0].canCancel, true, "an unstarted hired order may be cancelled while waiting for a vehicle");
 order.status = "booked";
+const cancellationRun = data.meta.transportV2.runs.find(run => run.id === order.stages[0].runs[0].id);
+for (const user of [gm, player]) {
+  game.user = user;
+  data.meta.transportV2.clockQd = cancellationRun.departureQd - 1;
+  assert.equal((await app._prepareContext({})).orders[0].canCancel, true, "cancellation remains available before the common departure");
+  data.meta.transportV2.clockQd = cancellationRun.departureQd;
+  assert.equal((await app._prepareContext({})).orders[0].canCancel, false, "a lagging window cannot offer cancellation at the common departure");
+  assert.equal(order.history.some(row => row.kind === "departed"), false);
+}
+data.meta.transportV2.clockQd = 0;
 order.lostQty = 1; order.spoiledQty = 2; order.insurancePaidCopper = 34;
 const quantities = (await app._prepareContext({})).orders[0];
 assert.equal(quantities.lost, 1); assert.equal(quantities.spoiled, 2); assert.ok(quantities.insurancePaid);

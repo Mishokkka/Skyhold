@@ -18,7 +18,7 @@ export function validateTransportConfiguration(raw = {}) {
 }
 
 /** Collapse transit-only nodes before rounding movement or charging dispatch. */
-export function transportServicesFromRoutes(routes = [], rawConfiguration = {}, regions = [], { markets = [], homeRegionId = "" } = {}) {
+export function transportServicesFromRoutes(routes = [], rawConfiguration = {}, regions = [], { markets = [], homeRegionId = "", homeEndpoint = "" } = {}) {
   const config = validateTransportConfiguration(rawConfiguration), result = new Map();
   const handling = new Map(markets.map(market => [market.regionId, market.locationProfile]));
   for (const route of routes) {
@@ -41,13 +41,18 @@ export function transportServicesFromRoutes(routes = [], rawConfiguration = {}, 
         previous.riskFactor = Math.max(previous.riskFactor ?? 1, leg.riskFactor ?? 1);
       } else groups.push({ ...leg, routeIds: [leg.routeId], accessCost });
     }
-    for (const group of groups) {
+    for (const [index, group] of groups.entries()) {
       const from = group.fromRegionId, to = group.toRegionId;
       // A local last mile is still a physical leg with two different endpoints.
       const outbound = route.transportPlan.direction === "outbound";
-      const source = from === to && outbound ? `${from}:holding` : from;
-      const destination = from === to && !outbound ? `${to}:holding` : to;
-      const key = stableDataHash([source, destination, group.mode, group.carrierId, group.routeIds]);
+      const legacySource = from === to && outbound ? `${from}:holding` : from;
+      const legacyDestination = from === to && !outbound ? `${to}:holding` : to;
+      // Attach only the route's holding end. A transit/transfer port in the
+      // same region stays a port; a direct flight already reaches the holding.
+      const source = homeEndpoint && outbound && index === 0 && from === homeRegionId ? homeEndpoint : legacySource;
+      const destination = homeEndpoint && !outbound && index === groups.length - 1 && to === homeRegionId ? homeEndpoint : legacyDestination;
+      // Endpoint labels must not reset published schedules, fleet occupancy or overrides.
+      const key = stableDataHash([legacySource, legacyDestination, group.mode, group.carrierId, group.routeIds]);
       const travelQd = Math.max(1, Math.ceil(group.movementQd));
       const fullCopper = Math.ceil(group.dispatchCopper + group.hireCopper + group.distanceCopper + group.operatingCopper
         + group.capacityLoad * group.loadCopperPerUnit);

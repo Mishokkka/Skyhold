@@ -89,6 +89,9 @@ assert.match(appSource, /this\._disclosures\.bind\(this\.element\)/);
 assert.match(template, /data-fbls-disclosure="transport-departures:/);
 assert.match(template, /selected\.value[\s\S]*selected\.treasury/);
 assert.match(template, /selected\.coveragePercent[\s\S]*порча и расходы доставки не страхуются/);
-assert.match(appSource, /canCancel: permissions\.canUseStorage && !order\.shipStarted/, "financial explanations retain granted cancellation rights and departure lock");
+// The local-history guard moved into a common physical-departure policy.
+// Executable GM/player UI and authority checks cover its before/after boundary.
+assert.match(appSource, /canCancel: permissions\.canUseStorage && canCancelTransportOrder\(data\.meta\?\.transportV2, order, clockQd\)/,
+  "financial explanations retain storage permission and delegate departure eligibility to the common policy");
 
 console.log("Market purchase cost presentation: mass/value attribution, exact copper conservation, batching, average unit price, saved coverage privacy and retained disclosure state passed.");

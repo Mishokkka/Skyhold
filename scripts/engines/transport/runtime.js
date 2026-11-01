@@ -91,9 +91,25 @@ export function bookTransportOrder({ state, holding, plan, services, id, directi
   return order;
 }
 
+/** Local receipts can lag behind a shared departure. Use the same rule in UI and authority. */
+export function canCancelTransportOrder(state, order, currentQd = state?.clockQd ?? 0) {
+  if (!order || !activeTransportOrder(order) || order.shipStarted || order.history.some(row => row.kind === "departed")) return false;
+  const first = order.stages[0], clockQd = Math.max(state?.clockQd ?? 0, currentQd);
+  if (!Number.isSafeInteger(clockQd) || !Array.isArray(state?.runs) || !first?.runs.length || first.receipts.length) return false;
+  return first.runs.every(planned => {
+    const physical = runFor(state, planned.id);
+    if (!physical || physical.status !== "booked" || physical.incident) return false;
+    if (physical.departureQd > clockQd) return true;
+    const vehicle = waitForVehicle(state, physical);
+    // A queued charter cannot have left while its preceding vehicle is blocked.
+    // Known return dates shift its earliest departure, including loading time.
+    return vehicle.pending || vehicle.readyQd + physical.departureQd - physical.startQd > clockQd;
+  });
+}
+
 export function cancelTransportOrder({ state, holding, order, refundCommercial = () => {} }) {
   if (order.status === "cancelled") return { replay: true };
-  if (order.history.some((row) => row.kind === "departed") || order.shipStarted) throw new Error("Перевозка уже началась; отмена недоступна.");
+  if (!canCancelTransportOrder(state, order)) throw new Error("Перевозка уже началась по общей дате или требует обработки; отмена недоступна.");
   releaseRuns(state, order);
   const ship = (holding.special?.ships?.list ?? []).find((row) => row.id === order.ownShipId);
   if (order.ownShipId && !ship) throw new Error("Не найден корабль для возврата денег.");

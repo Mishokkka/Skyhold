@@ -119,7 +119,9 @@ export function prepareTransportContext({ data, holding, request = {}, isGM = fa
     .filter((route) => route.routeAccessCost + difficulty <= route.accessLevel);
   const home = findHoldingRegion(holding, data.catalog.eventRegions)?.value;
   if (!home) throw new Error("У поселения не определена локация.");
-  let services = transportServicesFromRoutes(routes, configuration, data.catalog.eventRegions, { markets: context.markets, homeRegionId: home });
+  const endpoint = ["sky-island", "ship"].includes(holding.type) || context.market.regionId === home ? `${home}:holding` : home;
+  const serviceEndpoints = { markets: context.markets, homeRegionId: home, homeEndpoint: endpoint };
+  let services = transportServicesFromRoutes(routes, configuration, data.catalog.eventRegions, serviceEndpoints);
   const ship = request.ownShipId ? holding.special?.ships?.list?.find((row) => row.id === request.ownShipId) : null;
   if (request.ownShipId && !ship) throw new Error("Выбранный корабль не найден.");
   const world = ship ? buildShipWorldContext(data, holding) : null;
@@ -138,11 +140,9 @@ export function prepareTransportContext({ data, holding, request = {}, isGM = fa
           .filter(route => route.routeAccessCost + difficulty <= route.accessLevel));
       }
     }
-    const extra = transportServicesFromRoutes(connections, configuration, data.catalog.eventRegions, { markets: context.markets, homeRegionId: home });
+    const extra = transportServicesFromRoutes(connections, configuration, data.catalog.eventRegions, serviceEndpoints);
     services = [...new Map([...extra, ...services].map(service => [service.id, service])).values()];
   }
-  const localService = services.some((service) => service.from === `${home}:holding` || service.to === `${home}:holding`);
-  const endpoint = localService || context.market.regionId === home ? `${home}:holding` : home;
   const from = direction === "inbound" ? context.market.regionId : endpoint;
   const to = direction === "inbound" ? endpoint : context.market.regionId;
   const state = data.meta?.transportV2;

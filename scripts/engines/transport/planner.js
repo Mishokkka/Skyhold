@@ -3,6 +3,9 @@ import { cargoLoad, cargoValue, takeTransportCargo, transportInteger, transportM
 const copy = (value) => JSON.parse(JSON.stringify(value));
 const slotId = (service, departure, vehicle = "regular") => `${service.id}:${vehicle}:${departure}`;
 const occupied = (run) => run.status !== "cancelled";
+// Older direct services used the region for the holding end. The exact run ID
+// has already matched before comparing these endpoints; its capacity remains shared.
+const sameScheduledEndpoint = (left, right) => String(left).replace(/:holding$/, "") === String(right).replace(/:holding$/, "");
 
 export class TransportPlanningUnavailableError extends Error {
   constructor(code, message) { super(message); this.name = "TransportPlanningUnavailableError"; this.code = code; }
@@ -35,7 +38,7 @@ function regularSlot(service, readyQd, runs, horizon, cargo) {
     const existing = runs.find((run) => run.id === id && occupied(run));
     if (existing?.blocked || existing?.incident) continue;
     if (existing && (existing.startQd < readyQd || existing.kind !== service.kind
-      || existing.from !== service.from || existing.to !== service.to)) continue;
+      || !sameScheduledEndpoint(existing.from, service.from) || !sameScheduledEndpoint(existing.to, service.to))) continue;
     const free = Math.min(service.capacity, existing?.capacity ?? service.capacity) - (existing?.reservedLoad ?? 0);
     if (free >= 0 && cargo.some(lot => lot.unitLoad <= free)) return { id, departureQd: departure, free, vehicle: "regular", existing };
   }
