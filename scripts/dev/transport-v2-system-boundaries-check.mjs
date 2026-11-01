@@ -64,9 +64,8 @@ for (const shared of [false, true]) {
   assert.deepEqual(b, otherHolding, "deletion must not alter another holding's order or receipts");
   if (shared) assert.equal(state.runs.length, 0, "both owners completed; all released physical records can now retire");
   else assert.deepEqual(state.runs, runs.map(run => ({ ...run,
-    reservedLoad: run.reservedLoad - run.claims.filter(claim => claim.holdingId === a.id).reduce((sum, claim) => sum + claim.load, 0),
     claims: run.claims.filter(claim => claim.holdingId !== a.id)
-  })), "only the deleted completed claim retires; the lagging holding keeps the physical schedule and its own claim");
+  })), "only the completed owner reference retires; the physical schedule and used capacity remain for lagging orders");
   assert.equal(data.holdings.length, 1);
 }
 

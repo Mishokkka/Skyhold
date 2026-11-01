@@ -218,6 +218,7 @@ export function advanceTransportOrders({ state, holding, targetQd, dependencies 
     if (typeof dependencies.receiveCargo !== "function" || (order.direction === "outbound" && typeof dependencies.dispatchCargo !== "function")) {
       throw new Error("Не подключён складской исполнитель перевозки.");
     }
+    let waitingForVehicle = false;
     while (order.stageIndex < order.stages.length) {
       let stage = order.stages[order.stageIndex];
       const prior = order.stages[order.stageIndex - 1];
@@ -245,7 +246,7 @@ export function advanceTransportOrders({ state, holding, targetQd, dependencies 
         if (!physical) throw new Error("Отсутствует забронированный рейс.");
         if (!receipt && physical.departureQd <= targetQd) {
           const vehicle = waitForVehicle(state, physical);
-          if (vehicle.pending) { order.status = "waitingCarrier"; break; }
+          if (vehicle.pending) { waitingForVehicle = true; break; }
           if (vehicle.readyQd > physical.startQd) {
             if (!attemptRebooking(order, targetQd, () => rebookStageRemainder(state, order, stage, Math.max(vehicle.readyQd, order.lastProcessedQd)))) break;
             replanned = true; break;
@@ -309,6 +310,11 @@ export function advanceTransportOrders({ state, holding, targetQd, dependencies 
       holding.storage.moneyCopper += refund;
       order.money.escrowCopper -= refund; order.money.refundedCopper += refund;
       report.push({ orderId: order.id, status: order.status, receivedQty: totalQty(order.received), spentCopper: order.money.spentCopper });
+    } else {
+      const inFlight = order.stages.flatMap(stage => stage.receipts).filter(receipt => receipt.status !== "arrived");
+      const pending = inFlight.some(receipt => runFor(state, receipt.runId)?.incident?.status === "pending");
+      order.status = pending ? "needsResolution" : waitingForVehicle || order.replanFailure ? "waitingCarrier"
+        : inFlight.length ? "travelling" : "booked";
     }
   }
   return report;

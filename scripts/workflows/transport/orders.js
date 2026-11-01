@@ -28,7 +28,9 @@ export function advanceTransportShipments(data, holding, targetQd, workflow, { l
   const state = ensureTransportState(data);
   const commonTargetQd = transportHoldingQd(data, holding, targetQd);
   recordTransportClock(data, holding);
-  const absoluteQd = qd => Number.isSafeInteger(state.calendarEpochQd) ? state.calendarEpochQd + qd : null;
+  // Without calendar dates the common transport coordinate is also the shared
+  // market clock. Falling back to the holding's age loses its saved offset.
+  const absoluteQd = qd => (Number.isSafeInteger(state.calendarEpochQd) ? state.calendarEpochQd : 0) + qd;
   advanceSharedMarketClock(holding, targetQd, absoluteQd(commonTargetQd));
   const entries = [];
   const cashBefore = holding.storage.moneyCopper;

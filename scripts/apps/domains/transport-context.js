@@ -44,18 +44,19 @@ function ownServices(data, holding, ship, points, request, clockQd, world = buil
   if (worldShipPortDebtCopper(ship, clockQd) > 0) throw new Error("Сначала оплатите накопленное содержание корабля.");
   const capacityPoints = shipCapacityLoadPoints(ship);
   const home = request.homeEndpoint ?? world.home.regionId;
-  const position = !ship.location || ship.location.kind === "home" ? home : ship.location.regionId;
+  const positionAtHome = !ship.location || ship.location.kind === "home";
+  const position = positionAtHome ? home : ship.location.regionId;
   const services = [];
-  const quote = (from, to, loadPoints, maxAccess) => worldShipTransportTerms(data, holding, ship,
+  const quote = (from, to, loadPoints, maxAccess, fromHome = from === home) => worldShipTransportTerms(data, holding, ship,
     from === home ? world.home.regionId : from, to === home ? world.home.regionId : to,
-    { context: world, loadPoints, maxAccess, fromHome: from === home, toHome: to === home });
+    { context: world, loadPoints, maxAccess, fromHome, toHome: to === home });
   const emptyQuotes = new Map();
-  const emptyTerms = (from, to) => {
-    if (from === to) return null;
-    const key = JSON.stringify([from, to]);
+  const emptyTerms = (from, to, fromHome = from === home) => {
+    if (from === to && fromHome === (to === home)) return null;
+    const key = JSON.stringify([from, to, fromHome]);
     if (!emptyQuotes.has(key)) {
       let terms = null;
-      try { terms = quote(from, to, 0, request.accessLimit); }
+      try { terms = quote(from, to, 0, request.accessLimit, fromHome); }
       catch (_error) { /* Cache unavailable pairs too, only for this quote. */ }
       emptyQuotes.set(key, terms);
     }
@@ -69,7 +70,10 @@ function ownServices(data, holding, ship, points, request, clockQd, world = buil
       let maxAccess = request.cargoAccessLimit;
       while (maxAccess >= 0) {
         const terms = quote(from, to, capacityPoints, maxAccess);
-        const approach = emptyTerms(position, from), back = emptyTerms(to, from);
+        // A local market remains a port even when this request uses the same
+        // region ID as its warehouse endpoint. Position.kind survives requests.
+        const atPickup = position === from && positionAtHome === (from === home);
+        const approach = emptyTerms(position, from, positionAtHome), back = emptyTerms(to, from);
         const homeReturn = emptyTerms(to, home), abortReturn = emptyTerms(from, home);
         const variant = maxAccess === request.cargoAccessLimit ? "" : `:access:${terms.accessCost}`;
         services.push({ id: `owned:${ship.id}:${from}:${to}${variant}`, label: `${ship.name} · ${terms.distanceKm} км · УРС ${terms.accessCost}`,
@@ -79,7 +83,7 @@ function ownServices(data, holding, ship, points, request, clockQd, world = buil
           loadingCapacity: terms.loadingCapacity, unloadingCapacity: terms.unloadingCapacity,
           returnQd: back?.durationQd ?? 0, endReturnQd: homeReturn?.durationQd ?? 0, endReturnLocation: home,
           emptyAccessLimit: request.accessLimit,
-          approachAvailable: from === position || Boolean(approach), approachAccessCost: approach?.accessCost ?? 0,
+          approachAvailable: atPickup || Boolean(approach), approachAccessCost: approach?.accessCost ?? 0,
           returnAvailable: Boolean(back), returnAccessCost: back?.accessCost ?? 0,
           endReturnAvailable: to === home || Boolean(homeReturn), endReturnAccessCost: homeReturn?.accessCost ?? 0,
           abortReturnAvailable: from === home || Boolean(abortReturn), abortReturnAccessCost: abortReturn?.accessCost ?? 0,

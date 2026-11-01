@@ -24,13 +24,13 @@ export function deleteHoldingFromData(data, holdingId) {
   const committedRun = (transport?.runs ?? []).some((run) => run.claims.some((claim) => claim.holdingId === holdingId)
     && (run.status === "booked" || run.incident?.status === "pending" || run.releaseQd > transport.clockQd));
   if (unfinished || committedRun) throw Object.assign(new Error("Сначала завершите перевозки поселения, расчёты и возвращение транспорта либо отмените ещё не начатые заказы."), { code: "transport-obligations" });
-  // Retire only known completed claims while their owner still exists. Unknown
-  // references retain the recovery guard in pruneCompletedTransportRuns.
+  // Detach known completed owners, retaining used capacity until the safe
+  // pruning boundary: a lagging replan can still inspect this past departure.
+  // Unknown references retain the recovery guard in pruneCompletedTransportRuns.
   const completedIds = new Set(transportOrders(holding).map(order => order.id));
   for (const run of transport?.runs ?? []) {
     run.claims = run.claims.filter(claim => {
       if (claim.holdingId !== holdingId || !completedIds.has(claim.orderId)) return true;
-      run.reservedLoad -= claim.load;
       return false;
     });
   }
