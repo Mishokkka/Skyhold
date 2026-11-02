@@ -29,6 +29,17 @@
     <div class="fbls-action-group">{{#if hasExcludedCompanies}}<button type="button" class="fbls-button" data-action="transport-restore-companies">Снова учитывать исключённых перевозчиков</button>{{/if}}{{#if hasPins}}<button type="button" class="fbls-button" data-action="transport-clear-pins">Снять закрепления участков</button>{{/if}}</div>
     {{#if request.ownShipId}}<div class="fbls-cluster"><label><input type="checkbox" data-transport-field="returnHome" {{checked request.returnHome}} /> Вернуть корабль домой</label><label class="fbls-field">Запас денег на борту, ММ<input type="number" min="0" step="1" data-transport-field="reserveCopper" value="{{request.reserveCopper}}" /></label>{{#if isGM}}<button type="button" class="fbls-button" data-action="transport-ship-sync">Довести время корабля до текущей даты с оплатой стоянки</button>{{/if}}</div>{{/if}}
     {{#if quoteError}}<p role="alert">{{quoteError}}</p>{{/if}}
+    {{#if request.ownShipId}}
+      <label class="fbls-field">Учитывать порт при поиске
+        <select data-transport-field="transferPortId"><option value="" {{#unless request.transferPortId}}selected{{/unless}}>Выбирать автоматически</option>
+          {{#if transferUnavailable}}<option value="{{request.transferPortId}}" selected disabled>Выбранный порт сейчас недоступен</option>{{/if}}
+          {{#each transferPorts}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+        </select>
+      </label>
+      <p>Этот выбор добавляет порт в расчёт. Чтобы провести груз через него, закрепите нужные участки ниже.</p>
+      {{#if portSearchLimited}}<p role="status">Не все подходящие порты вошли в поиск. Выберите дополнительный порт или закрепите участки; самый выгодный маршрут может оставаться за пределами расчёта.</p>{{/if}}
+    {{/if}}
+    {{#if routeSearchLimited}}<p role="status">Достигнут предел перебора связей между локациями. Часть наёмных участков могла не попасть в расчёт; ГМ может упростить сеть связей.</p>{{/if}}
     {{#if refinements.groups}}
     <details class="fbls-panel" data-fbls-disclosure="transport-adjust" {{#unless selected}}open{{/unless}}>
       <summary>Уточнить маршрут и перевозчиков</summary>

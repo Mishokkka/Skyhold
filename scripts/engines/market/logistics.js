@@ -369,6 +369,7 @@ export function resolveMarketLogistics({ holding = {}, market = {}, regions = []
   const airshipHireCopper = usesAirship ? Math.max(0, finite(market.airshipHireCopper, 120)) : 0;
   const result = {
     ok: reasons.length === 0,
+    searchLimited: search.limited,
     reasons,
     destinationRegionId: String(destination?.value ?? ""),
     destinationLabel: String(destination?.label ?? holding?.overview?.region ?? "Неизвестный регион"),
