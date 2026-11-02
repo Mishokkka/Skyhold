@@ -62,7 +62,8 @@ export function transportPeriodCosts(durationQd, { foodCopper = 0, crewCopper = 
 }
 
 export function transportOperatingCharge(service, durationQd, returning = false) {
-  const costs = returning ? service.returnDailyCosts ?? service.dailyCosts : service.dailyCosts;
+  const costs = returning ? service.returnDailyCosts
+    ?? (service.returnOperatingMilliCopperPerQd !== undefined ? null : service.dailyCosts) : service.dailyCosts;
   if (costs) return transportPeriodCosts(durationQd, costs).totalCopper;
   const rate = returning ? service.returnOperatingMilliCopperPerQd ?? service.operatingMilliCopperPerQd : service.operatingMilliCopperPerQd;
   return transportRateCharge(durationQd, rate ?? (service.operatingCopperPerQd ?? 0) * 1000);

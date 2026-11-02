@@ -13,6 +13,7 @@ import { shipCrewReadiness } from "../../engines/ships/crew-readiness.js";
 import { transportClockOffsetQd, transportHoldingQd } from "../../data/transport/clock.js";
 import { transportRelevantHolding } from "../../data/transport/state.js";
 import { discoverTransportPorts } from "./transport-discovery.js";
+import { transportInsuranceCopper, transportRiskBps } from "../../engines/transport/economics.js";
 
 export function transportSourceToken(data, holding) {
   return stableDataHash({ holding: transportRelevantHolding(holding), markets: data?.meta?.sharedMarkets,
@@ -100,7 +101,8 @@ function ownServices(data, holding, ship, points, request, clockQd, world = buil
           returnOperatingMilliCopperPerQd: back?.operatingMilliCopperPerQd ?? terms.operatingMilliCopperPerQd,
           dailyCosts: terms.dailyCosts, returnDailyCosts: back?.dailyCosts ?? terms.dailyCosts,
           waitingMilliCopperPerQd: from === home && ship.homeUpkeepEnabled === false ? 0 : terms.operatingMilliCopperPerQd,
-          accessCost: terms.accessCost, riskBps: Math.min(10000, Math.round((request.riskBps ?? 300) * terms.riskFactor)) });
+          storageIncluded: true, storageMilliCopperPerLoadQd: 0,
+          accessCost: terms.accessCost, riskBps: transportRiskBps(terms.riskExposureQd, request.riskBps ?? 300) });
         maxAccess = terms.accessCost - 1;
       }
     } catch (_error) { /* An unavailable pair is not a service; the selected complete chain is validated below. */ }
@@ -121,7 +123,7 @@ export function prepareTransportContext({ data, holding, request = {}, isGM = fa
   const home = findHoldingRegion(holding, data.catalog.eventRegions)?.value;
   if (!home) throw new Error("У поселения не определена локация.");
   const endpoint = ["sky-island", "ship"].includes(holding.type) || context.market.regionId === home ? `${home}:holding` : home;
-  const serviceEndpoints = { markets: context.markets, homeRegionId: home, homeEndpoint: endpoint };
+  const serviceEndpoints = { markets: context.markets, resources: context.resources, homeRegionId: home, homeEndpoint: endpoint };
   let services = transportServicesFromRoutes(routes, configuration, data.catalog.eventRegions, serviceEndpoints);
   const ship = request.ownShipId ? holding.special?.ships?.list?.find((row) => row.id === request.ownShipId) : null;
   if (request.ownShipId && !ship) throw new Error("Выбранный корабль не найден.");
@@ -184,7 +186,7 @@ export function prepareTransportContext({ data, holding, request = {}, isGM = fa
   }
   const valueCopper = cargoValue(cargo);
   const taxCopper = Math.ceil(valueCopper * (Number(logistics?.importTaxRate ?? 0) + Number(logistics?.exportTaxRate ?? 0)));
-  const insuranceCopper = request.insurance === false ? 0 : Math.ceil(valueCopper * configuration.insuranceBps / 10000);
+  const insuranceCopper = request.insurance === false ? 0 : transportInsuranceCopper(plan, configuration);
   const funding = shipTransportFunding({ expensesCopper: plan.ownExpensesCopper, reserveCopper: ship ? Number(request.reserveCopper ?? 0) : 0,
     onboardCopper: ship?.onboardCopper ?? 0 });
   const totalCopper = transportMoney([plan.totalCopper, taxCopper, insuranceCopper]);

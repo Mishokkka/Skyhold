@@ -155,6 +155,8 @@ await check("R3 undated shared markets keep a new holding's common clock through
     assert.equal(holding.special.transportV2.clockOffsetQd, 400);
     assert.equal(sim.data.meta.sharedMarkets.clockTenday, 10);
     const request = { marketId: "a", direction: "outbound", quantities: { wood: 10 }, insurance: false };
+    const initial = prepareTransportContext({ data: sim.data, holding, request, isGM });
+    request.serviceIds = [initial.services.find(row => row.kind === "charter" && row.from === initial.from && row.to === initial.to).id];
     const quote = prepareTransportContext({ data: sim.data, holding, request, isGM });
     await sim.command(created.id, "transport-book", { request, planToken: quote.planToken }, isGM ? "gm" : "player");
     assert.equal(Math.floor(quote.plan.arrivalQd / 40), 10);
@@ -263,7 +265,7 @@ await check("R5 cancellation follows common departures rather than a lagging hol
         assert.equal(physical.reservedLoad, aOrder.stages[0].runs[0].reservedLoad);
       } else {
         await sim.reject(b.id, "transport-cancel", { orderId: current.id }, userId, /уже началась/);
-        await sim.advance(b.id, 40);
+        await sim.advance(b.id, bookedRun.arrivalQd + 1);
         const delivered = sim.holding(b.id).special.transportV2.orders[0];
         assert.equal(delivered.status, "delivered");
         assert.equal(delivered.received.reduce((sum, lot) => sum + lot.qty, 0), 10);

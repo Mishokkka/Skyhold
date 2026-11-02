@@ -1,6 +1,7 @@
 import { recordFleetFunds } from "./fleet-accounting.js";
 import { applyShipFundsOperation } from "./funds.js";
 import { attentionLabel, contractGuidance, resolveContractOutcome } from "./contracts.js";
+import { resolveBundlePassages } from "./bundle-incidents.js";
 import { getShipProfile, shipCapacityLoadPoints } from "./profiles.js";
 import { bundleOperatingShares } from "./bundle-accounting.js";
 import { beginShipOuting, ensurePartialShipOuting, planShipOutingLeg, planShipOutingBundleRewards, recordShipOutingFunds, completeShipOutingLeg } from "./outing-report.js";
@@ -436,8 +437,9 @@ function drawDie(random, sides) {
   return Math.floor(value * sides) + 1;
 }
 
-function outcomeDice(random) {
-  return { commercialDice: [drawDie(random, 6), drawDie(random, 6)], incidentRoll: drawDie(random, 12) };
+function outcomeDice(random, contract) {
+  return { commercialDice: [drawDie(random, 6), drawDie(random, 6)], incidentRoll: drawDie(random, 12),
+    ...(contract?.economics?.version === 1 ? { passageRoll: drawDie(random, 10000) } : {}) };
 }
 
 function attentionChange(ship, contract, outcome, clockQd) {
@@ -536,7 +538,7 @@ export function resolveWorldShip(holding, ship, { operationId: suppliedOperation
   const clockQd = worldShipTimelineQd(holding, ship);
   settleIdleBilling(holding, ship, clockQd);
   if (!voyage.outcome) {
-    voyage.outcome = resolveContractOutcome(voyage.quote.contract, voyage.style, outcomeDice(random));
+    voyage.outcome = resolveContractOutcome(voyage.quote.contract, voyage.style, outcomeDice(random, voyage.quote.contract));
     voyage.outcomeOperationId = suppliedOperationId;
   }
   const outcome = voyage.outcome;
@@ -633,6 +635,7 @@ export function resolveWorldShipBundleStop(holding, ship, { operationId: supplie
   due.sort((a, b) => Number(b.offer.contract.kind === "smuggling") - Number(a.offer.contract.kind === "smuggling")
     || a.offerId.localeCompare(b.offerId));
   const shares = bundleOperatingShares(bundle.orders.map((order) => order.offer), bundle.totalOperatingCopper);
+  const physical = stop.economics?.version === 1 ? resolveBundlePassages(bundle, stop, random) : null;
   const completedOrders = [];
   for (const [index, order] of due.entries()) {
     if (order.outcomeApplied) continue;
@@ -640,12 +643,22 @@ export function resolveWorldShipBundleStop(holding, ship, { operationId: supplie
       const share = shares[bundle.orders.indexOf(order)];
       const contract = clone(order.offer.contract);
       contract.guidance = { ...contract.guidance, operatingCopper: share, preparationCopper: 0 };
-      const dice = index === 0 ? outcomeDice(random) : {
+      const dice = physical ? { commercialDice: [drawDie(random, 6), drawDie(random, 6)], incidentRoll: 12, passageRoll: 10000 }
+        : index === 0 ? outcomeDice(random, contract) : {
         commercialDice: [drawDie(random, 6), drawDie(random, 6)],
-        incidentRoll: due[0].outcome.incidentRoll
+        incidentRoll: due[0].outcome.incidentRoll,
+        passageRoll: due[0].outcome.passageRoll
       };
-      order.outcome = resolveContractOutcome(contract, order.style, { ...dice, commercialOnly: index > 0,
+      order.outcome = resolveContractOutcome(contract, order.style, { ...dice, commercialOnly: Boolean(physical) || index > 0,
+        sharedIncident: physical ? { eventId: "shared-passage", eventLabel: "Итоги общих участков рейса",
+          delayQd: physical.delayQd, damagePercent: 0, cargoRewardPercent: (order.cargoRewardBps ?? 10000) / 100 }
+          : index > 0 ? due[0].outcome.physicalIncident : null,
         sharedPassageAllowsBonus: index === 0 || Number(due[0].outcome.effectiveIncidentRoll) >= 8 });
+      if (physical && index === 0) {
+        order.outcome.expenseCopper = physical.expenseCopper;
+        order.outcome.delayQd = physical.delayQd;
+        order.outcome.passages = clone(physical.passages);
+      }
     }
     const outcome = order.outcome;
     integer(outcome.expenseCopper, "расходы исхода");

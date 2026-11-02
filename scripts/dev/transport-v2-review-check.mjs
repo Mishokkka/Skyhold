@@ -60,13 +60,13 @@ await check("R2 intermediate pins remain mandatory across cheaper bypasses", () 
     request: { ...fixture.request, serviceIds: quote.plan.stages.map(stage => stage.service.id), pins: { unused: "missing" } } }), /закрепления/);
 });
 
-await check("R3 collapsing transit nodes retains the maximum route risk", () => {
+await check("R3 collapsing transit nodes retains the time spent at each danger level", () => {
   const leg = (from, to, riskFactor) => ({ fromRegionId: from, toRegionId: to, fromCountryId: "country", toCountryId: "country",
     carrierId: "company", mode: "airship", capacityLoad: 10, movementQd: 2, distanceKm: 10,
     dispatchCopper: 1, hireCopper: 1, distanceCopper: 10, operatingCopper: 2, loadCopperPerUnit: 1, riskFactor, routeId: `${from}:${to}` });
   for (const risks of [[1, 4], [4, 1]]) {
     const services = transportServicesFromRoutes([{ transportPlan: { direction: "inbound", legs: [leg("A", "B", risks[0]), leg("B", "D", risks[1])] } }]);
-    assert.ok(services.every(row => row.riskBps === 1200));
+    assert.ok(services.every(row => row.riskBps === Math.round((1 - 0.97 ** (10 / 16)) * 10000)));
   }
 });
 

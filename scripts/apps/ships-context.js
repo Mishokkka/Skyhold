@@ -33,7 +33,12 @@ function preparedGuidance(contract) {
   return ["cautious", "normal", "bold"].map((style) => {
     const guidance = contractGuidance(contract, style);
     const riskLabel = guidance.incidentPressure <= 3 ? "низкий" : guidance.incidentPressure <= 6 ? "заметный" : guidance.incidentPressure <= 8 ? "высокий" : "крайний";
-    return { ...guidance, riskLabel, styleHint: STYLE_HINTS[style] };
+    const modern = contract.economics?.version === 1;
+    const hints = { cautious: "Вероятность происшествия ниже на четверть; предусмотрены отдельные расходы на предосторожности.",
+      normal: "Договорная плата. Ремонт и содержание при задержке рассчитываются отдельно.",
+      bold: "Вероятность происшествия выше в полтора раза; премия 2% за полное исполнение без задержек." };
+    return { ...guidance, riskLabel: modern ? `${(guidance.riskBps / 100).toLocaleString("ru-RU", { maximumFractionDigits: 2 })}%` : riskLabel,
+      styleHint: modern ? hints[style] : STYLE_HINTS[style] };
   });
 }
 
@@ -51,12 +56,16 @@ function worldOfferRow(offer, worldContext) {
     ? shortestMarketRouteDistanceKm(offer.from.regionId, contract.pickup.regionId, worldContext.regions, { mode: "airship" }) : 0;
   return {
     ...offer,
+    feeHint: contract.economics?.version === 1
+      ? `Плата за место на рейсе по общей себестоимости и штатной команде. Подлёт к погрузке и дорога домой не повышают плату. Пошлины и обработка включены. Доплата за особую услугу: ${formatShipGold(contract.economics.specialPremiumCopper)} ЗМ; за риск: ${formatShipGold(contract.economics.riskPremiumCopper)} ЗМ. ${contract.kind === "smuggling" ? "При срыве сделки плата может быть утрачена." : `При отмене заказчиком: ${contract.kind === "commission" ? 50 : 75}% платы до последствий перевозки.`}`
+      : "Плата сохранена по прежним условиям предложения. Дорогая фактическая команда не повышает плату; подход капитана и события меняют итог.",
     title: offer.title || `${KIND_LABELS[contract.kind] ?? "Заказ"}: ${offer?.to?.label ?? "порт"}`,
     destination: offer?.to?.label ?? "—", kindLabel: KIND_LABELS[contract.kind] ?? "Заказ",
     attention: contract.attention ?? { level: 0, label: attentionLabel(0) },
     durationDays, difficultyLabel,
     approachKm, deliveryKm: Math.max(0, Number(quote.distanceKm ?? 0) - Number(approachKm ?? 0)),
-    difficultyHint: `Сложность объединяет риск происшествия, длительность рейса${contract.pickup ? " и подход к чужому порту погрузки" : ""}. Длительность влияет на расходы, но сама по себе не меняет бросок происшествия.`,
+    difficultyHint: `Сложность объединяет риск происшествия, длительность рейса${contract.pickup ? " и подход к чужому порту погрузки" : ""}. ${contract.economics?.version === 1
+      ? "Риск растёт со временем в пути и опасностью регионов." : "Длительность влияет на расходы; риск определяется прежними условиями договора."}`,
     timing: {
       flightDays: timing.flightQd / 4,
       loadingDays: timing.loadingQd / 4,

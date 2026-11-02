@@ -186,7 +186,8 @@ try {
     const initial = prepareMarketAuthorityContext({ data, holding, marketId: "a", isGM });
     const offer = initial.quote.offers.find((row) => row.resourceId === "test-freight"), quantities = { [offer.id]: 2 };
     const view = prepareMarketAuthorityContext({ data, holding, marketId: "a", isGM, quantities });
-    assert.equal(view.quote.logistics.transportMode, "rail"); assert.equal(view.plan.logistics.transportMode, "caravan");
+    assert.equal(view.quote.logistics.transportMode, "rail"); assert.equal(view.plan.logistics.transportMode, "rail",
+      "the priced plan now includes the wagon crew and draft teams, so this train is cheaper");
     const app = new SkyholdMarketApp({ holdingId: holding.id }); app.quantities = quantities;
     app._marketSnapshot = () => ({ ...view, data, holding }); app._enrichMarketQuoteItems = async (quote) => quote;
     const context = await app._prepareContext({});

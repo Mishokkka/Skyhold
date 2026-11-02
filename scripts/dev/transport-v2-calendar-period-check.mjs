@@ -63,6 +63,11 @@ function harness(data) {
       const initial = prepareTransportContext({ data: stored, holding: h, request, isGM: userId === "gm" });
       request.serviceIds = [initial.services.find(row => row.from === initial.from && row.to === initial.to
         && row.kind === (ownShipId ? "owned" : "regular")).id];
+      // This clock-boundary fixture needs an explicitly fast port operation within this tenday.
+      if (!ownShipId) {
+        stored.catalog.transportV2.overrides ??= {};
+        stored.catalog.transportV2.overrides[request.serviceIds[0]] = { loadingQd: 1, unloadingQd: 1 };
+      }
       const quote = prepareTransportContext({ data: stored, holding: h, request, isGM: userId === "gm" });
       const operation = { type: "transport-book", operationId: `calendar-book-${++sequence}`, holdingId: id,
         expectedRevision: stored.meta.revision, sourceToken: quote.sourceToken, planToken: quote.planToken, request };

@@ -1,4 +1,5 @@
-import { cargoLoad, cargoValue, takeTransportCargo, transportInteger, transportMoney, transportRateCharge, transportOperatingCharge, transportWaitingCharge, TRANSPORT_LIMITS, TRANSPORT_LOAD_SCALE } from "./quantities.js";
+import { transportServiceCharge } from "./economics.js";
+import { cargoLoad, cargoValue, takeTransportCargo, transportInteger, transportMoney, transportRateCharge, transportWaitingCharge, TRANSPORT_LIMITS, TRANSPORT_LOAD_SCALE } from "./quantities.js";
 
 const copy = (value) => JSON.parse(JSON.stringify(value));
 const slotId = (service, departure, vehicle = "regular") => `${service.id}:${vehicle}:${departure}`;
@@ -21,9 +22,10 @@ function checkService(service) {
   if (!service?.id || !service.from || !service.to || service.from === service.to) throw new Error("Не заданы разные пункты перевозки.");
   if (!["regular", "charter", "owned"].includes(service.kind)) throw new Error("Неизвестный вид перевозки.");
   for (const field of ["capacity", "travelQd"]) transportInteger(service[field], field, 1);
-  for (const field of ["loadingQd", "unloadingQd", "returnQd", "firstQd", "dispatchCopper", "loadCopper", "operatingCopperPerQd", "handlingCopper", "storageCopperPerLoadQd"]) {
+  for (const field of ["loadingQd", "unloadingQd", "preparationQd", "returnQd", "firstQd", "dispatchCopper", "loadCopper", "operatingCopperPerQd", "handlingCopper", "storageCopperPerLoadQd"]) {
     transportInteger(service[field] ?? 0, field);
   }
+  for (const field of ["loadingCapacity", "unloadingCapacity"]) if (service[field] !== undefined) transportInteger(service[field], field, 1);
   if (service.kind === "regular") transportInteger(service.intervalQd, "интервал отправлений", 1);
   else transportInteger(service.vehicles ?? 1, "число машин", 1, TRANSPORT_LIMITS.vehicles);
   if (service.kind === "owned" && !service.shipId) throw new Error("Не выбран собственный корабль.");
@@ -62,19 +64,6 @@ function charterSlot(service, readyQd, runs, horizon, durationQd) {
   return candidates.sort((a, b) => a.startQd - b.startQd || a.vehicle - b.vehicle)[0] ?? null;
 }
 
-function runCharge(service, load, occupiedQd, returnQd = 0) {
-  const dispatchCopper = service.dispatchCopper ?? 0;
-  const loadCopper = transportRateCharge(load, service.loadMilliCopper ?? (service.loadCopper ?? 0) * 1000, TRANSPORT_LOAD_SCALE * 1000);
-  const operatingCopper = service.kind === "regular" ? 0 : transportOperatingCharge(service, occupiedQd - returnQd)
-    + transportOperatingCharge(service, returnQd, true);
-  const handlingCopper = (service.handlingFlatCopper ?? 0)
-    + transportRateCharge(load, service.handlingMilliCopper ?? (service.handlingCopper ?? 0) * 1000, TRANSPORT_LOAD_SCALE * 1000);
-  const gross = transportMoney([dispatchCopper, loadCopper, operatingCopper, handlingCopper]);
-  const discountBps = transportInteger(service.discountBps ?? 0, "скидка", 0, 10000);
-  const discountCopper = Math.floor((dispatchCopper + loadCopper) * discountBps / 10000);
-  return { dispatchCopper, loadCopper, operatingCopper, handlingCopper, discountCopper, totalCopper: gross - discountCopper };
-}
-
 /** A candidate uses one location chain; each stage packs independently. No bottleneck-sized full-route multiplication. */
 export function planTransportChain({ cargo, services, startQd = 0, runs = [], horizonQd = TRANSPORT_LIMITS.horizonQd, storageRate = 0 }) {
   transportInteger(startQd, "дата");
@@ -105,8 +94,8 @@ export function planTransportChain({ cargo, services, startQd = 0, runs = [], ho
       if (waiting.some((lot) => lot.unitLoad > service.capacity)) throw new Error("Одна единица товара больше вместимости транспорта.");
       const full = takeTransportCargo(waiting, service.capacity);
       const fullLoad = cargoLoad(full.taken);
-      const timed = service.kind === "owned" ? { ...service,
-        loadingQd: service.loadingCapacity ? Math.ceil(fullLoad / service.loadingCapacity) : service.loadingQd ?? 0,
+      const timed = service.kind !== "regular" ? { ...service,
+        loadingQd: (service.preparationQd ?? 0) + (service.loadingCapacity ? Math.ceil(fullLoad / service.loadingCapacity) : service.loadingQd ?? 0),
         unloadingQd: service.unloadingCapacity ? Math.ceil(fullLoad / service.unloadingCapacity) : service.unloadingQd ?? 0 } : service;
       const last = full.remaining.length === 0;
       // Charter machines return to their published hub; owned ship returns between shuttles or by explicit final choice.
@@ -130,8 +119,8 @@ export function planTransportChain({ cargo, services, startQd = 0, runs = [], ho
       const arrivalQd = slot.existing?.arrivalQd ?? slot.departureQd + service.travelQd + (timed.unloadingQd ?? 0);
       if (arrivalQd > horizon) throw new TransportPlanningUnavailableError("horizon", "Доставка выходит за горизонт планирования.");
       const start = slot.existing?.startQd ?? slot.startQd ?? slot.departureQd - (timed.loadingQd ?? 0);
-      const charge = runCharge(service, load, arrivalQd + returnQd - start, returnQd);
-      storageCopper += transportRateCharge(load * Math.max(0, start - readyQd),
+      const charge = transportServiceCharge(service, load, arrivalQd + returnQd - start, returnQd);
+      storageCopper += service.storageIncluded ? 0 : transportRateCharge(load * Math.max(0, start - readyQd),
         service.storageMilliCopperPerLoadQd ?? (service.storageCopperPerLoadQd ?? storageRate) * 1000, TRANSPORT_LOAD_SCALE * 1000);
       const run = { id: slot.id, serviceId: service.id, serviceLabel: service.label || service.id, kind: service.kind,
         shipId: service.shipId ?? "", vehicle: slot.vehicle, from: service.from, to: service.to,

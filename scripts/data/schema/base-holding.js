@@ -114,7 +114,8 @@ export const BASE_HOLDING = {
       defense: 0,
       reputation: 0,
       morale: 0,
-      marketConnectionsLevel: 1
+      marketConnectionsLevel: 1,
+      marketLocalDistanceKm: 20
     },
     efficiencyModifiers: {
       all: 0,

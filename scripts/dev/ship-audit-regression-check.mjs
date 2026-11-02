@@ -62,7 +62,7 @@ for (const weights of [[1, 1], [1, 1, 1], [1, 7, 3], [4000, 200, 800]]) {
   assert.equal(summary.reserveCopper, plan.recommendedBudgetCopper - plan.stops[0].legOffer.quote.operatingCopper);
   assert.equal(summary.freeCopper, 0, "the recommended departure budget has no uncommitted cash");
   assert.equal(JSON.stringify(saved), before, "a summary must never alter the accepted snapshot");
-  const perOrder = bundleOutcomeReserves(offers, plan.totalOperatingCopper);
+  const perOrder = bundleOutcomeReserves(offers, plan.totalOperatingCopper, { stops: plan.stops });
   saved.orderBundle.orders[0].outcome = { expenseCopper: 19 };
   assert.equal(shipMoneySummary(holding, saved).incidentReserveCopper, plan.outcomeReserveCopper - perOrder[0]);
   assert.equal(shipMoneySummary(holding, saved).outcomeDueCopper, 19);

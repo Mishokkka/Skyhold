@@ -10,7 +10,7 @@ const channels = [["base", "Базовая цена"], ["ordinary", "Обычн�
 
 function summary(result) {
   if (!result.available) return result.reason;
-  return `Партия ${result.qty} ЕД.: выручка ${format(result.revenue)}, сырьё ${range(result.inputMin, result.inputMax)}, труд ${format(result.labor)} ММ. Остаток до содержания и сбыта: ${range(result.marginMin, result.marginMax)} ММ. Содержание здания с этой линией: ${format(result.upkeepMonthly)} ММ/месяц.`;
+  return `Партия ${result.qty} ЕД.: выручка ${format(result.revenue)}, сырьё ${result.hasLandedCost ? "с доставкой" : "по каталогу"} ${range(result.inputMin, result.inputMax)}, труд ${format(result.labor)} ММ. Остаток до содержания и сбыта: ${range(result.marginMin, result.marginMax)} ММ. Содержание здания с этой линией: ${format(result.upkeepMonthly)} ММ/месяц.`;
 }
 
 export function prepareProductionEconomics(editor, building) {
@@ -37,7 +37,7 @@ export function bindProductionEconomics(editor, root) {
     const update = () => {
       for (const control of panel.querySelectorAll("[data-economics-input]")) {
         const key = control.dataset.economicsInput;
-        state[key] = key === "channel" ? control.value : Number(control.value);
+        state[key] = key === "channel" || key === "inputCostCopper" && control.value === "" ? control.value : Number(control.value);
       }
       panel.querySelector("[data-economics-result]").textContent = summary(productionLineEconomics(model.line, model.building, state));
       panel.querySelector('[data-economics-input="unitPrice"]').disabled = state.channel !== "contract";

@@ -132,8 +132,8 @@ for (const isGM of [true, false]) for (const direction of ["inbound", "outbound"
   const before = prepareTransportContext({ ...f, request, isGM: true });
   f.data.catalog.eventRegions.find(region => region.value === "a").marketRiskFactor = 4;
   const after = prepareTransportContext({ ...f, request, isGM: true });
-  assert.equal(before.plan.stages[0].service.riskBps, 300);
-  assert.equal(after.plan.stages[0].service.riskBps, 1200, "environment applies without the independent carrier's risk surcharge");
+  assert.equal(before.plan.stages[0].service.riskBps, Math.round((1 - 0.97 ** (4 / 16)) * 10000));
+  assert.equal(after.plan.stages[0].service.riskBps, 300, "four QD at fourfold danger equal sixteen QD at ordinary danger");
   f.data.catalog.eventRegions[0].marketLinks[0].seasonalModifiers = { winter: { enabled: true, riskFactor: 2, timeFactor: 1, costFactor: 1 } };
   const context = buildShipWorldContext(f.data, f.holding); context.seasonId = "winter";
   assert.equal(worldShipTransportTerms(f.data, f.holding, f.ship, "home", "a", { context }).riskFactor, 8);

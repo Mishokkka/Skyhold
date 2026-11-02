@@ -20,11 +20,10 @@ const days = (qd) => `${Math.max(0, qd) / 4} дн.`;
 const statuses = { booked: "Забронировано", travelling: "В пути", waitingCarrier: "Ожидает освобождения транспорта", needsResolution: "Ожидает решения ГМ", delivered: "Доставлено", lost: "Груз утрачен", cancelled: "Отменено" };
 function stageInvoice(stage) {
   const parts = [["Подача", "dispatchCopper"], ["Тариф за груз", "loadCopper"], ["Содержание в пути и возврат", "operatingCopper"],
-    ["Обработка", "handlingCopper"], ["Скидка", "discountCopper"]].map(([label, key]) => {
+    ["Обработка", "handlingCopper"], ["Надбавка перевозчика", "profitCopper"], ["Скидка", "discountCopper"]].map(([label, key]) => {
     const amount = stage.runs.reduce((sum, run) => sum + (run.charge[key] ?? 0), 0);
     return amount ? `${label}: ${key === "discountCopper" ? "−" : ""}${money(amount)}` : "";
   }).filter(Boolean);
-  if (stage.storageCopper) parts.push(`Хранение до отправления: ${money(stage.storageCopper)}`);
   return parts.join("; ");
 }
 const actions = ["transport-confirm", "transport-retry", "transport-cancel", "transport-advance", "transport-configure",
@@ -106,7 +105,7 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
           value: service.id, label: `${service.label} · ${service.kind === "regular" ? "регулярный" : service.kind === "owned" ? "свой корабль" : "чартер"}`,
           selected: service.id === stage.service.id })) }))
     } : null;
-    const configuration = this._configuration ?? data.catalog?.transportV2 ?? TRANSPORT_SERVICE_DEFAULTS;
+    const configuration = { ...TRANSPORT_SERVICE_DEFAULTS, ...(this._configuration ?? data.catalog?.transportV2) };
     const page = transportHistoryPage(transportOrders(holding), this._historyPage);
     this._historyPage = page.history.page - 1;
     const orders = page.orders.map((order) => ({ id: order.id,
@@ -149,6 +148,7 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
       hasRequest: Boolean(this.request), request: this.request, byTime: this.request?.priority === "time", configuration,
       configurationView: { intervalDays: configuration.regularIntervalQd / 4, phaseDays: configuration.regularFirstQd / 4,
         commercialPercent: configuration.commercialLoadBps / 100, insurancePercent: configuration.insuranceBps / 100,
+        profitPercent: configuration.carrierProfitBps / 100,
         coveragePercent: configuration.insuranceCoverageBps / 100 },
       hasExcludedCompanies: Boolean(this.request?.excluded?.length),
       hasPins: Boolean(Object.keys(this.request?.pins ?? {}).length),

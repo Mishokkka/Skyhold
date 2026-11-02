@@ -12,8 +12,10 @@
       <label class="fbls-field">Сдвиг расписания, дни<input type="number" min="0" step="0.25" data-transport-config="regularFirstQd" data-scale="4" value="{{configurationView.phaseDays}}" /></label>
       <label class="fbls-field">Чартерных машин на услугу<input type="number" min="1" max="10000" step="1" data-transport-config="charterVehicles" value="{{configuration.charterVehicles}}" /></label>
       <label class="fbls-field">Коммерческая загрузка, %<input type="number" min="0.01" max="100" step="0.01" data-transport-config="commercialLoadBps" data-scale="100" value="{{configurationView.commercialPercent}}" /></label>
+      <label class="fbls-field">Надбавка перевозчика, %<input type="number" min="0" max="100" step="1" data-transport-config="carrierProfitBps" data-scale="100" value="{{configurationView.profitPercent}}" /></label>
+      <label class="fbls-field">Минимальная страховая ставка, %<input type="number" min="0" max="100" step="0.1" data-transport-config="insuranceBps" data-scale="100" value="{{configurationView.insurancePercent}}" /></label>
     </div>
-    <p>Регулярный тариф распределяет эталонную стоимость рейса по коммерческой загрузке. Чартер оплачивает машину и пустой возврат. Страховка — {{configurationView.insurancePercent}}% стоимости товара, покрытие — {{configurationView.coveragePercent}}%; порча от времени не страхуется.</p>
+    <p>Регулярный тариф делит расходы оборота между ожидаемым грузом в обоих направлениях. Чартер оплачивает выделенный транспорт и пустой возврат. Страховая цена зависит от опасности и длительности пути; покрытие — {{configurationView.coveragePercent}}%. Порча от времени не страхуется.</p>
 
     <button type="button" class="fbls-button" data-action="transport-configure" {{#if busy}}disabled{{/if}}>Сохранить условия будущих заказов</button>
 
