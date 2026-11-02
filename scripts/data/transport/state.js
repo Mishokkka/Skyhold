@@ -3,6 +3,19 @@ import { transportEpochQd } from "./clock.js";
 export const transportOrders = (holding) => holding?.special?.transportV2?.orders ?? [];
 export const activeTransportOrder = (order) => !["delivered", "lost", "cancelled"].includes(order.status);
 
+/** Delivered cargo can still have an unpaid adjustment or a vessel returning. */
+export const transportOrderHasObligations = order => order.status !== "cancelled"
+  && (activeTransportOrder(order) || order.fundingNeededCopper > 0
+    || Boolean(order.ownShipId && (!order.shipReleased || !order.shipCostsReconciled)));
+
+/** Read-only projection: completed history is unrelated to a new quotation. */
+export function transportRelevantHolding(holding) {
+  if (!holding?.special?.transportV2) return holding;
+  return { ...holding, special: { ...holding.special, transportV2: {
+    ...holding.special.transportV2, orders: transportOrders(holding).filter(transportOrderHasObligations)
+  } } };
+}
+
 /** Drop operational records only after every consumer has passed them. Order receipts retain history. */
 export function pruneCompletedTransportRuns(data) {
   const state = data.meta?.transportV2;

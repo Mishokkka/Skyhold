@@ -29,6 +29,21 @@
     <div class="fbls-action-group">{{#if hasExcludedCompanies}}<button type="button" class="fbls-button" data-action="transport-restore-companies">Снова учитывать исключённых перевозчиков</button>{{/if}}{{#if hasPins}}<button type="button" class="fbls-button" data-action="transport-clear-pins">Снять закрепления участков</button>{{/if}}</div>
     {{#if request.ownShipId}}<div class="fbls-cluster"><label><input type="checkbox" data-transport-field="returnHome" {{checked request.returnHome}} /> Вернуть корабль домой</label><label class="fbls-field">Запас денег на борту, ММ<input type="number" min="0" step="1" data-transport-field="reserveCopper" value="{{request.reserveCopper}}" /></label>{{#if isGM}}<button type="button" class="fbls-button" data-action="transport-ship-sync">Довести время корабля до текущей даты с оплатой стоянки</button>{{/if}}</div>{{/if}}
     {{#if quoteError}}<p role="alert">{{quoteError}}</p>{{/if}}
+    {{#if refinements.groups}}
+    <details class="fbls-panel" data-fbls-disclosure="transport-adjust" {{#unless selected}}open{{/unless}}>
+      <summary>Уточнить маршрут и перевозчиков</summary>
+      {{#each refinements.groups}}<label class="fbls-field">Отправление из {{label}}
+        <select data-transport-pin="{{from}}"><option value="" {{#if automatic}}selected{{/if}}>Выбирать автоматически</option>
+          {{#each options}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
+        </select>
+      </label>{{/each}}
+      {{#if refinements.companies}}<label class="fbls-field">Исключить перевозчика
+        <select data-transport-exclude="true"><option value="">Выберите перевозчика</option>
+          {{#each refinements.companies}}<option value="{{id}}">{{label}}</option>{{/each}}
+        </select>
+      </label>{{/if}}
+    </details>
+    {{/if}}
     {{#if selected}}
     <article class="fbls-panel fbls-stack">
       <div class="fbls-card-header"><strong>Доставка: {{selected.delivery}}</strong><span>Весь груз через {{selected.arrival}}</span></div>
@@ -41,7 +56,6 @@
         </details>
       </li>{{/each}}</ol>
       {{#each selected.warnings}}<p role="status">{{this}}</p>{{/each}}
-      <details data-fbls-disclosure="transport-adjust"><summary>Изменить перевозку по участкам</summary>{{#each selected.stages}}<div class="fbls-cluster"><label class="fbls-field">{{path}}<select data-transport-pin="{{from}}">{{#each options}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select></label>{{#if pinned}}<span class="fbls-chip">Закреплено</span><button type="button" class="fbls-button" data-action="transport-clear-pin" data-from="{{from}}">Снять закрепление</button>{{/if}}<button type="button" class="fbls-button" data-action="transport-exclude" data-company="{{company}}">Исключить перевозчика</button></div>{{/each}}</details>
       <details data-fbls-disclosure="transport-invoice"><summary>Товары и сборы</summary><ul>{{#each selected.cargo}}<li>{{name}} × {{qty}}</li>{{/each}}</ul><p>Пошлины: {{selected.tax}}. Страхование: {{selected.insurance}}. Покрытие утраты груза: {{selected.coveragePercent}}%; порча и расходы доставки не страхуются. {{#if selected.approach}}Пустой подход и ожидание своего корабля до первого участка: {{selected.approach}}.{{/if}}</p></details>
       <p>{{#if selected.limited}}Найден подходящий вариант в пределах поиска.{{else}}Выбран лучший найденный вариант для этого заказа.{{/if}} Наёмная доставка фиксируется при подтверждении; расходы своего корабля уточняются по фактическому времени и отправлениям.</p>
       <button type="button" class="fbls-button primary" data-action="transport-confirm" {{#unless canConfirm}}disabled{{/unless}}>Подтвердить заказ</button>
@@ -63,6 +77,11 @@
     </div>
   </article>
   {{/each}}
+  {{#if history.count}}<nav class="fbls-action-group" aria-label="Страницы истории перевозок">
+    <button type="button" class="fbls-button" data-action="transport-history-previous" {{#unless history.previous}}disabled{{/unless}}>Более новые</button>
+    <span>История: {{history.count}} заказов · страница {{history.page}} из {{history.pages}}. Незавершённые заказы показаны всегда.</span>
+    <button type="button" class="fbls-button" data-action="transport-history-next" {{#unless history.next}}disabled{{/unless}}>Более старые</button>
+  </nav>{{/if}}
   {{#each orders}}
   <article class="fbls-panel fbls-stack">
     <div class="fbls-card-header"><strong>{{direction}} · {{market}}</strong><span class="fbls-chip">{{status}}</span></div>

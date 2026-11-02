@@ -13,6 +13,7 @@ import { DisclosureState } from "./common/disclosure-state.js";
 import { RenderSchedulerMixin } from "./common/render-scheduler.js";
 import { restoreApplicationFocus } from "./common/window-focus-keeper.js";
 import { requestSkyholdAppRender } from "./registry.js";
+import { transportHistoryPage, transportRefinements } from "./domains/transport-view.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const days = (qd) => `${Math.max(0, qd) / 4} дн.`;
@@ -27,7 +28,8 @@ function stageInvoice(stage) {
   return parts.join("; ");
 }
 const actions = ["transport-confirm", "transport-retry", "transport-cancel", "transport-advance", "transport-configure",
-  "transport-incident-success", "transport-incident-delay", "transport-incident-loss", "transport-ship-sync", "transport-clear-pin", "transport-clear-pins", "transport-fund", "transport-exclude", "transport-restore-companies"];
+  "transport-incident-success", "transport-incident-delay", "transport-incident-loss", "transport-ship-sync", "transport-clear-pin", "transport-clear-pins", "transport-fund", "transport-exclude", "transport-restore-companies",
+  "transport-history-previous", "transport-history-next"];
 
 export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2)) {
   static instances = new Map();
@@ -57,10 +59,13 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
     const clockQd = Math.max(data.meta?.transportV2?.clockQd ?? 0, transportHoldingQd(data, holding));
     let quote = null, quoteError = "";
     if (this.request) {
-      try { quote = prepareTransportContext({ data, holding, request: this.request, isGM: permissions.isGM }); }
+      try {
+        quote = prepareTransportContext({ data, holding, request: this.request, isGM: permissions.isGM, allowIncomplete: true });
+        quoteError = quote.error ?? "";
+      }
       catch (error) { quoteError = error.message; }
     }
-    this._view = { data, holding, permissions, quote, sourceToken: transportSourceToken(data, holding) };
+    this._view = { data, holding, permissions, quote, sourceToken: quote?.sourceToken ?? transportSourceToken(data, holding) };
     const hiddenCountries = new Set((data.catalog?.marketEconomy?.countries ?? []).filter((row) => row.visibility === "gm").map((row) => row.id));
     const hiddenRegions = new Set((data.catalog?.eventRegions ?? []).filter((row) => hiddenCountries.has(row.countryId)).map((row) => row.value));
     const hiddenCompanies = new Set((data.catalog?.marketEconomy?.organizations ?? []).filter((row) => row.visibility === "gm").map((row) => row.id));
@@ -78,7 +83,8 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
       const label = pointLabel(destination);
       return `Ожидаемое освобождение через ${days((order.shipAbort?.releaseQd ?? physical.releaseQd) - clockQd)}: ${label}; при происшествии срок уточняется`;
     };
-    const selected = quote ? {
+    const refinements = transportRefinements(quote?.services, this.request ?? {}, pointLabel);
+    const selected = quote?.plan ? {
       delivery: money(quote.totalCopper), value: money(quote.valueCopper), treasury: money(quote.treasuryCopper),
       arrival: days(quote.plan.arrivalQd - quote.plan.startQd), firstArrival: days(quote.plan.firstArrivalQd - quote.plan.startQd),
       splitArrival: quote.plan.firstArrivalQd !== quote.plan.arrivalQd, shipRelease: quote.ship ? days(quote.plan.shipReleaseQd - quote.plan.startQd) : "",
@@ -101,7 +107,9 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
           selected: service.id === stage.service.id })) }))
     } : null;
     const configuration = this._configuration ?? data.catalog?.transportV2 ?? TRANSPORT_SERVICE_DEFAULTS;
-    const orders = [...transportOrders(holding)].reverse().map((order) => ({ id: order.id,
+    const page = transportHistoryPage(transportOrders(holding), this._historyPage);
+    this._historyPage = page.history.page - 1;
+    const orders = page.orders.map((order) => ({ id: order.id,
       market: !permissions.isGM && hiddenRegions.has(order.commercial.marketRegionId) ? "Скрытый рынок" : order.commercial.marketLabel,
       status: statuses[order.status] || order.status, direction: order.direction === "outbound" ? "Продажа" : "Покупка",
       waitingReason: order.replanFailure?.message ?? "",
@@ -131,7 +139,8 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
         cargo: (row.cargo ?? row.cargoReservations ?? []).map((lot) => `${lot.name || lot.resourceId || "Товар"} × ${lot.qty}`).join(" · ") }));
     return { ...base, hasHolding: true, holdingName: holding.name, isGM: permissions.isGM, canUse: permissions.canUseStorage,
       canConfirm: Boolean(quote?.affordable && permissions.canUseStorage && (!quote.ship || permissions.canManageShips) && !this._pending && !this._busy),
-      selected, quoteError, error: this._error, busy: this._busy || this.constructor.inFlight.has(this._pending?.operationId), pending: Boolean(this._pending), orders, incidents, archive,
+      selected, refinements, history: page.history, quoteError, error: this._error,
+      busy: this._busy || this.constructor.inFlight.has(this._pending?.operationId), pending: Boolean(this._pending), orders, incidents, archive,
       hasRequest: Boolean(this.request), request: this.request, byTime: this.request?.priority === "time", configuration,
       configurationView: { intervalDays: configuration.regularIntervalQd / 4, phaseDays: configuration.regularFirstQd / 4,
         commercialPercent: configuration.commercialLoadBps / 100, insurancePercent: configuration.insuranceBps / 100,
@@ -146,7 +155,7 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
     this._listeners?.abort(); this._listeners = new AbortController(); this._disclosures.bind(this.element);
     this.element.addEventListener("change", (event) => {
       if (this._busy || this._pending) return;
-      const field = event.target.closest("[data-transport-field], [data-transport-pin], [data-transport-config], [data-transport-incident-field]");
+      const field = event.target.closest("[data-transport-field], [data-transport-pin], [data-transport-exclude], [data-transport-config], [data-transport-incident-field]");
       if (!field) return;
       if (field.dataset.transportIncidentField && this._view.permissions.isGM) {
         const runId = field.closest("[data-transport-incident]").dataset.transportIncident;
@@ -156,7 +165,11 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
         this._configuration = { ...(this._configuration ?? this._view.data.catalog?.transportV2 ?? TRANSPORT_SERVICE_DEFAULTS),
           [field.dataset.transportConfig]: Math.round(Number(field.value) * Number(field.dataset.scale ?? 1)) };
       } else if (this.request && field.dataset.transportPin) {
-        this.request.pins = { ...this.request.pins, [field.dataset.transportPin]: field.value };
+        this.request.pins = { ...this.request.pins };
+        if (field.value) this.request.pins[field.dataset.transportPin] = field.value;
+        else delete this.request.pins[field.dataset.transportPin];
+      } else if (this.request && field.dataset.transportExclude && field.value) {
+        this.request.excluded = [...new Set([...(this.request.excluded ?? []), field.value])];
       } else if (this.request && field.dataset.transportField) {
         this.request[field.dataset.transportField] = field.type === "checkbox" ? field.checked : field.type === "number" ? Number(field.value) : field.value;
       }
@@ -169,6 +182,10 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
     this._error = "";
     try {
       const action = target.dataset.action;
+      if (action === "transport-history-previous" || action === "transport-history-next") {
+        this._historyPage = Math.max(0, (this._historyPage ?? 0) + (action === "transport-history-next" ? 1 : -1));
+        return this.requestRender({ focus: false });
+      }
       if (action === "transport-clear-pin") { delete this.request.pins?.[target.dataset.from]; return this.requestRender({ focus: false }); }
       if (action === "transport-clear-pins") { this.request.pins = {}; return this.requestRender({ focus: false }); }
       if (action === "transport-exclude") {

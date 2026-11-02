@@ -1,4 +1,5 @@
-import { prepareMarketAuthorityContext, authorityMarketLogistics } from "../market/authority-context.js";
+import { authorityMarketLogistics } from "../market/authority-context.js";
+import { prepareTransportCommerce } from "../market/transport-commerce.js";
 import { transportServicesFromRoutes, validateTransportConfiguration } from "../../engines/transport/services.js";
 import { findTransportPlans, planTransportChain, transportChainMatchesConstraints } from "../../engines/transport/planner.js";
 import { cargoValue, shipTransportFunding, transportLoad, transportMoney, transportOperatingCharge } from "../../engines/transport/quantities.js";
@@ -10,9 +11,11 @@ import { worldShipTimelineQd, worldShipPortDebtCopper } from "../../engines/ship
 import { shipCapacityLoadPoints } from "../../engines/ships/profiles.js";
 import { shipCrewReadiness } from "../../engines/ships/crew-readiness.js";
 import { transportClockOffsetQd, transportHoldingQd } from "../../data/transport/clock.js";
+import { transportRelevantHolding } from "../../data/transport/state.js";
 
 export function transportSourceToken(data, holding) {
-  return stableDataHash({ holding, markets: data?.meta?.sharedMarkets, transport: data?.meta?.transportV2, catalog: data?.catalog });
+  return stableDataHash({ holding: transportRelevantHolding(holding), markets: data?.meta?.sharedMarkets,
+    transport: data?.meta?.transportV2, catalog: data?.catalog });
 }
 
 function selectedCargo(context, request) {
@@ -104,12 +107,9 @@ function ownServices(data, holding, ship, points, request, clockQd, world = buil
   return services;
 }
 
-export function prepareTransportContext({ data, holding, request = {}, isGM = false }) {
+export function prepareTransportContext({ data, holding, request = {}, isGM = false, allowIncomplete = false }) {
   const direction = request.direction === "outbound" ? "outbound" : "inbound";
-  const context = prepareMarketAuthorityContext({ data, holding, marketId: request.marketId, isGM,
-    quantities: direction === "inbound" ? request.quantities : {}, outboundQuantities: direction === "outbound" ? request.quantities : {},
-    targetRoomId: request.targetRoomId ?? "outdoors" });
-  if (!context.market) throw new Error("Этот рынок недоступен поселению.");
+  const context = prepareTransportCommerce({ data, holding, request: { ...request, direction }, isGM });
   const { cargo, lines } = selectedCargo(context, { ...request, direction });
   const configuration = validateTransportConfiguration(data.catalog?.transportV2);
   const { logistics } = authorityMarketLogistics({ data, holding, market: context.market, direction, isGM, preservePhysicalRoutes: true });
@@ -168,9 +168,14 @@ export function prepareTransportContext({ data, holding, request = {}, isGM = fa
     if (plan.ownShipId !== String(request.ownShipId ?? "")) throw new Error("План не соответствует выбранному кораблю.");
     if (plan.stages.reduce((sum, stage) => sum + (stage.service.accessCost ?? 0), 0) + difficulty > (logistics?.accessLevel ?? 0)) throw new Error("Недостаточно УРС для выбранного маршрута и товара.");
   }
-  if (!plan) throw new Error(search.limited
-    ? "Поиск достиг лимита вариантов без подходящего плана. Это не означает, что маршрута нет. Уточните закрепления или исключите часть перевозчиков и повторите расчёт."
-    : search.failures[0] ?? "Для выбранного груза нет доступной перевозки.");
+  if (!plan) {
+    const message = search.limited
+      ? "Поиск достиг лимита вариантов без подходящего плана. Это не означает, что маршрута нет. Уточните закрепления или исключите часть перевозчиков и повторите расчёт."
+      : search.failures[0] ?? "Для выбранного груза нет доступной перевозки.";
+    if (allowIncomplete) return { plan: null, services, search, from, to, ship, lines, error: message,
+      affordable: false, sourceToken: transportSourceToken(data, holding) };
+    throw new Error(message);
+  }
   const valueCopper = cargoValue(cargo);
   const taxCopper = Math.ceil(valueCopper * (Number(logistics?.importTaxRate ?? 0) + Number(logistics?.exportTaxRate ?? 0)));
   const insuranceCopper = request.insurance === false ? 0 : Math.ceil(valueCopper * configuration.insuranceBps / 10000);

@@ -163,7 +163,7 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
   }
 
   _marketQuote(holding, data, market, { isGM = Boolean(game.user?.isGM), economy = null, resources = null } = {}) {
-    const quote = authorityMarketQuote({ holding, data, market, carrierId: this.carrierId, isGM, economy, resources });
+    const quote = authorityMarketQuote({ holding, data, market, carrierId: this.carrierId, isGM, economy, resources, discoverTransport: true });
     if (quote) this.carrierId = String(quote.selectedCarrierId ?? "");
     return quote;
   }
