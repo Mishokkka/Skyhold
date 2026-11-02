@@ -2,6 +2,7 @@ import { stableDataHash } from "../../data/storage-commit.js";
 import { carrierProvidersForRoute } from "./providers.js";
 import { MARKET_DEFAULT_TRANSPORT_CAPACITY_LOAD, MARKET_TRANSPORT_TARIFFS, resolveMarketLogistics, findHoldingRegion, edgeSeasonalModifier } from "./logistics.js";
 import { marketTransportFreightFactor } from "./pricing.js";
+import { localMarketDistanceKm, referenceTransportCosts } from "../transport/economics.js";
 
 export const AUTO_CARRIERS = "auto-carriers";
 const MODES = Object.keys(MARKET_TRANSPORT_TARIFFS);
@@ -12,7 +13,7 @@ const sameService = (a, b) => a && b && a.mode === b.mode && a.carrierId === b.c
 
 /** Country presence is the dispatch country's service market. A permitted link authorizes arrival across its border. */
 export function planMarketTransport({ holding = {}, market = {}, regions = [], organizations = [], countries = [], isGM = false,
-  seasonId = "", direction = "inbound", dependencies = {}, accessLevel = null, carrierId = AUTO_CARRIERS } = {}) {
+  seasonId = "", direction = "inbound", dependencies = {}, accessLevel = null, carrierId = AUTO_CARRIERS, preservePhysicalRoutes = false } = {}) {
   const byId = new Map(regions.map((row) => [String(row.value), row]));
   const companies = new Map(organizations.map((row) => [String(row.id), row]));
   const countryRows = new Map(countries.map((row) => [String(row.id), row]));
@@ -35,28 +36,34 @@ export function planMarketTransport({ holding = {}, market = {}, regions = [], o
   const makeLeg = (edge, mode, carrier, kind = "route") => {
     const from = direction === "outbound" ? edge.from : edge.to, to = direction === "outbound" ? edge.to : edge.from;
     const source = byId.get(from), target = byId.get(to), place = factors(from), destination = factors(to), season = edgeSeasonalModifier(edge, seasonId);
-    const tariff = MARKET_TRANSPORT_TARIFFS[mode], distanceKm = kind === "last-mile" ? 0 : Math.max(0, finite(edge.distanceKm));
+    const tariff = MARKET_TRANSPORT_TARIFFS[mode], distanceKm = kind === "last-mile" ? localMarketDistanceKm(holding) : Math.max(0, finite(edge.distanceKm));
     const distance = distanceKm / 40, delivery = Math.max(0.01, finite(place.delivery, 1)), time = Math.max(0.01, finite(place.time, 1));
     const priceFactor = Math.max(0.5, finite(carrier.priceFactor, 1)), timeFactor = Math.max(0.5, finite(carrier.timeFactor, 1));
-    const movementQd = (kind === "last-mile" ? 1 : distance * tariff.qdPerDistance * finite(season.timeFactor, 1)) * time * timeFactor;
+    const movementQd = distance * tariff.qdPerDistance * finite(season.timeFactor, 1) * time * timeFactor;
+    const capacityLoad = capacityFor(mode, carrier);
+    const reference = referenceTransportCosts(mode, capacityLoad, Math.ceil(9 * Math.max(0.01, finite(place.price, 1))));
     const fromCountryId = String(source?.countryId ?? from), toCountryId = String(target?.countryId ?? to);
     const privateLeg = companies.get(carrier.id)?.visibility === "gm" || countryRows.get(fromCountryId)?.visibility === "gm"
       || countryRows.get(toCountryId)?.visibility === "gm";
     return { routeId: String(edge.routeId ?? ""), fromRegionId: from, toRegionId: to, fromCountryId, toCountryId,
       fromLabel: String(source?.label ?? from), toLabel: String(target?.label ?? to), mode, modeLabel: tariff.label,
       carrierId: carrier.id, carrierLabel: carrier.label, visibility: privateLeg ? "gm" : "public", kind,
-      distanceKm, movementQd, travelQd: movementQd, transferQd: 0, capacityLoad: capacityFor(mode, carrier),
+      distanceKm, movementQd, travelQd: movementQd, transferQd: 0, capacityLoad,
+      sourcePriceFactor: Math.max(0.01, finite(place.price, 1)), targetPriceFactor: Math.max(0.01, finite(destination.price, 1)),
+      sourceTimeFactor: time, targetTimeFactor: Math.max(0.01, finite(destination.time, 1)),
+      operatingFactor: priceFactor * delivery * finite(season.costFactor, 1),
       dispatchCopper: tariff.dispatchCopper * priceFactor,
       hireCopper: mode === "airship" ? Math.max(0, finite(market.airshipHireCopper, 120)) * priceFactor : 0,
-      distanceCopper: distance * (tariff.distanceCopper * finite(season.costFactor, 1) + Math.max(0, finite(market.deliveryDistanceCopper))) * priceFactor * delivery,
-      loadCopperPerUnit: distance * (tariff.loadDistanceCopper * finite(season.costFactor, 1) + Math.max(0, finite(market.deliveryLoadDistanceCopper))) * priceFactor * delivery,
-      operatingCopper: movementQd * tariff.operatingCopperPerQd * priceFactor * delivery,
+      distanceCopper: distance * Math.max(0, finite(market.deliveryDistanceCopper)) * priceFactor * delivery,
+      loadCopperPerUnit: distance * Math.max(0, finite(market.deliveryLoadDistanceCopper)) * priceFactor * delivery,
+      operatingCopper: movementQd / 4 * reference.dailyCopper * priceFactor * delivery * finite(season.costFactor, 1),
       riskFactor: Math.max(0.25, finite(place.risk, 1) * finite(destination.risk, 1) * finite(season.riskFactor, 1) * finite(carrier.riskFactor, 1)),
       priceFactor, timeFactor, capacityFactor: Math.max(0.1, finite(carrier.capacityFactor, 1)), sharePct: carrier.sharePct,
       freightFactor: marketTransportFreightFactor(mode) * priceFactor * delivery };
   };
   const localAvailable = Boolean(home?.marketTransportModes?.includes("airship") && providers(localId, "airship").length);
   const network = {
+    preservePhysicalRoutes,
     localAirshipAvailable: localAvailable,
     servicesForEdge: (from, edge, mode) => {
       const dispatch = direction === "outbound" ? from : edge.to;
@@ -86,11 +93,12 @@ export function planMarketTransport({ holding = {}, market = {}, regions = [], o
   const args = { holding, market, regions, seasonId, direction, dependencies, accessLevel, transportNetwork: network };
   let base = resolveMarketLogistics(args), raw = base.routeCandidates?.length ? base.routeCandidates : base.ok ? [base] : [];
   if (base.sameRegion && home) {
+    const localKm = localMarketDistanceKm(holding);
     const modes = (market.transportModes ?? MODES).filter((mode) => home.marketTransportModes?.includes(mode)
       && (!floating && !home.marketAirshipOnly || mode === "airship"));
     raw = modes.flatMap((mode) => providers(localId, mode).map((carrier) => resolveMarketLogistics({ ...args, singleRoute: true,
-      selectedRoute: { path: [localId], edges: [{ from: localId, to: localId, distanceKm: 20, distance: 0.5, selectedMode: mode,
-        modes: [mode], service: { carrier } }], distanceKm: 20, distance: 0.5, hops: 0, accessCost: 0 }
+      selectedRoute: { path: [localId], edges: [{ from: localId, to: localId, distanceKm: localKm, distance: localKm / 40, selectedMode: mode,
+        modes: [mode], service: { carrier } }], distanceKm: localKm, distance: localKm / 40, hops: 0, accessCost: 0 }
     }))).filter((row) => row.ok);
   }
   // Legacy logistics can estimate an unconfigured endpoint; a real agreement needs actual legs.
@@ -117,7 +125,7 @@ export function planMarketTransport({ holding = {}, market = {}, regions = [], o
       freightFactor: distanceKm > 0 ? legs.reduce((total, leg) => total + leg.distanceKm * leg.freightFactor, 0) / distanceKm : 1,
       transferQd: sum("transferQd") };
     const identities = new Set(legs.map((leg) => leg.carrierId === "independent-carriers" ? `${leg.carrierId}:${leg.fromCountryId}` : leg.carrierId));
-    return { ...legacy, transportPlan, carrierId: identities.size === 1 ? legs[0].carrierId : key,
+    return { ...legacy, transportPlan, distanceKm, distance: distanceKm / 40, carrierId: identities.size === 1 ? legs[0].carrierId : key,
       carrierLabel: identities.size === 1 ? legs[0].carrierLabel : "Составная перевозка", carrierSharePct: Math.min(...legs.map((leg) => leg.sharePct)), carrierPriceFactor: 1,
       carrierRiskFactor: 1, carrierTimeFactor: 1, carrierCapacityFactor: 1, baseCapacityLoad: capacityLoad, capacityLoad,
       travelQd: Math.max(1, Math.ceil(transportPlan.travelQd)), riskFactor: transportPlan.riskFactor,

@@ -88,7 +88,7 @@ export function checkShipMultiorder() {
   const final = resolveWorldShipBundleStop(holding, ship, { operationId: "resolve-b", bundleId: "bundle-1", random: () => { finalDraws++; return 0.99; } });
   assert.equal(final.pending, false);
   assert.equal(final.completedOrders.length, 2);
-  assert.equal(finalDraws, 5, "two commercial outcomes share one road-incident roll at the same port");
+  assert.equal(finalDraws, 6, "two commercial outcomes share one physical passage probability and severity roll");
   assert.equal(ship.orderBundle, null);
   assert.equal(ship.location.id, "b");
   const afterFinal = ship.onboardCopper;
@@ -122,7 +122,7 @@ export function checkShipMultiorder() {
   advanceWorldShips(blockedFixture.holding, blockedArrival);
   blockedFixture.ship.onboardCopper = 0;
   const unpaid = resolveWorldShipBundleStop(blockedFixture.holding, blockedFixture.ship, {
-    operationId: "unpaid-outcome", bundleId: "blocked-bundle", random: () => 0.01
+    operationId: "unpaid-outcome", bundleId: "blocked-bundle", random: () => 0
   });
   assert.equal(unpaid.pending, true);
   const saved = structuredClone(blockedFixture.ship.orderBundle.orders[0].outcome);

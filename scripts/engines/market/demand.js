@@ -1,5 +1,5 @@
 import { marketStateFor, writeMarketState, sharedMarketTenday } from "../../data/market/shared-context.js";
-import { marketDemandKey, marketDemandRecoveryDuration, normalizeMarketDemandState } from "../../data/market/demand-state.js";
+import { marketDemandKey, marketDemandRecoveryDuration, normalizeMarketDemandState, normalizeDemandRecoveryLots } from "../../data/market/demand-state.js";
 
 function integer(value, fallback = 0, min = 0, max = 1_000_000_000) {
   const parsed = Number(value);
@@ -9,6 +9,18 @@ function integer(value, fallback = 0, min = 0, max = 1_000_000_000) {
 
 function text(value = "") {
   return String(value ?? "").trim();
+}
+
+function remainingRecovery(lot, tenday) {
+  return Math.ceil(lot.qty * Math.max(0, lot.durationTendays - Math.max(0, tenday - lot.startedTenday)) / lot.durationTendays);
+}
+
+function datedRecovery(state, qty, occurredTenday, tenday, durationTendays) {
+  const existing = state.recoveryLots ?? (state.consumedOutstanding > 0 ? [{ qty: state.recoveryStartConsumed,
+    startedTenday: state.recoveryStartedTenday, durationTendays: state.recoveryDurationTendays }] : []);
+  const lots = normalizeDemandRecoveryLots([...existing, { qty, startedTenday: occurredTenday, durationTendays }]);
+  const recoveryLots = lots.filter(lot => remainingRecovery(lot, tenday) > 0);
+  return { recoveryLots, consumedOutstanding: recoveryLots.reduce((sum, lot) => sum + remainingRecovery(lot, tenday), 0) };
 }
 
 function demandIdForLine(line = {}) {
@@ -168,7 +180,7 @@ export function reserveMarketDemand({ holding = null, marketId = "", lines = [],
  * leave the draft unchanged. The caller owns authorization and persistence.
  * @returns {object} Settlement totals, replay status, or a stale/invalid result.
  */
-export function settleMarketDemandReservations({ holding = null, reservations = [], outcome = "consumed", operationId = "", currentTenday = null, updatedAt = "" } = {}) {
+export function settleMarketDemandReservations({ holding = null, reservations = [], outcome = "consumed", operationId = "", currentTenday = null, occurredTenday = null, updatedAt = "" } = {}) {
   const id = text(operationId);
   const selectedOutcome = outcome === "restored" ? "restored" : "consumed";
   if (!holding || !id) return { ok: false, message: "Market demand settlement requires holding and operation ids." };
@@ -221,6 +233,9 @@ export function settleMarketDemandReservations({ holding = null, reservations = 
       ...state,
       reservations: reservationsNext,
       consumedOutstanding,
+      ...(selectedOutcome === "consumed" && (occurredTenday !== null || state.recoveryLots)
+        ? datedRecovery(state, row.consumedQty, occurredTenday === null ? tenday : integer(occurredTenday), tenday,
+          marketDemandRecoveryDuration(row.marketId, row.demandId)) : {}),
       recoveryStartedTenday: selectedOutcome === "consumed" ? tenday : state.recoveryStartedTenday,
       recoveryStartConsumed: selectedOutcome === "consumed" ? consumedOutstanding : state.recoveryStartConsumed,
       recoveryDurationTendays: selectedOutcome === "consumed" ? marketDemandRecoveryDuration(row.marketId, row.demandId) : state.recoveryDurationTendays,
@@ -253,7 +268,9 @@ export function recoverMarketDemand({ holding = null, currentTenday = null, base
     const startConsumed = Math.min(baseDemand, integer(row.recoveryStartConsumed, row.consumedOutstanding));
     const elapsed = Math.max(0, tenday - startTenday);
     const progress = Math.min(1, elapsed / duration);
-    const targetConsumed = Math.max(0, Math.ceil(startConsumed * (1 - progress)));
+    const recoveryLots = row.recoveryLots?.filter(lot => remainingRecovery(lot, tenday) > 0);
+    const targetConsumed = recoveryLots ? recoveryLots.reduce((sum, lot) => sum + remainingRecovery(lot, tenday), 0)
+      : Math.max(0, Math.ceil(startConsumed * (1 - progress)));
     const consumedOutstanding = Math.min(row.consumedOutstanding, targetConsumed);
     const recoveredQty = Math.max(0, row.consumedOutstanding - consumedOutstanding);
     if (!recoveredQty && baseDemand === row.baseDemand && duration === row.recoveryDurationTendays) continue;
@@ -261,6 +278,7 @@ export function recoverMarketDemand({ holding = null, currentTenday = null, base
       ...row,
       baseDemand,
       consumedOutstanding,
+      ...(recoveryLots ? { recoveryLots } : {}),
       recoveryStartConsumed: startConsumed,
       recoveryDurationTendays: duration,
       lastRecoveryTenday: recoveredQty > 0 ? tenday : row.lastRecoveryTenday,

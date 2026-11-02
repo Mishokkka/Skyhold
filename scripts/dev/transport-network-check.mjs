@@ -85,9 +85,9 @@ function parallelServicesAndCheapDetour() {
   ], [company("rail", ["A"], ["rail"], { priceFactor: 3 }), company("road", ["A"], ["caravan"], { priceFactor: 0.5 })]);
   const result = purchase(parallel);
   assert.equal(result.plan.ok, true);
-  assert.equal(legsOf(result)[0].routeId, "road", "the saved chain identifies the chosen parallel physical link");
-  assert.equal(legsOf(result)[0].carrierId, "road");
-  assert.equal(legsOf(result)[0].mode, "caravan");
+  assert.equal(legsOf(result)[0].routeId, "track", "rail economies of scale beat this longer wagon route");
+  assert.equal(legsOf(result)[0].carrierId, "rail");
+  assert.equal(legsOf(result)[0].mode, "rail");
   const detour = fixture([
     node("h", "A", [edge("m", ["caravan"], 100, { routeId: "direct" }), edge("x", ["caravan"], 1)]),
     node("x", "B", [edge("m", ["caravan"], 120)]), node("m", "C")
@@ -141,10 +141,10 @@ function localAerialTail() {
     assert.equal(result.plan.ok, true, "the local country can provide aerial handling even when the distant supplier only offers caravan");
     const legs = legsOf(result), local = legs.find((leg) => leg.kind === "last-mile");
     assert.ok(local); assert.equal(local.carrierId, "A-local");
-    assert.equal(local.fromCountryId, "A"); assert.equal(local.distanceKm, 0); assert.equal(local.movementQd, 1);
+    assert.equal(local.fromCountryId, "A"); assert.equal(local.distanceKm, 20); assert.equal(local.movementQd, 0.75);
     assert.equal(legs.reduce((sum, leg) => sum + leg.transferQd, 0), 1, "the ground/air handover is counted in either direction");
     assert.equal(direction === "inbound" ? legs.at(-1).kind : legs[0].kind, "last-mile");
-    assert.equal(result.plan.logistics.distanceKm, 80, "the synthetic local leg does not invent measured map distance");
+    assert.equal(result.plan.logistics.distanceKm, 100, "the configured local connection is part of the physical distance");
   }
 }
 
@@ -181,7 +181,7 @@ function independentBoundaryDominance() {
   assert.equal(selected.plan.ok, true);
   assert.deepEqual(selected.plan.logistics.routePath, ["h", "k", "j", "m"],
     "a prefix ending in another country's local independent pool cannot erase a cheaper continuing local haul");
-  assert.equal(selected.plan.shipmentBatches[0].operationalFreightCopper, 28);
+  assert.equal(selected.plan.shipmentBatches[0].operationalFreightCopper, 107, "the caravan now pays crew, draft teams and occupied time");
 }
 
 // Enumerate every simple path, edge mode and local provider without production graph/pruning helpers.
@@ -224,6 +224,15 @@ export function exhaustivePlans(input, direction) {
             && (!carrier.independent || prior.fromCountryId === byId.get(from).countryId);
           const tariff = MARKET_TRANSPORT_TARIFFS[mode], units = link.distanceKm / 40;
           const movementQd = units * tariff.qdPerDistance * carrier.timeFactor;
+          const capacityLoad = MARKET_DEFAULT_TRANSPORT_CAPACITY_LOAD[mode] * carrier.capacityFactor;
+          let dailyCopper;
+          if (mode === "caravan") dailyCopper = Math.ceil(capacityLoad / 40) * (2 * 21 + 24);
+          else if (mode === "rail") dailyCopper = (4 + Math.ceil(capacityLoad / 2000)) * 21 + 60 + Math.ceil(capacityLoad / 100) * 2;
+          else {
+            const [capacity, crew, upkeep] = capacityLoad <= 200 ? [200, 8, 3] : capacityLoad <= 500 ? [500, 18, 6] : [1000, 36, 12];
+            const scale = (capacityLoad / capacity) ** 0.85;
+            dailyCopper = Math.max(2, Math.ceil(crew * scale)) * 21 + Math.max(1, Math.ceil(upkeep * scale));
+          }
           const leg = { id: `oracle-leg:${legs.length}`, routeId: link.routeId ?? "", mode, carrierId: carrier.id,
             fromRegionId: from, toRegionId: link.to, fromCountryId: byId.get(from).countryId, toCountryId: byId.get(link.to).countryId,
             distanceKm: link.distanceKm, movementQd, transferQd: legs.length && !same ? 1 : 0,
@@ -231,9 +240,9 @@ export function exhaustivePlans(input, direction) {
             capacityLoad: MARKET_DEFAULT_TRANSPORT_CAPACITY_LOAD[mode] * carrier.capacityFactor,
             dispatchCopper: same ? 0 : tariff.dispatchCopper * carrier.priceFactor,
             hireCopper: same || mode !== "airship" ? 0 : input.market.airshipHireCopper * carrier.priceFactor,
-            distanceCopper: units * tariff.distanceCopper * carrier.priceFactor,
-            loadCopperPerUnit: units * tariff.loadDistanceCopper * carrier.priceFactor,
-            operatingCopper: movementQd * tariff.operatingCopperPerQd * carrier.priceFactor,
+            distanceCopper: 0,
+            loadCopperPerUnit: 0,
+            operatingCopper: movementQd / 4 * dailyCopper * carrier.priceFactor,
             riskFactor: carrier.riskFactor, freightFactor: marketTransportFreightFactor(mode) * carrier.priceFactor };
           visit([...path, link.to], [...legs, leg], access + link.ursCost);
         }

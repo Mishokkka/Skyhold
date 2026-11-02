@@ -7,12 +7,14 @@ import { getSkyholdWorkflowService } from "../workflows/skyhold-workflow-service
 import { checkCalendariaCharacterization } from "./calendaria-characterization-check.mjs";
 import { normalizeEventRegionOptions } from "../data/random-events.js";
 import { SkyholdData } from "../data/store.js";
+import { prepareTransportContext } from "../apps/domains/transport-context.js";
 
 globalThis.foundry = { applications: { api: {
   ApplicationV2: class { async _prepareContext() { return {}; } }, HandlebarsApplicationMixin: (Base) => Base
 } } };
 const { graphContext, SkyholdRouteGraphEditor, SkyholdRouteEdgeEditor } = await import("../apps/editors/route-graph-editor.js");
 const { SkyholdMarketApp } = await import("../apps/market-app.js");
+const { SkyholdTransportApp } = await import("../apps/transport-app.js");
 const winter = { enabled: true, costFactor: 1.4, timeFactor: 1.25, riskFactor: 1.2 };
 const rows = [
   { value: "a", label: "A", marketMapX: 100, marketMapY: 100, marketLinks: [
@@ -171,6 +173,7 @@ try {
   workflow._storageRooms = () => [{ id: "outdoors", label: "Снаружи" }];
   for (const isGM of [true, false]) {
     const { data, holding } = worldMarketFixture(); holding.type = "village"; holding.gm.modifiers.marketConnectionsLevel = 3;
+    holding.visibility = "public"; holding.gm.playersCanUseStorage = true;
     data.catalog.eventRegions = normalizeEventRegionOptions([
       { value: "home", label: "Дом", countryId: "public", marketTransportModes: ["rail", "caravan"], marketLinks: [
         { regionId: "a", routeId: "train", distanceKm: 80, modes: ["rail"] },
@@ -178,18 +181,38 @@ try {
       ] }, { value: "a", label: "Рынок", countryId: "public", marketTransportModes: ["rail", "caravan"] }
     ], { fallback: false });
     const gm = { id: "gm", isGM: true, active: true }, player = { id: "player", isGM: false, active: true };
-    globalThis.game = { user: isGM ? gm : player, users: { contents: [gm, player] }, modules: new Map(), settings: { get() {} } };
+    globalThis.game = { user: isGM ? gm : player, users: { contents: [gm, player] }, socket: { emit() {} }, modules: new Map(), settings: { get() {} } };
+    SkyholdData.view = () => data;
     const initial = prepareMarketAuthorityContext({ data, holding, marketId: "a", isGM });
     const offer = initial.quote.offers.find((row) => row.resourceId === "test-freight"), quantities = { [offer.id]: 2 };
     const view = prepareMarketAuthorityContext({ data, holding, marketId: "a", isGM, quantities });
-    assert.equal(view.quote.logistics.transportMode, "rail"); assert.equal(view.plan.logistics.transportMode, "caravan");
+    assert.equal(view.quote.logistics.transportMode, "rail"); assert.equal(view.plan.logistics.transportMode, "rail",
+      "the priced plan now includes the wagon crew and draft teams, so this train is cheaper");
     const app = new SkyholdMarketApp({ holdingId: holding.id }); app.quantities = quantities;
     app._marketSnapshot = () => ({ ...view, data, holding }); app._enrichMarketQuoteItems = async (quote) => quote;
     const context = await app._prepareContext({});
-    assert.equal(context.transportLabel, view.plan.logistics.transportLabel, "the route panel must describe the transport actually charged for");
-    assert.equal(context.routeDistanceText, "1 перех. · 160 км");
+    assert.equal(context.canConfirm, true);
+    let opened;
+    app._showTransport = async options => { opened = options; };
+    await app._onBuy();
+    assert.deepEqual(opened.request.quantities, quantities, "the goods window passes its selected cargo to the transport window");
+    const transport = new SkyholdTransportApp({ holdingId: holding.id });
+    const available = prepareTransportContext({ data, holding, request: opened.request, isGM });
+    // V2 owns the route panel. Changing its chosen road must change both the
+    // displayed carrier and the physical plan; the retired cart had neither.
+    for (const [mode, distance, label] of [["caravan", 160, "Наземный караван"], ["rail", 80, "Железная дорога"]]) {
+      const selected = available.services.find(service => service.mode === mode && service.kind === "regular");
+      assert.ok(selected);
+      transport.request = { ...opened.request, pins: { [selected.from]: selected.id } };
+      const route = await transport._prepareContext({});
+      assert.ok(route.selected.stages[0].label.includes(label), "the route panel describes the selected transport actually charged for");
+      assert.equal(transport._view.quote.plan.stages[0].service.id, selected.id);
+      assert.equal(transport._view.quote.plan.stages[0].service.distanceKm, distance);
+      assert.equal(route.canConfirm, true);
+    }
     app.quantities = {}; const empty = await app._prepareContext({});
-    assert.equal(empty.transportLabel, view.quote.logistics.transportLabel, "an empty cart retains the preliminary route");
+    assert.equal(empty.canConfirm, false, "an empty cart cannot start a transport request");
+    assert.equal(empty.transportLabel, undefined, "the goods cart no longer presents the retired delivery contract");
   }
-} finally { workflow._storageRooms = previousRooms; globalThis.game = previousGame; }
+} finally { workflow._storageRooms = previousRooms; globalThis.game = previousGame; SkyholdData.view = previousView; }
 console.log("Route network: round trip, merge, GM/player logistics, selected-route presentation and stable editor DOM passed.");

@@ -14,7 +14,7 @@ import { createMarketOutboundShipment, advanceMarketOutboundShipments, cancelMar
 import { marketOutboundRouteFromPurchasePlan } from "../apps/market/outbound-context.js";
 import { marketShipmentFinancialRiskText } from "../apps/market/purchase-cost-presentation.js";
 import { marketShipmentRiskContext } from "../apps/market/shipment-context.js";
-import { createMarketOperationExecutor } from "../apps/market-operation-executor.js";
+import { createMarketOperationExecutor } from "./fixtures/legacy-market-executor.mjs";
 
 const deps = {
   addMoney: (h, amount) => { h.storage.moneyCopper += amount; },

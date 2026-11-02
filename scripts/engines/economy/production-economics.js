@@ -27,9 +27,14 @@ export function productionLineEconomics(line = {}, building = {}, options = {}) 
   const capacity = productionCapacity(line);
   const qty = capacity ? Math.min(fullQty, Math.floor(amount(options.batchQty, fullQty)), capacity) : fullQty;
   const fraction = qty / Math.max(1, fullQty);
+  const landed = options.inputCostCopper;
+  const hasLandedCost = landed !== undefined && landed !== null && landed !== "";
+  if (hasLandedCost && (!Number.isSafeInteger(Number(landed)) || Number(landed) < 0)) {
+    return { available: false, reason: "Укажите целую неотрицательную стоимость сырья с доставкой." };
+  }
   const costs = [...parseResourceCosts(line.expenses).map((cost) => costRange(cost, line.expenseMode === "unit" ? qty : fraction)),
     ...parseResourceCosts(line.source === "content" ? "" : line.fixedExpenses).map((cost) => costRange(cost, 1))];
-  if (costs.some((cost) => !cost)) return { available: false, reason: "Для части сырья не задана каталожная цена." };
+  if (!hasLandedCost && costs.some((cost) => !cost)) return { available: false, reason: "Для части сырья не задана каталожная цена." };
   const base = resourceBasePriceCopper(line.resourceId, line.resource);
   const channel = options.channel ?? "base";
   const price = channel === "contract" ? Math.floor(amount(options.unitPrice, base))
@@ -37,9 +42,9 @@ export function productionLineEconomics(line = {}, building = {}, options = {}) 
   const wage = amount(line.wageDailyCopper) || amount(building.wageDailyCopper);
   const labor = (line.source ?? "workers") === "workers"
     ? amount(line.workQd, 1) * fraction * wage / (2 * Math.max(0.01, amount(options.productionEfficiency, 1))) : 0;
-  const inputMin = costs.reduce((sum, cost) => sum + cost.min, 0);
-  const inputMax = costs.reduce((sum, cost) => sum + cost.max, 0);
-  return { available: true, qty, unitPrice: price, revenue: qty * price, inputMin, inputMax, labor,
+  const inputMin = hasLandedCost ? Number(landed) : costs.reduce((sum, cost) => sum + cost.min, 0);
+  const inputMax = hasLandedCost ? Number(landed) : costs.reduce((sum, cost) => sum + cost.max, 0);
+  return { available: true, qty, unitPrice: price, revenue: qty * price, inputMin, inputMax, labor, hasLandedCost,
     marginMin: qty * price - inputMax - labor, marginMax: qty * price - inputMin - labor,
     upkeepMonthly: amount(building.baseUpkeepMonthlyCopper) + amount(building.operatingUpkeepMonthlyCopper) + amount(line.operatingUpkeepMonthlyCopper) };
 }

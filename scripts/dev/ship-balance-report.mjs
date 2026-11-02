@@ -1,7 +1,7 @@
-import { getShipProfile } from "../engines/ships/profiles.js";
-import { buildShipWorldContext, generateWorldShipOffers, quoteWorldShipBundle } from "../engines/ships/world-market.js";
-import { resolveContractOutcome } from "../engines/ships/contracts.js";
-import { bundleOperatingShares } from "../engines/ships/bundle-accounting.js";
+import { getShipProfile, calculateShipCosts } from "../engines/ships/profiles.js";
+import { buildShipWorldContext, generateWorldShipOffers, quoteWorldShipBundle, quoteWorldShipRelocation, quoteWorldShipReturn } from "../engines/ships/world-market.js";
+import { contractGuidance, resolveContractOutcome } from "../engines/ships/contracts.js";
+import { resolveBundlePassages } from "../engines/ships/bundle-incidents.js";
 import { worldMarketFixture } from "./world-ship-market-characterization-check.mjs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -38,48 +38,58 @@ function fixture({ wage = 12, attention = 0, distanceFactor = 1, profileId = "me
   return { data, holding, ship, context: buildShipWorldContext(data, holding) };
 }
 
-function expectedAdditionalNet(contract, commercialOnly = false, style = "normal", { fixedIncidentRoll = null, sharedPassageAllowsBonus = true } = {}) {
-  let total = 0;
-  const incidentRolls = fixedIncidentRoll == null ? Array.from({ length: 12 }, (_, index) => index + 1) : [fixedIncidentRoll];
-  for (let first = 1; first <= 6; first++) {
-    for (let second = 1; second <= 6; second++) {
-      for (const incidentRoll of incidentRolls) {
-        const outcome = resolveContractOutcome(contract, style, { commercialDice: [first, second], incidentRoll,
-          commercialOnly, sharedPassageAllowsBonus });
-        total += outcome.rewardCopper - outcome.expenseCopper;
+function weightedOutcomes(contract, style = "normal", commercialOnly = false) {
+  const probability = contractGuidance(contract, style).riskBps / 10000;
+  const approachBps = Math.min(10000, Math.ceil((contract.economics.approachRiskBps ?? 0) * (style === "cautious" ? 0.75 : style === "bold" ? 1.5 : 1)));
+  const outcomes = [];
+  for (let first = 1; first <= 6; first++) for (let second = 1; second <= 6; second++) {
+    for (let incidentRoll = 1; incidentRoll <= 12; incidentRoll++) {
+      for (const [passageRoll, probabilityWeight] of [[1, approachBps / 10000],
+        [Math.min(10000, approachBps + 1), probability - approachBps / 10000], [10000, 1 - probability]]) {
+        if (!probabilityWeight) continue;
+        outcomes.push({ weight: probabilityWeight / 432, outcome: resolveContractOutcome(contract, style,
+          { commercialDice: [first, second], incidentRoll, passageRoll, commercialOnly }) });
       }
     }
   }
-  return total / (36 * incidentRolls.length);
+  return outcomes;
+}
+
+function expectedAdditionalNet(contract, commercialOnly = false, style = "normal") {
+  return weightedOutcomes(contract, style, commercialOnly).reduce((sum, row) => sum + row.weight
+    * (row.outcome.rewardCopper - row.outcome.expenseCopper), 0);
 }
 
 function soloLossChance(offer) {
   const cost = offer.quote.operatingCopper + offer.quote.returnReserveCopper;
-  let losses = 0;
-  for (let first = 1; first <= 6; first++) {
-    for (let second = 1; second <= 6; second++) {
-      for (let incidentRoll = 1; incidentRoll <= 12; incidentRoll++) {
-        const outcome = resolveContractOutcome(offer.contract, "normal", { commercialDice: [first, second], incidentRoll });
-        if (outcome.rewardCopper - outcome.expenseCopper - cost < 0) losses++;
-      }
-    }
-  }
-  return losses / 432;
+  return weightedOutcomes(offer.contract).reduce((sum, row) => sum + (row.outcome.rewardCopper - row.outcome.expenseCopper < cost ? row.weight : 0), 0);
 }
 
-function bundleDeliveries(stop, offers, totalOperatingCopper) {
-  const shares = bundleOperatingShares(offers, totalOperatingCopper);
-  return stop.deliveryOfferIds.map((id) => offers.find((offer) => offer.id === id))
-    .sort((left, right) => Number(right.contract.kind === "smuggling") - Number(left.contract.kind === "smuggling")
-      || left.id.localeCompare(right.id))
-    .map((offer) => ({
-      ...offer,
-      contract: {
-        ...offer.contract,
-        guidance: { ...offer.contract.guidance,
-          operatingCopper: shares[offers.indexOf(offer)], preparationCopper: 0 }
+function pairExpectedNet(plan, offers) {
+  let expected = -plan.totalOperatingCopper - plan.returnReserveCopper;
+  for (const stop of plan.stops) {
+    expected += expectedAdditionalNet({ kind: "freight", rewardCopper: 0, economics: stop.economics, guidance: {} });
+  }
+  for (const offer of offers) {
+    let distribution = new Map([[10000, 1]]);
+    for (const stop of plan.stops.filter(row => row.cargoOfferIds.includes(offer.id))) {
+      const damageChance = stop.economics.riskBps / 10000 / 6;
+      const next = new Map();
+      for (const [bps, probability] of distribution) {
+        for (const [key, weight] of [[bps, 1 - damageChance], [Math.floor(bps * 0.75), damageChance]]) {
+          next.set(key, (next.get(key) ?? 0) + probability * weight);
+        }
       }
-    }));
+      distribution = next;
+    }
+    for (let first = 1; first <= 6; first++) for (let second = 1; second <= 6; second++) {
+      for (const [bps, probability] of distribution) expected += probability / 36 * resolveContractOutcome(offer.contract, "normal", {
+        commercialDice: [first, second], incidentRoll: 12, passageRoll: 10000, commercialOnly: true,
+        sharedIncident: { eventId: "shared-passage", eventLabel: "Shared", cargoRewardPercent: bps / 100, delayQd: 0, damagePercent: 0 }
+      }).rewardCopper;
+    }
+  }
+  return expected;
 }
 
 function pairLossChance(plan, offers, seed) {
@@ -87,17 +97,21 @@ function pairLossChance(plan, offers, seed) {
   let losses = 0;
   for (let sample = 0; sample < 144; sample++) {
     let net = -plan.totalOperatingCopper - plan.returnReserveCopper;
-    for (const stop of plan.stops) {
-      const incidentRoll = 1 + Math.floor(draw() * 12);
-      let sharedPassageAllowsBonus = true;
-      bundleDeliveries(stop, offers, plan.totalOperatingCopper).forEach((offer, index) => {
-        const outcome = resolveContractOutcome(offer.contract, "normal", {
-          commercialDice: [1 + Math.floor(draw() * 6), 1 + Math.floor(draw() * 6)],
-          incidentRoll, commercialOnly: index > 0, sharedPassageAllowsBonus
+    const bundle = { stops: structuredClone(plan.stops), orders: offers.map(offer => ({ offerId: offer.id, offer, style: "normal" })) };
+    for (const [index, stop] of bundle.stops.entries()) {
+      bundle.nextStopIndex = index + 1;
+      if (!stop.deliveryOfferIds.length) continue;
+      const physical = resolveBundlePassages(bundle, stop, draw);
+      net -= physical.expenseCopper;
+      for (const order of bundle.orders.filter(row => stop.deliveryOfferIds.includes(row.offerId))) {
+        const outcome = resolveContractOutcome(order.offer.contract, "normal", {
+          commercialDice: [1 + Math.floor(draw() * 6), 1 + Math.floor(draw() * 6)], incidentRoll: 12, passageRoll: 10000,
+          commercialOnly: true, sharedIncident: { eventId: "shared-passage", eventLabel: "Shared",
+            cargoRewardPercent: (order.cargoRewardBps ?? 10000) / 100, delayQd: physical.delayQd, damagePercent: 0 }
         });
-        if (index === 0) sharedPassageAllowsBonus = outcome.effectiveIncidentRoll >= 8;
-        net += outcome.rewardCopper - outcome.expenseCopper;
-      });
+        order.outcomeApplied = true;
+        net += outcome.rewardCopper;
+      }
     }
     if (net < 0) losses++;
   }
@@ -129,20 +143,7 @@ function scoreBoard({ data, holding, ship, context }, random, period) {
         const nominal = offers[first].contract.rewardCopper + offers[second].contract.rewardCopper
           - plan.totalOperatingCopper - plan.returnReserveCopper;
         bestPair = Math.max(bestPair ?? -Infinity, nominal);
-        let expected = -plan.totalOperatingCopper - plan.returnReserveCopper;
-        for (const stop of plan.stops) {
-          const deliveries = bundleDeliveries(stop, [offers[first], offers[second]], plan.totalOperatingCopper);
-          if (!deliveries.length) continue;
-          for (let incidentRoll = 1; incidentRoll <= 12; incidentRoll++) {
-            const firstOutcome = resolveContractOutcome(deliveries[0].contract, "normal", { commercialDice: [3, 4], incidentRoll });
-            const sharedPassageAllowsBonus = firstOutcome.effectiveIncidentRoll >= 8;
-            deliveries.forEach((offer, index) => {
-              expected += expectedAdditionalNet(offer.contract, index > 0, "normal", {
-                fixedIncidentRoll: incidentRoll, sharedPassageAllowsBonus
-              }) / 12;
-            });
-          }
-        }
+        const expected = pairExpectedNet(plan, [offers[first], offers[second]]);
         if (bestPairExpected === null || expected > bestPairExpected) {
           bestPairExpected = expected;
           bestPairPlan = plan;
@@ -211,6 +212,46 @@ export function shipBalanceReport({ boards = BOARDS, profileId = "merchant-barqu
   });
 }
 
+/** One 240-day trading season: paid port-to-port work, unpaid approach/return and retained crew during idle time. */
+export function shipTradingYearReport({ profileId = "merchant-barque", wage = 12, seed = 8192 } = {}) {
+  const f = fixture({ profileId, wage }), draw = randomSeed(seed);
+  const profile = getShipProfile(profileId);
+  const move = quoteWorldShipRelocation(f.data, f.holding, f.ship, "a", { context: f.context });
+  let clockQd = move.quote.durationQd, expenses = move.quote.operatingCopper, income = 0, idleQd = 0, jobs = 0;
+  const boards = new Map(), consumed = new Set();
+  f.ship.location = move.to; f.ship.timelineQd = clockQd;
+  while (clockQd < 960) {
+    const home = quoteWorldShipReturn(f.data, f.holding, f.ship, { context: f.context });
+    const period = Math.floor(clockQd / 40), key = `${f.ship.location.id}:${period}`;
+    if (!boards.has(key)) boards.set(key, generateWorldShipOffers(f.data, f.holding, f.ship, { period, random: draw, context: f.context }));
+    const offers = boards.get(key).filter(offer => !consumed.has(offer.id));
+    const available = offers.filter(offer => offer.quote.durationQd + home.quote.durationQd + clockQd + 20 <= 960)
+      .map(offer => ({ offer, net: expectedAdditionalNet(offer.contract) - offer.quote.operatingCopper }))
+      .filter(row => row.net > 0)
+      .sort((a, b) => b.net / b.offer.quote.durationQd - a.net / a.offer.quote.durationQd);
+    if (!available.length) {
+      if (clockQd + 4 + home.quote.durationQd > 960) break;
+      idleQd += 4; clockQd += 4; f.ship.timelineQd = clockQd; continue;
+    }
+    const offer = available[0].offer;
+    consumed.add(offer.id);
+    const outcome = resolveContractOutcome(offer.contract, "normal", {
+      commercialDice: [1 + Math.floor(draw() * 6), 1 + Math.floor(draw() * 6)],
+      incidentRoll: 1 + Math.floor(draw() * 12), passageRoll: 1 + Math.floor(draw() * 10000)
+    });
+    expenses += offer.quote.operatingCopper + outcome.expenseCopper; income += outcome.rewardCopper; jobs++;
+    clockQd += offer.quote.durationQd + outcome.delayQd;
+    f.ship.location = offer.to; f.ship.timelineQd = clockQd;
+  }
+  const home = quoteWorldShipReturn(f.data, f.holding, f.ship, { context: f.context });
+  expenses += home.quote.operatingCopper; clockQd += home.quote.durationQd;
+  if (clockQd > 960) throw new Error("Trading season exceeded its reserved return time");
+  idleQd += 960 - clockQd;
+  expenses += calculateShipCosts(f.ship, { durationQd: idleQd, crewCount: profile.crewTarget, foodUnitCopper: 9, wageDailyCopper: wage }).totalCopper;
+  return { profileId, days: 240, jobs, idleDays: idleQd / 4, incomeCopper: income, expenseCopper: expenses, netCopper: income - expenses };
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   for (const row of shipBalanceReport()) console.log(JSON.stringify(row));
+  for (const profileId of ["cutter", "schooner", "merchant-barque"]) console.log(JSON.stringify(shipTradingYearReport({ profileId })));
 }

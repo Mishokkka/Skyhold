@@ -7,7 +7,8 @@ const amount = (value) => Number.isFinite(Number(value)) ? Math.max(0, Number(va
 function pendingIncidentReserve(ship, quote) {
   if (ship.orderBundle) {
     const orders = ship.orderBundle.orders ?? [];
-    const reserves = bundleOutcomeReserves(orders.map((order) => order.offer), ship.orderBundle.totalOperatingCopper);
+    const reserves = bundleOutcomeReserves(orders.map((order) => order.offer), ship.orderBundle.totalOperatingCopper,
+      { stops: ship.orderBundle.stops });
     return orders.reduce((sum, order, index) => sum + (order.outcome || order.outcomeApplied ? 0 : reserves[index]), 0);
   }
   if (!quote?.contract || ship.activeVoyage?.outcome) return 0;

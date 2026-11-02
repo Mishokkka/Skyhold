@@ -257,12 +257,12 @@ function quoteOutboundOffer(offer, { location, quoteKey, resource, logistics = {
   };
 }
 
-export function prepareMarketQuote({ holding = {}, market = {}, resources = [], location: locationOverride = null, logistics = null } = {}) {
+export function prepareMarketQuote({ holding = {}, market = {}, resources = [], location: locationOverride = null, logistics = null, offerAccessCost = null } = {}) {
   const location = locationOverride ?? resolveMarketLocation(holding, market.locationProfiles);
   const quoteKey = marketQuotePeriodKey(holding, { quotePeriodDays: market.quotePeriodDays });
   const marketQuoteKey = `${quoteKey}|market:${String(market.id ?? "external-market")}`;
   const resourceById = new Map((resources ?? []).map((row) => [String(row.id ?? row.resourceId ?? ""), row]));
-  const routeAccessCost = Math.max(0, Math.floor(finiteNumber(logistics?.routeAccessLevel ?? logistics?.routeAccessCost, finiteNumber(logistics?.hops, 0))));
+  const routeAccessCost = Math.max(0, Math.floor(finiteNumber(offerAccessCost ?? logistics?.routeAccessLevel ?? logistics?.routeAccessCost, finiteNumber(logistics?.hops, 0))));
   const accessLevel = Math.max(0, Math.floor(finiteNumber(logistics?.accessLevel, 0)));
   const enforceAccess = Boolean(logistics && Object.hasOwn(logistics, "accessLevel"));
   const activeOffers = (market.offers ?? []).filter((offer) => offer?.active !== false);
@@ -356,6 +356,24 @@ export function marketShipmentRiskProfile({ logistics = {}, deliveryQd = 0, subt
 }
 
 /**
+ * Select available goods and their value without choosing transport or mutating stock.
+ */
+export function selectMarketPurchaseCargo({ quote = {}, quantities = {}, targetRoomId = "outdoors" } = {}) {
+  const lines = [];
+  let subtotalCopper = 0, totalLoad = 0;
+  for (const offer of quote.offers ?? []) {
+    const requested = Math.max(0, Math.floor(finiteNumber(quantities?.[offer.id], 0)));
+    const qty = Math.min(requested, Math.max(0, Math.floor(finiteNumber(offer.stock, 0))));
+    if (!qty) continue;
+    const lineCopper = qty * Math.max(1, Math.floor(finiteNumber(offer.unitPriceCopper, 1)));
+    subtotalCopper += lineCopper;
+    totalLoad += qty * Math.max(0, finiteNumber(offer.load, 1));
+    lines.push({ ...offer, qty, lineCopper, targetRoomId: String(targetRoomId || "outdoors") });
+  }
+  return { lines, subtotalCopper, totalLoad };
+}
+
+/**
  * Build a purchase quote without reserving stock, spending money, or mutating inputs.
  * Chooses the cheapest eligible route. Known capacity errors and, for ordinary purchases,
  * over-limit goods totals retain cargo/error flags without allocating shipment batches.
@@ -383,18 +401,7 @@ export function planMarketPurchase({ holding = {}, quote = {}, quantities = {}, 
     const { routeCandidates: _routes, ...fallback } = quote.logistics;
     return planMarketPurchase({ holding, quantities, targetRoomId, serviceLevel, transportOnly, quote: { ...quote, logistics: fallback } });
   }
-  const lines = [];
-  let subtotalCopper = 0;
-  let totalLoad = 0;
-  for (const offer of quote.offers ?? []) {
-    const requested = Math.max(0, Math.floor(finiteNumber(quantities?.[offer.id], 0)));
-    const qty = Math.min(requested, Math.max(0, Math.floor(finiteNumber(offer.stock, 0))));
-    if (!qty) continue;
-    const lineCopper = qty * Math.max(1, Math.floor(finiteNumber(offer.unitPriceCopper, 1)));
-    subtotalCopper += lineCopper;
-    totalLoad += qty * Math.max(0, finiteNumber(offer.load, 1));
-    lines.push({ ...offer, qty, lineCopper, targetRoomId: String(targetRoomId || "outdoors") });
-  }
+  const { lines, subtotalCopper, totalLoad } = selectMarketPurchaseCargo({ quote, quantities, targetRoomId });
   const location = quote.location ?? {};
   const logistics = quote.logistics ?? {};
   const physicalCapacityLoad = Math.max(0, finiteNumber(logistics?.capacityLoad, 0));

@@ -198,4 +198,29 @@ assert.match(errors.at(-1), /Тайники/);
 assert.equal(data.holdings[0].special.ships.list[0].hiddenCapacityLoadPoints <= capacity, true);
 await app._onShipFieldChange(numericEvent(4, "capacityLoadPoints", capacity + 500));
 assert.equal(data.holdings[0].special.ships.list[0].capacityLoadPoints, capacity + 500);
-console.log("Ship window: lightweight overview, selected detail, crew membership/drafts, GM reroll intent and stale settings guards passed.");
+// The actual ship button must surface a failed lazy stylesheet load without an unhandled rejection.
+{
+  const clicks = [], loading = new SkyholdShipApp({ holdingId: holding.id, shipId: ship.id });
+  loading.element.addEventListener = (type, handler) => { if (type === "click") clicks.push(handler); };
+  loading.element.contains = () => true;
+  await loading._onRender({}, {});
+  const originalError = console.error, originalNotifications = ui.notifications;
+  const logs = [];
+  console.error = (...args) => logs.push(args);
+  globalThis.document = { querySelector: () => null,
+    createElement: () => ({ dataset: {}, events: {}, addEventListener(type, handler) { this.events[type] = handler; }, remove() {} }),
+    head: { append(link) { globalThis.queueMicrotask(() => link.events.error()); } } };
+  let timeout;
+  try {
+    await new Promise((resolve, reject) => {
+      timeout = setTimeout(() => reject(new Error("lazy load failure was not reported")), 2000);
+      ui.notifications = { error: resolve };
+      const button = { dataset: { action: "ship-open-transport" } };
+      clicks.at(-1)({ type: "click", target: { closest: () => button }, preventDefault() {} });
+    });
+    assert.match(logs[0][1].message, /Failed to load stylesheet/);
+  } finally {
+    clearTimeout(timeout); console.error = originalError; ui.notifications = originalNotifications; delete globalThis.document;
+  }
+}
+console.log("Ship window: lightweight overview, selected detail, crew membership/drafts, GM reroll intent, stale settings guards and lazy load failure feedback passed.");

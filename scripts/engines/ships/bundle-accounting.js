@@ -28,11 +28,26 @@ export function bundleOperatingShares(offers, totalCopper) {
 }
 
 /** Derived from the accepted snapshot; no new persisted fields or load-time repair. */
-export function bundleOutcomeReserves(offers, totalCopper) {
+export function bundleOutcomeReserves(offers, totalCopper, { stops = [] } = {}) {
   const firstAtPort = new Map();
   for (const offer of [...offers].sort((a, b) => Number(b.contract.kind === "smuggling") - Number(a.contract.kind === "smuggling") || String(a.id).localeCompare(String(b.id)))) {
     const key = `${offer.to?.kind ?? ""}:${offer.to?.id ?? offer.contract.destination}`;
     if (!firstAtPort.has(key)) firstAtPort.set(key, offer.id);
+  }
+  if (stops.length && stops.every(stop => stop.economics?.version === 1)) {
+    const reserves = offers.map(() => 0);
+    let pending = 0;
+    for (const stop of stops) {
+      const terms = stop.economics;
+      pending += terms.repairCopper + terms.delayDailyCopper * 2 + terms.precautionCopper;
+      if (!stop.deliveryOfferIds.length) continue;
+      const key = `${stop.point.kind}:${stop.point.id}`;
+      const index = offers.findIndex(offer => offer.id === firstAtPort.get(key));
+      if (index < 0 || !Number.isSafeInteger(pending) || pending < 0) throw new Error("Некорректный резерв составного рейса.");
+      reserves[index] += pending; pending = 0;
+    }
+    if (pending) throw new Error("Участок рейса остался без расчёта по доставке.");
+    return reserves;
   }
   return bundleOperatingShares(offers, totalCopper).map((share, index) => {
     const offer = offers[index];

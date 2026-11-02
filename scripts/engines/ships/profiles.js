@@ -1,3 +1,5 @@
+import { transportPeriodCosts } from "../transport/quantities.js";
+
 const MAX_MONEY = 1_000_000_000;
 
 function integer(value, name, min = 0, max = MAX_MONEY) {
@@ -99,9 +101,8 @@ export function calculateShipCosts(ship, {
   const load = integer(handlingLoadPoints, "погрузочный объём", 0, profile.capacityLoadPoints);
   const rate = finiteRate(taxRate, "ставка пошлины", 0, 1);
 
-  const foodCopper = integer(Math.ceil(ration * crew * duration / 4), "провизия");
-  const crewCopper = integer(Math.ceil(dailyCrew * duration / 4), "плата команды");
-  const upkeepCopper = integer(Math.ceil(profile.upkeepDailyCopper * duration / 4), "содержание корабля");
+  const { foodCopper, crewCopper, upkeepCopper } = transportPeriodCosts(duration,
+    { foodCopper: ration * crew, crewCopper: dailyCrew, upkeepCopper: profile.upkeepDailyCopper });
   const baseHandling = Math.ceil(load * profile.handlingLoadRateCopper / 100);
   const handlingCopper = integer(Math.ceil(baseHandling * feeFactor / 100), "портовая обработка");
   const taxCopper = integer(Math.round(value * rate), "пошлина");

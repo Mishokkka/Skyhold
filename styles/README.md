@@ -35,8 +35,9 @@ CSS is split by ownership. Edit the narrowest file that owns the UI area. New wo
 - `parts/economy/*` - economy and accounting layouts.
 - `parts/economy/bank-window.css` - bank header, offers and loan cards, GM catalog forms and their bounded scroll area.
 - `parts/mass-combat/*` - mass combat window, detail tables, action popovers, dedicated reference windows and chat summary styles.
-- `parts/market/market.css`, `parts/market/market-checkout.css` and `parts/market/market-outbound.css` - external market catalog/header, inbound delivery/checkout rail and outbound FIFO-sale lifecycle; the Storage-tab entry remains with the market shell owner.
+- `parts/market/market.css`, `parts/market/market-checkout.css` and `parts/market/market-outbound.css` - external market catalog/header, purchase selection and outbound FIFO goods selection; transport confirmation/tracking belong to `transport-window.css`. The Storage-tab entry remains with the market shell owner.
 - `parts/market/market-catalog.css` - owner of the standalone GM editor for base offers, country characters, specialties and organizations.
+- `parts/market/transport-window.css` - owner of the transport planner, accepted orders and shared-run incident controls.
 - `parts/market/region-catalog.css` - only owner of the standalone card-based market-location editor.
 - `parts/market/route-graph.css` - owner of the visual GM route graph and route-edge popout editors.
 - `parts/ships/ship-window.css` - owner of the standalone ship window and crew picker; compact fleet rows remain in `parts/current/skyhold-current-ships.css`.
@@ -98,7 +99,7 @@ Current owners:
 - Expanded resident editor: `parts/skyhold-resident-editor-v2.css`.
 - Main GM tab: `parts/skyhold-gm.css`.
 - Content-pack importer: `parts/skyhold-content-pack.css`.
-- External market catalog/header: `parts/market/market.css`; delivery and checkout rail: `parts/market/market-checkout.css`; outbound sales: `parts/market/market-outbound.css`; layered market-economy editor: `parts/market/market-catalog.css`; market-location editor: `parts/market/region-catalog.css`; route map and edge popout: `parts/market/route-graph.css`.
+- External market catalog/header: `parts/market/market.css`; purchase selection: `parts/market/market-checkout.css`; outbound goods: `parts/market/market-outbound.css`; transport calculation and tracking: `parts/market/transport-window.css`; layered market-economy editor: `parts/market/market-catalog.css`; market-location editor: `parts/market/region-catalog.css`; route map and edge popout: `parts/market/route-graph.css`.
 - Tenday workflow window: `parts/tenday/tenday-window.css`; its event decision component: `parts/tenday/tenday-decisions.css`.
 - Building/template browser: `template-browser/*`, split by browser area. Template card heads, dev-chip rows and inline deficits belong to `template-browser/skyhold-template-browser-card.css`.
 - Building card collection layout, responsive columns, card heads and medical card accents: `parts/current/skyhold-current-building-cards.css`.

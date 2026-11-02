@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { pathToFileURL } from "node:url";
 import { worldMarketFixture } from "./world-ship-market-characterization-check.mjs";
 import { prepareMarketAuthorityContext, marketAuthoritySourceToken } from "../apps/market/authority-context.js";
-import { createMarketOperationExecutor } from "../apps/market-operation-executor.js";
+import { createMarketOperationExecutor } from "./fixtures/legacy-market-executor.mjs";
 import { advanceWorldShips, departWorldShip } from "../engines/ships/world-voyage.js";
 import { quoteWorldShipReturn } from "../engines/ships/world-market.js";
 import { shipMoneySummary, shipOutingSummary } from "../engines/ships/summary.js";

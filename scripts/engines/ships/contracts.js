@@ -1,4 +1,5 @@
 import { planShipVoyage } from "./voyage.js";
+import { economicContractGuidance, economicContractOutcome } from "./contract-economics.js";
 
 const KINDS = new Set(["freight", "smuggling", "commission"]);
 const STYLES = new Set(["cautious", "normal", "bold"]);
@@ -139,6 +140,7 @@ function offerReward(base, kind, attention, random) {
 }
 
 export function contractGuidance(offer, style = "normal", { commercialOnly = false } = {}) {
+  if (offer?.economics?.version === 1) return economicContractGuidance(offer, style, { commercialOnly });
   if (!STYLES.has(style)) throw new Error("Неизвестный стиль выполнения контракта.");
   const rule = STYLE_RULES[style];
   const reward = integer(offer?.rewardCopper, "награда предложения");
@@ -237,12 +239,14 @@ function incidentForKind(incident, kind) {
 }
 
 /** Resolve supplied dice only. Callers on the authority GM draw the dice before invoking this function. */
-export function resolveContractOutcome(contract, style = "normal", { commercialDice, incidentRoll, commercialOnly = false, sharedPassageAllowsBonus = true } = {}) {
+export function resolveContractOutcome(contract, style = "normal", { commercialDice, incidentRoll, passageRoll, commercialOnly = false, sharedPassageAllowsBonus = true, sharedIncident = null } = {}) {
   if (!contract || !KINDS.has(contract.kind)) throw new Error("Некорректный контракт.");
   if (!STYLES.has(style)) throw new Error("Неизвестный стиль выполнения контракта.");
   if (!Array.isArray(commercialDice) || commercialDice.length !== 2) throw new Error("Нужны два коммерческих кубика.");
   const dice = commercialDice.map((value, index) => integer(value, `коммерческий кубик ${index + 1}`, 1, 6));
   integer(incidentRoll, "бросок происшествия", 1, 12);
+  if (contract.economics?.version === 1) return economicContractOutcome(contract, style,
+    { commercialDice: dice, incidentRoll, passageRoll, commercialOnly, sharedIncident });
   const attention = integer(contract?.attention?.level ?? 0, "внимание", 0, 10);
   const rule = STYLE_RULES[style];
   const commercial = commercialResult(contract.kind, dice[0] + dice[1]);

@@ -1,3 +1,5 @@
+import { prepareShipTransportFinance } from "./ship-transport-finance.js";
+
 const amount = (value) => Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : 0;
 const validAmount = (value) => Number.isSafeInteger(value) && value >= 0;
 const DETAIL_LABELS = Object.freeze({
@@ -38,37 +40,43 @@ function pendingPayments(ship, ownSale) {
 }
 
 /** Financial explanations from existing receipts and accepted snapshots, without changing any ledger. */
-export function prepareShipFinancePresentation(holding, ship, { money, outingReport, ownSale = null } = {}) {
+export function prepareShipFinancePresentation(holding, ship, { money, outingReport, ownSale = null, data = null, isGM = true } = {}) {
   const mandatoryShortageCopper = money?.calculationValid ? Math.max(0, money.obligationsCopper - money.balanceCopper) : null;
   const reserveShortageCopper = money?.reserveKnown ? Math.max(0, money.shortageCopper - mandatoryShortageCopper) : null;
-  const payments = pendingPayments(ship, ownSale);
+  const transport = prepareShipTransportFinance(holding, ship, outingReport, { data, isGM });
+  const payments = [...pendingPayments(ship, ownSale), ...transport.pendingPayments];
   let outing = null;
   if (outingReport) {
     // A sale starts its ship outing with the same operationId. Never attach another ship's or another outing's costs.
     const sale = (holding.special?.market?.outbound?.orders ?? []).find((order) => order.ownShipId === ship.id
       && order.operationId === outingReport.id) ?? null;
-    const marketExpenseKnown = Boolean(sale?.upfrontOperationId && validAmount(sale.upfrontCopper));
-    const marketExpenseCopper = marketExpenseKnown ? sale.upfrontCopper : 0;
+    const legacyExpenseKnown = Boolean(sale?.upfrontOperationId && validAmount(sale.upfrontCopper));
+    const marketExpenseKnown = Boolean(sale || transport.present) && (!sale || legacyExpenseKnown) && transport.known;
+    const legacyExpenseCopper = legacyExpenseKnown ? sale.upfrontCopper : 0;
+    const marketExpenseCopper = legacyExpenseCopper + transport.expenseCopper;
     const futureStops = outingReport.ongoing ? (ship.orderBundle?.stops ?? [])
       .slice(amount(ship.orderBundle?.nextStopIndex) + (ship.activeVoyage ? 1 : 0)) : [];
     const futureOperatingCopper = futureStops.reduce((sum, stop) => sum + amount(stop.legOffer?.quote?.operatingCopper), 0);
     const futureDurationQd = futureStops.reduce((sum, stop) => sum + amount(stop.legOffer?.quote?.durationQd), 0);
-    const plannedExpenseCopper = outingReport.plannedExpenseCopper + futureOperatingCopper + marketExpenseCopper;
-    const plannedIncomeCopper = outingReport.plannedIncomeCopper + amount(sale?.revenueCopper);
-    const netCopper = outingReport.netCopper - marketExpenseCopper;
-    const details = (outingReport.details ?? []).map(detailRow);
-    if (marketExpenseKnown && marketExpenseCopper > 0) details.push({
+    const plannedExpenseCopper = outingReport.plannedExpenseCopper + futureOperatingCopper + legacyExpenseCopper + transport.plannedExpenseCopper;
+    const plannedIncomeCopper = outingReport.plannedIncomeCopper + amount(sale?.revenueCopper) + transport.plannedIncomeCopper;
+    const netCopper = outingReport.netCopper - marketExpenseCopper + transport.treasuryIncomeCopper;
+    const details = [...(outingReport.details ?? []).map(detailRow), ...transport.details];
+    if (legacyExpenseKnown && legacyExpenseCopper > 0) details.push({
       kindLabel: "Расходы рынка", reason: `Продажа: ${sale.marketLabel || "Внешний рынок"}. Оплачено казной при отправлении.`,
-      timeLabel: "При отправлении", hasAmount: true, displayAmountCopper: -marketExpenseCopper, isTransfer: false
+      timeLabel: "При отправлении", hasAmount: true, displayAmountCopper: -legacyExpenseCopper, isTransfer: false
     });
     outing = {
       ...outingReport, netCopper, marketExpenseCopper, marketExpenseKnown,
-      hasSale: Boolean(sale), saleCostsUnknown: Boolean(sale && !marketExpenseKnown),
+      hasSale: Boolean(sale) || transport.hasSale, hasTransport: transport.present, transportPending: transport.pending,
+      hasMarketExpenses: Boolean(sale) || transport.present, treasuryIncomeCopper: transport.treasuryIncomeCopper,
+      saleCostsUnknown: Boolean(sale || transport.present) && !marketExpenseKnown,
       shipExpenseCopper: outingReport.expenseCopper, totalExpenseCopper: outingReport.expenseCopper + marketExpenseCopper,
       plannedIncomeCopper, plannedExpenseCopper, plannedNetCopper: plannedIncomeCopper - plannedExpenseCopper,
       plannedDays: outingReport.plannedDays + futureDurationQd / 4,
       varianceCopper: netCopper - (plannedIncomeCopper - plannedExpenseCopper),
-      canComparePlan: !outingReport.partial && !outingReport.ongoing && (!sale || marketExpenseKnown),
+      canComparePlan: !outingReport.partial && !outingReport.ongoing && !transport.pending
+        && (!(sale || transport.present) || marketExpenseKnown),
       details
     };
   }

@@ -21,6 +21,7 @@ import { marketOutboundRouteFromPurchasePlan, prepareMarketOutboundContext } fro
 import { buildShipWorldContext, quoteWorldShipSale } from "../../engines/ships/world-market.js";
 import { shipCrewReadiness } from "../../engines/ships/crew-readiness.js";
 import { shipMoneySummary } from "../../engines/ships/summary.js";
+import { transportRelevantHolding } from "../../data/transport/state.js";
 
 function marketSeasonId(holding = {}) {
   const calendaria = holding?.gm?.calendaria ?? {};
@@ -30,7 +31,7 @@ function marketSeasonId(holding = {}) {
 
 export function marketAuthoritySourceToken({ data, holding, marketId = "", carrierId = "" } = {}) {
   return stableDataHash({
-    holding,
+    holding: transportRelevantHolding(holding),
     sharedMarkets: data?.meta?.sharedMarkets,
     eventRegions: data?.catalog?.eventRegions,
     marketEconomy: data?.catalog?.marketEconomy,
@@ -112,7 +113,7 @@ export function authorityMarketLogistics({
   carrierId = "",
   isGM = false,
   economy: preparedEconomy = null,
-  direction = "inbound"
+  direction = "inbound", preservePhysicalRoutes = false
 } = {}) {
   if (!market) return { logistics: null, carriers: [], carrier: null };
   const locations = data?.catalog?.eventRegions ?? [];
@@ -127,6 +128,7 @@ export function authorityMarketLogistics({
     isGM,
     seasonId: marketSeasonId(holding),
     direction,
+    preservePhysicalRoutes,
     dependencies: {
       regionFactors: (region) => marketLocationFactors(region, economy, locations),
       regionResolver: marketRegionForValue
@@ -141,7 +143,8 @@ export function authorityMarketQuote({
   carrierId = "",
   isGM = false,
   economy: preparedEconomy = null,
-  resources: preparedResources = null
+  resources: preparedResources = null,
+  discoverTransport = false
 } = {}) {
   if (!market) return null;
   const locations = data?.catalog?.eventRegions ?? [];
@@ -155,9 +158,13 @@ export function authorityMarketQuote({
     isGM,
     economy
   });
+  // Discovery uses the regional lower bound: the selected vessel may take a
+  // lower-access path than a hired carrier. V2 validates the actual full chain.
   const quote = overlayMarketQuoteStock({
     holding,
-    quote: prepareMarketQuote({ holding, market, resources, location: market.locationProfile, logistics })
+    quote: prepareMarketQuote({ holding, market, resources, location: market.locationProfile, logistics,
+      offerAccessCost: discoverTransport ? market.routeAccessCost
+        ?? marketRegionAccessCostMap({ holding, regions: locations, dependencies: { regionResolver: marketRegionForValue } }).get(String(market.regionId)) : null })
   });
   const allocated = allocateQuoteToMerchantProviders({
     offers: quote.offers,

@@ -395,6 +395,8 @@ function checkMarketBoundaries() {
   const providers = readFileSync(path.join(root, "scripts/engines/market/providers.js"), "utf8");
   const app = readFileSync(path.join(root, "scripts/apps/market-app.js"), "utf8");
   const marketOperationExecutor = readFileSync(path.join(root, "scripts/apps/market-operation-executor.js"), "utf8");
+  const transportExecutor = readFileSync(path.join(root, "scripts/apps/transport-operation-executor.js"), "utf8");
+  const transportTemplate = readFileSync(path.join(root, "templates/transport-app.hbs"), "utf8");
   const editor = readFileSync(path.join(root, "scripts/apps/editors/market-catalog-editor.js"), "utf8");
   const editorTemplate = readFileSync(path.join(root, "templates/market-catalog-editor.hbs"), "utf8");
   const editorCss = readFileSync(path.join(root, "styles/parts/market/market-catalog.css"), "utf8");
@@ -420,7 +422,7 @@ function checkMarketBoundaries() {
     const expectedImports = {
       pricing: ["../../core/economy-calendar.js", "../../data/market/money-limits.js", "../../data/market/transport-plan.js"],
       delivery: ["./purchase-payment.js"],
-      shipment: ["./cargo-aging.js", "./shipment-schedule.js", "./purchase-payment.js", "../../data/market/transport-plan.js"],
+      shipment: ["./cargo-aging.js", "./shipment-schedule.js", "./purchase-payment.js", "../../data/market/transport-plan.js", "../../core/seeded-unit.js"],
       logistics: ["../politics/runtime-effects.js", "./route-candidates.js"]
     }[name];
     assert.deepEqual(imports, expectedImports, `market ${name} engine may only import its declared domain helpers`);
@@ -428,7 +430,7 @@ function checkMarketBoundaries() {
     assertNoEngineGlobals(engine, `market ${name} engine must not access Foundry or UI globals`);
   }
   for (const helper of [
-    "scripts/core/economy-calendar.js", "scripts/data/market/money-limits.js", "scripts/data/market/transport-plan.js",
+    "scripts/core/economy-calendar.js", "scripts/core/seeded-unit.js", "scripts/data/market/money-limits.js", "scripts/data/market/transport-plan.js",
     "scripts/engines/market/purchase-payment.js", "scripts/engines/market/route-candidates.js"
   ]) {
     const source = readFileSync(path.join(root, helper), "utf8");
@@ -455,7 +457,7 @@ function checkMarketBoundaries() {
   assert.match(shipment, /holding\.special\.market\.orders\.push\(\.\.\.preparedOrders\)/, "all physical cargo batches must be persisted as independent shipment records");
   assert.match(shipment, /export function retainMarketShipmentOrders\b/, "shipment retention must prune terminal history without dropping active batches");
   assert.match(shipment, /export function advanceMarketShipments\b/, "market shipment engine must expose replay-safe QD advancement");
-  assert.match(shipment, /export function deterministicMarketShipmentUnit\b/, "market shipment incidents must use a stable deterministic source");
+  assert.match(shipment, /deterministicUnit as deterministicMarketShipmentUnit.*from "\.\.\/\.\.\/core\/seeded-unit\.js"/, "historical incidents retain the shared deterministic algorithm");
   assert.match(shipment, /export function resolveMarketShipmentRisk\b/, "market shipment engine must resolve delay, loss and insurance atomically");
   assert.match(shipment, /!order\.insurancePaidAt/, "market shipment insurance must guard against duplicate payouts");
   assert.match(shipment, /export function marketShipmentCancellationQuote\b/, "market shipment engine must expose an explainable cancellation preview");
@@ -471,18 +473,19 @@ function checkMarketBoundaries() {
   assert.match(logistics, /holding\?\.overview\?\.region/, "market logistics must read the Basis region");
   assert.doesNotMatch(logistics, /overview\?\.(?:altitude|drift)/, "altitude and drift must not substitute for the Basis region");
   assert.match(logistics, /edgeSeasonalModifier\(/, "market logistics must apply editable seasonal factors at the route-edge owner");
-  assert.match(app, /from "\.\.\/engines\/market\/pricing\.js"/, "market app must consume the pure pricing engine");
-  assert.match(marketOperationExecutor, /from "\.\.\/engines\/market\/delivery\.js"/, "authority market executor must consume the pure delivery engine");
-  assert.match(app, /from "\.\.\/engines\/market\/shipment\.js"/, "market app must consume the pure shipment engine");
+  assert.match(app, /authorityMarketQuote/, "market goods retain authoritative prices");
+  assert.match(transportExecutor, /bookTransportOrder/, "authority executor must book through the unified transport engine");
+  assert.doesNotMatch(marketOperationExecutor, /createMarketShipment|applyPurchase|applyOutbound/, "retired commands may replay receipts but cannot create orders");
+  assert.match(app, /openTransportApp/, "market checkout must open unified transport");
   assert.doesNotMatch(app, /_marketComparisonRows\(/, "market app must not eagerly calculate every route while opening the location selector");
   assert.match(app, /marketOptions:\s*markets\.map\(/, "market app must retain the compact location selector without the removed comparison pass");
   assert.match(app, /from "\.\.\/engines\/market\/logistics\.js"/, "market app must consume the pure logistics engine");
   assert.match(app, /from "\.\.\/engines\/market\/composition\.js"/, "market app must compose markets from countries and location specialties");
-  assert.match(app, /from "\.\.\/engines\/market\/providers\.js"/, "market app must allocate merchant stock and selectable carriers");
-  assert.match(economyDomain, /from "\.\.\/\.\.\/\.\.\/engines\/market\/shipment\.js"/, "economy domain must consume shipment advancement through its pure engine");
-  assert.match(economyDomain, /this\._advanceMarketShipmentsForQd\(holding, qd, report\)/, "confirmed QD economy flow must advance market shipments");
+  assert.match(app, /groupMarketOffers/, "market app must retain per-provider stock selection");
+  assert.match(economyDomain, /import\("\.\.\/\.\.\/\.\.\/workflows\/transport\/orders\.js"\)/, "economy lazily advances the unified transport workflow");
+  assert.doesNotMatch(economyDomain, /advanceMarketShipments|advanceMarketOutboundShipments/, "old delivery executors must not remain in period execution");
   const economyFlow = economyDomain.match(/async _runEconomyForQd\([\s\S]+?\n},/)?.[0] ?? "";
-  const arrivalIndex = economyFlow.indexOf("this._advanceMarketShipmentsForQd(holding, qd, report)");
+  const arrivalIndex = economyFlow.indexOf("advanceTransportShipments(data, holding");
   const productionIndex = economyFlow.indexOf("await this._runProductionAndLivestockForQd");
   assert.ok(arrivalIndex >= 0 && productionIndex >= 0, "economy flow must retain both shipment advancement and production/livestock orchestration");
   assert.ok(
@@ -515,7 +518,8 @@ function checkMarketBoundaries() {
   assert.match(marketTemplate, /fbls-market-money[\s\S]{0,220}\{\{label\}\}/, "market prices must render compact colored denomination parts");
   assert.match(marketTemplate, /fbls-market-money[\s\S]{0,250}fbls-market-movement[\s\S]{0,180}movementTooltip/, "market movement percentage must follow the price on the same semantic row and explain itself on hover");
   assert.match(app, /bindFloatingTooltips\(this, root\)/, "market hover explanations must use the shared element-anchored tooltip surface without a mousemove hot path");
-  assert.match(app, /_marketSnapshot\(\{ includePlan: false \}\)[\s\S]{0,1400}if \(quote\) plan = planMarketPurchase/, "market render context must defer purchase planning until the final enriched quote and corrected room are ready");
+  assert.doesNotMatch(app, /planMarketPurchase\(/, "the goods window must not compute the retired delivery quote");
+  assert.match(app, /await this\._enrichMarketQuoteItems\(quote\)/, "Item details remain hydrated before rendering goods");
   assert.match(app, /addEventListener\("contextmenu"[\s\S]{0,5000}step > 0 \? stock : 0/, "right-clicking market steppers must set the selected provider to maximum or zero");
   assert.match(app, /capturePersistentImages\(this\.element\)/, "every market rerender must retain already loaded offer images, including delivery controls");
   assert.match(imageFallback, /export function restorePersistentImages[\s\S]{0,900}replaceWith\(previous\)/, "shared image continuity must transplant loaded image nodes instead of reloading them");
@@ -538,11 +542,11 @@ function checkMarketBoundaries() {
   assert.match(routeEdgeTemplate, /route-edge-path-edit/, "route edge popout must expose waypoint editing");
   assert.match(marketTemplate, /data-market-provider/, "market UI must keep a compact market-location selector");
   assert.doesNotMatch(marketTemplate, /fbls-market-provider-comparison|Сравнение рынков-локаций/, "market UI must not spend vertical space on the removed location-comparison panel");
-  assert.match(marketTemplate, /data-market-carrier/, "market UI must expose an independent carrier choice");
-  assert.match(marketTemplate, /value="standard"[^>]*>Попутный груз<[\s\S]{0,300}value="express"[^>]*>Ускоренная<[\s\S]{0,300}value="charter"[^>]*>Выделенный рейс</, "market UI must expose all three delivery services");
-  assert.match(marketTemplate, /Партии[\s\S]{0,500}\{\{batchCountText\}\}/, "market checkout must explain automatic multi-departure batching");
-  assert.match(marketTemplate, /data-market-batch-preview/, "multi-departure checkout must let the user inspect an individual flight");
-  assert.match(app, /\[data-market-batch-preview\][\s\S]{0,300}batchPreviewIndex/, "market batch selector must update the inspected flight without mutating the order");
+  assert.match(transportTemplate, /data-transport-pin/, "transport UI must expose per-stage carrier selection");
+  assert.match(transportTemplate, /value="cost"[\s\S]{0,200}value="time"/, "transport compares actual price and whole-cargo arrival");
+  assert.doesNotMatch(marketTemplate, /data-market-service|data-market-carrier/, "the old three-service checkout must be removed");
+  assert.match(transportTemplate, /отправлений: \{\{count\}\}/, "stage batching remains explicit");
+  assert.match(transportTemplate, /transport-departures:[\s\S]{0,400}each departures/, "each physical departure remains inspectable without mutating the order");
   assert.match(marketTemplate, /providerLabel/, "market offers must identify the merchant provider that owns each stock share");
   assert.match(marketTemplate, /data-action="market-select-merchant"[^>]+data-source-offer-id[^>]+data-provider-id/, "market product rows must expose independent merchant chips without duplicating source offers");
   assert.match(marketTemplate, /fbls-market-merchant-chip[^>]+hasQuantity/, "merchant chips must expose per-provider ordered quantities");
@@ -550,9 +554,9 @@ function checkMarketBoundaries() {
   assert.match(marketTemplate, /fbls-market-facts/, "market header must characterize the market in one compact fact grid");
   assert.doesNotMatch(marketTemplate, /\{\{locationText\}\}|title="Локация"/, "market header must never expose the settlement location");
   assert.match(marketTemplate, /title="Страна: {{marketCountryLabel}}"[\s\S]{0,300}title="Размер рынка: {{marketSizeLabel}}"[\s\S]{0,300}title="Состояние рынка: {{marketConditionLabel}}"/, "market header facts must preserve full country, size and state values in that order");
-  assert.match(marketTemplate, /fbls-market-cart-section delivery[\s\S]+fbls-market-cart-section route[\s\S]+fbls-market-cart-section costs/, "market checkout must separate delivery, route and cost decisions");
-  assert.match(marketTemplate, /fbls-market-cart-section costs[\s\S]{0,5000}data-market-delivery-breakdown/, "the expanded delivery formula must live directly beside the displayed delivery cost");
-  assert.match(marketTemplate, /Итого доставка[\s\S]{0,180}totalFormulaText/, "the expanded delivery formula must visibly reconcile to the delivery total");
+  assert.match(transportTemplate, /selected\.delivery[\s\S]+selected\.stages[\s\S]+transport-invoice/, "transport checkout separates total, stage calculations and goods/taxes");
+  assert.match(transportTemplate, /\{\{price\}\}[\s\S]{0,80}\{\{invoice\}\}/, "stage price and its cost breakdown stay together");
+  assert.doesNotMatch(transportTemplate, /transport-activate|unless enabled|if enabled/, "the branch has no transport switch or activation command");
   assert.match(marketCss, /\.fbls-market-shell\s*\{[\s\S]{0,180}flex-direction:\s*column/, "market shell must tolerate a variable number of notices without overlapping content");
   assert.match(marketCss, /\.fbls-market-price\s*\{[^}]*display:\s*flex[^}]*font-size:\s*var\(--fbls-type-compact-sm\)/, "market price and movement percentage must share a row at the canonical compact text scale");
   assert.match(marketCheckoutCss, /\.fbls-market-delivery-help\s*\{[^}]*border:[^}]*background:/, "delivery calculation disclosure must be visually discoverable in the checkout");

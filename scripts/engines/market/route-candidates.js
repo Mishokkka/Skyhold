@@ -44,7 +44,7 @@ function billingCurveDominates(a, b) {
 // distance, mode, operating time, load and insurance, so a single shortest
 // path cannot stand in for the eventual quote of a real consignment.
 export function marketTransportRoutes({ graph, from, to, maxAccess, modesForEdge, termsForEdge, preserveFirstMode = false,
-  servicesForEdge = null } = {}) {
+  servicesForEdge = null, preservePhysicalRoutes = false } = {}) {
   if (from === to) return { routes: [], limited: false };
   const remainingAccess = remainingAccessByNode(graph, to);
   const risks = servicesForEdge ? new Set() : new Set([...graph.values()].flatMap((edges) => edges.map((edge) => termsForEdge(edge, "caravan").risk)));
@@ -88,7 +88,11 @@ export function marketTransportRoutes({ graph, from, to, maxAccess, modesForEdge
           // Exact capacity and distance keep nonlinear booking floors and weighted freight factors comparable.
           const serviceKey = servicesForEdge ? [mode, service.carrier.id,
             service.carrier.independent ? service.carrier.dispatchCountryId : "", next.capacity, next.distanceKm] : [];
-          const key = JSON.stringify([edge.to, next.mask, preserveFirstMode ? next.edges[0].selectedMode : "", ...serviceKey]);
+          // Scheduled transport checks occupancy later. Equal static tariffs do
+          // not make two physical roads or carrier sequences interchangeable.
+          const physicalKey = preservePhysicalRoutes ? next.edges.map(part => [part.from, part.to, part.routeId,
+            part.selectedMode, part.service?.carrier.id, part.service?.localAirship?.id]) : null;
+          const key = JSON.stringify([edge.to, next.mask, preserveFirstMode ? next.edges[0].selectedMode : "", ...serviceKey, physicalKey]);
           const bucket = labels.get(key) ?? [];
           if (bucket.some((previous) => !previous.discarded && dominates(previous, next))) continue;
           for (const previous of bucket) if (dominates(next, previous)) previous.discarded = true;
