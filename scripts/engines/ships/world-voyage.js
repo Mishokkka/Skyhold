@@ -4,6 +4,7 @@ import { attentionLabel, contractGuidance, resolveContractOutcome } from "./cont
 import { resolveBundlePassages, bundleOrderAllowsBonus } from "./bundle-incidents.js";
 import { getShipProfile, shipCapacityLoadPoints } from "./profiles.js";
 import { bundleOperatingShares } from "./bundle-accounting.js";
+import { clientCargoOutcome, clientCargoLadenDelay, startClientCargo } from "./client-cargo.js";
 import { beginShipOuting, ensurePartialShipOuting, planShipOutingLeg, planShipOutingBundleRewards, recordShipOutingFunds, completeShipOutingLeg } from "./outing-report.js";
 
 const MAX_MONEY = 1_000_000_000;
@@ -518,6 +519,7 @@ function finalizeArrival(holding, ship, arrivalQd) {
     for (const offerId of stop.pickupOfferIds) {
       const order = bundle.orders.find((row) => row.offerId === offerId);
       order.state = "loaded";
+      startClientCargo(order.offer.contract.cargo, arrivalQd, order.offer.contract.cargo.ageQd ?? 0);
     }
     bundle.nextStopIndex++;
     bundle.status = stop.deliveryOfferIds.length ? "awaiting-outcome" : "at-port";
@@ -540,7 +542,9 @@ export function resolveWorldShip(holding, ship, { operationId: suppliedOperation
   const clockQd = worldShipTimelineQd(holding, ship);
   settleIdleBilling(holding, ship, clockQd);
   if (!voyage.outcome) {
-    voyage.outcome = resolveContractOutcome(voyage.quote.contract, voyage.style, outcomeDice(random, voyage.quote.contract));
+    const outcome = resolveContractOutcome(voyage.quote.contract, voyage.style, outcomeDice(random, voyage.quote.contract));
+    voyage.outcome = clientCargoOutcome(voyage.quote.contract, outcome, clockQd,
+      clientCargoLadenDelay(voyage.quote.contract, voyage.style, outcome));
     voyage.outcomeOperationId = suppliedOperationId;
   }
   const outcome = voyage.outcome;
@@ -651,12 +655,13 @@ export function resolveWorldShipBundleStop(holding, ship, { operationId: supplie
         incidentRoll: due[0].outcome.incidentRoll,
         passageRoll: due[0].outcome.passageRoll
       };
-      order.outcome = resolveContractOutcome(contract, order.style, { ...dice, commercialOnly: Boolean(physical) || index > 0,
+      const outcome = resolveContractOutcome(contract, order.style, { ...dice, commercialOnly: Boolean(physical) || index > 0,
         sharedIncident: physical ? { eventId: "shared-passage", eventLabel: "Итоги общих участков рейса",
           delayQd: physical.delayQd, damagePercent: 0, cargoRewardPercent: (order.cargoRewardBps ?? 10000) / 100 }
           : index > 0 ? due[0].outcome.physicalIncident : null,
         sharedPassageAllowsBonus: physical ? bundleOrderAllowsBonus(bundle, order)
           : index === 0 || Number(due[0].outcome.effectiveIncidentRoll) >= 8 });
+      order.outcome = clientCargoOutcome(contract, outcome, clockQd, physical?.delayQd ?? outcome.delayQd);
       if (physical && index === 0) {
         order.outcome.expenseCopper = physical.expenseCopper;
         order.outcome.delayQd = physical.delayQd;

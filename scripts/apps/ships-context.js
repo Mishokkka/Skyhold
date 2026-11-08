@@ -17,6 +17,7 @@ import { shipRemovalBlocker } from "../engines/ships/removal.js";
 import { formatShipGold, shipGoldInput } from "../core/ship-gold.js";
 import { shortestMarketRouteDistanceKm } from "../engines/market/logistics.js";
 import { allResourceDefs } from "../core/resources.js";
+import { clientCargoLifetime } from "../engines/ships/client-cargo.js";
 
 const KIND_LABELS = Object.freeze({ freight: "Перевозка", commission: "Поручение", smuggling: "Контрабанда" });
 const STYLE_HINTS = Object.freeze({
@@ -49,6 +50,9 @@ function worldOfferRow(offer, worldContext) {
   const costs = quote.costs ?? {};
   const timing = worldShipTimeBreakdown(worldContext, offer);
   const durationDays = Number(quote.durationQd ?? 0) / 4;
+  const cargoLifetimeQd = clientCargoLifetime(contract.cargo);
+  const cargoFreshnessHint = cargoLifetimeQd && contract.cargo.ageAtQd != null
+    ? `Срок годности: ${cargoLifetimeQd / 4} дн. с начала погрузки. При порче плата за груз не начисляется.` : "";
   const difficultyScore = Number(styles[1]?.incidentPressure ?? 0) + (contract.pickup ? 2 : 0)
     + (durationDays >= 20 ? 2 : durationDays >= 10 ? 1 : 0);
   const difficultyLabel = difficultyScore >= 7 ? "Опасный" : difficultyScore >= 4 ? "Сложный" : "Обычный";
@@ -62,7 +66,7 @@ function worldOfferRow(offer, worldContext) {
     title: offer.title || `${KIND_LABELS[contract.kind] ?? "Заказ"}: ${offer?.to?.label ?? "порт"}`,
     destination: offer?.to?.label ?? "—", kindLabel: KIND_LABELS[contract.kind] ?? "Заказ",
     attention: contract.attention ?? { level: 0, label: attentionLabel(0) },
-    durationDays, difficultyLabel,
+    durationDays, difficultyLabel, cargoFreshnessHint,
     approachKm, deliveryKm: Math.max(0, Number(quote.distanceKm ?? 0) - Number(approachKm ?? 0)),
     difficultyHint: `Сложность объединяет риск происшествия, длительность рейса${contract.pickup ? " и подход к чужому порту погрузки" : ""}. ${contract.economics?.version === 1
       ? "Риск растёт со временем в пути и опасностью регионов." : "Длительность влияет на расходы; риск определяется прежними условиями договора."}`,

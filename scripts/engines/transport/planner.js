@@ -1,3 +1,4 @@
+import { remainingCargoArrivals, availableTransportCargo, allArrivalCargo, cargoQuantitiesMatch } from "./cargo-flow.js";
 import { transportServiceCharge } from "./economics.js";
 import { cargoLoad, cargoValue, takeTransportCargo, transportInteger, transportMoney, transportRateCharge, transportWaitingCharge, TRANSPORT_LIMITS, TRANSPORT_LOAD_SCALE } from "./quantities.js";
 
@@ -66,8 +67,8 @@ function charterSlot(service, readyQd, runs, horizon, durationQd) {
   return candidates.sort((a, b) => a.startQd - b.startQd || a.vehicle - b.vehicle)[0] ?? null;
 }
 
-/** A candidate uses one location chain; each stage packs independently. No bottleneck-sized full-route multiplication. */
-export function planTransportChain({ cargo, services, startQd = 0, runs = [], horizonQd = TRANSPORT_LIMITS.horizonQd, storageRate = 0 }) {
+/** A location chain streams ready cargo through each independently reserved service. */
+export function planTransportChain({ cargo, services, startQd = 0, runs = [], horizonQd = TRANSPORT_LIMITS.horizonQd, storageRate = 0, cargoArrivals = null }) {
   transportInteger(startQd, "дата");
   if (!cargo?.length || !services?.length || services.length > TRANSPORT_LIMITS.stages) throw new Error("Не задан груз или маршрут слишком длинный.");
   cargoLoad(cargo); cargoValue(cargo);
@@ -76,9 +77,11 @@ export function planTransportChain({ cargo, services, startQd = 0, runs = [], ho
     if (!lot.lotId || lots.has(lot.lotId)) throw new Error("Партии должны иметь уникальное происхождение.");
     lots.add(lot.lotId);
   }
+  let arrivals = cargoArrivals ? copy(cargoArrivals) : [{ arrivalQd: startQd, cargo: copy(cargo) }];
+  if (!cargoQuantitiesMatch(cargo, allArrivalCargo(arrivals))) throw new Error("Доступные партии не совпадают с грузом.");
   const workingRuns = copy(runs), stages = [];
   const horizon = startQd + transportInteger(horizonQd, "горизонт", 1, 100000);
-  let readyQd = startQd, previous = null, ownedEnded = false, ownedId = "";
+  let previous = null, ownedEnded = false, ownedId = "";
   for (const [index, service] of services.entries()) {
     checkService(service);
     if (previous && previous.to !== service.from) throw new Error("Разрыв транспортной цепочки.");
@@ -86,82 +89,102 @@ export function planTransportChain({ cargo, services, startQd = 0, runs = [], ho
       if (ownedEnded || (ownedId && ownedId !== service.shipId)) throw new Error("Свой корабль может занимать только одну непрерывную часть маршрута.");
       ownedId = service.shipId;
     } else if (ownedId) ownedEnded = true;
-    let waiting = copy(cargo), stageRuns = [], storageCopper = 0;
+    let minimumReadyQd = startQd;
     if (service.kind === "owned" && previous?.kind !== "owned") {
       validateEmptyPath(service, "approach");
-      readyQd = Math.max(readyQd, startQd + (service.approachQd ?? 0));
-    }
-    while (waiting.length) {
-      if (stages.reduce((sum, stage) => sum + stage.runs.length, 0) + stageRuns.length >= TRANSPORT_LIMITS.runs) throw new TransportPlanningUnavailableError("run-limit", "Слишком много отправлений. Уменьшите заказ.");
-      if (waiting.some((lot) => lot.unitLoad > service.capacity)) throw new Error("Одна единица товара больше вместимости транспорта.");
-      const full = takeTransportCargo(waiting, service.capacity);
-      const fullLoad = cargoLoad(full.taken);
-      const timed = service.kind !== "regular" ? { ...service,
-        loadingQd: (service.preparationQd ?? 0) + (service.loadingCapacity ? Math.max(1, Math.ceil(fullLoad / service.loadingCapacity)) : service.loadingQd ?? 0),
-        unloadingQd: service.unloadingCapacity ? Math.max(1, Math.ceil(fullLoad / service.unloadingCapacity)) : service.unloadingQd ?? 0 } : service;
-      const last = full.remaining.length === 0;
-      // Charter machines return to their published hub; owned ship returns between shuttles or by explicit final choice.
-      const finalOwnReturn = service.kind === "owned" && last && service.returnAtEnd && services[index + 1]?.kind !== "owned";
-      if (service.kind === "owned" && (finalOwnReturn || !last)) validateEmptyPath(service, finalOwnReturn ? "endReturn" : "return");
-      const returnQd = service.kind === "regular" ? 0 : finalOwnReturn ? service.endReturnQd ?? service.returnQd ?? 0
-        : (service.kind === "charter" || !last ? service.returnQd ?? 0 : 0);
-      const returnsToOrigin = returnQd > 0 || service.distanceKm === 0
-        && (service.kind === "charter" || service.kind === "owned" && !last);
-      const baseQd = (timed.loadingQd ?? 0) + service.travelQd + (timed.unloadingQd ?? 0);
-      const slot = service.kind === "regular" ? regularSlot(service, readyQd, workingRuns, horizon, waiting)
-        : charterSlot(timed, readyQd, workingRuns, horizon, baseQd + returnQd);
-      if (!slot) throw new TransportPlanningUnavailableError("no-slot", "Нет свободного транспорта в горизонте планирования.");
-      const packed = takeTransportCargo(waiting, slot.free);
-      if (!packed.taken.length) {
-        // A partly occupied scheduled vehicle cannot hold an indivisible unit; skip it in this search only.
-        const existing = workingRuns.find((run) => run.id === slot.id);
-        if (existing) existing.blocked = true;
-        else throw new Error("Груз не помещается в транспорт.");
-        continue;
+      minimumReadyQd += service.approachQd ?? 0;
+      if (previous && services[index + 1]?.kind === "owned") {
+        minimumReadyQd = Math.max(minimumReadyQd, ...arrivals.map(row => row.arrivalQd));
       }
+    }
+    // One owned vessel finishes its previous shuttles before continuing from their destination.
+    if (service.kind === "owned" && previous?.kind === "owned") {
+      minimumReadyQd = Math.max(minimumReadyQd, ...stages.at(-1).runs.map(run => run.releaseQd));
+    }
+    const readyQd = Math.max(minimumReadyQd, Math.min(...arrivals.map(row => row.arrivalQd)));
+    const forwarded = [], stageRuns = [];
+    let storageCopper = 0;
+    while (true) {
+      const remaining = remainingCargoArrivals(arrivals, forwarded);
+      if (!remaining.length) break;
+      if (stages.reduce((sum, stage) => sum + stage.runs.length, 0) + stageRuns.length >= TRANSPORT_LIMITS.runs) throw new TransportPlanningUnavailableError("run-limit", "Слишком много отправлений. Уменьшите заказ.");
+      const waiting = allArrivalCargo(remaining);
+      if (waiting.some(lot => lot.unitLoad > service.capacity)) throw new Error("Одна единица товара больше вместимости транспорта.");
+      let availableAtQd = Math.max(minimumReadyQd, remaining[0].arrivalQd);
+      let available, timed, slot, start, returnQd, finalOwnReturn, returnsToOrigin;
+      while (true) {
+        available = availableTransportCargo(arrivals, forwarded, availableAtQd, { age: false });
+        const full = takeTransportCargo(available, service.capacity), fullLoad = cargoLoad(full.taken);
+        timed = service.kind !== "regular" ? { ...service,
+          loadingQd: (service.preparationQd ?? 0) + (service.loadingCapacity ? Math.max(1, Math.ceil(fullLoad / service.loadingCapacity)) : service.loadingQd ?? 0),
+          unloadingQd: service.unloadingCapacity ? Math.max(1, Math.ceil(fullLoad / service.unloadingCapacity)) : service.unloadingQd ?? 0 } : service;
+        const last = cargoQuantitiesMatch(full.taken, waiting);
+        finalOwnReturn = service.kind === "owned" && last && service.returnAtEnd && services[index + 1]?.kind !== "owned";
+        if (service.kind === "owned" && (finalOwnReturn || !last)) validateEmptyPath(service, finalOwnReturn ? "endReturn" : "return");
+        returnQd = service.kind === "regular" ? 0 : finalOwnReturn ? service.endReturnQd ?? service.returnQd ?? 0
+          : (service.kind === "charter" || !last ? service.returnQd ?? 0 : 0);
+        returnsToOrigin = returnQd > 0 || service.distanceKm === 0
+          && (service.kind === "charter" || service.kind === "owned" && !last);
+        const baseQd = (timed.loadingQd ?? 0) + service.travelQd + (timed.unloadingQd ?? 0);
+        slot = service.kind === "regular" ? regularSlot(service, availableAtQd, workingRuns, horizon, available)
+          : charterSlot(timed, availableAtQd, workingRuns, horizon, baseQd + returnQd);
+        if (!slot) throw new TransportPlanningUnavailableError("no-slot", "Нет свободного транспорта в горизонте планирования.");
+        start = slot.existing?.startQd ?? slot.startQd ?? slot.departureQd - (timed.loadingQd ?? 0);
+        const atStart = availableTransportCargo(arrivals, forwarded, start, { age: false });
+        if (cargoQuantitiesMatch(available, atStart)) break;
+        availableAtQd = start;
+      }
+      const packed = takeTransportCargo(available, slot.free);
+      if (!packed.taken.length) throw new Error("Груз не помещается в транспорт.");
       const load = cargoLoad(packed.taken);
       const arrivalQd = slot.existing?.arrivalQd ?? slot.departureQd + service.travelQd + (timed.unloadingQd ?? 0);
       if (arrivalQd > horizon) throw new TransportPlanningUnavailableError("horizon", "Доставка выходит за горизонт планирования.");
-      const start = slot.existing?.startQd ?? slot.startQd ?? slot.departureQd - (timed.loadingQd ?? 0);
       const charge = transportServiceCharge(service, load, arrivalQd + returnQd - start, returnQd);
-      storageCopper += service.storageIncluded ? 0 : transportRateCharge(load * Math.max(0, start - readyQd),
-        service.storageMilliCopperPerLoadQd ?? (service.storageCopperPerLoadQd ?? storageRate) * 1000, TRANSPORT_LOAD_SCALE * 1000);
+      if (!service.storageIncluded) {
+        const needed = new Map(packed.taken.map(lot => [lot.lotId, lot.qty]));
+        let loadQd = 0;
+        for (const wave of remaining) for (const lot of wave.cargo) {
+          if (wave.arrivalQd > start) continue;
+          const qty = Math.min(lot.qty, needed.get(lot.lotId) ?? 0);
+          needed.set(lot.lotId, (needed.get(lot.lotId) ?? 0) - qty);
+          loadQd += qty * lot.unitLoad * Math.max(0, start - wave.arrivalQd);
+        }
+        storageCopper += transportRateCharge(loadQd, service.storageMilliCopperPerLoadQd
+          ?? (service.storageCopperPerLoadQd ?? storageRate) * 1000, TRANSPORT_LOAD_SCALE * 1000);
+      }
       const run = { id: slot.id, serviceId: service.id, serviceLabel: service.label || service.id, kind: service.kind,
         shipId: service.shipId ?? "", vehicle: slot.vehicle, from: service.from, to: service.to,
         startQd: start, departureQd: slot.departureQd, arrivalQd, releaseQd: arrivalQd + returnQd,
-        releaseLocation: finalOwnReturn ? service.endReturnLocation ?? service.from
-          : returnsToOrigin ? service.from : service.to,
-        capacity: service.capacity, reservedLoad: load,
-        cargo: packed.taken, charge, status: "booked", riskBps: service.riskBps ?? 0 };
+        releaseLocation: finalOwnReturn ? service.endReturnLocation ?? service.from : returnsToOrigin ? service.from : service.to,
+        capacity: service.capacity, reservedLoad: load, cargo: packed.taken, charge, status: "booked", riskBps: service.riskBps ?? 0 };
       if (slot.existing) {
         for (const key of ["startQd", "departureQd", "arrivalQd", "releaseQd", "releaseLocation", "capacity", "riskBps"]) run[key] = slot.existing[key];
       }
-      const shared = workingRuns.find((row) => row.id === run.id && occupied(row));
+      const shared = workingRuns.find(row => row.id === run.id && occupied(row));
       if (shared) shared.reservedLoad += load;
       else workingRuns.push(copy(run));
       stageRuns.push(run);
-      waiting = packed.remaining;
+      forwarded.push(...packed.taken);
     }
-    const completedQd = Math.max(...stageRuns.map((run) => run.arrivalQd));
+    const completedQd = Math.max(...stageRuns.map(run => run.arrivalQd));
     stages.push({ index, from: service.from, to: service.to, service: copy(service), readyQd, completedQd,
-      storageCopper, runs: stageRuns, totalCopper: transportMoney([...stageRuns.map((run) => run.charge.totalCopper), storageCopper]) });
-    readyQd = completedQd;
+      storageCopper, runs: stageRuns, totalCopper: transportMoney([...stageRuns.map(run => run.charge.totalCopper), storageCopper]) });
+    arrivals = stageRuns.map(run => ({ arrivalQd: run.arrivalQd, cargo: run.cargo }));
     previous = service;
   }
-  const ownStages = stages.filter((stage) => stage.service.kind === "owned");
-  const ownedRuns = ownStages.flatMap((stage) => stage.runs);
-  const lastOwn = ownedRuns.at(-1);
-  const firstOwned = ownStages[0];
+  const ownStages = stages.filter(stage => stage.service.kind === "owned");
+  const ownedRuns = ownStages.flatMap(stage => stage.runs), lastOwn = ownedRuns.at(-1), firstOwned = ownStages[0];
   const waitingQd = firstOwned ? Math.max(0, firstOwned.runs[0].startQd - startQd - (firstOwned.service.approachQd ?? 0)) : 0;
   const waitingCopper = firstOwned ? transportWaitingCharge(firstOwned.service, waitingQd) : 0;
-  const approachCopper = transportMoney([ownStages[0]?.service.approachCopper ?? 0, waitingCopper]);
+  const approachCopper = transportMoney([firstOwned?.service.approachCopper ?? 0, waitingCopper]);
   return { version: 2, startQd, cargo: copy(cargo), stages, ownShipId: ownedId, approachCopper,
     shipApproachCopper: firstOwned?.service.approachCopper ?? 0, shipWaitingCopper: waitingCopper,
-    totalCopper: transportMoney([...stages.map((stage) => stage.totalCopper), approachCopper]),
-    ownExpensesCopper: transportMoney([...ownStages.map((stage) => stage.totalCopper), approachCopper]),
-    arrivalQd: readyQd, firstArrivalQd: Math.min(...stages.at(-1).runs.map((run) => run.arrivalQd)),
+    totalCopper: transportMoney([...stages.map(stage => stage.totalCopper), approachCopper]),
+    ownExpensesCopper: transportMoney([...ownStages.map(stage => stage.totalCopper), approachCopper]),
+    arrivalQd: stages.at(-1).completedQd, firstArrivalQd: Math.min(...stages.at(-1).runs.map(run => run.arrivalQd)),
     shipReleaseQd: lastOwn?.releaseQd ?? null, shipReleaseLocation: lastOwn?.releaseLocation ?? "" };
 }
+
 
 export function transportChainMatchesConstraints(chain, { pins = {}, excluded = [] } = {}) {
   return Object.entries(pins).every(([from, id]) => chain.some(service => service.from === from && service.id === id))

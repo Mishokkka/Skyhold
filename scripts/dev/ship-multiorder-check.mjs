@@ -53,8 +53,8 @@ export function checkShipMultiorder() {
   assert.deepEqual(plan.stops[0].pickupOfferIds, ["job-pickup"]);
   assert.equal(plan.initialLoadPoints, 2400);
   assert.deepEqual(plan.stops.map((stop) => [stop.loadOnLegPoints, stop.loadAfterPoints]), [[2400, 1800], [1800, 0]]);
-  assert.equal(plan.stops[0].legOffer.quote.durationQd, 11, "first leg combines 4 QD flight, 3 QD loading and a 4 QD port rest");
-  assert.equal(plan.stops[1].legOffer.quote.durationQd, 12, "second leg combines 8 QD flight with a 4 QD rest/handling stop");
+  assert.equal(plan.stops[0].legOffer.quote.durationQd, 9, "first leg combines 4 QD flight, 3 QD loading and 2 QD cargo handling");
+  assert.equal(plan.stops[1].legOffer.quote.durationQd, 10, "second leg combines 8 QD flight and 2 QD cargo handling");
   assert.ok(plan.totalOperatingCopper < first.quote.operatingCopper + second.quote.operatingCopper + third.quote.operatingCopper,
     "shared travel and crew costs must not be billed as three independent voyages");
   const overfull = repriceWorldShipOffer(data, holding, ship, smallOffer(source, "job-overfull", "b", 3000), { context: world });

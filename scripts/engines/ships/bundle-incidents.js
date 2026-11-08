@@ -1,5 +1,6 @@
 import { economicContractOutcome } from "./contract-economics.js";
 import { transportInteger, transportMoney } from "../transport/quantities.js";
+import { clientCargoLifetime } from "./client-cargo.js";
 
 function die(random, sides) {
   const value = random();
@@ -22,6 +23,11 @@ export function resolveBundlePassages(bundle, stop, random) {
     const outcome = economicContractOutcome({ kind: "freight", rewardCopper: 0, economics: passage.economics },
       bundle.orders[0].style, { commercialDice: [3, 4], incidentRoll: die(random, 12), passageRoll: die(random, 10000) });
     passage.physicalOutcome = outcome;
+    for (const order of bundle.orders) {
+      const cargo = order.offer?.contract?.cargo;
+      if (order.state === "loaded" && !passage.cargoOfferIds.includes(order.offerId)
+        && clientCargoLifetime(cargo) && cargo.ageAtQd != null) cargo.ageAtQd += outcome.delayQd;
+    }
     for (const id of passage.cargoOfferIds) {
       const order = bundle.orders.find(row => row.offerId === id);
       if (!order || order.outcomeApplied) throw new Error("Груз участка не совпадает с принятым составным рейсом.");

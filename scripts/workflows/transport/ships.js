@@ -91,7 +91,7 @@ export function advanceTransportShip(data, holding, order, targetQd) {
   }
   const last = [...ownRuns].sort((a, b) => b.releaseQd - a.releaseQd)[0];
   const sharedLast = data.meta.transportV2.runs.find((run) => run.id === last?.id);
-  const releaseQd = transportLocalQd(order, order.shipAbort?.releaseQd ?? Math.max(last.releaseQd, sharedLast?.releaseQd ?? 0));
+  const releaseQd = transportLocalQd(order, order.shipAbort?.releaseQd ?? Math.max(last?.releaseQd ?? order.plan.shipReleaseQd, sharedLast?.releaseQd ?? 0));
   ship.timelineQd = Math.max(ship.timelineQd, Math.min(targetQd, releaseQd));
   if (targetQd < releaseQd || !completed) return;
   const destination = point(data, holding, order.shipAbort?.location ?? last.releaseLocation, order);
