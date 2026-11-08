@@ -246,7 +246,7 @@ export function resolveContractOutcome(contract, style = "normal", { commercialD
   const dice = commercialDice.map((value, index) => integer(value, `коммерческий кубик ${index + 1}`, 1, 6));
   integer(incidentRoll, "бросок происшествия", 1, 12);
   if (contract.economics?.version === 1) return economicContractOutcome(contract, style,
-    { commercialDice: dice, incidentRoll, passageRoll, commercialOnly, sharedIncident });
+    { commercialDice: dice, incidentRoll, passageRoll, commercialOnly, sharedIncident, sharedPassageAllowsBonus });
   const attention = integer(contract?.attention?.level ?? 0, "внимание", 0, 10);
   const rule = STYLE_RULES[style];
   const commercial = commercialResult(contract.kind, dice[0] + dice[1]);

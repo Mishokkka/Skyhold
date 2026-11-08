@@ -30,7 +30,7 @@ export function economicContractGuidance(contract, style, { commercialOnly = fal
     incidentPressure: value.riskBps / 1000, riskBps: value.riskBps };
 }
 
-export function economicContractOutcome(contract, style, { commercialDice, incidentRoll, passageRoll, commercialOnly = false, sharedIncident = null } = {}) {
+export function economicContractOutcome(contract, style, { commercialDice, incidentRoll, passageRoll, commercialOnly = false, sharedIncident = null, sharedPassageAllowsBonus = true } = {}) {
   const value = terms(contract, style);
   transportInteger(passageRoll, "бросок риска", 1, 10000);
   const total = commercialDice[0] + commercialDice[1];
@@ -52,7 +52,8 @@ export function economicContractOutcome(contract, style, { commercialDice, incid
       incident = { ...incident, eventId: "approach-damage", eventLabel: "Повреждение оснастки на подлёте", cargoRewardPercent: 100 };
     }
   }
-  const bonus = style === "bold" && rewardPercent === 100 && incident.delayQd === 0 ? 2 : 0;
+  const bonus = style === "bold" && rewardPercent === 100 && incident.cargoRewardPercent === 100
+    && incident.delayQd === 0 && sharedPassageAllowsBonus ? 2 : 0;
   const rewardCopper = percent(percent(contract.rewardCopper, rewardPercent), incident.cargoRewardPercent) + percent(contract.rewardCopper, bonus);
   const expenseCopper = commercialOnly ? 0 : transportMoney([
     percent(value.repairCopper, incident.damagePercent), Math.ceil(value.delayDailyCopper * incident.delayQd / 4),

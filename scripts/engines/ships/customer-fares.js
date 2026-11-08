@@ -1,6 +1,7 @@
 import { getShipProfile } from "./profiles.js";
+import { MARKET_TRANSPORT_TARIFFS } from "../market/logistics.js";
 import { regularTransportRate, referenceTransportCosts, transportServiceCharge, transportRationPrice,
-  transportPortHandlingQd, transportRiskBps } from "../transport/economics.js";
+  transportPortHandlingQd, transportRiskBps, configuredTransportCharges } from "../transport/economics.js";
 import { transportHandlingTerms, transportMoney } from "../transport/quantities.js";
 
 /** A customer buys space between cargo ports. The player's approach, crew and return are not part of the fare. */
@@ -9,6 +10,8 @@ export function customerTransportFare({ cargo, origin, destination, resources, c
   const route = referenceRoute(profile);
   const capacityLoad = profile.capacityLoadPoints / 4;
   const factor = Math.max(0.01, origin.factors?.delivery ?? 1);
+  const charges = configuredTransportCharges({ mode: "airship", distanceKm: route.distanceKm, settings: origin,
+    dispatchCopper: MARKET_TRANSPORT_TARIFFS.airship.dispatchCopper, deliveryFactor: factor });
   const costsAt = port => Object.fromEntries(Object.entries(referenceTransportCosts("airship", capacityLoad,
     transportRationPrice(resources, port)).dailyCosts).map(([key, amount]) => [key, Math.ceil(amount * factor)]));
   const service = { kind: "regular", dispatchCopper: 1, profitBps: configuration.carrierProfitBps,
@@ -16,7 +19,9 @@ export function customerTransportFare({ cargo, origin, destination, resources, c
     loadMilliCopper: regularTransportRate({ capacityLoad, travelQd: route.durationQd,
       loadingQd: transportPortHandlingQd(origin, profile.capacityLoadPoints),
       unloadingQd: transportPortHandlingQd(destination, profile.capacityLoadPoints),
-      dailyCosts: costsAt(origin), returnDailyCosts: costsAt(destination), fixedCopper: 140,
+      dailyCosts: costsAt(origin), returnDailyCosts: costsAt(destination),
+      fixedCopper: Math.ceil(charges.dispatchCopper + charges.hireCopper + charges.distanceCopper),
+      loadMilliCopper: Math.ceil(charges.loadCopperPerUnit * 1000),
       commercialLoadBps: configuration.commercialLoadBps }) };
   const charge = transportServiceCharge(service, cargo.loadPoints * 1000, 0);
   const riskBps = transportRiskBps(route.riskExposureQd * (cargo.kind === "smuggling" ? 2 + attention / 10 : 1), configuration.riskBps);

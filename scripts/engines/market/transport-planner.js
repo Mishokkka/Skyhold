@@ -2,7 +2,7 @@ import { stableDataHash } from "../../data/storage-commit.js";
 import { carrierProvidersForRoute } from "./providers.js";
 import { MARKET_DEFAULT_TRANSPORT_CAPACITY_LOAD, MARKET_TRANSPORT_TARIFFS, resolveMarketLogistics, findHoldingRegion, edgeSeasonalModifier } from "./logistics.js";
 import { marketTransportFreightFactor } from "./pricing.js";
-import { localMarketDistanceKm, referenceTransportCosts } from "../transport/economics.js";
+import { localMarketDistanceKm, referenceTransportCosts, configuredTransportCharges } from "../transport/economics.js";
 
 export const AUTO_CARRIERS = "auto-carriers";
 const MODES = Object.keys(MARKET_TRANSPORT_TARIFFS);
@@ -52,10 +52,7 @@ export function planMarketTransport({ holding = {}, market = {}, regions = [], o
       sourcePriceFactor: Math.max(0.01, finite(place.price, 1)), targetPriceFactor: Math.max(0.01, finite(destination.price, 1)),
       sourceTimeFactor: time, targetTimeFactor: Math.max(0.01, finite(destination.time, 1)),
       operatingFactor: priceFactor * delivery * finite(season.costFactor, 1),
-      dispatchCopper: tariff.dispatchCopper * priceFactor,
-      hireCopper: mode === "airship" ? Math.max(0, finite(market.airshipHireCopper, 120)) * priceFactor : 0,
-      distanceCopper: distance * Math.max(0, finite(market.deliveryDistanceCopper)) * priceFactor * delivery,
-      loadCopperPerUnit: distance * Math.max(0, finite(market.deliveryLoadDistanceCopper)) * priceFactor * delivery,
+      ...configuredTransportCharges({ mode, distanceKm, settings: market, dispatchCopper: tariff.dispatchCopper, priceFactor, deliveryFactor: delivery }),
       operatingCopper: movementQd / 4 * reference.dailyCopper * priceFactor * delivery * finite(season.costFactor, 1),
       riskFactor: Math.max(0.25, finite(place.risk, 1) * finite(destination.risk, 1) * finite(season.riskFactor, 1) * finite(carrier.riskFactor, 1)),
       priceFactor, timeFactor, capacityFactor: Math.max(0.1, finite(carrier.capacityFactor, 1)), sharePct: carrier.sharePct,

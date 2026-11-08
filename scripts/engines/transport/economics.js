@@ -6,6 +6,18 @@ export const TRANSPORT_ECONOMICS = Object.freeze({
   meanLossBps: 2500, insuranceLoadingBps: 2500, minimumPolicyCopper: 1
 });
 
+/** Published preparation and distance supplements, shared by hired routes and reference customer fares. */
+export function configuredTransportCharges({ mode, distanceKm, settings = {}, dispatchCopper = 0, priceFactor = 1, deliveryFactor = 1 }) {
+  const rate = (value, fallback = 0) => Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : fallback;
+  const distance = rate(distanceKm) / 40;
+  return {
+    dispatchCopper: dispatchCopper * priceFactor,
+    hireCopper: mode === "airship" ? rate(settings.airshipHireCopper, 120) * priceFactor : 0,
+    distanceCopper: distance * rate(settings.deliveryDistanceCopper) * priceFactor * deliveryFactor,
+    loadCopperPerUnit: distance * rate(settings.deliveryLoadDistanceCopper) * priceFactor * deliveryFactor
+  };
+}
+
 /** One invoice rule for reference carriers, customer jobs and actual owned transport. */
 export function transportServiceCharge(service, load, occupiedQd, returnQd = 0) {
   const dispatchCopper = service.dispatchCopper ?? 0;

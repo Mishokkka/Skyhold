@@ -181,9 +181,8 @@ function routeTerms(context, ship, from, to, { maxAccess = Infinity, includeRisk
   const found = shortestMarketRoute(from.regionId, to.regionId, context.regions, { mode: "airship", maxAccess });
   if (!found) throw new Error(`Нет воздушного маршрута: ${from.label} → ${to.label}.`);
   const route = { ...found };
-  const localDistance = from.regionId === to.regionId && from.kind !== to.kind
-    ? Number((from.kind === "home" ? from : to).localDistanceKm ?? 20) : 0;
-  if (localDistance) {
+  if (from.regionId === to.regionId && from.kind !== to.kind) {
+    const localDistance = Number((from.kind === "home" ? from : to).localDistanceKm ?? 20);
     route.distanceKm = localDistance;
     route.edges = [{ from: from.regionId, to: to.regionId, distanceKm: localDistance }];
   }
@@ -591,6 +590,9 @@ export function generateWorldShipOffers(data, holding, ship, { period, random = 
     const suitable = goods.filter((good) => availableQuantity(good) * good.loadPoints >= Math.min(limit * 0.6, bestLoad));
     const choice = suitable.length ? Math.floor(draw() * suitable.length) : 0;
     const loadShare = suitable.length ? 0.6 + draw() * 0.35 : 0.6;
+    // Prefer a useful full lot, but test smaller consignments if the bulk goods cannot afford delivery.
+    const preferred = new Set(suitable);
+    const candidates = [...suitable.slice(choice), ...suitable.slice(0, choice), ...goods.filter(good => !preferred.has(good))];
     const maxLoad = kind === "commission" ? Math.floor(capacity * 0.2) : limit;
     const routeCache = new Map();
     const referenceRoute = profile => {
@@ -598,8 +600,8 @@ export function generateWorldShipOffers(data, holding, ship, { period, random = 
       return routeCache.get(profile.id);
     };
     let selected = null;
-    for (let attempt = 0; attempt < (kind === "commission" ? 1 : suitable.length); attempt++) {
-      const good = suitable[(choice + attempt) % suitable.length];
+    for (let attempt = 0; attempt < (kind === "commission" ? 1 : candidates.length); attempt++) {
+      const good = candidates[attempt];
       const quantity = good ? Math.min(Math.floor(maxLoad * loadShare / good.loadPoints), availableQuantity(good)) : 0;
       if (kind !== "commission" && quantity <= 0) continue;
       const cargo = { kind, resourceId: kind === "commission" ? "" : good.resourceId,

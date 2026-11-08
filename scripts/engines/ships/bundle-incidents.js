@@ -7,6 +7,12 @@ function die(random, sides) {
   return Math.floor(value * sides) + 1;
 }
 
+/** Read the accepted passage history, including after reload; unrelated cargo never loses its bonus. */
+export function bundleOrderAllowsBonus(bundle, order) {
+  return (order.cargoRewardBps ?? 10000) === 10000 && bundle.stops.slice(0, bundle.nextStopIndex)
+    .every(passage => !passage.cargoOfferIds.includes(order.offerId) || passage.physicalOutcome?.delayQd === 0);
+}
+
 /** Roll each accepted physical leg once, including empty approach. All cargo aboard shares that leg's event. */
 export function resolveBundlePassages(bundle, stop, random) {
   if (stop.physicalResolution) return stop.physicalResolution;

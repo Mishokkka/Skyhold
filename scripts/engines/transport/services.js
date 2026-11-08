@@ -61,7 +61,7 @@ export function transportServicesFromRoutes(routes = [], rawConfiguration = {}, 
       const destination = homeEndpoint && !outbound && index === groups.length - 1 && to === homeRegionId ? homeEndpoint : legacyDestination;
       // Endpoint labels must not reset published schedules, fleet occupancy or overrides.
       const key = stableDataHash([legacySource, legacyDestination, group.mode, group.carrierId, group.routeIds]);
-      const travelQd = Math.max(1, Math.ceil(group.movementQd));
+      const travelQd = Math.max(group.distanceKm === 0 ? 0 : 1, Math.ceil(group.movementQd));
       const port = (id, price, time) => ({ ...markets.find(row => row.regionId === id), factors: { price: price ?? 1, time: time ?? 1 } });
       const origin = port(from, group.sourcePriceFactor, group.sourceTimeFactor), target = port(to, group.targetPriceFactor, group.targetTimeFactor);
       const costsAt = (place, load = group.capacityLoad) => referenceTransportCosts(group.mode, load, resources.length ? transportRationPrice(resources, place) : 9).dailyCosts;

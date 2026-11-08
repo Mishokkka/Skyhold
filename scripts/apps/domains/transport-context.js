@@ -84,7 +84,7 @@ function ownServices(data, holding, ship, points, request, clockQd, world = buil
         services.push({ id: `owned:${ship.id}:${from}:${to}${variant}`, label: `${ship.name} · ${terms.distanceKm} км · УРС ${terms.accessCost}`,
           companyId: `owned:${ship.id}`, kind: "owned", shipId: ship.id,
           from, to, fromLabel: terms.from.label, toLabel: terms.to.label, capacity: capacityPoints * 1000, vehicles: 1,
-          travelQd: Math.max(1, terms.durationQd), loadingQd: terms.loadingQd, unloadingQd: terms.unloadingQd,
+          distanceKm: terms.distanceKm, travelQd: terms.durationQd, loadingQd: terms.loadingQd, unloadingQd: terms.unloadingQd,
           loadingCapacity: terms.loadingCapacity, unloadingCapacity: terms.unloadingCapacity,
           returnQd: back?.durationQd ?? 0, endReturnQd: homeReturn?.durationQd ?? 0, endReturnLocation: home,
           emptyAccessLimit: request.accessLimit,

@@ -21,11 +21,13 @@ function validateEmptyPath(service, kind) {
 function checkService(service) {
   if (!service?.id || !service.from || !service.to || service.from === service.to) throw new Error("Не заданы разные пункты перевозки.");
   if (!["regular", "charter", "owned"].includes(service.kind)) throw new Error("Неизвестный вид перевозки.");
-  for (const field of ["capacity", "travelQd"]) transportInteger(service[field], field, 1);
+  transportInteger(service.capacity, "capacity", 1);
+  transportInteger(service.travelQd, "travelQd", service.distanceKm === 0 ? 0 : 1);
   for (const field of ["loadingQd", "unloadingQd", "preparationQd", "returnQd", "firstQd", "dispatchCopper", "loadCopper", "operatingCopperPerQd", "handlingCopper", "storageCopperPerLoadQd"]) {
     transportInteger(service[field] ?? 0, field);
   }
   for (const field of ["loadingCapacity", "unloadingCapacity"]) if (service[field] !== undefined) transportInteger(service[field], field, 1);
+  if (service.travelQd === 0 && !(service.loadingQd || service.unloadingQd)) throw new Error("Местная перевозка требует времени обработки груза.");
   if (service.kind === "regular") transportInteger(service.intervalQd, "интервал отправлений", 1);
   else transportInteger(service.vehicles ?? 1, "число машин", 1, TRANSPORT_LIMITS.vehicles);
   if (service.kind === "owned" && !service.shipId) throw new Error("Не выбран собственный корабль.");
@@ -95,14 +97,16 @@ export function planTransportChain({ cargo, services, startQd = 0, runs = [], ho
       const full = takeTransportCargo(waiting, service.capacity);
       const fullLoad = cargoLoad(full.taken);
       const timed = service.kind !== "regular" ? { ...service,
-        loadingQd: (service.preparationQd ?? 0) + (service.loadingCapacity ? Math.ceil(fullLoad / service.loadingCapacity) : service.loadingQd ?? 0),
-        unloadingQd: service.unloadingCapacity ? Math.ceil(fullLoad / service.unloadingCapacity) : service.unloadingQd ?? 0 } : service;
+        loadingQd: (service.preparationQd ?? 0) + (service.loadingCapacity ? Math.max(1, Math.ceil(fullLoad / service.loadingCapacity)) : service.loadingQd ?? 0),
+        unloadingQd: service.unloadingCapacity ? Math.max(1, Math.ceil(fullLoad / service.unloadingCapacity)) : service.unloadingQd ?? 0 } : service;
       const last = full.remaining.length === 0;
       // Charter machines return to their published hub; owned ship returns between shuttles or by explicit final choice.
       const finalOwnReturn = service.kind === "owned" && last && service.returnAtEnd && services[index + 1]?.kind !== "owned";
       if (service.kind === "owned" && (finalOwnReturn || !last)) validateEmptyPath(service, finalOwnReturn ? "endReturn" : "return");
       const returnQd = service.kind === "regular" ? 0 : finalOwnReturn ? service.endReturnQd ?? service.returnQd ?? 0
         : (service.kind === "charter" || !last ? service.returnQd ?? 0 : 0);
+      const returnsToOrigin = returnQd > 0 || service.distanceKm === 0
+        && (service.kind === "charter" || service.kind === "owned" && !last);
       const baseQd = (timed.loadingQd ?? 0) + service.travelQd + (timed.unloadingQd ?? 0);
       const slot = service.kind === "regular" ? regularSlot(service, readyQd, workingRuns, horizon, waiting)
         : charterSlot(timed, readyQd, workingRuns, horizon, baseQd + returnQd);
@@ -125,7 +129,9 @@ export function planTransportChain({ cargo, services, startQd = 0, runs = [], ho
       const run = { id: slot.id, serviceId: service.id, serviceLabel: service.label || service.id, kind: service.kind,
         shipId: service.shipId ?? "", vehicle: slot.vehicle, from: service.from, to: service.to,
         startQd: start, departureQd: slot.departureQd, arrivalQd, releaseQd: arrivalQd + returnQd,
-        releaseLocation: finalOwnReturn ? service.endReturnLocation ?? service.from : returnQd ? service.from : service.to, capacity: service.capacity, reservedLoad: load,
+        releaseLocation: finalOwnReturn ? service.endReturnLocation ?? service.from
+          : returnsToOrigin ? service.from : service.to,
+        capacity: service.capacity, reservedLoad: load,
         cargo: packed.taken, charge, status: "booked", riskBps: service.riskBps ?? 0 };
       if (slot.existing) {
         for (const key of ["startQd", "departureQd", "arrivalQd", "releaseQd", "releaseLocation", "capacity", "riskBps"]) run[key] = slot.existing[key];

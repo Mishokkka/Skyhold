@@ -1,7 +1,7 @@
 import { recordFleetFunds } from "./fleet-accounting.js";
 import { applyShipFundsOperation } from "./funds.js";
 import { attentionLabel, contractGuidance, resolveContractOutcome } from "./contracts.js";
-import { resolveBundlePassages } from "./bundle-incidents.js";
+import { resolveBundlePassages, bundleOrderAllowsBonus } from "./bundle-incidents.js";
 import { getShipProfile, shipCapacityLoadPoints } from "./profiles.js";
 import { bundleOperatingShares } from "./bundle-accounting.js";
 import { beginShipOuting, ensurePartialShipOuting, planShipOutingLeg, planShipOutingBundleRewards, recordShipOutingFunds, completeShipOutingLeg } from "./outing-report.js";
@@ -204,7 +204,9 @@ function normalizedQuote(ship, offer) {
   if (!sameEndpoint(from, ship.location)) throw new Error("Корабль находится в другом порту.");
   if (sameEndpoint(from, to)) throw new Error("Пункт назначения совпадает с текущим портом.");
   const source = offer.quote ?? {};
-  const durationQd = integer(source.durationQd, "длительность", 1, 100_000);
+  const local = from.regionId === to.regionId && from.kind !== to.kind;
+  const distanceKm = finiteNumber(source.distanceKm, "расстояние", local ? 0 : 1, 1_000_000);
+  const durationQd = integer(source.durationQd, "длительность", local && distanceKm === 0 && !offer.contract ? 0 : 1, 100_000);
   const operatingCopper = integer(source.operatingCopper, "расходы рейса");
   const preparationCopper = integer(source.preparationCopper ?? 0, "подготовка");
   const rewardCopper = integer(source.rewardCopper ?? 0, "награда");
@@ -244,7 +246,7 @@ function normalizedQuote(ship, offer) {
     from,
     to,
     durationQd,
-    distanceKm: finiteNumber(source.distanceKm, "расстояние", 1, 1_000_000),
+    distanceKm,
     speedKmPerDay: integer(source.speedKmPerDay, "скорость", 1, 10_000),
     operatingCopper,
     preparationCopper,
@@ -653,7 +655,8 @@ export function resolveWorldShipBundleStop(holding, ship, { operationId: supplie
         sharedIncident: physical ? { eventId: "shared-passage", eventLabel: "Итоги общих участков рейса",
           delayQd: physical.delayQd, damagePercent: 0, cargoRewardPercent: (order.cargoRewardBps ?? 10000) / 100 }
           : index > 0 ? due[0].outcome.physicalIncident : null,
-        sharedPassageAllowsBonus: index === 0 || Number(due[0].outcome.effectiveIncidentRoll) >= 8 });
+        sharedPassageAllowsBonus: physical ? bundleOrderAllowsBonus(bundle, order)
+          : index === 0 || Number(due[0].outcome.effectiveIncidentRoll) >= 8 });
       if (physical && index === 0) {
         order.outcome.expenseCopper = physical.expenseCopper;
         order.outcome.delayQd = physical.delayQd;
@@ -768,9 +771,11 @@ export function advanceWorldShips(holding, targetQd, { shipId = null, transportO
         });
         continue;
       }
-      if (target <= voyage.lastProcessedQd) continue;
+      const zeroLocal = !voyage.quote.contract && voyage.quote.distanceKm === 0
+        && voyage.quote.from.regionId === voyage.quote.to.regionId;
+      if (target <= voyage.lastProcessedQd && !(zeroLocal && voyage.quote.durationQd === 0)) continue;
       const elapsedDelta = target - voyage.lastProcessedQd;
-      const durationQd = integer(voyage.durationQd ?? voyage.quote.durationQd, "длительность", 1, 100_100);
+      const durationQd = integer(voyage.durationQd ?? voyage.quote.durationQd, "длительность", zeroLocal ? 0 : 1, 100_100);
       const elapsedQd = Math.min(durationQd, integer(voyage.elapsedQd, "прогресс", 0, durationQd) + elapsedDelta);
       if (elapsedQd < durationQd) {
         voyage.elapsedQd = elapsedQd;
