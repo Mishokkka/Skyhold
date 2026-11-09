@@ -144,8 +144,7 @@ export function commitTendayCarrierDecision(data, projection, runId) {
   // The original booking can disappear after a lost feeder. Adopt that now-empty
   // prefix as well, otherwise its phantom reservation would block the next review.
   adoptProjectedTransportBookings({ state, holdings: data.holdings, projectedData: projection.data,
-    runId: row.sourceRunId, prefixClaims: row.sourceClaims, atQd: projection.commonTarget });
-  for (const id of row.prerequisiteRunIds) adoptProjectedTransportBookings({ state, holdings: data.holdings, projectedData: projection.data, runId: id });
+    runId: row.sourceRunId, runIds: row.prerequisiteRunIds, prefixClaims: row.sourceClaims, atQd: projection.commonTarget });
   for (const id of row.prerequisiteRunIds) {
     const forecast = projection.data.meta.transportV2.runs.find(run => run.id === id);
     const live = state.runs.find(run => run.id === id);

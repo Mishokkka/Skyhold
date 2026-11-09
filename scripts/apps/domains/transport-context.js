@@ -6,7 +6,7 @@ import { cargoValue, shipTransportFunding, transportLoad, transportMoney, transp
 import { stableDataHash } from "../../data/storage-commit.js";
 import { findHoldingRegion } from "../../engines/market/logistics.js";
 import { cargoShelfLife } from "../../engines/market/cargo-aging.js";
-import { buildShipWorldContext, worldShipTransportTerms } from "../../engines/ships/world-market.js";
+import { buildShipWorldContext, worldShipTransportOptions, worldShipRouteSearchBudget } from "../../engines/ships/world-market.js";
 import { worldShipTimelineQd, worldShipPortDebtCopper } from "../../engines/ships/world-voyage.js";
 import { shipCapacityLoadPoints } from "../../engines/ships/profiles.js";
 import { shipCrewReadiness } from "../../engines/ships/crew-readiness.js";
@@ -53,37 +53,49 @@ function ownServices(data, holding, ship, points, request, clockQd, world = buil
   const positionAtHome = !ship.location || ship.location.kind === "home";
   const position = positionAtHome ? home : ship.location.regionId;
   const services = [];
+  let limited = false;
+  const searchBudget = worldShipRouteSearchBudget();
   const calendar = transportSeasonalCalendar(holding, transportHoldingQd(data, holding));
   const snapshot = terms => terms?.seasonal ? { ...terms.seasonal, calendar } : null;
-  const quote = (from, to, loadPoints, maxAccess, fromHome = from === home) => worldShipTransportTerms(data, holding, ship,
-    from === home ? world.home.regionId : from, to === home ? world.home.regionId : to,
-    { context: world, loadPoints, maxAccess, fromHome, toHome: to === home });
+  const quote = (from, to, loadPoints, maxAccess, fromHome = from === home) => {
+    const result = worldShipTransportOptions(data, holding, ship,
+      from === home ? world.home.regionId : from, to === home ? world.home.regionId : to,
+      { context: world, loadPoints, maxAccess, fromHome, toHome: to === home, searchBudget, fastest: loadPoints === 0 });
+    limited ||= result.limited; return result.terms;
+  };
   const emptyQuotes = new Map();
   const emptyTerms = (from, to, fromHome = from === home) => {
     if (from === to && fromHome === (to === home)) return null;
     const key = JSON.stringify([from, to, fromHome]);
     if (!emptyQuotes.has(key)) {
       let terms = null;
-      try { terms = quote(from, to, 0, request.accessLimit, fromHome); }
+      try {
+        terms = quote(from, to, 0, request.accessLimit, fromHome)
+          .sort((a, b) => a.durationQd - b.durationQd || a.accessCost - b.accessCost || a.distanceKm - b.distanceKm)[0] ?? null;
+      }
       catch (_error) { /* Cache unavailable pairs too, only for this quote. */ }
       emptyQuotes.set(key, terms);
     }
     return emptyQuotes.get(key);
   };
-  for (const from of points) for (const to of points) {
-    if (from === to) continue;
+  const cargoFrom = request.direction === "outbound" ? home : points[1], cargoTo = request.direction === "outbound" ? points[1] : home;
+  const pairs = points.flatMap(from => points.filter(to => to !== from).map(to => [from, to]))
+    .sort((a, b) => Number(b[0] === cargoFrom && b[1] === cargoTo) - Number(a[0] === cargoFrom && a[1] === cargoTo));
+  for (const [from, to] of pairs) {
     try {
-      // Preserve shorter and lower-access paths: a later hired/owned leg can
-      // need the remaining access even when this pair alone fits the limit.
-      let maxAccess = request.cargoAccessLimit;
-      while (maxAccess >= 0) {
-        const terms = quote(from, to, capacityPoints, maxAccess);
+      // Keep physical seasonal alternatives and lower-access paths until the
+      // complete itinerary is evaluated at each actual departure date.
+      const alternatives = quote(from, to, capacityPoints, request.cargoAccessLimit)
+        .sort((a, b) => a.distanceKm - b.distanceKm || a.accessCost - b.accessCost);
+      for (const [index, terms] of alternatives.entries()) {
         // A local market remains a port even when this request uses the same
         // region ID as its warehouse endpoint. Position.kind survives requests.
         const atPickup = position === from && positionAtHome === (from === home);
         const approach = emptyTerms(position, from, positionAtHome), back = emptyTerms(to, from);
         const homeReturn = emptyTerms(to, home), abortReturn = emptyTerms(from, home);
-        const variant = maxAccess === request.cargoAccessLimit ? "" : `:access:${terms.accessCost}`;
+        const firstAtAccess = !alternatives.slice(0, index).some(row => row.accessCost === terms.accessCost);
+        const variant = index === 0 ? "" : firstAtAccess && terms.accessCost < alternatives[0].accessCost
+          ? `:access:${terms.accessCost}` : `:route:${stableDataHash({ path: terms.path, legs: terms.seasonal.legs })}`;
         services.push({ id: `owned:${ship.id}:${from}:${to}${variant}`, label: `${ship.name} · ${terms.distanceKm} км · УРС ${terms.accessCost}`,
           companyId: `owned:${ship.id}`, kind: "owned", shipId: ship.id,
           from, to, fromLabel: terms.from.label, toLabel: terms.to.label, capacity: capacityPoints * 1000, vehicles: 1,
@@ -110,11 +122,10 @@ function ownServices(data, holding, ship, points, request, clockQd, world = buil
           waitingMilliCopperPerQd: from === home && ship.homeUpkeepEnabled === false ? 0 : terms.operatingMilliCopperPerQd,
           storageIncluded: true, storageMilliCopperPerLoadQd: 0,
           accessCost: terms.accessCost, riskBps: transportRiskBps(terms.riskExposureQd, request.riskBps ?? 300) });
-        maxAccess = terms.accessCost - 1;
       }
     } catch (_error) { /* An unavailable pair is not a service; the selected complete chain is validated below. */ }
   }
-  return services;
+  return { services, limited };
 }
 
 export function prepareTransportContext({ data, holding, request = {}, isGM = false, allowIncomplete = false }) {
@@ -165,9 +176,10 @@ export function prepareTransportContext({ data, holding, request = {}, isGM = fa
   const startQd = transportHoldingQd(data, holding);
   if (startQd < Number(state?.clockQd ?? 0)) throw new Error("Дата поселения отстаёт от общей даты перевозок. Проведите недостающие периоды перед новым заказом.");
   if (ship) {
-    services.push(...ownServices(data, holding, ship, discovery.points, { ...request, riskBps: configuration.riskBps,
+    const own = ownServices(data, holding, ship, discovery.points, { ...request, riskBps: configuration.riskBps,
       accessLimit: logistics?.accessLevel ?? 0, cargoAccessLimit: (logistics?.accessLevel ?? 0) - difficulty,
-      homeEndpoint: endpoint }, startQd - clockOffsetQd, world));
+      homeEndpoint: endpoint }, startQd - clockOffsetQd, world);
+    services.push(...own.services); routeSearchLimited ||= own.limited;
   }
   services = services.filter((service) => isGM || service.visibility !== "gm");
   const search = findTransportPlans({ from, to, services, cargo, startQd, runs: state?.runs ?? [], priority: request.priority,

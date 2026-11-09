@@ -4,6 +4,7 @@ import { attentionLabel, contractGuidance, resolveContractOutcome } from "./cont
 import { resolveBundlePassages, bundleOrderAllowsBonus } from "./bundle-incidents.js";
 import { getShipProfile, shipCapacityLoadPoints } from "./profiles.js";
 import { bundleOperatingShares } from "./bundle-accounting.js";
+import { worldShipBundleLegAt } from "./bundle-leg.js";
 import { clientCargoOutcome, clientCargoLadenDelay, startClientCargo } from "./client-cargo.js";
 import { beginShipOuting, ensurePartialShipOuting, planShipOutingLeg, planShipOutingBundleRewards, recordShipOutingFunds, completeShipOutingLeg } from "./outing-report.js";
 
@@ -385,19 +386,24 @@ export function departWorldShipBundle(holding, ship, { operationId: suppliedOper
       && offer.contract.cargo.loadPoints > Number(ship.hiddenCapacityLoadPoints ?? 0))) {
     throw new Error("Кораблю не хватает вместимости для составного рейса.");
   }
-  const first = clone(plan.stops[0].legOffer);
+  const stops = clone(plan.stops);
+  const { offer: first, economics } = worldShipBundleLegAt(stops[0], clockQd);
   first.id = `${id}:leg:0`;
   const departure = departWorldShip(holding, ship, { operationId: id, offer: first, style, budgetCopper, clockQd });
   if (!departure.ok) return departure;
+  const costDifference = first.quote.operatingCopper - stops[0].legOffer.quote.operatingCopper;
+  const durationDifference = first.quote.durationQd - stops[0].legOffer.quote.durationQd;
+  stops[0].legOffer = first;
+  if (economics) stops[0].economics = economics;
   const orders = plan.offers.map((offer) => ({
     offerId: offer.id, offer: clone(offer), style,
     state: offer.contract.pickup ? "waiting-pickup" : "loaded",
     outcome: null, outcomeApplied: false, deliveredAtQd: null
   }));
   ship.orderBundle = {
-    id, orders, stops: clone(plan.stops), nextStopIndex: 0, status: "travelling",
-    totalDurationQd: plan.totalDurationQd, totalOperatingCopper: plan.totalOperatingCopper,
-    recommendedBudgetCopper: plan.recommendedBudgetCopper,
+    id, orders, stops, nextStopIndex: 0, status: "travelling",
+    totalDurationQd: plan.totalDurationQd + durationDifference, totalOperatingCopper: plan.totalOperatingCopper + costDifference,
+    recommendedBudgetCopper: plan.recommendedBudgetCopper + costDifference,
     returnReserveCopper: plan.returnReserveCopper, idleReserveCopper: plan.idleReserveCopper,
     delayUntilQd: null
   };
@@ -421,11 +427,16 @@ export function continueWorldShipBundle(holding, ship, { operationId: suppliedOp
   }
   const next = bundle.stops[bundle.nextStopIndex];
   if (!next) throw new Error("Все заказы составного рейса уже доставлены.");
-  const leg = clone(next.legOffer);
+  const { offer: leg, economics } = worldShipBundleLegAt(next, clock);
   leg.id = `${bundle.id}:leg:${bundle.nextStopIndex}`;
   if (!sameEndpoint(leg.from, ship.location)) throw new Error("Корабль находится не в запланированном порту.");
   const result = departWorldShip(holding, ship, { operationId: id, offer: leg, style: "normal", clockQd: clock, bundleId });
   if (result.ok) {
+    bundle.totalOperatingCopper += leg.quote.operatingCopper - next.legOffer.quote.operatingCopper;
+    bundle.totalDurationQd += leg.quote.durationQd - next.legOffer.quote.durationQd;
+    bundle.recommendedBudgetCopper += leg.quote.operatingCopper - next.legOffer.quote.operatingCopper;
+    next.legOffer = leg;
+    if (economics) next.economics = economics;
     bundle.status = "travelling";
     bundle.delayUntilQd = null;
   }

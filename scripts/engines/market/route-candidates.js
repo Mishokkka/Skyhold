@@ -1,5 +1,5 @@
 const MODE_BITS = { caravan: 1, rail: 2, airship: 4 };
-const MAX_SEARCH_LABELS = 20_000;
+export const MARKET_ROUTE_SEARCH_LABELS = 20_000;
 
 // An optimistic bound: physical links may be unavailable to a carrier, so
 // ignoring modes/services can only underestimate the access still required.
@@ -44,10 +44,12 @@ function billingCurveDominates(a, b) {
 // distance, mode, operating time, load and insurance, so a single shortest
 // path cannot stand in for the eventual quote of a real consignment.
 export function marketTransportRoutes({ graph, from, to, maxAccess, modesForEdge, termsForEdge, preserveFirstMode = false,
-  servicesForEdge = null, preservePhysicalRoutes = false } = {}) {
+  servicesForEdge = null, preservePhysicalRoutes = false, physicalRouteKey = null, dominatesRoute = null, searchBudget = null } = {}) {
   if (from === to) return { routes: [], limited: false };
+  if (searchBudget?.labels === 0) return { routes: [], limited: true };
+  if (searchBudget) searchBudget.labels--;
   const remainingAccess = remainingAccessByNode(graph, to);
-  const risks = servicesForEdge ? new Set() : new Set([...graph.values()].flatMap((edges) => edges.map((edge) => termsForEdge(edge, "caravan").risk)));
+  const risks = servicesForEdge || dominatesRoute ? new Set() : new Set([...graph.values()].flatMap((edges) => edges.map((edge) => termsForEdge(edge, "caravan").risk)));
   const uniformRisk = risks.size <= 1;
   const labels = new Map();
   const queue = [{ path: [from], edges: [], distanceKm: 0, accessCost: 0, mask: 0,
@@ -56,6 +58,7 @@ export function marketTransportRoutes({ graph, from, to, maxAccess, modesForEdge
   let generated = 1;
   const dominates = (a, b) => {
     if (!a.path.every((node) => b.path.includes(node))) return false;
+    if (dominatesRoute) return dominatesRoute(a, b);
     if (servicesForEdge) return a.time <= b.time + 1e-9 && a.accessCost <= b.accessCost && a.risk <= b.risk
       && a.valueCost <= b.valueCost + 1e-9
       && billingCurveDominates(a, b);
@@ -90,7 +93,7 @@ export function marketTransportRoutes({ graph, from, to, maxAccess, modesForEdge
             service.carrier.independent ? service.carrier.dispatchCountryId : "", next.capacity, next.distanceKm] : [];
           // Scheduled transport checks occupancy later. Equal static tariffs do
           // not make two physical roads or carrier sequences interchangeable.
-          const physicalKey = preservePhysicalRoutes ? next.edges.map(part => [part.from, part.to, part.routeId,
+          const physicalKey = physicalRouteKey ? physicalRouteKey(next) : preservePhysicalRoutes ? next.edges.map(part => [part.from, part.to, part.routeId,
             part.selectedMode, part.service?.carrier.id, part.service?.localAirship?.id]) : null;
           const key = JSON.stringify([edge.to, next.mask, preserveFirstMode ? next.edges[0].selectedMode : "", ...serviceKey, physicalKey]);
           const bucket = labels.get(key) ?? [];
@@ -98,8 +101,10 @@ export function marketTransportRoutes({ graph, from, to, maxAccess, modesForEdge
           for (const previous of bucket) if (dominates(next, previous)) previous.discarded = true;
           bucket.push(next);
           labels.set(key, bucket);
+          if (generated >= MARKET_ROUTE_SEARCH_LABELS || searchBudget?.labels === 0) return { routes: [], limited: true };
+          generated++;
+          if (searchBudget) searchBudget.labels--;
           queue.push(next);
-          if (++generated > MAX_SEARCH_LABELS) return { routes: [], limited: true };
         }
       }
     }

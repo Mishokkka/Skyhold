@@ -136,8 +136,7 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
       ...(holding.special?.market?.outbound?.orders ?? []).map((row) => ({ ...row, direction: "Продажа" }))]
       .filter((row) => ["delivered", "lost", "cancelled"].includes(row.status)).slice(-40).reverse().map((row) => ({
         direction: row.direction, status: statuses[row.status],
-        market: !permissions.isGM && (hiddenCountries.has(row.countryId) || hiddenRegions.has(row.originRegionId)
-          || hiddenRegions.has(row.destinationRegionId) || hiddenRegions.has(String(row.marketId ?? "").replace(/^market-location:/, ""))) ? "Скрытый рынок" : row.marketLabel,
+        market: visibility.marketLabel(row),
         cargo: (row.cargo ?? row.cargoReservations ?? []).map((lot) => `${lot.name || lot.resourceId || "Товар"} × ${lot.qty}`).join(" · ") }));
     return { ...base, hasHolding: true, holdingName: holding.name, isGM: permissions.isGM, canUse: permissions.canUseStorage,
       canConfirm: Boolean(quote?.affordable && permissions.canUseStorage && (!quote.ship || permissions.canManageShips) && !this._pending && !this._busy),

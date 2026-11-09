@@ -74,6 +74,16 @@ order.stages[0].to = localEndpoint;
 game.user = gm;
 assert.equal((await app._prepareContext({})).orders[0].market, order.commercial.marketLabel);
 assert.equal((await app._prepareContext({})).archive[0].market, "PRIVATE MARKET");
+// Replacing a catalogue cannot make an unknown archived market public.
+const savedCountries = data.catalog.marketEconomy.countries, savedRegions = data.catalog.eventRegions;
+data.catalog.marketEconomy.countries = [];
+data.catalog.eventRegions = [];
+game.user = player;
+assert.equal((await app._prepareContext({})).archive[0].market, "Скрытый рынок");
+game.user = gm;
+assert.equal((await app._prepareContext({})).archive[0].market, "PRIVATE MARKET");
+data.catalog.marketEconomy.countries = savedCountries;
+data.catalog.eventRegions = savedRegions;
 data.catalog.marketEconomy.countries[0].visibility = "public";
 const physical = data.meta.transportV2.runs[0];
 physical.incident = { status: "pending" };

@@ -21,7 +21,8 @@ function requestedPoints(request, services, points) {
       if (!id.startsWith(start)) continue;
       const tail = id.slice(start.length);
       for (const to of points) {
-        if (tail !== to && !(tail.startsWith(`${to}:access:`) && /^\d+$/.test(tail.slice(to.length + 8)))) continue;
+        const suffix = tail.slice(to.length);
+        if (tail !== to && !(tail.startsWith(to) && /^:(?:access:\d+|route:[a-z0-9]+)$/.test(suffix))) continue;
         result.add(from);
         result.add(to);
       }

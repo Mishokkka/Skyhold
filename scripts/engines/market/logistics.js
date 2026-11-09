@@ -221,6 +221,14 @@ export function shortestMarketRoute(fromId = "", toId = "", regions = [], { mode
   return null;
 }
 
+/** Bounded single-vessel alternatives; transit regions need no landing facility. */
+export function marketAirshipRoutes(from, to, regions, { maxAccess = Infinity, ...options } = {}) {
+  const byId = new Map(regions.map(region => [region.value, region]));
+  return marketTransportRoutes({ ...options, graph: routeGraph(regions), from, to, maxAccess,
+    modesForEdge: (node, edge) => edgeTransportModes(edge, byId.get(node), byId.get(edge.to),
+      { fromStop: node === from, toStop: edge.to === to }).includes("airship") ? ["airship"] : [] });
+}
+
 export function holdingMarketAccessLevel(holding = {}, { politicsMarketAccess = null } = {}) {
   const manual = holding?.gm?.modifiers?.marketConnectionsLevel;
   const legacy = holding?.special?.market?.accessLevelOverride;

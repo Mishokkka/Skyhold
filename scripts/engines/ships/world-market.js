@@ -4,7 +4,7 @@ import { normalizeEventRegionOptions } from "../../data/random-events.js";
 import { stableDataHash } from "../../data/storage-commit.js";
 import { isResidentRestingOnShip } from "../../data/resident-presence.js";
 import { composeMarketLocation, effectiveMarketLocations, marketLocationFactors } from "../market/composition.js";
-import { shortestMarketRoute } from "../market/logistics.js";
+import { shortestMarketRoute, marketAirshipRoutes } from "../market/logistics.js";
 import { getCalendariaSeasonSnapshot } from "../../integrations/calendaria-bridge.js";
 import { attentionLevel, attentionLabel, contractGuidance } from "./contracts.js";
 import { shipCrewComposition } from "./crew-readiness.js";
@@ -12,7 +12,8 @@ import { calculateShipCosts, getShipProfile, shipCapacityLoadPoints } from "./pr
 import { shipIdleReserveCopper } from "./fleet-accounting.js";
 import { bundleOutcomeReserves } from "./bundle-accounting.js";
 import { laborWageRate } from "../economy/labor-wage-rate.js";
-import { transportHandlingTerms } from "../transport/quantities.js";
+import { transportHandlingTerms, TRANSPORT_LIMITS } from "../transport/quantities.js";
+import { MARKET_ROUTE_SEARCH_LABELS } from "../market/route-candidates.js";
 import { localMarketDistanceKm, transportRationPrice, transportPortCapacity, transportPortHandlingQd, transportRiskBps, transportServiceCharge } from "../transport/economics.js";
 import { validateTransportConfiguration } from "../transport/services.js";
 import { customerTransportFare, ordinaryFreightBudget } from "./customer-fares.js";
@@ -179,9 +180,9 @@ export function configureWorldShipEconomy(data, holding, ship, options = {}) {
   return quote;
 }
 
-function routeTerms(context, ship, from, to, { maxAccess = Infinity, includeRisk = false,
+function routeTerms(context, ship, from, to, { maxAccess = Infinity, includeRisk = false, selectedRoute = null,
   startQd = Number(ship.timelineQd ?? context.seasonalCalendar?.anchorQd ?? 0), includeSeasonal = false } = {}) {
-  const found = shortestMarketRoute(from.regionId, to.regionId, context.regions, { mode: "airship", maxAccess });
+  const found = selectedRoute ?? shortestMarketRoute(from.regionId, to.regionId, context.regions, { mode: "airship", maxAccess });
   if (!found) throw new Error(`Нет воздушного маршрута: ${from.label} → ${to.label}.`);
   const route = { ...found };
   if (from.regionId === to.regionId && from.kind !== to.kind) {
@@ -262,19 +263,21 @@ function costsFor(context, holding, ship, from, to, route, cargo = null) {
   costs.handlingCopper = handling;
   costs.totalCopper = costs.operatingCopper = money(costs.foodCopper + costs.crewCopper + costs.upkeepCopper + handling + costs.taxCopper);
   const daily = calculateShipCosts(ship, { ...values, foodUnitCopper: rationPrice(context, portForPoint(context, to)), durationQd: 4, cargoValueCopper: 0, taxRate: 0 });
-  return { costs, dailyCopper: daily.totalCopper, foodUnitCopper };
+  return { costs, dailyCopper: daily.totalCopper, foodUnitCopper,
+    dailyCosts: { foodCopper: crew.crewCount * foodUnitCopper, crewCopper: crew.crewDailyCopper,
+      upkeepCopper: getShipProfile(ship.profileId).upkeepDailyCopper } };
 }
 
 /** Shared physical inputs for transport orders; customer rewards remain independent market offers. */
 export function worldShipTransportTerms(data, holding, ship, fromRegionId, toRegionId,
-  { context = null, loadPoints = 0, maxAccess = Infinity, fromHome = true, toHome = true, startQd = null } = {}) {
+  { context = null, loadPoints = 0, maxAccess = Infinity, fromHome = true, toHome = true, startQd = null, selectedRoute = null } = {}) {
   const world = context ?? buildShipWorldContext(data, holding);
   const findPort = (id, atHome) => id === world.home.regionId && atHome ? world.home : world.ports.find((port) => port.regionId === id);
   const from = findPort(fromRegionId, fromHome), to = findPort(toRegionId, toHome);
   if (!from || !to) throw new Error("Для погрузки и выгрузки своего судна нужны доступные порты.");
   const loadingQd = portHandlingQd(from, loadPoints);
   const departureQd = startQd ?? Number(ship.timelineQd ?? holding.gm?.calendaria?.lastQd ?? 0) + loadingQd;
-  const route = routeTerms(world, ship, from, to, { maxAccess, includeRisk: true, includeSeasonal: true, startQd: departureQd });
+  const route = routeTerms(world, ship, from, to, { maxAccess, includeRisk: true, includeSeasonal: true, startQd: departureQd, selectedRoute });
   const crew = crewEconomics(holding, ship);
   const dailyCopper = crew.crewDailyCopper + crew.crewCount * rationPrice(world, portForPoint(world, from))
     + getShipProfile(ship.profileId).upkeepDailyCopper;
@@ -286,6 +289,50 @@ export function worldShipTransportTerms(data, holding, ship, fromRegionId, toReg
       upkeepCopper: getShipProfile(ship.profileId).upkeepDailyCopper },
     ...transportHandlingTerms([from, to].filter(port => port.kind !== "home").map(port => portForPoint(world, port).locationProfile)),
     idleUpkeepCopperPerDay: costsFor(world, holding, ship, from, to, { durationQd: 4 }).dailyCopper };
+}
+
+/** One quote shares both exploration and extra-route budgets across all port pairs. */
+export function worldShipRouteSearchBudget() {
+  return { labels: MARKET_ROUTE_SEARCH_LABELS, routes: TRANSPORT_LIMITS.paths };
+}
+
+/** Preserve different seasonal paths until the complete cargo itinerary is priced. */
+export function worldShipTransportOptions(data, holding, ship, fromRegionId, toRegionId, options = {}) {
+  const world = options.context ?? buildShipWorldContext(data, holding);
+  const baseline = worldShipTransportTerms(data, holding, ship, fromRegionId, toRegionId, { ...options, context: world });
+  if (fromRegionId === toRegionId) return { terms: [baseline], limited: false };
+  const budget = options.searchBudget ?? worldShipRouteSearchBudget();
+  if (!budget.labels || !options.fastest && !budget.routes) return { terms: [baseline], limited: true };
+  const departureQd = options.startQd ?? Number(ship.timelineQd ?? holding.gm?.calendaria?.lastQd ?? 0) + baseline.loadingQd;
+  const economy = contextMarketSources.get(world)?.economy, factors = new Map();
+  const riskAt = id => {
+    if (!factors.has(id)) factors.set(id, marketLocationFactors(world.regions.find(region => region.value === id),
+      economy, world.regions, { normalizedEconomy: true }).risk);
+    return factors.get(id);
+  };
+  const profile = edge => ({ movementQd: edge.distanceKm * 4 / baseline.speedKmPerDay,
+    riskFactor: riskAt(edge.from) * riskAt(edge.to), seasonalModifiers: edge.seasonalModifiers });
+  const search = marketAirshipRoutes(fromRegionId, toRegionId, world.regions, { maxAccess: options.maxAccess, searchBudget: budget,
+    // With no season changes, time, access and accumulated exposure compose.
+    // A seasonal path must keep its exact ordered physical inputs: a later
+    // cargo departure can cross a different boundary than this initial quote.
+    physicalRouteKey: route => route.edges.some(edge => Object.values(edge.seasonalModifiers).some(row => row?.enabled))
+      ? route.edges.map(profile) : null,
+    dominatesRoute: (a, b) => a.time <= b.time + 1e-9 && a.accessCost <= b.accessCost && a.risk <= b.risk + 1e-9,
+    termsForEdge: (edge, _mode, _service, current) => {
+      const movement = transportSeasonalMovement({ ...baseline.seasonal, legs: [profile(edge)] }, departureQd + (current?.time ?? 0));
+      return { flat: 0, load: 0, operating: 0, time: movement.movementQd, risk: movement.riskExposureQd / edge.distanceKm };
+    } });
+  const maxTerms = options.fastest ? 1 : Math.min(TRANSPORT_LIMITS.paths, budget.routes + 1);
+  const limited = search.limited || !options.fastest && search.routes.length > maxTerms;
+  const selected = search.routes.sort((a, b) => a.time - b.time || a.accessCost - b.accessCost || a.distanceKm - b.distanceKm).slice(0, maxTerms);
+  const terms = selected.map(selectedRoute => worldShipTransportTerms(data, holding, ship, fromRegionId, toRegionId,
+    { ...options, context: world, selectedRoute }));
+  // The distance path remains a usable, explicitly incomplete fallback if the
+  // bounded physical search is exhausted; never present it as an optimum.
+  if (limited && !terms.some(term => JSON.stringify(term.seasonal) === JSON.stringify(baseline.seasonal))) terms.push(baseline);
+  budget.routes = Math.max(0, budget.routes - Math.max(0, terms.length - 1));
+  return { terms, limited };
 }
 
 function baseQuote(context, holding, ship, from, to, cargo, pickup = null) {
@@ -391,8 +438,8 @@ export function quoteWorldShipBundle(data, holding, ship, offers, { context = nu
     }
     const route = routeCache.get(key);
     if (!route) return null;
-    const { seasonal, ...terms } = route, movement = transportSeasonalMovement(seasonal, startQd);
-    return { ...terms, durationQd: movement.durationQd, riskExposureQd: movement.riskExposureQd, riskFactor: movement.riskFactor };
+    const movement = transportSeasonalMovement(route.seasonal, startQd);
+    return { ...route, durationQd: movement.durationQd, riskExposureQd: movement.riskExposureQd, riskFactor: movement.riskFactor };
   };
   const visit = (sequence, remaining, carried, load, hidden, previous, durationQd, distanceKm, loadedAt) => {
     if (!remaining.length) {
@@ -483,6 +530,8 @@ export function quoteWorldShipBundle(data, holding, ship, offers, { context = nu
       quote: {
         durationQd, distanceKm: route.distanceKm, speedKmPerDay: route.speedKmPerDay,
         operatingCopper: costs.totalCopper, preparationCopper: 0, rewardCopper: 0, costs,
+        seasonal: structuredClone({ ...route.seasonal, handlingQd, loadingQd: index === 0 ? initialHandlingQd : 0,
+          dailyCosts: base.dailyCosts, baseRiskBps: configuration.riskBps, illegalRisk }),
         idleUpkeepCopperPerDay: costsFor(world, holding, ship, port, port, { durationQd: 4 }).dailyCopper,
         idleReserveCopper: 0, returnReserveCopper: 0, recommendedBudgetCopper: costs.totalCopper
       }

@@ -54,16 +54,44 @@ function releaseRuns(state, order, fromStage = 0, keepIds = new Set(), throughSt
 /** Reserve a forecast event's real prerequisites before a GM freezes its outcome.
  * Only unstarted booking metadata is adopted; no receipt, warehouse, wallet or clock is copied.
  */
-export function adoptProjectedTransportBookings({ state, holdings, projectedData, runId, prefixClaims = [], atQd = 0 }) {
+export function adoptProjectedTransportBookings({ state, holdings, projectedData, runId, runIds = [], prefixClaims = [], atQd = 0 }) {
   const projectedRun = projectedData.meta.transportV2.runs.find(run => run.id === runId)
     ?? (prefixClaims.length ? { claims: [], arrivalQd: atQd } : null);
   if (!projectedRun) throw new Error("Не найден расчёт происшествия.");
-  const affected = [...(runFor(state, runId)?.claims ?? []), ...projectedRun.claims, ...prefixClaims];
+  const affected = [...new Set([runId, ...runIds])].flatMap(id => [
+    ...(runFor(state, id)?.claims ?? []), ...(runFor(projectedData.meta.transportV2, id)?.claims ?? [])
+  ]).concat(prefixClaims);
   const prefixes = new Map();
   for (const claim of affected) {
     const key = JSON.stringify([claim.holdingId, claim.orderId]);
     prefixes.set(key, Math.max(prefixes.get(key) ?? -1, claim.stage));
   }
+  // A moved booking can take a slot (or a finite vehicle's time) released by
+  // another forecast prefix. Adopt that dependency in the same release/reserve
+  // batch, including displaced future bookings, before freezing physical facts.
+  let expanded;
+  do {
+    expanded = false;
+    for (const [key, through] of prefixes) {
+      const [holdingId, orderId] = JSON.parse(key);
+      const forecast = transportOrders(projectedData.holdings.find(row => row.id === holdingId)).find(row => row.id === orderId);
+      for (const planned of forecast?.stages.slice(0, through + 1).flatMap(stage => stage.runs) ?? []) {
+        for (const live of state.runs) {
+          const sameVehicle = planned.kind !== "regular" && live.kind !== "regular"
+            && (planned.shipId ? planned.shipId === live.shipId : planned.serviceId === live.serviceId && planned.vehicle === live.vehicle);
+          if (live.id !== planned.id && !(sameVehicle && planned.startQd < live.releaseQd && live.startQd < planned.releaseQd)) continue;
+          const projected = runFor(projectedData.meta.transportV2, live.id);
+          for (const claim of live.claims) {
+            const remains = projected?.claims.find(row => row.holdingId === claim.holdingId && row.orderId === claim.orderId && row.stage === claim.stage);
+            if (remains?.load === claim.load && projected.startQd === live.startQd && projected.releaseQd === live.releaseQd) continue;
+            const dependency = JSON.stringify([claim.holdingId, claim.orderId]);
+            if ((prefixes.get(dependency) ?? -1) >= claim.stage) continue;
+            prefixes.set(dependency, claim.stage); expanded = true;
+          }
+        }
+      }
+    }
+  } while (expanded);
   const changes = [];
   const projectedIds = new Set(projectedData.meta.transportV2.runs.map(run => run.id));
   for (const [key, through] of prefixes) {
@@ -223,6 +251,28 @@ function unforwardedArrivals(state, stage, arrivals) {
   })));
 }
 
+/** Reserve ready cargo for earlier bookings before a later manifest becomes physical.
+ * An unresolved early booking can claim only cargo present at its loading date.
+ */
+function departureCargo(state, stage, arrivals, scheduled) {
+  let remaining = unforwardedArrivals(state, stage, arrivals);
+  const index = stage.runs.indexOf(scheduled), startQd = runFor(state, scheduled.id).startQd;
+  const earlier = pendingRuns(stage).filter(run => {
+    const start = runFor(state, run.id).startQd;
+    return start < startQd || start === startQd && stage.runs.indexOf(run) < index;
+  }).sort((a, b) => runFor(state, a.id).startQd - runFor(state, b.id).startQd);
+  for (const run of earlier) {
+    const atQd = runFor(state, run.id).startQd;
+    const available = new Map(availableTransportCargo(remaining, [], atQd, { age: false }).map(lot => [lot.lotId, lot.qty]));
+    const cargo = run.cargo.flatMap(lot => {
+      const qty = Math.min(lot.qty, available.get(lot.lotId) ?? 0);
+      return qty ? [{ ...lot, qty }] : [];
+    });
+    remaining = unreservedCargoArrivals(remaining, [{ startQd: atQd, cargo }]);
+  }
+  return availableTransportCargo(remaining, [], startQd);
+}
+
 function uncommittedArrivals(state, order, stage, arrivals) {
   const committed = committedRunIds(state, order, stage);
   return unreservedCargoArrivals(unforwardedArrivals(state, stage, arrivals),
@@ -379,7 +429,9 @@ export function resolveTransportIncident(state, runId, { outcome, delayQd = 0, l
 /** Pure world draft executor; dependencies handle storage placement and ship lifecycle. */
 export function advanceTransportOrders({ state, holding, targetQd, dependencies = {} }) {
   if (state?.version !== 2) return [];
-  transportInteger(targetQd, "дата исполнения");
+  // Common calendar coordinates before the fixed epoch are valid backfill dates.
+  // New bookings still require a date at or after the nonnegative common clock.
+  transportInteger(targetQd, "дата исполнения", -Number.MAX_SAFE_INTEGER);
   state.clockQd = Math.max(state.clockQd, targetQd);
   const report = [];
   const queue = [...transportOrders(holding)], waiting = new Map(), processed = new Set();
@@ -444,7 +496,7 @@ export function advanceTransportOrders({ state, holding, targetQd, dependencies 
             if (!attemptRebooking(order, targetQd, () => rebookStage(state, order, stage, planningArrivals, vehicle.readyQd, "vehicle-rebooked"), stage.index)) { waitingForVehicle = true; blockedBookings.add(stage.index); break; }
             replanned = true; break;
           }
-          const available = new Map(availableTransportCargo(unforwardedArrivals(state, stage, arrivals), [], physical.startQd)
+          const available = new Map(departureCargo(state, stage, arrivals, scheduled)
             .map(lot => [lot.lotId, lot]));
           if (scheduled.cargo.some(lot => (available.get(lot.lotId)?.qty ?? 0) < lot.qty)) {
             if (waitingManifest) { waitingForVehicle = true; continue; }
