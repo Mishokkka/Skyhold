@@ -12,6 +12,26 @@ export function remainingCargoArrivals(arrivals, used = []) {
   });
 }
 
+/** Keep dated, committed departures supplied without consuming earlier stock needed by other trips. */
+export function unreservedCargoArrivals(arrivals, reservations = []) {
+  const remaining = arrivals.map(row => ({ ...row, cargo: row.cargo.map(lot => ({ ...lot })) }))
+    .sort((a, b) => a.arrivalQd - b.arrivalQd);
+  for (const reservation of [...reservations].sort((a, b) => a.startQd - b.startQd)) for (const lot of reservation.cargo) {
+    let qty = lot.qty;
+    for (let index = remaining.length - 1; index >= 0 && qty; index--) {
+      const arrival = remaining[index];
+      if (arrival.arrivalQd > reservation.startQd) continue;
+      for (const available of arrival.cargo) {
+        if (available.lotId !== lot.lotId) continue;
+        const take = Math.min(qty, available.qty);
+        available.qty -= take; qty -= take;
+      }
+    }
+    if (qty) throw new Error("Не найден входящий груз подтверждённого рейса. Сначала обработайте его предыдущие участки.");
+  }
+  return remaining.map(row => ({ ...row, cargo: row.cargo.filter(lot => lot.qty > 0) })).filter(row => row.cargo.length);
+}
+
 export function ageTransportCargo(lot, atQd, fallbackQd) {
   return { ...lot, ageQd: (lot.ageQd ?? 0) + Math.max(0, atQd - (lot.ageAtQd ?? fallbackQd)), ageAtQd: atQd };
 }

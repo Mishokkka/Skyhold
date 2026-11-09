@@ -98,7 +98,8 @@ _checkPreparedTendayCalendar(prepared, data) {
 },
 
 async _prepareTendayOperation({ holdingId = "", qd = 40, rationUnitsPerResident = null, dataView = null, dependencyHash: suppliedDependencyHash = "",
-  operationId: suppliedOperationId = "", preparedAt: suppliedPreparedAt = "", pendingEventsCollected = false } = {}) {
+  operationId: suppliedOperationId = "", preparedAt: suppliedPreparedAt = "", pendingEventsCollected = false,
+  includeTransportProjection = false } = {}) {
   if (!game.user?.isGM) return { ok: false, message: "Провести десятник может только GM." };
   const periodQd = normalizeTendayQd(qd);
   const data = dataView ?? SkyholdData.view();
@@ -120,7 +121,7 @@ async _prepareTendayOperation({ holdingId = "", qd = 40, rationUnitsPerResident 
       return draft;
     }) } : data;
     const prepared = await prepareSequentialTendays(this, { holdingId: id, qd: periodQd, data: batchData, rationUnitsPerResident,
-      operationId: suppliedOperationId || makeId("tenday", 20), preparedAt: suppliedPreparedAt || new Date().toISOString() });
+      operationId: suppliedOperationId || makeId("tenday", 20), preparedAt: suppliedPreparedAt || new Date().toISOString(), includeTransportProjection });
     if (!prepared.ok) return prepared.transportReview ? { ...prepared, qd: periodQd,
       sourceHash: stableDataHash(source), dependencyHash: String(suppliedDependencyHash || this._tendayDependencyHash(data, id)),
       dataRevision: Math.max(0, Number(data.meta?.revision) || 0), calendariaGate,
@@ -162,7 +163,9 @@ async _prepareTendayOperation({ holdingId = "", qd = 40, rationUnitsPerResident 
     const { projectTendayTransport } = await import("../../../workflows/transport/tenday-review.js");
     const projection = projectTendayTransport(executionData, previewHolding, Number(source.gm?.calendaria?.lastQd ?? 0) + periodQd, this);
     if (projection) return { ok: false, blocked: true, transportReview: projection.rows, operationId,
+      ...(includeTransportProjection ? { transportProjection: projection } : {}),
       holdingId: id, holdingName: String(source.name || "Владение"), qd: periodQd, sourceHash, dependencyHash,
+      rationUnitsPerResident: selectedRationUnits,
       dataRevision: Math.max(0, Number(data.meta?.revision) || 0), calendariaGate,
       calendarAdvance: { dateTime: calendariaGate.targetDateTime, timestamp: calendariaGate.targetTimestamp },
       periodLabel: this._periodLabel(periodQd),

@@ -101,7 +101,18 @@ export function createTransportOperationExecutor({ transaction = (updater, optio
             if (!gate.ok) throw fail(gate.message, "conflict");
             const calendarStart = gate.startDateTime ? { snapshot: gate.snapshot, targetDateTime: gate.startDateTime,
               targetTimestamp: timestampForCalendariaDate(gate.startDateTime) } : null;
-            const projection = projectTendayTransport(data, holding, Number(holding.gm?.calendaria?.lastQd ?? 0) + op.reviewQd, engine, { calendarStart });
+            // A batch is previewed one tenday at a time. Reproduce that same blocked
+            // period, including its earlier draft economy, before accepting a decision.
+            let projection;
+            if (op.reviewQd > 40) {
+              const prepared = await engine._prepareTendayOperation({ holdingId: holding.id, qd: op.reviewQd, dataView: data,
+                rationUnitsPerResident: op.rationUnitsPerResident ?? null, pendingEventsCollected: true,
+                includeTransportProjection: true });
+              const currentGate = engine._checkPreparedTendayCalendar({ holdingId: holding.id, qd: op.reviewQd, calendariaGate: gate,
+                calendarAdvance: { dateTime: gate.targetDateTime, timestamp: gate.targetTimestamp } }, data);
+              if (!currentGate.ok) throw fail(currentGate.message, "conflict");
+              projection = prepared.transportProjection;
+            } else projection = projectTendayTransport(data, holding, Number(holding.gm?.calendaria?.lastQd ?? 0) + op.reviewQd, engine, { calendarStart });
             result.decision = op.resolution?.outcome === "carrier" ? commitTendayCarrierDecision(data, projection, op.runId)
               : commitTendayTransportDecision(data, projection, op.runId, op.resolution);
           } else resolveTransportIncident(data.meta.transportV2, op.runId, { ...op.resolution, atQd: data.meta.transportV2.clockQd });

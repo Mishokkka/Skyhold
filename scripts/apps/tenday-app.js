@@ -575,6 +575,7 @@ export class SkyholdTendayApp extends WindowFrameMixin(RenderSchedulerMixin(Hand
       const data = SkyholdData.view(), holding = data.holdings.find(entry => entry.id === this.holdingId);
       const op = { type: "transport-incident", operationId: makeId("transport", 20), holdingId: this.holdingId,
         expectedRevision: this.prepared.dataRevision, sourceToken: transportSourceToken(data, holding), reviewQd: this.prepared.qd,
+        rationUnitsPerResident: this.prepared.rationUnitsPerResident,
         runId: row.runId, resolution: { outcome: element.dataset.outcome, delayQd, lossBps } };
       this.constructor.transportSessions.set(this.holdingId, op);
       await this._submitTransportDecision();

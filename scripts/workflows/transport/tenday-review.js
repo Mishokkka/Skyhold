@@ -31,7 +31,9 @@ function carrierReviewRows(data, holding, commonTarget) {
   });
 }
 
-function carrierPrerequisites(data, row) {
+function carrierPrerequisites(data, row, { includeUnreadyInputs = false } = {}) {
+  // Incident discovery must include a delayed feeder beyond an obsolete booking.
+  // Confirmation still freezes only the actual dated physical prerequisites.
   const state = data.meta.transportV2, roots = state.runs.filter(run => run.id === row.sourceRunId);
   if (!roots.length) for (const claim of row.sourceClaims) {
     const order = orderFor(data, claim);
@@ -46,7 +48,7 @@ function carrierPrerequisites(data, row) {
     for (const claim of run.claims) for (const stage of orderFor(data, claim)?.stages.slice(0, claim.stage + 1) ?? []) {
       for (const planned of stage.runs) {
         const prior = state.runs.find(row => row.id === planned.id);
-        if (prior && (stage.index < claim.stage ? prior.arrivalQd <= run.startQd : prior.startQd < run.startQd)) required.set(prior.id, prior);
+        if (prior && (stage.index < claim.stage ? includeUnreadyInputs || prior.arrivalQd <= run.startQd : prior.startQd < run.startQd)) required.set(prior.id, prior);
       }
     }
     if (run.kind !== "regular") for (const prior of state.runs) {
@@ -85,7 +87,7 @@ export function projectTendayTransport(data, holding, targetQd, workflow, { cale
   let changed;
   do {
     const before = signature(), count = selected.size;
-    const needed = carrierRows.flatMap(row => carrierPrerequisites(draft, row));
+    const needed = carrierRows.flatMap(row => carrierPrerequisites(draft, row, { includeUnreadyInputs: true }));
     for (const run of needed) for (const claim of run.claims) selected.add(claim.holdingId);
     for (const id of selected) {
       const related = draft.holdings.find(row => row.id === id);
@@ -96,13 +98,13 @@ export function projectTendayTransport(data, holding, targetQd, workflow, { cale
         for (const run of transportVehicleDependencies(state, order, commonTarget)) for (const claim of run.claims) selected.add(claim.holdingId);
       }
     }
-    const requiredIds = new Set(carrierRows.flatMap(row => carrierPrerequisites(draft, row)).map(run => run.id));
+    const requiredIds = new Set(carrierRows.flatMap(row => carrierPrerequisites(draft, row, { includeUnreadyInputs: true })).map(run => run.id));
     for (const run of state.runs.filter(run => pending(run) && run.incident.atQd <= commonTarget && (owns(run) || requiredIds.has(run.id)))) {
       for (const claim of run.claims) if (!claim.manifestReady) selected.add(claim.holdingId);
     }
     changed = count !== selected.size || before !== signature();
   } while (changed);
-  const requiredIds = new Set(carrierRows.flatMap(row => carrierPrerequisites(draft, row)).map(run => run.id));
+  const requiredIds = new Set(carrierRows.flatMap(row => carrierPrerequisites(draft, row, { includeUnreadyInputs: true })).map(run => run.id));
   const incidents = state.runs.filter(run => pending(run) && run.incident.atQd <= commonTarget && (owns(run) || requiredIds.has(run.id)));
   for (const row of carrierRows) {
     const required = carrierPrerequisites(draft, row);

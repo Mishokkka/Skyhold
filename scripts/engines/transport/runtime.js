@@ -1,4 +1,4 @@
-import { remainingCargoArrivals, availableTransportCargo, allArrivalCargo, cargoQuantitiesMatch, ageTransportCargo as ageLot } from "./cargo-flow.js";
+import { unreservedCargoArrivals, availableTransportCargo, allArrivalCargo, cargoQuantitiesMatch, ageTransportCargo as ageLot } from "./cargo-flow.js";
 import { cargoValue, transportInteger, transportMoney, shipTransportFunding, TRANSPORT_LIMITS } from "./quantities.js";
 import { planTransportChain, validateTransportPlan, TransportPlanningUnavailableError } from "./planner.js";
 import { activeTransportOrder, transportOrders } from "../../data/transport/state.js";
@@ -7,6 +7,21 @@ import { deterministicUnit as deterministicMarketShipmentUnit } from "../../core
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const totalQty = (cargo) => cargo.reduce((sum, lot) => sum + lot.qty, 0);
 const runFor = (state, id) => state.runs.find((run) => run.id === id);
+
+function committedAllocation(run, claim) {
+  return claim?.manifestReady === true && Boolean(run.incident || run.riskChecked || ["travelling", "arrived"].includes(run.status));
+}
+
+/** Physical facts are immutable even while this holding has not recorded its local receipt. */
+function committedRunIds(state, order, stage) {
+  const ids = new Set(stage.receipts.map(receipt => receipt.runId));
+  for (const planned of stage.runs) {
+    const physical = runFor(state, planned.id);
+    const claim = physical?.claims.find(claim => claim.holdingId === order.holdingId && claim.orderId === order.id && claim.stage === stage.index);
+    if (physical && committedAllocation(physical, claim)) ids.add(planned.id);
+  }
+  return ids;
+}
 
 function reserveRuns(state, order, stages) {
   for (const stage of stages) for (const planned of stage.runs) {
@@ -29,6 +44,7 @@ function releaseRuns(state, order, fromStage = 0, keepIds = new Set(), throughSt
   for (const run of state.runs) {
     if (keepIds.has(run.id)) continue;
     const removed = run.claims.filter((claim) => claim.orderId === order.id && claim.holdingId === order.holdingId && claim.stage >= fromStage && claim.stage <= throughStage);
+    if (removed.some(claim => committedAllocation(run, claim))) throw new Error("Нельзя снять груз с подтверждённого физического рейса.");
     run.reservedLoad -= removed.reduce((sum, claim) => sum + claim.load, 0);
     run.claims = run.claims.filter((claim) => !removed.includes(claim));
   }
@@ -57,10 +73,11 @@ export function adoptProjectedTransportBookings({ state, holdings, projectedData
     if (!order || !forecast) throw new Error("Связанный заказ перевозки изменился.");
     for (const stage of order.stages.slice(0, through + 1)) {
       const forecastStage = forecast.stages[stage.index];
+      const started = committedRunIds(state, order, stage);
       const planned = { ...forecastStage, runs: forecastStage.runs.filter(run => projectedIds.has(run.id)
-        || forecastStage.receipts.some(receipt => receipt.runId === run.id)) };
+        || forecastStage.receipts.some(receipt => receipt.runId === run.id))
+        .map(run => started.has(run.id) ? stage.runs.find(original => original.id === run.id) : run) };
       if (JSON.stringify(stage.runs) === JSON.stringify(planned.runs)) continue;
-      const started = new Set(stage.receipts.map(receipt => receipt.runId));
       if ([...started].some(id => !planned.runs.some(run => run.id === id))) throw new Error("Расчёт изменил уже отправленную часть груза.");
       changes.push({ order, stage, planned, started, through });
     }
@@ -69,7 +86,7 @@ export function adoptProjectedTransportBookings({ state, holdings, projectedData
   for (const { order, stage, through } of changes) if (stage.service.kind === "owned") {
     for (const next of order.stages.slice(stage.index + 1)) {
       if (next.service.kind !== "owned") break;
-      if (next.index > through) releaseRuns(state, order, next.index, new Set(next.receipts.map(receipt => receipt.runId)), next.index);
+      if (next.index > through) releaseRuns(state, order, next.index, committedRunIds(state, order, next), next.index);
     }
   }
   for (const { order, stage, planned, started } of changes) {
@@ -179,29 +196,55 @@ function spend(order, amount) {
   order.money.spentCopper += amount;
 }
 
-function incomingCargo(state, order, stage, targetQd) {
+function incomingCargo(state, order, stage, targetQd, { includeUnreadyInputs = false } = {}) {
   if (!stage.index) return [{ arrivalQd: order.plan.startQd, cargo: order.cargo }];
   const prior = order.stages[stage.index - 1];
   return prior.runs.flatMap(planned => {
     const receipt = prior.receipts.find(row => row.runId === planned.id), physical = runFor(state, planned.id);
     if (receipt?.status === "arrived") return [{ arrivalQd: receipt.arrivalQd,
       cargo: prior.received.filter(lot => lot.deliveryRunId === planned.id) }];
-    if (!physical || physical.incident?.status === "pending"
-      || (!receipt && physical.departureQd <= targetQd)) return [];
+    if (!physical) return includeUnreadyInputs ? [{ arrivalQd: planned.arrivalQd, cargo: planned.cargo }] : [];
+    if (physical.incident?.status === "pending" && physical.incident.atQd <= targetQd
+      || (!receipt && physical.departureQd <= targetQd)) {
+      if (!includeUnreadyInputs) return [];
+      return [{ arrivalQd: physical.arrivalQd, cargo: receipt?.cargo ?? planned.cargo }];
+    }
     return [{ arrivalQd: physical.arrivalQd, cargo: receipt?.cargo ?? planned.cargo }];
   });
 }
 
-const departedCargo = stage => stage.receipts.flatMap(receipt => receipt.cargo);
 const pendingRuns = stage => stage.runs.filter(run => !stage.receipts.some(receipt => receipt.runId === run.id));
 
-function stageNeedsRebooking(state, stage, arrivals) {
-  const used = departedCargo(stage), pending = pendingRuns(stage);
-  if (stage.needsRebooking || !cargoQuantitiesMatch(allArrivalCargo(arrivals, used), pending.flatMap(run => run.cargo))) return true;
-  const assigned = [...used];
+/** Late trips can be recorded first; they must not consume stock needed by earlier departures. */
+function unforwardedArrivals(state, stage, arrivals) {
+  return unreservedCargoArrivals(arrivals, stage.receipts.map(receipt => ({
+    startQd: (runFor(state, receipt.runId) ?? stage.runs.find(run => run.id === receipt.runId)).startQd,
+    cargo: receipt.cargo
+  })));
+}
+
+function uncommittedArrivals(state, order, stage, arrivals) {
+  const committed = committedRunIds(state, order, stage);
+  return unreservedCargoArrivals(unforwardedArrivals(state, stage, arrivals),
+    pendingRuns(stage).filter(run => committed.has(run.id)).map(run => ({ startQd: runFor(state, run.id).startQd, cargo: run.cargo })));
+}
+
+function unknownIncoming(state, prior, targetQd) {
+  return prior?.runs.some(planned => {
+    const receipt = prior.receipts.find(receipt => receipt.runId === planned.id), physical = runFor(state, planned.id);
+    return receipt?.status !== "arrived" && (!physical || physical.incident?.status === "pending" && physical.incident.atQd <= targetQd
+      || !receipt && physical.departureQd <= targetQd);
+  });
+}
+
+function stageNeedsRebooking(state, order, stage, arrivals) {
+  const committed = committedRunIds(state, order, stage), pending = pendingRuns(stage).filter(run => !committed.has(run.id));
+  const remaining = uncommittedArrivals(state, order, stage, arrivals);
+  if (stage.needsRebooking || !cargoQuantitiesMatch(allArrivalCargo(remaining), pending.flatMap(run => run.cargo))) return true;
+  const assigned = [];
   for (const planned of [...pending].sort((a, b) => a.startQd - b.startQd)) {
     const atQd = runFor(state, planned.id)?.startQd ?? planned.startQd;
-    const available = new Map(availableTransportCargo(arrivals, assigned, atQd).map(lot => [lot.lotId, lot.qty]));
+    const available = new Map(availableTransportCargo(remaining, assigned, atQd).map(lot => [lot.lotId, lot.qty]));
     if (planned.cargo.some(lot => (available.get(lot.lotId) ?? 0) < lot.qty)) return true;
     assigned.push(...planned.cargo);
   }
@@ -210,8 +253,8 @@ function stageNeedsRebooking(state, stage, arrivals) {
 
 /** Rebook only unstarted allocations of this stage; other physical receipts remain immutable. */
 function rebookStage(state, order, stage, arrivals, minimumQd = 0, kind = "rebooked") {
-  const started = new Set(stage.receipts.map(receipt => receipt.runId));
-  const remaining = remainingCargoArrivals(arrivals, departedCargo(stage));
+  const started = committedRunIds(state, order, stage);
+  const remaining = uncommittedArrivals(state, order, stage, arrivals);
   const draft = { ...state, runs: clone(state.runs) };
   releaseRuns(draft, order, stage.index, started, stage.index);
   if (stage.service.kind === "owned") {
@@ -219,7 +262,7 @@ function rebookStage(state, order, stage, arrivals, minimumQd = 0, kind = "reboo
     // needed to finish its delayed feeder shuttles.
     for (const next of order.stages.slice(stage.index + 1)) {
       if (next.service.kind !== "owned") break;
-      releaseRuns(draft, order, next.index, new Set(next.receipts.map(receipt => receipt.runId)), next.index);
+      releaseRuns(draft, order, next.index, committedRunIds(state, order, next), next.index);
     }
   }
   const service = { ...stage.service, approachQd: 0, approachCopper: 0,
@@ -331,20 +374,23 @@ export function advanceTransportOrders({ state, holding, targetQd, dependencies 
         continue;
       }
       const arrivals = incomingCargo(state, order, stage, targetQd);
-      // Shared incidents need their complete claimant manifests. An owned vessel must also
-      // retain its pickup-return promises until the feeder's remaining cargo is known.
+      // Replan against both known cargo and tentative feeder promises, but dispatch
+      // only actual arrivals. Unknown stock cannot erase the remainder or hold ready cargo.
       const upstreamBookingBlocked = blockedBookings.has(index - 1);
       if (upstreamBookingBlocked) blockedBookings.add(index);
-      const waitingManifest = upstreamBookingBlocked || stage.service.kind === "owned" && prior && prior.status !== "arrived"
+      const waitingRebooking = upstreamBookingBlocked || stage.service.kind === "owned" && prior && prior.status !== "arrived"
         || prior?.runs.some(run => runFor(state, run.id)?.incident?.status === "pending")
         && pendingRuns(stage).some(run => runFor(state, run.id)?.incident?.status === "pending");
+      const unknownManifest = unknownIncoming(state, prior, targetQd);
+      const waitingManifest = waitingRebooking || unknownManifest;
+      const planningArrivals = unknownManifest ? incomingCargo(state, order, stage, targetQd, { includeUnreadyInputs: true }) : arrivals;
       if (prior?.status === "arrived" && !allArrivalCargo(arrivals).length && !stage.receipts.length) {
         order.abortedFromStage ??= stage.index;
         releaseRuns(state, order, stage.index);
         break;
       }
-      if (!waitingManifest && stageNeedsRebooking(state, stage, arrivals)
-        && !attemptRebooking(order, targetQd, () => rebookStage(state, order, stage, arrivals), stage.index)) {
+      if (!waitingRebooking && stageNeedsRebooking(state, order, stage, planningArrivals)
+        && !attemptRebooking(order, targetQd, () => rebookStage(state, order, stage, planningArrivals), stage.index)) {
         waitingForVehicle = true;
         blockedBookings.add(stage.index);
         continue;
@@ -355,36 +401,38 @@ export function advanceTransportOrders({ state, holding, targetQd, dependencies 
         const physical = runFor(state, scheduled.id);
         if (!physical) throw new Error("Отсутствует забронированный рейс.");
         if (!receipt && physical.departureQd <= targetQd) {
+          const claim = physical.claims.find(row => row.holdingId === order.holdingId && row.orderId === order.id && row.stage === stage.index);
+          const committed = committedAllocation(physical, claim);
           const vehicle = waitForVehicle(state, physical);
-          if (vehicle.pending) {
+          if (!committed && vehicle.pending) {
             waitingForVehicle = true;
             const runs = waiting.get(order) ?? new Set();
             runs.add(physical.id); waiting.set(order, runs);
             continue;
           }
-          if (vehicle.readyQd > physical.startQd) {
-            if (waitingManifest) { waitingForVehicle = true; continue; }
-            if (!attemptRebooking(order, targetQd, () => rebookStage(state, order, stage, arrivals, vehicle.readyQd, "vehicle-rebooked"), stage.index)) { waitingForVehicle = true; blockedBookings.add(stage.index); break; }
+          if (!committed && vehicle.readyQd > physical.startQd) {
+            if (waitingRebooking) { waitingForVehicle = true; continue; }
+            if (!attemptRebooking(order, targetQd, () => rebookStage(state, order, stage, planningArrivals, vehicle.readyQd, "vehicle-rebooked"), stage.index)) { waitingForVehicle = true; blockedBookings.add(stage.index); break; }
             replanned = true; break;
           }
-          const available = new Map(availableTransportCargo(arrivals, departedCargo(stage), physical.startQd)
+          const available = new Map(availableTransportCargo(unforwardedArrivals(state, stage, arrivals), [], physical.startQd)
             .map(lot => [lot.lotId, lot]));
           if (scheduled.cargo.some(lot => (available.get(lot.lotId)?.qty ?? 0) < lot.qty)) {
             if (waitingManifest) { waitingForVehicle = true; continue; }
+            if (committed) throw new Error("В учёте не хватает груза подтверждённого рейса. Проверьте предыдущие участки перевозки.");
             if (!attemptRebooking(order, targetQd, () => rebookStage(state, order, stage, arrivals), stage.index)) { waitingForVehicle = true; blockedBookings.add(stage.index); break; }
             replanned = true; break;
           }
           const cargo = scheduled.cargo.map(lot => ageLot({ ...available.get(lot.lotId), qty: lot.qty }, physical.departureQd, order.plan.startQd));
           if (stage.index === 0 && order.direction === "outbound") dependencies.dispatchCargo?.(order, cargo, physical.departureQd);
-          const claim = physical.claims.find(row => row.holdingId === order.holdingId && row.orderId === order.id && row.stage === stage.index);
           if (claim) claim.manifestReady = true;
-          if (claim && !physical.incident?.lossAllocations) claim.cargo = cargo.map(lot => ({ lotId: lot.lotId, qty: lot.qty,
+          if (claim && !committed) claim.cargo = cargo.map(lot => ({ lotId: lot.lotId, qty: lot.qty,
             ageQd: lot.ageQd, ageAtQd: lot.ageAtQd, shelfLifeQd: lot.shelfLifeQd ?? 0, spoiledQty: lot.spoiledQty ?? 0 }));
           if (!stage.receipts.length) spend(order, stage.totalCopper + (stage.index === 0 ? order.plan.approachCopper : 0));
           if (stage.index === 0) for (const lot of cargo) order.dispatched[lot.lotId] = (order.dispatched[lot.lotId] ?? 0) + lot.qty;
           receipt = { runId: scheduled.id, cargo, departureQd: physical.departureQd, status: "travelling" };
           stage.receipts.push(receipt);
-          physical.status = "travelling";
+          if (physical.status !== "arrived") physical.status = "travelling";
           order.status = "travelling";
           order.history.push({ kind: "departed", runId: physical.id, qd: physical.departureQd });
         }
@@ -423,7 +471,7 @@ export function advanceTransportOrders({ state, holding, targetQd, dependencies 
       const upstreamComplete = !prior || prior.status === "arrived";
       if (upstreamComplete && stage.receipts.length === stage.runs.length
         && stage.receipts.every(receipt => receipt.status === "arrived")
-        && !allArrivalCargo(arrivals, departedCargo(stage)).length) stage.status = "arrived";
+        && !allArrivalCargo(unforwardedArrivals(state, stage, arrivals)).length) stage.status = "arrived";
     }
     const unfinished = order.stages.findIndex(stage => stage.status !== "arrived");
     order.stageIndex = order.abortedFromStage != null || unfinished < 0 ? order.stages.length : unfinished;

@@ -23,7 +23,8 @@ function setup() {
     _isPreparedTendayCurrent: prepared => prepared.dataRevision === f.data.meta.revision,
     async _prepareTendayOperation() {
       calculations++;
-      return { ok: decided, holdingId: f.holding.id, holdingName: f.holding.name, qd: 40, dependencyHash: "source", dataRevision: f.data.meta.revision,
+      return { ok: decided, holdingId: f.holding.id, holdingName: f.holding.name, qd: 40, rationUnitsPerResident: 15,
+        dependencyHash: "source", dataRevision: f.data.meta.revision,
         ...(decided ? { operationId: "ready", report: {}, changeSet: {} } : { transportReview: [{ runId: "run", name: "Shared run", from: "A", to: "B",
           localQd: 4, canResolve: true, canLose: true, blockers: [] }], message: "Review" }) };
     }
@@ -49,6 +50,7 @@ function setup() {
   };
   await app._onTransportDecision(event, { dataset: { run: "run", outcome: "delay" }, closest: () => card });
   assert.equal(sent, 1); assert.equal(operation.reviewQd, 40); assert.equal(operation.resolution.delayQd, 6);
+  assert.equal(operation.rationUnitsPerResident, 15, "review authority receives the ration chosen for this sequential preparation");
   assert.equal(operation.resolution.lossBps, 1250);
   const pending = await app._prepareContext({});
   assert.equal(pending.hasTransportRetry, true); assert.equal(pending.canApply, false); assert.equal(pending.transportReview[0].canResolve, false);

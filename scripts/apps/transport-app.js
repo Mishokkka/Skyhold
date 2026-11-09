@@ -78,6 +78,7 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
       if (!order.ownShipId || order.shipArrived || order.status === "cancelled") return "";
       const last = order.stages.filter((stage) => stage.service.kind === "owned").flatMap((stage) => stage.runs).at(-1);
       const physical = data.meta.transportV2.runs.find((run) => run.id === last?.id) ?? last;
+      if (!physical && !order.shipAbort) return "Грузовых ходок нет. Возврат корабля будет рассчитан при проведении поселения.";
       const destination = order.shipAbort?.location ?? physical.releaseLocation;
       const label = pointLabel(destination);
       return `Ожидаемое освобождение через ${days((order.shipAbort?.releaseQd ?? physical.releaseQd) - clockQd)}: ${label}; при происшествии срок уточняется`;
