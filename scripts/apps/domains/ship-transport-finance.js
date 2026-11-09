@@ -1,5 +1,6 @@
 import { activeTransportOrder, transportOrders } from "../../data/transport/state.js";
 import { transportLocalQd } from "../../data/transport/clock.js";
+import { createMarketVisibility } from "../../data/market/visibility.js";
 
 const amount = value => Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : 0;
 const validAmount = value => Number.isSafeInteger(value) && value >= 0;
@@ -16,10 +17,8 @@ function outstandingRevenue(order) {
 
 /** Add only the accepted transport operations belonging to this outing; never write a ledger. */
 export function prepareShipTransportFinance(holding, ship, outingReport, { data = null, isGM = true } = {}) {
-  const hiddenCountries = new Set((data?.catalog?.marketEconomy?.countries ?? []).filter(row => row.visibility === "gm").map(row => row.id));
-  const hiddenRegions = new Set((data?.catalog?.eventRegions ?? []).filter(row => hiddenCountries.has(row.countryId)).map(row => row.value));
-  const labelFor = order => !isGM && hiddenRegions.has(order.commercial?.marketRegionId)
-    ? "Скрытый рынок" : order.commercial?.marketLabel || "Внешний рынок";
+  const visibility = createMarketVisibility(data, { isGM });
+  const labelFor = order => visibility.marketLabel(order.commercial);
   const accepted = transportOrders(holding).filter(order => order.ownShipId === ship.id && order.shipStarted && order.status !== "cancelled");
   const pendingPayments = accepted.filter(order => order.direction === "outbound" && activeTransportOrder(order))
     .map(order => ({ label: `Продажа: ${labelFor(order)}`,

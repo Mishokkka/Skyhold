@@ -1,4 +1,5 @@
 import { transportOperatingCharge, transportWaitingCharge } from "./quantities.js";
+import { transportEmptyQd } from "./seasonal.js";
 
 export function ownedTransportActualCosts(order, state) {
   const owned = order.stages.filter((stage) => stage.service.kind === "owned");
@@ -42,7 +43,7 @@ export function prepareOwnedTransportAbort(order, state) {
   const returnBlocked = Boolean(first.service.returnAtEnd && (service[`${returnKind}Available`] === false
     || (service[`${returnKind}AccessCost`] ?? 0) > (service.emptyAccessLimit ?? Infinity)));
   const returnHome = first.service.returnAtEnd && !returnBlocked;
-  const returnQd = returnHome ? service[returnKind + "Qd"] ?? 0 : 0;
+  const returnQd = returnHome ? transportEmptyQd(service, returnKind, freeQd) : 0;
   order.shipAbort = { decidedQd, releaseQd: freeQd + returnQd, returnBlocked,
     location: returnHome ? service.endReturnLocation : completed?.run.releaseLocation ?? first.from,
     idleUpkeepCopperPerDay: atPickup ? service.startIdleUpkeepCopperPerDay ?? service.idleUpkeepCopperPerDay : service.idleUpkeepCopperPerDay,

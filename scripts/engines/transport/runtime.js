@@ -1,5 +1,5 @@
 import { unreservedCargoArrivals, availableTransportCargo, allArrivalCargo, cargoQuantitiesMatch, ageTransportCargo as ageLot } from "./cargo-flow.js";
-import { cargoValue, transportInteger, transportMoney, shipTransportFunding, TRANSPORT_LIMITS } from "./quantities.js";
+import { cargoLoad, cargoValue, transportInteger, transportMoney, shipTransportFunding, TRANSPORT_LIMITS } from "./quantities.js";
 import { planTransportChain, validateTransportPlan, TransportPlanningUnavailableError } from "./planner.js";
 import { activeTransportOrder, transportOrders } from "../../data/transport/state.js";
 import { deterministicUnit as deterministicMarketShipmentUnit } from "../../core/seeded-unit.js";
@@ -251,12 +251,41 @@ function stageNeedsRebooking(state, order, stage, arrivals) {
   return false;
 }
 
+/** A shared departure can have physical facts before this claimant's manifest is ready.
+ * Keep its catchable allocation; consider earlier bookings first so a later trip cannot hold early cargo.
+ */
+function retainSharedAllocations(state, order, stage, arrivals) {
+  const retained = [];
+  if (stage.service.kind !== "regular") return { retained, remaining: arrivals };
+  let unassigned = arrivals, remaining = arrivals;
+  for (const planned of [...pendingRuns(stage)].sort((a, b) => a.startQd - b.startQd)) {
+    const physical = runFor(state, planned.id);
+    const claim = physical?.claims.find(row => row.holdingId === order.holdingId && row.orderId === order.id && row.stage === stage.index);
+    if (!claim || committedAllocation(physical, claim)) continue;
+    const available = new Map(availableTransportCargo(unassigned, [], physical.startQd, { age: false }).map(lot => [lot.lotId, lot.qty]));
+    const booked = new Map(claim.cargo.map(lot => [lot.lotId, lot.qty]));
+    const cargo = planned.cargo.flatMap(lot => {
+      const qty = Math.min(lot.qty, available.get(lot.lotId) ?? 0, booked.get(lot.lotId) ?? 0);
+      return qty > 0 ? [{ ...lot, qty }] : [];
+    });
+    if (!cargo.length) continue;
+    const reservation = [{ startQd: physical.startQd, cargo }];
+    unassigned = unreservedCargoArrivals(unassigned, reservation);
+    if (!physical.incident && !physical.riskChecked && !["travelling", "arrived"].includes(physical.status)) continue;
+    retained.push({ ...planned, cargo, reservedLoad: cargoLoad(cargo) });
+    remaining = unreservedCargoArrivals(remaining, reservation);
+  }
+  return { retained, remaining };
+}
+
 /** Rebook only unstarted allocations of this stage; other physical receipts remain immutable. */
 function rebookStage(state, order, stage, arrivals, minimumQd = 0, kind = "rebooked") {
   const started = committedRunIds(state, order, stage);
-  const remaining = uncommittedArrivals(state, order, stage, arrivals);
+  const shared = retainSharedAllocations(state, order, stage, uncommittedArrivals(state, order, stage, arrivals));
+  const remaining = shared.remaining;
   const draft = { ...state, runs: clone(state.runs) };
   releaseRuns(draft, order, stage.index, started, stage.index);
+  reserveRuns(draft, order, [{ ...stage, runs: shared.retained }]);
   if (stage.service.kind === "owned") {
     // Downstream reservations of this same vessel must not occupy the time
     // needed to finish its delayed feeder shuttles.
@@ -265,14 +294,14 @@ function rebookStage(state, order, stage, arrivals, minimumQd = 0, kind = "reboo
       releaseRuns(draft, order, next.index, committedRunIds(state, order, next), next.index);
     }
   }
-  const service = { ...stage.service, approachQd: 0, approachCopper: 0,
+  const service = { ...stage.service, approachQd: 0, approachCopper: 0, approachSeasonal: null,
     approachAvailable: true, approachAccessCost: 0,
     returnAtEnd: stage.service.returnAtEnd && order.stages[stage.index + 1]?.service.kind !== "owned" };
   const originalStart = Math.min(...order.plan.stages[stage.index].runs.map(run => run.startQd));
   const startQd = Math.max(order.lastProcessedQd, minimumQd, originalStart);
   const replanned = remaining.length ? planTransportChain({ cargo: allArrivalCargo(remaining),
     cargoArrivals: remaining, services: [service], startQd, runs: draft.runs }).stages[0].runs : [];
-  const retained = stage.runs.filter(run => started.has(run.id));
+  const retained = [...stage.runs.filter(run => started.has(run.id)), ...shared.retained];
   if (order.stages.reduce((sum, row) => sum + (row === stage ? retained.length + replanned.length : row.runs.length), 0) > TRANSPORT_LIMITS.runs) {
     throw new TransportPlanningUnavailableError("run-limit", "Слишком много отправлений оставшегося груза.");
   }

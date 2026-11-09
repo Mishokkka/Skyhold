@@ -71,12 +71,12 @@ export function referenceTransportCosts(mode, capacityLoad, foodUnitCopper = 9) 
 }
 
 /** Full round trip, with paid load on both directions; handling fees are passed through separately. */
-export function regularTransportRate({ capacityLoad, travelQd, loadingQd, unloadingQd, dailyCosts, returnDailyCosts = dailyCosts,
+export function regularTransportRate({ capacityLoad, travelQd, returnTravelQd = travelQd, loadingQd, unloadingQd, dailyCosts, returnDailyCosts = dailyCosts,
   fixedCopper = 0, loadMilliCopper = 0, commercialLoadBps = TRANSPORT_ECONOMICS.commercialLoadBps }) {
   transportInteger(commercialLoadBps, "коммерческая загрузка", 1, 10000);
   const occupied = travelQd + loadingQd + unloadingQd;
   const cycleCopper = transportMoney([transportPeriodCosts(occupied, dailyCosts).totalCopper,
-    transportPeriodCosts(occupied, returnDailyCosts).totalCopper, fixedCopper * 2]);
+    transportPeriodCosts(returnTravelQd + loadingQd + unloadingQd, returnDailyCosts).totalCopper, fixedCopper * 2]);
   return Math.ceil(cycleCopper * 1000 / (2 * capacityLoad * commercialLoadBps / 10000)) + loadMilliCopper;
 }
 

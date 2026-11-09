@@ -14,6 +14,7 @@ import { RenderSchedulerMixin } from "./common/render-scheduler.js";
 import { restoreApplicationFocus } from "./common/window-focus-keeper.js";
 import { requestSkyholdAppRender } from "./registry.js";
 import { transportHistoryPage, transportRefinements } from "./domains/transport-view.js";
+import { createMarketVisibility } from "../data/market/visibility.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const days = (qd) => `${Math.max(0, qd) / 4} дн.`;
@@ -68,6 +69,7 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
     const hiddenCountries = new Set((data.catalog?.marketEconomy?.countries ?? []).filter((row) => row.visibility === "gm").map((row) => row.id));
     const hiddenRegions = new Set((data.catalog?.eventRegions ?? []).filter((row) => hiddenCountries.has(row.countryId)).map((row) => row.value));
     const hiddenCompanies = new Set((data.catalog?.marketEconomy?.organizations ?? []).filter((row) => row.visibility === "gm").map((row) => row.id));
+    const visibility = createMarketVisibility(data, { isGM: permissions.isGM });
     const regionId = id => String(id).replace(/:holding$/, "");
     const pointLabel = id => !permissions.isGM && hiddenRegions.has(regionId(id)) ? "скрытый порт"
       : String(id).endsWith(":holding") ? holding.name : data.catalog.eventRegions.find(row => row.value === id)?.label ?? id;
@@ -110,7 +112,7 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
     const page = transportHistoryPage(transportOrders(holding), this._historyPage);
     this._historyPage = page.history.page - 1;
     const orders = page.orders.map((order) => ({ id: order.id,
-      market: !permissions.isGM && hiddenRegions.has(order.commercial.marketRegionId) ? "Скрытый рынок" : order.commercial.marketLabel,
+      market: visibility.marketLabel(order.commercial),
       status: statuses[order.status] || order.status, direction: order.direction === "outbound" ? "Продажа" : "Покупка",
       waitingReason: order.replanFailure?.message ?? "",
       cost: money(order.status === "cancelled" ? 0 : order.money.spentCopper + order.commercial.taxCopper + order.commercial.insuranceCopper), escrow: money(order.money.escrowCopper),

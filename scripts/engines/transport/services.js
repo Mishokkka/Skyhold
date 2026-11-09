@@ -20,7 +20,7 @@ export function validateTransportConfiguration(raw = {}) {
 }
 
 /** Collapse transit-only nodes before rounding movement or charging dispatch. */
-export function transportServicesFromRoutes(routes = [], rawConfiguration = {}, regions = [], { markets = [], resources = [], homeRegionId = "", homeEndpoint = "" } = {}) {
+export function transportServicesFromRoutes(routes = [], rawConfiguration = {}, regions = [], { markets = [], resources = [], homeRegionId = "", homeEndpoint = "", calendar = null } = {}) {
   const config = validateTransportConfiguration(rawConfiguration), result = new Map();
   const handling = new Map(markets.map(market => [market.regionId, market.locationProfile]));
   for (const route of routes) {
@@ -40,13 +40,14 @@ export function transportServicesFromRoutes(routes = [], rawConfiguration = {}, 
         previous.capacityLoad = Math.min(previous.capacityLoad, leg.capacityLoad);
         for (const field of ["movementQd", "distanceKm", "distanceCopper", "operatingCopper", "loadCopperPerUnit"]) previous[field] += Number(leg[field] ?? 0);
         previous.routeIds.push(leg.routeId);
+        previous.seasonalLegs.push(leg.seasonalTerms);
         previous.accessCost += accessCost;
         previous.riskExposureQd += riskExposureQd;
         previous.operatingFactorSum += Number(leg.movementQd ?? 0) * Number(leg.operatingFactor ?? 1);
         previous.targetPriceFactor = leg.targetPriceFactor;
         previous.targetTimeFactor = leg.targetTimeFactor;
         previous.riskFactor = Math.max(previous.riskFactor ?? 1, leg.riskFactor ?? 1);
-      } else groups.push({ ...leg, routeIds: [leg.routeId], accessCost, riskExposureQd,
+      } else groups.push({ ...leg, routeIds: [leg.routeId], seasonalLegs: [leg.seasonalTerms], accessCost, riskExposureQd,
         operatingFactorSum: Number(leg.movementQd ?? 0) * Number(leg.operatingFactor ?? 1) });
     }
     for (const [index, group] of groups.entries()) {
@@ -121,6 +122,17 @@ export function transportServicesFromRoutes(routes = [], rawConfiguration = {}, 
         if (Object.hasOwn(override, "returnOperatingMilliCopperPerQd")) delete applied.returnDailyCosts;
         if (Object.hasOwn(override, "loadingQd")) delete applied.loadingCapacity;
         if (Object.hasOwn(override, "unloadingQd")) delete applied.unloadingCapacity;
+        if (calendar && group.seasonalLegs.every(Boolean)) {
+          applied.seasonal = { calendar, legs: group.seasonalLegs, baseRiskBps: config.riskBps,
+            dailyCosts: costsAt(origin, applied.capacity / 4000), returnDailyCosts: costsAt(target, applied.capacity / 4000),
+            fixed: { travel: Object.hasOwn(override, "travelQd"), risk: Object.hasOwn(override, "riskBps"),
+              rate: Object.hasOwn(override, "loadMilliCopper") || Object.hasOwn(override, "loadCopper"),
+              daily: Object.hasOwn(override, "dailyCosts") || !applied.dailyCosts && service.kind === "charter",
+              backDaily: Object.hasOwn(override, "returnDailyCosts") || !applied.returnDailyCosts && service.kind === "charter",
+              backTravel: Object.hasOwn(override, "returnQd") || Object.hasOwn(override, "travelQd") },
+            fare: { fixedCopper: Math.ceil(group.dispatchCopper + group.hireCopper + group.distanceCopper),
+              loadMilliCopper, commercialLoadBps: config.commercialLoadBps } };
+        }
         result.set(service.id, applied);
       }
     }

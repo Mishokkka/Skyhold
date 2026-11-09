@@ -12,14 +12,14 @@ export function customerTransportFare({ cargo, origin, destination, resources, c
   const factor = Math.max(0.01, origin.factors?.delivery ?? 1);
   const charges = configuredTransportCharges({ mode: "airship", distanceKm: route.distanceKm, settings: origin,
     dispatchCopper: MARKET_TRANSPORT_TARIFFS.airship.dispatchCopper, deliveryFactor: factor });
-  const costsAt = port => Object.fromEntries(Object.entries(referenceTransportCosts("airship", capacityLoad,
-    transportRationPrice(resources, port)).dailyCosts).map(([key, amount]) => [key, Math.ceil(amount * factor)]));
+  const costsAt = (port, seasonalFactor = 1) => Object.fromEntries(Object.entries(referenceTransportCosts("airship", capacityLoad,
+    transportRationPrice(resources, port)).dailyCosts).map(([key, amount]) => [key, Math.ceil(amount * factor * seasonalFactor)]));
   const service = { kind: "regular", dispatchCopper: 1, profitBps: configuration.carrierProfitBps,
     ...transportHandlingTerms([origin.locationProfile, destination.locationProfile]),
-    loadMilliCopper: regularTransportRate({ capacityLoad, travelQd: route.durationQd,
+    loadMilliCopper: regularTransportRate({ capacityLoad, travelQd: route.durationQd, returnTravelQd: route.returnDurationQd,
       loadingQd: transportPortHandlingQd(origin, profile.capacityLoadPoints),
       unloadingQd: transportPortHandlingQd(destination, profile.capacityLoadPoints),
-      dailyCosts: costsAt(origin), returnDailyCosts: costsAt(destination),
+      dailyCosts: costsAt(origin, route.operatingFactor), returnDailyCosts: costsAt(destination, route.returnOperatingFactor),
       fixedCopper: Math.ceil(charges.dispatchCopper + charges.hireCopper + charges.distanceCopper),
       loadMilliCopper: Math.ceil(charges.loadCopperPerUnit * 1000),
       commercialLoadBps: configuration.commercialLoadBps }) };

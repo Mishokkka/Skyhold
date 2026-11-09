@@ -14,6 +14,7 @@ import { transportClockOffsetQd, transportHoldingQd } from "../../data/transport
 import { transportRelevantHolding } from "../../data/transport/state.js";
 import { discoverTransportPorts } from "./transport-discovery.js";
 import { transportInsuranceCopper, transportRiskBps } from "../../engines/transport/economics.js";
+import { transportSeasonalCalendar } from "../../engines/transport/seasonal.js";
 
 export function transportSourceToken(data, holding) {
   return stableDataHash({ holding: transportRelevantHolding(holding), markets: data?.meta?.sharedMarkets,
@@ -52,6 +53,8 @@ function ownServices(data, holding, ship, points, request, clockQd, world = buil
   const positionAtHome = !ship.location || ship.location.kind === "home";
   const position = positionAtHome ? home : ship.location.regionId;
   const services = [];
+  const calendar = transportSeasonalCalendar(holding, transportHoldingQd(data, holding));
+  const snapshot = terms => terms?.seasonal ? { ...terms.seasonal, calendar } : null;
   const quote = (from, to, loadPoints, maxAccess, fromHome = from === home) => worldShipTransportTerms(data, holding, ship,
     from === home ? world.home.regionId : from, to === home ? world.home.regionId : to,
     { context: world, loadPoints, maxAccess, fromHome, toHome: to === home });
@@ -100,6 +103,10 @@ function ownServices(data, holding, ship, points, request, clockQd, world = buil
           startIdleUpkeepCopperPerDay: Object.values(terms.dailyCosts).reduce((sum, cost) => sum + cost, 0),
           returnOperatingMilliCopperPerQd: back?.operatingMilliCopperPerQd ?? terms.operatingMilliCopperPerQd,
           dailyCosts: terms.dailyCosts, returnDailyCosts: back?.dailyCosts ?? terms.dailyCosts,
+          seasonal: { ...snapshot(terms), baseRiskBps: request.riskBps ?? 300 },
+          approachSeasonal: snapshot(approach), approachDailyCosts: approach?.dailyCosts ?? null,
+          returnSeasonal: snapshot(back), endReturnSeasonal: snapshot(homeReturn),
+          abortReturnSeasonal: snapshot(abortReturn),
           waitingMilliCopperPerQd: from === home && ship.homeUpkeepEnabled === false ? 0 : terms.operatingMilliCopperPerQd,
           storageIncluded: true, storageMilliCopperPerLoadQd: 0,
           accessCost: terms.accessCost, riskBps: transportRiskBps(terms.riskExposureQd, request.riskBps ?? 300) });
@@ -123,7 +130,8 @@ export function prepareTransportContext({ data, holding, request = {}, isGM = fa
   const home = findHoldingRegion(holding, data.catalog.eventRegions)?.value;
   if (!home) throw new Error("У поселения не определена локация.");
   const endpoint = ["sky-island", "ship"].includes(holding.type) || context.market.regionId === home ? `${home}:holding` : home;
-  const serviceEndpoints = { markets: context.markets, resources: context.resources, homeRegionId: home, homeEndpoint: endpoint };
+  const serviceEndpoints = { markets: context.markets, resources: context.resources, homeRegionId: home, homeEndpoint: endpoint,
+    calendar: transportSeasonalCalendar(holding, transportHoldingQd(data, holding)) };
   let services = transportServicesFromRoutes(routes, configuration, data.catalog.eventRegions, serviceEndpoints);
   const ship = request.ownShipId ? holding.special?.ships?.list?.find((row) => row.id === request.ownShipId) : null;
   if (request.ownShipId && !ship) throw new Error("Выбранный корабль не найден.");
