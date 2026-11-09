@@ -166,7 +166,7 @@ async _prepareTendayOperation({ holdingId = "", qd = 40, rationUnitsPerResident 
       dataRevision: Math.max(0, Number(data.meta?.revision) || 0), calendariaGate,
       calendarAdvance: { dateTime: calendariaGate.targetDateTime, timestamp: calendariaGate.targetTimestamp },
       periodLabel: this._periodLabel(periodQd),
-      message: "Перед расчётом хозяйства разберите происшествия перевозок этого десятника. Решения сохраняются; груз и деньги будут проведены вместе с десятником." };
+      message: "Перед расчётом хозяйства обработайте зависимые рейсы и разберите происшествия этого десятника. Решения сохраняются; груз и деньги будут проведены вместе с десятником." };
   }
 
   beginPerishableStoragePeriod(previewHolding);

@@ -96,13 +96,14 @@ export function createTransportOperationExecutor({ transaction = (updater, optio
         } else if (op.type === "transport-incident") {
           if (op.reviewQd !== undefined) {
             if (!Number.isSafeInteger(op.reviewQd) || op.reviewQd < 40 || op.reviewQd > 1440 || op.reviewQd % 40) throw fail("Разбор перевозок выполняется полными десятниками, не более 360 дней.");
-            const { projectTendayTransport, commitTendayTransportDecision } = await import("../workflows/transport/tenday-review.js");
+            const { projectTendayTransport, commitTendayTransportDecision, commitTendayCarrierDecision } = await import("../workflows/transport/tenday-review.js");
             const gate = engine._checkCalendariaEconomyAdvance(holding, op.reviewQd);
             if (!gate.ok) throw fail(gate.message, "conflict");
             const calendarStart = gate.startDateTime ? { snapshot: gate.snapshot, targetDateTime: gate.startDateTime,
               targetTimestamp: timestampForCalendariaDate(gate.startDateTime) } : null;
             const projection = projectTendayTransport(data, holding, Number(holding.gm?.calendaria?.lastQd ?? 0) + op.reviewQd, engine, { calendarStart });
-            result.decision = commitTendayTransportDecision(data, projection, op.runId, op.resolution);
+            result.decision = op.resolution?.outcome === "carrier" ? commitTendayCarrierDecision(data, projection, op.runId)
+              : commitTendayTransportDecision(data, projection, op.runId, op.resolution);
           } else resolveTransportIncident(data.meta.transportV2, op.runId, { ...op.resolution, atQd: data.meta.transportV2.clockQd });
         } else if (op.type === "transport-ship-sync") {
           const ship = holding.special?.ships?.list?.find((row) => row.id === op.shipId);

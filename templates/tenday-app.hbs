@@ -50,7 +50,9 @@
             <div class="fbls-card-header"><h3>{{name}}</h3><span>{{dateText}}</span></div>
             <p>{{from}} → {{to}}</p>
             {{#if legacy}}<p class="fbls-muted-text">Ожидание этого ранее остановленного рейса учитывается до текущей даты.</p>{{/if}}
-            {{#each blockers}}<div class="fbls-cluster"><span>{{name}}: {{reason}}</span><button type="button" class="fbls-button" data-action="tenday-transport-related" data-holding="{{holdingId}}" data-qd="{{qd}}" {{#if @root.transportBusy}}disabled{{/if}}><i class="fa-solid fa-calendar-days" aria-hidden="true"></i> Разобрать перевозки поселения</button></div>{{/each}}
+            {{#if carrier}}<p class="fbls-muted-text">Подтвердите известные предыдущие рейсы общего транспорта. Это не проводит склад, казну и хозяйство связанных поселений.</p>{{/if}}
+            {{#each blockers}}<div class="fbls-cluster"><span>{{name}}: {{reason}}</span><button type="button" class="fbls-button" data-action="tenday-transport-related" data-holding="{{holdingId}}" data-qd="{{qd}}" {{#if @root.transportBusy}}disabled{{/if}}><i class="fa-solid fa-calendar-days" aria-hidden="true"></i> {{#if currentDate}}Открыть перевозки поселения{{else}}Разобрать перевозки поселения{{/if}}</button></div>{{/each}}
+            {{#unless carrier}}
             <div class="fbls-cluster">
               <label class="fbls-field"><span>Задержка, дней</span><input type="number" min="0" max="360" step="0.25" value="{{delayDays}}" data-tenday-transport-delay aria-label="Задержка рейса {{name}}, дней" {{#unless canResolve}}disabled{{/unless}} /></label>
               <label class="fbls-field"><span>Утрата, %</span><input type="number" min="0" max="100" step="1" value="{{lossPercent}}" data-tenday-transport-loss aria-label="Утрата груза рейса {{name}}, процентов" {{#unless canResolve}}disabled{{/unless}} /></label>
@@ -60,6 +62,9 @@
               <button type="button" class="fbls-button" data-action="tenday-transport-decision" data-run="{{runId}}" data-outcome="delay" {{#unless canResolve}}disabled{{/unless}}><i class="fa-solid fa-clock" aria-hidden="true"></i> Задержка</button>
               <button type="button" class="fbls-button" data-action="tenday-transport-decision" data-run="{{runId}}" data-outcome="loss" {{#unless canResolve}}disabled{{/unless}}><i class="fa-solid fa-box-open" aria-hidden="true"></i> Утрата груза</button>
             </div>
+            {{else}}
+            <div class="fbls-action-group"><button type="button" class="fbls-button" data-action="tenday-transport-decision" data-run="{{runId}}" data-outcome="carrier" {{#unless canResolve}}disabled{{/unless}}><i class="fa-solid fa-check" aria-hidden="true"></i> Подтвердить предыдущие рейсы</button></div>
+            {{/unless}}
           </article>
         {{/each}}
         <div class="fbls-action-group">

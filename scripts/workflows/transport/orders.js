@@ -24,7 +24,7 @@ export function cancelTransportShipment(data, holding, order) {
   } });
 }
 
-export function advanceTransportShipments(data, holding, targetQd, workflow, { log = true, deferInternalDemand = false } = {}) {
+export function advanceTransportShipments(data, holding, targetQd, workflow, { log = true, deferInternalDemand = false, retainRuns = false } = {}) {
   const state = ensureTransportState(data);
   const commonTargetQd = transportHoldingQd(data, holding, targetQd);
   recordTransportClock(data, holding);
@@ -138,7 +138,7 @@ export function advanceTransportShipments(data, holding, targetQd, workflow, { l
   if (transfer) entries.push({ kind: "transfer", resourceId: "money", name: "Возврат транспортного резерва и бортовых денег", qty: transfer,
     roomId: "treasury", source: "Перевозки", note: "Внутренний перевод, не торговая прибыль." });
   if (log && entries.length) workflow._appendStorageLog(holding, entries);
-  pruneCompletedTransportRuns(data);
+  if (!retainRuns) pruneCompletedTransportRuns(data);
   report.entries = entries;
   return report;
 }

@@ -64,6 +64,42 @@ function setup() {
 SkyholdTendayApp.preparedCache.clear();
 {
   const h = setup(), app = h.open(); await app.prepare();
+  app.prepared.transportReview = [{ runId: "carrier:previous", carrier: true, name: "Finite carrier", from: "A", to: "B",
+    localQd: 7, canResolve: false, canLose: false, blockers: [{ holdingId: "other", qd: 0, currentDate: true }] }];
+  const view = await app._prepareContext({});
+  assert.equal(view.canApply, false); assert.equal(view.transportReview[0].canResolve, false);
+  assert.equal(view.transportReview[0].blockers[0].currentDate, true);
+  assert.match(template, /\{\{#unless carrier\}\}/, "a carrier dependency does not offer incident rolls");
+  let opened, sent = 0;
+  app._openTransport = holdingId => { opened = holdingId; };
+  app._requestTransportDecision = () => { sent++; };
+  await app._onTransportRelated({ dataset: { holding: "other", qd: "0" } });
+  assert.equal(opened, "other", "an already elapsed dependency opens its current-date transport window");
+  await app._onTransportDecision(event, { dataset: { run: "carrier:previous", outcome: "success" }, closest: () => card });
+  assert.equal(sent, 0, "a dependency cannot be resolved as a successful incident");
+  const originalOpen = SkyholdTendayApp.open;
+  try {
+    SkyholdTendayApp.open = options => { opened = options; };
+    await app._onTransportRelated({ dataset: { holding: "other", qd: "80" } });
+    assert.equal(opened.holdingId, "other"); assert.equal(opened.qd, 80);
+  } finally { SkyholdTendayApp.open = originalOpen; }
+  app.prepared.transportReview[0].canResolve = true;
+  let confirmation;
+  app._requestTransportDecision = async operation => {
+    confirmation = structuredClone(operation); h.done();
+    throw Object.assign(new Error("Carrier confirmation response lost"), { code: "timeout", retryable: true });
+  };
+  await app._onTransportDecision(event, { dataset: { run: "carrier:previous", outcome: "carrier" }, closest: () => card });
+  assert.equal(confirmation.resolution.outcome, "carrier");
+  assert.equal((await app._prepareContext({})).canApply, false, "lost confirmation replies do not enable household Apply");
+  app._requestTransportDecision = async operation => { assert.deepEqual(operation, confirmation); return { ok: true, replay: true }; };
+  await app._submitTransportDecision();
+  assert.equal(app.phase, "preview"); assert.equal(SkyholdTendayApp.transportSessions.size, 0);
+  await app._onClose({});
+}
+SkyholdTendayApp.preparedCache.clear();
+{
+  const h = setup(), app = h.open(); await app.prepare();
   let sent = 0; app._requestTransportDecision = async () => { sent++; return { ok: true }; };
   h.f.data.meta.revision++;
   await app._onTransportDecision(event, { dataset: { run: "run", outcome: "success" }, closest: () => card });

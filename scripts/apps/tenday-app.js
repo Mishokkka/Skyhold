@@ -511,7 +511,7 @@ export class SkyholdTendayApp extends WindowFrameMixin(RenderSchedulerMixin(Hand
       if (action === "tenday-apply") return this._onApply(event);
       if (action === "tenday-transport-decision") return this._onTransportDecision(event, element);
       if (action === "tenday-transport-retry") return this._submitTransportDecision();
-      if (action === "tenday-transport-related") return this.constructor.open({ workflow: this.workflow, holdingId: element.dataset.holding, qd: Number(element.dataset.qd) });
+      if (action === "tenday-transport-related") return this._onTransportRelated(element);
       if (action === "tenday-transport-open") return this._openTransport();
       if (action === "tenday-refresh" || action === "tenday-next") return this._onRefresh(event);
       if (action === "tenday-event-apply") return this._onEventDecision(event, element, "apply");
@@ -551,9 +551,14 @@ export class SkyholdTendayApp extends WindowFrameMixin(RenderSchedulerMixin(Hand
     this.requestRender({ focus: false });
   }
 
-  async _openTransport() {
+  _onTransportRelated(element) {
+    return Number(element.dataset.qd) === 0 ? this._openTransport(element.dataset.holding)
+      : this.constructor.open({ workflow: this.workflow, holdingId: element.dataset.holding, qd: Number(element.dataset.qd) });
+  }
+
+  async _openTransport(holdingId = this.holdingId) {
     const { openTransportApp } = await import("./lazy-apps.js");
-    return openTransportApp({ holdingId: this.holdingId });
+    return openTransportApp({ holdingId });
   }
 
   async _onTransportDecision(event, element) {

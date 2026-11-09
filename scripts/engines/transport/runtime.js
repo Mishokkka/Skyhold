@@ -38,23 +38,27 @@ function releaseRuns(state, order, fromStage = 0, keepIds = new Set(), throughSt
 /** Reserve a forecast event's real prerequisites before a GM freezes its outcome.
  * Only unstarted booking metadata is adopted; no receipt, warehouse, wallet or clock is copied.
  */
-export function adoptProjectedTransportBookings({ state, holdings, projectedData, runId }) {
-  const projectedRun = projectedData.meta.transportV2.runs.find(run => run.id === runId);
+export function adoptProjectedTransportBookings({ state, holdings, projectedData, runId, prefixClaims = [], atQd = 0 }) {
+  const projectedRun = projectedData.meta.transportV2.runs.find(run => run.id === runId)
+    ?? (prefixClaims.length ? { claims: [], arrivalQd: atQd } : null);
   if (!projectedRun) throw new Error("Не найден расчёт происшествия.");
-  const affected = [...(runFor(state, runId)?.claims ?? []), ...projectedRun.claims];
+  const affected = [...(runFor(state, runId)?.claims ?? []), ...projectedRun.claims, ...prefixClaims];
   const prefixes = new Map();
   for (const claim of affected) {
     const key = JSON.stringify([claim.holdingId, claim.orderId]);
     prefixes.set(key, Math.max(prefixes.get(key) ?? -1, claim.stage));
   }
   const changes = [];
+  const projectedIds = new Set(projectedData.meta.transportV2.runs.map(run => run.id));
   for (const [key, through] of prefixes) {
     const [holdingId, orderId] = JSON.parse(key);
     const order = transportOrders(holdings.find(row => row.id === holdingId)).find(row => row.id === orderId);
     const forecast = transportOrders(projectedData.holdings.find(row => row.id === holdingId)).find(row => row.id === orderId);
     if (!order || !forecast) throw new Error("Связанный заказ перевозки изменился.");
     for (const stage of order.stages.slice(0, through + 1)) {
-      const planned = forecast.stages[stage.index];
+      const forecastStage = forecast.stages[stage.index];
+      const planned = { ...forecastStage, runs: forecastStage.runs.filter(run => projectedIds.has(run.id)
+        || forecastStage.receipts.some(receipt => receipt.runId === run.id)) };
       if (JSON.stringify(stage.runs) === JSON.stringify(planned.runs)) continue;
       const started = new Set(stage.receipts.map(receipt => receipt.runId));
       if ([...started].some(id => !planned.runs.some(run => run.id === id))) throw new Error("Расчёт изменил уже отправленную часть груза.");
@@ -73,7 +77,7 @@ export function adoptProjectedTransportBookings({ state, holdings, projectedData
     stage.runs = clone(planned.runs);
     delete stage.needsRebooking;
     for (const next of order.stages.slice(stage.index + 1)) next.needsRebooking = true;
-    order.history.push({ kind: "rebooked", stage: stage.index, qd: Math.min(...stage.runs.map(run => run.startQd), projectedRun.incident.atQd) });
+    order.history.push({ kind: "rebooked", stage: stage.index, qd: Math.min(...stage.runs.map(run => run.startQd), projectedRun.incident?.atQd ?? projectedRun.arrivalQd) });
   }
   for (const [key, through] of prefixes) {
     const [holdingId, orderId] = JSON.parse(key);
@@ -90,8 +94,23 @@ function waitForVehicle(state, planned) {
   const preceding = state.runs.filter((run) => run.id !== planned.id && run.status !== "cancelled"
     && (planned.shipId ? run.shipId === planned.shipId : run.serviceId === planned.serviceId && run.vehicle === planned.vehicle)
     && run.startQd < planned.startQd);
-  if (preceding.some((run) => run.status === "booked" || run.incident?.status === "pending")) return { pending: true };
-  return { readyQd: Math.max(planned.startQd, ...preceding.map((run) => run.releaseQd)) };
+  const blockedRuns = preceding.filter(run => run.status !== "arrived" || run.incident?.status === "pending");
+  return { readyQd: Math.max(planned.startQd, ...preceding.map((run) => run.releaseQd)),
+    pending: blockedRuns.length > 0, blockedRuns };
+}
+
+/** Earlier physical trips that still prevent this order's departures inside the period. */
+export function transportVehicleDependencies(state, order, targetQd) {
+  const blockers = new Map();
+  for (const stage of order.stages) for (const scheduled of pendingRuns(stage)) {
+    const physical = runFor(state, scheduled.id);
+    if (!physical || physical.departureQd > targetQd) continue;
+    const vehicle = waitForVehicle(state, physical);
+    // A known late return already puts departure outside this period, even without another incident.
+    if (!vehicle.pending || vehicle.readyQd + physical.departureQd - physical.startQd > targetQd) continue;
+    for (const run of vehicle.blockedRuns) blockers.set(run.id, run);
+  }
+  return [...blockers.values()];
 }
 
 /** Runs, treasury and ship wallet must be saved by the caller's single authoritative transaction. */
@@ -291,7 +310,8 @@ export function advanceTransportOrders({ state, holding, targetQd, dependencies 
   transportInteger(targetQd, "дата исполнения");
   state.clockQd = Math.max(state.clockQd, targetQd);
   const report = [];
-  for (const order of transportOrders(holding)) {
+  const queue = [...transportOrders(holding)], waiting = new Map(), processed = new Set();
+  for (const order of queue) {
     if (order.status === "cancelled") continue;
     if (targetQd < order.lastProcessedQd) throw new Error("Нельзя переместить перевозку в прошлое.");
     if (order.ownShipId) dependencies.advanceShip?.(order, targetQd);
@@ -299,6 +319,7 @@ export function advanceTransportOrders({ state, holding, targetQd, dependencies 
     if (typeof dependencies.receiveCargo !== "function" || (order.direction === "outbound" && typeof dependencies.dispatchCargo !== "function")) {
       throw new Error("Не подключён складской исполнитель перевозки.");
     }
+    processed.add(order);
     let waitingForVehicle = false;
     const blockedBookings = new Set();
     for (let index = 0; index < order.stages.length; index++) {
@@ -335,7 +356,12 @@ export function advanceTransportOrders({ state, holding, targetQd, dependencies 
         if (!physical) throw new Error("Отсутствует забронированный рейс.");
         if (!receipt && physical.departureQd <= targetQd) {
           const vehicle = waitForVehicle(state, physical);
-          if (vehicle.pending) { waitingForVehicle = true; continue; }
+          if (vehicle.pending) {
+            waitingForVehicle = true;
+            const runs = waiting.get(order) ?? new Set();
+            runs.add(physical.id); waiting.set(order, runs);
+            continue;
+          }
           if (vehicle.readyQd > physical.startQd) {
             if (waitingManifest) { waitingForVehicle = true; continue; }
             if (!attemptRebooking(order, targetQd, () => rebookStage(state, order, stage, arrivals, vehicle.readyQd, "vehicle-rebooked"), stage.index)) { waitingForVehicle = true; blockedBookings.add(stage.index); break; }
@@ -401,7 +427,6 @@ export function advanceTransportOrders({ state, holding, targetQd, dependencies 
     }
     const unfinished = order.stages.findIndex(stage => stage.status !== "arrived");
     order.stageIndex = order.abortedFromStage != null || unfinished < 0 ? order.stages.length : unfinished;
-    order.lastProcessedQd = targetQd;
     if (order.stageIndex >= order.stages.length) {
       delete order.replanFailure;
       order.status = order.received.length ? "delivered" : "lost";
@@ -417,6 +442,17 @@ export function advanceTransportOrders({ state, holding, targetQd, dependencies 
       order.status = pending ? "needsResolution" : waitingForVehicle || order.replanFailure ? "waitingCarrier"
         : inFlight.length ? "travelling" : "booked";
     }
+    // Revisit only orders whose actual vehicle dependency became ready. A later-created
+    // trip may sail first; no clock, random outcome or household action is repeated here.
+    for (const [blocked, runs] of waiting) if ([...runs].some(id => {
+      const physical = runFor(state, id);
+      return !physical || !waitForVehicle(state, physical).pending;
+    })) {
+      waiting.delete(blocked);
+      queue.push(blocked);
+    }
   }
+  // A retry still belongs to this execution interval; its rebooking floor is not the period's end.
+  for (const order of processed) order.lastProcessedQd = targetQd;
   return report;
 }
