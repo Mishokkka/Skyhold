@@ -35,6 +35,56 @@ function releaseRuns(state, order, fromStage = 0, keepIds = new Set(), throughSt
   state.runs = state.runs.filter((run) => run.claims.length || run.status !== "booked");
 }
 
+/** Reserve a forecast event's real prerequisites before a GM freezes its outcome.
+ * Only unstarted booking metadata is adopted; no receipt, warehouse, wallet or clock is copied.
+ */
+export function adoptProjectedTransportBookings({ state, holdings, projectedData, runId }) {
+  const projectedRun = projectedData.meta.transportV2.runs.find(run => run.id === runId);
+  if (!projectedRun) throw new Error("Не найден расчёт происшествия.");
+  const affected = [...(runFor(state, runId)?.claims ?? []), ...projectedRun.claims];
+  const prefixes = new Map();
+  for (const claim of affected) {
+    const key = JSON.stringify([claim.holdingId, claim.orderId]);
+    prefixes.set(key, Math.max(prefixes.get(key) ?? -1, claim.stage));
+  }
+  const changes = [];
+  for (const [key, through] of prefixes) {
+    const [holdingId, orderId] = JSON.parse(key);
+    const order = transportOrders(holdings.find(row => row.id === holdingId)).find(row => row.id === orderId);
+    const forecast = transportOrders(projectedData.holdings.find(row => row.id === holdingId)).find(row => row.id === orderId);
+    if (!order || !forecast) throw new Error("Связанный заказ перевозки изменился.");
+    for (const stage of order.stages.slice(0, through + 1)) {
+      const planned = forecast.stages[stage.index];
+      if (JSON.stringify(stage.runs) === JSON.stringify(planned.runs)) continue;
+      const started = new Set(stage.receipts.map(receipt => receipt.runId));
+      if ([...started].some(id => !planned.runs.some(run => run.id === id))) throw new Error("Расчёт изменил уже отправленную часть груза.");
+      changes.push({ order, stage, planned, started, through });
+    }
+  }
+  for (const { order, stage, started } of changes) releaseRuns(state, order, stage.index, started, stage.index);
+  for (const { order, stage, through } of changes) if (stage.service.kind === "owned") {
+    for (const next of order.stages.slice(stage.index + 1)) {
+      if (next.service.kind !== "owned") break;
+      if (next.index > through) releaseRuns(state, order, next.index, new Set(next.receipts.map(receipt => receipt.runId)), next.index);
+    }
+  }
+  for (const { order, stage, planned, started } of changes) {
+    reserveRuns(state, order, [{ ...stage, runs: planned.runs.filter(run => !started.has(run.id)) }]);
+    stage.runs = clone(planned.runs);
+    delete stage.needsRebooking;
+    for (const next of order.stages.slice(stage.index + 1)) next.needsRebooking = true;
+    order.history.push({ kind: "rebooked", stage: stage.index, qd: Math.min(...stage.runs.map(run => run.startQd), projectedRun.incident.atQd) });
+  }
+  for (const [key, through] of prefixes) {
+    const [holdingId, orderId] = JSON.parse(key);
+    const order = transportOrders(holdings.find(row => row.id === holdingId)).find(row => row.id === orderId);
+    const forecast = transportOrders(projectedData.holdings.find(row => row.id === holdingId)).find(row => row.id === orderId);
+    for (const stage of order.stages.slice(0, through + 1)) {
+      if (!forecast.stages[stage.index].needsRebooking) delete stage.needsRebooking;
+    }
+  }
+}
+
 function waitForVehicle(state, planned) {
   if (planned.kind === "regular") return { readyQd: planned.startQd };
   const preceding = state.runs.filter((run) => run.id !== planned.id && run.status !== "cancelled"
@@ -77,6 +127,7 @@ export function canCancelTransportOrder(state, order, currentQd = state?.clockQd
   if (!order || !activeTransportOrder(order) || order.shipStarted || order.history.some(row => row.kind === "departed")) return false;
   const first = order.stages[0], clockQd = Math.max(state?.clockQd ?? 0, currentQd);
   if (!Number.isSafeInteger(clockQd) || !Array.isArray(state?.runs) || !first?.runs.length || first.receipts.length) return false;
+  if (order.stages.some(stage => stage.runs.some(run => runFor(state, run.id)?.incident))) return false;
   return first.runs.every(planned => {
     const physical = runFor(state, planned.id);
     if (!physical || physical.status !== "booked" || physical.incident) return false;

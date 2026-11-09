@@ -39,6 +39,37 @@
       </div>
     {{/if}}
 
+    {{#if isTransportReview}}
+      <section class="fbls-tenday-report-card fbls-tenday-transport-review fbls-stack" aria-label="Разбор перевозок перед десятником">
+        <h2><i class="fa-solid fa-truck-fast" aria-hidden="true"></i> Перевозки: разбор десятника</h2>
+        <p>{{transportMessage}}</p>
+        <p class="fbls-muted-text">Решение фиксируется сразу. Дата поселения, склад и казна будут проведены вместе с десятником. Более ранние происшествия разбираются первыми.</p>
+        {{#if transportError}}<p role="alert">{{transportError}}</p>{{/if}}
+        {{#each transportReview}}
+          <article class="fbls-tenday-event-card fbls-stack" data-tenday-transport-run="{{runId}}">
+            <div class="fbls-card-header"><h3>{{name}}</h3><span>{{dateText}}</span></div>
+            <p>{{from}} → {{to}}</p>
+            {{#if legacy}}<p class="fbls-muted-text">Ожидание этого ранее остановленного рейса учитывается до текущей даты.</p>{{/if}}
+            {{#each blockers}}<div class="fbls-cluster"><span>{{name}}: {{reason}}</span><button type="button" class="fbls-button" data-action="tenday-transport-related" data-holding="{{holdingId}}" data-qd="{{qd}}" {{#if @root.transportBusy}}disabled{{/if}}><i class="fa-solid fa-calendar-days" aria-hidden="true"></i> Разобрать перевозки поселения</button></div>{{/each}}
+            <div class="fbls-cluster">
+              <label class="fbls-field"><span>Задержка, дней</span><input type="number" min="0" max="360" step="0.25" value="{{delayDays}}" data-tenday-transport-delay aria-label="Задержка рейса {{name}}, дней" {{#unless canResolve}}disabled{{/unless}} /></label>
+              <label class="fbls-field"><span>Утрата, %</span><input type="number" min="0" max="100" step="1" value="{{lossPercent}}" data-tenday-transport-loss aria-label="Утрата груза рейса {{name}}, процентов" {{#unless canResolve}}disabled{{/unless}} /></label>
+            </div>
+            <div class="fbls-action-group">
+              <button type="button" class="fbls-button" data-action="tenday-transport-decision" data-run="{{runId}}" data-outcome="success" {{#unless canResolve}}disabled{{/unless}}><i class="fa-solid fa-check" aria-hidden="true"></i> Успешно</button>
+              <button type="button" class="fbls-button" data-action="tenday-transport-decision" data-run="{{runId}}" data-outcome="delay" {{#unless canResolve}}disabled{{/unless}}><i class="fa-solid fa-clock" aria-hidden="true"></i> Задержка</button>
+              <button type="button" class="fbls-button" data-action="tenday-transport-decision" data-run="{{runId}}" data-outcome="loss" {{#unless canResolve}}disabled{{/unless}}><i class="fa-solid fa-box-open" aria-hidden="true"></i> Утрата груза</button>
+            </div>
+          </article>
+        {{/each}}
+        <div class="fbls-action-group">
+          {{#if hasTransportRetry}}<button type="button" class="fbls-button" data-action="tenday-transport-retry" {{#if transportBusy}}disabled{{/if}}><i class="fa-solid fa-rotate" aria-hidden="true"></i> Проверить результат решения</button>{{/if}}
+          {{#if canRefreshTransport}}<button type="button" class="fbls-button" data-action="tenday-refresh"><i class="fa-solid fa-rotate" aria-hidden="true"></i> Обновить расчёт</button>{{/if}}
+          <button type="button" class="fbls-button" data-action="tenday-transport-open"><i class="fa-solid fa-truck-fast" aria-hidden="true"></i> Открыть перевозки</button>
+        </div>
+      </section>
+    {{/if}}
+
     {{#if hasPrepared}}
       <nav class="fbls-tenday-tabs" data-fbls-tablist="tenday" role="tablist" aria-label="Разделы отчёта десятника">
         {{#each tabs}}
@@ -82,7 +113,7 @@
             {{#if hasAttention}}
               <section class="fbls-tenday-attention" aria-label="Предупреждения десятника">
                 {{#each attention}}
-                  <article class="fbls-tenday-alert {{severity}}"><i class="{{icon}}"></i><div><strong>{{title}}</strong><span>{{text}}</span></div></article>
+                  <article class="fbls-tenday-alert {{severity}}"><i class="{{icon}}"></i><div><strong>{{title}}</strong><span>{{text}}</span>{{#if openTransport}}<button type="button" class="fbls-button" data-action="tenday-transport-open"><i class="fa-solid fa-truck-fast" aria-hidden="true"></i> Открыть перевозки</button>{{/if}}</div></article>
                 {{/each}}
               </section>
             {{else}}

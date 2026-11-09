@@ -13,6 +13,7 @@ import { resolveMarketItemDocuments } from "./market-operation-executor.js";
 import { getSkyholdWorkflowService } from "../workflows/skyhold-workflow-service.js";
 import { advanceWorldShips } from "../engines/ships/world-voyage.js";
 import { transportHoldingQd } from "../data/transport/clock.js";
+import { timestampForCalendariaDate } from "../integrations/calendaria-bridge.js";
 
 const fail = (message, code = "invalid") => Object.assign(new Error(message), { code });
 const types = new Set(["transport-book", "transport-cancel", "transport-advance", "transport-incident", "transport-configure", "transport-ship-sync", "transport-fund"]);
@@ -93,7 +94,16 @@ export function createTransportOperationExecutor({ transaction = (updater, optio
           engine._appendStorageLog(holding, [{ kind: "transfer", resourceId: "money", name: "Возврат денег отменённого заказа", qty: order.money.treasuryCopper,
             roomId: "treasury", source: "Перевозки", note: "Возврат платежа и резерва, не торговая прибыль.", operationId: op.operationId }]);
         } else if (op.type === "transport-incident") {
-          resolveTransportIncident(data.meta.transportV2, op.runId, { ...op.resolution, atQd: data.meta.transportV2.clockQd });
+          if (op.reviewQd !== undefined) {
+            if (!Number.isSafeInteger(op.reviewQd) || op.reviewQd < 40 || op.reviewQd > 1440 || op.reviewQd % 40) throw fail("Разбор перевозок выполняется полными десятниками, не более 360 дней.");
+            const { projectTendayTransport, commitTendayTransportDecision } = await import("../workflows/transport/tenday-review.js");
+            const gate = engine._checkCalendariaEconomyAdvance(holding, op.reviewQd);
+            if (!gate.ok) throw fail(gate.message, "conflict");
+            const calendarStart = gate.startDateTime ? { snapshot: gate.snapshot, targetDateTime: gate.startDateTime,
+              targetTimestamp: timestampForCalendariaDate(gate.startDateTime) } : null;
+            const projection = projectTendayTransport(data, holding, Number(holding.gm?.calendaria?.lastQd ?? 0) + op.reviewQd, engine, { calendarStart });
+            result.decision = commitTendayTransportDecision(data, projection, op.runId, op.resolution);
+          } else resolveTransportIncident(data.meta.transportV2, op.runId, { ...op.resolution, atQd: data.meta.transportV2.clockQd });
         } else if (op.type === "transport-ship-sync") {
           const ship = holding.special?.ships?.list?.find((row) => row.id === op.shipId);
           if (!ship || ship.activeVoyage || ship.orderBundle || ship.transportOrderId) throw fail("Сначала завершите текущий рейс корабля.");
@@ -107,7 +117,9 @@ export function createTransportOperationExecutor({ transaction = (updater, optio
           })));
           if (entries.length) engine._appendStorageLog(holding, entries);
         }
-        if (op.type !== "transport-ship-sync") advanceTransportShipments(data, holding, Number(holding.gm?.calendaria?.lastQd ?? 0), engine);
+        if (op.type !== "transport-ship-sync" && !(op.type === "transport-incident" && op.reviewQd !== undefined)) {
+          advanceTransportShipments(data, holding, Number(holding.gm?.calendaria?.lastQd ?? 0), engine);
+        }
       }
       appendHoldingOperation(holding, { type: "transport-v2", operationId: op.operationId, createdAt: new Date().toISOString(),
         title: "Перевозка", payload: { signature, userId, result } });
