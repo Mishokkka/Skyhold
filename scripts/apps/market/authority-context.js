@@ -5,12 +5,9 @@ import { stableDataHash } from "../../data/storage-commit.js";
 import { effectiveMarketLocations, marketLocationFactors } from "../../engines/market/composition.js";
 import {
   holdingMarketAccessLevel,
-  marketRegionAccessCostMap,
-  resolveMarketLogistics,
-  shortestMarketRoute
+  marketRegionAccessCostMap
 } from "../../engines/market/logistics.js";
-import { planMarketPurchase, prepareMarketOutboundQuote, prepareMarketQuote, marketHistoricalInsuranceRate,
-  marketShipmentRiskProfile, MARKET_INSURANCE_COVERAGE_RATE } from "../../engines/market/pricing.js";
+import { planMarketPurchase, prepareMarketOutboundQuote, prepareMarketQuote } from "../../engines/market/pricing.js";
 import {
   allocateQuoteToMerchantProviders,
 } from "../../engines/market/providers.js";
@@ -18,9 +15,6 @@ import { AUTO_CARRIERS, planMarketTransport } from "../../engines/market/transpo
 import { overlayMarketQuoteStock } from "../../engines/market/stock.js";
 import { getCalendariaSeasonSnapshot } from "../../integrations/calendaria-bridge.js";
 import { marketOutboundRouteFromPurchasePlan, prepareMarketOutboundContext } from "./outbound-context.js";
-import { buildShipWorldContext, quoteWorldShipSale } from "../../engines/ships/world-market.js";
-import { shipCrewReadiness } from "../../engines/ships/crew-readiness.js";
-import { shipMoneySummary } from "../../engines/ships/summary.js";
 import { transportRelevantHolding } from "../../data/transport/state.js";
 
 function marketSeasonId(holding = {}) {
@@ -39,34 +33,6 @@ export function marketAuthoritySourceToken({ data, holding, marketId = "", carri
     resources: data?.catalog?.resources,
     marketId: String(marketId ?? ""),
     carrierId: String(carrierId ?? "")
-  });
-}
-
-export function marketPurchasePlanToken(plan = {}) {
-  return stableDataHash({
-    version: 1,
-    marketId: String(plan?.marketId ?? ""),
-    quoteKey: String(plan?.quoteKey ?? ""),
-    locationId: String(plan?.locationId ?? ""),
-    targetRoomId: String(plan?.targetRoomId ?? ""),
-    serviceLevel: String(plan?.serviceLevel ?? ""),
-    carrierId: String(plan?.carrierId ?? ""),
-    deliveryMode: String(plan?.deliveryMode ?? ""),
-    transportPlan: plan?.logistics?.transportPlan ?? null,
-    totalCopper: Math.max(0, Math.floor(Number(plan?.totalCopper) || 0)),
-    deliveryQd: Math.max(0, Math.floor(Number(plan?.deliveryQd) || 0)),
-    lines: (Array.isArray(plan?.lines) ? plan.lines : []).map((line) => ({
-      id: String(line?.id ?? ""),
-      stockOfferId: String(line?.stockOfferId ?? line?.sourceOfferId ?? line?.id ?? ""),
-      sourceType: String(line?.sourceType ?? ""),
-      resourceId: String(line?.resourceId ?? ""),
-      itemUuid: String(line?.itemUuid ?? ""),
-      providerId: String(line?.providerId ?? ""),
-      qty: Math.max(0, Math.floor(Number(line?.qty) || 0)),
-      unitPriceCopper: Math.max(0, Math.floor(Number(line?.unitPriceCopper) || 0)),
-      stockBaseStock: Math.max(0, Math.floor(Number(line?.stockBaseStock ?? line?.stock) || 0)),
-      stockStateRevision: Math.max(0, Math.floor(Number(line?.stockStateRevision) || 0))
-    }))
   });
 }
 
@@ -259,71 +225,6 @@ export function authorityOutboundRoutes({ holding, data, market, economy, resour
   return routes;
 }
 
-export function authorityOwnShipOutboundRoute({ holding, data, market, offers = [], ownShipId = "" } = {}) {
-  const ship = (holding?.special?.ships?.list ?? []).find((row) => row.id === ownShipId);
-  if (!ship) return { route: null, reason: "Собственный корабль не найден." };
-  const readiness = shipCrewReadiness(holding, ship, { catalog: data?.catalog });
-  if (!readiness.ready) return { route: null, reason: readiness.issues.map((row) => row.message).join(" ") };
-  const selected = offers.filter((row) => Number(row.qty) > 0);
-  const loadPoints = selected.reduce((sum, row) => sum + Number(row.qty) * Math.max(0, Math.round(Number(row.load || 0) * 4)), 0);
-  const valueCopper = selected.reduce((sum, row) => sum + Number(row.qty) * Number(row.unitPriceCopper || 0), 0);
-  try {
-    const world = buildShipWorldContext(data, holding, { offerLocationIds: [market.regionId] });
-    const voyageOffer = quoteWorldShipSale(data, holding, ship, market.regionId, { loadPoints, valueCopper, context: world });
-    const route = shortestMarketRoute(world.home.regionId, market.regionId, world.regions, { mode: "airship" });
-    const economy = normalizeMarketEconomy(data?.catalog?.marketEconomy, { locations: world.regions });
-    const logistics = resolveMarketLogistics({ holding, market: { ...market, transportModes: ["airship"] },
-      regions: world.regions, selectedRoute: route, singleRoute: true, direction: "outbound", seasonId: marketSeasonId(holding),
-      dependencies: { regionFactors: (region) => marketLocationFactors(region, economy, world.regions), regionResolver: marketRegionForValue } });
-    const difficulty = Math.max(0, ...selected.map((offer) => Number(offer.accessDifficulty) || 0));
-    if (!logistics.ok || logistics.routeAccessCost + difficulty > logistics.accessLevel) throw new Error(
-      logistics.reasons.join(" ") || "Недостаточно УРС для воздушного маршрута и выбранного товара.");
-    const risk = marketShipmentRiskProfile({ logistics, deliveryQd: voyageOffer.quote.durationQd });
-    const importTaxCopper = Math.ceil(valueCopper * logistics.importTaxRate);
-    const exportTaxCopper = Math.ceil(valueCopper * logistics.exportTaxRate);
-    return { route: {
-      id: `own-ship:${ship.id}`, label: ship.name, carrierId: `own-ship:${ship.id}`,
-      carrierLabel: ship.name, ownShipId: ship.id, freightCopper: 0,
-      tariffCopper: importTaxCopper + exportTaxCopper, importTaxCopper, exportTaxCopper,
-      insurancePremiumRate: marketHistoricalInsuranceRate({ location: market.locationProfile, logistics }),
-      insuranceCoverageRate: MARKET_INSURANCE_COVERAGE_RATE,
-      riskFactor: risk.riskFactor, riskLossChance: risk.lossChance, riskDelayChance: risk.delayChance, riskMaxDelayQd: risk.maxDelayQd,
-      routePath: voyageOffer.quote.path, routeModes: ["airship"], transportMode: "airship",
-      deliveryQd: voyageOffer.quote.durationQd, ok: true
-    }, voyageOffer, loadPoints, reason: "" };
-  } catch (error) {
-    return { route: null, reason: error.message };
-  }
-}
-
-export function validateOwnShipOutboundFunding(holding, result, ownShip) {
-  if (!ownShip?.voyageOffer || !result?.plan?.ok) return result;
-  const ship = (holding?.special?.ships?.list ?? []).find((row) => row.id === ownShip.voyageOffer.shipId);
-  if (!ship) {
-    result.plan.ok = false;
-    result.plan.reasons = [...(result.plan.reasons ?? []), "Собственный корабль не найден."];
-    return result;
-  }
-  const quote = ownShip.voyageOffer.quote;
-  const money = shipMoneySummary(holding, ship, { clockQd: Math.max(
-    Number(holding.gm?.calendaria?.lastQd ?? 0), Number(ship.timelineQd ?? 0)) });
-  if (!money.calculationValid) {
-    result.plan.ok = false;
-    result.plan.reasons = [...(result.plan.reasons ?? []), "Не удалось рассчитать корабельные деньги. ГМ должен проверить данные."];
-    return result;
-  }
-  const walletAfterBilling = Math.max(0, money.walletCopper - money.portDebtCopper);
-  const homeBillCopper = Math.max(0, money.portDebtCopper - money.walletCopper);
-  const transferCopper = Math.max(0, Number(quote.recommendedBudgetCopper ?? 0) - walletAfterBilling);
-  const requiredCopper = Number(result.plan.upfrontCopper ?? 0) + transferCopper + homeBillCopper + Number(quote.preparationCopper ?? 0);
-  if (Number(holding?.storage?.moneyCopper ?? 0) < requiredCopper) {
-    result.plan.ok = false;
-    result.plan.reasons = [...new Set([...(result.plan.reasons ?? []),
-      `Для продажи и отправки корабля требуется ${requiredCopper} ММ в казне поселения.`])];
-  }
-  return result;
-}
-
 export function authorityMarketOutboundContext({
   holding,
   data,
@@ -333,7 +234,6 @@ export function authorityMarketOutboundContext({
   resources,
   quantities = {},
   insuranceEnabled = true,
-  ownShipId = "",
   carrierId = AUTO_CARRIERS,
   isGM = false
 } = {}) {
@@ -363,21 +263,8 @@ export function authorityMarketOutboundContext({
     carrierId,
     isGM
   });
-  const ownShip = ownShipId ? authorityOwnShipOutboundRoute({ holding, data, market, offers: preliminary.offers, ownShipId }) : null;
-  const result = prepareMarketOutboundContext({
-    holding,
-    quote: outboundQuote,
-    resourceDefinitions: resources,
-    organizations,
-    routes: ownShipId ? (ownShip?.route ? [ownShip.route] : []) : routes,
-    quantities,
-    insuranceEnabled
-  });
-  if (ownShipId && ownShip?.reason && result.plan) {
-    result.plan.ok = false;
-    result.plan.reasons = [...new Set([...result.plan.reasons, ownShip.reason])];
-  }
-  return { ...validateOwnShipOutboundFunding(holding, result, ownShip), ownShip };
+  return prepareMarketOutboundContext({ holding, quote: outboundQuote, resourceDefinitions: resources,
+    organizations, routes, quantities, insuranceEnabled });
 }
 
 export function prepareMarketAuthorityContext({
@@ -391,7 +278,6 @@ export function prepareMarketAuthorityContext({
   serviceLevel = "standard",
   outboundQuantities = {},
   outboundInsuranceEnabled = true,
-  ownShipId = "",
   isGM = false
 } = {}) {
   const locations = data?.catalog?.eventRegions ?? [];
@@ -413,7 +299,6 @@ export function prepareMarketAuthorityContext({
     resources,
     quantities: outboundQuantities,
     insuranceEnabled: outboundInsuranceEnabled,
-    ownShipId,
     carrierId: outboundCarrierId,
     isGM
   });

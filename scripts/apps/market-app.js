@@ -6,12 +6,8 @@ import { SkyholdData } from "../data/store.js";
 import { findReadableHoldingEntry } from "../data/access-guard.js";
 import { holdingPermissionContext } from "../data/holding-permissions.js";
 import { normalizeMarketEconomy } from "../data/market/economy.js";
-import { marketRegionForValue } from "../data/market/region-market.js";
 import { allResourceDefs } from "../core/resources.js";
 import { copperCurrencyParts, formatCopperCurrencyCompact, formatCopperCurrencyCompact as formatCopperCurrency } from "../core/currency.js";
-
-import { holdingMarketAccessLevel, marketRegionAccessCostMap } from "../engines/market/logistics.js";
-import { effectiveMarketLocations } from "../engines/market/composition.js";
 
 import { resolveFoundryUuid } from "../integrations/foundry-runtime.js";
 import { getSkyholdWorkflowService } from "../workflows/skyhold-workflow-service.js";
@@ -25,36 +21,9 @@ import { groupMarketOffers, marketOfferGroupTotals, merchantAbbreviation, mercha
 
 import { prepareMarketOutboundContext } from "./market/outbound-context.js";
 
-import { authorityMarketLogistics, authorityMarketQuote, authorityOutboundRoutes, marketAuthoritySourceToken } from "./market/authority-context.js";
+import { availableAuthorityMarkets, authorityMarketLogistics, authorityMarketQuote, authorityOutboundRoutes, marketAuthoritySourceToken } from "./market/authority-context.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
-
-const TRANSPORT_MODE_NAMES = { caravan: "Караван", rail: "Железная дорога", airship: "Воздушный корабль" };
-const TRANSPORT_NUMBER_FORMAT = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 });
-
-/** Role-safe presentation of immutable transport terms; never looks up current prices. */
-export function marketTransportPlanView(transportPlan, { isGM = false, hiddenCarrierIds = new Set(), hiddenCountryIds = new Set(), hiddenRegionIds = new Set() } = {}) {
-  if (transportPlan?.version !== 1 || !Array.isArray(transportPlan.legs)
-    || transportPlan.legs.some((leg) => !leg || typeof leg !== "object")) return { legs: [], pathText: "", carrierText: "", choiceText: "", transportText: "" };
-  const decimal = (value) => TRANSPORT_NUMBER_FORMAT.format(Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : 0);
-  const legs = transportPlan.legs.map((leg, index) => {
-    const hidden = leg.visibility === "gm" || hiddenCarrierIds.has(leg.carrierId) || hiddenCountryIds.has(leg.fromCountryId)
-      || hiddenCountryIds.has(leg.toCountryId) || hiddenRegionIds.has(leg.fromRegionId) || hiddenRegionIds.has(leg.toRegionId);
-    if (!isGM && hidden) return { number: index + 1, hidden: true, fromLabel: "Скрытый участок", toLabel: "",
-      modeLabel: "", carrierLabel: "", distanceText: "", timeText: "", capacityText: "", transferText: "", chargedText: "" };
-    return { number: index + 1, hidden: false, fromLabel: String(leg.fromLabel || "Пункт отправления"), toLabel: String(leg.toLabel || "Пункт назначения"),
-      modeLabel: leg.kind === "last-mile" ? "Местный воздушный участок" : String(leg.modeLabel || TRANSPORT_MODE_NAMES[leg.mode] || "Перевозка"),
-      carrierLabel: String(leg.carrierLabel || "Независимые перевозчики"), distanceText: `${decimal(leg.distanceKm)} км`, timeText: `${decimal(leg.travelQd)} QD`,
-      capacityText: loadText(leg.capacityLoad), transferText: Number.isFinite(leg.transferQd) && leg.transferQd > 0 ? `перегрузка ${decimal(leg.transferQd)} QD` : "",
-      chargedText: Number.isFinite(leg.chargedCopper) ? `за перевозку: ${formatCopperCurrencyCompact(leg.chargedCopper)}` : "" };
-  });
-  const carriers = [...new Set(legs.map((leg) => leg.carrierLabel).filter(Boolean))];
-  const hidden = legs.some((leg) => leg.hidden);
-  return { legs, pathText: legs.map((leg) => leg.hidden ? "Скрытый участок" : `${leg.fromLabel} → ${leg.toLabel}`).join(" · "),
-    carrierText: hidden || carriers.length > 1 ? "Составная перевозка" : carriers[0] || "",
-    choiceText: legs.map((leg) => leg.hidden ? "Скрытый участок" : `${leg.modeLabel} · ${leg.carrierLabel}`).join(" → "),
-    transportText: [...new Set(legs.map((leg) => leg.hidden ? "Скрытый участок" : leg.modeLabel))].join(" + ") };
-}
 
 function prepareLine(line, quantity = 0) {
   const qty = Math.max(0, Math.min(Math.floor(Number(quantity) || 0), line.stock));
@@ -73,11 +42,6 @@ function prepareLine(line, quantity = 0) {
     providerShareText: `${Math.round(Number(line.providerSharePct ?? 0))}%`,
     searchText: [line.name, line.kindLabel, line.resourceId, line.itemUuid, line.origin, line.providerLabel, ...(line.tags ?? [])].filter(Boolean).join(" ").toLocaleLowerCase("ru")
   };
-}
-
-function loadText(value = 0) {
-  const load = Math.max(0, Number(value) || 0);
-  return `${Number.isInteger(load) ? load : Number(load.toFixed(1))} ед.`;
 }
 
 export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2)) {
@@ -130,30 +94,7 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
   }
 
   _availableMarkets(data, { holding = null, isGM = Boolean(game.user?.isGM), economy: preparedEconomy = null, resources: preparedResources = null } = {}) {
-    const locations = data?.catalog?.eventRegions ?? [];
-    const resources = preparedResources ?? allResourceDefs({ catalogRows: data?.catalog?.resources });
-    const economy = preparedEconomy ?? normalizeMarketEconomy(data?.catalog?.marketEconomy, { locations });
-    if (!holding) return [];
-    const access = holdingMarketAccessLevel(holding);
-    const accessByRegion = marketRegionAccessCostMap({ holding, regions: locations, dependencies: { regionResolver: marketRegionForValue } });
-    const reachableLocations = locations.filter((location) => {
-      const routeAccessCost = accessByRegion.get(String(location?.value ?? ""));
-      return Number.isFinite(routeAccessCost) && routeAccessCost <= access.level;
-    });
-    return effectiveMarketLocations({
-      economy,
-      locations: reachableLocations,
-      resources,
-      isGM,
-      normalizedEconomy: true
-    }).map((market) => {
-      const routeAccessCost = accessByRegion.get(String(market.regionId ?? ""));
-      return {
-        ...market,
-        routeAccessCost: Number.isFinite(routeAccessCost) ? routeAccessCost : null,
-        offers: market.offers.filter((offer) => offer.active && (isGM || offer.visibility !== "gm"))
-      };
-    }).filter((market) => market.routeAccessCost !== null && market.routeAccessCost <= access.level);
+    return availableAuthorityMarkets(data, { holding, isGM, economy: preparedEconomy, resources: preparedResources });
   }
 
   _marketLogistics(holding, data, market, { carrierId = this.carrierId, persistCarrier = false, isGM = Boolean(game.user?.isGM), economy = null } = {}) {

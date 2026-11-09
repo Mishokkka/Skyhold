@@ -4,9 +4,7 @@ import { pathToFileURL } from "node:url";
 import { mergeHoldingDefaults } from "../data/normalizers.js";
 import { normalizeMarketOutboundState } from "../data/market/outbound-state.js";
 import { normalizeMarketTransportPlan, marketTransportPlanSnapshot, marketTransportPlanForOrder, allocateMarketTransportCharges } from "../data/market/transport-plan.js";
-import { createMarketShipment } from "../engines/market/shipment.js";
-import { createMarketOutboundOrder, planMarketOutboundSale, marketOutboundPlanToken } from "../engines/market/outbound.js";
-import { planMarketPurchase } from "../engines/market/pricing.js";
+import { planMarketOutboundSale, marketOutboundPlanToken } from "../engines/market/outbound.js";
 
 function snapshot(direction = "inbound") {
   const leg = (id, from, to, mode, extra = {}) => ({ id, routeId: id, fromRegionId: from, toRegionId: to,
@@ -24,31 +22,6 @@ function snapshot(direction = "inbound") {
   return { version: 1, key: `accepted:${direction}`, direction, legs,
     distanceKm: 120.5, travelQd: 3.25, capacityLoad: 400.5, dispatchCopper: 38,
     distanceCopper: 10.25, loadCopperPerUnit: 0.075, operatingCopper: 62.25, hireCopper: 24.25, riskFactor: 1.125 };
-}
-
-const deps = {
-  addMoney: (holding, amount) => { holding.storage.moneyCopper += amount; },
-  snapshotItemForStorage: (item) => structuredClone(item),
-  appendStorageLog: (holding, rows) => holding.storage.log.push(...rows)
-};
-function inboundPlan(transportPlan, qty = 2) {
-  const holding = mergeHoldingDefaults({ id: "snapshot-test", storage: { moneyCopper: 10_000 } });
-  const plan = planMarketPurchase({ holding, quantities: { goods: qty }, quote: {
-    marketId: "market", marketLabel: "Рынок", deliveryMode: "scheduled", deliveryQd: 12,
-    location: {}, offers: [{ id: "goods", sourceType: "resource", resourceId: "wood", name: "Древесина", stock: qty, unitPriceCopper: 20, load: 1 }],
-    logistics: { ok: true, transportMode: "multimodal", routePath: ["home", "transfer", "market"],
-      distanceKm: 120.5, distanceFlatCopper: 40, distanceLoadCopper: 0.075, travelQd: 3.25, capacityLoad: 400.5,
-      ...(transportPlan ? { transportPlan } : {}) }
-  } });
-  assert.equal(plan.ok, true);
-  return { holding, plan };
-}
-function outboundPlan(transportPlan) {
-  return { ok: true, marketId: "market", deliveryQd: 12, revenueCopper: 100, upfrontCopper: 5, freightCopper: 5,
-    tariffCopper: 0, insuranceCopper: 0, insuredValueCopper: 100, maximumInsurancePayoutCopper: 0,
-    lines: [{ resourceId: "wood", name: "Древесина", qty: 2 }], cargoReservations: [{ rowId: "wood", resourceId: "wood", qty: 2 }],
-    buyerAllocations: [], route: { id: "route", carrierId: "chain", routePath: ["home", "transfer", "market"],
-      routeModes: ["airship", "caravan"], transportMode: "multimodal", ...(transportPlan ? { transportPlan } : {}) } };
 }
 
 export function checkTransportPlanState() {
@@ -81,69 +54,29 @@ export function checkTransportPlanState() {
   const bounded = normalizeMarketTransportPlan(readCorrupt);
   assert.equal(bounded.legs[0].dispatchCopper, 0); assert.equal(bounded.legs[1].riskFactor, 1);
 
-  const { holding, plan } = inboundPlan(original);
-  const moneyBefore = holding.storage.moneyCopper;
-  const created = createMarketShipment({ holding, plan, operationId: "book-inbound", dependencies: deps });
-  assert.equal(created.ok, true); assert.equal(holding.storage.moneyCopper, moneyBefore - plan.totalCopper);
-  const accepted = created.order.transportPlan, { billing: _billing, ...tariff } = accepted;
-  assert.deepEqual({ ...tariff, legs: tariff.legs.map(({ chargedCopper: _charge, ...leg }) => leg) }, original,
-    "booking preserves every frozen tariff field while adding actual paid attribution");
-  assert.deepEqual(accepted.legs.map((leg) => leg.chargedCopper), plan.shipmentBatches[0].transportLegCosts);
-  assert.equal(accepted.legs.reduce((sum, leg) => sum + leg.chargedCopper, 0), plan.routeCopper);
-  assert.deepEqual(accepted.billing, { batchCount: 1, freightCopper: plan.routeCopper, insuranceCopper: plan.insuranceCopper,
-    taxCopper: plan.taxCopper, handlingCopper: plan.handlingCopper, expressSurchargeCopper: plan.expressSurchargeCopper,
-    deliveryCopper: plan.deliveryCopper, serviceLevel: plan.serviceLevel });
-  original.legs[0].carrierLabel = "Каталог изменён"; original.legs[0].distanceCopper = 999;
-  assert.notEqual(created.order.transportPlan.legs[0].carrierLabel, original.legs[0].carrierLabel);
-  assert.notEqual(created.order.transportPlan.legs[0].distanceCopper, original.legs[0].distanceCopper);
-  const loaded = mergeHoldingDefaults(JSON.parse(JSON.stringify(holding)));
-  assert.deepEqual(loaded.special.market.orders[0].transportPlan, created.order.transportPlan);
-  assert.equal(loaded.special.market.orders[0].totalCopper, created.order.totalCopper);
-  const replay = createMarketShipment({ holding, plan, operationId: "book-inbound", dependencies: deps });
-  assert.equal(replay.replay, true); assert.equal(holding.storage.moneyCopper, moneyBefore - plan.totalCopper);
-
-  const outward = snapshot("outbound"), outPlan = outboundPlan(outward);
-  const order = createMarketOutboundOrder({ plan: outPlan, operationId: "book-outbound" });
-  assert.deepEqual(order.transportPlan, outward);
-  outward.legs[0].carrierLabel = "Другая компания";
-  assert.notEqual(order.transportPlan.legs[0].carrierLabel, outward.legs[0].carrierLabel);
-  assert.deepEqual(normalizeMarketOutboundState(JSON.parse(JSON.stringify({ orders: [order] }))).orders[0].transportPlan, order.transportPlan);
-
-  const legacyInbound = inboundPlan();
-  const legacyCreated = createMarketShipment({ ...legacyInbound, operationId: "legacy", dependencies: deps });
-  assert.equal(Object.hasOwn(legacyCreated.order, "transportPlan"), false);
-  assert.equal(Object.hasOwn(mergeHoldingDefaults(JSON.parse(JSON.stringify(legacyInbound.holding))).special.market.orders[0], "transportPlan"), false);
-  const legacyOutward = createMarketOutboundOrder({ plan: outboundPlan(), operationId: "legacy-outbound" });
-  assert.equal(Object.hasOwn(legacyOutward, "transportPlan"), false);
-  assert.equal(Object.hasOwn(normalizeMarketOutboundState({ orders: [legacyOutward] }).orders[0], "transportPlan"), false);
-
+  const accepted = marketTransportPlanForOrder(original, { transportLegCosts: [10, 15, 5], freightCopper: 30,
+    insuranceCopper: 4, taxCopper: 3, handlingCopper: 2, expressSurchargeCopper: 1, deliveryCopper: 40, serviceLevel: "express" });
+  const { billing: _billing, ...tariff } = accepted;
+  assert.deepEqual({ ...tariff, legs: tariff.legs.map(({ chargedCopper: _charge, ...leg }) => leg) }, original);
+  assert.deepEqual(accepted.legs.map(leg => leg.chargedCopper), [10, 15, 5]);
+  assert.deepEqual(accepted.billing, { batchCount: 1, freightCopper: 30, insuranceCopper: 4, taxCopper: 3,
+    handlingCopper: 2, expressSurchargeCopper: 1, deliveryCopper: 40, serviceLevel: "express" });
+  original.legs[0].carrierLabel = "Changed catalog";
+  assert.notEqual(accepted.legs[0].carrierLabel, original.legs[0].carrierLabel);
+  const saved = { id: "accepted-history", status: "delivered", totalCopper: 90, transportPlan: accepted };
+  const loaded = mergeHoldingDefaults({ special: { market: { orders: [saved] } } });
+  assert.deepEqual(loaded.special.market.orders[0].transportPlan, accepted);
+  assert.equal(loaded.special.market.orders[0].totalCopper, 90);
+  const outward = marketTransportPlanSnapshot(snapshot("outbound"));
+  assert.deepEqual(normalizeMarketOutboundState({ orders: [{ id: "old-sale", status: "delivered", transportPlan: outward }] }).orders[0].transportPlan, outward);
+  assert.equal(Object.hasOwn(mergeHoldingDefaults({ special: { market: { orders: [{ id: "legacy", status: "delivered" }] } } }).special.market.orders[0], "transportPlan"), false);
+  assert.equal(Object.hasOwn(normalizeMarketOutboundState({ orders: [{ id: "legacy", status: "delivered" }] }).orders[0], "transportPlan"), false);
   for (const retained of [future, { version: 1, key: "broken", direction: "inbound", legs: [{ originalMetadata: true }] }]) {
-    const loadedInbound = mergeHoldingDefaults({ special: { market: { orders: [{ ...legacyCreated.order, transportPlan: retained }] } } });
-    assert.deepEqual(loadedInbound.special.market.orders[0].transportPlan, retained, "normal loading preserves newer/invalid metadata for recovery");
-    assert.equal(loadedInbound.special.market.orders[0].totalCopper, legacyCreated.order.totalCopper);
-    assert.deepEqual(normalizeMarketOutboundState({ orders: [{ ...legacyOutward, transportPlan: retained }] }).orders[0].transportPlan, retained);
+    const imported = mergeHoldingDefaults({ special: { market: { orders: [{ ...saved, transportPlan: retained }] } } });
+    assert.deepEqual(imported.special.market.orders[0].transportPlan, retained);
+    assert.equal(imported.special.market.orders[0].totalCopper, 90);
+    assert.deepEqual(normalizeMarketOutboundState({ orders: [{ id: "old-sale", transportPlan: retained }] }).orders[0].transportPlan, retained);
   }
-  const invalid = snapshot(); invalid.legs[0].carrierId = "";
-  const rejected = inboundPlan(invalid), beforeRejected = JSON.stringify(rejected.holding);
-  assert.throws(() => createMarketShipment({ ...rejected, operationId: "rejected", dependencies: deps }), /план перевозки/);
-  assert.equal(JSON.stringify(rejected.holding), beforeRejected, "an invalid new agreement cannot debit money or append orders/logs");
-  assert.throws(() => createMarketOutboundOrder({ plan: outboundPlan(invalid), operationId: "rejected-outward" }), /план перевозки/);
-
-  const bulk = inboundPlan(snapshot(), 201);
-  assert.ok(bulk.plan.batchCount > 1);
-  const bulkCreated = createMarketShipment({ ...bulk, operationId: "bulk-inbound", dependencies: deps });
-  assert.equal(bulkCreated.orders.length, bulk.plan.batchCount);
-  bulkCreated.orders.forEach((batch, index) => {
-    assert.equal(batch.transportPlan.billing.batchCount, 1);
-    assert.deepEqual(batch.transportPlan.legs.map((leg) => leg.chargedCopper), bulk.plan.shipmentBatches[index].transportLegCosts);
-    assert.equal(batch.transportPlan.billing.freightCopper, batch.routeCopper);
-    assert.equal(batch.transportPlan.billing.deliveryCopper, batch.deliveryCopper);
-    assert.equal(batch.transportPlan.billing.insuranceCopper, batch.insuranceCopper);
-  });
-  assert.equal(bulkCreated.orders.reduce((sum, batch) => sum + batch.transportPlan.billing.deliveryCopper, 0), bulk.plan.deliveryCopper);
-  for (const leg of bulk.plan.logistics.transportPlan.legs) assert.equal(leg.chargedCopper,
-    bulkCreated.orders.reduce((sum, batch) => sum + batch.transportPlan.legs.find((row) => row.id === leg.id).chargedCopper, 0));
-
   checkOutboundBilling();
 }
 
@@ -169,9 +102,13 @@ function checkOutboundBilling() {
     assert.equal(plan.shipmentBatches.length, 2);
     assert.equal(plan.route.transportPlan.billing.insuranceCopper, plan.insuranceCopper);
     assert.equal(plan.route.transportPlan.billing.deliveryCopper, plan.upfrontCopper);
-    const orders = plan.shipmentBatches.map((part, index) => createMarketOutboundOrder({ plan: part, operationId: `out:${insuranceEnabled}:${index}` }));
+    const orders = normalizeMarketOutboundState({ orders: plan.shipmentBatches.map((part, index) => ({
+      id: `historical:${insuranceEnabled}:${index}`, status: "delivered", transportPlan: part.route.transportPlan,
+      freightCopper: part.freightCopper, tariffCopper: part.tariffCopper, insuranceCopper: part.insuranceCopper,
+      upfrontCopper: part.upfrontCopper
+    })) }).orders;
     orders.forEach((order, index) => {
-      assert.deepEqual(order.transportPlan, plan.shipmentBatches[index].route.transportPlan, "the per-order preview is exactly the saved paid snapshot");
+      assert.deepEqual(order.transportPlan, plan.shipmentBatches[index].route.transportPlan, "historical read preserves the saved paid snapshot");
       const bill = order.transportPlan.billing;
       assert.equal(order.transportPlan.legs.reduce((sum, leg) => sum + leg.chargedCopper, 0), bill.freightCopper);
       assert.equal(bill.freightCopper + bill.handlingCopper + bill.expressSurchargeCopper, order.freightCopper);
@@ -189,5 +126,5 @@ function checkOutboundBilling() {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   checkTransportPlanState();
-  console.log("Transport-plan state: immutable inbound/outbound promises, fractional terms, JSON round trip, legacy/unknown preservation, replay and rejected-write atomicity passed.");
+  console.log("Transport-plan state: immutable historical inbound/outbound terms, billing attribution, fractional values, JSON round trip and unknown-version preservation passed.");
 }

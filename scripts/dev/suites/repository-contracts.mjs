@@ -387,13 +387,12 @@ function checkStorageEngineBoundaries() {
 
 function checkMarketBoundaries() {
   const pricing = readFileSync(path.join(root, "scripts/engines/market/pricing.js"), "utf8");
-  const delivery = readFileSync(path.join(root, "scripts/engines/market/delivery.js"), "utf8");
-  const shipment = readFileSync(path.join(root, "scripts/engines/market/shipment.js"), "utf8");
   const logistics = readFileSync(path.join(root, "scripts/engines/market/logistics.js"), "utf8");
   const economy = readFileSync(path.join(root, "scripts/data/market/economy.js"), "utf8");
   const composition = readFileSync(path.join(root, "scripts/engines/market/composition.js"), "utf8");
   const providers = readFileSync(path.join(root, "scripts/engines/market/providers.js"), "utf8");
   const app = readFileSync(path.join(root, "scripts/apps/market-app.js"), "utf8");
+  const marketAuthority = readFileSync(path.join(root, "scripts/apps/market/authority-context.js"), "utf8");
   const marketOperationExecutor = readFileSync(path.join(root, "scripts/apps/market-operation-executor.js"), "utf8");
   const transportExecutor = readFileSync(path.join(root, "scripts/apps/transport-operation-executor.js"), "utf8");
   const transportTemplate = readFileSync(path.join(root, "templates/transport-app.hbs"), "utf8");
@@ -415,14 +414,12 @@ function checkMarketBoundaries() {
   const resourceCore = readFileSync(path.join(root, "scripts/core/resources.js"), "utf8");
   const gmTemplate = readFileSync(path.join(root, "templates/parts/skyhold-tab-gm.hbs"), "utf8");
   const tradePack = JSON.parse(readFileSync(path.join(root, "examples/content-packs/air-islands-trade-network-template.json"), "utf8"));
-  for (const [name, engine] of [["pricing", pricing], ["delivery", delivery], ["shipment", shipment], ["logistics", logistics]]) {
+  for (const [name, engine] of [["pricing", pricing], ["logistics", logistics]]) {
     const imports = [...engine.matchAll(/^\s*import\s+[^;]+?from\s+["']([^"']+)["']/gm)].map((match) => match[1]);
     // These helpers own game-date quotes, bounded money, conserved purchase
     // receipts, dated cargo and alternative routes; they are active contracts.
     const expectedImports = {
       pricing: ["../../core/economy-calendar.js", "../../data/market/money-limits.js", "../../data/market/transport-plan.js"],
-      delivery: ["./purchase-payment.js"],
-      shipment: ["./cargo-aging.js", "./shipment-schedule.js", "./purchase-payment.js", "../../data/market/transport-plan.js", "../../core/seeded-unit.js"],
       logistics: ["../politics/runtime-effects.js", "./route-candidates.js"]
     }[name];
     assert.deepEqual(imports, expectedImports, `market ${name} engine may only import its declared domain helpers`);
@@ -431,7 +428,7 @@ function checkMarketBoundaries() {
   }
   for (const helper of [
     "scripts/core/economy-calendar.js", "scripts/core/seeded-unit.js", "scripts/data/market/money-limits.js", "scripts/data/market/transport-plan.js",
-    "scripts/engines/market/purchase-payment.js", "scripts/engines/market/route-candidates.js"
+    "scripts/engines/market/route-candidates.js"
   ]) {
     const source = readFileSync(path.join(root, helper), "utf8");
     assertNoEngineGlobals(source, `${helper} must remain independent of platform globals`);
@@ -451,17 +448,6 @@ function checkMarketBoundaries() {
   assert.match(pricing, /charter:[^\n]+capacityFactor:\s*1[^\n]+fullFixedFare:\s*true/, "charter must expose full vessel capacity and full fixed voyage cost");
   assert.match(pricing, /export function splitMarketShipmentLines\b/, "market pricing must split oversized orders into conserved physical cargo batches");
   assert.match(pricing, /service\.fullFixedFare\s*&&\s*hasCapacityLimit\s*\?\s*physicalCapacityLoad\s*:\s*batch\.totalLoad/, "charter operating cost must reserve the whole vessel instead of charging only its partial cargo mass");
-  assert.match(delivery, /export function applyMarketDelivery\b/, "market delivery engine must expose atomic resource and Item placement");
-  assert.match(shipment, /export function createMarketShipment\b/, "market shipment engine must expose debit-once shipment creation");
-  assert.match(shipment, /parentOperationId/, "batched shipments must retain their parent purchase transaction");
-  assert.match(shipment, /holding\.special\.market\.orders\.push\(\.\.\.preparedOrders\)/, "all physical cargo batches must be persisted as independent shipment records");
-  assert.match(shipment, /export function retainMarketShipmentOrders\b/, "shipment retention must prune terminal history without dropping active batches");
-  assert.match(shipment, /export function advanceMarketShipments\b/, "market shipment engine must expose replay-safe QD advancement");
-  assert.match(shipment, /deterministicUnit as deterministicMarketShipmentUnit.*from "\.\.\/\.\.\/core\/seeded-unit\.js"/, "historical incidents retain the shared deterministic algorithm");
-  assert.match(shipment, /export function resolveMarketShipmentRisk\b/, "market shipment engine must resolve delay, loss and insurance atomically");
-  assert.match(shipment, /!order\.insurancePaidAt/, "market shipment insurance must guard against duplicate payouts");
-  assert.match(shipment, /export function marketShipmentCancellationQuote\b/, "market shipment engine must expose an explainable cancellation preview");
-  assert.match(shipment, /export function cancelMarketShipment\b/, "market shipment cancellation must remain a replay-safe engine operation");
   assert.match(logistics, /export function resolveMarketLogistics\b/, "market logistics engine must expose route, access and transport resolution");
   assert.match(logistics, /airship:[^\n]+loadDistanceCopper:\s*0\.02/, "airship bulk freight must retain the sea-like corrected distance tariff");
   assert.match(logistics, /export function holdingMarketAccessLevel\b/, "market logistics engine must expose the manually entered URS");
@@ -479,8 +465,9 @@ function checkMarketBoundaries() {
   assert.match(app, /openTransportApp/, "market checkout must open unified transport");
   assert.doesNotMatch(app, /_marketComparisonRows\(/, "market app must not eagerly calculate every route while opening the location selector");
   assert.match(app, /marketOptions:\s*markets\.map\(/, "market app must retain the compact location selector without the removed comparison pass");
-  assert.match(app, /from "\.\.\/engines\/market\/logistics\.js"/, "market app must consume the pure logistics engine");
-  assert.match(app, /from "\.\.\/engines\/market\/composition\.js"/, "market app must compose markets from countries and location specialties");
+  assert.match(app, /return availableAuthorityMarkets\(data,/, "market browsing must delegate to the shared authority availability rules");
+  assert.match(marketAuthority, /from "\.\.\/\.\.\/engines\/market\/logistics\.js"/, "shared market availability must consume the pure logistics engine");
+  assert.match(marketAuthority, /from "\.\.\/\.\.\/engines\/market\/composition\.js"/, "shared market availability must compose countries and location specialties");
   assert.match(app, /groupMarketOffers/, "market app must retain per-provider stock selection");
   assert.match(economyDomain, /import\("\.\.\/\.\.\/\.\.\/workflows\/transport\/orders\.js"\)/, "economy lazily advances the unified transport workflow");
   assert.doesNotMatch(economyDomain, /advanceMarketShipments|advanceMarketOutboundShipments/, "old delivery executors must not remain in period execution");

@@ -22,8 +22,7 @@ import { economyLedgerStorageRows } from "../../../engines/economy/ledger.js";
 import { FinanceStorageContextDomain } from "./storage/context-domain.js";
 import { FinanceStorageItemDocumentDomain } from "./storage/item-document-domain.js";
 import { composeDomainGroup } from "../compose-domain.js";
-import { transportOrders } from "../../../data/transport/state.js";
-import { createMarketVisibility } from "../../../data/market/visibility.js";
+import { createMarketVisibility, marketLogSources } from "../../../data/market/visibility.js";
 import {
   addResourceBatches,
   availableResourceBatchInventory,
@@ -45,10 +44,9 @@ _storageLogRows(holding, roomsArg = null) {
     return roomLabelCache.get(id);
   };
   const log = Array.isArray(holding?.storage?.log) ? holding.storage.log : [];
-  const orders = new Map(transportOrders(holding).map(order => [order.id, order]));
+  const rows = [...log].reverse().slice(0, 80), sources = marketLogSources(holding, rows);
   const visibility = createMarketVisibility(this._contextData, { isGM: Boolean(globalThis.game?.user?.isGM) });
-  return [...log].reverse().slice(0, 80).map((row) => {
-    const order = orders.get(row.operationId);
+  return rows.map((row) => {
     const id = normalizeResourceId(row.resourceId, row.name);
     const name = id === "custom" ? (row.name || "Ресурс") : resourceLabel(id);
     const qty = this._safeNumber(row.qty, 0);
@@ -71,7 +69,7 @@ _storageLogRows(holding, roomsArg = null) {
       realDateText,
       laputaDateText,
       kindLabel: this._storageLogKindLabel(row.kind),
-      source: order && row.source === order.commercial?.marketLabel ? visibility.marketLabel(order.commercial) : row.source || "—",
+      source: visibility.logSource(row, sources.get(row.operationId)),
       roomLabel,
       note: [roomLabel, row.note || row.period || ""].filter(Boolean).join(" · ")
     };

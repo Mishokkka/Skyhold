@@ -6,11 +6,9 @@ import { marketLocationForHolding, marketRegionFactors, marketRegionForValue } f
 import { normalizeEventRegionOptions } from "../data/random-events.js";
 import { marketRouteDistanceKm, marketRoutePolylineLength, normalizeMarketRouteMap } from "../data/market/route-map.js";
 import { MARKET_CHARTER_ETA_FACTOR, MARKET_DELIVERY_SERVICES, MARKET_EXPRESS_ETA_FACTOR, MARKET_EXPRESS_SURCHARGE_RATE, MARKET_FREIGHT_MAX_RATE, MARKET_FREIGHT_MIN_RATE, MARKET_STANDARD_ETA_FACTOR, marketHistoricalFreightRate, marketHistoricalInsuranceRate, marketLocationText, marketQuotePeriodKey, marketShipmentRiskProfile, planMarketPurchase, prepareMarketQuote, resolveMarketLocation, splitMarketShipmentLines } from "../engines/market/pricing.js";
-import { applyMarketDelivery } from "../engines/market/delivery.js";
-import { advanceMarketShipments, cancelMarketShipment, createMarketShipment, deliverMarketShipmentNow, marketShipmentCancellationQuote, resolveMarketShipmentRisk, retainMarketShipmentOrders } from "../engines/market/shipment.js";
 import { holdingMarketAccessLevel, marketRegionAccessCostMap, MARKET_TRANSPORT_TARIFFS, resolveMarketLogistics, shortestMarketRoute, shortestMarketRouteDistanceKm } from "../engines/market/logistics.js";
 import { allResourceDefs, normalizeResourceCatalogRow } from "../core/resources.js";
-import { copperCurrencyParts, formatCopperCurrency, formatCopperCurrencyCompact } from "../core/currency.js";
+import { copperCurrencyParts, formatCopperCurrencyCompact } from "../core/currency.js";
 import { normalizeStorageLogRow } from "../data/normalizers/storage.js";
 import { buildHoldingOperationTimeline } from "../data/operation-timeline.js";
 import { mergeHoldingDefaults, normalizeSkyholdData } from "../data/normalizers.js";
@@ -468,207 +466,6 @@ const emptyPlan = planMarketPurchase({ holding: connected, quote: quoteA, quanti
 assert.equal(emptyPlan.empty, true);
 assert.equal(emptyPlan.deliveryCopper, 0);
 
-const deliveryDependencies = {
-  addMoney: (target, amount) => { target.storage.moneyCopper += amount; },
-  storageAddWithOverflow: (target, row, qty) => {
-    target.storage.resources.push({ ...row, qty });
-    return [{ roomId: row.roomId, qty }];
-  },
-  snapshotItemForStorage: (item, qty, roomId) => ({ id: `stored-${item.id}`, name: item.name, img: item.img, type: item.type, qty, roomId, itemUuid: item.uuid, itemData: { name: item.name, type: item.type, img: item.img, system: { quantity: qty } } }),
-  appendStorageLog: (target, rows) => { target.storage.log.push(...rows); },
-  formatCurrency: formatCopperCurrency,
-  internalDemandAvailableFromQd: (target) => Math.max(0, Number(target?.gm?.calendaria?.lastQd) || 0) + 40
-};
-const instantDeliveryDependencies = {
-  ...deliveryDependencies,
-  internalDemandAvailableFromQd: (target) => Math.max(0, Number(target?.gm?.calendaria?.lastQd) || 0)
-};
-const safeStandardBatchPlan = {
-  ...standardBatchPlan,
-  riskLossChance: 0,
-  riskDelayChance: 0,
-  shipmentBatches: standardBatchPlan.shipmentBatches.map((batch) => ({
-    ...batch,
-    riskProfile: { ...batch.riskProfile, lossChance: 0, delayChance: 0 }
-  }))
-};
-const batchedShipmentHolding = { storage: { moneyCopper: safeStandardBatchPlan.totalCopper + 100, resources: [], items: [], log: [] }, special: { market: { orders: [] } } };
-const batchedShipment = createMarketShipment({ holding: batchedShipmentHolding, plan: safeStandardBatchPlan, operationId: "shipment-batched", dependencies: deliveryDependencies });
-assert.equal(batchedShipment.ok, true);
-assert.equal(batchedShipment.batchCount, 2);
-assert.equal(batchedShipmentHolding.storage.moneyCopper, 100, "a multi-departure purchase must still debit the treasury atomically once");
-assert.deepEqual(batchedShipment.orders.map((order) => order.operationId), ["shipment-batched:batch:1", "shipment-batched:batch:2"]);
-assert.deepEqual(batchedShipment.orders.map((order) => order.cargo[0].qty), [800, 40], "each shipment record must own only its physical cargo batch");
-assert.deepEqual(batchedShipment.orders.map((order) => order.remainingQd), safeStandardBatchPlan.shipmentBatches.map((batch) => batch.deliveryQd), "each departure must retain its own ETA");
-const replayBatchedShipment = createMarketShipment({ holding: batchedShipmentHolding, plan: safeStandardBatchPlan, operationId: "shipment-batched", dependencies: deliveryDependencies });
-assert.equal(replayBatchedShipment.replay, true);
-assert.equal(replayBatchedShipment.orders.length, 2, "replaying the parent transaction must recover every child shipment without another debit");
-const firstBatchArrival = advanceMarketShipments({ holding: batchedShipmentHolding, elapsedQd: safeStandardBatchPlan.firstDeliveryQd, dependencies: deliveryDependencies });
-assert.equal(firstBatchArrival.delivered.length, 1, "the first full rideshare allotment must arrive independently");
-assert.equal(batchedShipmentHolding.storage.resources[0].batches[0].internalDemandAvailableFromQd, 40, "scheduled cargo arriving inside an Apply must be deferred to the next tenday boundary");
-assert.equal(batchedShipmentHolding.special.market.orders[1].remainingQd, safeStandardBatchPlan.dispatchIntervalQd);
-assert.equal(batchedShipmentHolding.storage.resources.reduce((sum, row) => sum + row.qty, 0), 800);
-const finalBatchArrival = advanceMarketShipments({ holding: batchedShipmentHolding, elapsedQd: safeStandardBatchPlan.dispatchIntervalQd, dependencies: deliveryDependencies });
-assert.equal(finalBatchArrival.delivered.length, 1);
-assert.equal(batchedShipmentHolding.storage.resources.reduce((sum, row) => sum + row.qty, 0), 840, "staggered batch arrivals must conserve total cargo");
-
-const independentlyCancelledHolding = { storage: { moneyCopper: safeStandardBatchPlan.totalCopper + 100, resources: [], items: [], log: [] }, special: { market: { orders: [] } } };
-const independentlyCancelled = createMarketShipment({ holding: independentlyCancelledHolding, plan: safeStandardBatchPlan, operationId: "shipment-independent-cancel", dependencies: deliveryDependencies });
-cancelMarketShipment({ holding: independentlyCancelledHolding, orderId: independentlyCancelled.orders[0].id, dependencies: deliveryDependencies });
-advanceMarketShipments({ holding: independentlyCancelledHolding, elapsedQd: safeStandardBatchPlan.deliveryQd, dependencies: deliveryDependencies });
-assert.equal(independentlyCancelledHolding.special.market.orders[0].status, "cancelled");
-assert.equal(independentlyCancelledHolding.special.market.orders[1].status, "delivered", "cancelling one batch must not cancel a different departure from the same purchase");
-assert.equal(independentlyCancelledHolding.storage.resources.reduce((sum, row) => sum + row.qty, 0), 40);
-const retainedOrders = retainMarketShipmentOrders([
-  ...Array.from({ length: 305 }, (_value, index) => ({ id: `archived-${index}`, status: "delivered" })),
-  { id: "active-a", status: "in-transit" },
-  { id: "active-b", status: "delayed" }
-]);
-assert.equal(retainedOrders.length, 302);
-assert.deepEqual(retainedOrders.slice(-2).map((order) => order.id), ["active-a", "active-b"], "archive pruning must never discard active cargo batches");
-
-const deliveryHolding = { storage: { moneyCopper: connectedPlan.totalCopper + 100, resources: [], items: [], log: [] } };
-const resourceDelivery = applyMarketDelivery({ holding: deliveryHolding, plan: connectedPlan, operationId: "delivery-resource", dependencies: instantDeliveryDependencies });
-assert.equal(resourceDelivery.ok, true);
-assert.equal(deliveryHolding.storage.resources[0].resourceId, first.resourceId, "resource market lines must use storage overflow delivery");
-assert.equal(deliveryHolding.storage.resources[0].batches[0].internalDemandAvailableFromQd, 0, "an instant receipt between periods must be eligible when internal demand first runs in the next Apply");
-assert.equal(deliveryHolding.storage.moneyCopper, 100, "delivery engine must debit the confirmed total exactly once");
-
-const guildMarket = effectiveWorldCatalog[1];
-const guildQuote = prepareMarketQuote({ holding: connected, market: guildMarket, resources });
-const guildPlan = planMarketPurchase({ holding: connected, quote: guildQuote, quantities: { "guild-item": 1 }, targetRoomId: "warehouse" });
-const rejectedItemHolding = { storage: { moneyCopper: guildPlan.totalCopper + 100, resources: [], items: [], log: [] } };
-const rejectedItemDelivery = applyMarketDelivery({ holding: rejectedItemHolding, plan: guildPlan, operationId: "missing-item", dependencies: instantDeliveryDependencies });
-assert.equal(rejectedItemDelivery.ok, false, "missing Item document must reject delivery before mutations");
-assert.equal(rejectedItemHolding.storage.moneyCopper, guildPlan.totalCopper + 100);
-assert.equal(rejectedItemHolding.storage.items.length, 0);
-const itemDocument = { id: "example", uuid: "Compendium.world.goods.Item.example", name: "Набор инструментов", img: "icons/svg/item-bag.svg", type: "gear" };
-const itemDeliveryHolding = { storage: { moneyCopper: guildPlan.totalCopper + 100, resources: [], items: [], log: [] } };
-const itemDelivery = applyMarketDelivery({ holding: itemDeliveryHolding, plan: guildPlan, itemDocuments: new Map([["guild-item", itemDocument]]), operationId: "delivery-item", dependencies: instantDeliveryDependencies });
-assert.equal(itemDelivery.ok, true);
-assert.equal(itemDeliveryHolding.storage.moneyCopper, 100);
-assert.equal(itemDeliveryHolding.storage.items[0].itemUuid, itemDocument.uuid, "Item UUID offer must be snapshotted into stored items");
-assert.equal(itemDeliveryHolding.storage.items[0].internalDemandAvailableFromQd, 0, "instant Item cargo must use the same between-period boundary as resources");
-assert.equal(itemDeliveryHolding.storage.log[0].operationId, "delivery-item");
-
-const shipmentHolding = { storage: { moneyCopper: connectedPlan.totalCopper + 100, resources: [], items: [], log: [] }, special: { market: { orders: [] } } };
-const safeShipmentPlan = { ...connectedPlan, riskLossChance: 0, riskDelayChance: 0 };
-const shipment = createMarketShipment({
-  holding: shipmentHolding,
-  plan: safeShipmentPlan,
-  operationId: "shipment-resource",
-  createdAt: "2026-07-13T00:00:00.000Z",
-  dependencies: deliveryDependencies
-});
-assert.equal(shipment.ok, true);
-assert.equal(shipment.order.status, "in-transit");
-assert.equal(shipment.order.remainingQd, safeShipmentPlan.deliveryQd);
-assert.equal(shipmentHolding.storage.moneyCopper, 100, "shipment acceptance must debit the confirmed total once");
-assert.equal(shipmentHolding.storage.log[0].operationId, "shipment-resource:payment");
-assert.equal(shipmentHolding.storage.log[0].qty, -safeShipmentPlan.totalCopper, "acceptance must log the exact money debit before cargo arrives");
-assert.equal(shipmentHolding.storage.resources.length, 0, "in-transit resources must not enter settlement storage early");
-assert.equal(shipment.order.cargo[0].sourceType, "resource");
-const replayShipment = createMarketShipment({ holding: shipmentHolding, plan: safeShipmentPlan, operationId: "shipment-resource", dependencies: deliveryDependencies });
-assert.equal(replayShipment.replay, true, "replayed shipment operation must return the existing order");
-assert.equal(shipmentHolding.storage.moneyCopper, 100, "replayed shipment operation must not debit treasury again");
-const shipmentHalfway = advanceMarketShipments({ holding: shipmentHolding, elapsedQd: safeShipmentPlan.deliveryQd - 1, dependencies: deliveryDependencies });
-assert.equal(shipmentHalfway.delivered.length, 0);
-assert.equal(shipmentHolding.special.market.orders[0].remainingQd, 1);
-assert.equal(shipmentHolding.storage.resources.length, 0);
-const shipmentArrival = advanceMarketShipments({ holding: shipmentHolding, elapsedQd: 1, deliveredAt: "2026-07-14T00:00:00.000Z", dependencies: deliveryDependencies });
-assert.equal(shipmentArrival.delivered.length, 1);
-assert.equal(shipmentHolding.special.market.orders[0].status, "delivered");
-assert.equal(shipmentHolding.storage.resources[0].resourceId, first.resourceId);
-assert.equal(shipmentHolding.storage.log[1].operationId, "shipment-resource:arrival", "arrival retains its separate cargo receipt after the purchase payment");
-const storedResourceCount = shipmentHolding.storage.resources.length;
-const storedLogCount = shipmentHolding.storage.log.length;
-advanceMarketShipments({ holding: shipmentHolding, elapsedQd: 40, dependencies: deliveryDependencies });
-assert.equal(shipmentHolding.storage.resources.length, storedResourceCount, "delivered shipment must be replay-safe");
-assert.equal(shipmentHolding.storage.log.length, storedLogCount, "replay must not duplicate arrival logs");
-
-const cancellationHolding = { storage: { moneyCopper: connectedPlan.totalCopper + 100, resources: [], items: [], log: [] }, special: { market: { orders: [] } } };
-const cancellableShipment = createMarketShipment({ holding: cancellationHolding, plan: connectedPlan, operationId: "shipment-cancel", dependencies: deliveryDependencies });
-const cancellationQuote = marketShipmentCancellationQuote(cancellableShipment.order);
-assert.equal(cancellationQuote.cancellable, true, "a booked shipment must remain cancellable before its first economy tick");
-assert.equal(cancellationQuote.refundCopper, connectedPlan.totalCopper, "pre-dispatch cancellation must refund the full confirmed payment");
-assert.equal(cancellationQuote.withheldCopper, 0, "pre-dispatch cancellation must not retain a fee");
-const cancelledShipment = cancelMarketShipment({ holding: cancellationHolding, orderId: "shipment-cancel", cancelledAt: "2026-07-14T00:30:00.000Z", dependencies: deliveryDependencies });
-assert.equal(cancelledShipment.ok, true);
-assert.equal(cancellationHolding.special.market.orders[0].status, "cancelled");
-assert.equal(cancellationHolding.storage.moneyCopper, 100 + cancellationQuote.refundCopper);
-assert.equal(cancellationHolding.storage.log.at(-1).operationId, "shipment-cancel:cancel");
-const cancelledMoney = cancellationHolding.storage.moneyCopper;
-const cancelledLogCount = cancellationHolding.storage.log.length;
-const cancellationReplay = cancelMarketShipment({ holding: cancellationHolding, orderId: "shipment-cancel", dependencies: deliveryDependencies });
-assert.equal(cancellationReplay.replay, true, "repeated cancellation must resolve as an idempotent replay");
-assert.equal(cancellationHolding.storage.moneyCopper, cancelledMoney, "repeated cancellation must not credit treasury twice");
-assert.equal(cancellationHolding.storage.log.length, cancelledLogCount, "repeated cancellation must not duplicate the refund log");
-advanceMarketShipments({ holding: cancellationHolding, elapsedQd: 40, dependencies: deliveryDependencies });
-assert.equal(cancellationHolding.storage.resources.length, 0, "cancelled cargo must never arrive");
-
-const departedHolding = { storage: { moneyCopper: connectedPlan.totalCopper + 100, resources: [], items: [], log: [] }, special: { market: { orders: [] } } };
-const safeDeparturePlan = { ...connectedPlan, riskLossChance: 0, riskDelayChance: 0 };
-createMarketShipment({ holding: departedHolding, plan: safeDeparturePlan, operationId: "shipment-departed", dependencies: deliveryDependencies });
-advanceMarketShipments({ holding: departedHolding, elapsedQd: 1, dependencies: deliveryDependencies });
-assert.equal(marketShipmentCancellationQuote(departedHolding.special.market.orders[0]).cancellable, false, "a shipment cannot be cancelled after it is handed to the carrier");
-
-const delayedHolding = { storage: { moneyCopper: connectedPlan.totalCopper + 100, resources: [], items: [], log: [] }, special: { market: { orders: [] } } };
-const delayedPlan = { ...connectedPlan, riskLossChance: 0.01, riskDelayChance: 0.4, riskMaxDelayQd: 4 };
-createMarketShipment({ holding: delayedHolding, plan: delayedPlan, operationId: "shipment-delayed", dependencies: deliveryDependencies });
-const delayDependencies = {
-  ...deliveryDependencies,
-  riskUnit: (seed) => seed.endsWith("|loss") ? 0.99 : (seed.endsWith("|delay") ? 0 : 0.49)
-};
-const delayedTick = advanceMarketShipments({ holding: delayedHolding, elapsedQd: 1, deliveredAt: "2026-07-14T01:00:00.000Z", dependencies: delayDependencies });
-assert.equal(delayedTick.needsResolution.length, 1, "deterministic route risk must pause only the affected shipment for GM resolution");
-assert.equal(delayedHolding.special.market.orders[0].status, "needsResolution");
-assert.equal(delayedHolding.special.market.orders[0].remainingQd, delayedPlan.deliveryQd, "the incident tick must not advance the blocked shipment");
-const delayedResolution = resolveMarketShipmentRisk({ holding: delayedHolding, orderId: "shipment-delayed", outcome: "proposal", operationId: "shipment-delayed:gm-resolution", resolvedAt: "2026-07-14T01:30:00.000Z", dependencies: delayDependencies });
-assert.equal(delayedResolution.outcome, "delayed");
-assert.equal(delayedResolution.delayQd, 2);
-assert.equal(delayedHolding.special.market.orders[0].remainingQd, delayedPlan.deliveryQd + 2, "confirmed delay must extend ETA only after GM resolution");
-const resumedTick = advanceMarketShipments({ holding: delayedHolding, elapsedQd: 2, dependencies: delayDependencies });
-assert.equal(resumedTick.needsResolution.length, 0, "resolved risk must never reroll on later economy ticks");
-assert.equal(delayedHolding.special.market.orders[0].status, "in-transit", "shipment must resume automatically after delay QD elapses");
-const delayedArrival = advanceMarketShipments({ holding: delayedHolding, elapsedQd: delayedPlan.deliveryQd, dependencies: delayDependencies });
-assert.equal(delayedArrival.delivered.length, 1, "delayed shipment must still arrive without a manual unpause");
-
-const lostHolding = { storage: { moneyCopper: connectedPlan.totalCopper + 100, resources: [], items: [], log: [] }, special: { market: { orders: [] } } };
-const lostPlan = { ...connectedPlan, riskLossChance: 0.08, riskDelayChance: 0.4 };
-createMarketShipment({ holding: lostHolding, plan: lostPlan, operationId: "shipment-lost", dependencies: deliveryDependencies });
-const lossDependencies = { ...deliveryDependencies, riskUnit: (seed) => seed.endsWith("|loss") ? 0 : 0.99 };
-const lostTick = advanceMarketShipments({ holding: lostHolding, elapsedQd: 1, deliveredAt: "2026-07-14T02:00:00.000Z", dependencies: lossDependencies });
-assert.equal(lostTick.needsResolution.length, 1, "a proposed loss must wait for GM instead of mutating cargo automatically");
-assert.equal(lostHolding.special.market.orders[0].status, "needsResolution");
-assert.equal(lostHolding.storage.resources.length, 0, "lost cargo must never enter storage");
-assert.equal(lostHolding.storage.moneyCopper, 100, "insurance must not pay while the incident is unresolved");
-const lossResolution = resolveMarketShipmentRisk({ holding: lostHolding, orderId: "shipment-lost", outcome: "proposal", operationId: "shipment-lost:gm-resolution", resolvedAt: "2026-07-14T02:30:00.000Z", dependencies: lossDependencies });
-assert.equal(lossResolution.payoutCopper, connectedPlan.maximumInsurancePayoutCopper, "insurance payout must respect the stored coverage cap");
-assert.equal(lostHolding.special.market.orders[0].status, "lost");
-assert.equal(lostHolding.storage.moneyCopper, 100 + connectedPlan.maximumInsurancePayoutCopper, "insurance must credit treasury once after loss");
-assert.equal(lostHolding.storage.log.at(-1).operationId, "shipment-lost:insurance", "insurance payout must have its own correlated operation id");
-const lostMoneyAfterResolution = lostHolding.storage.moneyCopper;
-const lostLogAfterResolution = lostHolding.storage.log.length;
-resolveMarketShipmentRisk({ holding: lostHolding, orderId: "shipment-lost", outcome: "proposal", operationId: "shipment-lost:gm-resolution", dependencies: lossDependencies });
-assert.equal(lostHolding.storage.moneyCopper, lostMoneyAfterResolution, "replayed loss processing must not pay insurance twice");
-assert.equal(lostHolding.storage.log.length, lostLogAfterResolution, "replayed loss processing must not duplicate the insurance log");
-
-const missingShipmentHolding = { storage: { moneyCopper: guildPlan.totalCopper + 100, resources: [], items: [], log: [] }, special: { market: { orders: [] } } };
-const missingShipment = createMarketShipment({ holding: missingShipmentHolding, plan: guildPlan, operationId: "shipment-missing-item", dependencies: deliveryDependencies });
-assert.equal(missingShipment.ok, false);
-assert.equal(missingShipmentHolding.storage.moneyCopper, guildPlan.totalCopper + 100, "missing Item snapshot must reject before debit");
-assert.equal(missingShipmentHolding.special.market.orders.length, 0);
-const itemShipmentHolding = { storage: { moneyCopper: guildPlan.totalCopper + 100, resources: [], items: [], log: [] }, special: { market: { orders: [] } } };
-const itemShipment = createMarketShipment({ holding: itemShipmentHolding, plan: guildPlan, itemDocuments: new Map([["guild-item", itemDocument]]), operationId: "shipment-item", dependencies: deliveryDependencies });
-assert.equal(itemShipment.ok, true);
-assert.equal(itemShipmentHolding.storage.items.length, 0, "Item snapshot must remain in cargo while shipment is in transit");
-assert.equal(itemShipment.order.cargo[0].item.itemUuid, itemDocument.uuid);
-const itemArrival = deliverMarketShipmentNow({ holding: itemShipmentHolding, orderId: "shipment-item", dependencies: deliveryDependencies });
-assert.equal(itemArrival.delivered.length, 1);
-assert.equal(itemShipmentHolding.storage.items[0].itemUuid, itemDocument.uuid);
-assert.notEqual(itemShipmentHolding.storage.items[0], itemShipment.order.cargo[0].item, "arrival must clone the stored Item snapshot instead of sharing mutable state");
-
-assert.equal(formatCopperCurrency(123), "1 ЗМ 2 СМ 3 ММ", "market and treasury must share the same currency formatter");
 const logRow = normalizeStorageLogRow({
   id: "market-log",
   kind: "market-purchase",
@@ -697,34 +494,6 @@ const normalizedOrderHolding = mergeHoldingDefaults({
 assert.equal(normalizedOrderHolding.special.market.orders[0].marketId, "guild-market");
 assert.equal(normalizedOrderHolding.special.market.orders[0].lines[0].sourceType, "item");
 assert.equal(normalizedOrderHolding.special.market.orders[0].lines[0].itemUuid, "Compendium.world.goods.Item.example");
-const normalizedShipmentHolding = mergeHoldingDefaults(itemShipmentHolding);
-assert.equal(normalizedShipmentHolding.special.market.orders[0].deliveryMode, "scheduled");
-assert.equal(normalizedShipmentHolding.special.market.orders[0].status, "delivered");
-assert.equal(normalizedShipmentHolding.special.market.orders[0].cargo[0].item.itemUuid, itemDocument.uuid, "serialized Item cargo snapshot must survive normalization");
-const normalizedLostHolding = mergeHoldingDefaults(lostHolding);
-assert.equal(normalizedLostHolding.special.market.orders[0].riskOutcome, "lost");
-assert.equal(normalizedLostHolding.special.market.orders[0].insurancePayoutCopper, connectedPlan.maximumInsurancePayoutCopper, "loss and payout audit fields must survive normalization");
-assert.equal(normalizedLostHolding.special.market.orders[0].remainingQd, 0);
-const normalizedCancelledHolding = mergeHoldingDefaults(cancellationHolding);
-assert.equal(normalizedCancelledHolding.special.market.orders[0].dispatchStatus, "cancelled");
-assert.equal(normalizedCancelledHolding.special.market.orders[0].cancellationRefundCopper, cancellationQuote.refundCopper, "cancellation audit values must survive normalization");
-assert.equal(normalizedCancelledHolding.special.market.orders[0].remainingQd, 0);
-const expressHolding = { storage: { moneyCopper: expressLogisticsPlan.totalCopper + 100, resources: [], items: [], log: [] }, special: { market: { orders: [] } } };
-createMarketShipment({ holding: expressHolding, plan: expressLogisticsPlan, operationId: "shipment-express", dependencies: deliveryDependencies });
-const normalizedExpressHolding = mergeHoldingDefaults(expressHolding);
-assert.equal(normalizedExpressHolding.special.market.orders[0].serviceLevel, "express");
-assert.equal(normalizedExpressHolding.special.market.orders[0].expressSurchargeCopper, expressLogisticsPlan.expressSurchargeCopper);
-const charterHolding = { storage: { moneyCopper: charterBatchPlan.totalCopper + 100, resources: [], items: [], log: [] }, special: { market: { orders: [] } } };
-createMarketShipment({ holding: charterHolding, plan: charterBatchPlan, operationId: "shipment-charter", dependencies: deliveryDependencies });
-const normalizedCharterHolding = mergeHoldingDefaults(charterHolding);
-assert.equal(normalizedCharterHolding.special.market.orders[0].serviceLevel, "charter");
-assert.equal(normalizedCharterHolding.special.market.orders[0].bookingCapacityLoad, 4000);
-assert.equal(normalizedCharterHolding.special.market.orders[0].chargedCapacityShare, 1);
-assert.equal(normalizedCharterHolding.special.market.orders[0].billableLoad, 4000);
-const normalizedBatchedHolding = mergeHoldingDefaults(batchedShipmentHolding);
-assert.equal(normalizedBatchedHolding.special.market.orders[0].parentOperationId, "shipment-batched");
-assert.equal(normalizedBatchedHolding.special.market.orders[1].batchIndex, 1);
-assert.equal(normalizedBatchedHolding.special.market.orders[1].batchCount, 2, "batch linkage must survive world-data normalization");
 const legacyRiskHolding = mergeHoldingDefaults({ id: "legacy-market-risk", special: { market: { orders: [{ id: "legacy-transit", status: "in-transit", deliveryMode: "scheduled", deliveryQd: 4, remainingQd: 3 }] } } });
 assert.equal(legacyRiskHolding.special.market.orders[0].riskStatus, "waived", "pre-risk in-transit orders must not receive a retroactive loss roll");
 assert.equal(legacyRiskHolding.special.market.orders[0].dispatchStatus, "departed", "legacy in-transit orders must not become retroactively cancellable");
@@ -748,4 +517,4 @@ const providerQuoteMs = performance.now() - providerQuotesStarted;
 assert.equal(largeQuote.offers.length, 240, "large provider quote must retain every configured offer");
 assert.ok(providerQuoteMs < 250, `240-offer quote should remain interactive, got ${providerQuoteMs.toFixed(2)} ms`);
 
-console.log(`FBL Skyhold market characterization: three delivery services, conserved multi-departure batching, seasonal edges, replay-safe cancellation/refund, deterministic GM-resolved delay/loss and insurance passed; 240 offers ${providerQuoteMs.toFixed(2)} ms.`);
+console.log(`FBL Skyhold market quotes: delivery estimates, conserved price batching, seasonal edges, catalog/legacy normalization and 240 offers ${providerQuoteMs.toFixed(2)} ms.`);

@@ -2,28 +2,12 @@ import assert from "node:assert/strict";
 import { worldMarketFixture } from "./world-ship-market-characterization-check.mjs";
 import { getSkyholdWorkflowService } from "../workflows/skyhold-workflow-service.js";
 import { prepareMarketAuthorityContext } from "../apps/market/authority-context.js";
-import { marketTransportPicker } from "../apps/market/transport-picker.js";
 import { transportOfferAccessFixture } from "./fixtures/transport-offer-access.mjs";
-
-const manyOptions = [{ value: "auto-carriers", label: "Автоматически", automatic: true }, ...Array.from({ length: 80 }, (_, index) => ({
-  value: `chain-${index}`, label: `Вариант ${index + 1}`, searchText: `общий префикс из 29 участков конечная компания-${index} гавань-${index}`
-}))];
-const lastPage = marketTransportPicker({ options: manyOptions, selectedId: "chain-79", page: 99, canSelect: true });
-assert.equal(lastPage.rows.length, 2, "all eighty alternatives remain reachable with six per page");
-assert.equal(lastPage.rows.at(-1).value, "chain-79"); assert.equal(lastPage.hasNext, false);
-assert.equal(lastPage.rows.at(-1).selected, true);
-assert.equal(lastPage.selectedText, "Вариант 80", "paging cannot change the selected agreement");
-const searched = marketTransportPicker({ options: manyOptions, selectedId: "chain-79", query: "КОМПАНИЯ-37 гавань-37", page: 99, canSelect: true });
-assert.deepEqual(searched.rows.map(row => row.value), ["chain-37"], "late legs remain searchable through a common long prefix");
-assert.equal(searched.page, 0); assert.equal(searched.selectedText, "Вариант 80");
-const empty = marketTransportPicker({ options: manyOptions, selectedId: "chain-79", query: "нет совпадений" });
-assert.equal(empty.rows.length, 0); assert.equal(empty.automatic.value, "auto-carriers"); assert.equal(empty.automatic.disabled, true);
-assert.equal(marketTransportPicker({ options: manyOptions, selectedId: "removed" }).selectedText.includes("недоступен"), true);
 
 globalThis.foundry = { applications: { api: {
   ApplicationV2: class { get state() { return 0; } async _prepareContext() { return {}; } }, HandlebarsApplicationMixin: (Base) => Base
 } } };
-const { SkyholdMarketApp, marketTransportPlanView } = await import("../apps/market-app.js");
+const { SkyholdMarketApp } = await import("../apps/market-app.js");
 for (const isGM of [true, false]) {
   const { data, holding } = transportOfferAccessFixture();
   const initial = prepareMarketAuthorityContext({ data, holding, marketId: "a", isGM });
@@ -38,27 +22,6 @@ for (const isGM of [true, false]) {
   assert.deepEqual(pinned.offers, automatic.offers);
   assert.equal(pinned.plan.planToken, automatic.plan.planToken);
 }
-const transportPlan = { version: 1, key: "chain-one", direction: "inbound", legs: [
-  { id: "leg-public", fromRegionId: "market", toRegionId: "relay", fromCountryId: "country-a", toCountryId: "country-b", fromLabel: "Рынок", toLabel: "Перевалка", mode: "caravan",
-    carrierId: "company-a", carrierLabel: "Караванщики", visibility: "public", distanceKm: 80, travelQd: 2.25, capacityLoad: 400 },
-  { id: "secret-leg-id", fromRegionId: "secret-region", toRegionId: "home", fromLabel: "SECRET PORT", toLabel: "SECRET HOME", mode: "airship",
-    modeLabel: "SECRET MODE", carrierId: "secret-company", carrierLabel: "SECRET COMPANY", visibility: "gm", distanceKm: 40, travelQd: 1, capacityLoad: 200 }
-] };
-const before = JSON.stringify(transportPlan);
-const gmView = marketTransportPlanView(transportPlan, { isGM: true });
-const playerView = marketTransportPlanView(transportPlan, { isGM: false });
-assert.equal(gmView.legs[0].timeText, "2,25 QD", "fractional leg times remain explicit instead of summing rounded legs");
-assert.match(JSON.stringify(gmView), /SECRET COMPANY/);
-assert.doesNotMatch(JSON.stringify(playerView), /SECRET|secret-company|secret-region|secret-leg-id/);
-assert.equal(playerView.legs[1].hidden, true);
-assert.equal(JSON.stringify(transportPlan), before, "presentation cannot mutate accepted conditions");
-assert.deepEqual(marketTransportPlanView(undefined).legs, [], "legacy orders never acquire invented transport details");
-assert.deepEqual(marketTransportPlanView({ version: 1, legs: [null] }).legs, [], "recoverable malformed metadata cannot break the market window");
-assert.equal(marketTransportPlanView(transportPlan, { hiddenCarrierIds: new Set(["company-a"]) }).legs[0].hidden, true,
-  "current company privacy can hide a previously public frozen leg without repricing it");
-assert.equal(marketTransportPlanView(transportPlan, { hiddenCountryIds: new Set(["country-a"]) }).legs[0].hidden, true);
-assert.equal(marketTransportPlanView(transportPlan, { hiddenRegionIds: new Set(["market"]) }).legs[0].hidden, true);
-
 // Inline legacy route selection has been replaced by the shared transport checkout.
 // Goods browsing still honors permissions and preserves both directions independently.
 const workflow = getSkyholdWorkflowService(), previousRooms = workflow._storageRooms, previousGame = globalThis.game;
@@ -93,4 +56,4 @@ try {
     }
   }
 } finally { workflow._storageRooms = previousRooms; globalThis.game = previousGame; }
-console.log("Transport UI: goods availability, historical terms/privacy and unified GM/player buy/sell checkout passed.");
+console.log("Transport UI: goods availability, storage permissions and unified GM/player buy/sell checkout passed.");

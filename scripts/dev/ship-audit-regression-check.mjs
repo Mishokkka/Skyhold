@@ -1,37 +1,40 @@
 import assert from "node:assert/strict";
 import { worldMarketFixture } from "./world-ship-market-characterization-check.mjs";
 import { bundleOperatingShares, bundleOutcomeReserves } from "../engines/ships/bundle-accounting.js";
-import { generateWorldShipOffers, quoteWorldShipBundle, quoteWorldShipHomeUpkeep, quoteWorldShipSale } from "../engines/ships/world-market.js";
+import { generateWorldShipOffers, quoteWorldShipBundle, quoteWorldShipHomeUpkeep, worldShipTransportTerms } from "../engines/ships/world-market.js";
 import { departWorldShipBundle, advanceWorldShips } from "../engines/ships/world-voyage.js";
 import { shipMoneySummary } from "../engines/ships/summary.js";
 import { shipRemovalBlocker } from "../engines/ships/removal.js";
 import { applyShipHomePlacement, shipHomeLocationContext } from "../apps/domains/ship-home-location.js";
 import { normalizeMarketOutboundState } from "../data/market/outbound-state.js";
 import { planMarketOutboundSale, preflightMarketOutboundBooking, applyMarketOutboundDispatch } from "../engines/market/outbound.js";
-import { visibleActiveShipments } from "../apps/market/shipment-list.js";
+import { transportHistoryPage } from "../apps/domains/transport-view.js";
 import { transferResidentBetweenHoldings } from "../data/resident-assignments.js";
 import { buildPlayerPatch, validatePlayerPatch } from "../data/player-write-guard.js";
 import { createStorageOperationExecutor } from "../apps/storage-operation-executor.js";
 import { createSkyholdSocketApi } from "../data/socket.js";
 import { createShipViewState } from "../apps/ships-view-state.js";
-import { validateOwnShipOutboundFunding } from "../apps/market/authority-context.js";
+import { transportFixture, transportRequest } from "./fixtures/transport-v2.mjs";
+import { prepareTransportContext } from "../apps/domains/transport-context.js";
 import { applyShipFundsOperation, createShipFunds } from "../engines/ships/funds.js";
 
 const clone = (value) => structuredClone(value);
 
-// Sale funding previews include the home bill that the command will settle first.
+// The current planner requires explicit settlement of home debt, then uses the vessel wallet for its actual accepted budget.
 {
-  const { holding, ship } = worldMarketFixture();
-  holding.gm.calendaria.lastQd = 40;
+  const f = transportFixture(), { holding, ship } = f;
+  holding.gm.calendaria.lastQd = 40; ship.timelineQd = 40;
   ship.portBilling = { scope: "home", dailyCopper: 10, sinceQd: 0, lastCalculatedQd: 0, chargedCopper: 0, carriedCopper: 0 };
-  const ownShip = { voyageOffer: { shipId: ship.id, quote: { recommendedBudgetCopper: 200, preparationCopper: 10 } } };
+  const request = transportRequest(f, "a", { direction: "outbound", ownShipId: ship.id, insurance: false });
+  assert.throws(() => prepareTransportContext({ ...f, request, isGM: true }), /оплатите накопленное содержание/);
+  Object.assign(ship.portBilling, { chargedCopper: 100, lastCalculatedQd: 40 });
   for (const wallet of [0, 60, 150, 400]) {
-    ship.onboardCopper = wallet;
-    const required = 20 + 10 + Math.max(0, 100 - wallet) + Math.max(0, 200 - Math.max(0, wallet - 100));
+    ship.onboardCopper = wallet; holding.storage.moneyCopper = 1_000_000;
+    const required = prepareTransportContext({ ...f, request, isGM: true }).treasuryCopper;
     holding.storage.moneyCopper = required - 1;
-    assert.equal(validateOwnShipOutboundFunding(holding, { plan: { ok: true, upfrontCopper: 20 } }, ownShip).plan.ok, false);
+    assert.equal(prepareTransportContext({ ...f, request, isGM: true }).affordable, false);
     holding.storage.moneyCopper = required;
-    assert.equal(validateOwnShipOutboundFunding(holding, { plan: { ok: true, upfrontCopper: 20 } }, ownShip).plan.ok, true);
+    assert.equal(prepareTransportContext({ ...f, request, isGM: true }).affordable, true);
   }
   const full = applyShipFundsOperation(createShipFunds(1_000_000_000), { id: "depart", kind: "depart", amountCopper: 1_000_000_000 }).state;
   const before = JSON.stringify(full);
@@ -117,17 +120,23 @@ for (const weights of [[1, 1], [1, 1, 1], [1, 7, 3], [4000, 200, 800]]) {
   assert.equal(dispatched.dispatchedQty, 1008);
   assert.equal(resources.reduce((sum, row) => sum + row.qty, 0), 0);
   const fixture = worldMarketFixture();
-  assert.doesNotThrow(() => quoteWorldShipSale(fixture.data, fixture.holding, fixture.ship, "a", { loadPoints: 0, valueCopper: 30 }));
+  assert.doesNotThrow(() => worldShipTransportTerms(fixture.data, fixture.holding, fixture.ship, "home", "a", { loadPoints: 0 }));
   fixture.holding.special.market.outbound = { orders: [{ ownShipId: fixture.ship.id, status: "needsResolution" }] };
   assert.match(shipRemovalBlocker(fixture.holding, fixture.ship), /продажи/);
 }
 
-for (const limit of [12, 20]) {
-  const normal = Array.from({ length: 25 }, (_, index) => ({ id: `normal-${index}`, status: "in-transit" }));
+{
+  const normal = Array.from({ length: 25 }, (_, index) => ({ id: `normal-${index}`, status: "delivered" }));
   const blocked = Array.from({ length: 25 }, (_, index) => ({ id: `blocked-${index}`, status: "needsResolution" }));
-  const source = [...normal, ...blocked];
-  assert.deepEqual(visibleActiveShipments(source, limit), blocked, "every blocked decision is reachable above the ordinary display limit");
-  assert.equal(source[0], normal[0], "selection does not reorder persisted orders");
+  const source = [...normal, ...blocked], before = structuredClone(source);
+  for (const index of [0, 1]) {
+    const page = transportHistoryPage(source, index);
+    const decisions = page.orders.filter(row => row.status === "needsResolution");
+    assert.equal(decisions.length, blocked.length);
+    assert.deepEqual(new Set(decisions.map(row => row.id)), new Set(blocked.map(row => row.id)),
+      "all current transport decisions remain reachable outside the archive page limit");
+  }
+  assert.deepEqual(source, before, "history projection cannot reorder persisted orders");
 }
 
 {

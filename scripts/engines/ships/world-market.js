@@ -244,9 +244,8 @@ function costsFor(context, holding, ship, from, to, route, cargo = null) {
   const crew = crewEconomics(holding, ship);
   // A home departure point carries no offers: resolve its market for the same ration price as home upkeep.
   const foodUnitCopper = rationPrice(context, portForPoint(context, from));
-  // Own-sale customs are charged once by the market authority operation.
   // Client freight pays export at pickup and import at its actual destination.
-  const customsExempt = ["smuggling", "own-sale"].includes(cargo?.kind);
+  const customsExempt = cargo?.kind === "smuggling";
   const importTaxRate = customsExempt || to.kind === "home" ? 0 : (to.factors?.taxRate ?? 0);
   const exportTaxRate = customsExempt ? 0 : (portForPoint(context, from)?.factors?.exportTaxRate ?? 0);
   const values = {
@@ -688,20 +687,4 @@ export function quoteWorldShipRelocation(data, holding, ship, destinationId, { c
   const quote = baseQuote(world, holding, ship, from, to, null);
   return { mode: "world", id: `relocate:${ship.id}:${from.id}:${to.id}`, shipId: ship.id,
     title: `Передислокация: ${to.label}`, from: point(from), to: point(to), quote, contract: null };
-}
-
-/** A settlement-owned consignment uses the real hold, handling time and ship costs. */
-export function quoteWorldShipSale(data, holding, ship, destinationId, { loadPoints, valueCopper, context = null } = {}) {
-  if (ship.navigationMode !== "world" || ship.location?.kind !== "home" || ship.activeVoyage || ship.orderBundle || ship.condition !== "ready") {
-    throw new Error("Продажа своим кораблём доступна только исправному свободному судну дома.");
-  }
-  const load = Number(loadPoints);
-  if (!Number.isSafeInteger(load) || load < 0 || load > shipCapacityLoadPoints(ship)) throw new Error("Товар не помещается в трюм корабля.");
-  const world = context ?? buildShipWorldContext(data, holding, { offerLocationIds: [destinationId] });
-  const from = currentPort(world, ship);
-  const to = world.ports.find((port) => port.id === destinationId);
-  if (!to || to.regionId === from.regionId || to.regionId === world.home.regionId) throw new Error("Порт продажи недоступен.");
-  const quote = baseQuote(world, holding, ship, from, to, { kind: "own-sale", loadPoints: load, valueCopper: Number(valueCopper) || 0 });
-  return { mode: "world", id: `sale:${ship.id}:${to.id}`, shipId: ship.id,
-    title: `Продажа товара: ${to.label}`, from: point(from), to: point(to), quote, contract: null };
 }

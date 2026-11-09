@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import { transportServiceCharge } from "../engines/transport/economics.js";
 import { worldMarketFixture } from "./world-ship-market-characterization-check.mjs";
-import { configureWorldShipEconomy, generateWorldShipOffers, quoteWorldShipReturn, quoteWorldShipSale } from "../engines/ships/world-market.js";
+import { configureWorldShipEconomy, generateWorldShipOffers, quoteWorldShipReturn, worldShipTransportTerms } from "../engines/ships/world-market.js";
 import { advanceWorldShipEconomy, refreshWorldShipHomeEconomy } from "../engines/ships/world-economy.js";
 import { advanceWorldShips, departWorldShip, resolveWorldShip } from "../engines/ships/world-voyage.js";
 import { shipCrewReadiness } from "../engines/ships/crew-readiness.js";
@@ -15,13 +16,18 @@ import { createShipOperationExecutor } from "../apps/ship-operation-executor.js"
   const { data, holding, ship } = worldMarketFixture();
   const offers = generateWorldShipOffers(data, holding, ship, { period: 0, random: () => 0.4 });
   const accepted = structuredClone(offers[0]);
-  const saleBefore = quoteWorldShipSale(data, holding, ship, "a", { loadPoints: 400, valueCopper: 10000 });
+  const handling = () => {
+    const terms = worldShipTransportTerms(data, holding, ship, "home", "a", { loadPoints: 400 });
+    return transportServiceCharge({ kind: "owned", ...terms }, 400000,
+      terms.durationQd + terms.loadingQd + terms.unloadingQd).handlingCopper;
+  };
+  const handlingBefore = handling();
   data.catalog.marketEconomy.settings = { handlingSubtotalRate: 0.1 };
-  const saleAfter = quoteWorldShipSale(data, holding, ship, "a", { loadPoints: 400, valueCopper: 10000 });
-  assert.equal(saleAfter.quote.costs.handlingCopper, saleBefore.quote.costs.handlingCopper);
+  const handlingAfter = handling();
+  assert.equal(handlingAfter, handlingBefore);
   const context = buildShipWorldContext(data, holding);
   const port = context.ports.find((row) => row.id === "a");
-  assert.equal(saleAfter.quote.costs.handlingCopper, Math.ceil(port.locationProfile.deliveryFlatCopper + 100 * port.locationProfile.deliveryLoadCopper));
+  assert.equal(handlingAfter, Math.ceil(port.locationProfile.deliveryFlatCopper + 100 * port.locationProfile.deliveryLoadCopper));
   assert.ok(marketHistoricalInsuranceRate({ location: port.locationProfile }) >= 0.1);
   const snapshot = JSON.stringify(accepted.quote);
   departWorldShip(holding, ship, { operationId: "accepted-price", offer: accepted, clockQd: 0 });

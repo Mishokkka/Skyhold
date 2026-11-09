@@ -3,8 +3,12 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { normalizeEventRegionOptions } from "../data/random-events.js";
 import { resolveMarketLogistics, shortestMarketRoute } from "../engines/market/logistics.js";
-import { marketShipmentRiskProfile, planMarketPurchase } from "../engines/market/pricing.js";
-import { createMarketOutboundOrder } from "../engines/market/outbound.js";
+import { planMarketPurchase } from "../engines/market/pricing.js";
+import { prepareTransportContext } from "../apps/domains/transport-context.js";
+import { bookTransportOrder } from "../engines/transport/runtime.js";
+import { ensureTransportState } from "../data/transport/state.js";
+import { worldShipTransportTerms } from "../engines/ships/world-market.js";
+import { transportRiskBps } from "../engines/transport/economics.js";
 import { carrierProvidersForLogistics, carrierProvidersForRoute, applyCarrierToLogistics } from "../engines/market/providers.js";
 import { prepareMarketAuthorityContext, authorityOutboundRoutes } from "../apps/market/authority-context.js";
 import { worldMarketFixture } from "./world-ship-market-characterization-check.mjs";
@@ -33,17 +37,23 @@ function ownShip() {
   const logistics = resolveMarketLogistics({ holding, market: { regionId: "a", transportModes: ["airship"] }, regions, selectedRoute, singleRoute: true });
   assert.deepEqual(logistics.routeModes, ["airship", "airship"], "an explicit airship route must retain its mode on intermediate multimode links");
   assert.equal(logistics.transportMode, "airship");
-  const view = prepareMarketAuthorityContext({ data, holding, marketId: "a", ownShipId: ship.id,
-    outboundQuantities: { "test-freight": 2 }, outboundInsuranceEnabled: false, isGM: true });
-  assert.equal(view.outbound.plan.ok, true);
-  const route = view.outbound.plan.route;
-  const expected = marketShipmentRiskProfile({ logistics: { distanceKm: 150, riskFactor: 1, transportMode: "airship" }, deliveryQd: route.deliveryQd });
-  assert.equal(route.riskLossChance, expected.lossChance, "own-ship plan uses the airship risk coefficient");
-  assert.equal(route.riskDelayChance, expected.delayChance);
-  const order = createMarketOutboundOrder({ plan: view.outbound.plan, operationId: "review-own-ship" });
-  assert.deepEqual(order.routeModes, ["airship"]); assert.equal(order.transportMode, "airship");
-  assert.equal(order.riskLossChance, expected.lossChance, "the saved order retains the same airship loss risk");
-  assert.equal(order.riskDelayChance, expected.delayChance);
+  const initial = prepareMarketAuthorityContext({ data, holding, marketId: "a", isGM: true });
+  const request = { marketId: initial.market.id, ownShipId: ship.id, direction: "outbound", quantities: { "test-freight": 2 }, insurance: false };
+  const discovered = prepareTransportContext({ data, holding, request, isGM: true });
+  const service = discovered.services.find(row => row.kind === "owned" && row.from === discovered.from && row.to === discovered.to);
+  assert.ok(service, "the current planner finds the direct owned airship route through multimode links");
+  request.serviceIds = [service.id];
+  const view = prepareTransportContext({ data, holding, request, isGM: true });
+  const terms = worldShipTransportTerms(data, holding, ship, "home", "a", { loadPoints: 8 });
+  const expectedRisk = transportRiskBps(terms.riskExposureQd, 300);
+  assert.equal(service.distanceKm, 150); assert.equal(service.seasonal.legs.length, 2);
+  const state = ensureTransportState(data);
+  const order = bookTransportOrder({ state, holding, plan: view.plan, services: view.services,
+    id: "review-own-ship", direction: "outbound", commercial: view.commercial, ship });
+  assert.equal(order.stages.length, 1); assert.equal(order.stages[0].service.kind, "owned");
+  assert.equal(order.stages[0].runs[0].riskBps, expectedRisk, "the saved current order keeps the airship path's physical risk");
+  assert.equal(order.ownShipId, ship.id);
+
 }
 
 function candidates() {
@@ -138,9 +148,16 @@ function selectedModes() {
     assert.equal(Boolean(shortestMarketRoute("home", "a", regions, { mode: "airship" })), transit, "direct flight checks endpoint ports, preserving a flight over a non-port transit point");
     if (transit) regions[1].marketEnabled = false;
     for (const isGM of [true, false]) {
-      const view = prepareMarketAuthorityContext({ data, holding, marketId: "a", ownShipId: ship.id,
-        outboundQuantities: { "test-freight": 2 }, isGM });
-      assert.equal(view.outbound.plan.ok, transit, "GM/player own-ship sale rejects restricted endpoints but permits non-port overflight");
+      let view;
+      try {
+        view = prepareTransportContext({ data, holding, isGM, allowIncomplete: true,
+          request: { marketId: "a", ownShipId: ship.id, direction: "outbound", quantities: { "test-freight": 2 }, insurance: false } });
+      } catch (error) {
+        if (transit) throw error;
+        assert.match(error.message, /маршрут|цепоч|перевозк|порт|рынок/);
+      }
+      assert.equal(Boolean(view?.plan), transit, "current GM/player own-ship planning rejects restricted endpoints but permits non-port overflight");
+
     }
   }
   const { data, holding, ship, regions } = fixture([["airship"], ["airship"]]);

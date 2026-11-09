@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
+import { transportMoney } from "../engines/transport/quantities.js";
 import { normalizeMarketEconomy } from "../data/market/economy.js";
 import { normalizeMarketDemandState, marketDemandKey } from "../data/market/demand-state.js";
 import { normalizeMarketStockState, marketStockKey } from "../data/market/stock-state.js";
-import { authorityMarketQuote, authorityMarketOutboundContext, authorityOwnShipOutboundRoute } from "../apps/market/authority-context.js";
+import { authorityMarketQuote, authorityMarketOutboundContext } from "../apps/market/authority-context.js";
 import { composeMarketLocation } from "../engines/market/composition.js";
 import { resolveMarketLogistics, shortestMarketRoute } from "../engines/market/logistics.js";
 import { marketTransportRoutes } from "../engines/market/route-candidates.js";
@@ -15,8 +16,10 @@ import { itemQuantity } from "../engines/storage/item-quantity.js";
 import { FinanceTradeDomain } from "../apps/domains/finance/trade-domain.js";
 import { FinanceInternalDemandDomain } from "../apps/domains/finance/internal-demand-domain.js";
 import { normalizeStorageItemRow } from "../data/normalizers/storage.js";
-import { planMarketOutboundSale, createMarketOutboundOrder } from "../engines/market/outbound.js";
+import { planMarketOutboundSale } from "../engines/market/outbound.js";
 import { worldMarketFixture } from "./world-ship-market-characterization-check.mjs";
+import { transportFixture, transportRequest } from "./fixtures/transport-v2.mjs";
+import { prepareTransportContext } from "../apps/domains/transport-context.js";
 import { generateWorldShipOffers, quoteWorldShipBundle } from "../engines/ships/world-market.js";
 
 const resource = { id: "wood", label: "Wood", basePriceCopper: 100, loadPoints: 4, categoryTag: "construction.simple" };
@@ -200,17 +203,15 @@ for (const revenue of [999999999, 1000000000, 1000000001, 2000000000]) {
     routes: [{ id: "route", freightCopper: 0, tariffCopper: 0, deliveryQd: 1 }], insuranceEnabled: false });
   assert.equal(plan.revenueCopper, revenue);
   assert.equal(plan.ok, revenue <= 1000000000);
-  if (plan.ok) {
-    const order = createMarketOutboundOrder({ plan, operationId: `money-${revenue}` });
-    assert.equal(order.revenueCopper, revenue);
-  } else assert.equal(createMarketOutboundOrder({ plan, operationId: `money-${revenue}` }), null);
+  if (plan.ok) assert.equal(transportMoney([plan.revenueCopper]), revenue);
+  else assert.throws(() => transportMoney([plan.revenueCopper]), RangeError);
+
 }
 const tooLarge = planMarketOutboundSale({ resources: [{ id: "a", resourceId: "a", qty: 1 }, { id: "b", resourceId: "b", qty: 1 }],
   lines: [{ resourceId: "a", qty: 1, unitPriceCopper: 1000000000 }, { resourceId: "b", qty: 1, unitPriceCopper: 1 }],
   routes: [{ id: "route", freightCopper: 0, tariffCopper: 0, deliveryQd: 1 }], insuranceEnabled: false });
 assert.equal(tooLarge.ok, false);
-assert.equal(createMarketOutboundOrder({ plan: tooLarge, operationId: "oversized" }), null);
-assert.throws(() => createMarketOutboundOrder({ plan: { ...tooLarge, ok: true }, operationId: "forged" }), RangeError);
+assert.throws(() => transportMoney([tooLarge.revenueCopper]), RangeError, "current transport accounting cannot accept an oversized aggregate sale");
 const largePurchase = planMarketPurchase({ holding: { storage: { moneyCopper: Number.MAX_SAFE_INTEGER } },
   quote: { offers: [{ id: "rare", unitPriceCopper: 2000000, stock: 1000, load: 0 }], deliveryMode: "instant" }, quantities: { rare: 1000 } });
 assert.equal(largePurchase.amountExceeded, true);
@@ -229,17 +230,20 @@ for (let index = 1; index < 36; index++) {
   shipHolding.people.list.push({ id, name: id, wageDailyOverrideCopper: 12 });
   ship.crewResidentIds.push(id);
 }
-const shipEconomy = normalizeMarketEconomy(shipData.catalog.marketEconomy, { locations: shipData.catalog.eventRegions });
-const shipMarket = composeMarketLocation({ location: shipData.catalog.eventRegions.find((row) => row.value === "a"),
-  economy: shipEconomy, resources: shipData.catalog.resources, locations: shipData.catalog.eventRegions, normalizedEconomy: true });
-const shipArgs = { holding: shipHolding, data: shipData, market: shipMarket, ownShipId: ship.id,
-  offers: [{ resourceId: "test-freight", qty: 10, load: 1, unitPriceCopper: 100 }] };
-const own = authorityOwnShipOutboundRoute(shipArgs);
-assert(own.route, own.reason);
-const poisoned = authorityOwnShipOutboundRoute({ ...shipArgs, routes: [{ transportMode: "airship", tariffCopper: 999999,
-  insurancePremiumRate: 1, riskLossChance: 0.08, riskDelayChance: 0.45 }] });
-assert.deepEqual(poisoned.route, own.route, "an unrelated hired carrier cannot set own-ship taxes, insurance or risk");
-assert(own.route.riskLossChance > 0 && own.route.insurancePremiumRate > 0);
+{
+  const f = transportFixture(); f.data.catalog.transportV2.riskBps = 300;
+  const request = transportRequest(f, "a", { direction: "outbound", ownShipId: f.ship.id, insurance: true });
+  const discovered = prepareTransportContext({ ...f, request, isGM: true });
+  const service = discovered.services.find(row => row.kind === "owned" && row.from === discovered.from && row.to === discovered.to);
+  assert.ok(service); request.serviceIds = [service.id];
+  const own = prepareTransportContext({ ...f, request, isGM: true });
+  f.data.catalog.transportV2.overrides = Object.fromEntries(discovered.services.filter(row => row.kind !== "owned")
+    .map(row => [row.id, { dispatchCopper: 999999, loadCopper: 999, riskBps: 9999 }]));
+  const poisoned = prepareTransportContext({ ...f, request, isGM: true });
+  assert.deepEqual(poisoned.plan, own.plan, "unrelated hired terms cannot set an owned vessel's physical terms or cost");
+  assert.deepEqual(poisoned.commercial, own.commercial);
+  assert.ok(own.plan.stages[0].runs[0].riskBps > 0 && own.commercial.insuranceCopper > 0);
+}
 const clientData = structuredClone(shipData);
 clientData.catalog.marketEconomy.countries = clientData.catalog.eventRegions.map((region, index) => {
   region.countryId = `customs-${index}`;
