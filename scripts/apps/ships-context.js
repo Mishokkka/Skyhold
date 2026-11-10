@@ -18,6 +18,7 @@ import { formatShipGold, shipGoldInput } from "../core/ship-gold.js";
 import { shortestMarketRouteDistanceKm } from "../engines/market/logistics.js";
 import { allResourceDefs } from "../core/resources.js";
 import { clientCargoLifetime } from "../engines/ships/client-cargo.js";
+import { createMarketVisibility } from "../data/market/visibility.js";
 
 const KIND_LABELS = Object.freeze({ freight: "Перевозка", commission: "Поручение", smuggling: "Контрабанда" });
 const STYLE_HINTS = Object.freeze({
@@ -181,7 +182,7 @@ function currentOffersForShip(ships, ship, period) {
     && (ship.navigationMode === "world" || offer.mode !== "world"));
 }
 
-function overviewShipRow(holding, ship, index, { permissions, period, data }) {
+function overviewShipRow(holding, ship, index, { permissions, period, data, visibility }) {
   const isWorld = ship.navigationMode === "world";
   const inTransit = Boolean(ship.activeVoyage || shipTransportState(holding, ship).inTransit);
   const awaitingOutcome = inTransit && ship.activeVoyage?.awaitingOutcome === true;
@@ -206,7 +207,8 @@ function overviewShipRow(holding, ship, index, { permissions, period, data }) {
     atHome,
     statusLabel: management?.statusLabel ?? (awaitingOutcome ? "Ожидает итога" : inTransit ? "В пути" : ship.status === "away" ? "В рейсе" : "В поселении"),
     conditionLabel: ship.condition === "ready" ? "Исправен" : "Требуется обслуживание",
-    locationLabel: ship.location?.label || (atHome ? holding.name : inTransit ? "В пути" : "—"),
+    locationLabel: ship.location?.kind === "transit" && visibility.routeHidden(ship.activeVoyage?.quote) ? "В пути"
+      : visibility.pointLabel(ship.location, atHome ? holding.name : inTransit ? "В пути" : "—"),
     profileLabel: profile?.label ?? ship.profileId ?? "Прежний ручной расчёт",
     remainingDays: Number(ship.activeVoyage?.remainingQd ?? 0) / 4,
     readiness,
@@ -224,9 +226,10 @@ function overviewShipRow(holding, ship, index, { permissions, period, data }) {
 
 export function prepareShipsContext(holding, { revision = 0, data = null } = {}) {
   const permissions = holdingPermissionContext(holding);
+  const visibility = createMarketVisibility(data, { isGM: permissions.isGM });
   const ships = holding.special?.ships ?? {};
   const period = periodForHolding(holding);
-  const rows = (ships.list ?? []).map((ship, index) => overviewShipRow(holding, ship, index, { permissions, period, data }));
+  const rows = (ships.list ?? []).map((ship, index) => overviewShipRow(holding, ship, index, { permissions, period, data, visibility }));
   return {
     revision,
     period,
@@ -244,6 +247,7 @@ export function prepareShipsContext(holding, { revision = 0, data = null } = {})
 
 export function prepareShipWindowContext(holding, { revision = 0, data = null, shipId = "" } = {}) {
   const permissions = holdingPermissionContext(holding);
+  const visibility = createMarketVisibility(data, { isGM: permissions.isGM });
   const ships = holding.special?.ships ?? {};
   const resourceLoads = new Map(allResourceDefs({ catalogRows: data?.catalog?.resources ?? [] })
     .map((resource) => [resource.id, resource.loadPoints]));
@@ -300,7 +304,8 @@ export function prepareShipWindowContext(holding, { revision = 0, data = null, s
     let returnError = "";
     if (data && atForeignPort) {
       try { returnOffer = worldOfferRow(quoteWorldShipReturn(data, holding, ship, { context: worldContext }), worldContext); }
-      catch (error) { returnError = error.message; }
+      catch (error) { returnError = visibility.pointHidden(ship.location?.regionId) && !permissions.isGM
+        ? "Не удалось рассчитать возвращение из скрытого порта. Проверьте маршрут с ГМом." : error.message; }
     }
     let quote = null;
     let quoteError = "";
@@ -319,8 +324,9 @@ export function prepareShipWindowContext(holding, { revision = 0, data = null, s
         && port.regionId !== worldContext.home?.regionId)
         .map((port) => ({ id: port.id, label: port.label })) : [];
     const bundle = ship.orderBundle;
-    const bundleCurrentStop = bundle?.stops?.[bundle.nextStopIndex - 1] ?? null;
-    const bundleNextStop = bundle?.stops?.[bundle.nextStopIndex] ?? null;
+    const presentedStop = stop => stop ? { ...stop, point: { ...stop.point, label: visibility.pointLabel(stop.point) } } : null;
+    const bundleCurrentStop = presentedStop(bundle?.stops?.[bundle.nextStopIndex - 1]);
+    const bundleNextStop = presentedStop(bundle?.stops?.[bundle.nextStopIndex]);
     const outingReport = isWorld ? shipOutingSummary(ship, { clockQd: shipQd, obligationsCopper: moneySummary.obligationsCopper }) : null;
     let homeUpkeepCopperPerDay = ship.homeUpkeepEnabled === false ? 0 : ship.homeUpkeepCopperPerDay;
     if (data && atHome && worldContext.home) {
@@ -331,21 +337,24 @@ export function prepareShipWindowContext(holding, { revision = 0, data = null, s
       ...ship, index, isWorld, isLegacy, inTransit, away: ship.status === "away",
       homeUpkeepCopperPerDay,
       homeUpkeepEnabled: ship.homeUpkeepEnabled !== false,
-      atHome, atForeignPort, locationLabel: ship.location?.label || (atHome ? worldContext.home?.label : "В пути") || "—",
+      atHome, atForeignPort, locationLabel: ship.location?.kind === "transit" && visibility.routeHidden(ship.activeVoyage?.quote) ? "В пути"
+        : visibility.pointLabel(ship.location, (atHome ? worldContext.home?.label : "В пути") || "—"),
       profileLabel: profile?.label ?? ship.profileId ?? "—", linkedCrewCount: readiness?.linkedCount ?? 0,
       abstractCrewCount: readiness?.abstractCount ?? 0, totalCrewCount: readiness?.totalCount ?? 0,
       readiness, moneySummary,
       ...management,
       timelineQd: shipQd, settlementQd, catchUpDays: Math.max(0, settlementQd - shipQd) / 4,
       walletGold: formatShipGold(ship.onboardCopper ?? 0),
-      ownSale, ownSaleCargoText: (ownSale?.cargo ?? []).map((row) => `${row.name || row.resourceId} ×${row.qty}`).slice(0, 5).join(" · "),
+      ownSale: ownSale ? { ...ownSale, marketLabel: visibility.marketLabel(ownSale) } : null,
+      ownSaleCargoText: (ownSale?.cargo ?? []).map((row) => `${row.name || row.resourceId} ×${row.qty}`).slice(0, 5).join(" · "),
       ownSaleRemainingDays: Number(ownSale?.remainingQd ?? 0) / 4,
       ownSaleNeedsResolution: ownSale?.status === "needsResolution",
-      voyagePresentation: prepareShipVoyagePresentation(holding, ship, { ownSale }),
+      voyagePresentation: prepareShipVoyagePresentation(holding, ship, { ownSale, visibility }),
       hasBundle: Boolean(bundle), bundleCurrentStop, bundleNextStop,
       bundleOrders: (bundle?.orders ?? []).map((order) => ({
-        offerId: order.offerId, title: order.offer.title, destination: order.offer.to?.label,
-        pickupLabel: order.offer.contract?.pickup?.label || order.offer.from?.label,
+        offerId: order.offerId, title: visibility.routeHidden(order.offer) ? "Заказ по скрытому маршруту" : order.offer.title,
+        destination: visibility.pointLabel(order.offer.to),
+        pickupLabel: visibility.pointLabel(order.offer.contract?.pickup ?? order.offer.from),
         cargoName: order.offer.contract?.cargo?.name || order.offer.title,
         stateLabel: order.state === "delivered" ? "Доставлен" : order.outcome && !order.outcomeApplied ? "Исход сохранён · ждёт оплаты" : order.state === "loaded" ? "На борту" : "Ожидает погрузки",
         loadPoints: order.offer.contract?.cargo?.loadPoints ?? 0, rewardCopper: order.offer.contract?.rewardCopper ?? 0,
@@ -405,12 +414,13 @@ export function prepareShipWindowContext(holding, { revision = 0, data = null, s
     fleetAccounting: fleetAccountingSummary(holding),
     offersGenerated: String(ships.offerPeriod) === String(period), worldIssues: worldContext.issues ?? [], rows,
     history: (ships.history ?? []).filter((row) => String(row?.shipId ?? "") === String(shipId ?? "")).slice(-10).reverse().map((row) => ({
-      ...row, destination: row.destination || row.to?.label || "—",
+      ...row, destination: visibility.pointLabel({ ...row.to, label: row.destination || row.to?.label }, row.destination || "—"),
       outcome: row.outcome ? { ...row.outcome, delayDays: Number(row.outcome.delayQd ?? 0) / 4 } : null,
       historyTitle: row.contract
-        ? `${row.contract.cargo?.name || "Заказ"}: ${row.contract.pickup?.label || row.from?.label || "Порт"} → ${row.to?.label || row.destination || "—"}`
-        : `${row.from?.label || "Порт"} → ${row.to?.label || row.destination || "—"}`,
-      ledger: (row.ledger ?? []).map((entry) => ({ ...entry, label: entry.reason || ({ depart: "Бортовой бюджет и подготовка", expense: "Снабжение", income: "Плата за рейс", return: "Возврат остатка" }[entry.kind] ?? "Операция") }))
+        ? `${row.contract.cargo?.name || "Заказ"}: ${visibility.pointLabel(row.contract.pickup ?? row.from, "Порт")} → ${visibility.pointLabel(row.to, row.destination || "—")}`
+        : `${visibility.pointLabel(row.from, "Порт")} → ${visibility.pointLabel(row.to, row.destination || "—")}`,
+      ledger: (row.ledger ?? []).map((entry) => ({ ...entry, label: visibility.routeHidden(row) ? "Операция по скрытому маршруту"
+        : entry.reason || ({ depart: "Бортовой бюджет и подготовка", expense: "Снабжение", income: "Плата за рейс", return: "Возврат остатка" }[entry.kind] ?? "Операция") }))
     }))
   };
 }

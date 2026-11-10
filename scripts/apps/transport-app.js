@@ -13,7 +13,7 @@ import { DisclosureState } from "./common/disclosure-state.js";
 import { RenderSchedulerMixin } from "./common/render-scheduler.js";
 import { restoreApplicationFocus } from "./common/window-focus-keeper.js";
 import { requestSkyholdAppRender } from "./registry.js";
-import { transportHistoryPage, transportRefinements } from "./domains/transport-view.js";
+import { transportHistoryPage, transportRefinements, transportRiskLabel, transportStageRiskLabel } from "./domains/transport-view.js";
 import { createMarketVisibility } from "../data/market/visibility.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -95,9 +95,11 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
       warnings: quote.warnings,
       cargo: quote.plan.cargo.map((lot) => ({ name: lot.name || lot.resourceId, qty: lot.qty })),
       stages: quote.plan.stages.map((stage) => ({ path: path(stage), count: stage.runs.length,
+        risk: transportStageRiskLabel(stage),
         label: stage.service.label, price: money(stage.totalCopper), invoice: stageInvoice(stage), from: stage.from, company: stage.service.companyId,
         departures: stage.runs.map((run, index) => ({ number: index + 1, qty: run.cargo.reduce((sum, lot) => sum + lot.qty, 0),
-          departure: days(run.departureQd - quote.plan.startQd), arrival: days(run.arrivalQd - quote.plan.startQd), price: money(run.charge.totalCopper) })),
+          departure: days(run.departureQd - quote.plan.startQd), arrival: days(run.arrivalQd - quote.plan.startQd), price: money(run.charge.totalCopper),
+          risk: transportRiskLabel(run.riskBps) })),
         pinned: Boolean(this.request.pins?.[stage.from]),
         options: quote.services.filter((service) => service.from === stage.from && service.to === stage.to).map((service) => ({
           value: service.id, label: `${service.label} · ${service.kind === "regular" ? "регулярный" : service.kind === "owned" ? "свой корабль" : "чартер"}`,

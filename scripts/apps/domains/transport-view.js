@@ -4,6 +4,16 @@ import { TRANSPORT_LOAD_SCALE } from "../../engines/transport/quantities.js";
 
 export const TRANSPORT_HISTORY_PAGE_SIZE = 20;
 
+export const transportRiskLabel = (riskBps = 0) => `${(riskBps / 100).toLocaleString("ru-RU", { maximumFractionDigits: 2 })}%`;
+
+/** Parallel departures have separate events; a range never adds their probabilities. */
+export function transportStageRiskLabel(stage) {
+  const risks = stage.runs.map(run => run.riskBps ?? 0);
+  if (!risks.length) return "Нет отправлений";
+  const minimum = Math.min(...risks), maximum = Math.max(...risks);
+  return minimum === maximum ? transportRiskLabel(minimum) : `${transportRiskLabel(minimum)}–${transportRiskLabel(maximum)}`;
+}
+
 export function transportHistoryPage(orders, page = 0) {
   const active = [], history = [];
   for (const order of orders) (transportOrderHasObligations(order) ? active : history).push(order);

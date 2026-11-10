@@ -6,6 +6,8 @@ import { prepareTransportContext } from "../apps/domains/transport-context.js";
 import { bookTransportOrder } from "../engines/transport/runtime.js";
 import { ensureTransportState } from "../data/transport/state.js";
 import { transportFixture, transportRequest, transportHarness } from "./fixtures/transport-v2.mjs";
+import { transportRiskLabel, transportStageRiskLabel } from "../apps/domains/transport-view.js";
+import { readFileSync } from "node:fs";
 
 const applications = new Map();
 globalThis.foundry = { applications: { api: {
@@ -38,6 +40,37 @@ SkyholdTransportApp.rerenderOpen();
 assert.equal((await app._prepareContext({})).canConfirm, true);
 game.user = player;
 assert.equal((await app._prepareContext({})).canConfirm, true, "authorized players can request an authority-GM booking");
+// The quote exposes actual departure risks before either role can confirm.
+// Seasonal departures can differ; their probabilities must never be added.
+{
+  const configuration = data.catalog.transportV2;
+  const original = structuredClone(data);
+  for (const user of [gm, player]) for (const riskBps of [0, 123, 10000]) {
+    game.user = user;
+    data.catalog.transportV2 = { riskBps };
+    const preview = prepareTransportContext({ data, holding, request, isGM: user.isGM });
+    const view = await app._prepareContext({});
+    for (const [index, stage] of preview.plan.stages.entries()) {
+      assert.equal(view.selected.stages[index].risk, transportStageRiskLabel(stage));
+      assert.deepEqual(view.selected.stages[index].departures.map(row => row.risk),
+        stage.runs.map(run => transportRiskLabel(run.riskBps)));
+    }
+    assert.equal(view.canConfirm, true);
+  }
+  assert.equal(transportRiskLabel(0), "0%");
+  assert.equal(transportRiskLabel(123), "1,23%");
+  assert.equal(transportRiskLabel(10000), "100%");
+  assert.equal(transportStageRiskLabel({ runs: [{ riskBps: 250 }, { riskBps: 1000 }, { riskBps: 250 }] }), "2,5%–10%");
+  assert.equal(transportStageRiskLabel({ runs: [{ riskBps: 1000 }, { riskBps: 1000 }] }), "10%");
+  assert.equal(transportStageRiskLabel({ runs: [] }), "Нет отправлений");
+  const template = readFileSync(new URL("../../templates/transport-app.hbs", import.meta.url), "utf8");
+  assert.match(template, /риск происшествия на отправление: {{risk}}/);
+  assert.match(template, /риск происшествия: {{risk}}/);
+  if (configuration === undefined) delete data.catalog.transportV2;
+  else data.catalog.transportV2 = configuration;
+  assert.deepEqual(data, original, "risk presentation never rewrites the quote source or a saved agreement");
+  game.user = player;
+}
 game.socket = null;
 assert.equal((await app._prepareContext({})).canConfirm, false, "offline authority disables confirmation");
 game.socket = { emit() {} };

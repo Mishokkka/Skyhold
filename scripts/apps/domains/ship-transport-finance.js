@@ -34,6 +34,9 @@ export function prepareShipTransportFinance(holding, ship, outingReport, { data 
       && (outingReport.ongoing || start < outingReport.completedAtQd);
   }) : [];
   const result = { present: orders.length > 0, hasSale: orders.some(order => order.direction === "outbound"),
+    hideOutingRoutes: orders.some(order => visibility.marketHidden(order.commercial)
+      || order.stages.some(stage => visibility.transportStageHidden(stage))
+      || order.shipOrigin?.kind === "market" && visibility.pointHidden(order.shipOrigin.regionId || order.shipOrigin.id)),
     known: true, pending: false, pendingPayments, plannedIncomeCopper: 0, plannedExpenseCopper: 0,
     expenseCopper: 0, treasuryIncomeCopper: 0, details: [] };
   for (const order of orders) {

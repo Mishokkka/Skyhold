@@ -109,6 +109,36 @@ finance = prepareShipFinancePresentation(saleHolding, partialShip, { money, outi
 assert.equal(finance.outing.partial, true);
 assert.equal(finance.outing.canComparePlan, false);
 
+// Archived sales use the same visibility policy as new transport orders.
+{
+  const oldSale = { ...sale, marketId: "market-location:a", marketLabel: "LEGACY PRIVATE PORT" };
+  const oldHolding = { ...holding, special: { market: { outbound: { orders: [oldSale] } } } };
+  const oldShip = { ...finishedShip, lastOuting: { ...baseReport, details: [
+    { kind: "leg-start", clockQd: 0, amountCopper: 0, reason: "Дом → LEGACY PRIVATE PORT" },
+    { kind: "expense", clockQd: 0, amountCopper: -200, reason: "Автоматические расходы: Дом — LEGACY PRIVATE PORT" }
+  ] } };
+  const data = { catalog: { eventRegions: [{ value: "a", countryId: "private" }],
+    marketEconomy: { countries: [{ id: "private", visibility: "gm" }] } } };
+  const before = structuredClone({ oldHolding, oldShip, data });
+  for (const isGM of [true, false]) {
+    const view = prepareShipFinancePresentation(oldHolding, oldShip, {
+      data, isGM, money, outingReport: shipOutingSummary(oldShip)
+    });
+    assert.equal(JSON.stringify(view).includes("LEGACY PRIVATE PORT"), isGM);
+    assert.equal(view.outing.marketExpenseCopper, 70);
+    assert.equal(view.outing.netCopper, 530);
+    const pending = prepareShipFinancePresentation(oldHolding, oldShip, {
+      data, isGM, money, ownSale: { ...oldSale, status: "booked" }
+    });
+    assert.equal(pending.pendingPayments[0].label, `Продажа: ${isGM ? "LEGACY PRIVATE PORT" : "Скрытый рынок"}`);
+  }
+  assert.deepEqual({ oldHolding, oldShip, data }, before, "legacy visibility never repairs or rewrites stored history");
+  data.catalog.marketEconomy.countries[0].visibility = "public";
+  assert.ok(JSON.stringify(prepareShipFinancePresentation(oldHolding, oldShip, {
+    data, isGM: false, money, outingReport: shipOutingSummary(oldShip)
+  })).includes("LEGACY PRIVATE PORT"), "public archived names remain available to players");
+}
+
 const template = readFileSync(new URL("../../templates/parts/ship-window/finance.hbs", import.meta.url), "utf8");
 const adjustmentPosition = template.indexOf('data-ship-disclosure="funds:');
 assert.ok(template.indexOf("Баланс и обязательства") < adjustmentPosition, "the approved compact balance summary precedes the manual adjustment form");

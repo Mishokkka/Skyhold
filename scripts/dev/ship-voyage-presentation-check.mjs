@@ -168,6 +168,66 @@ assert.equal(prepareShipVoyagePresentation({ gm: { calendaria: { lastQd: 10 } } 
 assert.equal(prepareShipVoyagePresentation(movement.holding, { ...parked, navigationMode: "legacy" }, { ownSale: sale }), null);
 
 const template = readFileSync(new URL("../../templates/parts/ship-window/voyage-progress.hbs", import.meta.url), "utf8");
+// Accepted client voyages keep their physical snapshots when a country closes,
+// but every ordinary route/payment/history label must respect the viewer.
+for (const bundled of [false, true]) {
+  const f = worldMarketFixture();
+  f.holding.visibility = "public"; f.holding.gm.playersCanManageShips = true;
+  for (const region of f.data.catalog.eventRegions.filter(row => ["a", "b"].includes(row.value))) region.label = `PRIVATE PORT ${region.value}`;
+  const jobs = generateWorldShipOffers(f.data, f.holding, f.ship, { period: 0, random: () => 0.4 });
+  if (bundled) departWorldShipBundle(f.holding, f.ship, { operationId: "private-client-bundle",
+    plan: quoteWorldShipBundle(f.data, f.holding, f.ship, jobs.slice(0, 2)), clockQd: 0, budgetCopper: 100000 });
+  else departWorldShip(f.holding, f.ship, { operationId: "private-client-solo", offer: jobs[0], clockQd: 0, budgetCopper: 100000 });
+  const check = hidden => {
+    const before = structuredClone(f.data);
+    for (const isGM of [true, false]) {
+      globalThis.game = { user: { id: isGM ? "gm" : "player", isGM },
+        users: [{ id: "gm", isGM: true, active: true }], socket: { emit() { throw new Error("View wrote a command"); } } };
+      const view = prepareShipWindowContext(f.holding, { data: f.data, shipId: f.ship.id });
+      const row = view.rows[0];
+      const visible = { location: row.locationLabel, overview: prepareShipsContext(f.holding, { data: f.data }).rows[0].locationLabel,
+        voyage: row.voyagePresentation, finance: row.financePresentation,
+        nextPort: row.bundleNextStop?.point.label,
+        orders: row.bundleOrders.map(order => [order.title, order.destination, order.pickupLabel]),
+        history: view.history.map(history => [history.historyTitle, ...history.ledger.map(entry => entry.label)]) };
+      assert.equal(JSON.stringify(visible).includes("PRIVATE PORT"), isGM || !hidden,
+        "normal labels, not inspection of raw saved snapshots, follow market visibility");
+    }
+    assert.deepEqual(f.data, before, "visibility never changes time, cargo, money, outcomes or accepted names");
+  };
+  check(false);
+  f.data.catalog.marketEconomy.countries[0].visibility = "gm";
+  check(true);
+  for (let pass = 0; pass < 8 && (f.ship.activeVoyage || f.ship.orderBundle); pass++) {
+    if (f.ship.activeVoyage) {
+      f.holding.gm.calendaria.lastQd = f.ship.activeVoyage.arrivalQd;
+      advanceWorldShips(f.holding, f.holding.gm.calendaria.lastQd);
+    }
+    check(true);
+    if (f.ship.orderBundle) {
+      const id = f.ship.orderBundle.id;
+      if (f.ship.orderBundle.status === "awaiting-outcome") resolveWorldShipBundleStop(f.holding, f.ship, {
+        operationId: `private-resolve-${pass}`, bundleId: id, random: () => 0.99
+      });
+      if (f.ship.orderBundle?.status === "at-port") continueWorldShipBundle(f.holding, f.ship, {
+        operationId: `private-continue-${pass}`, bundleId: id, clockQd: f.ship.timelineQd
+      });
+    } else if (f.ship.activeVoyage?.awaitingOutcome) resolveWorldShip(f.holding, f.ship, {
+      operationId: `private-solo-result-${pass}`, random: () => 0.99
+    });
+  }
+  assert.equal(f.ship.activeVoyage, null); assert.equal(f.ship.orderBundle ?? null, null);
+  const back = quoteWorldShipReturn(f.data, f.holding, f.ship);
+  departWorldShip(f.holding, f.ship, { operationId: "private-client-return", offer: back, clockQd: f.ship.timelineQd });
+  check(true);
+  f.holding.gm.calendaria.lastQd = f.ship.activeVoyage.arrivalQd;
+  advanceWorldShips(f.holding, f.holding.gm.calendaria.lastQd);
+  check(true);
+  f.data.catalog.marketEconomy.countries[0].visibility = "public";
+  check(false);
+  f.data.catalog.eventRegions = f.data.catalog.eventRegions.filter(row => !["a", "b"].includes(row.value));
+  check(true);
+}
 assert.match(template, /<progress[^>]*aria-label=/);
 assert.match(template, /aria-valuetext=/);
 assert.match(template, /aria-current=/);

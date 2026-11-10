@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { transportFixture, transportRequest, transportHarness } from "./fixtures/transport-v2.mjs";
-import { prepareShipWindowContext } from "../apps/ships-context.js";
+import { prepareShipsContext, prepareShipWindowContext } from "../apps/ships-context.js";
 import { prepareShipFinancePresentation } from "../apps/domains/ship-finance-presentation.js";
 import { shipMoneySummary, shipOutingSummary } from "../engines/ships/summary.js";
 import { cargoValue } from "../engines/transport/quantities.js";
@@ -114,15 +114,89 @@ for (const isGM of [true, false]) for (const direction of ["inbound", "outbound"
 }
 {
   const f = transportFixture(), harness = transportHarness(f);
-  const request = transportRequest(f, "a", { direction: "outbound", ownShipId: f.ship.id, insurance: true });
-  const { order } = await harness.book(request, "hidden-sale");
-  order.commercial.marketLabel = "PRIVATE MARKET";
+  const region = harness.data.catalog.eventRegions.find(row => row.value === "a");
+  region.label = "PRIVATE PORT DELTA";
+  const request = transportRequest(harness.fixture(), "a", { direction: "outbound", ownShipId: f.ship.id, insurance: true });
+  const { preview } = await harness.book(request, "hidden-sale");
+  const check = hidden => {
+    const before = structuredClone(harness.data);
+    for (const isGM of [true, false]) {
+      globalThis.game.user = { id: isGM ? "gm" : "player", isGM };
+      const row = prepareShipWindowContext(harness.holding, { data: harness.data, shipId: harness.ship.id }).rows[0];
+      const overview = prepareShipsContext(harness.holding, { data: harness.data }).rows[0];
+      assert.equal(JSON.stringify(row.financePresentation).includes("PRIVATE PORT DELTA"), isGM || !hidden,
+        "both the market payment and saved route journal obey ordinary window visibility");
+      if (harness.ship.location.kind === "market") for (const view of [row, overview]) {
+        assert.equal(view.locationLabel, hidden && !isGM ? "Скрытый рынок" : "PRIVATE PORT DELTA");
+      }
+      assert.deepEqual(row.financePresentation.outing.details.map(detail => [detail.kind, detail.displayAmountCopper]),
+        prepareShipFinancePresentation(harness.holding, harness.ship, {
+          data: harness.data, isGM: true, outingReport: shipOutingSummary(harness.ship), money: row.moneySummary
+        }).outing.details.map(detail => [detail.kind, detail.displayAmountCopper]), "masking never changes the financial evidence");
+    }
+    assert.deepEqual(harness.data, before, "neither role can rewrite saved names, dates or receipts by viewing them");
+  };
   harness.data.catalog.marketEconomy.countries[0].visibility = "gm";
+  check(true);
+  harness.advance(preview.plan.shipReleaseQd);
+  check(true);
+  harness.data.catalog.marketEconomy.countries[0].visibility = "public";
+  check(false);
+  const returning = await harness.book(transportRequest(harness.fixture(), "home", {
+    ownShipId: f.ship.id, returnHome: true
+  }), "private-return-home");
+  harness.data.catalog.marketEconomy.countries[0].visibility = "gm";
+  harness.advance(returning.preview.plan.shipReleaseQd);
+  check(true);
+  harness.data.catalog.marketEconomy.countries[0].visibility = "public";
+  check(false);
+  harness.data.catalog.eventRegions = harness.data.catalog.eventRegions.filter(row => row.value !== "a");
+  check(true);
+  assert.ok(harness.ship.lastOuting.details.some(detail => detail.reason.includes("PRIVATE PORT DELTA")),
+    "the GM's original journal survives visibility changes and catalog replacement");
+  globalThis.game.user = { id: "gm", isGM: true };
+}
+
+// A private order affects its own (possibly multi-order) outing, never a later one.
+for (const returnHome of [true, false]) {
+  const f = transportFixture(), harness = transportHarness(f);
+  const first = await harness.book(transportRequest(harness.fixture(), "a", {
+    direction: "outbound", ownShipId: f.ship.id, returnHome
+  }), "private-past-outing");
+  harness.advance(first.preview.plan.shipReleaseQd);
+  const hidden = structuredClone(harness.holding.special.transportV2.orders[0]);
+  hidden.commercial.marketRegionId = "removed-private-port";
+  hidden.commercial.marketId = "market-location:removed-private-port";
+  harness.holding.special.transportV2.orders[0] = hidden;
+  await harness.book(transportRequest(harness.fixture(), returnHome ? "a" : "home", {
+    ownShipId: f.ship.id, returnHome: true
+  }), "public-next-outing");
   for (const isGM of [true, false]) {
     globalThis.game.user = { id: isGM ? "gm" : "player", isGM };
-    const view = prepareShipWindowContext(harness.holding, { data: harness.data, shipId: harness.ship.id }).rows[0].financePresentation;
-    assert.equal(JSON.stringify(view).includes("PRIVATE MARKET"), isGM, "the ordinary player finance window respects market visibility");
+    const row = prepareShipWindowContext(harness.holding, { data: harness.data, shipId: harness.ship.id }).rows[0];
+    const routes = row.financePresentation.outing.details.filter(detail => detail.kind === "leg-start");
+    assert.ok(routes.length);
+    assert.equal(routes.every(detail => detail.reason === "Скрытый участок"), !isGM && !returnHome,
+      "only accepted orders belonging to this outing can hide its text-only route notes");
   }
+}
+delete globalThis.game;
+{
+  const f = transportFixture();
+  const oldSale = { id: "old-private-sale", operationId: "old-private-sale", ownShipId: f.ship.id,
+    marketId: "market-location:a", marketLabel: "LEGACY PRIVATE PORT", status: "needsResolution", revenueCopper: 123, cargo: [] };
+  f.holding.special.market.outbound.orders.push(oldSale);
+  f.data.catalog.marketEconomy.countries[0].visibility = "gm";
+  const before = structuredClone(f.data);
+  for (const isGM of [true, false]) {
+    globalThis.game = { user: { id: isGM ? "gm" : "player", isGM },
+      users: [{ id: "gm", isGM: true, active: true }], socket: { emit() { throw new Error("Rendering wrote data"); } } };
+    const row = prepareShipWindowContext(f.holding, { data: f.data, shipId: f.ship.id }).rows[0];
+    assert.equal(row.ownSale.marketLabel, isGM ? "LEGACY PRIVATE PORT" : "Скрытый рынок");
+    assert.equal(row.voyagePresentation.stops[0].label, isGM ? "LEGACY PRIVATE PORT" : "Скрытый рынок");
+    assert.equal(JSON.stringify(row.financePresentation).includes("LEGACY PRIVATE PORT"), isGM);
+  }
+  assert.deepEqual(f.data, before, "ordinary legacy sale controls use a projection, not a rewritten order");
 }
 delete globalThis.game;
 console.log("Transport finance: real GM/player bookings/views, plan and receipt attribution, inventory exclusion, partial loss/insurance, mixed delivery and multiple orders per outing passed.");

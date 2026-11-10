@@ -63,11 +63,12 @@
       <p>{{#if selected.outbound}}Выручка: {{selected.value}}; после доставки и сборов: {{selected.net}}. Зачисление {{#if selected.revenueOnBoard}}на борт{{else}}в казну{{/if}}.{{else}}Товары: {{selected.value}}.{{/if}} Сейчас из казны: <strong>{{selected.treasury}}</strong>.</p>
       {{#if selected.splitArrival}}<p>Первое частичное прибытие через {{selected.firstArrival}}.</p>{{/if}}
       {{#if selected.shipRelease}}<p>Корабль освободится через {{selected.shipRelease}}: {{selected.shipReleaseLocation}}. Расходы судна: {{selected.ownExpenses}}; отдельный запас денег: {{selected.reserve}}.</p>{{/if}}
-      <ol>{{#each selected.stages}}<li>{{path}} · {{label}} · отправлений: {{count}} · {{price}}<small>{{invoice}}</small>
+      <ol>{{#each selected.stages}}<li>{{path}} · {{label}} · отправлений: {{count}} · {{price}} · риск происшествия на отправление: {{risk}}<small>{{invoice}}</small>
         <details data-fbls-disclosure="transport-departures:{{from}}"><summary>Отдельные отправления</summary>
-          {{#each departures}}<p>№ {{number}} · {{qty}} ед. · отправление через {{departure}}, прибытие через {{arrival}} · {{price}}</p>{{/each}}
+          {{#each departures}}<p>№ {{number}} · {{qty}} ед. · отправление через {{departure}}, прибытие через {{arrival}} · {{price}} · риск происшествия: {{risk}}</p>{{/each}}
         </details>
       </li>{{/each}}</ol>
+      <p>Риск относится к отдельному физическому отправлению. Все партии общего рейса разделяют одно происшествие; его последствия определяет ГМ. Порча от времени учитывается отдельно.</p>
       {{#each selected.warnings}}<p role="status">{{this}}</p>{{/each}}
       <details data-fbls-disclosure="transport-invoice"><summary>Товары и сборы</summary><ul>{{#each selected.cargo}}<li>{{name}} × {{qty}}</li>{{/each}}</ul><p>Пошлины: {{selected.tax}}. Страхование: {{selected.insurance}}. Покрытие утраты груза: {{selected.coveragePercent}}%; порча и расходы доставки не страхуются. {{#if selected.approach}}Пустой подход и ожидание своего корабля до первого участка: {{selected.approach}}.{{/if}}</p></details>
       <p>{{#if selected.limited}}Найден подходящий вариант в пределах поиска.{{else}}Выбран лучший найденный вариант для этого заказа.{{/if}} Наёмная доставка фиксируется при подтверждении; расходы своего корабля уточняются по фактическому времени и отправлениям.</p>

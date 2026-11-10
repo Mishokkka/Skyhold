@@ -2,8 +2,8 @@ const amount = (value) => Number.isFinite(Number(value)) ? Math.max(0, Number(va
 const label = (point) => point?.label || "Неизвестный порт";
 const cargoName = (order) => order?.offer?.contract?.cargo?.name || order?.offer?.title || "Груз заказчика";
 
-function stop(point, number, fields = {}) {
-  return { number, label: label(point), statusLabel: "Впереди", current: false, complete: false, ...fields };
+function stop(point, number, fields = {}, pointLabel = label) {
+  return { number, label: pointLabel(point), statusLabel: "Впереди", current: false, complete: false, ...fields };
 }
 
 function portStatus({ waitingFunds, awaiting, delayed }) {
@@ -11,14 +11,14 @@ function portStatus({ waitingFunds, awaiting, delayed }) {
     : delayed ? "Задержан в порту" : "В порту · ждёт приказа";
 }
 
-function bundleStops(bundle, voyage, delayed) {
+function bundleStops(bundle, voyage, delayed, pointLabel) {
   const orders = bundle.orders ?? [];
   const stops = bundle.stops ?? [];
   const next = amount(bundle.nextStopIndex);
   const cargoText = (ids) => (ids ?? []).map((id) => cargoName(orders.find((order) => order.offerId === id))).join(" · ");
   const origin = stops[0]?.legOffer?.from;
   const rows = origin ? [stop(origin, 0, { complete: true, statusLabel: "Отправление",
-    pickupText: orders.filter((order) => !order.offer?.contract?.pickup).map(cargoName).join(" · ") })] : [];
+    pickupText: orders.filter((order) => !order.offer?.contract?.pickup).map(cargoName).join(" · ") }, pointLabel)] : [];
   for (const [index, saved] of stops.entries()) {
     const reached = index < next;
     const current = voyage ? index === next : index === next - 1;
@@ -27,37 +27,38 @@ function bundleStops(bundle, voyage, delayed) {
       statusLabel: current ? (voyage ? "Следующий порт" : portStatus({ waitingFunds: bundle.waitingFunds,
         awaiting: bundle.status === "awaiting-outcome", delayed })) : reached ? "Пройден" : "Впереди",
       pickupText: cargoText(saved.pickupOfferIds), deliveryText: cargoText(saved.deliveryOfferIds),
-      incomingLabel: `${label(saved.legOffer?.from)} → ${label(saved.point)}`,
+      incomingLabel: `${pointLabel(saved.legOffer?.from)} → ${pointLabel(saved.point)}`,
       durationDays: amount(saved.legOffer?.quote?.durationQd) / 4,
       hasLoadPlan: Number.isFinite(saved.loadOnLegPoints) && Number.isFinite(saved.loadAfterPoints),
       loadOnLegPoints: saved.loadOnLegPoints, loadAfterPoints: saved.loadAfterPoints
-    }));
+    }, pointLabel));
   }
   return rows;
 }
 
-function singleStops(voyage, ownSale, delayed) {
+function singleStops(voyage, ownSale, delayed, pointLabel, visibility) {
   const quote = voyage?.quote;
-  if (!quote) return ownSale ? [stop({ label: ownSale.marketLabel }, 1, { current: true, complete: true,
+  if (!quote) return ownSale ? [stop({ label: visibility?.marketLabel(ownSale) ?? ownSale.marketLabel }, 1, { current: true, complete: true,
     statusLabel: ownSale.status === "needsResolution" ? "Требуется решение ГМа" : amount(ownSale.delayRemainingQd) > 0 ? "Продажа задержана" : "Ожидает расчёта продажи" })] : [];
   const contract = quote.contract;
   const arrived = voyage.awaitingOutcome === true || delayed;
   const rows = [stop(quote.from, 0, { complete: true, statusLabel: "Отправление",
-    pickupText: !contract?.pickup ? contract?.cargo?.name : "" })];
+    pickupText: !contract?.pickup ? contract?.cargo?.name : "" }, pointLabel)];
   if (contract?.pickup) rows.push(stop(contract.pickup, 1, { complete: arrived,
-    statusLabel: arrived ? "Пройден" : "Погрузка в составе участка", pickupText: contract.cargo?.name }));
+    statusLabel: arrived ? "Пройден" : "Погрузка в составе участка", pickupText: contract.cargo?.name }, pointLabel));
   rows.push(stop(quote.to, rows.length, { current: true, complete: arrived,
     statusLabel: arrived ? portStatus({ waitingFunds: voyage.waitingFunds, awaiting: voyage.awaitingOutcome, delayed }) : "Следующий порт",
-    deliveryText: contract?.cargo?.name }));
+    deliveryText: contract?.cargo?.name }, pointLabel));
   return rows;
 }
 
 /** Present only accepted snapshots. Never reprice, move time, settle bills or infer a position along a flight. */
-export function prepareShipVoyagePresentation(holding, ship, { ownSale = null } = {}) {
+export function prepareShipVoyagePresentation(holding, ship, { ownSale = null, visibility = null } = {}) {
   if (ship.navigationMode !== "world") return null;
   const voyage = ship.activeVoyage?.mode === "world" ? ship.activeVoyage : null;
   const bundle = ship.orderBundle;
   if (!voyage && !bundle && !ownSale) return null;
+  const pointLabel = point => visibility?.pointLabel(point, "Неизвестный порт") ?? label(point);
   const settlementQd = amount(holding.gm?.calendaria?.lastQd);
   // Match the existing cursor fallback for saves which predate timelineQd.
   const shipQd = ship.timelineQd == null ? Math.max(settlementQd, amount(voyage?.lastProcessedQd), amount(ship.portBilling?.lastCalculatedQd))
@@ -81,7 +82,7 @@ export function prepareShipVoyagePresentation(holding, ship, { ownSale = null } 
     const remainingQd = Math.min(totalQd, amount(voyage.remainingQd));
     const elapsedQd = soloDelay ? totalQd - remainingQd : Math.min(totalQd, amount(voyage.elapsedQd));
     leg = {
-      label: soloDelay ? `Задержка · ${label(voyage.quote?.to)}` : `${label(voyage.quote?.from)} → ${label(voyage.quote?.to)}`,
+      label: soloDelay ? `Задержка · ${pointLabel(voyage.quote?.to)}` : `${pointLabel(voyage.quote?.from)} → ${pointLabel(voyage.quote?.to)}`,
       isDelay: soloDelay, totalQd, elapsedQd, durationDays: totalQd / 4,
       elapsedDays: elapsedQd / 4, remainingDays: remainingQd / 4, hasProgress: totalQd > 0,
       progressText: `${elapsedQd / 4} из ${totalQd / 4} дн.`,
@@ -102,7 +103,7 @@ export function prepareShipVoyagePresentation(holding, ship, { ownSale = null } 
                 : "Время включает перелёт и предусмотренные портовые работы. Прогресс показывает учтённые дни всего участка; точная фаза и позиция внутри перелёта отдельно не отслеживаются.";
   const snapshotIssue = bundle?.status === "travelling" && !voyage
     ? "В принятом рейсе отсутствует текущий участок. ГМу нужно проверить состояние корабля; просмотр не восстанавливает рейс автоматически." : "";
-  const stops = bundle ? bundleStops(bundle, voyage, delayed) : singleStops(voyage, ownSale, soloDelay);
+  const stops = bundle ? bundleStops(bundle, voyage, delayed, pointLabel) : singleStops(voyage, ownSale, soloDelay, pointLabel, visibility);
   return {
     title, statusLabel: snapshotIssue ? "Требуется проверка ГМа" : statusLabel,
     leg, awaiting, delayed, snapshotIssue, traveling: Boolean(voyage && !awaiting && !soloDelay),
