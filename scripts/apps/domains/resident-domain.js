@@ -56,7 +56,7 @@ _prepareRows(holding, canEdit, activeTab = "overview", options = {}) {
   if (tab === "special" || tab === "defense") {
     const decorate = (sourceRows) => (sourceRows ?? []).map((row, index) => ({ ...row, _index: index }));
     rows.special = decorate(holding.special?.list).filter((row) => {
-      if (canEdit) return true;
+      if (globalThis.game?.user?.isGM) return true;
       return row.visibility !== "gm";
     }).map((row) => ({ ...row, isGmOnly: row.visibility === "gm" }));
     rows.cemetery = this._preparePersonRows(holding, canEdit, "cemetery", false);

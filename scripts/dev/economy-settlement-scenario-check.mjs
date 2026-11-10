@@ -160,6 +160,7 @@ export async function settlementScenario({ population = 12, demandFactor = 1, pr
       const report = await app._runEconomyForQd(h, 40, { operationId: "year-" + period, createdAt: "2026-10-08", data: SkyholdData.view() });
       finishPerishableStoragePeriod({ holding: h, elapsedQd: 40, report, appendLedger: () => {}, formatNumber: String });
       h.gm.calendaria.lastQd += 40;
+      let bookedExportQty = 0, bookedExportValueCopper = 0;
       for (const b of h.buildings.list.filter((row) => ["bathhouse", "meeting-house"].includes(row.templateId))) {
         assert.equal(b.serviceState?.active, true, b.templateId + " must be staffed and funded");
       }
@@ -191,11 +192,13 @@ export async function settlementScenario({ population = 12, demandFactor = 1, pr
           id: operationId, direction: "outbound", commercial: { marketId: "regional-port", marketLabel: "Региональный порт",
             taxCopper: plan.tariffCopper, insuranceCopper: plan.insuranceCopper } });
         order.demandReservations = demand.reservations;
+        bookedExportQty += qty;
+        bookedExportValueCopper += cargoValue(cargo);
         advanceTransportShipments(world, h, h.gm.calendaria.lastQd, app);
       }
       periods.push({ period: period + 1, foodEaten: report.food.eaten, needed: report.food.needed, hunger: h.gm.food.hungerLevel,
         cash: h.storage.moneyCopper, debt: report.treasury.deficit, grain: total(h, "grain"), wood: total(h, "wood"), stone: total(h, "stone"),
-        freeQd: population * 20 - plannedQd, heatingInputCost,
+        freeQd: population * 20 - plannedQd, heatingInputCost, bookedExportQty, bookedExportValueCopper,
         deliveryRevenue: report.ledger.filter(row => row.meta?.storageKind === "transport-sale").reduce((sum, row) => sum + row.qty, 0) });
       h = mergeHoldingDefaults(h);
     }
@@ -207,6 +210,8 @@ export async function settlementScenario({ population = 12, demandFactor = 1, pr
         annualFreeQd: rows.reduce((sum, row) => sum + row.freeQd, 0),
         minimumFreeLaborPct: Math.round(Math.min(...rows.map((row) => row.freeQd)) / (population * 20) * 100),
         heatingInputCost: rows.reduce((sum, row) => sum + row.heatingInputCost, 0),
+        bookedExportQty: rows.reduce((sum, row) => sum + row.bookedExportQty, 0),
+        bookedExportValueCopper: rows.reduce((sum, row) => sum + row.bookedExportValueCopper, 0),
         exportReceipts: rows.reduce((sum, row) => sum + row.deliveryRevenue, 0), debt: rows.at(-1).debt };
     });
     return { population, demandFactor, priceFactor, missedSowing, relief, initialGrain, initialFlour,
@@ -221,7 +226,7 @@ export async function settlementScenario({ population = 12, demandFactor = 1, pr
 /** Asserts food autonomy, paid upkeep and labor reserves across normal, stressed, missed-sowing and explicit-aid scenarios. */
 export async function checkSettlementScenarios() {
   const rows = [];
-  for (const options of [{ population: 12 }, { population: 20 }, { population: 50 }, { population: 20, demandFactor: 0.5, priceFactor: 0.9 }, { population: 50, demandFactor: 0.5, priceFactor: 0.9 }, { population: 12, missedSowing: true }, { population: 12, missedSowing: true, relief: true }]) {
+  for (const options of [{ population: 12 }, { population: 20 }, { population: 50 }, { population: 20, demandFactor: 0.1, priceFactor: 0.75 }, { population: 50, demandFactor: 0.1, priceFactor: 0.75 }, { population: 12, missedSowing: true }, { population: 12, missedSowing: true, relief: true }]) {
     const result = await settlementScenario(options);
     if (!result.missedSowing) for (const year of result.years) {
       assert.equal(year.hungryPeriods, 0, "normal and market-stress scenarios must remain food-autonomous");
@@ -232,6 +237,18 @@ export async function checkSettlementScenarios() {
     }
     else assert.ok(result.years[0].hungryPeriods > 0, "missing sowing must expose the limits of the declared starting grain");
     if (result.relief) assert.ok(result.periods.slice(-12).every((row) => row.hunger === 0), "declared aid must permit a sustained recovery");
+    if (result.demandFactor < 1 || result.priceFactor < 1) {
+      const baseline = rows.find(row => row.population === result.population && row.demandFactor === 1 && row.priceFactor === 1);
+      assert.ok(baseline, "market stress requires a matching normal scenario");
+      for (const [index, year] of result.years.entries()) {
+        const normal = baseline.years[index];
+        assert.ok(year.bookedExportQty > 0 && year.bookedExportQty < normal.bookedExportQty,
+          "the demand shock must actually reduce booked cargo, not only the configured demand");
+        assert.ok(year.bookedExportValueCopper * normal.bookedExportQty < normal.bookedExportValueCopper * year.bookedExportQty,
+          "the price shock must actually reduce the average integer unit price");
+        assert.ok(year.exportReceipts < normal.exportReceipts, "market stress must reduce actual delivered export receipts");
+      }
+    }
     rows.push(result);
   }
   return rows;

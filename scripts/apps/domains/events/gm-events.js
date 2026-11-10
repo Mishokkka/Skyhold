@@ -6,7 +6,7 @@ import { escapeHtml, rollD6Pool } from "../../../core/helpers.js";
 import { resourceLabel } from "../../../core/resources.js";
 import { normalizeEventRegionOptions, normalizeRandomEventTables, rollRandomEventTable } from "../../../data/random-events.js";
 import { controlIncidentSeverity } from "../../../engines/settlement/control.js";
-import { createFoundryChatMessage, foundryChatSpeaker, foundryWhisperRecipients } from "../../../integrations/foundry-runtime.js";
+import { createHoldingChatMessage, foundryChatSpeaker } from "../../../integrations/foundry-runtime.js";
 
 function rollD100() {
   return Math.floor(Math.random() * 100) + 1;
@@ -39,9 +39,7 @@ function isGmOnlyEvent(result = null) {
 
 function eventChatOptions(results = []) {
   const list = Array.isArray(results) ? results : [results];
-  if (!list.some((result) => isGmOnlyEvent(result))) return {};
-  const recipients = foundryWhisperRecipients("GM").map((user) => user.id);
-  return recipients.length ? { whisper: recipients } : {};
+  return { gmOnly: list.some((result) => isGmOnlyEvent(result)) };
 }
 
 function eventResultHtml(result = null, { gmDetails = false } = {}) {
@@ -532,7 +530,7 @@ async _onRollEventTable(event) {
     };
   }, { reason: "gm:roll" });
 
-  await createFoundryChatMessage({
+  await createHoldingChatMessage(holding, {
     speaker: foundryChatSpeaker({ alias: holdingName }),
     content: `
       <div class="fbls-chat-card">
@@ -540,9 +538,8 @@ async _onRollEventTable(event) {
         <p><strong>${escapeHtml(holding.name)}.</strong></p>
         ${eventResultHtml(result, { gmDetails: isGmOnlyEvent(result) })}
       </div>
-    `,
-    ...eventChatOptions(result)
-  });
+    `
+  }, eventChatOptions(result));
   this.requestRender();
 },
 
@@ -565,7 +562,7 @@ async _postReputationEventRoll(holding) {
     }, { reason: "gm:roll-reputation-event" });
   }
 
-  await createFoundryChatMessage({
+  await createHoldingChatMessage(holding, {
     speaker: foundryChatSpeaker({ alias: holding.name || "Владение" }),
     content: `
       <div class="fbls-chat-card">
@@ -573,9 +570,8 @@ async _postReputationEventRoll(holding) {
         <p><strong>${escapeHtml(holding.name)}.</strong></p>
         ${reputationRollHtml(result)}
       </div>
-    `,
-    ...eventChatOptions(result.external.map((item) => item.event))
-  });
+    `
+  }, eventChatOptions(result.external.map((item) => item.event)));
   this.requestRender?.();
   return result;
 },

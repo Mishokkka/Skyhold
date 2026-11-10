@@ -1,4 +1,5 @@
 import { makeId } from "../../data/utils.js";
+import { isResidentInPopulation } from "../../data/resident-presence.js";
 import { clearPersonFromAssignments } from "../../data/resident-assignments.js";
 import { isMedicalBuilding } from "../../core/building-specials.js";
 import { asInt, clamp, militiaThreshold } from "./rules.js";
@@ -24,7 +25,7 @@ export function medicalSupport(holding, { battleLost = false, medicalAssignments
   const workers = new Map();
   for (const building of medicalBuildings) {
     for (const id of (Array.isArray(building.assignedWorkerIds) ? building.assignedWorkerIds : [])) {
-      const person = (holding?.people?.list ?? []).find((row) => String(row.id) === String(id) && !row.dead && !isInjuredResident(row));
+      const person = (holding?.people?.list ?? []).find((row) => String(row.id) === String(id) && isResidentInPopulation(row, holding) && !isInjuredResident(row));
       if (person) workers.set(String(person.id), person);
     }
   }
@@ -61,7 +62,7 @@ export function medicalSupport(holding, { battleLost = false, medicalAssignments
 }
 
 export function defenderCasualtyCandidates(holding, state = {}, calc = {}) {
-  const people = (holding?.people?.list ?? []).filter((person) => !person?.dead && !isInjuredResident(person));
+  const people = (holding?.people?.list ?? []).filter((person) => isResidentInPopulation(person, holding) && !isInjuredResident(person));
   const byId = new Map(people.map((person) => [String(person.id), person]));
   const ids = new Set();
   const add = (id) => {

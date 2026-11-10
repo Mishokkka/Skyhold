@@ -10,7 +10,7 @@ import { dispatchDelegatedAction } from "./common/delegated-events.js";
 import { bindFloatingTooltips, hideFloatingTooltip } from "./common/floating-tooltip.js";
 import { RenderSchedulerMixin } from "./common/render-scheduler.js";
 import { getSkyholdManager, requestSkyholdAppRender } from "./registry.js";
-import { createFoundryChatMessage, foundryChatSpeaker, foundryDialogV2, playFoundryAudio } from "../integrations/foundry-runtime.js";
+import { createHoldingChatMessage, foundryChatSpeaker, foundryDialogV2, playFoundryAudio } from "../integrations/foundry-runtime.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
@@ -427,7 +427,7 @@ export class SkyholdMassCombatApp extends RenderSchedulerMixin(HandlebarsApplica
     }
     const state = holding.gm?.massCombat ?? {};
     const rows = battleAftermathRows(holding, state, (names) => this._compactNameList(names));
-    await createFoundryChatMessage({
+    await createHoldingChatMessage(holding, {
       speaker: foundryChatSpeaker({ alias: holding.name || "Владение" }),
       content: `
         <div class="fbls-chat-card">
@@ -504,7 +504,7 @@ export class SkyholdMassCombatApp extends RenderSchedulerMixin(HandlebarsApplica
         ? holding?.gm?.defense?.defeatSound
         : holding?.gm?.defense?.drawSound;
     if (!src) return;
-    try { playFoundryAudio({ src, volume: 0.8, autoplay: true, loop: false }, true); }
+    try { playFoundryAudio({ src, volume: 0.8, autoplay: true, loop: false }, holding?.visibility !== "gm"); }
     catch (error) { console.warn("FBL Skyhold | Defense sound failed", error); }
   }
 
@@ -818,7 +818,7 @@ export class SkyholdMassCombatApp extends RenderSchedulerMixin(HandlebarsApplica
       this.requestRender();
       return;
     }
-    await createFoundryChatMessage({
+    await createHoldingChatMessage(result.holding, {
       speaker: foundryChatSpeaker({ alias: result.holding.name || "Владение" }),
       content: roundChatContent(result.holding, result.state, result.calc, {
         round: result.round,
@@ -869,7 +869,7 @@ export class SkyholdMassCombatApp extends RenderSchedulerMixin(HandlebarsApplica
     const calculationDependencies = battleCalculationDependencies(manager);
     const defenseTotal = manager?._defenseSummary?.(holding)?.total ?? asNumber(holding?.overview?.defense, 0);
     const calc = calculateBattle(holding, state, { defenseTotal, ...calculationDependencies });
-    await createFoundryChatMessage({
+    await createHoldingChatMessage(holding, {
       speaker: foundryChatSpeaker({ alias: holding.name || "Владение" }),
       content: `
         <div class="fbls-chat-card">

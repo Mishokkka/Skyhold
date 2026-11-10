@@ -18,7 +18,7 @@ import {
 import { assignResidentsToFreeHousing } from "../../../engines/housing/assignment.js";
 import { rememberApplicationFocusReturn } from "../../common/window-focus-keeper.js";
 import { confirmBuildingWorkerAdmission } from "../../common/building-worker-admission.js";
-import { createFoundryChatMessage, foundryChatSpeaker } from "../../../integrations/foundry-runtime.js";
+import { createHoldingChatMessage, foundryChatSpeaker } from "../../../integrations/foundry-runtime.js";
 import {
   isBuiltAssignableBuilding,
   isCivilianWorkerCandidate,
@@ -671,6 +671,7 @@ async _onRollConstructionCrew(event) {
     const chat = {
       ok: true,
       holdingName: holding.name || "Владение",
+      holdingVisibility: holding.visibility,
       crewName: crew.name || "Стройбригада",
       rawDice: crew.rawDice,
       moraleMod: crew.moraleMod,
@@ -689,7 +690,7 @@ async _onRollConstructionCrew(event) {
     return;
   }
 
-  await createFoundryChatMessage({
+  await createHoldingChatMessage({ visibility: result.holdingVisibility }, {
     speaker: foundryChatSpeaker({ alias: result.holdingName }),
     content: `
       <div class="fbls-chat-card">
@@ -742,7 +743,7 @@ async _onRollConstruction(event) {
     return;
   }
 
-  await createFoundryChatMessage({
+  await createHoldingChatMessage(holding, {
     speaker: foundryChatSpeaker({ alias: result.holdingName }),
     content: `
       <div class="fbls-chat-card">

@@ -7,7 +7,7 @@ import { normalizeBelief } from "../../../generators/resident-rules.js";
 import { SkyholdCrewEditor } from "../../editors/crew-editor.js";
 import { openMarketApp, openBankApp, openMassCombatApp, openPoliticsApp, openPoliticsBalanceEditor } from "../../lazy-apps.js";
 import { escapeHtml, fieldValue, rollD6Pool } from "../../../core/helpers.js";
-import { createFoundryChatMessage, foundryChatSpeaker, foundryDialogV2, renderFoundryFilePicker } from "../../../integrations/foundry-runtime.js";
+import { createHoldingChatMessage, foundryChatSpeaker, foundryDialogV2, renderFoundryFilePicker } from "../../../integrations/foundry-runtime.js";
 import { filterStorageSearchRows } from "../../../engines/storage/search.js";
 
 function createStorageSearchResultButton(row = {}) {
@@ -144,7 +144,7 @@ async _onRollHoldingStat(event) {
   const rolls = rollD6Pool(value);
   const successes = rolls.filter((roll) => roll >= 6).length;
   const diceText = rolls.map((roll) => roll >= 6 ? `<strong>${roll}</strong>` : String(roll)).join(", ");
-  await createFoundryChatMessage({
+  await createHoldingChatMessage(holding, {
     speaker: foundryChatSpeaker({ alias: holding.name || "Владение" }),
     content: `<div class="fbls-chat-card"><h3>${label}: ${value}к6</h3><p><strong>Кости:</strong> ${diceText}</p><p><strong>Успехи:</strong> ${successes}</p></div>`
   });

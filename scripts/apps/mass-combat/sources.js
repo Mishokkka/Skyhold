@@ -247,7 +247,7 @@ export function defenseSquadProfile(holding, state = {}) {
       label: squad.name || profile.label,
       baseEfficiency: effective,
       tags,
-      participantIds: combatantIds,
+      participantIds: combatants.map((person) => String(person.id)),
       threshold: FULL_UNIT_EFFICIENCY
     });
     source.sergeantBonus = sergeantBonus;

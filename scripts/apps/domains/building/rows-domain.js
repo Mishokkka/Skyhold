@@ -77,7 +77,7 @@ _medicalCapacityForBuilding(holding, building, workerContext = null) {
 },
 
 _medicalAssignments(holding, workerContext = null) {
-  const patients = (holding?.people?.list ?? []).filter((person) => this._isMedicalPatient(person));
+  const patients = (holding?.people?.list ?? []).filter((person) => isResidentInPopulation(person, holding) && this._isMedicalPatient(person));
   const buildings = this._medicalBuildingBaseRows(holding);
   const result = new Map();
   let cursor = 0;

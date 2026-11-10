@@ -59,6 +59,20 @@ export function createFoundryChatMessage(data = {}, options = {}) {
   return ChatMessage.create(data, options);
 }
 
+/** Keep every holding card within its ordinary visibility, including automatic reports. */
+export function createHoldingChatMessage(holding, data = {}, { gmOnly = false, ...options } = {}) {
+  if (holding?.visibility === "gm" || gmOnly) {
+    const current = globalThis.game?.user;
+    const whisper = [...new Set([
+      ...foundryWhisperRecipients("GM").map((user) => user.id),
+      ...(current?.isGM ? [current.id] : [])
+    ].filter(Boolean))];
+    if (!whisper.length) return Promise.reject(new Error("FBL Skyhold | No GM recipients for private holding chat."));
+    data = { ...data, whisper };
+  }
+  return createFoundryChatMessage(data, options);
+}
+
 export function resolveFoundryUuid(uuid, options = {}) {
   if (!uuid) return Promise.resolve(null);
   const fromUuid = requireApi(globalThis.foundry?.utils?.fromUuid, "foundry.utils.fromUuid");
