@@ -1,5 +1,5 @@
 import { bindSharedMarketHolding } from "../../data/market/shared-context.js";
-import { activeTransportOrder, transportOrders } from "../../data/transport/state.js";
+import { activeTransportOrder, transportOrders, transportRunService } from "../../data/transport/state.js";
 import { transportClockOffsetQd, transportHoldingQd } from "../../data/transport/clock.js";
 import { advanceTransportShipments } from "./orders.js";
 import { transportServicesShareFleet } from "../../engines/transport/service-identity.js";
@@ -171,7 +171,8 @@ export function commitTendayTransportDecision(data, projection, runId, resolutio
   const state = data.meta.transportV2;
   const atQd = row.legacy ? state.clockQd : projected.incident.atQd;
   // Validate and allocate on the draft first; even invalid commands cannot partly rebook live data.
-  resolveTransportIncident(projection.data.meta.transportV2, runId, { ...resolution, atQd });
+  resolveTransportIncident(projection.data.meta.transportV2, runId, { ...resolution, atQd,
+    service: transportRunService(projection.data, runId) });
   adoptProjectedTransportBookings({ state, holdings: data.holdings, projectedData: projection.data, runId });
   const live = state.runs.find(run => run.id === runId);
   // The projection has verified the frozen cargo, including known feeder losses and expiry.

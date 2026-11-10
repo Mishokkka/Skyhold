@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { transportFixture, transportRequest } from "./fixtures/transport-v2.mjs";
 import { fixture, book, harness } from "./fixtures/transport-tenday.mjs";
-import { prepareTransportContext } from "../apps/domains/transport-context.js";
+import { prepareTransportContext, transportSourceToken } from "../apps/domains/transport-context.js";
 import { transportSeasonalCalendar, transportSeasonalMovement } from "../engines/transport/seasonal.js";
 import { planTransportChain } from "../engines/transport/planner.js";
+import { bookTransportOrder } from "../engines/transport/runtime.js";
+import { startTransportShip, advanceTransportShipments } from "../workflows/transport/orders.js";
 import { prepareOwnedTransportAbort } from "../engines/transport/owned-costs.js";
 import { transportInsuranceCopper } from "../engines/transport/economics.js";
 import { worldShipTransportTerms, buildShipWorldContext, generateWorldShipOffers, quoteWorldShipBundle } from "../engines/ships/world-market.js";
@@ -159,6 +161,90 @@ const cargo = qty => [{ lotId: "cargo", resourceId: "wood", qty, unitLoad: 4000,
   assert.equal(order.status, "delivered"); assert.deepEqual(order.plan, accepted);
   assert.equal(order.stages[1].totalCopper, accepted.stages[1].totalCopper);
   assert.equal(order.stages[1].service.seasonal.legs[0].seasonalModifiers.spring.timeFactor, 1);
+}
+
+// A dated physical incident moves only the future empty return. The accepted
+// invoice and completed outward movement remain immutable across local Apply.
+for (const kind of ["charter", "owned"]) for (const slower of [false, true]) for (const fixed of [false, true])
+for (const returnWork of kind === "owned" ? [1, 4] : [1]) {
+  const f = transportFixture(); dated(f.holding, 26);
+  if (kind === "charter") { f.holding.people.list = []; f.holding.special.ships.list = []; }
+  f.ship.homeUpkeepEnabled = false;
+  const winter = slower ? 1 : 4, spring = slower ? 4 : 1;
+  const seasonal = { calendar: transportSeasonalCalendar(f.holding), baseRiskBps: 10000,
+    fixed: { risk: true, backTravel: fixed }, legs: [{ movementQd: 1, seasonalModifiers: {
+      winter: { enabled: true, timeFactor: winter, costFactor: 1, riskFactor: 1 },
+      spring: { enabled: true, timeFactor: spring, costFactor: 1, riskFactor: 1 }
+    } }] };
+  const service = { id: "seasonal-return", kind, from: "home", to: "a", capacity: 4000, vehicles: 1,
+    loadingQd: 1, unloadingQd: 1, travelQd: winter, returnQd: fixed ? 7 : winter, riskBps: 10000,
+    dailyCosts: { foodCopper: 4 }, returnDailyCosts: { foodCopper: 8 }, seasonal,
+    ...(kind === "owned" ? { shipId: f.ship.id, returnAtEnd: true, endReturnLocation: "home", endReturnQd: fixed ? 7 : winter * returnWork,
+      endReturnSeasonal: { ...structuredClone(seasonal), legs: [{ ...structuredClone(seasonal.legs[0]), movementQd: returnWork }] } } : {}) };
+  const plan = planTransportChain({ cargo: cargo(1), services: [service] });
+  const order = bookTransportOrder({ state: f.data.meta.transportV2, holding: f.holding, services: [service], plan,
+    id: "seasonal-return-order", direction: "inbound", ship: kind === "owned" ? f.ship : null,
+    commercial: { targetRoomId: "outdoors", reserveCopper: kind === "owned" ? 1000 : 0 } });
+  if (kind === "owned") startTransportShip(f.data, f.holding, order);
+  const h = harness(f.data), id = f.holding.id, review = await h.prepare(id, 40);
+  assert.equal(review.ok, false);
+  const before = structuredClone(h.data), api = globalThis.CALENDARIA;
+  if (!fixed) {
+    globalThis.CALENDARIA = undefined;
+    await assert.rejects(h.decide(review, { outcome: "delay", delayQd: 20 }), /Calendaria/);
+    assert.deepEqual(h.data, before, "a missing dated return adapter cannot partly change the incident or bookings");
+    globalThis.CALENDARIA = api;
+  }
+  await h.decide(review, { outcome: "delay", delayQd: 20 }); h.reload();
+  const physical = h.data.meta.transportV2.runs[0], original = plan.stages[0].runs[0];
+  const arrival = original.arrivalQd + 20, returning = fixed ? 7 : spring * returnWork;
+  assert.equal(physical.arrivalQd, arrival);
+  assert.equal(physical.releaseQd, arrival + returning, `${kind}: empty return uses the actual new season or explicit GM override`);
+  assert.deepEqual(h.holding(id).special.transportV2.orders[0].plan, plan);
+  if (kind === "charter") {
+    const next = planTransportChain({ cargo: cargo(1), services: [service], runs: h.data.meta.transportV2.runs });
+    assert.equal(next.stages[0].runs[0].startQd, physical.releaseQd, "a finite vehicle cannot leave before its actual return");
+  }
+  await h.apply(await h.prepare(id, 40)); h.reload();
+  const completed = h.holding(id).special.transportV2.orders[0];
+  assert.equal(completed.status, "delivered"); assert.deepEqual(completed.plan, plan);
+  if (kind === "owned") {
+    assert.equal(completed.ownedActualCopper, arrival + returning * 2,
+      "forward delay and changed return duration use their own accepted daily costs");
+    assert.equal(completed.shipReleased, true);
+    assert.equal(h.holding(id).special.ships.list[0].location.kind, "home");
+    assert.equal(h.holding(id).storage.moneyCopper, 500000 - 5 - completed.ownedActualCopper,
+      "the complete treasury result includes a shorter-return refund as well as extra operating costs");
+  } else assert.equal(completed.money.spentCopper, plan.totalCopper, "the hired invoice remains fixed");
+}
+
+// The ordinary incident command also handles already-recorded pending events.
+// Old numeric contracts keep their accepted return; player resolution is refused.
+for (const snapshot of [false, true]) {
+  const f = fixture(); dated(f.holding, 26); f.holding.people.list = [];
+  const service = { ...f.carrier, kind: "charter", from: "a", to: "home", capacity: 40000,
+    loadingQd: 1, unloadingQd: 1, travelQd: 4, returnQd: 4, riskBps: 10000,
+    ...(snapshot ? { seasonal: { ...profile(f.holding, 1), fixed: { risk: true } } } : {}) };
+  book(f, f.holding, "saved-seasonal-event", [service], { resourceId: "wood" });
+  const workflow = { _appendStorageLog() {}, _storageAddWithOverflow() { throw new Error("Pending cargo cannot arrive"); } };
+  advanceTransportShipments(f.data, f.holding, 40, workflow);
+  f.holding.gm.calendaria.lastQd = 40;
+  f.holding.gm.calendaria.lastDateTime = addCalendariaQd(f.holding.gm.calendaria.lastDateTime, 40);
+  const h = harness(f.data), id = f.holding.id, runId = h.data.meta.transportV2.runs[0].id;
+  const operation = { type: "transport-incident", operationId: "saved-seasonal-decision", holdingId: id,
+    expectedRevision: h.data.meta.revision, sourceToken: transportSourceToken(h.data, h.holding(id)), runId,
+    resolution: { outcome: "delay", delayQd: 20 } };
+  const before = structuredClone(h.data);
+  await assert.rejects(h.execute(operation, { userId: "player", remote: true }), /ГМ/);
+  assert.deepEqual(h.data, before);
+  assert.equal((await h.execute(operation, { userId: "gm" })).ok, true);
+  const after = structuredClone(h.data);
+  assert.equal((await h.execute(operation, { userId: "gm" })).replay, true);
+  assert.deepEqual(h.data, after); h.reload();
+  assert.equal(h.data.meta.transportV2.runs[0].arrivalQd, 60);
+  assert.equal(h.data.meta.transportV2.runs[0].releaseQd, snapshot ? 61 : 64);
+  await h.apply(await h.prepare(id, 40));
+  assert.equal(h.holding(id).special.transportV2.orders[0].status, "delivered");
 }
 
 // The legacy customer-order planner also dates each next leg after the prior port's handling.

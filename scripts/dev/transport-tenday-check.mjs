@@ -363,4 +363,30 @@ assert.deepEqual(await splitTendays(true), await splitTendays(false), "a sequent
   assert.equal(prepared.preparedHolding.special.transportV2.orders[0].stages[0].receipts[0].arrivalQd, 84);
   await h.apply(prepared);
 }
-console.log("Transport tendays: pre-economy GM decisions, true dates, cargo/cash isolation, fresh sales, new connections, own return costs, shared feeder manifests, atomic Apply and replay passed.");
+// A warehouse expiry is already a stock movement; the later transport receipt
+// accounts for that spoiled promise without claiming a second warehouse dispatch.
+{
+  const f = transportFixture(); f.holding.people.list = []; f.holding.special.ships.list = [];
+  f.holding.storage.resources = [{ id: "expired-stock", resourceId: "meat", name: "Meat", roomId: "outdoors", qty: 10,
+    batches: [{ id: "expired-batch", qty: 10, ageQd: 0 }] }];
+  const cargo = [{ lotId: "expired-lot", rowId: "expired-stock", batchId: "expired-batch", resourceId: "meat", name: "Meat",
+    qty: 10, unitLoad: 4000, unitCopper: 5, ageQd: 0, shelfLifeQd: 20 }];
+  const service = { ...feeder, id: "expired-carrier", firstQd: 80, riskBps: 0 };
+  bookTransportOrder({ state: f.data.meta.transportV2, holding: f.holding, services: [service],
+    plan: planTransportChain({ cargo, services: [service] }), id: "expired-sale", direction: "outbound",
+    commercial: { marketId: "a", marketLabel: "Test market" } }).demandReservations = [];
+  const h = harness(f.data);
+  await h.apply(await h.prepare()); h.reload();
+  assert.equal(h.holding().storage.log.filter(row => row.resourceId === "meat").reduce((sum, row) => sum + row.qty, 0), -10);
+  const departure = await h.prepare();
+  assert.equal(departure.report.ledger.filter(row => row.resourceId === "meat" && row.meta?.storageKind === "transport").length, 0,
+    "an entirely expired reservation never becomes a new warehouse dispatch in the tenday report");
+  await h.apply(departure); h.reload();
+  assert.equal(h.holding().storage.log.filter(row => row.resourceId === "meat").reduce((sum, row) => sum + row.qty, 0), -10,
+    "warehouse history conserves the original ten units after expiry and scheduled departure");
+  await h.apply(await h.prepare());
+  const order = h.holding().special.transportV2.orders[0];
+  assert.equal(order.spoiledQty, 10); assert.equal(order.status, "lost");
+  assert.equal(order.dispatched["expired-lot"], 10, "the full promise is retired even though no stock was loaded");
+}
+console.log("Transport tendays: pre-economy GM decisions, true dates, cargo/cash isolation, fresh sales, new connections, own return costs, shared feeder manifests, expired-source history, atomic Apply and replay passed.");

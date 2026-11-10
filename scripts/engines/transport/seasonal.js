@@ -81,3 +81,14 @@ export function transportEmptyQd(service, kind, startQd) {
   const profile = service[`${kind}Seasonal`];
   return profile ? transportSeasonalMovement(profile, startQd).durationQd : service[`${kind}Qd`] ?? 0;
 }
+
+/** Only the empty return is still future after a dated arrival incident. */
+export function transportRunReturnQd(service, run, arrivalQd) {
+  const saved = run.releaseQd - run.arrivalQd;
+  if (!saved || !service || service.seasonal?.fixed?.backTravel) return saved;
+  const kind = service.kind === "owned" && service.returnAtEnd && run.releaseLocation === service.endReturnLocation
+    ? "endReturn" : "return";
+  const profile = service[`${kind}Seasonal`] ?? (service.kind !== "owned" && service.seasonal
+    ? { ...service.seasonal, legs: [...service.seasonal.legs].reverse() } : null);
+  return profile ? transportSeasonalMovement(profile, arrivalQd).durationQd : saved;
+}

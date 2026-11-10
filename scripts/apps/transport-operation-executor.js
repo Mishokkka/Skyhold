@@ -2,7 +2,7 @@ import { SkyholdData } from "../data/store.js";
 import { COMMIT_SCOPES } from "../data/commit-preparation.js";
 import { canReadHolding } from "../data/access-guard.js";
 import { appendHoldingOperation, findHoldingOperation } from "../data/operations.js";
-import { ensureTransportState } from "../data/transport/state.js";
+import { ensureTransportState, transportRunService } from "../data/transport/state.js";
 import { prepareTransportContext, transportSourceToken } from "./domains/transport-context.js";
 import { validateTransportConfiguration } from "../engines/transport/services.js";
 import { bookTransportOrder, resolveTransportIncident } from "../engines/transport/runtime.js";
@@ -115,7 +115,8 @@ export function createTransportOperationExecutor({ transaction = (updater, optio
             } else projection = projectTendayTransport(data, holding, Number(holding.gm?.calendaria?.lastQd ?? 0) + op.reviewQd, engine, { calendarStart });
             result.decision = op.resolution?.outcome === "carrier" ? commitTendayCarrierDecision(data, projection, op.runId)
               : commitTendayTransportDecision(data, projection, op.runId, op.resolution);
-          } else resolveTransportIncident(data.meta.transportV2, op.runId, { ...op.resolution, atQd: data.meta.transportV2.clockQd });
+          } else resolveTransportIncident(data.meta.transportV2, op.runId, { ...op.resolution, atQd: data.meta.transportV2.clockQd,
+            service: transportRunService(data, op.runId) });
         } else if (op.type === "transport-ship-sync") {
           const ship = holding.special?.ships?.list?.find((row) => row.id === op.shipId);
           if (!ship || ship.activeVoyage || ship.orderBundle || ship.transportOrderId) throw fail("Сначала завершите текущий рейс корабля.");

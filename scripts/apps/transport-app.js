@@ -66,15 +66,10 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
       catch (error) { quoteError = error.message; }
     }
     this._view = { data, holding, permissions, quote, sourceToken: quote?.sourceToken ?? transportSourceToken(data, holding) };
-    const hiddenCountries = new Set((data.catalog?.marketEconomy?.countries ?? []).filter((row) => row.visibility === "gm").map((row) => row.id));
-    const hiddenRegions = new Set((data.catalog?.eventRegions ?? []).filter((row) => hiddenCountries.has(row.countryId)).map((row) => row.value));
-    const hiddenCompanies = new Set((data.catalog?.marketEconomy?.organizations ?? []).filter((row) => row.visibility === "gm").map((row) => row.id));
     const visibility = createMarketVisibility(data, { isGM: permissions.isGM });
-    const regionId = id => String(id).replace(/:holding$/, "");
-    const pointLabel = id => !permissions.isGM && hiddenRegions.has(regionId(id)) ? "скрытый порт"
+    const pointLabel = id => visibility.pointHidden(id) ? "скрытый порт"
       : String(id).endsWith(":holding") ? holding.name : data.catalog.eventRegions.find(row => row.value === id)?.label ?? id;
-    const path = (stage) => !permissions.isGM && (stage.service.visibility === "gm" || hiddenRegions.has(regionId(stage.from))
-      || hiddenRegions.has(regionId(stage.to)) || hiddenCompanies.has(stage.service.companyId)) ? "Скрытый участок"
+    const path = (stage) => visibility.transportStageHidden(stage) ? "Скрытый участок"
       : `${stage.service.fromLabel || stage.from} → ${stage.service.toLabel || stage.to}`;
     const shipTiming = (order) => {
       if (!order.ownShipId || order.shipArrived || order.status === "cancelled") return "";

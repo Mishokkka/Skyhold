@@ -60,7 +60,7 @@ export function advanceTransportShipments(data, holding, targetQd, workflow, { l
         const actual = dispatched.cargo.find((row) => row.lotId === lot.lotId);
         if (actual) lot.ageQd = actual.ageQd + Math.max(0, transportLocalQd(order, atQd) - Number(holding.gm?.calendaria?.lastQd ?? 0));
         lot.ageAtQd = atQd;
-        entries.push({ kind: "transport", resourceId: lot.resourceId, name: lot.name, qty: -lot.qty,
+        if (actual?.qty) entries.push({ kind: "transport", resourceId: lot.resourceId, name: lot.name, qty: -actual.qty,
           roomId: lot.roomId ?? "outdoors", source: "Отправление груза", operationId: order.id });
       }
     },

@@ -3,6 +3,18 @@ import { transportEpochQd } from "./clock.js";
 export const transportOrders = (holding) => holding?.special?.transportV2?.orders ?? [];
 export const activeTransportOrder = (order) => !["delivered", "lost", "cancelled"].includes(order.status);
 
+/** Read the accepted service, never a later catalog quote, for a physical run. */
+export function transportRunService(data, runId) {
+  const run = data.meta?.transportV2?.runs?.find(row => row.id === runId);
+  for (const claim of run?.claims ?? []) {
+    const holding = data.holdings.find(row => row.id === claim.holdingId);
+    const order = transportOrders(holding).find(row => row.id === claim.orderId);
+    const service = order?.stages?.[claim.stage]?.service;
+    if (service) return service;
+  }
+  return null;
+}
+
 /** Delivered cargo can still have an unpaid adjustment or a vessel returning. */
 export const transportOrderHasObligations = order => order.status !== "cancelled"
   && (activeTransportOrder(order) || order.fundingNeededCopper > 0

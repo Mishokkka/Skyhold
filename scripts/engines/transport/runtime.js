@@ -4,6 +4,7 @@ import { planTransportChain, validateTransportPlan, TransportPlanningUnavailable
 import { activeTransportOrder, transportOrders } from "../../data/transport/state.js";
 import { transportServicesShareFleet } from "./service-identity.js";
 import { deterministicUnit as deterministicMarketShipmentUnit } from "../../core/seeded-unit.js";
+import { transportRunReturnQd } from "./seasonal.js";
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const totalQty = (cargo) => cargo.reduce((sum, lot) => sum + lot.qty, 0);
@@ -411,7 +412,7 @@ function allocateRunLoss(run, lossBps) {
 }
 
 /** A physical run has one outcome, shared by every holding and order aboard it. */
-export function resolveTransportIncident(state, runId, { outcome, delayQd = 0, lossBps = 0, atQd = state.clockQd } = {}) {
+export function resolveTransportIncident(state, runId, { outcome, delayQd = 0, lossBps = 0, atQd = state.clockQd, service = null } = {}) {
   const run = runFor(state, runId);
   if (!run?.incident || run.incident.status !== "pending") throw new Error("Этот рейс не ожидает решения.");
   if (!["success", "delay", "loss"].includes(outcome)) throw new Error("Неизвестный исход.");
@@ -419,9 +420,12 @@ export function resolveTransportIncident(state, runId, { outcome, delayQd = 0, l
   if (outcome === "loss" && run.claims.some(claim => claim.manifestReady !== true)) {
     throw new Error("Сначала обработайте отправления и предыдущие участки связанных заказов: состав груза на общем рейсе ещё не определён.");
   }
-  const previous = run.arrivalQd;
-  run.arrivalQd = Math.max(previous, atQd) + (outcome === "delay" ? delayQd : 0);
-  run.releaseQd += run.arrivalQd - previous;
+  const arrivalQd = Math.max(run.arrivalQd, atQd) + (outcome === "delay" ? delayQd : 0);
+  // Evaluate before changing physical facts: a missing calendar leaves the
+  // pending incident and all existing reservations intact for retry.
+  const returnQd = arrivalQd === run.arrivalQd ? run.releaseQd - run.arrivalQd : transportRunReturnQd(service, run, arrivalQd);
+  run.arrivalQd = arrivalQd;
+  run.releaseQd = arrivalQd + returnQd;
   run.incident = { status: "resolved", outcome, lossBps: outcome === "loss" ? lossBps : 0, atQd: run.arrivalQd };
   if (outcome === "loss") run.incident.lossAllocations = allocateRunLoss(run, lossBps);
   return run;

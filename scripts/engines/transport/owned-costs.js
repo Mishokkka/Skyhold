@@ -14,8 +14,11 @@ export function ownedTransportActualCosts(order, state) {
   for (const [index, row] of runs.entries()) {
     actualCopper += row.planned.charge.totalCopper;
     const baseDuration = row.planned.arrivalQd - row.planned.startQd;
-    const actualDuration = baseDuration + Math.max(0, row.physical.releaseQd - row.planned.releaseQd);
+    const actualDuration = baseDuration + Math.max(0, row.physical.arrivalQd - row.planned.arrivalQd);
     actualCopper += transportOperatingCharge(row.service, actualDuration) - transportOperatingCharge(row.service, baseDuration);
+    const baseReturn = row.planned.releaseQd - row.planned.arrivalQd;
+    const actualReturn = row.physical.releaseQd - row.physical.arrivalQd;
+    actualCopper += transportOperatingCharge(row.service, actualReturn, true) - transportOperatingCharge(row.service, baseReturn, true);
     if (index) actualCopper += transportWaitingCharge(row.service, Math.max(0, row.physical.startQd - runs[index - 1].physical.releaseQd));
   }
   actualCopper += order.shipAbort?.returnCopper ?? 0;

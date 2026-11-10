@@ -20,8 +20,10 @@ export function marketLogSources(holding, rows) {
 export function createMarketVisibility(data, { isGM = false } = {}) {
   const countries = new Map((data?.catalog?.marketEconomy?.countries ?? []).map(row => [row.id, row]));
   const regions = new Map((data?.catalog?.eventRegions ?? []).map(row => [row.value, row]));
+  const companies = new Map((data?.catalog?.marketEconomy?.organizations ?? []).map(row => [row.id, row]));
   const countryHidden = id => !isGM && countries.get(id)?.visibility === "gm";
   const regionHidden = id => countryHidden(regions.get(String(id).replace(/:holding$/, ""))?.countryId);
+  const pointHidden = id => !isGM && (!regions.has(String(id).replace(/:holding$/, "")) || regionHidden(id));
   const marketLabel = (commercial = {}) => {
     const label = commercial.marketLabel || "Внешний рынок";
     if (isGM) return label;
@@ -31,7 +33,14 @@ export function createMarketVisibility(data, { isGM = false } = {}) {
     return label;
   };
   return {
-    countryHidden, regionHidden, marketLabel,
+    countryHidden, regionHidden, pointHidden, marketLabel,
+    transportStageHidden(stage) {
+      const companyId = stage.service.companyId;
+      const company = companies.get(companyId);
+      const externalCompany = companyId && companyId !== "independent-carriers" && !companyId.startsWith("owned:");
+      return !isGM && (stage.service.visibility === "gm" || pointHidden(stage.from) || pointHidden(stage.to)
+        || externalCompany && (!company || company.visibility === "gm"));
+    },
     logSource(row, market) {
       if (market && row.source === market.marketLabel) return marketLabel(market);
       if (!isGM && String(row.kind ?? "").startsWith("market-")) {

@@ -5,6 +5,7 @@ import { prepareMarketAuthorityContext } from "../apps/market/authority-context.
 import { prepareTransportContext } from "../apps/domains/transport-context.js";
 import { bookTransportOrder } from "../engines/transport/runtime.js";
 import { ensureTransportState } from "../data/transport/state.js";
+import { transportFixture, transportRequest, transportHarness } from "./fixtures/transport-v2.mjs";
 
 const applications = new Map();
 globalThis.foundry = { applications: { api: {
@@ -80,11 +81,23 @@ data.catalog.marketEconomy.countries = [];
 data.catalog.eventRegions = [];
 game.user = player;
 assert.equal((await app._prepareContext({})).archive[0].market, "Скрытый рынок");
+assert.ok((await app._prepareContext({})).orders[0].stages.every(stage => stage.path === "Скрытый участок"),
+  "unknown saved ports must also stay hidden in the ordinary route disclosure");
 game.user = gm;
 assert.equal((await app._prepareContext({})).archive[0].market, "PRIVATE MARKET");
+assert.ok((await app._prepareContext({})).orders[0].stages.every(stage => stage.path !== "Скрытый участок"),
+  "GM retains the accepted route labels after catalog replacement");
 data.catalog.marketEconomy.countries = savedCountries;
 data.catalog.eventRegions = savedRegions;
 data.catalog.marketEconomy.countries[0].visibility = "public";
+const savedCompany = order.stages[0].service.companyId;
+order.stages[0].service.companyId = "removed-private-carrier";
+game.user = player;
+assert.equal((await app._prepareContext({})).orders[0].stages[0].path, "Скрытый участок",
+  "removing a carrier cannot make its accepted private labels public");
+game.user = gm;
+assert.notEqual((await app._prepareContext({})).orders[0].stages[0].path, "Скрытый участок");
+order.stages[0].service.companyId = savedCompany;
 const physical = data.meta.transportV2.runs[0];
 physical.incident = { status: "pending" };
 physical.claims.push({ holdingId: holding.id, orderId: "incoming", stage: 1, manifestReady: false, load: 1 });
@@ -113,4 +126,21 @@ const settled = await app._prepareContext({});
 assert.equal(settled.pending, false); assert.equal(settled.busy, false);
 assert.equal(app.request, null, "late success clears the reopened checkout");
 await app.close();
+// A real accepted own-ship sale also renders its release port outside the
+// route disclosure. Unknown endpoint IDs must not leak through that sentence.
+{
+  const f = transportFixture(), h = transportHarness(f);
+  await h.book(transportRequest(f, "a", { direction: "outbound", ownShipId: f.ship.id, returnHome: false }), "unknown-release-port");
+  h.data.catalog.eventRegions = []; h.data.catalog.marketEconomy.countries = [];
+  const before = structuredClone(h.data), ownApp = new SkyholdTransportApp({ holdingId: h.holding.id });
+  SkyholdData.view = () => h.data;
+  game.user = player;
+  const hidden = await ownApp._prepareContext({});
+  assert.match(hidden.orders[0].shipTiming, /скрытый порт/);
+  assert.ok(hidden.orders[0].stages.every(stage => stage.path === "Скрытый участок"));
+  game.user = gm;
+  assert.doesNotMatch((await ownApp._prepareContext({})).orders[0].shipTiming, /скрытый порт/);
+  assert.deepEqual(h.data, before, "GM/player projection preserves the accepted labels, cargo and accounts");
+  await ownApp.close();
+}
 console.log("transport-v2 UI: GM/player permissions, offline authority, ordinary hidden-route visibility and late receipt after reopening passed");
