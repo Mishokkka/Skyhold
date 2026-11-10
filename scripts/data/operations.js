@@ -11,6 +11,7 @@ const OPERATION_TYPES = new Set([
   "market-purchase",
   "market-outbound",
   "bank",
+  "transport-v2",
   "ship-operation",
   "politics",
   "system",

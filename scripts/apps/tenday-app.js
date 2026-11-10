@@ -1,5 +1,6 @@
 import { MODULE_ID } from "../data/constants.js";
-import { SkyholdData } from "../data/store.js";
+import { SkyholdData, requestMarketOperation } from "../data/store.js";
+import { makeId } from "../data/utils.js";
 import { WindowFrameMixin } from "./common/window-frame.js";
 import { RenderSchedulerMixin } from "./common/render-scheduler.js";
 import { bindTabNavigation } from "./common/tab-navigation.js";
@@ -132,7 +133,8 @@ function attentionRows(prepared = {}) {
     severity: String(warning?.severity ?? "warning"),
     icon: warning?.severity === "danger" ? "fa-solid fa-circle-exclamation" : "fa-solid fa-triangle-exclamation",
     title: warning?.severity === "danger" ? "Критическое последствие" : "Требует внимания",
-    text: String(warning?.text ?? "")
+    text: String(warning?.text ?? ""),
+    openTransport: String(warning?.key ?? "").startsWith("transport-")
   }));
   const existing = new Set(warnings.map((row) => row.key));
   const readiness = (prepared?.readiness?.alerts ?? [])
@@ -159,6 +161,8 @@ function resultStatus(prepared = {}, phase = "preview") {
 export class SkyholdTendayApp extends WindowFrameMixin(RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2))) {
   static instances = new Map();
   static preparedCache = new Map();
+  static transportSessions = new Map();
+  static transportInFlight = new Set();
 
   static rememberPrepared(key, prepared) {
     this.preparedCache.delete(key);
@@ -219,9 +223,12 @@ export class SkyholdTendayApp extends WindowFrameMixin(RenderSchedulerMixin(Hand
     this.error = "";
     this.rationUnitsPerResident = null;
     this._operationToken = null;
+    this._transportBusy = false;
+    this._transportFields = {};
+    this._tendayClosed = false;
     this._dataHookId = globalThis.Hooks?.on?.("fblSkyholdDataChanged", () => this._onDataChanged());
     this._calendarHookId = globalThis.Hooks?.on?.("fblSkyholdCalendariaChanged", () => {
-      if (this.rendered && this.phase === "preview") this.requestRender({ focus: false });
+      if (this.rendered && ["preview", "transport"].includes(this.phase)) this.requestRender({ focus: false });
     });
   }
 
@@ -235,6 +242,11 @@ export class SkyholdTendayApp extends WindowFrameMixin(RenderSchedulerMixin(Hand
   async prepare() {
     if (this.phase === "loading" && this._operationToken) return;
     if (this.phase === "applying") return;
+    if (this.constructor.transportSessions.has(this.holdingId)) {
+      this.phase = "transport";
+      this.requestRender({ focus: false });
+      return;
+    }
     const token = Symbol("tenday-prepare");
     this._operationToken = token;
     this.phase = "loading";
@@ -266,9 +278,9 @@ export class SkyholdTendayApp extends WindowFrameMixin(RenderSchedulerMixin(Hand
         });
       if (this._operationToken !== token) return;
       if (!prepared?.ok) {
-        this.prepared = null;
-        this.phase = "error";
-        this.error = String(prepared?.message || "Не удалось подготовить десятник.");
+        this.prepared = prepared?.transportReview ? prepared : null;
+        this.phase = prepared?.transportReview ? "transport" : "error";
+        this.error = prepared?.transportReview ? "" : String(prepared?.message || "Не удалось подготовить десятник.");
       } else {
         this.prepared = prepared;
         this.constructor.rememberPrepared(cacheKey, prepared);
@@ -297,11 +309,14 @@ export class SkyholdTendayApp extends WindowFrameMixin(RenderSchedulerMixin(Hand
   }
 
   _isStale(dataView = null) {
-    return Boolean(this.prepared && !this.prepared.historical && this.phase === "preview" && !this.workflow?._isPreparedTendayCurrent?.(this.prepared, dataView));
+    dataView ??= SkyholdData.view();
+    return Boolean(this.prepared && !this.prepared.historical && ["preview", "transport"].includes(this.phase)
+      && (this.phase === "transport" && this.prepared.dataRevision !== dataView.meta?.revision
+        || !this.workflow?._isPreparedTendayCurrent?.(this.prepared, dataView)));
   }
 
   _onDataChanged() {
-    if (!this.rendered || !this.prepared || this.phase !== "preview") return;
+    if (!this.rendered || !this.prepared || !["preview", "transport"].includes(this.phase)) return;
     if (this._isStale()) this.requestRender({ focus: false });
   }
 
@@ -394,7 +409,9 @@ export class SkyholdTendayApp extends WindowFrameMixin(RenderSchedulerMixin(Hand
     );
     const construction = report?.construction ?? {};
     const eventCount = eventResults.length;
-    const hasPrepared = Boolean(prepared);
+    const transportPending = this.constructor.transportSessions.get(this.holdingId);
+    const transportBusy = this._transportBusy || this.constructor.transportInFlight.has(transportPending?.operationId);
+    const hasPrepared = Boolean(prepared && !prepared.transportReview);
     return {
       ...context,
       phase,
@@ -409,13 +426,25 @@ export class SkyholdTendayApp extends WindowFrameMixin(RenderSchedulerMixin(Hand
       holdingName: prepared?.holdingName ?? currentHolding?.name ?? "Владение",
       holdingMissing: !currentHolding,
       hasPrepared,
+      isTransportReview: Boolean(prepared?.transportReview || transportPending),
+      transportMessage: prepared?.message || "Предыдущее решение ещё не подтверждено. Проверьте его результат повторно.",
+      transportError: this.error,
+      transportBusy,
+      canRefreshTransport: !transportPending && !transportBusy,
+      hasTransportRetry: Boolean(transportPending),
+      transportReview: (prepared?.transportReview ?? []).map(row => ({ ...row,
+        dateText: row.legacy ? "Ранее ожидавшее решения происшествие" : `Через ${Math.max(0, row.localQd - Number(currentHolding?.gm?.calendaria?.lastQd ?? 0)) / 4} дн. от последней проведённой даты`,
+        canResolve: phase === "transport" && row.canResolve && !stale && !transportBusy && !transportPending && Boolean(game.user?.isGM),
+        delayDays: this._transportFields[row.runId]?.delayDays ?? 1,
+        lossPercent: this._transportFields[row.runId]?.lossPercent ?? 100,
+        blockers: row.blockers.filter(entry => entry.holdingId !== this.holdingId) })),
       rationUnitsPerResident,
       rationOptions: [
         { value: 5, label: "Скудный · 5 ед.", selected: rationUnitsPerResident === 5 },
         { value: 10, label: "Обычный · 10 ед.", selected: rationUnitsPerResident === 10 },
         { value: 15, label: "Усиленный · 15 ед.", selected: rationUnitsPerResident === 15 }
       ],
-      canApply: phase === "preview" && Boolean(currentHolding),
+      canApply: phase === "preview" && Boolean(currentHolding) && !transportPending && !transportBusy,
       operationId: prepared?.operationId ?? this.result?.operationId ?? "",
       periodLabel: prepared?.periodLabel ?? "десятник",
       clock: prepared?.clock ?? null,
@@ -480,12 +509,25 @@ export class SkyholdTendayApp extends WindowFrameMixin(RenderSchedulerMixin(Hand
       const action = String(element.dataset.action ?? "");
       if (action === "tenday-tab") return this._onTab(event, element);
       if (action === "tenday-apply") return this._onApply(event);
+      if (action === "tenday-transport-decision") return this._onTransportDecision(event, element);
+      if (action === "tenday-transport-retry") return this._submitTransportDecision();
+      if (action === "tenday-transport-related") return this._onTransportRelated(element);
+      if (action === "tenday-transport-open") return this._openTransport();
       if (action === "tenday-refresh" || action === "tenday-next") return this._onRefresh(event);
       if (action === "tenday-event-apply") return this._onEventDecision(event, element, "apply");
       if (action === "tenday-event-schedule") return this._onEventDecision(event, element, "schedule");
       if (action === "tenday-close") return this.close();
     }, { signal: controller.signal });
     root.addEventListener("change", (event) => {
+      const incidentField = event.target?.closest?.("[data-tenday-transport-delay], [data-tenday-transport-loss]");
+      if (incidentField && root.contains(incidentField)) {
+        const runId = incidentField.closest("[data-tenday-transport-run]")?.dataset.tendayTransportRun;
+        if (runId) {
+          this._transportFields[runId] ??= {};
+          this._transportFields[runId][incidentField.hasAttribute("data-tenday-transport-delay") ? "delayDays" : "lossPercent"] = incidentField.value;
+        }
+        return;
+      }
       const select = event.target?.closest?.("[data-tenday-ration]");
       if (!select || !root.contains(select) || this.phase !== "preview") return;
       const next = normalizeFoodRationUnits(select.value, this.rationUnitsPerResident ?? 10);
@@ -509,10 +551,74 @@ export class SkyholdTendayApp extends WindowFrameMixin(RenderSchedulerMixin(Hand
     this.requestRender({ focus: false });
   }
 
+  _onTransportRelated(element) {
+    return Number(element.dataset.qd) === 0 ? this._openTransport(element.dataset.holding)
+      : this.constructor.open({ workflow: this.workflow, holdingId: element.dataset.holding, qd: Number(element.dataset.qd) });
+  }
+
+  async _openTransport(holdingId = this.holdingId) {
+    const { openTransportApp } = await import("./lazy-apps.js");
+    return openTransportApp({ holdingId });
+  }
+
+  async _onTransportDecision(event, element) {
+    event.preventDefault(); event.stopPropagation();
+    if (this.phase !== "transport" || this._transportBusy || this.constructor.transportSessions.has(this.holdingId) || this._isStale()) return;
+    const row = this.prepared?.transportReview?.find(entry => entry.runId === element.dataset.run);
+    if (!game.user?.isGM || !row?.canResolve) return;
+    const card = element.closest("[data-tenday-transport-run]");
+    const delayQd = Number(card?.querySelector("[data-tenday-transport-delay]")?.value ?? 1) * 4;
+    const lossBps = Math.round(Number(card?.querySelector("[data-tenday-transport-loss]")?.value ?? 100) * 100);
+    this._transportBusy = true;
+    try {
+      const { transportSourceToken } = await import("./domains/transport-context.js");
+      const data = SkyholdData.view(), holding = data.holdings.find(entry => entry.id === this.holdingId);
+      const op = { type: "transport-incident", operationId: makeId("transport", 20), holdingId: this.holdingId,
+        expectedRevision: this.prepared.dataRevision, sourceToken: transportSourceToken(data, holding), reviewQd: this.prepared.qd,
+        rationUnitsPerResident: this.prepared.rationUnitsPerResident,
+        runId: row.runId, resolution: { outcome: element.dataset.outcome, delayQd, lossBps } };
+      this.constructor.transportSessions.set(this.holdingId, op);
+      await this._submitTransportDecision();
+    } catch (error) { this.error = error.message; }
+    finally { this._transportBusy = false; if (!this._tendayClosed) this.requestRender({ focus: false }); }
+  }
+
+  async _submitTransportDecision() {
+    const op = this.constructor.transportSessions.get(this.holdingId);
+    if (!op || this.constructor.transportInFlight.has(op.operationId)) return;
+    this.constructor.transportInFlight.add(op.operationId);
+    this._transportBusy = true; this.error = ""; this.requestRender({ focus: false });
+    try {
+      const result = await this._requestTransportDecision(op);
+      if (!result?.ok) throw new Error("Решение перевозки не подтверждено.");
+      this.constructor.transportSessions.delete(this.holdingId);
+      this.constructor.preparedCache.delete(this._preparedCacheKey());
+      const active = this._activeTransportWindow();
+      if (active) { active.prepared = null; await active.prepare(); }
+    } catch (error) {
+      this.error = error.message;
+      if (!["timeout", "authority-offline", "socket-unavailable"].includes(error.code) && !error.retryable) this.constructor.transportSessions.delete(this.holdingId);
+    } finally {
+      this.constructor.transportInFlight.delete(op.operationId); this._transportBusy = false;
+      const active = this._activeTransportWindow();
+      active?.requestRender({ focus: false });
+    }
+  }
+
+  _requestTransportDecision(operation) {
+    return requestMarketOperation(operation);
+  }
+
+  _activeTransportWindow() {
+    const app = this.constructor.instances.get(this.instanceKey) ?? this;
+    return app._tendayClosed ? null : app;
+  }
+
   async _onApply(event) {
     event.preventDefault();
     event.stopPropagation();
     if (this.phase !== "preview" || !this.prepared) return;
+    if (this.constructor.transportSessions.has(this.holdingId)) return;
     if (this._isStale()) {
       this.requestRender({ focus: false });
       return;
@@ -578,6 +684,7 @@ export class SkyholdTendayApp extends WindowFrameMixin(RenderSchedulerMixin(Hand
   _onRefresh(event) {
     event.preventDefault();
     event.stopPropagation();
+    if (this.constructor.transportSessions.has(this.holdingId)) return;
     this.prepared = null;
     this.result = null;
     this.activeTab = "summary";
@@ -585,6 +692,7 @@ export class SkyholdTendayApp extends WindowFrameMixin(RenderSchedulerMixin(Hand
   }
 
   async _onClose(options) {
+    this._tendayClosed = true;
     await super._onClose(options);
     this._operationToken = null;
     this._delegatedAbortController?.abort?.();

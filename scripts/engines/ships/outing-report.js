@@ -143,7 +143,8 @@ export function planShipOutingLeg(ship, voyage = {}) {
   const operating = integer(quote.operatingCopper ?? quote.costs?.totalCopper ?? 0, "плановые расходы участка");
   const preparation = integer(quote.preparationCopper ?? 0, "плановая подготовка участка");
   const reward = integer(quote.rewardCopper ?? quote.contract?.rewardCopper ?? 0, "договорная плата участка");
-  const durationQd = integer(quote.durationQd, "плановая длительность участка", 1);
+  const zeroLocal = !quote.contract && quote.distanceKm === 0 && quote.from?.regionId === quote.to?.regionId;
+  const durationQd = integer(quote.durationQd, "плановая длительность участка", zeroLocal ? 0 : 1);
   const clockQd = integer(voyage?.startedAtQd, "начало участка");
   const from = text(quote?.from?.label, "Неизвестный порт") || "Неизвестный порт";
   const to = text(quote?.to?.label, "Неизвестный порт") || "Неизвестный порт";
@@ -181,7 +182,8 @@ export function recordShipOutingFunds(ship, receipt = {}, { clockQd, reason = ""
   const port = category === "port" || receiptId.includes(":idle:market:");
   const actualExternal = internal ? 0 : external;
   return update(ship, (report) => {
-    if (actualExternal > 0) report.incomeCopper = add(report.incomeCopper, actualExternal, "внешние поступления");
+    if (actualExternal > 0 && kind === "expense-refund") report.expenseCopper = Math.max(0, report.expenseCopper - actualExternal);
+    else if (actualExternal > 0) report.incomeCopper = add(report.incomeCopper, actualExternal, "внешние поступления");
     if (actualExternal < 0) {
       const expense = Math.abs(actualExternal);
       report.expenseCopper = add(report.expenseCopper, expense, "фактические расходы");

@@ -9,7 +9,7 @@ import { isMagnifiqueShip } from "../engines/ships/crew-roster.js";
 import { hasResidentSettlementWork, isResidentAway, isResidentRestingOnShip, residentShipAssignment } from "../data/resident-presence.js";
 import { shipCrewReadiness } from "../engines/ships/crew-readiness.js";
 import { shipMoneySummary, shipOutingSummary } from "../engines/ships/summary.js";
-import { prepareShipManagementState } from "./domains/ship-management-state.js";
+import { prepareShipManagementState, shipTransportState } from "./domains/ship-management-state.js";
 import { prepareShipVoyagePresentation } from "./domains/ship-voyage-presentation.js";
 import { prepareShipFinancePresentation } from "./domains/ship-finance-presentation.js";
 import { shipPresentationTimelineQd } from "./domains/ship-command-availability.js";
@@ -17,6 +17,8 @@ import { shipRemovalBlocker } from "../engines/ships/removal.js";
 import { formatShipGold, shipGoldInput } from "../core/ship-gold.js";
 import { shortestMarketRouteDistanceKm } from "../engines/market/logistics.js";
 import { allResourceDefs } from "../core/resources.js";
+import { clientCargoLifetime } from "../engines/ships/client-cargo.js";
+import { createMarketVisibility } from "../data/market/visibility.js";
 
 const KIND_LABELS = Object.freeze({ freight: "Перевозка", commission: "Поручение", smuggling: "Контрабанда" });
 const STYLE_HINTS = Object.freeze({
@@ -33,7 +35,12 @@ function preparedGuidance(contract) {
   return ["cautious", "normal", "bold"].map((style) => {
     const guidance = contractGuidance(contract, style);
     const riskLabel = guidance.incidentPressure <= 3 ? "низкий" : guidance.incidentPressure <= 6 ? "заметный" : guidance.incidentPressure <= 8 ? "высокий" : "крайний";
-    return { ...guidance, riskLabel, styleHint: STYLE_HINTS[style] };
+    const modern = contract.economics?.version === 1;
+    const hints = { cautious: "Вероятность происшествия ниже на четверть; предусмотрены отдельные расходы на предосторожности.",
+      normal: "Договорная плата. Ремонт и содержание при задержке рассчитываются отдельно.",
+      bold: "Вероятность происшествия выше в полтора раза; премия 2% за полное исполнение без задержек." };
+    return { ...guidance, riskLabel: modern ? `${(guidance.riskBps / 100).toLocaleString("ru-RU", { maximumFractionDigits: 2 })}%` : riskLabel,
+      styleHint: modern ? hints[style] : STYLE_HINTS[style] };
   });
 }
 
@@ -44,6 +51,9 @@ function worldOfferRow(offer, worldContext) {
   const costs = quote.costs ?? {};
   const timing = worldShipTimeBreakdown(worldContext, offer);
   const durationDays = Number(quote.durationQd ?? 0) / 4;
+  const cargoLifetimeQd = clientCargoLifetime(contract.cargo);
+  const cargoFreshnessHint = cargoLifetimeQd && contract.cargo.ageAtQd != null
+    ? `Срок годности: ${cargoLifetimeQd / 4} дн. с начала погрузки. При порче плата за груз не начисляется.` : "";
   const difficultyScore = Number(styles[1]?.incidentPressure ?? 0) + (contract.pickup ? 2 : 0)
     + (durationDays >= 20 ? 2 : durationDays >= 10 ? 1 : 0);
   const difficultyLabel = difficultyScore >= 7 ? "Опасный" : difficultyScore >= 4 ? "Сложный" : "Обычный";
@@ -51,12 +61,16 @@ function worldOfferRow(offer, worldContext) {
     ? shortestMarketRouteDistanceKm(offer.from.regionId, contract.pickup.regionId, worldContext.regions, { mode: "airship" }) : 0;
   return {
     ...offer,
+    feeHint: contract.economics?.version === 1
+      ? `Плата за место на рейсе по общей себестоимости и штатной команде. Подлёт к погрузке и дорога домой не повышают плату. Пошлины и обработка включены. Доплата за особую услугу: ${formatShipGold(contract.economics.specialPremiumCopper)} ЗМ; за риск: ${formatShipGold(contract.economics.riskPremiumCopper)} ЗМ. ${contract.kind === "smuggling" ? "При срыве сделки плата может быть утрачена." : `При отмене заказчиком: ${contract.kind === "commission" ? 50 : 75}% платы до последствий перевозки.`}`
+      : "Плата сохранена по прежним условиям предложения. Дорогая фактическая команда не повышает плату; подход капитана и события меняют итог.",
     title: offer.title || `${KIND_LABELS[contract.kind] ?? "Заказ"}: ${offer?.to?.label ?? "порт"}`,
     destination: offer?.to?.label ?? "—", kindLabel: KIND_LABELS[contract.kind] ?? "Заказ",
     attention: contract.attention ?? { level: 0, label: attentionLabel(0) },
-    durationDays, difficultyLabel,
+    durationDays, difficultyLabel, cargoFreshnessHint,
     approachKm, deliveryKm: Math.max(0, Number(quote.distanceKm ?? 0) - Number(approachKm ?? 0)),
-    difficultyHint: `Сложность объединяет риск происшествия, длительность рейса${contract.pickup ? " и подход к чужому порту погрузки" : ""}. Длительность влияет на расходы, но сама по себе не меняет бросок происшествия.`,
+    difficultyHint: `Сложность объединяет риск происшествия, длительность рейса${contract.pickup ? " и подход к чужому порту погрузки" : ""}. ${contract.economics?.version === 1
+      ? "Риск растёт со временем в пути и опасностью регионов." : "Длительность влияет на расходы; риск определяется прежними условиями договора."}`,
     timing: {
       flightDays: timing.flightQd / 4,
       loadingDays: timing.loadingQd / 4,
@@ -168,9 +182,9 @@ function currentOffersForShip(ships, ship, period) {
     && (ship.navigationMode === "world" || offer.mode !== "world"));
 }
 
-function overviewShipRow(holding, ship, index, { permissions, period, data }) {
+function overviewShipRow(holding, ship, index, { permissions, period, data, visibility }) {
   const isWorld = ship.navigationMode === "world";
-  const inTransit = Boolean(ship.activeVoyage);
+  const inTransit = Boolean(ship.activeVoyage || shipTransportState(holding, ship).inTransit);
   const awaitingOutcome = inTransit && ship.activeVoyage?.awaitingOutcome === true;
   const atHome = isWorld && ship.location?.kind === "home" && !inTransit;
   const readiness = isWorld ? shipCrewReadiness(holding, ship, { catalog: data?.catalog }) : null;
@@ -193,7 +207,8 @@ function overviewShipRow(holding, ship, index, { permissions, period, data }) {
     atHome,
     statusLabel: management?.statusLabel ?? (awaitingOutcome ? "Ожидает итога" : inTransit ? "В пути" : ship.status === "away" ? "В рейсе" : "В поселении"),
     conditionLabel: ship.condition === "ready" ? "Исправен" : "Требуется обслуживание",
-    locationLabel: ship.location?.label || (atHome ? holding.name : inTransit ? "В пути" : "—"),
+    locationLabel: ship.location?.kind === "transit" && visibility.routeHidden(ship.activeVoyage?.quote) ? "В пути"
+      : visibility.pointLabel(ship.location, atHome ? holding.name : inTransit ? "В пути" : "—"),
     profileLabel: profile?.label ?? ship.profileId ?? "Прежний ручной расчёт",
     remainingDays: Number(ship.activeVoyage?.remainingQd ?? 0) / 4,
     readiness,
@@ -211,9 +226,10 @@ function overviewShipRow(holding, ship, index, { permissions, period, data }) {
 
 export function prepareShipsContext(holding, { revision = 0, data = null } = {}) {
   const permissions = holdingPermissionContext(holding);
+  const visibility = createMarketVisibility(data, { isGM: permissions.isGM });
   const ships = holding.special?.ships ?? {};
   const period = periodForHolding(holding);
-  const rows = (ships.list ?? []).map((ship, index) => overviewShipRow(holding, ship, index, { permissions, period, data }));
+  const rows = (ships.list ?? []).map((ship, index) => overviewShipRow(holding, ship, index, { permissions, period, data, visibility }));
   return {
     revision,
     period,
@@ -231,6 +247,7 @@ export function prepareShipsContext(holding, { revision = 0, data = null } = {})
 
 export function prepareShipWindowContext(holding, { revision = 0, data = null, shipId = "" } = {}) {
   const permissions = holdingPermissionContext(holding);
+  const visibility = createMarketVisibility(data, { isGM: permissions.isGM });
   const ships = holding.special?.ships ?? {};
   const resourceLoads = new Map(allResourceDefs({ catalogRows: data?.catalog?.resources ?? [] })
     .map((resource) => [resource.id, resource.loadPoints]));
@@ -250,7 +267,7 @@ export function prepareShipWindowContext(holding, { revision = 0, data = null, s
     if (String(offer?.period) !== String(period) || offer?.consumedBy) continue;
     const ship = selectedShips.find((row) => row.id === offer.shipId);
     if (!ship) continue;
-    if (ship.orderBundle) continue;
+    if (ship.orderBundle || ship.transportOrderId) continue;
     if (ship.navigationMode === "world" && (offer.mode !== "world" || !sameLocation(offer.from, ship.location))) continue;
     if (ship.navigationMode !== "world" && offer.mode === "world") continue;
     try {
@@ -270,7 +287,8 @@ export function prepareShipWindowContext(holding, { revision = 0, data = null, s
     const index = (ships.list ?? []).findIndex((row) => String(row?.id ?? "") === String(ship.id ?? ""));
     const isWorld = ship.navigationMode === "world";
     const isLegacy = !isWorld;
-    const inTransit = Boolean(ship.activeVoyage);
+    const transport = shipTransportState(holding, ship);
+    const inTransit = Boolean(ship.activeVoyage || transport.inTransit);
     const awaitingOutcome = inTransit && ship.activeVoyage?.awaitingOutcome === true;
     const outcome = inTransit && ship.activeVoyage?.outcome
       ? { ...ship.activeVoyage.outcome, delayDays: Number(ship.activeVoyage.outcome.delayQd ?? 0) / 4 } : null;
@@ -278,7 +296,7 @@ export function prepareShipWindowContext(holding, { revision = 0, data = null, s
     const atHome = isWorld && ship.location?.kind === "home" && !inTransit;
     const ownSale = (holding.special?.market?.outbound?.orders ?? []).find((order) => order.ownShipId === ship.id
       && !["delivered", "lost", "cancelled"].includes(order.status)) ?? null;
-    const atForeignPort = isWorld && ship.location?.kind === "market" && !inTransit && !ship.orderBundle && !ownSale;
+    const atForeignPort = isWorld && ship.location?.kind === "market" && !inTransit && !ship.orderBundle && !ownSale && !transport.busy;
     const readiness = isWorld ? shipCrewReadiness(holding, ship, { catalog: data?.catalog }) : null;
     let profile = null;
     try { profile = isWorld ? getShipProfile(ship.profileId) : null; } catch (_error) { profile = null; }
@@ -286,7 +304,8 @@ export function prepareShipWindowContext(holding, { revision = 0, data = null, s
     let returnError = "";
     if (data && atForeignPort) {
       try { returnOffer = worldOfferRow(quoteWorldShipReturn(data, holding, ship, { context: worldContext }), worldContext); }
-      catch (error) { returnError = error.message; }
+      catch (error) { returnError = visibility.pointHidden(ship.location?.regionId) && !permissions.isGM
+        ? "Не удалось рассчитать возвращение из скрытого порта. Проверьте маршрут с ГМом." : error.message; }
     }
     let quote = null;
     let quoteError = "";
@@ -300,13 +319,14 @@ export function prepareShipWindowContext(holding, { revision = 0, data = null, s
     const moneySummary = isWorld ? shipMoneySummary(holding, ship, { returnOffer, clockQd: shipQd }) : null;
     const availableOffers = offersByShip.get(ship.id) ?? [];
     const management = isWorld ? prepareShipManagementState(holding, ship, { permissions, readiness, money: moneySummary, offers: availableOffers, returnOffer }) : null;
-    const relocationPorts = isWorld && !inTransit && !ship.orderBundle && !ownSale
+    const relocationPorts = isWorld && !inTransit && !ship.orderBundle && !ownSale && !transport.busy
       ? worldContext.ports.filter((port) => port.regionId !== ship.location?.regionId
         && port.regionId !== worldContext.home?.regionId)
         .map((port) => ({ id: port.id, label: port.label })) : [];
     const bundle = ship.orderBundle;
-    const bundleCurrentStop = bundle?.stops?.[bundle.nextStopIndex - 1] ?? null;
-    const bundleNextStop = bundle?.stops?.[bundle.nextStopIndex] ?? null;
+    const presentedStop = stop => stop ? { ...stop, point: { ...stop.point, label: visibility.pointLabel(stop.point) } } : null;
+    const bundleCurrentStop = presentedStop(bundle?.stops?.[bundle.nextStopIndex - 1]);
+    const bundleNextStop = presentedStop(bundle?.stops?.[bundle.nextStopIndex]);
     const outingReport = isWorld ? shipOutingSummary(ship, { clockQd: shipQd, obligationsCopper: moneySummary.obligationsCopper }) : null;
     let homeUpkeepCopperPerDay = ship.homeUpkeepEnabled === false ? 0 : ship.homeUpkeepCopperPerDay;
     if (data && atHome && worldContext.home) {
@@ -317,21 +337,24 @@ export function prepareShipWindowContext(holding, { revision = 0, data = null, s
       ...ship, index, isWorld, isLegacy, inTransit, away: ship.status === "away",
       homeUpkeepCopperPerDay,
       homeUpkeepEnabled: ship.homeUpkeepEnabled !== false,
-      atHome, atForeignPort, locationLabel: ship.location?.label || (atHome ? worldContext.home?.label : "В пути") || "—",
+      atHome, atForeignPort, locationLabel: ship.location?.kind === "transit" && visibility.routeHidden(ship.activeVoyage?.quote) ? "В пути"
+        : visibility.pointLabel(ship.location, (atHome ? worldContext.home?.label : "В пути") || "—"),
       profileLabel: profile?.label ?? ship.profileId ?? "—", linkedCrewCount: readiness?.linkedCount ?? 0,
       abstractCrewCount: readiness?.abstractCount ?? 0, totalCrewCount: readiness?.totalCount ?? 0,
       readiness, moneySummary,
       ...management,
       timelineQd: shipQd, settlementQd, catchUpDays: Math.max(0, settlementQd - shipQd) / 4,
       walletGold: formatShipGold(ship.onboardCopper ?? 0),
-      ownSale, ownSaleCargoText: (ownSale?.cargo ?? []).map((row) => `${row.name || row.resourceId} ×${row.qty}`).slice(0, 5).join(" · "),
+      ownSale: ownSale ? { ...ownSale, marketLabel: visibility.marketLabel(ownSale) } : null,
+      ownSaleCargoText: (ownSale?.cargo ?? []).map((row) => `${row.name || row.resourceId} ×${row.qty}`).slice(0, 5).join(" · "),
       ownSaleRemainingDays: Number(ownSale?.remainingQd ?? 0) / 4,
       ownSaleNeedsResolution: ownSale?.status === "needsResolution",
-      voyagePresentation: prepareShipVoyagePresentation(holding, ship, { ownSale }),
+      voyagePresentation: prepareShipVoyagePresentation(holding, ship, { ownSale, visibility }),
       hasBundle: Boolean(bundle), bundleCurrentStop, bundleNextStop,
       bundleOrders: (bundle?.orders ?? []).map((order) => ({
-        offerId: order.offerId, title: order.offer.title, destination: order.offer.to?.label,
-        pickupLabel: order.offer.contract?.pickup?.label || order.offer.from?.label,
+        offerId: order.offerId, title: visibility.routeHidden(order.offer) ? "Заказ по скрытому маршруту" : order.offer.title,
+        destination: visibility.pointLabel(order.offer.to),
+        pickupLabel: visibility.pointLabel(order.offer.contract?.pickup ?? order.offer.from),
         cargoName: order.offer.contract?.cargo?.name || order.offer.title,
         stateLabel: order.state === "delivered" ? "Доставлен" : order.outcome && !order.outcomeApplied ? "Исход сохранён · ждёт оплаты" : order.state === "loaded" ? "На борту" : "Ожидает погрузки",
         loadPoints: order.offer.contract?.cargo?.loadPoints ?? 0, rewardCopper: order.offer.contract?.rewardCopper ?? 0,
@@ -341,7 +364,7 @@ export function prepareShipWindowContext(holding, { revision = 0, data = null, s
       canContinueBundle: Boolean(management?.commands.continueBundle?.allowed),
       bundleDelayDays: Math.max(0, Number(bundle?.delayUntilQd ?? 0) - Number(holding.gm?.calendaria?.lastQd ?? 0)) / 4,
       outingReport,
-      financePresentation: isWorld ? prepareShipFinancePresentation(holding, ship, { money: moneySummary, outingReport, ownSale }) : null,
+      financePresentation: isWorld ? prepareShipFinancePresentation(holding, ship, { money: moneySummary, outingReport, ownSale, data, isGM: permissions.isGM }) : null,
       nextAction: management?.nextAction ?? "",
       statusLabel: management?.statusLabel ?? (ship.status === "away" ? "В рейсе" : "В поселении"),
       conditionLabel: ship.condition === "ready" ? "Исправен" : "Требуется обслуживание",
@@ -351,27 +374,27 @@ export function prepareShipWindowContext(holding, { revision = 0, data = null, s
         : Number(ship.activeVoyage?.quote?.contract?.cargo?.loadPoints ?? 0),
       crewOptions: options, hasCrewOptions: options.length > 0,
       crewRoster: crewRoster(holding, ship),
-      canEditPlan: permissions.isGM && !inTransit && !bundle && !ownSale,
+      canEditPlan: permissions.isGM && !inTransit && !bundle && !ownSale && !transport.busy,
       canAdopt: permissions.isGM && isLegacy && ship.status === "docked" && !ship.activeVoyage,
-      canConfigureCrew: permissions.isGM && atHome,
+      canConfigureCrew: permissions.isGM && atHome && !transport.busy,
       canDelete: permissions.isGM && !ownSale && !shipRemovalBlocker(holding, ship),
       deleteReason: ownSale ? "Дождитесь исхода продажи собственного товара" : shipRemovalBlocker(holding, ship) || "Удалить корабль; жители и их работа сохранятся",
-      canInstallMagnifiqueCrew: permissions.isGM && atHome && isMagnifiqueShip(ship)
+      canInstallMagnifiqueCrew: permissions.isGM && atHome && !transport.busy && isMagnifiqueShip(ship)
         && magnifiqueRosterVersion < MAGNIFIQUE_CREW_VERSION,
       magnifiqueCrewInstalled: isMagnifiqueShip(ship) && magnifiqueRosterVersion >= MAGNIFIQUE_CREW_VERSION,
-      canAdjust: isWorld ? (!management.commands.clockBlocked && (atHome
+      canAdjust: isWorld ? (!transport.busy && !management.commands.clockBlocked && (atHome
         ? permissions.canManageShips && ship.status === "docked" && !bundle && !ownSale
         : permissions.isGM && ship.status === "away" && Boolean(inTransit || ship.location?.kind === "market")))
         : permissions.isGM && ship.status === "away",
       canDepart: Boolean(permissions.canManageShips && isLegacy && ship.status === "docked" && ship.condition === "ready" && quote && !ship.activeVoyage),
-      canDepartOffer: Boolean(permissions.canManageShips && !inTransit && !bundle && !ownSale && ship.condition === "ready" && (!isWorld || readiness.ready)),
-      canDepartBundle: Boolean(permissions.canManageShips && isWorld && !inTransit && !bundle && !ownSale
+      canDepartOffer: Boolean(permissions.canManageShips && !transport.busy && !inTransit && !bundle && !ownSale && ship.condition === "ready" && (!isWorld || readiness.ready)),
+      canDepartBundle: Boolean(permissions.canManageShips && isWorld && !transport.busy && !inTransit && !bundle && !ownSale
         && ship.condition === "ready" && readiness.ready && availableOffers.length >= 2),
-      canGenerateWorld: Boolean(permissions.canManageShips && isWorld && !management.commands.clockBlocked && !inTransit && !bundle && !ownSale && ship.condition === "ready" && !worldOffersGenerated),
-      canRerollWorld: Boolean(permissions.isGM && isWorld && !management.commands.clockBlocked && !inTransit && !bundle && !ownSale && ship.condition === "ready" && worldOffersGenerated),
+      canGenerateWorld: Boolean(permissions.canManageShips && isWorld && !transport.busy && !management.commands.clockBlocked && !inTransit && !bundle && !ownSale && ship.condition === "ready" && !worldOffersGenerated),
+      canRerollWorld: Boolean(permissions.isGM && isWorld && !transport.busy && !management.commands.clockBlocked && !inTransit && !bundle && !ownSale && ship.condition === "ready" && worldOffersGenerated),
       worldOffersGenerated,
       canReturnHome: Boolean(management?.commands.returnHome?.allowed),
-      canRelocate: Boolean(permissions.canManageShips && isWorld && !inTransit && !bundle && !ownSale
+      canRelocate: Boolean(permissions.canManageShips && isWorld && !transport.busy && !inTransit && !bundle && !ownSale
         && !management.commands.clockBlocked && ship.condition === "ready" && readiness.ready && relocationPorts.length),
       relocationPorts,
       canResolve: isWorld ? Boolean(management.commands.resolveWorld?.allowed) : Boolean(permissions.canManageShips && awaitingOutcome),
@@ -391,12 +414,13 @@ export function prepareShipWindowContext(holding, { revision = 0, data = null, s
     fleetAccounting: fleetAccountingSummary(holding),
     offersGenerated: String(ships.offerPeriod) === String(period), worldIssues: worldContext.issues ?? [], rows,
     history: (ships.history ?? []).filter((row) => String(row?.shipId ?? "") === String(shipId ?? "")).slice(-10).reverse().map((row) => ({
-      ...row, destination: row.destination || row.to?.label || "—",
+      ...row, destination: visibility.pointLabel({ ...row.to, label: row.destination || row.to?.label }, row.destination || "—"),
       outcome: row.outcome ? { ...row.outcome, delayDays: Number(row.outcome.delayQd ?? 0) / 4 } : null,
       historyTitle: row.contract
-        ? `${row.contract.cargo?.name || "Заказ"}: ${row.contract.pickup?.label || row.from?.label || "Порт"} → ${row.to?.label || row.destination || "—"}`
-        : `${row.from?.label || "Порт"} → ${row.to?.label || row.destination || "—"}`,
-      ledger: (row.ledger ?? []).map((entry) => ({ ...entry, label: entry.reason || ({ depart: "Бортовой бюджет и подготовка", expense: "Снабжение", income: "Плата за рейс", return: "Возврат остатка" }[entry.kind] ?? "Операция") }))
+        ? `${row.contract.cargo?.name || "Заказ"}: ${visibility.pointLabel(row.contract.pickup ?? row.from, "Порт")} → ${visibility.pointLabel(row.to, row.destination || "—")}`
+        : `${visibility.pointLabel(row.from, "Порт")} → ${visibility.pointLabel(row.to, row.destination || "—")}`,
+      ledger: (row.ledger ?? []).map((entry) => ({ ...entry, label: visibility.routeHidden(row) ? "Операция по скрытому маршруту"
+        : entry.reason || ({ depart: "Бортовой бюджет и подготовка", expense: "Снабжение", income: "Плата за рейс", return: "Возврат остатка" }[entry.kind] ?? "Операция") }))
     }))
   };
 }

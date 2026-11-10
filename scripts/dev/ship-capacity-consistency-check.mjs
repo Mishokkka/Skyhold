@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
+import { transportFixture, transportRequest } from "./fixtures/transport-v2.mjs";
+import { prepareTransportContext } from "../apps/domains/transport-context.js";
+import { planTransportChain } from "../engines/transport/planner.js";
 import { pathToFileURL } from "node:url";
 import { worldMarketFixture } from "./world-ship-market-characterization-check.mjs";
 import { shipCapacityLoadPoints } from "../engines/ships/profiles.js";
-import { generateWorldShipOffers, repriceWorldShipOffer, quoteWorldShipSale, quoteWorldShipBundle } from "../engines/ships/world-market.js";
+import { generateWorldShipOffers, repriceWorldShipOffer, quoteWorldShipBundle } from "../engines/ships/world-market.js";
 import { previewShipOrders } from "../engines/ships/order-preview.js";
 import { departWorldShip, departWorldShipBundle } from "../engines/ships/world-voyage.js";
 import { createShipOperationExecutor } from "../apps/ship-operation-executor.js";
@@ -15,13 +18,29 @@ export async function checkShipCapacityConsistency() {
     const offers = generateWorldShipOffers(data, holding, ship, { period: 0, random: () => 0.3 });
     if (capacity === 0) {
       assert.deepEqual(offers, []);
-      assert.throws(() => quoteWorldShipSale(data, holding, ship, "a", { loadPoints: 1, valueCopper: 100 }), /трюм/);
     } else {
       assert.ok(offers.length > 0);
       assert.ok(offers.every((offer) => offer.contract.cargo.loadPoints <= shipCapacityLoadPoints(ship)));
-      assert.ok(quoteWorldShipSale(data, holding, ship, "a", { loadPoints: capacity === 8000 ? 6000 : 1000, valueCopper: 10000 }));
     }
   }
+  for (const capacity of [undefined, null, 0, 8000]) {
+    const f = transportFixture(); f.ship.capacityLoadPoints = capacity;
+    const request = transportRequest(f, "a", { ownShipId: f.ship.id, direction: "outbound", insurance: false });
+    if (capacity === 0) {
+      assert.throws(() => prepareTransportContext({ ...f, request, isGM: true }), /вместимость|трюм|объём|Некорректно: capacity|нет доступной перевозки/i);
+      continue;
+    }
+    const view = prepareTransportContext({ ...f, request, isGM: true });
+    const service = view.services.find(row => row.kind === "owned" && row.from === view.from && row.to === view.to);
+    assert.ok(service);
+    assert.equal(service.capacity, shipCapacityLoadPoints(f.ship) * 1000, "the actual transport service uses the same effective vessel capacity");
+    const cargo = [{ lotId: "large-unit", resourceId: "wood", qty: 1,
+      unitLoad: (capacity === 8000 ? 6000 : 1000) * 1000, unitCopper: 10000 }];
+    const planned = planTransportChain({ cargo, services: [service] });
+    assert.equal(planned.stages[0].runs.length, 1);
+    assert.ok(planned.stages[0].runs[0].reservedLoad <= service.capacity);
+  }
+
   for (const bad of [-1, 0.5, NaN, Infinity]) assert.throws(() => shipCapacityLoadPoints({ capacityLoadPoints: bad, profileId: "merchant-barque" }), /вместимость/);
   for (const isGM of [true, false]) {
     const { data, holding, ship } = worldMarketFixture();

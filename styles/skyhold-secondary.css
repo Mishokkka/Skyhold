@@ -8,6 +8,7 @@
 @import url("./parts/market/market.css") layer(skyhold.tools);
 @import url("./parts/market/market-checkout.css") layer(skyhold.tools);
 @import url("./parts/market/market-outbound.css") layer(skyhold.tools);
+@import url("./parts/market/transport-window.css") layer(skyhold.tools);
 @import url("./parts/market/market-catalog.css") layer(skyhold.tools);
 @import url("./parts/market/route-graph.css") layer(skyhold.tools);
 @import url("./parts/tenday/tenday-window.css") layer(skyhold.tools);

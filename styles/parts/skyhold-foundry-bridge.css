@@ -690,3 +690,8 @@
 }
 .application.fbls-workforce-window .window-header .window-title,
 .window-app.fbls-workforce-window .window-header .window-title { color: var(--fbls-text-strong); text-shadow: none; }
+
+.fbls-transport-window .window-content {
+  overflow: auto;
+  padding: 1rem;
+}

@@ -91,7 +91,13 @@ function checkPickupOrdersAndWholesale() {
   const bulk = generateWorldShipOffers(retail, holding, ship, { period: 0, random: () => 0.3 })[0];
   assert.ok(bulk.contract.cargo.quantity > 60);
   assert.ok(bulk.contract.cargo.loadPoints <= ship.capacityLoadPoints);
-  assert.ok(bulk.quote.rewardCopper > bulk.quote.operatingCopper, "ordinary wholesale work pays a standard barque before events");
+  assert.ok(bulk.quote.rewardCopper <= bulk.contract.economics.customerBudgetCopper, "ordinary work must fit the customer's delivered-cost budget");
+  const nearby = structuredClone(ship);
+  nearby.location = { kind: "market", id: bulk.contract.pickup.id, regionId: bulk.contract.pickup.regionId, label: bulk.contract.pickup.label };
+  const localJob = repriceWorldShipOffer(retail, holding, nearby, { ...bulk, from: nearby.location,
+    contract: { ...bulk.contract, pickup: undefined } });
+  assert.equal(localJob.quote.rewardCopper, bulk.quote.rewardCopper, "empty approach cannot inflate the agreed fee");
+  assert.ok(localJob.quote.operatingCopper < bulk.quote.operatingCopper, "the distant owner's real empty flight still costs money");
   let firstSmugglingDraw = true;
   const smugglers = generateWorldShipOffers(data, holding, ship, { period: 0, random: () => {
     if (firstSmugglingDraw) { firstSmugglingDraw = false; return 0.4; }

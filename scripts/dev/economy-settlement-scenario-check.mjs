@@ -13,7 +13,12 @@ import { preparationProductionTradePlan } from "./economy-preparation-year-check
 import { marketDemandKey } from "../data/market/demand-state.js";
 import { planMarketOutboundSale } from "../engines/market/outbound.js";
 import { marketOutboundAvailableQuantity } from "../engines/market/outbound.js";
-import { createMarketOutboundShipment } from "../workflows/market/outbound-shipment.js";
+import { reserveMarketDemand } from "../engines/market/demand.js";
+import { planTransportChain } from "../engines/transport/planner.js";
+import { bookTransportOrder } from "../engines/transport/runtime.js";
+import { transportLoad, cargoLoad, cargoValue } from "../engines/transport/quantities.js";
+import { ensureTransportState } from "../data/transport/state.js";
+import { advanceTransportShipments } from "../workflows/transport/orders.js";
 import { parseResourceCosts, resourceDef } from "../core/resources.js";
 import { applyStaffAppointment, buildingLaborMode, validateHybridLaborHolding } from "../data/hybrid-labor.js";
 
@@ -26,15 +31,13 @@ export async function settlementScenario({ population = 12, demandFactor = 1, pr
   const savedGame = globalThis.game, savedView = SkyholdData.view;
   globalThis.game = { user: { id: "gm", isGM: true }, settings: { get: () => undefined }, modules: new Map(), i18n: { localize: (s) => s } };
   const app = new SkyholdWorkflowService();
-  // Only the external calendar provider and random transport incident draw are replaced.
+  // Only the external calendar provider and declared risk-free transport tariff are replaced.
   // Production, finance, planning, food, storage, agriculture and delivery are real runtime domains.
   app._agricultureCalendarContext = (h, offset = 0) => {
     const qd = h.gm.calendaria.lastQd + offset, year = 1 + Math.floor(qd / 960);
     const seasonId = ["spring", "summer", "autumn", "winter"][Math.floor(qd / 240) % 4];
     return { year, seasonId, seasonKey: year + ":" + seasonId };
   };
-  const dependencies = app._marketShipmentDependencies.bind(app);
-  app._marketShipmentDependencies = () => ({ ...dependencies(), riskUnit: () => 1 });
   // Allocate part of the declared grain stock to a circulating flour buffer.
   // Real QD scheduling cannot spend milling output before that QD completes.
   const initialMoney = 1000000, initialFlour = population * 10, initialGrain = population * 150 - initialFlour;
@@ -62,7 +65,10 @@ export async function settlementScenario({ population = 12, demandFactor = 1, pr
   add("lumbermill");
   if (population >= 50) { add("quarry"); add("bathhouse"); add("meeting-house"); }
   h = mergeHoldingDefaults(h);
-  SkyholdData.view = () => ({ ...DEFAULT_SKYHOLD_DATA, holdings: [h] });
+  const world = structuredClone(DEFAULT_SKYHOLD_DATA);
+  world.holdings = [h];
+  ensureTransportState(world);
+  SkyholdData.view = () => { world.holdings = [h]; return world; };
   const periods = [];
   try {
     for (let period = 0; period < 48; period++) {
@@ -171,13 +177,26 @@ export async function settlementScenario({ population = 12, demandFactor = 1, pr
             unitPriceCopper: Math.round(resourceDef(id).basePriceCopper * priceFactor),
             demandBaseDemand: baseDemand, demandStateRevision: demandState?.revision ?? 0 }] });
         assert.equal(plan.ok, true, plan.message);
-        const order = createMarketOutboundShipment({ holding: h, plan, operationId: "sale-" + id + "-" + period, dependencies: app._marketShipmentDependencies() });
-        assert.equal(order.ok, true, order.message);
+        const operationId = "sale-" + id + "-" + period;
+        const cargo = plan.cargoReservations.map((lot, index) => ({ ...lot, lotId: `${operationId}:${index}`,
+          unitLoad: transportLoad((resourceDef(lot.resourceId).loadPoints ?? 4) / 4), unitCopper: lot.unitPriceCopper,
+          ageQd: lot.reservedAgeQd ?? 0 }));
+        const services = [{ id: `regional-export-${id}`, kind: "regular", from: "home", to: "regional-port",
+          capacity: cargoLoad(cargo), firstQd: 0, intervalQd: 4, travelQd: plan.deliveryQd,
+          dispatchCopper: plan.freightCopper, riskBps: 0 }];
+        const transport = planTransportChain({ cargo, services, startQd: h.gm.calendaria.lastQd, runs: world.meta.transportV2.runs });
+        const demand = reserveMarketDemand({ holding: h, marketId: "regional-port", lines: plan.lines, operationId });
+        assert.equal(demand.ok, true, demand.message);
+        const order = bookTransportOrder({ state: world.meta.transportV2, holding: h, plan: transport, services,
+          id: operationId, direction: "outbound", commercial: { marketId: "regional-port", marketLabel: "Региональный порт",
+            taxCopper: plan.tariffCopper, insuranceCopper: plan.insuranceCopper } });
+        order.demandReservations = demand.reservations;
+        advanceTransportShipments(world, h, h.gm.calendaria.lastQd, app);
       }
       periods.push({ period: period + 1, foodEaten: report.food.eaten, needed: report.food.needed, hunger: h.gm.food.hungerLevel,
         cash: h.storage.moneyCopper, debt: report.treasury.deficit, grain: total(h, "grain"), wood: total(h, "wood"), stone: total(h, "stone"),
         freeQd: population * 20 - plannedQd, heatingInputCost,
-        deliveryRevenue: report.marketOutbound?.delivered?.reduce((sum, row) => sum + row.revenueCopper, 0) ?? 0 });
+        deliveryRevenue: report.ledger.filter(row => row.meta?.storageKind === "transport-sale").reduce((sum, row) => sum + row.qty, 0) });
       h = mergeHoldingDefaults(h);
     }
     const years = [0, 1].map((year) => {
@@ -195,8 +214,8 @@ export async function settlementScenario({ population = 12, demandFactor = 1, pr
       reliefInputs: relief ? { "canned-protein": population * 60, grain: population * 150 } : {},
       buyerBaseDemand: { wood: Math.floor(300 * demandFactor), stone: Math.floor(240 * demandFactor) },
       startingCashNeed: initialMoney - Math.min(initialMoney, ...periods.map((row) => row.cash)),
-      closingReceivables: (h.special.market.outbound?.orders ?? []).filter((order) => !["delivered", "lost", "cancelled"].includes(order.status))
-        .reduce((sum, order) => sum + order.revenueCopper, 0), years, periods };
+      closingReceivables: (h.special.transportV2?.orders ?? []).filter((order) => !["delivered", "lost", "cancelled"].includes(order.status))
+        .reduce((sum, order) => sum + cargoValue(order.cargo), 0), years, periods };
   } finally { globalThis.game = savedGame; SkyholdData.view = savedView; }
 }
 /** Asserts food autonomy, paid upkeep and labor reserves across normal, stressed, missed-sowing and explicit-aid scenarios. */
@@ -209,6 +228,7 @@ export async function checkSettlementScenarios() {
       assert.equal(year.foodEaten, year.expectedFood);
       assert.equal(year.debt, 0, "owner-funded upkeep is paid");
       assert.ok(year.minimumFreeLaborPct >= 10, "seasonal work keeps at least 10% reserve");
+      if (result.population >= 20) assert.ok(year.exportReceipts > 0, "new transport deliveries must actually pay for exports");
     }
     else assert.ok(result.years[0].hungryPeriods > 0, "missing sowing must expose the limits of the declared starting grain");
     if (result.relief) assert.ok(result.periods.slice(-12).every((row) => row.hunger === 0), "declared aid must permit a sustained recovery");

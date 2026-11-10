@@ -14,6 +14,7 @@ import { MODULE_ID, SETTING_DATA } from "./constants.js";
 import { stableDataHash } from "./storage-commit.js";
 import { createGmWriteAuthority } from "./gm-write-authority.js";
 import { assertNoNewEntityCollisions } from "./entity-identity.js";
+import { holdingTransportLocationBlocker } from "./transport/state.js";
 
 export { clone } from "./utils.js";
 export { DEFAULT_SKYHOLD_DATA } from "./defaults/default-skyhold-data.js";
@@ -181,6 +182,12 @@ export class SkyholdData {
 
   static async update(path, value) {
     return this.transaction((data) => {
+      const location = /^holdings\.(\d+)\.overview\.region$/.exec(String(path));
+      const holding = location ? data.holdings[Number(location[1])] : null;
+      if (holding && String(holding.overview?.region ?? "") !== String(value ?? "")) {
+        const blocker = holdingTransportLocationBlocker(holding);
+        if (blocker) throw Object.assign(new Error(blocker), { code: "transport-obligations" });
+      }
       foundry.utils.setProperty(data, path, value);
     }, { reason: `update:${path}`, scope: String(path).startsWith("catalog.") ? COMMIT_SCOPES.CATALOG : String(path).startsWith("holdings.") ? COMMIT_SCOPES.HOLDINGS : COMMIT_SCOPES.BOTH });
   }

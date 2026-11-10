@@ -454,7 +454,7 @@ export function createDefaultMarketEconomy(locations = []) {
       airshipCapacityLoad: 4000,
       handlingFlatCopper: 8,
       handlingSubtotalRate: 0.02,
-      handlingLoadCopper: 1
+      handlingLoadCopper: 0.1
     },
     baseOffers: clone(DEFAULT_MARKET_BASE_OFFERS),
     sizeProfiles: clone(DEFAULT_MARKET_SIZE_PROFILES),
@@ -493,7 +493,7 @@ export function normalizeMarketEconomy(source = null, { locations = [] } = {}) {
       airshipCapacityLoad: hasLegacyCapacityDefaults ? 4000 : bounded(settings.airshipCapacityLoad, 4000, 1, 1_000_000),
       handlingFlatCopper: bounded(settings.handlingFlatCopper, 8, 0, 1_000_000),
       handlingSubtotalRate: bounded(settings.handlingSubtotalRate, 0.02, 0, 0.4),
-      handlingLoadCopper: bounded(settings.handlingLoadCopper, 1, 0, 1_000_000)
+      handlingLoadCopper: bounded(settings.handlingLoadCopper, 0.1, 0, 1_000_000)
     },
     baseOffers: normalizeOffers(baseOffers),
     sizeProfiles: uniqueRows(sizeProfiles, normalizeMarketSizeProfile, 100),

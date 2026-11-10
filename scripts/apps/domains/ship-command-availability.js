@@ -1,4 +1,5 @@
 import { worldShipPortDebtCopper, worldShipTimelineQd } from "../../engines/ships/world-voyage.js";
+import { bundleStopAwaitsOutcome } from "../../engines/ships/bundle-incidents.js";
 
 const validMoney = (value) => Number.isSafeInteger(value) && value >= 0 && value <= 1_000_000_000;
 const validTime = (value) => Number.isSafeInteger(value) && value >= 0;
@@ -21,6 +22,7 @@ export function prepareShipCommandAvailability(holding, ship, { permissions, per
   if (permissions && !permissions.canManageShips && !permissionReason) commonIssues.unshift("Управление кораблём недоступно.");
   const result = { clockIssue, clockBlocked: Boolean(clockIssue), departurePortBillCopper: null,
     continueBundle: null, resolveBundle: null, resolveWorld: null, returnHome: null };
+  if (ship.transportOrderId) return result;
   if (!ship.activeVoyage && !ship.orderBundle && ship.location?.kind === "market") {
     try { result.departurePortBillCopper = worldShipPortDebtCopper(ship, shipQd); }
     catch (_error) { /* Unknown billing is explained by the departure command, without repairing it. */ }
@@ -70,7 +72,7 @@ export function prepareShipCommandAvailability(holding, ship, { permissions, per
   };
   const bundle = ship.orderBundle;
   if (ownSale) return result;
-  if (bundle?.status === "at-port") {
+  if (bundle?.status === "at-port" && !bundleStopAwaitsOutcome(bundle)) {
     const issues = [];
     const delayUntilQd = bundle.delayUntilQd ?? 0;
     const departureQd = Math.max(shipQd, delayUntilQd);
@@ -78,7 +80,7 @@ export function prepareShipCommandAvailability(holding, ship, { permissions, per
     else if (departureQd > settlementQd) issues.push("Задержка в порту ещё не закончилась.");
     const nextStop = bundle.stops?.[bundle.nextStopIndex];
     result.continueBundle = departure(nextStop?.legOffer, issues, departureQd);
-  } else if (bundle?.status === "awaiting-outcome") {
+  } else if (bundleStopAwaitsOutcome(bundle)) {
     const stop = bundle.stops?.[bundle.nextStopIndex - 1];
     const issues = [];
     if (ship.activeVoyage || ship.location?.kind !== "market" || !samePoint(stop?.point, ship.location)) {

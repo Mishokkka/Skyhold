@@ -59,17 +59,19 @@ export function combineTendayReports(periods, dependencies = {}) {
 }
 
 /** Preparation only: every phase runs on a draft; the final Apply stays atomic. */
-export async function prepareSequentialTendays(app, { holdingId, qd, data, rationUnitsPerResident, operationId, preparedAt }) {
+export async function prepareSequentialTendays(app, { holdingId, qd, data, rationUnitsPerResident, operationId, preparedAt,
+  includeTransportProjection = false }) {
   const count = qd / 40;
   const periods = [];
   let draftData = data;
   for (let index = 0; index < count; index++) {
     const prepared = await app._prepareTendayOperation({ holdingId, qd: 40, dataView: draftData,
-      rationUnitsPerResident, operationId: `${operationId}-p${index + 1}`, preparedAt, pendingEventsCollected: true });
+      rationUnitsPerResident, operationId: `${operationId}-p${index + 1}`, preparedAt, pendingEventsCollected: true, includeTransportProjection });
     if (!prepared.ok) return { ...prepared, message: `Десятник ${index + 1}/${count}: ${prepared.message}` };
     periods.push(prepared);
     draftData = { ...draftData, meta: { ...draftData.meta,
-      ...(prepared.preparedSharedMarkets ? { sharedMarkets: prepared.preparedSharedMarkets } : {}) },
+      ...(prepared.preparedSharedMarkets ? { sharedMarkets: prepared.preparedSharedMarkets } : {}),
+      ...(prepared.preparedSharedTransport ? { transportV2: prepared.preparedSharedTransport } : {}) },
       holdings: draftData.holdings.map((holding) => String(holding.id) === String(holdingId) ? prepared.preparedHolding : holding) };
   }
   const first = periods[0];

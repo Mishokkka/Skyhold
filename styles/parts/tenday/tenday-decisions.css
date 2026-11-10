@@ -26,3 +26,13 @@
 .fbl-skyhold-tenday-app .fbls-tenday-decision-status.is-applied {
   color: var(--fbls-success);
 }
+
+.fbl-skyhold-tenday-app .fbls-tenday-shell[data-tenday-phase="transport"] {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.fbl-skyhold-tenday-app .fbls-tenday-transport-review {
+  min-height: 0;
+  overflow: auto;
+  margin: var(--fbls-gap-md);
+}

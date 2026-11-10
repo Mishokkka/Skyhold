@@ -98,7 +98,8 @@ _checkPreparedTendayCalendar(prepared, data) {
 },
 
 async _prepareTendayOperation({ holdingId = "", qd = 40, rationUnitsPerResident = null, dataView = null, dependencyHash: suppliedDependencyHash = "",
-  operationId: suppliedOperationId = "", preparedAt: suppliedPreparedAt = "", pendingEventsCollected = false } = {}) {
+  operationId: suppliedOperationId = "", preparedAt: suppliedPreparedAt = "", pendingEventsCollected = false,
+  includeTransportProjection = false } = {}) {
   if (!game.user?.isGM) return { ok: false, message: "Провести десятник может только GM." };
   const periodQd = normalizeTendayQd(qd);
   const data = dataView ?? SkyholdData.view();
@@ -120,8 +121,11 @@ async _prepareTendayOperation({ holdingId = "", qd = 40, rationUnitsPerResident 
       return draft;
     }) } : data;
     const prepared = await prepareSequentialTendays(this, { holdingId: id, qd: periodQd, data: batchData, rationUnitsPerResident,
-      operationId: suppliedOperationId || makeId("tenday", 20), preparedAt: suppliedPreparedAt || new Date().toISOString() });
-    if (!prepared.ok) return prepared;
+      operationId: suppliedOperationId || makeId("tenday", 20), preparedAt: suppliedPreparedAt || new Date().toISOString(), includeTransportProjection });
+    if (!prepared.ok) return prepared.transportReview ? { ...prepared, qd: periodQd,
+      sourceHash: stableDataHash(source), dependencyHash: String(suppliedDependencyHash || this._tendayDependencyHash(data, id)),
+      dataRevision: Math.max(0, Number(data.meta?.revision) || 0), calendariaGate,
+      calendarAdvance: { dateTime: calendariaGate.targetDateTime, timestamp: calendariaGate.targetTimestamp } } : prepared;
     prepared.sourceHash = stableDataHash(source);
     prepared.dependencyHash = String(suppliedDependencyHash || this._tendayDependencyHash(data, id));
     prepared.calendariaGate = calendariaGate;
@@ -139,6 +143,9 @@ async _prepareTendayOperation({ holdingId = "", qd = 40, rationUnitsPerResident 
   const sourceSnapshot = clone(source);
   const previewHolding = clone(source);
   const sharedMarketDraft = data?.meta?.sharedMarkets?.enabled ? clone(data.meta.sharedMarkets) : null;
+  const sharedTransportDraft = clone(data?.meta?.transportV2 ?? { version: 2, clockQd: Number(source.gm?.calendaria?.lastQd ?? 0), runs: [] });
+  const executionData = sharedTransportDraft ? { ...data, meta: { ...data.meta, transportV2: sharedTransportDraft },
+    holdings: data.holdings.map((row) => row.id === previewHolding.id ? previewHolding : row) } : data;
   bindSharedMarketHolding(previewHolding, sharedMarketDraft);
   if (!previewHolding.gm || typeof previewHolding.gm !== "object") previewHolding.gm = {};
   if (!previewHolding.gm.food || typeof previewHolding.gm.food !== "object") previewHolding.gm.food = {};
@@ -152,10 +159,23 @@ async _prepareTendayOperation({ holdingId = "", qd = 40, rationUnitsPerResident 
       targetDateTime: calendariaGate.startDateTime, targetTimestamp: timestampForCalendariaDate(calendariaGate.startDateTime) });
   }
 
+  if ((source.special?.transportV2?.orders ?? []).some(order => !["delivered", "lost", "cancelled"].includes(order.status))) {
+    const { projectTendayTransport } = await import("../../../workflows/transport/tenday-review.js");
+    const projection = projectTendayTransport(executionData, previewHolding, Number(source.gm?.calendaria?.lastQd ?? 0) + periodQd, this);
+    if (projection) return { ok: false, blocked: true, transportReview: projection.rows, operationId,
+      ...(includeTransportProjection ? { transportProjection: projection } : {}),
+      holdingId: id, holdingName: String(source.name || "Владение"), qd: periodQd, sourceHash, dependencyHash,
+      rationUnitsPerResident: selectedRationUnits,
+      dataRevision: Math.max(0, Number(data.meta?.revision) || 0), calendariaGate,
+      calendarAdvance: { dateTime: calendariaGate.targetDateTime, timestamp: calendariaGate.targetTimestamp },
+      periodLabel: this._periodLabel(periodQd),
+      message: "Перед расчётом хозяйства обработайте зависимые рейсы и разберите происшествия этого десятника. Решения сохраняются; груз и деньги будут проведены вместе с десятником." };
+  }
+
   beginPerishableStoragePeriod(previewHolding);
   let rawReport;
   try {
-    rawReport = await this._runEconomyForQd(previewHolding, periodQd, { operationId, createdAt: preparedAt, data });
+    rawReport = await this._runEconomyForQd(previewHolding, periodQd, { operationId, createdAt: preparedAt, data: executionData });
     finishPerishableStoragePeriod({
       holding: previewHolding,
       elapsedQd: periodQd,
@@ -213,6 +233,10 @@ async _prepareTendayOperation({ holdingId = "", qd = 40, rationUnitsPerResident 
     formatNumber: (value) => this._formatNumber(value)
   });
   const warnings = [];
+  if (preparedHolding.special?.transportV2?.orders?.length) {
+    const { transportTendayWarnings } = await import("../../../workflows/transport/tenday-review.js");
+    warnings.push(...transportTendayWarnings(preparedHolding));
+  }
   if (this._safeNumber(report?.food?.hungryResidentDays, 0) > 0) warnings.push({ key: "food", severity: "danger", text: `Голод: ${report.food.hungryResidentDays} человеко-дней без пищи.` });
   if (this._safeNumber(report?.treasury?.deficit, 0) > 0) warnings.push({ key: "treasury", severity: "danger", text: `Дефицит казны: ${this._formatCopperCurrency(report.treasury.deficit)}.` });
   if ((report?.maintenance?.needsResolution ?? []).length) warnings.push({ key: "maintenance", severity: "warning", text: `Требуют решения GM после третьего пропуска обслуживания: ${report.maintenance.needsResolution.length}.` });
@@ -232,6 +256,7 @@ async _prepareTendayOperation({ holdingId = "", qd = 40, rationUnitsPerResident 
     dataRevision: Math.max(0, Number(data?.meta?.revision) || 0),
     preparedHolding,
     ...(sharedMarketDraft ? { preparedSharedMarkets: sharedMarketDraft } : {}),
+    ...(sharedTransportDraft ? { preparedSharedTransport: sharedTransportDraft } : {}),
     report,
     recovery,
     calendarAdvance,
@@ -261,6 +286,10 @@ async _applyPreparedTendayOperation(prepared = {}) {
         operationId: prepared.operationId
       });
     }
+    if (prepared.preparedHolding.special?.transportV2?.orders?.some(order => order.status === "needsResolution")) {
+      return SkyholdData.skipTransaction({ ok: false, stale: true,
+        message: "Разберите происшествия перевозок и подготовьте десятник заново перед проведением хозяйства." });
+    }
     const dependencyHash = this._tendayDependencyHash(data, prepared.holdingId);
     if (!dependencyHash || dependencyHash !== prepared.dependencyHash) {
       return SkyholdData.skipTransaction({ ok: false, stale: true, message: "Владение или влияющий каталог изменились после расчёта. Подготовь десятник заново." });
@@ -272,6 +301,7 @@ async _applyPreparedTendayOperation(prepared = {}) {
       return SkyholdData.skipTransaction({ ok: false, stale: true, message: "Владение изменилось после расчёта. Подготовь десятник заново." });
     }
     if (prepared.preparedSharedMarkets) data.meta.sharedMarkets = clone(prepared.preparedSharedMarkets);
+    if (prepared.preparedSharedTransport) data.meta.transportV2 = clone(prepared.preparedSharedTransport);
     appendHoldingOperation(holding, {
       operationId: prepared.operationId,
       type: "tenday",

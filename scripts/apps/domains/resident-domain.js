@@ -135,6 +135,7 @@ _preparePersonRows(holding, canEdit = false, mode = "living", applyFilters = tru
       workLabel,
       awayOnShip,
       restingOnShip,
+      transportBusy: Boolean(assignedShip?.transportOrderId),
       onBoardOnly: restingOnShip || awayOnShip,
       assignedShipId: assignedShip?.id ?? "",
       assignedShipName: assignedShip?.name ?? "",

@@ -85,7 +85,8 @@ export function checkShipOfferGenerationPerformance() {
   });
   assert.deepEqual(sharedGeneration.value, fullGeneration.value, "one command-scoped context must preserve generated contracts exactly");
   const foreignPort = fullContext.ports.find((port) => port.regionId !== fullContext.home.regionId
-    && fullGeneration.value.some((offer) => offer.to.id === port.id));
+    && fullFixture.data.catalog.eventRegions.find(row => row.value === fullContext.home.regionId)
+      .marketLinks.some(link => link.regionId === port.regionId));
   assert.ok(foreignPort, "the fixture must include an accessible foreign destination");
   for (const seed of [13, 91]) {
     const foreignShip = { ...fullFixture.ship, hiddenCapacityLoadPoints: 200, location: {

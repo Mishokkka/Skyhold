@@ -35,9 +35,9 @@
   <p><strong>{{#if atHome}}Свободно дома{{else}}Свободно на борту{{/if}}: {{#if moneySummary.reserveKnown}}{{fblsShipGold moneySummary.freeCopper}} ЗМ{{else}}не определено{{/if}}</strong> <span class="fbls-muted-text">после счетов и рекомендуемого запаса</span></p>
 </details>
 {{/if}}
-{{#if financePresentation.pendingPayments.length}}<section class="fbls-ship-box" aria-label="Ожидаемые поступления"><strong>Ещё не поступило на борт</strong>
+{{#if financePresentation.pendingPayments.length}}<section class="fbls-ship-box" aria-label="Ожидаемые поступления"><strong>Ожидаемые поступления</strong>
   {{#each financePresentation.pendingPayments}}<div class="fbls-ship-ledger-row"><span class="fbls-ship-ledger-description">{{label}}<br /><small>{{#if routeLabel}}{{routeLabel}} · {{/if}}{{basisLabel}}</small></span><strong>{{fblsShipGold amountCopper}} ЗМ</strong></div>{{/each}}
-  <p class="fbls-muted-text">Эти деньги пока недоступны для оплаты расходов. Договорную плату может изменить исход; собственная продажа зависит от доставки и решения во «Внешнем рынке».</p>
+  <p class="fbls-muted-text">Эти деньги пока недоступны для оплаты расходов. Договорную плату может изменить исход; собственная продажа зависит от доставки и происшествий перевозки.</p>
 </section>{{/if}}
 {{#with financePresentation.outing as |report|}}
 <section class="fbls-ship-box" aria-label="Денежный результат выхода корабля">
@@ -47,10 +47,12 @@
     {{#unless report.partial}}<div><dt>Выделено кораблю дома</dt><dd>{{fblsShipGold report.fundingCopper}} ЗМ</dd></div>{{/unless}}
     <div><dt>Получено на борт</dt><dd>{{fblsShipGold report.incomeCopper}} ЗМ</dd></div>
     <div><dt>Оплачено кораблём</dt><dd>{{fblsShipGold report.shipExpenseCopper}} ЗМ</dd></div>
-    {{#if report.hasSale}}<div><dt>Расходы продажи из казны</dt><dd>{{#if report.marketExpenseKnown}}{{fblsShipGold report.marketExpenseCopper}} ЗМ{{else}}Не подтверждены{{/if}}</dd></div>{{/if}}
+    {{#if report.hasMarketExpenses}}<div><dt>{{#if report.hasTransport}}Расходы перевозок вне борта{{else}}Расходы продажи из казны{{/if}}</dt><dd>{{#if report.marketExpenseKnown}}{{fblsShipGold report.marketExpenseCopper}} ЗМ{{else}}Не подтверждены{{/if}}</dd></div>{{/if}}
+    {{#if report.treasuryIncomeCopper}}<div><dt>Выручка и страхование в казну</dt><dd>{{fblsShipGold report.treasuryIncomeCopper}} ЗМ</dd></div>{{/if}}
     <div><dt>{{#if report.ongoing}}На борту сейчас{{else}}Передано домой{{/if}}</dt><dd>{{fblsShipGold report.balanceCopper}} ЗМ</dd></div>
   </dl>
-  <p class="fbls-muted-text">Результат = полученные поступления − оплаченные расходы{{#if report.marketExpenseKnown}}, включая расходы собственной продажи из казны{{/if}}. Выделенный бюджет и возврат остатка не являются заработком или расходом.</p>
+  <p class="fbls-muted-text">Результат = полученные поступления − оплаченные расходы{{#if report.marketExpenseKnown}}, включая связанные операции казны и транспортного резерва{{/if}}. Выделенный бюджет и возврат остатка не являются заработком или расходом.</p>
+  {{#if report.hasTransport}}<p class="fbls-muted-text">Включены целиком принятые перевозки с участием этого корабля: свои и наёмные участки, пошлины, страхование и полученная выручка. Стоимость приобретённого груза учитывается как запас склада.</p>{{/if}}
   {{#if report.hasSale}}<p class="fbls-muted-text">Себестоимость складского груза в этот результат не входит.</p>{{else}}<p class="fbls-muted-text">Другие расходы поселения и себестоимость складского товара в бортовой учёт не входят.</p>{{/if}}
   {{#if report.saleCostsUnknown}}<p class="fbls-ship-notice">В записи продажи нет подтверждённой суммы оплаченных рыночных расходов. Она не вычтена из показанного результата; сравнение с планом недоступно.</p>{{/if}}
   <p class="fbls-muted-text">Участков завершено {{report.completedLegs}} / {{report.startedLegs}} · {{report.durationDays}} дн. с учётом стоянок. Из оплаченного кораблём на стоянки пришлось {{fblsShipGold report.portExpenseCopper}} ЗМ.</p>
@@ -58,7 +60,7 @@
   <details data-ship-disclosure="outing:{{../id}}"><summary>Смета и журнал операций</summary>
     {{#unless report.partial}}
       <dl class="fbls-ship-facts"><div><dt>Плановая плата</dt><dd>{{fblsShipGold report.plannedIncomeCopper}} ЗМ</dd></div><div><dt>Смета принятых участков</dt><dd>{{fblsShipGold report.plannedExpenseCopper}} ЗМ</dd></div><div><dt>Плановая разница</dt><dd>{{fblsShipGold report.plannedNetCopper}} ЗМ</dd></div><div><dt>Принятые участки</dt><dd>{{report.plannedDays}} дн.</dd></div></dl>
-      {{#if report.canComparePlan}}<p>Отклонение от доступной сметы после завершения выхода: {{fblsShipGold report.varianceCopper}} ЗМ.</p>{{else if report.ongoing}}<p class="fbls-muted-text">Выход продолжается. Смета включает ещё не начатые участки принятых заказов; ожидание и происшествия могут изменить итог. Возвращение добавится в смету после отдельного приказа. Сравнивать итог с планом можно после возвращения домой.</p>{{else}}<p class="fbls-muted-text">Сравнение недоступно: оплаченные расходы продажи подтверждены не полностью.</p>{{/if}}
+      {{#if report.canComparePlan}}<p>Отклонение от доступной сметы после завершения выхода: {{fblsShipGold report.varianceCopper}} ЗМ.</p>{{else if report.ongoing}}<p class="fbls-muted-text">Выход продолжается. Смета включает ещё не начатые участки принятых заказов; ожидание и происшествия могут изменить итог. Возвращение добавится в смету после отдельного приказа. Сравнивать итог с планом можно после возвращения домой.</p>{{else if report.transportPending}}<p class="fbls-muted-text">Связанные перевозки или расчёты ещё не завершены. Сравнение с планом появится после их окончания.</p>{{else}}<p class="fbls-muted-text">Сравнение недоступно: оплаченные расходы продажи подтверждены не полностью.</p>{{/if}}
       <p class="fbls-muted-text">Рыночные расходы и плановая выручка собственной продажи включаются при наличии её записи. Новые, ещё не принятые заказы в план не входят.</p>
     {{/unless}}
     <p class="fbls-muted-text">В журнале есть денежные операции и пояснения маршрута. Переводы показаны отдельно; записи без денежной операции не имеют суммы.</p>

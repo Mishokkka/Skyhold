@@ -252,6 +252,26 @@ function shipmentRows(before = {}, after = {}, formatNumber = defaultFormatNumbe
     if (changedNumber(oldOrder?.insurancePayoutCopper, nextOrder?.insurancePayoutCopper)) changes.push(numberChange("insurance", "Страховая выплата", oldOrder?.insurancePayoutCopper, nextOrder?.insurancePayoutCopper, formatNumber));
     if (changes.length) rows.push({ id: key, name: String(nextOrder?.marketLabel ?? oldOrder?.marketLabel ?? "Поставка"), changes });
   }
+  const oldTransport = new Map((before.special?.transportV2?.orders ?? []).map(order => [order.id, order]));
+  const statuses = { booked: "Забронировано", travelling: "В пути", waitingCarrier: "Ожидает транспорта", needsResolution: "Ожидает решения ГМа",
+    delivered: "Доставлено", lost: "Груз утрачен", cancelled: "Отменено" };
+  for (const order of after.special?.transportV2?.orders ?? []) {
+    const old = oldTransport.get(order.id);
+    const changes = [];
+    if (old?.status !== order.status) changes.push(textChange("status", "Статус", statuses[old?.status] ?? old?.status ?? "—", statuses[order.status] ?? order.status));
+    const received = row => (row?.received ?? []).reduce((sum, lot) => sum + lot.qty, 0);
+    for (const [key, label, previous, next] of [
+      ["received", "Получено, ед.", received(old), received(order)],
+      ["lostQty", "Утрачено, ед.", old?.lostQty, order.lostQty],
+      ["spoiledQty", "Испорчено, ед.", old?.spoiledQty, order.spoiledQty],
+      ["insurance", "Страховая выплата, ММ", old?.insurancePaidCopper, order.insurancePaidCopper],
+      ["funding", "Нужно пополнить корабль, ММ", old?.fundingNeededCopper, order.fundingNeededCopper]
+    ]) if (changedNumber(previous, next)) changes.push(numberChange(key, label, previous, next, formatNumber));
+    if (order.ownShipId && Boolean(old?.shipReleased) !== Boolean(order.shipReleased)) {
+      changes.push(textChange("shipReleased", "Корабль", old?.shipReleased ? "Освобождён" : "Занят", order.shipReleased ? "Освобождён" : "Занят"));
+    }
+    if (changes.length) rows.push({ id: `transport:${order.id}`, name: `${order.commercial?.marketLabel || "Перевозка"} · ${order.direction === "outbound" ? "продажа" : "покупка"}`, changes });
+  }
   return rows.sort((left, right) => left.name.localeCompare(right.name, "ru"));
 }
 

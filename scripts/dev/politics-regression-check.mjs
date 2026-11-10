@@ -147,7 +147,7 @@ export async function checkPoliticsRegressions() {
   const phaseOrder = [];
   const noop = () => {};
   const pipelineOwner = { ...serviceOwner, ...FinanceStaffDomain,
-    _periodLabel: () => "десятник", _advanceMarketShipmentsForQd: noop, _advanceMarketOutboundForQd: noop,
+    _periodLabel: () => "десятник",
     _prepareFinanceForQd: () => ({ operatingBlockedFunctionKeys: new Set(), blockedWorkerIds: new Set(), periodIdentity: { periodKey: "tenday:1" } }),
     _runMaintenanceForQd: () => ({ ok: true }), _prepareTechnicalServiceRestarts: noop, _economyWorkerContext: () => ({}),
     _runInstitutionConsumables: FinanceEconomyDomain._runInstitutionConsumables, _runInstitutionResolutions: noop,

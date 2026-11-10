@@ -1,4 +1,5 @@
 import { isPerishableFoodDefinition } from "../../core/perishable-food.js";
+import { expireTransportReservation } from "../../data/transport/state.js";
 import { buildingOperationalState } from "../../core/building-state.js";
 import {
   beginResourceBatchPeriod,
@@ -70,6 +71,7 @@ export function expireProductionIngredients(holding, step, report, appendLedger)
     if (!expired.length) continue;
     const ids = new Set(expired.map((batch) => batch.id));
     const qty = resourceBatchTotal(expired);
+    for (const batch of expired) expireTransportReservation(holding, row.id, batch.id);
     row.batches = row.batches.filter((batch) => !ids.has(batch.id));
     row.qty = resourceBatchTotal(row.batches);
     const name = row.name || resourceLabel(row.resourceId);

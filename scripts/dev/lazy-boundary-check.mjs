@@ -34,6 +34,21 @@ function staticJsImports(file) {
     .filter(Boolean);
 }
 
+function literalDynamicSpecifiers(source) {
+  return [...source.matchAll(/\bimport\s*\(\s*(["'`])([^"'`]+)\1\s*\)/g)]
+    .map(match => match[2]).filter(specifier => !specifier.includes("${"));
+}
+
+function allJsImports(file) {
+  return [...staticJsImports(file), ...literalDynamicSpecifiers(readFileSync(file, "utf8"))
+    .map(specifier => resolveImport(file, specifier, ".js")).filter(Boolean)];
+}
+
+assert.deepEqual(literalDynamicSpecifiers("import('./one.js'); import(\"./two.mjs\"); import(`./three.js`); import(variable); import(`./${name}.js`);"),
+  ["./one.js", "./two.mjs", "./three.js"]);
+assert.ok(allJsImports(path.join(root, "scripts/apps/lazy-apps.js")).includes(path.join(root, "scripts/apps/transport-app.js")));
+assert.ok(!staticJsImports(path.join(root, "scripts/apps/lazy-apps.js")).includes(path.join(root, "scripts/apps/transport-app.js")));
+
 function cssImports(file) {
   const source = readFileSync(file, "utf8");
   return [...source.matchAll(/@import\s+(?:url\()?\s*["']([^"']+)["']/g)]
@@ -61,6 +76,13 @@ const manifest = JSON.parse(readFileSync(path.join(root, "module.json"), "utf8")
 const jsEntry = path.join(root, manifest.esmodules[0]);
 const staticJs = reachable([jsEntry], staticJsImports);
 const runtimeJs = walk(path.join(root, "scripts"), (file) => file.endsWith(".js"));
+for (const file of runtimeJs) {
+  assert.ok(allJsImports(file).every(imported => !normalize(imported).startsWith("scripts/dev/")),
+    `${normalize(file)} must not import historical development fixtures`);
+}
+const transportRuntime = reachable([path.join(root, "scripts/engines/transport/runtime.js")], allJsImports);
+assert.ok(![...transportRuntime].some(file => normalize(file) === "scripts/engines/market/shipment.js"),
+  "the new transport executor must not load the retired shipment executor");
 
 const lazyModules = [
   "scripts/apps/mass-combat.js",

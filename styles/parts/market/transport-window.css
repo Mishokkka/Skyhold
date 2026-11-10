@@ -1,0 +1,21 @@
+.fbls-transport-window .fbls-panel {
+  padding: 0.75rem;
+}
+
+.fbls-transport-window .fbls-field {
+  min-width: 12rem;
+  flex: 1 1 14rem;
+}
+
+.fbls-transport-window .fbls-field select,
+.fbls-transport-window .fbls-field input {
+  width: 100%;
+}
+
+.fbls-transport-window li + li {
+  margin-top: 0.375rem;
+}
+
+.fbls-transport-window li small {
+  display: block;
+}

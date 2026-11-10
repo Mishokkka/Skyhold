@@ -110,12 +110,6 @@ function runtimeHarness() {
     _assignedWorkerSet(holding = {}) {
       return new Set((holding?.buildings?.list ?? []).flatMap((building) => building?.assignedWorkerIds ?? []).map(String));
     },
-    _advanceMarketShipmentsForQd() {
-      calls.push("shipments");
-    },
-    _advanceMarketOutboundForQd() {
-      calls.push("outbound");
-    },
     _prepareFinanceForQd(...args) {
       calls.push("finance");
       return originalPrepareFinance.call(this, ...args);
@@ -342,7 +336,7 @@ export async function checkFinanceRuntimeCharacterization() {
       operationId: "poor-tenday",
       createdAt: "2026-08-11T10:00:00.000Z"
     });
-    assert.deepEqual(calls, ["shipments", "outbound", "finance", "production", "food", "construction", "internal-demand"], "allocation must run after inbound/outbound arrivals and before every economic result");
+    assert.deepEqual(calls, ["finance", "production", "food", "construction", "internal-demand"], "standalone finance without a world snapshot allocates before every economic result; transport integration is covered by transport-v2-period-check");
     assert.equal(holding.storage.moneyCopper, 0, "the treasury must never become negative");
     assert.equal(holding.testOutput ?? 0, 0, "an unpaid current worker must not create output");
     assert.equal(report.finance.currentOutstandingCopper, 30);
@@ -626,15 +620,17 @@ export async function checkFinanceRuntimeCharacterization() {
 
   const economySource = readFileSync(path.join(root, "scripts/apps/domains/finance/economy-domain.js"), "utf8");
   const runStart = economySource.indexOf("async _runEconomyForQd");
-  const runEnd = economySource.indexOf("\n_marketShipmentDependencies", runStart);
+  const runEnd = economySource.indexOf("\n_foodConsumptionDependencies", runStart);
   const runSource = economySource.slice(runStart, runEnd);
-  assert.ok(runSource.indexOf("_advanceMarketShipmentsForQd") < runSource.indexOf("_prepareFinanceForQd"));
-  assert.ok(runSource.indexOf("_advanceMarketOutboundForQd") < runSource.indexOf("_prepareFinanceForQd"));
+  const transportIndex = runSource.indexOf("advanceTransportShipments(data, holding");
+  assert.ok(transportIndex >= 0 && transportIndex < runSource.indexOf("_prepareFinanceForQd"), "unified transport executes before finance and production");
+  assert.doesNotMatch(runSource, /this\._advanceMarket(?:Shipments|Outbound)ForQd/, "the removed executor must not run alongside transport");
   assert.ok(runSource.indexOf("_prepareFinanceForQd") < runSource.indexOf("_runProductionAndLivestockForQd"));
   assert.doesNotMatch(runSource, /_runTreasuryCostsForQd/, "the legacy treasury pass must stay disconnected from runtime to prevent double payment");
 
   const eventsSource = readFileSync(path.join(root, "scripts/apps/domains/events/economy-events.js"), "utf8");
-  assert.match(eventsSource, /_runEconomyForQd\(previewHolding, periodQd, \{ operationId, createdAt: preparedAt, data \}\)/, "Preview binds finance to its operation id and supplies the catalog snapshot for automatic crew upkeep");
+  assert.match(eventsSource, /_runEconomyForQd\(previewHolding, periodQd, \{ operationId, createdAt: preparedAt, data: executionData \}\)/, "Preview binds finance to its operation id and supplies the catalog snapshot with isolated shared transport state");
+  assert.match(eventsSource, /transportV2: sharedTransportDraft/, "Shared transport mutations stay in the preview draft until Apply");
 
   const tendayAppSource = readFileSync(path.join(root, "scripts/apps/tenday-app.js"), "utf8");
   assert.match(tendayAppSource, /title: "Денежные обязательства"/, "the GM Preview/History economy tab must expose the exact obligation rows");

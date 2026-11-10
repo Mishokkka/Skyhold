@@ -147,6 +147,7 @@
               <label><span><i class="fa-solid fa-face-smile"></i> Дов.</span><input type="number" data-type="number" data-field="holdings.{{holdingIndex}}.gm.modifiers.morale" value="{{holding.gm.modifiers.morale}}" /></label>
               <label class="market-connections"><span data-fbls-tooltip="Ручной бюджет доступа к рынкам и товарам. Рынок требует по одному УРС за каждую связь маршрута; товар добавляет собственную сложность."><i class="fa-solid fa-route"></i> УРС</span><input type="number" min="0" step="1" data-type="number" data-field="holdings.{{holdingIndex}}.gm.modifiers.marketConnectionsLevel" value="{{holding.gm.modifiers.marketConnectionsLevel}}" /></label>
             </div>
+            <label class="fbls-field">До местного рынка, км<input type="number" min="0" max="100000" step="1" data-type="number" data-field="holdings.{{holdingIndex}}.gm.modifiers.marketLocalDistanceKm" value="{{holding.gm.modifiers.marketLocalDistanceKm}}" title="Расстояние от владения до рынка в его локации. Для других локаций используются связи карты." /></label>
             <p class="fbls-muted-text compact">Уровень рыночных связей: рынок виден при УРС не ниже числа переходов; товар требует ещё свой уровень сложности.</p>
           </article>
 

@@ -187,14 +187,15 @@ export async function checkAuditRegressions() {
     globalThis.game.user = gm;
     let confirmations = 0;
     let finishConfirmation;
-    globalThis.foundry.applications.api.DialogV2 = { confirm: () => {
+    const market = Object.assign(Object.create(SkyholdMarketApp.prototype), {
+      quantities: {}, targetRoomId: "outdoors", _marketSnapshot: () => ({ holding: current.holdings[0], market: { id: "market" } }),
+      _showTransport: () => {
       confirmations += 1;
       return new Promise((resolve) => { finishConfirmation = resolve; });
-    } };
-    const market = { _marketSnapshot: () => ({ holding: current.holdings[0], plan: { lines: [], marketLabel: "Market", subtotalCopper: 0, deliveryCopper: 0, totalCopper: 0 } }) };
+    } });
     const purchase = SkyholdMarketApp.prototype._onBuy.call(market);
     await SkyholdMarketApp.prototype._onBuy.call(market);
-    assert.equal(confirmations, 1, "two fast purchase clicks must share one confirmation/operation");
+    assert.equal(confirmations, 1, "two fast purchase clicks must open one unified checkout");
     finishConfirmation(false);
     await purchase;
     assert.equal(market._buyOperationPending, false, "cancel must release the purchase guard");

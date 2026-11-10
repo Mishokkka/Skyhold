@@ -244,7 +244,6 @@ departShip(boundary, boundary.special.ships.list[0], { operationId: "boundary", 
 const reachedFinance = new Error("finance-boundary");
 const owner = {
   _safeNumber: (value) => value, _periodLabel: () => "Period",
-  _advanceMarketShipmentsForQd() {}, _advanceMarketOutboundForQd() {},
   _prepareFinanceForQd(holding, _qd, report) {
     assert.equal(holding.storage.moneyCopper, 1100);
     assert.equal(holding.special.ships.list[0].status, "docked");
@@ -261,7 +260,6 @@ awaitingShip.status = "away";
 awaitingShip.activeVoyage = { id: "awaiting", awaitingOutcome: true, waitingFunds: true, lastProcessedQd: 0, outcome: { expenseCopper: 70 } };
 const awaitingOwner = {
   _safeNumber: (value) => value, _periodLabel: () => "Period",
-  _advanceMarketShipmentsForQd() {}, _advanceMarketOutboundForQd() {},
   _prepareFinanceForQd(_holding, _qd, report) {
     assert.ok(report.work.some((row) => row.includes("исход рейса сохранён") && row.includes("70 ММ")));
     throw reachedFinance;

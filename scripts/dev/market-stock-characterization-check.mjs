@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
+import { transportFixture, transportHarness, transportRequest } from "./fixtures/transport-v2.mjs";
+import { transportSourceToken } from "../apps/domains/transport-context.js";
+import { canCancelTransportOrder } from "../engines/transport/runtime.js";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { marketStockKey, marketStockRecoveryEvery, normalizeMarketStockState } from "../data/market/stock-state.js";
 import { mergeHoldingDefaults } from "../data/normalizers.js";
-import { cancelMarketShipment, createMarketShipment, marketShipmentCancellationQuote } from "../engines/market/shipment.js";
 import {
   marketStockPlanToken,
   overlayMarketQuoteStock,
@@ -167,87 +169,48 @@ assert.equal(rareHolding.special.market.stock[rareKey].availableStock, 0, "an in
 recoverMarketStock({ holding: rareHolding, currentTenday: rareDuration });
 assert.equal(rareHolding.special.market.stock[rareKey].availableStock, 1, "an indivisible rare unit must return at the end of its 2-6 tenday cycle");
 
-const cancellationHolding = stockHolding({ moneyCopper: 500 });
-const cancellationQuote = overlayMarketQuoteStock({
-  holding: cancellationHolding,
-  quote: { marketId, offers: [{ id: offerId, stock: 8, unitPriceCopper: 10, load: 0.25 }] }
-});
-const purchaseOperationId = "stocked-purchase";
-const purchaseReservation = reserveMarketStock({
-  holding: cancellationHolding,
-  marketId,
-  lines: [{ ...cancellationQuote.offers[0], qty: 3 }],
-  operationId: purchaseOperationId,
-  currentTenday: 0
-});
-const plan = {
-  ok: true,
-  deliveryMode: "scheduled",
-  deliveryQd: 4,
-  marketId,
-  marketLabel: "North Market",
-  targetRoomId: "outdoors",
-  stockReservationOperationId: purchaseOperationId,
-  stockReservations: purchaseReservation.reservations,
-  lines: [{ ...cancellationQuote.offers[0], qty: 3, lineCopper: 30 }],
-  subtotalCopper: 30,
-  routeCopper: 8,
-  handlingCopper: 4,
-  insuranceCopper: 2,
-  taxCopper: 1,
-  expressSurchargeCopper: 5,
-  deliveryCopper: 20,
-  totalCopper: 50,
-  totalLoad: 0.75,
-  riskLossChance: 0,
-  riskDelayChance: 0
-};
-const dependencies = {
-  addMoney(target, amount) {
-    target.storage.moneyCopper += amount;
-  },
-  snapshotItemForStorage() {
-    throw new Error("resource-only shipment must not snapshot an Item");
-  },
-  appendStorageLog(target, entries) {
-    target.storage.log.push(...entries);
-  },
-  formatCurrency(value) {
-    return String(value);
-  },
-  restoreMarketStock(options) {
-    return restoreMarketStockReservations(options);
-  }
-};
-const shipment = createMarketShipment({ holding: cancellationHolding, plan, operationId: purchaseOperationId, dependencies });
-assert.equal(shipment.ok, true);
-assert.equal(cancellationHolding.storage.moneyCopper, 450);
-assert.equal(cancellationHolding.special.market.stock[key].availableStock, 5);
-const cancellationPreview = marketShipmentCancellationQuote(shipment.order);
-assert.equal(cancellationPreview.refundCopper, 50, "pre-dispatch cancellation must refund the complete payment");
-assert.equal(cancellationPreview.withheldCopper, 0);
-const cancellation = cancelMarketShipment({ holding: cancellationHolding, orderId: purchaseOperationId, dependencies });
-assert.equal(cancellation.ok, true);
-assert.equal(cancellationHolding.storage.moneyCopper, 500);
-assert.equal(cancellationHolding.special.market.stock[key].availableStock, 8, "pre-dispatch cancellation must restore all reserved stock");
-const afterCancellation = clone(cancellationHolding);
-const cancellationReplay = cancelMarketShipment({ holding: cancellationHolding, orderId: purchaseOperationId, dependencies });
-assert.equal(cancellationReplay.replay, true);
-assert.deepEqual(cancellationHolding, afterCancellation, "cancellation replay must restore neither money nor stock twice");
+// Stock cancellation is exercised through the current authority command, never a copied old executor.
+{
+  const previousGame = globalThis.game;
+  try {
+    globalThis.game = { user: { id: "gm", isGM: true }, settings: { get: () => undefined }, modules: new Map() };
+    const f = transportFixture(); f.holding.special.ships.list = [];
+    const h = transportHarness(f), request = transportRequest({ ...f, data: h.data, holding: h.holding });
+    const money = h.holding.storage.moneyCopper;
+    const { preview, order } = await h.book(request, "current-stocked-purchase");
+    assert.equal(h.holding.storage.moneyCopper, money - preview.treasuryCopper);
+    assert.ok(order.stockReservations.length);
+    for (const row of order.stockReservations) assert.equal(h.holding.special.market.stock[marketStockKey(row.marketId, row.offerId)].availableStock,
+      row.baseStock - row.qty, "the actual booking reserves its precise quantity");
+    assert.equal(canCancelTransportOrder(h.data.meta.transportV2, order), true);
+    const cancel = { type: "transport-cancel", operationId: "current-stock-cancel", holdingId: h.holding.id,
+      orderId: order.id, expectedRevision: h.data.meta.revision, sourceToken: transportSourceToken(h.data, h.holding) };
+    assert.equal((await h.execute(cancel, { userId: "gm" })).ok, true);
+    assert.equal(h.holding.storage.moneyCopper, money, "pre-dispatch cancellation refunds the entire accepted payment");
+    for (const row of order.stockReservations) assert.equal(h.holding.special.market.stock[marketStockKey(row.marketId, row.offerId)].availableStock,
+      row.baseStock, "the actual cancellation restores every reserved unit");
+    const after = structuredClone(h.data);
+    assert.equal((await h.execute(cancel, { userId: "gm" })).replay, true);
+    assert.deepEqual(h.data, after, "replay cannot restore money or stock twice");
+    const next = transportRequest({ ...f, data: h.data, holding: h.holding });
+    const { order: rebooked } = await h.book(next, "current-stocked-purchase-again");
+    assert.deepEqual(rebooked.stockReservations.map(row => [row.marketId, row.offerId, row.qty]),
+      order.stockReservations.map(row => [row.marketId, row.offerId, row.qty]),
+      "the authority can actually reserve the restored stock for the same purchase again");
+  } finally { globalThis.game = previousGame; }
+}
 
 const marketAppSource = readFileSync(fileURLToPath(new URL("../apps/market-app.js", import.meta.url)), "utf8");
 const marketOperationExecutorSource = readFileSync(fileURLToPath(new URL("../apps/market-operation-executor.js", import.meta.url)), "utf8");
-const buyStart = marketAppSource.indexOf("async _onBuy()");
-const cancelStart = marketAppSource.indexOf("async _onCancelShipment", buyStart);
-const deliverStart = marketAppSource.indexOf("async _onDeliverShipment", cancelStart);
-const buySource = marketAppSource.slice(buyStart, cancelStart);
-const cancelSource = marketAppSource.slice(cancelStart, deliverStart);
+const buySource = marketAppSource.slice(marketAppSource.indexOf("async _onBuy()"));
+const transportExecutor = readFileSync(new URL("../apps/transport-operation-executor.js", import.meta.url), "utf8");
+const transportApp = readFileSync(new URL("../apps/transport-app.js", import.meta.url), "utf8");
 assert.ok(buySource.includes("holdingPermissionContext(snapshot.holding).canUseStorage"), "market purchase UI must use the granted storage/market permission for players and GMs");
-assert.match(cancelSource, /if \(!game\.user\?\.isGM\)/, "market cancellation UI must reject a non-GM caller");
-assert.ok(buySource.includes("requestMarketOperation({"), "market purchase UI must use the dedicated authority-GM command");
-assert.match(marketOperationExecutorSource, /updateHolding\(operation\.holdingId,[\s\S]*applyPurchase\(\{ holding, operation, context, workflow, resolveUuid, createdAt \}\)/, "the authority transaction must invoke the purchase applier on its holding draft");
-assert.ok(marketOperationExecutorSource.includes("reserveMarketStock({"), "the dedicated purchase applier must reserve market stock before delivery");
-assert.ok(cancelSource.indexOf("SkyholdData.updateHolding") < cancelSource.indexOf("cancelMarketShipment({"), "stock restoration must happen inside the authority transaction");
+assert.doesNotMatch(marketAppSource, /_onCancelShipment|_onDeliverShipment/, "retired shipment mutations are removed from the goods browser");
+assert.match(transportExecutor, /!user\.isGM && !holding\.gm\?\.playersCanUseStorage/, "transport cancellation retains the granted storage permission");
+assert.match(transportApp, /requestMarketOperation\(/, "transport UI uses the dedicated authority-GM command");
+assert.match(marketOperationExecutorSource, /if \(replay\) return replay/, "the old command adapter only acknowledges durable receipts");
+assert.ok(transportExecutor.indexOf("return transaction(") < transportExecutor.indexOf("cancelTransportShipment(data, holding, order)"), "stock restoration must happen inside the authority transaction");
 const economyEventsSource = readFileSync(fileURLToPath(new URL("../apps/domains/events/economy-events.js", import.meta.url)), "utf8");
 const prepareTendayStart = economyEventsSource.indexOf("async _prepareTendayOperation");
 const applyTendayStart = economyEventsSource.indexOf("async _applyPreparedTendayOperation", prepareTendayStart);

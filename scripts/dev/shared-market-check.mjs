@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { FinanceEconomyDomain } from "../apps/domains/finance/economy-domain.js";
+import { advanceTransportShipments } from "../workflows/transport/orders.js";
 import { bindSharedMarkets, bindSharedMarketHolding, marketStateFor } from "../data/market/shared-context.js";
 import { previewSharedMarketMigration, applySharedMarketMigration } from "../data/market/shared-migration.js";
 import { reserveMarketStock, recoverMarketStock } from "../engines/market/stock.js";
@@ -84,12 +84,12 @@ const holding = (id) => ({ id, gm: { calendaria: { lastQd: 0 } }, special: { mar
     lines: [{ demandId: "wood", qty: 10, demandBaseDemand: 10, demandStateRevision: 0 }] });
   settleMarketDemandReservations({ holding: data.holdings[0], reservations: reserved.reservations, outcome: "consumed", operationId: "runtime-arrive" });
   const clock = data.meta.sharedMarkets.clockTenday;
-  const app = { _safeNumber: (n) => Number(n) || 0,
-    _marketShipmentDependencies: () => ({ addMoney: () => {}, appendStorageLog: () => {} }) };
-  FinanceEconomyDomain._advanceMarketOutboundForQd.call(app, data.holdings[0], 40);
+  for (const h of data.holdings) h.storage = { moneyCopper: 0 };
+  const app = { _appendStorageLog() {} };
+  advanceTransportShipments(data, data.holdings[0], 40, app);
   const once = data.meta.sharedMarkets.clockTenday;
   assert.equal(once, clock + 1, "runtime advances one period in absolute game time");
-  FinanceEconomyDomain._advanceMarketOutboundForQd.call(app, data.holdings[1], 40);
+  advanceTransportShipments(data, data.holdings[1], 40, app);
   assert.equal(data.meta.sharedMarkets.clockTenday, once, "second holding at the same date cannot double global time");
 }
 console.log("Shared market: explicit migration, conserved promises, common stock/demand, isolated previews and one recovery per game date passed.");

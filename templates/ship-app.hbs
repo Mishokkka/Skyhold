@@ -2,9 +2,11 @@
   {{#each shipsContext.rows}}
   <article class="fbls-ship-console" data-ship-card="{{id}}" data-ship-revision="{{@root.shipsContext.revision}}" data-ship-holding="{{@root.holding.id}}" data-ship-voyage="{{#if orderBundle}}{{orderBundle.id}}{{else}}{{activeVoyage.id}}{{/if}}">
     <header class="fbls-ship-heading fbls-card-header">
+      <button type="button" class="fbls-button" data-action="ship-open-transport"><i class="fa-solid fa-route" aria-hidden="true"></i> Перевозки своего груза</button>
       <div class="fbls-section-heading"><h2 class="fbls-heading-title"><i class="fa-solid fa-ship" aria-hidden="true"></i> {{name}}</h2><p>{{#if isWorld}}{{locationLabel}} · {{statusLabel}} · {{profileLabel}}{{else}}{{#if away}}В рейсе{{else}}В поселении{{/if}} · Прежние рейсы{{/if}} · {{conditionLabel}}{{#if commanderName}} · {{commanderName}}{{/if}}</p></div>
     </header>
     {{#if isWorld}}
+    {{#if transportBusy}}<p role="status">{{transportStageText}}. {{nextAction}}.</p>{{/if}}
     <nav class="fbls-ship-tabs fbls-action-group" aria-label="Разделы корабля">
       {{#each @root.shipWindowTabs}}<button type="button" class="fbls-subnav-tab {{#if active}}active{{/if}}" data-action="ship-window-tab" data-ship-window-tab="{{id}}" aria-pressed="{{active}}" tabindex="{{#if active}}0{{else}}-1{{/if}}"><i class="{{icon}}" aria-hidden="true"></i> {{label}}</button>{{/each}}
     </nav>

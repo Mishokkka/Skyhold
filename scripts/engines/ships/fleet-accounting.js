@@ -5,7 +5,8 @@ export function recordFleetFunds(ship, receipt, { clockQd = 0, idle = "" } = {})
   if (!delta) return;
   ship.fleetAccounting ??= { sinceQd: whole(clockQd), incomeCopper: 0, expenseCopper: 0, homeIdleCopper: 0, portIdleCopper: 0 };
   const account = ship.fleetAccounting;
-  if (delta > 0) account.incomeCopper = whole(account.incomeCopper) + delta;
+  if (delta > 0 && receipt.kind === "expense-refund") account.expenseCopper = Math.max(0, whole(account.expenseCopper) - delta);
+  else if (delta > 0) account.incomeCopper = whole(account.incomeCopper) + delta;
   else account.expenseCopper = whole(account.expenseCopper) - delta;
   if (delta < 0 && idle === "home") account.homeIdleCopper = whole(account.homeIdleCopper) - delta;
   if (delta < 0 && idle === "port") account.portIdleCopper = whole(account.portIdleCopper) - delta;

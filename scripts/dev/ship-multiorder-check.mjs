@@ -53,8 +53,8 @@ export function checkShipMultiorder() {
   assert.deepEqual(plan.stops[0].pickupOfferIds, ["job-pickup"]);
   assert.equal(plan.initialLoadPoints, 2400);
   assert.deepEqual(plan.stops.map((stop) => [stop.loadOnLegPoints, stop.loadAfterPoints]), [[2400, 1800], [1800, 0]]);
-  assert.equal(plan.stops[0].legOffer.quote.durationQd, 11, "first leg combines 4 QD flight, 3 QD loading and a 4 QD port rest");
-  assert.equal(plan.stops[1].legOffer.quote.durationQd, 12, "second leg combines 8 QD flight with a 4 QD rest/handling stop");
+  assert.equal(plan.stops[0].legOffer.quote.durationQd, 9, "first leg combines 4 QD flight, 3 QD loading and 2 QD cargo handling");
+  assert.equal(plan.stops[1].legOffer.quote.durationQd, 10, "second leg combines 8 QD flight and 2 QD cargo handling");
   assert.ok(plan.totalOperatingCopper < first.quote.operatingCopper + second.quote.operatingCopper + third.quote.operatingCopper,
     "shared travel and crew costs must not be billed as three independent voyages");
   const overfull = repriceWorldShipOffer(data, holding, ship, smallOffer(source, "job-overfull", "b", 3000), { context: world });
@@ -70,10 +70,12 @@ export function checkShipMultiorder() {
   assert.equal(landed.arrived.length, 1);
   assert.equal(ship.location.id, "a");
   assert.equal(ship.orderBundle.status, "awaiting-outcome");
-  assert.equal(ship.orderBundle.orders.find((order) => order.offerId === "job-pickup").state, "loaded");
+  assert.equal(ship.orderBundle.orders.find((order) => order.offerId === "job-pickup").state, "waiting-pickup",
+    "new cargo is handed over after the arriving leg's physical outcome");
   const firstResult = resolveWorldShipBundleStop(holding, ship, { operationId: "resolve-a", bundleId: "bundle-1", random: () => 0.99 });
   assert.equal(firstResult.pending, false);
   assert.deepEqual(firstResult.completedOrders, ["job-a"]);
+  assert.equal(ship.orderBundle.orders.find((order) => order.offerId === "job-pickup").state, "loaded");
   assert.equal(ship.orderBundle.status, "at-port");
   const afterFirst = ship.onboardCopper;
   assert.throws(() => resolveWorldShipBundleStop(holding, ship, { operationId: "repeat-a", bundleId: "bundle-1" }), /нет заказов/);
@@ -88,7 +90,7 @@ export function checkShipMultiorder() {
   const final = resolveWorldShipBundleStop(holding, ship, { operationId: "resolve-b", bundleId: "bundle-1", random: () => { finalDraws++; return 0.99; } });
   assert.equal(final.pending, false);
   assert.equal(final.completedOrders.length, 2);
-  assert.equal(finalDraws, 5, "two commercial outcomes share one road-incident roll at the same port");
+  assert.equal(finalDraws, 6, "two commercial outcomes share one physical passage probability and severity roll");
   assert.equal(ship.orderBundle, null);
   assert.equal(ship.location.id, "b");
   const afterFinal = ship.onboardCopper;
@@ -122,7 +124,7 @@ export function checkShipMultiorder() {
   advanceWorldShips(blockedFixture.holding, blockedArrival);
   blockedFixture.ship.onboardCopper = 0;
   const unpaid = resolveWorldShipBundleStop(blockedFixture.holding, blockedFixture.ship, {
-    operationId: "unpaid-outcome", bundleId: "blocked-bundle", random: () => 0.01
+    operationId: "unpaid-outcome", bundleId: "blocked-bundle", random: () => 0
   });
   assert.equal(unpaid.pending, true);
   const saved = structuredClone(blockedFixture.ship.orderBundle.orders[0].outcome);
