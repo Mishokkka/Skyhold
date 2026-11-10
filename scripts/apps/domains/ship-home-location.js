@@ -3,19 +3,12 @@ import { normalizeMarketRouteMap, marketRoutePolylineLength } from "../../data/m
 import { stableDataHash } from "../../data/storage-commit.js";
 import { routeEdgeKey, routePolylinePoints, upsertRouteEdge } from "../editors/route-graph-model.js";
 import { buildShipWorldContext, configureWorldShipEconomy } from "../../engines/ships/world-market.js";
+import { holdingTransportLocationBlocker } from "../../data/transport/state.js";
 
 const sourceKey = (holding) => `fbl-skyhold:ship-home:${holding.id}`;
 
 export function shipHomePlacementBlocker(holding) {
-  if ((holding.special?.ships?.list ?? []).some((ship) => ship.activeVoyage || ship.orderBundle
-    || ship.status !== "docked" || (ship.navigationMode === "world" && ship.location?.kind !== "home"))) {
-    return "Верните все корабли домой и завершите их рейсы перед переносом домашней точки.";
-  }
-  const market = holding.special?.market ?? {};
-  if ([...(market.orders ?? []), ...(market.outbound?.orders ?? [])].some((order) => !["delivered", "lost", "cancelled"].includes(order.status))) {
-    return "Сначала завершите входящие доставки и продажи во Внешней торговле.";
-  }
-  return "";
+  return holdingTransportLocationBlocker(holding);
 }
 
 /** Uses the existing location/link schema; never places or moves anything on read. */

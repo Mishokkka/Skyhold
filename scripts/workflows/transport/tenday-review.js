@@ -2,6 +2,7 @@ import { bindSharedMarketHolding } from "../../data/market/shared-context.js";
 import { activeTransportOrder, transportOrders } from "../../data/transport/state.js";
 import { transportClockOffsetQd, transportHoldingQd } from "../../data/transport/clock.js";
 import { advanceTransportShipments } from "./orders.js";
+import { transportServicesShareFleet } from "../../engines/transport/service-identity.js";
 import { adoptProjectedTransportBookings, resolveTransportIncident, transportVehicleDependencies } from "../../engines/transport/runtime.js";
 
 const clone = value => structuredClone(value);
@@ -53,7 +54,7 @@ function carrierPrerequisites(data, row, { includeUnreadyInputs = false } = {}) 
     }
     if (run.kind !== "regular") for (const prior of state.runs) {
       if (prior.status !== "cancelled" && prior.startQd < run.startQd
-        && (run.shipId ? prior.shipId === run.shipId : prior.serviceId === run.serviceId && prior.vehicle === run.vehicle)) required.set(prior.id, prior);
+        && (run.shipId ? prior.shipId === run.shipId : transportServicesShareFleet(prior.serviceId, run.serviceId) && prior.vehicle === run.vehicle)) required.set(prior.id, prior);
     }
   }
   return [...required.values()].sort((a, b) => a.startQd - b.startQd || a.id.localeCompare(b.id));

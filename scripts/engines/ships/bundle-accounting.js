@@ -38,6 +38,7 @@ export function bundleOutcomeReserves(offers, totalCopper, { stops = [] } = {}) 
     const reserves = offers.map(() => 0);
     let pending = 0;
     for (const stop of stops) {
+      if (stop.physicalOutcome) continue;
       const terms = stop.economics;
       pending += terms.repairCopper + terms.delayDailyCopper * 2 + terms.precautionCopper;
       if (!stop.deliveryOfferIds.length) continue;

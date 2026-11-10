@@ -1,4 +1,5 @@
 import { remainingCargoArrivals, availableTransportCargo, allArrivalCargo, cargoQuantitiesMatch } from "./cargo-flow.js";
+import { transportServicesShareFleet, transportServiceExcluded } from "./service-identity.js";
 import { transportServiceCharge } from "./economics.js";
 import { cargoLoad, cargoValue, takeTransportCargo, transportInteger, transportMoney, transportOperatingCharge, transportRateCharge, transportWaitingCharge, TRANSPORT_LIMITS, TRANSPORT_LOAD_SCALE } from "./quantities.js";
 import { transportEmptyQd, transportServiceAt } from "./seasonal.js";
@@ -39,6 +40,8 @@ function regularSlot(service, readyQd, runs, horizon, cargo) {
   departure = (service.firstQd ?? 0) + Math.ceil((departure - (service.firstQd ?? 0)) / service.intervalQd) * service.intervalQd;
   for (; departure <= horizon; departure += service.intervalQd) {
     const id = slotId(service, departure);
+    if (runs.some(run => occupied(run) && run.serviceId !== service.id && run.departureQd === departure
+      && transportServicesShareFleet(run.serviceId, service.id))) continue;
     const existing = runs.find((run) => run.id === id && occupied(run));
     if (existing?.blocked || existing?.incident || existing?.riskChecked || ["travelling", "arrived"].includes(existing?.status)) continue;
     if (existing && (existing.startQd < readyQd || existing.kind !== service.kind
@@ -54,7 +57,7 @@ function charterSlot(service, readyQd, runs, horizon, termsAt) {
   for (let vehicle = 0; vehicle < (service.vehicles ?? 1); vehicle++) {
     let start = Math.max(readyQd, service.firstQd ?? 0);
     const commitments = runs.filter((run) => occupied(run) && (service.kind === "owned"
-      ? run.shipId === service.shipId : run.serviceId === service.id && run.vehicle === vehicle))
+      ? run.shipId === service.shipId : transportServicesShareFleet(run.serviceId, service.id) && run.vehicle === vehicle))
       .sort((a, b) => a.startQd - b.startQd);
     for (const run of commitments) {
       if (start + termsAt(start).durationQd <= run.startQd) break;
@@ -203,12 +206,13 @@ export function planTransportChain({ cargo, services, startQd = 0, runs = [], ho
 
 export function transportChainMatchesConstraints(chain, { pins = {}, excluded = [] } = {}) {
   return Object.entries(pins).every(([from, id]) => chain.some(service => service.from === from && service.id === id))
-    && chain.every(service => service.enabled !== false && !excluded.includes(service.id) && !excluded.includes(service.companyId));
+    && chain.every(service => service.enabled !== false && !transportServiceExcluded(service, excluded));
 }
 
-export function findTransportPlans({ from, to, services = [], cargo, startQd = 0, runs = [], priority = "cost", pins = {}, excluded = [], ownShipId = "", maxPaths = TRANSPORT_LIMITS.paths, accessLimit = Infinity }) {
+export function findTransportPlans({ from, to, services = [], cargo, startQd = 0, runs = [], priority = "cost", pins = {}, excluded = [], ownShipId = "", maxPaths = TRANSPORT_LIMITS.paths, accessLimit = Infinity, preferredPoints = [] }) {
   const plans = [], failures = new Set();
   const candidates = [...services].sort((a, b) => Number(b.kind === "owned") - Number(a.kind === "owned")
+    || Number(preferredPoints.includes(b.to)) - Number(preferredPoints.includes(a.to))
     || Number(b.to === to) - Number(a.to === to) || String(a.id).localeCompare(String(b.id)));
   let searched = 0, limited = false, expanded = 0;
   function visit(location, chain, visited) {
@@ -227,7 +231,7 @@ export function findTransportPlans({ from, to, services = [], cargo, startQd = 0
     for (const service of candidates) {
       if (service.enabled === false || service.from !== location || visited.has(service.to)
         || chain.reduce((sum, row) => sum + (row.accessCost ?? 0), service.accessCost ?? 0) > accessLimit
-        || excluded.includes(service.id) || excluded.includes(service.companyId)
+        || transportServiceExcluded(service, excluded)
         || (pins[location] && pins[location] !== service.id)
         || (service.kind === "owned" && (service.shipId !== ownShipId || ownEnded))) continue;
       visit(service.to, [...chain, service], new Set([...visited, service.to]));

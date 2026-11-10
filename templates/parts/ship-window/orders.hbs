@@ -20,7 +20,7 @@
     {{#if commands.resolveBundle}}
       {{> "modules/fbl-skyhold/templates/parts/ship-window/command-readiness.hbs" commands.resolveBundle}}
       <p class="fbls-muted-text">Исход сохраняется до проверки денег. При нехватке средств корабль дождётся оплаты; повтор продолжит сохранённый результат.</p>
-      <button type="button" class="fbls-button compact" data-action="ship-resolve-bundle" title="{{commands.resolveBundle.reasonText}}" data-fbls-tooltip="Подвести итоги доставленных в этом порту заказов. Исход каждого сохраняется до проверки денег; повтор не выдаёт плату дважды." {{#unless canResolveBundle}}disabled{{/unless}}><i class="fa-solid fa-dice" aria-hidden="true"></i> {{#if orderBundle.waitingFunds}}Продолжить сохранённые исходы{{else}}Подвести итоги заказов{{/if}}</button>
+      <button type="button" class="fbls-button compact" data-action="ship-resolve-bundle" title="{{commands.resolveBundle.reasonText}}" data-fbls-tooltip="Подвести итоги перелёта и доставленных в этом порту заказов перед новой погрузкой. Исход сохраняется до проверки денег; повтор не списывает расходы и не выдаёт плату дважды." {{#unless canResolveBundle}}disabled{{/unless}}><i class="fa-solid fa-dice" aria-hidden="true"></i> {{#if orderBundle.waitingFunds}}Продолжить сохранённые исходы{{else}}Подвести итоги участка{{/if}}</button>
       {{#if orderBundle.waitingFunds}}<button type="button" class="fbls-button compact" data-action="ship-window-tab" data-ship-panel-target="finance"><i class="fa-solid fa-coins" aria-hidden="true"></i> Проверить деньги</button>{{/if}}
     {{/if}}
     {{#if commands.continueBundle}}

@@ -3,6 +3,7 @@ import { carrierProvidersForRoute } from "./providers.js";
 import { MARKET_DEFAULT_TRANSPORT_CAPACITY_LOAD, MARKET_TRANSPORT_TARIFFS, resolveMarketLogistics, findHoldingRegion, edgeSeasonalModifier } from "./logistics.js";
 import { marketTransportFreightFactor } from "./pricing.js";
 import { localMarketDistanceKm, referenceTransportCosts, configuredTransportCharges } from "../transport/economics.js";
+import { TRANSPORT_LIMITS } from "../transport/quantities.js";
 
 export const AUTO_CARRIERS = "auto-carriers";
 const MODES = Object.keys(MARKET_TRANSPORT_TARIFFS);
@@ -13,7 +14,8 @@ const sameService = (a, b) => a && b && a.mode === b.mode && a.carrierId === b.c
 
 /** Country presence is the dispatch country's service market. A permitted link authorizes arrival across its border. */
 export function planMarketTransport({ holding = {}, market = {}, regions = [], organizations = [], countries = [], isGM = false,
-  seasonId = "", direction = "inbound", dependencies = {}, accessLevel = null, carrierId = AUTO_CARRIERS, preservePhysicalRoutes = false } = {}) {
+  seasonId = "", direction = "inbound", dependencies = {}, accessLevel = null, carrierId = AUTO_CARRIERS,
+  preservePhysicalRoutes = false, searchBudget = null } = {}) {
   const byId = new Map(regions.map((row) => [String(row.value), row]));
   const companies = new Map(organizations.map((row) => [String(row.id), row]));
   const countryRows = new Map(countries.map((row) => [String(row.id), row]));
@@ -64,6 +66,9 @@ export function planMarketTransport({ holding = {}, market = {}, regions = [], o
   const localAvailable = Boolean(home?.marketTransportModes?.includes("airship") && providers(localId, "airship").length);
   const network = {
     preservePhysicalRoutes,
+    searchBudget,
+    maxRoutes: searchBudget && preservePhysicalRoutes
+      ? searchBudget.hiredRoutes ?? TRANSPORT_LIMITS.paths : Infinity,
     localAirshipAvailable: localAvailable,
     servicesForEdge: (from, edge, mode) => {
       const dispatch = direction === "outbound" ? from : edge.to;
@@ -100,6 +105,13 @@ export function planMarketTransport({ holding = {}, market = {}, regions = [], o
       selectedRoute: { path: [localId], edges: [{ from: localId, to: localId, distanceKm: localKm, distance: localKm / 40, selectedMode: mode,
         modes: [mode], service: { carrier } }], distanceKm: localKm, distance: localKm / 40, hops: 0, accessCost: 0 }
     }))).filter((row) => row.ok);
+  }
+  if (searchBudget && preservePhysicalRoutes) {
+    const remaining = searchBudget.hiredRoutes ?? TRANSPORT_LIMITS.paths;
+    const limited = raw.length > remaining;
+    raw = raw.slice(0, remaining);
+    searchBudget.hiredRoutes = remaining - raw.length;
+    if (limited) { base.searchLimited = true; raw = raw.map(route => ({ ...route, searchLimited: true })); }
   }
   // Legacy logistics can estimate an unconfigured endpoint; a real agreement needs actual legs.
   const candidates = raw.filter((route) => route.transportEdges?.length).map((route) => {

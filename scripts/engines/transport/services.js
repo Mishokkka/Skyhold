@@ -1,6 +1,7 @@
 import { stableDataHash } from "../../data/storage-commit.js";
 import { transportLoad, transportInteger, transportHandlingTerms, TRANSPORT_LIMITS } from "./quantities.js";
 import { referenceTransportCosts, regularTransportRate, transportPortCapacity, transportRationPrice, transportRiskBps, TRANSPORT_ECONOMICS } from "./economics.js";
+import { legacyTransportServiceId } from "./service-identity.js";
 
 export const TRANSPORT_SERVICE_DEFAULTS = Object.freeze({
   regularIntervalQd: 40, regularFirstQd: 4, charterVehicles: 1, charterPreparationQd: 1,
@@ -26,6 +27,7 @@ export function transportServicesFromRoutes(routes = [], rawConfiguration = {}, 
   for (const route of routes) {
     const groups = [];
     for (const leg of route.transportPlan?.legs ?? []) {
+      const physicalEdge = [leg.fromRegionId, leg.toRegionId, leg.routeId ?? "", leg.mode, leg.carrierId];
       const source = regions.find((row) => row.value === leg.fromRegionId), destination = regions.find((row) => row.value === leg.toRegionId);
       const link = source?.marketLinks?.find((row) => row.regionId === leg.toRegionId && (!leg.routeId || row.routeId === leg.routeId))
         ?? destination?.marketLinks?.find((row) => row.regionId === leg.fromRegionId && (!leg.routeId || row.routeId === leg.routeId));
@@ -40,6 +42,7 @@ export function transportServicesFromRoutes(routes = [], rawConfiguration = {}, 
         previous.capacityLoad = Math.min(previous.capacityLoad, leg.capacityLoad);
         for (const field of ["movementQd", "distanceKm", "distanceCopper", "operatingCopper", "loadCopperPerUnit"]) previous[field] += Number(leg[field] ?? 0);
         previous.routeIds.push(leg.routeId);
+        previous.physicalEdges.push(physicalEdge);
         previous.seasonalLegs.push(leg.seasonalTerms);
         previous.accessCost += accessCost;
         previous.riskExposureQd += riskExposureQd;
@@ -47,7 +50,7 @@ export function transportServicesFromRoutes(routes = [], rawConfiguration = {}, 
         previous.targetPriceFactor = leg.targetPriceFactor;
         previous.targetTimeFactor = leg.targetTimeFactor;
         previous.riskFactor = Math.max(previous.riskFactor ?? 1, leg.riskFactor ?? 1);
-      } else groups.push({ ...leg, routeIds: [leg.routeId], seasonalLegs: [leg.seasonalTerms], accessCost, riskExposureQd,
+      } else groups.push({ ...leg, routeIds: [leg.routeId], physicalEdges: [physicalEdge], seasonalLegs: [leg.seasonalTerms], accessCost, riskExposureQd,
         operatingFactorSum: Number(leg.movementQd ?? 0) * Number(leg.operatingFactor ?? 1) });
     }
     for (const [index, group] of groups.entries()) {
@@ -61,7 +64,8 @@ export function transportServicesFromRoutes(routes = [], rawConfiguration = {}, 
       const source = homeEndpoint && outbound && index === 0 && from === homeRegionId ? homeEndpoint : legacySource;
       const destination = homeEndpoint && !outbound && index === groups.length - 1 && to === homeRegionId ? homeEndpoint : legacyDestination;
       // Endpoint labels must not reset published schedules, fleet occupancy or overrides.
-      const key = stableDataHash([legacySource, legacyDestination, group.mode, group.carrierId, group.routeIds]);
+      const legacyKey = stableDataHash([legacySource, legacyDestination, group.mode, group.carrierId, group.routeIds]);
+      const key = `${legacyKey}:route:${stableDataHash(group.physicalEdges)}`;
       const travelQd = Math.max(group.distanceKm === 0 ? 0 : 1, Math.ceil(group.movementQd));
       const port = (id, price, time) => ({ ...markets.find(row => row.regionId === id), factors: { price: price ?? 1, time: time ?? 1 } });
       const origin = port(from, group.sourcePriceFactor, group.sourceTimeFactor), target = port(to, group.targetPriceFactor, group.targetTimeFactor);
@@ -91,7 +95,7 @@ export function transportServicesFromRoutes(routes = [], rawConfiguration = {}, 
         vehicles: config.charterVehicles, returnQd: travelQd,
         dispatchCopper, dailyCosts, returnDailyCosts, loadMilliCopper };
       for (const service of [regular, charter]) {
-        const override = config.overrides[service.id] ?? {};
+        const override = { ...config.overrides[legacyTransportServiceId(service.id)], ...config.overrides[service.id] };
         let resized = service;
         if (override.capacity !== undefined && override.capacity !== capacity) {
           transportInteger(override.capacity, "вместимость услуги", 1);

@@ -284,6 +284,8 @@ export function resolveMarketLogistics({ holding = {}, market = {}, regions = []
     graph: routeGraph(regions), from: destination.value, to: origin.value, maxAccess: access.level,
     modesForEdge, preserveFirstMode: needsAerialDelivery, servicesForEdge: transportNetwork?.servicesForEdge,
     preservePhysicalRoutes: transportNetwork?.preservePhysicalRoutes,
+    searchBudget: transportNetwork?.searchBudget, maxRoutes: transportNetwork?.maxRoutes,
+    retainPartial: Boolean(transportNetwork?.searchBudget),
     termsForEdge: transportNetwork?.termsForEdge ?? ((edge, transport) => {
       const terms = TRANSPORT[transport];
       const seasonal = edgeSeasonalModifier(edge, seasonId);
@@ -332,7 +334,7 @@ export function resolveMarketLogistics({ holding = {}, market = {}, regions = []
   const fallbackMode = TRANSPORT[transportMode] ? transportMode : (usedModes[0] ?? "");
   const mode = TRANSPORT[fallbackMode] ?? null;
   const reasons = [];
-  if (search.limited) reasons.push("Сеть содержит слишком много альтернатив для точного расчёта. Упростите связи между рынками.");
+  if (search.limited && (!transportNetwork?.searchBudget || !graphRoute)) reasons.push("Сеть содержит слишком много альтернатив для точного расчёта. Упростите связи между рынками.");
   if (!destination) reasons.push("Регион поселения не найден в каталоге логистики.");
   if (origin && !originFactors.enabled) reasons.push("Торговля в регионе поставщика отключена.");
   if (destination && !destinationFactors.enabled) reasons.push("Регион поселения закрыт для торговли.");
@@ -432,11 +434,11 @@ export function resolveMarketLogistics({ holding = {}, market = {}, regions = []
     distanceLoadCopper: mode ? routeLoadBeforeFactorCopper * originFactors.delivery : 0
   };
   if (!singleRoute && search.routes.length) {
-    const candidates = search.routes.map((route) => resolveMarketLogistics({
+    const candidates = search.routes.map((route) => ({ ...resolveMarketLogistics({
       holding, market, regions, seasonId, dependencies, direction, accessLevel, transportNetwork, selectedRoute: route, singleRoute: true
-    })).filter((route) => route.ok);
+    }), searchLimited: search.limited })).filter((route) => route.ok);
     // Keep search-limit failures: a partial search cannot establish the cheapest route.
-    if (!result.ok && !search.limited && candidates.length) return { ...candidates[0], routeCandidates: candidates };
+    if (!result.ok && (!search.limited || transportNetwork?.searchBudget) && candidates.length) return { ...candidates[0], routeCandidates: candidates };
     result.routeCandidates = candidates;
   }
   return result;

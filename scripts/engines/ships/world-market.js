@@ -293,7 +293,7 @@ export function worldShipTransportTerms(data, holding, ship, fromRegionId, toReg
 
 /** One quote shares both exploration and extra-route budgets across all port pairs. */
 export function worldShipRouteSearchBudget() {
-  return { labels: MARKET_ROUTE_SEARCH_LABELS, routes: TRANSPORT_LIMITS.paths };
+  return { labels: MARKET_ROUTE_SEARCH_LABELS, routes: TRANSPORT_LIMITS.paths, hiredRoutes: TRANSPORT_LIMITS.paths };
 }
 
 /** Preserve different seasonal paths until the complete cargo itinerary is priced. */
@@ -312,7 +312,7 @@ export function worldShipTransportOptions(data, holding, ship, fromRegionId, toR
   };
   const profile = edge => ({ movementQd: edge.distanceKm * 4 / baseline.speedKmPerDay,
     riskFactor: riskAt(edge.from) * riskAt(edge.to), seasonalModifiers: edge.seasonalModifiers });
-  const search = marketAirshipRoutes(fromRegionId, toRegionId, world.regions, { maxAccess: options.maxAccess, searchBudget: budget,
+  const search = marketAirshipRoutes(fromRegionId, toRegionId, world.regions, { maxAccess: options.maxAccess, searchBudget: budget, retainPartial: true,
     // With no season changes, time, access and accumulated exposure compose.
     // A seasonal path must keep its exact ordered physical inputs: a later
     // cargo departure can cross a different boundary than this initial quote.

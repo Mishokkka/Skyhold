@@ -70,10 +70,12 @@ export function checkShipMultiorder() {
   assert.equal(landed.arrived.length, 1);
   assert.equal(ship.location.id, "a");
   assert.equal(ship.orderBundle.status, "awaiting-outcome");
-  assert.equal(ship.orderBundle.orders.find((order) => order.offerId === "job-pickup").state, "loaded");
+  assert.equal(ship.orderBundle.orders.find((order) => order.offerId === "job-pickup").state, "waiting-pickup",
+    "new cargo is handed over after the arriving leg's physical outcome");
   const firstResult = resolveWorldShipBundleStop(holding, ship, { operationId: "resolve-a", bundleId: "bundle-1", random: () => 0.99 });
   assert.equal(firstResult.pending, false);
   assert.deepEqual(firstResult.completedOrders, ["job-a"]);
+  assert.equal(ship.orderBundle.orders.find((order) => order.offerId === "job-pickup").state, "loaded");
   assert.equal(ship.orderBundle.status, "at-port");
   const afterFirst = ship.onboardCopper;
   assert.throws(() => resolveWorldShipBundleStop(holding, ship, { operationId: "repeat-a", bundleId: "bundle-1" }), /нет заказов/);

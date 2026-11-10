@@ -1,5 +1,6 @@
 import { contractGuidance } from "./contracts.js";
 import { bundleOutcomeReserves } from "./bundle-accounting.js";
+import { bundleStopAwaitsOutcome } from "./bundle-incidents.js";
 
 /** Read-only cash and readiness presentation; never settles a bill or changes a quote. */
 const amount = (value) => Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : 0;
@@ -31,8 +32,12 @@ export function shipMoneySummary(holding, ship, { returnOffer = null, clockQd = 
     + Math.ceil(amount(bill.dailyCopper) * Math.max(0, Math.max(clockQd, amount(bill.lastCalculatedQd)) - amount(bill.sinceQd)) / 4)
     - amount(bill.chargedCopper)) : 0;
   const portDebtCopper = Math.max(amount(ship.pendingPortBillCopper), accrued);
+  const stop = ship.orderBundle?.stops?.[ship.orderBundle.nextStopIndex - 1];
+  const pickupPassageDue = bundleStopAwaitsOutcome(ship.orderBundle) && !stop?.deliveryOfferIds?.length
+    ? amount(stop?.physicalResolution?.expenseCopper) : 0;
   const outcomeDueCopper = (ship.activeVoyage?.outcome && !ship.activeVoyage.outcomeApplied
     ? amount(ship.activeVoyage.outcome.expenseCopper) : 0)
+    + pickupPassageDue
     + (ship.orderBundle?.orders ?? []).reduce((sum, order) => sum + (order.outcome && !order.outcomeApplied ? amount(order.outcome.expenseCopper) : 0), 0);
   const obligationsCopper = portDebtCopper + outcomeDueCopper;
   const balanceCopper = atHome ? amount(holding.storage?.moneyCopper) + amount(ship.onboardCopper) : amount(ship.onboardCopper);
@@ -63,8 +68,8 @@ export function shipMoneySummary(holding, ship, { returnOffer = null, clockQd = 
 }
 
 export function shipNextAction(ship, { readiness, money, offers = [], returnOffer = null } = {}) {
-  if (ship.orderBundle?.status === "awaiting-outcome") return ship.orderBundle.waitingFunds
-    ? "Нужны бортовые деньги для исхода составного рейса" : "Подвести итоги доставленных заказов";
+  if (bundleStopAwaitsOutcome(ship.orderBundle)) return ship.orderBundle.waitingFunds
+    ? "Нужны бортовые деньги для исхода составного рейса" : "Подвести итоги участка и заказов в этом порту";
   if (ship.orderBundle?.status === "at-port") return "Отправиться в следующий порт составного рейса";
   if (ship.orderBundle?.status === "final-delay") return "Дождаться окончания задержки в порту";
   if (ship.orderBundle?.status === "travelling") return "Составной рейс — дождаться следующего порта";

@@ -79,7 +79,7 @@ export function authorityMarketLogistics({
   carrierId = "",
   isGM = false,
   economy: preparedEconomy = null,
-  direction = "inbound", preservePhysicalRoutes = false
+  direction = "inbound", preservePhysicalRoutes = false, searchBudget = null
 } = {}) {
   if (!market) return { logistics: null, carriers: [], carrier: null };
   const locations = data?.catalog?.eventRegions ?? [];
@@ -95,8 +95,9 @@ export function authorityMarketLogistics({
     seasonId: marketSeasonId(holding),
     direction,
     preservePhysicalRoutes,
+    searchBudget,
     dependencies: {
-      regionFactors: (region) => marketLocationFactors(region, economy, locations),
+      regionFactors: (region) => marketLocationFactors(region, economy, locations, { normalizedEconomy: true }),
       regionResolver: marketRegionForValue
     }
   });
@@ -110,7 +111,7 @@ export function authorityMarketQuote({
   isGM = false,
   economy: preparedEconomy = null,
   resources: preparedResources = null,
-  discoverTransport = false
+  discoverTransport = false, searchBudget = null
 } = {}) {
   if (!market) return null;
   const locations = data?.catalog?.eventRegions ?? [];
@@ -122,6 +123,7 @@ export function authorityMarketQuote({
     market,
     carrierId,
     isGM,
+    searchBudget,
     economy
   });
   // Discovery uses the regional lower bound: the selected vessel may take a

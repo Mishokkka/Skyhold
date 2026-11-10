@@ -54,7 +54,7 @@ export function discoverTransportPorts({ world, holding, marketRegionId, endpoin
   }
   const selected = new Set(points);
   return {
-    points, ports, transfers: ports.filter(port => selected.has(port.regionId)),
+    points, ports, requiredPoints: [...forced], transfers: ports.filter(port => selected.has(port.regionId)),
     limited: candidates.size > points.length,
     requestedUnavailable: Boolean(request.transferPortId && !ports.some(port => port.regionId === request.transferPortId))
   };

@@ -1,4 +1,5 @@
 import { transportOrderHasObligations } from "../../data/transport/state.js";
+import { transportServiceExcluded, resolveTransportSelections } from "../../engines/transport/service-identity.js";
 import { TRANSPORT_LOAD_SCALE } from "../../engines/transport/quantities.js";
 
 export const TRANSPORT_HISTORY_PAGE_SIZE = 20;
@@ -15,13 +16,14 @@ export function transportHistoryPage(orders, page = 0) {
 
 /** Refinement choices exist before a feasible plan; endpoint labels remain view-owned. */
 export function transportRefinements(services = [], request = {}, pointLabel = id => id) {
+  request = resolveTransportSelections(services, request).request;
   const groups = new Map(), companies = new Map();
   for (const service of services) {
     if (service.enabled === false) continue;
     if (service.companyId && !(request.excluded ?? []).includes(service.companyId)) {
       companies.set(service.companyId, { id: service.companyId, label: service.label });
     }
-    if ((request.excluded ?? []).includes(service.companyId) || (request.excluded ?? []).includes(service.id)) continue;
+    if (transportServiceExcluded(service, request.excluded)) continue;
     if (!groups.has(service.from)) groups.set(service.from, { from: service.from, label: pointLabel(service.from),
       automatic: !request.pins?.[service.from], options: [] });
     const kind = service.kind === "owned" ? "свой корабль" : service.kind === "regular" ? "регулярный" : "чартер";

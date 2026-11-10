@@ -2,6 +2,7 @@ import { unreservedCargoArrivals, availableTransportCargo, allArrivalCargo, carg
 import { cargoLoad, cargoValue, transportInteger, transportMoney, shipTransportFunding, TRANSPORT_LIMITS } from "./quantities.js";
 import { planTransportChain, validateTransportPlan, TransportPlanningUnavailableError } from "./planner.js";
 import { activeTransportOrder, transportOrders } from "../../data/transport/state.js";
+import { transportServicesShareFleet } from "./service-identity.js";
 import { deterministicUnit as deterministicMarketShipmentUnit } from "../../core/seeded-unit.js";
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -78,7 +79,7 @@ export function adoptProjectedTransportBookings({ state, holdings, projectedData
       for (const planned of forecast?.stages.slice(0, through + 1).flatMap(stage => stage.runs) ?? []) {
         for (const live of state.runs) {
           const sameVehicle = planned.kind !== "regular" && live.kind !== "regular"
-            && (planned.shipId ? planned.shipId === live.shipId : planned.serviceId === live.serviceId && planned.vehicle === live.vehicle);
+            && (planned.shipId ? planned.shipId === live.shipId : transportServicesShareFleet(planned.serviceId, live.serviceId) && planned.vehicle === live.vehicle);
           if (live.id !== planned.id && !(sameVehicle && planned.startQd < live.releaseQd && live.startQd < planned.releaseQd)) continue;
           const projected = runFor(projectedData.meta.transportV2, live.id);
           for (const claim of live.claims) {
@@ -137,7 +138,7 @@ export function adoptProjectedTransportBookings({ state, holdings, projectedData
 function waitForVehicle(state, planned) {
   if (planned.kind === "regular") return { readyQd: planned.startQd };
   const preceding = state.runs.filter((run) => run.id !== planned.id && run.status !== "cancelled"
-    && (planned.shipId ? run.shipId === planned.shipId : run.serviceId === planned.serviceId && run.vehicle === planned.vehicle)
+    && (planned.shipId ? run.shipId === planned.shipId : transportServicesShareFleet(run.serviceId, planned.serviceId) && run.vehicle === planned.vehicle)
     && run.startQd < planned.startQd);
   const blockedRuns = preceding.filter(run => run.status !== "arrived" || run.incident?.status === "pending");
   return { readyQd: Math.max(planned.startQd, ...preceding.map((run) => run.releaseQd)),

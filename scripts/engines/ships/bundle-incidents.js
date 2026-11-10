@@ -2,6 +2,13 @@ import { economicContractOutcome } from "./contract-economics.js";
 import { transportInteger, transportMoney } from "../transport/quantities.js";
 import { clientCargoLifetime } from "./client-cargo.js";
 
+/** Older saves could reach a pickup-only port without resolving the approach leg. */
+export function bundleStopAwaitsOutcome(bundle) {
+  const stop = bundle?.stops?.[bundle.nextStopIndex - 1];
+  return bundle?.status === "awaiting-outcome" || bundle?.status === "at-port"
+    && stop?.economics?.version === 1 && !stop.physicalResolution;
+}
+
 function die(random, sides) {
   const value = random();
   if (!Number.isFinite(value) || value < 0 || value >= 1) throw new Error("Некорректный источник случайных чисел.");

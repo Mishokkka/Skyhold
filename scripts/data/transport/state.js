@@ -8,6 +8,22 @@ export const transportOrderHasObligations = order => order.status !== "cancelled
   && (activeTransportOrder(order) || order.fundingNeededCopper > 0
     || Boolean(order.ownShipId && (!order.shipReleased || !order.shipCostsReconciled)));
 
+/** Moving a warehouse changes every accepted physical destination, including old saves. */
+export function holdingTransportLocationBlocker(holding) {
+  if ((holding.special?.ships?.list ?? []).some(ship => ship.activeVoyage || ship.orderBundle
+    || ship.status !== "docked" || ship.navigationMode === "world" && ship.location?.kind !== "home")) {
+    return "Верните все корабли домой и завершите их рейсы перед переносом домашней точки.";
+  }
+  if (transportOrders(holding).some(transportOrderHasObligations)) {
+    return "Сначала завершите перевозки поселения, расчёты и возвращение транспорта перед сменой домашней точки.";
+  }
+  const market = holding?.special?.market ?? {};
+  if ([...(market.orders ?? []), ...(market.outbound?.orders ?? [])].some(order => activeTransportOrder(order))) {
+    return "Сначала завершите прежние входящие доставки и продажи во Внешней торговле.";
+  }
+  return "";
+}
+
 /** Read-only projection: completed history is unrelated to a new quotation. */
 export function transportRelevantHolding(holding) {
   if (!holding?.special?.transportV2) return holding;

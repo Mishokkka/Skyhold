@@ -15,6 +15,7 @@ import { transportRelevantHolding } from "../../data/transport/state.js";
 import { discoverTransportPorts } from "./transport-discovery.js";
 import { transportInsuranceCopper, transportRiskBps } from "../../engines/transport/economics.js";
 import { transportSeasonalCalendar } from "../../engines/transport/seasonal.js";
+import { resolveTransportSelections } from "../../engines/transport/service-identity.js";
 
 export function transportSourceToken(data, holding) {
   return stableDataHash({ holding: transportRelevantHolding(holding), markets: data?.meta?.sharedMarkets,
@@ -42,7 +43,7 @@ function selectedCargo(context, request) {
   return { cargo, lines };
 }
 
-function ownServices(data, holding, ship, points, request, clockQd, world = buildShipWorldContext(data, holding)) {
+function ownServices(data, holding, ship, points, request, clockQd, world = buildShipWorldContext(data, holding), searchBudget = worldShipRouteSearchBudget()) {
   if (ship.navigationMode !== "world" || ship.condition !== "ready" || ship.activeVoyage || ship.orderBundle || ship.transportOrderId) throw new Error("Корабль занят или не готов к рейсу.");
   const readiness = shipCrewReadiness(holding, ship, { catalog: data.catalog });
   if (!readiness.ready) throw new Error(readiness.issues.map((row) => row.message).join(" "));
@@ -54,7 +55,6 @@ function ownServices(data, holding, ship, points, request, clockQd, world = buil
   const position = positionAtHome ? home : ship.location.regionId;
   const services = [];
   let limited = false;
-  const searchBudget = worldShipRouteSearchBudget();
   const calendar = transportSeasonalCalendar(holding, transportHoldingQd(data, holding));
   const snapshot = terms => terms?.seasonal ? { ...terms.seasonal, calendar } : null;
   const quote = (from, to, loadPoints, maxAccess, fromHome = from === home) => {
@@ -80,7 +80,8 @@ function ownServices(data, holding, ship, points, request, clockQd, world = buil
   };
   const cargoFrom = request.direction === "outbound" ? home : points[1], cargoTo = request.direction === "outbound" ? points[1] : home;
   const pairs = points.flatMap(from => points.filter(to => to !== from).map(to => [from, to]))
-    .sort((a, b) => Number(b[0] === cargoFrom && b[1] === cargoTo) - Number(a[0] === cargoFrom && a[1] === cargoTo));
+    .sort((a, b) => Number(b[0] === cargoFrom && b[1] === cargoTo) - Number(a[0] === cargoFrom && a[1] === cargoTo)
+      || Number(b.some(point => request.preferredPoints?.includes(point))) - Number(a.some(point => request.preferredPoints?.includes(point))));
   for (const [from, to] of pairs) {
     try {
       // Keep physical seasonal alternatives and lower-access paths until the
@@ -128,12 +129,14 @@ function ownServices(data, holding, ship, points, request, clockQd, world = buil
   return { services, limited };
 }
 
-export function prepareTransportContext({ data, holding, request = {}, isGM = false, allowIncomplete = false }) {
+export function prepareTransportContext({ data, holding, request = {}, isGM = false, allowIncomplete = false,
+  searchBudget = worldShipRouteSearchBudget() }) {
   const direction = request.direction === "outbound" ? "outbound" : "inbound";
-  const context = prepareTransportCommerce({ data, holding, request: { ...request, direction }, isGM });
+  const context = prepareTransportCommerce({ data, holding, request: { ...request, direction }, isGM, searchBudget });
   const { cargo, lines } = selectedCargo(context, { ...request, direction });
   const configuration = validateTransportConfiguration(data.catalog?.transportV2);
-  const { logistics } = authorityMarketLogistics({ data, holding, market: context.market, direction, isGM, preservePhysicalRoutes: true });
+  const { logistics } = authorityMarketLogistics({ data, holding, market: context.market, economy: context.economy,
+    direction, isGM, preservePhysicalRoutes: true, searchBudget });
   const difficulty = Math.max(0, ...lines.map((line) => Number(line.accessDifficulty
     ?? context.outbound?.offers?.find((offer) => offer.resourceId === line.resourceId)?.accessDifficulty ?? 0)));
   const routes = (logistics?.routeCandidates?.length ? logistics.routeCandidates : logistics?.ok ? [logistics] : [])
@@ -149,6 +152,12 @@ export function prepareTransportContext({ data, holding, request = {}, isGM = fa
   const world = ship ? buildShipWorldContext(data, holding) : null;
   const discovery = ship ? discoverTransportPorts({ world, holding, marketRegionId: context.market.regionId,
     endpoint, accessLimit: (logistics?.accessLevel ?? 0) - difficulty, request, services }) : null;
+  const from = direction === "inbound" ? context.market.regionId : endpoint;
+  const to = direction === "inbound" ? endpoint : context.market.regionId;
+  const state = data.meta?.transportV2;
+  const clockOffsetQd = transportClockOffsetQd(data, holding);
+  const startQd = transportHoldingQd(data, holding);
+  if (startQd < Number(state?.clockQd ?? 0)) throw new Error("Дата поселения отстаёт от общей даты перевозок. Проведите недостающие периоды перед новым заказом.");
   let routeSearchLimited = Boolean(logistics?.searchLimited);
   if (ship) {
     // A usable mixed route need not be a complete hired route. The own ship can
@@ -157,47 +166,47 @@ export function prepareTransportContext({ data, holding, request = {}, isGM = fa
       .map(id => id.replace(/:holding$/, "")));
     const transfers = discovery.transfers.filter(port => !known.has(port.regionId));
     const connections = [];
-    for (const port of transfers) {
+    const loadTransfer = port => {
       const atPort = { ...holding, type: "village", overview: { ...holding.overview, region: port.regionId } };
       for (const endpoints of [{ holding, market: port }, { holding: atPort, market: context.market }]) {
-        const leg = authorityMarketLogistics({ data, ...endpoints, direction, isGM, preservePhysicalRoutes: true }).logistics;
+        const leg = authorityMarketLogistics({ data, ...endpoints, economy: context.economy,
+          direction, isGM, preservePhysicalRoutes: true, searchBudget }).logistics;
         routeSearchLimited ||= Boolean(leg?.searchLimited);
         connections.push(...(leg?.routeCandidates?.length ? leg.routeCandidates : leg?.ok ? [leg] : [])
           .filter(route => route.routeAccessCost + difficulty <= route.accessLevel));
       }
-    }
+    };
+    const required = new Set(discovery.requiredPoints);
+    for (const port of transfers.filter(port => required.has(port.regionId))) loadTransfer(port);
+    const own = ownServices(data, holding, ship, discovery.points, { ...request, riskBps: configuration.riskBps,
+      accessLimit: logistics?.accessLevel ?? 0, cargoAccessLimit: (logistics?.accessLevel ?? 0) - difficulty,
+      homeEndpoint: endpoint, preferredPoints: discovery.requiredPoints }, startQd - clockOffsetQd, world, searchBudget);
+    services.push(...own.services); routeSearchLimited ||= own.limited;
+    for (const port of transfers.filter(port => !required.has(port.regionId))) loadTransfer(port);
     const extra = transportServicesFromRoutes(connections, configuration, data.catalog.eventRegions, serviceEndpoints);
     services = [...new Map([...extra, ...services].map(service => [service.id, service])).values()];
   }
-  const from = direction === "inbound" ? context.market.regionId : endpoint;
-  const to = direction === "inbound" ? endpoint : context.market.regionId;
-  const state = data.meta?.transportV2;
-  const clockOffsetQd = transportClockOffsetQd(data, holding);
-  const startQd = transportHoldingQd(data, holding);
-  if (startQd < Number(state?.clockQd ?? 0)) throw new Error("Дата поселения отстаёт от общей даты перевозок. Проведите недостающие периоды перед новым заказом.");
-  if (ship) {
-    const own = ownServices(data, holding, ship, discovery.points, { ...request, riskBps: configuration.riskBps,
-      accessLimit: logistics?.accessLevel ?? 0, cargoAccessLimit: (logistics?.accessLevel ?? 0) - difficulty,
-      homeEndpoint: endpoint }, startQd - clockOffsetQd, world);
-    services.push(...own.services); routeSearchLimited ||= own.limited;
-  }
   services = services.filter((service) => isGM || service.visibility !== "gm");
+  const selection = resolveTransportSelections(services, request);
+  const selectedRequest = selection.request;
   const search = findTransportPlans({ from, to, services, cargo, startQd, runs: state?.runs ?? [], priority: request.priority,
-    pins: request.pins ?? {}, excluded: request.excluded ?? [], ownShipId: request.ownShipId ?? "", accessLimit: (logistics?.accessLevel ?? 0) - difficulty });
+    pins: selectedRequest.pins, excluded: request.excluded ?? [], ownShipId: request.ownShipId ?? "",
+    preferredPoints: discovery?.requiredPoints, accessLimit: (logistics?.accessLevel ?? 0) - difficulty });
   search.limits = { ports: Boolean(discovery?.limited), routes: routeSearchLimited, plans: search.limited };
   search.limited ||= search.limits.ports || search.limits.routes;
   let plan = search.plans[0];
-  if (request.serviceIds?.length) {
-    const selected = request.serviceIds.map((id) => services.find((row) => row.id === id));
+  if (selectedRequest.serviceIds?.length) {
+    if (selection.ambiguous.length) throw new Error("Прежняя услуга соответствует нескольким физическим путям. Выберите конкретный участок заново.");
+    const selected = selectedRequest.serviceIds.map((id) => services.find((row) => row.id === id));
     if (selected.some((row) => !row)) throw new Error("Выбранная услуга больше недоступна.");
-    if (!transportChainMatchesConstraints(selected, request)) throw new Error("Маршрут не соблюдает закрепления или исключения перевозчиков.");
+    if (!transportChainMatchesConstraints(selected, selectedRequest)) throw new Error("Маршрут не соблюдает закрепления или исключения перевозчиков.");
     plan = planTransportChain({ cargo, services: selected, startQd, runs: state?.runs ?? [] });
     if (plan.stages[0].from !== from || plan.stages.at(-1).to !== to) throw new Error("Маршрут не соединяет рынок и поселение.");
     if (plan.ownShipId !== String(request.ownShipId ?? "")) throw new Error("План не соответствует выбранному кораблю.");
     if (plan.stages.reduce((sum, stage) => sum + (stage.service.accessCost ?? 0), 0) + difficulty > (logistics?.accessLevel ?? 0)) throw new Error("Недостаточно УРС для выбранного маршрута и товара.");
   }
   if (!plan) {
-    const message = search.limited
+    const message = selection.ambiguous.length ? "Прежняя услуга соответствует нескольким физическим путям. Выберите конкретный участок заново." : search.limited
       ? `Поиск достиг лимита вариантов без подходящего плана. Это не означает, что маршрута нет. Уточните ${ship ? "порт поиска, " : ""}закрепления участков или исключите часть перевозчиков и повторите расчёт.`
       : search.failures[0] ?? "Для выбранного груза нет доступной перевозки.";
     if (allowIncomplete) return { plan: null, services, search, discovery, from, to, ship, lines, error: message,

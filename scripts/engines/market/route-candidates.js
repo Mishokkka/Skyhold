@@ -44,9 +44,10 @@ function billingCurveDominates(a, b) {
 // distance, mode, operating time, load and insurance, so a single shortest
 // path cannot stand in for the eventual quote of a real consignment.
 export function marketTransportRoutes({ graph, from, to, maxAccess, modesForEdge, termsForEdge, preserveFirstMode = false,
-  servicesForEdge = null, preservePhysicalRoutes = false, physicalRouteKey = null, dominatesRoute = null, searchBudget = null } = {}) {
+  servicesForEdge = null, preservePhysicalRoutes = false, physicalRouteKey = null, dominatesRoute = null,
+  searchBudget = null, maxRoutes = Infinity, retainPartial = false } = {}) {
   if (from === to) return { routes: [], limited: false };
-  if (searchBudget?.labels === 0) return { routes: [], limited: true };
+  if (searchBudget?.labels === 0 || maxRoutes <= 0) return { routes: [], limited: true };
   if (searchBudget) searchBudget.labels--;
   const remainingAccess = remainingAccessByNode(graph, to);
   const risks = servicesForEdge || dominatesRoute ? new Set() : new Set([...graph.values()].flatMap((edges) => edges.map((edge) => termsForEdge(edge, "caravan").risk)));
@@ -55,6 +56,8 @@ export function marketTransportRoutes({ graph, from, to, maxAccess, modesForEdge
   const queue = [{ path: [from], edges: [], distanceKm: 0, accessCost: 0, mask: 0,
     flat: 0, load: 0, time: 0, operating: 0, risk: 0, capacity: Infinity, curves: {}, valueCost: 0 }];
   const routes = [];
+  const finish = limited => ({ routes: routes.filter(route => !route.discarded).map(route => ({ ...route,
+    distance: route.distanceKm / 40, hops: route.edges.length })), limited });
   let generated = 1;
   const dominates = (a, b) => {
     if (!a.path.every((node) => b.path.includes(node))) return false;
@@ -71,7 +74,11 @@ export function marketTransportRoutes({ graph, from, to, maxAccess, modesForEdge
     const current = queue[index];
     if (current.discarded) continue;
     const node = current.path.at(-1);
-    if (node === to) { routes.push(current); continue; }
+    if (node === to) {
+      routes.push(current);
+      if (routes.length >= maxRoutes && index + 1 < queue.length) return finish(true);
+      continue;
+    }
     for (const edge of graph.get(node) ?? []) {
       const accessAfterEdge = current.accessCost + edge.ursCost;
       if (current.path.includes(edge.to) || !remainingAccess.has(edge.to)
@@ -101,7 +108,9 @@ export function marketTransportRoutes({ graph, from, to, maxAccess, modesForEdge
           for (const previous of bucket) if (dominates(next, previous)) previous.discarded = true;
           bucket.push(next);
           labels.set(key, bucket);
-          if (generated >= MARKET_ROUTE_SEARCH_LABELS || searchBudget?.labels === 0) return { routes: [], limited: true };
+          if (generated >= MARKET_ROUTE_SEARCH_LABELS || searchBudget?.labels === 0) {
+            return retainPartial ? finish(true) : { routes: [], limited: true };
+          }
           generated++;
           if (searchBudget) searchBudget.labels--;
           queue.push(next);
@@ -109,6 +118,5 @@ export function marketTransportRoutes({ graph, from, to, maxAccess, modesForEdge
       }
     }
   }
-  return { routes: routes.filter((route) => !route.discarded).map((route) => ({ ...route,
-    distance: route.distanceKm / 40, hops: route.edges.length })), limited: false };
+  return finish(false);
 }

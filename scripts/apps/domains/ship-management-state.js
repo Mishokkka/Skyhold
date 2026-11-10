@@ -1,6 +1,7 @@
 import { shipNextAction } from "../../engines/ships/summary.js";
 import { prepareShipCommandAvailability, shipPresentationTimelineQd } from "./ship-command-availability.js";
 import { transportOrders } from "../../data/transport/state.js";
+import { bundleStopAwaitsOutcome } from "../../engines/ships/bundle-incidents.js";
 
 export function shipTransportState(holding, ship) {
   const busy = Boolean(ship.transportOrderId);
@@ -28,7 +29,7 @@ export function prepareShipManagementState(holding, ship, { permissions, readine
     || bundle?.status === "at-port" && settlementQd < Number(bundle.delayUntilQd ?? 0);
   const awaitingOutcome = ship.activeVoyage?.awaitingOutcome === true;
   let statusLabel = ownSale ? (inTransit && !awaitingOutcome ? "Везёт товар поселения" : "Ожидает исхода продажи")
-    : delayed ? "Задержан в порту" : bundle?.status === "awaiting-outcome" ? "Заказы ждут итога"
+    : delayed ? "Задержан в порту" : bundleStopAwaitsOutcome(bundle) ? "Участок ждёт итога"
       : awaitingOutcome ? "Ожидает итога" : inTransit ? "В пути" : atHome ? "В поселении" : "В чужом порту";
   const permissionReason = !permissions || permissions.canManageShips ? "" : !permissions.mayManageShips
     ? "Доступен просмотр. ГМ не разрешил управление кораблями этого поселения."

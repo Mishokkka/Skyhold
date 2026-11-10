@@ -1,7 +1,7 @@
 import { recordFleetFunds } from "./fleet-accounting.js";
 import { applyShipFundsOperation } from "./funds.js";
 import { attentionLabel, contractGuidance, resolveContractOutcome } from "./contracts.js";
-import { resolveBundlePassages, bundleOrderAllowsBonus } from "./bundle-incidents.js";
+import { resolveBundlePassages, bundleOrderAllowsBonus, bundleStopAwaitsOutcome } from "./bundle-incidents.js";
 import { getShipProfile, shipCapacityLoadPoints } from "./profiles.js";
 import { bundleOperatingShares } from "./bundle-accounting.js";
 import { worldShipBundleLegAt } from "./bundle-leg.js";
@@ -418,7 +418,7 @@ export function departWorldShipBundle(holding, ship, { operationId: suppliedOper
 export function continueWorldShipBundle(holding, ship, { operationId: suppliedOperationId, bundleId, clockQd }) {
   const id = operationId(suppliedOperationId);
   const bundle = ship?.orderBundle;
-  if (!bundle || bundle.id !== bundleId || bundle.status !== "at-port" || ship.activeVoyage) {
+  if (!bundle || bundle.id !== bundleId || bundle.status !== "at-port" || bundleStopAwaitsOutcome(bundle) || ship.activeVoyage) {
     throw new Error("Корабль не готов к следующему участку составного рейса.");
   }
   const clock = integer(clockQd, "время", 0, Number.MAX_SAFE_INTEGER);
@@ -527,13 +527,14 @@ function finalizeArrival(holding, ship, arrivalQd) {
   ship.activeVoyage = null;
   ship.timelineQd = arrivalQd;
   if (bundle) {
-    for (const offerId of stop.pickupOfferIds) {
+    // New physical legs must settle before cargo is handed over at this port.
+    for (const offerId of stop.economics?.version === 1 ? [] : stop.pickupOfferIds) {
       const order = bundle.orders.find((row) => row.offerId === offerId);
       order.state = "loaded";
       startClientCargo(order.offer.contract.cargo, arrivalQd, order.offer.contract.cargo.ageQd ?? 0);
     }
     bundle.nextStopIndex++;
-    bundle.status = stop.deliveryOfferIds.length ? "awaiting-outcome" : "at-port";
+    bundle.status = stop.economics?.version === 1 || stop.deliveryOfferIds.length ? "awaiting-outcome" : "at-port";
   }
   appendHistory(holding, summary);
   startIdleBilling(ship, destination, arrivalQd);
@@ -635,14 +636,15 @@ export function resolveWorldShip(holding, ship, { operationId: suppliedOperation
   };
 }
 
-/** Resolve only deliveries at the current stop; each fee and roll is saved separately. */
+/** Resolve the completed physical leg, then deliveries and pickups at its port. */
 export function resolveWorldShipBundleStop(holding, ship, { operationId: suppliedOperationId, bundleId, random = Math.random }) {
   operationId(suppliedOperationId);
   const bundle = ship?.orderBundle;
-  if (!bundle || bundle.id !== bundleId || bundle.status !== "awaiting-outcome" || ship.activeVoyage
+  if (!bundle || bundle.id !== bundleId || !bundleStopAwaitsOutcome(bundle) || ship.activeVoyage
     || ship.location?.kind !== "market") throw new Error("Здесь нет заказов для подведения итогов.");
   const stop = bundle.stops[bundle.nextStopIndex - 1];
   if (!sameEndpoint(stop?.point, ship.location)) throw new Error("Корабль находится не в порту доставки.");
+  bundle.status = "awaiting-outcome";
   const clockQd = worldShipTimelineQd(holding, ship);
   settleIdleBilling(holding, ship, clockQd);
   const due = stop.deliveryOfferIds.map((offerId) => bundle.orders.find((row) => row.offerId === offerId));
@@ -654,6 +656,17 @@ export function resolveWorldShipBundleStop(holding, ship, { operationId: supplie
   const shares = bundleOperatingShares(bundle.orders.map((order) => order.offer), bundle.totalOperatingCopper);
   const physical = stop.economics?.version === 1 ? resolveBundlePassages(bundle, stop, random) : null;
   const completedOrders = [];
+  // With deliveries the first outcome already owns the passage fee, including in
+  // accepted older saves. A pickup-only stop needs its own ordinary funds receipt.
+  if (physical && !due.length) {
+    if (ship.onboardCopper < physical.expenseCopper) {
+      bundle.waitingFunds = true;
+      return { bundleId, pending: true, waitingFunds: true, requiredCopper: physical.expenseCopper - ship.onboardCopper,
+        completedOrders, pendingPortBillCopper: ship.pendingPortBillCopper ?? 0 };
+    }
+    applyFunds(holding, ship, { id: `${bundle.id}:passage:${bundle.nextStopIndex - 1}:expense`, kind: "expense",
+      amountCopper: physical.expenseCopper }, "Итоги участка перед погрузкой", clockQd);
+  }
   for (const [index, order] of due.entries()) {
     if (order.outcomeApplied) continue;
     if (!order.outcome) {
@@ -713,7 +726,13 @@ export function resolveWorldShipBundleStop(holding, ship, { operationId: supplie
     });
   }
   bundle.waitingFunds = false;
-  const delayQd = Math.max(0, ...due.map((order) => Number(order.outcome?.delayQd ?? 0)));
+  const delayQd = Math.max(physical?.delayQd ?? 0, ...due.map((order) => Number(order.outcome?.delayQd ?? 0)));
+  for (const offerId of stop.pickupOfferIds) {
+    const order = bundle.orders.find((row) => row.offerId === offerId);
+    if (order.state !== "waiting-pickup") continue;
+    order.state = "loaded";
+    startClientCargo(order.offer.contract.cargo, clockQd + delayQd, order.offer.contract.cargo.ageQd ?? 0);
+  }
   if (delayQd) {
     bundle.delayUntilQd = integer(clockQd + delayQd, "окончание задержки", 0, Number.MAX_SAFE_INTEGER);
     const carried = integer(ship.pendingPortBillCopper ?? 0, "долг стоянки");
