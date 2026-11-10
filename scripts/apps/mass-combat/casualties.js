@@ -19,6 +19,11 @@ function rollDie(random, sides = 6) {
   return Math.max(1, Math.ceil(random() * sides));
 }
 
+/**
+ * Compute free local medical beds; a lost battle disables treatment.
+ * Presence-aware providers preserve configured capacity and patient occupancy.
+ * Only the no-provider fallback uses five beds per available assigned doctor.
+ */
 export function medicalSupport(holding, { battleLost = false, medicalAssignments = null, medicalCapacityForBuilding = null } = {}) {
   const built = builtBuildings(holding);
   const medicalBuildings = built.filter((building) => isMedicalBuilding(building));
@@ -61,6 +66,11 @@ export function medicalSupport(holding, { battleLost = false, medicalAssignments
   };
 }
 
+/**
+ * Return distinct, present and uninjured residents exposed to this settlement battle.
+ * Include equipped squads, garrisons, military residents and the mobilized militia;
+ * reserve militia are exposed only after a breach. The holding is not modified.
+ */
 export function defenderCasualtyCandidates(holding, state = {}, calc = {}) {
   const people = (holding?.people?.list ?? []).filter((person) => isResidentInPopulation(person, holding) && !isInjuredResident(person));
   const byId = new Map(people.map((person) => [String(person.id), person]));

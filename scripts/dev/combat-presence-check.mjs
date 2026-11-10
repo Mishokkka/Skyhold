@@ -3,6 +3,7 @@ import { defenderCasualtyCandidates, applyDefenderResidentCasualties, medicalSup
 import { defenseSquadProfile } from "../apps/mass-combat/sources.js";
 import { defenseCommanderBonus } from "../apps/mass-combat/modifiers.js";
 import { BuildingRowsDomain } from "../apps/domains/building/rows-domain.js";
+import { BuildingWorkerDomain } from "../apps/domains/building/worker-domain.js";
 
 const soldier = (id, away = false) => ({ id, name: id, age: 30, ageGroup: "Вз", role: "Солдат", workAssignment: "soldier",
   injuredDays: 0, attributes: { strength: 5, agility: 5, wits: 5, empathy: 5 },
@@ -25,6 +26,36 @@ const medical = { people: { list: [{ id: "doctor", injuredDays: 0, shipAssignmen
   buildings: { list: [{ id: "hospital", specialKind: "medical", constructionStatus: "built", assignedWorkerIds: ["doctor"] }] } };
 assert.equal(medicalSupport(medical).capacity, 0, "absent doctors cannot treat settlement casualties");
 assert.equal(medicalSupport(medical).workers, 0);
+const capacityApp = { ...BuildingRowsDomain, ...BuildingWorkerDomain,
+  _safeNumber: (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback };
+for (const unavailable of [{ shipAssignment: { shipId: "ship", away: true } }, { dead: true }, { injuredDays: 2 }]) {
+  const unavailableDoctor = structuredClone(medical);
+  unavailableDoctor.people.list = [{ id: "doctor", injuredDays: 0, ...unavailable }];
+  const assignments = capacityApp._medicalAssignments(unavailableDoctor);
+  for (const provider of [assignments, h => capacityApp._medicalAssignments(h)]) {
+    const support = medicalSupport(unavailableDoctor, { medicalAssignments: provider });
+    assert.equal(support.capacity, 0, "real medical assignments must exclude away, dead and injured doctors");
+    assert.equal(support.workers, 0);
+  }
+  assert.equal(medicalSupport(unavailableDoctor, {
+    medicalCapacityForBuilding: (h, b) => capacityApp._medicalCapacityForBuilding(h, b)
+  }).capacity, 0, "the capacity callback must apply the same doctor availability rule");
+}
+const mixedDoctors = structuredClone(medical);
+mixedDoctors.people.list.push({ id: "home-doctor", injuredDays: 0 }, { id: "patient", injuredDays: 2 });
+mixedDoctors.buildings.list[0].assignedWorkerIds.push("home-doctor");
+mixedDoctors.buildings.list[0].medical = { patientsPerEfficiency: 9, maxPatients: 13 };
+for (const maxPatients of [13, 7]) {
+  mixedDoctors.buildings.list[0].medical.maxPatients = maxPatients;
+  const assignments = capacityApp._medicalAssignments(mixedDoctors);
+  for (const provider of [assignments, h => capacityApp._medicalAssignments(h)]) {
+    const support = medicalSupport(mixedDoctors, { medicalAssignments: provider });
+    assert.equal(support.workers, 1);
+    assert.equal(support.workerEfficiency, 1);
+    assert.equal(support.capacity, Math.min(9, maxPatients) - 1,
+      "mixed staffing must preserve the configured capacity, building limit and occupied patient bed");
+  }
+}
 const command = { ...squadHolding, gm: { defense: { commanderId: "absent" } } };
 assert.equal(defenseCommanderBonus(command, 10).percent, 0, "absent commanders cannot lead a settlement battle");
 command.gm.defense.commanderId = "present-0";
@@ -35,4 +66,4 @@ const medicalApp = { ...BuildingRowsDomain, _safeNumber: (value, fallback = 0) =
   _isMedicalBuildingRecord: () => true, _medicalCapacityForBuilding: () => ({ capacity: 1, efficiency: 1 }) };
 assert.deepEqual(medicalApp._medicalAssignments(patients).get("hospital").patients.map(row => row.id), ["home-patient"],
   "absent patients cannot occupy local beds or receive local treatment");
-console.log("Combat presence: absent residents, casualty exhaustion, squad risk membership and absent doctors passed.");
+console.log("Combat presence: absent combatants/patients, casualty exhaustion, squad risk and real medical providers with unavailable/mixed doctors and configured beds passed.");

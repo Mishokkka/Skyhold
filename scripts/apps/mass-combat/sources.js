@@ -210,6 +210,11 @@ export function collectTags(sources = []) {
   return tags;
 }
 
+/**
+ * Build equipped squads from available local residents and the battle's supply plan.
+ * Risk-source participant IDs contain only those combatants, so later casualty
+ * allocation cannot target an absent member through a stale squad slot.
+ */
 export function defenseSquadProfile(holding, state = {}) {
   if (state.useDefenseSquads === false) return { enabled: false, squads: [], units: 0, bs: 0, dice: 0, tags: {}, effective: 0, sources: [], details: "отряды поселения отключены" };
   const people = (holding?.people?.list ?? []).filter((person) => isResidentInPopulation(person, holding) && !isInjuredResident(person));

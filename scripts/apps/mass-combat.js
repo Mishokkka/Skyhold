@@ -417,6 +417,7 @@ export class SkyholdMassCombatApp extends RenderSchedulerMixin(HandlebarsApplica
     this.requestRender();
   }
 
+  /** Publish the current aftermath using the holding's ordinary chat audience. */
   async _onPostAftermath(event) {
     event.preventDefault();
     event.stopPropagation();
@@ -497,6 +498,7 @@ export class SkyholdMassCombatApp extends RenderSchedulerMixin(HandlebarsApplica
     return await this._confirm("Завершить бой", "Архивировать текущий бой?") ? "archive" : "cancel";
   }
 
+  /** Play the round's outcome sound locally for hidden holdings, publicly otherwise. */
   _playDefenseSound(holding, margin = 0) {
     const src = margin > 0
       ? holding?.gm?.defense?.victorySound
@@ -706,6 +708,10 @@ export class SkyholdMassCombatApp extends RenderSchedulerMixin(HandlebarsApplica
     this.requestRender();
   }
 
+  /**
+   * Commit a prepared round once after signature/trace validation, then publish it.
+   * A chat failure reports the saved result and still completes the window refresh.
+   */
   async _onApplyPendingRound(event) {
     event.preventDefault();
     event.stopPropagation();
@@ -818,21 +824,26 @@ export class SkyholdMassCombatApp extends RenderSchedulerMixin(HandlebarsApplica
       this.requestRender();
       return;
     }
-    await createHoldingChatMessage(result.holding, {
-      speaker: foundryChatSpeaker({ alias: result.holding.name || "Владение" }),
-      content: roundChatContent(result.holding, result.state, result.calc, {
-        round: result.round,
-        defenderRolls: result.defenderRolls,
-        attackerRolls: result.attackerRolls,
-        defenderSuccesses: result.defenderSuccesses,
-        attackerSuccesses: result.attackerSuccesses,
-        margin: result.margin,
-        casualtyText: result.casualtyText,
-        damageText: result.damageText,
-        terminal: result.terminal,
-        ...result.consequences
-      })
-    });
+    try {
+      await createHoldingChatMessage(result.holding, {
+        speaker: foundryChatSpeaker({ alias: result.holding.name || "Владение" }),
+        content: roundChatContent(result.holding, result.state, result.calc, {
+          round: result.round,
+          defenderRolls: result.defenderRolls,
+          attackerRolls: result.attackerRolls,
+          defenderSuccesses: result.defenderSuccesses,
+          attackerSuccesses: result.attackerSuccesses,
+          margin: result.margin,
+          casualtyText: result.casualtyText,
+          damageText: result.damageText,
+          terminal: result.terminal,
+          ...result.consequences
+        })
+      });
+    } catch (error) {
+      console.error("FBL Skyhold | Applied battle round chat failed", error);
+      ui.notifications.warn("Раунд применён, но карточку не удалось отправить в чат.");
+    }
     this._playDefenseSound(result.holding, result.margin);
     if (result.terminal?.finished) ui.notifications.info(result.terminal.title);
     this.requestRender();
@@ -856,6 +867,7 @@ export class SkyholdMassCombatApp extends RenderSchedulerMixin(HandlebarsApplica
     this.requestRender();
   }
 
+  /** Publish a battle summary using the holding's ordinary chat audience. */
   async _onPostSummary(event) {
     event.preventDefault();
     event.stopPropagation();

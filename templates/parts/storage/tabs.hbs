@@ -19,7 +19,7 @@
             </div>
           </div>
 
-          {{#unless isGM}}{{#if canUseStorage}}<p class="fbls-help">Можно перемещать позиции между помещениями и менять общие заметки. Количество, продажи, казну и передачу предметов персонажам ведёт ГМ.</p>{{/if}}{{/unless}}
+          {{#unless isGM}}{{#if canUseStorage}}<p class="fbls-help">Можно перемещать позиции между помещениями. Количество, продажи, казну и передачу предметов персонажам ведёт ГМ.</p>{{/if}}{{/unless}}
 
           <div class="fbls-storage-global-search {{#if activeStorage.resources}}with-add-row{{/if}}">
             <label><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-storage-search value="{{storageContext.searchQuery}}" placeholder="Найти ресурс или предмет во всех помещениях…" autocomplete="off" /></label>

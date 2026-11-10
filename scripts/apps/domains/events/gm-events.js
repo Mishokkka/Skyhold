@@ -37,6 +37,7 @@ function isGmOnlyEvent(result = null) {
   return String(result?.row?.visibility ?? "public") === "gm";
 }
 
+/** Require a private audience for the whole card if any included event is GM-only. */
 function eventChatOptions(results = []) {
   const list = Array.isArray(results) ? results : [results];
   return { gmOnly: list.some((result) => isGmOnlyEvent(result)) };

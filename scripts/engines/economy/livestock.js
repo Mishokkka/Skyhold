@@ -218,6 +218,10 @@ function wholeProduction(state, key, quantity) {
   return Math.floor(units / 10000);
 }
 
+/**
+ * Produce eggs from fed adult females during cared days, reserving feed for males first.
+ * Whole output consumes and updates the draft state's fractional egg remainder.
+ */
 function eggPlan(state, profile, feeding, caredDays, enabled) {
   if (!enabled || !profile.producesEggs || profile.eggPerFullFlockDay <= 0 || caredDays <= 0) {
     return { adultDays: 0, outputQty: 0 };
@@ -267,6 +271,11 @@ function woolPlan(state, profile, feeding, seasonId, seasonKey, requestedQty, av
   };
 }
 
+/**
+ * Apply a slaughter selection to the draft herd within the available QD budget.
+ * Explicitly selected breeding males take priority; other males remain protected.
+ * Update adult/male/wool counts and return meat, consumed labor and warnings.
+ */
 function slaughterPlan(state, profile, requestedQty, requestedBreedingMales = 0, availableWorkQd = 0) {
   const requested = Math.min(whole(requestedQty), state.adults);
   const qty = Math.min(requested, Math.floor(whole(availableWorkQd, 0, Number.MAX_SAFE_INTEGER) / profile.slaughterWorkQdPerHead));

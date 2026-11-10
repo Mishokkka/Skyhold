@@ -59,7 +59,11 @@ export function createFoundryChatMessage(data = {}, options = {}) {
   return ChatMessage.create(data, options);
 }
 
-/** Keep every holding card within its ordinary visibility, including automatic reports. */
+/**
+ * Keep holding cards within their ordinary audience, including automatic reports.
+ * Private holdings/events target only GMs; a missing GM audience rejects publication.
+ * Forward the remaining options unchanged to Foundry's ChatMessage.create.
+ */
 export function createHoldingChatMessage(holding, data = {}, { gmOnly = false, ...options } = {}) {
   if (holding?.visibility === "gm" || gmOnly) {
     const current = globalThis.game?.user;

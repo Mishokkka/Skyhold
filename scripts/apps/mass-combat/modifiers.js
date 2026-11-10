@@ -33,6 +33,10 @@ export function commanderEffectiveness(person = {}) {
   return clamp(round2(value), 0, 5);
 }
 
+/**
+ * Calculate the assigned local commander's percentage bonus, rounding dice upward.
+ * Missing, absent, dead or injured commanders contribute no bonus.
+ */
 export function defenseCommanderBonus(holding, armyDice = 0) {
   const id = String(holding?.gm?.defense?.commanderId ?? "");
   if (!id) return { value: 0, raw: 0, cap: 0, percent: 0, effectiveness: 0, label: "командир не назначен" };
