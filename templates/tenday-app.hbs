@@ -126,7 +126,7 @@
             {{/if}}
 
             {{#if isPreview}}
-              <div class="fbls-tenday-contract-note"><i class="fa-solid fa-shield-halved"></i><span>Мир ещё не изменён. После подтверждения будет записан именно этот snapshot; параллельные изменения сделают его устаревшим.</span></div>
+              <div class="fbls-tenday-contract-note"><i class="fa-solid fa-shield-halved"></i><span>Предпросмотр не проводит хозяйство. Подтверждение сохранит показанный результат; изменение исходных данных потребует нового расчёта.</span></div>
             {{/if}}
             {{#if isResult}}
               <div class="fbls-tenday-contract-note is-complete"><i class="fa-solid fa-fingerprint"></i><span>Операция {{operationId}} записана. Итог ниже соответствует применённому snapshot.</span></div>
@@ -202,7 +202,7 @@
               {{/if}}
             {{else}}
               <article class="fbls-tenday-event-plan">
-                <header><i class="fa-solid fa-lock"></i><div><h2>Исходы зафиксированы, но пока скрыты</h2><p>Они входят в подготовленный snapshot и раскроются только после успешного commit.</p></div></header>
+                <header><i class="fa-solid fa-lock"></i><div><h2>Исходы зафиксированы, но пока скрыты</h2><p>Они сохранятся вместе с результатом периода и станут видны после проведения.</p></div></header>
                 <div class="fbls-tenday-event-list">
                   {{#each eventPlans}}
                     <div class="fbls-tenday-plan-row"><strong>Десятник {{index}}</strong><span>Общее событие: {{#if generalAvailable}}1 проверка{{else}}нет активной записи{{/if}}</span><span>Репутация: {{reputationDice}}к6</span></div>

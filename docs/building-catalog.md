@@ -1,17 +1,18 @@
-# Каталог зданий v16
+# Каталог зданий v19
 
-Единый справочник действующего кода: 124 здания дерева и 2 сюжетных. Сгенерирован командой `node scripts/dev/build-building-catalog-reference.mjs`; `--check` проверяет соответствие без записи. Установка кода не переносит сохранённые здания: для них нужен отдельный Preview/Apply.
+Статус: сгенерированный справочник встроенного каталога, 124 здания дерева и 2 сюжетных. Источник — `scripts/data/building-templates.js`. Обновление: `node scripts/dev/build-building-catalog-reference.mjs`; сверка без записи: та же команда с `--check`. Сохранённые каталоги и здания могут иметь другие настройки; [перенос](migrations.md) выполняется отдельно.
 
-П/Т/К/В — Пища, Технология, Культура, Война. Деньги указаны в ММ; содержание — за месяц, ставка — за день, обслуживание — прямые QD на экземпляр за десятник. Нулевая трудовая норма не отменяет денежного содержания. Общие правила находятся в [экономическом контракте](economy-contract.md), правила перехода — в [руководстве v16](morale-v16-implementation.md).
+П/Т/К/В — Пища, Технология, Культура, Война. Деньги — ММ; содержание — за месяц, ставка — за день. Техобслуживание версии 2 — прямые QD на экземпляр за десятник. Нулевой труд не отменяет денежного содержания. [Экономика](economy-contract.md), [режимы труда](labor-contract.md), [социальные эффекты](building-social-contract.md).
 
 ## Колодец
 
 ID: `well`. Инфраструктура; этап 0. Требования П/Т/К/В: **0/0/0/0**; развитие: **0/1/0/0**.
 
 - Строительство: 2 этапов; сложность 0. Материалы: Stone 50.
-- Штат: 1–1; ставка 0. Содержание: база 18, эксплуатация 0. Техобслуживание: 0 QD.
+- Штат: 0–0; ставка 0. Содержание: база 18, эксплуатация 0. Техобслуживание: 0 QD.
+- Режим труда: passive; предел физических QD: 0.
 - Функции: общественная служба. Репутация / довольство / условия труда: 0/1/0.
-- Активация: 1 работников, 2 QD; содержательный результат не требуется.
+- Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Участок: Участок с доступным водоносным слоем.
 - Работники: —; обязательный состав: нет. Пассивный источник воды
@@ -23,28 +24,30 @@ ID: `well`. Инфраструктура; этап 0. Требования П/Т
 ID: `grain-field`. Производство; этап 0. Требования П/Т/К/В: **0/0/0/0**; развитие: **4/0/0/0**.
 
 - Строительство: 4 этапов; сложность 0. Материалы: нет.
-- Штат: 1–8; ставка 12. Содержание: база 18, эксплуатация 18. Техобслуживание: 0 QD.
+- Штат: 0–8; ставка 12. Содержание: база 18, эксплуатация 18. Техобслуживание: 0 QD.
+- Режим труда: qd; предел физических QD: отдельно не задан.
 - Функции: производство. Репутация / довольство / условия труда: 0/0/0.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Участок: Достаточно ровная плодородная земля вне плотной застройки.
 - Работники: Любой трудоспособный; обязательный состав: нет. Тяжёлый сезонный труд, животные и согласованная работа
-- Сельское хозяйство: `{"schemaVersion":2,"enabled":true,"kind":"field","activeCropId":"grain","outputRoomId":"outdoors","gmPriority":500,"operations":{"sow":true,"harvest":true},"crops":[{"id":"grain","label":"Зерно","resourceId":"grain","outputQty":960,"sowingSeasons":["spring"],"sowingWorkQd":8,"growingQd":480,"harvestWorkQd":20,"expiryRule":"qd","readyExpiryQd":120,"annualHarvestLimit":1,"perennial":false},{"id":"plant-fiber","label":"Растительное волокно","resourceId":"plant-fiber","outputQty":320,"sowingSeasons":["spring"],"sowingWorkQd":8,"growingQd":480,"harvestWorkQd":20,"expiryRule":"qd","readyExpiryQd":120,"annualHarvestLimit":1,"perennial":false},{"id":"animal-feed","label":"Корм для животных","resourceId":"animal-feed","outputQty":240,"sowingSeasons":["spring"],"sowingWorkQd":8,"growingQd":480,"harvestWorkQd":20,"expiryRule":"qd","readyExpiryQd":120,"annualHarvestLimit":1,"perennial":false}],"state":{"version":2,"phase":"empty"}}`.
+- Сельское хозяйство: `{"schemaVersion":2,"enabled":true,"kind":"field","activeCropId":"grain","outputRoomId":"auto","gmPriority":500,"operations":{"sow":true,"harvest":true},"crops":[{"id":"grain","label":"Зерно","resourceId":"grain","outputQty":960,"sowingSeasons":["spring"],"sowingWorkQd":24,"growingQd":480,"harvestWorkQd":56,"expiryRule":"qd","readyExpiryQd":120,"annualHarvestLimit":1,"perennial":false},{"id":"plant-fiber","label":"Растительное волокно","resourceId":"plant-fiber","outputQty":320,"sowingSeasons":["spring"],"sowingWorkQd":24,"growingQd":480,"harvestWorkQd":56,"expiryRule":"qd","readyExpiryQd":120,"annualHarvestLimit":1,"perennial":false},{"id":"animal-feed","label":"Корм для животных","resourceId":"animal-feed","outputQty":240,"sowingSeasons":["spring"],"sowingWorkQd":24,"growingQd":480,"harvestWorkQd":56,"expiryRule":"qd","readyExpiryQd":120,"annualHarvestLimit":1,"perennial":false}],"state":{"version":2,"phase":"empty"}}`.
 
-Пашня, дающая массовый урожай зерна. Одна культура: Grain 960, Plant Fiber 320 или Animal Feed 240 за урожай Семена абстрактны; незавершённый посев после допустимого сезона не создаёт урожай.
+Пашня, дающая массовый урожай зерна. Ручная обработка: 24 QD посева и 56 QD уборки за год. Одна культура: Grain 960, Plant Fiber 320 или Animal Feed 240 за урожай Семена абстрактны; незавершённый посев после допустимого сезона не создаёт урожай.
 
 ## Сад
 
 ID: `garden`. Производство; этап 0. Требования П/Т/К/В: **0/0/0/0**; развитие: **4/0/0/0**.
 
 - Строительство: 3 этапов; сложность 0. Материалы: нет.
-- Штат: 1–4; ставка 12. Содержание: база 18, эксплуатация 18. Техобслуживание: 0 QD.
+- Штат: 0–4; ставка 12. Содержание: база 18, эксплуатация 18. Техобслуживание: 0 QD.
+- Режим труда: qd; предел физических QD: отдельно не задан.
 - Функции: производство. Репутация / довольство / условия труда: 0/0/0.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Участок: Плодородная земля и бытовой доступ к воде.
 - Работники: Любой трудоспособный; обязательный состав: нет. Наблюдение, знание культур и бережный уход
-- Сельское хозяйство: `{"schemaVersion":2,"enabled":true,"kind":"garden","activeCropId":"vegetables","outputRoomId":"outdoors","gmPriority":500,"operations":{"sow":true,"harvest":true},"crops":[{"id":"vegetables","label":"Овощи","resourceId":"vegetables","outputQty":480,"sowingSeasons":["spring"],"sowingWorkQd":4,"growingQd":320,"harvestWorkQd":10,"expiryRule":"qd","readyExpiryQd":120,"annualHarvestLimit":1,"perennial":false},{"id":"fruits","label":"Фрукты","resourceId":"fruits","outputQty":360,"sowingSeasons":["spring"],"sowingWorkQd":4,"growingQd":320,"harvestWorkQd":10,"expiryRule":"qd","readyExpiryQd":120,"annualHarvestLimit":1,"perennial":false},{"id":"herbs","label":"Травы","resourceId":"herbs","outputQty":80,"sowingSeasons":["spring"],"sowingWorkQd":4,"growingQd":320,"harvestWorkQd":10,"expiryRule":"qd","readyExpiryQd":120,"annualHarvestLimit":1,"perennial":false}],"state":{"version":2,"phase":"empty"}}`.
+- Сельское хозяйство: `{"schemaVersion":2,"enabled":true,"kind":"garden","activeCropId":"vegetables","outputRoomId":"auto","gmPriority":500,"operations":{"sow":true,"harvest":true},"crops":[{"id":"vegetables","label":"Овощи","resourceId":"vegetables","outputQty":480,"sowingSeasons":["spring"],"sowingWorkQd":12,"growingQd":320,"harvestWorkQd":28,"expiryRule":"qd","readyExpiryQd":120,"annualHarvestLimit":1,"perennial":false},{"id":"fruits","label":"Фрукты","resourceId":"fruits","outputQty":360,"sowingSeasons":["spring"],"sowingWorkQd":12,"growingQd":320,"harvestWorkQd":28,"expiryRule":"qd","readyExpiryQd":120,"annualHarvestLimit":1,"perennial":true},{"id":"herbs","label":"Травы","resourceId":"herbs","outputQty":80,"sowingSeasons":["spring"],"sowingWorkQd":12,"growingQd":320,"harvestWorkQd":28,"expiryRule":"qd","readyExpiryQd":120,"annualHarvestLimit":1,"perennial":false}],"state":{"version":2,"phase":"empty"}}`.
 
 Огород, травы и овощи для стола и лекарского дела. Vegetables 480, Fruits 360 или Herbs 80 за урожай Семена абстрактны. Срок готового урожая и правило гибели настраиваются отдельно для каждой культуры.
 
@@ -53,14 +56,15 @@ ID: `garden`. Производство; этап 0. Требования П/Т/�
 ID: `lumbermill`. Производство; этап 0. Требования П/Т/К/В: **0/0/0/0**; развитие: **0/2/0/0**.
 
 - Строительство: 1 этапов; сложность 0. Материалы: нет.
-- Штат: 1–16; ставка 12. Содержание: база 18, эксплуатация 18. Техобслуживание: 0 QD.
+- Штат: 0–16; ставка 12. Содержание: база 18, эксплуатация 18. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: производство. Репутация / довольство / условия труда: 0/0/-1.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Участок: Доступ к возобновляемому лесному массиву.
 - Работники: СИЛ≥3; обязательный состав: нет. Сила важна всем, знание рубки отличает мастера
-- Производственная линия: `{"id":"line","active":true,"requiresGmConfirmation":false,"name":"Обычная древесина","mode":"Обычная древесина","source":"workers","period":"qd","resourceId":"wood","resource":"Обычная древесина","outputQty":2,"workQd":1,"expenseMode":"cycle","expenses":"","costsText":"","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-rare-wood","active":false,"requiresGmConfirmation":true,"name":"Редкая древесина","mode":"Редкая древесина","source":"workers","period":"qd","resourceId":"rare-wood","resource":"Редкая древесина","outputQty":1,"workQd":1,"expenseMode":"cycle","expenses":"","costsText":"","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none","wageDailyCopper":18}`.
+- Производственная линия: `{"id":"line","active":true,"requiresGmConfirmation":false,"name":"Обычная древесина","mode":"Обычная древесина","source":"workers","period":"qd","resourceId":"wood","resource":"Обычная древесина","outputQty":2,"workQd":1,"expenseMode":"cycle","expenses":"","costsText":"","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-rare-wood","active":false,"requiresGmConfirmation":true,"name":"Редкая древесина","mode":"Редкая древесина","source":"workers","period":"qd","resourceId":"rare-wood","resource":"Редкая древесина","outputQty":1,"workQd":1,"expenseMode":"cycle","expenses":"","costsText":"","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none","wageDailyCopper":18}`.
 
 Заготовка древесины. Wood 2 за 1 QD; сюжетная Rare Wood 1 за 1 QD со ставкой 18 Каждый работник производит Wood за Quarter Day.
 
@@ -69,14 +73,15 @@ ID: `lumbermill`. Производство; этап 0. Требования П/
 ID: `quarry`. Производство; этап 0. Требования П/Т/К/В: **0/0/0/0**; развитие: **0/2/0/0**.
 
 - Строительство: 1 этапов; сложность 0. Материалы: нет.
-- Штат: 2–16; ставка 12. Содержание: база 18, эксплуатация 18. Техобслуживание: 0 QD.
+- Штат: 0–16; ставка 12. Содержание: база 18, эксплуатация 18. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: производство. Репутация / довольство / условия труда: 0/0/-1.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Участок: Выход подходящей каменной породы и безопасный подъезд.
 - Работники: СИЛ≥3; обязательный состав: нет. Тяжёлый труд и точное безопасное владение инструментом
-- Производственная линия: `{"id":"line","active":true,"requiresGmConfirmation":false,"name":"Обычный камень","mode":"Обычный камень","source":"workers","period":"qd","resourceId":"stone","resource":"Обычный камень","outputQty":2,"workQd":1,"expenseMode":"cycle","expenses":"","costsText":"","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-marble","active":false,"requiresGmConfirmation":true,"name":"Мрамор","mode":"Мрамор","source":"workers","period":"qd","resourceId":"marble","resource":"Мрамор","outputQty":1,"workQd":1,"expenseMode":"cycle","expenses":"","costsText":"","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none","wageDailyCopper":18}`.
+- Производственная линия: `{"id":"line","active":true,"requiresGmConfirmation":false,"name":"Обычный камень","mode":"Обычный камень","source":"workers","period":"qd","resourceId":"stone","resource":"Обычный камень","outputQty":2,"workQd":1,"expenseMode":"cycle","expenses":"","costsText":"","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-marble","active":false,"requiresGmConfirmation":true,"name":"Мрамор","mode":"Мрамор","source":"workers","period":"qd","resourceId":"marble","resource":"Мрамор","outputQty":1,"workQd":1,"expenseMode":"cycle","expenses":"","costsText":"","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none","wageDailyCopper":18}`.
 
 Добыча камня для строительства. Stone 2 за 1 QD; сюжетный Marble 1 за 1 QD со ставкой 18 Каждый работник производит Stone за Quarter Day.
 
@@ -86,6 +91,7 @@ ID: `tent-camp`. Жилые; этап 0. Требования П/Т/К/В: **0/0
 
 - Строительство: 1 этапов; сложность 1. Материалы: нет.
 - Штат: 0–0; ставка 0. Содержание: база 18, эксплуатация 0. Техобслуживание: 0 QD.
+- Режим труда: passive; предел физических QD: 0.
 - Функции: жильё. Репутация / довольство / условия труда: 0/0/0.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
@@ -99,9 +105,10 @@ ID: `tent-camp`. Жилые; этап 0. Требования П/Т/К/В: **0/0
 ID: `cemetery`. Инфраструктура; этап 0. Требования П/Т/К/В: **0/0/0/0**; развитие: **0/0/2/0**.
 
 - Строительство: 2 этапов; сложность 0. Материалы: нет.
-- Штат: 1–1; ставка 0. Содержание: база 18, эксплуатация 0. Техобслуживание: 0 QD.
+- Штат: 0–0; ставка 0. Содержание: база 18, эксплуатация 0. Техобслуживание: 0 QD.
+- Режим труда: passive; предел физических QD: 0.
 - Функции: общественная служба. Репутация / довольство / условия труда: 0/1/0.
-- Активация: 1 работников, 4 QD; содержательный результат не требуется.
+- Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Участок: Сухой участок вдали от питьевой воды.
 - Работники: —; обязательный состав: нет. Ритуальная функция без штатных работников
@@ -114,6 +121,7 @@ ID: `shooting-range`. Инфраструктура; этап 0. Требован
 
 - Строительство: 1 этапов; сложность 0. Материалы: Wood 20.
 - Штат: 0–0; ставка 0. Содержание: база 18, эксплуатация 0. Техобслуживание: 0 QD.
+- Режим труда: passive; предел физических QD: 0.
 - Функции: общественная служба. Репутация / довольство / условия труда: 0/0/0.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
@@ -127,6 +135,7 @@ ID: `training-camp`. Инфраструктура; этап 0. Требован�
 
 - Строительство: 2 этапов; сложность 0. Материалы: Wood 40.
 - Штат: 0–0; ставка 0. Содержание: база 18, эксплуатация 0. Техобслуживание: 0 QD.
+- Режим труда: passive; предел физических QD: 0.
 - Функции: общественная служба. Репутация / довольство / условия труда: 0/0/0.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
@@ -140,6 +149,7 @@ ID: `bunkhouse`. Жилые; этап 0. Требования П/Т/К/В: **0/0
 
 - Строительство: 3 этапов; сложность 0. Материалы: Wood 100; Cloth 20.
 - Штат: 0–0; ставка 0. Содержание: база 18, эксплуатация 0. Техобслуживание: 0 QD.
+- Режим труда: passive; предел физических QD: 0.
 - Функции: жильё. Репутация / довольство / условия труда: 0/0/0.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
@@ -154,6 +164,7 @@ ID: `barracks`. Жилые; этап 0. Требования П/Т/К/В: **0/0/
 
 - Строительство: 4 этапов; сложность 0. Материалы: Wood 140; Stone 40.
 - Штат: 0–0; ставка 0. Содержание: база 18, эксплуатация 0. Техобслуживание: 0 QD.
+- Режим труда: passive; предел физических QD: 0.
 - Функции: оборона, жильё. Репутация / довольство / условия труда: 0/0/0.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
@@ -168,9 +179,10 @@ ID: `barracks`. Жилые; этап 0. Требования П/Т/К/В: **0/0/
 ID: `watch-post`. Военные; этап 0. Требования П/Т/К/В: **0/0/0/0**; развитие: **0/0/0/1**.
 
 - Строительство: 1 этапов; сложность 0. Материалы: Wood 25; Stone 10.
-- Штат: 1–2; ставка 18. Содержание: база 18, эксплуатация 18. Техобслуживание: 0 QD.
+- Штат: 0–2; ставка 18. Содержание: база 18, эксплуатация 18. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: оборона. Репутация / довольство / условия труда: 0/0/-1.
-- Активация: 1 работников, 20 QD; содержательный результат не требуется.
+- Активация: 0 работников, 20 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: ЛОВ≥3 или РАЗ≥3; обязательный состав: 1 × ОХРАНА. Наблюдение требует внимания и охранного опыта либо подходящей черты с характеристиками
 - Контроль: `{"generalFlat":1,"maximum":1}`.
@@ -182,13 +194,14 @@ ID: `watch-post`. Военные; этап 0. Требования П/Т/К/В: 
 ID: `animal-pen`. Производство; этап 1. Требования П/Т/К/В: **2/0/0/0**; развитие: **2/0/0/0**.
 
 - Строительство: 2 этапов; сложность 0. Материалы: Wood 50.
-- Штат: 1–2; ставка 12. Содержание: база 18, эксплуатация 18. Техобслуживание: 0 QD.
+- Штат: 0–2; ставка 12. Содержание: база 18, эксплуатация 18. Техобслуживание: 0 QD.
+- Режим труда: qd; предел физических QD: отдельно не задан.
 - Функции: производство. Репутация / довольство / условия труда: 0/0/0.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Участок: Сухой огороженный участок с доступом к корму и воде.
 - Работники: ЭМП≥3 или СИЛ≥3; обязательный состав: нет. Уход и физическая работа с животными
-- Животные: `{"schemaVersion":2,"enabled":true,"speciesId":"poultry","speciesOptions":["poultry","rabbits","goats"],"outputRoomId":"outdoors","gmPriority":500,"state":{"version":2,"speciesId":"poultry","adults":0,"breedingMales":0,"young":[]},"operations":{"milk":true,"eggs":true,"shearQty":0,"slaughterQty":0,"slaughterBreedingMales":0,"feedPriority":"adults"}}`.
+- Животные: `{"schemaVersion":2,"enabled":true,"speciesId":"poultry","speciesOptions":["poultry","rabbits","goats"],"outputRoomId":"auto","gmPriority":500,"state":{"version":2,"speciesId":"poultry","adults":0,"breedingMales":0,"young":[]},"operations":{"milk":true,"eggs":true,"shearQty":0,"slaughterQty":0,"slaughterBreedingMales":0,"feedPriority":"adults"}}`.
 
 Один профиль: птица, кролики или козы Один профиль: птица, кролики или козы
 
@@ -197,13 +210,14 @@ ID: `animal-pen`. Производство; этап 1. Требования П/
 ID: `apiary`. Производство; этап 1. Требования П/Т/К/В: **2/0/0/0**; развитие: **2/0/0/0**.
 
 - Строительство: 2 этапов; сложность 0. Материалы: Wood 30.
-- Штат: 1–2; ставка 12. Содержание: база 18, эксплуатация 18. Техобслуживание: 0 QD.
+- Штат: 0–2; ставка 12. Содержание: база 18, эксплуатация 18. Техобслуживание: 0 QD.
+- Режим труда: qd; предел физических QD: отдельно не задан.
 - Функции: производство. Репутация / довольство / условия труда: 0/0/0.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Участок: Спокойный участок рядом с цветущими угодьями.
 - Работники: РАЗ≥3 или ЭМП≥3; обязательный состав: нет. Знание поведения пчёл и спокойная точная работа
-- Сельское хозяйство: `{"schemaVersion":2,"enabled":true,"kind":"apiary","activeCropId":"honey","outputRoomId":"outdoors","gmPriority":500,"operations":{"sow":true,"harvest":true},"crops":[{"id":"honey","label":"Мёд","resourceId":"honey","outputQty":120,"sowingSeasons":["spring"],"sowingWorkQd":0,"growingQd":480,"harvestWorkQd":4,"expiryRule":"qd","readyExpiryQd":120,"annualHarvestLimit":1,"perennial":true}],"state":{"version":2,"phase":"empty"}}`.
+- Сельское хозяйство: `{"schemaVersion":2,"enabled":true,"kind":"apiary","activeCropId":"honey","outputRoomId":"auto","gmPriority":500,"operations":{"sow":true,"harvest":true},"crops":[{"id":"honey","label":"Мёд","resourceId":"honey","outputQty":120,"sowingSeasons":["spring"],"sowingWorkQd":0,"growingQd":480,"harvestWorkQd":4,"expiryRule":"qd","readyExpiryQd":120,"annualHarvestLimit":1,"perennial":true}],"state":{"version":2,"phase":"empty"}}`.
 
 Honey 120 за один годовой сбор; сбор требует 4 QD Honey 120 за один годовой сбор; сбор требует 4 QD
 
@@ -212,13 +226,14 @@ Honey 120 за один годовой сбор; сбор требует 4 QD Ho
 ID: `fishing-pier`. Производство; этап 1. Требования П/Т/К/В: **2/1/0/0**; развитие: **3/0/0/0**.
 
 - Строительство: 3 этапов; сложность -1. Материалы: Wood 80; Rope 10.
-- Штат: 1–8; ставка 12. Содержание: база 18, эксплуатация 18. Техобслуживание: 0 QD.
+- Штат: 0–8; ставка 12. Содержание: база 18, эксплуатация 18. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: производство. Репутация / довольство / условия труда: 0/0/-1.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Участок: Рыбный водоём и безопасный берег.
 - Работники: ЛОВ≥3 или СИЛ≥3; обязательный состав: нет. Снасти, лодка и тяжёлый улов
-- Производственная линия: `{"id":"line-1-fish","active":true,"requiresGmConfirmation":false,"name":"Рыба","mode":"Рыба","source":"workers","period":"qd","resourceId":"fish","resource":"Рыба","outputQty":2,"workQd":1,"expenseMode":"cycle","expenses":"","costsText":"","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-1-fish","active":true,"requiresGmConfirmation":false,"name":"Рыба","mode":"Рыба","source":"workers","period":"qd","resourceId":"fish","resource":"Рыба","outputQty":2,"workQd":1,"expenseMode":"cycle","expenses":"","costsText":"","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
 
 Fish 2 за 1 QD Fish 2 за 1 QD
 
@@ -227,13 +242,14 @@ Fish 2 за 1 QD Fish 2 за 1 QD
 ID: `vineyard`. Производство; этап 1. Требования П/Т/К/В: **4/0/1/0**; развитие: **2/0/1/0**.
 
 - Строительство: 3 этапов; сложность 0. Материалы: Wood 40.
-- Штат: 1–8; ставка 12. Содержание: база 18, эксплуатация 18. Техобслуживание: 0 QD.
+- Штат: 0–8; ставка 12. Содержание: база 18, эксплуатация 18. Техобслуживание: 0 QD.
+- Режим труда: qd; предел физических QD: отдельно не задан.
 - Функции: производство. Репутация / довольство / условия труда: 0/0/0.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Участок: Освещённый склон или иной подходящий участок.
 - Работники: Любой трудоспособный; обязательный состав: нет. Знание лозы и своевременный аккуратный сбор
-- Сельское хозяйство: `{"schemaVersion":2,"enabled":true,"kind":"vineyard","activeCropId":"grapes","outputRoomId":"outdoors","gmPriority":500,"operations":{"sow":true,"harvest":true},"crops":[{"id":"grapes","label":"Виноград","resourceId":"grapes","outputQty":480,"sowingSeasons":["spring"],"sowingWorkQd":8,"growingQd":480,"harvestWorkQd":20,"expiryRule":"qd","readyExpiryQd":120,"annualHarvestLimit":1,"perennial":false}],"state":{"version":2,"phase":"empty"}}`.
+- Сельское хозяйство: `{"schemaVersion":2,"enabled":true,"kind":"vineyard","activeCropId":"grapes","outputRoomId":"auto","gmPriority":500,"operations":{"sow":true,"harvest":true},"crops":[{"id":"grapes","label":"Виноград","resourceId":"grapes","outputQty":480,"sowingSeasons":["spring"],"sowingWorkQd":32,"growingQd":480,"harvestWorkQd":48,"expiryRule":"qd","readyExpiryQd":120,"annualHarvestLimit":1,"perennial":true}],"state":{"version":2,"phase":"empty"}}`.
 
 Grapes 480 за годовой урожай Grapes 480 за годовой урожай
 
@@ -242,13 +258,14 @@ Grapes 480 за годовой урожай Grapes 480 за годовой ур�
 ID: `hop-yard`. Производство; этап 1. Требования П/Т/К/В: **4/0/0/0**; развитие: **2/0/0/0**.
 
 - Строительство: 3 этапов; сложность 0. Материалы: Wood 60; Rope 10.
-- Штат: 1–8; ставка 12. Содержание: база 18, эксплуатация 18. Техобслуживание: 0 QD.
+- Штат: 0–8; ставка 12. Содержание: база 18, эксплуатация 18. Техобслуживание: 0 QD.
+- Режим труда: qd; предел физических QD: отдельно не задан.
 - Функции: производство. Репутация / довольство / условия труда: 0/0/0.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Участок: Плодородный участок с опорами и доступом к воде.
 - Работники: Любой трудоспособный; обязательный состав: нет. Уход за высокой культурой и оценка зрелости
-- Сельское хозяйство: `{"schemaVersion":2,"enabled":true,"kind":"hop-yard","activeCropId":"hops","outputRoomId":"outdoors","gmPriority":500,"operations":{"sow":true,"harvest":true},"crops":[{"id":"hops","label":"Хмель","resourceId":"hops","outputQty":360,"sowingSeasons":["spring"],"sowingWorkQd":8,"growingQd":480,"harvestWorkQd":20,"expiryRule":"qd","readyExpiryQd":120,"annualHarvestLimit":1,"perennial":false}],"state":{"version":2,"phase":"empty"}}`.
+- Сельское хозяйство: `{"schemaVersion":2,"enabled":true,"kind":"hop-yard","activeCropId":"hops","outputRoomId":"auto","gmPriority":500,"operations":{"sow":true,"harvest":true},"crops":[{"id":"hops","label":"Хмель","resourceId":"hops","outputQty":360,"sowingSeasons":["spring"],"sowingWorkQd":16,"growingQd":480,"harvestWorkQd":40,"expiryRule":"qd","readyExpiryQd":120,"annualHarvestLimit":1,"perennial":true}],"state":{"version":2,"phase":"empty"}}`.
 
 Hops 360 за годовой урожай Hops 360 за годовой урожай
 
@@ -257,13 +274,14 @@ Hops 360 за годовой урожай Hops 360 за годовой урож�
 ID: `pasture`. Производство; этап 1. Требования П/Т/К/В: **4/0/0/0**; развитие: **3/0/0/0**.
 
 - Строительство: 2 этапов; сложность 0. Материалы: Wood 80.
-- Штат: 1–2; ставка 12. Содержание: база 18, эксплуатация 18. Техобслуживание: 0 QD.
+- Штат: 0–2; ставка 12. Содержание: база 18, эксплуатация 18. Техобслуживание: 0 QD.
+- Режим труда: qd; предел физических QD: отдельно не задан.
 - Функции: производство. Репутация / довольство / условия труда: 0/0/0.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Участок: Достаточная площадь выпаса и доступ к воде.
 - Работники: ЭМП≥3 или СИЛ≥3; обязательный состав: нет. Управление стадом и тяжёлый уход
-- Животные: `{"schemaVersion":2,"enabled":true,"speciesId":"cattle","speciesOptions":["cattle"],"outputRoomId":"outdoors","gmPriority":500,"state":{"version":2,"speciesId":"cattle","adults":0,"breedingMales":0,"young":[]},"operations":{"milk":true,"eggs":true,"shearQty":0,"slaughterQty":0,"slaughterBreedingMales":0,"feedPriority":"adults"}}`.
+- Животные: `{"schemaVersion":2,"enabled":true,"speciesId":"cattle","speciesOptions":["cattle"],"outputRoomId":"auto","gmPriority":500,"state":{"version":2,"speciesId":"cattle","adults":0,"breedingMales":0,"young":[]},"operations":{"milk":true,"eggs":true,"shearQty":0,"slaughterQty":0,"slaughterBreedingMales":0,"feedPriority":"adults"}}`.
 
 Место для коров: молоко, мясо и приплод. До 12 голов КРС; молоко, приплод и явный забой Каждое пастбище содержит отдельное стадо; животные не хранятся под открытым небом.
 
@@ -272,41 +290,44 @@ ID: `pasture`. Производство; этап 1. Требования П/Т/
 ID: `pigsty`. Производство; этап 1. Требования П/Т/К/В: **4/0/0/0**; развитие: **3/0/0/0**.
 
 - Строительство: 3 этапов; сложность 0. Материалы: Wood 80; Stone 10.
-- Штат: 1–2; ставка 12. Содержание: база 18, эксплуатация 18. Техобслуживание: 0 QD.
+- Штат: 0–2; ставка 12. Содержание: база 18, эксплуатация 18. Техобслуживание: 0 QD.
+- Режим труда: qd; предел физических QD: отдельно не задан.
 - Функции: производство. Репутация / довольство / условия труда: 0/0/-1.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: ЭМП≥3 или СИЛ≥3; обязательный состав: нет. Поведение животных и физическая хозяйственная работа
-- Животные: `{"schemaVersion":2,"enabled":true,"speciesId":"pigs","speciesOptions":["pigs"],"outputRoomId":"outdoors","gmPriority":500,"state":{"version":2,"speciesId":"pigs","adults":0,"breedingMales":0,"young":[]},"operations":{"milk":true,"eggs":true,"shearQty":0,"slaughterQty":0,"slaughterBreedingMales":0,"feedPriority":"adults"}}`.
+- Животные: `{"schemaVersion":2,"enabled":true,"speciesId":"pigs","speciesOptions":["pigs"],"outputRoomId":"auto","gmPriority":500,"state":{"version":2,"speciesId":"pigs","adults":0,"breedingMales":0,"young":[]},"operations":{"milk":true,"eggs":true,"shearQty":0,"slaughterQty":0,"slaughterBreedingMales":0,"feedPriority":"adults"},"profile":{"headsPerFeedUnit":2,"maturityQd":720}}`.
 
-Свиньи дают мясо и приплод. До 12 свиней; приплод и явный забой Каждый свинарник содержит отдельное стадо; при нехватке корма животные не производят и не размножаются, но не умирают автоматически.
+Свиньи дают мясо и приплод. До 12 свиней; приплод и явный забой Каждый свинарник содержит отдельное стадо; при нехватке корма животные не производят и не размножаются, но не умирают автоматически. Молодняк созревает за 180 дней. Одна кормовая единица обеспечивает две головы за десятник; уход, забой и свободные места для приплода учитываются отдельно. Для воспроизводства оставляют племенное ядро и места для молодняка.
 
 ## Овчарня
 
 ID: `sheepfold`. Производство; этап 1. Требования П/Т/К/В: **4/1/0/0**; развитие: **3/1/0/0**.
 
 - Строительство: 2 этапов; сложность 0. Материалы: Wood 60.
-- Штат: 1–2; ставка 12. Содержание: база 18, эксплуатация 18. Техобслуживание: 0 QD.
+- Штат: 0–2; ставка 12. Содержание: база 18, эксплуатация 18. Техобслуживание: 0 QD.
+- Режим труда: qd; предел физических QD: отдельно не задан.
 - Функции: производство. Репутация / довольство / условия труда: 0/0/0.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: ЭМП≥3 или СИЛ≥3; обязательный состав: нет. Управление стадом, стрижка и аккуратный уход
-- Животные: `{"schemaVersion":2,"enabled":true,"speciesId":"sheep","speciesOptions":["sheep"],"outputRoomId":"outdoors","gmPriority":500,"state":{"version":2,"speciesId":"sheep","adults":0,"breedingMales":0,"young":[]},"operations":{"milk":true,"eggs":true,"shearQty":0,"slaughterQty":0,"slaughterBreedingMales":0,"feedPriority":"adults"}}`.
+- Животные: `{"schemaVersion":2,"enabled":true,"speciesId":"sheep","speciesOptions":["sheep"],"outputRoomId":"auto","gmPriority":500,"state":{"version":2,"speciesId":"sheep","adults":0,"breedingMales":0,"young":[],"capacity":24},"operations":{"milk":true,"eggs":true,"shearQty":0,"slaughterQty":0,"slaughterBreedingMales":0,"feedPriority":"adults"},"profile":{"capacity":24,"headsPerFeedUnit":2,"woolPerHead":6,"maturityQd":720}}`.
 
-Овцы дают шерсть, мясо и приплод. До 12 овец; шерсть, приплод и явный забой Каждая овчарня содержит отдельное стадо; неостриженная готовность сохраняется, но не накапливается выше числа взрослых.
+Овцы дают шерсть, мясо и приплод. До 12 овец; шерсть, приплод и явный забой Каждая овчарня содержит отдельное стадо; неостриженная готовность сохраняется, но не накапливается выше числа взрослых. Вместимость — 24 головы вместе с молодняком; 180 дней до взрослого поголовья. Стрижка даёт 6 ЕД. шерсти с головы. Одна кормовая единица обеспечивает две головы за десятник без выпаса. Хозяйство рассчитано на шерсть и приплод, а не только на шерсть.
 
 ## Мельница
 
 ID: `mill`. Производство; этап 1. Требования П/Т/К/В: **8/3/0/0**; развитие: **4/3/0/0**.
 
 - Строительство: 5 этапов; сложность -1. Материалы: Wood 250; Stone 100; Простые компоненты 20.
-- Штат: 2–8; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 1 QD.
+- Штат: 0–8; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 1 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: производство. Репутация / довольство / условия труда: 0/0/-1.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: СИЛ≥3 или РАЗ≥3; обязательный состав: нет. Тяжёлое сырьё и настройка механизма
-- Производственная линия: `{"id":"line","active":true,"requiresGmConfirmation":false,"name":"Мука","mode":"Мука","source":"workers","period":"qd","resourceId":"flour","resource":"Мука","outputQty":6,"workQd":1,"expenseMode":"cycle","expenses":"grain 6","costsText":"grain 6","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-feed","active":true,"requiresGmConfirmation":false,"name":"Корм","mode":"Корм","source":"workers","period":"qd","resourceId":"animal-feed","resource":"Корм","outputQty":2,"workQd":1,"expenseMode":"cycle","expenses":"grain 2","costsText":"grain 2","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line","active":true,"requiresGmConfirmation":false,"name":"Мука","mode":"Мука","source":"workers","period":"qd","resourceId":"flour","resource":"Мука","outputQty":6,"workQd":1,"expenseMode":"cycle","expenses":"grain 6","costsText":"grain 6","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-feed","active":true,"requiresGmConfirmation":false,"name":"Корм","mode":"Корм","source":"workers","period":"qd","resourceId":"animal-feed","resource":"Корм","outputQty":6,"workQd":2,"expenseMode":"cycle","expenses":"grain 6","costsText":"grain 2","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
 
 Перемалывает зерно в муку. Grain 6 → Flour 6 или Grain 2 → Animal Feed 2 за 1 QD Grain превращается в Flour по Quarter Day.
 
@@ -316,11 +337,12 @@ ID: `root-cellar`. Инфраструктура; этап 1. Требовани�
 
 - Строительство: 3 этапов; сложность -1. Материалы: Wood 50; Stone 150.
 - Штат: 0–0; ставка 0. Содержание: база 18, эксплуатация 0. Техобслуживание: 0 QD.
+- Режим труда: passive; предел физических QD: 0.
 - Функции: склад. Репутация / довольство / условия труда: 0/0/0.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: —; обязательный состав: нет. Пассивное хранилище
-- Склад: `{"capacity":400,"security":1,"quality":4,"shelfLifeMultiplier":2,"profileLabel":"Скоропортящаяся пища","profilePerishableFood":true,"profileCapacityMultiplier":0.5,"profileRequiresStaff":false}`.
+- Склад: `{"capacity":400,"security":1,"quality":4,"shelfLifeMultiplier":2,"profileLabel":"Скоропортящаяся пища","profilePerishableFood":true,"profileCapacityMultiplier":0.5,"profileRequiresStaff":false,"autoReceive":true}`.
 
 Подземное хранение еды. 400 нагрузки; профильная пища занимает половину места и хранится вдвое дольше Еда хранится значительно дольше. В менеджере это склад с высоким качеством хранения.
 
@@ -329,26 +351,28 @@ ID: `root-cellar`. Инфраструктура; этап 1. Требовани�
 ID: `tannery`. Производство; этап 1. Требования П/Т/К/В: **0/2/0/0**; развитие: **0/2/0/0**.
 
 - Строительство: 3 этапов; сложность -1. Материалы: Wood 80; Stone 20.
-- Штат: 2–8; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Штат: 0–8; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Режим труда: qd; предел физических QD: отдельно не задан.
 - Функции: производство, общественная служба. Репутация / довольство / условия труда: 0/-1/-1.
 - Активация: 0 работников, 0 QD; содержательный результат обязателен.
 - Зависимости: нет.
 - Работники: ЛОВ≥3 и РАЗ≥3; обязательный состав: нет. Точная ручная обработка и знание технологического процесса
-- Производственная линия: `{"id":"line","active":true,"requiresGmConfirmation":false,"name":"Кожа","mode":"Кожа","source":"workers","period":"qd","resourceId":"leather","resource":"Кожа","outputQty":2,"workQd":1,"expenseMode":"cycle","expenses":"pelt 2","costsText":"pelt 2","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line","active":true,"requiresGmConfirmation":false,"name":"Кожа","mode":"Кожа","source":"workers","period":"qd","resourceId":"leather","resource":"Кожа","outputQty":30,"workQd":15,"expenseMode":"cycle","expenses":"pelt 30","costsText":"pelt 30","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none","waitDays":30,"batchCapacity":150,"batchStartQty":1}`.
 
-Выделка шкур в кожу. Pelt 2 → Leather 2 за 1 QD Pelt превращается в Leather.
+Выделка шкур в кожу. Pelt 2 → Leather 2 за 1 QD Pelt превращается в Leather. Кожа: до 30 ЕД. в партии, запуск от 1 ЕД., общая вместимость 150 ЕД. Сырьё и труд пропорциональны загрузке; после подготовки — 30 дн. ожидания без труда. Партии выдерживаются независимо.
 
 ## Конюшня
 
 ID: `stables`. Производство; этап 1. Требования П/Т/К/В: **2/2/0/0**; развитие: **0/1/0/2**.
 
 - Строительство: 5 этапов; сложность -1. Материалы: Wood 300; Stone 50.
-- Штат: 1–3; ставка 12. Содержание: база 18, эксплуатация 18. Техобслуживание: 0 QD.
+- Штат: 0–3; ставка 12. Содержание: база 18, эксплуатация 18. Техобслуживание: 0 QD.
+- Режим труда: qd; предел физических QD: отдельно не задан.
 - Функции: производство. Репутация / довольство / условия труда: 0/0/-1.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: ЭМП≥3 или ЛОВ≥3; обязательный состав: нет. Контакт с лошадьми и уверенная подвижная работа
-- Животные: `{"schemaVersion":2,"enabled":true,"speciesId":"horses","speciesOptions":["horses"],"outputRoomId":"outdoors","gmPriority":500,"state":{"version":2,"speciesId":"horses","adults":0,"breedingMales":0,"young":[]},"operations":{"milk":true,"eggs":true,"shearQty":0,"slaughterQty":0,"slaughterBreedingMales":0,"feedPriority":"adults"}}`.
+- Животные: `{"schemaVersion":2,"enabled":true,"speciesId":"horses","speciesOptions":["horses"],"outputRoomId":"auto","gmPriority":500,"state":{"version":2,"speciesId":"horses","adults":0,"breedingMales":0,"young":[]},"operations":{"milk":true,"eggs":true,"shearQty":0,"slaughterQty":0,"slaughterBreedingMales":0,"feedPriority":"adults"}}`.
 
 Защита и содержание ездовых животных. До 12 лошадей; автоматического разведения нет Protects and feeds riding animals.
 
@@ -357,9 +381,10 @@ ID: `stables`. Производство; этап 1. Требования П/Т/
 ID: `pier`. Инфраструктура; этап 1. Требования П/Т/К/В: **0/2/0/0**; развитие: **0/1/1/0**.
 
 - Строительство: 5 этапов; сложность -1. Материалы: Wood 250; Iron 20; Rope 20.
-- Штат: 1–1; ставка 0. Содержание: база 18, эксплуатация 0. Техобслуживание: 0 QD.
+- Штат: 0–0; ставка 0. Содержание: база 18, эксплуатация 0. Техобслуживание: 0 QD.
+- Режим труда: passive; предел физических QD: 0.
 - Функции: общественная служба. Репутация / довольство / условия труда: 1/0/0.
-- Активация: 1 работников, 4 QD; содержательный результат не требуется.
+- Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Участок: Судоходный берег с безопасным подходом.
 - Работники: —; обязательный состав: нет. Работники относятся к кораблю или перевозке, не к сооружению
@@ -371,13 +396,14 @@ ID: `pier`. Инфраструктура; этап 1. Требования П/Т
 ID: `market`. Инфраструктура; этап 1. Требования П/Т/К/В: **0/3/2/0**; развитие: **0/1/3/0**.
 
 - Строительство: 3 этапов; сложность 0. Материалы: Wood 120; Cloth 20.
-- Штат: 1–8; ставка 18. Содержание: база 36, эксплуатация 54. Техобслуживание: 0 QD.
+- Штат: 0–8; ставка 18. Содержание: база 36, эксплуатация 54. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: доход, общественная служба. Репутация / довольство / условия труда: 1/1/0.
-- Активация: 1 работников, 10 QD; содержательный результат не требуется.
+- Активация: 0 работников, 10 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: Любой трудоспособный; обязательный состав: нет. Переговоры, оценка товара и организация торговли
 - Услуга: `{"capacity":100,"coverageKind":"population","coveredBuildingIds":[]}`.
-- Доходная функция: `{"base":0,"perWorker":0,"formula":"","risk":0,"illegal":false,"trade":{"enabled":true,"sourceIds":["population","market-flow"],"allowedTags":["all"],"demandSource":"market-flow","demandBudgetBaseCopper":80,"demandBudgetPerWorkerCopper":15,"throughputUnitsPerWorker":8,"gmPriority":500,"roomId":"all","kind":"all","service":{"enabled":false,"categoryTag":"","basePriceCopper":0,"unitsPerWorker":0},"notes":"Обычная рыночная торговля."},"wageDailyCopper":18,"operatingUpkeepMonthlyCopper":54}`.
+- Доходная функция: `{"base":0,"perWorker":0,"formula":"","risk":0,"illegal":false,"trade":{"enabled":true,"sourceIds":["population","market-flow"],"allowedTags":["all"],"demandSource":"market-flow","demandBudgetBaseCopper":480,"demandBudgetPerWorkerCopper":90,"throughputUnitsPerWorker":8,"gmPriority":500,"roomId":"all","kind":"all","service":{"enabled":false,"categoryTag":"","basePriceCopper":0,"unitsPerWorker":0},"notes":"Обычная рыночная торговля."},"wageDailyCopper":18,"operatingUpkeepMonthlyCopper":54}`.
 
 Торговые ряды и место приезжих купцов. Продаёт фактические товары через единый конечный бюджет спроса поселения Supply как у обычной деревни. Довольство +3.
 
@@ -386,9 +412,10 @@ ID: `market`. Инфраструктура; этап 1. Требования П/
 ID: `festival-square`. Инфраструктура; этап 1. Требования П/Т/К/В: **0/1/1/0**; развитие: **0/0/1/0**.
 
 - Строительство: 2 этапов; сложность 0. Материалы: Wood 40; Stone 20; Cloth 10.
-- Штат: 1–1; ставка 12. Содержание: база 18, эксплуатация 18. Техобслуживание: 0 QD.
+- Штат: 0–1; ставка 12. Содержание: база 18, эксплуатация 18. Техобслуживание: 0 QD.
+- Режим труда: qd; предел физических QD: 20.
 - Функции: общественная служба. Репутация / довольство / условия труда: 0/10/0.
-- Активация: 1 работников, 4 QD; содержательный результат не требуется.
+- Активация: 0 работников, 4 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Участок: Открытая безопасная площадка, доступная жителям; проверка GM
 - Работники: Любой трудоспособный; обязательный состав: нет. Обслуживание посетителей и проведение программы досуга
@@ -401,9 +428,10 @@ ID: `festival-square`. Инфраструктура; этап 1. Требова�
 ID: `alehouse`. Инфраструктура; этап 1. Требования П/Т/К/В: **3/1/2/0**; развитие: **0/0/0/0**.
 
 - Строительство: 3 этапов; сложность 0. Материалы: Wood 100; Stone 40; Cloth 10.
-- Штат: 1–1; ставка 18. Содержание: база 18, эксплуатация 54. Техобслуживание: 0 QD.
+- Штат: 0–1; ставка 18. Содержание: база 18, эксплуатация 54. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: общественная служба. Репутация / довольство / условия труда: 0/12/0.
-- Активация: 1 работников, 4 QD; содержательный результат не требуется.
+- Активация: 0 работников, 4 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: Любой трудоспособный; обязательный состав: нет. Обслуживание посетителей и проведение программы досуга
 - Услуга: `{"capacity":12,"coverageKind":"population","coveredBuildingIds":[],"leisure":{"kind":"drinking","capacity":12,"qdPerCapacity":1.6666666666666667,"functionId":"culture","minWorkers":1}}`.
@@ -415,9 +443,10 @@ ID: `alehouse`. Инфраструктура; этап 1. Требования �
 ID: `gallows`. Военные; этап 1. Требования П/Т/К/В: **0/0/0/2**; развитие: **0/0/0/1**.
 
 - Строительство: 1 этапов; сложность 0. Материалы: Wood 20.
-- Штат: 1–1; ставка 0. Содержание: база 18, эксплуатация 0. Техобслуживание: 0 QD.
+- Штат: 0–0; ставка 0. Содержание: база 18, эксплуатация 0. Техобслуживание: 0 QD.
+- Режим труда: passive; предел физических QD: 0.
 - Функции: оборона, общественная служба. Репутация / довольство / условия труда: 1/-2/0.
-- Активация: 1 работников, 4 QD; содержательный результат не требуется.
+- Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: —; обязательный состав: нет. Нет постоянного штата; применение решает GM
 - Контроль: `{"generalFlat":2,"maximum":2}`.
@@ -430,6 +459,7 @@ ID: `common-house`. Жилые; этап 1. Требования П/Т/К/В: **
 
 - Строительство: 4 этапов; сложность 0. Материалы: Wood 120; Stone 40.
 - Штат: 0–0; ставка 0. Содержание: база 18, эксплуатация 0. Техобслуживание: 0 QD.
+- Режим труда: passive; предел физических QD: 0.
 - Функции: жильё. Репутация / довольство / условия труда: 0/0/0.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
@@ -444,11 +474,12 @@ ID: `barn`. Инфраструктура; этап 1. Требования П/Т
 
 - Строительство: 3 этапов; сложность 0. Материалы: Wood 100; Straw 30.
 - Штат: 0–0; ставка 0. Содержание: база 18, эксплуатация 0. Техобслуживание: 0 QD.
+- Режим труда: passive; предел физических QD: 0.
 - Функции: склад. Репутация / довольство / условия труда: 0/0/0.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: —; обязательный состав: нет. Пассивное хранилище
-- Склад: `{"capacity":600,"security":1,"quality":3,"profileLabel":"Сухие сельскохозяйственные запасы","profileResourceIds":["grain","flour","animal-feed","straw","hops"],"profileMarketTags":["agriculture","fodder","grain"],"profileCapacityMultiplier":0.5,"profileRequiresStaff":false}`.
+- Склад: `{"capacity":600,"security":1,"quality":3,"profileLabel":"Сухие сельскохозяйственные запасы","profileResourceIds":["grain","flour","animal-feed","straw","hops"],"profileMarketTags":["agriculture","fodder","grain"],"profileCapacityMultiplier":0.5,"profileRequiresStaff":false,"autoReceive":true}`.
 
 Сухой склад для зерна, еды и хозяйственных припасов. 600 нагрузки, эффективно 1200 для сухих сельскохозяйственных запасов Сухой склад для зерна, еды и хозяйственных припасов.
 
@@ -458,11 +489,12 @@ ID: `warehouse`. Инфраструктура; этап 1. Требования 
 
 - Строительство: 4 этапов; сложность 0. Материалы: Wood 160; Stone 60.
 - Штат: 0–0; ставка 0. Содержание: база 18, эксплуатация 0. Техобслуживание: 0 QD.
+- Режим труда: passive; предел физических QD: 0.
 - Функции: склад. Репутация / довольство / условия труда: 0/0/0.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: —; обязательный состав: нет. Пассивное хранилище
-- Склад: `{"capacity":1000,"security":2,"quality":2}`.
+- Склад: `{"capacity":1000,"security":2,"quality":2,"autoReceive":true}`.
 
 Универсальное складское помещение для материалов и товаров. Универсальное хранение на 1000 нагрузки без профильных преимуществ Универсальное складское помещение для материалов и товаров.
 
@@ -471,12 +503,13 @@ ID: `warehouse`. Инфраструктура; этап 1. Требования 
 ID: `arsenal`. Инфраструктура; этап 1. Требования П/Т/К/В: **0/4/0/3**; развитие: **0/1/0/3**.
 
 - Строительство: 3 этапов; сложность 0. Материалы: Wood 80; Stone 40; Iron 10.
-- Штат: 1–2; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Штат: 0–2; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: оборона, склад. Репутация / довольство / условия труда: 0/0/0.
-- Активация: 1 работников, 10 QD; содержательный результат не требуется.
+- Активация: 0 работников, 10 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: РАЗ≥3 или СИЛ≥3; обязательный состав: 1 × ОХРАНА. Учёт и обслуживание оружия плюс контролируемая выдача
-- Склад: `{"capacity":120,"security":4,"quality":4,"profileLabel":"Вооружение","profileCategoryTags":["armament"],"profileCapacityMultiplier":0.5,"profileRequiresStaff":true}`.
+- Склад: `{"capacity":120,"security":4,"quality":4,"profileLabel":"Вооружение","profileCategoryTags":["armament"],"profileCapacityMultiplier":0.5,"profileRequiresStaff":true,"autoReceive":true}`.
 
 Склад оружия, пороха, доспехов и строевой амуниции. 120 нагрузки, эффективно 240 для Armament; полная защищённость требует кладовщика Покупку вооружения модуль пока не автоматизирует. Галочка экипировки у отряда остается решением ГМа.
 
@@ -485,9 +518,10 @@ ID: `arsenal`. Инфраструктура; этап 1. Требования П
 ID: `barricade-line`. Военные; этап 1. Требования П/Т/К/В: **0/2/0/3**; развитие: **0/0/0/2**.
 
 - Строительство: 2 этапов; сложность 0. Материалы: Wood 40; Stone 20; Iron 10.
-- Штат: 1–3; ставка 12. Содержание: база 18, эксплуатация 18. Техобслуживание: 0 QD.
+- Штат: 0–3; ставка 12. Содержание: база 18, эксплуатация 18. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: оборона. Репутация / довольство / условия труда: 0/0/-1.
-- Активация: 1 работников, 10 QD; содержательный результат не требуется.
+- Активация: 0 работников, 10 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: СИЛ≥3; обязательный состав: 1 × ОХРАНА. Быстрая физическая оборона и перестройка заграждений
 - Контроль: `{"generalFlat":1,"maximum":1}`.
@@ -499,9 +533,10 @@ ID: `barricade-line`. Военные; этап 1. Требования П/Т/К/
 ID: `signal-tower`. Военные; этап 1. Требования П/Т/К/В: **0/4/0/4**; развитие: **0/1/1/3**.
 
 - Строительство: 3 этапов; сложность -1. Материалы: Wood 60; Stone 25; Iron 5.
-- Штат: 1–3; ставка 18. Содержание: база 36, эксплуатация 36. Техобслуживание: 0 QD.
+- Штат: 0–3; ставка 18. Содержание: база 36, эксплуатация 36. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: оборона, общественная служба. Репутация / довольство / условия труда: 1/0/-1.
-- Активация: 1 работников, 10 QD; содержательный результат не требуется.
+- Активация: 0 работников, 10 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: РАЗ≥3 или ЛОВ≥3; обязательный состав: 1 × ОХРАНА. Распознавание обстановки и точная передача сигналов
 
@@ -512,9 +547,10 @@ ID: `signal-tower`. Военные; этап 1. Требования П/Т/К/В
 ID: `school`. Инфраструктура; этап 1. Требования П/Т/К/В: **0/3/2/0**; развитие: **0/3/3/0**.
 
 - Строительство: 5 этапов; сложность -1. Материалы: Wood 160; Stone 80; Письменные материалы 20; Простые компоненты 10.
-- Штат: 1–3; ставка 18. Содержание: база 54, эксплуатация 36. Техобслуживание: 0 QD.
+- Штат: 0–3; ставка 18. Содержание: база 54, эксплуатация 36. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: общественная служба. Репутация / довольство / условия труда: 0/1/1.
-- Активация: 1 работников, 4 QD; содержательный результат не требуется.
+- Активация: 0 работников, 4 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: РАЗ≥3 или ЭМП≥3; обязательный состав: 1 × ГРАМОТА. Учительское прошлое либо сочетание грамотности и Разума активирует обучение
 - Услуга: `{"capacity":100,"coverageKind":"population","coveredBuildingIds":[]}`.
@@ -527,6 +563,7 @@ ID: `family-house`. Жилые; этап 1. Требования П/Т/К/В: **
 
 - Строительство: 3 этапов; сложность 0. Материалы: Wood 120; Stone 40; Cloth 10.
 - Штат: 0–0; ставка 0. Содержание: база 18, эксплуатация 0. Техобслуживание: 0 QD.
+- Режим труда: passive; предел физических QD: 0.
 - Функции: жильё. Репутация / довольство / условия труда: 0/0/0.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
@@ -541,9 +578,10 @@ ID: `family-house`. Жилые; этап 1. Требования П/Т/К/В: **
 ID: `sheriff-post`. Военные; этап 1. Требования П/Т/К/В: **0/3/2/3**; развитие: **0/0/2/1**.
 
 - Строительство: 3 этапов; сложность 0. Материалы: Wood 100; Stone 40; Iron 10.
-- Штат: 1–3; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Штат: 0–3; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: оборона, общественная служба. Репутация / довольство / условия труда: 0/0/-1.
-- Активация: 1 работников, 20 QD; содержательный результат не требуется.
+- Активация: 0 работников, 20 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: РАЗ≥3 или ЭМП≥3; обязательный состав: 1 × ОХРАНА. Расследование и работа с населением требуют профессионального стражника
 - Услуга: `{"capacity":30,"coverageKind":"population","coveredBuildingIds":[]}`.
@@ -556,48 +594,51 @@ ID: `sheriff-post`. Военные; этап 1. Требования П/Т/К/В
 ID: `bakery`. Производство; этап 2. Требования П/Т/К/В: **14/5/0/0**; развитие: **4/1/0/0**.
 
 - Строительство: 4 этапов; сложность -1. Материалы: Stone 120; Bricks 80; Wood 40; Простые компоненты 10.
-- Штат: 2–8; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Штат: 0–8; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: производство, общественная служба. Репутация / довольство / условия труда: 0/1/0.
 - Активация: 0 работников, 0 QD; содержательный результат обязателен.
 - Зависимости: нет.
 - Работники: Любой трудоспособный; обязательный состав: нет. Рецептура, повторяемость и обслуживание покупателей
 - Услуга: `{"capacity":100,"coverageKind":"population","coveredBuildingIds":[]}`.
-- Производственная линия: `{"id":"line","active":true,"requiresGmConfirmation":false,"name":"Хлеб","mode":"Хлеб","source":"workers","period":"qd","resourceId":"bread","resource":"Хлеб","outputQty":6,"workQd":1,"expenseMode":"cycle","expenses":"flour 6","costsText":"flour 6","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-2-food-grain","active":true,"requiresGmConfirmation":false,"name":"Зерновая пища","mode":"Зерновая пища","source":"workers","period":"qd","resourceId":"food-grain","resource":"Зерновая пища","outputQty":4,"workQd":1,"expenseMode":"cycle","expenses":"flour 6","costsText":"flour 6","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line","active":true,"requiresGmConfirmation":false,"name":"Хлеб","mode":"Хлеб","source":"workers","period":"qd","resourceId":"bread","resource":"Хлеб","outputQty":24,"workQd":3,"expenseMode":"cycle","expenses":"flour 24, fuel-solid 1","costsText":"flour 6","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
 
-Печь для хлеба и сухарей. Хлеб и готовая зерновая пища Flour превращается в Bread/Food.
+Печь для хлеба и сухарей. Хлеб и готовая зерновая пища Flour превращается в Bread/Food. Тепловая обработка расходует твёрдое топливо на полную партию; обычная эксплуатация оплачивается отдельно один раз на здание.
 
 ## Трактир
 
 ID: `inn`. Жилые; этап 2. Требования П/Т/К/В: **14/0/8/0**; развитие: **2/0/1/0**.
 
 - Строительство: 5 этапов; сложность -1. Материалы: Wood 220; Stone 80; Cloth 20.
-- Штат: 2–10; ставка 18. Содержание: база 54, эксплуатация 36. Техобслуживание: 0 QD.
-- Функции: производство, доход, жильё, общественная служба. Репутация / довольство / условия труда: 1/30/0.
-- Активация: 2 работников, 40 QD; содержательный результат не требуется.
+- Штат: 0–10; ставка 18. Содержание: база 54, эксплуатация 36. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
+- Функции: производство, доход, жильё, общественная служба. Репутация / довольство / условия труда: 1/15/0.
+- Активация: 0 работников, 40 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: Любой трудоспособный; обязательный состав: нет. Ровный работник хорош в смешанной кухонной и гостевой работе
-- Услуга: `{"capacity":100,"coverageKind":"population","coveredBuildingIds":[],"leisure":{"kind":"drinking","capacity":30,"qdPerCapacity":2.6666666666666665,"functionId":"culture","minWorkers":2}}`.
 - Жильё: `{"capacity":6,"comfort":1,"quality":1,"notes":"Комнаты для гостей и работников."}`.
-- Производственная линия: `{"id":"line","active":true,"requiresGmConfirmation":false,"name":"Белковая пища из мяса","mode":"Белковая пища из мяса","source":"workers","period":"qd","resourceId":"food-protein","resource":"Белковая пища из мяса","outputQty":3,"workQd":1,"expenseMode":"cycle","expenses":"meat 3","costsText":"meat 3","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-2-food-protein","active":true,"requiresGmConfirmation":false,"name":"Белковая пища из рыбы","mode":"Белковая пища из рыбы","source":"workers","period":"qd","resourceId":"food-protein","resource":"Белковая пища из рыбы","outputQty":3,"workQd":1,"expenseMode":"cycle","expenses":"fish 3","costsText":"fish 3","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-3-food-protein","active":true,"requiresGmConfirmation":false,"name":"Белковая пища из яиц","mode":"Белковая пища из яиц","source":"workers","period":"qd","resourceId":"food-protein","resource":"Белковая пища из яиц","outputQty":3,"workQd":1,"expenseMode":"cycle","expenses":"eggs 3","costsText":"eggs 3","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-2","active":true,"requiresGmConfirmation":false,"name":"Плодовая пища из овощей","mode":"Плодовая пища из овощей","source":"workers","period":"qd","resourceId":"food-fruit","resource":"Плодовая пища из овощей","outputQty":3,"workQd":1,"expenseMode":"cycle","expenses":"vegetables 3","costsText":"vegetables 3","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-5-food-fruit","active":true,"requiresGmConfirmation":false,"name":"Плодовая пища из фруктов","mode":"Плодовая пища из фруктов","source":"workers","period":"qd","resourceId":"food-fruit","resource":"Плодовая пища из фруктов","outputQty":3,"workQd":1,"expenseMode":"cycle","expenses":"fruits 3","costsText":"fruits 3","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-3","active":true,"requiresGmConfirmation":false,"name":"Молочная пища","mode":"Молочная пища","source":"workers","period":"qd","resourceId":"food-dairy","resource":"Молочная пища","outputQty":3,"workQd":1,"expenseMode":"cycle","expenses":"milk 3","costsText":"milk 3","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-4","active":true,"requiresGmConfirmation":false,"name":"Зерновая пища из яиц","mode":"Зерновая пища из яиц","source":"workers","period":"qd","resourceId":"food-grain","resource":"Зерновая пища из яиц","outputQty":3,"workQd":1,"expenseMode":"cycle","expenses":"eggs 2, flour 1","costsText":"eggs 2, flour 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Доходная функция: `{"base":0,"perWorker":0,"formula":"","risk":0,"illegal":false,"trade":{"enabled":true,"sourceIds":["population","inn-visitors"],"allowedTags":["food.prepared","alcohol","beverage","service.inn"],"demandSource":"inn-visitors","demandBudgetBaseCopper":40,"demandBudgetPerWorkerCopper":10,"throughputUnitsPerWorker":5,"gmPriority":500,"roomId":"all","kind":"all","service":{"enabled":true,"categoryTag":"service.inn","basePriceCopper":5,"unitsPerWorker":2},"notes":"Покупатели трактирных услуг и мелких товаров."},"wageDailyCopper":18,"operatingUpkeepMonthlyCopper":36}`.
+- Производственная линия: `{"id":"line","active":true,"requiresGmConfirmation":false,"name":"Белковая пища из мяса","mode":"Белковая пища из мяса","source":"workers","period":"qd","resourceId":"food-protein","resource":"Белковая пища из мяса","outputQty":12,"workQd":3,"expenseMode":"cycle","expenses":"meat 12, fuel-solid 1","costsText":"meat 3","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-2-food-protein","active":true,"requiresGmConfirmation":false,"name":"Белковая пища из рыбы","mode":"Белковая пища из рыбы","source":"workers","period":"qd","resourceId":"food-protein","resource":"Белковая пища из рыбы","outputQty":12,"workQd":3,"expenseMode":"cycle","expenses":"fish 12, fuel-solid 1","costsText":"fish 3","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-3-food-protein","active":true,"requiresGmConfirmation":false,"name":"Белковая пища из яиц","mode":"Белковая пища из яиц","source":"workers","period":"qd","resourceId":"food-protein","resource":"Белковая пища из яиц","outputQty":12,"workQd":3,"expenseMode":"cycle","expenses":"eggs 12, fuel-solid 1","costsText":"eggs 3","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-2","active":true,"requiresGmConfirmation":false,"name":"Плодовая пища из овощей","mode":"Овощное блюдо","source":"workers","period":"qd","resourceId":"food-vegetables","resource":"Готовая пища (овощная)","outputQty":12,"workQd":3,"expenseMode":"cycle","expenses":"vegetables 12, fuel-solid 1","costsText":"vegetables 3","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-5-food-fruit","active":true,"requiresGmConfirmation":false,"name":"Плодовая пища из фруктов","mode":"Плодовая пища из фруктов","source":"workers","period":"qd","resourceId":"food-fruit","resource":"Плодовая пища из фруктов","outputQty":12,"workQd":3,"expenseMode":"cycle","expenses":"fruits 12, fuel-solid 1","costsText":"fruits 3","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-3","active":true,"requiresGmConfirmation":false,"name":"Молочная пища","mode":"Молочная пища","source":"workers","period":"qd","resourceId":"food-dairy","resource":"Молочная пища","outputQty":12,"workQd":3,"expenseMode":"cycle","expenses":"milk 12, fuel-solid 1","costsText":"milk 3","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-4","active":true,"requiresGmConfirmation":false,"name":"Зерновая пища из яиц","mode":"Мучная похлёбка","source":"workers","period":"qd","resourceId":"food-grain","resource":"Зерновая пища из яиц","outputQty":10,"workQd":2,"expenseMode":"cycle","expenses":"flour 8, fuel-solid 1","costsText":"eggs 2, flour 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-grain-porridge","active":true,"requiresGmConfirmation":false,"name":"Зерновая пища из яиц","mode":"Каша из зерна","source":"workers","period":"qd","resourceId":"food-grain","resource":"Зерновая пища из яиц","outputQty":10,"workQd":2,"expenseMode":"cycle","expenses":"grain 12, fuel-solid 1","costsText":"eggs 2, flour 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-vegetables-oil","active":true,"requiresGmConfirmation":false,"name":"Плодовая пища из овощей","mode":"Овощи с маслом","source":"workers","period":"qd","resourceId":"food-vegetables","resource":"Готовая пища (овощная)","outputQty":14,"workQd":3,"expenseMode":"cycle","expenses":"vegetables 12, cooking-oil 1, fuel-solid 1","costsText":"vegetables 3","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Доходная функция: `{"base":0,"perWorker":0,"formula":"","risk":0,"illegal":false,"trade":{"enabled":true,"sourceIds":["population","inn-visitors"],"allowedTags":["food.prepared","alcohol","beverage","service.inn"],"demandSource":"inn-visitors","demandBudgetBaseCopper":240,"demandBudgetPerWorkerCopper":60,"throughputUnitsPerWorker":5,"gmPriority":500,"roomId":"all","kind":"all","service":{"enabled":true,"categoryTag":"service.inn","basePriceCopper":30,"unitsPerWorker":2},"notes":"Покупатели трактирных услуг и мелких товаров."},"wageDailyCopper":18,"operatingUpkeepMonthlyCopper":36}`.
 
-Постоялый двор, еда, слухи и малый доход. Готовая пища, гостевые места и услуги посетителям Первые 40 QD досуга обеспечивают 15 мест; 80 QD — полную мощность 30. Кухня использует тот же общий предел в 10 работников, но отдельные QD производства. Расходы программы досуга включены в денежное содержание; кухня расходует материалы своих рецептов отдельно.
+Постоялый двор, еда, слухи и малый доход. Готовая пища, гостевые места и услуги посетителям Работающий трактир даёт +15 довольства. Отдельная бригада досуга не нужна: учитывается работа кухни, торговли и обслуживания, без повторного счёта QD. Производственные назначения распределяются между конкретными блюдами. Топливо списывается на партию. Простая каша и мучная похлёбка готовятся здесь без пекарни.
 
 ## Дом игр
 
 ID: `game-house`. Инфраструктура; этап 2. Требования П/Т/К/В: **0/7/8/0**; развитие: **0/0/1/0**.
 
 - Строительство: 4 этапов; сложность -1. Материалы: Wood 160; Stone 80; Cloth 20; Письменные материалы 10.
-- Штат: 2–2; ставка 18. Содержание: база 36, эксплуатация 54. Техобслуживание: 0 QD.
+- Штат: 0–2; ставка 18. Содержание: база 36, эксплуатация 54. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: общественная служба. Репутация / довольство / условия труда: 0/20/0.
-- Активация: 2 работников, 8 QD; содержательный результат не требуется.
+- Активация: 0 работников, 8 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: Любой трудоспособный; обязательный состав: нет. Обслуживание посетителей и проведение программы досуга
 - Услуга: `{"capacity":20,"coverageKind":"population","coveredBuildingIds":[],"leisure":{"kind":"games","capacity":20,"qdPerCapacity":2,"functionId":"culture","minWorkers":2}}`.
@@ -609,124 +650,132 @@ ID: `game-house`. Инфраструктура; этап 2. Требования
 ID: `oil-press`. Производство; этап 2. Требования П/Т/К/В: **12/6/0/0**; развитие: **4/1/0/0**.
 
 - Строительство: 4 этапов; сложность -1. Материалы: Wood 120; Stone 40; Простые компоненты 20.
-- Штат: 2–8; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Штат: 0–8; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: производство. Репутация / довольство / условия труда: 0/0/0.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: СИЛ≥3 или РАЗ≥3; обязательный состав: нет. Тяжёлый пресс и контроль переработки сырья
-- Производственная линия: `{"id":"line-1-cooking-oil","active":true,"requiresGmConfirmation":false,"name":"Масло из зерна","mode":"Масло из зерна","source":"workers","period":"qd","resourceId":"cooking-oil","resource":"Масло из зерна","outputQty":2,"workQd":1,"expenseMode":"cycle","expenses":"grain 3","costsText":"grain 3","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-2-cooking-oil","active":true,"requiresGmConfirmation":false,"name":"Масло из плодов","mode":"Масло из плодов","source":"workers","period":"qd","resourceId":"cooking-oil","resource":"Масло из плодов","outputQty":3,"workQd":1,"expenseMode":"cycle","expenses":"fruits 3","costsText":"fruits 3","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-1-cooking-oil","active":true,"requiresGmConfirmation":false,"name":"Масло из зерна","mode":"Масло из масличных семян","source":"workers","period":"qd","resourceId":"cooking-oil","resource":"Масло из зерна","outputQty":5,"workQd":2,"expenseMode":"cycle","expenses":"grain 6","costsText":"grain 3","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-2-cooking-oil","active":true,"requiresGmConfirmation":false,"name":"Масло из плодов","mode":"Масло из масличных плодов","source":"workers","period":"qd","resourceId":"cooking-oil","resource":"Масло из плодов","outputQty":3,"workQd":1,"expenseMode":"cycle","expenses":"fruits 3","costsText":"fruits 3","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
 
-Пищевое масло из выбранного местного сырья Пищевое масло из выбранного местного сырья
+Пищевое масло из выбранного местного сырья Пищевое масло из выбранного местного сырья Категории зерна и плодов здесь означают подходящие масличные семена и плоды. Обычная пшеница и яблоки не являются их буквальной заменой; состав партии определяет ГМ. Масло используется в отдельном овощном блюде трактира, остальные блюда его не требуют.
 
 ## Сыроварня
 
 ID: `cheesery`. Производство; этап 2. Требования П/Т/К/В: **12/6/0/0**; развитие: **4/1/0/0**.
 
 - Строительство: 4 этапов; сложность -1. Материалы: Wood 120; Stone 60; Простые компоненты 10.
-- Штат: 2–8; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Штат: 0–8; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: производство. Репутация / довольство / условия труда: 0/0/0.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: РАЗ≥3 или ЭМП≥3; обязательный состав: нет. Контроль созревания и обращение с молочным сырьём
-- Производственная линия: `{"id":"line-1-food-dairy","active":true,"requiresGmConfirmation":false,"name":"Молочная пища","mode":"Молочная пища","source":"workers","period":"qd","resourceId":"food-dairy","resource":"Молочная пища","outputQty":4,"workQd":1,"expenseMode":"cycle","expenses":"milk 4","costsText":"milk 4","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-2-aged-cheese","active":true,"requiresGmConfirmation":false,"name":"Выдержанный сыр","mode":"Выдержанный сыр","source":"workers","period":"qd","resourceId":"aged-cheese","resource":"Выдержанный сыр","outputQty":2,"workQd":1,"expenseMode":"cycle","expenses":"milk 4","costsText":"milk 4","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-1-food-dairy","active":true,"requiresGmConfirmation":false,"name":"Молочная пища","mode":"Молочная пища","source":"workers","period":"qd","resourceId":"food-dairy","resource":"Молочная пища","outputQty":16,"workQd":3,"expenseMode":"cycle","expenses":"milk 16, fuel-solid 1","costsText":"milk 4","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-2-aged-cheese","active":true,"requiresGmConfirmation":false,"name":"Выдержанный сыр","mode":"Выдержанный сыр","source":"workers","period":"qd","resourceId":"aged-cheese","resource":"Выдержанный сыр","outputQty":80,"workQd":30,"expenseMode":"cycle","expenses":"milk 160, fuel-solid 10","costsText":"milk 160, fuel-solid 10","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none","waitDays":30,"batchCapacity":240,"batchStartQty":8}`.
 
-Готовая молочная пища и выдержанный сыр Готовая молочная пища и выдержанный сыр
+Готовая молочная пища и выдержанный сыр Готовая молочная пища и выдержанный сыр Тепловая обработка расходует твёрдое топливо на полную партию; обычная эксплуатация оплачивается отдельно один раз на здание. Выдержанный сыр: до 80 ЕД. в партии, запуск от 8 ЕД., общая вместимость 240 ЕД. Сырьё и труд пропорциональны загрузке; после подготовки — 30 дн. ожидания без труда. Партии выдерживаются независимо.
 
 ## Коптильня
 
 ID: `smokehouse`. Производство; этап 2. Требования П/Т/К/В: **14/6/0/0**; развитие: **4/1/0/0**.
 
 - Строительство: 3 этапов; сложность 0. Материалы: Wood 80; Stone 60; Bricks 20.
-- Штат: 2–8; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Штат: 0–8; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: производство. Репутация / довольство / условия труда: 0/0/-1.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: СИЛ≥3 или РАЗ≥3; обязательный состав: нет. Топка, тяжёлые партии и контроль консервации
-- Производственная линия: `{"id":"line-1-preserved-meat","active":true,"requiresGmConfirmation":false,"name":"Консервы из мяса","mode":"Консервы из мяса","source":"workers","period":"qd","resourceId":"preserved-meat","resource":"Консервы из мяса","outputQty":3,"workQd":1,"expenseMode":"cycle","expenses":"meat 4, salt 1","costsText":"meat 4, salt 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-2-preserved-meat","active":true,"requiresGmConfirmation":false,"name":"Консервы из рыбы","mode":"Консервы из рыбы","source":"workers","period":"qd","resourceId":"preserved-meat","resource":"Консервы из рыбы","outputQty":3,"workQd":1,"expenseMode":"cycle","expenses":"fish 4, salt 1","costsText":"fish 4, salt 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-3-preserved-meat","active":true,"requiresGmConfirmation":false,"name":"Консервы из яиц","mode":"Консервы из яиц","source":"workers","period":"qd","resourceId":"preserved-meat","resource":"Консервы из яиц","outputQty":3,"workQd":1,"expenseMode":"cycle","expenses":"eggs 4, salt 1","costsText":"eggs 4, salt 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-4-dried-fruit","active":true,"requiresGmConfirmation":false,"name":"Сушёные фрукты","mode":"Сушёные фрукты","source":"workers","period":"qd","resourceId":"dried-fruit","resource":"Сушёные фрукты","outputQty":3,"workQd":1,"expenseMode":"cycle","expenses":"fruits 4","costsText":"fruits 4","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-1-preserved-meat","active":true,"requiresGmConfirmation":false,"name":"Консервы из мяса","mode":"Белковые заготовки из мяса","source":"workers","period":"qd","resourceId":"preserved-meat","resource":"Консервы из мяса","outputQty":12,"workQd":3,"expenseMode":"cycle","expenses":"meat 16, salt 4, fuel-solid 1","costsText":"meat 4, salt 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-2-preserved-meat","active":true,"requiresGmConfirmation":false,"name":"Консервы из рыбы","mode":"Белковые заготовки из рыбы","source":"workers","period":"qd","resourceId":"preserved-meat","resource":"Консервы из рыбы","outputQty":12,"workQd":3,"expenseMode":"cycle","expenses":"fish 16, salt 4, fuel-solid 1","costsText":"fish 4, salt 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-3-preserved-meat","active":true,"requiresGmConfirmation":false,"name":"Консервы из яиц","mode":"Белковые заготовки из яиц","source":"workers","period":"qd","resourceId":"preserved-meat","resource":"Консервы из яиц","outputQty":12,"workQd":3,"expenseMode":"cycle","expenses":"eggs 16, salt 4, fuel-solid 1","costsText":"eggs 4, salt 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-4-dried-fruit","active":true,"requiresGmConfirmation":false,"name":"Сушёные фрукты","mode":"Сушёные фрукты","source":"workers","period":"qd","resourceId":"dried-fruit","resource":"Сушёные фрукты","outputQty":24,"workQd":6,"expenseMode":"cycle","expenses":"fruits 32, fuel-solid 2","costsText":"fruits 32, fuel-solid 2","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none","waitDays":1,"batchCapacity":48,"batchStartQty":12}`.
 
-Консервированный белок и растительные консервы Консервированный белок и растительные консервы
+Консервированный белок и растительные консервы Консервированный белок и растительные консервы Тепловая обработка расходует твёрдое топливо на полную партию; обычная эксплуатация оплачивается отдельно один раз на здание. Сушёные фрукты: до 24 ЕД. в партии, запуск от 12 ЕД., общая вместимость 48 ЕД. Сырьё и труд пропорциональны загрузке; после подготовки — 1 дн. ожидания без труда. Партии выдерживаются независимо.
 
 ## Пивоварня
 
 ID: `brewery`. Производство; этап 2. Требования П/Т/К/В: **12/5/4/0**; развитие: **2/1/1/0**.
 
 - Строительство: 5 этапов; сложность -1. Материалы: Wood 180; Stone 80; Copper 10; Простые компоненты 20.
-- Штат: 3–12; ставка 18. Содержание: база 36, эксплуатация 36. Техобслуживание: 0 QD.
+- Штат: 0–12; ставка 18. Содержание: база 36, эксплуатация 36. Техобслуживание: 0 QD.
+- Режим труда: qd; предел физических QD: отдельно не задан.
 - Функции: производство. Репутация / довольство / условия труда: 0/0/0.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: СИЛ≥3 или РАЗ≥3; обязательный состав: нет. Варка, ёмкости и устойчивый технологический режим
-- Производственная линия: `{"id":"line-1-alcohol-brewed-cheap-weak","active":true,"requiresGmConfirmation":false,"name":"Дешёвый слабый алкоголь","mode":"Дешёвый слабый алкоголь","source":"workers","period":"qd","resourceId":"alcohol-brewed-cheap-weak","resource":"Дешёвый слабый алкоголь","outputQty":2,"workQd":1,"expenseMode":"cycle","expenses":"grain 6, hops 2","costsText":"grain 6, hops 2","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-2-alcohol-brewed-fine-weak","active":true,"requiresGmConfirmation":false,"name":"Дорогой слабый алкоголь","mode":"Дорогой слабый алкоголь","source":"workers","period":"qd","resourceId":"alcohol-brewed-fine-weak","resource":"Дорогой слабый алкоголь","outputQty":2,"workQd":2,"expenseMode":"cycle","expenses":"grain 8, hops 4, sugar 2, spices 1","costsText":"grain 8, hops 4, sugar 2, spices 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-1-alcohol-brewed-cheap-weak","active":true,"requiresGmConfirmation":false,"name":"Дешёвый слабый алкоголь","mode":"Дешёвый слабый алкоголь","source":"workers","period":"qd","resourceId":"alcohol-brewed-cheap-weak","resource":"Дешёвый слабый алкоголь","outputQty":32,"workQd":12,"expenseMode":"cycle","expenses":"grain 96, hops 32, fuel-solid 4","costsText":"grain 96, hops 32, fuel-solid 4","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none","waitDays":10,"batchCapacity":160,"batchStartQty":8}`.
+- Производственная линия: `{"id":"line-2-alcohol-brewed-fine-weak","active":true,"requiresGmConfirmation":false,"name":"Дорогой слабый алкоголь","mode":"Дорогой слабый алкоголь","source":"workers","period":"qd","resourceId":"alcohol-brewed-fine-weak","resource":"Дорогой слабый алкоголь","outputQty":32,"workQd":28,"expenseMode":"cycle","expenses":"grain 128, hops 64, sugar 32, spices 16, fuel-solid 4","costsText":"grain 128, hops 64, sugar 32, spices 16, fuel-solid 4","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none","waitDays":20,"batchCapacity":128,"batchStartQty":8}`.
 
-Слабый зерновой и хмельной алкоголь Слабый зерновой и хмельной алкоголь
+Слабый зерновой и хмельной алкоголь Слабый зерновой и хмельной алкоголь Тепловая обработка расходует твёрдое топливо на полную партию; обычная эксплуатация оплачивается отдельно один раз на здание. Внешнее или сюжетное сырьё: сахар, специи. Стандартное дерево поселения не производит эти входы. Дешёвый слабый алкоголь: до 32 ЕД. в партии, запуск от 8 ЕД., общая вместимость 160 ЕД. Сырьё и труд пропорциональны загрузке; после подготовки — 10 дн. ожидания без труда. Партии выдерживаются независимо. Дорогой слабый алкоголь: до 32 ЕД. в партии, запуск от 8 ЕД., общая вместимость 128 ЕД. Сырьё и труд пропорциональны загрузке; после подготовки — 20 дн. ожидания без труда. Партии выдерживаются независимо.
 
 ## Винодельня
 
 ID: `winery`. Производство; этап 2. Требования П/Т/К/В: **12/5/6/0**; развитие: **3/0/2/0**.
 
 - Строительство: 5 этапов; сложность -1. Материалы: Wood 180; Stone 100; Glass 20; Простые компоненты 10.
-- Штат: 3–12; ставка 18. Содержание: база 36, эксплуатация 36. Техобслуживание: 0 QD.
+- Штат: 0–12; ставка 18. Содержание: база 36, эксплуатация 36. Техобслуживание: 0 QD.
+- Режим труда: qd; предел физических QD: отдельно не задан.
 - Функции: производство. Репутация / довольство / условия труда: 0/0/0.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: РАЗ≥3 или ЭМП≥3; обязательный состав: нет. Оценка сырья, брожения и качества
-- Производственная линия: `{"id":"line-1-alcohol-wine-cheap-weak","active":true,"requiresGmConfirmation":false,"name":"Дешёвое слабое вино","mode":"Дешёвое слабое вино","source":"workers","period":"qd","resourceId":"alcohol-wine-cheap-weak","resource":"Дешёвое слабое вино","outputQty":1,"workQd":1,"expenseMode":"cycle","expenses":"grapes 6","costsText":"grapes 6","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-2-alcohol-wine-fine-weak","active":true,"requiresGmConfirmation":false,"name":"Дорогое слабое вино","mode":"Дорогое слабое вино","source":"workers","period":"qd","resourceId":"alcohol-wine-fine-weak","resource":"Дорогое слабое вино","outputQty":1,"workQd":2,"expenseMode":"cycle","expenses":"grapes 16","costsText":"grapes 16","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-1-alcohol-wine-cheap-weak","active":true,"requiresGmConfirmation":false,"name":"Дешёвое слабое вино","mode":"Дешёвое слабое вино","source":"workers","period":"qd","resourceId":"alcohol-wine-cheap-weak","resource":"Дешёвое слабое вино","outputQty":20,"workQd":20,"expenseMode":"cycle","expenses":"grapes 120","costsText":"grapes 120","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none","waitDays":30,"batchCapacity":160,"batchStartQty":1}`.
+- Производственная линия: `{"id":"line-2-alcohol-wine-fine-weak","active":true,"requiresGmConfirmation":false,"name":"Дорогое слабое вино","mode":"Дорогое слабое вино","source":"workers","period":"qd","resourceId":"alcohol-wine-fine-weak","resource":"Дорогое слабое вино","outputQty":20,"workQd":40,"expenseMode":"cycle","expenses":"grapes 320","costsText":"grapes 320","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none","waitDays":90,"batchCapacity":200,"batchStartQty":1}`.
 
-Слабый винный алкоголь Слабый винный алкоголь
+Слабый винный алкоголь Слабый винный алкоголь Дешёвое слабое вино: до 20 ЕД. в партии, запуск от 1 ЕД., общая вместимость 160 ЕД. Сырьё и труд пропорциональны загрузке; после подготовки — 30 дн. ожидания без труда. Партии выдерживаются независимо. Дорогое слабое вино: до 20 ЕД. в партии, запуск от 1 ЕД., общая вместимость 200 ЕД. Сырьё и труд пропорциональны загрузке; после подготовки — 90 дн. ожидания без труда. Партии выдерживаются независимо.
 
 ## Винокурня
 
 ID: `distillery`. Производство; этап 2. Требования П/Т/К/В: **10/10/6/0**; развитие: **1/2/1/0**.
 
 - Строительство: 5 этапов; сложность -2. Материалы: Wood 140; Stone 80; Copper 20; Glass 20; Простые компоненты 20.
-- Штат: 3–10; ставка 18. Содержание: база 36, эксплуатация 54. Техобслуживание: 0 QD.
+- Штат: 0–10; ставка 18. Содержание: база 36, эксплуатация 54. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: производство. Репутация / довольство / условия труда: 0/0/-1.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: РАЗ≥3 и ЛОВ≥3; обязательный состав: нет. Точная и пожароопасная перегонка
-- Производственная линия: `{"id":"line-1-alcohol-brewed-cheap-strong","active":true,"requiresGmConfirmation":false,"name":"Дешёвый зерновой крепкий","mode":"Дешёвый зерновой крепкий","source":"workers","period":"qd","resourceId":"alcohol-brewed-cheap-strong","resource":"Дешёвый зерновой крепкий","outputQty":1,"workQd":1,"expenseMode":"cycle","expenses":"alcohol-brewed-cheap-weak 2","costsText":"alcohol-brewed-cheap-weak 2","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-2-alcohol-brewed-fine-strong","active":true,"requiresGmConfirmation":false,"name":"Дорогой зерновой крепкий","mode":"Дорогой зерновой крепкий","source":"workers","period":"qd","resourceId":"alcohol-brewed-fine-strong","resource":"Дорогой зерновой крепкий","outputQty":1,"workQd":1,"expenseMode":"cycle","expenses":"alcohol-brewed-fine-weak 2","costsText":"alcohol-brewed-fine-weak 2","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-3-alcohol-wine-cheap-strong","active":true,"requiresGmConfirmation":false,"name":"Дешёвый винный крепкий","mode":"Дешёвый винный крепкий","source":"workers","period":"qd","resourceId":"alcohol-wine-cheap-strong","resource":"Дешёвый винный крепкий","outputQty":1,"workQd":2,"expenseMode":"cycle","expenses":"alcohol-wine-cheap-weak 2","costsText":"alcohol-wine-cheap-weak 2","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-4-alcohol-wine-fine-strong","active":true,"requiresGmConfirmation":false,"name":"Дорогой винный крепкий","mode":"Дорогой винный крепкий","source":"workers","period":"qd","resourceId":"alcohol-wine-fine-strong","resource":"Дорогой винный крепкий","outputQty":1,"workQd":3,"expenseMode":"cycle","expenses":"alcohol-wine-fine-weak 2","costsText":"alcohol-wine-fine-weak 2","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-5-alcohol-general-cheap-strong","active":true,"requiresGmConfirmation":false,"name":"Дешёвый общий крепкий","mode":"Дешёвый общий крепкий","source":"workers","period":"qd","resourceId":"alcohol-general-cheap-strong","resource":"Дешёвый общий крепкий","outputQty":1,"workQd":2,"expenseMode":"cycle","expenses":"alcohol-general-cheap-weak 2","costsText":"alcohol-general-cheap-weak 2","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-6-alcohol-general-fine-strong","active":true,"requiresGmConfirmation":false,"name":"Дорогой общий крепкий","mode":"Дорогой общий крепкий","source":"workers","period":"qd","resourceId":"alcohol-general-fine-strong","resource":"Дорогой общий крепкий","outputQty":1,"workQd":4,"expenseMode":"cycle","expenses":"alcohol-general-fine-weak 2","costsText":"alcohol-general-fine-weak 2","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-1-alcohol-brewed-cheap-strong","active":true,"requiresGmConfirmation":false,"name":"Дешёвый зерновой крепкий","mode":"Дешёвый зерновой крепкий","source":"workers","period":"qd","resourceId":"alcohol-brewed-cheap-strong","resource":"Дешёвый зерновой крепкий","outputQty":4,"workQd":3,"expenseMode":"cycle","expenses":"alcohol-brewed-cheap-weak 8, fuel-solid 1","costsText":"alcohol-brewed-cheap-weak 2","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-2-alcohol-brewed-fine-strong","active":true,"requiresGmConfirmation":false,"name":"Дорогой зерновой крепкий","mode":"Дорогой зерновой крепкий","source":"workers","period":"qd","resourceId":"alcohol-brewed-fine-strong","resource":"Дорогой зерновой крепкий","outputQty":4,"workQd":3,"expenseMode":"cycle","expenses":"alcohol-brewed-fine-weak 8, fuel-solid 1","costsText":"alcohol-brewed-fine-weak 2","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-3-alcohol-wine-cheap-strong","active":true,"requiresGmConfirmation":false,"name":"Дешёвый винный крепкий","mode":"Дешёвый винный крепкий","source":"workers","period":"qd","resourceId":"alcohol-wine-cheap-strong","resource":"Дешёвый винный крепкий","outputQty":4,"workQd":7,"expenseMode":"cycle","expenses":"alcohol-wine-cheap-weak 8, fuel-solid 1","costsText":"alcohol-wine-cheap-weak 2","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-4-alcohol-wine-fine-strong","active":true,"requiresGmConfirmation":false,"name":"Дорогой винный крепкий","mode":"Дорогой винный крепкий","source":"workers","period":"qd","resourceId":"alcohol-wine-fine-strong","resource":"Дорогой винный крепкий","outputQty":4,"workQd":11,"expenseMode":"cycle","expenses":"alcohol-wine-fine-weak 8, fuel-solid 1","costsText":"alcohol-wine-fine-weak 2","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-5-alcohol-general-cheap-strong","active":true,"requiresGmConfirmation":false,"name":"Дешёвый общий крепкий","mode":"Дешёвый общий крепкий","source":"workers","period":"qd","resourceId":"alcohol-general-cheap-strong","resource":"Дешёвый общий крепкий","outputQty":4,"workQd":7,"expenseMode":"cycle","expenses":"alcohol-general-cheap-weak 8, fuel-solid 1","costsText":"alcohol-general-cheap-weak 2","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-6-alcohol-general-fine-strong","active":true,"requiresGmConfirmation":false,"name":"Дорогой общий крепкий","mode":"Дорогой общий крепкий","source":"workers","period":"qd","resourceId":"alcohol-general-fine-strong","resource":"Дорогой общий крепкий","outputQty":4,"workQd":15,"expenseMode":"cycle","expenses":"alcohol-general-fine-weak 8, fuel-solid 1","costsText":"alcohol-general-fine-weak 2","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
 
-Крепкий алкоголь из соответствующей слабой основы Крепкий алкоголь из соответствующей слабой основы
+Крепкий алкоголь из соответствующей слабой основы Крепкий алкоголь из соответствующей слабой основы Тепловая обработка расходует твёрдое топливо на полную партию; обычная эксплуатация оплачивается отдельно один раз на здание. Внешнее или сюжетное сырьё: покупной общий слабый алкоголь, покупной дорогой общий слабый алкоголь. Стандартное дерево поселения не производит эти входы.
 
 ## Ткацкая мастерская
 
 ID: `weaving-workshop`. Производство; этап 2. Требования П/Т/К/В: **0/10/4/0**; развитие: **0/2/1/0**.
 
 - Строительство: 4 этапов; сложность -1. Материалы: Wood 160; Stone 40; Простые компоненты 20.
-- Штат: 4–16; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Штат: 0–16; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: производство. Репутация / довольство / условия труда: 0/0/-1.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: ЛОВ≥3; обязательный состав: нет. Точная повторяемая работа и настройка станков
-- Производственная линия: `{"id":"line-1-cloth","active":true,"requiresGmConfirmation":false,"name":"Ткань из волокна","mode":"Ткань из волокна","source":"workers","period":"qd","resourceId":"cloth","resource":"Ткань из волокна","outputQty":2,"workQd":1,"expenseMode":"cycle","expenses":"plant-fiber 2","costsText":"plant-fiber 2","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-2-cloth","active":true,"requiresGmConfirmation":false,"name":"Ткань из шерсти","mode":"Ткань из шерсти","source":"workers","period":"qd","resourceId":"cloth","resource":"Ткань из шерсти","outputQty":2,"workQd":1,"expenseMode":"cycle","expenses":"wool 2","costsText":"wool 2","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-1-cloth","active":true,"requiresGmConfirmation":false,"name":"Ткань из волокна","mode":"Ткань из волокна","source":"workers","period":"qd","resourceId":"cloth","resource":"Ткань из волокна","outputQty":2,"workQd":1,"expenseMode":"cycle","expenses":"plant-fiber 2","costsText":"plant-fiber 2","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-2-cloth","active":true,"requiresGmConfirmation":false,"name":"Ткань из шерсти","mode":"Ткань из шерсти","source":"workers","period":"qd","resourceId":"cloth","resource":"Ткань из шерсти","outputQty":2,"workQd":1,"expenseMode":"cycle","expenses":"wool 2","costsText":"wool 2","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
 
-Ткань из растительного волокна или шерсти Ткань из растительного волокна или шерсти
+Ткань из растительного волокна или шерсти Ткань из растительного волокна или шерсти Волокно и шерсть дают одну укрупнённую ткань. Шерстяная линия полезна при собственном овцеводстве или доступной шерсти; равная прибыль двух линий не обещается.
 
 ## Столярная мастерская
 
 ID: `carpentry-workshop`. Производство; этап 2. Требования П/Т/К/В: **0/10/0/0**; развитие: **0/2/0/0**.
 
 - Строительство: 4 этапов; сложность -1. Материалы: Wood 160; Stone 20; Простые компоненты 10.
-- Штат: 2–10; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Штат: 0–10; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: производство. Репутация / довольство / условия труда: 0/0/0.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: СИЛ≥3 или РАЗ≥3; обязательный состав: нет. Материал, конструкция и ручной инструмент
-- Производственная линия: `{"id":"line-1-components-simple","active":true,"requiresGmConfirmation":false,"name":"Простые компоненты","mode":"Простые компоненты","source":"workers","period":"qd","resourceId":"components-simple","resource":"Простые компоненты","outputQty":1,"workQd":1,"expenseMode":"cycle","expenses":"wood 8","costsText":"wood 8","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-2-household-goods-simple","active":true,"requiresGmConfirmation":false,"name":"Простые бытовые товары","mode":"Простые бытовые товары","source":"workers","period":"qd","resourceId":"household-goods-simple","resource":"Простые бытовые товары","outputQty":1,"workQd":2,"expenseMode":"cycle","expenses":"wood 20","costsText":"wood 20","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-1-components-simple","active":true,"requiresGmConfirmation":false,"name":"Простые компоненты","mode":"Простые компоненты","source":"workers","period":"qd","resourceId":"components-simple","resource":"Простые компоненты","outputQty":1,"workQd":1,"expenseMode":"cycle","expenses":"wood 8","costsText":"wood 8","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-2-household-goods-simple","active":true,"requiresGmConfirmation":false,"name":"Простые бытовые товары","mode":"Простые бытовые товары","source":"workers","period":"qd","resourceId":"household-goods-simple","resource":"Простые бытовые товары","outputQty":1,"workQd":2,"expenseMode":"cycle","expenses":"wood 20","costsText":"wood 20","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
 
 Простые компоненты и бытовые товары из дерева Простые компоненты и бытовые товары из дерева
 
@@ -735,53 +784,57 @@ ID: `carpentry-workshop`. Производство; этап 2. Требован
 ID: `soapworks`. Производство; этап 2. Требования П/Т/К/В: **0/8/4/0**; развитие: **0/1/1/0**.
 
 - Строительство: 4 этапов; сложность -1. Материалы: Wood 100; Stone 80; Bricks 20; Iron 10.
-- Штат: 2–8; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Штат: 0–8; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: производство. Репутация / довольство / условия труда: 0/-1/-1.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: РАЗ≥3 и ЛОВ≥3; обязательный состав: нет. Дозировка едких веществ и ручная точность
-- Производственная линия: `{"id":"line-1-chemicals-simple","active":true,"requiresGmConfirmation":false,"name":"Простая химия","mode":"Простая химия","source":"workers","period":"qd","resourceId":"chemicals-simple","resource":"Простая химия","outputQty":1,"workQd":1,"expenseMode":"cycle","expenses":"tallow 4","costsText":"tallow 4","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-2-household-goods-simple","active":true,"requiresGmConfirmation":false,"name":"Простые бытовые товары","mode":"Простые бытовые товары","source":"workers","period":"qd","resourceId":"household-goods-simple","resource":"Простые бытовые товары","outputQty":1,"workQd":3,"expenseMode":"cycle","expenses":"tallow 6, chemicals-simple 1","costsText":"tallow 6, chemicals-simple 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-1-chemicals-simple","active":true,"requiresGmConfirmation":false,"name":"Простая химия","mode":"Мыло и средства ухода","source":"workers","period":"qd","resourceId":"household-goods-simple","resource":"Бытовые изделия (простые)","outputQty":1,"workQd":2,"expenseMode":"cycle","expenses":"tallow 8, chemicals-simple 1, fuel-solid 1","costsText":"tallow 4","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-2-household-goods-simple","active":true,"requiresGmConfirmation":false,"name":"Простые бытовые товары","mode":"Свечи и бытовые восковые составы","source":"workers","period":"qd","resourceId":"household-goods-simple","resource":"Простые бытовые товары","outputQty":1,"workQd":3,"expenseMode":"cycle","expenses":"tallow 6, chemicals-simple 1, fuel-solid 1","costsText":"tallow 6, chemicals-simple 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
 
-Простая химия и бытовые товары из жира Простая химия и бытовые товары из жира
+Простая химия и бытовые товары из жира Простая химия и бытовые товары из жира Мыловарня выпускает бытовые изделия, а не взаимозаменяемые промышленные реактивы. Простая химия во входе означает подходящий щелочной/технологический состав.
 
 ## Письменная мастерская
 
 ID: `writing-workshop`. Производство; этап 2. Требования П/Т/К/В: **0/10/6/0**; развитие: **0/2/2/0**.
 
 - Строительство: 4 этапов; сложность -1. Материалы: Wood 100; Stone 40; Cloth 20; Простые компоненты 10.
-- Штат: 2–8; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Штат: 0–8; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: производство. Репутация / довольство / условия труда: 0/0/0.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: ЛОВ≥3 и РАЗ≥3; обязательный состав: 1 × ГРАМОТА. Тонкая работа плюс обязательная грамотность производства
-- Производственная линия: `{"id":"line-1-parchment","active":true,"requiresGmConfirmation":false,"name":"Письменные материалы","mode":"Письменные материалы","source":"workers","period":"qd","resourceId":"parchment","resource":"Письменные материалы","outputQty":2,"workQd":1,"expenseMode":"cycle","expenses":"plant-fiber 2","costsText":"plant-fiber 2","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-1-parchment","active":true,"requiresGmConfirmation":false,"name":"Письменные материалы","mode":"Письменные материалы","source":"workers","period":"qd","resourceId":"parchment","resource":"Письменные материалы","outputQty":2,"workQd":1,"expenseMode":"cycle","expenses":"plant-fiber 2","costsText":"plant-fiber 2","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
 
-Письменные материалы из растительного волокна Письменные материалы из растительного волокна
+Письменные материалы из растительного волокна Письменные материалы из растительного волокна Письменные материалы включают бумагу, чернила и подготовленные листы. Растительное волокно идёт на бумажную основу, а не на животный пергамент.
 
 ## Ателье
 
 ID: `tailor-shop`. Производство; этап 2. Требования П/Т/К/В: **0/12/8/0**; развитие: **0/2/2/0**.
 
 - Строительство: 3 этапов; сложность -1. Материалы: Wood 100; Cloth 20; Простые инструменты 10.
-- Штат: 2–10; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Штат: 0–10; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: производство, общественная служба. Репутация / довольство / условия труда: 0/0/1.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: ЛОВ≥3; обязательный состав: нет. Крой, шитьё и оценка материала
-- Производственная линия: `{"id":"line-1-household-goods-simple","active":true,"requiresGmConfirmation":false,"name":"Простая одежда","mode":"Простая одежда","source":"workers","period":"qd","resourceId":"household-goods-simple","resource":"Простая одежда","outputQty":1,"workQd":2,"expenseMode":"cycle","expenses":"cloth 6","costsText":"cloth 6","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-2-household-goods-fine","active":true,"requiresGmConfirmation":false,"name":"Дорогая одежда","mode":"Дорогая одежда","source":"workers","period":"qd","resourceId":"household-goods-fine","resource":"Дорогая одежда","outputQty":1,"workQd":6,"expenseMode":"cycle","expenses":"cloth 18, silk 1, components-simple 1","costsText":"cloth 18, silk 1, components-simple 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-1-household-goods-simple","active":true,"requiresGmConfirmation":false,"name":"Простая одежда","mode":"Простая одежда","source":"workers","period":"qd","resourceId":"household-goods-simple","resource":"Простая одежда","outputQty":1,"workQd":2,"expenseMode":"cycle","expenses":"cloth 6","costsText":"cloth 6","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-2-household-goods-fine","active":true,"requiresGmConfirmation":false,"name":"Дорогая одежда","mode":"Дорогая одежда","source":"workers","period":"qd","resourceId":"household-goods-fine","resource":"Дорогая одежда","outputQty":1,"workQd":6,"expenseMode":"cycle","expenses":"cloth 18, silk 1, components-simple 1","costsText":"cloth 18, silk 1, components-simple 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
 
-Ткачество и пошив одежды. Простая и дорогая одежда Wool превращается в Cloth, Wool. Бонус к Crafting одежды.
+Ткачество и пошив одежды. Простая и дорогая одежда Wool превращается в Cloth, Wool. Бонус к Crafting одежды. Внешнее или сюжетное сырьё: шёлк. Стандартное дерево поселения не производит эти входы.
 
 ## Агентство Найма
 
 ID: `hiring-agency`. Инфраструктура; этап 2. Требования П/Т/К/В: **0/10/10/0**; развитие: **0/1/2/0**.
 
 - Строительство: 3 этапов; сложность -1. Материалы: Wood 100; Stone 20; Письменные материалы 10.
-- Штат: 1–4; ставка 18. Содержание: база 36, эксплуатация 36. Техобслуживание: 0 QD.
+- Штат: 0–4; ставка 18. Содержание: база 36, эксплуатация 36. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: общественная служба. Репутация / довольство / условия труда: 1/0/0.
-- Активация: 1 работников, 4 QD; содержательный результат не требуется.
+- Активация: 0 работников, 4 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: ЭМП≥3 или РАЗ≥3; обязательный состав: нет. Оценка кандидатов, связи и переговоры
 
@@ -792,9 +845,10 @@ ID: `hiring-agency`. Инфраструктура; этап 2. Требован�
 ID: `dovecote`. Инфраструктура; этап 2. Требования П/Т/К/В: **0/10/6/0**; развитие: **0/1/1/0**.
 
 - Строительство: 2 этапов; сложность 0. Материалы: Wood 40; Stone 10.
-- Штат: 1–1; ставка 0. Содержание: база 18, эксплуатация 0. Техобслуживание: 0 QD.
+- Штат: 0–0; ставка 0. Содержание: база 18, эксплуатация 0. Техобслуживание: 0 QD.
+- Режим труда: passive; предел физических QD: 0.
 - Функции: общественная служба. Репутация / довольство / условия труда: 1/0/0.
-- Активация: 1 работников, 4 QD; содержательный результат не требуется.
+- Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: —; обязательный состав: нет. По утверждённому нормативу постоянного штата нет
 
@@ -805,9 +859,10 @@ ID: `dovecote`. Инфраструктура; этап 2. Требования �
 ID: `bathhouse`. Инфраструктура; этап 2. Требования П/Т/К/В: **0/10/8/0**; развитие: **0/0/3/0**.
 
 - Строительство: 5 этапов; сложность -1. Материалы: Wood 120; Stone 200; Bricks 80; Iron 20.
-- Штат: 2–2; ставка 18. Содержание: база 36, эксплуатация 144. Техобслуживание: 0 QD.
+- Штат: 0–2; ставка 18. Содержание: база 36, эксплуатация 144. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: общественная служба. Репутация / довольство / условия труда: 0/3/0.
-- Активация: 2 работников, 20 QD; содержательный результат не требуется.
+- Активация: 0 работников, 20 QD; содержательный результат не требуется.
 - Зависимости: Колодец (прежнее условие присутствия).
 - Участок: Колодец
 - Работники: Любой трудоспособный; обязательный состав: нет. Смешанная работа с людьми, водой, топкой и уборкой
@@ -820,9 +875,10 @@ ID: `bathhouse`. Инфраструктура; этап 2. Требования 
 ID: `shrine`. Инфраструктура; этап 2. Требования П/Т/К/В: **0/0/10/0**; развитие: **0/0/3/0**.
 
 - Строительство: 3 этапов; сложность -1. Материалы: Wood 80; Stone 40; Cloth 10.
-- Штат: 1–4; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Штат: 0–4; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: общественная служба. Репутация / довольство / условия труда: 1/2/1.
-- Активация: 1 работников, 4 QD; содержательный результат не требуется.
+- Активация: 0 работников, 4 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: ЭМП≥3; обязательный состав: 1 × КУЛЬТ. Работа с людьми требует эмпатии, а обряд — отдельной подготовки жреца
 - Услуга: `{"capacity":100,"coverageKind":"population","coveredBuildingIds":[]}`.
@@ -834,9 +890,10 @@ ID: `shrine`. Инфраструктура; этап 2. Требования П/
 ID: `guard-tower`. Военные; этап 2. Требования П/Т/К/В: **0/8/0/12**; развитие: **0/0/0/4**.
 
 - Строительство: 5 этапов; сложность -1. Материалы: Wood 200; Stone 100; Iron 20.
-- Штат: 1–4; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Штат: 0–4; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: оборона. Репутация / довольство / условия труда: 0/0/-1.
-- Активация: 1 работников, 10 QD; содержательный результат не требуется.
+- Активация: 0 работников, 10 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: ЛОВ≥3 или РАЗ≥3; обязательный состав: 1 × ОХРАНА. Наблюдение и профессиональная охрана
 - Контроль: `{"generalFlat":2,"maximum":2}`.
@@ -848,9 +905,10 @@ ID: `guard-tower`. Военные; этап 2. Требования П/Т/К/В:
 ID: `dungeon`. Военные; этап 2. Требования П/Т/К/В: **0/0/6/6**; развитие: **0/0/1/1**.
 
 - Строительство: 5 этапов; сложность -1. Материалы: Stone 250; Bricks 60; Iron 40.
-- Штат: 1–2; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Штат: 0–2; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: оборона, общественная служба. Репутация / довольство / условия труда: 0/-1/-1.
-- Активация: 1 работников, 10 QD; содержательный результат не требуется.
+- Активация: 0 работников, 10 QD; содержательный результат не требуется.
 - Зависимости: Пост шерифа (при создании проекта).
 - Работники: СИЛ≥3 или ЭМП≥3; обязательный состав: 1 × ОХРАНА. Удержание заключённых и деэскалация конфликтов
 - Контроль: `{"generalFlat":1,"maximum":1}`.
@@ -862,9 +920,10 @@ ID: `dungeon`. Военные; этап 2. Требования П/Т/К/В: **0
 ID: `boarding-house`. Жилые; этап 2. Требования П/Т/К/В: **0/0/8/0**; развитие: **0/0/2/0**.
 
 - Строительство: 5 этапов; сложность -1. Материалы: Wood 220; Stone 80; Cloth 30.
-- Штат: 1–1; ставка 0. Содержание: база 18, эксплуатация 0. Техобслуживание: 0 QD.
+- Штат: 0–0; ставка 0. Содержание: база 18, эксплуатация 0. Техобслуживание: 0 QD.
+- Режим труда: passive; предел физических QD: 0.
 - Функции: жильё, общественная служба. Репутация / довольство / условия труда: 1/0/0.
-- Активация: 1 работников, 4 QD; содержательный результат не требуется.
+- Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: —; обязательный состав: нет. По утверждённому нормативу постоянного штата нет
 - Жильё: `{"capacity":18,"comfort":0,"quality":1,"notes":"Жилье для гостей, работников и временных специалистов."}`.
@@ -876,12 +935,13 @@ ID: `boarding-house`. Жилые; этап 2. Требования П/Т/К/В: 
 ID: `guarded-storehouse`. Инфраструктура; этап 2. Требования П/Т/К/В: **0/12/0/4**; развитие: **0/1/0/0**.
 
 - Строительство: 6 этапов; сложность -1. Материалы: Wood 200; Stone 160; Iron 20.
-- Штат: 1–2; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Штат: 0–2; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: склад. Репутация / довольство / условия труда: 0/0/0.
-- Активация: 1 работников, 10 QD; содержательный результат не требуется.
+- Активация: 0 работников, 10 QD; содержательный результат не требуется.
 - Зависимости: нет; одна из: Сторожевой пост (при создании проекта) ИЛИ Караульный дом (при создании проекта).
 - Работники: СИЛ≥3 или РАЗ≥3; обязательный состав: 1 × ОХРАНА. Учёт запасов и контролируемый доступ
-- Склад: `{"capacity":900,"security":4,"quality":2,"profileLabel":"Универсальный охраняемый склад","profileCapacityMultiplier":1,"profileRequiresStaff":true}`.
+- Склад: `{"capacity":900,"security":4,"quality":2,"profileLabel":"Универсальный охраняемый склад","profileCapacityMultiplier":1,"profileRequiresStaff":true,"autoReceive":true}`.
 
 Склад с замками, учетной комнатой и местом для караула. 900 нагрузки; вместимость сохраняется без охраны, security — нет Склад с замками, учетной комнатой и местом для караула.
 
@@ -890,9 +950,10 @@ ID: `guarded-storehouse`. Инфраструктура; этап 2. Требов
 ID: `lazaret`. Инфраструктура; этап 2. Требования П/Т/К/В: **0/10/8/0**; развитие: **0/1/1/0**.
 
 - Строительство: 4 этапов; сложность -1. Материалы: Wood 100; Stone 40; Cloth 30; Медицинские припасы 10.
-- Штат: 1–3; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Штат: 0–3; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: общественная служба. Репутация / довольство / условия труда: 0/1/-1.
-- Активация: 1 работников, 20 QD; содержательный результат не требуется.
+- Активация: 0 работников, 20 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: РАЗ≥3 или ЭМП≥3; обязательный состав: 1 × МЕДИЦИНА. Допуск к уходу требует внимательности или эмпатии, лечение — подготовки лекаря
 - Услуга: `{"capacity":100,"coverageKind":"population","coveredBuildingIds":[]}`.
@@ -904,28 +965,30 @@ ID: `lazaret`. Инфраструктура; этап 2. Требования П
 ID: `apothecary`. Производство; этап 2. Требования П/Т/К/В: **0/12/8/0**; развитие: **0/2/1/0**.
 
 - Строительство: 4 этапов; сложность -1. Материалы: Wood 80; Stone 60; Glass 20; Copper 10; Простые компоненты 10.
-- Штат: 2–6; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Штат: 0–6; ставка 18. Содержание: база 18, эксплуатация 36. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: производство, склад, общественная служба. Репутация / довольство / условия труда: 0/0/1.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: РАЗ≥4; обязательный состав: 1 × МЕДИЦИНА. Распознавание веществ, рецептура и точность
-- Склад: `{"capacity":80,"security":2,"quality":2,"profileLabel":"Медицина и химия","profileResourceIds":["herbs","medical-supplies","medicines","chemicals-simple","chemicals-complex"],"profileCapacityMultiplier":0.5,"profileRequiresStaff":false}`.
-- Производственная линия: `{"id":"line-medical-supplies","active":true,"requiresGmConfirmation":false,"name":"Медицинские припасы","mode":"Медицинские припасы","source":"workers","period":"qd","resourceId":"medical-supplies","resource":"Медицинские припасы","outputQty":1,"workQd":1,"expenseMode":"cycle","expenses":"herbs 2, cloth 1","costsText":"herbs 2, cloth 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-medicines","active":true,"requiresGmConfirmation":false,"name":"Лекарства","mode":"Лекарства","source":"workers","period":"qd","resourceId":"medicines","resource":"Лекарства","outputQty":1,"workQd":4,"expenseMode":"cycle","expenses":"herbs 4, chemicals-complex 1","costsText":"herbs 4, chemicals-complex 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
+- Склад: `{"capacity":80,"security":2,"quality":2,"profileLabel":"Медицина и химия","profileResourceIds":["herbs","medical-supplies","medicines","chemicals-simple","chemicals-complex"],"profileCapacityMultiplier":0.5,"profileRequiresStaff":false,"autoReceive":true}`.
+- Производственная линия: `{"id":"line-medical-supplies","active":true,"requiresGmConfirmation":false,"name":"Медицинские припасы","mode":"Медицинские припасы","source":"workers","period":"qd","resourceId":"medical-supplies","resource":"Медицинские припасы","outputQty":1,"workQd":1,"expenseMode":"cycle","expenses":"herbs 2, cloth 1","costsText":"herbs 2, cloth 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-medicines","active":true,"requiresGmConfirmation":false,"name":"Лекарства","mode":"Лекарства","source":"workers","period":"qd","resourceId":"medicines","resource":"Лекарства","outputQty":1,"workQd":4,"expenseMode":"cycle","expenses":"herbs 4, chemicals-complex 1","costsText":"herbs 4, chemicals-complex 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
 
-Травы, настойки, обезболивающие, мази и учет медицинских запасов. Профильное хранение 80, эффективно 160 для медицины и химии В Mass Combat считается медицинской поддержкой. Подходит для аптекарей, лекарей и травников.
+Травы, настойки, обезболивающие, мази и учет медицинских запасов. Профильное хранение 80, эффективно 160 для медицины и химии В Mass Combat считается медицинской поддержкой. Подходит для аптекарей, лекарей и травников. Производство перевязочных материалов и лекарств. Лечение пациентов выполняется в Лазарете или Больнице.
 
 ## Пороховой погреб
 
 ID: `powder-magazine`. Инфраструктура; этап 2. Требования П/Т/К/В: **0/12/0/12**; развитие: **0/1/0/3**.
 
 - Строительство: 5 этапов; сложность -2. Материалы: Stone 200; Bricks 100; Iron 30; Простые компоненты 10.
-- Штат: 1–2; ставка 18. Содержание: база 36, эксплуатация 36. Техобслуживание: 0 QD.
+- Штат: 0–2; ставка 18. Содержание: база 36, эксплуатация 36. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: оборона, склад. Репутация / довольство / условия труда: 0/0/-1.
-- Активация: 1 работников, 10 QD; содержательный результат не требуется.
+- Активация: 0 работников, 10 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: РАЗ≥3 и СИЛ≥3; обязательный состав: 1 × ОХРАНА. Опасные припасы требуют дисциплины и физической осторожности
-- Склад: `{"capacity":70,"security":3,"quality":3,"profileLabel":"Боеприпасы и взрывчатка","profileResourceIds":["military-supplies-simple","military-supplies-complex","explosives"],"profileCapacityMultiplier":0.5,"profileRequiresStaff":true}`.
+- Склад: `{"capacity":70,"security":3,"quality":3,"profileLabel":"Боеприпасы и взрывчатка","profileResourceIds":["military-supplies-simple","military-supplies-complex","explosives"],"profileCapacityMultiplier":0.5,"profileRequiresStaff":true,"autoReceive":true}`.
 
 Защищенное сухое хранилище для пороха, свинца, фитилей и боеприпасов. 70 нагрузки, эффективно 140 для военных припасов и Explosives Не создает бойцов, но помогает вооруженной обороне.
 
@@ -934,9 +997,10 @@ ID: `powder-magazine`. Инфраструктура; этап 2. Требова�
 ID: `field-fort`. Военные; этап 2. Требования П/Т/К/В: **0/10/0/16**; развитие: **0/0/0/4**.
 
 - Строительство: 5 этапов; сложность 0. Материалы: Wood 120; Stone 200; Iron 20.
-- Штат: 2–5; ставка 18. Содержание: база 72, эксплуатация 54. Техобслуживание: 0 QD.
+- Штат: 0–5; ставка 18. Содержание: база 72, эксплуатация 54. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: оборона. Репутация / довольство / условия труда: 0/0/-1.
-- Активация: 2 работников, 10 QD; содержательный результат не требуется.
+- Активация: 0 работников, 10 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: СИЛ≥3; обязательный состав: 1 × ОХРАНА. Полевая оборона, реакция и выносливость
 - Контроль: `{"generalFlat":1,"maximum":1}`.
@@ -949,6 +1013,7 @@ ID: `worker-dormitory`. Жилые; этап 2. Требования П/Т/К/В
 
 - Строительство: 5 этапов; сложность -1. Материалы: Wood 200; Stone 100; Bricks 80; Iron 20.
 - Штат: 0–1; ставка 12. Содержание: база 36, эксплуатация 18. Техобслуживание: 0 QD.
+- Режим труда: qd; предел физических QD: 10.
 - Функции: жильё. Репутация / довольство / условия труда: 0/0/0.
 - Активация: 0 работников, 10 QD; содержательный результат не требуется.
 - Зависимости: нет.
@@ -963,9 +1028,10 @@ ID: `worker-dormitory`. Жилые; этап 2. Требования П/Т/К/В
 ID: `guard-house`. Военные; этап 2. Требования П/Т/К/В: **0/14/8/8**; развитие: **0/0/2/2**.
 
 - Строительство: 5 этапов; сложность -1. Материалы: Wood 180; Stone 120; Bricks 80; Iron 30; Простые инструменты 10.
-- Штат: 2–6; ставка 18. Содержание: база 36, эксплуатация 54. Техобслуживание: 0 QD.
+- Штат: 0–6; ставка 18. Содержание: база 36, эксплуатация 54. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: оборона, общественная служба. Репутация / довольство / условия труда: 0/0/-1.
-- Активация: 2 работников, 20 QD; содержательный результат не требуется.
+- Активация: 0 работников, 20 QD; содержательный результат не требуется.
 - Зависимости: Пост шерифа (прежнее условие присутствия).
 - Участок: Пост шерифа
 - Работники: СИЛ≥3 или РАЗ≥3; обязательный состав: 1 × ОХРАНА. Патруль, дисциплина и оценка угроз
@@ -979,31 +1045,34 @@ ID: `guard-house`. Военные; этап 2. Требования П/Т/К/В:
 ID: `brickworks`. Производство; этап 3. Требования П/Т/К/В: **0/18/0/0**; развитие: **0/2/0/0**.
 
 - Строительство: 5 этапов; сложность -1. Материалы: Wood 180; Stone 100; Iron 20; Простые компоненты 20.
-- Штат: 8–24; ставка 18. Содержание: база 36, эксплуатация 54. Техобслуживание: 0 QD.
+- Штат: 0–24; ставка 18. Содержание: база 36, эксплуатация 54. Техобслуживание: 0 QD.
+- Режим труда: qd; предел физических QD: отдельно не задан.
 - Функции: производство, общественная служба. Репутация / довольство / условия труда: 0/-1/-1.
 - Активация: 0 работников, 0 QD; содержательный результат обязателен.
 - Зависимости: нет.
+- Участок: Доступный участок подходящей глины и воды
 - Работники: СИЛ≥3; обязательный состав: 1 × ТЕХНИКА. Массовый тяжёлый процесс с одним технологическим руководителем
-- Производственная линия: `{"id":"line-1-bricks","active":true,"requiresGmConfirmation":false,"name":"Кирпич","mode":"Кирпич; местное сырьё: глина","source":"workers","period":"qd","resourceId":"bricks","resource":"Кирпич","outputQty":4,"workQd":2,"expenseMode":"cycle","expenses":"fuel-solid 1","costsText":"fuel-solid 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-1-bricks","active":true,"requiresGmConfirmation":false,"name":"Кирпич","mode":"Кирпич; местное сырьё: глина","source":"workers","period":"qd","resourceId":"bricks","resource":"Кирпич","outputQty":40,"workQd":20,"expenseMode":"cycle","expenses":"fuel-solid 10","costsText":"fuel-solid 10","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none","waitDays":5,"batchCapacity":120,"batchStartQty":4}`.
 
-Серийное производство Bricks при наличии местной глины Серийное производство Bricks при наличии местной глины
+Серийное производство Bricks при наличии местной глины Серийное производство Bricks при наличии местной глины Доступность местного минерального сырья подтверждает ГМ при выборе участка. Его добыча включена в труд рецепта; отдельная складская строка не требуется. Кирпич; местное сырьё: глина: до 40 ЕД. в партии, запуск от 4 ЕД., общая вместимость 120 ЕД. Сырьё и труд пропорциональны загрузке; после подготовки — 5 дн. ожидания без труда. Партии выдерживаются независимо.
 
 ## Шахта
 
 ID: `mine`. Производство; этап 3. Требования П/Т/К/В: **0/18/0/0**; развитие: **0/3/0/0**.
 
 - Строительство: 6 этапов; сложность -2. Материалы: Wood 200; Stone 80; Rope 20; Простые инструменты 20.
-- Штат: 6–30; ставка 18. Содержание: база 36, эксплуатация 54. Техобслуживание: 2 QD.
+- Штат: 0–30; ставка 18. Содержание: база 36, эксплуатация 54. Техобслуживание: 2 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: производство. Репутация / довольство / условия труда: 0/0/-2.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Участок: Подтверждённое ГМ месторождение выбранного профиля.
 - Работники: СИЛ≥3; обязательный состав: 1 × ТЕХНИКА. Физический труд, безопасность и понимание выработки
-- Производственная линия: `{"id":"line","active":true,"requiresGmConfirmation":false,"name":"Железная руда","mode":"Железная руда","source":"workers","period":"qd","resourceId":"iron-ore","resource":"Железная руда","outputQty":2,"workQd":1,"expenseMode":"cycle","expenses":"","costsText":"","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"mine-solid-fuel","active":true,"requiresGmConfirmation":false,"name":"Твёрдое топливо","mode":"Твёрдое топливо","source":"workers","period":"qd","resourceId":"fuel-solid","resource":"Твёрдое топливо","outputQty":1,"workQd":1,"expenseMode":"cycle","expenses":"","costsText":"","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"mine-salt","active":true,"requiresGmConfirmation":false,"name":"Соль","mode":"Соль","source":"workers","period":"qd","resourceId":"salt","resource":"Соль","outputQty":5,"workQd":1,"expenseMode":"cycle","expenses":"","costsText":"","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"mine-copper","active":true,"requiresGmConfirmation":false,"name":"Медь","mode":"Медь","source":"workers","period":"qd","resourceId":"copper","resource":"Медь","outputQty":1,"workQd":5,"expenseMode":"cycle","expenses":"","costsText":"","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"mine-nonferrous","active":true,"requiresGmConfirmation":false,"name":"Цветные металлы","mode":"Цветные металлы","source":"workers","period":"qd","resourceId":"nonferrous-metals","resource":"Цветные металлы","outputQty":1,"workQd":4,"expenseMode":"cycle","expenses":"","costsText":"","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line","active":true,"requiresGmConfirmation":false,"name":"Железная руда","mode":"Железная руда","source":"workers","period":"qd","resourceId":"iron-ore","resource":"Железная руда","outputQty":2,"workQd":1,"expenseMode":"cycle","expenses":"","costsText":"","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"mine-solid-fuel","active":true,"requiresGmConfirmation":false,"name":"Твёрдое топливо","mode":"Твёрдое топливо","source":"workers","period":"qd","resourceId":"fuel-solid","resource":"Твёрдое топливо","outputQty":1,"workQd":1,"expenseMode":"cycle","expenses":"","costsText":"","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"mine-salt","active":true,"requiresGmConfirmation":false,"name":"Соль","mode":"Соль","source":"workers","period":"qd","resourceId":"salt","resource":"Соль","outputQty":5,"workQd":1,"expenseMode":"cycle","expenses":"","costsText":"","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"mine-copper","active":true,"requiresGmConfirmation":false,"name":"Медь","mode":"Медь","source":"workers","period":"qd","resourceId":"copper","resource":"Медь","outputQty":1,"workQd":5,"expenseMode":"cycle","expenses":"","costsText":"","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"mine-nonferrous","active":true,"requiresGmConfirmation":false,"name":"Цветные металлы","mode":"Цветные металлы","source":"workers","period":"qd","resourceId":"nonferrous-metals","resource":"Цветные металлы","outputQty":1,"workQd":4,"expenseMode":"cycle","expenses":"","costsText":"","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
 
 Добыча железной руды. Опасно, но выгодно. Одно выбранное и подтверждённое GM месторождение Каждый шахтер производит Iron Ore за Quarter Day.
 
@@ -1012,26 +1081,29 @@ ID: `mine`. Производство; этап 3. Требования П/Т/К/
 ID: `glassworks`. Производство; этап 3. Требования П/Т/К/В: **0/22/6/0**; развитие: **0/2/1/0**.
 
 - Строительство: 5 этапов; сложность -2. Материалы: Wood 160; Stone 100; Bricks 80; Iron 20; Простые компоненты 20.
-- Штат: 4–16; ставка 18. Содержание: база 36, эксплуатация 54. Техобслуживание: 0 QD.
+- Штат: 0–16; ставка 18. Содержание: база 36, эксплуатация 54. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: производство, общественная служба. Репутация / довольство / условия труда: 0/-1/-1.
 - Активация: 0 работников, 0 QD; содержательный результат обязателен.
 - Зависимости: нет.
+- Участок: Доступный источник стекольного песка и минеральных добавок
 - Работники: ЛОВ≥3 и РАЗ≥3; обязательный состав: 1 × ТЕХНИКА. Высокая температура, точность и хрупкий материал
-- Производственная линия: `{"id":"line-1-glass","active":true,"requiresGmConfirmation":false,"name":"Стекло","mode":"Стекло; местное сырьё: песок или кварц","source":"workers","period":"qd","resourceId":"glass","resource":"Стекло","outputQty":1,"workQd":2,"expenseMode":"cycle","expenses":"fuel-solid 2, chemicals-simple 1","costsText":"fuel-solid 2, chemicals-simple 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-1-glass","active":true,"requiresGmConfirmation":false,"name":"Стекло","mode":"Стекло; местное сырьё: песок или кварц","source":"workers","period":"qd","resourceId":"glass","resource":"Стекло","outputQty":1,"workQd":2,"expenseMode":"cycle","expenses":"fuel-solid 2, chemicals-simple 1","costsText":"fuel-solid 2, chemicals-simple 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
 
-Производство Glass при наличии местного песка или кварца Производство Glass при наличии местного песка или кварца
+Производство Glass при наличии местного песка или кварца Производство Glass при наличии местного песка или кварца Доступность местного минерального сырья подтверждает ГМ при выборе участка. Его добыча включена в труд рецепта; отдельная складская строка не требуется.
 
 ## Инструментальная мастерская
 
 ID: `tool-workshop`. Производство; этап 3. Требования П/Т/К/В: **0/22/0/0**; развитие: **0/3/0/0**.
 
 - Строительство: 5 этапов; сложность -1. Материалы: Wood 160; Stone 80; Iron 40; Простые компоненты 20.
-- Штат: 4–16; ставка 18. Содержание: база 36, эксплуатация 54. Техобслуживание: 0 QD.
+- Штат: 0–16; ставка 18. Содержание: база 36, эксплуатация 54. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: производство. Репутация / довольство / условия труда: 0/0/-1.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: РАЗ≥3 и СИЛ≥3; обязательный состав: 1 × ТЕХНИКА. Точная конструкция при тяжёлой обработке металла
-- Производственная линия: `{"id":"line-1-tools-simple","active":true,"requiresGmConfirmation":false,"name":"Простые инструменты","mode":"Простые инструменты","source":"workers","period":"qd","resourceId":"tools-simple","resource":"Простые инструменты","outputQty":1,"workQd":2,"expenseMode":"cycle","expenses":"iron 2, components-simple 1","costsText":"iron 2, components-simple 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-1-tools-simple","active":true,"requiresGmConfirmation":false,"name":"Простые инструменты","mode":"Простые инструменты","source":"workers","period":"qd","resourceId":"tools-simple","resource":"Простые инструменты","outputQty":1,"workQd":2,"expenseMode":"cycle","expenses":"iron 2, components-simple 1","costsText":"iron 2, components-simple 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
 
 Производство Простых инструментов Производство Простых инструментов
 
@@ -1041,11 +1113,12 @@ ID: `vault`. Инфраструктура; этап 3. Требования П/�
 
 - Строительство: 7 этапов; сложность -2. Материалы: Wood 100; Stone 300; Bricks 100; Iron 60.
 - Штат: 0–0; ставка 0. Содержание: база 18, эксплуатация 0. Техобслуживание: 0 QD.
+- Режим труда: passive; предел физических QD: 0.
 - Функции: склад. Репутация / довольство / условия труда: 0/0/0.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: —; обязательный состав: нет. Пассивное хранилище
-- Склад: `{"capacity":800,"security":5,"quality":3,"profileLabel":"Ценности и дорогие товары","profileResourceIds":["silver","gold","gemstones","art-goods","parchment","tsukami-paper","household-goods-fine","silk"],"profileCapacityMultiplier":0.5,"profileRequiresStaff":false}`.
+- Склад: `{"capacity":800,"security":5,"quality":3,"profileLabel":"Ценности и дорогие товары","profileResourceIds":["silver","gold","gemstones","art-goods","parchment","tsukami-paper","household-goods-fine","silk"],"profileCapacityMultiplier":0.5,"profileRequiresStaff":false,"autoReceive":true}`.
 
 Защищенный склад для ценностей. 800 нагрузки, эффективно 1600 для ценностей и дорогих товаров Ценности хранятся за железной дверью.
 
@@ -1054,9 +1127,10 @@ ID: `vault`. Инфраструктура; этап 3. Требования П/�
 ID: `construction-center`. Инфраструктура; этап 3. Требования П/Т/К/В: **0/28/14/0**; развитие: **0/4/1/0**.
 
 - Строительство: 6 этапов; сложность -1. Материалы: Wood 250; Stone 150; Bricks 50; Простые компоненты 30; Письменные материалы 10.
-- Штат: 1–2; ставка 18. Содержание: база 36, эксплуатация 36. Техобслуживание: 0 QD.
+- Штат: 0–2; ставка 18. Содержание: база 36, эксплуатация 36. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: общественная служба. Репутация / довольство / условия труда: 0/0/1.
-- Активация: 1 работников, 10 QD; содержательный результат не требуется.
+- Активация: 0 работников, 10 QD; содержательный результат не требуется.
 - Зависимости: Столярная мастерская (при создании проекта).
 - Работники: РАЗ≥3 или СИЛ≥3; обязательный состав: 1 × СТРОИТЕЛЬСТВО. Инженерная подготовка и профессиональное руководство стройкой
 
@@ -1067,14 +1141,15 @@ ID: `construction-center`. Инфраструктура; этап 3. Требо�
 ID: `forge`. Производство; этап 3. Требования П/Т/К/В: **0/30/0/8**; развитие: **0/4/0/1**.
 
 - Строительство: 6 этапов; сложность -2. Материалы: Stone 250; Bricks 100; Iron 60; Простые компоненты 20.
-- Штат: 2–10; ставка 18. Содержание: база 54, эксплуатация 54. Техобслуживание: 0 QD.
+- Штат: 0–10; ставка 18. Содержание: база 54, эксплуатация 54. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: производство, общественная служба. Репутация / довольство / условия труда: 0/-1/-1.
 - Активация: 0 работников, 0 QD; содержательный результат обязателен.
 - Зависимости: нет.
 - Работники: СИЛ≥3 и РАЗ≥3; обязательный состав: 1 × ТЕХНИКА. Металл, температура и оружейная точность
-- Производственная линия: `{"id":"line","active":true,"requiresGmConfirmation":false,"name":"Железо","mode":"Железо","source":"workers","period":"qd","resourceId":"iron","resource":"Железо","outputQty":1,"workQd":1,"expenseMode":"cycle","expenses":"iron-ore 1","costsText":"iron-ore 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-2-armament-simple","active":true,"requiresGmConfirmation":false,"name":"Простое вооружение","mode":"Простое вооружение","source":"workers","period":"qd","resourceId":"armament-simple","resource":"Простое вооружение","outputQty":1,"workQd":10,"expenseMode":"cycle","expenses":"wood 20, iron 20, steel 10, components-simple 5","costsText":"wood 20, iron 20, steel 10, components-simple 5","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-3-military-supplies-simple","active":true,"requiresGmConfirmation":false,"name":"Простые военные припасы","mode":"Простые военные припасы","source":"workers","period":"qd","resourceId":"military-supplies-simple","resource":"Простые военные припасы","outputQty":2,"workQd":2,"expenseMode":"cycle","expenses":"wood 4, iron 2, chemicals-simple 1","costsText":"wood 4, iron 2, chemicals-simple 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line","active":true,"requiresGmConfirmation":false,"name":"Железо","mode":"Железо","source":"workers","period":"qd","resourceId":"iron","resource":"Железо","outputQty":4,"workQd":3,"expenseMode":"cycle","expenses":"iron-ore 4, fuel-solid 1","costsText":"iron-ore 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-2-armament-simple","active":true,"requiresGmConfirmation":false,"name":"Простое вооружение","mode":"Простое вооружение","source":"workers","period":"qd","resourceId":"armament-simple","resource":"Простое вооружение","outputQty":1,"workQd":10,"expenseMode":"cycle","expenses":"wood 20, iron 20, steel 10, components-simple 5, fuel-solid 2","costsText":"wood 20, iron 20, steel 10, components-simple 5","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-3-military-supplies-simple","active":true,"requiresGmConfirmation":false,"name":"Простые военные припасы","mode":"Простые военные припасы","source":"workers","period":"qd","resourceId":"military-supplies-simple","resource":"Простые военные припасы","outputQty":2,"workQd":2,"expenseMode":"cycle","expenses":"wood 4, iron 2, chemicals-simple 1, fuel-solid 1","costsText":"wood 4, iron 2, chemicals-simple 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
 
 Переработка руды и основа металлообработки. Выплавка Iron и штучное простое огнестрельное вооружение Iron Ore превращается в Iron.
 
@@ -1083,9 +1158,10 @@ ID: `forge`. Производство; этап 3. Требования П/Т/К
 ID: `library`. Инфраструктура; этап 3. Требования П/Т/К/В: **0/18/24/0**; развитие: **0/2/4/0**.
 
 - Строительство: 6 этапов; сложность -1. Материалы: Wood 200; Stone 100; Glass 40; Письменные материалы 50.
-- Штат: 1–4; ставка 18. Содержание: база 36, эксплуатация 36. Техобслуживание: 0 QD.
+- Штат: 0–4; ставка 18. Содержание: база 36, эксплуатация 36. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: общественная служба. Репутация / довольство / условия труда: 1/1/1.
-- Активация: 1 работников, 4 QD; содержательный результат не требуется.
+- Активация: 0 работников, 4 QD; содержательный результат не требуется.
 - Зависимости: Школа (при создании проекта).
 - Работники: РАЗ≥3; обязательный состав: 1 × ГРАМОТА. Работа с фондами требует грамотного сотрудника
 - Услуга: `{"capacity":100,"coverageKind":"population","coveredBuildingIds":[]}`.
@@ -1097,9 +1173,10 @@ ID: `library`. Инфраструктура; этап 3. Требования П
 ID: `lighthouse`. Инфраструктура; этап 3. Требования П/Т/К/В: **0/24/12/0**; развитие: **0/2/1/0**.
 
 - Строительство: 8 этапов; сложность -2. Материалы: Stone 400; Bricks 100; Glass 40; Iron 40; Простые компоненты 20.
-- Штат: 1–3; ставка 18. Содержание: база 54, эксплуатация 36. Техобслуживание: 1 QD.
+- Штат: 0–3; ставка 18. Содержание: база 54, эксплуатация 36. Техобслуживание: 1 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: общественная служба. Репутация / довольство / условия труда: 1/0/-1.
-- Активация: 1 работников, 20 QD; содержательный результат не требуется.
+- Активация: 0 работников, 20 QD; содержательный результат не требуется.
 - Зависимости: Пирс (прежнее условие присутствия).
 - Участок: Хорошо видимая точка у действующего судоходного подхода.
 - Работники: РАЗ≥3 и ЛОВ≥3; обязательный состав: 1 × МОРЕ. Навигационный объект требует морского специалиста
@@ -1111,9 +1188,10 @@ ID: `lighthouse`. Инфраструктура; этап 3. Требования
 ID: `personnel-office`. Инфраструктура; этап 3. Требования П/Т/К/В: **0/28/22/0**; развитие: **0/2/3/0**.
 
 - Строительство: 5 этапов; сложность -1. Материалы: Wood 180; Stone 80; Письменные материалы 20; Простые компоненты 10.
-- Штат: 1–4; ставка 18. Содержание: база 36, эксплуатация 36. Техобслуживание: 0 QD.
+- Штат: 0–4; ставка 18. Содержание: база 36, эксплуатация 36. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: доход, общественная служба. Репутация / довольство / условия труда: 0/0/0.
-- Активация: 1 работников, 10 QD; содержательный результат не требуется.
+- Активация: 0 работников, 10 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: РАЗ≥3 или ЭМП≥3; обязательный состав: нет. Учёт, планирование и работа с людьми
 - Доходная функция: `{"base":0,"perWorker":0,"formula":"","risk":0,"illegal":false,"trade":{"enabled":false,"budgetFormula":"2d6*10","maxLotsPerBuyer":1,"roomId":"all","kind":"all","notes":""},"wageDailyCopper":18,"operatingUpkeepMonthlyCopper":36}`.
@@ -1125,9 +1203,10 @@ ID: `personnel-office`. Инфраструктура; этап 3. Требова
 ID: `scriptorium`. Инфраструктура; этап 3. Требования П/Т/К/В: **0/24/34/0**; развитие: **0/1/4/0**.
 
 - Строительство: 7 этапов; сложность -2. Материалы: Wood 180; Stone 100; Glass 40; Письменные материалы 50; Простые компоненты 20.
-- Штат: 1–4; ставка 18. Содержание: база 54, эксплуатация 36. Техобслуживание: 0 QD.
+- Штат: 0–4; ставка 18. Содержание: база 54, эксплуатация 36. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: общественная служба. Репутация / довольство / условия труда: 1/1/1.
-- Активация: 1 работников, 4 QD; содержательный результат не требуется.
+- Активация: 0 работников, 4 QD; содержательный результат не требуется.
 - Зависимости: Библиотека (прежнее условие присутствия).
 - Участок: Библиотека
 - Работники: РАЗ≥4; обязательный состав: 1 × ЧУДОТВОРЕЦ. Переписчики обслуживают здание, но обучение чудотворству активирует только редкий носитель дара
@@ -1140,9 +1219,10 @@ ID: `scriptorium`. Инфраструктура; этап 3. Требовани�
 ID: `hall-of-fame`. Инфраструктура; этап 3. Требования П/Т/К/В: **0/18/38/16**; развитие: **0/1/5/2**.
 
 - Строительство: 10 этапов; сложность -3. Материалы: Stone 200; ММ 40000.
-- Штат: 1–1; ставка 0. Содержание: база 72, эксплуатация 0. Техобслуживание: 0 QD.
+- Штат: 0–0; ставка 0. Содержание: база 72, эксплуатация 0. Техобслуживание: 0 QD.
+- Режим труда: passive; предел физических QD: 0.
 - Функции: общественная служба. Репутация / довольство / условия труда: 1/2/0.
-- Активация: 1 работников, 4 QD; содержательный результат не требуется.
+- Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: —; обязательный состав: нет. Пассивный памятник
 
@@ -1153,9 +1233,10 @@ ID: `hall-of-fame`. Инфраструктура; этап 3. Требовани
 ID: `spire`. Инфраструктура; этап 3. Требования П/Т/К/В: **0/30/42/0**; развитие: **0/0/5/0**.
 
 - Строительство: 12 этапов; сложность -3. Материалы: Stone 150; ММ 20000.
-- Штат: 1–1; ставка 0. Содержание: база 72, эксплуатация 0. Техобслуживание: 0 QD.
+- Штат: 0–0; ставка 0. Содержание: база 72, эксплуатация 0. Техобслуживание: 0 QD.
+- Режим труда: passive; предел физических QD: 0.
 - Функции: общественная служба. Репутация / довольство / условия труда: 3/3/0.
-- Активация: 1 работников, 4 QD; содержательный результат не требуется.
+- Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: —; обязательный состав: нет. Пассивный символ
 
@@ -1166,9 +1247,10 @@ ID: `spire`. Инфраструктура; этап 3. Требования П/�
 ID: `performance-house`. Инфраструктура; этап 3. Требования П/Т/К/В: **0/16/26/0**; развитие: **0/0/2/0**.
 
 - Строительство: 6 этапов; сложность -2. Материалы: Wood 240; Stone 120; Bricks 60; Glass 20; Cloth 40.
-- Штат: 3–3; ставка 18. Содержание: база 54, эксплуатация 72. Техобслуживание: 0 QD.
+- Штат: 0–3; ставка 18. Содержание: база 54, эксплуатация 72. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: общественная служба. Репутация / довольство / условия труда: 0/30/0.
-- Активация: 3 работников, 12 QD; содержательный результат не требуется.
+- Активация: 0 работников, 12 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: Любой трудоспособный; обязательный состав: нет. Обслуживание посетителей и проведение программы досуга
 - Услуга: `{"capacity":30,"coverageKind":"population","coveredBuildingIds":[],"leisure":{"kind":"performance","capacity":30,"qdPerCapacity":2,"functionId":"culture","minWorkers":3}}`.
@@ -1180,9 +1262,10 @@ ID: `performance-house`. Инфраструктура; этап 3. Требов�
 ID: `promenade-garden`. Инфраструктура; этап 3. Требования П/Т/К/В: **12/14/22/0**; развитие: **0/0/1/0**.
 
 - Строительство: 5 этапов; сложность -1. Материалы: Wood 80; Stone 120; Straw 20; ММ 1000.
-- Штат: 1–1; ставка 12. Содержание: база 36, эксплуатация 36. Техобслуживание: 0 QD.
+- Штат: 0–1; ставка 12. Содержание: база 36, эксплуатация 36. Техобслуживание: 0 QD.
+- Режим труда: qd; предел физических QD: 20.
 - Функции: общественная служба. Репутация / довольство / условия труда: 0/20/0.
-- Активация: 1 работников, 4 QD; содержательный результат не требуется.
+- Активация: 0 работников, 4 QD; содержательный результат не требуется.
 - Зависимости: Колодец (прежнее условие присутствия).
 - Участок: Свободный безопасный участок с доступом к воде; проверка GM
 - Работники: Любой трудоспособный; обязательный состав: нет. Обслуживание посетителей и проведение программы досуга
@@ -1195,9 +1278,10 @@ ID: `promenade-garden`. Инфраструктура; этап 3. Требова
 ID: `ramparts`. Инфраструктура; этап 3. Требования П/Т/К/В: **0/16/0/22**; развитие: **0/1/0/4**.
 
 - Строительство: 12 этапов; сложность -2. Материалы: Stone 600; Bricks 300; Wood 100; Iron 50.
-- Штат: 1–1; ставка 0. Содержание: база 36, эксплуатация 0. Техобслуживание: 0 QD.
+- Штат: 0–0; ставка 0. Содержание: база 36, эксплуатация 0. Техобслуживание: 0 QD.
+- Режим труда: passive; предел физических QD: 0.
 - Функции: оборона, общественная служба. Репутация / довольство / условия труда: 0/1/0.
-- Активация: 1 работников, 4 QD; содержательный результат не требуется.
+- Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Работники: —; обязательный состав: нет. Пассивная оборона
 
@@ -1209,6 +1293,7 @@ ID: `moat`. Инфраструктура; этап 3. Требования П/Т
 
 - Строительство: 10 этапов; сложность 0. Материалы: нет.
 - Штат: 0–0; ставка 0. Содержание: база 18, эксплуатация 0. Техобслуживание: 0 QD.
+- Режим труда: passive; предел физических QD: 0.
 - Функции: оборона. Репутация / довольство / условия труда: 0/0/0.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: Крепостной вал (прежнее условие присутствия).
@@ -1223,6 +1308,7 @@ ID: `gatehouse`. Военные; этап 3. Требования П/Т/К/В: *
 
 - Строительство: 8 этапов; сложность -2. Материалы: Stone 300; Bricks 150; Wood 120; Iron 60.
 - Штат: 0–4; ставка 18. Содержание: база 54, эксплуатация 36. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: оборона. Репутация / довольство / условия труда: 0/0/-1.
 - Активация: 0 работников, 10 QD; содержательный результат не требуется.
 - Зависимости: нет; одна из: Охранная башня (прежнее условие присутствия) ИЛИ Крепостной вал (прежнее условие присутствия).
@@ -1238,6 +1324,7 @@ ID: `artillery-platform`. Военные; этап 3. Требования П/Т
 
 - Строительство: 7 этапов; сложность -2. Материалы: Stone 180; Bricks 100; Wood 120; Iron 30; Steel 20; Простые компоненты 20.
 - Штат: 0–5; ставка 18. Содержание: база 90, эксплуатация 54. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: оборона. Репутация / довольство / условия труда: 0/0/-1.
 - Активация: 0 работников, 10 QD; содержательный результат не требуется.
 - Зависимости: нет; одна из: Арсенал (прежнее условие присутствия) ИЛИ Пороховой погреб (прежнее условие присутствия).
@@ -1253,6 +1340,7 @@ ID: `portcullis`. Инфраструктура; этап 3. Требования
 
 - Строительство: 6 этапов; сложность -2. Материалы: Iron 100; Steel 40; Простые компоненты 20.
 - Штат: 0–0; ставка 0. Содержание: база 18, эксплуатация 0. Техобслуживание: 0 QD.
+- Режим труда: passive; предел физических QD: 0.
 - Функции: оборона. Репутация / довольство / условия труда: 0/0/0.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: Крепостной вал (прежнее условие присутствия); Кузня (прежнее условие присутствия).
@@ -1266,9 +1354,10 @@ ID: `portcullis`. Инфраструктура; этап 3. Требования
 ID: `urban-tenement`. Жилые; этап 3. Требования П/Т/К/В: **0/24/18/0**; развитие: **0/0/2/0**.
 
 - Строительство: 7 этапов; сложность -2. Материалы: Wood 200; Stone 240; Bricks 300; Iron 50; Glass 20.
-- Штат: 0–1; ставка 12. Содержание: база 54, эксплуатация 18. Техобслуживание: 0 QD.
+- Штат: 0–0; ставка 12. Содержание: база 54, эксплуатация 18. Техобслуживание: 0 QD.
+- Режим труда: passive; предел физических QD: 0.
 - Функции: жильё. Репутация / довольство / условия труда: 0/0/0.
-- Активация: 0 работников, 10 QD; содержательный результат не требуется.
+- Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Участок: Плотная городская застройка; желателен охват пожарной службы.
 - Работники: Любой трудоспособный; обязательный состав: нет. Управляющему полезна универсальность и работа с жильцами
@@ -1282,6 +1371,7 @@ ID: `comfortable-house`. Жилые; этап 3. Требования П/Т/К/�
 
 - Строительство: 7 этапов; сложность -2. Материалы: Wood 220; Stone 220; Bricks 240; Iron 40; Glass 40; Простые компоненты 20.
 - Штат: 0–0; ставка 0. Содержание: база 36, эксплуатация 18. Техобслуживание: 0 QD.
+- Режим труда: passive; предел физических QD: 0.
 - Функции: жильё. Репутация / довольство / условия труда: 0/0/0.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет; одна из: Колодец (прежнее условие присутствия) ИЛИ Водопроводная станция (прежнее условие присутствия).
@@ -1296,13 +1386,14 @@ ID: `comfortable-house`. Жилые; этап 3. Требования П/Т/К/�
 ID: `grain-elevator`. Инфраструктура; этап 3. Требования П/Т/К/В: **22/20/8/0**; развитие: **5/2/0/0**.
 
 - Строительство: 7 этапов; сложность -2. Материалы: Wood 180; Stone 240; Bricks 180; Iron 40; Rope 20; Простые компоненты 20; ММ 800.
-- Штат: 2–8; ставка 18. Содержание: база 54, эксплуатация 54. Техобслуживание: 1 QD.
+- Штат: 0–8; ставка 18. Содержание: база 54, эксплуатация 54. Техобслуживание: 1 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: склад, общественная служба. Репутация / довольство / условия труда: 1/0/-1.
-- Активация: 2 работников, 10 QD; содержательный результат не требуется.
+- Активация: 0 работников, 10 QD; содержательный результат не требуется.
 - Зависимости: Мельница (прежнее условие присутствия); Амбар (прежнее условие присутствия).
 - Участок: Сухой участок с грузовым подъездом.
 - Работники: РАЗ≥3 или СИЛ≥3; обязательный состав: 1 × ТЕХНИКА. Механизированные потоки тяжёлых запасов
-- Склад: `{"capacity":2000,"security":0,"quality":0,"profileMarketTags":["agriculture","fodder","grain"],"profileCapacityMultiplier":0.5,"profileRequiresStaff":true}`.
+- Склад: `{"capacity":2000,"security":0,"quality":0,"profileMarketTags":["agriculture","fodder","grain"],"profileCapacityMultiplier":0.5,"profileRequiresStaff":true,"autoReceive":true}`.
 
 2000 нагрузки, эффективно 4000 для зерна и сухих сельскохозяйственных запасов 2000 нагрузки, эффективно 4000 для зерна и сухих сельскохозяйственных запасов
 
@@ -1311,9 +1402,10 @@ ID: `grain-elevator`. Инфраструктура; этап 3. Требован
 ID: `militia-headquarters`. Инфраструктура; этап 3. Требования П/Т/К/В: **0/22/14/24**; развитие: **0/1/2/6**.
 
 - Строительство: 6 этапов; сложность -1. Материалы: Wood 220; Stone 180; Bricks 120; Iron 40; Письменные материалы 30; ММ 600.
-- Штат: 3–8; ставка 18. Содержание: база 72, эксплуатация 72. Техобслуживание: 0 QD.
+- Штат: 0–8; ставка 18. Содержание: база 72, эксплуатация 72. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: общественная служба. Репутация / довольство / условия труда: 0/1/0.
-- Активация: 3 работников, 10 QD; содержательный результат не требуется.
+- Активация: 0 работников, 10 QD; содержательный результат не требуется.
 - Зависимости: Казарма (прежнее условие присутствия); одна из: Стрельбище (прежнее условие присутствия) ИЛИ Тренировочный лагерь (прежнее условие присутствия).
 - Участок: Казарма; одно из: Стрельбище, Тренировочный лагерь
 - Работники: СИЛ≥3 или ЭМП≥3; обязательный состав: 1 × ОХРАНА. Сбор, дисциплина и руководство ополченцами
@@ -1326,13 +1418,14 @@ ID: `militia-headquarters`. Инфраструктура; этап 3. Требо
 ID: `industrial-icehouse`. Инфраструктура; этап 4. Требования П/Т/К/В: **28/36/14/0**; развитие: **4/2/0/0**.
 
 - Строительство: 8 этапов; сложность -2. Материалы: Wood 250; Stone 250; Bricks 150; Iron 40; Простые компоненты 30; Straw 20; ММ 2000.
-- Штат: 1–4; ставка 12. Содержание: база 54, эксплуатация 54. Техобслуживание: 1 QD.
+- Штат: 0–4; ставка 12. Содержание: база 54, эксплуатация 54. Техобслуживание: 1 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: склад. Репутация / довольство / условия труда: 0/0/-1.
-- Активация: 1 работников, 10 QD; содержательный результат не требуется.
+- Активация: 0 работников, 10 QD; содержательный результат не требуется.
 - Зависимости: нет; нужен Центр Строительства.
 - Участок: Сухой защищённый участок с удобным грузовым доступом.
 - Работники: РАЗ≥3 или СИЛ≥3; обязательный состав: 1 × ТЕХНИКА. Режим охлаждения и тяжёлые запасы
-- Склад: `{"capacity":1200,"security":0,"quality":0,"profilePerishableFood":true,"profileCapacityMultiplier":0.5,"profileRequiresStaff":true,"shelfLifeMultiplier":4}`.
+- Склад: `{"capacity":1200,"security":0,"quality":0,"profilePerishableFood":true,"profileCapacityMultiplier":0.5,"profileRequiresStaff":true,"shelfLifeMultiplier":4,"autoReceive":true}`.
 
 Крупное охлаждаемое хранение продовольствия Крупное охлаждаемое хранение продовольствия
 
@@ -1341,9 +1434,10 @@ ID: `industrial-icehouse`. Инфраструктура; этап 4. Требо�
 ID: `waterworks`. Инфраструктура; этап 4. Требования П/Т/К/В: **18/36/18/0**; развитие: **3/2/2/0**.
 
 - Строительство: 10 этапов; сложность -2. Материалы: Stone 400; Bricks 300; Iron 100; Простые компоненты 50; Сложные компоненты 20; ММ 6000.
-- Штат: 2–6; ставка 18. Содержание: база 90, эксплуатация 90. Техобслуживание: 2 QD.
+- Штат: 0–6; ставка 18. Содержание: база 90, эксплуатация 90. Техобслуживание: 2 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: общественная служба. Репутация / довольство / условия труда: 0/3/0.
-- Активация: 2 работников, 20 QD; содержательный результат не требуется.
+- Активация: 0 работников, 20 QD; содержательный результат не требуется.
 - Зависимости: нет; нужен Центр Строительства.
 - Участок: Подтверждённый источник воды и маршрут городской сети.
 - Работники: РАЗ≥3 или СИЛ≥3; обязательный состав: 1 × ТЕХНИКА. Насосы, ремонт и эксплуатация сети
@@ -1356,9 +1450,10 @@ ID: `waterworks`. Инфраструктура; этап 4. Требования
 ID: `fire-station`. Инфраструктура; этап 4. Требования П/Т/К/В: **0/38/20/0**; развитие: **0/2/2/0**.
 
 - Строительство: 8 этапов; сложность -2. Материалы: Wood 220; Stone 120; Bricks 80; Iron 30; Простые компоненты 20; Rope 10; ММ 3000.
-- Штат: 3–10; ставка 18. Содержание: база 54, эксплуатация 72. Техобслуживание: 0 QD.
+- Штат: 0–10; ставка 18. Содержание: база 54, эксплуатация 72. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: общественная служба. Репутация / довольство / условия труда: 0/2/-1.
-- Активация: 3 работников, 20 QD; содержательный результат не требуется.
+- Активация: 0 работников, 20 QD; содержательный результат не требуется.
 - Зависимости: нет; одна из: Колодец (действующая услуга) ИЛИ Водопроводная станция (действующая услуга); нужен Центр Строительства.
 - Работники: СИЛ≥3 или ЛОВ≥3; обязательный состав: 1 × ОХРАНА. Срочная универсальная работа, сила и реакция
 - Услуга: `{"capacityPerWorker":10,"maximumCapacity":100,"coverageKind":"buildings","coveredBuildingIds":[]}`.
@@ -1370,9 +1465,10 @@ ID: `fire-station`. Инфраструктура; этап 4. Требовани
 ID: `telegraph-station`. Инфраструктура; этап 4. Требования П/Т/К/В: **0/42/24/8**; развитие: **0/4/1/1**.
 
 - Строительство: 8 этапов; сложность -2. Материалы: Wood 180; Stone 120; Copper 50; Glass 30; Iron 20; Сложные компоненты 30; ММ 5000.
-- Штат: 1–4; ставка 24. Содержание: база 54, эксплуатация 72. Техобслуживание: 1 QD.
+- Штат: 0–4; ставка 24. Содержание: база 54, эксплуатация 72. Техобслуживание: 1 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: общественная служба. Репутация / довольство / условия труда: 2/1/1.
-- Активация: 1 работников, 20 QD; содержательный результат не требуется.
+- Активация: 0 работников, 20 QD; содержательный результат не требуется.
 - Зависимости: нет; нужен Центр Строительства.
 - Работники: РАЗ≥3 и ЛОВ≥3; обязательный состав: 1 × ГРАМОТА. Быстрый точный набор и грамотное сообщение
 - Услуга: `{"capacity":100,"coverageKind":"population","coveredBuildingIds":[]}`.
@@ -1384,41 +1480,44 @@ ID: `telegraph-station`. Инфраструктура; этап 4. Требов�
 ID: `printing-house`. Производство; этап 4. Требования П/Т/К/В: **0/38/34/0**; развитие: **0/2/4/0**.
 
 - Строительство: 8 этапов; сложность -2. Материалы: Wood 200; Stone 100; Iron 40; Простые компоненты 30; Сложные компоненты 20; ММ 4000.
-- Штат: 6–24; ставка 18. Содержание: база 54, эксплуатация 72. Техобслуживание: 0 QD.
+- Штат: 0–24; ставка 18. Содержание: база 54, эксплуатация 72. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: производство, общественная служба. Репутация / довольство / условия труда: 2/1/0.
 - Активация: 0 работников, 0 QD; содержательный результат обязателен.
 - Зависимости: Библиотека (при создании проекта); нужен Центр Строительства.
 - Работники: ЛОВ≥3 или РАЗ≥3; обязательный состав: 1 × ГРАМОТА. Серийная точность и грамотность выпуска
 - Услуга: `{"capacity":100,"coverageKind":"population","coveredBuildingIds":[]}`.
-- Производственная линия: `{"id":"line-1-parchment","active":true,"requiresGmConfirmation":false,"name":"Печатные материалы","mode":"Печатные материалы","source":"workers","period":"qd","resourceId":"parchment","resource":"Печатные материалы","outputQty":8,"workQd":2,"expenseMode":"cycle","expenses":"plant-fiber 4, chemicals-simple 1","costsText":"plant-fiber 4, chemicals-simple 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-1-parchment","active":true,"requiresGmConfirmation":false,"name":"Печатные материалы","mode":"Печатные материалы","source":"workers","period":"qd","resourceId":"parchment","resource":"Печатные материалы","outputQty":8,"workQd":2,"expenseMode":"cycle","expenses":"plant-fiber 4, chemicals-simple 1","costsText":"plant-fiber 4, chemicals-simple 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
 
-Массовое производство печатных материалов Массовое производство печатных материалов
+Массовое производство печатных материалов Массовое производство печатных материалов Письменные материалы включают бумагу, чернила и подготовленные листы. Растительное волокно идёт на бумажную основу, а не на животный пергамент.
 
 ## Консервный завод
 
 ID: `cannery`. Производство; этап 4. Требования П/Т/К/В: **34/44/16/0**; развитие: **5/3/0/0**.
 
 - Строительство: 9 этапов; сложность -2. Материалы: Wood 250; Stone 200; Bricks 200; Iron 80; Copper 20; Простые компоненты 40; Сложные компоненты 20; ММ 5000.
-- Штат: 10–40; ставка 18. Содержание: база 72, эксплуатация 90. Техобслуживание: 1 QD.
+- Штат: 0–40; ставка 18. Содержание: база 72, эксплуатация 90. Техобслуживание: 1 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: производство, общественная служба. Репутация / довольство / условия труда: 1/0/-1.
 - Активация: 0 работников, 0 QD; содержательный результат обязателен.
 - Зависимости: нет; нужен Центр Строительства.
 - Работники: СИЛ≥3 или РАЗ≥3; обязательный состав: 2 × ТЕХНИКА. Массовый поток сырья и промышленный контроль
-- Производственная линия: `{"id":"line-1-preserved-meat","active":true,"requiresGmConfirmation":false,"name":"Мясные консервы","mode":"Мясные консервы","source":"workers","period":"qd","resourceId":"preserved-meat","resource":"Мясные консервы","outputQty":14,"workQd":2,"expenseMode":"cycle","expenses":"meat 24, salt 4, iron 1","costsText":"meat 24, salt 4, iron 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-2-preserved-meat","active":true,"requiresGmConfirmation":false,"name":"Рыбные консервы","mode":"Рыбные консервы","source":"workers","period":"qd","resourceId":"preserved-meat","resource":"Рыбные консервы","outputQty":14,"workQd":2,"expenseMode":"cycle","expenses":"fish 24, salt 4, iron 1","costsText":"fish 24, salt 4, iron 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-3-dried-fruit","active":true,"requiresGmConfirmation":false,"name":"Фруктовые консервы","mode":"Фруктовые консервы","source":"workers","period":"qd","resourceId":"dried-fruit","resource":"Фруктовые консервы","outputQty":16,"workQd":2,"expenseMode":"cycle","expenses":"fruits 24, sugar 4, iron 1","costsText":"fruits 24, sugar 4, iron 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-4-dried-fruit","active":true,"requiresGmConfirmation":false,"name":"Овощные консервы","mode":"Овощные консервы","source":"workers","period":"qd","resourceId":"dried-fruit","resource":"Овощные консервы","outputQty":16,"workQd":2,"expenseMode":"cycle","expenses":"vegetables 24, sugar 4, iron 1","costsText":"vegetables 24, sugar 4, iron 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-1-preserved-meat","active":true,"requiresGmConfirmation":false,"name":"Мясные консервы","mode":"Мясные консервы","source":"workers","period":"qd","resourceId":"canned-protein","resource":"Белковые консервы","outputQty":20,"workQd":2,"expenseMode":"cycle","expenses":"meat 24, salt 4, iron 1, fuel-solid 1","costsText":"meat 24, salt 4, iron 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-2-preserved-meat","active":true,"requiresGmConfirmation":false,"name":"Рыбные консервы","mode":"Рыбные консервы","source":"workers","period":"qd","resourceId":"canned-protein","resource":"Белковые консервы","outputQty":20,"workQd":2,"expenseMode":"cycle","expenses":"fish 24, salt 4, iron 1, fuel-solid 1","costsText":"fish 24, salt 4, iron 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-3-dried-fruit","active":true,"requiresGmConfirmation":false,"name":"Фруктовые консервы","mode":"Фруктовые консервы","source":"workers","period":"qd","resourceId":"canned-fruit","resource":"Фруктовые консервы","outputQty":20,"workQd":2,"expenseMode":"cycle","expenses":"fruits 24, sugar 4, iron 1, fuel-solid 1","costsText":"fruits 24, sugar 4, iron 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-4-dried-fruit","active":true,"requiresGmConfirmation":false,"name":"Овощные консервы","mode":"Овощные консервы","source":"workers","period":"qd","resourceId":"canned-vegetables","resource":"Овощные консервы","outputQty":20,"workQd":2,"expenseMode":"cycle","expenses":"vegetables 24, salt 4, iron 1, fuel-solid 1","costsText":"vegetables 24, sugar 4, iron 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
 
-Массовое производство долговечной пищи Массовое производство долговечной пищи
+Массовое производство долговечной пищи Массовое производство долговечной пищи Внешнее или сюжетное сырьё: сахар. Стандартное дерево поселения не производит эти входы.
 
 ## Канализация
 
 ID: `sewer-system`. Инфраструктура; этап 4. Требования П/Т/К/В: **0/44/30/0**; развитие: **0/3/3/0**.
 
 - Строительство: 12 этапов; сложность -2. Материалы: Stone 600; Bricks 500; Iron 120; Простые компоненты 50; Сложные компоненты 30; ММ 8000.
-- Штат: 2–8; ставка 18. Содержание: база 90, эксплуатация 90. Техобслуживание: 2 QD.
+- Штат: 0–8; ставка 18. Содержание: база 90, эксплуатация 90. Техобслуживание: 2 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: общественная служба. Репутация / довольство / условия труда: 0/4/-1.
-- Активация: 2 работников, 20 QD; содержательный результат не требуется.
+- Активация: 0 работников, 20 QD; содержательный результат не требуется.
 - Зависимости: Водопроводная станция (действующая услуга); нужен Центр Строительства.
 - Участок: Маршрут отвода ниже источников питьевой воды.
 - Работники: СИЛ≥3 или РАЗ≥3; обязательный состав: 1 × ТЕХНИКА. Опасная сеть, очистка и ремонт
@@ -1431,9 +1530,10 @@ ID: `sewer-system`. Инфраструктура; этап 4. Требовани
 ID: `gasworks`. Инфраструктура; этап 4. Требования П/Т/К/В: **0/48/24/0**; развитие: **0/4/2/0**.
 
 - Строительство: 10 этапов; сложность -2. Материалы: Stone 300; Bricks 350; Iron 120; Steel 40; Простые компоненты 50; Сложные компоненты 30; ММ 8000.
-- Штат: 10–30; ставка 18. Содержание: база 90, эксплуатация 120. Техобслуживание: 2 QD.
+- Штат: 0–30; ставка 18. Содержание: база 90, эксплуатация 120. Техобслуживание: 2 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: общественная служба. Репутация / довольство / условия труда: 0/1/-2.
-- Активация: 10 работников, 20 QD; содержательный результат не требуется.
+- Активация: 0 работников, 20 QD; содержательный результат не требуется.
 - Зависимости: нет; нужен Центр Строительства.
 - Участок: Промышленный участок вдали от плотного жилья.
 - Работники: РАЗ≥3 и СИЛ≥3; обязательный состав: 2 × ТЕХНИКА. Взрывоопасное оборудование и тяжёлое топливное хозяйство
@@ -1446,9 +1546,10 @@ ID: `gasworks`. Инфраструктура; этап 4. Требования �
 ID: `railway-depot`. Инфраструктура; этап 4. Требования П/Т/К/В: **0/52/20/6**; развитие: **0/4/1/1**.
 
 - Строительство: 12 этапов; сложность -2. Материалы: Wood 400; Stone 400; Bricks 300; Iron 120; Steel 80; Простые компоненты 50; Сложные компоненты 40; ММ 12000.
-- Штат: 2–12; ставка 18. Содержание: база 90, эксплуатация 120. Техобслуживание: 2 QD.
+- Штат: 0–12; ставка 18. Содержание: база 90, эксплуатация 120. Техобслуживание: 2 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: общественная служба. Репутация / довольство / условия труда: 2/0/-1.
-- Активация: 2 работников, 20 QD; содержательный результат не требуется.
+- Активация: 0 работников, 20 QD; содержательный результат не требуется.
 - Зависимости: нет; нужен Центр Строительства.
 - Участок: Подтверждённый железнодорожный подход и транзитная площадка.
 - Работники: СИЛ≥3 или РАЗ≥3; обязательный состав: 1 × ТЕХНИКА. Механизмы, грузы и разнообразные диспетчерские задачи
@@ -1460,9 +1561,10 @@ ID: `railway-depot`. Инфраструктура; этап 4. Требован�
 ID: `guard-precinct`. Военные; этап 4. Требования П/Т/К/В: **0/42/30/12**; развитие: **0/2/3/0**.
 
 - Строительство: 8 этапов; сложность -2. Материалы: Stone 300; Bricks 300; Wood 160; Iron 80; Steel 20; Простые компоненты 30.
-- Штат: 4–12; ставка 18. Содержание: база 90, эксплуатация 108. Техобслуживание: 0 QD.
+- Штат: 0–12; ставка 18. Содержание: база 90, эксплуатация 108. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: оборона, общественная служба. Репутация / довольство / условия труда: 0/0/-1.
-- Активация: 4 работников, 20 QD; содержательный результат не требуется.
+- Активация: 0 работников, 20 QD; содержательный результат не требуется.
 - Зависимости: Караульный дом (прежнее условие присутствия); одна из: Управление кадров (прежнее условие присутствия) ИЛИ Ратуша (прежнее условие присутствия); нужен Центр Строительства.
 - Участок: Караульный дом; одно из: Управление кадров, Ратуша
 - Работники: РАЗ≥3 или ЭМП≥3; обязательный состав: 2 × ОХРАНА. Расследование, патрули и работа с населением
@@ -1476,9 +1578,10 @@ ID: `guard-precinct`. Военные; этап 4. Требования П/Т/К/
 ID: `irrigation-system`. Инфраструктура; этап 4. Требования П/Т/К/В: **36/42/16/0**; развитие: **7/1/0/0**.
 
 - Строительство: 9 этапов; сложность -2. Материалы: Stone 400; Bricks 260; Iron 100; Steel 30; Простые компоненты 30; ММ 2000.
-- Штат: 2–6; ставка 18. Содержание: база 72, эксплуатация 108. Техобслуживание: 1 QD.
+- Штат: 0–6; ставка 18. Содержание: база 72, эксплуатация 108. Техобслуживание: 1 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: общественная служба. Репутация / довольство / условия труда: 1/2/-1.
-- Активация: 2 работников, 20 QD; содержательный результат не требуется.
+- Активация: 0 работников, 20 QD; содержательный результат не требуется.
 - Зависимости: нет; одна из: Колодец (прежнее условие присутствия) ИЛИ Водопроводная станция (прежнее условие присутствия); нужен Центр Строительства.
 - Участок: Подтверждённый водный маршрут к выбранным хозяйствам.
 - Работники: РАЗ≥3 или СИЛ≥3; обязательный состав: 1 × ТЕХНИКА. Инженерная сеть и физическое обслуживание каналов
@@ -1491,9 +1594,10 @@ ID: `irrigation-system`. Инфраструктура; этап 4. Требов�
 ID: `food-distribution-center`. Инфраструктура; этап 4. Требования П/Т/К/В: **40/44/28/0**; развитие: **4/1/2/0**.
 
 - Строительство: 8 этапов; сложность -2. Материалы: Wood 240; Stone 300; Bricks 240; Iron 60; Простые компоненты 40; ММ 1800.
-- Штат: 4–12; ставка 18. Содержание: база 72, эксплуатация 108. Техобслуживание: 0 QD.
+- Штат: 0–12; ставка 18. Содержание: база 72, эксплуатация 108. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: общественная служба. Репутация / довольство / условия труда: 1/2/0.
-- Активация: 4 работников, 20 QD; содержательный результат не требуется.
+- Активация: 0 работников, 20 QD; содержательный результат не требуется.
 - Зависимости: Рынок (прежнее условие присутствия); одна из: Амбар (прежнее условие присутствия) ИЛИ Охраняемый склад (прежнее условие присутствия); нужен Центр Строительства.
 - Участок: Безопасный транспортный узел рядом с хранилищем.
 - Работники: Любой трудоспособный; обязательный состав: 1 × ТОРГОВЛЯ. Учёт, очереди, маршрутизация и выдача пайков
@@ -1506,57 +1610,61 @@ ID: `food-distribution-center`. Инфраструктура; этап 4. Тре
 ID: `machine-works`. Производство; этап 5. Требования П/Т/К/В: **0/60/20/0**; развитие: **0/5/0/0**.
 
 - Строительство: 10 этапов; сложность -3. Материалы: Wood 300; Stone 300; Bricks 250; Iron 180; Steel 80; Copper 50; Простые компоненты 60; Сложные компоненты 40; ММ 12000.
-- Штат: 10–40; ставка 18. Содержание: база 108, эксплуатация 144. Техобслуживание: 2 QD.
+- Штат: 0–40; ставка 24. Содержание: база 108, эксплуатация 144. Техобслуживание: 2 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: производство, общественная служба. Репутация / довольство / условия труда: 0/-1/-1.
 - Активация: 0 работников, 0 QD; содержательный результат обязателен.
 - Зависимости: нет; нужен Центр Строительства.
 - Работники: РАЗ≥3 и СИЛ≥3; обязательный состав: 3 × ТЕХНИКА. Тяжёлые механизмы и точная сборка
-- Производственная линия: `{"id":"line-1-components-complex","active":true,"requiresGmConfirmation":false,"name":"Сложные компоненты","mode":"Сложные компоненты","source":"workers","period":"qd","resourceId":"components-complex","resource":"Сложные компоненты","outputQty":2,"workQd":4,"expenseMode":"cycle","expenses":"iron 2, steel 1, copper 1, components-simple 2","costsText":"iron 2, steel 1, copper 1, components-simple 2","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-2-tools-complex","active":true,"requiresGmConfirmation":false,"name":"Сложные инструменты","mode":"Сложные инструменты","source":"workers","period":"qd","resourceId":"tools-complex","resource":"Сложные инструменты","outputQty":2,"workQd":8,"expenseMode":"cycle","expenses":"steel 4, copper 2, components-complex 4","costsText":"steel 4, copper 2, components-complex 4","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-1-components-complex","active":true,"requiresGmConfirmation":false,"name":"Сложные компоненты","mode":"Сложные компоненты","source":"workers","period":"qd","resourceId":"components-complex","resource":"Сложные компоненты","outputQty":2,"workQd":4,"expenseMode":"cycle","expenses":"iron 1, steel 1, copper 1, components-simple 2","costsText":"iron 2, steel 1, copper 1, components-simple 2","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none","wageDailyCopper":0}`.
+- Производственная линия: `{"id":"line-2-tools-complex","active":true,"requiresGmConfirmation":false,"name":"Сложные инструменты","mode":"Сложные инструменты","source":"workers","period":"qd","resourceId":"tools-complex","resource":"Сложные инструменты","outputQty":2,"workQd":8,"expenseMode":"cycle","expenses":"steel 4, copper 2, components-complex 3","costsText":"steel 4, copper 2, components-complex 4","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none","wageDailyCopper":0}`.
 
-Серийные сложные компоненты и сложные инструменты Серийные сложные компоненты и сложные инструменты
+Серийные сложные компоненты и сложные инструменты Серийные сложные компоненты и сложные инструменты Ставка продвинутого промышленного труда: 24 ММ в день сверх пайка. Индивидуальная оплата и добровольная работа задаются отдельно.
 
 ## Химический завод
 
 ID: `chemical-plant`. Производство; этап 5. Требования П/Т/К/В: **0/64/28/0**; развитие: **0/5/0/1**.
 
 - Строительство: 11 этапов; сложность -3. Материалы: Stone 250; Bricks 450; Iron 150; Steel 50; Copper 60; Glass 80; Простые компоненты 50; Сложные компоненты 60; ММ 15000.
-- Штат: 10–40; ставка 18. Содержание: база 108, эксплуатация 162. Техобслуживание: 2 QD.
+- Штат: 0–40; ставка 24. Содержание: база 108, эксплуатация 162. Техобслуживание: 2 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: производство, общественная служба. Репутация / довольство / условия труда: 0/-2/-2.
 - Активация: 0 работников, 0 QD; содержательный результат обязателен.
 - Зависимости: нет; нужен Центр Строительства.
 - Работники: РАЗ≥4 и ЛОВ≥3; обязательный состав: 3 × ТЕХНИКА. Опасная точная технология и лабораторный контроль
-- Производственная линия: `{"id":"line-1-chemicals-simple","active":true,"requiresGmConfirmation":false,"name":"Простая химия","mode":"Простая химия","source":"workers","period":"qd","resourceId":"chemicals-simple","resource":"Простая химия","outputQty":2,"workQd":2,"expenseMode":"cycle","expenses":"tallow 4, fuel-solid 1","costsText":"tallow 4, fuel-solid 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-2-chemicals-complex","active":true,"requiresGmConfirmation":false,"name":"Сложная химия","mode":"Сложная химия","source":"workers","period":"qd","resourceId":"chemicals-complex","resource":"Сложная химия","outputQty":2,"workQd":6,"expenseMode":"cycle","expenses":"chemicals-simple 4, salt 4, fuel-solid 2","costsText":"chemicals-simple 4, salt 4, fuel-solid 2","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-3-explosives","active":true,"requiresGmConfirmation":false,"name":"Взрывчатка","mode":"Взрывчатка","source":"workers","period":"qd","resourceId":"explosives","resource":"Взрывчатка","outputQty":2,"workQd":4,"expenseMode":"cycle","expenses":"chemicals-complex 1, fuel-solid 1, salt 2","costsText":"chemicals-complex 1, fuel-solid 1, salt 2","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-4-fuel-liquid","active":true,"requiresGmConfirmation":false,"name":"Жидкое топливо","mode":"Жидкое топливо","source":"workers","period":"qd","resourceId":"fuel-liquid","resource":"Жидкое топливо","outputQty":4,"workQd":2,"expenseMode":"cycle","expenses":"tallow 4, chemicals-simple 1","costsText":"tallow 4, chemicals-simple 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-1-chemicals-simple","active":true,"requiresGmConfirmation":false,"name":"Простая химия","mode":"Простая химия","source":"workers","period":"qd","resourceId":"chemicals-simple","resource":"Простая химия","outputQty":2,"workQd":2,"expenseMode":"cycle","expenses":"tallow 3, salt 4, fuel-solid 1","costsText":"tallow 4, fuel-solid 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none","wageDailyCopper":0}`.
+- Производственная линия: `{"id":"line-2-chemicals-complex","active":true,"requiresGmConfirmation":false,"name":"Сложная химия","mode":"Сложная химия","source":"workers","period":"qd","resourceId":"chemicals-complex","resource":"Сложная химия","outputQty":2,"workQd":6,"expenseMode":"cycle","expenses":"chemicals-simple 3, salt 4, fuel-solid 2","costsText":"chemicals-simple 4, salt 4, fuel-solid 2","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none","wageDailyCopper":0}`.
+- Производственная линия: `{"id":"line-3-explosives","active":true,"requiresGmConfirmation":false,"name":"Взрывчатка","mode":"Взрывчатка","source":"workers","period":"qd","resourceId":"explosives","resource":"Взрывчатка","outputQty":2,"workQd":2,"expenseMode":"cycle","expenses":"chemicals-complex 1, fuel-solid 1, salt 2","costsText":"chemicals-complex 1, fuel-solid 1, salt 2","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none","wageDailyCopper":0}`.
+- Производственная линия: `{"id":"line-4-fuel-liquid","active":true,"requiresGmConfirmation":false,"name":"Жидкое топливо","mode":"Жидкое топливо","source":"workers","period":"qd","resourceId":"fuel-liquid","resource":"Жидкое топливо","outputQty":5,"workQd":2,"expenseMode":"cycle","expenses":"tallow 4, chemicals-simple 1, fuel-solid 1","costsText":"tallow 4, chemicals-simple 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none","wageDailyCopper":0}`.
 
-Простая и сложная химия, жидкое топливо и взрывчатка Простая и сложная химия, жидкое топливо и взрывчатка
+Простая и сложная химия, жидкое топливо и взрывчатка Простая и сложная химия, жидкое топливо и взрывчатка Ставка продвинутого промышленного труда: 24 ММ в день сверх пайка. Индивидуальная оплата и добровольная работа задаются отдельно. Простая химия — подготовленный промышленный ассортимент солей, щелочных, связующих и органических составов под заказ. Жир является органической частью смеси, а не универсальной заменой всех реактивов. Местные минеральные добавки и вода входят в условия площадки и труд. Жидкое топливо из жира — ламповый состав, не нефтепереработка.
 
 ## Металлургический завод
 
 ID: `steelworks`. Производство; этап 5. Требования П/Т/К/В: **0/68/18/12**; развитие: **0/4/0/2**.
 
 - Строительство: 14 этапов; сложность -3. Материалы: Stone 500; Bricks 600; Iron 250; Steel 100; Copper 50; Простые компоненты 80; Сложные компоненты 60; ММ 18000.
-- Штат: 15–60; ставка 18. Содержание: база 144, эксплуатация 180. Техобслуживание: 3 QD.
+- Штат: 0–60; ставка 24. Содержание: база 144, эксплуатация 180. Техобслуживание: 3 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: производство, общественная служба. Репутация / довольство / условия труда: 1/-2/-2.
 - Активация: 0 работников, 0 QD; содержательный результат обязателен.
 - Зависимости: нет; нужен Центр Строительства.
 - Работники: СИЛ≥3 и РАЗ≥3; обязательный состав: 4 × ТЕХНИКА. Тяжёлая плавка и сложный технологический режим
-- Производственная линия: `{"id":"line-1-steel","active":true,"requiresGmConfirmation":false,"name":"Сталь","mode":"Сталь","source":"workers","period":"qd","resourceId":"steel","resource":"Сталь","outputQty":2,"workQd":1,"expenseMode":"cycle","expenses":"iron 2, fuel-solid 1","costsText":"iron 2, fuel-solid 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-2-light-alloys","active":true,"requiresGmConfirmation":false,"name":"Простые сплавы","mode":"Простые сплавы","source":"workers","period":"qd","resourceId":"light-alloys","resource":"Простые сплавы","outputQty":2,"workQd":4,"expenseMode":"cycle","expenses":"copper 1, nonferrous-metals 1, fuel-solid 1","costsText":"copper 1, nonferrous-metals 1, fuel-solid 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-3-complex-alloys","active":true,"requiresGmConfirmation":false,"name":"Сложные сплавы","mode":"Сложные сплавы","source":"workers","period":"qd","resourceId":"complex-alloys","resource":"Сложные сплавы","outputQty":2,"workQd":6,"expenseMode":"cycle","expenses":"steel 2, nonferrous-metals 2, light-alloys 1, chemicals-simple 1, fuel-solid 2","costsText":"steel 2, nonferrous-metals 2, light-alloys 1, chemicals-simple 1, fuel-solid 2","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-1-steel","active":true,"requiresGmConfirmation":false,"name":"Сталь","mode":"Сталь","source":"workers","period":"qd","resourceId":"steel","resource":"Сталь","outputQty":4,"workQd":2,"expenseMode":"cycle","expenses":"iron 4, fuel-solid 1","costsText":"iron 2, fuel-solid 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none","wageDailyCopper":0}`.
+- Производственная линия: `{"id":"line-2-light-alloys","active":true,"requiresGmConfirmation":false,"name":"Простые сплавы","mode":"Простые сплавы","source":"workers","period":"qd","resourceId":"light-alloys","resource":"Простые сплавы","outputQty":2,"workQd":3,"expenseMode":"cycle","expenses":"copper 1, nonferrous-metals 1, fuel-solid 1","costsText":"copper 1, nonferrous-metals 1, fuel-solid 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none","wageDailyCopper":0}`.
+- Производственная линия: `{"id":"line-3-complex-alloys","active":true,"requiresGmConfirmation":false,"name":"Сложные сплавы","mode":"Сложные сплавы","source":"workers","period":"qd","resourceId":"complex-alloys","resource":"Сложные сплавы","outputQty":2,"workQd":6,"expenseMode":"cycle","expenses":"steel 2, nonferrous-metals 1, light-alloys 1, chemicals-simple 1, fuel-solid 2","costsText":"steel 2, nonferrous-metals 2, light-alloys 1, chemicals-simple 1, fuel-solid 2","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none","wageDailyCopper":0}`.
 
-Сталь, лёгкие и сложные сплавы Сталь, лёгкие и сложные сплавы
+Сталь, лёгкие и сложные сплавы Сталь, лёгкие и сложные сплавы Ставка продвинутого промышленного труда: 24 ММ в день сверх пайка. Индивидуальная оплата и добровольная работа задаются отдельно.
 
 ## Ратуша
 
 ID: `town-hall`. Военные; этап 5. Требования П/Т/К/В: **0/52/58/0**; развитие: **0/1/4/0**.
 
 - Строительство: 10 этапов; сложность -2. Материалы: Wood 350; Stone 400; Bricks 250; Iron 80; Glass 50; Marble 50; Rare Wood 20; Письменные материалы 30; ММ 18000.
-- Штат: 4–12; ставка 18. Содержание: база 108, эксплуатация 90. Техобслуживание: 0 QD.
+- Штат: 0–12; ставка 18. Содержание: база 108, эксплуатация 90. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: оборона, общественная служба. Репутация / довольство / условия труда: 1/2/1.
-- Активация: 4 работников, 20 QD; содержательный результат не требуется.
+- Активация: 0 работников, 20 QD; содержательный результат не требуется.
 - Зависимости: Дом собраний (при создании проекта); нужен Центр Строительства.
 - Работники: РАЗ≥3 или ЭМП≥3; обязательный состав: 1 × ГРАМОТА. Администрация, архив и общественные решения
 - Услуга: `{"capacity":200,"coverageKind":"population","coveredBuildingIds":[]}`.
@@ -1569,9 +1677,10 @@ ID: `town-hall`. Военные; этап 5. Требования П/Т/К/В: *
 ID: `hospital`. Инфраструктура; этап 5. Требования П/Т/К/В: **0/56/54/0**; развитие: **0/3/3/0**.
 
 - Строительство: 12 этапов; сложность -3. Материалы: Wood 300; Stone 400; Bricks 300; Iron 100; Copper 30; Glass 80; Простые компоненты 50; Сложные компоненты 50; ММ 20000.
-- Штат: 6–24; ставка 18. Содержание: база 126, эксплуатация 144. Техобслуживание: 0 QD.
+- Штат: 0–24; ставка 18. Содержание: база 126, эксплуатация 144. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: общественная служба. Репутация / довольство / условия труда: 1/4/-1.
-- Активация: 6 работников, 20 QD; содержательный результат не требуется.
+- Активация: 0 работников, 20 QD; содержательный результат не требуется.
 - Зависимости: Лазарет (при создании проекта); нужен Центр Строительства.
 - Работники: РАЗ≥3 или ЭМП≥3; обязательный состав: 2 × МЕДИЦИНА. Многоуровневое лечение: специалисты и вспомогательный персонал
 - Услуга: `{"capacityBase":20,"capacityPerWorkerStep":5,"workerStep":3,"maximumCapacity":50,"coverageKind":"patients","coveredBuildingIds":[]}`.
@@ -1583,9 +1692,10 @@ ID: `hospital`. Инфраструктура; этап 5. Требования �
 ID: `bank-exchange`. Инфраструктура; этап 5. Требования П/Т/К/В: **0/60/50/0**; развитие: **0/1/3/0**.
 
 - Строительство: 11 этапов; сложность -2. Материалы: Wood 300; Stone 500; Bricks 300; Iron 160; Steel 60; Glass 60; Marble 80; Rare Wood 30; Письменные материалы 40; ММ 25000.
-- Штат: 4–16; ставка 18. Содержание: база 90, эксплуатация 108. Техобслуживание: 0 QD.
+- Штат: 0–16; ставка 18. Содержание: база 90, эксплуатация 108. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: общественная служба. Репутация / довольство / условия труда: 2/0/1.
-- Активация: 4 работников, 10 QD; содержательный результат не требуется.
+- Активация: 0 работников, 10 QD; содержательный результат не требуется.
 - Зависимости: Рынок (при создании проекта); нужен Центр Строительства.
 - Работники: РАЗ≥4 или ЭМП≥4; обязательный состав: 2 × ТОРГОВЛЯ. Риск, договоры и крупные переговоры
 
@@ -1596,9 +1706,10 @@ ID: `bank-exchange`. Инфраструктура; этап 5. Требован�
 ID: `city-theatre`. Инфраструктура; этап 5. Требования П/Т/К/В: **0/34/68/0**; развитие: **0/0/3/0**.
 
 - Строительство: 12 этапов; сложность -2. Материалы: Wood 500; Stone 350; Bricks 250; Iron 80; Glass 60; Marble 60; Rare Wood 40; Cloth 80; ММ 22000.
-- Штат: 6–24; ставка 18. Содержание: база 90, эксплуатация 108. Техобслуживание: 0 QD.
+- Штат: 0–24; ставка 18. Содержание: база 90, эксплуатация 108. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: общественная служба. Репутация / довольство / условия труда: 2/60/1.
-- Активация: 6 работников, 24 QD; содержательный результат не требуется.
+- Активация: 0 работников, 24 QD; содержательный результат не требуется.
 - Зависимости: нет; нужен Центр Строительства.
 - Работники: Любой трудоспособный; обязательный состав: нет. Исполнители, сцена и универсальные рабочие театра
 - Услуга: `{"capacity":100,"coverageKind":"population","coveredBuildingIds":[],"leisure":{"kind":"performance","capacity":60,"qdPerCapacity":2,"functionId":"culture","minWorkers":6}}`.
@@ -1610,9 +1721,10 @@ ID: `city-theatre`. Инфраструктура; этап 5. Требовани
 ID: `museum`. Инфраструктура; этап 5. Требования П/Т/К/В: **0/42/72/0**; развитие: **0/1/3/0**.
 
 - Строительство: 12 этапов; сложность -2. Материалы: Wood 350; Stone 500; Bricks 300; Iron 80; Glass 100; Marble 100; Rare Wood 40; Письменные материалы 30; Предметы искусства 10; ММ 25000.
-- Штат: 4–16; ставка 18. Содержание: база 90, эксплуатация 90. Техобслуживание: 0 QD.
+- Штат: 0–16; ставка 18. Содержание: база 90, эксплуатация 90. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: общественная служба. Репутация / довольство / условия труда: 2/40/1.
-- Активация: 4 работников, 16 QD; содержательный результат не требуется.
+- Активация: 0 работников, 16 QD; содержательный результат не требуется.
 - Зависимости: Библиотека (при создании проекта); нужен Центр Строительства.
 - Работники: РАЗ≥3 или ЭМП≥3; обязательный состав: 1 × ГРАМОТА. Исследование коллекции и публичная работа
 - Услуга: `{"capacity":100,"coverageKind":"population","coveredBuildingIds":[],"leisure":{"kind":"museum","capacity":40,"qdPerCapacity":2,"functionId":"culture","minWorkers":4}}`.
@@ -1624,9 +1736,10 @@ ID: `museum`. Инфраструктура; этап 5. Требования П/
 ID: `mansion`. Жилые; этап 5. Требования П/Т/К/В: **0/52/58/0**; развитие: **0/0/3/0**.
 
 - Строительство: 10 этапов; сложность -2. Материалы: Wood 300; Stone 400; Bricks 250; Marble 40; Glass 80; Дорогие бытовые товары 10; ММ 3000.
-- Штат: 1–4; ставка 12. Содержание: база 90, эксплуатация 72. Техобслуживание: 0 QD.
+- Штат: 0–4; ставка 12. Содержание: база 90, эксплуатация 72. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: жильё. Репутация / довольство / условия труда: 0/0/0.
-- Активация: 1 работников, 10 QD; содержательный результат не требуется.
+- Активация: 0 работников, 10 QD; содержательный результат не требуется.
 - Зависимости: Благоустроенный дом (прежнее условие присутствия); нужен Центр Строительства.
 - Участок: Крупный престижный участок и городской доступ к воде.
 - Работники: Любой трудоспособный; обязательный состав: нет. Универсальная домашняя служба и управление персоналом
@@ -1639,9 +1752,10 @@ ID: `mansion`. Жилые; этап 5. Требования П/Т/К/В: **0/52/
 ID: `court`. Военные; этап 5. Требования П/Т/К/В: **0/52/58/0**; развитие: **0/0/3/0**.
 
 - Строительство: 9 этапов; сложность -2. Материалы: Stone 400; Bricks 320; Wood 200; Iron 60; Glass 40; Письменные материалы 40; ММ 2000.
-- Штат: 3–8; ставка 24. Содержание: база 108, эксплуатация 108. Техобслуживание: 0 QD.
+- Штат: 0–8; ставка 24. Содержание: база 108, эксплуатация 108. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: оборона, общественная служба. Репутация / довольство / условия труда: 1/0/1.
-- Активация: 3 работников, 20 QD; содержательный результат не требуется.
+- Активация: 0 работников, 20 QD; содержательный результат не требуется.
 - Зависимости: Ратуша (прежнее условие присутствия); Участок охраны (прежнее условие присутствия); нужен Центр Строительства.
 - Участок: Ратуша; Участок охраны
 - Работники: РАЗ≥4 или ЭМП≥4; обязательный состав: 1 × ГРАМОТА. Право, документы и рассмотрение дел
@@ -1655,27 +1769,29 @@ ID: `court`. Военные; этап 5. Требования П/Т/К/В: **0/5
 ID: `greenhouse-complex`. Производство; этап 5. Требования П/Т/К/В: **52/62/30/0**; развитие: **8/3/0/0**.
 
 - Строительство: 10 этапов; сложность -2. Материалы: Stone 220; Bricks 250; Iron 160; Steel 80; Glass 300; Простые компоненты 60; ММ 5000.
-- Штат: 6–20; ставка 18. Содержание: база 126, эксплуатация 180. Техобслуживание: 1 QD.
+- Штат: 0–20; ставка 18. Содержание: база 126, эксплуатация 180. Техобслуживание: 1 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: производство, общественная служба. Репутация / довольство / условия труда: 2/2/0.
-- Активация: 6 работников, 0 QD; содержательный результат обязателен.
+- Активация: 0 работников, 0 QD; содержательный результат обязателен.
 - Зависимости: Стекольная мастерская (прежнее условие присутствия); Водопроводная станция (прежнее условие присутствия); нужен Центр Строительства.
 - Участок: Освещённый незагрязнённый участок с городской водой.
 - Работники: РАЗ≥3 или ЭМП≥3; обязательный состав: 1 × ТЕХНИКА. Агрономия, сложный климат и постоянное наблюдение
 - Услуга: `{"capacity":100,"coverageKind":"population","coveredBuildingIds":[]}`.
-- Производственная линия: `{"id":"line-1-vegetables","active":true,"requiresGmConfirmation":false,"name":"Секция овощей","mode":"Секция овощей","source":"workers","period":"qd","resourceId":"vegetables","resource":"Секция овощей","outputQty":20,"workQd":20,"expenseMode":"cycle","expenses":"","costsText":"","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-2-fruits","active":true,"requiresGmConfirmation":false,"name":"Секция фруктов","mode":"Секция фруктов","source":"workers","period":"qd","resourceId":"fruits","resource":"Секция фруктов","outputQty":15,"workQd":20,"expenseMode":"cycle","expenses":"","costsText":"","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-3-herbs","active":true,"requiresGmConfirmation":false,"name":"Секция трав","mode":"Секция трав","source":"workers","period":"qd","resourceId":"herbs","resource":"Секция трав","outputQty":5,"workQd":20,"expenseMode":"cycle","expenses":"","costsText":"","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-1-vegetables","active":true,"requiresGmConfirmation":false,"name":"Секция овощей","mode":"Секция овощей","source":"workers","period":"qd","resourceId":"vegetables","resource":"Секция овощей","outputQty":20,"workQd":20,"expenseMode":"cycle","expenses":"","costsText":"","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-2-fruits","active":true,"requiresGmConfirmation":false,"name":"Секция фруктов","mode":"Секция фруктов","source":"workers","period":"qd","resourceId":"fruits","resource":"Секция фруктов","outputQty":15,"workQd":20,"expenseMode":"cycle","expenses":"","costsText":"","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-3-herbs","active":true,"requiresGmConfirmation":false,"name":"Секция трав","mode":"Секция трав","source":"workers","period":"qd","resourceId":"herbs","resource":"Секция трав","outputQty":5,"workQd":20,"expenseMode":"cycle","expenses":"","costsText":"","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none"}`.
 
-До трёх круглогодичных производственных секций свежей пищи До трёх круглогодичных производственных секций свежей пищи
+Тепличный комплекс обеспечивает зимние поставки обычных культур. Отдельных уникальных растений не производит; себестоимость выше сезонного хозяйства. До трёх круглогодичных производственных секций свежей пищи Особенность трав — доступность зимой, а не отдельный редкий вид. Прибыль от обычных культур не является основной задачей теплицы.
 
 ## Гарнизонное управление
 
 ID: `garrison-administration`. Инфраструктура; этап 5. Требования П/Т/К/В: **0/58/40/48**; развитие: **0/1/1/7**.
 
 - Строительство: 9 этапов; сложность -2. Материалы: Wood 240; Stone 400; Bricks 320; Iron 80; Письменные материалы 40; Простые компоненты 30; ММ 3000.
-- Штат: 4–12; ставка 24. Содержание: база 108, эксплуатация 108. Техобслуживание: 0 QD.
+- Штат: 0–12; ставка 24. Содержание: база 108, эксплуатация 108. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: общественная служба. Репутация / довольство / условия труда: 0/1/1.
-- Активация: 4 работников, 20 QD; содержательный результат не требуется.
+- Активация: 0 работников, 20 QD; содержательный результат не требуется.
 - Зависимости: Штаб ополчения (прежнее условие присутствия); Телеграфная станция (прежнее условие присутствия); нужен Центр Строительства.
 - Участок: Защищённый штаб рядом с гарнизоном.
 - Работники: СИЛ≥3 или ЭМП≥3; обязательный состав: 2 × ОХРАНА. Дисциплина, кадровое руководство и командование
@@ -1688,23 +1804,25 @@ ID: `garrison-administration`. Инфраструктура; этап 5. Тре�
 ID: `high-tech-components-plant`. Производство; этап 6. Требования П/Т/К/В: **0/92/34/0**; развитие: **0/7/0/0**.
 
 - Строительство: 14 этапов; сложность -3. Материалы: Stone 400; Bricks 500; Iron 200; Steel 120; Copper 80; Цветные металлы 40; Сплавы (лёгкие) 30; Сплавы (сложные) 20; Редкоземельные металлы 5; Glass 100; Простые компоненты 100; Сложные компоненты 100; Сложные инструменты 20; ММ 30000.
-- Штат: 15–60; ставка 18. Содержание: база 144, эксплуатация 216. Техобслуживание: 3 QD.
+- Штат: 0–60; ставка 24. Содержание: база 144, эксплуатация 216. Техобслуживание: 3 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: производство, общественная служба. Репутация / довольство / условия труда: 2/0/0.
 - Активация: 0 работников, 0 QD; содержательный результат обязателен.
 - Зависимости: нет; нужен Центр Строительства.
 - Работники: РАЗ≥4 и ЛОВ≥3; обязательный состав: 5 × ТЕХНИКА. Предельно точная сборка и сложная технология
-- Производственная линия: `{"id":"line-1-components-high-tech","active":true,"requiresGmConfirmation":false,"name":"Высокотехнологичные компоненты","mode":"Высокотехнологичные компоненты","source":"workers","period":"qd","resourceId":"components-high-tech","resource":"Высокотехнологичные компоненты","outputQty":4,"workQd":10,"expenseMode":"cycle","expenses":"components-complex 3, copper 2, complex-alloys 1, rare-earth-metals 1, glass 1","costsText":"components-complex 3, copper 2, complex-alloys 1, rare-earth-metals 1, glass 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-1-components-high-tech","active":true,"requiresGmConfirmation":false,"name":"Высокотехнологичные компоненты","mode":"Высокотехнологичные компоненты","source":"workers","period":"qd","resourceId":"components-high-tech","resource":"Высокотехнологичные компоненты","outputQty":4,"workQd":10,"expenseMode":"cycle","expenses":"components-complex 2, copper 2, complex-alloys 1, rare-earth-metals 1, glass 1","costsText":"components-complex 3, copper 2, complex-alloys 1, rare-earth-metals 1, glass 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none","wageDailyCopper":0}`.
 
-Высокотехнологичные компоненты из редких промышленных материалов Высокотехнологичные компоненты из редких промышленных материалов
+Высокотехнологичные компоненты из редких промышленных материалов Высокотехнологичные компоненты из редких промышленных материалов Ставка продвинутого промышленного труда: 24 ММ в день сверх пайка. Индивидуальная оплата и добровольная работа задаются отдельно. Внешнее или сюжетное сырьё: редкие металлы. Стандартное дерево поселения не производит эти входы.
 
 ## Воздушная верфь
 
 ID: `airship-yard`. Инфраструктура; этап 6. Требования П/Т/К/В: **0/88/30/20**; развитие: **0/5/1/2**.
 
 - Строительство: 16 этапов; сложность -3. Материалы: Wood 800; Stone 500; Bricks 400; Iron 250; Steel 150; Сплавы (лёгкие) 60; Copper 60; Rope 80; Cloth 60; Простые компоненты 100; Сложные компоненты 80; ММ 30000.
-- Штат: 20–80; ставка 18. Содержание: база 180, эксплуатация 216. Техобслуживание: 3 QD.
+- Штат: 0–80; ставка 18. Содержание: база 180, эксплуатация 216. Техобслуживание: 3 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: общественная служба. Репутация / довольство / условия труда: 3/1/-1.
-- Активация: 20 работников, 40 QD; содержательный результат не требуется.
+- Активация: 0 работников, 40 QD; содержательный результат не требуется.
 - Зависимости: нет; нужен Центр Строительства.
 - Работники: СИЛ≥3 или РАЗ≥3; обязательный состав: 4 × ТЕХНИКА; 2 × МОРЕ. Инженерия, тяжёлые узлы, такелаж и навигационная практика
 - Услуга: `{"capacity":100,"coverageKind":"population","coveredBuildingIds":[]}`.
@@ -1716,9 +1834,10 @@ ID: `airship-yard`. Инфраструктура; этап 6. Требовани
 ID: `university`. Инфраструктура; этап 6. Требования П/Т/К/В: **0/70/90/0**; развитие: **0/5/9/0**.
 
 - Строительство: 14 этапов; сложность -3. Материалы: Wood 600; Stone 700; Bricks 500; Iron 120; Glass 150; Marble 150; Rare Wood 80; Письменные материалы 120; Сложные компоненты 30; ММ 35000.
-- Штат: 8–32; ставка 24. Содержание: база 126, эксплуатация 144. Техобслуживание: 0 QD.
+- Штат: 0–32; ставка 24. Содержание: база 126, эксплуатация 144. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: общественная служба. Репутация / довольство / условия труда: 3/4/1.
-- Активация: 8 работников, 40 QD; содержательный результат не требуется.
+- Активация: 0 работников, 40 QD; содержательный результат не требуется.
 - Зависимости: Библиотека (при создании проекта); нужен Центр Строительства.
 - Работники: РАЗ≥4 или ЭМП≥4; обязательный состав: 3 × ГРАМОТА. Исследование, преподавание и руководство проектами
 - Услуга: `{"capacity":100,"coverageKind":"population","coveredBuildingIds":[]}`.
@@ -1730,25 +1849,27 @@ ID: `university`. Инфраструктура; этап 6. Требования
 ID: `military-factory`. Производство; этап 6. Требования П/Т/К/В: **0/78/24/54**; развитие: **0/4/0/6**.
 
 - Строительство: 15 этапов; сложность -3. Материалы: Stone 400; Bricks 700; Iron 350; Steel 200; Copper 100; Цветные металлы 60; Простые компоненты 120; Сложные компоненты 100; Сложные инструменты 20; ММ 35000.
-- Штат: 20–80; ставка 18. Содержание: база 180, эксплуатация 216. Техобслуживание: 3 QD.
+- Штат: 0–80; ставка 24. Содержание: база 180, эксплуатация 216. Техобслуживание: 3 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: производство, общественная служба. Репутация / довольство / условия труда: 1/-2/-2.
 - Активация: 0 работников, 0 QD; содержательный результат обязателен.
 - Зависимости: Арсенал (при создании проекта); нужен Центр Строительства.
 - Работники: СИЛ≥3 и РАЗ≥3; обязательный состав: 5 × ТЕХНИКА; 1 × ОХРАНА. Сложное вооружение, тяжёлое производство и безопасность
-- Производственная линия: `{"id":"line-1-military-supplies-complex","active":true,"requiresGmConfirmation":false,"name":"Сложные припасы","mode":"Сложные припасы","source":"workers","period":"qd","resourceId":"military-supplies-complex","resource":"Сложные припасы","outputQty":2,"workQd":4,"expenseMode":"cycle","expenses":"iron 2, copper 1, chemicals-simple 2, explosives 1","costsText":"iron 2, copper 1, chemicals-simple 2, explosives 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-2-armament-complex","active":true,"requiresGmConfirmation":false,"name":"Сложное вооружение","mode":"Сложное вооружение","source":"workers","period":"qd","resourceId":"armament-complex","resource":"Сложное вооружение","outputQty":1,"workQd":20,"expenseMode":"cycle","expenses":"wood 40, steel 20, components-complex 6, military-supplies-complex 3","costsText":"wood 40, steel 20, components-complex 6, military-supplies-complex 3","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
-- Производственная линия: `{"id":"line-3-armament-elite","active":true,"requiresGmConfirmation":false,"name":"Элитное вооружение","mode":"Элитное вооружение","source":"workers","period":"qd","resourceId":"armament-elite","resource":"Элитное вооружение","outputQty":1,"workQd":40,"expenseMode":"cycle","expenses":"armament-complex 1, complex-alloys 8, components-high-tech 4, military-supplies-complex 6","costsText":"armament-complex 1, complex-alloys 8, components-high-tech 4, military-supplies-complex 6","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"outdoors","autoCollect":"none"}`.
+- Производственная линия: `{"id":"line-1-military-supplies-complex","active":true,"requiresGmConfirmation":false,"name":"Сложные припасы","mode":"Сложные припасы","source":"workers","period":"qd","resourceId":"military-supplies-complex","resource":"Сложные припасы","outputQty":2,"workQd":3,"expenseMode":"cycle","expenses":"iron 2, copper 1, chemicals-simple 2, explosives 1","costsText":"iron 2, copper 1, chemicals-simple 2, explosives 1","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none","wageDailyCopper":0}`.
+- Производственная линия: `{"id":"line-2-armament-complex","active":true,"requiresGmConfirmation":false,"name":"Сложное вооружение","mode":"Сложное вооружение","source":"workers","period":"qd","resourceId":"armament-complex","resource":"Сложное вооружение","outputQty":1,"workQd":20,"expenseMode":"cycle","expenses":"wood 40, steel 20, components-complex 6, military-supplies-complex 3","costsText":"wood 40, steel 20, components-complex 6, military-supplies-complex 3","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none","wageDailyCopper":0}`.
+- Производственная линия: `{"id":"line-3-armament-elite","active":true,"requiresGmConfirmation":false,"name":"Элитное вооружение","mode":"Элитное вооружение","source":"workers","period":"qd","resourceId":"armament-elite","resource":"Элитное вооружение","outputQty":1,"workQd":40,"expenseMode":"cycle","expenses":"armament-complex 1, complex-alloys 8, components-high-tech 4, military-supplies-complex 6","costsText":"armament-complex 1, complex-alloys 8, components-high-tech 4, military-supplies-complex 6","requiresCollection":false,"collectQd":0,"pendingQty":0,"storageRoomId":"auto","autoCollect":"none","wageDailyCopper":0}`.
 
-Сложные боеприпасы, сложное и элитное вооружение Сложные боеприпасы, сложное и элитное вооружение
+Сложные боеприпасы, сложное и элитное вооружение Сложные боеприпасы, сложное и элитное вооружение Ставка продвинутого промышленного труда: 24 ММ в день сверх пайка. Индивидуальная оплата и добровольная работа задаются отдельно. Стратегическое самообеспечение гарнизона. Узкая денежная маржа не означает отсутствия военной пользы; экспорт требует подходящего покупателя и цены.
 
 ## Военная академия
 
 ID: `military-academy`. Военные; этап 6. Требования П/Т/К/В: **0/64/40/60**; развитие: **0/2/3/6**.
 
 - Строительство: 12 этапов; сложность -2. Материалы: Wood 500; Stone 500; Bricks 300; Iron 100; Steel 80; Glass 60; Marble 50; Письменные материалы 80; Cloth 50; ММ 25000.
-- Штат: 6–24; ставка 18. Содержание: база 126, эксплуатация 126. Техобслуживание: 0 QD.
+- Штат: 0–24; ставка 18. Содержание: база 126, эксплуатация 126. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: оборона, общественная служба. Репутация / довольство / условия труда: 1/2/1.
-- Активация: 6 работников, 40 QD; содержательный результат не требуется.
+- Активация: 0 работников, 40 QD; содержательный результат не требуется.
 - Зависимости: нет; одна из: Стрельбище (при создании проекта) ИЛИ Тренировочный лагерь (при создании проекта); нужен Центр Строительства.
 - Работники: РАЗ≥3 или ЭМП≥3; обязательный состав: 3 × ОХРАНА. Теория, обучение и опыт профессиональных военных
 - Услуга: `{"capacity":100,"coverageKind":"population","coveredBuildingIds":[]}`.
@@ -1761,9 +1882,10 @@ ID: `military-academy`. Военные; этап 6. Требования П/Т/�
 ID: `bastion`. Военные; этап 6. Требования П/Т/К/В: **0/64/24/70**; развитие: **0/1/0/6**.
 
 - Строительство: 16 этапов; сложность -3. Материалы: Wood 200; Stone 1200; Bricks 900; Iron 300; Steel 150; Простые компоненты 60; Сложные компоненты 40; ММ 30000.
-- Штат: 5–20; ставка 18. Содержание: база 180, эксплуатация 108. Техобслуживание: 0 QD.
+- Штат: 0–20; ставка 18. Содержание: база 180, эксплуатация 108. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: оборона, общественная служба. Репутация / довольство / условия труда: 1/2/-1.
-- Активация: 5 работников, 10 QD; содержательный результат не требуется.
+- Активация: 0 работников, 10 QD; содержательный результат не требуется.
 - Зависимости: нет; нужен Центр Строительства.
 - Работники: СИЛ≥3; обязательный состав: 2 × ОХРАНА. Стойкость гарнизона и полевое руководство
 - Услуга: `{"capacity":100,"coverageKind":"population","coveredBuildingIds":[]}`.
@@ -1776,9 +1898,10 @@ ID: `bastion`. Военные; этап 6. Требования П/Т/К/В: **0
 ID: `agronomic-institute`. Инфраструктура; этап 6. Требования П/Т/К/В: **64/70/45/0**; развитие: **6/4/3/0**.
 
 - Строительство: 12 этапов; сложность -3. Материалы: Wood 300; Stone 500; Bricks 420; Steel 80; Glass 160; Письменные материалы 100; Простые компоненты 80; Сложные компоненты 40; ММ 12000.
-- Штат: 6–16; ставка 24. Содержание: база 144, эксплуатация 180. Техобслуживание: 0 QD.
+- Штат: 0–16; ставка 24. Содержание: база 144, эксплуатация 180. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: общественная служба. Репутация / довольство / условия труда: 2/2/1.
-- Активация: 6 работников, 40 QD; содержательный результат не требуется.
+- Активация: 0 работников, 40 QD; содержательный результат не требуется.
 - Зависимости: Тепличный комплекс (прежнее условие присутствия); одна из: Университет (прежнее условие присутствия) ИЛИ Библиотека (прежнее условие присутствия); нужен Центр Строительства.
 - Участок: Безопасный кампус с опытными участками.
 - Работники: РАЗ≥4 или ЭМП≥3; обязательный состав: 2 × ГРАМОТА. Исследование и передача результатов практикам
@@ -1791,9 +1914,10 @@ ID: `agronomic-institute`. Инфраструктура; этап 6. Требо�
 ID: `main-headquarters`. Военные; этап 6. Требования П/Т/К/В: **0/72/46/72**; развитие: **0/1/2/10**.
 
 - Строительство: 12 этапов; сложность -3. Материалы: Wood 280; Stone 600; Bricks 500; Iron 120; Steel 100; Glass 80; Письменные материалы 120; Простые компоненты 70; Сложные компоненты 50; ММ 15000.
-- Штат: 6–18; ставка 24. Содержание: база 180, эксплуатация 180. Техобслуживание: 0 QD.
+- Штат: 0–18; ставка 24. Содержание: база 180, эксплуатация 180. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: оборона, общественная служба. Репутация / довольство / условия труда: 0/1/1.
-- Активация: 6 работников, 20 QD; содержательный результат не требуется.
+- Активация: 0 работников, 20 QD; содержательный результат не требуется.
 - Зависимости: Гарнизонное управление (прежнее условие присутствия); Военная академия (прежнее условие присутствия); Телеграфная станция (прежнее условие присутствия); нужен Центр Строительства.
 - Участок: Укреплённый узел связи рядом с оборонным командованием.
 - Работники: РАЗ≥4 или ЭМП≥4; обязательный состав: 3 × ОХРАНА; 1 × ГРАМОТА. Планирование, связь, архив и командование
@@ -1807,9 +1931,10 @@ ID: `main-headquarters`. Военные; этап 6. Требования П/Т/
 ID: `citadel`. Военные; этап 7. Требования П/Т/К/В: **0/80/50/88**; развитие: **0/1/1/11**.
 
 - Строительство: 20 этапов; сложность -3. Материалы: Wood 500; Stone 2000; Bricks 1400; Iron 600; Steel 300; Glass 100; Marble 100; Простые компоненты 100; Сложные компоненты 80; ММ 60000.
-- Штат: 8–32; ставка 18. Содержание: база 300, эксплуатация 216. Техобслуживание: 0 QD.
+- Штат: 0–32; ставка 18. Содержание: база 300, эксплуатация 216. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: оборона, общественная служба. Репутация / довольство / условия труда: 3/3/0.
-- Активация: 8 работников, 20 QD; содержательный результат не требуется.
+- Активация: 0 работников, 20 QD; содержательный результат не требуется.
 - Зависимости: нет; нужен Центр Строительства.
 - Работники: СИЛ≥3 или ЭМП≥3; обязательный состав: 4 × ОХРАНА. Высшая военная дисциплина, управление и оборона
 - Услуга: `{"capacity":100,"coverageKind":"population","coveredBuildingIds":[]}`.
@@ -1822,9 +1947,10 @@ ID: `citadel`. Военные; этап 7. Требования П/Т/К/В: **0
 ID: `meeting-house`. Инфраструктура; этап 2. Требования П/Т/К/В: **8/6/10/0**; развитие: **0/1/3/0**.
 
 - Строительство: 3 этапов; сложность 0. Материалы: Wood 180; Stone 120; Cloth 20; Письменные материалы 10.
-- Штат: 1–2; ставка 18. Содержание: база 36, эксплуатация 18. Техобслуживание: 0 QD.
+- Штат: 0–2; ставка 18. Содержание: база 36, эксплуатация 18. Техобслуживание: 0 QD.
+- Режим труда: staff; предел физических QD: отдельно не задан.
 - Функции: общественная служба. Репутация / довольство / условия труда: 0/0/0.
-- Активация: 1 работников, 20 QD; содержательный результат не требуется.
+- Активация: 0 работников, 20 QD; содержательный результат не требуется.
 - Зависимости: нет.
 - Участок: доступное и безопасное место общих собраний, вне опасного промышленного участка; проверка GM
 - Работники: Обычная гражданская служба; обязательный состав: нет. обычная гражданская служба без закрытой специальности; прошлое писаря или управленца полезно для образа, не создаёт производственных процентов
@@ -1839,6 +1965,7 @@ ID: `fasti-shop`. Особые; этап сюжетный. Требования 
 
 - Строительство: 1 этапов; сложность 0. Материалы: нет.
 - Штат: 0–0; ставка 0. Содержание: база 18, эксплуатация 0. Техобслуживание: 0 QD.
+- Режим труда: passive; предел физических QD: 0.
 - Функции: нет. Репутация / довольство / условия труда: 0/0/0.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
@@ -1853,6 +1980,7 @@ ID: `laputa-excavated-crypt`. Складские; этап сюжетный. Т�
 
 - Строительство: 1 этапов; сложность 0. Материалы: нет.
 - Штат: 0–0; ставка 0. Содержание: база 0, эксплуатация 0. Техобслуживание: 0 QD.
+- Режим труда: passive; предел физических QD: 0.
 - Функции: склад. Репутация / довольство / условия труда: 0/0/0.
 - Активация: 0 работников, 0 QD; содержательный результат не требуется.
 - Зависимости: нет.
