@@ -84,6 +84,6 @@ await SkyholdData.transaction((draft, { skip }) => {
 
 **Документация как часть проверки**
 
-`npm run docs:check` проверяет локальные Markdown-ссылки/якоря, наличие документов в указателе и соответствие трёх генерируемых справочников коду. Генераторы находятся в `scripts/dev/build-building-catalog-reference.mjs`, `build-resource-catalog-reference.mjs`, `build-building-development-route-report.mjs`; запись — без `--check`, сверка — с ним. Входные Markdown-таблицы перечислены в [указателе](../docs/README.md). Их нельзя удалять как закрытые предложения: это часть воспроизводимой подготовки данных.
+`npm run docs:check` проверяет локальные Markdown-ссылки/якоря, наличие документов в указателе, доступность локальных ссылок поставляемых документов внутри релизного состава и соответствие трёх генерируемых справочников коду. Состав файлов задан в `scripts/dev/runtime-package-manifest.mjs` и используется также упаковщиком; проверка не создаёт архив. Генераторы находятся в `scripts/dev/build-building-catalog-reference.mjs`, `build-resource-catalog-reference.mjs`, `build-building-development-route-report.mjs`; запись — без `--check`, сверка — с ним. Входные Markdown-таблицы перечислены в [указателе](../docs/README.md). Их нельзя удалять как закрытые предложения: это часть воспроизводимой подготовки данных.
 
 В текущем срезе нет GitHub Actions workflows. Наличие npm-команды не означает автоматический запуск на PR; текущий результат проверки указывается отдельно.

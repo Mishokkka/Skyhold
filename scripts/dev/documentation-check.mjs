@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { isRuntimePackagePath } from "./runtime-package-manifest.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const ignored = new Set([".git", "node_modules", "dist", ".codex-tmp"]);
@@ -57,6 +58,11 @@ for (const [file, text] of texts) {
       continue;
     }
     if (!existsSync(destination)) { failures.push(`Missing target: ${label}`); continue; }
+    const sourcePath = path.relative(root, file).replaceAll("\\", "/");
+    const targetPath = path.relative(root, destination).replaceAll("\\", "/");
+    if (isRuntimePackagePath(sourcePath) && !isRuntimePackagePath(targetPath)) {
+      failures.push(`Target excluded from release package: ${label}`);
+    }
     if (file === path.join(root, "docs/README.md")) linkedDocs.add(destination);
     if (fragment && statSync(destination).isFile() && destination.endsWith(".md")) {
       const targetText = texts.get(destination) ?? withoutFences(readFileSync(destination, "utf8"));
@@ -72,4 +78,4 @@ for (const section of ["Действующие справочники", "Про�
   assert.ok(index.includes(`## ${section}`), `Documentation index must separate ${section}`);
 }
 assert.deepEqual(failures, [], `Documentation links/index:\n${failures.join("\n")}`);
-console.log(`Documentation: ${files.length} Markdown files, ${checked} local links/anchors, all docs indexed.`);
+console.log(`Documentation: ${files.length} Markdown files, ${checked} local links/anchors, all docs indexed; release links included in package inventory.`);
