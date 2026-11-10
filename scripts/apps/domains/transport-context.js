@@ -144,7 +144,7 @@ export function prepareTransportContext({ data, holding, request = {}, isGM = fa
   const home = findHoldingRegion(holding, data.catalog.eventRegions)?.value;
   if (!home) throw new Error("У поселения не определена локация.");
   const endpoint = ["sky-island", "ship"].includes(holding.type) || context.market.regionId === home ? `${home}:holding` : home;
-  const serviceEndpoints = { markets: context.markets, resources: context.resources, homeRegionId: home, homeEndpoint: endpoint,
+  const serviceEndpoints = { markets: context.markets, resources: context.resources, holdingId: holding.id, homeRegionId: home, homeEndpoint: endpoint,
     calendar: transportSeasonalCalendar(holding, transportHoldingQd(data, holding)) };
   let services = transportServicesFromRoutes(routes, configuration, data.catalog.eventRegions, serviceEndpoints);
   const ship = request.ownShipId ? holding.special?.ships?.list?.find((row) => row.id === request.ownShipId) : null;

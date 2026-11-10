@@ -1,7 +1,7 @@
 import { stableDataHash } from "../../data/storage-commit.js";
 import { transportLoad, transportInteger, transportHandlingTerms, TRANSPORT_LIMITS } from "./quantities.js";
 import { referenceTransportCosts, regularTransportRate, transportPortCapacity, transportRationPrice, transportRiskBps, TRANSPORT_ECONOMICS } from "./economics.js";
-import { legacyTransportServiceId } from "./service-identity.js";
+import { transportServiceCompatibilityIds } from "./service-identity.js";
 
 export const TRANSPORT_SERVICE_DEFAULTS = Object.freeze({
   regularIntervalQd: 40, regularFirstQd: 4, charterVehicles: 1, charterPreparationQd: 1,
@@ -21,7 +21,7 @@ export function validateTransportConfiguration(raw = {}) {
 }
 
 /** Collapse transit-only nodes before rounding movement or charging dispatch. */
-export function transportServicesFromRoutes(routes = [], rawConfiguration = {}, regions = [], { markets = [], resources = [], homeRegionId = "", homeEndpoint = "", calendar = null } = {}) {
+export function transportServicesFromRoutes(routes = [], rawConfiguration = {}, regions = [], { markets = [], resources = [], holdingId = "", homeRegionId = "", homeEndpoint = "", calendar = null } = {}) {
   const config = validateTransportConfiguration(rawConfiguration), result = new Map();
   const handling = new Map(markets.map(market => [market.regionId, market.locationProfile]));
   for (const route of routes) {
@@ -65,7 +65,13 @@ export function transportServicesFromRoutes(routes = [], rawConfiguration = {}, 
       const destination = homeEndpoint && !outbound && index === groups.length - 1 && to === homeRegionId ? homeEndpoint : legacyDestination;
       // Endpoint labels must not reset published schedules, fleet occupancy or overrides.
       const legacyKey = stableDataHash([legacySource, legacyDestination, group.mode, group.carrierId, group.routeIds]);
-      const key = `${legacyKey}:route:${stableDataHash(group.physicalEdges)}`;
+      // Regional arrivals stay shared even with a holding's display endpoint.
+      // A physical local leg uses this holding's own distance and warehouse.
+      // Keep the previous path ID as a prefix so accepted older bookings and GM
+      // settings remain meaningful without rewriting any stored agreement.
+      const warehouseEnd = (group.kind === "last-mile" || from === to)
+        && (outbound ? index === 0 && from === homeRegionId : index === groups.length - 1 && to === homeRegionId);
+      const key = `${legacyKey}:route:${stableDataHash(group.physicalEdges)}${holdingId && warehouseEnd ? `:holding:${encodeURIComponent(holdingId)}` : ""}`;
       const travelQd = Math.max(group.distanceKm === 0 ? 0 : 1, Math.ceil(group.movementQd));
       const port = (id, price, time) => ({ ...markets.find(row => row.regionId === id), factors: { price: price ?? 1, time: time ?? 1 } });
       const origin = port(from, group.sourcePriceFactor, group.sourceTimeFactor), target = port(to, group.targetPriceFactor, group.targetTimeFactor);
@@ -95,7 +101,7 @@ export function transportServicesFromRoutes(routes = [], rawConfiguration = {}, 
         vehicles: config.charterVehicles, returnQd: travelQd,
         dispatchCopper, dailyCosts, returnDailyCosts, loadMilliCopper };
       for (const service of [regular, charter]) {
-        const override = { ...config.overrides[legacyTransportServiceId(service.id)], ...config.overrides[service.id] };
+        const override = Object.assign({}, ...transportServiceCompatibilityIds(service.id).reverse().map(id => config.overrides[id]));
         let resized = service;
         if (override.capacity !== undefined && override.capacity !== capacity) {
           transportInteger(override.capacity, "вместимость услуги", 1);
