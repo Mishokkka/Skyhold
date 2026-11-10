@@ -23,7 +23,7 @@
                           <div><strong><button type="button" class="fbls-link-button" data-action="open-storage-item" data-index="{{_index}}">{{name}}</button></strong><small>{{typeLabel}} · {{qtyText}} ед. · нагрузка {{loadText}}</small></div>
                         </div>
 
-                        {{#if ../canUseStorage}}
+                        {{#if ../isGM}}
                           <label class="fbls-sale-flag icon-only {{#unless canMarkForSale}}disabled{{/unless}}" data-fbls-tooltip="{{saleTooltip}}"><input type="checkbox" data-type="checkbox" data-field="holdings.{{../holdingIndex}}.storage.items.{{_index}}.forSale" aria-label="Разрешить продажу {{name}}" {{#if forSale}}checked{{/if}} {{#unless canMarkForSale}}disabled{{/unless}} /><i class="fa-solid fa-coins"></i></label>
                         {{else}}
                           {{#if forSale}}<div class="fbls-sale-flag icon-only readonly" data-fbls-tooltip="Помечено к продаже"><i class="fa-solid fa-coins"></i></div>{{/if}}

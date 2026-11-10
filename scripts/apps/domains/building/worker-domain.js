@@ -1,6 +1,7 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import { workerTypeStyleFromAttributes } from "../../../generators/resident-rules.js";
 import { splitList, WORKER_TYPE_OPTIONS } from "../../../core/helpers.js";
+import { isResidentInPopulation } from "../../../data/resident-presence.js";
 import {
   buildingCompositionStatus,
   workerAdmission,
@@ -97,6 +98,10 @@ _workerEfficiencyForPerson(_holding, building, person) {
   };
 },
 
+/**
+ * Summarize active staffing, excluding unavailable residents without a cached context.
+ * A supplied economy context retains its finance-specific blocked-worker selection.
+ */
 _buildingEffectiveWorkers(holding, building, workerContext = null) {
   if (workerContext?.effectiveWorkers?.has(building)) return workerContext.effectiveWorkers.get(building);
   const cachedWorkers = workerContext?.buildingWorkers?.get(building);
@@ -105,7 +110,7 @@ _buildingEffectiveWorkers(holding, building, workerContext = null) {
   const allPeople = holding?.people?.list ?? [];
   const assignedPeople = activeAssignedPeople ?? assignedIds
     .map((id) => allPeople.find((person) => String(person?.id ?? "") === id))
-    .filter((person) => person && !person.dead && this._safeNumber(person?.injuredDays, 0) <= 0);
+    .filter((person) => person && isResidentInPopulation(person, holding) && this._safeNumber(person?.injuredDays, 0) <= 0);
   let productionWorkUnitsPerQd = 0;
   let suitableCount = 0;
   const details = [];

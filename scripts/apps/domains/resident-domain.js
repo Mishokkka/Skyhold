@@ -32,6 +32,11 @@ import {
   workAllocationTargetKey
 } from "../../data/work-allocations.js";
 
+/** Use one visibility rule for special-record rows and their tab badge. */
+function canViewSpecialRecord(row) {
+  return Boolean(globalThis.game?.user?.isGM) || row?.visibility !== "gm";
+}
+
 export const ResidentDomain = {
 _prepareRows(holding, canEdit, activeTab = "overview", options = {}) {
   if (!holding) return { people: [], residentWorkOptionCatalog: [], buildings: [], special: [], cemetery: [], storage: [] };
@@ -55,10 +60,8 @@ _prepareRows(holding, canEdit, activeTab = "overview", options = {}) {
 
   if (tab === "special" || tab === "defense") {
     const decorate = (sourceRows) => (sourceRows ?? []).map((row, index) => ({ ...row, _index: index }));
-    rows.special = decorate(holding.special?.list).filter((row) => {
-      if (canEdit) return true;
-      return row.visibility !== "gm";
-    }).map((row) => ({ ...row, isGmOnly: row.visibility === "gm" }));
+    rows.special = decorate(holding.special?.list).filter(canViewSpecialRecord)
+      .map((row) => ({ ...row, isGmOnly: row.visibility === "gm" }));
     rows.cemetery = this._preparePersonRows(holding, canEdit, "cemetery", false);
   }
 
@@ -236,7 +239,7 @@ _preparePersonRows(holding, canEdit = false, mode = "living", applyFilters = tru
 _prepareSpecialTabs(holding) {
   const people = holding?.people?.list ?? [];
   const dead = people.filter((person) => person?.dead).length;
-  const records = holding?.special?.list?.length ?? 0;
+  const records = (holding?.special?.list ?? []).filter(canViewSpecialRecord).length;
   const active = ["records", "cemetery"].includes(this.activeSpecialTab) ? this.activeSpecialTab : "records";
   return [
     { id: "records", label: "Записи", icon: "fa-solid fa-sparkles", count: records, tabCount: records, active: active === "records" },

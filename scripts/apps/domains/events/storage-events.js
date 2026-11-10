@@ -101,7 +101,7 @@ _onToggleStorageRoomRail(event) {
 
 _onPickStorageResource(event) {
   event.preventDefault();
-  if (!this._canUseStorage()) return;
+  if (!game.user?.isGM || !this._canUseStorage()) return;
   const button = event.currentTarget;
   const scope = String(button?.dataset?.storagePickerScope ?? "");
   const index = Number(button?.dataset?.storageResourceIndex ?? -1);
@@ -183,9 +183,11 @@ async _showStorageContextMenu({ rowType = "resources", rowId = "", roomId = "out
   menu.setAttribute("aria-label", "Действия с позицией склада");
   menu.append(
     createStorageContextMenuButton({ action: "move", icon: "fa-solid fa-right-left", label: "Переместить" }),
-    createStorageContextMenuButton({ action: "give", icon: "fa-solid fa-hand-holding", label: "Выдать" }),
-    createStorageContextMenuButton({ action: "note", icon: "fa-solid fa-note-sticky", label: "Заметка" }),
-    createStorageContextMenuButton({ action: "delete", icon: "fa-solid fa-trash", label: "Удалить", danger: true })
+    ...(game.user?.isGM ? [
+      createStorageContextMenuButton({ action: "give", icon: "fa-solid fa-hand-holding", label: "Выдать" }),
+      createStorageContextMenuButton({ action: "note", icon: "fa-solid fa-note-sticky", label: "Заметка" }),
+      createStorageContextMenuButton({ action: "delete", icon: "fa-solid fa-trash", label: "Удалить", danger: true })
+    ] : [])
   );
   const left = Math.max(8, Math.min(window.innerWidth - STORAGE_CONTEXT_MENU_WIDTH, Number(position?.x ?? 0)));
   const top = Math.max(8, Math.min(window.innerHeight - STORAGE_CONTEXT_MENU_HEIGHT, Number(position?.y ?? 0)));
@@ -381,6 +383,7 @@ async _openStorageMoveDialog({ rowType = "resources", rowId = "", fromRoomId = "
 },
 
 async _openStorageGiveDialog({ rowType = "resources", rowId = "", roomId = "outdoors" } = {}) {
+  if (!game.user?.isGM) return ui.notifications.warn("Предметы и ресурсы персонажам выдаёт ГМ.");
   const context = this._storageContextRow({ rowType, rowId, roomId });
   if (!context.holding || !context.row) return ui.notifications.warn("Позиция склада не найдена.");
   const isItem = context.type === "items";
@@ -406,6 +409,7 @@ async _openStorageGiveDialog({ rowType = "resources", rowId = "", roomId = "outd
 },
 
 async _openStorageNoteDialog({ rowType = "resources", rowId = "", roomId = "outdoors" } = {}) {
+  if (!game.user?.isGM) return ui.notifications.warn("Заметки отдельных позиций склада изменяет ГМ.");
   const context = this._storageContextRow({ rowType, rowId, roomId });
   if (!context.holding || !context.row) return ui.notifications.warn("Позиция склада не найдена.");
   const label = context.type === "items" ? String(context.row.name ?? "Предмет") : String(context.row.name ?? context.row.resourceId ?? "Ресурс");
@@ -430,6 +434,7 @@ async _openStorageNoteDialog({ rowType = "resources", rowId = "", roomId = "outd
 },
 
 async _openStorageDeleteDialog({ rowType = "resources", rowId = "", roomId = "outdoors" } = {}) {
+  if (!game.user?.isGM) return ui.notifications.warn("Позиции склада удаляет ГМ.");
   const context = this._storageContextRow({ rowType, rowId, roomId });
   if (!context.holding || !context.row) return ui.notifications.warn("Позиция склада не найдена.");
   const label = context.type === "items" ? String(context.row.name ?? "Предмет") : String(context.row.name ?? context.row.resourceId ?? "Ресурс");
@@ -473,7 +478,7 @@ _readMoneyInputValue(value = "") {
 },
 
 async _setStorageMoneyFromUi({ changedField = null, buttonDelta = 0, buttonDenom = "copper" } = {}) {
-  if (!this._canUseStorage()) return;
+  if (!game.user?.isGM || !this._canUseStorage()) return;
   const root = changedField?.closest?.(".fbls-storage-money-counter") ?? this.element?.querySelector?.(".fbls-storage-money-counter");
   if (!root) return;
   try {
@@ -535,6 +540,7 @@ async _onStorageDrop(event) {
   event.stopPropagation();
   if (!this._canUseStorage()) return;
   event.currentTarget?.classList?.remove?.("dragover");
+  if (!game.user?.isGM) return ui.notifications.warn("Предметы персонажей переносит на склад ГМ.");
 
   let dropData = null;
   try {

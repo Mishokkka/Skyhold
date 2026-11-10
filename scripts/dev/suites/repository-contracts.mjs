@@ -1208,7 +1208,7 @@ function checkStorageTemplatePartials() {
     },
     {
       file: "log.hbs",
-      required: ["{{#if activeStorage.log}}", "canUseStorage", "storageContext.logRows", "fbls-storage-log-card"]
+      required: ["{{#if activeStorage.log}}", "{{#if isGM}}", "storageContext.logRows", "fbls-storage-log-card"]
     }
   ];
 

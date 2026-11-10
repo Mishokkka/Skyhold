@@ -19,7 +19,7 @@ import {
   preparedTendayReplay,
   tendayDependencySnapshot
 } from "./tenday-preview.js";
-import { createFoundryChatMessage, foundryChatSpeaker } from "../../../integrations/foundry-runtime.js";
+import { createHoldingChatMessage, foundryChatSpeaker } from "../../../integrations/foundry-runtime.js";
 import { buildTendayChangeSet } from "../../../engines/tenday/change-set.js";
 import { buildTendayOperationPayload } from "../../../engines/tenday/operation-payload.js";
 import { recoverMarketStock } from "../../../engines/market/stock.js";
@@ -559,7 +559,7 @@ async _postTendaySummaryChat(holding, prepared = {}) {
     : (prepared?.events?.events?.length ? "Результат доступен GM." : "Активных событий нет.");
   const construction = report?.construction ?? {};
   const skipped = report?.skipped ?? [];
-  await createFoundryChatMessage({
+  await createHoldingChatMessage(holding, {
     speaker: foundryChatSpeaker({ alias: holding.name || "Владение" }),
     content: `
       <div class="fbls-chat-card fbls-chat-tenday-summary">

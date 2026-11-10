@@ -1,56 +1,20 @@
-# FBL Skyhold: performance baseline
+# Измерение производительности
 
-Дата замера: 15 июля 2026. Среда: Node.js v24.16.0, Windows x64.
+Статус: методика, не актуальный отчёт о миллисекундах. Числа июльских/августовских аудитов относятся к их fixtures и ревизиям; см. [исторический реестр](documentation-audit-2026-11-10.md). Они не являются гарантией скорости Foundry.
 
-Запуск:
+## Команды и смысл
 
-```bash
-npm run perf
-npm run perf:budget
-npm run perf:check
-```
+- `npm run perf` — измерения синтетических структурно валидных владений.
+- `npm run perf:check` — characterization инфраструктуры измерений.
+- `npm run perf:budget` — падающая проверка бюджетов; `check:all` не заменяет этот отдельный gate.
+- `npm run transport:perf:check` — подготовка большой истории/сметы перевозок.
 
-`perf:budget` запускает тот же benchmark как падающий release gate. Бюджеты намеренно содержат запас для менее быстрых CI-машин, но защищают clone, normalization, hash, cache-hit, минимальное ускорение и отсутствие повторной нормализации на cache-hit. Менять их следует только вместе с новым подтверждённым baseline, а не для сокрытия регрессии.
+Для нового результата фиксируйте commit, Node/ОС, fixture, число запусков, p95 и конкретный сценарий. Порог берите из исполняемого benchmark, не из старой таблицы документа. Изменение порога требует причины и повторимого baseline, а не только медленного единичного запуска.
 
-| Fixture | Clone p95 max | Normalize p95 max | Hash p95 max | Cache-hit p95 max | Min speedup |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| medium | 35 ms | 450 ms | 35 ms | 25 ms | 4x |
-| large | 55 ms | 900 ms | 75 ms | 60 ms | 4x |
-| extreme | 60 ms | 1300 ms | 100 ms | 55 ms | 4x |
+Read-cache проверяется отдельно от полной нормализации: cache-hit читает meta, не повторяет загрузку/хеширование остальных partitions. Scoped commit нормализует и пишет нужный раздел; no-op не делает world writes и не повышает revision. Локальный pan/zoom не является изменением world data.
 
-Harness использует синтетические, но структурно валидные поселения. Он отдельно измеряет глубокое клонирование, полную нормализацию, hashing holdings, прежний read-cache путь и новый revision-first cache-hit. «Старый путь» воспроизводит чтение и клонирование четырёх settings, default/legacy/commit hashing и возврат уже нормализованного cache; лишняя нормализация ему не приписывается.
+Node не измеряет Handlebars/DOM/layout, реальные sockets, фокус и heap живой сцены. Для них нужен воспроизводимый сценарий в Foundry с runtime observer и отдельной записью среды. Отсутствие вызова функции в Node coverage не доказывает ненужность окна.
 
-| Fixture | Жители | Здания | Storage rows | Log rows | Старый read p95 | Cache-hit p95 | Ускорение |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| medium | 100 | 50 | 100 | 250 | 75.37 ms | 13.00 ms | 5.8x |
-| large | 500 | 200 | 500 | 500 | 164.43 ms | 20.20 ms | 8.1x |
-| extreme | 1000 | 200 | 1000 | 1000 | 230.11 ms | 22.52 ms | 10.2x |
-
-Дополнительные p95 для extreme fixture:
-
-- глубокий clone: 21.65 ms;
-- полная normalization: 732.32 ms;
-- holdings hash: 38.15 ms.
-
-Это dev-characterization, а не обещание одинакового времени на всех машинах. Устойчивый результат здесь — структура работы: cache-hit делает ровно одно чтение meta, не читает holdings/catalog/legacy, не хеширует partitions и не запускает normalization.
-
-Рост времени полной normalization относительно прежнего baseline считается сигналом холодного пути, а не регрессией cache-hit. Оптимизировать его следует только по живому профилю конкретного мира: fixture и число нормализуемых доменов теперь больше.
-
-Приведённые замеры являются историческими baseline, не текущей гарантией скорости. Актуальные значения получают повторным запуском указанных команд; UI и сетевые задержки проверяются отдельно.
-
-## Scoped write baseline (16 июля 2026)
-
-Benchmark теперь измеряет полный путь записи: cache-hit draft, partition normalization, split-storage hashing, start/complete meta и запись изменённого раздела. Для `holdings` и `catalog` ожидаются ровно три world settings write на commit; логический no-op обязан завершаться без world writes и без увеличения revision.
-
-| Fixture | Holdings write p95 | Catalog write p95 | No-op p95 | No-op world writes |
-| --- | ---: | ---: | ---: | ---: |
-| medium | 163.19 ms | 164.88 ms | 151.18 ms | 0 |
-| large | 706.46 ms | 187.77 ms | 590.25 ms | 0 |
-| extreme | 1022.44 ms | 196.99 ms | 980.73 ms | 0 |
-
-Падающие бюджеты оставляют запас для CI: `350/300/300 ms` для medium, `900/400/850 ms` для large и `1400/350/1300 ms` для extreme (`holdings/catalog/no-op`). При scoped commit неизменённый раздел не клонируется и не хешируется повторно; готовые hashes передаются в обе фазы commit meta.
-
-Viewport карты маршрутов не входит в world write benchmark: pan/zoom — локальное клиентское состояние. Открытие и закрытие карты без изменения viewport не выполняет даже client-setting write.
 
 ## Runtime observer
 

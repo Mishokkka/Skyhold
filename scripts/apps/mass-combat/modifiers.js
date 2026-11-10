@@ -7,6 +7,7 @@ import {
 } from "./rules.js";
 import { getMassCombatTagCounters, tagLabel } from "./tag-config.js";
 import { isInjuredResident, isMilitaryBackgroundResident, personText } from "./residents.js";
+import { isResidentInPopulation } from "../../data/resident-presence.js";
 import { hasTag } from "./sources.js";
 
 function round1(value) {
@@ -32,10 +33,14 @@ export function commanderEffectiveness(person = {}) {
   return clamp(round2(value), 0, 5);
 }
 
+/**
+ * Calculate the assigned local commander's percentage bonus, rounding dice upward.
+ * Missing, absent, dead or injured commanders contribute no bonus.
+ */
 export function defenseCommanderBonus(holding, armyDice = 0) {
   const id = String(holding?.gm?.defense?.commanderId ?? "");
   if (!id) return { value: 0, raw: 0, cap: 0, percent: 0, effectiveness: 0, label: "командир не назначен" };
-  const commander = (holding?.people?.list ?? []).find((person) => String(person.id) === id && !person?.dead && !isInjuredResident(person));
+  const commander = (holding?.people?.list ?? []).find((person) => String(person.id) === id && isResidentInPopulation(person, holding) && !isInjuredResident(person));
   if (!commander) return { value: 0, raw: 0, cap: 0, percent: 0, effectiveness: 0, label: "командир недоступен" };
   const effectiveness = commanderEffectiveness(commander);
   const percent = commandPercentFromEffectiveness(effectiveness);

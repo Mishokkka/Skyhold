@@ -10,15 +10,13 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { RUNTIME_FILES, RUNTIME_DIRS, EXCLUDED_RUNTIME_PREFIXES } from "./runtime-package-manifest.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const manifest = JSON.parse(readFileSync(path.join(root, "module.json"), "utf8"));
 const moduleId = String(manifest.id ?? "").trim();
 const version = String(manifest.version ?? "").trim();
 
-const RUNTIME_FILES = ["module.json", "README.md"];
-const RUNTIME_DIRS = ["assets", "docs", "examples", "lang", "scripts", "styles", "templates"];
-const EXCLUDED_RUNTIME_PREFIXES = ["scripts/dev/"];
 const FORBIDDEN_ARCHIVE_SEGMENTS = new Set([
   ".agents",
   ".codex",

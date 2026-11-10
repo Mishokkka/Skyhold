@@ -1,6 +1,6 @@
 **Навигация по исходникам FBL Skyhold**
 
-Начальная точка — [main.js](main.js): `init`, `ready`, публичный API, socket listener и открытие менеджера. [AGENTS.md](../AGENTS.md) задаёт ограничения изменений; [структурный аудит](../docs/code-structure-audit-2026-10-24.md) объясняет сильные и сложные места архитектуры.
+Начальная точка — [main.js](main.js): `init`, `ready`, публичный API, socket listener и открытие менеджера. [AGENTS.md](../AGENTS.md) задаёт ограничения изменений. Текущие границы и владельцы перечислены ниже; исторические структурные аудиты доступны через [реестр документации](../docs/documentation-audit-2026-11-10.md).
 
 **Где искать владельца поведения**
 
@@ -63,3 +63,27 @@ flowchart TD
 Выберите профильные команды из AGENTS.md и запустите их до общего прогона. Для структурного изменения с широкими зависимостями `npm run check:all` выполняет `lint`, затем различные Node-команды `check` и `*:check`; `perf:budget` запускается отдельно. Составные suites и отдельные команды частично пересекаются.
 
 Результаты Node-тестов относятся к моделям, fixtures и программным контрактам. Проверка ApplicationV2, фокуса, socket-сессий и окончательной разметки внутри Foundry остаётся отдельным smoke-тестом.
+
+
+**Публичный API**
+
+После загрузки мира доступны `game.fblSkyhold.open()`, `rerender()` и `diagnostic()`. Регистрация уникальных приложений описана в [extension contract](../docs/unique-buildings-api.md); runtime observer — в [методике измерений](../docs/performance-baseline.md).
+
+Compatibility entry point для внешних ESM/макросов — `/modules/fbl-skyhold/scripts/data.js`. Внутренний runtime импортирует конкретных владельцев. `SkyholdData.view()` даёт неизменяемый view, `get()` — копию; изменяемый draft выдаётся только в транзакции. Не записывайте world settings напрямую и не обходите authority-GM.
+
+```js
+const { SkyholdData } = await import("/modules/fbl-skyhold/scripts/data.js");
+await SkyholdData.transaction((draft, { skip }) => {
+  const holding = draft.holdings.find(row => row.id === "example-holding");
+  if (!holding) return skip(null);
+  holding.overview.publicNotes = "Обновлено макросом";
+});
+```
+
+Обычный результат updater возвращается после сохранения draft; `skip(value)` / публичный `skipTransaction(value)` отменяет запись и возвращает значение. Это пример записи для разрешённого контекста, а не инструкция выполнять его при чтении документа. Права пользователя и ограничения операции сохраняются.
+
+**Документация как часть проверки**
+
+`npm run docs:check` проверяет локальные Markdown-ссылки/якоря, наличие документов в указателе, доступность локальных ссылок поставляемых документов внутри релизного состава и соответствие трёх генерируемых справочников коду. Состав файлов задан в `scripts/dev/runtime-package-manifest.mjs` и используется также упаковщиком; проверка не создаёт архив. Генераторы находятся в `scripts/dev/build-building-catalog-reference.mjs`, `build-resource-catalog-reference.mjs`, `build-building-development-route-report.mjs`; запись — без `--check`, сверка — с ним. Входные Markdown-таблицы перечислены в [указателе](../docs/README.md). Их нельзя удалять как закрытые предложения: это часть воспроизводимой подготовки данных.
+
+В текущем срезе нет GitHub Actions workflows. Наличие npm-команды не означает автоматический запуск на PR; текущий результат проверки указывается отдельно.
