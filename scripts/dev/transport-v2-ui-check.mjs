@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import { worldMarketFixture } from "./world-ship-market-characterization-check.mjs";
 import { SkyholdData, registerMarketOperationExecutor } from "../data/store.js";
 import { prepareMarketAuthorityContext } from "../apps/market/authority-context.js";
-import { prepareTransportContext } from "../apps/domains/transport-context.js";
+import { prepareTransportContext, transportSourceToken } from "../apps/domains/transport-context.js";
 import { bookTransportOrder } from "../engines/transport/runtime.js";
 import { ensureTransportState } from "../data/transport/state.js";
 import { transportFixture, transportRequest, transportHarness } from "./fixtures/transport-v2.mjs";
-import { transportRiskLabel, transportStageRiskLabel } from "../apps/domains/transport-view.js";
+import { transportRiskLabel, transportStageRiskLabel, transportStageSchedule } from "../apps/domains/transport-view.js";
+import { normalizeSkyholdData } from "../data/normalizers.js";
 import { readFileSync } from "node:fs";
 
 const applications = new Map();
@@ -77,6 +78,8 @@ game.socket = { emit() {} };
 const quote = prepareTransportContext({ data, holding, request, isGM: true });
 const order = bookTransportOrder({ state: data.meta.transportV2, holding, plan: quote.plan, services: quote.services,
   id: "visibility-order", direction: "inbound", commercial: quote.commercial });
+assert.equal((await app._prepareContext({})).orders[0].stages[0].departures?.length, order.stages[0].runs.length,
+  "accepted orders retain their departure schedule after checkout");
 order.status = "waitingCarrier";
 assert.equal((await app._prepareContext({})).orders[0].canCancel, true, "an unstarted hired order may be cancelled while waiting for a vehicle");
 order.status = "booked";
@@ -176,4 +179,88 @@ await app.close();
   assert.deepEqual(h.data, before, "GM/player projection preserves the accepted labels, cargo and accounts");
   await ownApp.close();
 }
-console.log("transport-v2 UI: GM/player permissions, offline authority, ordinary hidden-route visibility and late receipt after reopening passed");
+// Accepted split shipments remain inspectable after checkout, incidents and shared-run pruning.
+{
+  const f = transportFixture();
+  const request = transportRequest(f);
+  const initial = prepareTransportContext({ ...f, request, isGM: true });
+  const service = initial.services.find(row => row.kind === "regular" && row.from === initial.from && row.to === initial.to);
+  assert.ok(service);
+  request.serviceIds = [service.id];
+  f.data.catalog.transportV2.overrides = { [service.id]: { capacity: 20000, loadingQd: 1, unloadingQd: 1,
+    travelQd: 2, firstQd: 2, intervalQd: 8, riskBps: 10000 } };
+  const h = transportHarness(f);
+  const booked = await h.book(request, "schedule-authority");
+  const accepted = structuredClone(booked.order.plan);
+  const runs = booked.order.stages[0].runs;
+  assert.equal(runs.length, 2);
+  const scheduleApp = new SkyholdTransportApp({ holdingId: h.holding.id });
+  let viewData = h.data;
+  SkyholdData.view = () => viewData;
+  const inspect = async () => {
+    const before = structuredClone(viewData);
+    let schedule;
+    for (const user of [gm, player]) {
+      game.user = user;
+      const view = await scheduleApp._prepareContext({});
+      assert.equal(view.hasRequest, false, "accepted schedules survive closing the original checkout");
+      const current = view.orders[0].stages[0].departures;
+      if (schedule) assert.deepEqual(current, schedule, "GM and player see the same shipment dates and quantities");
+      schedule = current;
+    }
+    assert.deepEqual(viewData, before, "schedule preparation never changes physical runs, local receipts or funds");
+    return schedule;
+  };
+  let schedule = await inspect();
+  assert.deepEqual(schedule.map(row => row.qty), [5, 5]);
+  assert.equal(schedule[0].arrivalQd, 5);
+  assert.equal(schedule[0].departure, "через 0,5 дн.");
+  h.advance(5);
+  assert.equal((await inspect())[0].status, "Ожидает решения ГМ");
+  const decide = async (id, outcome, delayQd = 0) => {
+    const command = { type: "transport-incident", operationId: `schedule-${id}`, holdingId: h.holding.id,
+      expectedRevision: h.data.meta.revision, sourceToken: transportSourceToken(h.data, h.holding),
+      runId: id, resolution: { outcome, delayQd } };
+    game.user = gm;
+    assert.equal((await h.execute(command, { userId: "gm" })).ok, true);
+    viewData = h.data;
+    const before = structuredClone(h.data);
+    assert.equal((await h.execute(command, { userId: "gm" })).replay, true);
+    assert.deepEqual(h.data, before);
+  };
+  await decide(runs[0].id, "delay", 12);
+  schedule = await inspect();
+  assert.equal(schedule[0].arrivalQd, 17, "the live delayed arrival overrides the accepted estimate");
+  assert.equal(schedule[0].arrival, "через 3 дн.");
+  assert.equal(schedule[0].status, "В пути");
+  h.advance(13);
+  await decide(runs[1].id, "success");
+  schedule = await inspect();
+  assert.equal(schedule[1].recorded, true);
+  assert.equal(schedule[1].received, 5);
+  assert.equal(schedule[0].recorded, false, "an earlier delayed part does not inherit a later part's receipt");
+  assert.equal(schedule[0].arrival, "через 1 дн.");
+  h.advance(17);
+  assert.equal(h.data.meta.transportV2.runs.length, 0, "completed physical runs may be safely pruned");
+  viewData = normalizeSkyholdData(JSON.parse(JSON.stringify(h.data)));
+  schedule = await inspect();
+  assert.equal(schedule[0].arrivalQd, 17, "the local receipt preserves the delayed date after cleanup and loading");
+  assert.equal(schedule[0].arrival, "сейчас");
+  assert.equal(schedule[1].arrival, "1 дн. назад");
+  assert.ok(schedule.every(row => row.recorded && row.status === "Разгружено"));
+  assert.deepEqual(h.holding.special.transportV2.orders[0].plan, accepted, "tracking never rewrites accepted terms");
+  const stage = h.holding.special.transportV2.orders[0].stages[0];
+  const shared = new Map([[runs[0].id, { ...runs[0], status: "arrived", arrivalQd: 17 }]]);
+  const lagging = transportStageSchedule({ ...stage, receipts: [], received: [] }, shared, 17);
+  assert.equal(lagging[0].status, "Прибыл; ожидает проведения поселения");
+  assert.equal(lagging[0].recorded, false);
+  assert.equal(lagging[0].provisional, false, "a known physical arrival is not a tentative booking");
+  assert.equal(transportStageSchedule(stage, shared, 17, { cancelled: true })[0].status, "Отменено");
+  assert.deepEqual(transportStageSchedule({ ...stage, runs: [] }, shared, 17), []);
+  const template = readFileSync(new URL("../../templates/transport-app.hbs", import.meta.url), "utf8");
+  assert.match(template, /Маршрут и расписание заказа/);
+  assert.match(template, /Отправка: {{departure}}; прибытие: {{arrival}}/);
+  assert.match(template, /{{#each departures}}/);
+  await scheduleApp.close();
+}
+console.log("transport-v2 UI: GM/player permissions, accepted split schedules/delays/receipts/reload, offline authority, hidden routes and late receipt after reopening passed");

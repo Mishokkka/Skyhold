@@ -109,7 +109,19 @@
     {{#if fundingNeeded}}<p role="status">Дополнительные расходы судна: требуется ещё {{fundingNeeded}}.</p>
       {{#if canFund}}<button type="button" class="fbls-button" data-action="transport-fund" data-order="{{id}}">Добавить {{fundingNeeded}} из казны и продолжить</button>{{/if}}
     {{/if}}
-    <details data-fbls-disclosure="transport-order:{{id}}"><summary>Маршрут заказа</summary><ol>{{#each stages}}<li>{{path}} · отправлений: {{count}} · {{price}}</li>{{/each}}</ol></details>
+    <details data-fbls-disclosure="transport-order:{{id}}"><summary>Маршрут и расписание заказа</summary>
+      <p>Сроки отсчитываются от текущей общей даты перевозок. Прибытие рейса и проведение склада поселения показаны отдельно.</p>
+      <ol>{{#each stages}}<li>
+        <details data-fbls-disclosure="transport-order:{{../id}}:stage:{{index}}">
+          <summary>{{path}} · отправлений: {{count}} · {{price}}</summary>
+          <ol>{{#each departures}}<li>
+            Отправление {{number}} · {{qty}} ед. · {{status}}.
+            {{#unless cancelled}}Отправка: {{departure}}; прибытие: {{arrival}}.{{/unless}}{{#if recorded}} Выгружено: {{received}} ед.{{/if}}
+            {{#if provisional}}Даты предварительные до обработки происшествий и связанных отправлений.{{/if}}
+          </li>{{else}}<li>Грузовых отправлений нет.</li>{{/each}}</ol>
+        </details>
+      </li>{{/each}}</ol>
+    </details>
     {{#if canCancel}}<button type="button" class="fbls-button" data-action="transport-cancel" data-order="{{id}}">Отменить до отправления и вернуть деньги</button>{{/if}}
   </article>
   {{/each}}

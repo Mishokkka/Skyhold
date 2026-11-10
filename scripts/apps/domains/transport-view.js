@@ -14,6 +14,39 @@ export function transportStageRiskLabel(stage) {
   return minimum === maximum ? transportRiskLabel(minimum) : `${transportRiskLabel(minimum)}–${transportRiskLabel(maximum)}`;
 }
 
+function relativeTransportDate(qd, clockQd) {
+  if (!Number.isSafeInteger(qd)) return "Дата уточняется";
+  const delta = qd - clockQd;
+  if (!delta) return "сейчас";
+  const days = (Math.abs(delta) / 4).toLocaleString("ru-RU", { maximumFractionDigits: 2 });
+  return delta > 0 ? `через ${days} дн.` : `${days} дн. назад`;
+}
+
+/** Local receipts outlive pruned shared runs; viewing an order never replans it. */
+export function transportStageSchedule(stage, physicalRuns, clockQd, { cancelled = false } = {}) {
+  const receipts = new Map(stage.receipts.map(row => [row.runId, row]));
+  const received = new Map();
+  for (const lot of stage.received) received.set(lot.deliveryRunId, (received.get(lot.deliveryRunId) ?? 0) + lot.qty);
+  return stage.runs.map((planned, index) => {
+    const physical = physicalRuns.get(planned.id);
+    const receipt = receipts.get(planned.id);
+    const recorded = receipt?.status === "arrived";
+    const departureQd = receipt?.departureQd ?? physical?.departureQd ?? planned.departureQd;
+    const arrivalQd = receipt?.arrivalQd ?? physical?.arrivalQd ?? planned.arrivalQd;
+    const pending = physical?.incident?.status === "pending";
+    const status = cancelled ? "Отменено" : recorded ? "Разгружено" : pending ? "Ожидает решения ГМ"
+      : receipt ? "В пути" : physical?.status === "arrived" ? "Прибыл; ожидает проведения поселения"
+        : physical?.status === "travelling" ? "В пути; ожидает проведения поселения"
+          : departureQd <= clockQd ? "Ожидает проведения поселения" : "Забронировано";
+    return { number: index + 1, status, recorded, cancelled,
+      qty: (receipt?.cargo ?? planned.cargo).reduce((sum, lot) => sum + lot.qty, 0),
+      received: received.get(planned.id) ?? 0,
+      departureQd, arrivalQd, departure: relativeTransportDate(departureQd, clockQd), arrival: relativeTransportDate(arrivalQd, clockQd),
+      provisional: !cancelled && !recorded && Boolean(stage.needsRebooking || pending
+        || !receipt && !["travelling", "arrived"].includes(physical?.status) && departureQd <= clockQd) };
+  });
+}
+
 export function transportHistoryPage(orders, page = 0) {
   const active = [], history = [];
   for (const order of orders) (transportOrderHasObligations(order) ? active : history).push(order);

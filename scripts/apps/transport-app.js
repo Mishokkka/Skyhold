@@ -13,7 +13,7 @@ import { DisclosureState } from "./common/disclosure-state.js";
 import { RenderSchedulerMixin } from "./common/render-scheduler.js";
 import { restoreApplicationFocus } from "./common/window-focus-keeper.js";
 import { requestSkyholdAppRender } from "./registry.js";
-import { transportHistoryPage, transportRefinements, transportRiskLabel, transportStageRiskLabel } from "./domains/transport-view.js";
+import { transportHistoryPage, transportRefinements, transportRiskLabel, transportStageRiskLabel, transportStageSchedule } from "./domains/transport-view.js";
 import { createMarketVisibility } from "../data/market/visibility.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -107,6 +107,7 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
     } : null;
     const configuration = { ...TRANSPORT_SERVICE_DEFAULTS, ...(this._configuration ?? data.catalog?.transportV2) };
     const page = transportHistoryPage(transportOrders(holding), this._historyPage);
+    const physicalRuns = new Map((data.meta?.transportV2?.runs ?? []).map(run => [run.id, run]));
     this._historyPage = page.history.page - 1;
     const orders = page.orders.map((order) => ({ id: order.id,
       market: visibility.marketLabel(order.commercial),
@@ -121,9 +122,10 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
         ? "Корабль прибыл; ожидает расчёта, содержание продолжается" : "Корабль занят этим заказом" : "",
       shipReturnBlocked: order.shipAbort?.returnBlocked,
       shipTiming: shipTiming(order),
-      arrival: days(Math.max(...order.stages.flatMap((stage) => stage.runs.map((run) => run.arrivalQd))) - clockQd),
       canCancel: permissions.canUseStorage && canCancelTransportOrder(data.meta?.transportV2, order, clockQd),
-      stages: order.stages.map((stage) => ({ path: path(stage), count: stage.runs.length, price: money(stage.totalCopper), invoice: stageInvoice(stage) })) }));
+      stages: order.stages.map((stage) => ({ index: stage.index, path: path(stage), count: stage.runs.length,
+        price: money(stage.totalCopper), invoice: stageInvoice(stage),
+        departures: transportStageSchedule(stage, physicalRuns, clockQd, { cancelled: order.status === "cancelled" }) })) }));
     const incidents = permissions.isGM ? (data.meta?.transportV2?.runs ?? []).filter((run) => run.incident?.status === "pending")
       .map((run) => ({ id: run.id, label: run.serviceLabel, orders: run.claims.length,
         awaitingCargo: [...new Set(run.claims.filter(claim => claim.manifestReady !== true)
