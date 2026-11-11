@@ -1,13 +1,12 @@
-import { DUPLICATE_STORAGE_ROW, STORAGE_ROW_CHANGED, indexStorageRows } from "./row-identity.js";
-import { storageEffectiveRowLoad } from "./specialization.js";
-
 function requireDependencies(dependencies = {}) {
   const required = [
     "safeNumber",
     "normalizeStorageRoomId",
     "itemQuantity",
+    "resolveStorageRows",
     "storageRooms",
     "storageRowLoad",
+    "storageEffectiveRowLoad",
     "storageRoomLabel",
     "addResourceWithOverflow",
     "clone",
@@ -27,13 +26,12 @@ function normalizedRowType(value) {
 }
 
 function selectedRows(holding, { rowType, rowIds, fromRoomId }, dependencies) {
-  const ids = new Set((Array.isArray(rowIds) ? rowIds : []).map((id) => String(id ?? "").trim()).filter(Boolean));
-  const index = indexStorageRows(holding?.storage?.[rowType]);
-  if ([...ids].some((id) => index.get(id) === null)) return { message: DUPLICATE_STORAGE_ROW };
-  const rows = [...index.values()].filter((row) => row && ids.has(String(row.id))
-    && dependencies.normalizeStorageRoomId(row.roomId ?? row.storageRoomId) === fromRoomId);
-  if (rows.length !== ids.size) return { message: STORAGE_ROW_CHANGED };
-  return { rows };
+  const ids = (Array.isArray(rowIds) ? rowIds : []).map((id) => String(id ?? "").trim()).filter(Boolean);
+  const selected = dependencies.resolveStorageRows(holding?.storage?.[rowType], ids);
+  if (selected.rows?.some((row) => dependencies.normalizeStorageRoomId(row.roomId ?? row.storageRoomId) !== fromRoomId)) {
+    return { message: "Позиция больше не находится в этом хранилище." };
+  }
+  return selected;
 }
 
 function rowLabel(row = {}, rowType = "resources") {
@@ -56,7 +54,7 @@ function planItemDestinations(holding, rows, plannedRows, fromRoomId, toRoomId, 
     // A split stack receives a fresh ID. Only its item metadata determines its storage profile.
     const stack = { ...source, id: planned.qty < planned.availableQty ? "" : source.id, qty: planned.qty };
     for (const room of candidates) {
-      const load = storageEffectiveRowLoad(room, stack, planned.load);
+      const load = dependencies.storageEffectiveRowLoad(room, stack, planned.load);
       if (!roomCanFit(room, load)) continue;
       planned.roomId = room.id;
       if (!room.unlimited) room.free = Math.max(0, Number(room.free ?? 0) - load);
@@ -153,10 +151,10 @@ function prepareStorageBatchMove(options) {
   // Run the regular resource placement on a private draft so preview and apply obey the same capacity rules.
   const resources = deps.clone(holding.storage.resources);
   const draft = { ...holding, storage: { ...holding.storage, resources } };
-  const index = indexStorageRows(resources);
+  const { byId } = deps.resolveStorageRows(resources, plan.rows.map((row) => row.id));
   const transfers = [];
   for (const planned of plan.rows) {
-    const row = index.get(planned.id);
+    const row = byId.get(planned.id);
     const receipt = deps.takeResourceRow(draft, row, planned.qty);
     if (receipt.takenQty !== planned.qty) throw new RangeError("storage batch move could not take the planned quantity");
     const placements = deps.addResourceWithOverflow(draft, { ...row, roomId: plan.toRoomId, batches: receipt.batches }, planned.qty);
@@ -220,10 +218,10 @@ export function applyStorageBatchMove({
       messages.push(`${planned.label}: ${deps.formatNumber(planned.qty)} → ${placed.map((placement) => deps.storageRoomLabel(holding, placement.roomId)).join(", ")}`);
     }
   } else {
-    const rows = indexStorageRows(holding.storage.items);
+    const { byId } = deps.resolveStorageRows(holding.storage.items, plan.rows.map((row) => row.id));
     const entries = [];
     for (const planned of plan.rows) {
-      const row = rows.get(planned.id);
+      const row = byId.get(planned.id);
       const { qty: amount, availableQty: available, roomId: targetRoomId } = planned;
       let movedRow = row;
       if (amount < available) {

@@ -16,3 +16,13 @@ export function resolveStorageRow(rows, rowId) {
   if (row) return { row };
   return { row: null, message: row === null ? DUPLICATE_STORAGE_ROW : STORAGE_ROW_CHANGED };
 }
+
+/** Resolve a whole selection in storage order, rejecting missing or ambiguous IDs. */
+export function resolveStorageRows(rows, rowIds) {
+  const ids = new Set(rowIds);
+  const selected = new Map([...indexStorageRows(rows)].filter(([id]) => ids.has(id)));
+  const matchedRows = [...selected.values()];
+  if (matchedRows.includes(null)) return { message: DUPLICATE_STORAGE_ROW };
+  if (selected.size !== ids.size) return { message: STORAGE_ROW_CHANGED };
+  return { rows: matchedRows, byId: selected };
+}

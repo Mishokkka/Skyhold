@@ -142,6 +142,14 @@ const duplicateLots = structuredClone(olderStock);
 assert.equal(applyMarketOutboundDispatch({ resources: olderStock, cargoReservations: legacyCargo }).ok, false,
   "a saved shipment must stop when even its material and batch cannot distinguish the source");
 assert.deepEqual(olderStock, duplicateLots);
+const normalizedLegacy = [
+  { id: "older-stock", resourceId: "custom", qty: 2, batches: [{ id: "older-lot", qty: 2 }] },
+  { id: "older-stock", resourceId: "wood", qty: 2, batches: [{ id: "unrelated-lot", qty: 2 }] }
+];
+assert.equal(applyMarketOutboundDispatch({ resources: normalizedLegacy,
+  cargoReservations: [{ rowId: "older-stock", batchId: "older-lot", resourceId: "retired-catalog-item", qty: 1 }] }).ok, true,
+  "a unique saved lot still identifies a shipment after the catalog changes");
+assert.deepEqual(normalizedLegacy.map(row => row.qty), [1, 2]);
 const planned = salePlan(reservedHolding);
 assert.equal(planned.ok, true);
 assert.equal(planned.route.id, "cheap", "planner must select the cheapest admissible complete route quote");

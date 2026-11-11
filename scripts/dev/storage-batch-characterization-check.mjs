@@ -3,6 +3,8 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { applyStorageBatchMove, planStorageBatchMove } from "../engines/storage/batch-move.js";
 import { itemQuantity } from "../engines/storage/item-quantity.js";
+import { resolveStorageRows } from "../engines/storage/row-identity.js";
+import { storageEffectiveRowLoad } from "../engines/storage/specialization.js";
 import { createStorageOperationExecutor } from "../apps/storage-operation-executor.js";
 import {
   addResourceBatches,
@@ -52,8 +54,10 @@ function dependencies() {
     safeNumber: (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback,
     normalizeStorageRoomId,
     itemQuantity,
+    resolveStorageRows,
     storageRooms,
     storageRowLoad,
+    storageEffectiveRowLoad,
     storageRoomLabel: (holding, roomId) => storageRooms(holding).find((room) => room.id === roomId)?.label ?? roomId,
     clone,
     makeId: (prefix = "row") => `${prefix}-split`,

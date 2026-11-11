@@ -16,7 +16,8 @@ import { applyStorageBatchMove, planStorageBatchMove } from "../../../engines/st
 import { payStorageCosts } from "../../../engines/storage/payment.js";
 import { planStorageCosts } from "../../../engines/storage/group-payment.js";
 import { addStorageWithOverflow } from "../../../engines/storage/placement.js";
-import { storageProfileLoadMultiplier } from "../../../engines/storage/specialization.js";
+import { storageEffectiveRowLoad, storageProfileLoadMultiplier } from "../../../engines/storage/specialization.js";
+import { resolveStorageRows } from "../../../engines/storage/row-identity.js";
 import { resourceMatchesMaterialGroup } from "../../../core/material-groups.js";
 import { economyLedgerStorageRows } from "../../../engines/economy/ledger.js";
 import { FinanceStorageContextDomain } from "./storage/context-domain.js";
@@ -256,25 +257,22 @@ _storageTake(holding, resource = {}, qty = 0) {
   return { ...takeResourceBatches(row, amount, { holding, makeId }), row };
 },
 
-_storageAddWithOverflow(holding, resource = {}, qty = 0, { hiddenRooms = null } = {}) {
+_storageAddWithOverflow(holding, resource = {}, qty = 0) {
   return addStorageWithOverflow({
     holding,
     resource,
     qty,
-    dependencies: this._storagePlacementDependencies(hiddenRooms)
+    dependencies: this._storagePlacementDependencies()
   });
 },
 
-_storagePlacementDependencies(hiddenRooms = null) {
+_storagePlacementDependencies() {
   return {
     safeNumber: (value, fallback = 0) => this._safeNumber(value, fallback),
     normalizeResourceId,
     isMoneyResource,
     normalizeStorageRoomId: (roomId) => this._normalizeStorageRoomId(roomId),
-    storageRooms: (holding, options) => {
-      const rooms = this._storageRooms(holding, options);
-      return hiddenRooms?.size ? rooms.filter((room) => !hiddenRooms.has(room.id)) : rooms;
-    },
+    storageRooms: (holding, options) => this._storageRooms(holding, options),
     storageAdd: (holding, resource, qty) => this._storageAdd(holding, resource, qty),
     splitTransferBatches: (batches, qty) => splitResourceBatchParts(batches, qty),
     storageUnitLoad: (resource) => this._storageUnitLoad(resource),
@@ -422,14 +420,23 @@ _applyStorageMove(holding, { resourceId = "custom", name = "", qty = 0, fromRoom
 },
 
 _storageBatchMoveDependencies(hiddenRooms = new Set()) {
+  const storageRooms = (holding, options) => {
+    const rooms = this._storageRooms(holding, options);
+    return hiddenRooms.size ? rooms.filter((room) => !hiddenRooms.has(room.id)) : rooms;
+  };
+  const placementDependencies = { ...this._storagePlacementDependencies(), storageRooms };
   return {
     safeNumber: (value, fallback = 0) => this._safeNumber(value, fallback),
     normalizeStorageRoomId: (roomId) => this._normalizeStorageRoomId(roomId),
     itemQuantity: (row) => this._itemQuantity(row),
-    storageRooms: (holding, options) => this._storageRooms(holding, options).filter((room) => !hiddenRooms.has(room.id)),
+    resolveStorageRows,
+    storageRooms,
     storageRowLoad: (row) => this._storageRowLoad(row),
+    storageEffectiveRowLoad,
     storageRoomLabel: (holding, roomId) => this._storageRoomLabel(holding, roomId),
-    addResourceWithOverflow: (holding, resource, qty) => this._storageAddWithOverflow(holding, resource, qty, { hiddenRooms }),
+    addResourceWithOverflow: (holding, resource, qty) => addStorageWithOverflow({
+      holding, resource, qty, dependencies: placementDependencies
+    }),
     clone,
     makeId,
     setItemQuantity: (row, qty) => {

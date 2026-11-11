@@ -416,9 +416,12 @@ export function preflightMarketOutboundDispatch({ resources = [], cargoReservati
     const resourceId = text(cargo?.resourceId);
     const qty = whole(cargo?.qty);
     if (!rowId || !id || !qty) continue;
-    const matches = (rowsById.get(rowId) ?? []).filter((row) => !resourceId || text(row?.resourceId ?? row?.id) === resourceId)
+    const lots = (rowsById.get(rowId) ?? [])
       .flatMap((row) => (Array.isArray(row?.batches) ? row.batches : [])
         .filter((batch) => text(batch?.id) === id).map((batch) => ({ row, batch })));
+    // The frozen material code disambiguates identical lot IDs, but catalog normalization can rename a unique lot.
+    const matches = lots.length > 1 && resourceId
+      ? lots.filter(({ row }) => text(row.resourceId ?? row.id) === resourceId) : lots;
     if (matches.length !== 1) return stale(rowId, id, qty);
     const { row, batch } = matches[0];
     const key = batchKey(rowId, id);
