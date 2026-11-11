@@ -5,7 +5,7 @@ import {
   takeResourceBatchById
 } from "../../../core/resource-batches.js";
 import {
-  normalizeResourceId,
+  storageResourceId,
   resourceBasePriceCopper,
   resourceCategoryTag,
   resourceDef,
@@ -132,7 +132,7 @@ _internalDemandCandidates(holding, channels = []) {
     const batches = availableResourceBatchInventory(row, holding)
       .filter((batch) => resourceBatchAvailableToInternalDemand(batch, holding));
     if (!batches.length) continue;
-    const resourceId = normalizeResourceId(row.resourceId, row.name);
+    const resourceId = storageResourceId(row);
     const definition = resourceId === "custom" ? row : resourceDef(resourceId);
     const basePriceCopper = resourceBasePriceCopper(definition);
     if (!basePriceCopper) continue;

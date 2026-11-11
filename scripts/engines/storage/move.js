@@ -1,6 +1,6 @@
 export function moveStorageResource({
   holding,
-  resourceId = "custom",
+  resourceId = "",
   name = "",
   qty = 0,
   fromRoomId = "outdoors",
@@ -12,8 +12,8 @@ export function moveStorageResource({
   const required = [
     "safeNumber",
     "normalizeStorageRoomId",
-    "normalizeResourceId",
-    "isMoneyResource",
+    "storageResourceId",
+    "isStorageMoneyResource",
     "resourceLabel",
     "resourceUnit",
     "storageFind",
@@ -34,8 +34,8 @@ export function moveStorageResource({
   const fromRoom = deps.normalizeStorageRoomId(fromRoomId);
   const toRoom = deps.normalizeStorageRoomId(toRoomId);
   if (fromRoom === toRoom) return { ok: false, message: "Выбери разные склады." };
-  const id = deps.normalizeResourceId(resourceId, name);
-  if (deps.isMoneyResource(id, name)) {
+  const id = deps.storageResourceId({ resourceId, name });
+  if (deps.isStorageMoneyResource({ resourceId, name })) {
     return { ok: false, message: "Деньги перемещаются через казну, не через склады." };
   }
 
@@ -63,9 +63,10 @@ export function moveStorageResource({
     weight
   }, amount);
   if (receipt.takenQty !== amount) throw new RangeError("storage move could not take the planned batch quantity");
+  const customSource = id === "custom" ? { ...fromRow, separateRow: true } : {};
   const placements = deps.storageAddWithOverflow(
     holding,
-    { resourceId: id, name: label, roomId: toRoom, unit, weight, batches: receipt.batches },
+    { ...customSource, resourceId: id, name: label, roomId: toRoom, unit, weight, batches: receipt.batches },
     amount
   );
   const entries = [{

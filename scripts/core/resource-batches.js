@@ -1,4 +1,5 @@
-import { transportCargoReservations, expireTransportReservation } from "../data/transport/state.js";
+import { activeTransportOrder, expireTransportReservation, remainingTransportCargo, transportOrders } from "../data/transport/state.js";
+import { conflictingStorageLotKeys, indexStorageLots, matchingStorageLots } from "../engines/storage/row-identity.js";
 
 export const MAX_RESOURCE_BATCHES = 8;
 export const INTERNAL_DEMAND_BATCH_COOLDOWN_QD = 40;
@@ -225,14 +226,32 @@ export function reservedResourceBatchQuantities(holding, row = {}) {
   if (!rowId) return new Map();
   const terminal = new Set(["delivered", "lost", "cancelled"]);
   const result = new Map();
-  for (const order of [...(holding?.special?.market?.outbound?.orders ?? []),
-    { status: "booked", dispatchStatus: "booked", cargoReservations: transportCargoReservations(holding) }]) {
+  const resourceId = String(row?.resourceId ?? "").trim();
+  const storedRows = holding?.storage?.resources;
+  let sources;
+  let stored;
+  const transports = transportOrders(holding).filter((order) => activeTransportOrder(order) && order.direction === "outbound")
+    .map((order) => ({ cargoReservations: remainingTransportCargo(order), orderCargo: order.cargo }));
+  for (const order of [...(holding?.special?.market?.outbound?.orders ?? []), ...transports]) {
     if (terminal.has(String(order?.status ?? "")) || String(order?.dispatchStatus ?? "booked") !== "booked") continue;
-    for (const cargo of order?.cargoReservations ?? order?.cargo ?? []) {
-      if (String(cargo?.rowId ?? cargo?.storageRowId ?? "") !== rowId) continue;
+    const reservations = order?.cargoReservations ?? order?.cargo ?? [];
+    let conflicts;
+    for (const cargo of reservations) {
+      if (String(cargo?.rowId ?? cargo?.storageRowId ?? "").trim() !== rowId) continue;
       const id = String(cargo?.batchId ?? "").trim();
       const qty = whole(cargo?.qty, 0);
-      if (id && qty) result.set(id, (result.get(id) ?? 0) + qty);
+      if (!id || !qty) continue;
+      conflicts ??= conflictingStorageLotKeys(order.orderCargo ?? reservations);
+      if (!sources) {
+        sources = indexStorageLots(storedRows, rowId);
+        stored = Array.isArray(storedRows) && storedRows.includes(row);
+      }
+      const { matches, materialRequired } = matchingStorageLots(sources, cargo, conflicts);
+      if (resourceId && materialRequired && resourceId !== String(cargo?.resourceId ?? "").trim()) continue;
+      // Unresolved reservations stay protected. Draft copies can be matched by their material.
+      if (matches.length && resourceId && !matches.some(({ row: source }) => source === row
+        || !stored && String(source.resourceId ?? source.id).trim() === resourceId)) continue;
+      result.set(id, (result.get(id) ?? 0) + qty);
     }
   }
   return result;
@@ -417,7 +436,7 @@ export function finishResourceBatchPeriod(holding, {
       const kept = [];
       for (const batch of row.batches) {
         if (batch.ageQd >= effectiveShelfLifeQd) {
-          expireTransportReservation(holding, String(row.id ?? ""), batch.id);
+          expireTransportReservation(holding, row, batch);
           expired.push({
             rowId: String(row.id ?? ""),
             resourceId: String(row.resourceId ?? row.id ?? "custom"),

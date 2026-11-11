@@ -1,8 +1,8 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import { sellerUnitSalePrice } from "../../../engines/workers/seller-qualification.js";
 import {
-  isMoneyResource,
-  normalizeResourceId,
+  isStorageMoneyResource,
+  storageResourceId,
   resourceLabel
 } from "../../../core/resources.js";
 
@@ -70,12 +70,12 @@ _tradeCandidates(holding, filters = {}) {
   const candidates = [];
   for (const row of holding?.storage?.resources ?? []) {
     if (!row?.forSale) continue;
-    if (isMoneyResource(row.resourceId, row.name)) continue;
+    if (isStorageMoneyResource(row)) continue;
     const qty = this._storageAvailableRowQuantity(holding, row);
     if (!qty) continue;
     const basePrice = this._resourcePriceCopper(row);
     if (!basePrice) continue;
-    const id = normalizeResourceId(row.resourceId, row.name);
+    const id = storageResourceId(row);
     const candidate = { kind: "resource", holding, row, name: id === "custom" ? (row.name || "Ресурс") : resourceLabel(id), qty, basePrice, roomId: this._normalizeStorageRoomId(row.roomId ?? row.storageRoomId) };
     if (this._tradeCandidateAllowed(candidate, filters)) candidates.push(candidate);
   }

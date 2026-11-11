@@ -73,7 +73,7 @@ const plannerDependencies = {
 function foodDependencies() {
   return {
     safeNumber: (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback,
-    normalizeResourceId: (value) => String(value ?? ""),
+    storageResourceId: (row) => String(row?.resourceId ?? ""),
     resourceDef: () => ({ foodEdible: true, foodType: "prepared" }),
     resourceLabel: (value) => String(value ?? "Пища"),
     formatNumber: String,

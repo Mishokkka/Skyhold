@@ -50,7 +50,7 @@ export function payStorageCosts({ holding, costs = [], dependencies, captureRece
   for (const cost of costs) {
     const amount = Math.max(0, Math.ceil(deps.safeNumber(cost.qty, 0)));
     if (!amount) continue;
-    if (deps.isMoneyResource(cost.resourceId, cost.id, cost.name)) {
+    if (!cost.storageRowId && deps.isMoneyResource(cost.resourceId, cost.id, cost.name)) {
       deps.addMoney(holding, -amount);
       if (captureReceipt) receipts.push({ kind: "money", qty: amount });
       continue;

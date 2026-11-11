@@ -192,6 +192,7 @@ export function createStorageOperationExecutor({
             roomId: operation.roomId,
             kind: "manual-add",
             note: "Выбрано из каталога",
+            separateRow: operation.resourceId === "custom",
             operationId: operation.operationId
           });
         } else if (operation.type === "contributeUniqueBuilding") {

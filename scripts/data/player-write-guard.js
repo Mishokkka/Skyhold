@@ -2,7 +2,7 @@ import { clone, isPlainObject, toNumber } from "./utils.js";
 import { isKnownHoldingOperationType } from "./operations.js";
 import { advanceBuildingProject, buildingOperationalState } from "../core/building-state.js";
 import { resourceMatchesMaterialGroup } from "../core/material-groups.js";
-import { isMoneyResource, normalizeResourceId, resourceDef } from "../core/resources.js";
+import { isMoneyResource, normalizeResourceId, resourceDef, storageResourceId } from "../core/resources.js";
 import {
   aggregateConstructionCosts,
   constructionCostsForStageRange,
@@ -540,7 +540,7 @@ function validateRowIdentityChanges(holding = {}, nextHolding = {}) {
 }
 
 function storageResourceIdentityForGuard(row = {}) {
-  const resourceId = normalizeResourceId(row?.resourceId, row?.name, row?.label);
+  const resourceId = storageResourceId(row);
   if (resourceId !== "custom") return `resource:${resourceId}`;
   return `custom:${String(row?.name ?? row?.label ?? "").trim().toLocaleLowerCase("ru")}`;
 }
@@ -568,7 +568,8 @@ function validatePlayerResourceBatchContinuity(holding = {}, nextHolding = {}) {
 
     const reserved = reservedResourceBatchQuantities(holding, rawRow);
     if (reserved.size) {
-      const afterRow = afterRows.find((candidate) => String(candidate?.id ?? "") === String(rawRow?.id ?? ""));
+      const afterRow = afterRows.find((candidate) => String(candidate?.id ?? "") === String(rawRow?.id ?? "")
+        && storageResourceIdentityForGuard(candidate) === identity);
       for (const [batchId, reservedQty] of reserved) {
         const afterQty = (afterRow?.batches ?? [])
           .filter((batch) => String(batch?.id ?? "") === batchId)
@@ -812,13 +813,13 @@ function constructionChargeMatchesCost(charge = {}, cost = {}) {
   const group = String(cost?.resourceGroup ?? "").trim();
   if (group) {
     if (charge.money || charge?.sourceRow?.noAutoConsume === true) return false;
-    const id = normalizeResourceId(charge?.sourceRow?.resourceId, charge?.sourceRow?.id, charge?.sourceRow?.name);
+    const id = storageResourceId(charge?.sourceRow);
     const definition = id === "custom" ? null : resourceDef(id);
     return definition?.noAutoConsume !== true && resourceMatchesMaterialGroup(charge.sourceRow, group, definition);
   }
   const expectedMoney = isMoneyResource(cost?.resourceId, cost?.id, cost?.name);
   if (expectedMoney || charge.money) return expectedMoney && charge.money;
-  const chargeId = normalizeResourceId(charge?.resourceId, charge?.name);
+  const chargeId = storageResourceId(charge);
   const costId = normalizeResourceId(cost?.resourceId, cost?.id, cost?.name);
   if (chargeId !== costId) return false;
   if (chargeId !== "custom") return true;

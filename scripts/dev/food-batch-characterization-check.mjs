@@ -17,10 +17,10 @@ import {
   takeResourceBatches
 } from "../core/resource-batches.js";
 import {
-  normalizeResourceId,
   normalizeResourceRow,
   resourceDef,
-  resourceLabel
+  resourceLabel,
+  storageResourceId
 } from "../core/resources.js";
 import { BASE_HOLDING } from "../data/schema/base-holding.js";
 import { mergeHoldingDefaults } from "../data/normalizers.js";
@@ -50,7 +50,7 @@ import { storageProfileLoadMultiplier, storageProfileMatches } from "../engines/
 
 const foodDependencies = {
   safeNumber: (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback,
-  normalizeResourceId,
+  storageResourceId,
   resourceDef,
   resourceLabel,
   normalizeFoodRationUnits,
@@ -371,8 +371,8 @@ export function checkFoodBatchCharacterization() {
     qty: 4,
     dependencies: {
       safeNumber: foodDependencies.safeNumber,
-      normalizeResourceId,
-      isMoneyResource: () => false,
+      storageResourceId,
+      isStorageMoneyResource: () => false,
       normalizeStorageRoomId: (value) => String(value || "outdoors"),
       storageRooms: () => [
         { id: "pantry", available: true, unlimited: false, capacity: 2, used: 0 },

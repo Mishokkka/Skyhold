@@ -2,7 +2,7 @@ import { DEFAULT_BUILDING_TEMPLATES, DEPRECATED_TEMPLATE_IDS, TEMPLATE_CATALOG_V
 import { DEFAULT_SKYHOLD_DATA } from "./defaults/default-skyhold-data.js";
 import { BASE_HOLDING, HOLDING_TYPES } from "./schema/base-holding.js";
 import { SKYHOLD_SCHEMA_VERSION } from "./schema-version.js";
-import { normalizeResourceCatalogRow, normalizeResourceRow, normalizeResourceId, storageResourceKey, withResourceCatalog } from "../core/resources.js";
+import { normalizeResourceCatalogRow, normalizeResourceRow, storageResourceKey, withResourceCatalog } from "../core/resources.js";
 import {
   addResourceBatches,
   protectedResourceBatchIds,
@@ -28,6 +28,7 @@ import { normalizeFinanceObligationsState } from "./finance/obligations.js";
 import { normalizeInternalDemandConfig } from "./economy/internal-demand.js";
 import { normalizeShipsState } from "./ships.js";
 import { ensureTransportState, transportCargoReservations } from "./transport/state.js";
+import { indexStorageRows } from "../engines/storage/row-identity.js";
 
 export { clearBuildingReferences, clearPersonReferences };
 
@@ -615,29 +616,36 @@ export function mergeHoldingDefaults(holding, options = {}) {
   if (!Array.isArray(merged.storage.items)) merged.storage.items = [];
   merged.storage.moneyCopper = Math.max(0, toNumber(merged.storage.moneyCopper ?? merged.storage.money ?? merged.storage.coinsCopper ?? 0, 0));
   const normalizedResources = merged.storage.resources.map((row) => normalizeResourceRow(row, { compactBatches: false }));
+  merged.storage.resources = normalizedResources;
   const regularResources = [];
   const regularResourceIndex = new Map();
-  const transportSourceRows = new Set(transportCargoReservations(merged).map(lot => lot.rowId));
+  const rowsById = indexStorageRows(normalizedResources);
+  const transportSourceRows = new Set(transportCargoReservations(merged).map((lot) => String(lot.rowId ?? lot.storageRowId ?? "").trim()));
   for (const row of normalizedResources) {
-    if (normalizeResourceId(row.resourceId, row.name) === "money") merged.storage.moneyCopper += toNumber(row.qty, 0);
-    else {
-      const key = storageResourceKey(row);
-      const existing = regularResourceIndex.get(key);
-      if (!existing || transportSourceRows.has(row.id) || transportSourceRows.has(existing.id)) {
-        // An accepted transport contract retains its source row/batch until dispatch or expiry.
-        if (!existing) regularResourceIndex.set(key, row);
-        regularResources.push(row);
-      } else {
-        remapOutboundStorageRowId(merged, row.id, existing.id);
-        addResourceBatches(existing, { batches: row.batches }, { holding: merged, makeId });
-        existing.forSale = existing.forSale || row.forSale;
-      }
+    if (row.resourceId === "money") {
+      merged.storage.moneyCopper += toNumber(row.qty, 0);
+      continue;
     }
+    // Custom names are labels. Ambiguous IDs and accepted transport sources must also remain addressable as saved.
+    if (row.resourceId === "custom" || rowsById.get(row.id) === null || transportSourceRows.has(row.id.trim())) {
+      regularResources.push(row);
+      continue;
+    }
+    const key = storageResourceKey(row);
+    const existing = regularResourceIndex.get(key);
+    if (!existing) {
+      regularResourceIndex.set(key, row);
+      regularResources.push(row);
+      continue;
+    }
+    remapOutboundStorageRowId(merged, row.id, existing.id);
+    addResourceBatches(existing, { batches: row.batches }, { holding: merged, makeId });
+    existing.forSale = existing.forSale || row.forSale;
   }
+  merged.storage.resources = regularResources;
   for (const row of regularResources) {
     syncResourceRowBatches(row, { protectedBatchIds: protectedResourceBatchIds(merged, row) });
   }
-  merged.storage.resources = regularResources;
   merged.storage.items = merged.storage.items.map((row) => normalizeStorageItemRow(row)).filter(Boolean);
   if (!Array.isArray(merged.storage.log)) merged.storage.log = [];
   merged.storage.log = merged.storage.log.map((row) => normalizeStorageLogRow(row)).filter(Boolean).slice(-250);

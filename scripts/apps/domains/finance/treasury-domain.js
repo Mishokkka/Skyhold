@@ -1,6 +1,6 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import {
-  normalizeResourceId,
+  storageResourceId,
   resourceBasePriceCopper
 } from "../../../core/resources.js";
 import { formatCopperCurrency } from "../../../core/currency.js";
@@ -280,7 +280,7 @@ _parseCurrencyCost(value = "") {
 },
 
 _resourcePriceCopper(row = {}) {
-  const id = normalizeResourceId(row.resourceId, row.name);
+  const id = storageResourceId(row);
   if (id !== "custom") return resourceBasePriceCopper(id);
   return this._parseCurrencyCost(row.basePriceCopper ?? row.cost ?? row.itemData?.system?.cost ?? "");
 },

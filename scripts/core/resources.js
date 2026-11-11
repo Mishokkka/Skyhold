@@ -322,6 +322,24 @@ export function normalizeResourceId(...candidates) {
   return normalizeResourceIdFromIndex(createResourceIndex(), candidates);
 }
 
+function isExplicitCustom(resourceId) {
+  return String(resourceId ?? "").trim().toLowerCase() === "custom";
+}
+
+function storageResourceIdFromIndex(index, row) {
+  return isExplicitCustom(row?.resourceId) ? "custom"
+    : normalizeResourceIdFromIndex(index, [row?.resourceId, row?.id, row?.name, row?.label]);
+}
+
+/** Resolve inventory material without treating an explicitly custom name as a catalog alias. */
+export function storageResourceId(row = {}) {
+  return storageResourceIdFromIndex(createResourceIndex(), row);
+}
+
+export function isStorageMoneyResource(row = {}) {
+  return !isExplicitCustom(row?.resourceId) && isMoneyResource(row?.resourceId, row?.id, row?.name, row?.label);
+}
+
 export function parseResourceCosts(text = "") {
   const raw = String(text ?? "").split(/\r?\n/).map((line) => line.split("#")[0]).join("\n").trim();
   if (!raw) return [];
@@ -365,6 +383,7 @@ export function resourceDef(...candidates) {
 function resourceCandidateValues(candidates = []) {
   return candidates.flatMap((candidate) => {
     if (!candidate || typeof candidate !== "object") return [candidate];
+    if (isExplicitCustom(candidate.resourceId)) return [];
     return [candidate.resourceId, candidate.id, candidate.name, candidate.label];
   }).filter((candidate) => candidate !== undefined && candidate !== null && candidate !== "");
 }
@@ -447,7 +466,7 @@ export function resourceCategoryTag(...candidates) {
 export function resourceLabel(resource = "") {
   const index = createResourceIndex();
   if (resource && typeof resource === "object") {
-    const id = normalizeResourceIdFromIndex(index, [resource.id, resource.resourceId, resource.name, resource.label]);
+    const id = storageResourceIdFromIndex(index, resource);
     const def = id !== "custom" ? index.byId.get(id) : null;
     return def?.label ?? String(resource.name ?? resource.label ?? "Ресурс");
   }
@@ -481,7 +500,7 @@ export function isMoneyResource(...candidates) {
 
 export function resourceOptions(currentId = "", currentName = "", { includeMoney = true } = {}) {
   const index = createResourceIndex();
-  const selectedId = normalizeResourceIdFromIndex(index, [currentId, currentName]);
+  const selectedId = storageResourceIdFromIndex(index, { resourceId: currentId, name: currentName });
   const options = index.definitions
     .filter((resource) => includeMoney || !isMoneyResourceFromIndex(index, [resource.id, resource.label]))
     .map((resource) => ({
@@ -496,7 +515,7 @@ export function resourceOptions(currentId = "", currentName = "", { includeMoney
 
 export function normalizeResourceRow(row = {}, { compactBatches = true } = {}) {
   const index = createResourceIndex();
-  const id = normalizeResourceIdFromIndex(index, [row.resourceId, row.id, row.name, row.label]);
+  const id = storageResourceIdFromIndex(index, row);
   const def = id !== "custom" ? index.byId.get(id) : null;
   const name = String(row.name ?? row.label ?? def?.label ?? "Ресурс").replace(/^(Другое|Custom)\s*[:：-]\s*/i, "");
   const normalized = {
@@ -527,10 +546,8 @@ export function normalizeResourceRow(row = {}, { compactBatches = true } = {}) {
 export function reclassifyResourceRow(row, resourceId) {
   if (row.resourceId === resourceId) return row;
   const custom = resourceId === "custom";
-  // Legacy rows could use a catalog alias as their ID, which normalization also recognizes as a material.
-  const id = custom && normalizeResourceId(row.id) !== "custom" ? makeGeneratedId("res", 12) : row.id;
   return normalizeResourceRow({
-    id, resourceId, name: custom ? "Свой ресурс" : undefined,
+    id: row.id, resourceId, name: custom ? "Свой ресурс" : undefined,
     roomId: row.roomId, qty: row.qty, batches: row.batches, notes: row.notes,
     forSale: row.forSale, noAutoConsume: row.noAutoConsume
   }, { compactBatches: false });
@@ -621,7 +638,7 @@ export function normalizeProductionLine(line = {}, makeId = null) {
 }
 
 export function storageResourceKey(resource = {}) {
-  const id = normalizeResourceId(resource.resourceId, resource.id, resource.name);
+  const id = storageResourceId(resource);
   const roomId = String(resource.roomId ?? resource.storageRoomId ?? "outdoors") || "outdoors";
   const resourceKey = id !== "custom" ? `id:${id}` : `custom:${normalizeKey(resource.name)}`;
   return `room:${roomId}|${resourceKey}`;

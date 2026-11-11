@@ -2,7 +2,8 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import assert from "node:assert/strict";
 import { FinanceDomain } from "../apps/domains/finance-domain.js";
-import { normalizeResourceRow, resourceUnitLoad } from "../core/resources.js";
+import { normalizeResourceRow, reclassifyResourceRow, resourceUnitLoad, withResourceCatalog } from "../core/resources.js";
+import { mergeHoldingDefaults } from "../data/normalizers.js";
 import { BASE_HOLDING } from "../data/schema/base-holding.js";
 import { normalizeStorageItemRow, normalizeStorageLogRow } from "../data/normalizers/storage.js";
 import { applyPlayerPatch, buildPlayerPatch, validatePlayerPatch } from "../data/player-write-guard.js";
@@ -20,6 +21,7 @@ import { moveStorageResource } from "../engines/storage/move.js";
 import { payStorageCosts } from "../engines/storage/payment.js";
 import { planStorageCosts } from "../engines/storage/group-payment.js";
 import { addStorageWithOverflow } from "../engines/storage/placement.js";
+import { politicsReadyFood } from "../engines/politics/decree-payment.js";
 
 function makeHolding() {
   const holding = clone(BASE_HOLDING);
@@ -134,6 +136,62 @@ export function checkStorageCharacterization() {
   assert.equal(storage._storageUnitLoad({ itemData: { system: { weight: "heavy" } } }), 2, "stored items must retain the Foundry weight parser");
   assert.equal(storageFillClass({ capacity: 10, used: 7.5 }), "near-capacity", "75% room usage must enter near-capacity state");
   assert.equal(storageFillClass({ capacity: 10, used: 10 }), "full-capacity", "full rooms must enter full-capacity state");
+
+  withResourceCatalog([{ id: "local-food", label: "Местный паёк", aliases: ["Свой ресурс"], basePriceCopper: 40,
+    loadPoints: 12, foodEdible: true, foodType: "grain", shelfLifeQd: 8 }], () => {
+    const holding = makeHolding();
+    holding.buildings.list.push(storageBuilding("other-room", 40));
+    const converted = (id, material, qty, notes, noAutoConsume) => reclassifyResourceRow(
+      resource(id, material, qty, "outdoors", { notes, noAutoConsume, batches: [{ id: `${id}-batch`, qty, ageQd: 9 }] }), "custom"
+    );
+    holding.storage.resources = [
+      converted("wood", "wood", 3, "Особая партия", true),
+      converted("stone", "stone", 2, "Для обмена", false),
+      resource("other", "custom", 1, "other-room", { name: "Свой ресурс", notes: "Уже в комнате" }),
+      resource("tokens", "custom", 5, "outdoors", { name: "Деньги" }),
+      { id: "legacy", name: "Свой ресурс", qty: 1, roomId: "outdoors" }
+    ];
+    const stored = mergeHoldingDefaults(holding);
+    const rows = stored.storage.resources;
+    assert.deepEqual(rows.map(row => [row.id, row.resourceId, row.qty]), [
+      ["wood", "custom", 3], ["stone", "custom", 2], ["other", "custom", 1], ["tokens", "custom", 5], ["legacy", "local-food", 1]
+    ], "explicit custom rows and their IDs survive normalization while an untyped legacy row still resolves the alias");
+    assert.equal(stored.storage.moneyCopper, 0, "a custom item named after money cannot turn into treasury");
+    assert.deepEqual(mergeHoldingDefaults(stored).storage.resources, rows, "same-name custom rows and their batches persist across repeated saves");
+    const views = storage._prepareStorageRows(stored, true);
+    assert.equal(views.length, rows.length, "custom stock remains visible even when its name is a money alias");
+    assert.equal(views.find(row => row.id === "wood").isCustomResource, true);
+    assert.equal(storage._storageUnitLoad(rows[0]), 1);
+    assert.equal(storage._resourcePriceCopper(rows[0]), 0, "custom stock does not inherit the alias's price");
+    assert.equal(storage._isFoodResource(rows[1]), false, "the alias cannot make a custom row edible");
+    assert.equal(politicsReadyFood(stored), 1, "a decree can only take the actual edible catalog stock");
+    assert.equal(storage._storagePay(stored, [{ resourceId: "custom", name: "Свой ресурс", qty: 1 }]).ok, true,
+      "a legacy recipe placeholder still resolves its catalog ingredient by name");
+    assert.equal(rows[4].qty, 0);
+    assert.equal(storage._storagePay(stored, [{ resourceId: "custom", name: "Деньги", storageRowId: "tokens", qty: 1 }]).ok, true,
+      "payment against a physical custom row uses the row even when its name is a money alias");
+    assert.equal(stored.storage.moneyCopper, 0);
+    assert.equal(rows[3].qty, 4);
+    const moved = storage._applyStorageBatchMove(stored, { rowType: "resources", rowIds: ["wood", "stone"],
+      rowQuantities: { wood: 2 }, fromRoomId: "outdoors", toRoomId: "other-room" });
+    assert.equal(moved.ok, true);
+    const reloaded = mergeHoldingDefaults(stored);
+    const afterMove = reloaded.storage.resources;
+    const destination = afterMove.filter(row => row.roomId === "other-room");
+    assert.deepEqual(destination.map(row => [row.resourceId, row.qty, row.notes, row.noAutoConsume]), [
+      ["custom", 1, "Уже в комнате", false], ["custom", 2, "Особая партия", true], ["custom", 2, "Для обмена", false]
+    ], "transferred custom stock retains its own policies and does not merge with a homonymous destination row");
+    assert.deepEqual(destination[1].batches.map(row => [row.qty, row.ageQd]), [[2, 9]]);
+    const original = afterMove.find(row => row.id === "wood");
+    assert.equal(original.qty, 1);
+    const receipt = { ...original, storageRowId: original.id, batches: [{ id: "production-refund", qty: 1, ageQd: 10 }] };
+    original.resourceId = "wood";
+    storage._restoreProductionResource(reloaded, receipt, 1);
+    const refund = afterMove.find(row => row.batches.some(batch => batch.id === "production-refund"));
+    assert.ok(refund && refund.id !== original.id && refund.id !== "stone");
+    assert.equal(refund.notes, "Особая партия");
+    assert.equal(refund.noAutoConsume, true);
+  });
 
   {
     const holding = makeHolding();

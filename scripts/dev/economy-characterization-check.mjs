@@ -923,7 +923,7 @@ export async function checkEconomyCharacterization() {
     assert.equal(isFoodResource({ resourceId: "food-protein", noAutoConsume: true }, dependencies), false, "row-level noAutoConsume must override edible catalog metadata");
     assert.equal(isFoodResource({ resourceId: "protected-food" }, {
       ...dependencies,
-      normalizeResourceId: () => "protected-food",
+      storageResourceId: () => "protected-food",
       resourceDef: () => ({ foodEdible: true, noAutoConsume: true })
     }), false, "definition-level noAutoConsume must protect an edible resource");
   }

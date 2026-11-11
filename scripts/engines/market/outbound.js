@@ -2,6 +2,7 @@ import { MAX_OUTBOUND_CARGO_ROWS } from "../../data/market/outbound-state.js";
 import { marketMoneyInRange, MAX_MARKET_OPERATION_COPPER } from "../../data/market/money-limits.js";
 import { marketOutboundBatchPlans } from "./outbound-batches.js";
 import { allocateMarketTransportCharges, marketTransportPlanForOrder } from "../../data/market/transport-plan.js";
+import { conflictingStorageLotKeys, indexStorageLots, matchingStorageLots, storageLotKey as batchKey } from "../storage/row-identity.js";
 
 const TERMINAL_OUTBOUND_STATUSES = new Set(["delivered", "lost", "cancelled"]);
 
@@ -30,10 +31,6 @@ function tagMatches(tag = "", selector = "") {
   if (!candidate || !target) return false;
   if (target === "all") return true;
   return candidate === target || candidate.startsWith(`${target}.`) || candidate.startsWith(`${target}-`);
-}
-
-function batchKey(rowId = "", batchId = "") {
-  return `${encodeURIComponent(text(rowId))}::${encodeURIComponent(text(batchId))}`;
 }
 
 function activeSoftReservation(order = {}) {
@@ -400,55 +397,49 @@ export function planMarketOutboundSale({
   return plan;
 }
 
-export function preflightMarketOutboundDispatch({ resources = [], cargoReservations = [] } = {}) {
-  const rowsById = new Map();
-  for (const row of Array.isArray(resources) ? resources : []) {
-    const id = text(row?.id);
-    if (!rowsById.has(id)) rowsById.set(id, []);
-    rowsById.get(id).push(row);
-  }
+export function preflightMarketOutboundDispatch({ resources = [], cargoReservations = [], orderCargo = cargoReservations } = {}) {
+  const lots = indexStorageLots(resources);
+  const conflicts = conflictingStorageLotKeys(orderCargo);
   const grouped = new Map();
+  const sources = [];
   const stale = (rowId, batchId, qty, available = 0) => ({ ok: false, stale: true, rowId, batchId,
     requested: qty, available, message: "Reserved outbound cargo changed before dispatch." });
-  for (const cargo of cargoReservations ?? []) {
-    const rowId = text(cargo?.rowId);
+  for (const [index, cargo] of (cargoReservations ?? []).entries()) {
+    const rowId = text(cargo?.rowId ?? cargo?.storageRowId);
     const id = text(cargo?.batchId);
-    const resourceId = text(cargo?.resourceId);
     const qty = whole(cargo?.qty);
-    if (!rowId || !id || !qty) continue;
-    const lots = (rowsById.get(rowId) ?? [])
-      .flatMap((row) => (Array.isArray(row?.batches) ? row.batches : [])
-        .filter((batch) => text(batch?.id) === id).map((batch) => ({ row, batch })));
-    // The frozen material code disambiguates identical lot IDs, but catalog normalization can rename a unique lot.
-    const matches = lots.length > 1 && resourceId
-      ? lots.filter(({ row }) => text(row.resourceId ?? row.id) === resourceId) : lots;
+    if (!qty) continue;
+    if (!rowId || !id) return stale(rowId, id, qty);
+    const { matches } = matchingStorageLots(lots, cargo, conflicts);
     if (matches.length !== 1) return stale(rowId, id, qty);
-    const { row, batch } = matches[0];
-    const key = batchKey(rowId, id);
-    const previous = grouped.get(key);
-    if (previous && previous.batch !== batch) return stale(rowId, id, qty);
-    if (previous) previous.qty += qty;
-    else grouped.set(key, { rowId, batchId: id, qty, row, batch, ageQd: whole(batch.ageQd, 0, Number.MAX_SAFE_INTEGER) });
+    const source = matches[0];
+    const { row, batch } = source;
+    if (!grouped.has(source)) grouped.set(source, { rowId, batchId: id, qty: 0, row, batch,
+      ageQd: whole(batch.ageQd, 0, Number.MAX_SAFE_INTEGER) });
+    const requirement = grouped.get(source);
+    requirement.qty += qty;
+    sources[index] = requirement;
   }
   const prepared = [...grouped.values()];
   for (const requirement of prepared) {
     const available = whole(requirement.batch.qty);
     if (available < requirement.qty) return stale(requirement.rowId, requirement.batchId, requirement.qty, available);
   }
-  return { ok: true, prepared };
+  return { ok: true, prepared, sources };
 }
 
-export function applyMarketOutboundDispatch({ resources = [], cargoReservations = [] } = {}) {
-  const preflight = preflightMarketOutboundDispatch({ resources, cargoReservations });
+export function applyMarketOutboundDispatch({ resources = [], cargoReservations = [], orderCargo = cargoReservations } = {}) {
+  const preflight = preflightMarketOutboundDispatch({ resources, cargoReservations, orderCargo });
   if (!preflight.ok) return preflight;
-  const sources = new Map(preflight.prepared.map((row) => [batchKey(row.rowId, row.batchId), row]));
   for (const requirement of preflight.prepared) {
     requirement.batch.qty = whole(requirement.batch.qty) - requirement.qty;
-    requirement.row.batches = requirement.row.batches.filter((batch) => whole(batch?.qty) > 0);
-    requirement.row.qty = requirement.row.batches.reduce((sum, batch) => sum + whole(batch?.qty), 0);
   }
-  const cargo = (cargoReservations ?? []).map((row) => {
-    const source = sources.get(batchKey(row?.rowId, row?.batchId));
+  for (const row of new Set(preflight.prepared.map(({ row }) => row))) {
+    row.batches = row.batches.filter((batch) => whole(batch?.qty) > 0);
+    row.qty = row.batches.reduce((sum, batch) => sum + whole(batch?.qty), 0);
+  }
+  const cargo = (cargoReservations ?? []).map((row, index) => {
+    const source = preflight.sources[index];
     return { ...row, ageQd: source?.ageQd ?? whole(row?.reservedAgeQd ?? row?.ageQd),
       roomId: text(source?.row.roomId ?? source?.row.storageRoomId ?? row?.roomId) || "outdoors" };
   });

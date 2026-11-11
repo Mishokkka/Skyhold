@@ -16,6 +16,8 @@ import { previewSharedMarketMigration } from "../data/market/shared-migration.js
 import { prepareShipsContext, prepareShipWindowContext } from "../apps/ships-context.js";
 import { normalizeSkyholdData } from "../data/normalizers.js";
 import { preflightMarketOutboundDispatch } from "../engines/market/outbound.js";
+import { finishResourceBatchPeriod, reservedResourceBatchQuantities } from "../core/resource-batches.js";
+import { advanceTransportShipments } from "../workflows/transport/orders.js";
 
 const holding = id => ({ id, gm: { calendaria: { lastQd: 0 } }, storage: { moneyCopper: 1000000, resources: [] }, special: { market: {} } });
 const cargo = (qty = 10) => [{ lotId: "cloth", resourceId: "test-freight", qty, unitLoad: 4000, unitCopper: 5, ageQd: 0 }];
@@ -83,6 +85,42 @@ for (const shared of [false, true]) {
   assert.equal(preflightMarketOutboundDispatch({ resources: saved.storage.resources, cargoReservations: saved.special.transportV2.orders[0].cargo }).ok, true,
     "normalization preserves the row and batch referenced by the transport contract");
   assert.deepEqual(saved.special.transportV2.orders[0].plan, order.plan);
+}
+
+for (const expireBread of [false, true]) {
+  const h = holding("saved-collision");
+  const original = { meta: {}, holdings: [h], catalog: {} };
+  const state = ensureTransportState(original);
+  h.storage.resources = [
+    { id: "shared", resourceId: "bread", roomId: "pantry", qty: 4, batches: [{ id: "lot", qty: 4, ageQd: 8 }] },
+    { id: "shared", resourceId: "stone", roomId: "outdoors", qty: 5, batches: [{ id: "lot", qty: 5, ageQd: 1 }] }
+  ];
+  const lots = [
+    { ...cargo(2)[0], lotId: "bread", rowId: "shared", batchId: "lot", resourceId: "bread", shelfLifeQd: 100 },
+    { ...cargo(3)[0], lotId: "stone", rowId: "shared", batchId: "lot", resourceId: "stone" }
+  ];
+  const services = [service()];
+  bookTransportOrder({ state, holding: h, services, direction: "outbound", id: "saved-mixed-order",
+    plan: planTransportChain({ cargo: lots, services }) });
+  const data = normalizeSkyholdData(original), loaded = data.holdings[0];
+  const order = loaded.special.transportV2.orders[0];
+  const [bread, stone] = loaded.storage.resources;
+  assert.deepEqual([bread, stone].map(row => reservedResourceBatchQuantities(loaded, row).get("lot")), [2, 3],
+    "each material's ordinary storage actions see only the reservation against its own physical lot");
+  if (expireBread) {
+    finishResourceBatchPeriod(loaded, { elapsedQd: 4, shelfLifeQdForRow: row => row.resourceId === "bread" ? 10 : 0 });
+    assert.deepEqual(order.sourceSpoiledPending, { bread: 2 }, "expiry of one physical lot cannot spoil a different material in the same contract");
+    assert.deepEqual([bread.qty, stone.qty], [0, 5]);
+  }
+  const log = [];
+  advanceTransportShipments(data, loaded, order.plan.arrivalQd, {
+    _appendStorageLog(_holding, entries) { log.push(...entries); }
+  });
+  assert.deepEqual([bread.qty, stone.qty], [expireBread ? 0 : 2, 2]);
+  assert.deepEqual(log.filter(row => row.kind === "transport").map(row => [row.resourceId, row.qty, row.roomId]), [
+    ...(expireBread ? [] : [["bread", -2, "pantry"]]), ["stone", -3, "outdoors"]
+  ], "saved mixed orders dispatch and log only the actual debits from each source room");
+  assert.equal(order.status, "delivered");
 }
 
 // A4: reconstruct all balances, not just the first holding's dated recovery lots.

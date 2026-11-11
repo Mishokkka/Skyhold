@@ -211,7 +211,9 @@ function prepareStorageBatchMove(options) {
     const row = byId.get(planned.id);
     const receipt = deps.takeResourceRow(draft, row, planned.qty);
     if (receipt.takenQty !== planned.qty) throw new RangeError("storage batch move could not take the planned quantity");
-    const placements = deps.addResourceWithOverflow(draft, { ...row, roomId: plan.toRoomId, batches: receipt.batches }, planned.qty);
+    const placements = deps.addResourceWithOverflow(draft, {
+      ...row, separateRow: row.resourceId === "custom", roomId: plan.toRoomId, batches: receipt.batches
+    }, planned.qty);
     if (placements.some((placement) => placement.roomId === plan.fromRoomId && placement.qty > 0)) {
       return { plan: { ok: false, message: `Нет места для всего объёма «${planned.label}». Уменьшите количество или выберите другое помещение.`,
         rowType: plan.rowType, rows: [] } };

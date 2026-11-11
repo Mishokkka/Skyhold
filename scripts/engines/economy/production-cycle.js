@@ -60,17 +60,20 @@ export async function runProductionCycle({
     }
     return workerLineSummaries.get(key);
   };
-  const appendCosts = (building, costs = []) => deps.appendLedger?.(report, costs.map((cost) => ({
-    domain: "production",
-    kind: deps.normalizeResourceId(cost.resourceId, cost.name) === "money" ? "money" : "resource",
-    resourceId: deps.normalizeResourceId(cost.resourceId, cost.name),
-    name: cost.name || deps.resourceLabel(cost.resourceId),
-    qty: -Math.max(0, Math.ceil(deps.safeNumber(cost.qty, 0))),
-    roomId: cost.roomId ?? cost.storageRoomId ?? "",
-    sourceId: building?.id,
-    source: building?.name || "Здание",
-    note: "Сырьё зарезервировано для производственной партии"
-  })));
+  const appendCosts = (building, costs = []) => deps.appendLedger?.(report, costs.map((cost) => {
+    const resourceId = cost.storageRowId ? cost.resourceId : deps.normalizeResourceId(cost.resourceId, cost.name);
+    return {
+      domain: "production",
+      kind: resourceId === "money" ? "money" : "resource",
+      resourceId,
+      name: cost.name || deps.resourceLabel(resourceId),
+      qty: -Math.max(0, Math.ceil(deps.safeNumber(cost.qty, 0))),
+      roomId: cost.roomId ?? cost.storageRoomId ?? "",
+      sourceId: building?.id,
+      source: building?.name || "Здание",
+      note: "Сырьё зарезервировано для производственной партии"
+    };
+  }));
 
   const placeOutput = (building, line, resourceId, resourceName, total, extra = "") => {
     if (!total) return;

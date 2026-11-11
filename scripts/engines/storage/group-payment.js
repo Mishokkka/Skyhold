@@ -56,7 +56,8 @@ export function planStorageCosts({ holding = {}, costs = [], dependencies = {} }
   for (const rawCost of orderedCosts) {
     const amount = Math.max(0, Math.ceil(deps.safeNumber(rawCost?.qty, 0)));
     if (!amount) continue;
-    if (deps.isMoneyResource(rawCost?.resourceId, rawCost?.id, rawCost?.name)) {
+    const storageRowId = String(rawCost?.storageRowId ?? "");
+    if (!storageRowId && deps.isMoneyResource(rawCost?.resourceId, rawCost?.id, rawCost?.name)) {
       const take = Math.min(moneyRemaining, amount);
       moneyRemaining -= take;
       if (take > 0) concreteCosts.push({ ...rawCost, qty: take });
@@ -68,6 +69,7 @@ export function planStorageCosts({ holding = {}, costs = [], dependencies = {} }
     const candidates = inventory
       .filter((entry) => entry.remaining > 0.0001)
       .filter((entry) => costRoomMatches(entry.row, rawCost, deps.normalizeRoomId))
+      .filter((entry) => !storageRowId || String(entry.row?.id ?? "") === storageRowId)
       .filter((entry) => groupId ? deps.resourceMatchesGroup(entry.row, groupId) : deps.storageResourceMatches(entry.row, rawCost));
     candidates.sort((left, right) => right.ageQd - left.ageQd || left.index - right.index || left.batchIndex - right.batchIndex);
 

@@ -1,10 +1,7 @@
 import {
-  isMoneyResource,
-  normalizeResourceId,
+  isStorageMoneyResource,
+  storageResourceId,
   resourceDef,
-  resourceIcon,
-  resourceImage,
-  resourceItemUuid,
   resourceLabel,
   resourceUnitLoad,
   resourceOptions
@@ -24,7 +21,7 @@ import { hiddenStorageRoomIds } from "../../../../data/access-guard.js";
 export const FinanceStorageContextDomain = {
 _storageUnitLoad(resource = {}) {
   if (resource?.resourceId !== undefined && resource?.resourceId !== null && String(resource.resourceId).trim()) {
-    const id = normalizeResourceId(resource.resourceId, resource.name);
+    const id = storageResourceId(resource);
     return id === "custom" ? 1 : resourceUnitLoad(id);
   }
   return storageUnitLoad(resource);
@@ -56,9 +53,9 @@ _prepareStorageRows(holding, canEdit = false, roomsArg = null, rawRowsArg = null
     return roomLabelCache.get(id);
   };
   const rows = (Array.isArray(rawRowsArg) ? rawRowsArg : (holding?.storage?.resources ?? []))
-    .filter((row) => !isMoneyResource(row?.resourceId, row?.name));
+    .filter((row) => !isStorageMoneyResource(row));
   return rows.map((row, index) => {
-    const id = normalizeResourceId(row.resourceId, row.name);
+    const id = storageResourceId(row);
     const def = id !== "custom" ? resourceDef(id) : null;
     const label = id === "custom" ? (row.name || "Ресурс") : resourceLabel(id);
     const qty = this._safeNumber(row.qty, 0);
@@ -70,9 +67,9 @@ _prepareStorageRows(holding, canEdit = false, roomsArg = null, rawRowsArg = null
       _index: Number.isInteger(row.__storageIndex) ? row.__storageIndex : index,
       resourceId: id,
       label,
-      icon: resourceIcon(id),
-      img: id === "custom" ? String(row.img ?? "") : resourceImage(id),
-      itemUuid: row.itemUuid || resourceItemUuid(id),
+      icon: def?.icon ?? "fa-solid fa-cube",
+      img: id === "custom" ? String(row.img ?? "") : (def?.img ?? ""),
+      itemUuid: row.itemUuid || def?.itemUuid || "",
       category: def?.category ?? "Пользовательское",
       unit: "ед.",
       unitLoad: this._storageUnitLoad(row),
@@ -137,7 +134,7 @@ _prepareStorageItemRows(holding, canEdit = false, roomsArg = null, rawRowsArg = 
 
 _storageCapacityDependencies() {
   return {
-    isMoneyResource,
+    isStorageMoneyResource,
     safeNumber: (value, fallback = 0) => this._safeNumber(value, fallback),
     buildingFunctions: (building) => this._buildingFunctions(building),
     buildingStatus: (building) => this._buildingStatus(building),
@@ -191,7 +188,7 @@ _storageSearchRows(holding, roomsArg = null, hiddenRooms = hiddenStorageRoomIds(
       normalizeRoomId: (roomId) => this._normalizeStorageRoomId(roomId),
       roomLabel: (roomId) => this._storageRoomLabelFromRooms(rooms, roomId),
       resourceLabel: (row) => {
-        const id = normalizeResourceId(row?.resourceId, row?.name);
+        const id = storageResourceId(row);
         return id === "custom" ? String(row?.name || "Ресурс") : resourceLabel(id);
       }
     }
@@ -220,7 +217,7 @@ _storageContext(holding, canEdit = false, activeRoomId = "outdoors") {
   const visible = (row) => !hiddenRooms.has(this._normalizeStorageRoomId(row.roomId ?? row.storageRoomId));
   const roomsAll = this._storageRooms(holding, { includeUnavailable: true }).filter((room) => !hiddenRooms.has(room.id));
   const rawRows = (holding?.storage?.resources ?? []).map((row, index) => ({ ...row, __storageIndex: index }))
-    .filter((row) => visible(row) && !isMoneyResource(row.resourceId, row.name));
+    .filter((row) => visible(row) && !isStorageMoneyResource(row));
   const rawItemRows = (holding?.storage?.items ?? []).map((row, index) => ({ ...row, __storageIndex: index })).filter(visible);
   const visibleRawRows = rawRows.filter((row) => Math.abs(this._safeNumber(row.qty, 0)) >= 0.0001);
   const visibleItemRows = rawItemRows.filter((row) => this._itemQuantity(row) > 0);

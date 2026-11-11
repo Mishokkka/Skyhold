@@ -9,7 +9,7 @@ import {
   resourceBatchTotal
 } from "../../core/resource-batches.js";
 import {
-  normalizeResourceId,
+  storageResourceId,
   resourceCategoryTag,
   resourceDef,
   resourceLabel,
@@ -18,7 +18,7 @@ import {
 import { storageEffectiveShelfLifeMultiplier, storageProfileEffectFactor } from "../storage/specialization.js";
 
 function definitionForRow(row = {}) {
-  const id = normalizeResourceId(row.resourceId, row.id, row.name);
+  const id = storageResourceId(row);
   return { id, definition: id === "custom" ? null : resourceDef(id) };
 }
 
@@ -71,7 +71,7 @@ export function expireProductionIngredients(holding, step, report, appendLedger)
     if (!expired.length) continue;
     const ids = new Set(expired.map((batch) => batch.id));
     const qty = resourceBatchTotal(expired);
-    for (const batch of expired) expireTransportReservation(holding, row.id, batch.id);
+    for (const batch of expired) expireTransportReservation(holding, row, batch);
     row.batches = row.batches.filter((batch) => !ids.has(batch.id));
     row.qty = resourceBatchTotal(row.batches);
     const name = row.name || resourceLabel(row.resourceId);

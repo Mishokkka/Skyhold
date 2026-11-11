@@ -4,8 +4,8 @@ export function addStorageWithOverflow({ holding, resource = {}, qty = 0, depend
   const deps = dependencies ?? {};
   const required = [
     "safeNumber",
-    "normalizeResourceId",
-    "isMoneyResource",
+    "storageResourceId",
+    "isStorageMoneyResource",
     "normalizeStorageRoomId",
     "storageRooms",
     "storageAdd",
@@ -19,8 +19,8 @@ export function addStorageWithOverflow({ holding, resource = {}, qty = 0, depend
 
   const amount = Math.max(0, Math.floor(deps.safeNumber(qty, 0)));
   if (!amount) return [];
-  const id = deps.normalizeResourceId(resource.resourceId, resource.id, resource.name);
-  if (deps.isMoneyResource(id, resource.name)) {
+  const id = deps.storageResourceId(resource);
+  if (deps.isStorageMoneyResource(resource)) {
     deps.storageAdd(holding, resource, amount);
     return [{ roomId: "", qty: amount, overflowFrom: "" }];
   }

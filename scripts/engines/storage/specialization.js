@@ -1,4 +1,4 @@
-import { normalizeResourceId, resourceDef, resourceShelfLifeQd } from "../../core/resources.js";
+import { resourceDef, resourceShelfLifeQd, storageResourceId } from "../../core/resources.js";
 import { isPerishableFoodDefinition } from "../../core/perishable-food.js";
 import { buildingOperationalState } from "../../core/building-state.js";
 import { maintenanceEfficiencyFactor } from "../../data/economy/maintenance.js";
@@ -14,7 +14,7 @@ function normalizedList(value) {
 }
 
 function definitionFor(resource = {}) {
-  const id = normalizeResourceId(resource?.resourceId, resource?.id, resource?.name);
+  const id = storageResourceId(resource);
   return { id, definition: id === "custom" ? resource : (resourceDef(id) ?? resource) };
 }
 

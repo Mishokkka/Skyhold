@@ -1,4 +1,4 @@
-import { normalizeResourceId, resourceDef, resourceLabel, resourceOptions } from "../../../../core/resources.js";
+import { normalizeResourceId, resourceDef, resourceLabel, resourceOptions, storageResourceId } from "../../../../core/resources.js";
 import { makeId } from "../../../../data/utils.js";
 import { itemQuantity, itemQuantityUpdateData, setItemQuantityData } from "../../../../engines/storage/item-quantity.js";
 import { resolveStorageRow, STORAGE_ROW_CHANGED } from "../../../../engines/storage/row-identity.js";
@@ -103,7 +103,7 @@ async _createStorageTransferItem(actor, itemData, qty, operationId) {
 },
 
 async _foundryItemDataForResource(resourceId = "custom", name = "Ресурс", qty = 1) {
-  const id = normalizeResourceId(resourceId, name);
+  const id = storageResourceId({ resourceId, name });
   const def = id !== "custom" ? resourceDef(id) : null;
   let source = null;
   const uuid = def?.itemUuid || "";
@@ -126,7 +126,7 @@ async _withdrawResourceToActor(holding, { resourceId = "custom", name = "", qty 
   const actor = actorArg ?? (actorId ? globalThis.game?.actors?.get?.(actorId) : this._storageDefaultActor());
   if (!actor) return { ok: false, message: "У текущего пользователя нет привязанного персонажа-получателя." };
   const amount = Math.max(1, Math.floor(this._safeNumber(qty, 1)));
-  const id = normalizeResourceId(resourceId, name);
+  const id = storageResourceId({ resourceId, name });
   const label = id === "custom" ? (String(name).trim() || "Ресурс") : resourceLabel(id);
   const room = this._normalizeStorageRoomId(roomId);
   if (storageRowId) {

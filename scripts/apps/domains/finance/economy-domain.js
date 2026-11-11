@@ -12,6 +12,7 @@ import { isMedicalBuilding } from "../../../core/building-specials.js";
 import { evaluateArithmeticExpression, rollInlineDice } from "../../../core/formula.js";
 import {
   normalizeResourceId,
+  storageResourceId,
   resourceDef,
   resourceLabel
 } from "../../../core/resources.js";
@@ -1852,7 +1853,7 @@ async _runEconomyForQd(holding, periodQd = 40, { operationId = "", createdAt = "
 _foodConsumptionDependencies() {
   return {
     safeNumber: (value, fallback = 0) => this._safeNumber(value, fallback),
-    normalizeResourceId,
+    storageResourceId,
     resourceDef,
     resourceLabel,
     normalizeFoodRationUnits,

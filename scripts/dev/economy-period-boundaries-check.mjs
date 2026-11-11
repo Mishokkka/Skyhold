@@ -60,7 +60,7 @@ export function checkEconomyPeriodBoundaries() {
   const placed = [];
   const deps = {
     safeNumber: (v, f = 0) => Number.isFinite(Number(v)) ? Number(v) : f,
-    normalizeResourceId: (v) => v, isMoneyResource: () => false,
+    storageResourceId: (row) => row.resourceId, isStorageMoneyResource: () => false,
     normalizeStorageRoomId: (v) => v || "outdoors", storageRooms: () => rooms,
     storageAdd: (_h, row, qty) => placed.push({ ...row, qty }),
     storageUnitLoad: () => 1, storageProfileLoadMultiplier, splitTransferBatches: splitResourceBatchParts

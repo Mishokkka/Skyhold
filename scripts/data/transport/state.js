@@ -1,4 +1,5 @@
 import { transportEpochQd } from "./clock.js";
+import { conflictingStorageLotKeys, indexStorageLots, matchingStorageLots } from "../../engines/storage/row-identity.js";
 
 export const transportOrders = (holding) => holding?.special?.transportV2?.orders ?? [];
 export const activeTransportOrder = (order) => !["delivered", "lost", "cancelled"].includes(order.status);
@@ -69,18 +70,31 @@ export function pruneCompletedTransportRuns(data) {
   });
 }
 
-export function transportCargoReservations(holding) {
-  return transportOrders(holding).filter((order) => activeTransportOrder(order) && order.direction === "outbound")
-    .flatMap((order) => (order.cargo ?? []).map((lot) => ({ ...lot, qty: Math.max(0, lot.qty - (order.dispatched?.[lot.lotId] ?? 0)
-      - (order.sourceSpoiledPending?.[lot.lotId] ?? 0)) })))
+export function remainingTransportCargo(order) {
+  return (order.cargo ?? []).map((lot) => ({ ...lot, qty: Math.max(0, lot.qty - (order.dispatched?.[lot.lotId] ?? 0)
+    - (order.sourceSpoiledPending?.[lot.lotId] ?? 0)) }))
     .filter((lot) => lot.qty > 0);
 }
 
-export function expireTransportReservation(holding, rowId, batchId) {
+export function transportCargoReservations(holding) {
+  return transportOrders(holding).filter((order) => activeTransportOrder(order) && order.direction === "outbound")
+    .flatMap(remainingTransportCargo);
+}
+
+export function expireTransportReservation(holding, row, batch) {
+  const rowId = String(row?.id ?? "").trim();
+  const batchId = String(batch?.id ?? "").trim();
+  if (!rowId || !batchId) return;
+  let sources;
   for (const order of transportOrders(holding)) {
     if (!activeTransportOrder(order) || order.direction !== "outbound") continue;
+    let conflicts;
     for (const lot of order.cargo ?? []) {
-      if (lot.rowId !== rowId || lot.batchId !== batchId) continue;
+      if (String(lot.rowId ?? lot.storageRowId ?? "").trim() !== rowId || String(lot.batchId ?? "").trim() !== batchId) continue;
+      sources ??= indexStorageLots(holding?.storage?.resources, rowId);
+      conflicts ??= conflictingStorageLotKeys(order.cargo);
+      const { matches } = matchingStorageLots(sources, lot, conflicts);
+      if (matches.length !== 1 || matches[0].row !== row || matches[0].batch !== batch) continue;
       order.sourceSpoiledPending ??= {};
       order.sourceSpoiledPending[lot.lotId] = Math.max(0, lot.qty - (order.dispatched?.[lot.lotId] ?? 0));
     }
