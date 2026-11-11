@@ -1,3 +1,6 @@
+import { DUPLICATE_STORAGE_ROW, STORAGE_ROW_CHANGED, indexStorageRows } from "./row-identity.js";
+import { storageEffectiveRowLoad } from "./specialization.js";
+
 function requireDependencies(dependencies = {}) {
   const required = [
     "safeNumber",
@@ -24,20 +27,13 @@ function normalizedRowType(value) {
 }
 
 function selectedRows(holding, { rowType, rowIds, fromRoomId }, dependencies) {
-  const type = normalizedRowType(rowType);
   const ids = new Set((Array.isArray(rowIds) ? rowIds : []).map((id) => String(id ?? "").trim()).filter(Boolean));
-  const roomId = dependencies.normalizeStorageRoomId(fromRoomId);
-  const collection = type === "items" ? holding?.storage?.items : holding?.storage?.resources;
-  return (Array.isArray(collection) ? collection : []).filter((row) => {
-    if (!ids.has(String(row?.id ?? ""))) return false;
-    if (dependencies.normalizeStorageRoomId(row?.roomId ?? row?.storageRoomId) !== roomId) return false;
-    const qty = type === "items"
-      ? dependencies.itemQuantity(row)
-      : (typeof dependencies.resourceAvailableQuantity === "function"
-        ? dependencies.resourceAvailableQuantity(holding, row)
-        : Math.max(0, Math.floor(dependencies.safeNumber(row?.qty, 0))));
-    return qty > 0.0001;
-  });
+  const index = indexStorageRows(holding?.storage?.[rowType]);
+  if ([...ids].some((id) => index.get(id) === null)) return { message: DUPLICATE_STORAGE_ROW };
+  const rows = [...index.values()].filter((row) => row && ids.has(String(row.id))
+    && dependencies.normalizeStorageRoomId(row.roomId ?? row.storageRoomId) === fromRoomId);
+  if (rows.length !== ids.size) return { message: STORAGE_ROW_CHANGED };
+  return { rows };
 }
 
 function rowLabel(row = {}, rowType = "resources") {
@@ -48,14 +44,27 @@ function roomCanFit(room = {}, load = 0) {
   return Boolean(room?.available) && (room?.unlimited || Number(room?.free ?? 0) + 0.0001 >= load);
 }
 
-function itemTargetRoom(holding, row, targetRoomId, sourceRoomId, dependencies) {
-  const load = Math.max(0, dependencies.storageRowLoad(row));
-  const rooms = dependencies.storageRooms(holding, { includeUnavailable: true });
-  const candidates = [
-    rooms.find((room) => room.id === targetRoomId),
-    ...rooms.filter((room) => room.id !== targetRoomId && room.id !== sourceRoomId)
-  ].filter(Boolean);
-  return candidates.find((room) => roomCanFit(room, load))?.id ?? "outdoors";
+/** Reserve projected room capacity for the complete item batch before changing stock. */
+function planItemDestinations(holding, rows, plannedRows, fromRoomId, toRoomId, dependencies) {
+  const rooms = dependencies.storageRooms(holding, { includeUnavailable: true })
+    .filter((room) => room.available && room.id !== fromRoomId)
+    .map((room) => ({ ...room }));
+  const preferred = rooms.find((room) => room.id === toRoomId);
+  const candidates = preferred ? [preferred, ...rooms.filter((room) => room !== preferred)] : rooms;
+  for (const [index, planned] of plannedRows.entries()) {
+    const source = rows[index];
+    // A split stack receives a fresh ID. Only its item metadata determines its storage profile.
+    const stack = { ...source, id: planned.qty < planned.availableQty ? "" : source.id, qty: planned.qty };
+    for (const room of candidates) {
+      const load = storageEffectiveRowLoad(room, stack, planned.load);
+      if (!roomCanFit(room, load)) continue;
+      planned.roomId = room.id;
+      if (!room.unlimited) room.free = Math.max(0, Number(room.free ?? 0) - load);
+      break;
+    }
+    if (!planned.roomId) return planned;
+  }
+  return null;
 }
 
 function requestedRowQuantity(row, rowType, rowQuantities, dependencies, holding) {
@@ -87,30 +96,41 @@ export function planStorageBatchMove({
   const toRoom = deps.normalizeStorageRoomId(toRoomId);
   if (fromRoom === toRoom) return { ok: false, message: "Выбери другое помещение.", rowType: type, rows: [] };
 
-  const rows = selectedRows(holding, { rowType: type, rowIds, fromRoomId: fromRoom }, deps);
-  if (!rows.length) return { ok: false, message: "Выбери хотя бы одну позицию в текущем помещении.", rowType: type, rows: [] };
+  const selection = selectedRows(holding, { rowType: type, rowIds, fromRoomId: fromRoom }, deps);
+  if (!selection.rows?.length) {
+    return { ok: false, message: selection.message ?? "Выбери хотя бы одну позицию в текущем помещении.", rowType: type, rows: [] };
+  }
+  const { rows } = selection;
 
   const plannedRows = rows.map((row) => {
     const { available, requested } = requestedRowQuantity(row, type, rowQuantities, deps, holding);
-    const fullLoad = Math.max(0, deps.storageRowLoad(row));
+    const load = type === "items" ? deps.storageRowLoad({ ...row, qty: requested })
+      : deps.storageRowLoad(row) * (available > 0 ? requested / available : 0);
     return {
       id: String(row.id ?? ""),
       label: rowLabel(row, type),
       qty: requested,
       availableQty: available,
-      load: available > 0 ? fullLoad * (requested / available) : 0
+      load: Math.max(0, load)
     };
   });
   const invalid = plannedRows.find((row) => row.qty < 1 || row.qty > row.availableQty);
   if (invalid) {
     return {
       ok: false,
-      message: invalid.qty < 1
+      message: invalid.qty < 1 && invalid.availableQty > 0
         ? `Укажи количество для «${invalid.label}».`
         : `Для «${invalid.label}» доступно только ${deps.formatNumber(invalid.availableQty)} ед.`,
       rowType: type,
       rows: []
     };
+  }
+
+  if (type === "items") {
+    const blocked = planItemDestinations(holding, rows, plannedRows, fromRoom, toRoom, deps);
+    if (blocked) {
+      return { ok: false, message: `Нет места для «${blocked.label}» в доступных помещениях.`, rowType: type, rows: [] };
+    }
   }
 
   return {
@@ -140,13 +160,12 @@ export function applyStorageBatchMove({
 
   const messages = [];
   const placements = [];
+  const rows = indexStorageRows(holding.storage[plan.rowType]);
   if (plan.rowType === "resources") {
     if (typeof deps.takeResourceRow !== "function") throw new TypeError("storage batch move engine requires dependencies.takeResourceRow");
     for (const planned of plan.rows) {
-      const row = (holding?.storage?.resources ?? []).find((candidate) => String(candidate?.id ?? "") === planned.id);
-      if (!row) continue;
-      const amount = Math.max(0, Math.floor(deps.safeNumber(planned.qty, 0)));
-      if (!amount) continue;
+      const row = rows.get(planned.id);
+      const amount = planned.qty;
       const receipt = deps.takeResourceRow(holding, row, amount);
       if (receipt.takenQty !== amount) throw new RangeError("storage batch move could not take the planned quantity");
       const placed = deps.addResourceWithOverflow(holding, { ...row, roomId: plan.toRoomId, batches: receipt.batches }, amount);
@@ -175,20 +194,15 @@ export function applyStorageBatchMove({
   } else {
     const entries = [];
     for (const planned of plan.rows) {
-      const items = holding?.storage?.items ?? [];
-      const row = items.find((candidate) => String(candidate?.id ?? "") === planned.id);
-      if (!row) continue;
-      const available = deps.itemQuantity(row);
-      const amount = Math.max(1, Math.floor(deps.safeNumber(planned.qty, 1)));
-      const targetRoomId = itemTargetRoom(holding, { ...row, qty: amount }, plan.toRoomId, plan.fromRoomId, deps);
-      if (targetRoomId === plan.fromRoomId) continue;
+      const row = rows.get(planned.id);
+      const { qty: amount, availableQty: available, roomId: targetRoomId } = planned;
       let movedRow = row;
       if (amount < available) {
         movedRow = deps.clone(row);
         movedRow.id = deps.makeId("sitem", 12);
         deps.setItemQuantity(row, available - amount);
         deps.setItemQuantity(movedRow, amount);
-        items.push(movedRow);
+        holding.storage.items.push(movedRow);
       }
       movedRow.roomId = targetRoomId;
       placements.push({ id: planned.id, label: planned.label, roomId: targetRoomId, qty: planned.qty });
@@ -200,7 +214,6 @@ export function applyStorageBatchMove({
         { ...log, kind: "move-in", roomId: targetRoomId, qty: amount, note: `из ${plan.fromLabel}` }
       );
     }
-    if (!placements.length) return { ok: false, message: "Нет места для выбранных предметов в доступных помещениях." };
     deps.appendStorageLog(holding, entries);
   }
 

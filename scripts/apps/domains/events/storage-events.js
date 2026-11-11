@@ -5,6 +5,7 @@ import { stableDataHash } from "../../../data/storage-commit.js";
 import { canReadHolding, hiddenStorageRoomIds } from "../../../data/access-guard.js";
 import { reservedResourceBatchQuantities } from "../../../core/resource-batches.js";
 import { createSafeIcon } from "../../../core/helpers.js";
+import { DUPLICATE_STORAGE_ROW, indexStorageRows, resolveStorageRow, STORAGE_ROW_CHANGED } from "../../../engines/storage/row-identity.js";
 import { foundryItemClass, renderFoundryDocumentSheet, resolveFoundryUuid } from "../../../integrations/foundry-runtime.js";
 import { SkyholdResourceCatalogEditor } from "../../editors/resource-catalog-editor.js";
 import { SkyholdStorageActionDialog } from "../../storage-action-dialog.js";
@@ -28,7 +29,6 @@ export const StorageEventActions = {
 const STORAGE_CONTEXT_MENU_WIDTH = 248;
 const STORAGE_CONTEXT_MENU_HEIGHT = 176;
 const RESERVED_RESOURCE_MESSAGE = "В позиции есть груз по перевозке. Сначала завершите или отмените заказ.";
-const STORAGE_ROW_CHANGED = "Позиция склада изменилась. Откройте действие заново.";
 
 function createStorageContextMenuButton({ action = "", icon = "fa-solid fa-right-left", label = "", danger = false } = {}) {
   const button = document.createElement("button");
@@ -113,16 +113,18 @@ _onPickStorageResource(event) {
   const holdingId = data ? this._activeWritableHoldingId(data) : "";
   const holding = data?.holdings?.find((entry) => String(entry.id) === holdingId);
   const rowId = button?.closest?.("[data-storage-row-id]")?.dataset?.storageRowId;
-  const source = holding?.storage?.resources?.find((row) => row.id === rowId);
-  if (scope === "row" && !source) return ui.notifications.warn(STORAGE_ROW_CHANGED);
-  if (source && reservedResourceBatchQuantities(holding, source).size) return ui.notifications.warn(RESERVED_RESOURCE_MESSAGE);
+  if (scope === "row") {
+    const { row, message } = resolveStorageRow(holding?.storage?.resources, rowId);
+    if (!row) return ui.notifications.warn(message);
+    if (reservedResourceBatchQuantities(holding, row).size) return ui.notifications.warn(RESERVED_RESOURCE_MESSAGE);
+  }
   SkyholdResourceCatalogEditor.pick({
     selectedId: String(button?.dataset?.resourceId ?? ""),
     onSelect: async (resource) => {
       if (scope === "row") {
         const result = await SkyholdData.updateHolding(holdingId, (draft) => {
-          const row = draft?.storage?.resources?.find((candidate) => candidate.id === rowId);
-          if (!row) return SkyholdData.skipTransaction({ ok: false, message: STORAGE_ROW_CHANGED });
+          const { row, message } = resolveStorageRow(draft?.storage?.resources, rowId);
+          if (!row) return SkyholdData.skipTransaction({ ok: false, message });
           if (reservedResourceBatchQuantities(draft, row).size) {
             return SkyholdData.skipTransaction({ ok: false, message: RESERVED_RESOURCE_MESSAGE });
           }
@@ -268,21 +270,21 @@ _storageContextRow({ rowType = "resources", rowId = "", roomId = "outdoors" } = 
   const holdingIndex = (data?.holdings ?? []).findIndex((row) => String(row?.id ?? "") === String(holdingId ?? ""));
   const holding = holdingIndex >= 0 ? data.holdings[holdingIndex] : null;
   const type = rowType === "items" ? "items" : "resources";
-  const rows = Array.isArray(holding?.storage?.[type]) ? holding.storage[type] : [];
-  const row = rows.find((entry) => String(entry?.id ?? "") === String(rowId ?? "")) ?? null;
-  return { data, holding, holdingIndex, holdingId, type, row, roomId: this._normalizeStorageRoomId(roomId) };
+  const selection = resolveStorageRow(holding?.storage?.[type], rowId);
+  return { data, holding, holdingIndex, holdingId, type, ...selection, roomId: this._normalizeStorageRoomId(roomId) };
 },
 
-async _onStorageResourceFieldChange(field, property, value) {
+async _onStorageRowFieldChange(field, rowType, property, value) {
   if (!game.user?.isGM) return;
   const card = field.closest?.("[data-storage-row-id]");
   const rowId = card?.dataset?.storageRowId;
-  const context = this._storageContextRow({ rowId, roomId: card?.dataset?.storageRowRoomId });
-  if (!context.row) return ui.notifications.warn(STORAGE_ROW_CHANGED);
+  const context = this._storageContextRow({ rowType, rowId, roomId: card?.dataset?.storageRowRoomId });
+  if (!context.row) return ui.notifications.warn(context.message);
   const quantity = String(field.value ?? "").trim() ? value : NaN;
   const result = await SkyholdData.updateHolding(context.holdingId, (holding) => {
-    const row = holding.storage?.resources?.find((entry) => entry.id === rowId);
-    if (!row || row.resourceId !== context.row.resourceId || row[property] !== context.row[property]) {
+    const { row, message } = resolveStorageRow(holding.storage?.[context.type], rowId);
+    if (!row) return SkyholdData.skipTransaction({ ok: false, message });
+    if (row.resourceId !== context.row.resourceId || row[property] !== context.row[property]) {
       return SkyholdData.skipTransaction({ ok: false, message: STORAGE_ROW_CHANGED });
     }
     if (property === "qty") {
@@ -294,7 +296,7 @@ async _onStorageResourceFieldChange(field, property, value) {
     }
     row[property] = value;
     return { ok: true };
-  }, { reason: `storage:resource:${property}` });
+  }, { reason: `storage:${context.type}:${property}` });
   if (!result?.ok) ui.notifications.warn(result?.message ?? STORAGE_ROW_CHANGED);
 },
 
@@ -344,7 +346,8 @@ async _openStorageMoveDialog({ rowType = "resources", rowId = "", fromRoomId = "
     return;
   }
 
-  const rowById = new Map(sourceRows.map((row) => [String(row?.id ?? ""), row]));
+  const rowById = indexStorageRows(sourceRows);
+  if (rowIds.some((id) => rowById.get(id) === null)) return ui.notifications.warn(DUPLICATE_STORAGE_ROW);
   const labels = rowIds.map((id) => {
     const row = rowById.get(id) ?? {};
     if (normalizedType === "items") return String(row?.name ?? "Предмет");
@@ -424,7 +427,7 @@ async _openStorageMoveDialog({ rowType = "resources", rowId = "", fromRoomId = "
 async _openStorageGiveDialog({ rowType = "resources", rowId = "", roomId = "outdoors" } = {}) {
   if (!game.user?.isGM) return ui.notifications.warn("Предметы и ресурсы персонажам выдаёт ГМ.");
   const context = this._storageContextRow({ rowType, rowId, roomId });
-  if (!context.holding || !context.row) return ui.notifications.warn("Позиция склада не найдена.");
+  if (!context.row) return ui.notifications.warn(context.message);
   const isItem = context.type === "items";
   const label = isItem ? String(context.row.name ?? "Предмет") : String(context.row.name ?? context.row.resourceId ?? "Ресурс");
   const max = isItem ? this._itemQuantity(context.row) : this._storageAvailableRowQuantity(context.holding, context.row);
@@ -452,7 +455,7 @@ async _openStorageGiveDialog({ rowType = "resources", rowId = "", roomId = "outd
 async _openStorageNoteDialog({ rowType = "resources", rowId = "", roomId = "outdoors" } = {}) {
   if (!game.user?.isGM) return ui.notifications.warn("Заметки отдельных позиций склада изменяет ГМ.");
   const context = this._storageContextRow({ rowType, rowId, roomId });
-  if (!context.holding || !context.row) return ui.notifications.warn("Позиция склада не найдена.");
+  if (!context.row) return ui.notifications.warn(context.message);
   const label = context.type === "items" ? String(context.row.name ?? "Предмет") : String(context.row.name ?? context.row.resourceId ?? "Ресурс");
     const note = await SkyholdStorageActionDialog.open({
       anchor: this,
@@ -465,20 +468,21 @@ async _openStorageNoteDialog({ rowType = "resources", rowId = "", roomId = "outd
   });
   if (note === null) return;
   const saved = await SkyholdData.updateHolding(context.holdingId, (holding) => {
-    const rows = Array.isArray(holding?.storage?.[context.type]) ? holding.storage[context.type] : [];
-    const row = rows.find((entry) => String(entry?.id ?? "") === String(rowId));
-    if (!row || row.notes !== context.row.notes) return SkyholdData.skipTransaction(false);
+    const { row, message } = resolveStorageRow(holding?.storage?.[context.type], rowId);
+    if (!row || row.notes !== context.row.notes) {
+      return SkyholdData.skipTransaction({ ok: false, message: message ?? STORAGE_ROW_CHANGED });
+    }
     row.notes = this._sanitizeTextBlock(note).slice(0, 1000);
-    return true;
+    return { ok: true };
   }, { reason: `storage:${context.type}:note` });
-  if (saved) this.requestRender({ focus: false, skipLoadingOverlay: true });
-  else ui.notifications.warn(STORAGE_ROW_CHANGED);
+  if (saved?.ok) this.requestRender({ focus: false, skipLoadingOverlay: true });
+  else ui.notifications.warn(saved?.message ?? STORAGE_ROW_CHANGED);
 },
 
 async _openStorageDeleteDialog({ rowType = "resources", rowId = "", roomId = "outdoors" } = {}) {
   if (!game.user?.isGM) return ui.notifications.warn("Позиции склада удаляет ГМ.");
   const context = this._storageContextRow({ rowType, rowId, roomId });
-  if (!context.holding || !context.row) return ui.notifications.warn("Позиция склада не найдена.");
+  if (!context.row) return ui.notifications.warn(context.message);
   if (context.type === "resources" && reservedResourceBatchQuantities(context.holding, context.row).size) {
     return ui.notifications.warn(RESERVED_RESOURCE_MESSAGE);
   }
@@ -494,15 +498,15 @@ async _openStorageDeleteDialog({ rowType = "resources", rowId = "", roomId = "ou
   });
   if (!confirmed) return;
   const result = await SkyholdData.updateHolding(context.holdingId, (holding) => {
-    const rows = Array.isArray(holding?.storage?.[context.type]) ? holding.storage[context.type] : [];
-    const index = rows.findIndex((entry) => String(entry?.id ?? "") === String(rowId));
-    if (index < 0 || stableDataHash(rows[index]) !== stableDataHash(context.row)) {
-      return SkyholdData.skipTransaction({ ok: false, message: STORAGE_ROW_CHANGED });
+    const rows = holding?.storage?.[context.type];
+    const { row, message } = resolveStorageRow(rows, rowId);
+    if (!row || stableDataHash(row) !== stableDataHash(context.row)) {
+      return SkyholdData.skipTransaction({ ok: false, message: message ?? STORAGE_ROW_CHANGED });
     }
-    if (context.type === "resources" && reservedResourceBatchQuantities(holding, rows[index]).size) {
+    if (context.type === "resources" && reservedResourceBatchQuantities(holding, row).size) {
       return SkyholdData.skipTransaction({ ok: false, message: RESERVED_RESOURCE_MESSAGE });
     }
-    rows.splice(index, 1);
+    rows.splice(rows.indexOf(row), 1);
     return { ok: true };
   }, { reason: `storage:${context.type}:delete` });
   if (!result?.ok) return ui.notifications.warn(result?.message ?? STORAGE_ROW_CHANGED);

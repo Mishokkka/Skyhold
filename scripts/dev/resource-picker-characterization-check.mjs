@@ -89,6 +89,18 @@ try {
   await picker.onSelect(resource);
   assert.equal(data.holdings[0].storage.resources[0].resourceId, "wood", "booking during the picker must prevent reclassifying its cargo");
   assert.match(warnings.at(-1), /груз по перевозке/);
+
+  const storage = data.holdings[0].storage;
+  data.holdings[0].special = {};
+  StorageEventDomain._onPickStorageResource.call(manager, event({ storagePickerScope: "row" }, "new"));
+  storage.resources.push({ id: "new", resourceId: "iron" });
+  const ambiguousRows = structuredClone(storage.resources);
+  await picker.onSelect(resource);
+  assert.deepEqual(storage.resources, ambiguousRows, "the picker must recheck row identity when a duplicate appears while it is open");
+  assert.match(warnings.at(-1), /одинаковый ID/);
+  picker = null;
+  StorageEventDomain._onPickStorageResource.call(manager, event({ storagePickerScope: "row" }, "new"));
+  assert.equal(picker, null, "an ambiguous storage row cannot open the picker");
   for (const isGM of [true, false]) {
     game.user.isGM = isGM;
     picker = null;

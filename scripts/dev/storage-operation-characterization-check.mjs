@@ -426,6 +426,32 @@ export async function checkStorageOperationCharacterization() {
       assert.equal(holding.storage.resources[0].qty, 3, "the real finance adapter must deduct the withdrawn resource");
       assert.equal(holding.storage.log.at(-1).operationId, "real-withdraw-op", "the real storage journal must retain the withdrawal operation id");
 
+      const beforeMissing = clone(holding);
+      const beforeMissingActorItems = actor.itemIds();
+      for (const [operationId, resourceId, rowIds] of [
+        ["missing-selected-row", "wood", ["removed-row"]], ["missing-legacy-resource", "stone", []]
+      ]) {
+        const missing = await executor({
+          type: "withdrawResource", operationId, holdingId: holding.id,
+          actorId: actor.id, resourceId, roomId: "outdoors", rowIds, qty: 1
+        }, { userId: gm.id });
+        assert.equal(missing.ok, false, "a missing row must produce a normal refusal");
+      }
+      assert.deepEqual(holding, beforeMissing);
+      assert.deepEqual(actor.itemIds(), beforeMissingActorItems);
+
+      holding.storage.resources.push({ id: "wood", resourceId: "stone", name: "Камень", qty: 2, roomId: "outdoors" });
+      const beforeDuplicate = clone(holding);
+      const duplicate = await executor({
+        type: "withdrawResource", operationId: "duplicate-withdrawal", holdingId: holding.id,
+        actorId: actor.id, resourceId: "wood", roomId: "outdoors", rowIds: ["wood"], qty: 1
+      }, { userId: gm.id });
+      assert.equal(duplicate.ok, false);
+      assert.match(duplicate.message, /одинаковый ID/);
+      assert.deepEqual(holding, beforeDuplicate);
+      assert.deepEqual(actor.itemIds(), beforeMissingActorItems);
+      holding.storage.resources.pop();
+
       const reservedRow = holding.storage.resources[0];
       holding.special = { transportV2: { orders: [{
         id: "wood-export", direction: "outbound", status: "booked", cargo: [{

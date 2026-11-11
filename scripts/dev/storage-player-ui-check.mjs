@@ -84,6 +84,32 @@ const qtyChange = (value) => manager._onFieldChange({
     closest: () => ({ dataset: { storageRowId: wood.id, storageRowRoomId: "outdoors" } }) }
 });
 const row = (index) => data.holdings[index].storage.resources.find(resource => resource.id === wood.id);
+const originalHolding = data.holdings[0];
+data.holdings[0] = mergeHoldingDefaults({
+  ...originalHolding,
+  storage: { ...originalHolding.storage, resources: [wood, { ...wood, resourceId: "stone", name: "Камень", batches: [] }] }
+});
+const ambiguousHolding = structuredClone(data.holdings[0]);
+assert.equal(ambiguousHolding.storage.resources.length, 2, "old duplicate IDs can survive holding normalization");
+await qtyChange(9);
+assert.deepEqual(data.holdings[0], ambiguousHolding, "an inline edit cannot choose the first of two matching storage IDs");
+data.holdings[0] = originalHolding;
+
+const saleChange = (index, checked) => manager._onFieldChange({
+  preventDefault() {},
+  currentTarget: { checked, dataset: { type: "checkbox", field: `holdings.0.storage.items.${index}.forSale` },
+    closest: () => ({ dataset: { storageRowId: "sale-item", storageRowRoomId: "outdoors" } }) }
+});
+const item = { id: "sale-item", name: "Канат", roomId: "outdoors", qty: 1, forSale: false };
+data.holdings[0].storage.items = [item];
+await saleChange(0, true);
+assert.equal(data.holdings[0].storage.items[0].forSale, true, "a unique item still supports the sale toggle");
+data.holdings[0].storage.items.push({ ...item, name: "Сундук" });
+await saleChange(1, true);
+assert.equal(data.holdings[0].storage.items[0].forSale, true, "editing a duplicate item must leave the other sale flag intact");
+assert.equal(data.holdings[0].storage.items[1].forSale, false);
+data.holdings[0].storage.items = [];
+
 await qtyChange(9);
 assert.equal(row(0).qty, 9, "inline quantity survives actual holding normalization");
 assert.deepEqual(row(0).batches.find(batch => batch.id === "wood-batch"), wood.batches[0]);

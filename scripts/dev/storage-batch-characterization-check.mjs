@@ -180,6 +180,31 @@ export async function checkStorageBatchCharacterization() {
   assert.equal(itemQuantity(partialItemHolding.storage.items.find((row) => row.id === "sitem-split")), 1, "a partial item move must create a target stack with the requested quantity");
   assert.equal(partialItemHolding.storage.items.find((row) => row.id === "sitem-split")?.roomId, "target", "the split item stack must move to the requested room when it fits");
 
+  const limitedHolding = fixture();
+  limitedHolding.storage.items = ["first", "second"].map(id => ({ id, name: id, roomId: "outdoors", weight: 2, qty: 1 }));
+  const limitedBefore = clone(limitedHolding);
+  const limited = {
+    holding: limitedHolding, rowType: "items", rowIds: ["first", "second"],
+    fromRoomId: "outdoors", toRoomId: "target", operationId: "insufficient-space",
+    dependencies: { ...deps, storageRooms: (target) => deps.storageRooms(target).filter(room => room.id !== "source") }
+  };
+  assert.equal(applyStorageBatchMove(limited).ok, false, "fitting only the first item must reject the entire batch");
+  assert.deepEqual(limitedHolding, limitedBefore, "rejection must leave both quantities, rooms and the journal intact");
+  assert.equal(planStorageBatchMove(limited).ok, false, "the same capacity failure must be reported during preview");
+  const complete = applyStorageBatchMove({ ...limited, operationId: "with-overflow-space", dependencies: deps });
+  assert.equal(complete.ok, true, "a complete batch may use an available overflow room");
+  assert.deepEqual(complete.placements.map(({ id, roomId }) => [id, roomId]), [["first", "target"], ["second", "source"]]);
+  assert.equal(limitedHolding.storage.log.length, 4, "each moved stack produces a paired journal entry");
+
+  const ambiguousHolding = fixture();
+  ambiguousHolding.storage.resources.unshift({ id: "res-a", resourceId: "stone", name: "Камень", qty: 3, roomId: "target" });
+  const ambiguousBefore = clone(ambiguousHolding);
+  const ambiguous = applyStorageBatchMove({ holding: ambiguousHolding, rowIds: ["res-a"],
+    fromRoomId: "source", toRoomId: "target", dependencies: deps });
+  assert.equal(ambiguous.ok, false, "the selected ID must be unique even across rooms");
+  assert.match(ambiguous.message, /одинаковый ID/);
+  assert.deepEqual(ambiguousHolding, ambiguousBefore);
+
   const world = { meta: { revision: 7 }, holdings: [fixture()] };
   const logic = {
     _applyStorageBatchMove(target, options) {

@@ -1,6 +1,7 @@
 import { normalizeResourceId, resourceDef, resourceLabel, resourceOptions } from "../../../../core/resources.js";
 import { makeId } from "../../../../data/utils.js";
 import { itemQuantity, itemQuantityUpdateData, setItemQuantityData } from "../../../../engines/storage/item-quantity.js";
+import { resolveStorageRow, STORAGE_ROW_CHANGED } from "../../../../engines/storage/row-identity.js";
 import { resolveFoundryUuid } from "../../../../integrations/foundry-runtime.js";
 
 function cloneFoundryData(value) {
@@ -103,8 +104,13 @@ async _withdrawResourceToActor(holding, { resourceId = "custom", name = "", qty 
   const id = normalizeResourceId(resourceId, name);
   const label = id === "custom" ? (String(name).trim() || "Ресурс") : resourceLabel(id);
   const room = this._normalizeStorageRoomId(roomId);
+  if (storageRowId) {
+    const selection = resolveStorageRow(holding?.storage?.resources, storageRowId);
+    if (!selection.row) return { ok: false, message: selection.message };
+  }
   const resource = { resourceId: id, name: label, roomId: room, storageRowId };
   const row = this._storageFind(holding, resource);
+  if (!row) return { ok: false, message: STORAGE_ROW_CHANGED };
   const have = this._storageAvailableRowQuantity(holding, row);
   if (have < amount) return { ok: false, message: `На складе свободно ${this._formatNumber(have)} ед. ресурса «${label}». Запрошено ${this._formatNumber(amount)}.` };
   const itemData = await this._foundryItemDataForResource(id, label, amount);
@@ -133,9 +139,9 @@ async _giveStoredItemToActor(holding, { itemId = "", itemIndex = -1, qty = 1, ac
   if (!actor) return { ok: false, message: "У текущего пользователя нет привязанного персонажа-получателя." };
   if (!Array.isArray(holding?.storage?.items)) return { ok: false, message: "В хранилище нет предметов." };
   const stableId = String(itemId ?? "");
-  const index = stableId ? holding.storage.items.findIndex((item) => String(item?.id ?? "") === stableId) : Number(itemIndex);
-  const row = holding.storage.items[index];
-  if (!row) return { ok: false, message: "Предмет не найден." };
+  const items = holding.storage.items;
+  const { row, message } = stableId ? resolveStorageRow(items, stableId) : { row: items[Number(itemIndex)] };
+  if (!row) return { ok: false, message: message ?? "Предмет не найден." };
   const have = this._itemQuantity(row);
   const amount = Math.max(1, Math.floor(this._safeNumber(qty, 1)));
   if (amount > have) return { ok: false, message: `На складе осталось ${this._formatNumber(have)} ед. предмета «${row.name}».` };
@@ -155,7 +161,7 @@ async _giveStoredItemToActor(holding, { itemId = "", itemIndex = -1, qty = 1, ac
       row.qty = remaining;
       if (row.itemData?.system && typeof row.itemData.system === "object") row.itemData.system.quantity = remaining;
       if (row.system && typeof row.system === "object") row.system.quantity = remaining;
-    } else holding.storage.items.splice(index, 1);
+    } else items.splice(items.indexOf(row), 1);
     this._appendStorageLog(holding, [{ kind: "manual-spend", resourceId: "custom", name: row.name, qty: -amount, roomId: row.roomId, source: "Выдача Foundry", note: `получатель: ${actor.name}`, operationId }]);
     return { ok: true, message: `${actor.name}: выдан предмет ${row.name} (${this._formatNumber(amount)}).`, actorMutation };
   } catch (error) {
