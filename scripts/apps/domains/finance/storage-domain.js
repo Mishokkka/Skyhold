@@ -46,10 +46,33 @@ _storageLogRows(holding, roomsArg = null) {
   };
   const log = Array.isArray(holding?.storage?.log) ? holding.storage.log : [];
   const hiddenRooms = hiddenStorageRoomIds(holding);
-  const hiddenRoom = (row) => hiddenRooms.has(this._normalizeStorageRoomId(row.roomId));
-  const isMove = (row) => row.kind === "move-in" || row.kind === "move-out";
-  const hiddenMoves = new Set(log.filter((row) => isMove(row) && row.operationId && hiddenRoom(row)).map((row) => row.operationId));
-  const rows = log.filter((row) => !hiddenRoom(row) && !(isMove(row) && hiddenMoves.has(row.operationId))).reverse().slice(0, 80);
+  let visibleLog = log;
+  if (hiddenRooms.size) {
+    const hiddenRoom = (id) => hiddenRooms.has(this._normalizeStorageRoomId(id));
+    const isMove = (row) => row.kind === "move-in" || row.kind === "move-out"
+      || (row.kind === "note" && row.source === "Пакетное перемещение");
+    const hiddenMoves = new Set(log.filter((row) => isMove(row) && row.operationId && hiddenRoom(row.roomId)).map((row) => row.operationId));
+    const knownMoves = new Set();
+    // The receipts retain requested rooms and actual destinations even when the storage journal is truncated.
+    for (const operation of holding?.log ?? []) {
+      const result = operation.payload?.result;
+      if (!Array.isArray(result?.placements)) continue;
+      if (result.placements.some((placement) => hiddenRoom(placement.roomId))) hiddenMoves.add(operation.operationId);
+      let request;
+      try {
+        request = JSON.parse(operation.payload.signature);
+      } catch {
+        continue;
+      }
+      if (request?.type !== "batchMove" || !request.fromRoomId || !request.toRoomId) continue;
+      knownMoves.add(operation.operationId);
+      if (hiddenRoom(request.fromRoomId) || hiddenRoom(request.toRoomId)) hiddenMoves.add(operation.operationId);
+    }
+    visibleLog = log.filter((row) => !hiddenRoom(row.roomId) && !(isMove(row) && hiddenMoves.has(row.operationId)))
+      .filter((row) => !isMove(row) || row.kind !== "note" || knownMoves.has(row.operationId))
+      .map((row) => isMove(row) && !knownMoves.has(row.operationId) ? { ...row, note: "" } : row);
+  }
+  const rows = visibleLog.slice(-80).reverse();
   const sources = marketLogSources(holding, rows);
   const visibility = createMarketVisibility(this._contextData, { isGM: Boolean(globalThis.game?.user?.isGM) });
   return rows.map((row) => {
@@ -281,13 +304,18 @@ _storagePay(holding, costs = [], { captureReceipt = false } = {}) {
 },
 
 _restoreProductionResource(holding, resource, qty) {
-  // Recreate the original custom metadata if its empty inventory row was removed.
-  if (!this._storageFind(holding, resource)) {
-    const row = { ...resource, qty: 0, batches: [] };
-    delete row.storageRowId;
-    holding.storage.resources.push(row);
-  }
-  return this._storageAdd(holding, resource, qty);
+  const existing = this._storageFind(holding, resource)
+    ?? this._storageFind(holding, { ...resource, storageRowId: "" });
+  if (existing) return this._storageAdd(holding, { ...resource, storageRowId: existing.id }, qty);
+
+  // The receipt preserves the ingredient and its age. Its former row can now hold another resource.
+  const previousId = String(resource.storageRowId || resource.id || "");
+  const occupied = holding.storage.resources.some((row) => row.id === previousId);
+  const id = previousId && !occupied ? previousId : makeId("res", 12);
+  const row = { ...resource, id, qty: 0, batches: [] };
+  delete row.storageRowId;
+  holding.storage.resources.push(row);
+  return this._storageAdd(holding, { ...resource, storageRowId: id }, qty);
 },
 
 _storageResourceMatchesGroup(row = {}, groupId = "") {

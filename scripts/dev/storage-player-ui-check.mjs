@@ -148,6 +148,21 @@ const warehouse = mergeHoldingDefaults({
     ]
   }
 });
+warehouse.storage.log.push({ kind: "note", roomId: "outdoors", qty: 0, source: "Пакетное перемещение",
+  note: "Предмет → Тайная кладовая", operationId: "legacy-overflow" });
+warehouse.storage.log.push({ kind: "note", roomId: "outdoors", qty: 0, source: "Пакетное перемещение",
+  note: "Старый предмет → Тайная кладовая", operationId: "expired-receipt" });
+warehouse.storage.log.push({ kind: "move-in", roomId: "outdoors", qty: 1,
+  note: "из Тайная кладовая", operationId: "trimmed-source" });
+warehouse.storage.log.push({ kind: "note", roomId: "outdoors", qty: 0, source: "Пакетное перемещение",
+  note: "Ящик → Открытый склад", operationId: "public-item-move" });
+const movementReceipt = (operationId, fromRoomId, toRoomId, actualRoomId) => ({
+  operationId, type: "system",
+  payload: { signature: JSON.stringify({ type: "batchMove", fromRoomId, toRoomId }),
+    result: { rowType: "items", placements: [{ roomId: actualRoomId }] } }
+});
+warehouse.log.push(movementReceipt("legacy-overflow", "shed", "outdoors", "hidden"),
+  movementReceipt("public-item-move", "shed", "outdoors", "outdoors"));
 manager._storageRooms = () => [{ id: "outdoors", label: "Открытый склад", available: true },
   { id: "hidden", label: "Тайная кладовая", available: true }];
 manager.activeStorageTab = "log";
@@ -158,11 +173,45 @@ for (const isGM of [true, false]) {
   assert.equal(context.activeRoomId, isGM ? "hidden" : "outdoors");
   assert.equal(context.visibleCount, isGM ? 2 : 1);
   assert.equal(context.itemCount, isGM ? 1 : 0);
-  assert.equal(context.logRows.length, isGM ? 3 : 1);
+  assert.equal(context.logRows.length, isGM ? 7 : 3);
+  assert.ok(context.logRows.some(entry => entry.note.includes("Ящик → Открытый склад")));
   assert.equal(/Тайная кладовая|Тайный жетон/.test(JSON.stringify(context)), isGM);
   const outbound = prepareMarketOutboundContext({ holding: warehouse, quote, isGM });
   assert.equal(outbound.offers[0].availableStock, isGM ? 12 : 6);
 }
+
+const rooms = [{ id: "outdoors", label: "Открытый склад", available: true, unlimited: true },
+  { id: "full", label: "Заполненный склад", available: true, free: 0 },
+  { id: "hidden", label: "Тайная кладовая", available: true, free: 10 }];
+manager._storageRooms = () => rooms;
+let movementHolding = structuredClone(warehouse);
+movementHolding.storage.items.push({ id: "public-item", name: "Предмет", roomId: "outdoors", qty: 1 });
+const move = createStorageOperationExecutor({
+  logic: manager,
+  getUser: id => ({ id, isGM: id === "gm" }),
+  skipTransaction: SkyholdData.skipTransaction,
+  async updateHolding(_id, updater) {
+    const draft = structuredClone(movementHolding);
+    const result = await updater(draft, { meta: { revision: 1 } });
+    if (result?.[skip]) return result.value;
+    movementHolding = draft;
+    return result;
+  }
+});
+const movement = { type: "batchMove", holdingId: warehouse.id, rowType: "items", rowIds: ["public-item"],
+  fromRoomId: "outdoors", toRoomId: "full", expectedRevision: 1 };
+const movementBefore = structuredClone(movementHolding);
+const player = { userId: "player", remote: true };
+assert.equal((await move({ ...movement, operationId: "player-hidden", toRoomId: "hidden" }, player)).ok, false);
+assert.equal((await move({ ...movement, operationId: "player-full" }, player)).ok, false,
+  "player overflow cannot use a hidden room or create another stack in its source");
+assert.deepEqual(movementHolding, movementBefore);
+const gmMove = await move({ ...movement, operationId: "gm-overflow" }, { userId: "gm" });
+assert.equal(gmMove.placements[0].roomId, "hidden", "GM can use the physical capacity of the hidden warehouse");
+assert.deepEqual(movementHolding.storage.log.filter(entry => entry.operationId === "gm-overflow")
+  .map(({ roomId, qty }) => [roomId, qty]), [["outdoors", -1], ["hidden", 1]]);
+assert.equal(manager._storageLogRows(movementHolding, rooms).some(entry => entry.operationId === "gm-overflow"), false,
+  "player history hides both records of a GM move to a hidden overflow room");
 
 for (const file of ["resources", "items", "tabs", "log"]) {
   const template = readFileSync(`templates/parts/storage/${file}.hbs`, "utf8");

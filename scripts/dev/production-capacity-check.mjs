@@ -82,6 +82,26 @@ export async function checkProductionCapacity() {
   assert.ok(fixed.storage.resources.filter((row) => row.resourceId === "wood").flatMap((row) => row.batches).every((batch) => batch.ageQd === 3), "Queued raw receipts age before cancellation");
   assert.equal(cancelProductionBatch(fixed, lineOf(fixed), { ...adapters, batchId: cancelId }).ok, false, "A removed ID cannot refund again");
 
+  let retyped = fixture(config, { resourceId: "wood", qty: 20 });
+  await advance(retyped, 1);
+  const original = retyped.storage.resources.find(row => row.resourceId === "wood");
+  assert.equal(original.qty, 10);
+  const originalId = original.id;
+  const returnedBatches = lineOf(retyped).waitingBatches[0].workReservedInputs.entries[0].batches;
+  // The GM corrects the free remainder after the production charge.
+  original.resourceId = "stone";
+  original.name = "Камень";
+  retyped = mergeHoldingDefaults(retyped);
+  assert.equal(cancelProductionBatch(retyped, lineOf(retyped), adapters).ok, true);
+  const reopened = mergeHoldingDefaults(retyped);
+  const stone = reopened.storage.resources.find(row => row.resourceId === "stone");
+  const restored = reopened.storage.resources.find(row => row.resourceId === "wood");
+  assert.equal(stone.id, originalId);
+  assert.equal(stone.qty, 10);
+  assert.notEqual(restored.id, originalId, "a refund may not reuse the ID of a reclassified inventory row");
+  assert.equal(restored.qty, 10);
+  assert.deepEqual(restored.batches, returnedBatches, "refund must retain the actual receipt batches and age");
+
   const economics = productionLineEconomics({ source: "workers", outputQty: 10, workQd: 10, batchCapacity: 20,
     expenses: "wood 10", fixedExpenses: "wood 2", resourceId: "stone" }, { wageDailyCopper: 18 }, { batchQty: 5 });
   assert.equal(economics.qty, 5);

@@ -173,12 +173,15 @@ export function applyStorageBatchMove({
       messages.push(`${planned.label}: ${deps.formatNumber(amount)} → ${placed.map((placement) => deps.storageRoomLabel(holding, placement.roomId)).join(", ")}`);
     }
   } else {
+    const entries = [];
     for (const planned of plan.rows) {
       const items = holding?.storage?.items ?? [];
       const row = items.find((candidate) => String(candidate?.id ?? "") === planned.id);
       if (!row) continue;
       const available = deps.itemQuantity(row);
       const amount = Math.max(1, Math.floor(deps.safeNumber(planned.qty, 1)));
+      const targetRoomId = itemTargetRoom(holding, { ...row, qty: amount }, plan.toRoomId, plan.fromRoomId, deps);
+      if (targetRoomId === plan.fromRoomId) continue;
       let movedRow = row;
       if (amount < available) {
         movedRow = deps.clone(row);
@@ -187,21 +190,18 @@ export function applyStorageBatchMove({
         deps.setItemQuantity(movedRow, amount);
         items.push(movedRow);
       }
-      const targetRoomId = itemTargetRoom(holding, { ...movedRow, qty: amount }, plan.toRoomId, plan.fromRoomId, deps);
       movedRow.roomId = targetRoomId;
       placements.push({ id: planned.id, label: planned.label, roomId: targetRoomId, qty: planned.qty });
-      messages.push(`${planned.label}: ${deps.formatNumber(planned.qty)} → ${deps.storageRoomLabel(holding, targetRoomId)}`);
+      const destination = deps.storageRoomLabel(holding, targetRoomId);
+      messages.push(`${planned.label}: ${deps.formatNumber(planned.qty)} → ${destination}`);
+      const log = { resourceId: "custom", name: planned.label, source: "Пакетное перемещение", operationId };
+      entries.push(
+        { ...log, kind: "move-out", roomId: plan.fromRoomId, qty: -amount, note: `в ${destination}` },
+        { ...log, kind: "move-in", roomId: targetRoomId, qty: amount, note: `из ${plan.fromLabel}` }
+      );
     }
-    deps.appendStorageLog(holding, [{
-      kind: "note",
-      resourceId: "custom",
-      name: "Предметы",
-      qty: 0,
-      roomId: plan.toRoomId,
-      source: "Пакетное перемещение",
-      note: messages.join("; "),
-      operationId
-    }]);
+    if (!placements.length) return { ok: false, message: "Нет места для выбранных предметов в доступных помещениях." };
+    deps.appendStorageLog(holding, entries);
   }
 
   return {
