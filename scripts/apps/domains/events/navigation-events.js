@@ -356,7 +356,10 @@ async _onFieldChange(event) {
   if (path.endsWith(".belief")) value = normalizeBelief(value);
 
   try {
-    if (/^catalog\.resources\.\d+\.[A-Za-z][A-Za-z0-9]*$/.test(path)) {
+    const storageField = /^holdings\.\d+\.storage\.resources\.\d+\.(name|qty|forSale)$/.exec(path)?.[1];
+    if (storageField) {
+      await this._onStorageResourceFieldChange(field, storageField, value);
+    } else if (/^catalog\.resources\.\d+\.[A-Za-z][A-Za-z0-9]*$/.test(path)) {
       if (!game.user?.isGM) return;
       await SkyholdData.transaction((data) => {
         foundry.utils.setProperty(data, path, value);

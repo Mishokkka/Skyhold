@@ -3,6 +3,8 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { prepareTendayRandomEvents } from "../apps/domains/events/gm-events.js";
 import { EconomyEventDomain } from "../apps/domains/events/economy-events.js";
+import { DEFAULT_BUILDING_TEMPLATES } from "../data/building-templates.js";
+import { applyStaffAppointment } from "../data/hybrid-labor.js";
 import { normalizeLastEventRoll } from "../data/event-automation.js";
 import {
   advanceTendayClock,
@@ -232,7 +234,7 @@ function checkSchoolResolutionMilestone() {
   const holding = {
     people: { list: [
       { id: "child", name: "Ученик", age: 5, race: "Человек", dead: false, attributes: { ...attributes }, educationMilestones: [], notes: "" },
-      { id: "teacher", name: "Учитель", age: 30, race: "Человек", dead: false, injuredDays: 0 }
+      { id: "teacher", name: "Учитель", background: "Учитель", age: 30, race: "Человек", dead: false, injuredDays: 0 }
     ] },
     buildings: { list: [{ id: "school-1", templateId: "school", constructionStatus: "built", workersMin: 1, assignedWorkerIds: ["teacher"], functions: { culture: true } }] },
     finance: {},
@@ -252,6 +254,30 @@ function checkSchoolResolutionMilestone() {
   assert.equal(holding.log.length, 1);
   assert.equal(holding.log[0].payload?.needsResolution, true);
   assert.equal(holding.log[0].payload?.resolutionKind, "school-milestone");
+
+  const school = { ...structuredClone(DEFAULT_BUILDING_TEMPLATES.find((row) => row.id === "school")),
+    id: "school-2", templateId: "school", constructionStatus: "built", buildProgress: 5 };
+  const child = { ...holding.people.list[0], age: 5, educationMilestones: [] };
+  const staffHolding = { ...holding, buildings: { list: [school] },
+    people: { list: [child, { ...holding.people.list[1] }] }, log: [] };
+  applyStaffAppointment(staffHolding, "teacher", {
+    buildingId: school.id, primaryFunctionId: "culture", wageDailyCopper: 10
+  });
+  school.serviceState = {
+    functionId: "culture", periodKey: "tenday:24", active: false, activeWorkerIds: [],
+    workedQd: 0, reason: "Служба не работала в этом десятнике."
+  };
+  assert.equal(harness._advanceResidentAges(structuredClone(staffHolding), 1).educated, 0,
+    "a filled staff slot must not produce an education milestone when cultural service stopped");
+  school.serviceState = {
+    ...school.serviceState, active: true, activeWorkerIds: ["teacher"], workedQd: 4
+  };
+  assert.equal(harness._advanceResidentAges(structuredClone(staffHolding), 1).educated, 1,
+    "the current staff school must create a milestone when it actually teaches");
+  child.shipAssignment = { shipId: "ship", away: true };
+  const away = harness._advanceResidentAges(staffHolding, 1);
+  assert.equal(away.educated, 0, "a child away at sea ages without attending school");
+  assert.equal(child.age, 6);
 }
 
 function checkResidentAgeAttributeBudgets() {

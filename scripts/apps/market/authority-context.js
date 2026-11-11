@@ -252,7 +252,8 @@ export function authorityMarketOutboundContext({
     resourceDefinitions: resources,
     organizations,
     quantities,
-    insuranceEnabled
+    insuranceEnabled,
+    isGM
   });
   const routes = authorityOutboundRoutes({
     holding,
@@ -266,7 +267,7 @@ export function authorityMarketOutboundContext({
     isGM
   });
   return prepareMarketOutboundContext({ holding, quote: outboundQuote, resourceDefinitions: resources,
-    organizations, routes, quantities, insuranceEnabled });
+    organizations, routes, quantities, insuranceEnabled, isGM });
 }
 
 export function prepareMarketAuthorityContext({

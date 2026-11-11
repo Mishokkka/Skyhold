@@ -23,6 +23,7 @@ import { FinanceStorageContextDomain } from "./storage/context-domain.js";
 import { FinanceStorageItemDocumentDomain } from "./storage/item-document-domain.js";
 import { composeDomainGroup } from "../compose-domain.js";
 import { createMarketVisibility, marketLogSources } from "../../../data/market/visibility.js";
+import { hiddenStorageRoomIds } from "../../../data/access-guard.js";
 import {
   addResourceBatches,
   availableResourceBatchInventory,
@@ -44,7 +45,12 @@ _storageLogRows(holding, roomsArg = null) {
     return roomLabelCache.get(id);
   };
   const log = Array.isArray(holding?.storage?.log) ? holding.storage.log : [];
-  const rows = [...log].reverse().slice(0, 80), sources = marketLogSources(holding, rows);
+  const hiddenRooms = hiddenStorageRoomIds(holding);
+  const hiddenRoom = (row) => hiddenRooms.has(this._normalizeStorageRoomId(row.roomId));
+  const isMove = (row) => row.kind === "move-in" || row.kind === "move-out";
+  const hiddenMoves = new Set(log.filter((row) => isMove(row) && row.operationId && hiddenRoom(row)).map((row) => row.operationId));
+  const rows = log.filter((row) => !hiddenRoom(row) && !(isMove(row) && hiddenMoves.has(row.operationId))).reverse().slice(0, 80);
+  const sources = marketLogSources(holding, rows);
   const visibility = createMarketVisibility(this._contextData, { isGM: Boolean(globalThis.game?.user?.isGM) });
   return rows.map((row) => {
     const id = normalizeResourceId(row.resourceId, row.name);
@@ -140,6 +146,28 @@ _storageQuantity(holding, resource = {}) {
 
 _storageAvailableRowQuantity(holding, row = {}) {
   return availableResourceRowQuantity(row, holding);
+},
+
+_setStorageResourceQuantity(holding, row, quantity) {
+  if (!Number.isSafeInteger(quantity) || quantity < 0) {
+    return { ok: false, message: "Введите целое неотрицательное количество." };
+  }
+  const before = row.qty;
+  const delta = quantity - before;
+  if (!delta) return { ok: true };
+  if (delta < 0) {
+    const available = this._storageAvailableRowQuantity(holding, row);
+    if (-delta > available) return { ok: false, message: `В этой позиции зарезервировано ${before - available} ед. Сначала завершите или отмените перевозку.` };
+    const taken = takeResourceBatches(row, -delta, { holding, makeId });
+    if (taken.takenQty !== -delta) throw new Error("Не удалось изменить количество партии.");
+  } else {
+    addResourceBatches(row, { qty: delta }, { holding, makeId });
+  }
+  this._appendStorageLog(holding, [{
+    kind: delta > 0 ? "manual-add" : "manual-spend", resourceId: row.resourceId, name: row.name,
+    roomId: row.roomId, qty: delta, source: "Склад", note: "Ручная правка количества"
+  }]);
+  return { ok: true };
 },
 
 _storageAdd(holding, resource = {}, qty = 0) {
@@ -357,12 +385,12 @@ _applyStorageMove(holding, { resourceId = "custom", name = "", qty = 0, fromRoom
   });
 },
 
-_storageBatchMoveDependencies() {
+_storageBatchMoveDependencies(hiddenRooms = new Set()) {
   return {
     safeNumber: (value, fallback = 0) => this._safeNumber(value, fallback),
     normalizeStorageRoomId: (roomId) => this._normalizeStorageRoomId(roomId),
     itemQuantity: (row) => this._itemQuantity(row),
-    storageRooms: (holding, options) => this._storageRooms(holding, options),
+    storageRooms: (holding, options) => this._storageRooms(holding, options).filter((room) => !hiddenRooms.has(room.id)),
     storageRowLoad: (row) => this._storageRowLoad(row),
     storageRoomLabel: (holding, roomId) => this._storageRoomLabel(holding, roomId),
     addResourceWithOverflow: (holding, resource, qty) => this._storageAddWithOverflow(holding, resource, qty),
@@ -387,7 +415,7 @@ _planStorageBatchMove(holding, options = {}) {
   return planStorageBatchMove({
     holding,
     ...options,
-    dependencies: this._storageBatchMoveDependencies()
+    dependencies: this._storageBatchMoveDependencies(options.hiddenRooms)
   });
 },
 
@@ -395,7 +423,7 @@ _applyStorageBatchMove(holding, options = {}) {
   return applyStorageBatchMove({
     holding,
     ...options,
-    dependencies: this._storageBatchMoveDependencies()
+    dependencies: this._storageBatchMoveDependencies(options.hiddenRooms)
   });
 },
 

@@ -4,6 +4,7 @@ import { composeDomainGroup } from "./domains/compose-domain.js";
 import { FinanceDomain } from "./domains/finance-domain.js";
 import { resolveFoundryUuid } from "../integrations/foundry-runtime.js";
 import { appendHoldingOperation, findHoldingOperation } from "../data/operations.js";
+import { hiddenStorageRoomIds } from "../data/access-guard.js";
 
 const STORAGE_OPERATION_TYPES = new Set([
   "depositItem",
@@ -61,7 +62,8 @@ function normalizeOperation(raw = {}) {
     rowType: String(raw?.rowType ?? "") === "items" ? "items" : "resources",
     rowIds,
     rowQuantities,
-    expectedRevision: Number.isFinite(Number(raw?.expectedRevision)) ? Math.max(0, Math.floor(Number(raw.expectedRevision))) : null,
+    expectedRevision: raw?.expectedRevision != null && Number.isFinite(Number(raw.expectedRevision))
+      ? Math.max(0, Math.floor(Number(raw.expectedRevision))) : null,
     qty: Math.max(1, Math.min(1_000_000, Math.floor(Number(raw?.qty) || 1)))
   };
 }
@@ -121,8 +123,9 @@ export function createStorageOperationExecutor({
     if (restored === false) throw operationError("Не удалось восстановить инвентарь персонажа после ошибки записи.");
   }
 
-  async function executeOnce(rawOperation, { userId = "", remote = false } = {}) {
-    const operation = normalizeOperation(rawOperation);
+  async function executeOnce(operation, { userId = "", remote = false } = {}) {
+    // Older receipts serialized an omitted revision as zero after normalizing twice.
+    const signature = JSON.stringify({ ...operation, expectedRevision: operation.expectedRevision ?? 0 });
     const requester = getUser(userId);
     if (!requester) throw operationError("Storage operation requester was not found.");
     if (remote && requester.isGM) {
@@ -143,18 +146,20 @@ export function createStorageOperationExecutor({
         }
         const prior = findHoldingOperation(holding, operation.operationId);
         if (prior || hasCompletedOperation(holding, operation.operationId)) {
-          if (prior?.type !== "system" || prior.payload?.signature !== JSON.stringify(operation)
+          if (prior?.type !== "system" || prior.payload?.signature !== signature
             || prior.payload?.userId !== String(userId)) {
             throw operationError("Storage operation id is already used by another or unverifiable operation.");
           }
           return skipTransaction({ ...prior.payload.result, duplicate: true, replay: true });
         }
-        if (operation.type === "batchMove" && operation.expectedRevision !== Math.max(0, Number(data?.meta?.revision) || 0)) {
+        const checksRevision = operation.type === "batchMove"
+          || (REMOTE_GM_ONLY_STORAGE_TYPES.has(operation.type) && operation.expectedRevision !== null);
+        if (checksRevision && operation.expectedRevision !== Math.max(0, Number(data?.meta?.revision) || 0)) {
           return skipTransaction({
             ok: false,
             stale: true,
             operationId: operation.operationId,
-            message: "Склад изменился после предпросмотра. Повтори пакетную операцию."
+            message: "Склад изменился после предпросмотра. Откройте действие заново."
           });
         }
 
@@ -169,12 +174,17 @@ export function createStorageOperationExecutor({
 
         let applied;
         if (operation.type === "batchMove") {
+          const hiddenRooms = hiddenStorageRoomIds(holding, requester.isGM);
+          if (hiddenRooms.has(operation.fromRoomId) || hiddenRooms.has(operation.toRoomId)) {
+            return skipTransaction({ ok: false, message: "Это помещение недоступно." });
+          }
           applied = logic._applyStorageBatchMove.call(logic, holding, {
             rowType: operation.rowType,
             rowIds: operation.rowIds,
             rowQuantities: operation.rowQuantities,
             fromRoomId: operation.fromRoomId,
             toRoomId: operation.toRoomId,
+            hiddenRooms,
             operationId: operation.operationId
           });
         } else if (operation.type === "addResourceRow") {
@@ -249,6 +259,7 @@ export function createStorageOperationExecutor({
             resourceId: operation.resourceId,
             name: operation.name,
             roomId: operation.roomId,
+            storageRowId: operation.rowIds[0],
             qty: operation.qty,
             operationId: operation.operationId
           });
@@ -271,7 +282,7 @@ export function createStorageOperationExecutor({
         } : {});
         appendHoldingOperation(holding, { operationId: operation.operationId, type: "system",
           title: "Операция хранилища", summary: response.message,
-          payload: { signature: JSON.stringify(operation), userId: String(userId), result: response } });
+          payload: { signature, userId: String(userId), result: response } });
         return response;
       }, { fallback: false, reason: `storage-operation:${operation.type}` });
 

@@ -29,6 +29,14 @@ export function buildingCatalogV19Templates() {
   return buildingCatalogV18Templates().map((source) => {
     const row = structuredClone(source);
     row.templateVersion = 19;
+    if (row.id === "school") {
+      row.effect = "Работающая школа открывает ролевое решение ГМа при возрастной вехе ребёнка.";
+      row.notes = "При годовом старении учитывается присутствие ребёнка и работа культурной службы с учителем. Характеристики и черты школа автоматически не меняет.";
+    }
+    if (row.id === "bank-exchange") {
+      row.description = "Банковское учреждение и место крупных сделок.";
+      row.effect = "Займы, хранение и срочные вклады оформляются в окне «Банк» по предложениям справочника.";
+    }
     for (const [buildingId, resourceId, multiplier, capacity, minimum, days] of PRODUCTION_CAPACITY_REVISIONS) {
       if (row.id !== buildingId) continue;
       const line = row.productionLines.find((item) => item.resourceId === resourceId);

@@ -1,5 +1,6 @@
 import { normalizeMarketOutboundState } from "../../data/market/outbound-state.js";
 import { transportCargoReservations } from "../../data/transport/state.js";
+import { hiddenStorageRoomIds } from "../../data/access-guard.js";
 import { overlayMarketQuoteDemand } from "../../engines/market/demand.js";
 import {
   marketOutboundAvailableQuantity,
@@ -89,7 +90,8 @@ export function prepareMarketOutboundContext({
   organizations = [],
   routes = [],
   quantities = {},
-  insuranceEnabled = true
+  insuranceEnabled = true,
+  isGM = Boolean(globalThis.game?.user?.isGM)
 } = {}) {
   const empty = {
     offers: [],
@@ -103,7 +105,9 @@ export function prepareMarketOutboundContext({
 
   const definitionById = new Map((Array.isArray(resourceDefinitions) ? resourceDefinitions : [])
     .map((row) => [text(row?.id ?? row?.resourceId), row]));
-  const storageRows = (holding?.storage?.resources ?? []).filter((row) => row?.forSale && whole(row?.qty) > 0);
+  const hiddenRooms = hiddenStorageRoomIds(holding, isGM);
+  const storageRows = (holding?.storage?.resources ?? []).filter((row) => row?.forSale && whole(row.qty) > 0
+    && !hiddenRooms.has(text(row.roomId ?? row.storageRoomId)));
   const outboundState = normalizeMarketOutboundState(holding?.special?.market?.outbound);
   // The old market and the new planner observe the same protected warehouse lots.
   outboundState.orders.push({ id: "transport-v2-reservations", status: "booked", dispatchStatus: "booked",

@@ -11,6 +11,7 @@ import { buildingStaffingWorkerIds, explicitWorkAllocationsForBuilding } from ".
 import { buildingConstructionPrerequisitesMet, buildingHousingComfort, buildingNominalMorale, buildingWonderworkingActive } from "../../../engines/economy/building-service.js";
 import { isResidentInPopulation } from "../../../data/resident-presence.js";
 import { buildingLaborMode } from "../../../data/hybrid-labor.js";
+import { normalLaborQdPerTenday, residentLaborCapacity } from "../../../data/labor-budget.js";
 
 function cardSettlementEffects(app, holding) {
   return {
@@ -329,7 +330,8 @@ _prepareBuildingRow(holding, row, index, canEdit, storageRoomsArg = null, option
   const crewIds = new Set([...(selectedCrew?.memberIds ?? []), selectedCrew?.leaderId].filter(Boolean));
   const crewPeople = (holding.people?.list ?? []).filter((person) => crewIds.has(person.id)
     && isResidentInPopulation(person, holding) && !person.dead && !(Number(person.injuredDays) > 0));
-  const crewQd = crewPeople.reduce((sum, person) => sum + (this._isChildResident?.(person) ? 10 : 20), 0);
+  const normalQd = normalLaborQdPerTenday();
+  const crewQd = crewPeople.reduce((sum, person) => sum + residentLaborCapacity(person, normalQd).normalQd, 0);
   const capitalLines = capitalBudget ? [
     `Уже вложено в стадии: ${costText(capitalBudget.spent)}.`,
     `Неиспользованная предоплата: ${costText(capitalBudget.prepaid)}.`,

@@ -96,16 +96,17 @@ async _foundryItemDataForResource(resourceId = "custom", name = "Ресурс", 
   return this._setItemQuantityData(source, qty);
 },
 
-async _withdrawResourceToActor(holding, { resourceId = "custom", name = "", qty = 1, roomId = "outdoors", actorId = "", actor: actorArg = null, operationId = "" } = {}) {
+async _withdrawResourceToActor(holding, { resourceId = "custom", name = "", qty = 1, roomId = "outdoors", storageRowId = "", actorId = "", actor: actorArg = null, operationId = "" } = {}) {
   const actor = actorArg ?? (actorId ? globalThis.game?.actors?.get?.(actorId) : this._storageDefaultActor());
   if (!actor) return { ok: false, message: "У текущего пользователя нет привязанного персонажа-получателя." };
   const amount = Math.max(1, Math.floor(this._safeNumber(qty, 1)));
   const id = normalizeResourceId(resourceId, name);
   const label = id === "custom" ? (String(name).trim() || "Ресурс") : resourceLabel(id);
   const room = this._normalizeStorageRoomId(roomId);
-  const row = this._storageFind(holding, { resourceId: id, name: label, roomId: room });
-  const have = Math.max(0, this._safeNumber(row?.qty, 0));
-  if (have + 0.0001 < amount) return { ok: false, message: `В складе нет ${this._formatNumber(amount)} ${label}. Есть ${this._formatNumber(have)}.` };
+  const resource = { resourceId: id, name: label, roomId: room, storageRowId };
+  const row = this._storageFind(holding, resource);
+  const have = this._storageAvailableRowQuantity(holding, row);
+  if (have < amount) return { ok: false, message: `На складе свободно ${this._formatNumber(have)} ед. ресурса «${label}». Запрошено ${this._formatNumber(amount)}.` };
   const itemData = await this._foundryItemDataForResource(id, label, amount);
   if (operationId) {
     if (!itemData.flags || typeof itemData.flags !== "object") itemData.flags = {};
@@ -117,7 +118,8 @@ async _withdrawResourceToActor(holding, { resourceId = "custom", name = "", qty 
     itemIds: (Array.isArray(created) ? created : []).map((item) => String(item?.id ?? item?._id ?? "")).filter(Boolean)
   };
   try {
-    this._storageAdd(holding, { resourceId: id, name: label, roomId: room }, -amount);
+    const taken = this._storageTake(holding, resource, amount);
+    if (taken.takenQty !== amount) throw new Error("Не удалось списать подтверждённое количество со склада.");
     this._appendStorageLog(holding, [{ kind: "manual-spend", resourceId: id, name: label, qty: -amount, roomId: room, source: "Выдача Foundry", note: `получатель: ${actor.name}`, operationId }]);
     return { ok: true, message: `${actor.name}: выдано ${this._formatNumber(amount)} ${label}.`, actorMutation };
   } catch (error) {
@@ -135,7 +137,8 @@ async _giveStoredItemToActor(holding, { itemId = "", itemIndex = -1, qty = 1, ac
   const row = holding.storage.items[index];
   if (!row) return { ok: false, message: "Предмет не найден." };
   const have = this._itemQuantity(row);
-  const amount = Math.max(1, Math.min(have, Math.floor(this._safeNumber(qty, 1))));
+  const amount = Math.max(1, Math.floor(this._safeNumber(qty, 1)));
+  if (amount > have) return { ok: false, message: `На складе осталось ${this._formatNumber(have)} ед. предмета «${row.name}».` };
   const itemData = this._setItemQuantityData(row.itemData ?? row, amount);
   if (operationId) {
     if (!itemData.flags || typeof itemData.flags !== "object") itemData.flags = {};

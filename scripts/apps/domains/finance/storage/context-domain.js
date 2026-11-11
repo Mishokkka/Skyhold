@@ -19,6 +19,7 @@ import {
 import { buildStorageSearchRows } from "../../../../engines/storage/search.js";
 import { storageEffectiveRowLoad, storageProfileEffectFactor } from "../../../../engines/storage/specialization.js";
 import { financeBuildingFunctionBlockState } from "../../../../engines/economy/finance-obligations.js";
+import { hiddenStorageRoomIds } from "../../../../data/access-guard.js";
 
 export const FinanceStorageContextDomain = {
 _storageUnitLoad(resource = {}) {
@@ -178,11 +179,12 @@ _storageRoomsContext(holding, roomsArg = null) {
   return storageRoomsContext(rooms);
 },
 
-_storageSearchRows(holding, roomsArg = null) {
+_storageSearchRows(holding, roomsArg = null, hiddenRooms = hiddenStorageRoomIds(holding)) {
   const rooms = Array.isArray(roomsArg) ? roomsArg : this._storageRooms(holding, { includeUnavailable: true });
+  const visible = (row) => !hiddenRooms.has(this._normalizeStorageRoomId(row.roomId ?? row.storageRoomId));
   return buildStorageSearchRows({
-    resources: holding?.storage?.resources ?? [],
-    items: holding?.storage?.items ?? [],
+    resources: (holding?.storage?.resources ?? []).filter(visible),
+    items: (holding?.storage?.items ?? []).filter(visible),
     dependencies: {
       safeNumber: (value, fallback = 0) => this._safeNumber(value, fallback),
       itemQuantity: (item) => this._itemQuantity(item),
@@ -214,9 +216,12 @@ _storageContext(holding, canEdit = false, activeRoomId = "outdoors") {
     };
   }
 
-  const roomsAll = this._storageRooms(holding, { includeUnavailable: true });
-  const rawRows = (holding?.storage?.resources ?? []).map((row, index) => ({ ...row, __storageIndex: index })).filter((row) => !isMoneyResource(row?.resourceId, row?.name));
-  const rawItemRows = (holding?.storage?.items ?? []).map((row, index) => ({ ...row, __storageIndex: index }));
+  const hiddenRooms = hiddenStorageRoomIds(holding);
+  const visible = (row) => !hiddenRooms.has(this._normalizeStorageRoomId(row.roomId ?? row.storageRoomId));
+  const roomsAll = this._storageRooms(holding, { includeUnavailable: true }).filter((room) => !hiddenRooms.has(room.id));
+  const rawRows = (holding?.storage?.resources ?? []).map((row, index) => ({ ...row, __storageIndex: index }))
+    .filter((row) => visible(row) && !isMoneyResource(row.resourceId, row.name));
+  const rawItemRows = (holding?.storage?.items ?? []).map((row, index) => ({ ...row, __storageIndex: index })).filter(visible);
   const visibleRawRows = rawRows.filter((row) => Math.abs(this._safeNumber(row.qty, 0)) >= 0.0001);
   const visibleItemRows = rawItemRows.filter((row) => this._itemQuantity(row) > 0);
   let activeRoom = this._normalizeStorageRoomId(activeRoomId);
@@ -265,7 +270,7 @@ _storageContext(holding, canEdit = false, activeRoomId = "outdoors") {
     defaultResourceId: defaultResourceOption.value,
     defaultResourceLabel: defaultResourceOption.label,
     actorOptions: [], hasActorOptions: false, targetActor,
-    searchQuery: String(this.storageSearchQuery ?? ""), searchRows: this._storageSearchRows(holding, roomsAll),
+    searchQuery: String(this.storageSearchQuery ?? ""), searchRows: this._storageSearchRows(holding, roomsAll, hiddenRooms),
     notes: holding?.storage?.notes ?? "",
     batchSelection: {
       rowType: batchRowType,

@@ -3,6 +3,10 @@ import { pathToFileURL } from "node:url";
 import assert from "node:assert/strict";
 import { createStorageOperationExecutor } from "../apps/storage-operation-executor.js";
 import { clone } from "../data/utils.js";
+import { createSkyholdSplitStorage } from "../data/split-storage.js";
+import { prepareSkyholdCommit } from "../data/commit-preparation.js";
+import { migrateData } from "../data/normalizers.js";
+import { SETTING_CATALOG, SETTING_DATA, SETTING_HOLDINGS, SETTING_META } from "../data/constants.js";
 
 const SKIP = Symbol("skip");
 
@@ -422,6 +426,29 @@ export async function checkStorageOperationCharacterization() {
       assert.equal(holding.storage.resources[0].qty, 3, "the real finance adapter must deduct the withdrawn resource");
       assert.equal(holding.storage.log.at(-1).operationId, "real-withdraw-op", "the real storage journal must retain the withdrawal operation id");
 
+      const reservedRow = holding.storage.resources[0];
+      holding.special = { transportV2: { orders: [{
+        id: "wood-export", direction: "outbound", status: "booked", cargo: [{
+          lotId: "wood-lot", rowId: reservedRow.id, batchId: reservedRow.batches[0].id, qty: 2
+        }]
+      }] } };
+      const locked = {
+        type: "withdrawResource", operationId: "reserved-withdrawal", holdingId: holding.id,
+        actorId: actor.id, resourceId: "wood", roomId: "outdoors", qty: 2
+      };
+      const before = clone(holding);
+      const actorItems = actor.itemIds();
+      const refused = await executor(locked, { userId: gm.id });
+      assert.equal(refused.ok, false, "2 of 3 units are reserved, so issuing 2 must fail before creating an Item");
+      assert.deepEqual(actor.itemIds(), actorItems);
+      assert.deepEqual(holding, before, "refusal preserves stock, the transport reservation and journals");
+      holding.storage.resources.push({ id: "free-wood", resourceId: "wood", name: "Wood", qty: 2, roomId: "outdoors" });
+      const exact = await executor({ ...locked, operationId: "free-withdrawal", rowIds: ["free-wood"] }, { userId: gm.id });
+      assert.equal(exact.ok, true, "the selected free row is a valid source even when another row in the room is reserved");
+      assert.equal(holding.storage.resources[0].qty, 3);
+      assert.equal(holding.storage.resources[1].qty, 0);
+      assert.equal(actor.items.get(actor.itemIds().at(-1)).system.quantity, 2);
+
       const storedSword = holding.storage.items.find((item) => item.id === "stored-sword");
       storedSword.qty = 2;
       storedSword.itemData.system.quantity = 2;
@@ -449,6 +476,66 @@ export async function checkStorageOperationCharacterization() {
       assert.equal(delivery.ok, true, "the real finance adapter must execute stored-item delivery");
       assert.equal(holding.storage.items.some((item) => item.id === "stored-sword"), false, "the real finance adapter must remove a row after its final stored item is delivered");
       assert.equal(holding.storage.log.at(-1).operationId, "real-give-final-op", "the real storage journal must retain the delivery operation id");
+
+      // The last marker write can fail after the holding partition, including
+      // its receipt, has become recoverable. Compensation must follow that outcome.
+      for (const [type, blocked] of [
+        ["withdrawResource", "holdings"], ["withdrawResource", "completion"],
+        ["depositItem", "holdings"], ["depositItem", "completion"]
+      ]) {
+        const root = migrateData({ meta: { revision: 8 }, holdings: [makeHolding()], catalog: {} });
+        const settings = new Map([[SETTING_META, root.meta], [SETTING_HOLDINGS, root.holdings],
+          [SETTING_CATALOG, root.catalog], [SETTING_DATA, root]]);
+        const adapter = {
+          get: (_module, key) => clone(settings.get(key)),
+          async set(_module, key, value) {
+            if ((blocked === "holdings" && key === SETTING_HOLDINGS)
+              || (blocked === "completion" && key === SETTING_META && value.storageCommit?.writeComplete)) {
+              throw new Error("injected write failure");
+            }
+            settings.set(key, clone(value));
+          }
+        };
+        const storage = createSkyholdSplitStorage({ settings: adapter });
+        const options = {
+          updateHolding: async (holdingId, updater) => {
+            const draft = storage.getData();
+            const applied = await updater(draft.holdings.find(row => row.id === holdingId), draft);
+            if (applied?.[SKIP]) return applied.value;
+            const prepared = prepareSkyholdCommit(draft, { scope: "holdings" });
+            await storage.persistData(prepared.data, { normalized: true, scope: prepared.scope });
+            return applied;
+          },
+          skipTransaction: (value) => ({ [SKIP]: true, value }),
+          getUser: () => gm,
+          getActor: () => actor
+        };
+        const deposit = type === "depositItem";
+        const itemId = deposit ? `split-actor-item-${blocked}` : "";
+        if (deposit) actor.addItem({ id: itemId, name: "Lantern", type: "gear", qty: 1 });
+        const request = { ...locked, type, itemId, operationId: `split-${type}-${blocked}`, qty: 1 };
+        const idsBefore = actor.itemIds();
+        const run = createStorageOperationExecutor(options);
+        const stale = await run({ ...request, operationId: `${request.operationId}-stale`, expectedRevision: 7 }, { userId: gm.id });
+        assert.equal(stale.stale, true);
+        assert.deepEqual(actor.itemIds(), idsBefore, "a stale transfer never touches the Actor");
+        const attempt = run(request, { userId: gm.id });
+        if (blocked === "holdings") {
+          await assert.rejects(attempt, /injected write failure/);
+          assert.deepEqual(actor.itemIds(), idsBefore, "a rolled-back holding write must undo the Actor creation");
+        } else {
+          assert.equal((await attempt).ok, true, "a forward-recoverable holding write is a successful transfer");
+          const expectedItemCount = idsBefore.length + (deposit ? -1 : 1);
+          assert.equal(actor.itemIds().length, expectedItemCount);
+          const replay = await createStorageOperationExecutor(options)(request, { userId: gm.id });
+          assert.equal(replay.replay, true, "the recovered transfer receipt is usable after executor restart");
+          assert.equal(actor.itemIds().length, expectedItemCount);
+        }
+        const reopened = createSkyholdSplitStorage({ settings: adapter }).getData();
+        const saved = reopened.holdings[0].storage;
+        assert.equal(saved.resources[0].qty, !deposit && blocked === "completion" ? 4 : 5);
+        assert.equal(saved.items.length, deposit && blocked === "completion" ? 2 : 1);
+      }
     } finally {
       if (previousGame === undefined) delete globalThis.game;
       else globalThis.game = previousGame;

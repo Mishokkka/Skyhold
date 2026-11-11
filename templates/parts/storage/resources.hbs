@@ -22,7 +22,7 @@
                           {{#if img}}<img class="fbls-storage-resource-img" src="{{img}}" alt="" data-fbls-image-fallback /><i class="{{icon}}" data-fbls-image-fallback-icon hidden></i>{{else}}<i class="{{icon}}"></i>{{/if}}
                           <div class="fbls-storage-resource-name {{#if isCustomResource}}custom{{/if}}">
                             {{#if ../isGM}}
-                              <button type="button" class="fbls-storage-resource-picker" data-action="pick-storage-resource" data-storage-picker-scope="row" data-storage-resource-index="{{_index}}" data-resource-id="{{resourceId}}"><i class="{{icon}}"></i><strong>{{label}}</strong><i class="fa-solid fa-chevron-right"></i></button>
+                              <button type="button" class="fbls-storage-resource-picker" data-action="pick-storage-resource" data-storage-picker-scope="row" data-resource-id="{{resourceId}}"><i class="{{icon}}"></i><strong>{{label}}</strong><i class="fa-solid fa-chevron-right"></i></button>
                               {{#if isCustomResource}}<input type="text" data-field="holdings.{{../holdingIndex}}.storage.resources.{{_index}}.name" value="{{name}}" placeholder="Свой ресурс" />{{/if}}
                             {{else}}
                               <strong>{{label}}</strong>
@@ -32,7 +32,7 @@
                         </div>
 
                         <div class="fbls-storage-resource-qty">
-                          {{#if ../isGM}}<input type="number" data-type="number" data-field="holdings.{{../holdingIndex}}.storage.resources.{{_index}}.qty" value="{{qty}}" aria-label="Количество {{label}}" />{{else}}<strong>{{qtyText}}</strong>{{/if}}<span>ед.</span>
+                          {{#if ../isGM}}<input type="number" min="0" step="1" data-type="number" data-field="holdings.{{../holdingIndex}}.storage.resources.{{_index}}.qty" value="{{qty}}" aria-label="Количество {{label}}" />{{else}}<strong>{{qtyText}}</strong>{{/if}}<span>ед.</span>
                         </div>
 
                         {{#if ../isGM}}

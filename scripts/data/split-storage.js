@@ -305,24 +305,34 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
       now: startedAt
     });
 
-    next.meta = clone(startedMeta);
-    await writeSetting(SETTING_META, clone(next.meta));
-    if (holdingsDirty) await writeSetting(SETTING_HOLDINGS, clone(next.holdings));
-    if (catalogDirty) await writeSetting(SETTING_CATALOG, clone(next.catalog));
+    try {
+      await writeSetting(SETTING_META, clone(startedMeta));
+      if (holdingsDirty) await writeSetting(SETTING_HOLDINGS, clone(next.holdings));
+      if (catalogDirty) await writeSetting(SETTING_CATALOG, clone(next.catalog));
 
-    next.meta = makeStorageCommitMeta(next.meta, {
-      writeId,
-      previousRevision,
-      previousHoldingsHash: persistedPartitionHashes.holdings,
-      previousCatalogHash: persistedPartitionHashes.catalog,
-      holdings: next.holdings,
-      catalog: next.catalog,
-      holdingsHash: nextHashes.holdings,
-      catalogHash: nextHashes.catalog,
-      complete: true,
-      now: new Date().toISOString()
-    });
-    await writeSetting(SETTING_META, clone(next.meta));
+      next.meta = makeStorageCommitMeta(startedMeta, {
+        writeId,
+        previousRevision,
+        previousHoldingsHash: persistedPartitionHashes.holdings,
+        previousCatalogHash: persistedPartitionHashes.catalog,
+        holdingsHash: nextHashes.holdings,
+        catalogHash: nextHashes.catalog,
+        complete: true
+      });
+      await writeSetting(SETTING_META, clone(next.meta));
+    } catch (error) {
+      // Report the same outcome that a reload will see. A failed final marker
+      // must not trigger Actor compensation when both target partitions exist.
+      let durable;
+      try { durable = readSettings(); }
+      catch (_readError) { throw error; }
+      if (durable.meta?.storageCommit?.writeId !== writeId
+        || durable.meta.revision !== next.meta.revision
+        || !completeCommitToken(durable.meta)
+        || persistedPartitionHashes.holdings !== nextHashes.holdings
+        || persistedPartitionHashes.catalog !== nextHashes.catalog) throw error;
+      next.meta = durable.meta;
+    }
 
     persistedPartitionHashes = nextHashes;
     cachedPartitionHashes = nextHashes;

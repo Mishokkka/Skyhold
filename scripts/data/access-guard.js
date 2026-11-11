@@ -9,6 +9,12 @@ export function readableHoldings(data, user = globalThis.game?.user) {
   return holdings.filter((holding) => canReadHolding(holding, user));
 }
 
+export function hiddenStorageRoomIds(holding, isGM = Boolean(globalThis.game?.user?.isGM)) {
+  return new Set(isGM ? [] : (holding?.buildings?.list ?? [])
+    .filter((building) => building.visibility === "gm")
+    .map((building) => String(building.id)));
+}
+
 export function findHoldingIndex(data, holdingId, { fallback = false } = {}) {
   const holdings = Array.isArray(data?.holdings) ? data.holdings : [];
   const id = String(holdingId ?? "");

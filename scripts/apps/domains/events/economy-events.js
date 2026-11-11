@@ -1,7 +1,6 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import { bindSharedMarketHolding, advanceSharedMarketClock } from "../../../data/market/shared-context.js";
 import { escapeHtml } from "../../../core/helpers.js";
-import { buildingOperationalState } from "../../../core/building-state.js";
 import { SkyholdData } from "../../../data/store.js";
 import { clone, makeId } from "../../../data/utils.js";
 import { stableDataHash } from "../../../data/storage-commit.js";
@@ -9,7 +8,8 @@ import { appendHoldingOperation } from "../../../data/operations.js";
 import { mergeHoldingDefaults } from "../../../data/normalizers.js";
 import { normalizeLastEventRoll } from "../../../data/event-automation.js";
 import { adjustResidentAttributesForAgeTransition, ageGroupFromAge, ageThresholdsFor, raceKeyFromResident } from "../../../generators/resident-rules.js";
-import { financeBuildingFunctionBlockState, financeWorkerBlockState } from "../../../engines/economy/finance-obligations.js";
+import { isResidentInPopulation } from "../../../data/resident-presence.js";
+import { buildingServiceBlockReasons } from "../../../engines/economy/building-service.js";
 import { addCalendariaQd, calendariaDateKey, formatCalendariaDateTime, getCalendariaSnapshot, parseCalendariaDateInput, timestampForCalendariaDate } from "../../../integrations/calendaria-bridge.js";
 import {
   advanceTendayClock,
@@ -361,7 +361,9 @@ _advanceResidentAges(holding, years = 1) {
     const oldAge = Math.max(0, Math.floor(this._safeNumber(person.age, 0)));
     const oldGroup = ageGroupFromAge(person.age, person.race, person.subrace);
     const newAge = Math.max(0, oldAge + count);
-    if (school.active) educated += this._applySchoolEducation(holding, person, oldAge, newAge, school);
+    if (school.active && isResidentInPopulation(person, holding)) {
+      educated += this._applySchoolEducation(holding, person, oldAge, newAge, school);
+    }
     person.age = newAge;
     const newGroup = ageGroupFromAge(person.age, person.race, person.subrace);
     person.ageGroup = newGroup;
@@ -393,27 +395,19 @@ _advanceResidentAges(holding, years = 1) {
 },
 
 _schoolEducationContext(holding) {
-  const buildings = (holding?.buildings?.list ?? []).filter((building) => {
+  const teachers = new Set();
+  for (const building of holding?.buildings?.list ?? []) {
     const id = `${String(building?.id ?? "")} ${String(building?.templateId ?? "")}`.toLowerCase();
     const name = String(building?.name ?? "").toLowerCase();
-    if (!buildingOperationalState(building).operational || !(id === "school" || id.includes("school") || name.includes("школ"))) return false;
-    return !financeBuildingFunctionBlockState({ finance: holding?.finance, buildingId: String(building?.id ?? ""), functionId: "culture" }).blocked;
-  });
-  const peopleById = new Map((holding?.people?.list ?? []).map((person) => [String(person?.id ?? ""), person]));
-  const teachers = [];
-  for (const building of buildings) {
-    for (const id of Array.isArray(building?.assignedWorkerIds) ? building.assignedWorkerIds : []) {
-      const person = peopleById.get(String(id));
-      if (!person || person.dead || this._safeNumber(person?.injuredDays, 0) > 0) continue;
-      if (financeWorkerBlockState({ finance: holding?.finance, workerId: String(person?.id ?? "") }).blocked) continue;
-      const group = ageGroupFromAge(person.age, person.race, person.subrace);
-      if (group === "Ре") continue;
-      teachers.push(person);
-    }
+    if (building.functions?.culture !== true || !(id.includes("school") || name.includes("школ"))) continue;
+    const service = buildingServiceBlockReasons(holding, building, "culture");
+    if (!service.active) continue;
+    const adults = service.workforce.workers.filter((person) => ageGroupFromAge(person.age, person.race, person.subrace) !== "Ре");
+    const minimum = Math.max(1, Math.floor(this._safeNumber(building.workersMin, 1)));
+    if (adults.length < minimum) continue;
+    for (const person of adults) teachers.add(person.id);
   }
-  const teacherCount = teachers.length;
-  const requiredTeachers = buildings.length ? Math.min(...buildings.map((building) => Math.max(1, Math.floor(this._safeNumber(building?.workersMin, 1))))) : 1;
-  return { active: teacherCount >= requiredTeachers, teacherCount, requiredTeachers };
+  return { active: teachers.size > 0, teacherCount: teachers.size };
 },
 
 _childEducationMilestones(person = {}) {

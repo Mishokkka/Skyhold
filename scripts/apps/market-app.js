@@ -3,7 +3,7 @@ import { dispatchDelegatedAction } from "./common/delegated-events.js";
 import { MODULE_ID } from "../data/constants.js";
 import { SkyholdData } from "../data/store.js";
 
-import { findReadableHoldingEntry } from "../data/access-guard.js";
+import { findReadableHoldingEntry, hiddenStorageRoomIds } from "../data/access-guard.js";
 import { holdingPermissionContext } from "../data/holding-permissions.js";
 import { normalizeMarketEconomy } from "../data/market/economy.js";
 import { allResourceDefs } from "../core/resources.js";
@@ -127,7 +127,8 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
       resourceDefinitions: resources,
       organizations: buyerOrganizations,
       quantities: this.outboundQuantities,
-      insuranceEnabled: this.outboundInsuranceEnabled
+      insuranceEnabled: this.outboundInsuranceEnabled,
+      isGM
     });
     const transport = authorityMarketLogistics({ holding, data, market, economy, isGM,
       direction: "outbound", carrierId: "auto-carriers" });
@@ -149,7 +150,8 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
       resourceDefinitions: resources,
       organizations: buyerOrganizations,
       routes,
-      quantities: this.outboundQuantities
+      quantities: this.outboundQuantities,
+      isGM
     });
     return result;
   }
@@ -208,7 +210,8 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     let { holding, markets, market, quote, outbound } = this._marketSnapshot();
     const permissions = holdingPermissionContext(holding);
     const workflow = getSkyholdWorkflowService();
-    const rooms = holding ? workflow._storageRooms(holding, { includeUnavailable: false }) : [];
+    const hiddenRooms = hiddenStorageRoomIds(holding, permissions.isGM);
+    const rooms = holding ? workflow._storageRooms(holding, { includeUnavailable: false }).filter((room) => !hiddenRooms.has(room.id)) : [];
     const availableRoomIds = new Set(rooms.map((room) => String(room.id ?? "")));
     if (!availableRoomIds.has(this.targetRoomId)) {
       const preferred = String(holding?.special?.market?.preferredRoomId ?? "outdoors") || "outdoors";
