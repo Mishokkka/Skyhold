@@ -2,7 +2,7 @@ import { DEFAULT_BUILDING_TEMPLATES, DEPRECATED_TEMPLATE_IDS, TEMPLATE_CATALOG_V
 import { DEFAULT_SKYHOLD_DATA } from "./defaults/default-skyhold-data.js";
 import { BASE_HOLDING, HOLDING_TYPES } from "./schema/base-holding.js";
 import { SKYHOLD_SCHEMA_VERSION } from "./schema-version.js";
-import { normalizeResourceCatalogRow, normalizeResourceRow, storageResourceKey, withResourceCatalog } from "../core/resources.js";
+import { normalizeResourceCatalogRow, normalizeResourceRow, storageResourceStackKey, withResourceCatalog } from "../core/resources.js";
 import {
   addResourceBatches,
   protectedResourceBatchIds,
@@ -631,16 +631,19 @@ export function mergeHoldingDefaults(holding, options = {}) {
       regularResources.push(row);
       continue;
     }
-    const key = storageResourceKey(row);
+    const key = storageResourceStackKey(row);
     const existing = regularResourceIndex.get(key);
     if (!existing) {
       regularResourceIndex.set(key, row);
       regularResources.push(row);
       continue;
     }
+    if (row.batches.some((batch) => existing.batches.some((prior) => prior.id === batch.id))) {
+      regularResources.push(row);
+      continue;
+    }
     remapOutboundStorageRowId(merged, row.id, existing.id);
     addResourceBatches(existing, { batches: row.batches }, { holding: merged, makeId });
-    existing.forSale = existing.forSale || row.forSale;
   }
   merged.storage.resources = regularResources;
   for (const row of regularResources) {

@@ -51,7 +51,7 @@
                     {{/if}}
                   </td>
                   <td>{{#if ../canEditSpecial}}<textarea data-field="holdings.{{../holdingIndex}}.special.list.{{_index}}.notes" rows="2">{{notes}}</textarea>{{else}}{{notes}}{{/if}}</td>
-                  {{#if ../canEditSpecial}}<td><button type="button" class="fbls-icon-button danger" data-action="delete-row" data-collection="holdings.{{../holdingIndex}}.special.list" data-id="{{id}}" aria-label="Удалить особую запись {{name}}"><i class="fa-solid fa-trash"></i></button></td>{{/if}}
+                  {{#if ../canEditSpecial}}<td><button type="button" class="fbls-icon-button danger" data-action="delete-row" data-collection="holdings.{{../holdingIndex}}.special.list" data-holding-id="{{../holding.id}}" data-id="{{id}}" aria-label="Удалить особую запись {{name}}"><i class="fa-solid fa-trash"></i></button></td>{{/if}}
                 </tr>
               {{else}}
                 <tr><td colspan="5" class="fbls-empty">Записей пока нет.</td></tr>

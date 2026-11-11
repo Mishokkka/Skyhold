@@ -1,5 +1,8 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import { SkyholdData } from "../../../data/store.js";
+import { findReadableHoldingEntry } from "../../../data/access-guard.js";
+import { holdingPermissionContext } from "../../../data/holding-permissions.js";
+import { stableDataHash } from "../../../data/storage-commit.js";
 import { isResidentInPopulation } from "../../../data/resident-presence.js";
 import { clone, makeId } from "../../../data/utils.js";
 import { escapeHtml, rollD6Pool } from "../../../core/helpers.js";
@@ -302,14 +305,20 @@ async _onAddDefenseSquad(event) {
 async _onDeleteDefenseSquad(event) {
   event.preventDefault();
   event.stopPropagation();
-  if (!this._canManageDefense?.()) return;
   const id = String(event.currentTarget?.dataset?.squadId ?? "");
-  if (!id) return;
-  const squad = SkyholdData.view().holdings.find((row) => row.id === this.activeHoldingId)?.gm?.defense?.squads?.find((row) => String(row.id) === id);
-  if (!squad || !await this._confirmAction("Расформировать отряд", `Расформировать «${escapeHtml(squad.name || "отряд")}»? Назначения будут сняты, комплект вооружения вернётся на склад.`)) return;
-  const deleted = await this._updateActiveHolding((holding) => {
-    if (!holding?.gm?.defense?.squads) return SkyholdData.skipTransaction(false);
-    const target = holding.gm.defense.squads.find((row) => String(row.id) === id);
+  const holdingId = String(event.currentTarget?.dataset?.holdingId ?? "");
+  const { holding: source } = findReadableHoldingEntry(SkyholdData.view(), holdingId);
+  if (!id || !source || !holdingPermissionContext(source).canEditDefense) return;
+  const squads = (source.gm?.defense?.squads ?? []).filter((row) => String(row.id) === id);
+  if (squads.length !== 1) return ui.notifications.warn("Отряд недоступен или его ID неоднозначен.");
+  const [squad] = squads;
+  const expected = stableDataHash(squad);
+  if (!await this._confirmAction("Расформировать отряд", `Расформировать «${escapeHtml(squad.name || "отряд")}»? Назначения будут сняты, комплект вооружения вернётся на склад.`)) return;
+  const deleted = await SkyholdData.updateHolding(holdingId, (holding) => {
+    if (!holdingPermissionContext(holding).canEditDefense) return SkyholdData.skipTransaction(false);
+    const matches = (holding.gm?.defense?.squads ?? []).filter((row) => String(row.id) === id);
+    if (matches.length !== 1 || stableDataHash(matches[0]) !== expected) return SkyholdData.skipTransaction(false);
+    const [target] = matches;
     if (target?.armamentResourceId) {
       const placements = this._storageAddWithOverflow?.(holding, {
         resourceId: target.armamentResourceId,
@@ -325,13 +334,12 @@ async _onDeleteDefenseSquad(event) {
         note: "Комплект возвращён при расформировании отряда"
       })));
     }
-    const before = holding.gm.defense.squads.length;
-    holding.gm.defense.squads = holding.gm.defense.squads.filter((row) => String(row.id) !== id);
+    holding.gm.defense.squads.splice(holding.gm.defense.squads.indexOf(target), 1);
     this._applyDefenseSalaries?.(holding);
-    return holding.gm.defense.squads.length !== before;
-  }, { reason: "gm:delete-defense-squad" });
-  if (!deleted) return;
-  this.activeTab = "defense";
+    return true;
+  }, { fallback: false, reason: "gm:delete-defense-squad" });
+  if (!deleted) return ui.notifications.warn("Отряд изменился после открытия подтверждения. Повторите действие.");
+  if (this.activeHoldingId === holdingId) this.activeTab = "defense";
   this.requestRender();
 },
 

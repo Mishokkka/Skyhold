@@ -1,5 +1,5 @@
     {{#if active.storage}}
-      <section class="fbls-panel fbls-storage-panel-modern fbls-storage-drop-surface" data-storage-drop-zone data-room-id="{{storageContext.activeRoomId}}">
+      <section class="fbls-panel fbls-storage-panel-modern fbls-storage-drop-surface" data-storage-drop-zone data-storage-holding-id="{{holding.id}}" data-room-id="{{storageContext.activeRoomId}}">
         {{> "modules/fbl-skyhold/templates/parts/storage/tabs.hbs"}}
         {{> "modules/fbl-skyhold/templates/parts/storage/resources.hbs"}}
         {{> "modules/fbl-skyhold/templates/parts/storage/items.hbs"}}

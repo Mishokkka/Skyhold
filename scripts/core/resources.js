@@ -513,13 +513,12 @@ export function resourceOptions(currentId = "", currentName = "", { includeMoney
   return options;
 }
 
-export function normalizeResourceRow(row = {}, { compactBatches = true } = {}) {
+function resourceRowMetadata(row) {
   const index = createResourceIndex();
   const id = storageResourceIdFromIndex(index, row);
   const def = id !== "custom" ? index.byId.get(id) : null;
   const name = String(row.name ?? row.label ?? def?.label ?? "Ресурс").replace(/^(Другое|Custom)\s*[:：-]\s*/i, "");
-  const normalized = {
-    id: String(row.rowId ?? row._rowId ?? row.uuid ?? row._id ?? row.key ?? row.id ?? makeGeneratedId("res", 12)),
+  return {
     resourceId: id,
     name: id === "custom" ? name : def.label,
     img: String(id === "custom" ? (row.img ?? "") : (def?.img ?? row.img ?? "")),
@@ -527,7 +526,6 @@ export function normalizeResourceRow(row = {}, { compactBatches = true } = {}) {
     itemId: String(row.itemId ?? def?.itemId ?? ""),
     itemType: String(row.itemType ?? def?.itemType ?? ""),
     cost: String(row.cost ?? def?.cost ?? ""),
-    qty: floorNonNegativeQuantity(row.qty ?? row.quantity ?? row.count, 0),
     unit: id === "money" || def?.isMoney ? "медн." : "ед.",
     notes: String(row.notes ?? ""),
     roomId: String(row.roomId ?? row.storageRoomId ?? "outdoors"),
@@ -537,6 +535,19 @@ export function normalizeResourceRow(row = {}, { compactBatches = true } = {}) {
     foodType: String(row.foodType ?? "").trim().toLowerCase(),
     shelfLifeQd: nonNegativeInteger(row.shelfLifeQd, 0),
     categoryTag: normalizeCategoryTagValue(row.categoryTag)
+  };
+}
+
+/** Stock can share a row only when its persisted material, room and policies agree. */
+export function storageResourceStackKey(row = {}) {
+  return JSON.stringify(resourceRowMetadata(row));
+}
+
+export function normalizeResourceRow(row = {}, { compactBatches = true } = {}) {
+  const normalized = {
+    id: String(row.rowId ?? row._rowId ?? row.uuid ?? row._id ?? row.key ?? row.id ?? makeGeneratedId("res", 12)),
+    ...resourceRowMetadata(row),
+    qty: floorNonNegativeQuantity(row.qty ?? row.quantity ?? row.count, 0)
   };
   if (hasOwn(row, "batches")) normalized.batches = row.batches;
   return syncResourceRowBatches(normalized, { makeId: makeGeneratedId, compact: compactBatches });
@@ -635,11 +646,4 @@ export function normalizeProductionLine(line = {}, makeId = null) {
     itemUuid: String(line?.itemUuid ?? def?.itemUuid ?? ""),
     itemId: String(line?.itemId ?? def?.itemId ?? "")
   };
-}
-
-export function storageResourceKey(resource = {}) {
-  const id = storageResourceId(resource);
-  const roomId = String(resource.roomId ?? resource.storageRoomId ?? "outdoors") || "outdoors";
-  const resourceKey = id !== "custom" ? `id:${id}` : `custom:${normalizeKey(resource.name)}`;
-  return `room:${roomId}|${resourceKey}`;
 }

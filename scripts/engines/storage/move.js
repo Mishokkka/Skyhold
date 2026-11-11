@@ -63,10 +63,9 @@ export function moveStorageResource({
     weight
   }, amount);
   if (receipt.takenQty !== amount) throw new RangeError("storage move could not take the planned batch quantity");
-  const customSource = id === "custom" ? { ...fromRow, separateRow: true } : {};
   const placements = deps.storageAddWithOverflow(
     holding,
-    { ...customSource, resourceId: id, name: label, roomId: toRoom, unit, weight, batches: receipt.batches },
+    { ...fromRow, separateRow: id === "custom", resourceId: id, name: label, roomId: toRoom, unit, weight, batches: receipt.batches },
     amount
   );
   const entries = [{

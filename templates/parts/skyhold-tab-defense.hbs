@@ -36,7 +36,7 @@
                 <label class="fbls-defense-equipped-toggle" title="Выдача списывает одну единицу выбранного Вооружения со склада и закрепляет её за отрядом."><select data-defense-armament-choice aria-label="Тип вооружения для {{label}}">{{#each armamentOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select><button type="button" class="fbls-button compact" data-action="assign-defense-armament" data-squad-id="{{id}}"><i class="fa-solid fa-gun"></i><span>{{#if equipped}}Заменить{{else}}Выдать{{/if}}</span></button></label>
                 {{#if equipped}}<button type="button" class="fbls-button compact" data-action="unassign-defense-armament" data-squad-id="{{id}}" title="Вернуть {{armamentLabel}} на склад"><i class="fa-solid fa-box-open"></i><span>Снять</span></button>{{/if}}
               {{else}}<span class="fbls-defense-equipped-toggle"><i class="fa-solid fa-gun"></i> {{armamentLabel}}</span>{{/if}}
-              {{#if ../canManageDefense}}<button type="button" class="fbls-icon-button danger" data-action="delete-defense-squad" data-squad-id="{{id}}" title="Удалить отряд" aria-label="Удалить отряд {{name}}"><i class="fa-solid fa-trash"></i></button>{{/if}}
+              {{#if ../canManageDefense}}<button type="button" class="fbls-icon-button danger" data-action="delete-defense-squad" data-holding-id="{{../holding.id}}" data-squad-id="{{id}}" title="Удалить отряд" aria-label="Удалить отряд {{name}}"><i class="fa-solid fa-trash"></i></button>{{/if}}
             </div>
           </header>
 

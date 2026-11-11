@@ -57,7 +57,7 @@
             </thead>
             <tbody>
               {{#each rows.people}}
-                <tr class="fbls-person-row {{deadClass}}" data-id="{{id}}" data-resident-search="{{searchText}}">
+                <tr class="fbls-person-row {{deadClass}}" data-id="{{id}}" data-holding-id="{{../holding.id}}" data-resident-search="{{searchText}}">
                   <td class="fbls-person-name">{{#if injured}}<span class="fbls-injury-mark {{injuredBadgeClass}}" title="{{injuredTitle}}"><b>{{injuredText}}</b><i class="fa-solid fa-plus"></i></span>{{/if}}<span class="fbls-person-name-text">{{name}}</span>{{#if awayOnShip}}<span class="fbls-status-pill fbls-chip" title="{{shipPresenceLabel}}" aria-label="{{shipPresenceLabel}}"><i class="fa-solid fa-ship" aria-hidden="true"></i> Вне поселения</span>{{/if}}{{#if dead}}<span class="fbls-status-pill fbls-chip dead">Погиб</span>{{/if}}</td>
                   <td>{{ageLine}}</td>
                   <td>{{raceLine}}</td>

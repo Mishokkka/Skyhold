@@ -1,5 +1,8 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import { SkyholdData, requestShipOperation } from "../../../data/store.js";
+import { findReadableHoldingEntry } from "../../../data/access-guard.js";
+import { deleteCollectionRow } from "../../../data/collection-operations.js";
+import { stableDataHash } from "../../../data/storage-commit.js";
 import { normalizeBelief } from "../../../generators/resident-rules.js";
 import { createSafeIcon, escapeHtml, fieldValue } from "../../../core/helpers.js";
 import { makeId } from "../../../data/utils.js";
@@ -521,12 +524,33 @@ async _onDeleteRow(event) {
   const rowId = button.dataset.id;
   if (!collection || !rowId) return;
 
+  const data = SkyholdData.view();
+  const scope = collection.match(/^holdings\.(\d+)\.(.+)$/);
+  const holdingId = button.dataset.holdingId ?? (scope ? data.holdings[Number(scope[1])]?.id : null);
+  const collectionIn = (root) => {
+    if (!scope) return collection;
+    const { index } = findReadableHoldingEntry(root, holdingId);
+    return index >= 0 ? `holdings.${index}.${scope[2]}` : "";
+  };
+  const confirmedPath = collectionIn(data);
+  const confirmedRows = confirmedPath ? foundry.utils.getProperty(data, confirmedPath) : null;
+  const matched = Array.isArray(confirmedRows) ? confirmedRows.filter((row) => String(row?.id ?? "") === rowId) : [];
+  if (matched.length !== 1) return ui.notifications.warn("Запись недоступна или её ID неоднозначен.");
+  const expected = stableDataHash(matched[0]);
   const confirmed = await this._confirmAction("Удалить запись", "Удалить эту запись из владения?");
   if (!confirmed) return;
 
   try {
-    await SkyholdData.deleteRow(collection, rowId);
-    if (this.editingPersonId === rowId) this.editingPersonId = null;
+    const deleted = await SkyholdData.transaction((draft, { skip }) => {
+      const path = collectionIn(draft);
+      const rows = path ? foundry.utils.getProperty(draft, path) : null;
+      const matches = Array.isArray(rows) ? rows.filter((row) => String(row?.id ?? "") === rowId) : [];
+      if (matches.length !== 1 || stableDataHash(matches[0]) !== expected) return skip(false);
+      deleteCollectionRow(draft, path, rowId);
+      return true;
+    }, { reason: `delete-row:${collection}`, scope: scope ? "holdings" : collection.startsWith("catalog.") ? "catalog" : "both" });
+    if (!deleted) return ui.notifications.warn("Запись изменилась после открытия подтверждения. Повторите действие.");
+    if (this.activeHoldingId === holdingId && this.editingPersonId === rowId) this.editingPersonId = null;
     this.requestRender();
   } catch (error) {
     console.error("FBL Skyhold | Failed to delete row", error);
@@ -550,8 +574,9 @@ _closeResidentContextMenu() {
   if (menu) menu.remove();
 },
 
-async _executeResidentContextAction(personId = "", action = "") {
+async _executeResidentContextAction(personId = "", action = "", holdingId = this.activeHoldingId) {
   if (!this._canManagePeople()) return;
+  if (holdingId !== this.activeHoldingId) return ui.notifications.warn("Откройте меню жителя в его владении.");
   const data = SkyholdData.get();
   const holdingIndex = data.holdings.findIndex((item) => item.id === this.activeHoldingId);
   if (holdingIndex < 0) return;
@@ -588,7 +613,7 @@ async _executeResidentContextAction(personId = "", action = "") {
   if (action === "delete") {
     await this._onDeleteRow({
       preventDefault() {},
-      currentTarget: { dataset: { collection: `holdings.${actualHoldingIndex}.people.list`, id: String(personId) } }
+      currentTarget: { dataset: { collection: `holdings.${actualHoldingIndex}.people.list`, holdingId, id: String(personId) } }
     });
   }
 },
@@ -599,8 +624,9 @@ _canReturnResidentToShip(person, holding) {
   return Boolean(ship?.navigationMode === "world" && ship.location?.kind === "home" && !ship.activeVoyage && !ship.transportOrderId && ship.status !== "away");
 },
 
-async _showResidentActionMenu(personId = "", position = null) {
+async _showResidentActionMenu(personId = "", position = null, holdingId = this.activeHoldingId) {
   this._closeResidentContextMenu();
+  if (holdingId !== this.activeHoldingId) return;
   const data = SkyholdData.get();
   const holding = data.holdings.find((item) => item.id === this.activeHoldingId);
   const person = (holding?.people?.list ?? []).find((row) => String(row.id) === String(personId));
@@ -641,7 +667,7 @@ async _showResidentActionMenu(personId = "", position = null) {
     event.stopPropagation();
     const action = String(button.dataset.action ?? "");
     this._closeResidentContextMenu();
-    await this._executeResidentContextAction(personId, action);
+    await this._executeResidentContextAction(personId, action, holdingId);
   }));
 },
 
@@ -653,7 +679,7 @@ async _onResidentContextMenu(event) {
   if (target?.closest?.("button, input, textarea, select, a")) return;
   const personId = String(event.currentTarget?.dataset?.id ?? "");
   if (!personId) return;
-  await this._showResidentActionMenu(personId, { x: event.clientX, y: event.clientY });
+  await this._showResidentActionMenu(personId, { x: event.clientX, y: event.clientY }, String(event.currentTarget?.dataset?.holdingId ?? ""));
 },
 
 async _savePersonEditorDraft(event) {

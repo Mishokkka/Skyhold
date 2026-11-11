@@ -200,11 +200,11 @@ async _prepareTendayOperation({ holdingId = "", qd = 40, rationUnitsPerResident 
   if (!calendariaGate.snapshot?.available && elapsedYears > 0) {
     const aging = this._advanceResidentAges(previewHolding, elapsedYears);
     if (aging.changed) rawReport.work.push(`Возрастные категории изменились: ${aging.changed}.`);
-    if (aging.educated) rawReport.work.push(`Школа дала развитие детям: ${aging.educated}.`);
+    if (aging.educated) rawReport.work.push(`Школьных вех для решения ГМа — ${aging.educated}.`);
   }
   const calendarAdvance = this._commitCalendariaEconomyAdvance(previewHolding, calendariaGate);
   if (calendarAdvance?.aging?.changed) rawReport.work.push(`Возрастные категории изменились: ${calendarAdvance.aging.changed}.`);
-  if (calendarAdvance?.aging?.educated) rawReport.work.push(`Школа дала развитие детям: ${calendarAdvance.aging.educated}.`);
+  if (calendarAdvance?.aging?.educated) rawReport.work.push(`Школьных вех для решения ГМа — ${calendarAdvance.aging.educated}.`);
   const clock = advanceTendayClock(previewHolding, periodQd);
   advanceSharedMarketClock(previewHolding);
   const marketStockRecovery = recoverMarketStock({

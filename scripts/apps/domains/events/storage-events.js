@@ -1,10 +1,11 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import { requestStorageOperation, SkyholdData } from "../../../data/store.js";
 import { stableDataHash } from "../../../data/storage-commit.js";
-import { canReadHolding, hiddenStorageRoomIds } from "../../../data/access-guard.js";
+import { findReadableHoldingEntry, hiddenStorageRoomIds } from "../../../data/access-guard.js";
+import { holdingPermissionContext } from "../../../data/holding-permissions.js";
 import { reservedResourceBatchQuantities } from "../../../core/resource-batches.js";
 import { reclassifyResourceRow } from "../../../core/resources.js";
-import { createSafeIcon } from "../../../core/helpers.js";
+import { createSafeIcon, escapeHtml } from "../../../core/helpers.js";
 import { DUPLICATE_STORAGE_ROW, indexStorageRows, resolveStorageRow, STORAGE_ROW_CHANGED } from "../../../engines/storage/row-identity.js";
 import { foundryItemClass, renderFoundryDocumentSheet, resolveFoundryUuid } from "../../../integrations/foundry-runtime.js";
 import { SkyholdResourceCatalogEditor } from "../../editors/resource-catalog-editor.js";
@@ -30,6 +31,10 @@ const STORAGE_CONTEXT_MENU_WIDTH = 248;
 const STORAGE_CONTEXT_MENU_HEIGHT = 176;
 const RESERVED_RESOURCE_MESSAGE = "В позиции есть груз по перевозке. Сначала завершите или отмените заказ.";
 
+function storagePanel(element) {
+  return element?.closest?.("[data-storage-drop-zone]");
+}
+
 function createStorageContextMenuButton({ action = "", icon = "fa-solid fa-right-left", label = "", danger = false } = {}) {
   const button = document.createElement("button");
   button.type = "button";
@@ -47,10 +52,10 @@ _onAddStorageResource(event) {
   event.preventDefault();
   event.stopPropagation();
   if (!game.user?.isGM) return;
-  const data = SkyholdData.get();
-  const holdingId = this._activeWritableHoldingId(data);
+  const panel = storagePanel(event.currentTarget);
+  const holdingId = String(panel?.dataset?.storageHoldingId ?? "");
   if (!holdingId) return this._warnNoActiveHolding();
-  const roomId = this._normalizeStorageRoomId(this.activeStorageRoomId || "outdoors");
+  const roomId = this._normalizeStorageRoomId(panel?.dataset?.roomId);
   SkyholdResourceCatalogEditor.pick({
     onSelect: async (resource) => {
       const resourceId = String(resource?.id ?? "custom") || "custom";
@@ -70,9 +75,11 @@ _onAddStorageResource(event) {
           ui.notifications.warn(result?.message || "Не удалось добавить материал.");
           return;
         }
-        this.activeTab = "storage";
-        this.activeStorageTab = "resources";
-        this.activeStorageRoomId = roomId;
+        if (this.activeHoldingId === holdingId) {
+          this.activeTab = "storage";
+          this.activeStorageTab = "resources";
+          this.activeStorageRoomId = roomId;
+        }
         this._activeTabContextCache?.clear?.();
         this.requestRender({ focus: false, skipLoadingOverlay: true });
         ui.notifications.info(result.message || `${name}: добавлена 1 ед.`);
@@ -118,6 +125,7 @@ _onPickStorageResource(event) {
   if (scope === "row") {
     const { row, message } = resolveStorageRow(holding?.storage?.resources, rowId);
     if (!row) return ui.notifications.warn(message);
+    if (button.dataset.resourceId && row.resourceId !== button.dataset.resourceId) return ui.notifications.warn(STORAGE_ROW_CHANGED);
     if (reservedResourceBatchQuantities(holding, row).size) return ui.notifications.warn(RESERVED_RESOURCE_MESSAGE);
     source = row;
   }
@@ -152,14 +160,26 @@ _onPickStorageResource(event) {
     }
   });
 },
+_storageBatchSet(holdingId, rowType, create = false) {
+  if (!holdingId) return null;
+  let selection = this.storageBatchSelection?.get(holdingId);
+  if (!selection && create) {
+    this.storageBatchSelection ??= new Map();
+    selection = { resources: new Set(), items: new Set() };
+    this.storageBatchSelection.set(holdingId, selection);
+  }
+  return selection?.[rowType] ?? null;
+},
+
 _onStorageBatchSelectionChange(event) {
   if (!this._canUseStorage()) return;
   const field = event.currentTarget;
   const rowType = String(field?.dataset?.storageBatchKind ?? "") === "items" ? "items" : "resources";
   const rowId = String(field?.dataset?.storageBatchSelect ?? "");
   if (!rowId) return;
-  const selection = this.storageBatchSelection?.[rowType];
-  if (!(selection instanceof Set)) return;
+  const holdingId = storagePanel(field)?.dataset?.storageHoldingId;
+  const selection = this._storageBatchSet(holdingId, rowType, true);
+  if (!selection) return;
   if (field.checked) selection.add(rowId);
   else selection.delete(rowId);
   this._activeTabContextCache?.clear?.();
@@ -173,8 +193,9 @@ _onToggleStorageBatchVisible(event) {
   const rowType = String(event.currentTarget?.dataset?.storageBatchKind ?? "") === "items" ? "items" : "resources";
   const root = event.currentTarget?.closest?.(".fbls-storage-resources-layout");
   const fields = Array.from(root?.querySelectorAll?.(`[data-storage-batch-select][data-storage-batch-kind="${rowType}"]`) ?? []);
-  const selection = this.storageBatchSelection?.[rowType];
-  if (!(selection instanceof Set) || !fields.length) return;
+  const holdingId = storagePanel(event.currentTarget)?.dataset?.storageHoldingId;
+  const selection = this._storageBatchSet(holdingId, rowType, true);
+  if (!selection || !fields.length) return;
   const allSelected = fields.every((field) => selection.has(String(field.dataset.storageBatchSelect ?? "")));
   for (const field of fields) {
     const rowId = String(field.dataset.storageBatchSelect ?? "");
@@ -194,7 +215,7 @@ _closeStorageContextMenu({ restoreFocus = false } = {}) {
   this._storageContextAnchor = null;
 },
 
-async _showStorageContextMenu({ rowType = "resources", rowId = "", roomId = "outdoors", position = null, anchor = null } = {}) {
+async _showStorageContextMenu({ rowType = "resources", rowId = "", roomId = "outdoors", holdingId, position = null, anchor = null } = {}) {
   this._closeStorageContextMenu();
   this._storageContextAnchor = anchor;
   const menu = document.createElement("div");
@@ -246,7 +267,7 @@ async _showStorageContextMenu({ rowType = "resources", rowId = "", roomId = "out
     event.stopPropagation();
     const action = String(button.dataset.action ?? "");
     this._closeStorageContextMenu({ restoreFocus: true });
-    dispatchDelegatedAction(this, event, button, () => this._executeStorageContextAction({ action, rowType, rowId, roomId }));
+    dispatchDelegatedAction(this, event, button, () => this._executeStorageContextAction({ action, rowType, rowId, roomId, holdingId }));
   });
 },
 
@@ -259,23 +280,23 @@ _onStorageRowActions(event) {
   if (!row) return;
   const bounds = anchor.getBoundingClientRect();
   return this._showStorageContextMenu({ rowType: row.dataset.storageRowType, rowId: row.dataset.storageRowId,
-    roomId: row.dataset.storageRowRoomId, position: { x: bounds.left, y: bounds.bottom }, anchor });
+    holdingId: String(row.dataset.storageHoldingId ?? ""), roomId: row.dataset.storageRowRoomId,
+    position: { x: bounds.left, y: bounds.bottom }, anchor });
 },
 
 _onStorageSelectionMove(event) {
   event.preventDefault();
   if (!this._canUseStorage()) return;
   const rowType = event.currentTarget.dataset.storageBatchKind === "items" ? "items" : "resources";
-  const rowId = [...(this.storageBatchSelection?.[rowType] ?? [])][0];
-  if (!rowId) return;
-  return this._openStorageMoveDialog({ rowType, rowId, fromRoomId: this.activeStorageRoomId || "outdoors" });
+  const panel = storagePanel(event.currentTarget);
+  return this._openStorageMoveDialog({ rowType, holdingId: String(panel?.dataset?.storageHoldingId ?? ""),
+    fromRoomId: panel?.dataset?.roomId, useSelection: true });
 },
 
 _storageContextRow({ rowType = "resources", rowId = "", roomId = "outdoors", holdingId: renderedHoldingId } = {}) {
   const data = SkyholdData.get();
   const holdingId = renderedHoldingId ?? this._activeWritableHoldingId(data);
-  const holdingIndex = (data?.holdings ?? []).findIndex((row) => String(row?.id ?? "") === String(holdingId ?? ""));
-  const holding = holdingIndex >= 0 ? data.holdings[holdingIndex] : null;
+  const { holding, index: holdingIndex } = findReadableHoldingEntry(data, holdingId);
   const type = rowType === "items" ? "items" : "resources";
   const selection = resolveStorageRow(holding?.storage?.[type], rowId);
   return { data, holding, holdingIndex, holdingId, type, ...selection, roomId: this._normalizeStorageRoomId(roomId) };
@@ -289,12 +310,17 @@ async _onStorageRowFieldChange(field, rowType, property, value) {
   const context = this._storageContextRow({ rowType, rowId, holdingId, roomId: card?.dataset?.storageRowRoomId });
   if (!context.row) return ui.notifications.warn(context.message);
   const quantity = String(field.value ?? "").trim() ? value : NaN;
+  const renderedMaterial = card?.dataset?.storageResourceId;
+  const expected = property === "forSale" ? field.defaultChecked
+    : property === "qty" && field.defaultValue !== undefined ? Number(field.defaultValue) : field.defaultValue;
   const result = await SkyholdData.updateHolding(context.holdingId, (holding) => {
     const { row, message } = resolveStorageRow(holding.storage?.[context.type], rowId);
     if (!row) return SkyholdData.skipTransaction({ ok: false, message });
-    if (row.resourceId !== context.row.resourceId || row[property] !== context.row[property]) {
+    if (row.resourceId !== (renderedMaterial ?? context.row.resourceId)
+      || (row[property] !== (expected ?? context.row[property]) && row[property] !== value)) {
       return SkyholdData.skipTransaction({ ok: false, message: STORAGE_ROW_CHANGED });
     }
+    if (row[property] === (property === "qty" ? quantity : value)) return SkyholdData.skipTransaction({ ok: true });
     if (property === "qty") {
       const resized = this._setStorageResourceQuantity(holding, row, quantity);
       return resized.ok ? resized : SkyholdData.skipTransaction(resized);
@@ -308,11 +334,12 @@ async _onStorageRowFieldChange(field, rowType, property, value) {
   if (!result?.ok) ui.notifications.warn(result?.message ?? STORAGE_ROW_CHANGED);
 },
 
-async _executeStorageContextAction({ action = "", rowType = "resources", rowId = "", roomId = "outdoors" } = {}) {
-  if (action === "move") return this._openStorageMoveDialog({ rowType, rowId, fromRoomId: roomId });
-  if (action === "give") return this._openStorageGiveDialog({ rowType, rowId, roomId });
-  if (action === "note") return this._openStorageNoteDialog({ rowType, rowId, roomId });
-  if (action === "delete") return this._openStorageDeleteDialog({ rowType, rowId, roomId });
+async _executeStorageContextAction({ action = "", rowType = "resources", rowId = "", roomId = "outdoors", holdingId } = {}) {
+  const target = { rowType, rowId, roomId, holdingId };
+  if (action === "move") return this._openStorageMoveDialog({ ...target, fromRoomId: roomId });
+  if (action === "give") return this._openStorageGiveDialog(target);
+  if (action === "note") return this._openStorageNoteDialog(target);
+  if (action === "delete") return this._openStorageDeleteDialog(target);
 },
 
 async _onStorageRowContextMenu(event) {
@@ -324,14 +351,16 @@ async _onStorageRowContextMenu(event) {
   const rowId = String(row?.dataset?.storageRowId ?? "");
   const roomId = this._normalizeStorageRoomId(row?.dataset?.storageRowRoomId || this.activeStorageRoomId || "outdoors");
   if (!rowId) return;
-  await this._showStorageContextMenu({ rowType, rowId, roomId, position: { x: event.clientX, y: event.clientY } });
+  await this._showStorageContextMenu({ rowType, rowId, roomId, holdingId: String(row?.dataset?.storageHoldingId ?? ""),
+    position: { x: event.clientX, y: event.clientY } });
 },
 
-async _openStorageMoveDialog({ rowType = "resources", rowId = "", fromRoomId = "outdoors" } = {}) {
+async _openStorageMoveDialog({ rowType = "resources", rowId = "", fromRoomId = "outdoors", holdingId: renderedHoldingId,
+  useSelection = false } = {}) {
   const data = SkyholdData.get();
-  const holdingId = this._activeWritableHoldingId(data);
-  const source = (data?.holdings ?? []).find((holding) => String(holding?.id ?? "") === String(holdingId ?? ""));
-  if (!source) return this._warnNoActiveHolding();
+  const holdingId = renderedHoldingId ?? this._activeWritableHoldingId(data);
+  const { holding: source } = findReadableHoldingEntry(data, holdingId);
+  if (!source || !holdingPermissionContext(source).canUseStorage) return this._warnNoActiveHolding();
 
   const normalizedType = rowType === "items" ? "items" : "resources";
   const normalizedFromRoomId = this._normalizeStorageRoomId(fromRoomId);
@@ -340,8 +369,10 @@ async _openStorageMoveDialog({ rowType = "resources", rowId = "", fromRoomId = "
   const sourceRows = Array.isArray(source?.storage?.[normalizedType]) ? source.storage[normalizedType] : [];
   const rowsInRoom = sourceRows.filter((row) => this._normalizeStorageRoomId(row?.roomId ?? row?.storageRoomId) === normalizedFromRoomId);
   const validIds = new Set(rowsInRoom.map((row) => String(row?.id ?? "")).filter(Boolean));
-  const selectedIds = Array.from(this.storageBatchSelection?.[normalizedType] ?? []).map(String).filter((id) => validIds.has(id));
-  const rowIds = selectedIds.length > 1 ? selectedIds : (validIds.has(String(rowId)) ? [String(rowId)] : []);
+  const selection = this._storageBatchSet(holdingId, normalizedType);
+  const selectedIds = Array.from(selection ?? []).filter((id) => validIds.has(id));
+  const clickedId = String(rowId);
+  const rowIds = useSelection || selectedIds.includes(clickedId) ? selectedIds : (validIds.has(clickedId) ? [clickedId] : []);
   if (!rowIds.length) {
     ui.notifications.warn("Позиция больше не находится в этом хранилище.");
     return;
@@ -368,10 +399,11 @@ async _openStorageMoveDialog({ rowType = "resources", rowId = "", fromRoomId = "
     : `«${labels[0] || "Позиция"}»`;
   const singleRow = rowIds.length === 1 ? rowById.get(rowIds[0]) : null;
   const maxQuantity = singleRow
-    ? Math.max(1, Math.floor(normalizedType === "items"
+    ? Math.floor(normalizedType === "items"
       ? this._itemQuantity(singleRow)
-      : this._storageAvailableRowQuantity(source, singleRow)))
+      : this._storageAvailableRowQuantity(source, singleRow))
     : null;
+  if (singleRow && maxQuantity < 1) return ui.notifications.warn("В этой позиции нет свободного количества для перемещения.");
   const dialogResult = await SkyholdStorageActionDialog.open({
     anchor: this,
     mode: "move",
@@ -422,9 +454,8 @@ async _openStorageMoveDialog({ rowType = "resources", rowId = "", fromRoomId = "
     ui.notifications.warn(applied.message || "Не удалось переместить выбранные позиции.");
     return;
   }
+  for (const id of rowIds) selection?.delete(id);
   if (this.activeHoldingId === holdingId) {
-    const selection = this.storageBatchSelection?.[normalizedType];
-    for (const id of rowIds) selection?.delete?.(id);
     const destinations = (applied.placements ?? []).map((placement) => placement.roomId);
     this.activeStorageRoomId = destinations.includes(normalizedToRoomId) ? normalizedToRoomId : (destinations[0] ?? normalizedToRoomId);
     this.activeStorageTab = normalizedType;
@@ -434,9 +465,9 @@ async _openStorageMoveDialog({ rowType = "resources", rowId = "", fromRoomId = "
   ui.notifications.info(applied.message || `Перемещено позиций ${applied.moved}.`);
 },
 
-async _openStorageGiveDialog({ rowType = "resources", rowId = "", roomId = "outdoors" } = {}) {
+async _openStorageGiveDialog({ rowType = "resources", rowId = "", roomId = "outdoors", holdingId } = {}) {
   if (!game.user?.isGM) return ui.notifications.warn("Предметы и ресурсы персонажам выдаёт ГМ.");
-  const context = this._storageContextRow({ rowType, rowId, roomId });
+  const context = this._storageContextRow({ rowType, rowId, roomId, holdingId });
   if (!context.row) return ui.notifications.warn(context.message);
   const isItem = context.type === "items";
   const label = isItem ? String(context.row.name ?? "Предмет") : String(context.row.name ?? context.row.resourceId ?? "Ресурс");
@@ -462,9 +493,9 @@ async _openStorageGiveDialog({ rowType = "resources", rowId = "", roomId = "outd
     : this._withdrawStoredResource({ ...transfer, row: context.row });
 },
 
-async _openStorageNoteDialog({ rowType = "resources", rowId = "", roomId = "outdoors" } = {}) {
+async _openStorageNoteDialog({ rowType = "resources", rowId = "", roomId = "outdoors", holdingId } = {}) {
   if (!game.user?.isGM) return ui.notifications.warn("Заметки отдельных позиций склада изменяет ГМ.");
-  const context = this._storageContextRow({ rowType, rowId, roomId });
+  const context = this._storageContextRow({ rowType, rowId, roomId, holdingId });
   if (!context.row) return ui.notifications.warn(context.message);
   const label = context.type === "items" ? String(context.row.name ?? "Предмет") : String(context.row.name ?? context.row.resourceId ?? "Ресурс");
     const note = await SkyholdStorageActionDialog.open({
@@ -489,9 +520,9 @@ async _openStorageNoteDialog({ rowType = "resources", rowId = "", roomId = "outd
   else ui.notifications.warn(saved?.message ?? STORAGE_ROW_CHANGED);
 },
 
-async _openStorageDeleteDialog({ rowType = "resources", rowId = "", roomId = "outdoors" } = {}) {
+async _openStorageDeleteDialog({ rowType = "resources", rowId = "", roomId = "outdoors", holdingId } = {}) {
   if (!game.user?.isGM) return ui.notifications.warn("Позиции склада удаляет ГМ.");
-  const context = this._storageContextRow({ rowType, rowId, roomId });
+  const context = this._storageContextRow({ rowType, rowId, roomId, holdingId });
   if (!context.row) return ui.notifications.warn(context.message);
   if (context.type === "resources" && reservedResourceBatchQuantities(context.holding, context.row).size) {
     return ui.notifications.warn(RESERVED_RESOURCE_MESSAGE);
@@ -520,7 +551,7 @@ async _openStorageDeleteDialog({ rowType = "resources", rowId = "", roomId = "ou
     return { ok: true };
   }, { reason: `storage:${context.type}:delete` });
   if (!result?.ok) return ui.notifications.warn(result?.message ?? STORAGE_ROW_CHANGED);
-  if (this.activeHoldingId === context.holdingId) this.storageBatchSelection?.[context.type]?.delete?.(String(rowId));
+  this._storageBatchSet(context.holdingId, context.type)?.delete(String(rowId));
   this.requestRender({ focus: false, skipLoadingOverlay: true });
 },
 
@@ -534,49 +565,54 @@ _readMoneyInputValue(value = "") {
   const text = String(value ?? "").trim().replace(",", ".");
   const match = text.match(/^([+-]?)(\d+(?:\.\d+)?)$/);
   if (!match) return { ok: false, mode: "set", value: 0 };
+  const amount = Math.floor(Number(match[2]));
+  if (!Number.isSafeInteger(amount)) return { ok: false, mode: "set", value: 0 };
   return {
     ok: true,
     mode: match[1] === "+" || match[1] === "-" ? "delta" : "set",
     sign: match[1] === "-" ? -1 : 1,
-    value: Math.floor(Number(match[2]) || 0)
+    value: amount
   };
 },
 
-async _setStorageMoneyFromUi({ changedField = null, buttonDelta = 0, buttonDenom = "copper" } = {}) {
+async _setStorageMoneyFromUi({ changedField = null, button = null, buttonDelta = 0, buttonDenom = "copper" } = {}) {
   if (!game.user?.isGM || !this._canUseStorage()) return;
-  const root = changedField?.closest?.(".fbls-storage-money-counter") ?? this.element?.querySelector?.(".fbls-storage-money-counter");
-  if (!root) return;
+  const control = changedField ?? button;
+  const root = control?.closest?.(".fbls-storage-money-counter");
+  const holdingId = String(storagePanel(control)?.dataset?.storageHoldingId ?? "");
+  if (!root || !holdingId) return this._warnNoActiveHolding();
+  let delta = buttonDelta * this._moneyDenomFactor(buttonDenom);
+  let absolute = null;
+  const expected = Number(root.dataset.storageMoneyTotal);
+  if (changedField) {
+    const denom = String(changedField.dataset.storageMoneyField ?? "copper");
+    const parsed = this._readMoneyInputValue(changedField.value);
+    if (!parsed.ok) return ui.notifications.warn("Введи число или операцию вида +3 / -2.");
+    if (parsed.mode === "delta") delta = parsed.sign * parsed.value * this._moneyDenomFactor(denom);
+    else {
+      if (!Number.isSafeInteger(expected)) return ui.notifications.warn("Казна изменилась. Обновите окно и повторите правку.");
+      const denominations = { gold: Math.floor(expected / 100), silver: Math.floor(expected % 100 / 10), copper: expected % 10 };
+      denominations[denom] = parsed.value;
+      absolute = denominations.gold * 100 + denominations.silver * 10 + denominations.copper;
+    }
+  }
   try {
-    const result = await this._updateActiveHolding((holding) => {
+    const result = await SkyholdData.updateHolding(holdingId, (holding) => {
       const before = this._moneyCopper(holding);
-      let total = before;
-
-      if (buttonDelta) {
-        total = before + (buttonDelta * this._moneyDenomFactor(buttonDenom));
-      } else if (changedField) {
-        const denom = String(changedField.dataset.storageMoneyField ?? "copper");
-        const parsed = this._readMoneyInputValue(changedField.value);
-        if (!parsed.ok) return SkyholdData.skipTransaction({ ok: false, message: "Введи число или операцию вида +3 / -2." });
-        if (parsed.mode === "delta") total = before + parsed.sign * parsed.value * this._moneyDenomFactor(denom);
-        else {
-          const readPlain = (key) => {
-            const field = root.querySelector(`[data-storage-money-field="${key}"]`);
-            const parsedField = this._readMoneyInputValue(field?.value ?? "0");
-            return parsedField.ok && parsedField.mode === "set" ? parsedField.value : 0;
-          };
-          total = readPlain("gold") * 100 + readPlain("silver") * 10 + readPlain("copper");
-        }
+      const total = Math.max(0, absolute ?? before + delta);
+      if (!Number.isSafeInteger(total)) return SkyholdData.skipTransaction({ ok: false, message: "Сумма выходит за допустимый диапазон." });
+      if (total === before) return SkyholdData.skipTransaction({ ok: true });
+      if (absolute !== null && before !== expected) {
+        return SkyholdData.skipTransaction({ ok: false, message: "Казна изменилась после открытия окна. Повторите правку." });
       }
-
-      total = Math.max(0, Math.floor(total));
       this._setMoneyCopper(holding, total);
       const diff = total - before;
-      if (diff) this._appendStorageLog(holding, [{ kind: diff > 0 ? "income" : "expense", resourceId: "money", name: "Деньги", qty: diff, source: "Казна", note: "Ручная правка" }]);
+      this._appendStorageLog(holding, [{ kind: diff > 0 ? "income" : "expense", resourceId: "money", name: "Деньги", qty: diff, source: "Казна", note: "Ручная правка" }]);
       return { ok: true };
-    }, { reason: "storage:set-money" });
+    }, { fallback: false, reason: "storage:set-money" });
     if (!result) return;
-    if (!result.ok) { ui.notifications.warn(result.message); return; }
-    this.activeTab = "storage";
+    if (!result.ok) ui.notifications.warn(result.message);
+    else if (this.activeHoldingId === holdingId) this.activeTab = "storage";
     this.requestRender();
   } catch (error) {
     console.error("FBL Skyhold | Failed to update money counter", error);
@@ -596,7 +632,7 @@ async _onAdjustStorageMoney(event) {
   const button = event.currentTarget;
   const denom = String(button?.dataset?.moneyDenom ?? "copper");
   const delta = button?.dataset?.moneyOp === "minus" ? -1 : 1;
-  return this._setStorageMoneyFromUi({ buttonDelta: delta, buttonDenom: denom });
+  return this._setStorageMoneyFromUi({ button, buttonDelta: delta, buttonDenom: denom });
 },
 
 
@@ -606,6 +642,8 @@ async _onStorageDrop(event) {
   if (!this._canUseStorage()) return;
   event.currentTarget?.classList?.remove?.("dragover");
   if (!game.user?.isGM) return ui.notifications.warn("Предметы персонажей переносит на склад ГМ.");
+  const { storageHoldingId: holdingId, roomId } = event.currentTarget?.dataset ?? {};
+  if (!holdingId) return this._warnNoActiveHolding();
 
   let dropData = null;
   try {
@@ -626,12 +664,11 @@ async _onStorageDrop(event) {
   }
 
   try {
-    const roomId = String(event.currentTarget?.dataset?.roomId ?? this.activeStorageRoomId ?? "outdoors");
     const parent = item.parent;
     const parentDocumentName = parent?.documentName ?? parent?.constructor?.documentName;
     const result = await requestStorageOperation({
       type: "depositItem",
-      holdingId: String(this.activeHoldingId ?? ""),
+      holdingId,
       actorId: parentDocumentName === "Actor" ? String(parent.id ?? "") : "",
       actorUuid: parentDocumentName === "Actor" ? String(parent.uuid ?? "") : "",
       itemId: String(item.id ?? ""),
@@ -640,9 +677,11 @@ async _onStorageDrop(event) {
     });
     if (!result) return;
     if (!result.ok) { ui.notifications.warn(result.message); return; }
-    this.activeTab = "storage";
-    this.activeStorageTab = String(item.type) === "rawMaterial" ? "resources" : "items";
-    this.activeStorageRoomId = this._normalizeStorageRoomId(roomId);
+    if (this.activeHoldingId === holdingId) {
+      this.activeTab = "storage";
+      this.activeStorageTab = String(item.type) === "rawMaterial" ? "resources" : "items";
+      this.activeStorageRoomId = this._normalizeStorageRoomId(roomId);
+    }
     this.requestRender();
     ui.notifications.info(result.message);
   } catch (error) {
@@ -686,14 +725,13 @@ async _withdrawStoredResource({ holdingId, expectedRevision, row = null, qty = 1
 async _onOpenStorageItem(event) {
   event.preventDefault();
   event.stopPropagation();
-  const itemIndex = Number(event.currentTarget?.dataset?.index ?? -1);
-  if (!Number.isFinite(itemIndex) || itemIndex < 0) return;
+  const card = event.currentTarget?.closest?.("[data-storage-row-id]");
+  const holdingId = String(card?.dataset?.storageHoldingId ?? "");
+  const rowId = String(card?.dataset?.storageRowId ?? "");
   try {
-    const data = SkyholdData.get();
-    const holding = data.holdings.find((entry) => entry.id === this.activeHoldingId);
-    const row = holding?.storage?.items?.[itemIndex];
+    const { holding, row } = this._storageContextRow({ rowType: "items", rowId, holdingId });
     const roomId = this._normalizeStorageRoomId(row?.roomId ?? row?.storageRoomId);
-    if (!row || !canReadHolding(holding) || hiddenStorageRoomIds(holding).has(roomId)) {
+    if (!row || hiddenStorageRoomIds(holding).has(roomId)) {
       ui.notifications.warn("Предмет склада не найден.");
       return;
     }
@@ -766,15 +804,24 @@ async _onClearStorageLog(event) {
   event.preventDefault();
   event.stopPropagation();
   if (!game.user?.isGM) return;
-  if (!await this._confirmAction("Очистить лог хранилища", "Удалить все записи лога хранилища? Записи нельзя восстановить.")) return;
-  const cleared = await this._updateActiveHolding((holding) => {
+  const holdingId = String(storagePanel(event.currentTarget)?.dataset?.storageHoldingId ?? "");
+  const { holding: source } = findReadableHoldingEntry(SkyholdData.get(), holdingId);
+  if (!source) return this._warnNoActiveHolding();
+  const expected = stableDataHash(source.storage?.log ?? []);
+  if (!await this._confirmAction("Очистить лог хранилища", `Удалить журнал хранилища «${escapeHtml(source.name || "Владение")}»? Записи нельзя восстановить.`)) return;
+  const cleared = await SkyholdData.updateHolding(holdingId, (holding) => {
+    if (stableDataHash(holding.storage?.log ?? []) !== expected) {
+      return SkyholdData.skipTransaction({ ok: false, message: "Журнал изменился после открытия подтверждения. Повторите действие." });
+    }
     if (!holding.storage) holding.storage = { notes: "", resources: [], log: [] };
     holding.storage.log = [];
-    return true;
-  }, { reason: "storage:clear-log" });
-  if (!cleared) return;
-  this.activeTab = "storage";
-  this.activeStorageTab = "log";
+    return { ok: true };
+  }, { fallback: false, reason: "storage:clear-log" });
+  if (!cleared?.ok) return ui.notifications.warn(cleared?.message ?? "Хранилище недоступно.");
+  if (this.activeHoldingId === holdingId) {
+    this.activeTab = "storage";
+    this.activeStorageTab = "log";
+  }
   this.requestRender();
   ui.notifications.info("Лог хранилища очищен.");
 }

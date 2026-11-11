@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { SkyholdData } from "../data/store.js";
+import { registerStorageOperationExecutor, SkyholdData } from "../data/store.js";
 import { mergeHoldingDefaults } from "../data/normalizers.js";
 import { FinanceStorageDomain } from "../apps/domains/finance/storage-domain.js";
 import { prepareMarketOutboundContext } from "../apps/market/outbound-context.js";
@@ -11,6 +11,8 @@ const { StorageEventDomain } = await import("../apps/domains/events/storage-even
 const { createStorageOperationExecutor } = await import("../apps/storage-operation-executor.js");
 const { SkyholdStorageActionDialog } = await import("../apps/storage-action-dialog.js");
 const { NavigationEventDomain } = await import("../apps/domains/events/navigation-events.js");
+const { GmEventDomain } = await import("../apps/domains/events/gm-events.js");
+const { ResidentEventDomain } = await import("../apps/domains/events/resident-events.js");
 
 class Element {
   constructor(tag) { this.tag = tag; this.dataset = {}; this.style = {}; this.children = []; this.classList = { add() {} }; }
@@ -25,7 +27,7 @@ const body = new Element("body");
 globalThis.document = { body, createElement: tag => new Element(tag), addEventListener() {}, removeEventListener() {} };
 globalThis.window = { innerWidth: 1000, innerHeight: 800 };
 let warnings = 0;
-globalThis.ui = { notifications: { warn: () => warnings++ } };
+globalThis.ui = { notifications: { warn: () => warnings++, info() {} } };
 globalThis.game = { user: { id: "player", isGM: false } };
 const app = { ...StorageEventDomain, _closeStorageContextMenu() {}, _canUseStorage: () => true,
   _storageContextRow: () => { throw new Error("a denied player action must stop before opening a dialog"); } };
@@ -60,6 +62,7 @@ const data = { meta: { revision: 4 }, holdings: ["a", "b"].map(id => mergeHoldin
 })) };
 const skip = Symbol("skip");
 SkyholdData.get = () => structuredClone(data);
+SkyholdData.view = () => data;
 SkyholdData.skipTransaction = (value) => ({ [skip]: true, value });
 SkyholdData.updateHolding = async (id, updater) => {
   const index = data.holdings.findIndex(holding => holding.id === id);
@@ -75,13 +78,15 @@ globalThis.HTMLTextAreaElement = class {};
 const manager = { ...FinanceStorageDomain, ...StorageEventDomain, ...NavigationEventDomain, activeHoldingId: "a",
   _safeNumber: (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback,
   _normalizeStorageRoomId: normalizeStorageRoomId,
-  _formatNumber: String, _moneyContext: () => ({}), _canPlayerWriteFieldPath: () => game.user.isGM, _sanitizeTextBlock: value => value,
+  _formatNumber: String, _moneyContext: () => ({}), _resourcePriceCopper: () => 1,
+  _canPlayerWriteFieldPath: () => game.user.isGM, _sanitizeTextBlock: value => value,
   _activeWritableHoldingId() { return this.activeHoldingId; },
+  _canUseStorage: () => true, _warnNoActiveHolding: () => ui.notifications.warn("Владение недоступно."),
   requestRender() {}, _storageDefaultActor: () => ({ id: "actor" }) };
-const qtyChange = (value) => manager._onFieldChange({
+const qtyChange = (value, defaultValue) => manager._onFieldChange({
   preventDefault() {},
-  currentTarget: { value: String(value), dataset: { type: "number", field: "holdings.0.storage.resources.0.qty" },
-    closest: () => ({ dataset: { storageHoldingId: "a", storageRowId: wood.id, storageRowRoomId: "outdoors" } }) }
+  currentTarget: { value: String(value), defaultValue, dataset: { type: "number", field: "holdings.0.storage.resources.0.qty" },
+    closest: () => ({ dataset: { storageHoldingId: "a", storageRowId: wood.id, storageRowRoomId: "outdoors", storageResourceId: "wood" } }) }
 });
 const row = (index) => data.holdings[index].storage.resources.find(resource => resource.id === wood.id);
 const originalHolding = data.holdings[0];
@@ -122,6 +127,138 @@ assert.deepEqual(data, afterIncrease, "the inline editor must not lower stock be
 await qtyChange(5);
 assert.equal(row(0).qty, 5);
 assert.equal(row(0).batches.find(batch => batch.id === "wood-batch").qty, 4);
+const afterOtherEdit = structuredClone(data);
+await qtyChange(8, "6");
+assert.deepEqual(data, afterOtherEdit, "an absolute edit in a stale field must not overwrite a newer balance");
+
+{
+  const savedHoldings = structuredClone(data.holdings);
+  const panel = { dataset: { storageHoldingId: "a", roomId: "outdoors" }, classList: { remove() {} } };
+  const eventFor = (currentTarget) => ({ currentTarget, preventDefault() {}, stopPropagation() {} });
+  const control = (dataset = {}, extra = {}) => ({
+    dataset, closest: (selector) => selector === "[data-storage-drop-zone]" ? panel : null, ...extra
+  });
+  const requests = [];
+  registerStorageOperationExecutor(request => { requests.push(request); return { ok: true }; });
+  let finishDrop;
+  foundry.utils = { fromUuid: () => new Promise(resolve => { finishDrop = resolve; }) };
+  const dropping = manager._onStorageDrop({ ...eventFor(panel), dataTransfer: { getData: () => '{"uuid":"Item.dropped"}' } });
+  manager._onSelectHolding(eventFor({ value: "b" }));
+  finishDrop({ documentName: "Item", id: "dropped", uuid: "Item.dropped", type: "gear" });
+  await dropping;
+  assert.equal(requests[0].holdingId, "a", "an asynchronous Foundry drop stays in its rendered holding");
+  assert.equal(manager.activeTab, "overview", "a completed drop cannot navigate a different holding's window");
+
+  manager._moneyCopper = holding => holding.storage.moneyCopper;
+  manager._setMoneyCopper = (holding, total) => { holding.storage.moneyCopper = total; };
+  data.holdings[0].storage.moneyCopper = 120;
+  data.holdings[1].storage.moneyCopper = 70;
+  const moneyCounter = { dataset: { storageMoneyTotal: "100" } };
+  const moneyControl = (dataset, value) => control(dataset, {
+    value, closest: (selector) => selector === ".fbls-storage-money-counter" ? moneyCounter : panel
+  });
+  await manager._onStorageMoneyChange(eventFor(moneyControl({ storageMoneyField: "copper" }, "5")));
+  assert.deepEqual(data.holdings.map(holding => holding.storage.moneyCopper), [120, 70], "a stale absolute treasury edit must be refused");
+  await manager._onAdjustStorageMoney(eventFor(moneyControl({ moneyDenom: "silver", moneyOp: "plus" })));
+  assert.deepEqual(data.holdings.map(holding => holding.storage.moneyCopper), [130, 70], "a treasury delta uses the rendered holding's current total");
+
+  const logEntry = { id: "new-log", kind: "note", qty: 0, name: "Новая запись" };
+  manager._confirmAction = async () => { data.holdings[0].storage.log.push(logEntry); return true; };
+  await manager._onClearStorageLog(eventFor(control()));
+  assert.ok(data.holdings[0].storage.log.some(entry => entry.id === logEntry.id), "new journal entries survive an older confirmation");
+  data.holdings[1].storage.log.push(logEntry);
+  manager._confirmAction = async () => true;
+  await manager._onClearStorageLog(eventFor(control()));
+  assert.equal(data.holdings[0].storage.log.length, 0);
+  assert.ok(data.holdings[1].storage.log.some(entry => entry.id === logEntry.id), "clear log acts only on the rendered holding");
+
+  const shown = [];
+  globalThis.CONFIG = { Item: { documentClass: class {
+    constructor(data) { this.sheet = { render: () => shown.push(data.name) }; }
+  } } };
+  data.holdings[0].storage.items = [{ id: "other", name: "Другая строка", roomId: "outdoors" },
+    { id: "shared", name: "Канат из A", roomId: "outdoors" }];
+  data.holdings[1].storage.items = [{ id: "shared", name: "Сундук из B", roomId: "outdoors" }];
+  const itemButton = { dataset: { index: "0" }, closest: () => ({ dataset: { storageHoldingId: "a", storageRowId: "shared" } }) };
+  game.user.isGM = false;
+  await manager._onOpenStorageItem(eventFor(itemButton));
+  assert.deepEqual(shown, ["Канат из A"], "a player opens the rendered item by its ID after reordering and navigation");
+  data.holdings[0].visibility = "gm";
+  await manager._onOpenStorageItem(eventFor(itemButton));
+  assert.deepEqual(shown, ["Канат из A"], "a stale item card rechecks the current visibility");
+  game.user.isGM = true;
+  delete globalThis.CONFIG;
+
+  data.holdings[0].visibility = "public";
+  const savedRooms = manager._storageRooms;
+  manager._storageRooms = () => [{ id: "outdoors", label: "Улица", available: true }, { id: "shed", label: "Сарай", available: true }];
+  data.holdings[0].storage.resources.push({ ...wood, id: "shed-wood", roomId: "shed" });
+  manager._onStorageBatchSelectionChange(eventFor(control({ storageBatchSelect: "shed-wood" }, { checked: true })));
+  manager._onStorageBatchSelectionChange(eventFor(control({ storageBatchSelect: wood.id }, { checked: true })));
+  assert.equal(manager._storageContext(data.holdings[1], true).batchSelection.selectedCount, 0,
+    "matching row IDs in another holding never inherit the active batch selection");
+  let moveDialogs = 0;
+  SkyholdStorageActionDialog.open = async (config) => {
+    moveDialogs++;
+    assert.match(config.description, /Улица/);
+    assert.equal(config.max, 1, "the only selection in the rendered room is movable");
+    return null;
+  };
+  await manager._onStorageSelectionMove(eventFor(control({ storageBatchKind: "resources" })));
+  assert.equal(moveDialogs, 1);
+  game.user.isGM = false;
+  game.users = [{ id: "gm", active: true, isGM: true }];
+  game.socket = { emit() { throw new Error("a cancelled dialog cannot send a write"); } };
+  await manager._onStorageSelectionMove(eventFor(control({ storageBatchKind: "resources" })));
+  assert.equal(moveDialogs, 2, "a permitted player can preview the same rendered selection");
+  data.holdings[0].gm.playersCanUseStorage = false;
+  await manager._onStorageSelectionMove(eventFor(control({ storageBatchKind: "resources" })));
+  assert.equal(moveDialogs, 2, "a stale player control rechecks access to the holding it represents");
+  game.user.isGM = true;
+
+  for (const holding of data.holdings) {
+    holding.gm.defense.squads = [{ id: "shared", name: `Отряд ${holding.id}`, equipped: true,
+      armamentResourceId: "armament-simple", armamentSourceRoomId: "outdoors" }];
+  }
+  manager._confirmAction = async () => { manager.activeHoldingId = "b"; return true; };
+  manager.activeHoldingId = "a";
+  await GmEventDomain._onDeleteDefenseSquad.call(manager, eventFor({ dataset: { holdingId: "a", squadId: "shared" } }));
+  assert.deepEqual(data.holdings.map(holding => holding.gm.defense.squads.length), [0, 1]);
+  assert.deepEqual(data.holdings.map(holding => holding.storage.resources.find(row => row.resourceId === "armament-simple")?.qty ?? 0), [1, 0],
+    "disbanding a squad returns the kit to the same holding that was confirmed");
+  game.user.isGM = false;
+  data.holdings[1].gm.playersCanEditDefense = true;
+  manager._confirmAction = async () => { data.holdings[1].gm.playersCanEditDefense = false; return true; };
+  await GmEventDomain._onDeleteDefenseSquad.call(manager, eventFor({ dataset: { holdingId: "b", squadId: "shared" } }));
+  assert.equal(data.holdings[1].gm.defense.squads.length, 1, "a player's confirmation cannot outlive revoked defense access");
+  delete game.users;
+  delete game.socket;
+  game.user.isGM = true;
+
+  for (const holding of data.holdings) holding.people.list = [{ id: "resident", name: `Житель ${holding.id}` }];
+  foundry.utils.getProperty = (root, path) => path.split(".").reduce((node, key) => node?.[key], root);
+  foundry.utils.setProperty = (root, path, value) => {
+    const keys = path.split(".");
+    const leaf = keys.pop();
+    keys.reduce((node, key) => node[key], root)[leaf] = value;
+  };
+  SkyholdData.transaction = async (updater) => {
+    const draft = structuredClone(data);
+    const result = await updater(draft, { skip: SkyholdData.skipTransaction });
+    if (result?.[skip]) return result.value;
+    data.holdings = draft.holdings;
+    return result;
+  };
+  manager._confirmAction = async () => { data.holdings.reverse(); return true; };
+  await ResidentEventDomain._onDeleteRow.call(manager,
+    eventFor({ dataset: { holdingId: "a", collection: "holdings.0.people.list", id: "resident" } }));
+  assert.deepEqual(data.holdings.map(holding => [holding.id, holding.people.list.length]), [["b", 1], ["a", 0]],
+    "a destructive confirmation resolves the holding again by ID after the array is reordered");
+  manager._storageRooms = savedRooms;
+  manager.storageBatchSelection.clear();
+  data.holdings = savedHoldings;
+  manager.activeHoldingId = "a";
+}
 
 const action = { rowId: wood.id, roomId: "outdoors" };
 SkyholdStorageActionDialog.open = async () => {

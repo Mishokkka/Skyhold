@@ -137,6 +137,37 @@ export function checkStorageCharacterization() {
   assert.equal(storageFillClass({ capacity: 10, used: 7.5 }), "near-capacity", "75% room usage must enter near-capacity state");
   assert.equal(storageFillClass({ capacity: 10, used: 10 }), "full-capacity", "full rooms must enter full-capacity state");
 
+  {
+    const holding = makeHolding();
+    holding.buildings.list.push(storageBuilding("shed", 100));
+    holding.storage.resources = [
+      resource("protected", "wood", 2, "outdoors", { notes: "Для стройки", noAutoConsume: true }),
+      resource("sale", "wood", 5, "outdoors", { notes: "На продажу", forSale: true }),
+      resource("target-sale", "wood", 1, "shed", { notes: "На продажу", forSale: true })
+    ];
+    const loaded = mergeHoldingDefaults(holding);
+    assert.deepEqual(loaded.storage.resources.map(row => [row.id, row.qty, row.notes, row.noAutoConsume, row.forSale]), [
+      ["protected", 2, "Для стройки", true, false], ["sale", 5, "На продажу", false, true],
+      ["target-sale", 1, "На продажу", false, true]
+    ], "normalization cannot discard independent catalog stock policies");
+    const added = storage._storageAdd(loaded, { resourceId: "wood", roomId: "outdoors" }, 3);
+    assert.equal(added.qty, 3);
+    assert.equal(added.forSale, false, "a plain delivery must not automatically enter a marked sale row");
+    assert.equal(added.noAutoConsume, false);
+    assert.equal(storage._applyStorageBatchMove(loaded, { rowType: "resources", rowIds: ["protected"],
+      fromRoomId: "outdoors", toRoomId: "shed" }).ok, true);
+    const destination = mergeHoldingDefaults(loaded).storage.resources.filter(row => row.roomId === "shed");
+    assert.deepEqual(destination.map(row => [row.qty, row.notes, row.noAutoConsume, row.forSale]), [
+      [1, "На продажу", false, true], [2, "Для стройки", true, false]
+    ], "moving a marked catalog stack preserves its flags and separate note");
+
+    holding.storage.resources = [6, 25].map((ageQd, index) => resource(`legacy-${index}`, "wood", 1, "outdoors",
+      { batches: [{ id: "legacy-lot", qty: 1, ageQd }] }));
+    const repeatedBatchId = mergeHoldingDefaults(holding);
+    assert.deepEqual(repeatedBatchId.storage.resources.map(row => row.batches[0].ageQd), [6, 25],
+      "distinct physical lots that reuse a batch ID cannot acquire each other's age on load");
+  }
+
   withResourceCatalog([{ id: "local-food", label: "Местный паёк", aliases: ["Свой ресурс"], basePriceCopper: 40,
     loadPoints: 12, foodEdible: true, foodType: "grain", shelfLifeQd: 8 }], () => {
     const holding = makeHolding();

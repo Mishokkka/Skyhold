@@ -127,10 +127,9 @@ export function runFoodConsumption({
     candidate.batch.qty -= receipt.qty;
     const resourceId = deps.storageResourceId(candidate.row);
     const name = candidate.row.name || deps.resourceLabel(resourceId);
-    const key = String(candidate.row.id ?? candidate.rowIndex);
-    const summary = takenByRow.get(key) ?? { row: candidate.row, resourceId, name, qty: 0 };
+    const summary = takenByRow.get(candidate.row) ?? { row: candidate.row, resourceId, name, qty: 0 };
     summary.qty += receipt.qty;
-    takenByRow.set(key, summary);
+    takenByRow.set(candidate.row, summary);
     return receipt.qty;
   };
   // Secure modest shares of available groups; keep FIFO within each group.

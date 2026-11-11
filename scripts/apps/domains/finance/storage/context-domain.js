@@ -237,9 +237,9 @@ _storageContext(holding, canEdit = false, activeRoomId = "outdoors") {
   const activeRoomRows = activeSubtab === "resources" ? this._prepareStorageRows(holding, canEdit, roomsAll, activeRawRows) : [];
   const activeItemRows = activeSubtab === "items" ? this._prepareStorageItemRows(holding, canEdit, roomsAll, activeRawItems) : [];
   const batchRowType = activeSubtab === "items" ? "items" : "resources";
-  const batchSet = this.storageBatchSelection?.[batchRowType] instanceof Set ? this.storageBatchSelection[batchRowType] : new Set();
+  const batchSet = this.storageBatchSelection?.get(holding?.id)?.[batchRowType];
   const batchRows = batchRowType === "items" ? activeItemRows : activeRoomRows;
-  for (const row of batchRows) row.batchSelected = batchSet.has(String(row.id ?? ""));
+  for (const row of batchRows) row.batchSelected = batchSet?.has(String(row.id ?? "")) ?? false;
   const selectedBatchRows = batchRows.filter((row) => row.batchSelected);
   const activeRoomInfo = roomsAll.find((room) => room.id === activeRoom) ?? roomsAll[0] ?? null;
   const resourceRooms = roomsAll.filter((room) => room.available || room.source === "base" || roomsWithRows.has(room.id)).map((room) => ({ ...room, active: room.id === activeRoom, itemCount: roomItemCounts.get(room.id) ?? 0 }));

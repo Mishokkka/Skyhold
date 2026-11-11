@@ -4,12 +4,14 @@ import {
   isMoneyResource,
   isStorageMoneyResource,
   normalizeResourceId,
+  normalizeResourceRow,
   resourceDef,
   resourceIcon,
   resourceLabel,
   resourceUnit,
   parseResourceCosts,
-  storageResourceId
+  storageResourceId,
+  storageResourceStackKey
 } from "../../../core/resources.js";
 import { moveStorageResource } from "../../../engines/storage/move.js";
 import { applyStorageBatchMove, planStorageBatchMove } from "../../../engines/storage/batch-move.js";
@@ -147,6 +149,16 @@ _storageResourceMatches(row = {}, resource = {}) {
   return a.name === b.name;
 },
 
+_findCompatibleStorageStack(holding, resource, roomId) {
+  const key = storageResourceStackKey({ ...resource, roomId });
+  const batchIds = new Set((Array.isArray(resource.batches) ? resource.batches : []).map((batch) => batch?.id));
+  return (holding?.storage?.resources ?? []).find((candidate) =>
+    this._normalizeStorageRoomId(candidate.roomId ?? candidate.storageRoomId) === roomId
+      && this._storageResourceMatches(candidate, resource)
+      && storageResourceStackKey({ ...candidate, roomId }) === key
+      && !(Array.isArray(candidate.batches) && candidate.batches.some((batch) => batchIds.has(batch?.id)))) ?? null;
+},
+
 _storageFind(holding, resource = {}) {
   if (!holding.storage) holding.storage = { notes: "", resources: [], moneyCopper: 0, log: [] };
   if (!Array.isArray(holding.storage.resources)) holding.storage.resources = [];
@@ -214,47 +226,18 @@ _storageAdd(holding, resource = {}, qty = 0) {
     this._addMoney(holding, amount);
     return { id: "money", resourceId: "money", name: "Деньги", qty: this._moneyCopper(holding), unit: "медн.", notes: "" };
   }
-  const definition = id === "custom" ? null : resourceDef(id);
   const name = id === "custom" ? String(resource.name ?? "Ресурс") : resourceLabel(id);
   const roomId = this._normalizeStorageRoomId(resource.roomId ?? resource.storageRoomId);
-  const separate = id === "custom" && resource.separateRow === true && amount > 0;
-  let row = separate ? null : this._storageFind(holding, { resourceId: id, name, roomId, storageRowId: resource.storageRowId });
+  const identity = { resourceId: id, name, roomId, storageRowId: resource.storageRowId };
+  let row = resource.storageRowId || amount < 0 ? this._storageFind(holding, identity) : null;
+  if (!row && amount > 0 && !resource.storageRowId && !resource.separateRow) {
+    row = this._findCompatibleStorageStack(holding, { ...resource, ...identity }, roomId);
+  }
   if (!row && amount < 0) return null;
   if (!row) {
-    row = {
-      id: makeId("res", 12),
-      resourceId: id,
-      name,
-      qty: 0,
-      batches: [],
-      unit: "ед.",
-      img: id === "custom" ? String(resource.img ?? "") : (definition?.img ?? ""),
-      itemUuid: resource.itemUuid || definition?.itemUuid || "",
-      itemId: resource.itemId || definition?.itemId || "",
-      itemType: resource.itemType || definition?.itemType || "",
-      cost: resource.cost || definition?.cost || "",
-      roomId,
-      forSale: Boolean(resource.forSale ?? false),
-      notes: separate ? String(resource.notes ?? "") : "",
-      ...(separate ? {
-        noAutoConsume: Boolean(resource.noAutoConsume),
-        foodEdible: Boolean(resource.foodEdible),
-        foodType: resource.foodType,
-        shelfLifeQd: resource.shelfLifeQd,
-        categoryTag: resource.categoryTag
-      } : {})
-    };
+    row = normalizeResourceRow({ ...resource, ...identity, rowId: makeId("res", 12), qty: 0, batches: [] });
     holding.storage.resources.push(row);
   }
-  row.resourceId = id;
-  row.name = name;
-  row.unit = "ед.";
-  row.img = id === "custom" ? (row.img || resource.img || "") : (definition?.img ?? "");
-  row.itemUuid = row.itemUuid || resource.itemUuid || definition?.itemUuid || "";
-  row.itemId = row.itemId || resource.itemId || definition?.itemId || "";
-  row.itemType = row.itemType || resource.itemType || definition?.itemType || "";
-  row.cost = row.cost || resource.cost || definition?.cost || "";
-  row.roomId = roomId;
   if (amount > 0) {
     const input = Object.prototype.hasOwnProperty.call(resource, "batches")
       ? { batches: resource.batches }
@@ -326,15 +309,16 @@ _storagePay(holding, costs = [], { captureReceipt = false } = {}) {
 _restoreProductionResource(holding, resource, qty) {
   const previousId = String(resource.storageRowId || resource.id || "");
   const exact = previousId ? this._storageFind(holding, { ...resource, storageRowId: previousId }) : null;
-  const existing = exact ?? (storageResourceId(resource) === "custom"
-    ? null : this._storageFind(holding, { ...resource, storageRowId: "" }));
+  const roomId = this._normalizeStorageRoomId(resource.roomId ?? resource.storageRoomId);
+  const samePolicy = exact && storageResourceStackKey(exact) === storageResourceStackKey({ ...resource, roomId });
+  const existing = samePolicy ? exact : (storageResourceId(resource) === "custom"
+    ? null : this._findCompatibleStorageStack(holding, resource, roomId));
   if (existing) return this._storageAdd(holding, { ...resource, storageRowId: existing.id }, qty);
 
   // The receipt preserves the ingredient and its age. Its former row can now hold another resource.
   const occupied = holding.storage.resources.some((row) => row.id === previousId);
   const id = previousId && !occupied ? previousId : makeId("res", 12);
-  const row = { ...resource, id, qty: 0, batches: [] };
-  delete row.storageRowId;
+  const row = normalizeResourceRow({ ...resource, rowId: id, roomId, qty: 0, batches: [] });
   holding.storage.resources.push(row);
   return this._storageAdd(holding, { ...resource, storageRowId: id }, qty);
 },

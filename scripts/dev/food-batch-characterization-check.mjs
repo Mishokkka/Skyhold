@@ -270,6 +270,21 @@ export function checkFoodBatchCharacterization() {
   assert.equal(rationHolding.storage.resources[1].qty, 0);
   assert.deepEqual(ration.dietTypes, ["protein", "grain"], "report consumed food groups");
 
+  const sameIds = clone(BASE_HOLDING);
+  sameIds.gm.food.rationUnitsPerResident = 5;
+  sameIds.people.list = [{ id: "resident" }];
+  sameIds.storage.resources = [
+    preparedRow("legacy-row", "bread", "outdoors", [{ id: "same-batch", qty: 3, ageQd: 10 }]),
+    preparedRow("legacy-row", "food-protein", "cellar", [{ id: "same-batch", qty: 3, ageQd: 1 }])
+  ];
+  const mixedReport = foodReport();
+  const mixedRation = runFoodConsumption({ holding: sameIds, qd: 40, report: mixedReport, dependencies: foodDependencies });
+  assert.equal(mixedRation.eaten, 5);
+  assert.deepEqual(mixedRation.dietTypes.sort(), ["grain", "protein"], "legacy row IDs cannot collapse distinct foods in nutrition");
+  assert.deepEqual(mixedReport.ledger.filter(entry => entry.kind === "resource")
+    .map(entry => [entry.resourceId, entry.roomId, entry.qty]).sort(),
+  [["bread", "outdoors", -3], ["food-protein", "cellar", -2]]);
+
   const hungerHolding = clone(BASE_HOLDING);
   hungerHolding.people.list = [{ id: "one" }, { id: "two" }];
   hungerHolding.storage.resources = [preparedRow("bread", "bread", "outdoors", [{ id: "short", qty: 8, ageQd: 0 }])];

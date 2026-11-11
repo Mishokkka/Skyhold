@@ -92,7 +92,7 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
     this.storageRoomRailCollapsed = false;
     this.activePeopleTab = "living";
     this.activeSpecialTab = "records";
-    this.storageBatchSelection = { resources: new Set(), items: new Set() };
+    this.storageBatchSelection = new Map();
     this.storageSearchQuery = "";
     this._pendingStorageSearchTarget = null;
     this.crewEditor = null;
@@ -396,7 +396,7 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
       editingPersonId: this.editingPersonId,
       expandedPersonId: this.expandedPersonId,
       expandedBuildingId: this.expandedBuildingId,
-      storageBatchSelection: active.storage ? this.storageBatchSelection : null,
+      storageBatchSelection: active.storage ? this.storageBatchSelection.get(activeHolding?.id) : null,
       storageSearchQuery: active.storage ? this.storageSearchQuery : "",
       generatorConfig: active.gm ? this.generatorConfig : null,
       generatorPreview: active.gm ? this.generatorPreview : null,
