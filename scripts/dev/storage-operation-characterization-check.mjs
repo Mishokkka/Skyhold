@@ -85,8 +85,8 @@ function makeHolding() {
   };
 }
 
-function createHarness({ failPersist = false, failCompensation = false } = {}) {
-  const user = { id: "player-1", isGM: false };
+function createHarness({ failPersist = false, failCompensation = false, isGM = true } = {}) {
+  const user = { id: isGM ? "gm-1" : "player-1", isGM };
   const actor = makeActor("actor-1", user.id);
   actor.addItem({ id: "deposit-item", name: "Deposit", type: "gear", qty: 1 });
   let holding = makeHolding();
@@ -273,7 +273,7 @@ export async function checkStorageOperationCharacterization() {
       qty: 2
     };
     const first = await harness.executor(operation, { userId: harness.user.id });
-    const second = await harness.executor(operation, { userId: harness.user.id });
+    const second = await harness.executor(operation, { userId: harness.user.id, remote: true });
     assert.equal(first.ok, true, "a valid GM-authoritative withdrawal must succeed");
     assert.deepEqual(second, first, "duplicate delivery in one GM session must reuse the first operation result");
     assert.equal(harness.getHolding().storage.resources[0].qty, 3, "duplicate delivery must deduct storage only once");
@@ -351,16 +351,17 @@ export async function checkStorageOperationCharacterization() {
   }
 
   {
-    const harness = createHarness();
+    const harness = createHarness({ isGM: false });
     harness.getHolding().gm.playersCanUseStorage = false;
     const result = await harness.executor({
-      type: "withdrawResource",
+      type: "batchMove",
       operationId: "denied-1",
       holdingId: "holding-1",
-      actorId: "actor-1",
-      resourceId: "wood",
-      qty: 1
-    }, { userId: harness.user.id });
+      rowIds: ["wood"],
+      fromRoomId: "outdoors",
+      toRoomId: "storage",
+      expectedRevision: 0
+    }, { userId: harness.user.id, remote: true });
     assert.equal(result.ok, false, "storage operations must respect the holding permission flag");
     assert.equal(harness.getHolding().storage.resources[0].qty, 5, "a denied operation must not mutate storage");
   }
@@ -399,6 +400,35 @@ export async function checkStorageOperationCharacterization() {
         getActor: (actorId) => actorId === actor.id ? actor : null,
         resolveUuid: async () => null
       });
+
+      const beforeVeto = clone(holding);
+      const beforeVetoItems = actor.itemIds();
+      const create = actor.createEmbeddedDocuments;
+      actor.createEmbeddedDocuments = async () => [];
+      for (const type of ["withdrawResource", "giveStoredItem"]) {
+        const result = await executor({ type, operationId: `veto-${type}`, holdingId: holding.id,
+          actorId: actor.id, itemId: "stored-sword", resourceId: "wood", qty: 1 }, { userId: gm.id });
+        assert.equal(result.ok, false, "a Foundry creation veto must not debit the warehouse");
+        assert.deepEqual(holding, beforeVeto);
+        assert.deepEqual(actor.itemIds(), beforeVetoItems);
+      }
+      actor.createEmbeddedDocuments = (type, data) => create.call(actor, type,
+        data.map(item => ({ ...item, system: { ...item.system, quantity: 2 } })));
+      const changed = await executor({ type: "withdrawResource", operationId: "foundry-adjusted-qty", holdingId: holding.id,
+        actorId: actor.id, resourceId: "wood", qty: 1 }, { userId: gm.id });
+      assert.equal(changed.ok, false, "the warehouse must not debit a quantity different from the created Item");
+      assert.deepEqual(holding, beforeVeto);
+      assert.deepEqual(actor.itemIds(), beforeVetoItems, "the unexpected stack must be removed");
+      actor.createEmbeddedDocuments = create;
+
+      const remove = actor.deleteEmbeddedDocuments;
+      actor.deleteEmbeddedDocuments = async () => [];
+      const vetoedDeposit = await executor({ type: "depositItem", operationId: "veto-deposit", holdingId: holding.id,
+        actorId: actor.id, itemId: "real-deposit", roomId: "outdoors" }, { userId: gm.id });
+      assert.equal(vetoedDeposit.ok, false, "a Foundry deletion veto must not duplicate the Item in the warehouse");
+      assert.deepEqual(holding, beforeVeto);
+      assert.deepEqual(actor.itemIds(), beforeVetoItems);
+      actor.deleteEmbeddedDocuments = remove;
 
       const deposit = await executor({
         type: "depositItem",

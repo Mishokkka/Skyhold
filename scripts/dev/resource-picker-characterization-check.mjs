@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { SkyholdData } from "../data/store.js";
+import { normalizeResourceRow } from "../core/resources.js";
 
 const previous = Object.fromEntries(["foundry", "game", "ui"].map(key => [key, globalThis[key]]));
 const original = { get: SkyholdData.get, transaction: SkyholdData.transaction, updateHolding: SkyholdData.updateHolding };
@@ -101,11 +102,24 @@ try {
   picker = null;
   StorageEventDomain._onPickStorageResource.call(manager, event({ storagePickerScope: "row" }, "new"));
   assert.equal(picker, null, "an ambiguous storage row cannot open the picker");
+
+  storage.resources = [{ id: "wood", resourceId: "wood", name: "Древесина", roomId: "outdoors", qty: 3,
+    itemUuid: "Item.old-wood", itemId: "old-wood", cost: "99 мм", notes: "Опись",
+    batches: [{ id: "aged", qty: 3, ageQd: 8 }] }];
+  StorageEventDomain._onPickStorageResource.call(manager, event({ storagePickerScope: "row" }, "wood"));
+  await picker.onSelect({ id: "custom", label: "Другой материал…" });
+  const changed = normalizeResourceRow(storage.resources[0]);
+  assert.equal(changed.resourceId, "custom", "switching an old catalog row to a custom resource must survive normalization");
+  assert.equal(changed.itemUuid, "", "the previous catalog Item must not remain attached");
+  assert.equal(changed.cost, "", "the new custom material must not inherit the old market price");
+  assert.equal(changed.notes, "Опись");
+  assert.deepEqual(changed.batches, [{ id: "aged", qty: 3, ageQd: 8 }]);
+
   for (const isGM of [true, false]) {
     game.user.isGM = isGM;
     picker = null;
     manager._canUseStorage = () => false;
-    StorageEventDomain._onPickStorageResource.call(manager, event({ storagePickerScope: "row" }, "new"));
+    StorageEventDomain._onPickStorageResource.call(manager, event({ storagePickerScope: "row" }, changed.id));
     assert.equal(picker, null, "the original storage permission gate remains effective");
   }
   game.user.isGM = true;

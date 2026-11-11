@@ -206,10 +206,29 @@ for (const isGM of [true, false]) {
   assert.equal(outbound.offers[0].availableStock, isGM ? 12 : 6);
 }
 
+const ambiguousExport = structuredClone(warehouse);
+ambiguousExport.storage.resources[1].id = ambiguousExport.storage.resources[0].id;
+for (const isGM of [true, false]) {
+  assert.equal(prepareMarketOutboundContext({ holding: ambiguousExport, quote, isGM }).offers.length, 0,
+    "a duplicate ID across rooms must not be offered for a new export, even if only one row is visible");
+}
+
 const rooms = [{ id: "outdoors", label: "Открытый склад", available: true, unlimited: true },
   { id: "full", label: "Заполненный склад", available: true, free: 0 },
   { id: "hidden", label: "Тайная кладовая", available: true, free: 10 }];
 manager._storageRooms = () => rooms;
+const overflowHolding = structuredClone(warehouse);
+const manual = manager._applyManualStorageChange(overflowHolding, { resourceId: "wood", qty: 2, roomId: "hidden",
+  note: "Получено за день", operationId: "manual-overflow" });
+assert.equal(manual.ok, true);
+for (const isGM of [true, false]) {
+  game.user.isGM = isGM;
+  const entry = manager._storageLogRows(overflowHolding, rooms).find(row => row.operationId === "manual-overflow");
+  assert.equal(entry.qty, 2, "visible stock received by overflow remains in the player's journal");
+  assert.match(entry.note, /Получено за день/);
+  assert.equal(entry.note.includes("Тайная кладовая"), isGM, "an overflow note must not disclose the intended hidden room");
+}
+
 let movementHolding = structuredClone(warehouse);
 movementHolding.storage.items.push({ id: "public-item", name: "Предмет", roomId: "outdoors", qty: 1 });
 const move = createStorageOperationExecutor({

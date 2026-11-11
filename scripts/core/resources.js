@@ -523,6 +523,19 @@ export function normalizeResourceRow(row = {}, { compactBatches = true } = {}) {
   return syncResourceRowBatches(normalized, { makeId: makeGeneratedId, compact: compactBatches });
 }
 
+/** Preserve a stock row's lots and policies while taking material metadata from the new catalog entry. */
+export function reclassifyResourceRow(row, resourceId) {
+  if (row.resourceId === resourceId) return row;
+  const custom = resourceId === "custom";
+  // Legacy rows could use a catalog alias as their ID, which normalization also recognizes as a material.
+  const id = custom && normalizeResourceId(row.id) !== "custom" ? makeGeneratedId("res", 12) : row.id;
+  return normalizeResourceRow({
+    id, resourceId, name: custom ? "Свой ресурс" : undefined,
+    roomId: row.roomId, qty: row.qty, batches: row.batches, notes: row.notes,
+    forSale: row.forSale, noAutoConsume: row.noAutoConsume
+  }, { compactBatches: false });
+}
+
 
 function normalizeProductionSeasons(value = null) {
   const defs = ["spring", "summer", "autumn", "winter"];

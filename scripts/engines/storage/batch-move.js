@@ -81,7 +81,7 @@ function requestedRowQuantity(row, rowType, rowQuantities, dependencies, holding
   };
 }
 
-export function planStorageBatchMove({
+function planSelectedRows({
   holding,
   rowType = "resources",
   rowIds = [],
@@ -144,6 +144,38 @@ export function planStorageBatchMove({
   };
 }
 
+function prepareStorageBatchMove(options) {
+  const plan = planSelectedRows(options);
+  if (!plan.ok || plan.rowType === "items") return { plan };
+
+  const { holding, dependencies: deps } = options;
+  if (typeof deps.takeResourceRow !== "function") throw new TypeError("storage batch move engine requires dependencies.takeResourceRow");
+  // Run the regular resource placement on a private draft so preview and apply obey the same capacity rules.
+  const resources = deps.clone(holding.storage.resources);
+  const draft = { ...holding, storage: { ...holding.storage, resources } };
+  const index = indexStorageRows(resources);
+  const transfers = [];
+  for (const planned of plan.rows) {
+    const row = index.get(planned.id);
+    const receipt = deps.takeResourceRow(draft, row, planned.qty);
+    if (receipt.takenQty !== planned.qty) throw new RangeError("storage batch move could not take the planned quantity");
+    const placements = deps.addResourceWithOverflow(draft, { ...row, roomId: plan.toRoomId, batches: receipt.batches }, planned.qty);
+    if (placements.some((placement) => placement.roomId === plan.fromRoomId && placement.qty > 0)) {
+      return { plan: { ok: false, message: `Нет места для всего объёма «${planned.label}». Уменьшите количество или выберите другое помещение.`,
+        rowType: plan.rowType, rows: [] } };
+    }
+    if (placements.reduce((sum, placement) => sum + placement.qty, 0) !== planned.qty) {
+      throw new RangeError("storage batch move could not place the planned quantity");
+    }
+    transfers.push({ planned, row, placements });
+  }
+  return { plan, resources, transfers };
+}
+
+export function planStorageBatchMove(options = {}) {
+  return prepareStorageBatchMove(options).plan;
+}
+
 export function applyStorageBatchMove({
   holding,
   rowType = "resources",
@@ -155,25 +187,21 @@ export function applyStorageBatchMove({
   dependencies
 } = {}) {
   const deps = requireDependencies(dependencies);
-  const plan = planStorageBatchMove({ holding, rowType, rowIds, rowQuantities, fromRoomId, toRoomId, dependencies: deps });
+  const { plan, resources, transfers } = prepareStorageBatchMove({
+    holding, rowType, rowIds, rowQuantities, fromRoomId, toRoomId, dependencies: deps
+  });
   if (!plan.ok) return plan;
 
   const messages = [];
   const placements = [];
-  const rows = indexStorageRows(holding.storage[plan.rowType]);
   if (plan.rowType === "resources") {
-    if (typeof deps.takeResourceRow !== "function") throw new TypeError("storage batch move engine requires dependencies.takeResourceRow");
-    for (const planned of plan.rows) {
-      const row = rows.get(planned.id);
-      const amount = planned.qty;
-      const receipt = deps.takeResourceRow(holding, row, amount);
-      if (receipt.takenQty !== amount) throw new RangeError("storage batch move could not take the planned quantity");
-      const placed = deps.addResourceWithOverflow(holding, { ...row, roomId: plan.toRoomId, batches: receipt.batches }, amount);
+    holding.storage.resources = resources;
+    for (const { planned, row, placements: placed } of transfers) {
       deps.appendStorageLog(holding, [{
         kind: "move-out",
         resourceId: row.resourceId,
         name: row.name,
-        qty: -amount,
+        qty: -planned.qty,
         roomId: plan.fromRoomId,
         source: "Пакетное перемещение",
         note: `в ${plan.toLabel}`,
@@ -189,9 +217,10 @@ export function applyStorageBatchMove({
         operationId
       }))]);
       placements.push(...placed.map((placement) => ({ id: planned.id, label: planned.label, ...placement })));
-      messages.push(`${planned.label}: ${deps.formatNumber(amount)} → ${placed.map((placement) => deps.storageRoomLabel(holding, placement.roomId)).join(", ")}`);
+      messages.push(`${planned.label}: ${deps.formatNumber(planned.qty)} → ${placed.map((placement) => deps.storageRoomLabel(holding, placement.roomId)).join(", ")}`);
     }
   } else {
+    const rows = indexStorageRows(holding.storage.items);
     const entries = [];
     for (const planned of plan.rows) {
       const row = rows.get(planned.id);
@@ -217,13 +246,15 @@ export function applyStorageBatchMove({
     deps.appendStorageLog(holding, entries);
   }
 
+  const destinations = [...new Set(placements.map((placement) => placement.roomId))]
+    .map((id) => deps.storageRoomLabel(holding, id)).join(", ");
   return {
     ok: true,
     operationId: String(operationId ?? ""),
     rowType: plan.rowType,
-    moved: placements.length,
+    moved: plan.rows.length,
     placements,
     messages,
-    message: `Перемещено позиций: ${placements.length}.`
+    message: `Перемещено позиций ${plan.rows.length}. Размещено в помещениях ${destinations}.`
   };
 }

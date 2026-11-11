@@ -6,7 +6,7 @@ import { applyPlayerPatch, buildPlayerPatch, validatePlayerPatch } from "./playe
 import { makeId, toNumber } from "./utils.js";
 import { createShipSocketApi } from "./ship-socket.js";
 import { createPoliticsSocketApi } from "./politics-socket.js";
-import { acceptsGmSocketResponse, acceptsPlayerSocketRequest } from "./socket-auth.js";
+import { acceptsGmSocketResponse, acceptsPlayerSocketRequest, acceptsStorageSocketRequest } from "./socket-auth.js";
 import { appendHoldingOperation, findHoldingOperation } from "./operations.js";
 
 const PENDING_PLAYER_WRITES = new Map();
@@ -185,7 +185,7 @@ export function createSkyholdSocketApi({
   }
 
   /**
-   * Execute a GM storage command locally or send a player command to the authority GM.
+   * Run the entire storage command on the authority GM, including any Actor mutation.
    * Duplicate pending IDs reject without replacing the first caller; retries reuse that ID.
    * @param {object} [rawOperation={}] Storage command, optionally carrying an operationId.
    * @returns {Promise<object>} Executor result or matching GM acknowledgement.
@@ -195,7 +195,8 @@ export function createSkyholdSocketApi({
       ...rawOperation,
       operationId: String(rawOperation?.operationId ?? "").trim() || makeId("storage-op", 20)
     };
-    if (game.user?.isGM) {
+    const authority = activeSkyholdGm();
+    if (game.user?.isGM && (!authority || authority.id === game.user.id)) {
       if (typeof executeStorageOperation !== "function") {
         return Promise.reject(new Error("FBL Skyhold | Storage operation executor is not configured."));
       }
@@ -205,7 +206,7 @@ export function createSkyholdSocketApi({
       ui.notifications?.warn?.("Не удалось отправить операцию: socket Foundry недоступен.");
       return Promise.reject(new Error("FBL Skyhold | Socket is not available for storage operation."));
     }
-    if (!activeSkyholdGm()) {
+    if (!authority) {
       ui.notifications?.warn?.("Операции с хранилищем выполняет активный ГМ. Сейчас в мире нет активного ГМа.");
       return Promise.reject(new Error("FBL Skyhold | No active GM is available for storage operation."));
     }
@@ -324,7 +325,8 @@ export function createSkyholdSocketApi({
     if (!payload || typeof payload !== "object") return false;
     if (await ships.handleShipPayload(payload, senderId)) return true;
     if (await politics.handlePoliticsPayload(payload, senderId)) return true;
-    if (["playerStorageOperationRequest", "playerMarketOperationRequest", "playerConstructionOperationRequest", "playerDataPatchRequest"].includes(payload.type)
+    if (payload.type === "playerStorageOperationRequest" && !acceptsStorageSocketRequest(payload, senderId)) return true;
+    if (["playerMarketOperationRequest", "playerConstructionOperationRequest", "playerDataPatchRequest"].includes(payload.type)
       && !acceptsPlayerSocketRequest(payload, senderId)) return true;
 
     if (payload.type === "playerMarketOperationResponse") {
@@ -397,6 +399,7 @@ export function createSkyholdSocketApi({
     if (payload.type === "playerStorageOperationRequest") {
       if (!game.user?.isGM) return true;
       if (payload.targetGmId && payload.targetGmId !== game.user?.id) return true;
+      let command, result;
       try {
         if (!payload.requestId || payload.requestId !== payload.operation?.operationId) {
           throw commandError(commandFailure({ operationId: payload.requestId, code: COMMAND_ERROR.INVALID,
@@ -405,33 +408,25 @@ export function createSkyholdSocketApi({
         if (typeof executeStorageOperation !== "function") {
           throw new Error("FBL Skyhold | Storage operation executor is not configured.");
         }
-        const result = await executeStorageOperation(payload.operation, { userId: senderId, remote: true });
-        const command = commandSuccess({ operationId: payload.requestId });
-        game.socket?.emit?.(`module.${MODULE_ID}`, {
-          type: "playerStorageOperationResponse",
-          requestId: payload.requestId,
-          operationId: payload.requestId,
-          userId: senderId,
-          gmId: game.user.id,
-          ok: true,
-          command,
-          result
-        });
+        result = await executeStorageOperation(payload.operation, { userId: senderId, remote: true });
+        command = commandSuccess({ operationId: payload.requestId });
       } catch (error) {
-        console.error("FBL Skyhold | Failed to apply player storage operation", error);
-        const command = resultForError(error, { operationId: payload.requestId });
+        console.error("FBL Skyhold | Failed to apply storage operation", error);
+        command = resultForError(error, { operationId: payload.requestId });
+      }
+      try {
         game.socket?.emit?.(`module.${MODULE_ID}`, {
           type: "playerStorageOperationResponse",
           requestId: payload.requestId,
           operationId: payload.requestId,
           userId: senderId,
           gmId: game.user.id,
-          ok: false,
-          code: command.code,
-          error: command.message,
-          retryable: command.retryable,
+          ok: command.ok,
+          ...(command.ok ? { result } : { code: command.code, error: command.message, retryable: command.retryable }),
           command
         });
+      } catch (error) {
+        console.warn("FBL Skyhold | Storage operation response could not be delivered.", error);
       }
       return true;
     }

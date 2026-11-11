@@ -401,27 +401,36 @@ export function planMarketOutboundSale({
 }
 
 export function preflightMarketOutboundDispatch({ resources = [], cargoReservations = [] } = {}) {
-  const rowsById = new Map((Array.isArray(resources) ? resources : []).map((row) => [text(row?.id), row]));
+  const rowsById = new Map();
+  for (const row of Array.isArray(resources) ? resources : []) {
+    const id = text(row?.id);
+    if (!rowsById.has(id)) rowsById.set(id, []);
+    rowsById.get(id).push(row);
+  }
   const grouped = new Map();
+  const stale = (rowId, batchId, qty, available = 0) => ({ ok: false, stale: true, rowId, batchId,
+    requested: qty, available, message: "Reserved outbound cargo changed before dispatch." });
   for (const cargo of cargoReservations ?? []) {
     const rowId = text(cargo?.rowId);
     const id = text(cargo?.batchId);
+    const resourceId = text(cargo?.resourceId);
     const qty = whole(cargo?.qty);
     if (!rowId || !id || !qty) continue;
+    const matches = (rowsById.get(rowId) ?? []).filter((row) => !resourceId || text(row?.resourceId ?? row?.id) === resourceId)
+      .flatMap((row) => (Array.isArray(row?.batches) ? row.batches : [])
+        .filter((batch) => text(batch?.id) === id).map((batch) => ({ row, batch })));
+    if (matches.length !== 1) return stale(rowId, id, qty);
+    const { row, batch } = matches[0];
     const key = batchKey(rowId, id);
     const previous = grouped.get(key);
+    if (previous && previous.batch !== batch) return stale(rowId, id, qty);
     if (previous) previous.qty += qty;
-    else grouped.set(key, { rowId, batchId: id, qty });
+    else grouped.set(key, { rowId, batchId: id, qty, row, batch, ageQd: whole(batch.ageQd, 0, Number.MAX_SAFE_INTEGER) });
   }
-  const prepared = [];
-  for (const requirement of grouped.values()) {
-    const row = rowsById.get(requirement.rowId);
-    const batch = Array.isArray(row?.batches) ? row.batches.find((candidate) => text(candidate?.id) === requirement.batchId) : null;
-    const available = whole(batch?.qty);
-    if (!row || !batch || available < requirement.qty) {
-      return { ok: false, stale: true, rowId: requirement.rowId, batchId: requirement.batchId, requested: requirement.qty, available, message: "Reserved outbound cargo changed before dispatch." };
-    }
-    prepared.push({ ...requirement, row, batch, ageQd: whole(batch.ageQd, 0, Number.MAX_SAFE_INTEGER) });
+  const prepared = [...grouped.values()];
+  for (const requirement of prepared) {
+    const available = whole(requirement.batch.qty);
+    if (available < requirement.qty) return stale(requirement.rowId, requirement.batchId, requirement.qty, available);
   }
   return { ok: true, prepared };
 }
@@ -429,16 +438,17 @@ export function preflightMarketOutboundDispatch({ resources = [], cargoReservati
 export function applyMarketOutboundDispatch({ resources = [], cargoReservations = [] } = {}) {
   const preflight = preflightMarketOutboundDispatch({ resources, cargoReservations });
   if (!preflight.ok) return preflight;
-  const actualAges = new Map(preflight.prepared.map((row) => [batchKey(row.rowId, row.batchId), row.ageQd]));
+  const sources = new Map(preflight.prepared.map((row) => [batchKey(row.rowId, row.batchId), row]));
   for (const requirement of preflight.prepared) {
     requirement.batch.qty = whole(requirement.batch.qty) - requirement.qty;
     requirement.row.batches = requirement.row.batches.filter((batch) => whole(batch?.qty) > 0);
     requirement.row.qty = requirement.row.batches.reduce((sum, batch) => sum + whole(batch?.qty), 0);
   }
-  const cargo = (cargoReservations ?? []).map((row) => ({
-    ...row,
-    ageQd: actualAges.get(batchKey(row?.rowId, row?.batchId)) ?? whole(row?.reservedAgeQd ?? row?.ageQd)
-  }));
+  const cargo = (cargoReservations ?? []).map((row) => {
+    const source = sources.get(batchKey(row?.rowId, row?.batchId));
+    return { ...row, ageQd: source?.ageQd ?? whole(row?.reservedAgeQd ?? row?.ageQd),
+      roomId: text(source?.row.roomId ?? source?.row.storageRoomId ?? row?.roomId) || "outdoors" };
+  });
   return { ok: true, cargo, dispatchedQty: cargo.reduce((sum, row) => sum + whole(row?.qty), 0) };
 }
 

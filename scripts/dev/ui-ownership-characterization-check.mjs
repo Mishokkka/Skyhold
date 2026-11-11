@@ -62,6 +62,9 @@ export async function checkUiOwnership() {
     const remote = createGmWriteAuthority({ user: () => second, authority: () => gm, sender: (key) => users.get(key),
       socket: () => ({ emit: (_channel, payload) => { transported = payload; } }), timeoutMs: 1000 });
     const draft = clone(data); draft.meta.revision = 9;
+    await assert.rejects(remote.requestCommit(draft, { baseRevision: 8, scope: "holdings", localAuthority: true }),
+      { code: "authority-offline" });
+    assert.equal(transported, undefined, "an Actor transfer commit must stop rather than leave the executing authority");
     const wait = remote.requestCommit(draft, { baseRevision: 8, scope: "holdings" });
     await remote.handle({ type: "gmCommitResponse", requestId: transported.requestId,
       operationId: transported.operationId, userId: second.id, gmId: gm.id,
@@ -70,6 +73,23 @@ export async function checkUiOwnership() {
     await remote.handle(responses.at(-1), gm.id);
     assert.equal((await wait).meta.revision, 9, "authenticated authority receipt must resolve the requesting GM");
     assert.equal(writes, 2);
+
+    const notifyDraft = clone(data); notifyDraft.meta.revision = 10;
+    const writerWithNotificationFailure = createGmWriteAuthority({
+      getData: () => data, user: () => gm, authority: () => gm,
+      persistData: async (saved) => ({ data: saved, changed: true }),
+      notifyChanged() { throw new Error("notification transport unavailable"); }
+    });
+    const previousWarning = console.warn;
+    const warnings = [];
+    try {
+      console.warn = (...args) => warnings.push(args);
+      const saved = await writerWithNotificationFailure.requestCommit(notifyDraft, { baseRevision: 9, scope: "holdings" });
+      assert.equal(saved.meta.revision, 10, "a notification error after the save must not become a failed commit");
+      assert.equal(warnings.length, 1);
+    } finally {
+      console.warn = previousWarning;
+    }
 
     for (const failAttempt of [1, 2]) {
       let attempts = 0;

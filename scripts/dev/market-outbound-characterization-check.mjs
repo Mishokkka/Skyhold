@@ -6,6 +6,7 @@ import {
 } from "../data/market/outbound-state.js";
 import {
   allocateMarketOutboundBuyers,
+  applyMarketOutboundDispatch,
   marketOutboundAvailableQuantity,
   planMarketOutboundSale
 } from "../engines/market/outbound.js";
@@ -127,6 +128,20 @@ reservedHolding.special.market.outbound.orders.push({
 });
 const reservedState = normalizeMarketOutboundState(reservedHolding.special.market.outbound);
 assert.equal(marketOutboundAvailableQuantity({ resources: reservedHolding.storage.resources, outboundState: reservedState, resourceId: "wood" }), 8, "soft reservations must make exact batch quantities unavailable without deleting stock");
+const olderStock = [
+  { id: "shared", resourceId: "wood", roomId: "private", qty: 3, batches: [{ id: "lot", qty: 3, ageQd: 7 }] },
+  { id: "shared", resourceId: "stone", roomId: "outdoors", qty: 2, batches: [{ id: "lot", qty: 2, ageQd: 0 }] }
+];
+const legacyCargo = [{ rowId: "shared", batchId: "lot", resourceId: "wood", qty: 1 }];
+const sent = applyMarketOutboundDispatch({ resources: olderStock, cargoReservations: legacyCargo });
+assert.equal(sent.ok, true, "an accepted shipment can still resolve its unique material and batch despite a duplicate row ID");
+assert.deepEqual(olderStock.map(row => row.qty), [2, 2], "dispatch must debit the saved material, not the last row with that ID");
+assert.equal(sent.cargo[0].roomId, "private", "dispatch reports the real source for the role-filtered stock journal");
+olderStock.push(structuredClone(olderStock[0]));
+const duplicateLots = structuredClone(olderStock);
+assert.equal(applyMarketOutboundDispatch({ resources: olderStock, cargoReservations: legacyCargo }).ok, false,
+  "a saved shipment must stop when even its material and batch cannot distinguish the source");
+assert.deepEqual(olderStock, duplicateLots);
 const planned = salePlan(reservedHolding);
 assert.equal(planned.ok, true);
 assert.equal(planned.route.id, "cheap", "planner must select the cheapest admissible complete route quote");

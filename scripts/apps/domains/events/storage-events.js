@@ -1,9 +1,9 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import { requestStorageOperation, SkyholdData } from "../../../data/store.js";
-import { clone } from "../../../data/utils.js";
 import { stableDataHash } from "../../../data/storage-commit.js";
 import { canReadHolding, hiddenStorageRoomIds } from "../../../data/access-guard.js";
 import { reservedResourceBatchQuantities } from "../../../core/resource-batches.js";
+import { reclassifyResourceRow } from "../../../core/resources.js";
 import { createSafeIcon } from "../../../core/helpers.js";
 import { DUPLICATE_STORAGE_ROW, indexStorageRows, resolveStorageRow, STORAGE_ROW_CHANGED } from "../../../engines/storage/row-identity.js";
 import { foundryItemClass, renderFoundryDocumentSheet, resolveFoundryUuid } from "../../../integrations/foundry-runtime.js";
@@ -113,10 +113,12 @@ _onPickStorageResource(event) {
   const holdingId = data ? this._activeWritableHoldingId(data) : "";
   const holding = data?.holdings?.find((entry) => String(entry.id) === holdingId);
   const rowId = button?.closest?.("[data-storage-row-id]")?.dataset?.storageRowId;
+  let source;
   if (scope === "row") {
     const { row, message } = resolveStorageRow(holding?.storage?.resources, rowId);
     if (!row) return ui.notifications.warn(message);
     if (reservedResourceBatchQuantities(holding, row).size) return ui.notifications.warn(RESERVED_RESOURCE_MESSAGE);
+    source = row;
   }
   SkyholdResourceCatalogEditor.pick({
     selectedId: String(button?.dataset?.resourceId ?? ""),
@@ -125,11 +127,15 @@ _onPickStorageResource(event) {
         const result = await SkyholdData.updateHolding(holdingId, (draft) => {
           const { row, message } = resolveStorageRow(draft?.storage?.resources, rowId);
           if (!row) return SkyholdData.skipTransaction({ ok: false, message });
+          if (row.resourceId !== source.resourceId || row.name !== source.name) {
+            return SkyholdData.skipTransaction({ ok: false, message: STORAGE_ROW_CHANGED });
+          }
           if (reservedResourceBatchQuantities(draft, row).size) {
             return SkyholdData.skipTransaction({ ok: false, message: RESERVED_RESOURCE_MESSAGE });
           }
-          row.resourceId = String(resource.id ?? "custom");
-          if (row.resourceId !== "custom") row.name = String(resource.label ?? "");
+          const replacement = reclassifyResourceRow(row, String(resource.id ?? "custom"));
+          if (replacement === row) return SkyholdData.skipTransaction({ ok: true });
+          draft.storage.resources[draft.storage.resources.indexOf(row)] = replacement;
           return { ok: true };
         }, { fallback: false, reason: "storage:pick-row-resource" });
         if (result?.ok) this.requestRender({ focus: false });
@@ -385,8 +391,7 @@ async _openStorageMoveDialog({ rowType = "resources", rowId = "", fromRoomId = "
     ? { [rowIds[0]]: Math.max(1, Math.min(maxQuantity, Math.floor(Number(moveQuantity) || 1))) }
     : {};
 
-  const prepared = clone(source);
-  const preview = this._planStorageBatchMove(prepared, {
+  const preview = this._planStorageBatchMove(source, {
     rowType: normalizedType,
     rowIds,
     rowQuantities,
@@ -415,13 +420,16 @@ async _openStorageMoveDialog({ rowType = "resources", rowId = "", fromRoomId = "
     ui.notifications.warn(applied.message || "Не удалось переместить выбранные позиции.");
     return;
   }
-  const selection = this.storageBatchSelection?.[normalizedType];
-  for (const id of rowIds) selection?.delete?.(id);
-  this.activeStorageRoomId = normalizedToRoomId;
-  this.activeStorageTab = normalizedType;
-  this._activeTabContextCache?.clear?.();
-  this.requestRender({ focus: false, skipLoadingOverlay: true });
-  ui.notifications.info(`Перемещено позиций: ${applied.moved}.`);
+  if (this.activeHoldingId === holdingId) {
+    const selection = this.storageBatchSelection?.[normalizedType];
+    for (const id of rowIds) selection?.delete?.(id);
+    const destinations = (applied.placements ?? []).map((placement) => placement.roomId);
+    this.activeStorageRoomId = destinations.includes(normalizedToRoomId) ? normalizedToRoomId : (destinations[0] ?? normalizedToRoomId);
+    this.activeStorageTab = normalizedType;
+    this._activeTabContextCache?.clear?.();
+    this.requestRender({ focus: false, skipLoadingOverlay: true });
+  }
+  ui.notifications.info(applied.message || `Перемещено позиций ${applied.moved}.`);
 },
 
 async _openStorageGiveDialog({ rowType = "resources", rowId = "", roomId = "outdoors" } = {}) {

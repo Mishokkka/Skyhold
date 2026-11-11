@@ -24,6 +24,7 @@ async _removeQuantityFromActorItem(item, amount = 1) {
   if (!game.user?.isGM && !actor.isOwner) return { ok: false };
   const qty = this._itemQuantity(item);
   const take = Math.max(1, Math.floor(this._safeNumber(amount, 1)));
+  if (take > qty) return { ok: false };
   const previousData = item.toObject ? item.toObject() : cloneFoundryData(item);
   const receipt = {
     ok: true,
@@ -34,13 +35,19 @@ async _removeQuantityFromActorItem(item, amount = 1) {
     previousQuantity: qty,
     previousData
   };
-  if (qty > take && item.update) {
-    await item.update(itemQuantityUpdateData(qty - take));
-    return receipt;
+  if (qty > take) {
+    if (!item.update) return { ok: false };
+    const updated = await item.update(itemQuantityUpdateData(qty - take));
+    const remaining = this._itemQuantity(updated ?? actor.items?.get?.(item.id) ?? item);
+    if (remaining === qty - take) return receipt;
+    if (remaining !== qty && !await this._restoreActorItemRemoval(receipt)) {
+      throw new Error("Не удалось восстановить исходное количество предмета.");
+    }
+    return { ok: false };
   }
   if (actor.deleteEmbeddedDocuments) {
     await actor.deleteEmbeddedDocuments("Item", [item.id]);
-    return receipt;
+    if (!actor.items?.get?.(item.id)) return receipt;
   }
   return { ok: false };
 },
@@ -51,19 +58,20 @@ async _restoreActorItemRemoval(receipt = null) {
   if (!actor) return false;
   const existing = actor.items?.get?.(receipt.itemId);
   if (existing?.update) {
-    await existing.update(itemQuantityUpdateData(receipt.previousQuantity));
-    return true;
+    const restored = await existing.update(itemQuantityUpdateData(receipt.previousQuantity));
+    return this._itemQuantity(restored ?? actor.items?.get?.(receipt.itemId) ?? existing) === receipt.previousQuantity;
   }
   if (!actor.createEmbeddedDocuments || !receipt.previousData) return false;
+  let created;
   try {
-    await actor.createEmbeddedDocuments("Item", [receipt.previousData], { keepId: true });
+    created = await actor.createEmbeddedDocuments("Item", [receipt.previousData], { keepId: true });
   } catch (_error) {
     const fallback = cloneFoundryData(receipt.previousData);
     delete fallback._id;
     delete fallback.id;
-    await actor.createEmbeddedDocuments("Item", [fallback]);
+    created = await actor.createEmbeddedDocuments("Item", [fallback]);
   }
-  return true;
+  return Boolean(created?.[0] && this._itemQuantity(created[0]) === receipt.previousQuantity);
 },
 
 async _removeCreatedActorItems(receipt = null) {
@@ -74,7 +82,24 @@ async _removeCreatedActorItems(receipt = null) {
   const existingIds = itemIds.filter((id) => actor.items?.get?.(id));
   if (!existingIds.length) return true;
   await actor.deleteEmbeddedDocuments("Item", existingIds);
-  return true;
+  return existingIds.every((id) => !actor.items?.get?.(id));
+},
+
+/** Foundry can resolve a vetoed creation with an empty array. Confirm its result before debiting stock. */
+async _createStorageTransferItem(actor, itemData, qty, operationId) {
+  if (operationId) {
+    if (!itemData.flags || typeof itemData.flags !== "object") itemData.flags = {};
+    itemData.flags["fbl-skyhold"] = { ...(itemData.flags["fbl-skyhold"] ?? {}), storageOperationId: operationId };
+  }
+  const created = await actor.createEmbeddedDocuments("Item", [itemData]);
+  const itemIds = (Array.isArray(created) ? created : []).map((item) => String(item?.id ?? item?._id ?? "")).filter(Boolean);
+  if (!itemIds.length) return { ok: false, message: "Foundry не создал предмет у персонажа." };
+  const actorMutation = { kind: "created", actorId: String(actor.id ?? ""), actorUuid: String(actor.uuid ?? ""), itemIds };
+  if (itemIds.length !== 1 || this._itemQuantity(created[0]) !== qty) {
+    if (!await this._removeCreatedActorItems(actorMutation)) throw new Error("Не удалось отменить выдачу предмета с изменённым количеством.");
+    return { ok: false, message: "Foundry изменил количество при создании предмета. Выдача отменена." };
+  }
+  return { ok: true, actorMutation };
 },
 
 async _foundryItemDataForResource(resourceId = "custom", name = "Ресурс", qty = 1) {
@@ -114,22 +139,16 @@ async _withdrawResourceToActor(holding, { resourceId = "custom", name = "", qty 
   const have = this._storageAvailableRowQuantity(holding, row);
   if (have < amount) return { ok: false, message: `На складе свободно ${this._formatNumber(have)} ед. ресурса «${label}». Запрошено ${this._formatNumber(amount)}.` };
   const itemData = await this._foundryItemDataForResource(id, label, amount);
-  if (operationId) {
-    if (!itemData.flags || typeof itemData.flags !== "object") itemData.flags = {};
-    itemData.flags["fbl-skyhold"] = { ...(itemData.flags["fbl-skyhold"] ?? {}), storageOperationId: operationId };
-  }
-  const created = await actor.createEmbeddedDocuments("Item", [itemData]);
-  const actorMutation = {
-    kind: "created", actorId: String(actor.id ?? ""), actorUuid: String(actor.uuid ?? ""),
-    itemIds: (Array.isArray(created) ? created : []).map((item) => String(item?.id ?? item?._id ?? "")).filter(Boolean)
-  };
+  const transfer = await this._createStorageTransferItem(actor, itemData, amount, operationId);
+  if (!transfer.ok) return transfer;
+  const { actorMutation } = transfer;
   try {
     const taken = this._storageTake(holding, resource, amount);
     if (taken.takenQty !== amount) throw new Error("Не удалось списать подтверждённое количество со склада.");
     this._appendStorageLog(holding, [{ kind: "manual-spend", resourceId: id, name: label, qty: -amount, roomId: room, source: "Выдача Foundry", note: `получатель: ${actor.name}`, operationId }]);
     return { ok: true, message: `${actor.name}: выдано ${this._formatNumber(amount)} ${label}.`, actorMutation };
   } catch (error) {
-    await this._removeCreatedActorItems(actorMutation);
+    if (!await this._removeCreatedActorItems(actorMutation)) throw new Error("Не удалось отменить выдачу предмета.", { cause: error });
     throw error;
   }
 },
@@ -146,15 +165,9 @@ async _giveStoredItemToActor(holding, { itemId = "", itemIndex = -1, qty = 1, ac
   const amount = Math.max(1, Math.floor(this._safeNumber(qty, 1)));
   if (amount > have) return { ok: false, message: `На складе осталось ${this._formatNumber(have)} ед. предмета «${row.name}».` };
   const itemData = this._setItemQuantityData(row.itemData ?? row, amount);
-  if (operationId) {
-    if (!itemData.flags || typeof itemData.flags !== "object") itemData.flags = {};
-    itemData.flags["fbl-skyhold"] = { ...(itemData.flags["fbl-skyhold"] ?? {}), storageOperationId: operationId };
-  }
-  const created = await actor.createEmbeddedDocuments("Item", [itemData]);
-  const actorMutation = {
-    kind: "created", actorId: String(actor.id ?? ""), actorUuid: String(actor.uuid ?? ""),
-    itemIds: (Array.isArray(created) ? created : []).map((item) => String(item?.id ?? item?._id ?? "")).filter(Boolean)
-  };
+  const transfer = await this._createStorageTransferItem(actor, itemData, amount, operationId);
+  if (!transfer.ok) return transfer;
+  const { actorMutation } = transfer;
   try {
     if (have > amount) {
       const remaining = have - amount;
@@ -165,7 +178,7 @@ async _giveStoredItemToActor(holding, { itemId = "", itemIndex = -1, qty = 1, ac
     this._appendStorageLog(holding, [{ kind: "manual-spend", resourceId: "custom", name: row.name, qty: -amount, roomId: row.roomId, source: "Выдача Foundry", note: `получатель: ${actor.name}`, operationId }]);
     return { ok: true, message: `${actor.name}: выдан предмет ${row.name} (${this._formatNumber(amount)}).`, actorMutation };
   } catch (error) {
-    await this._removeCreatedActorItems(actorMutation);
+    if (!await this._removeCreatedActorItems(actorMutation)) throw new Error("Не удалось отменить выдачу предмета.", { cause: error });
     throw error;
   }
 },
@@ -262,7 +275,9 @@ async _storageReceiveFoundryItem(holding, item, { roomId = "outdoors", operation
     this._appendStorageLog(holding, [{ kind: "manual-add", resourceId: "custom", name: snapshot.name, qty: amount, roomId: targetRoom, source: "Предмет Foundry", note: snapshot.sourceActorName ? `из ${snapshot.sourceActorName}` : "перетаскивание", operationId }]);
     return { ok: true, message: `${snapshot.name}: предмет принят в ${this._storageRoomLabel(holding, targetRoom)}.`, actorMutation };
   } catch (error) {
-    if (actorMutation?.ok) await this._restoreActorItemRemoval(actorMutation);
+    if (actorMutation?.ok && !await this._restoreActorItemRemoval(actorMutation)) {
+      throw new Error("Не удалось восстановить предмет в инвентаре персонажа.", { cause: error });
+    }
     throw error;
   }
 }

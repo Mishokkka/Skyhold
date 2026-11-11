@@ -69,17 +69,19 @@ async function persistSkyholdData(data, options = {}) {
 async function commitSkyholdData(data, {
   scope = COMMIT_SCOPES.BOTH,
   baseRevision = data?.meta?.revision,
-  forceRollbackSnapshot = false
+  forceRollbackSnapshot = false,
+  localAuthority = false
 } = {}) {
   return measureSkyholdPerformance("SkyholdData.commit", async () => {
     assertNoNewEntityCollisions(SkyholdData.view(), data);
     const prepared = measureSkyholdPerformance("SkyholdData.normalize", () => prepareSkyholdCommit(data, { scope, baseRevision }));
     const next = prepared.data;
-    if (!game.user?.isGM) return requestGmDataPatch(next);
+    if (!localAuthority && !game.user?.isGM) return requestGmDataPatch(next);
     return gmWrites.requestCommit(next, {
       baseRevision,
       scope: prepared.scope,
-      forceRollbackSnapshot
+      forceRollbackSnapshot,
+      localAuthority
     });
   });
 }
@@ -125,13 +127,15 @@ export class SkyholdData {
   static async transaction(updater, {
     reason = "transaction",
     scope = COMMIT_SCOPES.BOTH,
-    forceRollbackSnapshot = false
+    forceRollbackSnapshot = false,
+    localAuthority = false
   } = {}) {
     if (typeof updater !== "function") {
       throw new Error("FBL Skyhold | SkyholdData.transaction requires an updater function.");
     }
 
     return enqueueSkyholdWrite(async () => {
+      if (localAuthority) gmWrites.assertAuthority();
       const draft = SkyholdData.get();
       const baseRevision = Math.max(0, toNumber(draft?.meta?.revision, 0));
       const result = await updater(draft, { reason, skip: skipTransaction });
@@ -140,7 +144,8 @@ export class SkyholdData {
         reason,
         scope: normalizeCommitScope(scope),
         baseRevision,
-        forceRollbackSnapshot
+        forceRollbackSnapshot,
+        localAuthority
       });
       return result === undefined ? saved : result;
     });
@@ -216,10 +221,10 @@ export class SkyholdData {
     }, { reason: "delete-holding", scope: COMMIT_SCOPES.HOLDINGS });
   }
 
-  static async updateHolding(holdingId, updater, { fallback = false, reason = "update-holding" } = {}) {
+  static async updateHolding(holdingId, updater, { fallback = false, reason = "update-holding", localAuthority = false } = {}) {
     return this.transaction(async (data) => {
       return updateHoldingInData(data, holdingId, updater, { fallback, skip: skipTransaction });
-    }, { reason, scope: COMMIT_SCOPES.HOLDINGS });
+    }, { reason, scope: COMMIT_SCOPES.HOLDINGS, localAuthority });
   }
 
   static async importLaputa() {

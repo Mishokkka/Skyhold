@@ -61,7 +61,7 @@ export function advanceTransportShipments(data, holding, targetQd, workflow, { l
         if (actual) lot.ageQd = actual.ageQd + Math.max(0, transportLocalQd(order, atQd) - Number(holding.gm?.calendaria?.lastQd ?? 0));
         lot.ageAtQd = atQd;
         if (actual?.qty) entries.push({ kind: "transport", resourceId: lot.resourceId, name: lot.name, qty: -actual.qty,
-          roomId: lot.roomId ?? "outdoors", source: "Отправление груза", operationId: order.id });
+          roomId: actual.roomId, source: "Отправление груза", operationId: order.id });
       }
     },
     receiveCargo(order, cargo, atQd, receipt) {

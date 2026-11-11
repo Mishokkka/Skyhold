@@ -332,6 +332,43 @@ export async function checkSocketCharacterization() {
     assert.equal(storageOperations, 2, "the direct GM path must execute exactly once");
     assert.equal(emitted.length, emittedBeforeDirectStorage, "the direct GM path must not round-trip through the socket");
 
+    const secondaryGm = { id: "gm-2", isGM: true, active: true };
+    game.users.contents.push(secondaryGm);
+    game.user = secondaryGm;
+    const secondaryStorage = api.requestStorageOperation({ ...storageRequest.operation, operationId: "storage-other-gm" });
+    assert.equal(storageOperations, 2, "a secondary GM must not touch the Actor before an authority commit");
+    const secondaryRequest = emitted.at(-1);
+    assert.equal(secondaryRequest.targetGmId, "gm-1");
+    game.user = game.users.contents.find(user => user.id === "gm-1");
+    await api.handleSkyholdSocketPayload(secondaryRequest, "player-1");
+    assert.equal(storageOperations, 2, "a player may not claim the secondary GM's identity");
+    const originalEmit = game.socket.emit;
+    const previousWarn = console.warn;
+    const responseCount = emitted.length;
+    try {
+      let responseFailed = false;
+      game.socket.emit = (channel, payload) => {
+        if (!responseFailed) {
+          responseFailed = true;
+          throw new Error("injected failure delivering the first receipt");
+        }
+        originalEmit(channel, payload);
+      };
+      console.warn = () => {};
+      await api.handleSkyholdSocketPayload(secondaryRequest, secondaryGm.id);
+      assert.equal(emitted.length, responseCount, "a lost success response must not be sent back as a failed operation");
+    } finally {
+      game.socket.emit = originalEmit;
+      console.warn = previousWarn;
+    }
+    assert.equal(storageOperations, 3, "the authority executes the authenticated GM's complete storage operation");
+    await api.handleSkyholdSocketPayload(secondaryRequest, secondaryGm.id);
+    const secondaryResponse = emitted.at(-1);
+    game.user = secondaryGm;
+    await api.handleSkyholdSocketPayload(secondaryResponse, "gm-1");
+    assert.equal((await secondaryStorage).operationId, "storage-other-gm");
+    game.user = game.users.contents.find(user => user.id === "gm-1");
+
     let forgedVictimWrites = 0;
     let forgedVictimActorMutations = 0;
     const victimUser = { id: "victim-player", isGM: false };

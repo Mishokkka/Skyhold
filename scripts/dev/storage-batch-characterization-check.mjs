@@ -196,6 +196,16 @@ export async function checkStorageBatchCharacterization() {
   assert.deepEqual(complete.placements.map(({ id, roomId }) => [id, roomId]), [["first", "target"], ["second", "source"]]);
   assert.equal(limitedHolding.storage.log.length, 4, "each moved stack produces a paired journal entry");
 
+  const resourceAtSource = fixture();
+  resourceAtSource.storage.resources[0].roomId = "outdoors";
+  const resourceBefore = clone(resourceAtSource);
+  const overflowBack = { holding: resourceAtSource, rowIds: ["res-a"], fromRoomId: "outdoors",
+    toRoomId: "target", operationId: "resource-overflow-to-source", dependencies: deps };
+  assert.equal(applyStorageBatchMove(overflowBack).ok, false, "a resource batch must not report a move when part goes back to its source");
+  assert.deepEqual(resourceAtSource, resourceBefore, "a rejected move must preserve the original resource row, batches and journal");
+  assert.equal(planStorageBatchMove(overflowBack).ok, false, "preview reports the same resource overflow refusal");
+  assert.equal(applyStorageBatchMove({ ...overflowBack, rowQuantities: { "res-a": 2 } }).ok, true);
+
   const ambiguousHolding = fixture();
   ambiguousHolding.storage.resources.unshift({ id: "res-a", resourceId: "stone", name: "Камень", qty: 3, roomId: "target" });
   const ambiguousBefore = clone(ambiguousHolding);

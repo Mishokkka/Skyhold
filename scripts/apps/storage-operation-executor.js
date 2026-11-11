@@ -14,7 +14,7 @@ const STORAGE_OPERATION_TYPES = new Set([
   "contributeUniqueBuilding",
   "batchMove"
 ]);
-const REMOTE_GM_ONLY_STORAGE_TYPES = new Set(["depositItem", "withdrawResource", "giveStoredItem"]);
+const GM_ONLY_ACTOR_TRANSFERS = new Set(["depositItem", "withdrawResource", "giveStoredItem"]);
 
 const StorageOperationLogic = composeDomainGroup("StorageOperationLogic", [
   ["BuildingDomain", BuildingDomain],
@@ -123,18 +123,15 @@ export function createStorageOperationExecutor({
     if (restored === false) throw operationError("Не удалось восстановить инвентарь персонажа после ошибки записи.");
   }
 
-  async function executeOnce(operation, { userId = "", remote = false } = {}) {
+  async function executeOnce(operation, { userId = "" } = {}) {
     // Older receipts serialized an omitted revision as zero after normalizing twice.
     const signature = JSON.stringify({ ...operation, expectedRevision: operation.expectedRevision ?? 0 });
     const requester = getUser(userId);
     if (!requester) throw operationError("Storage operation requester was not found.");
-    if (remote && requester.isGM) {
-      throw operationError("Remote storage operations cannot claim GM authority.");
-    }
     if (!requester.isGM && operation.type === "addResourceRow") {
       throw operationError("Только ГМ может вручную добавлять ресурсы на склад.");
     }
-    if (remote && REMOTE_GM_ONLY_STORAGE_TYPES.has(operation.type)) {
+    if (!requester.isGM && GM_ONLY_ACTOR_TRANSFERS.has(operation.type)) {
       throw operationError("Actor and Item storage transfers must be performed directly by a GM.");
     }
 
@@ -153,7 +150,7 @@ export function createStorageOperationExecutor({
           return skipTransaction({ ...prior.payload.result, duplicate: true, replay: true });
         }
         const checksRevision = operation.type === "batchMove"
-          || (REMOTE_GM_ONLY_STORAGE_TYPES.has(operation.type) && operation.expectedRevision !== null);
+          || (GM_ONLY_ACTOR_TRANSFERS.has(operation.type) && operation.expectedRevision !== null);
         if (checksRevision && operation.expectedRevision !== Math.max(0, Number(data?.meta?.revision) || 0)) {
           return skipTransaction({
             ok: false,
@@ -284,7 +281,7 @@ export function createStorageOperationExecutor({
           title: "Операция хранилища", summary: response.message,
           payload: { signature, userId: String(userId), result: response } });
         return response;
-      }, { fallback: false, reason: `storage-operation:${operation.type}` });
+      }, { fallback: false, localAuthority: true, reason: `storage-operation:${operation.type}` });
 
       if (!result) throw operationError("Storage operation holding was not found.");
       return result;
@@ -306,7 +303,7 @@ export function createStorageOperationExecutor({
 
   return async function executeStorageOperation(rawOperation, context = {}) {
     const operation = normalizeOperation(rawOperation);
-    const signature = JSON.stringify([String(context.userId ?? ""), Boolean(context.remote), operation]);
+    const signature = JSON.stringify([String(context.userId ?? ""), operation]);
     if (operationResults.has(operation.operationId)) {
       const cached = operationResults.get(operation.operationId);
       if (cached.signature !== signature) throw operationError("Storage operation id is already used by another operation.");
