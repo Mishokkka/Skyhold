@@ -200,6 +200,39 @@ export async function checkStorageBatchCharacterization() {
   assert.deepEqual(complete.placements.map(({ id, roomId }) => [id, roomId]), [["first", "target"], ["second", "source"]]);
   assert.equal(limitedHolding.storage.log.length, 4, "each moved stack produces a paired journal entry");
 
+  const feasible = fixture();
+  feasible.storage.items = [
+    { id: "small", name: "Малый груз", roomId: "outdoors", weight: 5, qty: 1 },
+    { id: "large", name: "Большой груз", roomId: "outdoors", weight: 10, qty: 1 }
+  ];
+  const alternative = { holding: feasible, rowType: "items", rowIds: ["small", "large"],
+    fromRoomId: "outdoors", toRoomId: "target",
+    dependencies: { ...deps, storageRooms: () => [
+      { id: "outdoors", available: true, unlimited: true },
+      { id: "target", available: true, free: 10 },
+      { id: "source", available: true, free: 5 }
+    ] } };
+  const layout = planStorageBatchMove(alternative);
+  assert.equal(layout.ok, true, "the smaller stack must yield the only large room to the larger stack");
+  assert.deepEqual(layout.rows.map(row => row.roomId), ["source", "target"]);
+  assert.deepEqual(feasible.storage.items.map(row => row.roomId), ["outdoors", "outdoors"], "preview must be read-only");
+  const movedAlternative = applyStorageBatchMove(alternative);
+  assert.equal(movedAlternative.ok, true);
+  assert.deepEqual(feasible.storage.items.map(row => row.roomId), ["source", "target"]);
+
+  const crowded = fixture();
+  crowded.storage.items = Array.from({ length: 30 }, (_, index) => ({
+    id: `stack-${index}`, roomId: "outdoors", qty: 1, weight: index === 29 ? 30 : 1
+  }));
+  const crowdedLayout = planStorageBatchMove({ ...alternative, holding: crowded,
+    rowIds: crowded.storage.items.map(row => row.id),
+    dependencies: { ...deps, storageRooms: () => [
+      { id: "target", available: true, free: 30 },
+      { id: "source", available: true, free: 29 }
+    ] } });
+  assert.equal(crowdedLayout.ok, true, "stacks with only one fitting room must be considered before numerous interchangeable ones");
+  assert.deepEqual(crowdedLayout.rows.map(row => row.roomId), [...Array(29).fill("source"), "target"]);
+
   const resourceAtSource = fixture();
   resourceAtSource.storage.resources[0].roomId = "outdoors";
   const resourceBefore = clone(resourceAtSource);

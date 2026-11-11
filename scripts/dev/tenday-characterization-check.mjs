@@ -274,6 +274,15 @@ function checkSchoolResolutionMilestone() {
   };
   assert.equal(harness._advanceResidentAges(structuredClone(staffHolding), 1).educated, 1,
     "the current staff school must create a milestone when it actually teaches");
+
+  const mixedStaff = structuredClone(staffHolding);
+  mixedStaff.people.list.find(person => person.id === "teacher").background = "Дровосек";
+  mixedStaff.people.list.push({ id: "trainee", name: "Грамотный подросток", age: 14, race: "Человек", background: "Учитель" });
+  applyStaffAppointment(mixedStaff, "trainee", { buildingId: school.id, primaryFunctionId: "culture", wageDailyCopper: 10 });
+  mixedStaff.buildings.list[0].serviceState.activeWorkerIds.push("trainee");
+  assert.equal(harness._advanceResidentAges(mixedStaff, 1).educated, 0,
+    "a literate child and an unqualified adult cannot combine into one teacher");
+
   child.shipAssignment = { shipId: "ship", away: true };
   const away = harness._advanceResidentAges(staffHolding, 1);
   assert.equal(away.educated, 0, "a child away at sea ages without attending school");

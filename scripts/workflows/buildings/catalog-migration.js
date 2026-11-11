@@ -15,6 +15,7 @@ import { usesTechnicalMaintenance } from "../../data/economy/maintenance.js";
 import { MAINTENANCE_WORK_SOURCE_ID, MAINTENANCE_WORK_FUNCTION_ID, buildWorkAllocationTargets } from "../../data/work-allocations.js";
 import { buildingLaborMode, validateHybridLaborHolding } from "../../data/hybrid-labor.js";
 import { BUILDING_CATALOG_V14_TEMPLATES } from "../../data/building-template-v14-catalog.js";
+import { applyStandardBuildingText } from "../../data/building-template-revision-v19.js";
 import { buildingCatalogV18Templates } from "../../data/building-template-revision-v18.js";
 import { buildingCatalogV17Templates } from "../../data/building-template-revision-v17.js";
 import { buildingCatalogV16Templates } from "../../data/building-template-revision-v16.js";
@@ -25,6 +26,8 @@ import { normalizeBuilding } from "../../data/normalizers/building.js";
 
 export const BUILDING_CATALOG_MIGRATION_NAMESPACE = "fbl-skyhold.buildings.catalog";
 export const BUILDING_CATALOG_MIGRATION_VERSION = TEMPLATE_CATALOG_VERSION;
+const EMPTY_MIGRATION_COUNTS = Object.freeze({ direct: 0, alias: 0, knownInstance: 0, custom: 0, deprecatedUnmapped: 0, changed: 0, unchanged: 0 });
+const TEXT_FIELD_LABELS = Object.freeze({ description: "Описание", effect: "Эффект", notes: "Заметки" });
 
 // Only true identifier replacements belong here. Development-tree upgrades
 // are deliberately excluded: upgradesFromTemplateIds is a future player
@@ -448,15 +451,17 @@ export function planBuildingCatalogMigration({
   operationId = "",
   createdAt = new Date().toISOString(),
   resolutions = {},
-  replaceCatalog = false
+  replaceCatalog = false,
+  textOnly = false
 } = {}) {
   invariant(currentData && typeof currentData === "object", "source-data", "Данные мира для Preview отсутствуют.");
   invariant(text(operationId), "operation-id", "Preview миграции требует operationId.");
   const source = rootDependency(currentData);
-  const targetTemplates = DEFAULT_BUILDING_TEMPLATES;
-  const legacyTargets = new Map(BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION.map((row) => [row.id, row]));
   const targetVersion = TEMPLATE_CATALOG_VERSION;
   invariant(source.templateCatalogVersion <= targetVersion, "source-version-newer", "Каталог мира новее этой версии модуля; перенос на старые правила запрещён.");
+  if (textOnly) return planStandardBuildingTextUpdate({ currentData, source, operationId, createdAt });
+  const targetTemplates = DEFAULT_BUILDING_TEMPLATES;
+  const legacyTargets = new Map(BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION.map((row) => [row.id, row]));
   const baselineTemplates = source.templateCatalogVersion < 15 ? BUILDING_CATALOG_V14_TEMPLATES
     : source.templateCatalogVersion === 15 ? buildingCatalogV15Templates()
       : source.templateCatalogVersion === 16 ? buildingCatalogV16Templates()
@@ -504,7 +509,7 @@ export function planBuildingCatalogMigration({
   const normalizedTemplates = normalizeCatalogPartition({ buildings: [...targetById.values()] }).buildings;
   for (const template of normalizedTemplates) targetById.set(text(template.id), template);
   targetData.catalog.buildings = targetData.catalog.buildings.map((row) => targetById.get(text(row.id)) ?? row);
-  const counts = { direct: 0, alias: 0, knownInstance: 0, custom: 0, deprecatedUnmapped: 0, changed: 0, unchanged: 0 };
+  const counts = { ...EMPTY_MIGRATION_COUNTS };
   for (const holding of targetData.holdings ?? []) {
     const people = holding?.people?.list ?? [];
     for (let index = 0; index < (holding?.buildings?.list ?? []).length; index += 1) {
@@ -589,7 +594,36 @@ export function planBuildingCatalogMigration({
       issues.push({ ...issue, holdingId: text(holding.id), holdingName: text(holding.name), detail: issue.message });
     }
   }
-  const targetCatalogHash = stableDataHash(targetData.catalog);
+  return completeMigrationPreview({ source, targetData, targetVersion, operationId, createdAt, counts, rows, issues, decisions });
+}
+
+function planStandardBuildingTextUpdate({ currentData, source, operationId, createdAt }) {
+  const targetData = clone(currentData);
+  const counts = { ...EMPTY_MIGRATION_COUNTS };
+  const textUpdates = [];
+  const update = (row, templateId, holding = null) => {
+    const changes = applyStandardBuildingText(row, templateId);
+    const label = text(row?.name) || text(templateId);
+    const location = holding ? (text(holding.name) || text(holding.id)) : "Шаблон";
+    for (const change of changes) {
+      textUpdates.push({ ...change, label, location, fieldLabel: TEXT_FIELD_LABELS[change.field] });
+    }
+    return changes.length > 0;
+  };
+  for (const template of targetData.catalog?.buildings ?? []) update(template, template.id);
+  for (const holding of targetData.holdings ?? []) {
+    for (const building of holding.buildings?.list ?? []) {
+      const changed = update(building, building.templateId, holding);
+      counts[changed ? "changed" : "unchanged"] += 1;
+    }
+  }
+  return completeMigrationPreview({ source, targetData, targetVersion: source.templateCatalogVersion, operationId, createdAt,
+    counts, textOnly: true, textUpdates });
+}
+
+function completeMigrationPreview({ source, targetData, targetVersion, operationId, createdAt, counts,
+  rows = [], issues = [], decisions = [], textOnly = false, textUpdates = [] }) {
+  const targetCatalogHash = stableDataHash(targetData.catalog ?? {});
   const targetHoldingsHash = stableDataHash(targetData.holdings ?? []);
   const catalogChanged = source.catalogHash !== targetCatalogHash;
   const holdingsChanged = source.holdingsHash !== targetHoldingsHash;
@@ -597,7 +631,7 @@ export function planBuildingCatalogMigration({
   const hasChanges = catalogChanged || holdingsChanged || versionChanged;
   const marker = {
     namespace: BUILDING_CATALOG_MIGRATION_NAMESPACE,
-    version: targetVersion,
+    version: BUILDING_CATALOG_MIGRATION_VERSION,
     operationId: text(operationId),
     createdAt: text(createdAt),
     sourceTemplateCatalogVersion: source.templateCatalogVersion,
@@ -609,12 +643,14 @@ export function planBuildingCatalogMigration({
   };
   targetData.meta = {
     ...clone(targetData.meta ?? {}),
-    templateCatalogVersion: targetVersion,
+    ...(textOnly ? {} : { templateCatalogVersion: targetVersion }),
     buildingCatalogMigration: marker
   };
   const blockingIssues = issues.map((issue) => ({ ...issue }));
   return {
-    version: targetVersion,
+    version: BUILDING_CATALOG_MIGRATION_VERSION,
+    textOnly,
+    textUpdates,
     operationId: text(operationId),
     createdAt: text(createdAt),
     source,
@@ -628,10 +664,10 @@ export function planBuildingCatalogMigration({
     preview: {
       sourceTemplateCatalogVersion: source.templateCatalogVersion,
       targetTemplateCatalogVersion: targetVersion,
-      catalogTemplates: targetTemplates.length,
-      customCatalogTemplates: targetData.catalog.buildings.length - targetTemplates.length,
+      catalogTemplates: textOnly ? (targetData.catalog?.buildings?.length ?? 0) : DEFAULT_BUILDING_TEMPLATES.length,
+      customCatalogTemplates: textOnly ? 0 : targetData.catalog.buildings.length - DEFAULT_BUILDING_TEMPLATES.length,
       holdings: (targetData.holdings ?? []).length,
-      instances: rows.length,
+      instances: textOnly ? counts.changed + counts.unchanged : rows.length,
       changedInstances: counts.changed,
       unchangedInstances: counts.unchanged,
       directInstances: counts.direct,
@@ -658,8 +694,10 @@ export function applyBuildingCatalogMigration({ currentData = {}, plan = null, o
   }
   invariant(plan.canApply === true, "plan-blocked", "Preview содержит блокирующие проблемы.", { issues: plan.blockingIssues ?? [] });
   invariant((plan.blockingIssues ?? []).length === 0, "plan-blocked", "Не все решения Preview приняты.");
-  invariant(whole(plan?.target?.templateCatalogVersion) === TEMPLATE_CATALOG_VERSION, "target-version-disabled", "Применение этой редакции каталога ещё не включено.");
-  invariant(stableDataHash(plan?.targetData?.catalog) === text(plan?.target?.catalogHash)
+  const targetVersion = plan.textOnly ? whole(plan.source?.templateCatalogVersion) : TEMPLATE_CATALOG_VERSION;
+  invariant(targetVersion <= TEMPLATE_CATALOG_VERSION && whole(plan?.target?.templateCatalogVersion) === targetVersion,
+    "target-version-disabled", "Применение этой редакции каталога ещё не включено.");
+  invariant(stableDataHash(plan?.targetData?.catalog ?? {}) === text(plan?.target?.catalogHash)
     && stableDataHash(plan?.targetData?.holdings ?? []) === text(plan?.target?.holdingsHash),
   "prepared-data-changed", "Подготовленные данные изменились после Preview; требуется новый расчёт.");
   const current = rootDependency(currentData);

@@ -72,6 +72,7 @@ const SkyholdAppActions = {
     "open-ui-review": "_onOpenUiReview",
     "open-laputa-migration-importer": "_onOpenLaputaMigrationImporter",
     "open-building-catalog-migration": "_onOpenBuildingCatalogMigration",
+    "open-building-text-refresh": "_onOpenBuildingCatalogMigration",
     "open-hybrid-labor-migration": "_onOpenHybridLaborMigration"
   },
   publicClick: ["open-building-template-browser", "open-workforce-planner"]

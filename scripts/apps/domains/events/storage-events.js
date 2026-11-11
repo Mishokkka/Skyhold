@@ -110,9 +110,10 @@ _onPickStorageResource(event) {
   const button = event.currentTarget;
   const scope = String(button?.dataset?.storagePickerScope ?? "");
   const data = scope === "row" ? SkyholdData.get() : null;
-  const holdingId = data ? this._activeWritableHoldingId(data) : "";
+  const card = button?.closest?.("[data-storage-row-id]");
+  const holdingId = String(card?.dataset?.storageHoldingId ?? "");
   const holding = data?.holdings?.find((entry) => String(entry.id) === holdingId);
-  const rowId = button?.closest?.("[data-storage-row-id]")?.dataset?.storageRowId;
+  const rowId = card?.dataset?.storageRowId;
   let source;
   if (scope === "row") {
     const { row, message } = resolveStorageRow(holding?.storage?.resources, rowId);
@@ -270,9 +271,9 @@ _onStorageSelectionMove(event) {
   return this._openStorageMoveDialog({ rowType, rowId, fromRoomId: this.activeStorageRoomId || "outdoors" });
 },
 
-_storageContextRow({ rowType = "resources", rowId = "", roomId = "outdoors" } = {}) {
+_storageContextRow({ rowType = "resources", rowId = "", roomId = "outdoors", holdingId: renderedHoldingId } = {}) {
   const data = SkyholdData.get();
-  const holdingId = this._activeWritableHoldingId(data);
+  const holdingId = renderedHoldingId ?? this._activeWritableHoldingId(data);
   const holdingIndex = (data?.holdings ?? []).findIndex((row) => String(row?.id ?? "") === String(holdingId ?? ""));
   const holding = holdingIndex >= 0 ? data.holdings[holdingIndex] : null;
   const type = rowType === "items" ? "items" : "resources";
@@ -284,7 +285,8 @@ async _onStorageRowFieldChange(field, rowType, property, value) {
   if (!game.user?.isGM) return;
   const card = field.closest?.("[data-storage-row-id]");
   const rowId = card?.dataset?.storageRowId;
-  const context = this._storageContextRow({ rowType, rowId, roomId: card?.dataset?.storageRowRoomId });
+  const holdingId = String(card?.dataset?.storageHoldingId ?? "");
+  const context = this._storageContextRow({ rowType, rowId, holdingId, roomId: card?.dataset?.storageRowRoomId });
   if (!context.row) return ui.notifications.warn(context.message);
   const quantity = String(field.value ?? "").trim() ? value : NaN;
   const result = await SkyholdData.updateHolding(context.holdingId, (holding) => {
@@ -302,7 +304,7 @@ async _onStorageRowFieldChange(field, rowType, property, value) {
     }
     row[property] = value;
     return { ok: true };
-  }, { reason: `storage:${context.type}:${property}` });
+  }, { fallback: false, reason: `storage:${context.type}:${property}` });
   if (!result?.ok) ui.notifications.warn(result?.message ?? STORAGE_ROW_CHANGED);
 },
 

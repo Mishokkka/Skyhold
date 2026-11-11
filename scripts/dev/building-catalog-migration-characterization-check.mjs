@@ -9,8 +9,10 @@ import { checkBuildingCatalogFullTransition } from "./building-catalog-full-tran
 checkCatalogLoadBoundary();
 checkBuildingCatalogFullTransition();
 
-import { TEMPLATE_CATALOG_VERSION } from "../data/building-templates.js";
+import { DEFAULT_BUILDING_TEMPLATES, TEMPLATE_CATALOG_VERSION } from "../data/building-templates.js";
+import { BUILDING_TEMPLATES_CULTURE } from "../data/building-template-catalog/culture.js";
 import { BUILDING_CATALOG_V14_TEMPLATES } from "../data/building-template-v14-catalog.js";
+import { buildingCatalogV18Templates } from "../data/building-template-revision-v18.js";
 import { clone } from "../data/utils.js";
 import {
   BUILDING_CATALOG_MIGRATION_NAMESPACE,
@@ -18,6 +20,49 @@ import {
   planBuildingCatalogMigration,
   technicalMaintenanceMigrationIssues
 } from "../workflows/buildings/catalog-migration.js";
+
+{
+  const old = buildingCatalogV18Templates();
+  const school = old.find(row => row.id === "school");
+  const bank = old.find(row => row.id === "bank-exchange");
+  const newSchool = DEFAULT_BUILDING_TEMPLATES.find(row => row.id === "school");
+  const newBank = DEFAULT_BUILDING_TEMPLATES.find(row => row.id === "bank-exchange");
+  for (const version of [18, TEMPLATE_CATALOG_VERSION]) {
+    const source = { meta: { revision: 7, templateCatalogVersion: version },
+      catalog: { buildings: [{ ...school, templateVersion: version, notes: "Записки ГМа" },
+        { ...bank, templateVersion: version, description: "Семейный банк", visibility: "gm" }] },
+      holdings: [{ id: "a", name: "A", buildings: { list: [
+        { ...school, id: "school-a", templateId: "school", templateVersion: version, effect: "Наши занятия" },
+        { id: "custom", name: "Школа", notes: school.notes }
+      ] } }] };
+    const before = clone(source);
+    const args = { currentData: source, operationId: `standard-text-${version}`, textOnly: true };
+    const plan = planBuildingCatalogMigration(args);
+    assert.deepEqual(source, before, "the preview must not write the world");
+    assert.equal(plan.canApply, true, "known old standard text must have a reviewable update even on the current catalog version");
+    assert.deepEqual(plan.textUpdates.map(row => row.field), ["effect", "effect", "notes"]);
+    const result = applyBuildingCatalogMigration({ currentData: source, plan });
+    const expected = clone(source);
+    expected.catalog.buildings[0].effect = newSchool.effect;
+    expected.catalog.buildings[1].effect = newBank.effect;
+    expected.holdings[0].buildings.list[0].notes = newSchool.notes;
+    assert.deepEqual(result.data.catalog, expected.catalog);
+    assert.deepEqual(result.data.holdings, expected.holdings);
+    assert.equal(result.data.meta.templateCatalogVersion, version, "a text update must not advance the installed catalog version");
+    assert.equal(applyBuildingCatalogMigration({ currentData: result.data, plan }).commitRequired, false);
+    assert.equal(planBuildingCatalogMigration({ ...args, currentData: result.data, operationId: "repeat-text" }).hasChanges, false);
+    const changed = clone(source);
+    changed.catalog.buildings[0].effect = "Новая авторская правка";
+    assert.throws(() => applyBuildingCatalogMigration({ currentData: changed, plan }), { code: "target-catalog-hash" });
+  }
+
+  const legacySchool = BUILDING_TEMPLATES_CULTURE.find(row => row.id === "school");
+  const legacyWorld = { meta: { templateCatalogVersion: legacySchool.templateVersion },
+    catalog: { buildings: [legacySchool] }, holdings: [] };
+  const legacyPlan = planBuildingCatalogMigration({ currentData: legacyWorld, operationId: "legacy-school-text", textOnly: true });
+  assert.deepEqual(legacyPlan.textUpdates.map(row => row.field), ["effect", "notes"]);
+  assert.equal(legacyPlan.targetData.catalog.buildings[0].effect, newSchool.effect);
+}
 
 {
   const before = { id: "holding", buildings: { list: [{ id: "mill", maintenance: { schemaVersion: 1 } }] },

@@ -21,7 +21,7 @@ try {
   const originalPick = SkyholdResourceCatalogEditor.pick;
   SkyholdResourceCatalogEditor.pick = options => { picker = options; };
   const event = (dataset, storageRowId) => ({ currentTarget: { dataset,
-    closest: () => ({ dataset: { storageRowId } }) }, preventDefault() {} });
+    closest: () => ({ dataset: { storageHoldingId: "a", storageRowId } }) }, preventDefault() {} });
   const resource = { id: "stone", label: "Камень" };
   const app = Object.create(SkyholdBuildingEditor.prototype);
   app._canEditBuilding = () => true;
@@ -58,7 +58,7 @@ try {
 
   const data = { holdings: [
     { id: "a", storage: { resources: [{ id: "before", resourceId: "wood" }, { id: "target", resourceId: "iron" }] } },
-    { id: "b", storage: { resources: [{ id: "other", resourceId: "wood" }, { id: "other-2", resourceId: "iron" }] } }
+    { id: "b", storage: { resources: [{ id: "other", resourceId: "wood" }, { id: "target", resourceId: "iron" }] } }
   ] };
   SkyholdData.get = () => structuredClone(data);
   SkyholdData.updateHolding = async (id, updater, options) => {
@@ -78,6 +78,10 @@ try {
   await picker.onSelect(resource);
   assert.equal(data.holdings[0].storage.resources[0].resourceId, "stone", "a storage picker stays bound to its original holding and row");
   assert.equal(data.holdings[1].storage.resources[1].resourceId, "iron", "switching the manager cannot redirect a delayed selection");
+  StorageEventDomain._onPickStorageResource.call(manager, event({ storagePickerScope: "row" }, "target"));
+  await picker.onSelect({ id: "wood", label: "Древесина" });
+  assert.equal(data.holdings[0].storage.resources[0].resourceId, "wood", "a picker opened from the previous render must use that render's holding");
+  assert.equal(data.holdings[1].storage.resources[1].resourceId, "iron", "an equal row ID in the active holding cannot redirect the picker");
   manager.activeHoldingId = "a";
   StorageEventDomain._onPickStorageResource.call(manager, event({ storagePickerScope: "row" }, "target"));
   data.holdings[0].storage.resources.splice(0, 1, { id: "new", resourceId: "wood" });

@@ -38,31 +38,87 @@ function rowLabel(row = {}, rowType = "resources") {
   return String(row?.name ?? row?.label ?? (rowType === "items" ? "Предмет" : "Ресурс"));
 }
 
-function roomCanFit(room = {}, load = 0) {
-  return Boolean(room?.available) && (room?.unlimited || Number(room?.free ?? 0) + 0.0001 >= load);
+const ROOM_CAPACITY_TOLERANCE = 0.0001;
+const EXTRA_ITEM_LAYOUT_ATTEMPTS = 20_000;
+const BATCH_CAPACITY_MESSAGE = "В доступных помещениях не хватает места для всего пакета.";
+
+function firstFitItemLayout(stacks, roomCapacity) {
+  const free = [...roomCapacity];
+  const roomIndices = [];
+  for (const { options } of stacks) {
+    const choice = options.find(({ roomIndex, load }) => free[roomIndex] + ROOM_CAPACITY_TOLERANCE >= load);
+    if (!choice) return null;
+    const { roomIndex, load } = choice;
+    free[roomIndex] = Math.max(0, free[roomIndex] - load);
+    roomIndices.push(roomIndex);
+  }
+  return roomIndices;
+}
+
+function searchItemLayout(stacks, roomCapacity) {
+  const free = [...roomCapacity];
+  const maxAttempts = EXTRA_ITEM_LAYOUT_ATTEMPTS + stacks.reduce((sum, stack) => sum + stack.options.length, 0);
+  const nextOption = stacks.map(() => 0);
+  const assigned = [];
+  let stackIndex = 0;
+  let attempts = 0;
+  while (stackIndex >= 0 && stackIndex < stacks.length) {
+    const choice = stacks[stackIndex].options[nextOption[stackIndex]];
+    if (!choice) {
+      nextOption[stackIndex] = 0;
+      stackIndex--;
+      const previous = assigned.pop();
+      if (previous) free[previous.roomIndex] = previous.free;
+      continue;
+    }
+    nextOption[stackIndex]++;
+    if (++attempts > maxAttempts) return { message: "Не удалось подобрать размещение всего пакета. Уменьшите выбор или укажите другое помещение." };
+    const remaining = free[choice.roomIndex];
+    if (remaining + ROOM_CAPACITY_TOLERANCE < choice.load) continue;
+    assigned.push({ roomIndex: choice.roomIndex, free: remaining });
+    free[choice.roomIndex] = Math.max(0, remaining - choice.load);
+    stackIndex++;
+  }
+  if (stackIndex < 0) return { message: BATCH_CAPACITY_MESSAGE };
+  const roomIndices = [];
+  for (const [index, stack] of stacks.entries()) roomIndices[stack.rowIndex] = assigned[index].roomIndex;
+  return { roomIndices };
 }
 
 /** Reserve projected room capacity for the complete item batch before changing stock. */
 function planItemDestinations(holding, rows, plannedRows, fromRoomId, toRoomId, dependencies) {
   const rooms = dependencies.storageRooms(holding, { includeUnavailable: true })
-    .filter((room) => room.available && room.id !== fromRoomId)
-    .map((room) => ({ ...room }));
+    .filter((room) => room.available && room.id !== fromRoomId);
   const preferred = rooms.find((room) => room.id === toRoomId);
   const candidates = preferred ? [preferred, ...rooms.filter((room) => room !== preferred)] : rooms;
-  for (const [index, planned] of plannedRows.entries()) {
-    const source = rows[index];
+  const free = candidates.map((room) => room.unlimited ? Infinity : Math.max(0, Number(room.free ?? 0)));
+  const stacks = plannedRows.map((planned, rowIndex) => {
+    const source = rows[rowIndex];
     // A split stack receives a fresh ID. Only its item metadata determines its storage profile.
     const stack = { ...source, id: planned.qty < planned.availableQty ? "" : source.id, qty: planned.qty };
-    for (const room of candidates) {
-      const load = dependencies.storageEffectiveRowLoad(room, stack, planned.load);
-      if (!roomCanFit(room, load)) continue;
-      planned.roomId = room.id;
-      if (!room.unlimited) room.free = Math.max(0, Number(room.free ?? 0) - load);
-      break;
-    }
-    if (!planned.roomId) return planned;
+    const options = candidates.map((room, roomIndex) => ({
+      roomIndex, load: dependencies.storageEffectiveRowLoad(room, stack, planned.load)
+    })).filter(({ roomIndex, load }) => free[roomIndex] + ROOM_CAPACITY_TOLERANCE >= load);
+    const minimumLoad = options.reduce((min, option) => Math.min(min, option.load), Infinity);
+    return { rowIndex, options, minimumLoad };
+  });
+  const blocked = stacks.find((stack) => !stack.options.length);
+  if (blocked) return `Нет места для «${plannedRows[blocked.rowIndex].label}» в доступных помещениях.`;
+
+  const minimumLoad = stacks.reduce((sum, stack) => sum + stack.minimumLoad, 0);
+  const capacity = free.reduce((sum, remaining) => sum + remaining, 0);
+  if (minimumLoad > capacity + ROOM_CAPACITY_TOLERANCE * stacks.length) return BATCH_CAPACITY_MESSAGE;
+
+  let roomIndices = firstFitItemLayout(stacks, free);
+  if (!roomIndices) {
+    // Try the hardest stacks first so small stacks cannot exhaust the search on equivalent layouts.
+    stacks.sort((a, b) => a.options.length - b.options.length || b.minimumLoad - a.minimumLoad);
+    const layout = searchItemLayout(stacks, free);
+    if (!layout.roomIndices) return layout.message;
+    roomIndices = layout.roomIndices;
   }
-  return null;
+  for (const [index, planned] of plannedRows.entries()) planned.roomId = candidates[roomIndices[index]].id;
+  return "";
 }
 
 function requestedRowQuantity(row, rowType, rowQuantities, dependencies, holding) {
@@ -125,10 +181,8 @@ function planSelectedRows({
   }
 
   if (type === "items") {
-    const blocked = planItemDestinations(holding, rows, plannedRows, fromRoom, toRoom, deps);
-    if (blocked) {
-      return { ok: false, message: `Нет места для «${blocked.label}» в доступных помещениях.`, rowType: type, rows: [] };
-    }
+    const message = planItemDestinations(holding, rows, plannedRows, fromRoom, toRoom, deps);
+    if (message) return { ok: false, message, rowType: type, rows: [] };
   }
 
   return {

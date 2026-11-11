@@ -16,7 +16,7 @@
                 <div class="fbls-storage-inventory-table items" data-render-scroll-key="storage-items-table">
                   <div class="fbls-storage-item-grid">
                     {{#each storageContext.activeItemRows}}
-                      <article class="fbls-storage-item-card {{#if batchSelected}}batch-selected{{/if}}" data-storage-row-type="items" data-storage-row-id="{{id}}" data-storage-row-room-id="{{roomId}}" {{#if notes}}data-fbls-tooltip="{{notes}}" data-fbls-tooltip-delay="1000"{{/if}}>
+                      <article class="fbls-storage-item-card {{#if batchSelected}}batch-selected{{/if}}" data-storage-row-type="items" data-storage-holding-id="{{../holding.id}}" data-storage-row-id="{{id}}" data-storage-row-room-id="{{roomId}}" {{#if notes}}data-fbls-tooltip="{{notes}}" data-fbls-tooltip-delay="1000"{{/if}}>
                         <div class="fbls-storage-item-main">
                           {{#if ../canUseStorage}}<label class="fbls-storage-batch-pick"><input type="checkbox" data-type="checkbox" data-storage-batch-select="{{id}}" data-storage-batch-kind="items" aria-label="Выбрать предмет {{name}}" {{#if batchSelected}}checked{{/if}} /></label>{{/if}}
                           <button type="button" class="fbls-storage-item-open" data-action="open-storage-item" data-index="{{_index}}" title="Открыть карточку предмета" aria-label="Открыть предмет {{name}}"><img src="{{img}}" alt="" data-fbls-image-fallback /><i class="fa-solid fa-suitcase" data-fbls-image-fallback-icon hidden></i></button>

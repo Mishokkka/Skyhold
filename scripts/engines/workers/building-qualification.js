@@ -275,7 +275,7 @@ export function compositionBackgrounds(row = {}) {
   return workerBackgroundGroupMembers(row.group === "ОХРАНА" ? "ВОЕННОЕ" : row.group);
 }
 
-function matchesCompositionRequirement(person, row) {
+export function workerMatchesCompositionRequirement(person, row) {
   if (!Array.isArray(row.backgrounds)) return workerMatchesCompositionGroup(person, row.group);
   const background = normalizeWorkerText(person.background);
   return Boolean(background) && row.backgrounds.some((name) => normalizeWorkerText(name) === background);
@@ -291,7 +291,7 @@ function matchCompositionSlots(slots, people) {
   const ownerByPerson = new Map();
   const assign = (slotIndex, visited) => {
     for (let index = 0; index < people.length; index += 1) {
-      if (visited.has(index) || !matchesCompositionRequirement(people[index], slots[slotIndex])) continue;
+      if (visited.has(index) || !workerMatchesCompositionRequirement(people[index], slots[slotIndex])) continue;
       visited.add(index);
       if (!ownerByPerson.has(index) || assign(ownerByPerson.get(index), visited)) {
         ownerByPerson.set(index, slotIndex);
@@ -310,7 +310,7 @@ export function buildingCompositionStatus(building = {}, assignedPeople = [], { 
   const people = assignedPeople.filter((person) => person && !person.dead && Number(person.injuredDays ?? 0) <= 0);
   const slots = requirements.flatMap((row) => Array.from({ length: row.count }, () => row));
   const met = matchCompositionSlots(slots, people);
-  const missing = requirements.filter((row) => people.filter((person) => matchesCompositionRequirement(person, row)).length < row.count);
+  const missing = requirements.filter((row) => people.filter((person) => workerMatchesCompositionRequirement(person, row)).length < row.count);
   return {
     met,
     requirements,

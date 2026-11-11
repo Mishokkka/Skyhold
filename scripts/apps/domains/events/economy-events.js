@@ -10,6 +10,7 @@ import { normalizeLastEventRoll } from "../../../data/event-automation.js";
 import { adjustResidentAttributesForAgeTransition, ageGroupFromAge, ageThresholdsFor, raceKeyFromResident } from "../../../generators/resident-rules.js";
 import { isResidentInPopulation } from "../../../data/resident-presence.js";
 import { buildingServiceBlockReasons } from "../../../engines/economy/building-service.js";
+import { buildingCompositionStatus, workerMatchesCompositionRequirement } from "../../../engines/workers/building-qualification.js";
 import { addCalendariaQd, calendariaDateKey, formatCalendariaDateTime, getCalendariaSnapshot, parseCalendariaDateInput, timestampForCalendariaDate } from "../../../integrations/calendaria-bridge.js";
 import {
   advanceTendayClock,
@@ -405,7 +406,13 @@ _schoolEducationContext(holding) {
     const adults = service.workforce.workers.filter((person) => ageGroupFromAge(person.age, person.race, person.subrace) !== "Ре");
     const minimum = Math.max(1, Math.floor(this._safeNumber(building.workersMin, 1)));
     if (adults.length < minimum) continue;
-    for (const person of adults) teachers.add(person.id);
+    const composition = buildingCompositionStatus(building, adults, { excludeGroups: ["ЧУДОТВОРЕЦ"] });
+    if (!composition.met) continue;
+    for (const person of adults) {
+      if (!composition.requirements.length || composition.requirements.some((rule) => workerMatchesCompositionRequirement(person, rule))) {
+        teachers.add(person.id);
+      }
+    }
   }
   return { active: teachers.size > 0, teacherCount: teachers.size };
 },

@@ -81,7 +81,7 @@ const manager = { ...FinanceStorageDomain, ...StorageEventDomain, ...NavigationE
 const qtyChange = (value) => manager._onFieldChange({
   preventDefault() {},
   currentTarget: { value: String(value), dataset: { type: "number", field: "holdings.0.storage.resources.0.qty" },
-    closest: () => ({ dataset: { storageRowId: wood.id, storageRowRoomId: "outdoors" } }) }
+    closest: () => ({ dataset: { storageHoldingId: "a", storageRowId: wood.id, storageRowRoomId: "outdoors" } }) }
 });
 const row = (index) => data.holdings[index].storage.resources.find(resource => resource.id === wood.id);
 const originalHolding = data.holdings[0];
@@ -98,7 +98,7 @@ data.holdings[0] = originalHolding;
 const saleChange = (index, checked) => manager._onFieldChange({
   preventDefault() {},
   currentTarget: { checked, dataset: { type: "checkbox", field: `holdings.0.storage.items.${index}.forSale` },
-    closest: () => ({ dataset: { storageRowId: "sale-item", storageRowRoomId: "outdoors" } }) }
+    closest: () => ({ dataset: { storageHoldingId: "a", storageRowId: "sale-item", storageRowRoomId: "outdoors" } }) }
 });
 const item = { id: "sale-item", name: "Канат", roomId: "outdoors", qty: 1, forSale: false };
 data.holdings[0].storage.items = [item];
@@ -109,9 +109,11 @@ await saleChange(1, true);
 assert.equal(data.holdings[0].storage.items[0].forSale, true, "editing a duplicate item must leave the other sale flag intact");
 assert.equal(data.holdings[0].storage.items[1].forSale, false);
 data.holdings[0].storage.items = [];
-
+manager._onSelectHolding({ preventDefault() {}, currentTarget: { value: "b" } });
 await qtyChange(9);
-assert.equal(row(0).qty, 9, "inline quantity survives actual holding normalization");
+assert.equal(row(1).qty, 6, "the form rendered for A cannot edit an identically named row in B");
+assert.equal(row(0).qty, 9, "the rendered holding ID remains authoritative during a switch");
+manager.activeHoldingId = "a";
 assert.deepEqual(row(0).batches.find(batch => batch.id === "wood-batch"), wood.batches[0]);
 assert.equal(row(0).batches.find(batch => batch.ageQd === 0).qty, 3);
 const afterIncrease = structuredClone(data);
