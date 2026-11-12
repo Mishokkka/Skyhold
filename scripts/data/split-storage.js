@@ -70,6 +70,7 @@ function logicalMetadataHash(meta = {}) {
 export function createSkyholdSplitStorage({ settings = null, assertWriteAuthority = () => {} } = {}) {
   let cachedRevision = null;
   let cachedCommitToken = "";
+  let cachedForwardToken = "";
   let cachedData = null;
   let cachedPartitionHashes = null;
   let persistedPartitionHashes = null;
@@ -128,9 +129,9 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
    * Read partition hashes and select split data, a recovered root or a legacy snapshot.
    * Recovery never writes settings; unusable commit markers warn before fallback selection.
    * @param {object} [providedMeta] Already-read metadata to avoid another settings read.
-   * @returns {object} Selected persisted root, before schema normalization.
+   * @returns {object} Selected persisted root and, for forward recovery, the verified commit token.
    */
-  function readSettings(providedMeta) {
+  function readPersistedState(providedMeta) {
     const split = {
       meta: clone(providedMeta ?? readSetting(SETTING_META) ?? DEFAULT_SKYHOLD_DATA.meta),
       holdings: clone(readSetting(SETTING_HOLDINGS) ?? DEFAULT_SKYHOLD_DATA.holdings),
@@ -146,63 +147,76 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
       holdingsHash: persistedPartitionHashes.holdings,
       catalogHash: persistedPartitionHashes.catalog
     });
+    const recovery = commitInspection.ok ? null : recoverStorageCommit(split, {
+      inspection: commitInspection,
+      holdingsHash: persistedPartitionHashes.holdings,
+      catalogHash: persistedPartitionHashes.catalog
+    });
+    if (recovery?.ok && recovery.mode === "forward") {
+      warnCommitProblem(commitInspection, splitRevision, null, recovery.mode);
+      const meta = recovery.data.meta;
+      const token = completeCommitToken(meta);
+      return { data: recovery.data, forwardToken: token ? `${token}:${stableDataHash(meta)}` : "" };
+    }
     const legacy = readSetting(SETTING_DATA);
     const legacyRevision = Math.max(0, toNumber(legacy?.meta?.revision, 0));
 
     if (!commitInspection.ok) {
-      const recovery = recoverStorageCommit(split, {
-        inspection: commitInspection,
-        holdingsHash: persistedPartitionHashes.holdings,
-        catalogHash: persistedPartitionHashes.catalog
-      });
       if (recovery.ok) {
-        if (recovery.mode === "rollback"
-          && legacyRevision === recovery.data?.meta?.revision
+        if (legacyRevision === recovery.data?.meta?.revision
           // A pristine snapshot also restores prior metadata when its payload
           // matches both rolled-back partitions; unrelated defaults cannot.
           && (legacyHasRuntimeData(legacy) || legacyMatchesPartitionHashes(legacy, persistedPartitionHashes))) {
           warnCommitProblem(commitInspection, splitRevision, legacyRevision, "legacy-rollback");
-          return legacy;
+          return { data: legacy };
         }
         warnCommitProblem(commitInspection, splitRevision, legacyRevision, recovery.mode);
-        return recovery.data;
+        return { data: recovery.data };
       }
       if (legacyHasRuntimeData(legacy)) {
         warnCommitProblem(commitInspection, splitRevision, legacyRevision, "legacy-fallback");
-        return legacy;
+        return { data: legacy };
       }
       warnCommitProblem(commitInspection, splitRevision, legacyRevision, "unrecoverable-split");
-      return split;
+      return { data: split };
     }
 
     // Worlds that already have skyholdData keep working: the first write after this
     // version persists them into split settings. Revision wins after the split exists.
     // The equality fallback protects older saves that never had a revision bump.
-    if (legacyRevision > splitRevision) return legacy;
+    if (legacyRevision > splitRevision) return { data: legacy };
     if (legacyRevision === splitRevision
       && isDefaultSplitPayload({
         holdingsHash: persistedPartitionHashes.holdings,
         catalogHash: persistedPartitionHashes.catalog
       })
-      && legacyHasRuntimeData(legacy)) return legacy;
-    return split;
+      && legacyHasRuntimeData(legacy)) return { data: legacy };
+    return { data: split };
   }
 
   function resolveData({ cloneResult = true } = {}) {
     const rawMeta = readSetting(SETTING_META) ?? DEFAULT_SKYHOLD_DATA.meta;
     const rawRevision = Math.max(0, toNumber(rawMeta?.revision, 0));
     const rawCommitToken = completeCommitToken(rawMeta);
-    if (cachedData && cachedRevision === rawRevision && rawCommitToken && cachedCommitToken === rawCommitToken) {
+    if (cachedData && !cachedForwardToken && cachedRevision === rawRevision
+      && rawCommitToken && cachedCommitToken === rawCommitToken) {
       metrics.cacheHits += 1;
       return cloneResult ? clone(cachedData) : cachedData;
     }
 
+    const { data: stored, forwardToken = "" } = readPersistedState(rawMeta);
+    // A pending marker alone cannot identify the snapshot. Reuse a recovered view
+    // only after both physical partitions have matched its target hashes again.
+    if (cachedData && forwardToken && cachedForwardToken === forwardToken) {
+      metrics.cacheHits += 1;
+      return cloneResult ? clone(cachedData) : cachedData;
+    }
     metrics.cacheMisses += 1;
-    const stored = readSettings(rawMeta);
     metrics.normalizations += 1;
     const migrated = measureSkyholdPerformance("SkyholdData.normalize", () => migrateData(stored));
     cachedRevision = Math.max(0, toNumber(migrated?.meta?.revision, 0));
     cachedCommitToken = completeCommitToken(migrated?.meta);
+    cachedForwardToken = forwardToken;
     // `migrated` is a fresh private root. Cache it directly and clone only the
     // value crossing the storage boundary instead of cloning the same large
     // settlement twice on every cache miss.
@@ -305,6 +319,7 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
       now: startedAt
     });
 
+    let forwardToken = "";
     try {
       await writeSetting(SETTING_META, clone(startedMeta));
       if (holdingsDirty) await writeSetting(SETTING_HOLDINGS, clone(next.holdings));
@@ -323,21 +338,24 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
     } catch (error) {
       // Report the same outcome that a reload will see. A failed final marker
       // must not trigger Actor compensation when both target partitions exist.
-      let durable;
-      try { durable = readSettings(); }
+      let persisted;
+      try { persisted = readPersistedState(); }
       catch (_readError) { throw error; }
+      const { data: durable } = persisted;
       if (durable.meta?.storageCommit?.writeId !== writeId
         || durable.meta.revision !== next.meta.revision
         || !completeCommitToken(durable.meta)
         || persistedPartitionHashes.holdings !== nextHashes.holdings
         || persistedPartitionHashes.catalog !== nextHashes.catalog) throw error;
       next.meta = durable.meta;
+      forwardToken = persisted.forwardToken ?? "";
     }
 
     persistedPartitionHashes = nextHashes;
     cachedPartitionHashes = nextHashes;
     cachedRevision = Math.max(0, toNumber(next?.meta?.revision, 0));
     cachedCommitToken = completeCommitToken(next.meta);
+    cachedForwardToken = forwardToken;
     cachedData = freezeDataView(next);
     const result = clone(next);
     return withStatus ? { changed: true, data: result, scope: commitScope } : result;
@@ -364,7 +382,7 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
     getDataView,
     getMetrics,
     persistData,
-    readSettings,
+    readSettings: (providedMeta) => readPersistedState(providedMeta).data,
     resetMetrics
   };
 }

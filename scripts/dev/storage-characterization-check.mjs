@@ -417,6 +417,49 @@ export function checkStorageCharacterization() {
 
   {
     const holding = makeHolding();
+    holding.storage.resources = [
+      resource("kept", "wood", 2, "outdoors", { batches: [{ id: "kept-lot", qty: 2, ageQd: 20 }] }),
+      resource("sale", "wood", 3, "outdoors", { forSale: true, batches: [{ id: "sale-lot", qty: 3, ageQd: 8 }] }),
+      resource("other-room", "wood", 5, "shed")
+    ];
+    holding.special.transportV2 = { orders: [{ id: "booked", direction: "outbound", status: "booked",
+      cargo: [{ lotId: "cargo", rowId: "kept", batchId: "kept-lot", qty: 1 }] }] };
+    assert.equal(storage._storageQuantity(holding, { resourceId: "wood", roomId: "outdoors" }), 4,
+      "room balance must include free stock across separate policies");
+    const before = clone(holding.storage);
+    const request = { resourceId: "wood", qty: -4, kind: "manual-spend", roomId: "outdoors" };
+    assert.equal(storage._applyManualStorageChange(holding, { ...request, qty: -5 }).ok, false);
+    assert.deepEqual(holding.storage, before, "an unsatisfied debit cannot mutate a lot or write a journal entry");
+    assert.equal(storage._applyManualStorageChange(holding, request).ok, true);
+    assert.deepEqual(holding.storage.resources.map(row => row.qty), [1, 0, 5], "the debit keeps the accepted export and the other room intact");
+    assert.deepEqual(holding.storage.log.map(row => row.qty), [-4]);
+
+    const duplicate = makeHolding();
+    duplicate.storage.resources = [resource("same", "wood", 2), resource("same", "wood", 3)];
+    const duplicateBefore = clone(duplicate.storage);
+    assert.equal(storage._applyManualStorageChange(duplicate, { ...request, qty: -1 }).ok, false);
+    assert.deepEqual(duplicate.storage, duplicateBefore, "an aggregate debit cannot guess which legacy row an ambiguous ID identifies");
+
+    const legacy = makeHolding();
+    legacy.storage.resources = [
+      resource(" lot ", "wood", 2, "outdoors", { batches: [{ id: "old", qty: 2, ageQd: 10 }] }),
+      resource("lot", "wood", 2, "outdoors", { batches: [{ id: "fresh", qty: 2, ageQd: 1 }] })
+    ];
+    assert.equal(storage._applyManualStorageChange(legacy, { ...request, qty: -1 }).ok, true);
+    assert.deepEqual(legacy.storage.resources.map(row => row.qty), [1, 2],
+      "payment follows the exact row ID in the FIFO plan, including a legacy spelling");
+
+    const custom = makeHolding();
+    custom.storage.moneyCopper = 14;
+    custom.storage.resources = [resource("token-a", "custom", 1, "outdoors", { name: "Деньги" }),
+      resource("token-b", "custom", 2, "outdoors", { name: "Деньги", notes: "Вторая строка" })];
+    assert.equal(storage._applyManualStorageChange(custom, { ...request, resourceId: "custom", name: "Деньги", qty: -2 }).ok, true);
+    assert.equal(custom.storage.resources.reduce((sum, row) => sum + row.qty, 0), 1);
+    assert.equal(custom.storage.moneyCopper, 14, "explicit custom material is never debited as treasury");
+  }
+
+  {
+    const holding = makeHolding();
     const added = storage._applyManualStorageChange(holding, {
       resourceId: "money",
       name: "Деньги",

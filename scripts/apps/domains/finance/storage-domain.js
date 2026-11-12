@@ -19,7 +19,7 @@ import { payStorageCosts } from "../../../engines/storage/payment.js";
 import { planStorageCosts } from "../../../engines/storage/group-payment.js";
 import { addStorageWithOverflow } from "../../../engines/storage/placement.js";
 import { storageEffectiveRowLoad, storageProfileLoadMultiplier } from "../../../engines/storage/specialization.js";
-import { resolveStorageRows } from "../../../engines/storage/row-identity.js";
+import { indexStorageRows, resolveStorageRow, resolveStorageRows } from "../../../engines/storage/row-identity.js";
 import { resourceMatchesMaterialGroup } from "../../../core/material-groups.js";
 import { economyLedgerStorageRows } from "../../../engines/economy/ledger.js";
 import { FinanceStorageContextDomain } from "./storage/context-domain.js";
@@ -177,7 +177,7 @@ _storageFind(holding, resource = {}) {
   if (!Array.isArray(holding.storage.resources)) holding.storage.resources = [];
   if (isStorageMoneyResource(resource)) return null;
   const roomId = this._normalizeStorageRoomId(resource.roomId ?? resource.storageRoomId);
-  const storageRowId = String(resource.storageRowId ?? "").trim();
+  const storageRowId = String(resource.storageRowId ?? "");
   const row = holding.storage.resources.find((candidate) => {
     if (storageRowId && String(candidate?.id ?? "") !== storageRowId) return false;
     return this._normalizeStorageRoomId(candidate.roomId ?? candidate.storageRoomId) === roomId && this._storageResourceMatches(candidate, resource);
@@ -190,17 +190,16 @@ _storageQuantity(holding, resource = {}) {
   if (isStorageMoneyResource(resource)) return this._moneyCopper(holding);
   const resourceGroup = String(resource.resourceGroup ?? "").trim();
   const hasRoom = resource.roomId !== undefined || resource.storageRoomId !== undefined;
-  if (resourceGroup) {
-    const roomId = hasRoom ? this._normalizeStorageRoomId(resource.roomId ?? resource.storageRoomId) : "";
-    return (holding?.storage?.resources ?? [])
-      .filter((row) => !hasRoom || this._normalizeStorageRoomId(row.roomId ?? row.storageRoomId) === roomId)
-      .filter((row) => this._storageResourceMatchesGroup(row, resourceGroup))
-      .reduce((sum, row) => sum + availableResourceRowQuantity(row, holding), 0);
+  const roomId = this._normalizeStorageRoomId(resource.roomId ?? resource.storageRoomId);
+  const matches = (row) => (!hasRoom || this._normalizeStorageRoomId(row.roomId ?? row.storageRoomId) === roomId)
+    && (resourceGroup ? this._storageResourceMatchesGroup(row, resourceGroup) : this._storageResourceMatches(row, resource));
+  const rows = holding?.storage?.resources ?? [];
+  const rowId = String(resource.storageRowId ?? "");
+  if (rowId && !resourceGroup) {
+    const { row } = resolveStorageRow(rows, rowId);
+    return row && matches(row) ? availableResourceRowQuantity(row, holding) : 0;
   }
-  if (hasRoom) return availableResourceRowQuantity(this._storageFind(holding, resource), holding);
-  return (holding?.storage?.resources ?? [])
-    .filter((row) => this._storageResourceMatches(row, resource))
-    .reduce((sum, row) => sum + availableResourceRowQuantity(row, holding), 0);
+  return rows.filter(matches).reduce((sum, row) => sum + availableResourceRowQuantity(row, holding), 0);
 },
 
 _storageAvailableRowQuantity(holding, row = {}) {
@@ -301,17 +300,17 @@ _storagePlacementText(holding, placements = []) {
   }).join("; ");
 },
 
-_storageCanPay(holding, costs = [], { eligibleResourceRow } = {}) {
+_storageCanPay(holding, costs = [], { eligibleResourceRow, explicitResource = false } = {}) {
   return planStorageCosts({
     holding,
     costs,
     eligibleResourceRow,
-    dependencies: this._storageCostPlanningDependencies()
+    dependencies: this._storageCostPlanningDependencies({ explicitResource })
   });
 },
 
-_storagePay(holding, costs = [], { captureReceipt = false, eligibleResourceRow } = {}) {
-  const plan = this._storageCanPay(holding, costs, { eligibleResourceRow });
+_storagePay(holding, costs = [], { captureReceipt = false, eligibleResourceRow, explicitResource = false } = {}) {
+  const plan = this._storageCanPay(holding, costs, { eligibleResourceRow, explicitResource });
   if (!plan.ok) return plan;
   const receipt = payStorageCosts({
     holding,
@@ -346,11 +345,11 @@ _storageResourceMatchesGroup(row = {}, groupId = "") {
   return resourceMatchesMaterialGroup(row, groupId, definition);
 },
 
-_storageCostPlanningDependencies() {
+_storageCostPlanningDependencies({ explicitResource = false } = {}) {
   return {
     safeNumber: (value, fallback = 0) => this._safeNumber(value, fallback),
-    isMoneyResource,
-    storageResourceMatches: (row, resource) => this._storageResourceMatches(row, legacyRecipeResource(resource)),
+    isMoneyResource: explicitResource ? (resourceId, id, name) => isStorageMoneyResource({ resourceId, id, name }) : isMoneyResource,
+    storageResourceMatches: (row, resource) => this._storageResourceMatches(row, explicitResource ? resource : legacyRecipeResource(resource)),
     resourceMatchesGroup: (row, groupId) => this._storageResourceMatchesGroup(row, groupId),
     normalizeRoomId: (roomId) => this._normalizeStorageRoomId(roomId),
     resourceBatches: (row, holding) => availableResourceBatchInventory(row, holding)
@@ -408,11 +407,15 @@ _applyManualStorageChange(holding, { resourceId = "", name = "", qty = 0, note =
   let placements = [];
   if (amount > 0) placements = this._storageAddWithOverflow(holding, { resourceId: id, name: label, roomId: targetRoom, separateRow }, amount);
   else {
-    const available = this._storageQuantity(holding, { resourceId: id, name: label, roomId: targetRoom });
-    if (available + 0.0001 < Math.abs(amount)) {
+    const rowsById = indexStorageRows(holding?.storage?.resources);
+    const payment = this._storagePay(holding, [{ resourceId: id, name: label, roomId: targetRoom, qty: -amount }], {
+      explicitResource: true,
+      eligibleResourceRow: (row) => rowsById.get(String(row.id ?? "")) === row
+    });
+    if (!payment.ok) {
+      const available = payment.missing[0]?.have ?? 0;
       return { ok: false, message: `${label}: нельзя списать ${this._formatNumber(Math.abs(amount))}. Доступно ${this._formatNumber(available)}.` };
     }
-    this._storageAdd(holding, { resourceId: id, name: label, roomId: targetRoom }, amount);
   }
   const entries = amount > 0 && placements.length
     ? placements.map((item) => ({ kind, resourceId: id, name: label, qty: item.qty, roomId: item.roomId, source: "Ручная правка", note: item.overflowFrom ? [note, `переполнение: ${this._storageRoomLabel(holding, item.overflowFrom)}`].filter(Boolean).join(" · ") : note, operationId }))

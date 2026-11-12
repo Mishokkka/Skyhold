@@ -6,7 +6,7 @@ import { clone } from "../data/utils.js";
 import { createSkyholdSplitStorage } from "../data/split-storage.js";
 import { prepareSkyholdCommit } from "../data/commit-preparation.js";
 import { migrateData } from "../data/normalizers.js";
-import { SETTING_CATALOG, SETTING_DATA, SETTING_HOLDINGS, SETTING_META } from "../data/constants.js";
+import { MODULE_ID, SETTING_CATALOG, SETTING_DATA, SETTING_HOLDINGS, SETTING_META } from "../data/constants.js";
 
 const SKIP = Symbol("skip");
 
@@ -30,6 +30,10 @@ function makeActor(id, ownerId) {
         type: item.type ?? "gear",
         parent: actor,
         system: { quantity: Number(item.qty ?? item.system?.quantity ?? 1) },
+        flags: clone(item.flags ?? {}),
+        getFlag(scope, key) {
+          return row.flags[scope]?.[key];
+        },
         async update(change = {}) {
           if (change["system.quantity"] !== undefined) row.system.quantity = Number(change["system.quantity"]);
           return row;
@@ -39,7 +43,8 @@ function makeActor(id, ownerId) {
             _id: row.id,
             name: row.name,
             type: row.type,
-            system: clone(row.system)
+            system: clone(row.system),
+            flags: clone(row.flags)
           };
         }
       };
@@ -55,6 +60,7 @@ function makeActor(id, ownerId) {
         name: source?.name,
         type: source?.type,
         system: source?.system,
+        flags: source?.flags,
         qty: source?.system?.quantity
       }));
     },
@@ -533,6 +539,28 @@ export async function checkStorageOperationCharacterization() {
       assert.equal(holding.storage.items.some((item) => item.id === "stored-sword"), false, "the real finance adapter must remove a row after its final stored item is delivered");
       assert.equal(holding.storage.log.at(-1).operationId, "real-give-final-op", "the real storage journal must retain the delivery operation id");
 
+      holding.storage.moneyCopper = 20;
+      holding.storage.resources.push({ id: "tokens", resourceId: "custom", name: "Деньги", roomId: "outdoors", qty: 3 });
+      const issuedCustom = await executor({ ...locked, operationId: "issue-custom-tokens",
+        resourceId: "custom", name: "Деньги", rowIds: ["tokens"], qty: 2 }, { userId: gm.id });
+      assert.equal(issuedCustom.ok, true);
+      const issuedItem = actor.items.get(actor.itemIds().at(-1));
+      assert.equal(issuedItem.getFlag(MODULE_ID, "storageOperationId"), issuedCustom.operationId);
+      const returnedCustom = await executor({ ...locked, type: "depositItem", operationId: "return-custom-tokens",
+        itemId: issuedItem.id }, { userId: gm.id });
+      assert.equal(returnedCustom.ok, true);
+      assert.equal(actor.items.get(issuedItem.id), null);
+      assert.equal(holding.storage.moneyCopper, 20, "returning tokens called money must not credit the treasury");
+      assert.equal(holding.storage.resources.filter(row => row.resourceId === "custom" && row.name === "Деньги")
+        .reduce((sum, row) => sum + row.qty, 0), 3, "the full transfer preserves the custom material and its quantity");
+      const unmarked = actor.addItem({ id: "unmarked-material", type: "rawMaterial", name: "Wood", qty: 1 });
+      const woodBefore = holding.storage.resources.filter(row => row.resourceId === "wood").reduce((sum, row) => sum + row.qty, 0);
+      const receivedUnmarked = await executor({ ...locked, type: "depositItem", operationId: "legacy-resource-deposit",
+        itemId: unmarked.id }, { userId: gm.id });
+      assert.equal(receivedUnmarked.ok, true);
+      assert.equal(holding.storage.resources.filter(row => row.resourceId === "wood").reduce((sum, row) => sum + row.qty, 0),
+        woodBefore + 1, "unmarked items still use catalog aliases");
+
       // The last marker write can fail after the holding partition, including
       // its receipt, has become recoverable. Compensation must follow that outcome.
       for (const [type, blocked] of [
@@ -583,6 +611,9 @@ export async function checkStorageOperationCharacterization() {
           assert.equal((await attempt).ok, true, "a forward-recoverable holding write is a successful transfer");
           const expectedItemCount = idsBefore.length + (deposit ? -1 : 1);
           assert.equal(actor.itemIds().length, expectedItemCount);
+          storage.resetMetrics();
+          assert.equal(storage.getDataView().meta.revision, 9);
+          assert.equal(storage.getMetrics().normalizations, 0, "a verified forward commit reuses the prepared view even while its marker remains pending");
           const replay = await createStorageOperationExecutor(options)(request, { userId: gm.id });
           assert.equal(replay.replay, true, "the recovered transfer receipt is usable after executor restart");
           assert.equal(actor.itemIds().length, expectedItemCount);

@@ -54,7 +54,7 @@ _prepareRows(holding, canEdit, activeTab = "overview", options = {}) {
     const workOptionsContext = this._residentWorkOptionsContext(holding);
     const hasRestingCrew = (holding.people?.list ?? []).some((person) => isResidentRestingOnShip(person, holding));
     const mode = options.activePeopleTab === "ship-crew" && hasRestingCrew ? "ship-crew" : "residents";
-    rows.people = this._preparePersonRows(holding, canEdit, mode, true, { workOptionsContext, editorPersonId: "" });
+    rows.people = this._preparePersonRows(holding, canEdit, mode, true, { workOptionsContext, canEditInlineWork: canEditBuildings });
     rows.residentWorkOptionCatalog = canEditBuildings ? this._residentWorkOptionCatalog(workOptionsContext) : [];
   }
 
@@ -72,6 +72,7 @@ _prepareRows(holding, canEdit, activeTab = "overview", options = {}) {
 },
 
 _preparePersonRows(holding, canEdit = false, mode = "living", applyFilters = true, options = {}) {
+  const canEditInlineWork = options.canEditInlineWork ?? canEdit;
   const housingIndex = this._residentHousingIndex(holding);
   const workOptionsContext = options?.workOptionsContext ?? this._residentWorkOptionsContext(holding);
   const workAssignments = this._peopleWorkAssignments(holding, workOptionsContext);
@@ -171,7 +172,7 @@ _preparePersonRows(holding, canEdit = false, mode = "living", applyFilters = tru
       editing
     };
 
-    if (canEdit) {
+    if (canEditInlineWork) {
       const inlineWork = this._residentInlineWorkOption(row, workLabel, workOptionsContext);
       Object.assign(prepared, {
         workInlineValue: inlineWork.value,

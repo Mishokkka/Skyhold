@@ -247,13 +247,12 @@ try {
     await worker._onWorkAssignmentChange(changeWork);
     assert.equal(live.holdings[1].people.list[0].workAssignment, "job", "a failed transfer preserves the resident's existing assignment");
 
-    const previousEditorData = live.holdings[1].people.list[0];
     const profile = { ...editor, dataset: { holdingId: "a", residentId: "resident" } };
     const save = worker._savePersonEditorDraft({ currentTarget: { closest: () => profile } });
-    await save;
+    assert.equal(await save, true);
     assert.equal(live.holdings[0].people.list[0].name, "b");
     assert.equal(live.holdings[1].people.list[0].name, field.value);
-    assert.equal(previousEditorData.workAssignment, "job");
+    assert.equal(live.holdings[1].people.list[0].workAssignment, "job");
     SkyholdData.skipTransaction = methods.skipTransaction;
   }
 

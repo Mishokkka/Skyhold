@@ -1,4 +1,5 @@
 import { normalizeResourceId, resourceDef, resourceLabel, resourceOptions, storageResourceId } from "../../../../core/resources.js";
+import { MODULE_ID } from "../../../../data/constants.js";
 import { makeId } from "../../../../data/utils.js";
 import { itemQuantity, itemQuantityUpdateData, setItemQuantityData } from "../../../../engines/storage/item-quantity.js";
 import { resolveStorageRow, STORAGE_ROW_CHANGED } from "../../../../engines/storage/row-identity.js";
@@ -6,6 +7,11 @@ import { resolveFoundryUuid } from "../../../../integrations/foundry-runtime.js"
 
 function cloneFoundryData(value) {
   return foundry?.utils?.deepClone?.(value) ?? structuredClone(value);
+}
+
+function setStorageItemFlag(itemData, key, value) {
+  itemData.flags = { ...itemData.flags, [MODULE_ID]: { ...itemData.flags?.[MODULE_ID], [key]: value } };
+  return itemData;
 }
 
 export const FinanceStorageItemDocumentDomain = {
@@ -87,10 +93,7 @@ async _removeCreatedActorItems(receipt = null) {
 
 /** Foundry can resolve a vetoed creation with an empty array. Confirm its result before debiting stock. */
 async _createStorageTransferItem(actor, itemData, qty, operationId) {
-  if (operationId) {
-    if (!itemData.flags || typeof itemData.flags !== "object") itemData.flags = {};
-    itemData.flags["fbl-skyhold"] = { ...(itemData.flags["fbl-skyhold"] ?? {}), storageOperationId: operationId };
-  }
+  if (operationId) setStorageItemFlag(itemData, "storageOperationId", operationId);
   const created = await actor.createEmbeddedDocuments("Item", [itemData]);
   const itemIds = (Array.isArray(created) ? created : []).map((item) => String(item?.id ?? item?._id ?? "")).filter(Boolean);
   if (!itemIds.length) return { ok: false, message: "Foundry не создал предмет у персонажа." };
@@ -119,7 +122,7 @@ async _foundryItemDataForResource(resourceId = "custom", name = "Ресурс", 
     img: def?.img || "icons/svg/item-bag.svg",
     system: { quantity: 1, cost: def?.cost || "" }
   };
-  return this._setItemQuantityData(source, qty);
+  return setStorageItemFlag(this._setItemQuantityData(source, qty), "storageResourceId", id);
 },
 
 async _withdrawResourceToActor(holding, { resourceId = "custom", name = "", qty = 1, roomId = "outdoors", storageRowId = "", actorId = "", actor: actorArg = null, operationId = "" } = {}) {
@@ -215,6 +218,8 @@ _itemTypeLabel(type = "") {
 },
 
 _resourceIdForFoundryItem(item = {}) {
+  const issuedId = item.getFlag?.(MODULE_ID, "storageResourceId") ?? item.flags?.[MODULE_ID]?.storageResourceId;
+  if (typeof issuedId === "string" && issuedId.trim()) return storageResourceId({ resourceId: issuedId });
   const uuid = String(item.uuid ?? item.itemUuid ?? "");
   const id = String(item.id ?? item._id ?? "");
   const name = String(item.name ?? "");

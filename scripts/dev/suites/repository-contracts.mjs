@@ -1792,6 +1792,15 @@ export async function runRepositoryContracts() {
   }
   const readOnlyResidentRows = residentSubject._preparePersonRows(residentHolding, false, "living", true, { workOptionsContext: residentWorkContext });
   assert.ok(readOnlyResidentRows.every((row) => !Object.hasOwn(row, "workInlineValue")), "read-only resident rows must not prepare mutation-only inline select state");
+  const buildingsOnly = residentSubject._prepareRows(residentHolding, false, "people", { canEditBuildings: true });
+  const assignedResident = buildingsOnly.people.find((row) => row.id === "resident-full");
+  assert.equal(assignedResident.workInlineValue, "building-full", "building permission alone must hydrate the current work selection");
+  assert.equal(assignedResident.workCanAssign, true);
+  assert.equal(assignedResident.editing, false, "assigning work must not enable resident profile editing");
+  assert.ok(buildingsOnly.residentWorkOptionCatalog.some((option) => option.value === "building-open"));
+  const residentsOnly = residentSubject._prepareRows(residentHolding, true, "people", { canEditBuildings: false });
+  assert.equal(residentsOnly.residentWorkOptionCatalog.length, 0);
+  assert.ok(residentsOnly.people.every((row) => !Object.hasOwn(row, "workInlineValue")));
   const editedResidentRows = residentSubject._preparePersonRows(residentHolding, true, "living", false, { workOptionsContext: residentWorkContext, editorPersonId: "resident-full" });
   for (const key of residentEditorOnlyKeys) {
     assert.equal(editedResidentRows.filter((row) => Object.hasOwn(row, key)).length, 1, `only the open resident editor may receive ${key}`);
