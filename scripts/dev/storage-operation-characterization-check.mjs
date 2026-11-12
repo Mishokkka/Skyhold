@@ -242,6 +242,39 @@ export async function checkStorageOperationCharacterization() {
       failPersist = true;
       await assert.rejects(transfer("depositItem", "token-deposit-rollback", deposit()), /persist failed$/);
       assert.equal(tokenActor.items.get("shared").system.quantity, 2, "rollback restores the token's Item");
+      const create = tokenActor.createEmbeddedDocuments;
+      const afterDeposit = clone(holding);
+      for (const mode of ["adjusted", "post-create-error"]) {
+        tokenActor.createEmbeddedDocuments = async (...args) => {
+          const restored = await create.call(tokenActor, ...args);
+          restored[0].system.quantity = 1;
+          if (mode === "post-create-error") throw new Error("hook failed after creation");
+          return restored;
+        };
+        await assert.rejects(transfer("depositItem", `token-rollback-${mode}`, deposit()), /persist failed$/);
+        assert.deepEqual(tokenActor.itemIds(), ["shared"], "a hook must not cause a second copy of the restored stack");
+        assert.equal(tokenActor.items.get("shared").system.quantity, 2, "rollback must correct the quantity actually created");
+        assert.deepEqual(holding, afterDeposit, "a failed deposit must never change the committed warehouse");
+      }
+      tokenActor.createEmbeddedDocuments = async (...args) => {
+        const restored = await create.call(tokenActor, ...args);
+        restored[0].system.quantity = 1;
+        restored[0].update = async () => null;
+        return restored;
+      };
+      const originalError = console.error;
+      try {
+        console.error = () => {};
+        await assert.rejects(transfer("depositItem", "token-rollback-veto", deposit()), /после отката найдено 1 из 2.*Item\.shared/,
+          "a second hook veto must identify the exact surviving stack and the quantity to recover");
+        assert.deepEqual(tokenActor.itemIds(), ["shared"]);
+        assert.equal(tokenActor.items.get("shared").system.quantity, 1);
+        assert.deepEqual(holding, afterDeposit);
+      } finally {
+        console.error = originalError;
+        tokenActor.createEmbeddedDocuments = create;
+        addTokenItem();
+      }
       assert.equal(worldItem.system.quantity, 9, "rollback must not change the world Actor's Item with the same ID");
       await assert.rejects(transfer("withdrawResource", "token-withdraw-rollback", { resourceId: "wood" }), /persist failed$/);
       assert.deepEqual(tokenActor.itemIds(), ["shared"]);
@@ -452,10 +485,11 @@ export async function checkStorageOperationCharacterization() {
       const actor = makeActor("actor-real", user.id);
       actor.addItem({ id: "real-deposit", name: "Lantern", type: "gear", qty: 1 });
       let holding = makeHolding();
+      const catalogGear = { id: "test-gear", label: "Складской комплект", itemType: "gear" };
       globalThis.game = {
         user: { id: "gm-real", isGM: true },
         actors: { get: (actorId) => actorId === actor.id ? actor : null },
-        settings: { get: () => null }
+        settings: { get: (_moduleId, key) => key === SETTING_CATALOG ? { resources: [catalogGear] } : null }
       };
       globalThis.foundry = { utils: { deepClone: clone } };
       globalThis.CONST = { DOCUMENT_OWNERSHIP_LEVELS: { OWNER: 3 } };
@@ -629,6 +663,33 @@ export async function checkStorageOperationCharacterization() {
       assert.equal(receivedUnmarked.ok, true);
       assert.equal(holding.storage.resources.filter(row => row.resourceId === "wood").reduce((sum, row) => sum + row.qty, 0),
         woodBefore + 1, "unmarked items still use catalog aliases");
+
+      const gearRow = { id: " gear-stock ", resourceId: catalogGear.id, name: catalogGear.label, roomId: "outdoors", qty: 3 };
+      holding.storage.resources.push(gearRow, { ...gearRow, id: "gear-stock", qty: 1 });
+      const gearStock = () => holding.storage.resources.filter(row => row.resourceId === catalogGear.id);
+      const issuedGear = await executor({ ...locked, operationId: "issue-catalog-gear", resourceId: catalogGear.id,
+        rowIds: [gearRow.id], qty: 2 }, { userId: gm.id });
+      assert.equal(issuedGear.ok, true);
+      assert.deepEqual(gearStock().map(({ id, qty }) => [id, qty]), [[gearRow.id, 1], ["gear-stock", 1]]);
+      const flaggedGear = actor.items.get(actor.itemIds().at(-1));
+      assert.equal(flaggedGear.type, "gear");
+      assert.equal(flaggedGear.getFlag(MODULE_ID, "storageResourceId"), catalogGear.id);
+      const gearReturn = { ...locked, type: "depositItem", operationId: "return-catalog-gear", itemId: flaggedGear.id };
+      const receivedGear = await executor(gearReturn, { userId: gm.id });
+      assert.equal(receivedGear.ok, true);
+      assert.deepEqual(await executor(gearReturn, { userId: gm.id }), receivedGear);
+      assert.equal(gearStock().reduce((sum, row) => sum + row.qty, 0), 4, "gear-backed resources must round-trip in the resource ledger");
+      assert.equal(actor.items.get(flaggedGear.id), null);
+      assert.equal(holding.storage.items.some(row => row.name === catalogGear.label), false);
+      const normalGear = actor.addItem({ id: "plain-gear", type: "gear", name: catalogGear.label, qty: 1 });
+      assert.equal((await executor({ ...gearReturn, operationId: "return-unmarked-gear", itemId: normalGear.id }, { userId: gm.id })).ok, true);
+      const storedGear = holding.storage.items.find(row => row.name === catalogGear.label);
+      assert.equal(storedGear?.qty, 1, "an ordinary unflagged Item with the same name must remain gear");
+      storedGear.id = " gear-item ";
+      holding.storage.items.push({ ...storedGear, id: "gear-item" });
+      assert.equal((await executor({ ...locked, type: "giveStoredItem", operationId: "give-exact-gear", itemId: storedGear.id, qty: 1 },
+        { userId: gm.id })).ok, true);
+      assert.deepEqual(holding.storage.items.filter(row => row.name === catalogGear.label).map(row => row.id), ["gear-item"]);
 
       // The last marker write can fail after the holding partition, including
       // its receipt, has become recoverable. Compensation must follow that outcome.

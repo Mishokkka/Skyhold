@@ -44,6 +44,31 @@ function legacyRecipeResource(cost) {
   return { ...cost, resourceId: normalizeResourceId(cost.id, cost.name) };
 }
 
+const PUBLIC_STORAGE_SOURCES = new Set([
+  "Склад", "Ручная правка", "Перемещение", "Пакетное перемещение",
+  "Инвентарь Foundry", "Предмет Foundry", "Выдача Foundry",
+  "Казна", "Питание поселения", "Порча сырья", "Порча запасов", "Управление кадров",
+  "Перевозки", "Отправление груза"
+]);
+const MANUAL_STORAGE_LOG_KINDS = new Set(["manual-add", "manual-spend"]);
+
+function tendayStorageSourceIds(holding, rows, keyFor) {
+  const requested = new Set(rows.map((row) => row.operationId).filter(Boolean));
+  const sources = new Map();
+  for (const operation of holding?.log ?? []) {
+    const ledger = operation.payload?.economy?.ledger;
+    if (operation.type !== "tenday" || !requested.has(operation.operationId)
+      || !Array.isArray(ledger?.rows) || ledger.truncated || ledger.total !== ledger.rows.length) continue;
+    for (const entry of economyLedgerStorageRows(ledger.rows, { operationId: operation.operationId })) {
+      if (entry.operationId !== operation.operationId) continue;
+      const key = keyFor(entry);
+      // Identical visible rows from different producers do not establish provenance.
+      sources.set(key, sources.has(key) && sources.get(key) !== entry.sourceId ? null : entry.sourceId);
+    }
+  }
+  return sources;
+}
+
 const FinanceStorageCoreDomain = {
 _storageLogRows(holding, roomsArg = null) {
   const rooms = Array.isArray(roomsArg) ? roomsArg : this._storageRooms(holding, { includeUnavailable: true });
@@ -86,8 +111,13 @@ _storageLogRows(holding, roomsArg = null) {
   const sources = marketLogSources(holding, rows);
   const visibility = createMarketVisibility(this._contextData, { isGM });
   const visibleRoomNames = new Set(rooms.filter((room) => !hiddenRooms.has(room.id)).map((room) => room.label));
-  const hiddenSourceNames = new Set((holding?.buildings?.list ?? []).filter((building) => hiddenRooms.has(String(building.id)))
-    .map((building) => building.name).filter(Boolean));
+  const sourceKey = (row, resourceId = storageResourceId(row)) => JSON.stringify([
+    row.operationId, row.kind, resourceId, resourceId === "custom" ? row.name : "",
+    isStorageMoneyResource(row) ? "" : this._normalizeStorageRoomId(row.roomId), Math.trunc(row.qty), row.source, row.note || ""
+  ]);
+  const tendaySources = isGM ? null : tendayStorageSourceIds(holding, rows, sourceKey);
+  const publicBuildingNames = new Map((holding?.buildings?.list ?? []).filter((building) => !hiddenRooms.has(String(building.id)))
+    .map((building) => [String(building.id), building.name]));
   return rows.map((row) => {
     const id = storageResourceId(row);
     const name = id === "custom" ? (row.name || "Ресурс") : resourceLabel(id);
@@ -99,7 +129,17 @@ _storageLogRows(holding, roomsArg = null) {
     const laputaDateText = String(row.laputaDateText ?? row.holdingDateText ?? holdingDateText).trim();
     const dateText = laputaDateText ? `${realDateText} · ${laputaDateText}` : realDateText;
     const roomLabel = row.roomId ? labelFor(row.roomId) : "";
-    const source = visibility.logSource(row, sources.get(row.operationId));
+    const market = sources.get(row.operationId);
+    let source = visibility.logSource(row, market);
+    if (!isGM) {
+      if (market && (row.source === market.marketLabel || String(row.kind).startsWith("market-"))) {
+        source = visibility.marketLabel(market);
+      } else if (row.source && !String(row.kind).startsWith("market-")
+        && !MANUAL_STORAGE_LOG_KINDS.has(row.kind) && !PUBLIC_STORAGE_SOURCES.has(row.source)) {
+        const buildingId = tendaySources.get(sourceKey(row, id));
+        source = publicBuildingNames.get(buildingId) || "Источник недоступен";
+      }
+    }
     // Legacy generated notes store the intended room as text. Only known public room names survive in a player view.
     const note = isGM ? row.note : String(row.note ?? "").replace(/(^| · |; |, )переполнение: ([\s\S]*)$/u,
       (match, prefix, label) => visibleRoomNames.has(label) ? match : `${prefix}переполнение`);
@@ -115,7 +155,7 @@ _storageLogRows(holding, roomsArg = null) {
       realDateText,
       laputaDateText,
       kindLabel: this._storageLogKindLabel(row.kind),
-      source: hiddenSourceNames.has(source) ? "Скрытый источник" : source,
+      source,
       roomLabel,
       note: [roomLabel, note || row.period || ""].filter(Boolean).join(" · ")
     };

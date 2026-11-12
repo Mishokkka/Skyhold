@@ -48,9 +48,9 @@ function normalizeOperation(raw = {}) {
   if (!holdingId) throw operationError("Storage operation holding id is missing.");
   if (defense) return normalizeDefenseOperation(raw, { type, operationId, holdingId });
   const batchMove = type === "batchMove";
+  // Stored row IDs are opaque, including IDs from old or imported data.
   const rowIds = Array.from(new Set((Array.isArray(raw?.rowIds) ? raw.rowIds : [])
-    .map((id) => String(id ?? "").trim())
-    .map((id) => batchMove ? id : id.slice(0, 120))
+    .map((id) => String(id ?? ""))
     .filter(Boolean)));
   if (rowIds.length > MAX_STORAGE_BATCH_ROWS) throw operationError(STORAGE_BATCH_TOO_LARGE);
   const allowedRowIds = new Set(rowIds);
@@ -67,7 +67,7 @@ function normalizeOperation(raw = {}) {
     holdingId,
     actorId: String(raw?.actorId ?? "").trim(),
     actorUuid: String(raw?.actorUuid ?? "").trim(),
-    itemId: String(raw?.itemId ?? "").trim(),
+    itemId: type === "giveStoredItem" ? String(raw?.itemId ?? "") : String(raw?.itemId ?? "").trim(),
     itemUuid: String(raw?.itemUuid ?? "").trim(),
     buildingId: String(raw?.buildingId ?? "").trim(),
     resourceId: String(raw?.resourceId ?? "custom").trim() || "custom",

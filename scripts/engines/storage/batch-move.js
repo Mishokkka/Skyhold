@@ -26,7 +26,7 @@ function normalizedRowType(value) {
 }
 
 function selectedRows(holding, { rowType, rowIds, fromRoomId }, dependencies) {
-  const ids = (Array.isArray(rowIds) ? rowIds : []).map((id) => String(id ?? "").trim()).filter(Boolean);
+  const ids = (Array.isArray(rowIds) ? rowIds : []).map((id) => String(id ?? "")).filter(Boolean);
   const selected = dependencies.resolveStorageRows(holding?.storage?.[rowType], ids);
   if (selected.rows?.some((row) => dependencies.normalizeStorageRoomId(row.roomId ?? row.storageRoomId) !== fromRoomId)) {
     return { message: "Позиция больше не находится в этом хранилище." };

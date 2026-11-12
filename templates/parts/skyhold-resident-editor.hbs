@@ -114,7 +114,7 @@
     <div class="fbls-work-block fbls-work-background-block">
       <label class="person-background">
         <span>Социальное прошлое</span>
-        <select data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.background">
+        <select data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.background" {{#unless @root.isGM}}disabled title="Социальное прошлое меняет ГМ"{{/unless}}>
           {{#each backgroundOptions}}
             <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
           {{/each}}

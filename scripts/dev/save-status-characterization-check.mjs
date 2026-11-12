@@ -173,6 +173,69 @@ try {
     assert.equal(await ResidentEventDomain[method].call(allocationManager, allocationEvent), true);
   }
 
+  {
+    const skipped = Symbol("skipped");
+    const person = { id: "person", name: "Старое имя", appearance: "Старое описание" };
+    const live = { holdings: [{ id: "holding", people: { list: [person] } }] };
+    const name = { ...field, value: "Новое имя" };
+    const appearance = { dataset: { field: "holdings.0.people.list.0.appearance" }, value: person.appearance, type: "text" };
+    const profile = { ...editor, closest: () => profile,
+      querySelectorAll: (selector) => selector === "[data-field]" ? [name, appearance] : [] };
+    const app = new SkyholdResidentEditor({ holdingId: "holding", personId: "person" });
+    app.element = { querySelector: (selector) => selector === ".fbls-person-editor.v2" ? profile : null };
+    app._manager = () => ({ ...ResidentEventDomain, ...manager });
+    let renders = 0;
+    app.requestRender = () => { renders++; };
+    SkyholdData.get = () => structuredClone(live);
+    SkyholdData.skipTransaction = (value) => ({ [skipped]: true, value });
+    let writes = 0;
+    let gate = deferred();
+    SkyholdData.transaction = async (updater) => {
+      const wait = gate;
+      writes++;
+      if (wait) { gate = null; await wait.promise; }
+      const result = await updater(live);
+      return result?.[skipped] ? result.value : result;
+    };
+
+    const firstGate = gate;
+    const firstEdit = app._saveDraft(profile, { render: true });
+    appearance.value = "Новое описание";
+    app._saveStatus.markDirty();
+    const secondEdit = app._saveDraft(profile);
+    const closing = app.close();
+    await Promise.resolve();
+    assert.equal(writes, 1, "a queued draft must not read the resident revision before the previous write");
+    assert.equal(renders, 0, "a render must wait for the queued form edits");
+    assert.notEqual(app.closed, true);
+    firstGate.resolve();
+    assert.deepEqual(await Promise.all([firstEdit, secondEdit]), [true, true], "the editor must not conflict with its own first save");
+    await closing;
+    assert.equal(app.closed, true);
+    assert.equal(app._saveStatus.context.state, "saved");
+    assert.equal(renders, 1);
+    assert.equal(writes, 2, "closing a confirmed draft must not submit the form again");
+    assert.deepEqual([person.name, person.appearance], ["Новое имя", "Новое описание"]);
+
+    app.closed = false;
+    const conflict = deferred();
+    gate = conflict;
+    name.value = "Несохранённое имя";
+    const staleEdit = app._saveDraft(profile);
+    const pendingEdit = app._saveDraft(profile);
+    const refusedClose = app.close();
+    person.name = "Имя от другого клиента";
+    conflict.resolve();
+    assert.deepEqual(await Promise.all([staleEdit, pendingEdit]), [false, false]);
+    await refusedClose;
+    assert.equal(writes, 3, "a queued save must not overwrite a detected external conflict");
+    assert.equal(person.name, "Имя от другого клиента");
+    assert.equal(app._saveStatus.context.state, "error");
+    assert.equal(app.closed, false);
+    SkyholdResidentEditor.instances.delete(app);
+    SkyholdData.skipTransaction = methods.skipTransaction;
+  }
+
   // The work select contains the current foreman role. A routine save must not
   // clear it as though it were an unknown building, including during injury.
   game.users = [{ id: "gm", active: true, isGM: true }];

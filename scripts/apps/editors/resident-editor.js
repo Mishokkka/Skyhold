@@ -10,6 +10,7 @@ import { bindFloatingTooltips, hideFloatingTooltip } from "../common/floating-to
 import { WindowFrameMixin } from "../common/window-frame.js";
 import { focusApplicationContent, restoreApplicationFocus } from "../common/window-focus-keeper.js";
 import { RenderSchedulerMixin } from "../common/render-scheduler.js";
+import { delegatedEvent } from "../common/delegated-events.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
@@ -19,7 +20,8 @@ export class SkyholdResidentEditor extends WindowFrameMixin(RenderSchedulerMixin
   static open({ holdingId = "", personId = "" } = {}) {
     const existing = [...this.instances].find((app) => app.holdingId === holdingId && app.personId === personId);
     if (existing) {
-      existing.render({ force: true, focus: true });
+      if (existing._pendingDraftSave) focusApplicationContent(existing, { options: { focus: true }, preferredSelector: ".person-name input" });
+      else existing.render({ force: true, focus: true });
       return existing;
     }
     const app = new this({ holdingId, personId }, {
@@ -49,9 +51,14 @@ export class SkyholdResidentEditor extends WindowFrameMixin(RenderSchedulerMixin
     super(options);
     this.holdingId = String(holdingId ?? "");
     this.personId = String(personId ?? "");
-    this._skipCloseSave = false;
     this._saveStatus = new SaveStatus({ onChange: () => syncSaveStatus(this.element, this._saveStatus) });
     SkyholdResidentEditor.instances.add(this);
+  }
+
+  async render(...args) {
+    if (this.element && args[0]?.focus === false && this._saveStatus.context.state !== "saved") return this;
+    this._renderAfterDraftSave = false;
+    return super.render(...args);
   }
 
   _manager({ warn = false } = {}) {
@@ -130,19 +137,16 @@ export class SkyholdResidentEditor extends WindowFrameMixin(RenderSchedulerMixin
       if (event.target?.matches?.("[data-field], [data-work-assignment-field], [data-work-allocation-target]")) this._saveStatus.markDirty();
     }, listener);
 
-    root.querySelectorAll("[data-field]").forEach((field) => field.addEventListener("change", async (event) => {
-      await this._saveDraft(event.currentTarget);
-      if (String(field.dataset.field ?? "").endsWith(".workAllocationMode")) this.requestRender({ focus: false });
+    root.querySelectorAll("[data-field]").forEach((field) => field.addEventListener("change", () => {
+      return this._saveDraft(field, { render: String(field.dataset.field ?? "").endsWith(".workAllocationMode") });
     }, listener));
-    root.querySelectorAll("[data-work-allocation-target]").forEach((field) => field.addEventListener("change", async (event) => {
-      if (await this._saveDraft(event.currentTarget)) this.requestRender({ focus: false });
+    root.querySelectorAll("[data-work-allocation-target]").forEach((field) => field.addEventListener("change", () => {
+      return this._saveDraft(field, { render: true });
     }, listener));
 
-    root.querySelectorAll("[data-work-assignment-field]").forEach((field) => field.addEventListener("change", async (event) => {
-      const manager = this._manager({ warn: true });
-      if (!manager) return;
-      await this._saveStatus.track(() => manager._onPersonEditorWorkAssignmentChange(event));
-      this.requestRender({ focus: false });
+    root.querySelectorAll("[data-work-assignment-field]").forEach((field) => field.addEventListener("change", (event) => {
+      event.preventDefault();
+      return this._queueDraftSave((manager) => manager._onPersonEditorWorkAssignmentChange(delegatedEvent(event, field)), { render: true });
     }, listener));
 
     root.querySelectorAll("[data-trait-add-field]").forEach((field) => field.addEventListener("change", async (event) => {
@@ -153,48 +157,79 @@ export class SkyholdResidentEditor extends WindowFrameMixin(RenderSchedulerMixin
       await this._saveDraft(field);
     }, listener));
 
-    root.querySelectorAll("[data-action='remove-trait']").forEach((button) => button.addEventListener("click", async (event) => {
+    root.addEventListener("click", async (event) => {
+      const button = event.target?.closest?.("[data-action='remove-trait']");
+      const editor = button?.closest?.(".fbls-person-editor.v2");
+      if (!editor || !root.contains(editor)) return;
+      event.preventDefault();
       const manager = this._manager({ warn: true });
       if (!manager) return;
-      await manager._onRemoveTrait(event);
+      await manager._onRemoveTrait(delegatedEvent(event, button));
       bindFloatingTooltips(this, root);
-      await this._saveDraft(button);
-    }, listener));
+      await this._saveDraft(editor);
+    }, listener);
 
     for (const [action, method] of [["add-work-allocation", "_onAddWorkAllocation"], ["remove-work-allocation", "_onRemoveWorkAllocation"]]) {
       root.querySelectorAll(`[data-action='${action}']`).forEach((button) => button.addEventListener("click", async (event) => {
-        const manager = this._manager({ warn: true });
-        if (!manager) return;
-        await this._saveStatus.track(() => manager[method](event));
-        this.requestRender({ focus: false });
+        event.preventDefault();
+        const editor = button.closest(".fbls-person-editor.v2");
+        if (!editor || editor.inert) return;
+        const restoreFocus = document.activeElement === button;
+        // Allocation controls address the rendered indices until the form is refreshed.
+        editor.inert = true;
+        try {
+          const saved = await this._queueDraftSave((manager) => manager[method](delegatedEvent(event, button)));
+          if (saved) await this.requestRender({ focus: false });
+        } finally {
+          editor.inert = false;
+          if (restoreFocus && document.activeElement === document.body) {
+            const target = button.isConnected ? button : this.element?.querySelector?.("[data-action='add-work-allocation']");
+            target?.focus({ preventScroll: true });
+          }
+        }
       }, listener));
     }
 
     root.querySelectorAll("[data-action='close-person-editor']").forEach((button) => button.addEventListener("click", async (event) => {
       event.preventDefault();
-      if (!await this._saveDraft(button)) return;
-      this._skipCloseSave = true;
       await this.close();
     }, listener));
   }
 
-  async _saveDraft(element = this.element) {
-    const manager = this._manager({ warn: true });
-    try {
-      return await this._saveStatus.track(() => manager
-        ? manager._savePersonEditorDraft({ currentTarget: element?.querySelector?.(".fbls-person-editor.v2") ?? element })
-        : false);
-    } catch (error) {
+  _saveDraft(element = this.element, options = {}) {
+    const target = element?.querySelector?.(".fbls-person-editor.v2") ?? element;
+    return this._queueDraftSave((manager) => manager._savePersonEditorDraft({ currentTarget: target }), options);
+  }
+
+  _queueDraftSave(save, { render = false } = {}) {
+    const previous = this._pendingDraftSave;
+    this._renderAfterDraftSave ||= render;
+    const pending = this._saveStatus.track(async () => {
+      // Read the resident revision only after the previous edit has committed.
+      if (previous && !await previous) return false;
+      const manager = this._manager({ warn: true });
+      return manager ? save(manager) : false;
+    }).catch((error) => {
       console.error("FBL Skyhold | Failed to save resident editor", error);
       ui.notifications?.error?.("Не удалось сохранить жителя. Подробности в консоли.");
       return false;
-    }
+    }).finally(() => {
+      if (this._pendingDraftSave !== pending) return;
+      this._pendingDraftSave = null;
+      if (this._renderAfterDraftSave && this._saveStatus.context.state === "saved") this.requestRender({ focus: false });
+    });
+    this._pendingDraftSave = pending;
+    return pending;
   }
 
   async _preClose(options) {
     await super._preClose(options);
-    if (!this._skipCloseSave && this.element?.querySelector?.(".fbls-person-editor.v2") && !await this._saveDraft(this.element)) {
-      throw Object.assign(new Error("Черновик жителя не сохранён; редактор остаётся открытым."), { code: "resident-draft-unsaved" });
+    const unsaved = () => Object.assign(new Error("Черновик жителя не сохранён. Редактор остаётся открытым."), { code: "resident-draft-unsaved" });
+    while (this._pendingDraftSave) {
+      if (!await this._pendingDraftSave) throw unsaved();
+    }
+    if (this.element?.querySelector?.(".fbls-person-editor.v2") && this._saveStatus.context.state !== "saved") {
+      if (!await this._saveDraft() || this._saveStatus.context.state !== "saved") throw unsaved();
     }
   }
 

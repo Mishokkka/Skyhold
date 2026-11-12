@@ -394,7 +394,6 @@ _refreshResidentTraitEditor(editor) {
         remove.title = "Убрать черту";
         remove.setAttribute("aria-label", `Убрать черту ${badge.name}`);
         remove.textContent = "×";
-        remove.addEventListener("click", (event) => this._onRemoveTrait(event));
         chip.appendChild(remove);
         list.appendChild(chip);
       }

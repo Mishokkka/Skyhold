@@ -116,6 +116,7 @@ export function economyLedgerStorageRows(rows = [], { operationId = "", period =
       name: entry.name,
       qty: entry.qty,
       roomId: entry.roomId,
+      sourceId: entry.sourceId,
       source: entry.source || entry.domain,
       note: entry.note,
       period: String(period ?? ""),

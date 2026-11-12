@@ -681,7 +681,7 @@ async _onStorageDrop(event) {
     if (!result.ok) { ui.notifications.warn(result.message); return; }
     if (this.activeHoldingId === holdingId) {
       this.activeTab = "storage";
-      this.activeStorageTab = String(item.type) === "rawMaterial" ? "resources" : "items";
+      this.activeStorageTab = this._resourceIdForFoundryItem(item) === null ? "items" : "resources";
       this.activeStorageRoomId = this._normalizeStorageRoomId(result.roomId ?? roomId);
     }
     this.requestRender();

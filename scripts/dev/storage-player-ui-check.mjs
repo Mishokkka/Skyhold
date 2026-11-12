@@ -6,6 +6,8 @@ import { mergeHoldingDefaults } from "../data/normalizers.js";
 import { FinanceStorageDomain } from "../apps/domains/finance/storage-domain.js";
 import { prepareMarketOutboundContext } from "../apps/market/outbound-context.js";
 import { normalizeStorageRoomId } from "../engines/storage/capacity.js";
+import { economyLedgerStorageRows } from "../engines/economy/ledger.js";
+import { buildTendayOperationPayload } from "../engines/tenday/operation-payload.js";
 import { ResidentDomain } from "../apps/domains/resident-domain.js";
 import { buildPlayerPatch, validatePlayerPatch } from "../data/player-write-guard.js";
 
@@ -494,6 +496,42 @@ for (const isGM of [true, false]) {
   assert.equal(collected.note.includes("Тайная кладовая"), isGM, "manual collection uses a comma in the legacy overflow note");
 }
 
+const production = structuredClone(warehouse);
+production.buildings.list.push(
+  { id: "public-producer", name: "Новая вывеска", visibility: "public" },
+  { id: "hidden-producer", name: "Закрытая мастерская", visibility: "gm" },
+  { id: "public-lookalike", name: "Старая тайная кузница", visibility: "public" }
+);
+const output = (sourceId, source, qty) => ({ domain: "production", kind: "resource",
+  resourceId: "wood", qty, roomId: "outdoors", sourceId, source });
+const productionReceipt = (operationId, ledger, ledgerTruncated = false) => {
+  manager._appendStorageLog(production, economyLedgerStorageRows(ledger, { operationId }));
+  production.log.push({ operationId, type: "tenday", payload: buildTendayOperationPayload({ report: { ledger, ledgerTruncated } }) });
+};
+productionReceipt("production-names", [
+  output("public-producer", "Прежняя открытая мастерская", 1),
+  output("hidden-producer", "Старая тайная кузница", 2),
+  output("deleted-producer", "Снесённый тайный цех", 3),
+  output("public-producer", "Совпавшее имя", 4),
+  output("hidden-producer", "Совпавшее имя", 4)
+]);
+productionReceipt("truncated-production", [output("public-producer", "Неполная квитанция", 5)], true);
+manager._appendStorageLog(production, [{ kind: "collect", resourceId: "wood", roomId: "outdoors",
+  source: "Старая тайная кузница", qty: 6, operationId: "legacy-collection" }]);
+for (const isGM of [true, false]) {
+  game.user.isGM = isGM;
+  const journal = manager._storageLogRows(production, rooms);
+  const labels = journal.filter(row => row.operationId === "production-names").map(row => row.source);
+  assert.deepEqual(labels, isGM
+    ? ["Совпавшее имя", "Совпавшее имя", "Снесённый тайный цех", "Старая тайная кузница", "Прежняя открытая мастерская"]
+    : ["Источник недоступен", "Источник недоступен", "Источник недоступен", "Источник недоступен", "Новая вывеска"]);
+  assert.equal(journal.find(row => row.operationId === "truncated-production").source, isGM ? "Неполная квитанция" : "Источник недоступен");
+  const legacy = journal.find(row => row.operationId === "legacy-collection");
+  assert.equal(legacy.source, isGM ? "Старая тайная кузница" : "Источник недоступен",
+    "a public building with the same name cannot identify an old collection entry");
+  assert.equal(legacy.qty, 6, "redaction must retain the amount stored in a public room");
+}
+
 const staffing = mergeHoldingDefaults({
   id: "staffing", visibility: "public", gm: { playersCanEditBuildings: true },
   buildings: { list: [
@@ -526,6 +564,16 @@ const afterGmChange = { meta: { revision: 2 }, holdings: [staffing] };
 const deniedAssignment = validatePlayerPatch(afterGmChange, buildPlayerPatch(visibleAtRender, playerDraft), "player");
 assert.equal(deniedAssignment.ok, false, "the authority must reject a now-hidden workplace even when resident fields have not changed");
 assert.doesNotMatch(deniedAssignment.error, /secret-work|Закрытый арсенал/);
+
+const playerProfile = structuredClone(visibleAtRender);
+playerProfile.holdings[0].gm.playersCanEditResidents = true;
+const editedProfile = structuredClone(playerProfile);
+editedProfile.holdings[0].people.list[1].background = "Офицер";
+assert.equal(validatePlayerPatch(playerProfile, buildPlayerPatch(playerProfile, editedProfile), "player").ok, false,
+  "editing residents and buildings must not grant the right to change military background");
+const residentTemplate = readFileSync("templates/parts/skyhold-resident-editor.hbs", "utf8");
+assert.match(residentTemplate, /<select data-field="[^"]+\.background" {{#unless @root\.isGM}}disabled\b/,
+  "the resident card must not offer a writable background control to a player");
 
 let movementHolding = structuredClone(warehouse);
 movementHolding.storage.items.push({ id: "public-item", name: "Предмет", roomId: "outdoors", qty: 1 });

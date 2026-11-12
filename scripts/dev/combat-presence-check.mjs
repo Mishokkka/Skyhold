@@ -49,6 +49,21 @@ for (const person of trainedByTitleOnly.people.list) delete person.background;
 assert.equal(defenseSquadProfile(trainedByTitleOnly).sources[0].sergeantBonus, 0,
   "assigning a role does not create the military past needed for a sergeant bonus");
 
+const thresholdSquad = marginal.gm.defense.squads[0];
+thresholdSquad.sergeantId = thresholdSquad.memberIds.pop();
+const thresholdSergeant = marginal.people.list.find(({ id }) => id === thresholdSquad.sergeantId);
+thresholdSergeant.attributes = { strength: 5, agility: 5 };
+thresholdSergeant.role = "Сержант";
+assert.equal(defenseSquadProfile(marginal).units, 0, "four residents below five effective fighters cannot field a unit");
+for (const background of ["Бывший офицер", "Сержант гарнизона"]) {
+  thresholdSergeant.background = background;
+  const profile = defenseSquadProfile(marginal);
+  assert.equal(profile.units, 1, `${background}: recognized military training takes the squad across the threshold`);
+  assert.equal(profile.sources[0].sergeantBonus, 0.10);
+  assert.equal(profile.effective, 5.06);
+  assert.equal(roster._defenseContext(marginal).effectiveUnits, profile.units);
+}
+
 const medical = { people: { list: [{ id: "doctor", injuredDays: 0, shipAssignment: { shipId: "ship", away: true } }] },
   buildings: { list: [{ id: "hospital", specialKind: "medical", constructionStatus: "built", assignedWorkerIds: ["doctor"] }] } };
 assert.equal(medicalSupport(medical).capacity, 0, "absent doctors cannot treat settlement casualties");

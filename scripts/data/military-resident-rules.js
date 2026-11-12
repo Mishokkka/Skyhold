@@ -90,7 +90,7 @@ export function residentSoldierEfficiency(attributes = {}, type = "line", { mili
 }
 
 export function hasMilitaryServiceBackground(person = {}) {
-  return /(солдат|ветеран|на[её]мник|страж|сторож|дозор|егерь|дезертир|канонир|артиллер|сап[её]р|тюремщик|палач|телохранитель|ополчен|мушкет|развед)/i.test(String(person.background ?? ""));
+  return /(солдат|ветеран|на[её]мник|страж|сторож|дозор|егерь|дезертир|канонир|артиллер|сап[её]р|тюремщик|палач|телохранитель|ополчен|мушкет|развед|офицер|сержант)/i.test(String(person.background ?? ""));
 }
 
 export function hasSergeantTraining(person = {}) {

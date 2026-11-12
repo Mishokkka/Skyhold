@@ -318,6 +318,22 @@ export async function checkStorageBatchCharacterization() {
   assert.equal(first.ok, true, "authority executor must apply a permitted current batch");
   assert.deepEqual(second, first, "operation id must make repeated batch commands idempotent");
 
+  world.holdings[0] = fixture();
+  world.holdings[0].storage.resources[1].id = " res-a ";
+  const exactCommand = { ...command, operationId: "batch-exact-id", toRoomId: "outdoors",
+    rowIds: [" res-a "], rowQuantities: { " res-a ": 2 } };
+  const preview = planStorageBatchMove({ holding: world.holdings[0], ...exactCommand, dependencies: deps });
+  assert.deepEqual(preview.rows.map(({ id, qty }) => [id, qty]), [[" res-a ", 2]],
+    "preview must select the exact row and its partial quantity even when a trimmed ID also exists");
+  const exact = await executor(exactCommand, { userId: "player-1", remote: true });
+  assert.equal(exact.ok, true);
+  assert.deepEqual(world.holdings[0].storage.resources.slice(0, 2).map(({ id, qty }) => [id, qty]),
+    [["res-a", 5], [" res-a ", 2]]);
+  assert.deepEqual(exact.placements.map(({ id, qty }) => [id, qty]), [[" res-a ", 2]]);
+  const holdingAfterMove = clone(world.holdings[0]);
+  assert.deepEqual(await executor(exactCommand, { userId: "player-1", remote: true }), exact);
+  assert.deepEqual(world.holdings[0], holdingAfterMove, "retry must not move the remaining part");
+
   const addition = {
     type: "addResourceRow",
     operationId: "add-resource-authority-1",

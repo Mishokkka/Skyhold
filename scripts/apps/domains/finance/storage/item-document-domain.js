@@ -62,22 +62,43 @@ async _restoreActorItemRemoval(receipt = null) {
   if (!receipt?.ok || !(receipt.actorUuid || receipt.actorId)) return false;
   const actor = await resolveFoundryActorReference(receipt);
   if (!actor) return false;
-  const existing = actor.items?.get?.(receipt.itemId);
-  if (existing?.update) {
-    const restored = await existing.update(itemQuantityUpdateData(receipt.previousQuantity));
-    return this._itemQuantity(restored ?? actor.items?.get?.(receipt.itemId) ?? existing) === receipt.previousQuantity;
-  }
-  if (!actor.createEmbeddedDocuments || !receipt.previousData) return false;
-  let created;
+  const expected = receipt.previousQuantity;
+  const findItem = (id) => actor.items?.get?.(id);
+  const quantityAt = (id) => {
+    const item = findItem(id);
+    return item ? this._itemQuantity(item) : 0;
+  };
+  let itemId = receipt.itemId;
+  let failure;
   try {
-    created = await actor.createEmbeddedDocuments("Item", [receipt.previousData], { keepId: true });
-  } catch (_error) {
-    const fallback = cloneFoundryData(receipt.previousData);
-    delete fallback._id;
-    delete fallback.id;
-    created = await actor.createEmbeddedDocuments("Item", [fallback]);
+    if (!findItem(itemId) && actor.createEmbeddedDocuments && receipt.previousData) {
+      const original = this._setItemQuantityData(receipt.previousData, expected);
+      try {
+        const [created] = await actor.createEmbeddedDocuments("Item", [original], { keepId: true }) ?? [];
+        itemId = created?.id ?? itemId;
+      } catch {
+        // A hook can throw after the document has already been added.
+        if (!findItem(itemId)) {
+          const fallback = cloneFoundryData(original);
+          delete fallback._id;
+          delete fallback.id;
+          const [created] = await actor.createEmbeddedDocuments("Item", [fallback]) ?? [];
+          itemId = created?.id ?? itemId;
+        }
+      }
+    }
+    if (quantityAt(itemId) !== expected) {
+      await findItem(itemId)?.update?.(itemQuantityUpdateData(expected));
+    }
+  } catch (error) {
+    failure = error;
   }
-  return Boolean(created?.[0] && this._itemQuantity(created[0]) === receipt.previousQuantity);
+  const actual = quantityAt(itemId);
+  if (actual === expected) return true;
+  const item = findItem(itemId);
+  const message = `Проверьте инвентарь «${actor.name ?? actor.id}». Для «${item?.name ?? receipt.previousData?.name ?? itemId}» после отката найдено ${actual} из ${expected}. ${item?.uuid ?? actor.uuid ?? ""}`.trim();
+  globalThis.ui?.notifications?.error?.(message);
+  throw new Error(message, { cause: failure });
 },
 
 async _removeCreatedActorItems(receipt = null) {
@@ -220,6 +241,7 @@ _itemTypeLabel(type = "") {
 _resourceIdForFoundryItem(item = {}) {
   const issuedId = item.getFlag?.(MODULE_ID, "storageResourceId") ?? item.flags?.[MODULE_ID]?.storageResourceId;
   if (typeof issuedId === "string" && issuedId.trim()) return storageResourceId({ resourceId: issuedId });
+  if (item.type !== "rawMaterial") return null;
   const uuid = String(item.uuid ?? item.itemUuid ?? "");
   const id = String(item.id ?? item._id ?? "");
   const name = String(item.name ?? "");
@@ -260,7 +282,8 @@ async _storageReceiveFoundryItem(holding, item, { roomId = "outdoors", operation
   const source = this._storageDepositSource(item);
   if (!source.ok) return source;
   if (!amount) return { ok: false, message: "В стопке нет предметов." };
-  const snapshot = String(item.type) === "rawMaterial" ? null : this._snapshotItemForStorage(item, amount, targetRoom);
+  const resourceId = this._resourceIdForFoundryItem(item);
+  const snapshot = resourceId === null ? this._snapshotItemForStorage(item, amount, targetRoom) : null;
   if (snapshot) snapshot.roomId = this._storageItemDepositRoom(holding, snapshot, targetRoom);
   let actorMutation = null;
   try {
@@ -268,9 +291,8 @@ async _storageReceiveFoundryItem(holding, item, { roomId = "outdoors", operation
       actorMutation = await this._removeQuantityFromActorItem(item, amount);
       if (!actorMutation?.ok) return { ok: false, message: "Не удалось списать предмет из инвентаря персонажа." };
     }
-    if (!snapshot) {
-      const resourceId = this._resourceIdForFoundryItem(item);
-      const id = resourceId === "custom" ? "custom" : resourceId;
+    if (resourceId !== null) {
+      const id = resourceId;
       const label = id === "custom" ? String(item.name ?? "Ресурс") : resourceLabel(id);
       const placements = this._storageAddWithOverflow(holding, { resourceId: id, name: label, roomId: targetRoom, img: item.img, itemUuid: item.uuid, itemId: item.id, itemType: item.type, weight: item.system?.weight ?? "" }, amount);
       this._appendStorageLog(holding, placements.map((place) => ({ kind: "manual-add", resourceId: id, name: label, qty: place.qty, roomId: place.roomId, source: "Инвентарь Foundry", note: (item.parent?.documentName ?? item.parent?.constructor?.documentName) === "Actor" ? `из ${item.parent.name}` : "перетаскивание", operationId })));
