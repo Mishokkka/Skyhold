@@ -1,4 +1,4 @@
-import { specialMoraleModifier } from "../../core/special-effects.js";
+import { isPublicSpecialNote, specialMoraleModifier } from "../../core/special-effects.js";
 import { residentLaborCapacity } from "../../data/labor-budget.js";
 import { selectionSummary } from "../common/selection-summary.js";
 import { residentTraitTooltip } from "../common/resident-trait-chips.js";
@@ -8,6 +8,8 @@ import { CULTURE_NAMES } from "../../generators/name-pools.js";
 import { ageGroupFromAge, ageThresholdsFor, attributeSummary, normalizeBelief, raceKeyFromResident, socialBackgroundOptions, workerTypeFromAttributes, workerTypeStyleFromAttributes } from "../../generators/resident-rules.js";
 import { buildingOperationalState } from "../../core/building-state.js";
 import { resourceLabel } from "../../core/resources.js";
+import { stableDataHash } from "../../data/storage-commit.js";
+import { DEFENSE_ARMAMENT_IDS } from "./defense-operation-domain.js";
 import {
   buildingConfirmedHarmActive,
   buildingConfirmedLeisureCapacity,
@@ -61,7 +63,8 @@ _prepareRows(holding, canEdit, activeTab = "overview", options = {}) {
   if (tab === "special" || tab === "defense") {
     const decorate = (sourceRows) => (sourceRows ?? []).map((row, index) => ({ ...row, _index: index }));
     rows.special = decorate(holding.special?.list).filter(canViewSpecialRecord)
-      .map((row) => ({ ...row, isGmOnly: row.visibility === "gm" }));
+      .map(({ _index, ...row }) => ({ ...row, _index, isGmOnly: row.visibility === "gm",
+        canDeleteSpecialRecord: Boolean(globalThis.game?.user?.isGM) || isPublicSpecialNote(row) }));
     rows.cemetery = this._preparePersonRows(holding, canEdit, "cemetery", false);
   }
 
@@ -257,7 +260,8 @@ _isMilitaryBackgroundResident(person = {}) {
 },
 
 _isCommanderCandidate(person = {}) {
-  if (!this._isSoldierResident(person) || this._isResidentInjured(person) || person?.dead) return false;
+  const servesInDefense = this._hasSoldierProfession(person) || person.workAssignment === "defenseCommander";
+  if (!servesInDefense || this._isChildResident(person) || this._isResidentInjured(person) || person.dead) return false;
   const attrs = person?.attributes ?? {};
   return this._safeNumber(attrs.wits, 0) >= COMMANDER_MIN_WITS;
 },
@@ -291,7 +295,7 @@ _defensePersonOptions(holding, selected = "", { soldiersOnly = false, sergeantsO
   if (!renderContext.filteredCache.has(cacheKey)) {
     renderContext.filteredCache.set(cacheKey, renderContext.activePeople.filter((person) => {
       const hasProfession = this._hasSoldierProfession?.(person) === true;
-      if (commandersOnly) return hasProfession && !this._isChildResident?.(person) && this._isCommanderCandidate(person);
+      if (commandersOnly) return this._isCommanderCandidate(person);
       if (sergeantsOnly) return hasProfession && this._isSergeantCandidate(person) && this._isSuitableForSquadType(person, squadType);
       if (soldiersOnly) return hasProfession && this._isSuitableForSquadType(person, squadType);
       return this._isSuitableForSquadType(person, squadType);
@@ -343,7 +347,7 @@ _sanitizeDefenseAssignments(holding) {
   const commanderId = String(defense.commanderId ?? "");
   if (commanderId) {
     const commander = people.get(commanderId);
-    if (!commander || !this._hasSoldierProfession?.(commander) || !this._isCommanderCandidate(commander) || this._isChildResident?.(commander) || this._isResidentInjured(commander) || commander.dead) {
+    if (!commander || !this._isCommanderCandidate(commander)) {
       defense.commanderId = "";
       changed = true;
     } else used.add(commanderId);
@@ -393,7 +397,7 @@ _defenseContext(holding) {
     const hasSergeant = Boolean(firstSlotPerson && this._isSergeantCandidate(firstSlotPerson));
     if (hasSergeant) effective += 0.5;
     if (!Number.isFinite(Number(effective))) effective = 0;
-    const armamentResourceId = ["armament-simple", "armament-complex", "armament-elite"].includes(String(squad.armamentResourceId ?? ""))
+    const armamentResourceId = DEFENSE_ARMAMENT_IDS.includes(String(squad.armamentResourceId ?? ""))
       ? String(squad.armamentResourceId)
       : "";
     const equipped = Boolean(armamentResourceId);
@@ -404,6 +408,7 @@ _defenseContext(holding) {
     return {
       ...squad,
       _index: index,
+      squadHash: stableDataHash(squad),
       label: squad.name || `${index + 1}-й ${type.label.toLowerCase()}`,
       typeLabel: type.label,
       typeTag: type.tag,
@@ -427,7 +432,7 @@ _defenseContext(holding) {
       equipped,
       armamentResourceId,
       armamentLabel: armamentResourceId ? resourceLabel(armamentResourceId) : "Вооружение не выдано",
-      armamentOptions: ["armament-simple", "armament-complex", "armament-elite"].map((resourceId) => ({
+      armamentOptions: DEFENSE_ARMAMENT_IDS.map((resourceId) => ({
         value: resourceId,
         label: resourceLabel(resourceId),
         selected: resourceId === (armamentResourceId || "armament-simple")
@@ -451,7 +456,7 @@ _defenseContext(holding) {
     effectiveUnits,
     squadTypeSummary: Object.values(typeDefs).map((item) => `${item.label}: ${item.tag}`).join(" · "),
     equipmentCostText: "Одна единица Вооружения закрепляется за одним отрядом из пяти человек до замены, разоружения или расформирования.",
-    defenseHelpText: `Командир выбирается отдельно от отрядов: любой живой взрослый житель. Он не дает плоских кубов; его эффективность 0-3 дает +7%/+14%/+21% к боевой мощи армии. Эффективность: Разум/управленческий тип, военное прошлое, лидерские черты. Сержантом считается только солдат с военным социальным прошлым и любой характеристикой 5+. ${Object.values(typeDefs).map((item) => `${item.label}: ${item.tag}`).join(" · ")}. Первый слот отряда — сержант или обычный солдат; всего в отряде 5 бойцов. Один житель не может занимать несколько слотов. Недоукомплектованные отряды и отряды без закрепленной единицы Вооружения не считаются. Один участвующий отряд расходует одну подходящую единицу Военных припасов за весь бой; без неё он сохраняется, но лишается 20% огнестрельного бонуса и тегов Стрелки/Осадные.`
+    defenseHelpText: `Командиром может стать взрослый военнослужащий с Разумом 4+ без ранения. Он не дает плоских кубов; его эффективность 0-3 дает +7%/+14%/+21% к боевой мощи армии. Эффективность: Разум/управленческий тип, военное прошлое, лидерские черты. Сержантом считается только солдат с военным социальным прошлым и любой характеристикой 5+. ${Object.values(typeDefs).map((item) => `${item.label}: ${item.tag}`).join(" · ")}. Первый слот отряда — сержант или обычный солдат; всего в отряде 5 бойцов. Один житель не может занимать несколько слотов. Недоукомплектованные отряды и отряды без закрепленной единицы Вооружения не считаются. Один участвующий отряд расходует одну подходящую единицу Военных припасов за весь бой; без неё он сохраняется, но лишается 20% огнестрельного бонуса и тегов Стрелки/Осадные.`
   };
 },
 
@@ -781,7 +786,7 @@ _isMilitaryResidentLike(person = {}) {
 },
 
 _hasSoldierProfession(person = {}) {
-  return String(person?.workAssignment ?? "") === "soldier" || /^\s*(солдат|сержант)\b/i.test(String(person?.role ?? ""));
+  return String(person?.workAssignment ?? "") === "soldier" || /^\s*(?:солдат|сержант)(?:\s|:|$)/iu.test(String(person?.role ?? ""));
 },
 
 _isSoldierResident(person = {}) {

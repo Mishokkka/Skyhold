@@ -1,8 +1,10 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import { SkyholdData, requestShipOperation } from "../../../data/store.js";
 import { findReadableHoldingEntry } from "../../../data/access-guard.js";
-import { deleteCollectionRow } from "../../../data/collection-operations.js";
+import { addCollectionRow, deleteCollectionRow } from "../../../data/collection-operations.js";
+import { holdingPermissionContext } from "../../../data/holding-permissions.js";
 import { stableDataHash } from "../../../data/storage-commit.js";
+import { isPublicSpecialNote } from "../../../core/special-effects.js";
 import { normalizeBelief } from "../../../generators/resident-rules.js";
 import { createSafeIcon, escapeHtml, fieldValue } from "../../../core/helpers.js";
 import { makeId } from "../../../data/utils.js";
@@ -206,14 +208,17 @@ _applyResidentSearchFilter(root = this.element, value = "") {
 async _onTogglePersonDead(event) {
   event.preventDefault();
   event.stopPropagation();
-  if (!this._canManagePeople()) return;
+  if (!game.user?.isGM) return;
   const id = String(event.currentTarget?.dataset?.id ?? "");
+  const holdingId = String(event.currentTarget?.dataset?.holdingId ?? "");
   const dead = String(event.currentTarget?.dataset?.dead ?? "true") !== "false";
-  if (!id) return;
+  if (!holdingId || !id) return;
   try {
-    const updated = await this._updateActiveHolding((holding) => {
-      const person = (holding?.people?.list ?? []).find((row) => String(row.id) === id);
-      if (!person) return SkyholdData.skipTransaction(false);
+    const updated = await SkyholdData.updateHolding(holdingId, (holding) => {
+      const matches = (holding?.people?.list ?? []).filter((row) => String(row.id) === id);
+      if (matches.length !== 1) return SkyholdData.skipTransaction(false);
+      const [person] = matches;
+      if (person.dead === dead) return SkyholdData.skipTransaction(true);
       person.dead = dead;
       person.status = dead ? "Погиб" : "";
       if (dead) person.injuredDays = 0;
@@ -226,7 +231,8 @@ async _onTogglePersonDead(event) {
       }
       return true;
     }, { reason: "resident:toggle-dead" });
-    if (!updated) return;
+    if (!updated) return ui.notifications.warn("Житель недоступен или его ID неоднозначен.");
+    if (this.activeHoldingId !== holdingId) return this.requestRender();
     this.activePeopleTab = "living";
     this.activeSpecialTab = dead ? "cemetery" : "records";
     this.activeTab = dead ? "special" : "people";
@@ -500,14 +506,21 @@ async _onTransferResident(event) {
 
 async _onAddRow(event) {
   event.preventDefault();
-  const collection = event.currentTarget?.dataset?.collection;
-  if (!game.user?.isGM && !(this._canEditBuildings() && String(collection ?? "").endsWith(".buildings.list"))) return;
-
+  const { collection, holdingId } = event.currentTarget?.dataset ?? {};
   if (!collection) return;
+  const special = /^holdings\.\d+\.special\.list$/.test(collection);
+  if (!special && !game.user?.isGM && !(collection.endsWith(".buildings.list") && this._canEditBuildings())) return;
 
   try {
     const row = this._emptyRowFor(collection, SkyholdData.view());
-    await SkyholdData.addRow(collection, row);
+    if (special) {
+      const added = await SkyholdData.updateHolding(holdingId, (holding) => {
+        if (!holdingPermissionContext(holding).canEditSpecial) return SkyholdData.skipTransaction(false);
+        addCollectionRow(holding, "special.list", { ...row, visibility: "public" });
+        return true;
+      }, { fallback: false, reason: "special:add-note" });
+      if (!added) return ui.notifications.warn("Добавление записи недоступно.");
+    } else await SkyholdData.addRow(collection, row);
     this.requestRender();
     if (collection.endsWith(".people.list")) await this._openResidentEditor(row.id, event.currentTarget);
   } catch (error) {
@@ -520,7 +533,6 @@ async _onDeleteRow(event) {
   event.preventDefault();
   const button = event.currentTarget;
   const collection = button.dataset.collection;
-  if (!game.user?.isGM && !(this._canEditBuildings() && String(collection ?? "").endsWith(".buildings.list"))) return;
   const rowId = button.dataset.id;
   if (!collection || !rowId) return;
 
@@ -528,14 +540,24 @@ async _onDeleteRow(event) {
   const scope = collection.match(/^holdings\.(\d+)\.(.+)$/);
   const holdingId = button.dataset.holdingId ?? (scope ? data.holdings[Number(scope[1])]?.id : null);
   const collectionIn = (root) => {
-    if (!scope) return collection;
-    const { index } = findReadableHoldingEntry(root, holdingId);
+    if (!scope) return game.user?.isGM ? collection : "";
+    const { holding, index } = findReadableHoldingEntry(root, holdingId);
+    if (!holding) return "";
+    if (!game.user?.isGM) {
+      const permissions = holdingPermissionContext(holding);
+      if (!(scope[2] === "special.list" && permissions.canEditSpecial
+        || scope[2] === "buildings.list" && permissions.canEditBuildings)) return "";
+    }
     return index >= 0 ? `holdings.${index}.${scope[2]}` : "";
   };
   const confirmedPath = collectionIn(data);
-  const confirmedRows = confirmedPath ? foundry.utils.getProperty(data, confirmedPath) : null;
+  if (!confirmedPath) return;
+  const confirmedRows = foundry.utils.getProperty(data, confirmedPath);
   const matched = Array.isArray(confirmedRows) ? confirmedRows.filter((row) => String(row?.id ?? "") === rowId) : [];
   if (matched.length !== 1) return ui.notifications.warn("Запись недоступна или её ID неоднозначен.");
+  if (!game.user?.isGM && scope?.[2] === "special.list" && !isPublicSpecialNote(matched[0])) {
+    return ui.notifications.warn("Особую запись с настройками или эффектом может удалить ГМ.");
+  }
   const expected = stableDataHash(matched[0]);
   const confirmed = await this._confirmAction("Удалить запись", "Удалить эту запись из владения?");
   if (!confirmed) return;
@@ -602,15 +624,16 @@ async _executeResidentContextAction(personId = "", action = "", holdingId = this
   }
 
   if (action === "mark-dead" || action === "restore") {
+    if (!game.user?.isGM) return;
     await this._onTogglePersonDead({
       preventDefault() {},
       stopPropagation() {},
-      currentTarget: { dataset: { id: String(personId), dead: action === "mark-dead" ? "true" : "false" } }
+      currentTarget: { dataset: { id: String(personId), holdingId, dead: action === "mark-dead" ? "true" : "false" } }
     });
     return;
   }
 
-  if (action === "delete") {
+  if (action === "delete" && game.user?.isGM) {
     await this._onDeleteRow({
       preventDefault() {},
       currentTarget: { dataset: { collection: `holdings.${actualHoldingIndex}.people.list`, holdingId, id: String(personId) } }
@@ -631,13 +654,13 @@ async _showResidentActionMenu(personId = "", position = null, holdingId = this.a
   const holding = data.holdings.find((item) => item.id === this.activeHoldingId);
   const person = (holding?.people?.list ?? []).find((row) => String(row.id) === String(personId));
   if (!person) return;
-  const items = [
-    { action: "edit", icon: "fa-solid fa-pen", label: "Редактировать" },
+  const items = [{ action: "edit", icon: "fa-solid fa-pen", label: "Редактировать" }];
+  if (game.user?.isGM) items.push(
     person.dead
       ? { action: "restore", icon: "fa-solid fa-heart-pulse", label: "Вернуть из кладбища" }
       : { action: "mark-dead", icon: "fa-solid fa-skull", label: "Отметить погибшим", danger: true },
     { action: "delete", icon: "fa-solid fa-trash", label: "Удалить", danger: true }
-  ];
+  );
   if (this._canReturnResidentToShip(person, holding)) items.splice(1, 0,
     { action: "return-to-ship", icon: "fa-solid fa-ship", label: "Вернуть на корабль" });
   const menu = document.createElement("div");

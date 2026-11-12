@@ -166,6 +166,16 @@ export function checkStorageCharacterization() {
     const repeatedBatchId = mergeHoldingDefaults(holding);
     assert.deepEqual(repeatedBatchId.storage.resources.map(row => row.batches[0].ageQd), [6, 25],
       "distinct physical lots that reuse a batch ID cannot acquire each other's age on load");
+
+    holding.storage.resources = [resource("for-sale", "wood", 1, "outdoors", { forSale: true })];
+    const saleStock = mergeHoldingDefaults(holding);
+    assert.equal(storage._storageAdd(saleStock, { resourceId: "wood" }, 2).id, "for-sale",
+      "a sole compatible sale stock is deliberately replenished");
+    const ordinary = storage._storageAdd(saleStock, { resourceId: "wood", forSale: false }, 1);
+    assert.equal(ordinary.forSale, false, "an explicit policy takes precedence over sale replenishment");
+    assert.equal(storage._storageAdd(saleStock, { resourceId: "wood" }, 3).id, ordinary.id,
+      "the presence of two policies never sends an unspecified acquisition to sale");
+    assert.deepEqual(mergeHoldingDefaults(saleStock).storage.resources.map(row => [row.qty, row.forSale]), [[3, true], [4, false]]);
   }
 
   withResourceCatalog([{ id: "local-food", label: "Местный паёк", aliases: ["Свой ресурс"], basePriceCopper: 40,

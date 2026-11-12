@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { registerStorageOperationExecutor, SkyholdData } from "../data/store.js";
+import { handleSkyholdSocketPayload, registerStorageOperationExecutor, SkyholdData } from "../data/store.js";
+import { stableDataHash } from "../data/storage-commit.js";
 import { mergeHoldingDefaults } from "../data/normalizers.js";
 import { FinanceStorageDomain } from "../apps/domains/finance/storage-domain.js";
 import { prepareMarketOutboundContext } from "../apps/market/outbound-context.js";
@@ -76,6 +77,7 @@ SkyholdData.updateHolding = async (id, updater) => {
 };
 globalThis.HTMLTextAreaElement = class {};
 const manager = { ...FinanceStorageDomain, ...StorageEventDomain, ...NavigationEventDomain, activeHoldingId: "a",
+  _onDefenseFieldChange: GmEventDomain._onDefenseFieldChange,
   _safeNumber: (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback,
   _normalizeStorageRoomId: normalizeStorageRoomId,
   _formatNumber: String, _moneyContext: () => ({}), _resourcePriceCopper: () => 1,
@@ -220,22 +222,131 @@ assert.deepEqual(data, afterOtherEdit, "an absolute edit in a stale field must n
     holding.gm.defense.squads = [{ id: "shared", name: `Отряд ${holding.id}`, equipped: true,
       armamentResourceId: "armament-simple", armamentSourceRoomId: "outdoors" }];
   }
+  const authority = { id: "gm", active: true, isGM: true };
+  const player = { id: "player", active: true, isGM: false };
+  game.user = authority;
+  game.users = { contents: [authority, player] };
+  const defenseExecutor = () => createStorageOperationExecutor({
+    updateHolding: async (holdingId, updater, options) => {
+      assert.equal(game.user.id, authority.id);
+      assert.equal(options.localAuthority, true);
+      return SkyholdData.updateHolding(holdingId, updater);
+    }
+  });
+  registerStorageOperationExecutor(defenseExecutor());
+  const defenseButton = (holding, choice) => {
+    const squad = holding.gm.defense.squads[0];
+    const card = { dataset: { holdingId: holding.id, squadId: squad.id, squadHash: stableDataHash(squad) },
+      querySelector: () => ({ value: choice }) };
+    return { closest: (selector) => selector === ".fbls-defense-squad" ? card : { dataset: { defenseHoldingId: holding.id } } };
+  };
   manager._confirmAction = async () => { manager.activeHoldingId = "b"; return true; };
   manager.activeHoldingId = "a";
-  await GmEventDomain._onDeleteDefenseSquad.call(manager, eventFor({ dataset: { holdingId: "a", squadId: "shared" } }));
+  await GmEventDomain._onDeleteDefenseSquad.call(manager, eventFor(defenseButton(data.holdings[0])));
   assert.deepEqual(data.holdings.map(holding => holding.gm.defense.squads.length), [0, 1]);
-  assert.deepEqual(data.holdings.map(holding => holding.storage.resources.find(row => row.resourceId === "armament-simple")?.qty ?? 0), [1, 0],
+  const kits = (holding, resourceId) => holding.storage.resources.filter(row => row.resourceId === resourceId)
+    .reduce((sum, row) => sum + row.qty, 0);
+  assert.deepEqual(data.holdings.map(holding => kits(holding, "armament-simple")), [1, 0],
     "disbanding a squad returns the kit to the same holding that was confirmed");
-  game.user.isGM = false;
+
+  const sent = [];
+  game.socket = { emit: (_channel, message) => sent.push(message) };
+  game.user = player;
+  const deliverToAuthority = async (request) => {
+    assert.equal(request.type, "playerStorageOperationRequest");
+    assert.equal(request.targetGmId, authority.id);
+    game.user = authority;
+    await handleSkyholdSocketPayload(request, player.id);
+    game.user = player;
+    const response = sent.shift();
+    assert.equal(response.requestId, request.requestId);
+    await handleSkyholdSocketPayload(response, authority.id);
+    return response.result;
+  };
+  const finishPlayerDefense = async (pending) => {
+    await Promise.resolve();
+    const request = sent.shift();
+    assert.ok(request, "the player action reaches the socket through the rendered card");
+    const result = await deliverToAuthority(request);
+    await pending;
+    assert.equal(sent.length, 0);
+    return { request, result };
+  };
+  const playerDefense = (method, button) => finishPlayerDefense(GmEventDomain[method].call(manager, eventFor(button)));
+  const playerDefenseField = (field) => finishPlayerDefense(manager._onFieldChange(eventFor(field)));
   data.holdings[1].gm.playersCanEditDefense = true;
+  data.holdings[1].gm.playersCanUseStorage = false;
+  data.holdings[1].buildings.list.push({ id: "secret", name: "Скрытый арсенал", visibility: "gm" });
+  data.holdings[1].storage.resources.push(
+    { id: "hidden-complex", resourceId: "armament-complex", qty: 1, roomId: "secret" },
+    { id: "hidden-elite", resourceId: "armament-elite", qty: 1, roomId: "secret" },
+    { id: "visible-complex", resourceId: "armament-complex", qty: 1, roomId: "outdoors" }
+  );
+  const buttonBeforeAssignment = defenseButton(data.holdings[1], "armament-complex");
+  const { request: assigned, result: assignedResult } = await playerDefense("_onAssignDefenseArmament", buttonBeforeAssignment);
+  assert.equal(assignedResult.ok, true, "defense permission authorizes a narrowly scoped issue without warehouse write rights");
+  assert.equal(data.holdings[1].gm.defense.squads[0].armamentResourceId, "armament-complex");
+  assert.equal(data.holdings[1].storage.resources.find(row => row.id === "hidden-complex").qty, 1, "a player cannot consume hidden inventory");
+  assert.equal(kits(data.holdings[1], "armament-complex"), 1);
+  assert.equal(kits(data.holdings[1], "armament-simple"), 1, "the previous kit is returned atomically");
+  assert.equal(data.holdings[1].storage.log.filter(row => row.operationId === assigned.requestId).length, 2);
+  const { result: hiddenOnly } = await playerDefense("_onAssignDefenseArmament", defenseButton(data.holdings[1], "armament-elite"));
+  assert.equal(hiddenOnly.ok, false);
+  assert.doesNotMatch(hiddenOnly.message, /арсенал|secret/iu);
+  const afterAssignment = structuredClone(data);
+  registerStorageOperationExecutor(defenseExecutor());
+  assert.equal((await deliverToAuthority(assigned)).replay, true, "the same request replays from the persisted receipt after executor restart");
+  assert.deepEqual(data, afterAssignment);
+  assert.equal((await playerDefense("_onUnassignDefenseArmament", buttonBeforeAssignment)).result.ok, false,
+    "a stale card cannot return a newly assigned kit");
+  assert.equal((await playerDefense("_onUnassignDefenseArmament", defenseButton(data.holdings[1]))).result.ok, true);
+  assert.equal(kits(data.holdings[1], "armament-complex"), 2);
+
+  data.holdings[1].people.list = [
+    { id: "captain", name: "Капитан", age: 35, workAssignment: "soldier", background: "Солдат", attributes: { wits: 5, strength: 5 } },
+    { id: "recruit", name: "Новобранец", age: 25, background: "Солдат", attributes: { wits: 4, strength: 5, agility: 5 } }
+  ];
+  data.holdings[1] = mergeHoldingDefaults(data.holdings[1]);
+  const commander = await playerDefenseField({ dataset: { field: "holdings.1.gm.defense.commanderId", defenseExpected: "" },
+    value: "captain", closest: (selector) => selector === "[data-defense-holding-id]" ? { dataset: { defenseHoldingId: "b" } } : null });
+  assert.equal(commander.result.ok, true);
+  assert.equal(data.holdings[1].people.list[0].workAssignment, "defenseCommander");
+  assert.equal((await playerDefense("_onFillDefenseSquadBest", defenseButton(data.holdings[1]))).result.ok, true,
+    "the player can fill the squad and the authority owns the derived wages");
+  assert.equal(data.holdings[1].gm.defense.squads[0].sergeantId, "recruit");
+  assert.ok(data.holdings[1].people.list[1].salary > 0);
+  const edit = await playerDefenseField({ ...defenseButton(data.holdings[1]), value: "Караул",
+    dataset: { field: "holdings.1.gm.defense.squads.0.name" } });
+  assert.equal(edit.result.ok, true);
+  assert.match(data.holdings[1].people.list[1].role, /Караул/);
+  assert.equal(data.holdings[1].gm.defense.commanderId, "captain", "recalculating a different squad must preserve the acting commander");
+
   manager._confirmAction = async () => { data.holdings[1].gm.playersCanEditDefense = false; return true; };
-  await GmEventDomain._onDeleteDefenseSquad.call(manager, eventFor({ dataset: { holdingId: "b", squadId: "shared" } }));
+  assert.equal((await playerDefense("_onDeleteDefenseSquad", defenseButton(data.holdings[1]))).result.ok, false);
   assert.equal(data.holdings[1].gm.defense.squads.length, 1, "a player's confirmation cannot outlive revoked defense access");
+  data.holdings[1].gm.playersCanEditDefense = true;
+  assert.equal((await playerDefense("_onAssignDefenseArmament", defenseButton(data.holdings[1], "armament-simple"))).result.ok, true);
+  manager._confirmAction = async () => true;
+  assert.equal((await playerDefense("_onDeleteDefenseSquad", defenseButton(data.holdings[1]))).result.ok, true);
+  assert.equal(data.holdings[1].gm.defense.squads.length, 0);
+  assert.equal(kits(data.holdings[1], "armament-simple"), 1, "armed disband returns a kit exactly once for a permitted player");
+  assert.equal(data.holdings[1].people.list[1].workAssignment, "");
+  assert.equal(data.holdings[1].people.list[1].salary, 0);
   delete game.users;
   delete game.socket;
-  game.user.isGM = true;
+  game.user = authority;
 
   for (const holding of data.holdings) holding.people.list = [{ id: "resident", name: `Житель ${holding.id}` }];
+  const residentMenu = { ...ResidentEventDomain, activeHoldingId: "a", _canReturnResidentToShip: () => false, _closeResidentContextMenu() {} };
+  game.user = player;
+  await residentMenu._showResidentActionMenu("resident");
+  assert.deepEqual(body.children.at(-1).children.map(button => button.dataset.action), ["edit"]);
+  await ResidentEventDomain._onDeleteRow.call(manager,
+    eventFor({ dataset: { holdingId: "a", collection: "holdings.0.people.list", id: "resident" } }));
+  assert.equal(data.holdings[0].people.list.length, 1, "player profile permission cannot remove a resident");
+  game.user = authority;
+  await residentMenu._showResidentActionMenu("resident");
+  assert.deepEqual(body.children.at(-1).children.map(button => button.dataset.action), ["edit", "mark-dead", "delete"]);
   foundry.utils.getProperty = (root, path) => path.split(".").reduce((node, key) => node?.[key], root);
   foundry.utils.setProperty = (root, path, value) => {
     const keys = path.split(".");

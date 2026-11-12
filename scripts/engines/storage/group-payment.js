@@ -10,7 +10,7 @@ function costRoomMatches(row, cost, normalizeRoomId) {
   return normalizeRoomId(row?.roomId ?? row?.storageRoomId) === normalizeRoomId(cost.roomId ?? cost.storageRoomId);
 }
 
-export function planStorageCosts({ holding = {}, costs = [], dependencies = {} } = {}) {
+export function planStorageCosts({ holding = {}, costs = [], eligibleResourceRow, dependencies = {} } = {}) {
   const deps = requiredDependencies(dependencies);
   // Select one complete alternative per OR group against the entire recipe.
   // Planning never changes the stock; payment receives only concrete costs.
@@ -21,7 +21,7 @@ export function planStorageCosts({ holding = {}, costs = [], dependencies = {} }
     const choose = (index, selected) => {
       if (index === groups.length) {
         const ordered = [...fixed, ...selected].sort((a, b) => Number(Boolean(a.resourceGroup)) - Number(Boolean(b.resourceGroup)));
-        const plan = planStorageCosts({ holding, costs: ordered, dependencies: deps });
+        const plan = planStorageCosts({ holding, costs: ordered, eligibleResourceRow, dependencies: deps });
         failure ??= plan;
         return plan.ok ? plan : null;
       }
@@ -38,7 +38,9 @@ export function planStorageCosts({ holding = {}, costs = [], dependencies = {} }
     if (Array.isArray(row?.batches)) return row.batches;
     return [{ qty: row?.qty, ageQd: 0 }];
   };
-  const inventory = (holding?.storage?.resources ?? []).flatMap((row, index) => batchesForRow(row).map((batch, batchIndex) => ({
+  const rows = holding?.storage?.resources ?? [];
+  const eligibleRows = eligibleResourceRow ? rows.filter(eligibleResourceRow) : rows;
+  const inventory = eligibleRows.flatMap((row, index) => batchesForRow(row).map((batch, batchIndex) => ({
     row,
     index,
     batchIndex,

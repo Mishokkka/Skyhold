@@ -1,10 +1,14 @@
 import { SkyholdData } from "../data/store.js";
+import { AssignmentDomain } from "./domains/assignment-domain.js";
 import { BuildingDomain } from "./domains/building-domain.js";
 import { composeDomainGroup } from "./domains/compose-domain.js";
+import { applyDefenseOperation, DEFENSE_OPERATIONS, normalizeDefenseOperation } from "./domains/defense-operation-domain.js";
 import { FinanceDomain } from "./domains/finance-domain.js";
+import { ResidentDomain } from "./domains/resident-domain.js";
 import { resolveFoundryUuid } from "../integrations/foundry-runtime.js";
 import { appendHoldingOperation, findHoldingOperation } from "../data/operations.js";
 import { hiddenStorageRoomIds } from "../data/access-guard.js";
+import { holdingPermissionContext } from "../data/holding-permissions.js";
 
 const STORAGE_OPERATION_TYPES = new Set([
   "depositItem",
@@ -17,7 +21,9 @@ const STORAGE_OPERATION_TYPES = new Set([
 const GM_ONLY_ACTOR_TRANSFERS = new Set(["depositItem", "withdrawResource", "giveStoredItem"]);
 
 const StorageOperationLogic = composeDomainGroup("StorageOperationLogic", [
+  ["ResidentDomain", ResidentDomain],
   ["BuildingDomain", BuildingDomain],
+  ["AssignmentDomain", AssignmentDomain],
   ["FinanceDomain", FinanceDomain],
   ["StorageOperationSupport", {
     _safeNumber(value, fallback = 0) {
@@ -33,11 +39,13 @@ function operationError(message) {
 
 function normalizeOperation(raw = {}) {
   const type = String(raw?.type ?? "");
-  if (!STORAGE_OPERATION_TYPES.has(type)) throw operationError("Unknown storage operation.");
+  const defense = DEFENSE_OPERATIONS.has(type);
+  if (!defense && !STORAGE_OPERATION_TYPES.has(type)) throw operationError("Unknown storage operation.");
   const operationId = String(raw?.operationId ?? "").trim();
   const holdingId = String(raw?.holdingId ?? "").trim();
   if (!operationId || operationId.length > 120) throw operationError("Storage operation id is missing or too long.");
   if (!holdingId) throw operationError("Storage operation holding id is missing.");
+  if (defense) return normalizeDefenseOperation(raw, { type, operationId, holdingId });
   const rowIds = Array.from(new Set((Array.isArray(raw?.rowIds) ? raw.rowIds : [])
     .map((id) => String(id ?? "").trim().slice(0, 120))
     .filter(Boolean))).slice(0, 200);
@@ -102,6 +110,18 @@ function publicResult(result = {}, operationId, extra = {}) {
   };
 }
 
+function recordStorageResult(holding, operation, applied, signature, userId) {
+  const response = publicResult(applied, operation.operationId, operation.type === "batchMove" ? {
+    moved: Math.max(0, Number(applied.moved) || 0),
+    rowType: applied.rowType,
+    placements: Array.isArray(applied.placements) ? applied.placements : []
+  } : {});
+  appendHoldingOperation(holding, { operationId: operation.operationId, type: "system",
+    title: DEFENSE_OPERATIONS.has(operation.type) ? "Операция обороны" : "Операция хранилища",
+    summary: response.message, payload: { signature, userId: String(userId), result: response } });
+  return response;
+}
+
 export function createStorageOperationExecutor({
   logic = StorageOperationLogic,
   updateHolding = (holdingId, updater, options) => SkyholdData.updateHolding(holdingId, updater, options),
@@ -128,6 +148,7 @@ export function createStorageOperationExecutor({
     const signature = JSON.stringify({ ...operation, expectedRevision: operation.expectedRevision ?? 0 });
     const requester = getUser(userId);
     if (!requester) throw operationError("Storage operation requester was not found.");
+    const defense = DEFENSE_OPERATIONS.has(operation.type);
     if (!requester.isGM && operation.type === "addResourceRow") {
       throw operationError("Только ГМ может вручную добавлять ресурсы на склад.");
     }
@@ -138,8 +159,11 @@ export function createStorageOperationExecutor({
     let actorMutation = null;
     try {
       const result = await updateHolding(operation.holdingId, async (holding, data) => {
-        if (!holdingAllowsOperation(holding, requester)) {
-          return skipTransaction({ ok: false, message: "Нет прав на операции с этим хранилищем." });
+        const allowed = defense ? holdingPermissionContext(holding, { user: requester }).mayEditDefense
+          : holdingAllowsOperation(holding, requester);
+        if (!allowed) {
+          return skipTransaction({ ok: false, message: defense
+            ? "Нет прав на управление обороной этого владения." : "Нет прав на операции с этим хранилищем." });
         }
         const prior = findHoldingOperation(holding, operation.operationId);
         if (prior || hasCompletedOperation(holding, operation.operationId)) {
@@ -148,6 +172,11 @@ export function createStorageOperationExecutor({
             throw operationError("Storage operation id is already used by another or unverifiable operation.");
           }
           return skipTransaction({ ...prior.payload.result, duplicate: true, replay: true });
+        }
+        if (defense) {
+          const applied = applyDefenseOperation(holding, operation, { requester, logic });
+          return !applied.ok || applied.unchanged ? skipTransaction(applied)
+            : recordStorageResult(holding, operation, applied, signature, userId);
         }
         const checksRevision = operation.type === "batchMove"
           || (GM_ONLY_ACTOR_TRANSFERS.has(operation.type) && operation.expectedRevision !== null);
@@ -273,15 +302,7 @@ export function createStorageOperationExecutor({
 
         if (!applied?.ok) return skipTransaction(applied);
         actorMutation = applied.actorMutation ?? null;
-        const response = publicResult(applied, operation.operationId, operation.type === "batchMove" ? {
-          moved: Math.max(0, Number(applied.moved) || 0),
-          rowType: applied.rowType,
-          placements: Array.isArray(applied.placements) ? applied.placements : []
-        } : {});
-        appendHoldingOperation(holding, { operationId: operation.operationId, type: "system",
-          title: "Операция хранилища", summary: response.message,
-          payload: { signature, userId: String(userId), result: response } });
-        return response;
+        return recordStorageResult(holding, operation, applied, signature, userId);
       }, { fallback: false, localAuthority: true, reason: `storage-operation:${operation.type}` });
 
       if (!result) throw operationError("Storage operation holding was not found.");

@@ -1,12 +1,12 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
-import { SkyholdData } from "../../../data/store.js";
+import { requestStorageOperation, SkyholdData } from "../../../data/store.js";
 import { findReadableHoldingEntry } from "../../../data/access-guard.js";
 import { holdingPermissionContext } from "../../../data/holding-permissions.js";
 import { stableDataHash } from "../../../data/storage-commit.js";
-import { isResidentInPopulation } from "../../../data/resident-presence.js";
+import { DEFENSE_SQUAD_CHANGED } from "../defense-operation-domain.js";
+import { resolveStorageRow } from "../../../engines/storage/row-identity.js";
 import { clone, makeId } from "../../../data/utils.js";
 import { escapeHtml, rollD6Pool } from "../../../core/helpers.js";
-import { resourceLabel } from "../../../core/resources.js";
 import { normalizeEventRegionOptions, normalizeRandomEventTables, rollRandomEventTable } from "../../../data/random-events.js";
 import { controlIncidentSeverity } from "../../../engines/settlement/control.js";
 import { createHoldingChatMessage, foundryChatSpeaker } from "../../../integrations/foundry-runtime.js";
@@ -285,6 +285,26 @@ export const GmEventActions = {
   }
 };
 
+function defenseSquadTarget(button) {
+  const card = button?.closest?.(".fbls-defense-squad");
+  const { holdingId, squadId, squadHash } = card?.dataset ?? {};
+  const { holding } = findReadableHoldingEntry(SkyholdData.view(), holdingId);
+  if (!holding || !squadId || !squadHash || !holdingPermissionContext(holding).canEditDefense) return null;
+  return { holding, target: { holdingId, squadId, expectedSquadHash: squadHash }, card };
+}
+
+async function submitDefenseOperation(app, operation) {
+  try {
+    const result = await requestStorageOperation(operation);
+    if (!result?.ok) return ui.notifications.warn(result?.message ?? DEFENSE_SQUAD_CHANGED);
+    if (app.activeHoldingId === operation.holdingId) app.activeTab = "defense";
+    app.requestRender();
+  } catch (error) {
+    console.error("FBL Skyhold | Defense operation failed", error);
+    ui.notifications.warn(error.message || "Не удалось сохранить действие с обороной.");
+  }
+}
+
 export const GmEventDomain = {
 async _onAddDefenseSquad(event) {
   event.preventDefault();
@@ -305,201 +325,55 @@ async _onAddDefenseSquad(event) {
 async _onDeleteDefenseSquad(event) {
   event.preventDefault();
   event.stopPropagation();
-  const id = String(event.currentTarget?.dataset?.squadId ?? "");
-  const holdingId = String(event.currentTarget?.dataset?.holdingId ?? "");
-  const { holding: source } = findReadableHoldingEntry(SkyholdData.view(), holdingId);
-  if (!id || !source || !holdingPermissionContext(source).canEditDefense) return;
-  const squads = (source.gm?.defense?.squads ?? []).filter((row) => String(row.id) === id);
-  if (squads.length !== 1) return ui.notifications.warn("Отряд недоступен или его ID неоднозначен.");
-  const [squad] = squads;
-  const expected = stableDataHash(squad);
+  const context = defenseSquadTarget(event.currentTarget);
+  if (!context) return;
+  const { holding, target } = context;
+  const { row: squad } = resolveStorageRow(holding.gm?.defense?.squads, target.squadId);
+  if (!squad || stableDataHash(squad) !== target.expectedSquadHash) return ui.notifications.warn(DEFENSE_SQUAD_CHANGED);
   if (!await this._confirmAction("Расформировать отряд", `Расформировать «${escapeHtml(squad.name || "отряд")}»? Назначения будут сняты, комплект вооружения вернётся на склад.`)) return;
-  const deleted = await SkyholdData.updateHolding(holdingId, (holding) => {
-    if (!holdingPermissionContext(holding).canEditDefense) return SkyholdData.skipTransaction(false);
-    const matches = (holding.gm?.defense?.squads ?? []).filter((row) => String(row.id) === id);
-    if (matches.length !== 1 || stableDataHash(matches[0]) !== expected) return SkyholdData.skipTransaction(false);
-    const [target] = matches;
-    if (target?.armamentResourceId) {
-      const placements = this._storageAddWithOverflow?.(holding, {
-        resourceId: target.armamentResourceId,
-        roomId: target.armamentSourceRoomId || "outdoors"
-      }, 1) ?? [];
-      this._appendStorageLog?.(holding, placements.map((row) => ({
-        kind: "military-armament-return",
-        resourceId: target.armamentResourceId,
-        name: resourceLabel(target.armamentResourceId),
-        qty: row.qty,
-        roomId: row.roomId,
-        source: target.name || "Расформированный отряд",
-        note: "Комплект возвращён при расформировании отряда"
-      })));
-    }
-    holding.gm.defense.squads.splice(holding.gm.defense.squads.indexOf(target), 1);
-    this._applyDefenseSalaries?.(holding);
-    return true;
-  }, { fallback: false, reason: "gm:delete-defense-squad" });
-  if (!deleted) return ui.notifications.warn("Отряд изменился после открытия подтверждения. Повторите действие.");
-  if (this.activeHoldingId === holdingId) this.activeTab = "defense";
-  this.requestRender();
+  await submitDefenseOperation(this, { ...target, type: "disbandDefenseSquad" });
 },
 
 async _onAssignDefenseArmament(event) {
   event.preventDefault();
   event.stopPropagation();
-  if (!this._canManageDefense?.()) return;
-  const squadId = String(event.currentTarget?.dataset?.squadId ?? "");
-  const resourceId = String(event.currentTarget?.closest?.(".fbls-defense-squad")?.querySelector?.("[data-defense-armament-choice]")?.value ?? "");
-  if (!squadId || !["armament-simple", "armament-complex", "armament-elite"].includes(resourceId)) return;
-  const result = await this._updateActiveHolding((holding) => {
-    const squad = holding?.gm?.defense?.squads?.find((row) => String(row?.id ?? "") === squadId);
-    if (!squad) return SkyholdData.skipTransaction({ ok: false, message: "Отряд не найден." });
-    if (String(squad.armamentResourceId ?? "") === resourceId) return SkyholdData.skipTransaction({ ok: true, unchanged: true });
-    const payment = this._storageCanPay?.(holding, [{ resourceId, qty: 1 }]);
-    if (!payment?.ok) return SkyholdData.skipTransaction({ ok: false, message: "На складе нет выбранной единицы Вооружения." });
-    this._storagePay(holding, payment.costs);
-    this._appendStorageLog?.(holding, payment.costs.map((row) => ({
-      kind: "military-armament-assign",
-      resourceId,
-      name: resourceLabel(resourceId),
-      qty: -Math.max(0, this._safeNumber(row?.qty, 0)),
-      roomId: row?.roomId ?? "",
-      source: squad.name || "Отряд",
-      note: "Комплект закреплён за отрядом"
-    })));
-    if (squad.armamentResourceId) {
-      const returnedResourceId = squad.armamentResourceId;
-      const placements = this._storageAddWithOverflow?.(holding, {
-        resourceId: squad.armamentResourceId,
-        roomId: squad.armamentSourceRoomId || "outdoors"
-      }, 1) ?? [];
-      this._appendStorageLog?.(holding, placements.map((row) => ({
-        kind: "military-armament-return",
-        resourceId: returnedResourceId,
-        name: resourceLabel(returnedResourceId),
-        qty: row.qty,
-        roomId: row.roomId,
-        source: squad.name || "Отряд",
-        note: "Прежний комплект возвращён при замене"
-      })));
-    }
-    squad.armamentResourceId = resourceId;
-    squad.armamentSourceRoomId = String(payment.costs?.[0]?.roomId ?? "outdoors") || "outdoors";
-    squad.equipped = true;
-    return { ok: true };
-  }, { reason: "gm:assign-defense-armament" });
-  if (!result?.ok) {
-    if (result?.message) ui.notifications.warn(result.message);
-    return;
-  }
-  this.requestRender();
+  const context = defenseSquadTarget(event.currentTarget);
+  const resourceId = String(context?.card.querySelector?.("[data-defense-armament-choice]")?.value ?? "");
+  if (!context || !resourceId) return;
+  await submitDefenseOperation(this, { ...context.target, type: "assignDefenseArmament", resourceId });
 },
 
 async _onUnassignDefenseArmament(event) {
   event.preventDefault();
   event.stopPropagation();
-  if (!this._canManageDefense?.()) return;
-  const squadId = String(event.currentTarget?.dataset?.squadId ?? "");
-  if (!squadId) return;
-  const result = await this._updateActiveHolding((holding) => {
-    const squad = holding?.gm?.defense?.squads?.find((row) => String(row?.id ?? "") === squadId);
-    if (!squad?.armamentResourceId) return SkyholdData.skipTransaction({ ok: false, message: "У отряда нет закрепленного Вооружения." });
-    const returnedResourceId = squad.armamentResourceId;
-    const placements = this._storageAddWithOverflow?.(holding, {
-      resourceId: squad.armamentResourceId,
-      roomId: squad.armamentSourceRoomId || "outdoors"
-    }, 1) ?? [];
-    this._appendStorageLog?.(holding, placements.map((row) => ({
-      kind: "military-armament-return",
-      resourceId: returnedResourceId,
-      name: resourceLabel(returnedResourceId),
-      qty: row.qty,
-      roomId: row.roomId,
-      source: squad.name || "Отряд",
-      note: "Комплект снят с отряда"
-    })));
-    squad.armamentResourceId = "";
-    squad.armamentSourceRoomId = "outdoors";
-    squad.equipped = false;
-    return { ok: true };
-  }, { reason: "gm:unassign-defense-armament" });
-  if (!result?.ok) {
-    if (result?.message) ui.notifications.warn(result.message);
-    return;
-  }
-  this.requestRender();
+  const context = defenseSquadTarget(event.currentTarget);
+  if (!context) return;
+  await submitDefenseOperation(this, { ...context.target, type: "unassignDefenseArmament" });
 },
 
 async _onFillDefenseSquadBest(event) {
   event.preventDefault();
   event.stopPropagation();
-  if (!this._canManageDefense?.()) return;
-  const squadId = String(event.currentTarget?.dataset?.squadId ?? "");
-  if (!squadId) return;
+  const context = defenseSquadTarget(event.currentTarget);
+  if (!context) return;
+  await submitDefenseOperation(this, { ...context.target, type: "fillDefenseSquad" });
+},
 
-  const result = await this._updateActiveHolding((holding) => {
-    const squads = holding?.gm?.defense?.squads;
-    const squad = Array.isArray(squads) ? squads.find((item) => String(item.id) === squadId) : null;
-    if (!holding || !squad) return SkyholdData.skipTransaction({ ok: false, message: "" });
-
-    const squadType = String(squad.type ?? "line") === "militia" ? "line" : String(squad.type ?? "line");
-    const commanderId = String(holding?.gm?.defense?.commanderId ?? "");
-    const otherSquadIds = new Set();
-    for (const other of squads) {
-      if (String(other.id) === squadId) continue;
-      if (other?.sergeantId) otherSquadIds.add(String(other.sergeantId));
-      for (const id of (Array.isArray(other?.memberIds) ? other.memberIds : []).slice(0, 4)) if (id) otherSquadIds.add(String(id));
-    }
-
-    const candidates = (holding?.people?.list ?? [])
-      .filter((person) => person && isResidentInPopulation(person, holding) && !this._isResidentInjured?.(person))
-      .filter((person) => !this._isChildResident?.(person))
-      .filter((person) => this._isSuitableForSquadType?.(person, squadType))
-      .filter((person) => String(person.id) !== commanderId)
-      .filter((person) => !otherSquadIds.has(String(person.id)))
-      .map((person) => {
-        const efficiency = Number(this._soldierEfficiency?.(person, squadType) ?? 0);
-        const sergeant = this._isSergeantCandidate?.(person) ? 0.35 : 0;
-        const military = this._isMilitaryBackgroundResident?.(person) ? 0.35 : 0;
-        const soldier = this._isSoldierResident?.(person) ? 0.25 : 0;
-        const free = !String(person.workAssignment ?? "").trim() ? 0.05 : 0;
-        return { person, score: (Number.isFinite(efficiency) ? efficiency : 0) + sergeant + military + soldier + free };
-      })
-      .filter((row) => row.score > 0)
-      .sort((a, b) => b.score - a.score);
-
-    const selected = [];
-    const sergeantCandidate = candidates.find((row) => this._isSergeantCandidate?.(row.person));
-    const first = sergeantCandidate ?? candidates[0];
-    if (first) selected.push(first.person);
-    for (const row of candidates) {
-      if (selected.length >= 5) break;
-      if (selected.some((person) => String(person.id) === String(row.person.id))) continue;
-      selected.push(row.person);
-    }
-
-    if (!selected.length) {
-      return SkyholdData.skipTransaction({ ok: false, message: "Нет подходящих жителей для этого типа отряда." });
-    }
-
-    for (const person of selected) {
-      this._clearPersonFromAssignments?.(holding, person.id);
-      person.workAssignment = "soldier";
-      if (!/^\s*(солдат|сержант)\b/i.test(String(person.role ?? ""))) person.role = "Солдат";
-    }
-    squad.sergeantId = String(selected[0]?.id ?? "");
-    squad.memberIds = selected.slice(1, 5).map((person) => String(person.id));
-    while (squad.memberIds.length < 4) squad.memberIds.push("");
-    this._sanitizeDefenseAssignments?.(holding);
-    this._applyDefenseSalaries?.(holding);
-    return { ok: true };
-  }, { reason: "gm:fill-defense-squad-best" });
-
-  if (!result?.ok) {
-    if (result?.message) ui.notifications.warn(result.message);
+async _onDefenseFieldChange(field, value) {
+  const path = String(field.dataset.field ?? "");
+  const key = path.match(/^holdings\.\d+\.gm\.defense\.(?:squads\.\d+\.)?(.+)$/)?.[1];
+  if (!key) return;
+  const context = defenseSquadTarget(field);
+  if (path.includes(".squads.")) {
+    if (!context) return;
+    await submitDefenseOperation(this, { ...context.target, type: "editDefense", field: key, value });
     return;
   }
-  this.activeTab = "defense";
-  this.requestRender();
+  const holdingId = String(field.closest("[data-defense-holding-id]")?.dataset.defenseHoldingId ?? "");
+  const { holding } = findReadableHoldingEntry(SkyholdData.view(), holdingId);
+  if (!holding || !holdingPermissionContext(holding).canEditDefense) return;
+  const expectedValue = field.dataset.defenseExpected ?? field.defaultValue;
+  await submitDefenseOperation(this, { holdingId, type: "editDefense", field: key, value, expectedValue });
 },
 
 async _onRollEventTable(event) {

@@ -159,6 +159,19 @@ _findCompatibleStorageStack(holding, resource, roomId) {
       && !(Array.isArray(candidate.batches) && candidate.batches.some((batch) => batchIds.has(batch?.id)))) ?? null;
 },
 
+_replenishStorageSaleStock(holding, resource, roomId) {
+  if (resource.resourceId === "custom" || resource.forSale !== undefined) return resource;
+  const rows = (holding?.storage?.resources ?? []).filter((row) =>
+    this._normalizeStorageRoomId(row.roomId ?? row.storageRoomId) === roomId
+      && this._storageResourceMatches(row, resource));
+  if (!rows.length || rows.some((row) => !row.forSale)) return resource;
+  const marked = { ...resource, forSale: true };
+  const key = storageResourceStackKey(marked);
+  // Replenish an established sale stock when this material has one policy in the room.
+  // With competing policies, new unspecified stock stays off sale.
+  return rows.every((row) => storageResourceStackKey({ ...row, roomId }) === key) ? marked : resource;
+},
+
 _storageFind(holding, resource = {}) {
   if (!holding.storage) holding.storage = { notes: "", resources: [], moneyCopper: 0, log: [] };
   if (!Array.isArray(holding.storage.resources)) holding.storage.resources = [];
@@ -229,13 +242,15 @@ _storageAdd(holding, resource = {}, qty = 0) {
   const name = id === "custom" ? String(resource.name ?? "Ресурс") : resourceLabel(id);
   const roomId = this._normalizeStorageRoomId(resource.roomId ?? resource.storageRoomId);
   const identity = { resourceId: id, name, roomId, storageRowId: resource.storageRowId };
+  let incoming = { ...resource, ...identity };
   let row = resource.storageRowId || amount < 0 ? this._storageFind(holding, identity) : null;
   if (!row && amount > 0 && !resource.storageRowId && !resource.separateRow) {
-    row = this._findCompatibleStorageStack(holding, { ...resource, ...identity }, roomId);
+    incoming = this._replenishStorageSaleStock(holding, incoming, roomId);
+    row = this._findCompatibleStorageStack(holding, incoming, roomId);
   }
   if (!row && amount < 0) return null;
   if (!row) {
-    row = normalizeResourceRow({ ...resource, ...identity, rowId: makeId("res", 12), qty: 0, batches: [] });
+    row = normalizeResourceRow({ ...incoming, rowId: makeId("res", 12), qty: 0, batches: [] });
     holding.storage.resources.push(row);
   }
   if (amount > 0) {
@@ -286,16 +301,17 @@ _storagePlacementText(holding, placements = []) {
   }).join("; ");
 },
 
-_storageCanPay(holding, costs = []) {
+_storageCanPay(holding, costs = [], { eligibleResourceRow } = {}) {
   return planStorageCosts({
     holding,
     costs,
+    eligibleResourceRow,
     dependencies: this._storageCostPlanningDependencies()
   });
 },
 
-_storagePay(holding, costs = [], { captureReceipt = false } = {}) {
-  const plan = this._storageCanPay(holding, costs);
+_storagePay(holding, costs = [], { captureReceipt = false, eligibleResourceRow } = {}) {
+  const plan = this._storageCanPay(holding, costs, { eligibleResourceRow });
   if (!plan.ok) return plan;
   const receipt = payStorageCosts({
     holding,

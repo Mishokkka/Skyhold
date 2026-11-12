@@ -21,7 +21,7 @@ import {
   takeResourceBatches
 } from "../core/resource-batches.js";
 import { validateHoldingWorkAllocations } from "./work-allocations.js";
-import { specialMoraleModifier } from "../core/special-effects.js";
+import { protectedSpecialRecordFields, specialMoraleModifier } from "../core/special-effects.js";
 import { isResidentAway, isResidentRestingOnShip } from "./resident-presence.js";
 import { isSheriffAppointment } from "./control-appointments.js";
 import { workforceChangeError } from "./workforce-plan.js";
@@ -440,13 +440,11 @@ function validatePlayerPatchSemantics(current, proposed, action, holdingIndex, p
 function validatePlayerSpecialSemantics(holding, nextHolding) {
   const before = new Map((holding.special?.list ?? []).map((row) => [String(row.id), row]));
   const after = new Map((nextHolding.special?.list ?? []).map((row) => [String(row.id), row]));
-  const editable = new Set(["id", "name", "type", "notes"]);
-  const protectedFields = (row) => Object.fromEntries(Object.entries(row ?? {}).filter(([key]) => !editable.has(key)));
   for (const id of new Set([...before.keys(), ...after.keys()])) {
     const old = before.get(id), next = after.get(id);
     if (sameJson(old, next)) continue;
     if (old?.visibility === "gm" || next?.visibility === "gm"
-      || !sameJson(protectedFields(old ?? { visibility: "public" }), protectedFields(next ?? { visibility: "public" }))
+      || !sameJson(protectedSpecialRecordFields(old), protectedSpecialRecordFields(next))
       || specialMoraleModifier(old) !== specialMoraleModifier(next)) {
       return { ok: false, error: "Игрок может редактировать текст публичных особых записей, но не эффекты и служебные поля." };
     }

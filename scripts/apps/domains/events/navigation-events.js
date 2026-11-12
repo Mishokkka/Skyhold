@@ -349,7 +349,8 @@ async _onFieldChange(event) {
   const field = event.currentTarget;
   const path = field.dataset.field;
   if (!path) return;
-  if (!this._canPlayerWriteFieldPath(path)) return;
+  const defenseField = /^holdings\.\d+\.gm\.defense\./.test(path) && field.closest?.("[data-defense-holding-id]");
+  if (!defenseField && !this._canPlayerWriteFieldPath(path)) return;
 
   let value = fieldValue(field);
   if (field instanceof HTMLTextAreaElement && this._sanitizeTextBlock) value = this._sanitizeTextBlock(value);
@@ -366,6 +367,8 @@ async _onFieldChange(event) {
         foundry.utils.setProperty(data, path, value);
         return true;
       }, { reason: `resource-catalog:field:${path}`, scope: "catalog" });
+    } else if (defenseField) {
+      await this._onDefenseFieldChange(field, value);
     } else if (/^holdings\.\d+\.gm\.defense\./.test(path) && this._sanitizeDefenseAssignments) {
       await SkyholdData.transaction((data) => {
         const scopedPath = this._resolveActiveHoldingScopedPath(data, path);
