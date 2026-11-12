@@ -146,10 +146,18 @@ export function checkFoodBatchCharacterization() {
 
   const nine = Array.from({ length: 9 }, (_value, index) => ({ id: `b${index}`, qty: 1, ageQd: index * 10 }));
   const compacted = compactResourceBatches(nine);
-  assert.equal(compacted.length, 8, "a resource and room may persist at most eight batches");
+  assert.equal(compacted.length, 8, "unreserved batches compact to the ordinary eight-batch limit");
   assert.equal(resourceBatchTotal(compacted), 9, "batch compaction must conserve whole quantity");
   assert.equal(compacted.find((batch) => batch.id === "b8")?.qty, 2, "the closest-age overflow pair must merge deterministically");
   assert.equal(compacted.find((batch) => batch.id === "b8")?.ageQd, 80, "a merged batch must keep the older age");
+  const booked = nine.map((batch, index) => ({ ...batch, internalDemandAvailableFromQd: index + 40 }));
+  const free = { id: "free", qty: 2, ageQd: 79 };
+  const protectedIds = new Set(booked.map((batch) => batch.id));
+  const saturated = compactResourceBatches([...booked, free], { protectedBatchIds: protectedIds });
+  assert.equal(saturated.length, 10, "a legacy row with nine protected lots retains all contracts plus one free stack");
+  assert.deepEqual(saturated.filter((batch) => protectedIds.has(batch.id)).reverse(), booked,
+    "saturated compaction leaves the ID, quantity, age and cooldown of every protected lot intact");
+  assert.deepEqual(saturated.find((batch) => batch.id === free.id), free);
 
   const reservedHolding = {
     special: { market: { outbound: { orders: [{
@@ -164,7 +172,8 @@ export function checkFoodBatchCharacterization() {
   };
   addResourceBatches(reservedHolding.storage.resources[0], { qty: 1, ageQd: 1 }, { holding: reservedHolding });
   assert.equal(reservedHolding.storage.resources[0].batches.length, 8);
-  assert.equal(reservedHolding.storage.resources[0].batches.find((batch) => batch.id === "reserved")?.qty, 2, "compaction must preserve a booked outbound batch id when merging its closest unreserved neighbour");
+  assert.deepEqual(reservedHolding.storage.resources[0].batches.find((batch) => batch.id === "reserved"),
+    { id: "reserved", qty: 1, ageQd: 0 }, "compaction must merge free lots without changing the booked batch's age or quantity");
   const reservedSpend = takeResourceBatches(reservedHolding.storage.resources[0], 8, { holding: reservedHolding });
   assert.equal(reservedSpend.shortfall, 0);
   assert.equal(reservedHolding.storage.resources[0].batches.find((batch) => batch.id === "reserved")?.qty, 1, "ordinary FIFO spending must leave the soft-reserved quantity in place");

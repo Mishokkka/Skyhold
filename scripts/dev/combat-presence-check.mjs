@@ -4,6 +4,7 @@ import { defenseSquadProfile } from "../apps/mass-combat/sources.js";
 import { defenseCommanderBonus } from "../apps/mass-combat/modifiers.js";
 import { BuildingRowsDomain } from "../apps/domains/building/rows-domain.js";
 import { BuildingWorkerDomain } from "../apps/domains/building/worker-domain.js";
+import { ResidentDomain } from "../apps/domains/resident-domain.js";
 
 const soldier = (id, away = false) => ({ id, name: id, age: 30, ageGroup: "Вз", role: "Солдат", workAssignment: "soldier",
   injuredDays: 0, attributes: { strength: 5, agility: 5, wits: 5, empathy: 5 },
@@ -16,11 +17,37 @@ assert.equal(holding.people.list[0].injuredDays, 0);
 assert.equal(holding.people.list[0].dead, undefined);
 
 const squadHolding = { people: { list: [soldier("absent", true), ...Array.from({ length: 5 }, (_, i) => soldier(`present-${i}`))] },
-  gm: { defense: { squads: [{ id: "squad", equipped: true, type: "line", sergeantId: "absent",
+  gm: { defense: { squads: [{ id: "squad", equipped: true, armamentResourceId: "armament-simple", type: "line", sergeantId: "absent",
     memberIds: ["present-0", "present-1", "present-2", "present-3"] }] } } };
 const profile = defenseSquadProfile(squadHolding);
 assert.ok(profile.sources.length, "fixture must retain a fighting squad");
 assert.ok(profile.sources.every(source => !source.participantIds.includes("absent")), "risk sources must contain actual combatants only");
+const roster = { ...ResidentDomain, _safeNumber: (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback };
+assert.equal(roster._defenseContext(squadHolding).squads[0].memberCount, 4);
+assert.equal(roster._defenseContext(squadHolding).squads[0].effective, profile.effective,
+  "defense and mass combat must use the same available roster and base efficiency");
+const marginal = structuredClone(squadHolding);
+for (const person of marginal.people.list) person.attributes = { strength: 3, agility: 3 };
+assert.equal(roster._defenseContext(marginal).effectiveUnits, 0, "four ordinary fighters must not be shown as a full unit");
+assert.equal(defenseSquadProfile(marginal).units, 0);
+const options = roster._defenseContext(marginal).squads[0].memberSlots[0].options;
+assert.ok(options.every(({ value }) => value !== "absent"), "an absent soldier cannot be offered as a new assignment");
+
+const trained = { people: { list: [] }, gm: { defense: { squads: [] } } };
+for (let index = 0; index < 2; index++) {
+  const people = Array.from({ length: 5 }, (_, slot) => ({ ...soldier(`v${index}-${slot}`), background: "Ветеран" }));
+  trained.people.list.push(...people);
+  trained.gm.defense.squads.push({ id: `veterans-${index}`, type: "line", equipped: true,
+    armamentResourceId: "armament-elite", sergeantId: people[0].id, memberIds: people.slice(1).map(({ id }) => id) });
+}
+const trainingProfile = defenseSquadProfile(trained);
+assert.equal(trainingProfile.sources[0].sergeantBonus, 0.10);
+assert.equal(roster._defenseContext(trained).effectiveUnits, 2, "high efficiency never creates a third squad");
+assert.equal(roster._defenseContext(trained).squads[0].effective, trainingProfile.squads[0].effective);
+const trainedByTitleOnly = structuredClone(trained);
+for (const person of trainedByTitleOnly.people.list) delete person.background;
+assert.equal(defenseSquadProfile(trainedByTitleOnly).sources[0].sergeantBonus, 0,
+  "assigning a role does not create the military past needed for a sergeant bonus");
 
 const medical = { people: { list: [{ id: "doctor", injuredDays: 0, shipAssignment: { shipId: "ship", away: true } }] },
   buildings: { list: [{ id: "hospital", specialKind: "medical", constructionStatus: "built", assignedWorkerIds: ["doctor"] }] } };

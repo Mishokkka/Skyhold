@@ -5,10 +5,11 @@ import { composeDomainGroup } from "./domains/compose-domain.js";
 import { applyDefenseOperation, DEFENSE_OPERATIONS, normalizeDefenseOperation } from "./domains/defense-operation-domain.js";
 import { FinanceDomain } from "./domains/finance-domain.js";
 import { ResidentDomain } from "./domains/resident-domain.js";
-import { resolveFoundryUuid } from "../integrations/foundry-runtime.js";
+import { resolveFoundryActorReference, resolveFoundryUuid } from "../integrations/foundry-runtime.js";
 import { appendHoldingOperation, findHoldingOperation } from "../data/operations.js";
 import { hiddenStorageRoomIds } from "../data/access-guard.js";
 import { holdingPermissionContext } from "../data/holding-permissions.js";
+import { MAX_STORAGE_BATCH_ROWS, STORAGE_BATCH_TOO_LARGE } from "../engines/storage/row-identity.js";
 
 const STORAGE_OPERATION_TYPES = new Set([
   "depositItem",
@@ -46,13 +47,20 @@ function normalizeOperation(raw = {}) {
   if (!operationId || operationId.length > 120) throw operationError("Storage operation id is missing or too long.");
   if (!holdingId) throw operationError("Storage operation holding id is missing.");
   if (defense) return normalizeDefenseOperation(raw, { type, operationId, holdingId });
+  const batchMove = type === "batchMove";
   const rowIds = Array.from(new Set((Array.isArray(raw?.rowIds) ? raw.rowIds : [])
-    .map((id) => String(id ?? "").trim().slice(0, 120))
-    .filter(Boolean))).slice(0, 200);
+    .map((id) => String(id ?? "").trim())
+    .map((id) => batchMove ? id : id.slice(0, 120))
+    .filter(Boolean)));
+  if (rowIds.length > MAX_STORAGE_BATCH_ROWS) throw operationError(STORAGE_BATCH_TOO_LARGE);
   const allowedRowIds = new Set(rowIds);
   const rowQuantities = Object.fromEntries(Object.entries(raw?.rowQuantities && typeof raw.rowQuantities === "object" ? raw.rowQuantities : {})
     .filter(([id]) => allowedRowIds.has(String(id)))
-    .map(([id, qty]) => [String(id), Math.max(1, Math.min(1_000_000, Math.floor(Number(qty) || 1)))]));
+    .map(([id, qty]) => {
+      const amount = Number(qty);
+      if (batchMove && (!Number.isSafeInteger(amount) || amount < 1)) throw operationError("Некорректное количество для перемещения.");
+      return [String(id), batchMove ? amount : Math.max(1, Math.min(1_000_000, Math.floor(amount || 1)))];
+    }));
   return {
     type,
     operationId,
@@ -115,7 +123,7 @@ function recordStorageResult(holding, operation, applied, signature, userId) {
     moved: Math.max(0, Number(applied.moved) || 0),
     rowType: applied.rowType,
     placements: Array.isArray(applied.placements) ? applied.placements : []
-  } : {});
+  } : operation.type === "depositItem" && applied.roomId ? { roomId: applied.roomId } : {});
   appendHoldingOperation(holding, { operationId: operation.operationId, type: "system",
     title: DEFENSE_OPERATIONS.has(operation.type) ? "Операция обороны" : "Операция хранилища",
     summary: response.message, payload: { signature, userId: String(userId), result: response } });
@@ -189,9 +197,10 @@ export function createStorageOperationExecutor({
           });
         }
 
-        let actor = operation.actorId ? getActor(operation.actorId) : null;
-        if (!actor && operation.actorUuid && typeof resolveUuid === "function") actor = await resolveUuid(operation.actorUuid);
-        if (!["depositItem", "contributeUniqueBuilding", "batchMove", "addResourceRow"].includes(operation.type) && !actor) {
+        const actor = GM_ONLY_ACTOR_TRANSFERS.has(operation.type)
+          ? await resolveFoundryActorReference(operation, { getActor, resolveUuid }) : null;
+        if (GM_ONLY_ACTOR_TRANSFERS.has(operation.type) && !actor
+          && (operation.type !== "depositItem" || operation.actorUuid || operation.actorId)) {
           return skipTransaction({ ok: false, message: "Персонаж-получатель не найден." });
         }
         if (actor && !userOwnsActor(actor, requester)) {
@@ -265,15 +274,13 @@ export function createStorageOperationExecutor({
             unlocked: shop.unlocked
           };
         } else if (operation.type === "depositItem") {
-          let item = actor?.items?.get?.(operation.itemId) ?? null;
-          if (!item && operation.itemUuid && typeof resolveUuid === "function") item = await resolveUuid(operation.itemUuid);
+          const embedded = actor?.items?.get?.(operation.itemId) ?? null;
+          const item = operation.itemUuid && embedded?.uuid !== operation.itemUuid
+            ? await resolveUuid(operation.itemUuid) : embedded;
           const parent = item?.parent;
-          const parentDocumentName = parent?.documentName ?? parent?.constructor?.documentName;
-          if (!item) return skipTransaction({ ok: false, message: "Предмет для помещения в хранилище не найден." });
-          if (!requester.isGM) {
-            if (!actor || parentDocumentName !== "Actor" || String(parent?.id ?? "") !== String(actor.id ?? "")) {
-              return skipTransaction({ ok: false, message: "Игрок может класть только предметы принадлежащего ему персонажа." });
-            }
+          if (!item || operation.itemUuid && item.uuid !== operation.itemUuid
+            || actor && parent !== actor && (!actor.uuid || parent?.uuid !== actor.uuid)) {
+            return skipTransaction({ ok: false, message: "Предмет для помещения в хранилище не найден у выбранного персонажа." });
           }
           applied = await logic._storageReceiveFoundryItem.call(logic, holding, item, {
             roomId: operation.roomId,

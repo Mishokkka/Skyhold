@@ -103,6 +103,25 @@ function dependencies() {
 export async function checkStorageBatchCharacterization() {
   const deps = dependencies();
   const holding = fixture();
+  const oversized = fixture();
+  oversized.storage.items = Array.from({ length: 201 }, (_, index) => ({
+    id: `stack-${index}`, roomId: "source", qty: 1, weight: 1
+  }));
+  const oversizedBefore = clone(oversized);
+  const selection = { holding: oversized, rowType: "items", rowIds: oversized.storage.items.map(({ id }) => id),
+    fromRoomId: "source", toRoomId: "outdoors", dependencies: deps };
+  assert.match(planStorageBatchMove(selection).message, /до 200/);
+  assert.equal(applyStorageBatchMove(selection).ok, false);
+  assert.deepEqual(oversized, oversizedBefore, "a large batch must fail atomically");
+  const rejectsOversized = createStorageOperationExecutor({
+    updateHolding: () => assert.fail("the authority must reject the oversize request before opening a draft")
+  });
+  await assert.rejects(rejectsOversized({ ...selection, type: "batchMove", holdingId: oversized.id, operationId: "too-large",
+    expectedRevision: 1 }, { userId: "player", remote: true }), /до 200/);
+  const reservedPreview = planStorageBatchMove({ holding, rowIds: ["res-a"], fromRoomId: "source", toRoomId: "target",
+    rowQuantities: { "res-a": 2 }, dependencies: { ...deps, resourceAvailableQuantity: () => 3 } });
+  assert.equal(reservedPreview.rows[0].load, 2, "reserved units must not inflate the load of a partial move");
+
   const plan = planStorageBatchMove({
     holding,
     rowType: "resources",

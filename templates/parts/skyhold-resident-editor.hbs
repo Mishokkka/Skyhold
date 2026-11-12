@@ -66,6 +66,9 @@
   <fieldset class="work-set compact-resident-work {{#if isCustomWork}}has-custom-work{{/if}}" {{#unless @root.canEditBuildings}}disabled{{/unless}}>
     <legend>Работа и жилье</legend>
     {{#if onBoardOnly}}<div class="fbls-resident-ship-status" tabindex="0" data-fbls-tooltip="{{#if restingOnShip}}Отдыхает на борту, не занимает дом и не участвует в довольстве поселения. Для назначения работы нажмите «В поселение» в списке «Жители → Экипажи». Вернуть моряка можно через контекстное меню.{{else}}Находится в рейсе. Работа и жильё поселения недоступны до возвращения корабля.{{/if}}"><i class="fa-solid fa-ship" aria-hidden="true"></i><span>{{homeLabel}} · {{#if restingOnShip}}отдыхает на борту{{else}}в рейсе{{/if}}</span><i class="fa-solid fa-circle-info" aria-hidden="true"></i></div>{{/if}}
+    {{#if workHidden}}
+      <p class="fbls-muted-text">Текущее рабочее назначение доступно ГМу.</p>
+    {{else}}
     <div class="fbls-work-block fbls-work-source-block">
       <label class="person-work">
         <span>Работа</span>
@@ -89,15 +92,18 @@
         <input type="text" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.role" value="{{role}}" />
       </label>
     </div>
+    {{/if}}
     <div class="fbls-work-block fbls-work-home-block">
       <label class="person-home">
         <span>Место жительства</span>
+        {{#if homeHidden}}<span>{{homeLabel}}</span>{{else}}
         {{#if onBoardOnly}}<span class="fbls-resident-ship-home">{{homeLabel}}</span>{{else}}
         <select data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.home">
           {{#each homeOptions}}
             <option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>
           {{/each}}
         </select>
+        {{/if}}
         {{/if}}
       </label>
       <label class="num-field person-maintenance-points">
@@ -117,6 +123,7 @@
     </div>
   </fieldset>
 
+  {{#unless workHidden}}
   <fieldset class="fbls-work-allocation-set {{#if workAllocationExplicit}}is-explicit{{else}}is-legacy{{/if}}" {{#if onBoardOnly}}disabled{{else}}{{#unless @root.canEditBuildings}}disabled{{/unless}}{{/if}}>
     <legend>План труда на десятник</legend>
     <div class="fbls-work-allocation-toolbar">
@@ -166,6 +173,7 @@
       <p class="fbls-muted-text">Строк нет. В явном режиме житель без выделенных QD не работает и не получает зарплату.</p>
     {{/if}}
   </fieldset>
+  {{/unless}}
 
   <div class="fbls-resident-midline">
     <fieldset class="stat-set compact-set">

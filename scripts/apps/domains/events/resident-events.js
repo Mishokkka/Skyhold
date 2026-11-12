@@ -1,6 +1,6 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import { SkyholdData, requestShipOperation } from "../../../data/store.js";
-import { findReadableHoldingEntry } from "../../../data/access-guard.js";
+import { findReadableHoldingEntry, hiddenBuildingIds, residentHasHiddenWork } from "../../../data/access-guard.js";
 import { addCollectionRow, deleteCollectionRow } from "../../../data/collection-operations.js";
 import { holdingPermissionContext } from "../../../data/holding-permissions.js";
 import { stableDataHash } from "../../../data/storage-commit.js";
@@ -138,6 +138,11 @@ async _onWorkAssignmentChange(event) {
   const path = residentScopedPath(source, field.dataset.workAssignmentField);
   if (!path || !holdingPermissionContext(source.holding).canEditBuildings) return;
   const value = String(field.value ?? "");
+  const hidden = hiddenBuildingIds(source.holding);
+  if (hidden.has(value) || residentHasHiddenWork(source.holding, source.person, hidden)) {
+    this.requestRender();
+    return ui.notifications.warn("Назначение недоступно.");
+  }
   const expected = stableDataHash(source.person);
   const building = source.holding.buildings?.list?.find((row) => String(row.id) === value);
   const expectedBuilding = stableDataHash(building);
@@ -150,8 +155,9 @@ async _onWorkAssignmentChange(event) {
     const result = await SkyholdData.transaction((draft) => {
       const { holding, person } = residentScope(draft, address);
       const targetBuilding = holding?.buildings?.list?.find((row) => String(row.id) === value);
+      const hidden = hiddenBuildingIds(holding);
       if (!person || !holdingPermissionContext(holding).canEditBuildings || stableDataHash(person) !== expected
-        || stableDataHash(targetBuilding) !== expectedBuilding) {
+        || stableDataHash(targetBuilding) !== expectedBuilding || hidden.has(value) || residentHasHiddenWork(holding, person, hidden)) {
         return SkyholdData.skipTransaction({ stale: true });
       }
       if (keepsCrewLeadership(holding, person, value)) return SkyholdData.skipTransaction(null);
@@ -418,7 +424,7 @@ async _onAddWorkAllocation(event) {
     if (!await this._savePersonEditorDraft(event)) return;
     const updated = await SkyholdData.transaction((data) => {
       const { holding, person } = residentScope(data, address);
-      if (!person || !holdingPermissionContext(holding).canEditBuildings) return SkyholdData.skipTransaction(false);
+      if (!person || !holdingPermissionContext(holding).canEditBuildings || residentHasHiddenWork(holding, person)) return SkyholdData.skipTransaction(false);
       this._clearPersonFromAssignments?.(holding, person.id);
       person.workAssignment = "";
       person.workAllocationMode = WORK_ALLOCATION_MODE_EXPLICIT;
@@ -451,7 +457,7 @@ async _onRemoveWorkAllocation(event) {
     if (!await this._savePersonEditorDraft(event)) return;
     const updated = await SkyholdData.transaction((data) => {
       const { holding, person } = residentScope(data, address);
-      if (!person || !holdingPermissionContext(holding).canEditBuildings) return SkyholdData.skipTransaction(false);
+      if (!person || !holdingPermissionContext(holding).canEditBuildings || residentHasHiddenWork(holding, person)) return SkyholdData.skipTransaction(false);
       const before = Array.isArray(person.workAllocations) ? person.workAllocations.length : 0;
       person.workAllocations = (person.workAllocations ?? []).filter((row) => String(row?.id ?? "") !== allocationId);
       return person.workAllocations.length !== before;
@@ -774,6 +780,13 @@ async _savePersonEditorDraft(event) {
   }
 
   let workDecision = { allowed: true, allowAdmissionOverride: false };
+  const hidden = hiddenBuildingIds(source.holding);
+  const updatesWork = workUpdate || regularUpdates.some(({ path }) => /\.(?:workAllocationMode|workAllocations|role)(?:\.|$)/.test(path));
+  const hiddenWork = residentHasHiddenWork(source.holding, source.person, hidden);
+  if (workUpdate && hidden.has(workUpdate.value) || updatesWork && hiddenWork) {
+    ui.notifications.warn("Назначение недоступно.");
+    return false;
+  }
   const workAllocationAdmissionOverrides = [];
   const candidatePersonPath = workUpdate?.path || modePath || regularUpdates.find((update) => /\.people\.list\.\d+\./.test(String(update.path ?? "")))?.path;
   const scopedPersonPath = residentScopedPath(source, candidatePersonPath);
@@ -799,7 +812,7 @@ async _savePersonEditorDraft(event) {
   }
 
   let previewExplicitBuildingIds = new Set();
-  if (previewPerson && currentHolding && String(previewPerson.workAllocationMode ?? "") === WORK_ALLOCATION_MODE_EXPLICIT) {
+  if (previewPerson && currentHolding && !hiddenWork && String(previewPerson.workAllocationMode ?? "") === WORK_ALLOCATION_MODE_EXPLICIT) {
     previewExplicitBuildingIds = new Set((previewPerson.workAllocations ?? [])
       .filter((allocation) => Math.max(0, Number(allocation?.normalQd ?? 0) || 0) + Math.max(0, Number(allocation?.overtimeQd ?? 0) || 0) > 0)
       .map((allocation) => String(allocation?.sourceId ?? ""))
@@ -816,6 +829,10 @@ async _savePersonEditorDraft(event) {
       return false;
     }
     for (const buildingId of previewExplicitBuildingIds) {
+      if (hidden.has(buildingId)) {
+        ui.notifications.warn("Назначение недоступно.");
+        return false;
+      }
       const building = (currentHolding.buildings?.list ?? []).find((row) => String(row?.id ?? "") === buildingId);
       if (!building) continue;
       const admission = this._buildingWorkerAdmission?.(building, previewPerson) ?? { eligible: true, hard: false, overridden: false };
@@ -844,8 +861,15 @@ async _savePersonEditorDraft(event) {
       return SkyholdData.skipTransaction({ stale: true });
     }
     const targetBuildings = target.holding.buildings?.list ?? [];
+    const hidden = hiddenBuildingIds(target.holding);
     if (workUpdate && (stableDataHash(targetBuildings.find((row) => String(row.id) === workUpdate.value)) !== stableDataHash(approvedBuilding)
-      || !holdingPermissionContext(target.holding).canEditBuildings)) return SkyholdData.skipTransaction({ stale: true });
+      || !holdingPermissionContext(target.holding).canEditBuildings || hidden.has(workUpdate.value))) return SkyholdData.skipTransaction({ stale: true });
+    if ((updatesWork && residentHasHiddenWork(target.holding, target.person, hidden))
+      || [...previewExplicitBuildingIds].some((id) => hidden.has(id))
+      || regularUpdates.some(({ path, value }) => path.endsWith(".home") && targetBuildings.some((building) =>
+        hidden.has(String(building.id)) && (String(building.id) === value || building.name === value)))) {
+      return SkyholdData.skipTransaction({ stale: true });
+    }
     const overrideBuildings = workAllocationAdmissionOverrides.map((override) => targetBuildings.find((row) => row.id === override.id));
     if (overrideBuildings.some((building, index) => stableDataHash(building) !== stableDataHash(workAllocationAdmissionOverrides[index]))) {
       return SkyholdData.skipTransaction({ stale: true });

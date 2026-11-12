@@ -81,13 +81,12 @@ function mergeDuplicateIds(batches = []) {
   return [...merged.values()];
 }
 
-function closestPair(batches = [], protectedBatchIds = new Set()) {
+function closestPair(batches = []) {
   let best = null;
   for (let left = 0; left < batches.length - 1; left += 1) {
     for (let right = left + 1; right < batches.length; right += 1) {
       const a = batches[left];
       const b = batches[right];
-      if (protectedBatchIds.has(a.id) && protectedBatchIds.has(b.id)) continue;
       const candidate = {
         left,
         right,
@@ -111,17 +110,21 @@ export function compactResourceBatches(rawBatches = [], {
   protectedBatchIds = new Set()
 } = {}) {
   const limit = Math.max(1, whole(maxBatches, MAX_RESOURCE_BATCHES));
-  const batches = mergeDuplicateIds(rawBatches.map((batch, index) => canonicalBatch(batch, index)).filter(Boolean));
-  while (batches.length > limit) {
-    const pair = closestPair(batches, protectedBatchIds);
-    const fallbackPair = pair ?? closestPair(batches, new Set());
-    if (!fallbackPair) break;
-    const left = batches[fallbackPair.left];
-    const right = batches[fallbackPair.right];
-    const protectedBatch = protectedBatchIds.has(left.id) ? left : (protectedBatchIds.has(right.id) ? right : null);
-    const older = protectedBatch ?? (left.ageQd > right.ageQd
+  const protectedBatches = [];
+  const batches = [];
+  for (const batch of mergeDuplicateIds(rawBatches.map((batch, index) => canonicalBatch(batch, index)).filter(Boolean))) {
+    (protectedBatchIds.has(batch.id) ? protectedBatches : batches).push(batch);
+  }
+  // Active contracts keep their quantity, freshness and identity. The soft limit leaves
+  // at least one slot for unreserved stock even if old contracts use every normal slot.
+  const unreservedLimit = Math.max(1, limit - protectedBatches.length);
+  while (batches.length > unreservedLimit) {
+    const pair = closestPair(batches);
+    const left = batches[pair.left];
+    const right = batches[pair.right];
+    const older = left.ageQd > right.ageQd
       ? left
-      : (right.ageQd > left.ageQd ? right : (String(left.id) <= String(right.id) ? left : right)));
+      : (right.ageQd > left.ageQd ? right : (String(left.id) <= String(right.id) ? left : right));
     const merged = {
       id: older.id,
       qty: left.qty + right.qty,
@@ -140,10 +143,10 @@ export function compactResourceBatches(rawBatches = [], {
           : {}
       )
     };
-    batches.splice(fallbackPair.right, 1);
-    batches.splice(fallbackPair.left, 1, merged);
+    batches.splice(pair.right, 1);
+    batches.splice(pair.left, 1, merged);
   }
-  return batches.sort(fifoSort);
+  return [...batches, ...protectedBatches].sort(fifoSort);
 }
 
 export function normalizeResourceBatches(rawBatches, {
@@ -176,21 +179,25 @@ export function resourceBatchAvailableToInternalDemand(batch = {}, holding = {})
   return whole(batch?.internalDemandAvailableFromQd, 0) <= internalDemandBatchClockQd(holding);
 }
 
-export function syncResourceRowBatches(row = {}, {
+function normalizedRowBatches(row, {
   compact = true,
   maxBatches = MAX_RESOURCE_BATCHES,
   protectedBatchIds = new Set()
 } = {}) {
-  if (!row || typeof row !== "object") return row;
   const authoritative = hasOwn(row, "batches");
   const prefix = rowBatchPrefix(row);
-  row.batches = normalizeResourceBatches(authoritative ? row.batches : null, {
+  return normalizeResourceBatches(authoritative ? row.batches : null, {
     fallbackQty: authoritative ? 0 : (row.qty ?? row.quantity ?? row.count),
     makeId: (_kind, _length, index = 0) => `${prefix}-${index + 1}`,
     compact,
     maxBatches,
     protectedBatchIds
   });
+}
+
+export function syncResourceRowBatches(row = {}, options = {}) {
+  if (!row || typeof row !== "object") return row;
+  row.batches = normalizedRowBatches(row, options);
   row.qty = resourceBatchTotal(row.batches);
   return row;
 }
@@ -385,11 +392,7 @@ export function splitResourceBatchParts(rawBatches = [], qty = 0) {
 }
 
 export function resourceBatchInventory(row = {}, { compact = true, protectedBatchIds = new Set() } = {}) {
-  return normalizeResourceBatches(hasOwn(row, "batches") ? row.batches : null, {
-    fallbackQty: hasOwn(row, "batches") ? 0 : row.qty,
-    compact,
-    protectedBatchIds
-  }).map((batch) => ({ ...batch }));
+  return normalizedRowBatches(row, { compact, protectedBatchIds });
 }
 
 export function availableResourceBatchInventory(row = {}, holding = null, { compact = true } = {}) {

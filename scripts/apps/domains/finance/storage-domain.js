@@ -35,6 +35,7 @@ import {
   protectedResourceBatchIds,
   splitResourceBatchParts,
   syncResourceRowBatches,
+  takeResourceBatchById,
   takeResourceBatches
 } from "../../../core/resource-batches.js";
 
@@ -53,7 +54,8 @@ _storageLogRows(holding, roomsArg = null) {
     return roomLabelCache.get(id);
   };
   const log = Array.isArray(holding?.storage?.log) ? holding.storage.log : [];
-  const hiddenRooms = hiddenStorageRoomIds(holding);
+  const isGM = Boolean(globalThis.game?.user?.isGM);
+  const hiddenRooms = hiddenStorageRoomIds(holding, isGM);
   let visibleLog = log;
   if (hiddenRooms.size) {
     const hiddenRoom = (id) => hiddenRooms.has(this._normalizeStorageRoomId(id));
@@ -78,16 +80,14 @@ _storageLogRows(holding, roomsArg = null) {
     }
     visibleLog = log.filter((row) => !hiddenRoom(row.roomId) && !(isMove(row) && hiddenMoves.has(row.operationId)))
       .filter((row) => !isMove(row) || row.kind !== "note" || knownMoves.has(row.operationId))
-      .map((row) => {
-        if (isMove(row) && !knownMoves.has(row.operationId)) return { ...row, note: "" };
-        // A public placement may carry an old, text-only reference to its intended room.
-        const note = String(row.note ?? "").replace(/(^| · |; )переполнение: [\s\S]*$/u, "$1переполнение");
-        return note === row.note ? row : { ...row, note };
-      });
+      .map((row) => isMove(row) && !knownMoves.has(row.operationId) ? { ...row, note: "" } : row);
   }
   const rows = visibleLog.slice(-80).reverse();
   const sources = marketLogSources(holding, rows);
-  const visibility = createMarketVisibility(this._contextData, { isGM: Boolean(globalThis.game?.user?.isGM) });
+  const visibility = createMarketVisibility(this._contextData, { isGM });
+  const visibleRoomNames = new Set(rooms.filter((room) => !hiddenRooms.has(room.id)).map((room) => room.label));
+  const hiddenSourceNames = new Set((holding?.buildings?.list ?? []).filter((building) => hiddenRooms.has(String(building.id)))
+    .map((building) => building.name).filter(Boolean));
   return rows.map((row) => {
     const id = storageResourceId(row);
     const name = id === "custom" ? (row.name || "Ресурс") : resourceLabel(id);
@@ -99,6 +99,10 @@ _storageLogRows(holding, roomsArg = null) {
     const laputaDateText = String(row.laputaDateText ?? row.holdingDateText ?? holdingDateText).trim();
     const dateText = laputaDateText ? `${realDateText} · ${laputaDateText}` : realDateText;
     const roomLabel = row.roomId ? labelFor(row.roomId) : "";
+    const source = visibility.logSource(row, sources.get(row.operationId));
+    // Legacy generated notes store the intended room as text. Only known public room names survive in a player view.
+    const note = isGM ? row.note : String(row.note ?? "").replace(/(^| · |; |, )переполнение: ([\s\S]*)$/u,
+      (match, prefix, label) => visibleRoomNames.has(label) ? match : `${prefix}переполнение`);
     return {
       ...row,
       resourceId: id,
@@ -111,9 +115,9 @@ _storageLogRows(holding, roomsArg = null) {
       realDateText,
       laputaDateText,
       kindLabel: this._storageLogKindLabel(row.kind),
-      source: visibility.logSource(row, sources.get(row.operationId)),
+      source: hiddenSourceNames.has(source) ? "Скрытый источник" : source,
       roomLabel,
-      note: [roomLabel, row.note || row.period || ""].filter(Boolean).join(" · ")
+      note: [roomLabel, note || row.period || ""].filter(Boolean).join(" · ")
     };
   });
 },
@@ -152,8 +156,11 @@ _storageResourceMatches(row = {}, resource = {}) {
 _findCompatibleStorageStack(holding, resource, roomId) {
   const key = storageResourceStackKey({ ...resource, roomId });
   const batchIds = new Set((Array.isArray(resource.batches) ? resource.batches : []).map((batch) => batch?.id));
-  return (holding?.storage?.resources ?? []).find((candidate) =>
+  const rows = holding?.storage?.resources ?? [];
+  const rowsById = indexStorageRows(rows);
+  return rows.find((candidate) =>
     this._normalizeStorageRoomId(candidate.roomId ?? candidate.storageRoomId) === roomId
+      && rowsById.get(String(candidate.id ?? "")) === candidate
       && this._storageResourceMatches(candidate, resource)
       && storageResourceStackKey({ ...candidate, roomId }) === key
       && !(Array.isArray(candidate.batches) && candidate.batches.some((batch) => batchIds.has(batch?.id)))) ?? null;
@@ -310,11 +317,18 @@ _storageCanPay(holding, costs = [], { eligibleResourceRow, explicitResource = fa
 },
 
 _storagePay(holding, costs = [], { captureReceipt = false, eligibleResourceRow, explicitResource = false } = {}) {
-  const plan = this._storageCanPay(holding, costs, { eligibleResourceRow, explicitResource });
+  const { resourceSources, ...plan } = planStorageCosts({
+    holding,
+    costs,
+    eligibleResourceRow,
+    trackResourceSources: true,
+    dependencies: this._storageCostPlanningDependencies({ explicitResource })
+  });
   if (!plan.ok) return plan;
   const receipt = payStorageCosts({
     holding,
     costs: plan.costs,
+    resourceSources,
     captureReceipt,
     dependencies: this._storagePaymentDependencies()
   });
@@ -323,7 +337,7 @@ _storagePay(holding, costs = [], { captureReceipt = false, eligibleResourceRow, 
 
 _restoreProductionResource(holding, resource, qty) {
   const previousId = String(resource.storageRowId || resource.id || "");
-  const exact = previousId ? this._storageFind(holding, { ...resource, storageRowId: previousId }) : null;
+  const exact = previousId ? resolveStorageRow(holding.storage.resources, previousId).row : null;
   const roomId = this._normalizeStorageRoomId(resource.roomId ?? resource.storageRoomId);
   const samePolicy = exact && storageResourceStackKey(exact) === storageResourceStackKey({ ...resource, roomId });
   const existing = samePolicy ? exact : (storageResourceId(resource) === "custom"
@@ -363,6 +377,7 @@ _storagePaymentDependencies() {
     storageQuantity: (holding, resource) => this._storageQuantity(holding, legacyRecipeResource(resource)),
     addMoney: (holding, amount) => this._addMoney(holding, amount),
     storageAdd: (holding, resource, qty) => this._storageAdd(holding, resource, qty),
+    takeResourceBatch: (holding, row, batchId, qty) => takeResourceBatchById(row, batchId, qty, { holding, makeId }),
     storageTake: (holding, resource, qty) => this._storageTake(holding, legacyRecipeResource(resource), qty),
     storageResourceMatches: (row, resource) => this._storageResourceMatches(row, legacyRecipeResource(resource))
   };

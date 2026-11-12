@@ -32,6 +32,13 @@ _storageRowLoad(row = {}) {
   return qty * this._storageUnitLoad(row);
 },
 
+_storageItemDepositRoom(holding, item, preferredRoomId) {
+  const room = this._storageRooms(holding, { includeUnavailable: false }).find((entry) => entry.id === preferredRoomId);
+  if (!room?.available) return "outdoors";
+  const load = storageEffectiveRowLoad(room, item, this._storageRowLoad(item));
+  return room.unlimited || room.free + 0.0001 >= load ? room.id : "outdoors";
+},
+
 _formatStorageLoad(value = 0) {
   const number = this._safeNumber(value, 0);
   if (Math.abs(number - Math.round(number)) < 0.0001) return this._formatNumber(Math.round(number));

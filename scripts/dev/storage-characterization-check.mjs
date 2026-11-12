@@ -440,6 +440,23 @@ export function checkStorageCharacterization() {
     assert.equal(storage._applyManualStorageChange(duplicate, { ...request, qty: -1 }).ok, false);
     assert.deepEqual(duplicate.storage, duplicateBefore, "an aggregate debit cannot guess which legacy row an ambiguous ID identifies");
 
+    const ingredients = makeHolding();
+    ingredients.storage.resources = [
+      resource("same", "wood", 1, "outdoors", { notes: "Свежий", batches: [{ id: "fresh", qty: 1, ageQd: 1 }] }),
+      resource("same", "wood", 2, "outdoors", { notes: "Старый", batches: [{ id: "older", qty: 2, ageQd: 20 }] })
+    ];
+    const payment = storage._storagePay(ingredients, [{ resourceId: "wood", qty: 2 }], { captureReceipt: true });
+    assert.equal(payment.ok, true, "a recipe can consume an exact physical lot even if the old save repeats the row ID");
+    assert.deepEqual(ingredients.storage.resources.map(({ qty }) => qty), [1, 0], "recipe planning and payment follow the same FIFO lot");
+    assert.deepEqual(payment.receipt[0].batches, [{ id: "older", qty: 2, ageQd: 20 }]);
+    assert.equal(payment.receipt[0].resource.notes, "Старый");
+    const [refund] = payment.receipt;
+    storage._restoreProductionResource(ingredients, { ...refund.resource, batches: refund.batches }, refund.qty);
+    assert.deepEqual(ingredients.storage.resources.map(({ qty }) => qty), [1, 0, 2],
+      "a refund never selects one of the colliding rows by array order");
+    assert.notEqual(ingredients.storage.resources[2].id, "same");
+    assert.deepEqual(ingredients.storage.resources[2].batches, refund.batches);
+
     const legacy = makeHolding();
     legacy.storage.resources = [
       resource(" lot ", "wood", 2, "outdoors", { batches: [{ id: "old", qty: 2, ageQd: 10 }] }),

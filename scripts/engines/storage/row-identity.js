@@ -1,5 +1,7 @@
 export const STORAGE_ROW_CHANGED = "Позиция склада изменилась. Откройте действие заново.";
 export const DUPLICATE_STORAGE_ROW = "У нескольких позиций склада одинаковый ID. Требуется проверка сохранения.";
+export const MAX_STORAGE_BATCH_ROWS = 200;
+export const STORAGE_BATCH_TOO_LARGE = `За раз можно переместить до ${MAX_STORAGE_BATCH_ROWS} позиций. Разделите выбор на несколько пакетов.`;
 
 /** Keep ambiguous saved IDs distinguishable from missing rows. */
 export function indexStorageRows(rows) {
@@ -20,6 +22,7 @@ export function resolveStorageRow(rows, rowId) {
 /** Resolve a whole selection in storage order, rejecting missing or ambiguous IDs. */
 export function resolveStorageRows(rows, rowIds) {
   const ids = new Set(rowIds);
+  if (ids.size > MAX_STORAGE_BATCH_ROWS) return { message: STORAGE_BATCH_TOO_LARGE };
   const selected = new Map([...indexStorageRows(rows)].filter(([id]) => ids.has(id)));
   const matchedRows = [...selected.values()];
   if (matchedRows.includes(null)) return { message: DUPLICATE_STORAGE_ROW };

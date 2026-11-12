@@ -35,7 +35,7 @@ export function canPayStorageCosts({ holding, costs = [], dependencies } = {}) {
   return { ok: missing.length === 0, missing };
 }
 
-export function payStorageCosts({ holding, costs = [], dependencies, captureReceipt = false } = {}) {
+export function payStorageCosts({ holding, costs = [], resourceSources, dependencies, captureReceipt = false } = {}) {
   const deps = requireDependencies(dependencies);
   const receipts = [];
   const recordTake = (receipt, cost) => {
@@ -50,11 +50,19 @@ export function payStorageCosts({ holding, costs = [], dependencies, captureRece
   for (const cost of costs) {
     const amount = Math.max(0, Math.ceil(deps.safeNumber(cost.qty, 0)));
     if (!amount) continue;
+    const source = resourceSources?.get(cost);
+    if (source) {
+      const batch = deps.takeResourceBatch(holding, source.row, source.batchId, amount);
+      if (batch?.qty !== amount) throw new RangeError("storage payment could not take the planned batch quantity");
+      recordTake({ row: source.row, batches: [batch], takenQty: batch.qty }, cost);
+      continue;
+    }
     if (!cost.storageRowId && deps.isMoneyResource(cost.resourceId, cost.id, cost.name)) {
       deps.addMoney(holding, -amount);
       if (captureReceipt) receipts.push({ kind: "money", qty: amount });
       continue;
     }
+    if (resourceSources) throw new RangeError("storage payment has no source for the planned resource");
     const hasRoom = cost.roomId !== undefined || cost.storageRoomId !== undefined;
     if (hasRoom) {
       const receipt = takeStorage(deps, holding, cost, amount);

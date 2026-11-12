@@ -6,7 +6,8 @@ import { holdingPermissionContext } from "../../../data/holding-permissions.js";
 import { reservedResourceBatchQuantities } from "../../../core/resource-batches.js";
 import { reclassifyResourceRow } from "../../../core/resources.js";
 import { createSafeIcon, escapeHtml } from "../../../core/helpers.js";
-import { DUPLICATE_STORAGE_ROW, indexStorageRows, resolveStorageRow, STORAGE_ROW_CHANGED } from "../../../engines/storage/row-identity.js";
+import { DUPLICATE_STORAGE_ROW, indexStorageRows, MAX_STORAGE_BATCH_ROWS, resolveStorageRow,
+  STORAGE_BATCH_TOO_LARGE, STORAGE_ROW_CHANGED } from "../../../engines/storage/row-identity.js";
 import { foundryItemClass, renderFoundryDocumentSheet, resolveFoundryUuid } from "../../../integrations/foundry-runtime.js";
 import { SkyholdResourceCatalogEditor } from "../../editors/resource-catalog-editor.js";
 import { SkyholdStorageActionDialog } from "../../storage-action-dialog.js";
@@ -377,6 +378,7 @@ async _openStorageMoveDialog({ rowType = "resources", rowId = "", fromRoomId = "
     ui.notifications.warn("Позиция больше не находится в этом хранилище.");
     return;
   }
+  if (rowIds.length > MAX_STORAGE_BATCH_ROWS) return ui.notifications.warn(STORAGE_BATCH_TOO_LARGE);
 
   const rooms = this._storageRooms(source, { includeUnavailable: true });
   const targetRooms = rooms.filter((room) => room.available && room.id !== normalizedFromRoomId && !hiddenRooms.has(room.id));
@@ -680,7 +682,7 @@ async _onStorageDrop(event) {
     if (this.activeHoldingId === holdingId) {
       this.activeTab = "storage";
       this.activeStorageTab = String(item.type) === "rawMaterial" ? "resources" : "items";
-      this.activeStorageRoomId = this._normalizeStorageRoomId(roomId);
+      this.activeStorageRoomId = this._normalizeStorageRoomId(result.roomId ?? roomId);
     }
     this.requestRender();
     ui.notifications.info(result.message);

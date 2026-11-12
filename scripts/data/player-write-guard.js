@@ -15,6 +15,7 @@ import { constructionLeaderQualification } from "../engines/workers/construction
 import { holdingWorkerAdmissionIssues, workerAdmission } from "../engines/workers/building-qualification.js";
 import {
   MAX_RESOURCE_BATCHES,
+  protectedResourceBatchIds,
   reservedResourceBatchQuantities,
   resourceBatchTotal,
   syncResourceRowBatches,
@@ -25,6 +26,7 @@ import { protectedSpecialRecordFields, specialMoraleModifier } from "../core/spe
 import { isResidentAway, isResidentRestingOnShip } from "./resident-presence.js";
 import { isSheriffAppointment } from "./control-appointments.js";
 import { workforceChangeError } from "./workforce-plan.js";
+import { hiddenBuildingIds, residentHasHiddenWork } from "./access-guard.js";
 
 const MAX_PLAYER_CHANGE_PATHS = 250;
 const MAX_STORAGE_LOG_ROWS = 250;
@@ -387,6 +389,12 @@ function validatePlayerPatchSemantics(current, proposed, action, holdingIndex, p
   if (duplicateIdError) return { ok: false, error: duplicateIdError };
   const identityError = validateRowIdentityChanges(holding, nextHolding);
   if (identityError) return { ok: false, error: identityError };
+  if (action === "buildings") {
+    const hidden = hiddenBuildingIds(holding, false);
+    if (hidden.size && paths.some((path) => changesHiddenResidentAssignment(path, holding, nextHolding, hidden))) {
+      return { ok: false, error: "Назначение недоступно. Обновите окно." };
+    }
+  }
   if (action === "defense") {
     const priorPeople = new Map((holding.people?.list ?? []).map((person) => [String(person.id), person]));
     const defense = nextHolding.gm?.defense ?? {};
@@ -435,6 +443,18 @@ function validatePlayerPatchSemantics(current, proposed, action, holdingIndex, p
     }
   }
   return { ok: true };
+}
+
+function changesHiddenResidentAssignment(path, holding, nextHolding, hidden) {
+  const match = path.match(/^holdings\.\d+\.people\.list\.(\d+)\.(workAssignment|workAllocationMode|workAllocations|staffAppointment|role|home)(?:\.|$)/);
+  if (!match) return false;
+  const before = holding.people?.list?.[Number(match[1])];
+  const after = nextHolding.people?.list?.[Number(match[1])];
+  if (match[2] !== "home") {
+    return residentHasHiddenWork(holding, before, hidden) || residentHasHiddenWork(nextHolding, after, hidden);
+  }
+  return (holding.buildings?.list ?? []).some((building) => hidden.has(String(building.id))
+    && [before?.home, after?.home].some((home) => home && (home === building.id || home === building.name)));
 }
 
 function validatePlayerSpecialSemantics(holding, nextHolding) {
@@ -637,8 +657,15 @@ function validatePlayerStorageSemantics(holding = {}, nextHolding = {}, paths = 
     const qty = Number(row?.qty ?? 0);
     if (!Number.isInteger(qty) || qty < 0) return { ok: false, error: `Ресурс '${row?.name ?? row?.resourceId ?? "?"}' должен иметь целое неотрицательное количество.` };
     if (Object.prototype.hasOwnProperty.call(row ?? {}, "batches")) {
-      if (!Array.isArray(row.batches) || row.batches.length > MAX_RESOURCE_BATCHES) {
-        return { ok: false, error: `Ресурс '${row?.name ?? row?.resourceId ?? "?"}' может иметь не более ${MAX_RESOURCE_BATCHES} партий.` };
+      if (!Array.isArray(row.batches)) {
+        return { ok: false, error: "Некорректный список складских партий." };
+      }
+      if (row.batches.length > MAX_RESOURCE_BATCHES) {
+        const protectedIds = protectedResourceBatchIds(nextHolding, row);
+        const protectedCount = row.batches.filter((batch) => protectedIds.has(String(batch?.id ?? ""))).length;
+        if (row.batches.length > Math.max(MAX_RESOURCE_BATCHES, protectedCount + 1)) {
+          return { ok: false, error: `У ресурса '${row?.name ?? row?.resourceId ?? "?"}' слишком много свободных партий.` };
+        }
       }
       const ids = new Set();
       for (const batch of row.batches) {

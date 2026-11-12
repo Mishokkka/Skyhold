@@ -25,7 +25,7 @@
               <label data-fbls-tooltip="{{typeHint}}"><span>Тип</span>{{#if ../canManageDefense}}<select title="{{typeHint}}" data-field="holdings.{{../holdingIndex}}.gm.defense.squads.{{_index}}.type">{{#each typeOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select>{{else}}<strong>{{typeLabel}}</strong>{{/if}}</label>
             </div>
             <div class="fbls-defense-squad-metrics" aria-label="Показатели {{label}}">
-              <span class="fbls-chip is-compact" title="Бойцов"><i class="fa-solid fa-users"></i><b>{{memberCount}}/5</b></span>
+              <span class="fbls-chip is-compact" title="Бойцов в строю"><i class="fa-solid fa-users"></i><b>{{memberCount}}/5</b></span>
               <span class="fbls-chip is-compact" title="Эффективность"><i class="fa-solid fa-bolt"></i><b>{{effectiveText}}</b></span>
               <span class="fbls-chip is-compact tag" data-fbls-tooltip="{{typeTag}}"><i class="{{typeIcon}}"></i><b>{{typeTag}}</b></span>
               <em class="fbls-chip is-compact {{statusClass}}">{{statusText}}</em>
@@ -33,7 +33,7 @@
             <div class="fbls-defense-squad-actions">
               {{#if ../canManageDefense}}<button type="button" class="fbls-button compact" data-action="fill-defense-squad-best" title="Назначить лучших подходящих солдат"><i class="fa-solid fa-ranking-star"></i><span>Лучшие</span></button>{{/if}}
               {{#if ../canManageDefense}}
-                <label class="fbls-defense-equipped-toggle" title="Выдача списывает одну единицу выбранного Вооружения со склада и закрепляет её за отрядом."><select data-defense-armament-choice aria-label="Тип вооружения для {{label}}">{{#each armamentOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select><button type="button" class="fbls-button compact" data-action="assign-defense-armament"><i class="fa-solid fa-gun"></i><span>{{#if equipped}}Заменить{{else}}Выдать{{/if}}</span></button></label>
+                <label class="fbls-defense-equipped-toggle" title="Выдача списывает один комплект. От комплекта зависит вид припасов, а сила отряда определяется составом."><select data-defense-armament-choice aria-label="Тип вооружения для {{label}}">{{#each armamentOptions}}<option value="{{value}}" title="На бой: {{supplyLabel}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select><button type="button" class="fbls-button compact" data-action="assign-defense-armament"><i class="fa-solid fa-gun"></i><span>{{#if equipped}}Заменить{{else}}Выдать{{/if}}</span></button></label>
                 {{#if equipped}}<button type="button" class="fbls-button compact" data-action="unassign-defense-armament" title="Вернуть {{armamentLabel}} на склад"><i class="fa-solid fa-box-open"></i><span>Снять</span></button>{{/if}}
               {{else}}<span class="fbls-defense-equipped-toggle"><i class="fa-solid fa-gun"></i> {{armamentLabel}}</span>{{/if}}
               {{#if ../canManageDefense}}<button type="button" class="fbls-icon-button danger" data-action="delete-defense-squad" title="Удалить отряд" aria-label="Удалить отряд {{name}}"><i class="fa-solid fa-trash"></i></button>{{/if}}

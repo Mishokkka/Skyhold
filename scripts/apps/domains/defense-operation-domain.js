@@ -1,7 +1,6 @@
 import { resourceLabel } from "../../core/resources.js";
 import { hiddenStorageRoomIds } from "../../data/access-guard.js";
-import { MANAGER_SQUAD_TYPE_PROFILES } from "../../data/military-resident-rules.js";
-import { isResidentInPopulation } from "../../data/resident-presence.js";
+import { isAvailableDefenseResident, MANAGER_SQUAD_TYPE_PROFILES } from "../../data/military-resident-rules.js";
 import { stableDataHash } from "../../data/storage-commit.js";
 import { indexStorageRows, resolveStorageRow } from "../../engines/storage/row-identity.js";
 
@@ -52,8 +51,8 @@ function fillDefenseSquad(holding, squad, logic) {
   const taken = new Set([defense.commanderId, ...defense.squads.filter((other) => other !== squad)
     .flatMap((other) => [other.sergeantId, ...(other.memberIds ?? []).slice(0, 4)])].filter(Boolean).map(String));
   const candidates = (holding.people?.list ?? [])
-    .filter((person) => person && isResidentInPopulation(person, holding) && !logic._isResidentInjured(person))
-    .filter((person) => !logic._isChildResident(person) && logic._isSuitableForSquadType(person, squadType)
+    .filter((person) => isAvailableDefenseResident(person, holding))
+    .filter((person) => logic._isSuitableForSquadType(person, squadType)
       && !taken.has(String(person.id)))
     .map((person) => {
       const efficiency = Number(logic._soldierEfficiency(person, squadType));
@@ -95,6 +94,12 @@ function editDefense(holding, squad, operation, logic) {
   const before = String(target[property] ?? "");
   if (before === value) return { ok: true, unchanged: true };
   if (!squad && before !== expectedValue) return { ok: false, message: "План обороны изменился. Обновите окно." };
+  if (value && (slot !== undefined || key === "sergeantId" || key === "commanderId")) {
+    const candidates = (holding.people?.list ?? []).filter((person) => String(person.id ?? "") === value);
+    if (candidates.length !== 1 || !isAvailableDefenseResident(candidates[0], holding)) {
+      return { ok: false, message: "Житель отсутствует или недоступен для назначения. Обновите окно." };
+    }
+  }
   target[property] = value;
   if (field !== "notes") {
     logic._sanitizeDefenseAssignments(holding);

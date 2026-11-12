@@ -1,5 +1,6 @@
 import { buildingOperationalState } from "../../core/building-state.js";
 import { isResidentInPopulation } from "../../data/resident-presence.js";
+import { DEFENSE_SQUAD_MIN_EFFICIENCY, evaluateDefenseSquad, isAvailableDefenseResident } from "../../data/military-resident-rules.js";
 import {
   ATTACK_METHODS,
   DEFENDER_MOBILIZATIONS,
@@ -16,13 +17,12 @@ import {
   isAdultResident,
   isInjuredResident,
   isMilitaryResident,
-  isSergeantCandidate,
   isSoldierResident,
   soldierEfficiency,
   squadTypeProfile
 } from "./residents.js";
 
-export const FULL_UNIT_EFFICIENCY = 5;
+export const FULL_UNIT_EFFICIENCY = DEFENSE_SQUAD_MIN_EFFICIENCY;
 const DEFAULT_GARRISON_THRESHOLD = 4;
 const SOURCE_TYPE_LABELS = {
   regular: "Отряд",
@@ -217,7 +217,7 @@ export function collectTags(sources = []) {
  */
 export function defenseSquadProfile(holding, state = {}) {
   if (state.useDefenseSquads === false) return { enabled: false, squads: [], units: 0, bs: 0, dice: 0, tags: {}, effective: 0, sources: [], details: "отряды поселения отключены" };
-  const people = (holding?.people?.list ?? []).filter((person) => isResidentInPopulation(person, holding) && !isInjuredResident(person));
+  const people = (holding?.people?.list ?? []).filter((person) => isAvailableDefenseResident(person, holding));
   const byId = new Map(people.map((person) => [String(person.id), person]));
   const squads = Array.isArray(holding?.gm?.defense?.squads) ? holding.gm.defense.squads : [];
   const counted = [];
@@ -228,23 +228,14 @@ export function defenseSquadProfile(holding, state = {}) {
   for (const squad of squads) {
     if (!squad?.equipped) continue;
     const profile = squadTypeProfile(squad.type);
-    const memberIds = (Array.isArray(squad.memberIds) ? squad.memberIds : []).slice(0, 4).map((id) => String(id ?? ""));
-    const sergeantId = String(squad.sergeantId ?? "");
-    const combatantIds = [...new Set([sergeantId, ...memberIds].filter(Boolean))];
-    const combatants = combatantIds.map((id) => byId.get(id)).filter(Boolean);
-    let effective = combatants.reduce((sum, person) => sum + soldierEfficiency(person, squad.type), 0);
-    const sergeant = byId.get(sergeantId);
-    const sergeantBonus = sergeant && isSergeantCandidate(sergeant) ? 0.10 : 0;
-    if (sergeantBonus) effective *= 1 + sergeantBonus;
     const supplied = supplyPlanActive && suppliedSquadIds.has(String(squad?.id ?? ""));
+    const { combatants, effective, sergeantBonus, ready } = evaluateDefenseSquad(squad, byId, { supplied });
+    if (!ready) continue;
     const tags = { ...(profile.tags ?? {}) };
     if (supplyPlanActive && !supplied) {
       delete tags.shooters;
       delete tags.siege;
     }
-    if (supplied) effective *= 1.20;
-    effective = round2(effective);
-    if (effective < FULL_UNIT_EFFICIENCY) continue;
     const source = makeSource({
       side: "defender",
       type: "regular",

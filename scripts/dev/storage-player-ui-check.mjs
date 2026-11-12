@@ -6,6 +6,8 @@ import { mergeHoldingDefaults } from "../data/normalizers.js";
 import { FinanceStorageDomain } from "../apps/domains/finance/storage-domain.js";
 import { prepareMarketOutboundContext } from "../apps/market/outbound-context.js";
 import { normalizeStorageRoomId } from "../engines/storage/capacity.js";
+import { ResidentDomain } from "../apps/domains/resident-domain.js";
+import { buildPlayerPatch, validatePlayerPatch } from "../data/player-write-guard.js";
 
 globalThis.foundry = { applications: { api: { ApplicationV2: class {}, HandlebarsApplicationMixin: Base => Base } } };
 const { StorageEventDomain } = await import("../apps/domains/events/storage-events.js");
@@ -304,13 +306,20 @@ assert.deepEqual(data, afterOtherEdit, "an absolute edit in a stale field must n
 
   data.holdings[1].people.list = [
     { id: "captain", name: "Капитан", age: 35, workAssignment: "soldier", background: "Солдат", attributes: { wits: 5, strength: 5 } },
-    { id: "recruit", name: "Новобранец", age: 25, background: "Солдат", attributes: { wits: 4, strength: 5, agility: 5 } }
+    { id: "recruit", name: "Новобранец", age: 25, background: "Солдат", attributes: { wits: 4, strength: 5, agility: 5 } },
+    { id: "sailor", name: "Матрос", age: 25, workAssignment: "soldier", background: "Солдат",
+      attributes: { strength: 5, agility: 5 }, shipAssignment: { shipId: "expedition", away: true } }
   ];
   data.holdings[1] = mergeHoldingDefaults(data.holdings[1]);
   const commander = await playerDefenseField({ dataset: { field: "holdings.1.gm.defense.commanderId", defenseExpected: "" },
     value: "captain", closest: (selector) => selector === "[data-defense-holding-id]" ? { dataset: { defenseHoldingId: "b" } } : null });
   assert.equal(commander.result.ok, true);
   assert.equal(data.holdings[1].people.list[0].workAssignment, "defenseCommander");
+  const beforeAbsent = structuredClone(data.holdings[1]);
+  const absent = await playerDefenseField({ ...defenseButton(data.holdings[1]), value: "sailor",
+    dataset: { field: "holdings.1.gm.defense.squads.0.memberIds.0" } });
+  assert.equal(absent.result.ok, false, "the authority rechecks physical presence even with a current squad hash");
+  assert.deepEqual(data.holdings[1], beforeAbsent, "rejected enlistment must not change staffing or wages");
   assert.equal((await playerDefense("_onFillDefenseSquadBest", defenseButton(data.holdings[1]))).result.ok, true,
     "the player can fill the squad and the authority owns the derived wages");
   assert.equal(data.holdings[1].gm.defense.squads[0].sergeantId, "recruit");
@@ -471,13 +480,52 @@ const overflowHolding = structuredClone(warehouse);
 const manual = manager._applyManualStorageChange(overflowHolding, { resourceId: "wood", qty: 2, roomId: "hidden",
   note: "Получено за день", operationId: "manual-overflow" });
 assert.equal(manual.ok, true);
+overflowHolding.storage.log.push({ kind: "collect", roomId: "outdoors", qty: 1,
+  note: "Ручной сбор, переполнение: Тайная кладовая", operationId: "collect-overflow" });
 for (const isGM of [true, false]) {
   game.user.isGM = isGM;
   const entry = manager._storageLogRows(overflowHolding, rooms).find(row => row.operationId === "manual-overflow");
   assert.equal(entry.qty, 2, "visible stock received by overflow remains in the player's journal");
   assert.match(entry.note, /Получено за день/);
   assert.equal(entry.note.includes("Тайная кладовая"), isGM, "an overflow note must not disclose the intended hidden room");
+  const collected = manager._storageLogRows(overflowHolding, rooms).find(row => row.operationId === "collect-overflow");
+  assert.equal(collected.qty, 1);
+  assert.match(collected.note, /Ручной сбор, переполнение/);
+  assert.equal(collected.note.includes("Тайная кладовая"), isGM, "manual collection uses a comma in the legacy overflow note");
 }
+
+const staffing = mergeHoldingDefaults({
+  id: "staffing", visibility: "public", gm: { playersCanEditBuildings: true },
+  buildings: { list: [
+    { id: "secret-work", name: "Закрытый арсенал", visibility: "gm", constructionStatus: "built",
+      workersMax: 2, assignedWorkerIds: ["keeper"] },
+    { id: "public-work", name: "Открытая мастерская", constructionStatus: "built", workersMax: 2 }
+  ] },
+  people: { list: [
+    { id: "keeper", name: "Хранитель", age: 30, workAssignment: "secret-work", role: "Закрытый арсенал" },
+    { id: "available", name: "Подмастерье", age: 30 }
+  ] }
+});
+const residents = { ...ResidentDomain, _constructionCrews: () => [], _safeNumber: manager._safeNumber,
+  _workMorale: () => ({ value: 1, conditions: 1, reason: "условия: +1 (Закрытый арсенал +1 × 20 QD)" }),
+  _personMatchesResidentFilters: () => true };
+for (const isGM of [true, false]) {
+  game.user.isGM = isGM;
+  const rows = residents._prepareRows(staffing, false, "people", { canEditBuildings: true });
+  assert.equal(rows.residentWorkOptionCatalog.some((option) => option.value === "secret-work"), isGM);
+  assert.ok(rows.residentWorkOptionCatalog.some((option) => option.value === "public-work"));
+  assert.equal(rows.people[0].workLabel, isGM ? "Закрытый арсенал" : "Назначение скрыто");
+  assert.equal(rows.people[0].workInlineValue, isGM ? "secret-work" : undefined);
+  assert.equal(rows.people[0].moraleTooltip.includes("Закрытый арсенал"), isGM, "the player tooltip must not disclose a prior workplace");
+}
+const visibleAtRender = { meta: { revision: 1 }, holdings: [structuredClone(staffing)] };
+visibleAtRender.holdings[0].buildings.list[0].visibility = "public";
+const playerDraft = structuredClone(visibleAtRender);
+playerDraft.holdings[0].people.list[1].workAssignment = "secret-work";
+const afterGmChange = { meta: { revision: 2 }, holdings: [staffing] };
+const deniedAssignment = validatePlayerPatch(afterGmChange, buildPlayerPatch(visibleAtRender, playerDraft), "player");
+assert.equal(deniedAssignment.ok, false, "the authority must reject a now-hidden workplace even when resident fields have not changed");
+assert.doesNotMatch(deniedAssignment.error, /secret-work|Закрытый арсенал/);
 
 let movementHolding = structuredClone(warehouse);
 movementHolding.storage.items.push({ id: "public-item", name: "Предмет", roomId: "outdoors", qty: 1 });

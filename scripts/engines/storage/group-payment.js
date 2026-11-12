@@ -10,7 +10,7 @@ function costRoomMatches(row, cost, normalizeRoomId) {
   return normalizeRoomId(row?.roomId ?? row?.storageRoomId) === normalizeRoomId(cost.roomId ?? cost.storageRoomId);
 }
 
-export function planStorageCosts({ holding = {}, costs = [], eligibleResourceRow, dependencies = {} } = {}) {
+export function planStorageCosts({ holding = {}, costs = [], eligibleResourceRow, trackResourceSources = false, dependencies = {} } = {}) {
   const deps = requiredDependencies(dependencies);
   // Select one complete alternative per OR group against the entire recipe.
   // Planning never changes the stock; payment receives only concrete costs.
@@ -21,7 +21,7 @@ export function planStorageCosts({ holding = {}, costs = [], eligibleResourceRow
     const choose = (index, selected) => {
       if (index === groups.length) {
         const ordered = [...fixed, ...selected].sort((a, b) => Number(Boolean(a.resourceGroup)) - Number(Boolean(b.resourceGroup)));
-        const plan = planStorageCosts({ holding, costs: ordered, eligibleResourceRow, dependencies: deps });
+        const plan = planStorageCosts({ holding, costs: ordered, eligibleResourceRow, trackResourceSources, dependencies: deps });
         failure ??= plan;
         return plan.ok ? plan : null;
       }
@@ -44,11 +44,13 @@ export function planStorageCosts({ holding = {}, costs = [], eligibleResourceRow
     row,
     index,
     batchIndex,
+    batchId: String(batch?.id ?? ""),
     ageQd: Math.max(0, Math.floor(deps.safeNumber(batch?.ageQd, 0))),
     remaining: Math.max(0, Math.floor(deps.safeNumber(batch?.qty, 0)))
   })));
   let moneyRemaining = Math.max(0, Math.floor(deps.safeNumber(holding?.storage?.moneyCopper, 0)));
   const concreteCosts = [];
+  const resourceSources = trackResourceSources ? new Map() : null;
   const missing = [];
 
   // Reserve exact ingredients before interchangeable groups, including recipes
@@ -84,7 +86,7 @@ export function planStorageCosts({ holding = {}, costs = [], eligibleResourceRow
       entry.remaining -= take;
       rest -= take;
       have += take;
-      concreteCosts.push({
+      const cost = {
         ...rawCost,
         resourceGroup: "",
         resourceId: String(entry.row?.resourceId ?? entry.row?.id ?? "custom"),
@@ -92,10 +94,13 @@ export function planStorageCosts({ holding = {}, costs = [], eligibleResourceRow
         roomId: deps.normalizeRoomId(entry.row?.roomId ?? entry.row?.storageRoomId),
         storageRowId: String(entry.row?.id ?? ""),
         qty: take
-      });
+      };
+      concreteCosts.push(cost);
+      // Live references are for this plan's draft only; durable costs and receipts keep their existing format.
+      resourceSources?.set(cost, { row: entry.row, batchId: entry.batchId });
     }
     if (rest > 0.0001) missing.push({ ...rawCost, qty: amount, have });
   }
 
-  return { ok: missing.length === 0, costs: concreteCosts, missing };
+  return { ok: missing.length === 0, costs: concreteCosts, missing, ...(resourceSources ? { resourceSources } : {}) };
 }

@@ -83,6 +83,18 @@ export function resolveFoundryUuid(uuid, options = {}) {
   return fromUuid(uuid, options);
 }
 
+/** A token Actor can share the world Actor's short ID, but has its own UUID. */
+export async function resolveFoundryActorReference({ actorId, actorUuid } = {}, {
+  getActor = (id) => globalThis.game?.actors?.get?.(id),
+  resolveUuid = resolveFoundryUuid
+} = {}) {
+  const worldActor = actorId ? getActor(actorId) : null;
+  if (!actorUuid || worldActor?.uuid === actorUuid) return worldActor ?? null;
+  const actor = await resolveUuid(actorUuid);
+  return (actor?.documentName ?? actor?.constructor?.documentName) === "Actor"
+    && actor.uuid === actorUuid ? actor : null;
+}
+
 export function foundryActorClass() {
   return requireApi(globalThis.foundry?.documents?.Actor, "foundry.documents.Actor");
 }

@@ -3,7 +3,7 @@ import { MODULE_ID } from "../../../../data/constants.js";
 import { makeId } from "../../../../data/utils.js";
 import { itemQuantity, itemQuantityUpdateData, setItemQuantityData } from "../../../../engines/storage/item-quantity.js";
 import { resolveStorageRow, STORAGE_ROW_CHANGED } from "../../../../engines/storage/row-identity.js";
-import { resolveFoundryUuid } from "../../../../integrations/foundry-runtime.js";
+import { resolveFoundryActorReference, resolveFoundryUuid } from "../../../../integrations/foundry-runtime.js";
 
 function cloneFoundryData(value) {
   return foundry?.utils?.deepClone?.(value) ?? structuredClone(value);
@@ -59,8 +59,8 @@ async _removeQuantityFromActorItem(item, amount = 1) {
 },
 
 async _restoreActorItemRemoval(receipt = null) {
-  if (!receipt?.ok || !receipt.actorId) return false;
-  const actor = globalThis.game?.actors?.get?.(receipt.actorId) ?? (receipt.actorUuid ? await resolveFoundryUuid(receipt.actorUuid) : null);
+  if (!receipt?.ok || !(receipt.actorUuid || receipt.actorId)) return false;
+  const actor = await resolveFoundryActorReference(receipt);
   if (!actor) return false;
   const existing = actor.items?.get?.(receipt.itemId);
   if (existing?.update) {
@@ -81,8 +81,8 @@ async _restoreActorItemRemoval(receipt = null) {
 },
 
 async _removeCreatedActorItems(receipt = null) {
-  if (receipt?.kind !== "created" || !receipt.actorId) return false;
-  const actor = globalThis.game?.actors?.get?.(receipt.actorId) ?? (receipt.actorUuid ? await resolveFoundryUuid(receipt.actorUuid) : null);
+  if (receipt?.kind !== "created" || !(receipt.actorUuid || receipt.actorId)) return false;
+  const actor = await resolveFoundryActorReference(receipt);
   const itemIds = (Array.isArray(receipt.itemIds) ? receipt.itemIds : []).map(String).filter(Boolean);
   if (!actor?.deleteEmbeddedDocuments || !itemIds.length) return false;
   const existingIds = itemIds.filter((id) => actor.items?.get?.(id));
@@ -259,26 +259,34 @@ async _storageReceiveFoundryItem(holding, item, { roomId = "outdoors", operation
   const amount = this._itemQuantity(item);
   const source = this._storageDepositSource(item);
   if (!source.ok) return source;
+  if (!amount) return { ok: false, message: "В стопке нет предметов." };
+  const snapshot = String(item.type) === "rawMaterial" ? null : this._snapshotItemForStorage(item, amount, targetRoom);
+  if (snapshot) snapshot.roomId = this._storageItemDepositRoom(holding, snapshot, targetRoom);
   let actorMutation = null;
   try {
     if (source.requiresRemoval) {
       actorMutation = await this._removeQuantityFromActorItem(item, amount);
       if (!actorMutation?.ok) return { ok: false, message: "Не удалось списать предмет из инвентаря персонажа." };
     }
-    if (String(item.type) === "rawMaterial") {
+    if (!snapshot) {
       const resourceId = this._resourceIdForFoundryItem(item);
       const id = resourceId === "custom" ? "custom" : resourceId;
       const label = id === "custom" ? String(item.name ?? "Ресурс") : resourceLabel(id);
       const placements = this._storageAddWithOverflow(holding, { resourceId: id, name: label, roomId: targetRoom, img: item.img, itemUuid: item.uuid, itemId: item.id, itemType: item.type, weight: item.system?.weight ?? "" }, amount);
       this._appendStorageLog(holding, placements.map((place) => ({ kind: "manual-add", resourceId: id, name: label, qty: place.qty, roomId: place.roomId, source: "Инвентарь Foundry", note: (item.parent?.documentName ?? item.parent?.constructor?.documentName) === "Actor" ? `из ${item.parent.name}` : "перетаскивание", operationId })));
-      return { ok: true, message: `${label}: принято ${this._formatNumber(amount)}; ${this._storagePlacementText(holding, placements)}.`, actorMutation };
+      const placedRoom = placements.find((place) => place.roomId === targetRoom)?.roomId ?? placements[0]?.roomId;
+      return { ok: true, roomId: placedRoom, message: `${label}: принято ${this._formatNumber(amount)}; ${this._storagePlacementText(holding, placements)}.`, actorMutation };
     }
     if (!holding.storage) holding.storage = { notes: "", resources: [], items: [], moneyCopper: 0, log: [] };
     if (!Array.isArray(holding.storage.items)) holding.storage.items = [];
-    const snapshot = this._snapshotItemForStorage(item, amount, targetRoom);
     holding.storage.items.push(snapshot);
-    this._appendStorageLog(holding, [{ kind: "manual-add", resourceId: "custom", name: snapshot.name, qty: amount, roomId: targetRoom, source: "Предмет Foundry", note: snapshot.sourceActorName ? `из ${snapshot.sourceActorName}` : "перетаскивание", operationId }]);
-    return { ok: true, message: `${snapshot.name}: предмет принят в ${this._storageRoomLabel(holding, targetRoom)}.`, actorMutation };
+    const overflow = snapshot.roomId !== targetRoom;
+    const note = [snapshot.sourceActorName ? `из ${snapshot.sourceActorName}` : "перетаскивание",
+      overflow ? `переполнение: ${this._storageRoomLabel(holding, targetRoom)}` : ""].filter(Boolean).join(" · ");
+    this._appendStorageLog(holding, [{ kind: "manual-add", resourceId: "custom", name: snapshot.name, qty: amount,
+      roomId: snapshot.roomId, source: "Предмет Foundry", note, operationId }]);
+    const roomLabel = this._storageRoomLabel(holding, snapshot.roomId);
+    return { ok: true, roomId: snapshot.roomId, message: `${snapshot.name}: предмет принят в ${roomLabel}${overflow ? " (выбранное помещение недоступно или заполнено)" : ""}.`, actorMutation };
   } catch (error) {
     if (actorMutation?.ok && !await this._restoreActorItemRemoval(actorMutation)) {
       throw new Error("Не удалось восстановить предмет в инвентаре персонажа.", { cause: error });

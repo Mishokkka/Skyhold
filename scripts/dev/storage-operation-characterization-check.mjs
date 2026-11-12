@@ -26,6 +26,7 @@ function makeActor(id, ownerId) {
     addItem(item) {
       const row = {
         id: String(item.id),
+        get uuid() { return `${actor.uuid}.Item.${row.id}`; },
         name: item.name ?? item.id,
         type: item.type ?? "gear",
         parent: actor,
@@ -194,6 +195,74 @@ function createHarness({ failPersist = false, failCompensation = false, isGM = t
 
 /** Exercises authoritative storage transfers, actor ownership and replay with isolated data and document fixtures. */
 export async function checkStorageOperationCharacterization() {
+  {
+    const gm = { id: "gm-token", isGM: true };
+    const worldActor = makeActor("base", gm.id);
+    const tokenActor = makeActor(worldActor.id, gm.id);
+    tokenActor.uuid = "Scene.test.Token.unlinked.Actor.base";
+    const worldItem = worldActor.addItem({ id: "shared", name: "Оригинал", qty: 9 });
+    worldActor.addItem({ id: "created-2", name: "Другой предмет", qty: 1 });
+    const addTokenItem = () => tokenActor.addItem({ id: "shared", name: "Токен", qty: 2 });
+    addTokenItem();
+    let holding = makeHolding();
+    holding.buildings = { list: [{ id: "full", name: "Малая кладовая", constructionStatus: "built",
+      functions: { storage: true }, storage: { capacity: 1 } }] };
+    let failPersist = false;
+    const resolveUuid = async (uuid) => uuid === tokenActor.uuid ? tokenActor
+      : tokenActor.itemIds().map((id) => tokenActor.items.get(id)).find((item) => item.uuid === uuid) ?? null;
+    const previousGame = globalThis.game;
+    const previousFoundry = globalThis.foundry;
+    globalThis.game = { user: gm, actors: { get: () => worldActor }, settings: { get: () => null } };
+    globalThis.foundry = { utils: { deepClone: clone, fromUuid: resolveUuid } };
+    try {
+      const executor = createStorageOperationExecutor({
+        getUser: () => gm, getActor: () => worldActor, resolveUuid,
+        skipTransaction: (value) => ({ [SKIP]: true, value }),
+        updateHolding: async (_id, updater) => {
+          const draft = clone(holding);
+          const result = await updater(draft);
+          if (result?.[SKIP]) return result.value;
+          if (failPersist) throw new Error("persist failed");
+          holding = draft;
+          return result;
+        }
+      });
+      const transfer = (type, operationId, extra = {}) => executor({
+        type, operationId, holdingId: holding.id, actorId: worldActor.id, actorUuid: tokenActor.uuid, ...extra
+      }, { userId: gm.id });
+      const deposit = () => ({ itemId: "shared", itemUuid: tokenActor.items.get("shared").uuid, roomId: "full" });
+      assert.equal((await transfer("depositItem", "token-deposit", deposit())).roomId, "outdoors",
+        "the stack cannot fit in the selected room and must be placed outdoors as one stack");
+      assert.equal(tokenActor.items.get("shared"), null);
+      assert.equal(worldActor.items.get("shared"), worldItem);
+      assert.deepEqual(holding.storage.items.slice(-1).map(({ roomId, qty }) => ({ roomId, qty })), [{ roomId: "outdoors", qty: 2 }]);
+      assert.equal(holding.storage.log.at(-1).roomId, "outdoors", "the receipt and journal describe the actual room");
+
+      addTokenItem();
+      failPersist = true;
+      await assert.rejects(transfer("depositItem", "token-deposit-rollback", deposit()), /persist failed$/);
+      assert.equal(tokenActor.items.get("shared").system.quantity, 2, "rollback restores the token's Item");
+      assert.equal(worldItem.system.quantity, 9, "rollback must not change the world Actor's Item with the same ID");
+      await assert.rejects(transfer("withdrawResource", "token-withdraw-rollback", { resourceId: "wood" }), /persist failed$/);
+      assert.deepEqual(tokenActor.itemIds(), ["shared"]);
+      assert.deepEqual(worldActor.itemIds(), ["shared", "created-2"], "rollback removes only the Item created on the token");
+      assert.equal(holding.storage.resources[0].qty, 5);
+
+      failPersist = false;
+      assert.equal((await transfer("giveStoredItem", "token-give", { itemId: "stored-sword" })).ok, true);
+      assert.equal(tokenActor.items.get("created-2").name, "Sword");
+      assert.equal(worldActor.items.get("created-2").name, "Другой предмет");
+      assert.equal((await transfer("withdrawResource", "deleted-token", { actorUuid: "Scene.test.Token.deleted.Actor.base", resourceId: "wood" })).ok, false,
+        "a removed token does not fall back to its world Actor");
+      assert.equal((await transfer("depositItem", "deleted-item", { ...deposit(), itemUuid: `${tokenActor.uuid}.Item.removed` })).ok, false,
+        "a stale Item UUID cannot fall back to another short ID");
+      assert.equal(tokenActor.items.get("shared").system.quantity, 2);
+    } finally {
+      globalThis.game = previousGame;
+      globalThis.foundry = previousFoundry;
+    }
+  }
+
   for (const type of ["depositItem", "giveStoredItem"]) {
     const harness = createHarness({ failPersist: true, failCompensation: true });
     const originalError = console.error;

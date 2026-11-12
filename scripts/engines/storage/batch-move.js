@@ -158,8 +158,7 @@ function planSelectedRows({
 
   const plannedRows = rows.map((row) => {
     const { available, requested } = requestedRowQuantity(row, type, rowQuantities, deps, holding);
-    const load = type === "items" ? deps.storageRowLoad({ ...row, qty: requested })
-      : deps.storageRowLoad(row) * (available > 0 ? requested / available : 0);
+    const load = deps.storageRowLoad({ ...row, qty: requested });
     return {
       id: String(row.id ?? ""),
       label: rowLabel(row, type),
