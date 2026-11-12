@@ -55,7 +55,7 @@ _prepareRows(holding, canEdit, activeTab = "overview", options = {}) {
     const hasRestingCrew = (holding.people?.list ?? []).some((person) => isResidentRestingOnShip(person, holding));
     const mode = options.activePeopleTab === "ship-crew" && hasRestingCrew ? "ship-crew" : "residents";
     rows.people = this._preparePersonRows(holding, canEdit, mode, true, { workOptionsContext, editorPersonId: "" });
-    rows.residentWorkOptionCatalog = canEdit ? this._residentWorkOptionCatalog(workOptionsContext) : [];
+    rows.residentWorkOptionCatalog = canEditBuildings ? this._residentWorkOptionCatalog(workOptionsContext) : [];
   }
 
   if (tab === "buildings") rows.buildings = this._prepareBuildingRows(holding, canEditBuildings, options);

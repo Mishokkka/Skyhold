@@ -70,7 +70,8 @@ export class SkyholdResidentEditor extends WindowFrameMixin(RenderSchedulerMixin
     const { holding, index: holdingIndex } = findReadableHoldingEntry(data, this.holdingId, { fallback: false });
     const manager = this._manager();
     const person = (holding?.people?.list ?? []).find((row) => String(row?.id ?? "") === this.personId);
-    const canEdit = Boolean(person && manager && holdingPermissionContext(holding).canEditResidents);
+    const permissions = holdingPermissionContext(holding);
+    const canEdit = Boolean(person && manager && permissions.canEditResidents);
     let prepared = null;
     if (canEdit) {
       const workOptionsContext = manager._residentWorkOptionsContext(holding);
@@ -81,11 +82,13 @@ export class SkyholdResidentEditor extends WindowFrameMixin(RenderSchedulerMixin
     }
     return {
       ...context,
+      holdingId: this.holdingId,
       holdingIndex,
       holdingName: holding?.name || "Владение",
       person: prepared,
       hasPerson: Boolean(person),
       canEdit,
+      canEditBuildings: permissions.canEditBuildings,
       isGM: Boolean(game.user?.isGM),
       saveStatus: this._saveStatus.context,
       error: !holding

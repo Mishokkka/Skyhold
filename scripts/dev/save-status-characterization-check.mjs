@@ -80,7 +80,8 @@ assert.deepEqual(groups, ["actions", "catalogs", "balance", "service"]);
 assert.equal(blocks.length, 0);
 
 const globals = { foundry: globalThis.foundry, game: globalThis.game, ui: globalThis.ui, HTMLTextAreaElement: globalThis.HTMLTextAreaElement };
-const methods = { get: SkyholdData.get, transaction: SkyholdData.transaction, updateHolding: SkyholdData.updateHolding };
+const methods = { get: SkyholdData.get, transaction: SkyholdData.transaction, updateHolding: SkyholdData.updateHolding,
+  skipTransaction: SkyholdData.skipTransaction };
 const originalError = console.error;
 try {
   class Base {
@@ -153,32 +154,35 @@ try {
   SkyholdResidentEditor.instances.delete(resident);
 
   const field = { dataset: { field: "holdings.0.people.list.0.name" }, value: "Руна", type: "text" };
-  const editor = { querySelectorAll: selector => selector === "[data-field]" ? [field] : [], querySelector: () => null };
+  const editor = { dataset: { holdingId: "holding", residentId: "person" },
+    querySelectorAll: selector => selector === "[data-field]" ? [field] : [], querySelector: () => null };
   const manager = { _canManagePeople: () => true, _canPlayerWriteFieldPath: () => true,
     _resolveActiveHoldingScopedPath: (_data, path) => path };
   const event = { currentTarget: { closest: () => editor } };
-  SkyholdData.get = () => ({ holdings: [{ people: { list: [{ id: "person", name: "Руна" }] } }] });
+  SkyholdData.get = () => ({ holdings: [{ id: "holding", people: { list: [{ id: "person", name: "Руна" }] } }] });
   SkyholdData.transaction = async () => null;
   assert.equal(await ResidentEventDomain._savePersonEditorDraft.call(manager, event), false, "missing resident/refused transaction must block close and success");
-  SkyholdData.transaction = async () => ({ warnNoSlot: false });
+  SkyholdData.transaction = async () => ({ saved: true });
   assert.equal(await ResidentEventDomain._savePersonEditorDraft.call(manager, event), true);
-  const allocationEvent = { preventDefault() {}, currentTarget: { dataset: { personId: "person", allocationId: "allocation" } } };
-  const allocationManager = { _canManagePeople: () => true, _savePersonEditorDraft: async () => true,
-    _updateActiveHolding: async () => false, requestRender() {} };
+  const allocationEvent = { preventDefault() {}, currentTarget: { dataset: { allocationId: "allocation" }, closest: () => editor } };
+  const allocationManager = { _canEditBuildings: () => true, _savePersonEditorDraft: async () => true, requestRender() {} };
   for (const method of ["_onAddWorkAllocation", "_onRemoveWorkAllocation"]) {
+    SkyholdData.transaction = async () => false;
     assert.equal(await ResidentEventDomain[method].call(allocationManager, allocationEvent), false, "allocation refusal must reach the editor status");
-    allocationManager._updateActiveHolding = async () => true;
+    SkyholdData.transaction = async () => true;
     assert.equal(await ResidentEventDomain[method].call(allocationManager, allocationEvent), true);
-    allocationManager._updateActiveHolding = async () => false;
   }
 
   // The work select contains the current foreman role. A routine save must not
   // clear it as though it were an unknown building, including during injury.
+  game.users = [{ id: "gm", active: true, isGM: true }];
+  game.socket = { emit() {} };
   for (const isGM of [true, false]) {
     globalThis.game.user.isGM = isGM;
     const person = { id: "foreman", name: "Руна", injuredDays: 3, salary: 18,
       workAssignment: "construction-leader:crew", workAllocationMode: "legacy", role: "Руководитель: Каменщики" };
-    const leaderHolding = { people: { list: [person] }, buildings: { list: [] },
+    const leaderHolding = { id: "holding", gm: { playersCanEditResidents: true, playersCanEditBuildings: true },
+      people: { list: [person] }, buildings: { list: [] },
       constructionCrews: [{ id: "crew", name: "Каменщики", memberIds: [], leaderId: person.id }] };
     const leaderData = { holdings: [leaderHolding] };
     SkyholdData.get = () => leaderData;
@@ -188,8 +192,11 @@ try {
     };
     const leaderManager = { ...AssignmentDomain, ...ResidentEventDomain, ...manager, requestRender() {} };
     const nameField = { dataset: { field: "holdings.0.people.list.0.name" }, value: "Руна Каменщик", type: "text" };
-    const workField = { dataset: { workAssignmentField: "holdings.0.people.list.0.workAssignment" }, value: person.workAssignment };
-    const leaderEditor = { querySelectorAll: selector => selector === "[data-field]" ? [nameField] : [],
+    const residentRow = { dataset: { holdingId: "holding", id: "foreman" } };
+    const workField = { dataset: { workAssignmentField: "holdings.0.people.list.0.workAssignment" }, value: person.workAssignment,
+      closest: () => residentRow };
+    const leaderEditor = { dataset: { holdingId: "holding", residentId: "foreman" },
+      querySelectorAll: selector => selector === "[data-field]" ? [nameField] : [],
       querySelector: selector => selector === "[data-work-assignment-field]" ? workField : null };
     const leaderEvent = { currentTarget: { closest: () => leaderEditor } };
     assert.equal(await leaderManager._savePersonEditorDraft(leaderEvent), true);
@@ -205,6 +212,50 @@ try {
     assert.equal(leaderHolding.constructionCrews[0].leaderId, "");
   }
   globalThis.game.user.isGM = true;
+  delete game.users;
+  delete game.socket;
+
+  {
+    let live = { holdings: ["a", "b"].map(id => ({
+      id, people: { list: [{ id: "resident", name: id, workAssignment: `current-${id}` }] },
+      buildings: { list: [{ id: "job", assignedWorkerIds: [], workersMax: 1, name: "Кузня" }] }
+    })) };
+    const approval = deferred();
+    const skipped = Symbol("skipped");
+    SkyholdData.skipTransaction = (value) => ({ [skipped]: true, value });
+    SkyholdData.get = () => structuredClone(live);
+    SkyholdData.transaction = async (updater) => {
+      const draft = structuredClone(live);
+      const result = await updater(draft);
+      if (result?.[skipped]) return result.value;
+      live = draft;
+      return result;
+    };
+    const worker = { ...AssignmentDomain, ...ResidentEventDomain, ...manager, activeHoldingId: "a", requestRender() {},
+      _safeNumber: (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback,
+      _workAssignmentAdmissionDecision: () => approval.promise };
+    const row = { dataset: { holdingId: "a", id: "resident" } };
+    const changeWork = { preventDefault() {}, currentTarget: { value: "job", closest: () => row,
+      dataset: { workAssignmentField: "holdings.0.people.list.0.workAssignment" } } };
+    const assigning = worker._onWorkAssignmentChange(changeWork);
+    worker.activeHoldingId = "b";
+    live.holdings.reverse();
+    approval.resolve({ allowed: true });
+    await assigning;
+    assert.deepEqual(live.holdings.map(item => item.people.list[0].workAssignment), ["current-b", "job"]);
+    changeWork.currentTarget.value = "vanished-job";
+    await worker._onWorkAssignmentChange(changeWork);
+    assert.equal(live.holdings[1].people.list[0].workAssignment, "job", "a failed transfer preserves the resident's existing assignment");
+
+    const previousEditorData = live.holdings[1].people.list[0];
+    const profile = { ...editor, dataset: { holdingId: "a", residentId: "resident" } };
+    const save = worker._savePersonEditorDraft({ currentTarget: { closest: () => profile } });
+    await save;
+    assert.equal(live.holdings[0].people.list[0].name, "b");
+    assert.equal(live.holdings[1].people.list[0].name, field.value);
+    assert.equal(previousEditorData.workAssignment, "job");
+    SkyholdData.skipTransaction = methods.skipTransaction;
+  }
 
   const { SkyholdRandomEventEditor } = await import("../apps/editors/random-event-editor.js");
   const events = new SkyholdRandomEventEditor({ holdingId: "holding" });

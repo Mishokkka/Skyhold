@@ -21,6 +21,24 @@ import { staffAppointmentFor } from "../../../data/hybrid-labor.js";
 const RESIDENT_CONTEXT_MENU_WIDTH = 230;
 const RESIDENT_CONTEXT_MENU_HEIGHT = 150;
 
+function residentAddress(element) {
+  const { holdingId, residentId, id } = element?.dataset ?? {};
+  return { holdingId, personId: residentId ?? id };
+}
+
+function residentScope(data, { holdingId, personId }) {
+  const { holding, index: holdingIndex } = findReadableHoldingEntry(data, holdingId);
+  const people = holding?.people?.list ?? [];
+  const matches = personId ? people.filter((person) => String(person?.id ?? "") === personId) : [];
+  const person = matches.length === 1 ? matches[0] : null;
+  return { holding, holdingIndex, person, personIndex: person ? people.indexOf(person) : -1 };
+}
+
+function residentScopedPath(scope, path) {
+  const field = String(path ?? "").match(/^holdings\.\d+\.people\.list\.\d+\.(.+)$/)?.[1];
+  return field && scope.person ? `holdings.${scope.holdingIndex}.people.list.${scope.personIndex}.${field}` : "";
+}
+
 function keepsCrewLeadership(holding, person, value) {
   if (!value.startsWith("construction-leader:") || String(person.workAssignment ?? "") !== value) return false;
   const crewId = value.slice("construction-leader:".length);
@@ -102,8 +120,7 @@ async _onCrewShoreDuty(event, type = "shore-duty") {
 },
 
 async _workAssignmentAdmissionDecision(data, path, value, personOverride = null) {
-  const scopedPath = this._resolveActiveHoldingScopedPath(data, path);
-  const parts = scopedPath?.match?.(/holdings\.(\d+)\.people\.list\.(\d+)\.workAssignment$/);
+  const parts = path.match(/^holdings\.(\d+)\.people\.list\.(\d+)\.workAssignment$/);
   if (!parts) return { allowed: true, allowAdmissionOverride: false };
   const holding = data?.holdings?.[Number(parts[1])];
   const person = personOverride ?? holding?.people?.list?.[Number(parts[2])];
@@ -114,28 +131,29 @@ async _workAssignmentAdmissionDecision(data, path, value, personOverride = null)
 
 async _onWorkAssignmentChange(event) {
   event.preventDefault();
-  if (!this._canManagePeople()) return;
   const field = event.currentTarget;
-  const path = field.dataset.workAssignmentField;
-  if (!path) return;
+  const address = residentAddress(field.closest?.(".fbls-person-row"));
+  const data = SkyholdData.get();
+  const source = residentScope(data, address);
+  const path = residentScopedPath(source, field.dataset.workAssignmentField);
+  if (!path || !holdingPermissionContext(source.holding).canEditBuildings) return;
   const value = String(field.value ?? "");
+  const expected = stableDataHash(source.person);
+  const building = source.holding.buildings?.list?.find((row) => String(row.id) === value);
+  const expectedBuilding = stableDataHash(building);
   try {
-    const decision = await this._workAssignmentAdmissionDecision(SkyholdData.get(), path, value);
+    const decision = await this._workAssignmentAdmissionDecision(data, path, value);
     if (!decision.allowed) {
       this.requestRender();
       return;
     }
-    const result = await SkyholdData.transaction((data) => {
-      const scopedPath = this._resolveActiveHoldingScopedPath(data, path);
-      if (!scopedPath) return SkyholdData.skipTransaction(null);
-      const parts = scopedPath.match(/holdings\.(\d+)\.people\.list\.(\d+)\.workAssignment$/);
-      if (!parts) {
-        foundry.utils.setProperty(data, scopedPath, value);
-        return { warnNoSlot: false };
+    const result = await SkyholdData.transaction((draft) => {
+      const { holding, person } = residentScope(draft, address);
+      const targetBuilding = holding?.buildings?.list?.find((row) => String(row.id) === value);
+      if (!person || !holdingPermissionContext(holding).canEditBuildings || stableDataHash(person) !== expected
+        || stableDataHash(targetBuilding) !== expectedBuilding) {
+        return SkyholdData.skipTransaction({ stale: true });
       }
-      const holding = data.holdings[Number(parts[1])];
-      const person = holding?.people?.list?.[Number(parts[2])];
-      if (!holding || !person) return SkyholdData.skipTransaction(null);
       if (keepsCrewLeadership(holding, person, value)) return SkyholdData.skipTransaction(null);
       this._clearPersonFromAssignments(holding, person.id);
       person.workAssignment = value;
@@ -149,20 +167,19 @@ async _onWorkAssignmentChange(event) {
         person.role = String(person.role ?? "") || "Другое";
         this._applyPersonSalaryForAssignment?.(holding, person, null);
       }
-      else if (value === "construction") this._assignPersonToCrew(holding, person.id, this._constructionCrews(holding)[0]?.id);
-      else if (value.startsWith("construction:")) this._assignPersonToCrew(holding, person.id, value.split(":")[1]);
+      else if (value === "construction" || value.startsWith("construction:")) {
+        const crewId = value === "construction" ? this._constructionCrews(holding)[0]?.id : value.split(":")[1];
+        if (!this._assignPersonToCrew(holding, person.id, crewId)) return SkyholdData.skipTransaction({ warnNoSlot: true });
+      }
       else {
         const ok = this._assignPersonToBuilding(holding, person.id, value, decision);
-        if (!ok) {
-          person.workAssignment = "";
-          this._setPersonFree?.(holding, person.id);
-          return { warnNoSlot: true };
-        }
+        if (!ok) return SkyholdData.skipTransaction({ warnNoSlot: true });
       }
       return { warnNoSlot: false };
     }, { reason: "resident:work-assignment", scope: "holdings" });
     if (!result) return;
-    if (result.warnNoSlot) ui.notifications.warn("В выбранном здании нет свободного рабочего слота.");
+    if (result.stale) ui.notifications.warn("Житель или место работы изменились. Обновите окно и повторите назначение.");
+    if (result.warnNoSlot) ui.notifications.warn("Назначение недоступно. Прежняя работа сохранена.");
     this.requestRender();
   } catch (error) {
     console.error("FBL Skyhold | Failed to update work assignment", error);
@@ -395,15 +412,14 @@ _refreshResidentTraitEditor(editor) {
 
 async _onAddWorkAllocation(event) {
   event.preventDefault();
-  if (!this._canManagePeople()) return;
-  const personId = String(event.currentTarget?.dataset?.personId ?? "");
-  if (!personId) return;
+  const address = residentAddress(event.currentTarget?.closest?.(".fbls-person-editor.v2"));
+  if (!address.personId || !this._canEditBuildings()) return;
   try {
     if (!await this._savePersonEditorDraft(event)) return;
-    const updated = await this._updateActiveHolding((holding) => {
-      const person = (holding?.people?.list ?? []).find((row) => String(row?.id ?? "") === personId);
-      if (!person) return SkyholdData.skipTransaction(false);
-      this._clearPersonFromAssignments?.(holding, personId);
+    const updated = await SkyholdData.transaction((data) => {
+      const { holding, person } = residentScope(data, address);
+      if (!person || !holdingPermissionContext(holding).canEditBuildings) return SkyholdData.skipTransaction(false);
+      this._clearPersonFromAssignments?.(holding, person.id);
       person.workAssignment = "";
       person.workAllocationMode = WORK_ALLOCATION_MODE_EXPLICIT;
       if (!Array.isArray(person.workAllocations)) person.workAllocations = [];
@@ -416,7 +432,7 @@ async _onAddWorkAllocation(event) {
         overtimeQd: 0
       });
       return true;
-    }, { reason: "resident:add-work-allocation" });
+    }, { reason: "resident:add-work-allocation", scope: "holdings" });
     if (updated) this.requestRender();
     return Boolean(updated);
   } catch (error) {
@@ -428,19 +444,18 @@ async _onAddWorkAllocation(event) {
 
 async _onRemoveWorkAllocation(event) {
   event.preventDefault();
-  if (!this._canManagePeople()) return;
-  const personId = String(event.currentTarget?.dataset?.personId ?? "");
+  const address = residentAddress(event.currentTarget?.closest?.(".fbls-person-editor.v2"));
   const allocationId = String(event.currentTarget?.dataset?.allocationId ?? "");
-  if (!personId || !allocationId) return;
+  if (!address.personId || !allocationId || !this._canEditBuildings()) return;
   try {
     if (!await this._savePersonEditorDraft(event)) return;
-    const updated = await this._updateActiveHolding((holding) => {
-      const person = (holding?.people?.list ?? []).find((row) => String(row?.id ?? "") === personId);
-      if (!person) return SkyholdData.skipTransaction(false);
+    const updated = await SkyholdData.transaction((data) => {
+      const { holding, person } = residentScope(data, address);
+      if (!person || !holdingPermissionContext(holding).canEditBuildings) return SkyholdData.skipTransaction(false);
       const before = Array.isArray(person.workAllocations) ? person.workAllocations.length : 0;
       person.workAllocations = (person.workAllocations ?? []).filter((row) => String(row?.id ?? "") !== allocationId);
       return person.workAllocations.length !== before;
-    }, { reason: "resident:remove-work-allocation" });
+    }, { reason: "resident:remove-work-allocation", scope: "holdings" });
     if (updated) this.requestRender();
     return Boolean(updated);
   } catch (error) {
@@ -707,7 +722,12 @@ async _onResidentContextMenu(event) {
 
 async _savePersonEditorDraft(event) {
   const editor = event?.currentTarget?.closest?.(".fbls-person-editor.v2") ?? this.element?.querySelector?.(".fbls-person-editor.v2");
-  if (!editor || !this._canManagePeople?.()) return false;
+  if (!editor) return false;
+  const address = residentAddress(editor);
+  const currentData = SkyholdData.get();
+  const source = residentScope(currentData, address);
+  if (!source.person || !holdingPermissionContext(source.holding).canEditResidents) return false;
+  const expected = stableDataHash(source.person);
 
   const regularFields = Array.from(editor.querySelectorAll("[data-field]")).filter((field) => !/\.salary(?:Modifier)?$/.test(String(field.dataset.field ?? "")));
   const salaryFields = Array.from(editor.querySelectorAll("[data-field]")).filter((field) => /\.salary(?:Modifier)?$/.test(String(field.dataset.field ?? "")));
@@ -741,7 +761,8 @@ async _savePersonEditorDraft(event) {
   if (workField) {
     const path = workField.dataset.workAssignmentField;
     const value = String(workField.value ?? "");
-    if (path && this._canPlayerWriteFieldPath(path)) {
+    const before = String(staffAppointmentFor(source.person)?.buildingId ?? source.person.workAssignment ?? "");
+    if (path && value !== before && holdingPermissionContext(source.holding).canEditBuildings && this._canPlayerWriteFieldPath(path)) {
       workUpdate = { path, value };
     }
   }
@@ -754,9 +775,8 @@ async _savePersonEditorDraft(event) {
 
   let workDecision = { allowed: true, allowAdmissionOverride: false };
   const workAllocationAdmissionOverrides = [];
-  const currentData = SkyholdData.get();
   const candidatePersonPath = workUpdate?.path || modePath || regularUpdates.find((update) => /\.people\.list\.\d+\./.test(String(update.path ?? "")))?.path;
-  const scopedPersonPath = candidatePersonPath ? this._resolveActiveHoldingScopedPath(currentData, candidatePersonPath) : "";
+  const scopedPersonPath = residentScopedPath(source, candidatePersonPath);
   const workParts = scopedPersonPath?.match?.(/^holdings\.(\d+)\.people\.list\.(\d+)(?:\.|$)/);
   const currentHolding = workParts ? currentData?.holdings?.[Number(workParts[1])] : null;
   const currentPerson = workParts ? currentHolding?.people?.list?.[Number(workParts[2])] : null;
@@ -764,14 +784,14 @@ async _savePersonEditorDraft(event) {
   if (previewPerson && workParts) {
     const prefix = `holdings.${workParts[1]}.people.list.${workParts[2]}.`;
     for (const update of regularUpdates) {
-      const scopedPath = this._resolveActiveHoldingScopedPath(currentData, update.path);
+      const scopedPath = residentScopedPath(source, update.path);
       if (!scopedPath?.startsWith(prefix)) continue;
       foundry.utils.setProperty(previewPerson, scopedPath.slice(prefix.length), update.value);
     }
   }
 
   if (workUpdate && String(previewPerson?.workAllocationMode ?? "") !== WORK_ALLOCATION_MODE_EXPLICIT) {
-    workDecision = await this._workAssignmentAdmissionDecision(currentData, workUpdate.path, workUpdate.value, previewPerson);
+    workDecision = await this._workAssignmentAdmissionDecision(currentData, residentScopedPath(source, workUpdate.path), workUpdate.value, previewPerson);
     if (!workDecision.allowed) {
       if (workField && currentPerson) workField.value = String(currentPerson.workAssignment ?? "");
       workUpdate = null;
@@ -801,7 +821,7 @@ async _savePersonEditorDraft(event) {
       const admission = this._buildingWorkerAdmission?.(building, previewPerson) ?? { eligible: true, hard: false, overridden: false };
       if (!admission.hard || admission.eligible) continue;
       if (admission.overridden) {
-        workAllocationAdmissionOverrides.push({ holdingIndex: Number(workParts[1]), personId: String(previewPerson.id), buildingId });
+        workAllocationAdmissionOverrides.push(building);
         continue;
       }
       const decision = await confirmBuildingWorkerAdmission({ manager: this, building, person: previewPerson });
@@ -810,18 +830,31 @@ async _savePersonEditorDraft(event) {
         return false;
       }
       if (decision.allowAdmissionOverride) {
-        workAllocationAdmissionOverrides.push({ holdingIndex: Number(workParts[1]), personId: String(previewPerson.id), buildingId });
+        workAllocationAdmissionOverrides.push(building);
       }
     }
   }
 
   if (!regularUpdates.length && !workUpdate && !salaryUpdates.length) return true;
 
+  const approvedBuilding = workUpdate && source.holding.buildings?.list?.find((row) => String(row.id) === workUpdate.value);
   const result = await SkyholdData.transaction((data) => {
+    const target = residentScope(data, address);
+    if (!target.person || stableDataHash(target.person) !== expected || !holdingPermissionContext(target.holding).canEditResidents) {
+      return SkyholdData.skipTransaction({ stale: true });
+    }
+    const targetBuildings = target.holding.buildings?.list ?? [];
+    if (workUpdate && (stableDataHash(targetBuildings.find((row) => String(row.id) === workUpdate.value)) !== stableDataHash(approvedBuilding)
+      || !holdingPermissionContext(target.holding).canEditBuildings)) return SkyholdData.skipTransaction({ stale: true });
+    const overrideBuildings = workAllocationAdmissionOverrides.map((override) => targetBuildings.find((row) => row.id === override.id));
+    if (overrideBuildings.some((building, index) => stableDataHash(building) !== stableDataHash(workAllocationAdmissionOverrides[index]))) {
+      return SkyholdData.skipTransaction({ stale: true });
+    }
+    const pathIn = (path) => residentScopedPath(target, path);
     let warnNoSlot = false;
 
     for (const { path, value } of regularUpdates) {
-      const scopedPath = this._resolveActiveHoldingScopedPath(data, path);
+      const scopedPath = pathIn(path);
       if (!scopedPath) return SkyholdData.skipTransaction(null);
       foundry.utils.setProperty(data, scopedPath, value);
       const injuredMatch = scopedPath.match(/^holdings\.(\d+)\.people\.list\.(\d+)\.injuredDays$/);
@@ -833,7 +866,7 @@ async _savePersonEditorDraft(event) {
     }
 
     const explicitMatches = new Set(regularUpdates.map(({ path }) => (
-      this._resolveActiveHoldingScopedPath(data, path).match(/^holdings\.(\d+)\.people\.list\.(\d+)\.workAllocation/)?.slice(1, 3).join(":")
+      pathIn(path).match(/^holdings\.(\d+)\.people\.list\.(\d+)\.workAllocation/)?.slice(1, 3).join(":")
     )).filter(Boolean));
     for (const match of explicitMatches) {
       const [holdingIndex, personIndex] = match.split(":").map(Number);
@@ -845,17 +878,14 @@ async _savePersonEditorDraft(event) {
       if (!String(person.role ?? "").trim() || ["Свободен", "Без работы"].includes(String(person.role))) person.role = "План QD";
     }
 
-    for (const override of workAllocationAdmissionOverrides) {
-      const holding = data.holdings?.[override.holdingIndex];
-      const building = (holding?.buildings?.list ?? []).find((row) => String(row?.id ?? "") === override.buildingId);
-      if (!building || !(holding?.people?.list ?? []).some((person) => String(person?.id ?? "") === override.personId)) continue;
+    for (const building of overrideBuildings) {
       if (!Array.isArray(building.workerAdmissionOverrideIds)) building.workerAdmissionOverrideIds = [];
-      if (!building.workerAdmissionOverrideIds.some((id) => String(id) === override.personId)) building.workerAdmissionOverrideIds.push(override.personId);
+      if (!building.workerAdmissionOverrideIds.some((id) => String(id) === address.personId)) building.workerAdmissionOverrideIds.push(address.personId);
     }
 
     if (workUpdate) {
       const { path, value } = workUpdate;
-      const scopedPath = this._resolveActiveHoldingScopedPath(data, path);
+      const scopedPath = pathIn(path);
       if (!scopedPath) return SkyholdData.skipTransaction(null);
       const parts = scopedPath.match(/holdings\.(\d+)\.people\.list\.(\d+)\.workAssignment$/);
       if (parts) {
@@ -880,15 +910,13 @@ async _savePersonEditorDraft(event) {
             } else if (value === "other") {
               person.role = String(person.role ?? "") || "Другое";
               this._applyPersonSalaryForAssignment?.(holding, person, null);
-            } else if (value === "construction") this._assignPersonToCrew?.(holding, person.id, this._constructionCrews?.(holding)?.[0]?.id);
-            else if (value.startsWith("construction:")) this._assignPersonToCrew?.(holding, person.id, value.split(":")[1]);
+            } else if (value === "construction" || value.startsWith("construction:")) {
+              const crewId = value === "construction" ? this._constructionCrews?.(holding)?.[0]?.id : value.split(":")[1];
+              if (!this._assignPersonToCrew?.(holding, person.id, crewId)) warnNoSlot = true;
+            }
             else {
               const ok = this._assignPersonToBuilding?.(holding, person.id, value, workDecision);
-              if (!ok) {
-                person.workAssignment = "";
-                this._setPersonFree?.(holding, person.id);
-                warnNoSlot = true;
-              }
+              if (!ok) warnNoSlot = true;
             }
           }
         }
@@ -896,7 +924,7 @@ async _savePersonEditorDraft(event) {
     }
 
     for (const { path, value } of salaryUpdates) {
-      const scopedPath = this._resolveActiveHoldingScopedPath(data, path);
+      const scopedPath = pathIn(path);
       if (!scopedPath) return SkyholdData.skipTransaction(null);
       foundry.utils.setProperty(data, scopedPath, value);
       const match = scopedPath.match(/^holdings\.(\d+)\.people\.list\.(\d+)\.salaryModifier$/);
@@ -908,11 +936,12 @@ async _savePersonEditorDraft(event) {
       }
     }
 
-    return { warnNoSlot };
+    return warnNoSlot ? SkyholdData.skipTransaction({ warnNoSlot: true }) : { saved: true };
   }, { reason: "resident:save-editor-draft", scope: "holdings" });
 
-  if (result?.warnNoSlot) ui.notifications.warn("В выбранном здании нет свободного рабочего слота.");
-  return Boolean(result);
+  if (result?.warnNoSlot) ui.notifications.warn("Назначение недоступно. Прежняя работа сохранена.");
+  if (result?.stale) ui.notifications.warn("Житель или место работы изменились. Обновите карточку и повторите правку.");
+  return result?.saved === true;
 },
 
 async _onClosePersonEditor(event) {

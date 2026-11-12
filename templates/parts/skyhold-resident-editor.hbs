@@ -1,4 +1,4 @@
-<div class="fbls-person-editor v2">
+<div class="fbls-person-editor v2" data-holding-id="{{@root.holdingId}}" data-resident-id="{{id}}">
   <fieldset class="main-set compact-resident-main">
     <legend>Основное</legend>
     <div class="fbls-resident-main-grid">
@@ -63,7 +63,7 @@
     </div>
   </fieldset>
 
-  <fieldset class="work-set compact-resident-work {{#if isCustomWork}}has-custom-work{{/if}}">
+  <fieldset class="work-set compact-resident-work {{#if isCustomWork}}has-custom-work{{/if}}" {{#unless @root.canEditBuildings}}disabled{{/unless}}>
     <legend>Работа и жилье</legend>
     {{#if onBoardOnly}}<div class="fbls-resident-ship-status" tabindex="0" data-fbls-tooltip="{{#if restingOnShip}}Отдыхает на борту, не занимает дом и не участвует в довольстве поселения. Для назначения работы нажмите «В поселение» в списке «Жители → Экипажи». Вернуть моряка можно через контекстное меню.{{else}}Находится в рейсе. Работа и жильё поселения недоступны до возвращения корабля.{{/if}}"><i class="fa-solid fa-ship" aria-hidden="true"></i><span>{{homeLabel}} · {{#if restingOnShip}}отдыхает на борту{{else}}в рейсе{{/if}}</span><i class="fa-solid fa-circle-info" aria-hidden="true"></i></div>{{/if}}
     <div class="fbls-work-block fbls-work-source-block">
@@ -117,7 +117,7 @@
     </div>
   </fieldset>
 
-  <fieldset class="fbls-work-allocation-set {{#if workAllocationExplicit}}is-explicit{{else}}is-legacy{{/if}}" {{#if onBoardOnly}}disabled{{/if}}>
+  <fieldset class="fbls-work-allocation-set {{#if workAllocationExplicit}}is-explicit{{else}}is-legacy{{/if}}" {{#if onBoardOnly}}disabled{{else}}{{#unless @root.canEditBuildings}}disabled{{/unless}}{{/if}}>
     <legend>План труда на десятник</legend>
     <div class="fbls-work-allocation-toolbar">
       <label class="fbls-field fbls-work-allocation-mode">
