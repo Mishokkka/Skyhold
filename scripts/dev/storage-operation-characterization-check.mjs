@@ -5,6 +5,7 @@ import { createStorageOperationExecutor } from "../apps/storage-operation-execut
 import { clone } from "../data/utils.js";
 import { createSkyholdSplitStorage } from "../data/split-storage.js";
 import { prepareSkyholdCommit } from "../data/commit-preparation.js";
+import { makeStorageCommitMeta } from "../data/storage-commit.js";
 import { migrateData } from "../data/normalizers.js";
 import { MODULE_ID, SETTING_CATALOG, SETTING_DATA, SETTING_HOLDINGS, SETTING_META } from "../data/constants.js";
 
@@ -180,6 +181,7 @@ function createHarness({ failPersist = false, failCompensation = false, isGM = t
   const executor = createStorageOperationExecutor({
     logic,
     updateHolding,
+    readCommittedData: () => ({ holdings: [holding], meta: { revision: 0 } }),
     skipTransaction: (value) => ({ [SKIP]: true, value }),
     getUser: (userId) => userId === user.id ? user : null,
     getActor: (actorId) => actorId === actor.id ? actor : null,
@@ -218,6 +220,7 @@ export async function checkStorageOperationCharacterization() {
     try {
       const executor = createStorageOperationExecutor({
         getUser: () => gm, getActor: () => worldActor, resolveUuid,
+        readCommittedData: () => ({ holdings: [holding], meta: { revision: 0 } }),
         skipTransaction: (value) => ({ [SKIP]: true, value }),
         updateHolding: async (_id, updater) => {
           const draft = clone(holding);
@@ -567,6 +570,7 @@ export async function checkStorageOperationCharacterization() {
       let attempted = 0;
       const serialized = createStorageOperationExecutor({
         getUser: () => gm, getActor: () => actor, skipTransaction: (value) => ({ [SKIP]: true, value }),
+        readCommittedData: () => ({ holdings: [holding], meta: { revision: 0 } }),
         async updateHolding(_id, updater) {
           const attempt = ++attempted;
           const draft = clone(holding);
@@ -756,20 +760,34 @@ export async function checkStorageOperationCharacterization() {
       // The last marker write can fail after the holding partition, including
       // its receipt, has become recoverable. Compensation must follow that outcome.
       for (const [type, blocked] of [
-        ["withdrawResource", "holdings"], ["withdrawResource", "completion"],
-        ["depositItem", "holdings"], ["depositItem", "completion"]
+        ...["withdrawResource", "depositItem"].flatMap(type =>
+          ["holdings", "completion", "veto", "newer", "unreadable"].map(blocked => [type, blocked]))
       ]) {
         const root = migrateData({ meta: { revision: 8 }, holdings: [makeHolding()], catalog: {} });
         const settings = new Map([[SETTING_META, root.meta], [SETTING_HOLDINGS, root.holdings],
           [SETTING_CATALOG, root.catalog], [SETTING_DATA, root]]);
+        let readable = true;
         const adapter = {
-          get: (_module, key) => clone(settings.get(key)),
+          get(_module, key) {
+            if (!readable) throw new Error("settings are temporarily unreadable");
+            return clone(settings.get(key));
+          },
           async set(_module, key, value) {
-            if ((blocked === "holdings" && key === SETTING_HOLDINGS)
-              || (blocked === "completion" && key === SETTING_META && value.storageCommit?.writeComplete)) {
+            if (blocked === "holdings" && key === SETTING_HOLDINGS) throw new Error("injected write failure");
+            if (["completion", "newer", "unreadable"].includes(blocked) && key === SETTING_META && value.storageCommit?.writeComplete) {
+              if (blocked === "newer") {
+                const fresh = clone(settings.get(SETTING_HOLDINGS));
+                fresh[0].name = "Edited after the transfer by the new authority";
+                settings.set(SETTING_HOLDINGS, fresh);
+                settings.set(SETTING_META, makeStorageCommitMeta({ ...value, revision: 10 }, { writeId: "second-gm",
+                  previousRevision: 9, holdings: fresh, catalog: settings.get(SETTING_CATALOG), complete: true }));
+              }
+              if (blocked === "unreadable") readable = false;
               throw new Error("injected write failure");
             }
+            if (blocked === "veto" && key === SETTING_HOLDINGS) return clone(settings.get(key));
             settings.set(key, clone(value));
+            return clone(value);
           }
         };
         const storage = createSkyholdSplitStorage({ settings: adapter });
@@ -784,7 +802,8 @@ export async function checkStorageOperationCharacterization() {
           },
           skipTransaction: (value) => ({ [SKIP]: true, value }),
           getUser: () => gm,
-          getActor: () => actor
+          getActor: () => actor,
+          readCommittedData: () => storage.getDataView()
         };
         const deposit = type === "depositItem";
         const itemId = deposit ? `split-actor-item-${blocked}` : "";
@@ -796,24 +815,32 @@ export async function checkStorageOperationCharacterization() {
         assert.equal(stale.stale, true);
         assert.deepEqual(actor.itemIds(), idsBefore, "a stale transfer never touches the Actor");
         const attempt = run(request, { userId: gm.id });
-        if (blocked === "holdings") {
-          await assert.rejects(attempt, /injected write failure/);
-          assert.deepEqual(actor.itemIds(), idsBefore, "a rolled-back holding write must undo the Actor creation");
+        const committed = !["holdings", "veto"].includes(blocked);
+        if (!committed) {
+          await assert.rejects(attempt, /injected write failure|не подтвердил запись/);
+          assert.deepEqual(actor.itemIds(), idsBefore, "a rolled-back holding write must restore the original Actor inventory");
         } else {
-          assert.equal((await attempt).ok, true, "a forward-recoverable holding write is a successful transfer");
+          if (blocked === "unreadable") {
+            await assert.rejects(attempt, { code: "outcome-unknown" });
+            await assert.rejects(run(request, { userId: gm.id }), { code: "outcome-unknown" });
+            readable = true;
+            assert.equal((await run(request, { userId: gm.id })).replay, true,
+              "retrying the same transfer can acknowledge a late receipt without touching the Actor again");
+          } else assert.equal((await attempt).ok, true, "a verified holding receipt makes the transfer successful");
           const expectedItemCount = idsBefore.length + (deposit ? -1 : 1);
-          assert.equal(actor.itemIds().length, expectedItemCount);
+          assert.equal(actor.itemIds().length, expectedItemCount, "never compensate a committed or still uncertain transfer");
           storage.resetMetrics();
-          assert.equal(storage.getDataView().meta.revision, 9);
-          assert.equal(storage.getMetrics().normalizations, 0, "a verified forward commit reuses the prepared view even while its marker remains pending");
+          assert.equal(storage.getDataView().meta.revision, blocked === "newer" ? 10 : 9);
+          if (blocked === "completion") assert.equal(storage.getMetrics().normalizations, 0,
+            "a verified forward commit reuses the prepared view even while its marker remains pending");
           const replay = await createStorageOperationExecutor(options)(request, { userId: gm.id });
           assert.equal(replay.replay, true, "the recovered transfer receipt is usable after executor restart");
           assert.equal(actor.itemIds().length, expectedItemCount);
         }
         const reopened = createSkyholdSplitStorage({ settings: adapter }).getData();
         const saved = reopened.holdings[0].storage;
-        assert.equal(saved.resources[0].qty, !deposit && blocked === "completion" ? 4 : 5);
-        assert.equal(saved.items.length, deposit && blocked === "completion" ? 2 : 1);
+        assert.equal(saved.resources[0].qty, !deposit && committed ? 4 : 5);
+        assert.equal(saved.items.length, deposit && committed ? 2 : 1);
       }
     } finally {
       if (previousGame === undefined) delete globalThis.game;

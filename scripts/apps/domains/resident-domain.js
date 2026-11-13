@@ -10,7 +10,7 @@ import { ageGroupFromAge, ageThresholdsFor, attributeSummary, normalizeBelief, r
 import { buildingOperationalState } from "../../core/building-state.js";
 import { resourceLabel } from "../../core/resources.js";
 import { stableDataHash } from "../../data/storage-commit.js";
-import { canEnrollDefenseResident, DEFENSE_ARMAMENT_IDS } from "./defense-operation-domain.js";
+import { canEnrollDefenseResident, defenseArmamentInUse, DEFENSE_ARMAMENT_IDS, DEFENSE_ARMAMENT_IN_USE } from "./defense-operation-domain.js";
 import {
   buildingConfirmedHarmActive,
   buildingConfirmedLeisureCapacity,
@@ -371,6 +371,8 @@ _defenseContext(holding) {
       ? String(squad.armamentResourceId)
       : "";
     const equipped = Boolean(armamentResourceId);
+    const armamentLocked = defenseArmamentInUse(holding, squad);
+    const supplyId = militarySupplyResourceForArmament(armamentResourceId);
     const counted = equipped && ready;
     const type = typeDefs[squadType] ?? typeDefs.line;
     return {
@@ -398,12 +400,16 @@ _defenseContext(holding) {
       effective,
       hasSergeant,
       equipped,
+      armamentLocked,
+      armamentHelp: armamentLocked ? DEFENSE_ARMAMENT_IN_USE
+        : "Выдача списывает один комплект. От комплекта зависит вид припасов, а сила отряда определяется составом.",
       armamentResourceId,
       armamentLabel: armamentResourceId ? resourceLabel(armamentResourceId) : "Вооружение не выдано",
       armamentOptions: DEFENSE_ARMAMENT_IDS.map((resourceId) => ({
         value: resourceId,
         label: resourceLabel(resourceId),
         supplyLabel: resourceLabel(militarySupplyResourceForArmament(resourceId)),
+        disabled: armamentLocked && militarySupplyResourceForArmament(resourceId) !== supplyId,
         selected: resourceId === (armamentResourceId || "armament-simple")
       })),
       counted,

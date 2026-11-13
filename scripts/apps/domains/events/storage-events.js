@@ -689,7 +689,7 @@ async _onStorageDrop(event) {
     ui.notifications.info(result.message);
   } catch (error) {
     console.error("FBL Skyhold | Failed to store dropped item", error);
-    if (error?.code === COMMAND_ERROR.TIMEOUT) return ui.notifications.warn(error.message);
+    if ([COMMAND_ERROR.TIMEOUT, COMMAND_ERROR.OUTCOME_UNKNOWN].includes(error?.code)) return ui.notifications.warn(error.message);
     ui.notifications.error("Не удалось принять предмет. Подробности в консоли.");
   }
 },
@@ -721,7 +721,7 @@ async _withdrawStoredResource({ holdingId, expectedRevision, row = null, qty = 1
     ui.notifications.info(result.message);
   } catch (error) {
     console.error("FBL Skyhold | Failed to withdraw resource", error);
-    if (error?.code === COMMAND_ERROR.TIMEOUT) return ui.notifications.warn(error.message);
+    if ([COMMAND_ERROR.TIMEOUT, COMMAND_ERROR.OUTCOME_UNKNOWN].includes(error?.code)) return ui.notifications.warn(error.message);
     ui.notifications.error("Не удалось выдать ресурс. Подробности в консоли.");
   }
 },
@@ -801,7 +801,7 @@ async _giveStoredItem({ holdingId, expectedRevision, itemId = "", qty = 1, actor
     ui.notifications.info(result.message);
   } catch (error) {
     console.error("FBL Skyhold | Failed to give stored item", error);
-    if (error?.code === COMMAND_ERROR.TIMEOUT) return ui.notifications.warn(error.message);
+    if ([COMMAND_ERROR.TIMEOUT, COMMAND_ERROR.OUTCOME_UNKNOWN].includes(error?.code)) return ui.notifications.warn(error.message);
     ui.notifications.error("Не удалось выдать предмет. Подробности в консоли.");
   }
 },

@@ -39,8 +39,14 @@ export function refundProductionInputs(holding, receipt, lost, outputQty, {
           if (!rest) break;
         }
         if (rest) throw new Error("Production input receipt is incomplete.");
-        addResource(holding, { ...entry.resource, batches }, qty);
-        refunded.push({ ...entry.resource, qty });
+        const placements = addResource(holding, { ...entry.resource, batches }, qty);
+        if (Array.isArray(placements)) {
+          for (const placement of placements) {
+            refunded.push({ ...entry.resource, qty: placement.qty, roomId: placement.roomId });
+          }
+        } else {
+          refunded.push({ ...entry.resource, qty });
+        }
       }
     }
   }

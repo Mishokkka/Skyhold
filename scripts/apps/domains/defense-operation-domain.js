@@ -1,6 +1,6 @@
 import { resourceLabel } from "../../core/resources.js";
 import { hiddenBuildingIds, hiddenStorageRoomIds, residentHasHiddenWork } from "../../data/access-guard.js";
-import { evaluateDefenseSquad, isAvailableDefenseResident, MANAGER_SQUAD_TYPE_PROFILES } from "../../data/military-resident-rules.js";
+import { evaluateDefenseSquad, isAvailableDefenseResident, MANAGER_SQUAD_TYPE_PROFILES, militarySupplyResourceForArmament } from "../../data/military-resident-rules.js";
 import { stableDataHash } from "../../data/storage-commit.js";
 import { indexStorageRows, resolveStorageRow } from "../../engines/storage/row-identity.js";
 
@@ -9,6 +9,14 @@ export const DEFENSE_OPERATIONS = new Set([
   "assignDefenseArmament", "unassignDefenseArmament", "disbandDefenseSquad", "fillDefenseSquad", "editDefense"
 ]);
 export const DEFENSE_SQUAD_CHANGED = "Отряд изменился или недоступен. Откройте действие заново.";
+export const DEFENSE_ARMAMENT_IN_USE = "Отряд уже получил припасы на этот бой. Снять комплект или изменить тип припасов можно после боя.";
+
+export function defenseArmamentInUse(holding, squad) {
+  const battle = holding.gm?.massCombat;
+  return Boolean(battle?.battleId && battle.militarySupplyBattleId === battle.battleId
+    && battle.militarySuppliesConsumed && !["terminal", "aftermath", "archived"].includes(battle.phase)
+    && (battle.militarySuppliedSquadIds ?? []).includes(String(squad.id)));
+}
 
 function squadResidentIds(squad) {
   return [squad.sergeantId, ...(squad.memberIds ?? []).slice(0, 4)].filter(Boolean).map(String);
@@ -137,8 +145,12 @@ export function applyDefenseOperation(holding, operation, { requester, logic }) 
       : fillDefenseSquad(holding, squad, logic, hiddenBuildings);
   }
 
+  const armamentInUse = defenseArmamentInUse(holding, squad);
   if (type === "assignDefenseArmament") {
     if (squad.armamentResourceId === resourceId) return { ok: true, unchanged: true };
+    if (armamentInUse && militarySupplyResourceForArmament(squad.armamentResourceId) !== militarySupplyResourceForArmament(resourceId)) {
+      return { ok: false, message: DEFENSE_ARMAMENT_IN_USE };
+    }
     const hiddenRooms = hiddenStorageRoomIds(holding, requester.isGM);
     const stockById = indexStorageRows(holding.storage?.resources);
     const payment = logic._storagePay(holding, [{ resourceId, qty: 1 }], {
@@ -164,6 +176,7 @@ export function applyDefenseOperation(holding, operation, { requester, logic }) 
     return { ok: true, message: "Отряд расформирован." };
   }
 
+  if (armamentInUse) return { ok: false, message: DEFENSE_ARMAMENT_IN_USE };
   if (!squad.armamentResourceId) return { ok: false, message: "У отряда нет закреплённого вооружения." };
   returnArmament(holding, squad, operationId, "Комплект снят с отряда", logic);
   squad.armamentResourceId = "";

@@ -53,7 +53,7 @@ export function indexStorageLots(rows, onlyRowId = "") {
   return index;
 }
 
-/** A contract that recorded different materials for one pair requires that discriminator in every run. */
+/** Contracts that recorded different materials for one pair require that discriminator in every run. */
 export function conflictingStorageLotKeys(cargo = []) {
   const materialByKey = new Map();
   const conflicts = new Set();

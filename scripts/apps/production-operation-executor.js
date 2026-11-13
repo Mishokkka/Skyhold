@@ -42,7 +42,11 @@ export async function executeProductionOperation(raw, { userId, remote }, { upda
     if (!cancelled.ok) fail(cancelled.reason);
     if (cancelled.noop && operation.type !== "deleteProductionLine") return skipTransaction(cancelled);
     if (operation.type === "deleteProductionLine") building.productionLines.splice(index, 1);
-    const summary = `${building.name || "Здание"}: ${operation.type === "deleteProductionLine" ? "линия удалена" : operation.batchId ? "выбранная партия отменена" : "партии отменены, линия остановлена"}. ${cancelled.expired ? "Просроченные партии списаны без возврата сырья." : `Пригодное сырьё возвращено: ${cancelled.refunds.map((row) => `${row.name} ${row.qty}`).join(", ") || "нет"}.${cancelled.discardedQty ? ` Испорчено сырья: ${cancelled.discardedQty}.` : ""}${cancelled.expiredBatches ? ` Просроченных партий списано: ${cancelled.expiredBatches}.` : ""}`} Затраченный труд не возвращается.`;
+    const returned = cancelled.refunds.map((row) => {
+      const placement = user.isGM && row.resourceId !== "money" ? ` → ${logic._storageRoomLabel(holding, row.roomId)}` : "";
+      return `${row.name} ${row.qty}${placement}`;
+    }).join(", ");
+    const summary = `${building.name || "Здание"}: ${operation.type === "deleteProductionLine" ? "линия удалена" : operation.batchId ? "выбранная партия отменена" : "партии отменены, линия остановлена"}. ${cancelled.expired ? "Просроченные партии списаны без возврата сырья." : `Пригодное сырьё возвращено: ${returned || "нет"}.${cancelled.discardedQty ? ` Испорчено сырья: ${cancelled.discardedQty}.` : ""}${cancelled.expiredBatches ? ` Просроченных партий списано: ${cancelled.expiredBatches}.` : ""}`} Затраченный труд не возвращается.`;
     appendHoldingOperation(holding, { type: "construction-cancellation", operationId: operation.operationId, createdAt: now().toISOString(),
       title: "Производственная партия", summary, payload: { kind: "production", signature, actorId: userId, refunds: cancelled.refunds } });
     return { ok: true, summary };

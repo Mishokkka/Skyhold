@@ -11,6 +11,7 @@ import { hiddenStorageRoomIds } from "../data/access-guard.js";
 import { holdingPermissionContext } from "../data/holding-permissions.js";
 import { createWriteQueue } from "../data/write-queue.js";
 import { isActorStorageTransfer } from "../data/constants.js";
+import { COMMAND_ERROR } from "../data/command-result.js";
 import { MAX_STORAGE_BATCH_ROWS, STORAGE_BATCH_TOO_LARGE } from "../engines/storage/row-identity.js";
 
 const STORAGE_OPERATION_TYPES = new Set([
@@ -103,6 +104,15 @@ function holdingAllowsOperation(holding, user) {
   return holding.visibility !== "gm" && holding?.gm?.playersCanUseStorage === true;
 }
 
+function storageOperationSignature(operation) {
+  // Older receipts serialized an omitted revision as zero after normalizing twice.
+  return JSON.stringify({ ...operation, expectedRevision: operation.expectedRevision ?? 0 });
+}
+
+function matchingStorageReceipt(receipt, signature, userId) {
+  return receipt?.type === "system" && receipt.payload?.signature === signature && receipt.payload.userId === String(userId);
+}
+
 function hasCompletedOperation(holding, operationId) {
   return (holding?.storage?.log ?? []).some((entry) => String(entry?.operationId ?? "") === operationId);
 }
@@ -137,7 +147,8 @@ export function createStorageOperationExecutor({
       ? globalThis.game.users.contents.find((user) => String(user?.id ?? "") === String(userId ?? ""))
       : null),
   getActor = (actorId) => globalThis.game?.actors?.get?.(actorId),
-  resolveUuid = resolveFoundryUuid
+  resolveUuid = resolveFoundryUuid,
+  readCommittedData = () => SkyholdData.view()
 } = {}) {
   const operationResults = new Map();
   // A rejected settings write releases the world queue before its Actor can
@@ -152,9 +163,20 @@ export function createStorageOperationExecutor({
     if (restored === false) throw operationError("Не удалось восстановить инвентарь персонажа после ошибки записи.");
   }
 
+  function readTransferOutcome(operation, signature, userId) {
+    let committed;
+    try { committed = readCommittedData(); }
+    catch (error) { console.warn("FBL Skyhold | Cannot verify the storage transfer receipt.", error); }
+    const holding = committed?.holdings?.find(row => row.id === operation.holdingId);
+    const receipt = findHoldingOperation(holding, operation.operationId);
+    return {
+      revision: Number(committed?.meta?.revision),
+      result: matchingStorageReceipt(receipt, signature, userId) ? { ...receipt.payload.result, replay: true } : null
+    };
+  }
+
   async function executeOnce(operation, { userId = "" } = {}) {
-    // Older receipts serialized an omitted revision as zero after normalizing twice.
-    const signature = JSON.stringify({ ...operation, expectedRevision: operation.expectedRevision ?? 0 });
+    const signature = storageOperationSignature(operation);
     const requester = getUser(userId);
     if (!requester) throw operationError("Storage operation requester was not found.");
     const defense = DEFENSE_OPERATIONS.has(operation.type);
@@ -167,6 +189,7 @@ export function createStorageOperationExecutor({
     }
 
     let actorMutation = null;
+    let transferRevision;
     try {
       const result = await updateHolding(operation.holdingId, async (holding, data) => {
         const allowed = defense ? holdingPermissionContext(holding, { user: requester }).mayEditDefense
@@ -177,8 +200,7 @@ export function createStorageOperationExecutor({
         }
         const prior = findHoldingOperation(holding, operation.operationId);
         if (prior || hasCompletedOperation(holding, operation.operationId)) {
-          if (prior?.type !== "system" || prior.payload?.signature !== signature
-            || prior.payload?.userId !== String(userId)) {
+          if (!matchingStorageReceipt(prior, signature, userId)) {
             throw operationError("Storage operation id is already used by another or unverifiable operation.");
           }
           return skipTransaction({ ...prior.payload.result, duplicate: true, replay: true });
@@ -311,6 +333,7 @@ export function createStorageOperationExecutor({
 
         if (!applied?.ok) return skipTransaction(applied);
         actorMutation = applied.actorMutation ?? null;
+        transferRevision = Math.max(0, Number(data?.meta?.revision) || 0);
         return recordStorageResult(holding, operation, applied, signature, userId);
       }, { fallback: false, localAuthority: true, reason: `storage-operation:${operation.type}` });
 
@@ -318,6 +341,12 @@ export function createStorageOperationExecutor({
       return result;
     } catch (error) {
       if (actorMutation) {
+        const outcome = readTransferOutcome(operation, signature, userId);
+        if (outcome.result) return outcome.result;
+        if (error?.code === COMMAND_ERROR.OUTCOME_UNKNOWN || outcome.revision > transferRevision) {
+          throw Object.assign(new Error(`Исход обмена ${operation.operationId} не подтверждён. Сверьте склад и инвентарь персонажа перед повтором.`,
+            { cause: error }), { code: COMMAND_ERROR.OUTCOME_UNKNOWN });
+        }
         try {
           await compensateActorMutation(actorMutation);
         } catch (compensationError) {
@@ -338,7 +367,15 @@ export function createStorageOperationExecutor({
     if (operationResults.has(operation.operationId)) {
       const cached = operationResults.get(operation.operationId);
       if (cached.signature !== signature) throw operationError("Storage operation id is already used by another operation.");
-      return cached.promise;
+      try { return await cached.promise; }
+      catch (error) {
+        if (error?.code === COMMAND_ERROR.OUTCOME_UNKNOWN) {
+          // A retry can acknowledge a late receipt without repeating the Actor mutation.
+          const { result } = readTransferOutcome(operation, storageOperationSignature(operation), context.userId);
+          if (result) return result;
+        }
+        throw error;
+      }
     }
     const pending = enqueueOperation(() => executeOnce(operation, context));
     operationResults.set(operation.operationId, { signature, promise: pending });
@@ -346,7 +383,7 @@ export function createStorageOperationExecutor({
     try {
       return await pending;
     } catch (error) {
-      operationResults.delete(operation.operationId);
+      if (error?.code !== COMMAND_ERROR.OUTCOME_UNKNOWN) operationResults.delete(operation.operationId);
       throw error;
     }
   };

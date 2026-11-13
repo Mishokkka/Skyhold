@@ -390,7 +390,7 @@ function validatePlayerPatchSemantics(current, proposed, action, holdingIndex, p
   const immutablePath = paths.find((path) => isPlayerImmutablePath(path));
   if (immutablePath) return { ok: false, error: `Игрок не может менять служебный идентификатор: ${immutablePath}` };
 
-  const duplicateIdError = validateUniqueRowIds(nextHolding);
+  const duplicateIdError = validateUniqueRowIds(holding, nextHolding);
   if (duplicateIdError) return { ok: false, error: duplicateIdError };
   const identityError = validateRowIdentityChanges(holding, nextHolding);
   if (identityError) return { ok: false, error: identityError };
@@ -524,18 +524,28 @@ function isPlayerImmutablePath(path = "") {
   return /^(buildings\.list|people\.list|special\.list|storage\.resources|storage\.items)\.\d+\.(id|templateId)$/.test(rest);
 }
 
-function validateUniqueRowIds(holding = {}) {
+function validateUniqueRowIds(holding, nextHolding) {
   const checks = [
-    ["building", holding?.buildings?.list],
-    ["resident", holding?.people?.list],
-    ["special", holding?.special?.list],
-    ["storage resource", holding?.storage?.resources],
-    ["storage item", holding?.storage?.items]
+    ["построек", holding.buildings?.list, nextHolding.buildings?.list],
+    ["жителей", holding.people?.list, nextHolding.people?.list],
+    ["особых записей", holding.special?.list, nextHolding.special?.list],
+    ["ресурсов хранилища", holding.storage?.resources, nextHolding.storage?.resources],
+    ["предметов хранилища", holding.storage?.items, nextHolding.storage?.items]
   ];
-  for (const [label, rows] of checks) {
-    if (!Array.isArray(rows)) continue;
-    const ids = rows.map((row) => String(row?.id ?? "")).filter(Boolean);
-    if (ids.length !== new Set(ids).size) return `Повторяющийся id в списке ${label}.`;
+  for (const [label, beforeRows, afterRows] of checks) {
+    if (!Array.isArray(afterRows)) continue;
+    const byId = new Map();
+    for (const row of afterRows) {
+      const id = String(row?.id ?? "");
+      if (!id) continue;
+      if (!byId.has(id)) byId.set(id, []);
+      byId.get(id).push(row);
+    }
+    for (const [id, rows] of byId) {
+      if (rows.length < 2) continue;
+      const previous = (beforeRows ?? []).filter((row) => String(row?.id ?? "") === id);
+      if (!sameJson(previous, rows)) return `Повторяющийся ID в списке ${label}. Требуется проверка сохранения.`;
+    }
   }
   return "";
 }

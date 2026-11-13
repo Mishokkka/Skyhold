@@ -397,9 +397,9 @@ export function planMarketOutboundSale({
   return plan;
 }
 
-export function preflightMarketOutboundDispatch({ resources = [], cargoReservations = [], orderCargo = cargoReservations } = {}) {
+export function preflightMarketOutboundDispatch({ resources = [], cargoReservations = [], orderCargo = cargoReservations,
+  conflicts = conflictingStorageLotKeys(orderCargo) } = {}) {
   const lots = indexStorageLots(resources);
-  const conflicts = conflictingStorageLotKeys(orderCargo);
   const grouped = new Map();
   const sources = [];
   const stale = (rowId, batchId, qty, available = 0) => ({ ok: false, stale: true, rowId, batchId,
@@ -428,8 +428,8 @@ export function preflightMarketOutboundDispatch({ resources = [], cargoReservati
   return { ok: true, prepared, sources };
 }
 
-export function applyMarketOutboundDispatch({ resources = [], cargoReservations = [], orderCargo = cargoReservations } = {}) {
-  const preflight = preflightMarketOutboundDispatch({ resources, cargoReservations, orderCargo });
+export function applyMarketOutboundDispatch({ resources = [], cargoReservations = [], orderCargo = cargoReservations, conflicts } = {}) {
+  const preflight = preflightMarketOutboundDispatch({ resources, cargoReservations, orderCargo, conflicts });
   if (!preflight.ok) return preflight;
   for (const requirement of preflight.prepared) {
     requirement.batch.qty = whole(requirement.batch.qty) - requirement.qty;

@@ -5,6 +5,7 @@ import { countSkyholdPerformance, measureSkyholdPerformance } from "./performanc
 import { inspectStorageCommit, makeStorageCommitMeta, recoverStorageCommit, stableDataHash } from "./storage-commit.js";
 import { clone, makeId, toNumber } from "./utils.js";
 import { COMMIT_SCOPES, normalizeCommitScope } from "./commit-preparation.js";
+import { COMMAND_ERROR } from "./command-result.js";
 
 // World settings are JSON data. Hash their serializable shape so the legacy
 // hydration fallback still recognizes untouched defaults containing undefined
@@ -108,13 +109,17 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
     return settingsApi().get(MODULE_ID, key);
   }
 
-  async function writeSetting(key, value) {
+  async function writeSetting(key, value, expectedHash = stableDataHash(value)) {
     assertWriteAuthority();
     metrics.settingWrites += 1;
     metrics.writesByKey[key] = (metrics.writesByKey[key] ?? 0) + 1;
     countSkyholdPerformance("Foundry.settings.write");
     countSkyholdPerformance(`Foundry.settings.write.${key}`);
-    return settingsApi().set(MODULE_ID, key, value);
+    // An existing Setting can return its old value when Foundry vetoes the update.
+    const saved = await settingsApi().set(MODULE_ID, key, value);
+    if (stableDataHash(saved) !== expectedHash) {
+      throw new Error(`Foundry не подтвердил запись настройки ${key}.`);
+    }
   }
 
   function warnCommitProblem(inspection, splitRevision, legacyRevision, recoveryMode = "") {
@@ -175,10 +180,10 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
       }
       if (legacyHasRuntimeData(legacy)) {
         warnCommitProblem(commitInspection, splitRevision, legacyRevision, "legacy-fallback");
-        return { data: legacy };
+        return { data: legacy, unverified: true };
       }
       warnCommitProblem(commitInspection, splitRevision, legacyRevision, "unrecoverable-split");
-      return { data: split };
+      return { data: split, unverified: true };
     }
 
     // Worlds that already have skyholdData keep working: the first write after this
@@ -320,10 +325,12 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
     });
 
     let forwardToken = "";
+    let partitionsWritten = false;
     try {
       await writeSetting(SETTING_META, clone(startedMeta));
-      if (holdingsDirty) await writeSetting(SETTING_HOLDINGS, clone(next.holdings));
-      if (catalogDirty) await writeSetting(SETTING_CATALOG, clone(next.catalog));
+      if (holdingsDirty) await writeSetting(SETTING_HOLDINGS, clone(next.holdings), nextHashes.holdings);
+      if (catalogDirty) await writeSetting(SETTING_CATALOG, clone(next.catalog), nextHashes.catalog);
+      partitionsWritten = true;
 
       next.meta = makeStorageCommitMeta(startedMeta, {
         writeId,
@@ -339,14 +346,20 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
       // Report the same outcome that a reload will see. A failed final marker
       // must not trigger Actor compensation when both target partitions exist.
       let persisted;
+      const uncertain = () => Object.assign(new Error("Не удалось подтвердить исход записи настроек.", { cause: error }),
+        { code: COMMAND_ERROR.OUTCOME_UNKNOWN });
       try { persisted = readPersistedState(); }
-      catch (_readError) { throw error; }
+      catch (_readError) { throw uncertain(); }
       const { data: durable } = persisted;
       if (durable.meta?.storageCommit?.writeId !== writeId
         || durable.meta.revision !== next.meta.revision
         || !completeCommitToken(durable.meta)
         || persistedPartitionHashes.holdings !== nextHashes.holdings
-        || persistedPartitionHashes.catalog !== nextHashes.catalog) throw error;
+        || persistedPartitionHashes.catalog !== nextHashes.catalog) {
+        const observedRevision = toNumber(durable.meta?.revision, 0);
+        if (observedRevision > previousRevision || (partitionsWritten && persisted.unverified)) throw uncertain();
+        throw error;
+      }
       next.meta = durable.meta;
       forwardToken = persisted.forwardToken ?? "";
     }

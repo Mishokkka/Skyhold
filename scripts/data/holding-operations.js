@@ -1,7 +1,7 @@
 import { findHoldingIndex } from "./access-guard.js";
 import { mergeHoldingDefaults } from "./normalizers.js";
 import { assertAvailableEntityId } from "./entity-identity.js";
-import { activeTransportOrder, transportOrders, pruneCompletedTransportRuns } from "./transport/state.js";
+import { legacyActiveMarketOrders, pruneCompletedTransportRuns, transportOrderHasObligations, transportOrders } from "./transport/state.js";
 
 export function addHoldingToData(data, holding) {
   if (!Array.isArray(data.holdings)) data.holdings = [];
@@ -18,8 +18,10 @@ export function deleteHoldingFromData(data, holdingId) {
   }
 
   const holding = data.holdings.find((row) => row.id === holdingId);
-  const unfinished = transportOrders(holding).some((order) => activeTransportOrder(order)
-    || order.fundingNeededCopper > 0 || (order.ownShipId && order.status !== "cancelled" && !order.shipReleased));
+  if (legacyActiveMarketOrders(holding).length) {
+    throw Object.assign(new Error("Перед удалением сверите незавершённые заказы прежней версии в окне «Перевозки»."), { code: "transport-obligations" });
+  }
+  const unfinished = transportOrders(holding).some(transportOrderHasObligations);
   const transport = data.meta?.transportV2;
   const committedRun = (transport?.runs ?? []).some((run) => run.claims.some((claim) => claim.holdingId === holdingId)
     && (run.status === "booked" || run.incident?.status === "pending" || run.releaseQd > transport.clockQd));

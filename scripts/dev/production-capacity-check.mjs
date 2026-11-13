@@ -102,6 +102,21 @@ export async function checkProductionCapacity() {
   assert.equal(restored.qty, 10);
   assert.deepEqual(restored.batches, returnedBatches, "refund must retain the actual receipt batches and age");
 
+  const refundToFullRoom = fixture(config, { resourceId: "wood", qty: 10, roomId: "locker" });
+  await advance(refundToFullRoom, 1);
+  refundToFullRoom.buildings.list.push({ id: "locker", name: "Кладовая", constructionStatus: "built",
+    functions: { storage: true }, storage: { capacity: 4 } });
+  const full = refundToFullRoom.storage.resources.find(row => row.resourceId === "wood");
+  full.qty = 8;
+  full.batches = [{ id: "replacement", qty: 8, ageQd: 0 }];
+  assert.equal(storage._storageRooms(refundToFullRoom).find(row => row.id === "locker").free, 0);
+  const refund = cancelProductionBatch(refundToFullRoom, lineOf(refundToFullRoom), adapters);
+  assert.equal(refund.ok, true);
+  assert.equal(full.qty, 8, "cancellation cannot overfill a room that was used while materials were reserved");
+  assert.deepEqual(refund.refunds.map(({ roomId, qty }) => [roomId, qty]), [["outdoors", 10]],
+    "the cancellation report must identify where the refunded materials were actually placed");
+  assert.equal(refundToFullRoom.storage.resources.find(row => row.roomId === "outdoors")?.batches[0].ageQd, 1);
+
   const economics = productionLineEconomics({ source: "workers", outputQty: 10, workQd: 10, batchCapacity: 20,
     expenses: "wood 10", fixedExpenses: "wood 2", resourceId: "stone" }, { wageDailyCopper: 18 }, { batchQty: 5 });
   assert.equal(economics.qty, 5);
@@ -208,7 +223,9 @@ async function checkQueueAuthority() {
     const command = { type: "cancelProductionBatch", operationId: "cancel-one", expectedRevision: 5,
       holdingId: original.id, buildingId: original.buildings.list[0].id, lineId: lineOf(original).id,
       batchId: lineOf(original).waitingBatches[0].id };
-    assert.equal((await executeProductionOperation(command, { userId: "player", remote: true }, deps)).ok, true);
+    const playerResult = await executeProductionOperation(command, { userId: "player", remote: true }, deps);
+    assert.equal(playerResult.ok, true);
+    assert.doesNotMatch(playerResult.summary, /→/, "the player acknowledgment must not disclose warehouse placement");
     assert.equal(lineOf(data.holdings[0]).waitingBatches.length, 1);
     assert.equal(lineOf(data.holdings[0]).active, true, "Cancel one does not pause other batches");
     assert.equal(quantity(data.holdings[0], "wood"), 3);
@@ -220,7 +237,9 @@ async function checkQueueAuthority() {
     await assert.rejects(executeProductionOperation({ ...command, operationId: "forbidden", expectedRevision: 6 }, { userId: "player", remote: true }, deps), /Нет права/);
     const deleteCommand = { ...command, operationId: "delete-all", type: "deleteProductionLine", expectedRevision: 6 };
     delete deleteCommand.batchId;
-    assert.equal((await executeProductionOperation(deleteCommand, { userId: "gm", remote: false }, deps)).ok, true);
+    const gmResult = await executeProductionOperation(deleteCommand, { userId: "gm", remote: false }, deps);
+    assert.equal(gmResult.ok, true);
+    assert.match(gmResult.summary, /→/u, "the GM acknowledgment identifies where the material was returned");
     assert.equal(data.holdings[0].buildings.list[0].productionLines.length, 0);
     assert.equal(quantity(data.holdings[0], "wood"), 6, "Deletion returns all remaining receipts once");
     globalThis.game.user.isGM = false;

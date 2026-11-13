@@ -10,6 +10,7 @@ import { normalizeLastEventRoll } from "../../../data/event-automation.js";
 import { adjustResidentAttributesForAgeTransition, ageGroupFromAge, ageThresholdsFor, raceKeyFromResident } from "../../../generators/resident-rules.js";
 import { isResidentInPopulation } from "../../../data/resident-presence.js";
 import { buildingServiceBlockReasons } from "../../../engines/economy/building-service.js";
+import { financePeriodIdentity } from "../../../engines/economy/finance-period.js";
 import { buildingCompositionStatus, workerMatchesCompositionRequirement } from "../../../engines/workers/building-qualification.js";
 import { SCHOOL_MILESTONE_REPORT_PREFIX } from "../../../engines/tenday/operation-payload.js";
 import { addCalendariaQd, calendariaDateKey, formatCalendariaDateTime, getCalendariaSnapshot, parseCalendariaDateInput, timestampForCalendariaDate } from "../../../integrations/calendaria-bridge.js";
@@ -198,8 +199,10 @@ async _prepareTendayOperation({ holdingId = "", qd = 40, rationUnitsPerResident 
   // A game year is 240 days; count boundaries even when time advances by one day.
   const beforeAgeQd = Math.max(0, Number(sourceSnapshot?.gm?.calendaria?.lastQd) || 0);
   const elapsedYears = Math.floor((beforeAgeQd + periodQd) / 960) - Math.floor(beforeAgeQd / 960);
-  const localAging = !calendariaGate.snapshot?.available && elapsedYears > 0 ? this._advanceResidentAges(previewHolding, elapsedYears) : null;
-  const calendarAdvance = this._commitCalendariaEconomyAdvance(previewHolding, calendariaGate);
+  const agingOptions = { schoolPeriodKey: financePeriodIdentity(previewHolding, periodQd).periodKey };
+  const localAging = !calendariaGate.snapshot?.available && elapsedYears > 0
+    ? this._advanceResidentAges(previewHolding, elapsedYears, agingOptions) : null;
+  const calendarAdvance = this._commitCalendariaEconomyAdvance(previewHolding, calendariaGate, agingOptions);
   const aging = calendarAdvance?.aging ?? localAging;
   if (aging?.changed) rawReport.work.push(`Возрастные категории изменились: ${aging.changed}.`);
   if (aging?.educated) rawReport.work.unshift(...aging.education);
@@ -348,10 +351,10 @@ _advanceResidentRecovery(holding, days = 0) {
   return { recovered };
 },
 
-_advanceResidentAges(holding, years = 1) {
+_advanceResidentAges(holding, years = 1, { schoolPeriodKey = "" } = {}) {
   const count = Math.max(0, Math.floor(this._safeNumber(years, 0)));
   if (!count) return { aged: 0, changed: 0 };
-  const school = this._schoolEducationContext(holding);
+  const school = this._schoolEducationContext(holding, schoolPeriodKey);
   let aged = 0;
   let changed = 0;
   const education = [];
@@ -393,13 +396,14 @@ _advanceResidentAges(holding, years = 1) {
   return { aged, changed, educated: education.length, education };
 },
 
-_schoolEducationContext(holding) {
+_schoolEducationContext(holding, periodKey) {
   const teachers = new Set();
   let publicSchool = false;
   for (const building of holding?.buildings?.list ?? []) {
     const id = `${String(building?.id ?? "")} ${String(building?.templateId ?? "")}`.toLowerCase();
     const name = String(building?.name ?? "").toLowerCase();
     if (building.functions?.culture !== true || !(id.includes("school") || name.includes("школ"))) continue;
+    if (!periodKey || building.serviceState?.periodKey !== periodKey) continue;
     const service = buildingServiceBlockReasons(holding, building, "culture");
     if (!service.active) continue;
     const adults = service.workforce.workers.filter((person) => ageGroupFromAge(person.age, person.race, person.subrace) !== "Ре");
@@ -484,7 +488,7 @@ _checkCalendariaEconomyAdvance(holding, qd = 0) {
   return { ok: true, snapshot, targetDateTime, targetTimestamp };
 },
 
-_commitCalendariaEconomyAdvance(holding, gate = {}) {
+_commitCalendariaEconomyAdvance(holding, gate = {}, agingOptions = {}) {
   const snapshot = gate.snapshot ?? getCalendariaSnapshot();
   if (!snapshot.available) return { available: false, aging: null, dateTime: null, timestamp: null };
   if (!holding.gm) holding.gm = {};
@@ -493,7 +497,7 @@ _commitCalendariaEconomyAdvance(holding, gate = {}) {
   const dateTime = gate.targetDateTime ?? snapshot.dateTime;
   let aging = null;
   if (previous && dateTime && Number.isFinite(Number(previous.year)) && Number.isFinite(Number(dateTime.year)) && Number(dateTime.year) > Number(previous.year)) {
-    aging = this._advanceResidentAges(holding, Math.max(1, Math.floor(Number(dateTime.year) - Number(previous.year))));
+    aging = this._advanceResidentAges(holding, Math.max(1, Math.floor(Number(dateTime.year) - Number(previous.year))), agingOptions);
   }
   const timestamp = Number.isFinite(gate.targetTimestamp) ? gate.targetTimestamp : snapshot.timestamp;
   holding.gm.calendaria.lastDateTime = dateTime ? (foundry?.utils?.deepClone?.(dateTime) ?? JSON.parse(JSON.stringify(dateTime))) : null;

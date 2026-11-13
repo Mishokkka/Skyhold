@@ -1,5 +1,5 @@
-import { activeTransportOrder, expireTransportReservation, remainingTransportCargo, transportOrders } from "../data/transport/state.js";
-import { conflictingStorageLotKeys, indexStorageLots, matchingStorageLots } from "../engines/storage/row-identity.js";
+import { activeTransportOrder, expireTransportReservation, outboundStorageLotConflicts, remainingTransportCargo, transportOrders } from "../data/transport/state.js";
+import { indexStorageLots, matchingStorageLots } from "../engines/storage/row-identity.js";
 
 export const MAX_RESOURCE_BATCHES = 8;
 export const INTERNAL_DEMAND_BATCH_COOLDOWN_QD = 40;
@@ -206,7 +206,9 @@ function nextBatchId(row = {}, makeId = null, holding = null, excludedIds = []) 
   const ids = new Set([...excludedIds, ...(row.batches ?? []).map((batch) => String(batch.id))]);
   for (const batch of productionReservedBatches(holding)) ids.add(String(batch.id));
   for (const id of protectedResourceBatchIds(holding, row)) ids.add(id);
-  for (const id of activePeriods.get(holding)?.oldBatchIds ?? []) ids.add(id);
+  const period = activePeriods.get(holding);
+  for (const id of period?.oldBatchIds ?? []) ids.add(id);
+  for (const id of period?.birthSteps.keys() ?? []) ids.add(id);
   if (typeof makeId === "function") {
     for (let attempt = 0; attempt < 10; attempt += 1) {
       const id = String(makeId("batch", 12) ?? "").trim();
@@ -235,20 +237,19 @@ export function reservedResourceBatchQuantities(holding, row = {}) {
   const result = new Map();
   const resourceId = String(row?.resourceId ?? "").trim();
   const storedRows = holding?.storage?.resources;
-  let sources;
+  let sources, conflicts;
   let stored;
   const transports = transportOrders(holding).filter((order) => activeTransportOrder(order) && order.direction === "outbound")
-    .map((order) => ({ cargoReservations: remainingTransportCargo(order), orderCargo: order.cargo }));
+    .map((order) => ({ cargoReservations: remainingTransportCargo(order) }));
   for (const order of [...(holding?.special?.market?.outbound?.orders ?? []), ...transports]) {
     if (terminal.has(String(order?.status ?? "")) || String(order?.dispatchStatus ?? "booked") !== "booked") continue;
     const reservations = order?.cargoReservations ?? order?.cargo ?? [];
-    let conflicts;
     for (const cargo of reservations) {
       if (String(cargo?.rowId ?? cargo?.storageRowId ?? "").trim() !== rowId) continue;
       const id = String(cargo?.batchId ?? "").trim();
       const qty = whole(cargo?.qty, 0);
       if (!id || !qty) continue;
-      conflicts ??= conflictingStorageLotKeys(order.orderCargo ?? reservations);
+      conflicts ??= outboundStorageLotConflicts(holding);
       if (!sources) {
         sources = indexStorageLots(storedRows, rowId);
         stored = Array.isArray(storedRows) && storedRows.includes(row);
@@ -317,6 +318,8 @@ export function addResourceBatches(row = {}, input = {}, {
   if (!explicitBatches && incoming.length === 1) {
     incoming[0].id = nextBatchId(row, makeId, holding);
     incoming[0].ageQd = whole(input.ageQd, 0);
+    const availableFrom = whole(input.internalDemandAvailableFromQd, 0);
+    if (availableFrom) incoming[0].internalDemandAvailableFromQd = availableFrom;
     const state = activePeriods.get(holding);
     if (state?.currentStep !== null && state?.currentStep !== undefined) state.birthSteps.set(incoming[0].id, state.currentStep + 1);
   }

@@ -71,6 +71,22 @@ for (const shared of [false, true]) {
   assert.equal(data.holdings.length, 1);
 }
 
+{
+  const a = holding("legacy-holding"), b = holding("other-holding");
+  const order = { id: "old-order", status: "pending" };
+  const data = { meta: {}, holdings: [a, b] };
+  a.special.market.orders = [order];
+  const before = structuredClone(data);
+  assert.throws(() => deleteHoldingFromData(data, a.id), /прежней версии/);
+  assert.deepEqual(data, before, "deletion must preserve a pending legacy delivery and the other holding");
+  a.special.market.orders = [];
+  a.special.market.outbound = { orders: [{ ...order, status: "booked" }] };
+  assert.throws(() => deleteHoldingFromData(data, a.id), /прежней версии/);
+  a.special.market.outbound.orders[0].status = "cancelled";
+  deleteHoldingFromData(data, a.id);
+  assert.deepEqual(data.holdings, [b], "terminal legacy history must not block deletion");
+}
+
 // Independent check: coalescing equal warehouse rows must not invalidate frozen source references.
 {
   const h = holding("coalescing"), data = { meta: {}, holdings: [h], catalog: {} }, state = ensureTransportState(data);
@@ -121,6 +137,40 @@ for (const expireBread of [false, true]) {
     ...(expireBread ? [] : [["bread", -2, "pantry"]]), ["stone", -3, "outdoors"]
   ], "saved mixed orders dispatch and log only the actual debits from each source room");
   assert.equal(order.status, "delivered");
+}
+
+{
+  const h = holding("split-contracts");
+  const data = { meta: {}, holdings: [h], catalog: {} };
+  const state = ensureTransportState(data);
+  h.storage.resources = [
+    { id: "same-row", resourceId: "meat", roomId: "outdoors", qty: 1, batches: [{ id: "same-lot", qty: 1, ageQd: 18 }] },
+    { id: "same-row", resourceId: "wood", roomId: "outdoors", qty: 1, batches: [{ id: "same-lot", qty: 1, ageQd: 0 }] }
+  ];
+  const services = [service()];
+  for (const { resourceId } of h.storage.resources) {
+    const shipment = { ...cargo(1)[0], lotId: resourceId, rowId: "same-row", batchId: "same-lot", resourceId };
+    bookTransportOrder({ state, holding: h, services, direction: "outbound", id: `sale-${resourceId}`,
+      plan: planTransportChain({ cargo: [shipment], services, runs: state.runs }) });
+  }
+  const [meatOrder, woodOrder] = h.special.transportV2.orders;
+  // A warehouse split already expired the meat lot. A later closure pass must not
+  // treat the identically keyed wood as that meat order's source.
+  finishResourceBatchPeriod(h, { elapsedQd: 4, shelfLifeQdForRow: row => row.resourceId === "meat" ? 20 : 0 });
+  assert.equal(meatOrder.sourceSpoiledPending?.meat, 1);
+  h.storage.resources = h.storage.resources.filter(row => row.qty > 0);
+  assert.equal(reservedResourceBatchQuantities(h, h.storage.resources[0]).get("same-lot"), 1);
+  // Old records can have an empty lot removed before a spoilage mark was recorded.
+  delete meatOrder.sourceSpoiledPending;
+  assert.equal(reservedResourceBatchQuantities(h, h.storage.resources[0]).get("same-lot"), 1,
+    "the orphaned meat booking cannot also reserve the wood");
+  assert.throws(() => advanceTransportShipments(data, h, meatOrder.plan.arrivalQd, {}),
+    /Reserved outbound cargo changed/, "a missing source must stop before debiting the wood for the meat order");
+  assert.equal(h.storage.resources[0].qty, 1);
+  assert.equal(woodOrder.dispatched.wood ?? 0, 0);
+  woodOrder.status = "cancelled";
+  assert.equal(reservedResourceBatchQuantities(h, h.storage.resources[0]).size, 0,
+    "cancelled orders retain evidence of an ambiguous physical source without reserving anything");
 }
 
 // A4: reconstruct all balances, not just the first holding's dated recovery lots.

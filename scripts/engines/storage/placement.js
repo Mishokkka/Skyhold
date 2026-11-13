@@ -72,11 +72,13 @@ export function addStorageWithOverflow({ holding, resource = {}, qty = 0, depend
     const arrivalShelfLifeQd = Math.max(0, Number(placedResource.arrivalShelfLifeQd) || 0);
     // A delivery may arrive partway through a long period. Check its end-of-period age
     // in the actual destination (including overflow) before production or food can use it.
-    if (arrivalShelfLifeQd && Array.isArray(placedResource.batches)) {
+    if (arrivalShelfLifeQd) {
       const room = rooms.find((candidate) => candidate.id === roomId) ?? {};
       const lifetime = arrivalShelfLifeQd * storageEffectiveShelfLifeMultiplier(room, placedResource);
-      placedResource.batches = placedResource.batches.filter((batch) => Number(batch.ageQd) < lifetime);
-      accepted = placedResource.batches.reduce((sum, batch) => sum + batch.qty, 0);
+      if (Array.isArray(placedResource.batches)) {
+        placedResource.batches = placedResource.batches.filter((batch) => Number(batch.ageQd) < lifetime);
+        accepted = placedResource.batches.reduce((sum, batch) => sum + batch.qty, 0);
+      } else if (Number(placedResource.ageQd) >= lifetime) accepted = 0;
     }
     delete placedResource.arrivalShelfLifeQd;
     if (accepted) deps.storageAdd(holding, placedResource, accepted);

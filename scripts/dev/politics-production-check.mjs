@@ -3,7 +3,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { clone } from "../data/utils.js";
 import { mergeHoldingDefaults } from "../data/normalizers.js";
-import { FinanceDomain } from "../apps/domains/finance-domain.js";
+import { SkyholdWorkflowService } from "../workflows/skyhold-workflow-service.js";
 import { runProductionCycle } from "../engines/economy/production-cycle.js";
 import { refundProductionInputs } from "../engines/economy/production-inputs.js";
 import { politicsProductionOutcome, setPoliticsRuntimeEffects } from "../engines/politics/runtime-effects.js";
@@ -13,7 +13,7 @@ import { stableDataHash } from "../data/storage-commit.js";
 import { cancelProductionBatch } from "../engines/economy/production-cancellation.js";
 import { createConstructionOperationExecutor } from "../apps/construction-operation-executor.js";
 
-const storage = { ...FinanceDomain, _safeNumber: (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback };
+const storage = new SkyholdWorkflowService();
 const quantity = (holding, resourceId) => holding.storage.resources.filter((row) => row.resourceId === resourceId).reduce((sum, row) => sum + row.qty, 0);
 const report = () => ({ produced: [], consumed: [], skipped: [], formulas: [], work: [], ledger: [] });
 

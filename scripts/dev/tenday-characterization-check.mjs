@@ -236,7 +236,9 @@ function checkSchoolResolutionMilestone() {
       { id: "child", name: "Ученик", age: 5, race: "Человек", dead: false, attributes: { ...attributes }, educationMilestones: [], notes: "" },
       { id: "teacher", name: "Учитель", background: "Учитель", age: 30, race: "Человек", dead: false, injuredDays: 0 }
     ] },
-    buildings: { list: [{ id: "school-1", templateId: "school", constructionStatus: "built", workersMin: 1, assignedWorkerIds: ["teacher"], functions: { culture: true } }] },
+    buildings: { list: [{ id: "school-1", templateId: "school", constructionStatus: "built", workersMin: 1,
+      assignedWorkerIds: ["teacher"], functions: { culture: true },
+      serviceState: { functionId: "culture", periodKey: "tenday:24", active: true, activeWorkerIds: ["teacher"], workedQd: 4 } }] },
     finance: {},
     log: []
   };
@@ -247,7 +249,8 @@ function checkSchoolResolutionMilestone() {
       return Number.isFinite(parsed) ? parsed : fallback;
     }
   };
-  const result = harness._advanceResidentAges(holding, 1);
+  const period = { schoolPeriodKey: "tenday:24" };
+  const result = harness._advanceResidentAges(holding, 1, period);
   assert.equal(result.educated, 1, "a working paid School must create one GM resolution at the first human childhood milestone");
   assert.deepEqual(holding.people.list[0].attributes, attributes, "School must never mutate attributes or traits automatically");
   assert.deepEqual(holding.people.list[0].educationMilestones, ["child-third-1"]);
@@ -267,17 +270,26 @@ function checkSchoolResolutionMilestone() {
     functionId: "culture", periodKey: "tenday:24", active: false, activeWorkerIds: [],
     workedQd: 0, reason: "Служба не работала в этом десятнике."
   };
-  assert.equal(harness._advanceResidentAges(structuredClone(staffHolding), 1).educated, 0,
+  assert.equal(harness._advanceResidentAges(structuredClone(staffHolding), 1, period).educated, 0,
     "a filled staff slot must not produce an education milestone when cultural service stopped");
   school.serviceState = {
     ...school.serviceState, active: true, activeWorkerIds: ["teacher"], workedQd: 4
   };
-  assert.equal(harness._advanceResidentAges(structuredClone(staffHolding), 1).educated, 1,
+  assert.equal(harness._advanceResidentAges(structuredClone(staffHolding), 1, period).educated, 1,
     "the current staff school must create a milestone when it actually teaches");
+  const planOnly = structuredClone(staffHolding);
+  delete planOnly.buildings.list[0].serviceState;
+  assert.equal(harness._advanceResidentAges(planOnly, 1, period).educated, 0,
+    "a staffing forecast cannot grant a milestone without a trace from the completed period");
+  const staleTrace = structuredClone(staffHolding);
+  assert.equal(harness._advanceResidentAges(staleTrace, 1, { schoolPeriodKey: "tenday:25" }).educated, 0,
+    "the earlier paid school period cannot stand in for the one that crosses the birthday boundary");
+  assert.equal(harness._advanceResidentAges(structuredClone(staffHolding), 1, period).educated, 1,
+    "the same trace grants the milestone on its actual boundary");
   const hiddenSchool = structuredClone(staffHolding);
   hiddenSchool.people.list[0].notes = "Публичная заметка";
   hiddenSchool.buildings.list[0].visibility = "gm";
-  const privateAging = harness._advanceResidentAges(hiddenSchool, 1);
+  const privateAging = harness._advanceResidentAges(hiddenSchool, 1, period);
   assert.equal(privateAging.educated, 1, "visibility does not disable an operating school");
   assert.match(privateAging.education[0], /Ученик.*первая треть детства/, "the GM report receives the resident and the milestone");
   assert.equal(hiddenSchool.log[0].payload.resolutionKind, "school-milestone");
@@ -288,11 +300,11 @@ function checkSchoolResolutionMilestone() {
   mixedStaff.people.list.push({ id: "trainee", name: "Грамотный подросток", age: 14, race: "Человек", background: "Учитель" });
   applyStaffAppointment(mixedStaff, "trainee", { buildingId: school.id, primaryFunctionId: "culture", wageDailyCopper: 10 });
   mixedStaff.buildings.list[0].serviceState.activeWorkerIds.push("trainee");
-  assert.equal(harness._advanceResidentAges(mixedStaff, 1).educated, 0,
+  assert.equal(harness._advanceResidentAges(mixedStaff, 1, period).educated, 0,
     "a literate child and an unqualified adult cannot combine into one teacher");
 
   child.shipAssignment = { shipId: "ship", away: true };
-  const away = harness._advanceResidentAges(staffHolding, 1);
+  const away = harness._advanceResidentAges(staffHolding, 1, period);
   assert.equal(away.educated, 0, "a child away at sea ages without attending school");
   assert.equal(child.age, 6);
 }

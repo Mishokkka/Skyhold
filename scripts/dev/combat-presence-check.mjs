@@ -87,6 +87,39 @@ for (const background of ["Бывший офицер", "Сержант гарн�
   assert.equal(defenseSquadProfile(draft).effective, 8.14, "a lower personal score can still make the strongest leader");
 }
 
+{
+  const draft = structuredClone(trained);
+  const squad = draft.gm.defense.squads[0];
+  draft.gm.massCombat = { battleId: "fighting", phase: "active", round: 2,
+    militarySupplyBattleId: "fighting", militarySuppliesConsumed: true, militarySuppliedSquadIds: [squad.id] };
+  const action = { type: "unassignDefenseArmament", squadId: squad.id, operationId: "unequip", expectedSquadHash: stableDataHash(squad) };
+  const logic = {
+    _storageAddWithOverflow(_holding, row, qty) { return [{ roomId: row.roomId, qty }]; },
+    _appendStorageLog() {}
+  };
+  const before = structuredClone(draft);
+  for (const isGM of [true, false]) {
+    const requester = { isGM };
+    assert.equal(applyDefenseOperation(draft, action, { requester, logic }).ok, false,
+      "a supplied squad cannot remove its kit while the battle is active");
+    const incompatible = { ...action, type: "assignDefenseArmament", resourceId: "armament-simple" };
+    assert.equal(applyDefenseOperation(draft, incompatible, { requester, logic }).ok, false,
+      "a supplied squad cannot switch to a different ammunition type between rounds");
+    assert.deepEqual(draft, before);
+  }
+  const squadView = roster._defenseContext(draft).squads[0];
+  assert.equal(squadView.armamentLocked, true);
+  assert.deepEqual(squadView.armamentOptions.filter(option => option.disabled).map(option => option.value), ["armament-simple"]);
+  logic._storagePay = (_holding, costs) => ({ ok: true, costs: costs.map(row => ({ ...row, roomId: "outdoors" })) });
+  logic._normalizeStorageRoomId = id => id;
+  const compatible = { ...action, type: "assignDefenseArmament", resourceId: "armament-complex" };
+  assert.equal(applyDefenseOperation(draft, compatible, { requester: { isGM: true }, logic }).ok, true);
+  assert.equal(squad.armamentResourceId, "armament-complex", "a kit using the same type of ammunition remains compatible");
+  draft.gm.massCombat.phase = "terminal";
+  assert.equal(applyDefenseOperation(draft, { ...action, expectedSquadHash: stableDataHash(squad) },
+    { requester: { isGM: true }, logic }).ok, true, "a concluded battle releases the kit for ordinary warehouse operations");
+}
+
 const medical = { people: { list: [{ id: "doctor", injuredDays: 0, shipAssignment: { shipId: "ship", away: true } }] },
   buildings: { list: [{ id: "hospital", specialKind: "medical", constructionStatus: "built", assignedWorkerIds: ["doctor"] }] } };
 assert.equal(medicalSupport(medical).capacity, 0, "absent doctors cannot treat settlement casualties");

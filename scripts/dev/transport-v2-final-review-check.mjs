@@ -13,7 +13,7 @@ import { bindSharedMarkets, sharedMarketEventTenday } from "../data/market/share
 import { prepareTransportContext } from "../apps/domains/transport-context.js";
 import { prepareMarketAuthorityContext } from "../apps/market/authority-context.js";
 import { createTransportOperationExecutor } from "../apps/transport-operation-executor.js";
-import { finishResourceBatchPeriod } from "../core/resource-batches.js";
+import { beginResourceBatchPeriod, finishResourceBatchPeriod } from "../core/resource-batches.js";
 
 globalThis.game = { user: { id: "gm", isGM: true }, users: [{ id: "gm", isGM: true, active: true }],
   settings: { get: () => undefined }, modules: new Map(), time: { worldTime: 0 }, socket: { emit() {} } };
@@ -69,6 +69,23 @@ await check("incoming item stacks use capacity at unloading", () => {
   const entry = holding.storage.log.find(row => row.kind === "transport-purchase");
   assert.equal(entry?.roomId, "outdoors", "the journal identifies the actual destination");
   assert.match(entry?.note, /переполнение: Кладовая/);
+});
+
+await check("incoming resource lots with pre-aged arrivals keep their freshness through tenday close", () => {
+  const { data, holding, workflow } = fixture();
+  const oldBatch = { id: "batch-1", qty: 1, ageQd: 20 };
+  holding.storage.resources = [{ id: "old-food", resourceId: "meat", roomId: "outdoors", qty: 1, batches: [oldBatch] }];
+  const services = [service({ firstQd: 30, travelQd: 2 })];
+  const purchased = lot({ lotId: "fresh-meat", resourceId: "meat", qty: 2, shelfLifeQd: 20 });
+  bookTransportOrder({ state: data.meta.transportV2, holding, services, direction: "inbound", id: "buy-meat",
+    plan: planTransportChain({ cargo: [purchased], services, startQd: 28 }) });
+  beginResourceBatchPeriod(holding);
+  advanceTransportShipments(data, holding, 40, workflow, { deferInternalDemand: true });
+  const result = finishResourceBatchPeriod(holding, { elapsedQd: 40, shelfLifeQdForRow: () => 20 });
+  assert.equal(result.expiredQty, 1, "only the preexisting lot should spoil");
+  const remaining = holding.storage.resources.flatMap(row => row.batches);
+  assert.deepEqual(remaining.map(({ qty, ageQd, internalDemandAvailableFromQd }) => [qty, ageQd, internalDemandAvailableFromQd]),
+    [[2, 12, 40]], "age includes time since dispatch and the tail of the tenday exactly once");
 });
 
 async function period(f) {

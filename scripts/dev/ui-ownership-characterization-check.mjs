@@ -115,7 +115,10 @@ export async function checkUiOwnership() {
     const settings = new Map([[SETTING_META, clone(data.meta)], [SETTING_HOLDINGS, clone(data.holdings)],
       [SETTING_CATALOG, clone(data.catalog)], [SETTING_DATA, clone(data)]]);
     const storage = createSkyholdSplitStorage({ settings: { get: (_module, key) => clone(settings.get(key)),
-      set: async (_module, key, value) => settings.set(key, clone(value)) } });
+      set: async (_module, key, value) => {
+        settings.set(key, clone(value));
+        return clone(value);
+      } } });
     const view = storage.getDataView();
     assert.throws(() => { view.holdings[0].name = "illegal"; }, TypeError);
     const mutable = storage.getData(); mutable.holdings[0].name = "draft";
@@ -207,7 +210,7 @@ export async function checkUiOwnership() {
     let authorityChecks = 0;
     const interruptedWrites = [];
     const interrupted = createSkyholdSplitStorage({ settings: { get: (_module, key) => clone(settings.get(key)),
-      set: async (_module, key) => { interruptedWrites.push(key); } }, assertWriteAuthority() {
+      set: async (_module, key, value) => { interruptedWrites.push(key); return clone(value); } }, assertWriteAuthority() {
       if (++authorityChecks > 1) throw Object.assign(new Error("authority changed"), { code: "authority-offline" });
     } });
     const interruptedDraft = interrupted.getData(); interruptedDraft.holdings[0].name = "interrupted";

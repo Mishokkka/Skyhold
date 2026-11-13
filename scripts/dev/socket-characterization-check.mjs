@@ -70,6 +70,17 @@ export async function checkSocketCharacterization() {
     guardHolding.storage.moneyCopper = 10;
     guardHolding.storage.resources = [{ id: "wood", resourceId: "wood", name: "Wood", qty: 2 }];
     guardHolding.storage.items = [{ id: "sword", name: "Sword", qty: 1 }];
+    const legacyWarehouse = clone(guardCurrent);
+    legacyWarehouse.holdings[0].storage.resources.push({ id: "wood", resourceId: "stone", name: "Stone", qty: 4 });
+    const legacyEdit = clone(legacyWarehouse);
+    legacyEdit.holdings[0].overview.description = "Updated overview";
+    assert.equal(validatePlayerPatch(legacyWarehouse, buildPlayerPatch(legacyWarehouse, legacyEdit), "player-1").ok, true,
+      "existing warehouse ID collisions must not prevent an unrelated player edit");
+    legacyWarehouse.holdings[0].gm.playersCanEditSpecial = true;
+    const duplicateSpecial = clone(legacyWarehouse);
+    duplicateSpecial.holdings[0].special.list = [{ id: "twice", name: "One" }, { id: "twice", name: "Two" }];
+    assert.equal(validatePlayerPatch(legacyWarehouse, buildPlayerPatch(legacyWarehouse, duplicateSpecial), "player-1").ok, false,
+      "an ordinary patch may not create duplicate identities in an editable list");
     const forbiddenGenericMutations = [
       ["treasury money", (draft) => { draft.holdings[0].storage.moneyCopper = 999; }],
       ["stored resources", (draft) => { draft.holdings[0].storage.resources[0].qty = 999; }],

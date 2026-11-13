@@ -482,6 +482,21 @@ for (const isGM of [true, false]) {
   assert.equal(outbound.offers[0].availableStock, isGM ? 12 : 6);
 }
 
+const actorJournal = structuredClone(warehouse);
+actorJournal.storage.log.push(
+  { kind: "manual-spend", source: "Выдача Foundry", roomId: "outdoors", qty: -1,
+    note: "получатель: Скрытый персонаж", operationId: "private-withdraw" },
+  { kind: "manual-add", source: "Предмет Foundry", roomId: "outdoors", qty: 1,
+    note: "из Скрытый персонаж · переполнение: Тайная кладовая", operationId: "private-deposit" }
+);
+for (const isGM of [true, false]) {
+  game.user.isGM = isGM;
+  const visible = manager._storageLogRows(actorJournal).filter(row => row.operationId.startsWith("private-"));
+  assert.equal(visible.length, 2, "the shared warehouse still shows the receipt and expense");
+  assert.equal(JSON.stringify(visible).includes("Скрытый персонаж"), isGM, "a public warehouse cannot reveal a private Foundry Actor");
+  assert.match(visible.find(row => row.operationId === "private-deposit").note, /переполнение/);
+}
+
 const ambiguousExport = structuredClone(warehouse);
 ambiguousExport.storage.resources[1].id = ambiguousExport.storage.resources[0].id;
 for (const isGM of [true, false]) {

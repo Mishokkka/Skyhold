@@ -52,6 +52,16 @@ const PUBLIC_STORAGE_SOURCES = new Set([
 ]);
 const MANUAL_STORAGE_LOG_KINDS = new Set(["manual-add", "manual-spend"]);
 
+function publicStorageLogNote(row, visibleRoomNames) {
+  const note = String(row.note ?? "");
+  if (row.source === "Выдача Foundry" && note.startsWith("получатель: ")) return "";
+  if ((row.source === "Предмет Foundry" || row.source === "Инвентарь Foundry") && note.startsWith("из ")) {
+    return note.includes(" · переполнение: ") ? "переполнение" : "";
+  }
+  return note.replace(/(^| · |; |, )переполнение: ([\s\S]*)$/u,
+    (match, prefix, label) => visibleRoomNames.has(label) ? match : `${prefix}переполнение`);
+}
+
 function tendayStorageSourceIds(holding, rows, keyFor) {
   const requested = new Set(rows.map((row) => row.operationId).filter(Boolean));
   const sources = new Map();
@@ -141,8 +151,7 @@ _storageLogRows(holding, roomsArg = null) {
       }
     }
     // Legacy generated notes store the intended room as text. Only known public room names survive in a player view.
-    const note = isGM ? row.note : String(row.note ?? "").replace(/(^| · |; |, )переполнение: ([\s\S]*)$/u,
-      (match, prefix, label) => visibleRoomNames.has(label) ? match : `${prefix}переполнение`);
+    const note = isGM ? row.note : publicStorageLogNote(row, visibleRoomNames);
     return {
       ...row,
       resourceId: id,
@@ -302,7 +311,7 @@ _storageAdd(holding, resource = {}, qty = 0) {
   if (amount > 0) {
     const input = Object.prototype.hasOwnProperty.call(resource, "batches")
       ? { batches: resource.batches }
-      : { qty: amount, ageQd: resource.ageQd };
+      : { qty: amount, ageQd: resource.ageQd, internalDemandAvailableFromQd: resource.internalDemandAvailableFromQd };
     addResourceBatches(row, input, { holding, makeId });
   } else takeResourceBatches(row, Math.abs(amount), { holding, makeId });
   return row;
@@ -380,16 +389,26 @@ _restoreProductionResource(holding, resource, qty) {
   const exact = previousId ? resolveStorageRow(holding.storage.resources, previousId).row : null;
   const roomId = this._normalizeStorageRoomId(resource.roomId ?? resource.storageRoomId);
   const samePolicy = exact && storageResourceStackKey(exact) === storageResourceStackKey({ ...resource, roomId });
-  const existing = samePolicy ? exact : (storageResourceId(resource) === "custom"
-    ? null : this._findCompatibleStorageStack(holding, resource, roomId));
-  if (existing) return this._storageAdd(holding, { ...resource, storageRowId: existing.id }, qty);
-
-  // The receipt preserves the ingredient and its age. Its former row can now hold another resource.
+  const custom = storageResourceId(resource) === "custom";
   const occupied = holding.storage.resources.some((row) => row.id === previousId);
-  const id = previousId && !occupied ? previousId : makeId("res", 12);
-  const row = normalizeResourceRow({ ...resource, rowId: id, roomId, qty: 0, batches: [] });
-  holding.storage.resources.push(row);
-  return this._storageAdd(holding, { ...resource, storageRowId: id }, qty);
+  const dependencies = this._storagePlacementDependencies();
+  return addStorageWithOverflow({
+    holding, resource: { ...resource, roomId }, qty,
+    dependencies: {
+      ...dependencies,
+      storageAdd: (draft, placed, amount) => {
+        const originalRoom = placed.roomId === roomId;
+        const existing = originalRoom && samePolicy ? exact
+          : custom ? null : this._findCompatibleStorageStack(draft, placed, placed.roomId);
+        // Only the original room can reclaim the receipt's row ID.
+        const id = existing?.id || (originalRoom && previousId && !occupied ? previousId : makeId("res", 12));
+        if (!existing) {
+          draft.storage.resources.push(normalizeResourceRow({ ...placed, rowId: id, qty: 0, batches: [] }));
+        }
+        return this._storageAdd(draft, { ...placed, storageRowId: id }, amount);
+      }
+    }
+  });
 },
 
 _storageResourceMatchesGroup(row = {}, groupId = "") {

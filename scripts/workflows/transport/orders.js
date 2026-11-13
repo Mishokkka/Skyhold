@@ -6,7 +6,7 @@ import { internalDemandBatchClockQd, nextInternalDemandBatchAvailabilityQd } fro
 import { cargoValue } from "../../engines/transport/quantities.js";
 import { stableDataHash } from "../../data/storage-commit.js";
 import { beginTransportShip, advanceTransportShip, recordTransportShipIncome } from "./ships.js";
-import { ensureTransportState, pruneCompletedTransportRuns } from "../../data/transport/state.js";
+import { ensureTransportState, outboundStorageLotConflicts, pruneCompletedTransportRuns } from "../../data/transport/state.js";
 import { sharedMarketEventTenday, advanceSharedMarketClock } from "../../data/market/shared-context.js";
 import { recordTransportClock, transportHoldingQd, transportLocalQd } from "../../data/transport/clock.js";
 
@@ -47,6 +47,7 @@ export function advanceTransportShipments(data, holding, targetQd, workflow, { l
     }
     return result;
   };
+  let sourceConflicts;
   const report = advanceTransportOrders({ state, holding, targetQd: commonTargetQd, dependencies: {
     dispatchCargo(order, cargo, atQd) {
       const available = cargo.map((lot) => {
@@ -55,7 +56,8 @@ export function advanceTransportShipments(data, holding, targetQd, workflow, { l
         return { ...lot, qty: lot.qty - spoiled };
       }).filter((lot) => lot.qty > 0);
       const dispatched = check(applyMarketOutboundDispatch({
-        resources: holding.storage.resources, cargoReservations: available, orderCargo: order.cargo
+        resources: holding.storage.resources, cargoReservations: available,
+        conflicts: sourceConflicts ??= outboundStorageLotConflicts(holding)
       }));
       // Warehouse batches already reflect all completed economy periods. Add only the open interval.
       for (const lot of cargo) {
@@ -103,7 +105,7 @@ export function advanceTransportShipments(data, holding, targetQd, workflow, { l
         } else {
           const placements = workflow._storageAddWithOverflow(holding, { ...lot, roomId: order.commercial.targetRoomId,
             arrivalShelfLifeQd: lot.shelfLifeQd,
-            batches: [{ qty: lot.qty, ageQd: lot.ageQd + Math.max(0, commonTargetQd - atQd), internalDemandAvailableFromQd: availableFromQd }] }, lot.qty);
+            ageQd: lot.ageQd + Math.max(0, commonTargetQd - atQd), internalDemandAvailableFromQd: availableFromQd }, lot.qty);
           for (const placement of placements ?? [{ qty: lot.qty, roomId: order.commercial.targetRoomId }]) {
             if (placement.qty) entries.push({ kind: "transport-purchase", resourceId: lot.resourceId, name: lot.name, qty: placement.qty,
               roomId: placement.roomId, source: order.commercial.marketLabel, operationId: order.id });

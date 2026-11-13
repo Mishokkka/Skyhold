@@ -88,18 +88,28 @@ export function transportCargoReservations(holding) {
     .flatMap(remainingTransportCargo);
 }
 
+/** A legacy collision can be recorded across separate contracts as well as within one. */
+export function outboundStorageLotConflicts(holding) {
+  // A completed contract can still explain a collision for a pending one.
+  const legacy = holding?.special?.market?.outbound?.orders ?? [];
+  const v2 = transportOrders(holding).filter(order => order.direction === "outbound");
+  return conflictingStorageLotKeys([
+    ...legacy.flatMap(order => order.cargoReservations ?? order.cargo ?? []),
+    ...v2.flatMap(order => order.cargo ?? [])
+  ]);
+}
+
 export function expireTransportReservation(holding, row, batch) {
   const rowId = String(row?.id ?? "").trim();
   const batchId = String(batch?.id ?? "").trim();
   if (!rowId || !batchId) return;
-  let sources;
+  let sources, conflicts;
   for (const order of transportOrders(holding)) {
     if (!activeTransportOrder(order) || order.direction !== "outbound") continue;
-    let conflicts;
     for (const lot of order.cargo ?? []) {
       if (String(lot.rowId ?? lot.storageRowId ?? "").trim() !== rowId || String(lot.batchId ?? "").trim() !== batchId) continue;
       sources ??= indexStorageLots(holding?.storage?.resources, rowId);
-      conflicts ??= conflictingStorageLotKeys(order.cargo);
+      conflicts ??= outboundStorageLotConflicts(holding);
       const { matches } = matchingStorageLots(sources, lot, conflicts);
       if (matches.length !== 1 || matches[0].row !== row || matches[0].batch !== batch) continue;
       order.sourceSpoiledPending ??= {};
