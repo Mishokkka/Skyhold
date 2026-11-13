@@ -99,11 +99,31 @@ export function hasSergeantTraining(person = {}) {
     && [attrs.strength, attrs.agility, attrs.wits, attrs.empathy].some((value) => number(value) >= 5);
 }
 
+function isDefenseInjured(person) {
+  if (Object.hasOwn(person, "injuredDays")) return number(person.injuredDays) > 0;
+  return /ранен|тяжело|сломлен|injured|wound/i.test(String(person.status ?? ""));
+}
+
 export function isAvailableDefenseResident(person, holding) {
-  if (!person || !isResidentInPopulation(person, holding) || number(person.injuredDays) > 0) return false;
-  if (!Object.hasOwn(person, "injuredDays") && /ранен|тяжело|сломлен|injured|wound/i.test(String(person.status ?? ""))) return false;
+  if (!person || !isResidentInPopulation(person, holding) || isDefenseInjured(person)) return false;
   const ageGroup = person.ageGroup ?? (person.age == null ? "" : ageGroupFromAge(person.age, person.race, person.subrace));
   return ageGroup !== "Ре";
+}
+
+export function commandPercentFromEffectiveness(effectiveness = 0) {
+  return Math.min(5, Math.max(0, number(effectiveness))) * 0.05;
+}
+
+export function commanderEffectiveness(person = {}) {
+  if (!person || person.dead || isDefenseInjured(person)) return 0;
+  const attrs = person.attributes ?? {};
+  const experience = [person.background, person.traitsText ?? person.traits];
+  // The derived title is a result of appointment, not a leadership trait.
+  const leadership = /(лидер|командир|офицер|тактик|стратег|харизмат|авторитет|leader|commander|officer|tactician|strategist)/i
+    .test(experience.concat(person.notes, person.workerTypeLabel, person.type).join(" "));
+  const military = experience.some((background) => hasMilitaryServiceBackground({ background }));
+  const value = (number(attrs.wits) + number(attrs.empathy)) / 2 + Number(military) + Number(leadership);
+  return Math.min(5, Math.max(0, Math.round(value * 100) / 100));
 }
 
 /** The defense roster and the battle use one calculation, without loading the battle window. */
@@ -124,6 +144,8 @@ export function evaluateDefenseSquad(squad, availablePeopleById, { supplied = fa
     base += efficiency;
     if (id === first && hasSergeantTraining(person)) sergeantBonus = 0.10;
   }
-  const effective = Math.round(base * (1 + sergeantBonus) * (supplied ? 1.20 : 1) * 100) / 100;
-  return { combatants, effective, sergeantBonus, ready: effective >= DEFENSE_SQUAD_MIN_EFFICIENCY };
+  const baseEffective = base * (1 + sergeantBonus);
+  const effective = Math.round(baseEffective * (supplied ? 1.20 : 1) * 100) / 100;
+  const ready = Math.round(baseEffective * 100) / 100 >= DEFENSE_SQUAD_MIN_EFFICIENCY;
+  return { combatants, effective, sergeantBonus, ready };
 }

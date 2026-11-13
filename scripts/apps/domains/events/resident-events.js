@@ -3,6 +3,7 @@ import { SkyholdData, requestShipOperation } from "../../../data/store.js";
 import { findReadableHoldingEntry, hiddenBuildingIds, residentHasHiddenWork } from "../../../data/access-guard.js";
 import { addCollectionRow, deleteCollectionRow } from "../../../data/collection-operations.js";
 import { holdingPermissionContext } from "../../../data/holding-permissions.js";
+import { isPlayerWritablePath } from "../../../data/player-write-guard.js";
 import { stableDataHash } from "../../../data/storage-commit.js";
 import { isPublicSpecialNote } from "../../../core/special-effects.js";
 import { normalizeBelief } from "../../../generators/resident-rules.js";
@@ -17,6 +18,7 @@ import { residentTraitTooltip } from "../../common/resident-trait-chips.js";
 import { confirmBuildingWorkerAdmission } from "../../common/building-worker-admission.js";
 import { transferResidentBetweenHoldings, vacatePoliticsRepresentative } from "../../../data/resident-assignments.js";
 import { staffAppointmentFor } from "../../../data/hybrid-labor.js";
+import { normalizePerson } from "../../../data/normalizers/resident.js";
 
 const RESIDENT_CONTEXT_MENU_WIDTH = 230;
 const RESIDENT_CONTEXT_MENU_HEIGHT = 150;
@@ -35,8 +37,53 @@ function residentScope(data, { holdingId, personId }) {
 }
 
 function residentScopedPath(scope, path) {
-  const field = String(path ?? "").match(/^holdings\.\d+\.people\.list\.\d+\.(.+)$/)?.[1];
+  const field = residentFieldPath(path);
   return field && scope.person ? `holdings.${scope.holdingIndex}.people.list.${scope.personIndex}.${field}` : "";
+}
+
+function residentFieldPath(path) {
+  return String(path ?? "").match(/^holdings\.\d+\.people\.list\.\d+\.(.+)$/)?.[1] ?? "";
+}
+
+export function canWriteResidentEditorField(data, scope, permissions, path) {
+  const field = residentFieldPath(path);
+  const scopedPath = residentScopedPath(scope, path);
+  if (!scopedPath) return false;
+  if (permissions.isGM) return true;
+  if (/^(home|role|workAssignment|workAllocationMode|workAllocations)(?:\.|$)/.test(field) && !permissions.canEditBuildings) return false;
+  return isPlayerWritablePath(scopedPath, data, data);
+}
+
+const editorDraftSources = new WeakMap();
+
+export function captureResidentEditorDraft(editor, person) {
+  if (!editor || !person) return;
+  const fields = [...editor.querySelectorAll("[data-field]"), ...editor.querySelectorAll("[data-work-allocation-target]")];
+  const work = editor.querySelector("[data-work-assignment-field]");
+  if (work) fields.push(work);
+  editorDraftSources.set(editor, { person: structuredClone(person), fields: new Map(fields.map((field) => [field, fieldValue(field)])) });
+}
+
+function residentDraftValue(person, path) {
+  if (path === "workAssignment") return String(staffAppointmentFor(person)?.buildingId ?? person.workAssignment ?? "");
+  return path.split(".").reduce((value, key) => value?.[key], person);
+}
+
+function resolveResidentDraftUpdate(update, renderedPerson, person) {
+  const renderedField = residentFieldPath(update.path);
+  const allocation = /^workAllocations\.(\d+)\.(.+)$/.exec(renderedField);
+  let field = renderedField;
+  if (allocation) {
+    const id = renderedPerson.workAllocations?.[Number(allocation[1])]?.id;
+    const rows = person.workAllocations ?? [];
+    const matching = id ? rows.filter((row) => row.id === id) : [];
+    if (matching.length !== 1) return null;
+    field = `workAllocations.${rows.indexOf(matching[0])}.${allocation[2]}`;
+  }
+  const before = residentDraftValue(renderedPerson, renderedField);
+  const current = residentDraftValue(person, field);
+  if (!field || (!Object.is(before, current) && !Object.is(update.value, current))) return null;
+  return { ...update, renderedField, field, path: update.path.slice(0, -renderedField.length) + field };
 }
 
 function keepsCrewLeadership(holding, person, value) {
@@ -727,56 +774,78 @@ async _onResidentContextMenu(event) {
 
 async _savePersonEditorDraft(event) {
   const editor = event?.currentTarget?.closest?.(".fbls-person-editor.v2") ?? this.element?.querySelector?.(".fbls-person-editor.v2");
-  if (!editor) return false;
+  const baseline = editorDraftSources.get(editor);
+  if (!baseline) return false;
   const address = residentAddress(editor);
   const currentData = SkyholdData.get();
   const source = residentScope(currentData, address);
-  if (!source.person || !holdingPermissionContext(source.holding).canEditResidents) return false;
+  const permissions = holdingPermissionContext(source.holding);
+  if (!source.person || !permissions.canEditResidents) return false;
   const expected = stableDataHash(source.person);
+  const canWrite = (path) => canWriteResidentEditorField(currentData, source, permissions, path);
 
   const regularFields = Array.from(editor.querySelectorAll("[data-field]")).filter((field) => !/\.salary(?:Modifier)?$/.test(String(field.dataset.field ?? "")));
   const salaryFields = Array.from(editor.querySelectorAll("[data-field]")).filter((field) => /\.salary(?:Modifier)?$/.test(String(field.dataset.field ?? "")));
   const workField = editor.querySelector("[data-work-assignment-field]");
   const workAllocationTargetFields = Array.from(editor.querySelectorAll("[data-work-allocation-target]"));
-  const regularUpdates = [];
-  const salaryUpdates = [];
+  let regularUpdates = [];
+  let salaryUpdates = [];
   let workUpdate = null;
+  const submitted = new Map();
+  for (const [field, originalValue] of baseline.fields) {
+    if (field.disabled || field.matches?.(":disabled")) continue;
+    const value = fieldValue(field);
+    if (!Object.is(value, originalValue)) submitted.set(field, value);
+  }
+  const pathFor = (field) => field.dataset.field || field.dataset.workAssignmentField || modePath;
+  const modePath = editor.querySelector("[data-field$='.workAllocationMode']")?.dataset?.field ?? "";
+  if ([...submitted.keys()].some((field) => !canWrite(pathFor(field)))) {
+    ui.notifications.warn("Нет права сохранить изменённое поле. Черновик остался в карточке.");
+    return false;
+  }
 
   for (const field of regularFields) {
     const path = field.dataset.field;
-    if (!path || !this._canPlayerWriteFieldPath(path)) continue;
-    let value = fieldValue(field);
+    if (!submitted.has(field)) continue;
+    let value = submitted.get(field);
     if (field instanceof HTMLTextAreaElement && this._sanitizeTextBlock) value = this._sanitizeTextBlock(value);
     if (path.endsWith(".belief")) value = normalizeBelief(value);
     regularUpdates.push({ path, value });
   }
 
-  const modePath = editor.querySelector("[data-field$='.workAllocationMode']")?.dataset?.field ?? "";
   const allocationBasePath = modePath.replace(/\.workAllocationMode$/, ".workAllocations");
   for (const field of workAllocationTargetFields) {
+    if (!submitted.has(field)) continue;
     const allocationIndex = Math.max(0, Math.floor(Number(field.dataset.allocationIndex) || 0));
     const target = parseWorkAllocationTargetKey(field.value);
     for (const [key, value] of [["sourceId", target.sourceId], ["functionId", target.functionId]]) {
       const path = allocationBasePath ? `${allocationBasePath}.${allocationIndex}.${key}` : "";
-      if (!path || !this._canPlayerWriteFieldPath(path)) continue;
       regularUpdates.push({ path, value });
     }
   }
 
-  if (workField) {
+  if (workField && submitted.has(workField)) {
     const path = workField.dataset.workAssignmentField;
     const value = String(workField.value ?? "");
-    const before = String(staffAppointmentFor(source.person)?.buildingId ?? source.person.workAssignment ?? "");
-    if (path && value !== before && holdingPermissionContext(source.holding).canEditBuildings && this._canPlayerWriteFieldPath(path)) {
-      workUpdate = { path, value };
-    }
+    workUpdate = { path, value };
   }
 
   for (const field of salaryFields) {
     const path = field.dataset.field;
-    if (!path || !this._canPlayerWriteFieldPath(path)) continue;
-    salaryUpdates.push({ path, value: fieldValue(field) });
+    if (!submitted.has(field)) continue;
+    salaryUpdates.push({ path, value: submitted.get(field) });
   }
+
+  const resolve = (update) => resolveResidentDraftUpdate(update, baseline.person, source.person);
+  const changedWork = Boolean(workUpdate);
+  regularUpdates = regularUpdates.map(resolve);
+  salaryUpdates = salaryUpdates.map(resolve);
+  if (workUpdate) workUpdate = resolve(workUpdate);
+  if ((changedWork && !workUpdate) || [...regularUpdates, ...salaryUpdates].includes(null)) {
+    ui.notifications.warn("Поле или строка плана изменились в другой сессии. Скопируйте свою правку и нажмите «Обновить карточку».");
+    return false;
+  }
+  if (!regularUpdates.length && !workUpdate && !salaryUpdates.length) return true;
 
   let workDecision = { allowed: true, allowAdmissionOverride: false };
   const hidden = hiddenBuildingIds(source.holding);
@@ -805,7 +874,8 @@ async _savePersonEditorDraft(event) {
   if (workUpdate && String(previewPerson?.workAllocationMode ?? "") !== WORK_ALLOCATION_MODE_EXPLICIT) {
     workDecision = await this._workAssignmentAdmissionDecision(currentData, residentScopedPath(source, workUpdate.path), workUpdate.value, previewPerson);
     if (!workDecision.allowed) {
-      if (workField && currentPerson) workField.value = String(currentPerson.workAssignment ?? "");
+      workField.value = baseline.fields.get(workField);
+      submitted.delete(workField);
       workUpdate = null;
     }
   }
@@ -854,9 +924,12 @@ async _savePersonEditorDraft(event) {
   if (!regularUpdates.length && !workUpdate && !salaryUpdates.length) return true;
 
   const approvedBuilding = workUpdate && source.holding.buildings?.list?.find((row) => String(row.id) === workUpdate.value);
+  const updates = [...regularUpdates, ...salaryUpdates, ...(workUpdate ? [workUpdate] : [])];
   const result = await SkyholdData.transaction((data) => {
     const target = residentScope(data, address);
-    if (!target.person || stableDataHash(target.person) !== expected || !holdingPermissionContext(target.holding).canEditResidents) {
+    const currentPermissions = holdingPermissionContext(target.holding);
+    if (!target.person || stableDataHash(target.person) !== expected || !currentPermissions.canEditResidents
+      || updates.some(({ path }) => !canWriteResidentEditorField(data, target, currentPermissions, path))) {
       return SkyholdData.skipTransaction({ stale: true });
     }
     const targetBuildings = target.holding.buildings?.list ?? [];
@@ -959,11 +1032,27 @@ async _savePersonEditorDraft(event) {
       }
     }
 
-    return warnNoSlot ? SkyholdData.skipTransaction({ warnNoSlot: true }) : { saved: true };
+    if (warnNoSlot) return SkyholdData.skipTransaction({ warnNoSlot: true });
+    const person = structuredClone(target.person);
+    normalizePerson(person);
+    return { saved: true, person };
   }, { reason: "resident:save-editor-draft", scope: "holdings" });
 
   if (result?.warnNoSlot) ui.notifications.warn("Назначение недоступно. Прежняя работа сохранена.");
-  if (result?.stale) ui.notifications.warn("Житель или место работы изменились. Обновите карточку и повторите правку.");
+  if (result?.stale) ui.notifications.warn("Житель, место работы или права изменились. Скопируйте правку, обновите карточку и повторите её.");
+  if (result?.saved) {
+    const committed = result.person;
+    for (const [field, value] of submitted) baseline.fields.set(field, value);
+    for (const { field, renderedField } of updates) {
+      if (field === "workAssignment") {
+        baseline.person.workAssignment = committed.workAssignment;
+        baseline.person.staffAppointment = committed.staffAppointment;
+      } else {
+        const value = residentDraftValue(committed, field);
+        foundry.utils.setProperty(baseline.person, renderedField, value);
+      }
+    }
+  }
   return result?.saved === true;
 },
 

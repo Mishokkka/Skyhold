@@ -10,7 +10,7 @@ import { ageGroupFromAge, ageThresholdsFor, attributeSummary, normalizeBelief, r
 import { buildingOperationalState } from "../../core/building-state.js";
 import { resourceLabel } from "../../core/resources.js";
 import { stableDataHash } from "../../data/storage-commit.js";
-import { DEFENSE_ARMAMENT_IDS } from "./defense-operation-domain.js";
+import { canEnrollDefenseResident, DEFENSE_ARMAMENT_IDS } from "./defense-operation-domain.js";
 import {
   buildingConfirmedHarmActive,
   buildingConfirmedLeisureCapacity,
@@ -24,6 +24,8 @@ import { politicsRuntimeEffects } from "../../engines/politics/runtime-effects.j
 import { isResidentAway, residentShipAssignment, shipForResident, isResidentRestingOnShip, isResidentInPopulation } from "../../data/resident-presence.js";
 import {
   COMMANDER_MIN_WITS,
+  commanderEffectiveness,
+  commandPercentFromEffectiveness,
   DEFENSE_SQUAD_MIN_EFFICIENCY,
   evaluateDefenseSquad,
   hasMilitaryServiceBackground,
@@ -287,6 +289,7 @@ _defenseRenderContext(holding) {
     activePeople,
     activePeopleById: new Map(activePeople.map((person) => [String(person.id), person])),
     peopleById: new Map(livingPeople.map((person) => [String(person?.id ?? ""), person])),
+    hiddenBuildings: hiddenBuildingIds(holding),
     filteredCache: new Map(),
     efficiencyCache: new Map()
   };
@@ -308,6 +311,7 @@ _defensePersonOptions(holding, selected = "", { soldiersOnly = false, sergeantsO
   const cacheKey = `${soldiersOnly ? 1 : 0}|${sergeantsOnly ? 1 : 0}|${commandersOnly ? 1 : 0}|${String(squadType ?? "line")}`;
   if (!renderContext.filteredCache.has(cacheKey)) {
     renderContext.filteredCache.set(cacheKey, renderContext.activePeople.filter((person) => {
+      if (!canEnrollDefenseResident(holding, person, renderContext.hiddenBuildings)) return false;
       const hasProfession = this._hasSoldierProfession?.(person) === true;
       if (commandersOnly) return this._isCommanderCandidate(person);
       if (sergeantsOnly) return hasProfession && this._isSergeantCandidate(person) && this._isSuitableForSquadType(person, squadType);
@@ -320,23 +324,17 @@ _defensePersonOptions(holding, selected = "", { soldiersOnly = false, sergeantsO
   for (const person of filtered) {
     const id = String(person.id);
     if (excluded.has(id) && current !== id) continue;
-    const attrs = person?.attributes ?? {};
     const eff = this._cachedSoldierEfficiency(person, squadType, renderContext);
-    const text = [person?.type, person?.workerType, person?.role, person?.background, person?.traits, person?.notes].map((value) => String(value ?? "").toLowerCase()).join(" ");
-    const commanderEff = commandersOnly
-      ? Math.min(3, Math.max(0,
-        (this._safeNumber(attrs.wits, 0) >= COMMANDER_MIN_WITS || /команд|началь|офиц|тактик|стратег|разум|мыслител|писарь|уч[её]н|воевод|капитан/i.test(text) ? 1 : 0)
-        + (this._isMilitaryBackgroundResident(person) || this._isSoldierResident(person) ? 1 : 0)
-        + (/лидер|вожд|команд|офиц|капитан|тактик|стратег|авторитет|харизм|дисциплин/i.test(text) ? 1 : 0)))
-      : 0;
+    const commanderEff = commandersOnly ? commanderEffectiveness(person) : 0;
+    const commanderPercent = Math.round(commandPercentFromEffectiveness(commanderEff) * 100);
     const label = commandersOnly
-      ? `${person.name || "Без имени"} · ком. ${commanderEff}/3 · +${commanderEff * 7}%`
+      ? `${person.name || "Без имени"} · ком. ${commanderEff}/5 · +${commanderPercent}%`
       : `${person.name || "Без имени"} · эфф. ${this._formatNumber ? this._formatNumber(eff) : eff}${this._isSergeantCandidate(person) ? " · сержант" : ""}`;
     options.push({ value: id, label, selected: current === id, disabled: false });
   }
-  if (current && !options.some((item) => item.value === current) && !(soldiersOnly || sergeantsOnly || commandersOnly)) {
+  if (current && !options.some((item) => item.value === current)) {
     const person = renderContext.peopleById.get(current);
-    options.push({ value: current, label: `${person?.name || current} (недоступен для типа отряда)`, selected: true });
+    options.push({ value: current, label: `${person?.name || "Житель"} (недоступен)`, selected: true, disabled: true });
   }
   return options;
 },
@@ -352,43 +350,6 @@ _defenseAssignmentIds(holding) {
   return ids;
 },
 
-_sanitizeDefenseAssignments(holding) {
-  const defense = holding?.gm?.defense;
-  if (!defense || !Array.isArray(defense.squads)) return false;
-  let changed = false;
-  const people = new Map((holding?.people?.list ?? []).map((person) => [String(person.id), person]));
-  const used = new Set();
-  const commanderId = String(defense.commanderId ?? "");
-  if (commanderId) {
-    const commander = people.get(commanderId);
-    if (!commander || !this._isCommanderCandidate(commander)) {
-      defense.commanderId = "";
-      changed = true;
-    } else used.add(commanderId);
-  }
-  for (const squad of defense.squads) {
-    let squadType = String(squad?.type ?? "line");
-    if (squadType === "militia") { squadType = "line"; squad.type = "line"; changed = true; }
-    const isAllowed = (id) => {
-      const person = people.get(String(id));
-      return person && this._hasSoldierProfession?.(person) && this._isSuitableForSquadType(person, squadType) && !this._isChildResident?.(person) && !this._isResidentInjured(person) && !person.dead;
-    };
-    const first = String(squad?.sergeantId ?? "");
-    if (first && (!isAllowed(first) || used.has(first))) { squad.sergeantId = ""; changed = true; }
-    else if (first) used.add(first);
-    const members = (Array.isArray(squad.memberIds) ? squad.memberIds : []).slice(0, 4);
-    while (members.length < 4) members.push("");
-    for (let i = 0; i < members.length; i += 1) {
-      const id = String(members[i] ?? "");
-      if (!id) { members[i] = ""; continue; }
-      if (!isAllowed(id) || used.has(id)) { members[i] = ""; changed = true; }
-      else { used.add(id); members[i] = id; }
-    }
-    squad.memberIds = members;
-  }
-  return changed;
-},
-
 _defenseContext(holding) {
   const defense = holding?.gm?.defense ?? {};
   const renderContext = this._defenseRenderContext(holding);
@@ -402,8 +363,6 @@ _defenseContext(holding) {
   const squads = squadsSource.map((squad, index) => {
     const memberIds = (Array.isArray(squad.memberIds) ? squad.memberIds : []).slice(0, 4);
     const firstSlotId = String(squad.sergeantId ?? "");
-    const combatantIds = [firstSlotId, ...memberIds.map((id) => String(id ?? ""))].filter(Boolean);
-    const uniqueCombatantIds = [...new Set(combatantIds)];
     const squadType = String(squad.type ?? "line") === "militia" ? "line" : String(squad.type ?? "line");
     const { combatants, effective, sergeantBonus, ready } = evaluateDefenseSquad(squad, renderContext.activePeopleById);
     const firstSlotPerson = peopleById.get(firstSlotId);
@@ -414,7 +373,6 @@ _defenseContext(holding) {
     const equipped = Boolean(armamentResourceId);
     const counted = equipped && ready;
     const type = typeDefs[squadType] ?? typeDefs.line;
-    const excludedForSquad = allAssignedIds.filter((id) => !combatantIds.includes(String(id)));
     return {
       ...squad,
       _index: index,
@@ -426,9 +384,9 @@ _defenseContext(holding) {
       typeKey: type.counterTag ?? "infantry",
       typeHint: type.hint,
       typeOptions: Object.entries(typeDefs).map(([value, data]) => ({ value, label: data.label, selected: squadType === value })),
-      firstSlotOptions: this._defensePersonOptions(holding, squad.sergeantId, { soldiersOnly: true, excludedIds: excludedForSquad, squadType, renderContext }),
+      firstSlotOptions: this._defensePersonOptions(holding, firstSlotId, { soldiersOnly: true, excludedIds: allAssignedIds, squadType, renderContext }),
       firstSlotName: firstSlotPerson?.name ?? "—",
-      firstSlotRoleLabel: hasSergeant ? "Сержант" : "Солдат",
+      firstSlotRoleLabel: firstSlotPerson && hasSergeantTraining(firstSlotPerson) ? "Сержант" : "Солдат",
       memberSlots: Array.from({ length: 4 }, (_, slot) => {
         const id = String(memberIds[slot] ?? "");
         const person = peopleById.get(id);
@@ -467,7 +425,7 @@ _defenseContext(holding) {
     effectiveUnits: countedSquads.length,
     squadTypeSummary: Object.values(typeDefs).map((item) => `${item.label}: ${item.tag}`).join(" · "),
     equipmentCostText: "Одна единица Вооружения закрепляется за одним отрядом из пяти человек до замены, разоружения или расформирования.",
-    defenseHelpText: `Командир — взрослый военнослужащий с Разумом 4+ без ранения. Его эффективность 1–3 даёт +7%/+14%/+21% к мощи армии. В отряде до пяти мест. К бою готовы отряды с комплектом и эффективностью от ${DEFENSE_SQUAD_MIN_EFFICIENCY} у бойцов в строю. Военное прошлое даёт прибавку к личной эффективности; сержант в первом слоте с военным прошлым и характеристикой 5+ даёт отряду +10%. ${Object.values(typeDefs).map((item) => `${item.label}: ${item.tag}`).join(" · ")}. Комплект определяет тип припасов: простое вооружение требует простых, сложное и элитное — сложных. Подходящие припасы дают +20% эффективности и сохраняют теги «Стрелки» и «Осадные». Один отряд расходует одну единицу за весь бой.`
+    defenseHelpText: `Командир — взрослый военнослужащий с Разумом 4+ без ранения. Его эффективность от 0 до 5 даёт по +5% за единицу (до +25%). В отряде до пяти мест. К бою готовы отряды с комплектом и эффективностью от ${DEFENSE_SQUAD_MIN_EFFICIENCY} у бойцов в строю. Военное прошлое даёт прибавку к личной эффективности; сержант в первом слоте с военным прошлым и характеристикой 5+ даёт отряду +10%. ${Object.values(typeDefs).map((item) => `${item.label}: ${item.tag}`).join(" · ")}. Комплект определяет тип припасов: простое вооружение требует простых, сложное и элитное — сложных. Подходящие припасы дают готовому отряду +20% эффективности и сохраняют теги «Стрелки» и «Осадные». Один отряд расходует одну единицу за весь бой.`
   };
 },
 

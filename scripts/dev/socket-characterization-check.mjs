@@ -563,6 +563,35 @@ export async function checkSocketCharacterization() {
         "player patches must reject the caller if the initial send or timed retry loses its transport");
       assert.equal(attempts, failAttempt);
     }
+    {
+      const originalUsers = game.users, originalUser = game.user, originalSocket = game.socket;
+      const first = { id: "gm-1", active: true, isGM: true };
+      const second = { id: "gm-2", active: true, isGM: true };
+      const requester = { id: "gm-3", active: true, isGM: true };
+      const messages = [];
+      game.users = { contents: [first, second, requester, originalUser] };
+      game.user = requester;
+      game.socket = { emit(_channel, payload) { messages.push(payload); } };
+      try {
+        const transfer = retryApi.requestStorageOperation({ type: "withdrawResource", operationId: "actor-authority-changed" });
+        first.active = false;
+        await assert.rejects(transfer, error => error?.code === "timeout" && /Сверьте склад и инвентарь/.test(error.message));
+        assert.deepEqual(messages.map(row => row.targetGmId), ["gm-1"], "a new authority must not replay an unconfirmed Actor mutation");
+        messages.length = 0;
+        first.active = true;
+        game.user = originalUser;
+        const movement = retryApi.requestStorageOperation({ type: "batchMove", operationId: "storage-authority-changed" });
+        first.active = false;
+        await assert.rejects(movement, /timed out/);
+        assert.deepEqual(messages.map(row => [row.targetGmId, row.operation?.operationId]), [
+          ["gm-1", "storage-authority-changed"], ["gm-2", "storage-authority-changed"]
+        ], "ordinary storage retries still follow the authority without changing their ID");
+      } finally {
+        game.users = originalUsers;
+        game.user = originalUser;
+        game.socket = originalSocket;
+      }
+    }
     globalThis.game.socket = { emit(_channel, payload) { retryEmitted.push(payload); } };
     retryEmitted.length = 0;
     await assert.rejects(
@@ -574,7 +603,7 @@ export async function checkSocketCharacterization() {
         resourceId: "wood",
         qty: 1
       }),
-      /timed out/
+      error => error?.code === "timeout" && /Сверьте склад и инвентарь/.test(error.message)
     );
     assert.equal(retryEmitted.length, 2, "a timed-out storage operation must be retried once");
     assert.equal(retryEmitted[0].operation.operationId, retryEmitted[1].operation.operationId, "a retry must preserve the original operation id");

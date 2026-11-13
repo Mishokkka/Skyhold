@@ -11,6 +11,7 @@ import { adjustResidentAttributesForAgeTransition, ageGroupFromAge, ageThreshold
 import { isResidentInPopulation } from "../../../data/resident-presence.js";
 import { buildingServiceBlockReasons } from "../../../engines/economy/building-service.js";
 import { buildingCompositionStatus, workerMatchesCompositionRequirement } from "../../../engines/workers/building-qualification.js";
+import { SCHOOL_MILESTONE_REPORT_PREFIX } from "../../../engines/tenday/operation-payload.js";
 import { addCalendariaQd, calendariaDateKey, formatCalendariaDateTime, getCalendariaSnapshot, parseCalendariaDateInput, timestampForCalendariaDate } from "../../../integrations/calendaria-bridge.js";
 import {
   advanceTendayClock,
@@ -197,14 +198,11 @@ async _prepareTendayOperation({ holdingId = "", qd = 40, rationUnitsPerResident 
   // A game year is 240 days; count boundaries even when time advances by one day.
   const beforeAgeQd = Math.max(0, Number(sourceSnapshot?.gm?.calendaria?.lastQd) || 0);
   const elapsedYears = Math.floor((beforeAgeQd + periodQd) / 960) - Math.floor(beforeAgeQd / 960);
-  if (!calendariaGate.snapshot?.available && elapsedYears > 0) {
-    const aging = this._advanceResidentAges(previewHolding, elapsedYears);
-    if (aging.changed) rawReport.work.push(`Возрастные категории изменились: ${aging.changed}.`);
-    if (aging.educated) rawReport.work.push(`Школьных вех для решения ГМа — ${aging.educated}.`);
-  }
+  const localAging = !calendariaGate.snapshot?.available && elapsedYears > 0 ? this._advanceResidentAges(previewHolding, elapsedYears) : null;
   const calendarAdvance = this._commitCalendariaEconomyAdvance(previewHolding, calendariaGate);
-  if (calendarAdvance?.aging?.changed) rawReport.work.push(`Возрастные категории изменились: ${calendarAdvance.aging.changed}.`);
-  if (calendarAdvance?.aging?.educated) rawReport.work.push(`Школьных вех для решения ГМа — ${calendarAdvance.aging.educated}.`);
+  const aging = calendarAdvance?.aging ?? localAging;
+  if (aging?.changed) rawReport.work.push(`Возрастные категории изменились: ${aging.changed}.`);
+  if (aging?.educated) rawReport.work.unshift(...aging.education);
   const clock = advanceTendayClock(previewHolding, periodQd);
   advanceSharedMarketClock(previewHolding);
   const marketStockRecovery = recoverMarketStock({
@@ -356,14 +354,14 @@ _advanceResidentAges(holding, years = 1) {
   const school = this._schoolEducationContext(holding);
   let aged = 0;
   let changed = 0;
-  let educated = 0;
+  const education = [];
   for (const person of holding?.people?.list ?? []) {
     if (!person || person.dead) continue;
     const oldAge = Math.max(0, Math.floor(this._safeNumber(person.age, 0)));
     const oldGroup = ageGroupFromAge(person.age, person.race, person.subrace);
     const newAge = Math.max(0, oldAge + count);
     if (school.active && isResidentInPopulation(person, holding)) {
-      educated += this._applySchoolEducation(holding, person, oldAge, newAge, school);
+      for (const decision of this._applySchoolEducation(holding, person, oldAge, newAge, school)) education.push(decision);
     }
     person.age = newAge;
     const newGroup = ageGroupFromAge(person.age, person.race, person.subrace);
@@ -392,11 +390,12 @@ _advanceResidentAges(holding, years = 1) {
       person.notes = [String(person.notes ?? "").trim(), `${prefix}: ${transitionNotes.join("; ") || `${oldGroup} → ${newGroup}`}.`].filter(Boolean).join("\n");
     }
   }
-  return { aged, changed, educated };
+  return { aged, changed, educated: education.length, education };
 },
 
 _schoolEducationContext(holding) {
   const teachers = new Set();
+  let publicSchool = false;
   for (const building of holding?.buildings?.list ?? []) {
     const id = `${String(building?.id ?? "")} ${String(building?.templateId ?? "")}`.toLowerCase();
     const name = String(building?.name ?? "").toLowerCase();
@@ -411,10 +410,11 @@ _schoolEducationContext(holding) {
     for (const person of adults) {
       if (!composition.requirements.length || composition.requirements.some((rule) => workerMatchesCompositionRequirement(person, rule))) {
         teachers.add(person.id);
+        if (building.visibility !== "gm") publicSchool = true;
       }
     }
   }
-  return { active: teachers.size > 0, teacherCount: teachers.size };
+  return { active: teachers.size > 0, teacherCount: teachers.size, publicSchool };
 },
 
 _childEducationMilestones(person = {}) {
@@ -429,24 +429,27 @@ _childEducationMilestones(person = {}) {
 
 _applySchoolEducation(holding, person = {}, oldAge = 0, newAge = 0, school = {}) {
   const oldGroup = ageGroupFromAge(oldAge, person.race, person.subrace);
-  if (oldGroup !== "Ре") return 0;
+  if (oldGroup !== "Ре") return [];
   if (!Array.isArray(person.educationMilestones)) person.educationMilestones = [];
   const done = new Set(person.educationMilestones.map((value) => String(value)));
-  let resolutions = 0;
+  const resolutions = [];
   for (const milestone of this._childEducationMilestones(person)) {
     if (done.has(milestone.key)) continue;
     if (!(oldAge < milestone.age && newAge >= milestone.age)) continue;
     person.educationMilestones.push(milestone.key);
     const operationId = `school-milestone:${String(person?.id ?? "resident")}:${milestone.key}:${milestone.age}`;
+    const summary = `${SCHOOL_MILESTONE_REPORT_PREFIX}${person.name || "Ребёнок"} · ${milestone.label}. ГМ определяет ролевой результат. Характеристики и черты сохраняются.`;
     appendHoldingOperation(holding, {
       operationId,
       type: "system",
       title: `Решение ГМа: обучение ${person.name || "ребёнка"}`,
-      summary: `${person.name || "Ребёнок"} достиг(ла) вехи «${milestone.label}» при работающей Школе. ГМ решает ролевой результат; характеристики и черты автоматически не меняются.`,
+      summary,
       payload: { needsResolution: true, resolutionKind: "school-milestone", residentId: person.id, milestone: milestone.key, age: milestone.age, teacherCount: school.teacherCount }
     });
-    person.notes = [String(person.notes ?? "").trim(), `Школа: достигнута веха «${milestone.label}»; результат ожидает решения ГМа.`].filter(Boolean).join("\n");
-    resolutions += 1;
+    if (school.publicSchool) {
+      person.notes = [String(person.notes ?? "").trim(), `Школа: достигнута веха «${milestone.label}».`].filter(Boolean).join("\n");
+    }
+    resolutions.push(summary);
   }
   return resolutions;
 },

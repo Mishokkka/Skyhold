@@ -31,7 +31,7 @@
               <em class="fbls-chip is-compact {{statusClass}}">{{statusText}}</em>
             </div>
             <div class="fbls-defense-squad-actions">
-              {{#if ../canManageDefense}}<button type="button" class="fbls-button compact" data-action="fill-defense-squad-best" title="Назначить лучших подходящих солдат"><i class="fa-solid fa-ranking-star"></i><span>Лучшие</span></button>{{/if}}
+              {{#if ../canManageDefense}}<button type="button" class="fbls-button compact" data-action="fill-defense-squad-best" title="Подобрать самый сильный состав. Новые бойцы освобождают прежнюю работу."><i class="fa-solid fa-ranking-star"></i><span>Лучшие</span></button>{{/if}}
               {{#if ../canManageDefense}}
                 <label class="fbls-defense-equipped-toggle" title="Выдача списывает один комплект. От комплекта зависит вид припасов, а сила отряда определяется составом."><select data-defense-armament-choice aria-label="Тип вооружения для {{label}}">{{#each armamentOptions}}<option value="{{value}}" title="На бой: {{supplyLabel}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}</select><button type="button" class="fbls-button compact" data-action="assign-defense-armament"><i class="fa-solid fa-gun"></i><span>{{#if equipped}}Заменить{{else}}Выдать{{/if}}</span></button></label>
                 {{#if equipped}}<button type="button" class="fbls-button compact" data-action="unassign-defense-armament" title="Вернуть {{armamentLabel}} на склад"><i class="fa-solid fa-box-open"></i><span>Снять</span></button>{{/if}}

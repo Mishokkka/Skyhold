@@ -5,7 +5,7 @@ import { WindowFrameMixin } from "./common/window-frame.js";
 import { RenderSchedulerMixin } from "./common/render-scheduler.js";
 import { bindTabNavigation } from "./common/tab-navigation.js";
 import { focusApplicationContent } from "./common/window-focus-keeper.js";
-import { hydrateTendayOperation } from "../engines/tenday/operation-payload.js";
+import { hydrateTendayOperation, SCHOOL_MILESTONE_REPORT_PREFIX } from "../engines/tenday/operation-payload.js";
 import { normalizeFoodRationUnits } from "../engines/economy/food-rations.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -327,7 +327,9 @@ export class SkyholdTendayApp extends WindowFrameMixin(RenderSchedulerMixin(Hand
     const prepared = this.prepared;
     const stale = this._isStale(data);
     const phase = stale ? "stale" : this.phase;
-    const report = prepared?.report ?? {};
+    const rawReport = prepared?.report ?? {};
+    const report = game.user?.isGM ? rawReport : { ...rawReport, work: (rawReport.work ?? [])
+      .filter((row) => !String(row).replace(/^Десятник \d+: /u, "").startsWith(SCHOOL_MILESTONE_REPORT_PREFIX)) };
     const changeSet = prepared?.changeSet ?? {};
     const owner = this.workflow;
     const changes = {

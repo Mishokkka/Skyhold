@@ -4,6 +4,14 @@ import { conflictingStorageLotKeys, indexStorageLots, matchingStorageLots } from
 export const transportOrders = (holding) => holding?.special?.transportV2?.orders ?? [];
 export const activeTransportOrder = (order) => !["delivered", "lost", "cancelled"].includes(order.status);
 
+export function legacyActiveMarketOrders(holding) {
+  const market = holding?.special?.market;
+  return [
+    ...(market?.orders ?? []).filter(activeTransportOrder).map(order => ({ order, direction: "inbound" })),
+    ...(market?.outbound?.orders ?? []).filter(activeTransportOrder).map(order => ({ order, direction: "outbound" }))
+  ];
+}
+
 /** Read the accepted service, never a later catalog quote, for a physical run. */
 export function transportRunService(data, runId) {
   const run = data.meta?.transportV2?.runs?.find(row => row.id === runId);
@@ -30,9 +38,8 @@ export function holdingTransportLocationBlocker(holding) {
   if (transportOrders(holding).some(transportOrderHasObligations)) {
     return "Сначала завершите перевозки поселения, расчёты и возвращение транспорта перед сменой домашней точки.";
   }
-  const market = holding?.special?.market ?? {};
-  if ([...(market.orders ?? []), ...(market.outbound?.orders ?? [])].some(order => activeTransportOrder(order))) {
-    return "Сначала завершите прежние входящие доставки и продажи во Внешней торговле.";
+  if (legacyActiveMarketOrders(holding).length) {
+    return "Перед переносом завершите доставки и продажи прежней версии. ГМ может сверить их в окне «Перевозки».";
   }
   return "";
 }

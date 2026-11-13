@@ -90,15 +90,16 @@ export function advanceTransportShipments(data, holding, targetQd, workflow, { l
         if (lot.sourceType === "item") {
           if (!lot.item) throw new Error("В договоре отсутствует сохранённый предмет.");
           holding.storage.items ??= [];
-          const item = structuredClone(lot.item);
-          const rooms = workflow._storageRooms?.(holding, { includeUnavailable: true });
+          const item = { ...structuredClone(lot.item), qty: lot.qty };
           const target = order.commercial.targetRoomId;
-          const roomId = rooms && !rooms.some((room) => room.id === target && room.available) ? "outdoors" : target;
+          const roomId = !target || target === "outdoors" ? "outdoors" : workflow._storageItemDepositRoom(holding, item, target);
           if (item.itemData && typeof workflow._setItemQuantityData === "function") item.itemData = workflow._setItemQuantityData(item.itemData, lot.qty);
-          holding.storage.items.push({ ...item, id: `transport-item-${stableDataHash([order.id, lot.lotId, lot.deliveryRunId])}`, qty: lot.qty,
+          holding.storage.items.push({ ...item, id: `transport-item-${stableDataHash([order.id, lot.lotId, lot.deliveryRunId])}`,
             roomId, internalDemandAvailableFromQd: availableFromQd });
           entries.push({ kind: "transport-purchase", resourceId: "custom", name: lot.name, qty: lot.qty,
-            roomId, source: order.commercial.marketLabel, operationId: order.id });
+            roomId, source: order.commercial.marketLabel,
+            note: target && roomId !== target ? `переполнение: ${workflow._storageRoomLabel(holding, target)}` : "",
+            operationId: order.id });
         } else {
           const placements = workflow._storageAddWithOverflow(holding, { ...lot, roomId: order.commercial.targetRoomId,
             arrivalShelfLifeQd: lot.shelfLifeQd,

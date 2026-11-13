@@ -3,6 +3,7 @@ import { requestStorageOperation, SkyholdData } from "../../../data/store.js";
 import { stableDataHash } from "../../../data/storage-commit.js";
 import { findReadableHoldingEntry, hiddenStorageRoomIds } from "../../../data/access-guard.js";
 import { holdingPermissionContext } from "../../../data/holding-permissions.js";
+import { COMMAND_ERROR } from "../../../data/command-result.js";
 import { reservedResourceBatchQuantities } from "../../../core/resource-batches.js";
 import { reclassifyResourceRow } from "../../../core/resources.js";
 import { createSafeIcon, escapeHtml } from "../../../core/helpers.js";
@@ -688,6 +689,7 @@ async _onStorageDrop(event) {
     ui.notifications.info(result.message);
   } catch (error) {
     console.error("FBL Skyhold | Failed to store dropped item", error);
+    if (error?.code === COMMAND_ERROR.TIMEOUT) return ui.notifications.warn(error.message);
     ui.notifications.error("Не удалось принять предмет. Подробности в консоли.");
   }
 },
@@ -719,6 +721,7 @@ async _withdrawStoredResource({ holdingId, expectedRevision, row = null, qty = 1
     ui.notifications.info(result.message);
   } catch (error) {
     console.error("FBL Skyhold | Failed to withdraw resource", error);
+    if (error?.code === COMMAND_ERROR.TIMEOUT) return ui.notifications.warn(error.message);
     ui.notifications.error("Не удалось выдать ресурс. Подробности в консоли.");
   }
 },
@@ -798,6 +801,7 @@ async _giveStoredItem({ holdingId, expectedRevision, itemId = "", qty = 1, actor
     ui.notifications.info(result.message);
   } catch (error) {
     console.error("FBL Skyhold | Failed to give stored item", error);
+    if (error?.code === COMMAND_ERROR.TIMEOUT) return ui.notifications.warn(error.message);
     ui.notifications.error("Не удалось выдать предмет. Подробности в консоли.");
   }
 },

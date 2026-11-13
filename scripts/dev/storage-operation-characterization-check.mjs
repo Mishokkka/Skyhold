@@ -19,6 +19,7 @@ function makeActor(id, ownerId) {
     documentName: "Actor",
     ownership: { default: 0, [ownerId]: 3 },
     items: {
+      get contents() { return [...rows.values()]; },
       get(itemId) {
         return rows.get(String(itemId)) ?? null;
       }
@@ -535,6 +536,67 @@ export async function checkStorageOperationCharacterization() {
       const vetoedDeposit = await executor({ type: "depositItem", operationId: "veto-deposit", holdingId: holding.id,
         actorId: actor.id, itemId: "real-deposit", roomId: "outdoors" }, { userId: gm.id });
       assert.equal(vetoedDeposit.ok, false, "a Foundry deletion veto must not duplicate the Item in the warehouse");
+      assert.deepEqual(holding, beforeVeto);
+      assert.deepEqual(actor.itemIds(), beforeVetoItems);
+      actor.deleteEmbeddedDocuments = remove;
+
+      // A document operation can mutate its collection before an error is reported.
+      const withdraw = { type: "withdrawResource", holdingId: holding.id, actorId: actor.id, resourceId: "wood", qty: 1 };
+      const takeIn = { type: "depositItem", holdingId: holding.id, actorId: actor.id, itemId: "real-deposit" };
+      actor.createEmbeddedDocuments = async (...args) => {
+        await create.apply(actor, args);
+        throw new Error("creation reported failure after mutation");
+      };
+      await assert.rejects(executor({ ...withdraw, operationId: "post-create-failure" }, { userId: gm.id }), /creation reported failure/);
+      assert.deepEqual(actor.itemIds(), beforeVetoItems, "only the uncommitted issuance is removed");
+      actor.createEmbeddedDocuments = create;
+      actor.deleteEmbeddedDocuments = async (...args) => {
+        await remove.apply(actor, args);
+        throw new Error("deletion reported failure after mutation");
+      };
+      await assert.rejects(executor({ ...takeIn, operationId: "post-delete-failure" }, { userId: gm.id }), /deletion reported failure/);
+      assert.deepEqual(actor.itemIds(), beforeVetoItems, "the failed deposit restores the source Item");
+      assert.deepEqual(holding, beforeVeto);
+      actor.deleteEmbeddedDocuments = remove;
+
+      let markCreated, failCommit, markCompensating, finishCompensating;
+      const created = new Promise(resolve => { markCreated = resolve; });
+      const commitFailure = new Promise(resolve => { failCommit = resolve; });
+      const compensating = new Promise(resolve => { markCompensating = resolve; });
+      const compensationGate = new Promise(resolve => { finishCompensating = resolve; });
+      let attempted = 0;
+      const serialized = createStorageOperationExecutor({
+        getUser: () => gm, getActor: () => actor, skipTransaction: (value) => ({ [SKIP]: true, value }),
+        async updateHolding(_id, updater) {
+          const attempt = ++attempted;
+          const draft = clone(holding);
+          const result = await updater(draft);
+          if (attempt === 1) {
+            markCreated();
+            await commitFailure;
+            throw new Error("commit failed");
+          }
+          if (result?.[SKIP]) return result.value;
+          holding = draft;
+          return result;
+        }
+      });
+      const first = assert.rejects(serialized({ ...withdraw, operationId: "fail-then-redeposit" }, { userId: gm.id }), /commit failed/);
+      await created;
+      const itemId = actor.items.contents.find(row => row.getFlag(MODULE_ID, "storageOperationId") === "fail-then-redeposit").id;
+      actor.deleteEmbeddedDocuments = async (...args) => {
+        markCompensating();
+        await compensationGate;
+        return remove.apply(actor, args);
+      };
+      const second = serialized({ ...takeIn, itemId, operationId: "attempt-redeposit" }, { userId: gm.id });
+      failCommit();
+      await compensating;
+      const attemptsDuringCompensation = attempted;
+      finishCompensating();
+      await first;
+      assert.equal((await second).ok, false);
+      assert.equal(attemptsDuringCompensation, 1, "the next command may not resolve a temporary Item");
       assert.deepEqual(holding, beforeVeto);
       assert.deepEqual(actor.itemIds(), beforeVetoItems);
       actor.deleteEmbeddedDocuments = remove;

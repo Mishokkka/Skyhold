@@ -11,6 +11,7 @@ import { WindowFrameMixin } from "../common/window-frame.js";
 import { focusApplicationContent, restoreApplicationFocus } from "../common/window-focus-keeper.js";
 import { RenderSchedulerMixin } from "../common/render-scheduler.js";
 import { delegatedEvent } from "../common/delegated-events.js";
+import { canWriteResidentEditorField, captureResidentEditorDraft } from "../domains/events/resident-events.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
@@ -20,8 +21,12 @@ export class SkyholdResidentEditor extends WindowFrameMixin(RenderSchedulerMixin
   static open({ holdingId = "", personId = "" } = {}) {
     const existing = [...this.instances].find((app) => app.holdingId === holdingId && app.personId === personId);
     if (existing) {
-      if (existing._pendingDraftSave) focusApplicationContent(existing, { options: { focus: true }, preferredSelector: ".person-name input" });
-      else existing.render({ force: true, focus: true });
+      const state = existing._saveStatus.context.state;
+      if (existing._pendingDraftSave || state !== "saved") {
+        focusApplicationContent(existing, { options: { focus: true }, preferredSelector: ".person-name input" });
+      } else {
+        existing.render({ force: true, focus: true });
+      }
       return existing;
     }
     const app = new this({ holdingId, personId }, {
@@ -76,7 +81,9 @@ export class SkyholdResidentEditor extends WindowFrameMixin(RenderSchedulerMixin
     const data = SkyholdData.get();
     const { holding, index: holdingIndex } = findReadableHoldingEntry(data, this.holdingId, { fallback: false });
     const manager = this._manager();
-    const person = (holding?.people?.list ?? []).find((row) => String(row?.id ?? "") === this.personId);
+    const people = holding?.people?.list ?? [];
+    const matching = people.filter((row) => String(row?.id ?? "") === this.personId);
+    const person = matching.length === 1 ? matching[0] : null;
     const permissions = holdingPermissionContext(holding);
     const canEdit = Boolean(person && manager && permissions.canEditResidents);
     let prepared = null;
@@ -93,6 +100,10 @@ export class SkyholdResidentEditor extends WindowFrameMixin(RenderSchedulerMixin
       holdingIndex,
       holdingName: holding?.name || "Владение",
       person: prepared,
+      draftPerson: canEdit ? person : null,
+      canWriteField: canEdit ? (path) => canWriteResidentEditorField(data, {
+        holdingIndex, personIndex: people.indexOf(person), person
+      }, permissions, path) : () => false,
       hasPerson: Boolean(person),
       canEdit,
       canEditBuildings: permissions.canEditBuildings,
@@ -124,6 +135,16 @@ export class SkyholdResidentEditor extends WindowFrameMixin(RenderSchedulerMixin
     syncSaveStatus(root, this._saveStatus);
     this._selectionDisclosures ??= new DisclosureState();
     this._selectionDisclosures.bind(root);
+    const editor = root.querySelector(".fbls-person-editor.v2");
+    if (editor && context.canWriteField) {
+      const allocationMode = editor.querySelector("[data-field$='.workAllocationMode']")?.dataset.field;
+      for (const field of editor.querySelectorAll("[data-field], [data-work-assignment-field], [data-work-allocation-target], [data-trait-add-field], [data-traits-field]")) {
+        const { field: path, workAssignmentField, workAllocationTarget, traitAddField, traitsField } = field.dataset;
+        const allocationPath = workAllocationTarget === undefined ? "" : allocationMode;
+        if (!context.canWriteField(path || workAssignmentField || allocationPath || traitAddField || traitsField)) field.disabled = true;
+      }
+      captureResidentEditorDraft(editor, context.draftPerson);
+    }
     this._bindEditorEvents(root);
     focusApplicationContent(this, { root, options, preferredSelector: ".person-name input" });
   }
@@ -194,6 +215,15 @@ export class SkyholdResidentEditor extends WindowFrameMixin(RenderSchedulerMixin
       event.preventDefault();
       await this.close();
     }, listener));
+    root.querySelector("[data-action='reload-resident-editor']")?.addEventListener("click", async (event) => {
+      event.preventDefault();
+      const manager = this._manager({ warn: true });
+      if (!manager || this._pendingDraftSave) return;
+      if (!await manager._confirmAction("Обновить карточку", "Загрузить сохранённые данные и сбросить несохранённые правки?")) return;
+      if (this._pendingDraftSave) return;
+      this._saveStatus = new SaveStatus({ onChange: () => syncSaveStatus(this.element, this._saveStatus) });
+      await this.requestRender({ focus: false });
+    }, listener);
   }
 
   _saveDraft(element = this.element, options = {}) {

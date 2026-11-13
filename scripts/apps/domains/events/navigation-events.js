@@ -369,18 +369,6 @@ async _onFieldChange(event) {
       }, { reason: `resource-catalog:field:${path}`, scope: "catalog" });
     } else if (defenseField) {
       await this._onDefenseFieldChange(field, value);
-    } else if (/^holdings\.\d+\.gm\.defense\./.test(path) && this._sanitizeDefenseAssignments) {
-      await SkyholdData.transaction((data) => {
-        const scopedPath = this._resolveActiveHoldingScopedPath(data, path);
-        if (!scopedPath) return SkyholdData.skipTransaction(false);
-        foundry.utils.setProperty(data, scopedPath, value);
-        const match = scopedPath.match(/^holdings\.(\d+)\./);
-        const holding = data.holdings?.[Number(match?.[1] ?? -1)];
-        if (holding) {
-          this._sanitizeDefenseAssignments(holding);
-          this._applyDefenseSalaries?.(holding);
-        }
-      }, { reason: `field:${path}`, scope: "holdings" });
     } else if (/^holdings\.\d+\.people\.list\.\d+\.salaryModifier$/.test(path) && this._applyPersonSalaryForAssignment) {
       await SkyholdData.transaction((data) => {
         const scopedPath = this._resolveActiveHoldingScopedPath(data, path);

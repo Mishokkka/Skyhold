@@ -1,4 +1,4 @@
-import { MODULE_ID } from "./constants.js";
+import { isActorStorageTransfer, MODULE_ID } from "./constants.js";
 import { activeSkyholdGm } from "./authority.js";
 import { COMMAND_ERROR, commandError, commandFailure, commandResultFromPayload, commandSuccess } from "./command-result.js";
 import { prepareSkyholdCommit } from "./commit-preparation.js";
@@ -67,7 +67,7 @@ export function createSkyholdSocketApi({
   }
 
   /** Wait for one player operation, retaining its ID and accepting either tried authority. */
-  function requestPlayerOperation(operation, { requests, payload, offlineError, timeoutError }) {
+  function requestPlayerOperation(operation, { requests, payload, offlineError, timeoutError, pinAuthority = false }) {
     const requestId = operation.operationId;
     if (requests.has(requestId)) return Promise.reject(commandError(commandFailure({
       operationId: requestId, code: COMMAND_ERROR.CONFLICT, message: "Операция уже ожидает ответа."
@@ -88,8 +88,11 @@ export function createSkyholdSocketApi({
           ...payload, requestId, userId: game.user?.id ?? null, targetGmId: targetGm.id, operation
         })) return;
         pending.timeout = setTimeout(() => {
-          if (pending.attempts < 2) emitAttempt();
-          else rejectPending(timeoutError());
+          if (pending.attempts >= 2) return rejectPending(timeoutError());
+          if (!pinAuthority || activeSkyholdGm()?.id === targetGm.id) return emitAttempt();
+          // The first GM may still be applying or compensating the Actor edit.
+          // Keep listening for that result without starting a second transfer.
+          pending.timeout = setTimeout(() => rejectPending(timeoutError()), writeTimeoutMs);
         }, writeTimeoutMs);
       };
       requests.set(requestId, pending);
@@ -109,13 +112,13 @@ export function createSkyholdSocketApi({
   /**
    * Diff a proposed player root and ask the authority GM to validate the resulting patch.
    * A no-op resolves locally; retries retain the operation ID and never write player settings.
-   * @param {object} data Proposed root based on the player's current snapshot.
+   * @param {object} data Proposed root from the player's transaction.
+   * @param {object} base Snapshot from before the transaction updater ran.
    * @returns {Promise<object>} Current or acknowledged data; rejects on transport or GM failure.
    */
-  function requestGmDataPatch(data) {
-    const current = getData();
-    const patch = buildPlayerPatch(current, data);
-    if (!patch.changes.length) return Promise.resolve(current);
+  function requestGmDataPatch(data, base = getData()) {
+    const patch = buildPlayerPatch(base, data);
+    if (!patch.changes.length) return Promise.resolve(getData());
     if (!game.socket) {
       ui.notifications?.warn?.("Не удалось отправить изменение: socket Foundry недоступен.");
       return Promise.reject(commandError(commandFailure({
@@ -211,11 +214,16 @@ export function createSkyholdSocketApi({
       return Promise.reject(new Error("FBL Skyhold | No active GM is available for storage operation."));
     }
 
+    const actorTransfer = isActorStorageTransfer(operation.type);
     return requestPlayerOperation(operation, {
       requests: PENDING_STORAGE_OPERATIONS,
       payload: { type: "playerStorageOperationRequest" },
+      pinAuthority: actorTransfer,
       offlineError: () => new Error("FBL Skyhold | No active GM is available for storage operation retry."),
-      timeoutError: () => new Error("FBL Skyhold | GM storage operation timed out.")
+      timeoutError: () => actorTransfer ? commandError(commandFailure({ operationId: operation.operationId,
+        code: COMMAND_ERROR.TIMEOUT,
+        message: "Нет подтверждения обмена. Сверьте склад и инвентарь персонажа перед повтором." }))
+        : new Error("FBL Skyhold | GM storage operation timed out.")
     });
   }
 

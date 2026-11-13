@@ -202,8 +202,8 @@ export function syncResourceRowBatches(row = {}, options = {}) {
   return row;
 }
 
-function nextBatchId(row = {}, makeId = null, holding = null) {
-  const ids = new Set((row.batches ?? []).map((batch) => String(batch.id)));
+function nextBatchId(row = {}, makeId = null, holding = null, excludedIds = []) {
+  const ids = new Set([...excludedIds, ...(row.batches ?? []).map((batch) => String(batch.id))]);
   for (const batch of productionReservedBatches(holding)) ids.add(String(batch.id));
   for (const id of protectedResourceBatchIds(holding, row)) ids.add(id);
   for (const id of activePeriods.get(holding)?.oldBatchIds ?? []) ids.add(id);
@@ -319,6 +319,24 @@ export function addResourceBatches(row = {}, input = {}, {
     incoming[0].ageQd = whole(input.ageQd, 0);
     const state = activePeriods.get(holding);
     if (state?.currentStep !== null && state?.currentStep !== undefined) state.birthSteps.set(incoming[0].id, state.currentStep + 1);
+  }
+  if (explicitBatches && incoming.length && row.batches.length) {
+    const existingById = new Map(row.batches.map((batch) => [batch.id, batch]));
+    const incomingIds = new Set(incoming.map((batch) => batch.id));
+    const birthSteps = activePeriods.get(holding)?.birthSteps;
+    for (const batch of incoming) {
+      const existing = existingById.get(batch.id);
+      if (!existing) continue;
+      const sameCohort = batch.ageQd === existing.ageQd
+        && batch.internalDemandAvailableFromQd === existing.internalDemandAvailableFromQd;
+      if (sameCohort && !protectedBatchIds.has(batch.id)) continue;
+      // A moved or refunded lot may have reused a legacy ID in another row.
+      // Keep the destination's identity and freshness before any compaction.
+      const sourceId = batch.id;
+      batch.id = nextBatchId(row, makeId, holding, incomingIds);
+      incomingIds.add(batch.id);
+      if (birthSteps?.has(sourceId)) birthSteps.set(batch.id, birthSteps.get(sourceId));
+    }
   }
   row.batches.push(...incoming);
   const compact = !isResourceBatchPeriodActive(holding);

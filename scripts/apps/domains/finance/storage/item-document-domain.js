@@ -14,6 +14,10 @@ function setStorageItemFlag(itemData, key, value) {
   return itemData;
 }
 
+function storageItemFlag(item, key) {
+  return item.getFlag?.(MODULE_ID, key) ?? item.flags?.[MODULE_ID]?.[key];
+}
+
 export const FinanceStorageItemDocumentDomain = {
 _setItemQuantityData(itemData = {}, qty = 1) {
   return setItemQuantityData(itemData, qty, { clone: cloneFoundryData });
@@ -41,20 +45,26 @@ async _removeQuantityFromActorItem(item, amount = 1) {
     previousQuantity: qty,
     previousData
   };
-  if (qty > take) {
-    if (!item.update) return { ok: false };
-    const updated = await item.update(itemQuantityUpdateData(qty - take));
-    const remaining = this._itemQuantity(updated ?? actor.items?.get?.(item.id) ?? item);
-    if (remaining === qty - take) return receipt;
-    if (remaining !== qty && !await this._restoreActorItemRemoval(receipt)) {
-      throw new Error("Не удалось восстановить исходное количество предмета.");
+  let failure;
+  try {
+    if (qty > take) {
+      if (!item.update) return { ok: false };
+      await item.update(itemQuantityUpdateData(qty - take));
+    } else {
+      if (!actor.deleteEmbeddedDocuments) return { ok: false };
+      await actor.deleteEmbeddedDocuments("Item", [item.id]);
     }
-    return { ok: false };
+  } catch (error) {
+    failure = error;
   }
-  if (actor.deleteEmbeddedDocuments) {
-    await actor.deleteEmbeddedDocuments("Item", [item.id]);
-    if (!actor.items?.get?.(item.id)) return receipt;
+  const live = actor.items?.get?.(item.id);
+  const remaining = live ? this._itemQuantity(live) : 0;
+  if (!failure && remaining === qty - take) return receipt;
+  // An embedded operation may throw after the live document has changed.
+  if (remaining !== qty && !await this._restoreActorItemRemoval(receipt)) {
+    throw new Error("Не удалось восстановить исходное количество предмета.", { cause: failure });
   }
+  if (failure) throw failure;
   return { ok: false };
 },
 
@@ -108,22 +118,44 @@ async _removeCreatedActorItems(receipt = null) {
   if (!actor?.deleteEmbeddedDocuments || !itemIds.length) return false;
   const existingIds = itemIds.filter((id) => actor.items?.get?.(id));
   if (!existingIds.length) return true;
-  await actor.deleteEmbeddedDocuments("Item", existingIds);
+  try {
+    await actor.deleteEmbeddedDocuments("Item", existingIds);
+  } catch (error) {
+    if (existingIds.some((id) => actor.items?.get?.(id))) throw error;
+  }
   return existingIds.every((id) => !actor.items?.get?.(id));
 },
 
 /** Foundry can resolve a vetoed creation with an empty array. Confirm its result before debiting stock. */
 async _createStorageTransferItem(actor, itemData, qty, operationId) {
   if (operationId) setStorageItemFlag(itemData, "storageOperationId", operationId);
-  const created = await actor.createEmbeddedDocuments("Item", [itemData]);
-  const itemIds = (Array.isArray(created) ? created : []).map((item) => String(item?.id ?? item?._id ?? "")).filter(Boolean);
-  if (!itemIds.length) return { ok: false, message: "Foundry не создал предмет у персонажа." };
-  const actorMutation = { kind: "created", actorId: String(actor.id ?? ""), actorUuid: String(actor.uuid ?? ""), itemIds };
-  if (itemIds.length !== 1 || this._itemQuantity(created[0]) !== qty) {
-    if (!await this._removeCreatedActorItems(actorMutation)) throw new Error("Не удалось отменить выдачу предмета с изменённым количеством.");
-    return { ok: false, message: "Foundry изменил количество при создании предмета. Выдача отменена." };
+  const priorIds = new Set((actor.items?.contents ?? []).map((item) => String(item.id)));
+  let created;
+  let failure;
+  try {
+    created = await actor.createEmbeddedDocuments("Item", [itemData]);
+  } catch (error) {
+    failure = error;
   }
-  return { ok: true, actorMutation };
+  const returnedIds = (Array.isArray(created) ? created : []).map((item) => String(item?.id ?? item?._id ?? ""))
+    .filter((id) => id && !priorIds.has(id));
+  // The operation flag identifies only our new documents if the API rejects without returning them.
+  const markedIds = operationId ? (actor.items?.contents ?? [])
+    .filter((item) => storageItemFlag(item, "storageOperationId") === operationId && !priorIds.has(String(item.id)))
+    .map((item) => String(item.id)) : [];
+  const itemIds = [...new Set([...returnedIds, ...markedIds])];
+  const actorMutation = { kind: "created", actorId: String(actor.id ?? ""), actorUuid: String(actor.uuid ?? ""), itemIds };
+  const live = actor.items?.get?.(returnedIds[0]);
+  if (!failure && returnedIds.length === 1 && itemIds.length === 1 && live && this._itemQuantity(live) === qty) {
+    return { ok: true, actorMutation };
+  }
+  if (itemIds.length && !await this._removeCreatedActorItems(actorMutation)) {
+    throw new Error("Не удалось отменить выдачу предмета.", { cause: failure });
+  }
+  if (failure) throw failure;
+  return { ok: false, message: returnedIds.length
+    ? "Foundry изменил количество при создании предмета. Выдача отменена."
+    : "Foundry не подтвердил создание предмета у персонажа." };
 },
 
 async _foundryItemDataForResource(resourceId = "custom", name = "Ресурс", qty = 1) {
@@ -239,7 +271,7 @@ _itemTypeLabel(type = "") {
 },
 
 _resourceIdForFoundryItem(item = {}) {
-  const issuedId = item.getFlag?.(MODULE_ID, "storageResourceId") ?? item.flags?.[MODULE_ID]?.storageResourceId;
+  const issuedId = storageItemFlag(item, "storageResourceId");
   if (typeof issuedId === "string" && issuedId.trim()) return storageResourceId({ resourceId: issuedId });
   if (item.type !== "rawMaterial") return null;
   const uuid = String(item.uuid ?? item.itemUuid ?? "");

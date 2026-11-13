@@ -9,17 +9,15 @@ import { resolveFoundryActorReference, resolveFoundryUuid } from "../integration
 import { appendHoldingOperation, findHoldingOperation } from "../data/operations.js";
 import { hiddenStorageRoomIds } from "../data/access-guard.js";
 import { holdingPermissionContext } from "../data/holding-permissions.js";
+import { createWriteQueue } from "../data/write-queue.js";
+import { isActorStorageTransfer } from "../data/constants.js";
 import { MAX_STORAGE_BATCH_ROWS, STORAGE_BATCH_TOO_LARGE } from "../engines/storage/row-identity.js";
 
 const STORAGE_OPERATION_TYPES = new Set([
-  "depositItem",
-  "withdrawResource",
-  "giveStoredItem",
   "addResourceRow",
   "contributeUniqueBuilding",
   "batchMove"
 ]);
-const GM_ONLY_ACTOR_TRANSFERS = new Set(["depositItem", "withdrawResource", "giveStoredItem"]);
 
 const StorageOperationLogic = composeDomainGroup("StorageOperationLogic", [
   ["ResidentDomain", ResidentDomain],
@@ -41,7 +39,7 @@ function operationError(message) {
 function normalizeOperation(raw = {}) {
   const type = String(raw?.type ?? "");
   const defense = DEFENSE_OPERATIONS.has(type);
-  if (!defense && !STORAGE_OPERATION_TYPES.has(type)) throw operationError("Unknown storage operation.");
+  if (!defense && !isActorStorageTransfer(type) && !STORAGE_OPERATION_TYPES.has(type)) throw operationError("Unknown storage operation.");
   const operationId = String(raw?.operationId ?? "").trim();
   const holdingId = String(raw?.holdingId ?? "").trim();
   if (!operationId || operationId.length > 120) throw operationError("Storage operation id is missing or too long.");
@@ -142,6 +140,9 @@ export function createStorageOperationExecutor({
   resolveUuid = resolveFoundryUuid
 } = {}) {
   const operationResults = new Map();
+  // A rejected settings write releases the world queue before its Actor can
+  // be restored. Storage commands must not observe that temporary inventory.
+  const enqueueOperation = createWriteQueue();
 
   async function compensateActorMutation(receipt) {
     if (!receipt) return;
@@ -157,10 +158,11 @@ export function createStorageOperationExecutor({
     const requester = getUser(userId);
     if (!requester) throw operationError("Storage operation requester was not found.");
     const defense = DEFENSE_OPERATIONS.has(operation.type);
+    const actorTransfer = isActorStorageTransfer(operation.type);
     if (!requester.isGM && operation.type === "addResourceRow") {
       throw operationError("Только ГМ может вручную добавлять ресурсы на склад.");
     }
-    if (!requester.isGM && GM_ONLY_ACTOR_TRANSFERS.has(operation.type)) {
+    if (!requester.isGM && actorTransfer) {
       throw operationError("Actor and Item storage transfers must be performed directly by a GM.");
     }
 
@@ -187,7 +189,7 @@ export function createStorageOperationExecutor({
             : recordStorageResult(holding, operation, applied, signature, userId);
         }
         const checksRevision = operation.type === "batchMove"
-          || (GM_ONLY_ACTOR_TRANSFERS.has(operation.type) && operation.expectedRevision !== null);
+          || (actorTransfer && operation.expectedRevision !== null);
         if (checksRevision && operation.expectedRevision !== Math.max(0, Number(data?.meta?.revision) || 0)) {
           return skipTransaction({
             ok: false,
@@ -197,9 +199,9 @@ export function createStorageOperationExecutor({
           });
         }
 
-        const actor = GM_ONLY_ACTOR_TRANSFERS.has(operation.type)
+        const actor = actorTransfer
           ? await resolveFoundryActorReference(operation, { getActor, resolveUuid }) : null;
-        if (GM_ONLY_ACTOR_TRANSFERS.has(operation.type) && !actor
+        if (actorTransfer && !actor
           && (operation.type !== "depositItem" || operation.actorUuid || operation.actorId)) {
           return skipTransaction({ ok: false, message: "Персонаж-получатель не найден." });
         }
@@ -338,7 +340,7 @@ export function createStorageOperationExecutor({
       if (cached.signature !== signature) throw operationError("Storage operation id is already used by another operation.");
       return cached.promise;
     }
-    const pending = executeOnce(operation, context);
+    const pending = enqueueOperation(() => executeOnce(operation, context));
     operationResults.set(operation.operationId, { signature, promise: pending });
     if (operationResults.size > 500) operationResults.delete(operationResults.keys().next().value);
     try {

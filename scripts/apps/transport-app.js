@@ -3,7 +3,7 @@ import { SkyholdData, requestMarketOperation } from "../data/store.js";
 import { findReadableHoldingEntry } from "../data/access-guard.js";
 import { holdingPermissionContext } from "../data/holding-permissions.js";
 import { makeId } from "../data/utils.js";
-import { transportOrders } from "../data/transport/state.js";
+import { legacyActiveMarketOrders, transportOrders } from "../data/transport/state.js";
 import { canCancelTransportOrder } from "../engines/transport/runtime.js";
 import { transportHoldingQd } from "../data/transport/clock.js";
 import { TRANSPORT_SERVICE_DEFAULTS } from "../engines/transport/services.js";
@@ -19,6 +19,7 @@ import { createMarketVisibility } from "../data/market/visibility.js";
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const days = (qd) => `${Math.max(0, qd) / 4} дн.`;
 const statuses = { booked: "Забронировано", travelling: "В пути", waitingCarrier: "Ожидает освобождения транспорта", needsResolution: "Ожидает решения ГМ", delivered: "Доставлено", lost: "Груз утрачен", cancelled: "Отменено" };
+const legacyStatuses = { pending: "Ожидает исполнения", "in-transit": "В пути", delayed: "Задержан" };
 function stageInvoice(stage) {
   const parts = [["Подача", "dispatchCopper"], ["Тариф за груз", "loadCopper"], ["Содержание в пути и возврат", "operatingCopper"],
     ["Обработка", "handlingCopper"], ["Надбавка перевозчика", "profitCopper"], ["Скидка", "discountCopper"]].map(([label, key]) => {
@@ -131,12 +132,20 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
         awaitingCargo: [...new Set(run.claims.filter(claim => claim.manifestReady !== true)
           .map(claim => data.holdings.find(row => row.id === claim.holdingId)?.name ?? claim.holdingId))].join(", "),
         delayDays: this._incidentFields?.[run.id]?.delayDays ?? 1, lossPercent: this._incidentFields?.[run.id]?.lossPercent ?? 100 })) : [];
+    const legacyCargo = (row) => (row.cargo ?? row.cargoReservations ?? []).map((lot) => `${lot.name || lot.resourceId || "Товар"} × ${lot.qty}`).join(" · ");
+    const legacyActive = permissions.isGM ? legacyActiveMarketOrders(holding).map(({ order, direction }) => ({
+      id: order.id || order.operationId,
+      direction: direction === "inbound" ? "Покупка" : "Продажа",
+      status: legacyStatuses[order.status] || statuses[order.status] || order.status,
+      market: visibility.marketLabel(order),
+      cargo: legacyCargo(order)
+    })) : [];
     const archive = [...(holding.special?.market?.orders ?? []).map((row) => ({ ...row, direction: "Покупка" })),
       ...(holding.special?.market?.outbound?.orders ?? []).map((row) => ({ ...row, direction: "Продажа" }))]
       .filter((row) => ["delivered", "lost", "cancelled"].includes(row.status)).slice(-40).reverse().map((row) => ({
         direction: row.direction, status: statuses[row.status],
         market: visibility.marketLabel(row),
-        cargo: (row.cargo ?? row.cargoReservations ?? []).map((lot) => `${lot.name || lot.resourceId || "Товар"} × ${lot.qty}`).join(" · ") }));
+        cargo: legacyCargo(row) }));
     return { ...base, hasHolding: true, holdingName: holding.name, isGM: permissions.isGM, canUse: permissions.canUseStorage,
       canConfirm: Boolean(quote?.affordable && permissions.canUseStorage && (!quote.ship || permissions.canManageShips) && !this._pending && !this._busy),
       selected, refinements, history: page.history, quoteError, error: this._error,
@@ -145,7 +154,7 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
       transferUnavailable: quote?.discovery?.requestedUnavailable ?? Boolean(this.request?.transferPortId),
       portSearchLimited: quote?.search?.limits.ports,
       routeSearchLimited: quote?.search?.limits.routes,
-      busy: this._busy || this.constructor.inFlight.has(this._pending?.operationId), pending: Boolean(this._pending), orders, incidents, archive,
+      busy: this._busy || this.constructor.inFlight.has(this._pending?.operationId), pending: Boolean(this._pending), orders, incidents, archive, legacyActive,
       hasRequest: Boolean(this.request), request: this.request, byTime: this.request?.priority === "time", configuration,
       configurationView: { intervalDays: configuration.regularIntervalQd / 4, phaseDays: configuration.regularFirstQd / 4,
         commercialPercent: configuration.commercialLoadBps / 100, insurancePercent: configuration.insuranceBps / 100,

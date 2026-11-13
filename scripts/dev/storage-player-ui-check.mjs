@@ -309,10 +309,12 @@ assert.deepEqual(data, afterOtherEdit, "an absolute edit in a stale field must n
   data.holdings[1].people.list = [
     { id: "captain", name: "Капитан", age: 35, workAssignment: "soldier", background: "Солдат", attributes: { wits: 5, strength: 5 } },
     { id: "recruit", name: "Новобранец", age: 25, background: "Солдат", attributes: { wits: 4, strength: 5, agility: 5 } },
+    { id: "closed-job", name: "Работник закрытого здания", age: 25, workAssignment: "secret", attributes: { strength: 6, agility: 6 } },
     { id: "sailor", name: "Матрос", age: 25, workAssignment: "soldier", background: "Солдат",
       attributes: { strength: 5, agility: 5 }, shipAssignment: { shipId: "expedition", away: true } }
   ];
   data.holdings[1] = mergeHoldingDefaults(data.holdings[1]);
+  data.holdings[1].buildings.list.find(row => row.id === "secret").assignedWorkerIds = ["closed-job"];
   const commander = await playerDefenseField({ dataset: { field: "holdings.1.gm.defense.commanderId", defenseExpected: "" },
     value: "captain", closest: (selector) => selector === "[data-defense-holding-id]" ? { dataset: { defenseHoldingId: "b" } } : null });
   assert.equal(commander.result.ok, true);
@@ -325,12 +327,25 @@ assert.deepEqual(data, afterOtherEdit, "an absolute edit in a stale field must n
   assert.equal((await playerDefense("_onFillDefenseSquadBest", defenseButton(data.holdings[1]))).result.ok, true,
     "the player can fill the squad and the authority owns the derived wages");
   assert.equal(data.holdings[1].gm.defense.squads[0].sergeantId, "recruit");
+  assert.deepEqual(data.holdings[1].buildings.list.find(row => row.id === "secret").assignedWorkerIds, ["closed-job"],
+    "the player cannot clear a hidden worker's assignment through squad autofill");
+  assert.equal(data.holdings[1].people.list.find(row => row.id === "closed-job").workAssignment, "secret");
   assert.ok(data.holdings[1].people.list[1].salary > 0);
+  data.holdings[1].people.list.push({ id: "recovering", age: 25, injuredDays: 3, workAssignment: "soldier",
+    role: "Солдат: Другой отряд (Линейная пехота)", salary: 12, attributes: { strength: 3, agility: 3 } });
+  const otherSquad = { id: "other-squad", name: "Другой отряд", type: "line", sergeantId: "",
+    memberIds: ["recovering", "", "", ""] };
+  data.holdings[1].gm.defense.squads.push(otherSquad);
   const edit = await playerDefenseField({ ...defenseButton(data.holdings[1]), value: "Караул",
     dataset: { field: "holdings.1.gm.defense.squads.0.name" } });
   assert.equal(edit.result.ok, true);
   assert.match(data.holdings[1].people.list[1].role, /Караул/);
   assert.equal(data.holdings[1].gm.defense.commanderId, "captain", "recalculating a different squad must preserve the acting commander");
+  assert.deepEqual(data.holdings[1].gm.defense.squads[1].memberIds, otherSquad.memberIds);
+  const recovering = data.holdings[1].people.list.find(row => row.id === "recovering");
+  assert.equal(recovering.workAssignment, "soldier", "injury changes readiness without releasing an unrelated assignment");
+  assert.equal(recovering.salary, 12);
+  data.holdings[1].gm.defense.squads.pop();
 
   manager._confirmAction = async () => { data.holdings[1].gm.playersCanEditDefense = false; return true; };
   assert.equal((await playerDefense("_onDeleteDefenseSquad", defenseButton(data.holdings[1]))).result.ok, false);

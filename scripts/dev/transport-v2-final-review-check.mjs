@@ -47,6 +47,30 @@ function ageWarehouse(f, elapsedQd) {
   finishResourceBatchPeriod(f.holding, { elapsedQd, shelfLifeQdForRow: () => 20 });
   f.holding.gm.calendaria.lastQd = elapsedQd;
 }
+
+await check("incoming item stacks use capacity at unloading", () => {
+  const { data, holding, workflow } = fixture();
+  holding.buildings.list = [{ id: "locker", name: "Кладовая", constructionStatus: "built",
+    storage: { capacity: 5 }, functions: { storage: true } }];
+  const services = [service()];
+  const purchased = lot({ lotId: "armor", name: "Доспех", resourceId: "custom", sourceType: "item", qty: 2,
+    item: { name: "Доспех", type: "armor", weight: "Heavy" } });
+  const order = bookTransportOrder({ state: data.meta.transportV2, holding, services, direction: "inbound", id: "buy-item",
+    commercial: { targetRoomId: "locker" }, plan: planTransportChain({ cargo: [purchased], services }) });
+  // Only two load points remain when the stack of two heavy items arrives.
+  holding.storage.items = [{ id: "existing", name: "Ящик", type: "gear", weight: "Heavy", qty: 1, roomId: "locker" }];
+  holding.buildings.list[0].storage.capacity = 4;
+  const roomBefore = workflow._storageRooms(holding, { includeUnavailable: false }).find(row => row.id === "locker");
+  assert.equal(roomBefore?.free, 2);
+  advanceTransportShipments(data, holding, order.plan.arrivalQd, workflow);
+  assert.equal(order.status, "delivered");
+  assert.deepEqual(holding.storage.items.map(({ name, qty, roomId }) => [name, qty, roomId]),
+    [["Ящик", 1, "locker"], ["Доспех", 2, "outdoors"]]);
+  const entry = holding.storage.log.find(row => row.kind === "transport-purchase");
+  assert.equal(entry?.roomId, "outdoors", "the journal identifies the actual destination");
+  assert.match(entry?.note, /переполнение: Кладовая/);
+});
+
 async function period(f) {
   let stored = structuredClone(f.data);
   const skipped = Symbol("skip");

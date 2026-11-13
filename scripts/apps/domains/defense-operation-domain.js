@@ -1,6 +1,6 @@
 import { resourceLabel } from "../../core/resources.js";
-import { hiddenStorageRoomIds } from "../../data/access-guard.js";
-import { isAvailableDefenseResident, MANAGER_SQUAD_TYPE_PROFILES } from "../../data/military-resident-rules.js";
+import { hiddenBuildingIds, hiddenStorageRoomIds, residentHasHiddenWork } from "../../data/access-guard.js";
+import { evaluateDefenseSquad, isAvailableDefenseResident, MANAGER_SQUAD_TYPE_PROFILES } from "../../data/military-resident-rules.js";
 import { stableDataHash } from "../../data/storage-commit.js";
 import { indexStorageRows, resolveStorageRow } from "../../engines/storage/row-identity.js";
 
@@ -9,6 +9,14 @@ export const DEFENSE_OPERATIONS = new Set([
   "assignDefenseArmament", "unassignDefenseArmament", "disbandDefenseSquad", "fillDefenseSquad", "editDefense"
 ]);
 export const DEFENSE_SQUAD_CHANGED = "Отряд изменился или недоступен. Откройте действие заново.";
+
+function squadResidentIds(squad) {
+  return [squad.sergeantId, ...(squad.memberIds ?? []).slice(0, 4)].filter(Boolean).map(String);
+}
+
+export function canEnrollDefenseResident(holding, person, hiddenBuildings) {
+  return isAvailableDefenseResident(person, holding) && !residentHasHiddenWork(holding, person, hiddenBuildings);
+}
 
 export function normalizeDefenseOperation(raw, common) {
   const squadId = String(raw.squadId ?? "");
@@ -45,68 +53,76 @@ function returnArmament(holding, squad, operationId, note, logic) {
   })));
 }
 
-function fillDefenseSquad(holding, squad, logic) {
+function fillDefenseSquad(holding, squad, logic, hiddenBuildings) {
   const defense = holding.gm.defense;
   const squadType = squad.type === "militia" ? "line" : squad.type ?? "line";
-  const taken = new Set([defense.commanderId, ...defense.squads.filter((other) => other !== squad)
-    .flatMap((other) => [other.sergeantId, ...(other.memberIds ?? []).slice(0, 4)])].filter(Boolean).map(String));
-  const candidates = (holding.people?.list ?? [])
-    .filter((person) => isAvailableDefenseResident(person, holding))
-    .filter((person) => logic._isSuitableForSquadType(person, squadType)
-      && !taken.has(String(person.id)))
-    .map((person) => {
-      const efficiency = Number(logic._soldierEfficiency(person, squadType));
-      const sergeant = logic._isSergeantCandidate(person);
-      const military = logic._isMilitaryBackgroundResident(person) ? 0.35 : 0;
-      const soldier = logic._isSoldierResident(person) ? 0.25 : 0;
-      const free = !String(person.workAssignment ?? "").trim() ? 0.05 : 0;
-      const score = (Number.isFinite(efficiency) ? efficiency : 0) + (sergeant ? 0.35 : 0) + military + soldier + free;
-      return { person, score, sergeant };
+  const taken = new Set([String(defense.commanderId ?? ""), ...defense.squads.filter((other) => other !== squad).flatMap(squadResidentIds)]);
+  const existing = new Set(squadResidentIds(squad));
+  const byId = indexStorageRows(holding.people?.list);
+  const candidates = [...byId.entries()]
+    .filter(([id, person]) => !taken.has(id) && canEnrollDefenseResident(holding, person, hiddenBuildings))
+    .map(([id, resident]) => {
+      const efficiency = logic._soldierEfficiency(resident, squadType);
+      const free = logic._hasSoldierProfession(resident) || (!resident.workAssignment && !resident.staffAppointment
+        && !(resident.workAllocationMode === "explicit" && resident.workAllocations?.some((work) => work.normalQd || work.overtimeQd)));
+      return { id, efficiency, kept: Number(existing.has(id)), free: Number(free) };
     })
-    .filter((entry) => entry.score > 0)
-    .sort((a, b) => b.score - a.score);
-  const first = candidates.find((entry) => entry.sergeant) ?? candidates[0];
-  if (!first) return { ok: false, message: "Нет подходящих жителей для этого типа отряда." };
-  const selected = new Map([[String(first.person.id), first.person]]);
-  for (const { person } of candidates) {
-    if (selected.size >= 5) break;
-    const id = String(person.id);
-    if (!selected.has(id)) selected.set(id, person);
+    .filter((entry) => entry.efficiency > 0)
+    .sort((a, b) => b.efficiency - a.efficiency || b.kept - a.kept || b.free - a.free || a.id.localeCompare(b.id));
+  if (!candidates.length) return { ok: false, message: "Нет подходящих жителей для этого типа отряда." };
+  let best;
+  // For a given first slot the remaining seats are additive. Try every leader
+  // with the best four other candidates, including the real sergeant bonus.
+  for (const first of candidates) {
+    const selected = [first];
+    for (const candidate of candidates) {
+      if (candidate !== first) selected.push(candidate);
+      if (selected.length === 5) break;
+    }
+    const memberIds = selected.slice(1).map(({ id }) => id);
+    const { effective } = evaluateDefenseSquad({ type: squadType, sergeantId: first.id, memberIds }, byId);
+    const rank = [effective, selected.reduce((sum, row) => sum + row.kept, 0),
+      selected.reduce((sum, row) => sum + row.free, 0), Number(squad.sergeantId === first.id)];
+    if (!best || rank.map((value, index) => value - best.rank[index]).find(Boolean) > 0) {
+      best = { rank, firstId: first.id, memberIds, selected };
+    }
   }
-  for (const person of selected.values()) {
-    logic._clearPersonFromAssignments(holding, person.id);
-    person.workAssignment = "soldier";
-    if (!/^\s*(солдат|сержант)\b/i.test(String(person.role ?? ""))) person.role = "Солдат";
-  }
-  const [firstId, ...memberIds] = selected.keys();
-  squad.sergeantId = firstId;
-  squad.memberIds = Array.from({ length: 4 }, (_, index) => memberIds[index] ?? "");
-  logic._sanitizeDefenseAssignments(holding);
+  for (const { id, kept } of best.selected) if (!kept) logic._clearPersonFromAssignments(holding, id);
+  squad.sergeantId = best.firstId;
+  squad.memberIds = Array.from({ length: 4 }, (_, index) => best.memberIds[index] ?? "");
   logic._applyDefenseSalaries(holding);
   return { ok: true, message: "Состав отряда обновлён." };
 }
 
-function editDefense(holding, squad, operation, logic) {
+function editDefense(holding, squad, operation, logic, hiddenBuildings) {
   const { field, value, expectedValue } = operation;
   const [key, slot] = field.split(".");
-  const target = slot !== undefined ? squad.memberIds : (squad ?? holding.gm.defense);
+  const defense = holding.gm.defense;
+  const target = () => slot !== undefined ? squad.memberIds : (squad ?? defense);
   const property = slot ?? key;
-  const before = String(target[property] ?? "");
+  const before = String(target()[property] ?? "");
   if (before === value) return { ok: true, unchanged: true };
   if (!squad && before !== expectedValue) return { ok: false, message: "План обороны изменился. Обновите окно." };
   if (value && (slot !== undefined || key === "sergeantId" || key === "commanderId")) {
     const candidates = (holding.people?.list ?? []).filter((person) => String(person.id ?? "") === value);
-    if (candidates.length !== 1 || !isAvailableDefenseResident(candidates[0], holding)) {
+    const [person] = candidates;
+    if (candidates.length !== 1 || !canEnrollDefenseResident(holding, person, hiddenBuildings)) {
       return { ok: false, message: "Житель отсутствует или недоступен для назначения. Обновите окно." };
     }
+    const assigned = String(defense.commanderId ?? "") === value || defense.squads.some((entry) => squadResidentIds(entry).includes(value));
+    const qualified = key === "commanderId" ? logic._isCommanderCandidate(person)
+      : logic._hasSoldierProfession(person) && logic._isSuitableForSquadType(person, squad.type);
+    if (assigned || !qualified) return { ok: false, message: "Назначение недоступно. Сверьте состав обороны." };
+    logic._clearPersonFromAssignments(holding, person.id);
   }
-  target[property] = value;
-  if (field !== "notes") {
-    logic._sanitizeDefenseAssignments(holding);
-    const after = slot !== undefined ? squad.memberIds[slot] : target[property];
-    if (after !== value) return { ok: false, message: "Назначение недоступно. Сверьте состав обороны." };
-    logic._applyDefenseSalaries(holding);
+  if (field === "type") {
+    const assigned = new Set(squadResidentIds(squad));
+    const incompatible = (holding.people?.list ?? []).some((person) => assigned.has(String(person.id))
+      && !logic._isSuitableForSquadType(person, value));
+    if (incompatible) return { ok: false, message: "В составе есть бойцы, не подходящие для нового типа. Сначала освободите их места." };
   }
+  target()[property] = value;
+  if (field !== "notes") logic._applyDefenseSalaries(holding);
   return { ok: true, message: "План обороны обновлён." };
 }
 
@@ -115,8 +131,11 @@ export function applyDefenseOperation(holding, operation, { requester, logic }) 
   const squads = holding.gm?.defense?.squads ?? [];
   const { row: squad } = squadId ? resolveStorageRow(squads, squadId) : { row: null };
   if (squadId && (!squad || stableDataHash(squad) !== expectedSquadHash)) return { ok: false, message: DEFENSE_SQUAD_CHANGED };
-  if (type === "editDefense") return editDefense(holding, squad, operation, logic);
-  if (type === "fillDefenseSquad") return fillDefenseSquad(holding, squad, logic);
+  if (type === "editDefense" || type === "fillDefenseSquad") {
+    const hiddenBuildings = hiddenBuildingIds(holding, requester.isGM);
+    return type === "editDefense" ? editDefense(holding, squad, operation, logic, hiddenBuildings)
+      : fillDefenseSquad(holding, squad, logic, hiddenBuildings);
+  }
 
   if (type === "assignDefenseArmament") {
     if (squad.armamentResourceId === resourceId) return { ok: true, unchanged: true };

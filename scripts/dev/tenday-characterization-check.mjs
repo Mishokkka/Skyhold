@@ -274,6 +274,14 @@ function checkSchoolResolutionMilestone() {
   };
   assert.equal(harness._advanceResidentAges(structuredClone(staffHolding), 1).educated, 1,
     "the current staff school must create a milestone when it actually teaches");
+  const hiddenSchool = structuredClone(staffHolding);
+  hiddenSchool.people.list[0].notes = "Публичная заметка";
+  hiddenSchool.buildings.list[0].visibility = "gm";
+  const privateAging = harness._advanceResidentAges(hiddenSchool, 1);
+  assert.equal(privateAging.educated, 1, "visibility does not disable an operating school");
+  assert.match(privateAging.education[0], /Ученик.*первая треть детства/, "the GM report receives the resident and the milestone");
+  assert.equal(hiddenSchool.log[0].payload.resolutionKind, "school-milestone");
+  assert.equal(hiddenSchool.people.list[0].notes, "Публичная заметка", "the ordinary resident card cannot reveal that a hidden school worked");
 
   const mixedStaff = structuredClone(staffHolding);
   mixedStaff.people.list.find(person => person.id === "teacher").background = "Дровосек";

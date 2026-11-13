@@ -177,6 +177,15 @@ export function checkFoodBatchCharacterization() {
   const reservedSpend = takeResourceBatches(reservedHolding.storage.resources[0], 8, { holding: reservedHolding });
   assert.equal(reservedSpend.shortfall, 0);
   assert.equal(reservedHolding.storage.resources[0].batches.find((batch) => batch.id === "reserved")?.qty, 1, "ordinary FIFO spending must leave the soft-reserved quantity in place");
+  const reservedStock = reservedHolding.storage.resources[0];
+  const sameIdFromAnotherRow = { id: "reserved", qty: 2, ageQd: 79, internalDemandAvailableFromQd: 40 };
+  addResourceBatches(reservedStock, { batches: [sameIdFromAnotherRow] }, { holding: reservedHolding });
+  assert.deepEqual(reservedStock.batches.find(batch => batch.id === "reserved"), { id: "reserved", qty: 1, ageQd: 0 },
+    "the incoming legacy lot must not change the destination reservation's freshness");
+  assert.equal(availableResourceRowQuantity(reservedStock, reservedHolding), 2);
+  const moved = takeResourceBatches(reservedStock, 2, { holding: reservedHolding });
+  assert.deepEqual(moved.batches.map(({ qty, ageQd, internalDemandAvailableFromQd }) => [qty, ageQd, internalDemandAvailableFromQd]), [[2, 79, 40]],
+    "the incoming units remain spendable with their original age and market eligibility");
   const normalizedReserved = mergeHoldingDefaults({
     ...clone(BASE_HOLDING),
     id: "reserved-normalization",

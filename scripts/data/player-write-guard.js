@@ -42,9 +42,10 @@ export function buildPlayerPatch(current, proposed) {
       const value = getByPath(proposed, path);
       const oldValue = getByPath(current, path);
       const base = oldValue === undefined ? { oldMissing: true } : { oldValue: clone(oldValue) };
+      const rowIds = indexedRowIds(current, path);
       return value === undefined
-        ? { path, delete: true, ...base }
-        : { path, value: clone(value), ...base };
+        ? { path, delete: true, rowIds, ...base }
+        : { path, value: clone(value), rowIds, ...base };
     })
   };
 }
@@ -126,6 +127,10 @@ function validatePatchBaseValues(current, changes = []) {
       return { ok: false, error: "Данные владения устарели. Открой окно заново и повтори действие." };
     }
 
+    const rowIds = indexedRowIds(current, change.path);
+    if (rowIds.length && !sameJson(rowIds, change.rowIds)) {
+      return { ok: false, error: "Редактируемая запись переместилась или была удалена. Обновите окно и повторите действие." };
+    }
     const currentValue = getByPath(current, change.path);
     const matches = expectsMissing
       ? currentValue === undefined
@@ -1343,6 +1348,17 @@ function getByPath(source, path) {
     value = value[part];
   }
   return value;
+}
+
+function indexedRowIds(source, path) {
+  const ids = [];
+  let value = source;
+  for (const part of path.split(".")) {
+    const indexed = Array.isArray(value) && /^\d+$/.test(part);
+    value = value?.[part];
+    if (indexed) ids.push(String(value?.id ?? ""));
+  }
+  return ids;
 }
 
 function setByPath(target, path, value) {
