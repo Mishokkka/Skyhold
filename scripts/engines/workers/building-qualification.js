@@ -152,11 +152,13 @@ export function holdingWorkerAdmissionIssues(holding = {}) {
   const issues = [];
   for (const person of holding?.people?.list ?? []) {
     if (String(person?.workAllocationMode ?? "") !== "explicit") continue;
-    const buildingIds = new Set((person?.workAllocations ?? [])
-      .filter((row) => Math.max(0, finiteInteger(row?.normalQd, 0)) + Math.max(0, finiteInteger(row?.overtimeQd, 0)) > 0)
-      .map((row) => String(row?.sourceId ?? ""))
-      .filter((id) => buildingsById.has(id)));
-    for (const buildingId of buildingIds) {
+    const plannedQd = new Map();
+    for (const row of person.workAllocations ?? []) {
+      const buildingId = String(row?.sourceId ?? "");
+      const qd = Math.max(0, finiteInteger(row?.normalQd, 0)) + Math.max(0, finiteInteger(row?.overtimeQd, 0));
+      if (qd && buildingsById.has(buildingId)) plannedQd.set(buildingId, (plannedQd.get(buildingId) ?? 0) + qd);
+    }
+    for (const [buildingId, qd] of plannedQd) {
       const building = buildingsById.get(buildingId);
       const admission = workerAdmission(building, person);
       if (!admission.hard || admission.eligible || admission.overridden) continue;
@@ -167,6 +169,8 @@ export function holdingWorkerAdmissionIssues(holding = {}) {
         personName: String(person?.name ?? "Житель"),
         buildingId,
         buildingName: String(building?.name ?? buildingId),
+        actual: qd,
+        limit: 0,
         message: `${String(person?.name ?? "Житель")}: нет обязательного допуска в «${String(building?.name ?? buildingId)}» (${admission.text}).`
       });
     }

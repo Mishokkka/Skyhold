@@ -74,6 +74,16 @@ for (const gm of [true, false]) {
   assert.equal(reserved.context.hasOutboundOrders, undefined, "tracking lives in the transport window");
   assert.equal(reserved.context.outboundCanBook, false, "fully reserved selection cannot open a payable checkout");
 
+  const knownCollision = { rowId: "shared-row", batchId: "shared-batch", qty: 3 };
+  const freeWood = await contextFor({ gm, quantities: { wood: 4 },
+    rows: [{ id: "shared-row", resourceId: "wood", qty: 4, forSale: true, batches: [{ id: "shared-batch", qty: 4 }] }],
+    transportOrders: [
+      { id: "pending-meat", status: "booked", direction: "outbound", cargo: [{ ...knownCollision, lotId: "meat", resourceId: "meat" }] },
+      { id: "cancelled-wood", status: "cancelled", direction: "outbound", cargo: [{ ...knownCollision, lotId: "wood", resourceId: "wood" }] }
+    ] });
+  assert.equal(freeWood.context.outboundOffers[0].available, 4, "the reserve of missing meat does not reduce marketable wood");
+  assert.equal(freeWood.context.outboundSelectedUnits, 4, "checkout uses the same free lots as the market and warehouse");
+
   for (const status of ["booked", "needsResolution", "delivered"]) {
     const { context: tracking } = await contextFor({ gm, orders: [{ id: "sale", status, riskStatus: status, marketLabel: "Порт", revenueCopper: 100 }] });
     assert.equal(tracking.outboundHasForSaleStock, false, "Existing orders do not expose an empty sale composer");

@@ -117,6 +117,21 @@ export async function checkProductionCapacity() {
     "the cancellation report must identify where the refunded materials were actually placed");
   assert.equal(refundToFullRoom.storage.resources.find(row => row.roomId === "outdoors")?.batches[0].ageQd, 1);
 
+  const chilled = fixture({ ...config, resourceId: "aged-cheese", workQd: 100, outputQty: 3, expenses: "milk 1",
+    batchCapacity: 3 }, { resourceId: "milk", qty: 3, roomId: "cold" });
+  chilled.buildings.list.push({ id: "cold", name: "Холодная кладовая", constructionStatus: "built",
+    functions: { storage: true }, storage: { capacity: 2.5, shelfLifeMultiplier: 3 } });
+  await advance(chilled, 1);
+  lineOf(chilled).active = false;
+  await advance(chilled, 7);
+  storage._storageAdd(chilled, { resourceId: "wood", roomId: "cold" }, 2);
+  assert.equal(storage._storageRooms(chilled).find(row => row.id === "cold").free, 0.5);
+  const partialRefund = cancelProductionBatch(chilled, lineOf(chilled), adapters);
+  assert.deepEqual(partialRefund.refunds.map(({ roomId, qty }) => [roomId, qty]), [["cold", 2]]);
+  assert.equal(partialRefund.discardedQty, 1, "milk is fresh at age 8 in cold storage but expires in outdoor overflow");
+  assert.equal(quantity(chilled, "milk"), 2, "spoiled overflow cannot be used by the next production or sale");
+  assert.equal(chilled.storage.resources.find(row => row.roomId === "cold" && row.resourceId === "milk").batches[0].ageQd, 8);
+
   const economics = productionLineEconomics({ source: "workers", outputQty: 10, workQd: 10, batchCapacity: 20,
     expenses: "wood 10", fixedExpenses: "wood 2", resourceId: "stone" }, { wageDailyCopper: 18 }, { batchQty: 5 });
   assert.equal(economics.qty, 5);

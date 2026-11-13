@@ -309,17 +309,10 @@ export const GmEventDomain = {
 async _onAddDefenseSquad(event) {
   event.preventDefault();
   event.stopPropagation();
-  if (!this._canManageDefense?.()) return;
-  const added = await this._updateActiveHolding((holding) => {
-    if (!holding.gm) holding.gm = {};
-    if (!holding.gm.defense) holding.gm.defense = {};
-    if (!Array.isArray(holding.gm.defense.squads)) holding.gm.defense.squads = [];
-    const number = holding.gm.defense.squads.length + 1;
-    holding.gm.defense.squads.push({ id: makeId("squad"), name: `${number}-й отряд`, type: "line", sergeantId: "", equipped: false, armamentResourceId: "", armamentSourceRoomId: "outdoors", memberIds: ["", "", "", ""], notes: "" });
-  }, { reason: "gm:add-defense-squad" });
-  if (!added) return;
-  this.activeTab = "defense";
-  this.requestRender();
+  const holdingId = String(event.currentTarget?.closest?.("[data-defense-holding-id]")?.dataset.defenseHoldingId ?? "");
+  const { holding } = findReadableHoldingEntry(SkyholdData.view(), holdingId);
+  if (!holding || !holdingPermissionContext(holding).canEditDefense) return;
+  await submitDefenseOperation(this, { holdingId, type: "addDefenseSquad" });
 },
 
 async _onDeleteDefenseSquad(event) {

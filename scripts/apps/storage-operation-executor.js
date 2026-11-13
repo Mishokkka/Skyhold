@@ -37,6 +37,12 @@ function operationError(message) {
   return new Error(`FBL Skyhold | ${message}`);
 }
 
+function unknownTransferOutcome(operationId, cause, detail = "") {
+  const message = `Исход обмена ${operationId} не подтверждён. Сверьте склад и инвентарь персонажа перед повтором.`;
+  return Object.assign(new Error(detail ? `${message} ${detail}` : message, { cause }),
+    { code: COMMAND_ERROR.OUTCOME_UNKNOWN, operationId });
+}
+
 function normalizeOperation(raw = {}) {
   const type = String(raw?.type ?? "");
   const defense = DEFENSE_OPERATIONS.has(type);
@@ -344,8 +350,7 @@ export function createStorageOperationExecutor({
         const outcome = readTransferOutcome(operation, signature, userId);
         if (outcome.result) return outcome.result;
         if (error?.code === COMMAND_ERROR.OUTCOME_UNKNOWN || outcome.revision > transferRevision) {
-          throw Object.assign(new Error(`Исход обмена ${operation.operationId} не подтверждён. Сверьте склад и инвентарь персонажа перед повтором.`,
-            { cause: error }), { code: COMMAND_ERROR.OUTCOME_UNKNOWN });
+          throw unknownTransferOutcome(operation.operationId, error);
         }
         try {
           await compensateActorMutation(actorMutation);
@@ -354,8 +359,10 @@ export function createStorageOperationExecutor({
             operationId: operation.operationId,
             error: compensationError
           });
-          throw operationError(`${error?.message ?? error}; compensation failed: ${compensationError?.message ?? compensationError}`);
+          throw unknownTransferOutcome(operation.operationId, error, compensationError?.message ?? String(compensationError));
         }
+      } else if (actorTransfer && error?.code === COMMAND_ERROR.OUTCOME_UNKNOWN) {
+        throw unknownTransferOutcome(operation.operationId, error, error.message);
       }
       throw error;
     }

@@ -107,12 +107,18 @@ export async function runProductionCycle({
     }
     if (outcome.lost && receipt.entries.length) {
       if (typeof deps.refundProductionInputs !== "function") throw new TypeError("Production requires an input refund adapter.");
-      const refunds = deps.refundProductionInputs(holding, receipt, outcome.lost, base);
+      const { refunds, spoiled } = deps.refundProductionInputs(holding, receipt, outcome.lost, base);
       for (const row of refunds) {
         report.consumed.push(`${building.name || "Здание"}: ${row.name} +${row.qty} возвращено из резерва неудавшегося выпуска.`);
         deps.appendLedger?.(report, { domain: "production", kind: row.resourceId === "money" ? "money" : "resource",
           resourceId: row.resourceId, name: row.name, qty: row.qty, roomId: row.roomId ?? row.storageRoomId ?? "",
           sourceId: building.id, source: building.name || "Здание", note: "Возврат сырья неудавшегося выпуска" });
+      }
+      for (const row of spoiled) {
+        const note = `${row.name} × ${row.qty} испорчено при возврате сырья неудавшегося выпуска.`;
+        report.skipped.push(`${building.name || "Здание"}: ${note}`);
+        deps.appendLedger?.(report, { domain: "production", kind: "notice", resourceId: row.resourceId,
+          name: row.name, roomId: row.roomId, sourceId: building.id, source: building.name || "Здание", status: "expired", note });
       }
     }
     if (outcome.lost) report.work.push(`${building.name || "Здание"} / ${resourceName}: потеряно ${outcome.lost} ед. выпуска${outcome.probabilistic ? " по проверке политического штрафа" : " из-за политического штрафа"}; затраченное время не возвращается.`);

@@ -2,11 +2,12 @@ import { resourceLabel } from "../../core/resources.js";
 import { hiddenBuildingIds, hiddenStorageRoomIds, residentHasHiddenWork } from "../../data/access-guard.js";
 import { evaluateDefenseSquad, isAvailableDefenseResident, MANAGER_SQUAD_TYPE_PROFILES, militarySupplyResourceForArmament } from "../../data/military-resident-rules.js";
 import { stableDataHash } from "../../data/storage-commit.js";
+import { makeId } from "../../data/utils.js";
 import { indexStorageRows, resolveStorageRow } from "../../engines/storage/row-identity.js";
 
 export const DEFENSE_ARMAMENT_IDS = Object.freeze(["armament-simple", "armament-complex", "armament-elite"]);
 export const DEFENSE_OPERATIONS = new Set([
-  "assignDefenseArmament", "unassignDefenseArmament", "disbandDefenseSquad", "fillDefenseSquad", "editDefense"
+  "addDefenseSquad", "assignDefenseArmament", "unassignDefenseArmament", "disbandDefenseSquad", "fillDefenseSquad", "editDefense"
 ]);
 export const DEFENSE_SQUAD_CHANGED = "Отряд изменился или недоступен. Откройте действие заново.";
 export const DEFENSE_ARMAMENT_IN_USE = "Отряд уже получил припасы на этот бой. Снять комплект или изменить тип припасов можно после боя.";
@@ -27,6 +28,7 @@ export function canEnrollDefenseResident(holding, person, hiddenBuildings) {
 }
 
 export function normalizeDefenseOperation(raw, common) {
+  if (common.type === "addDefenseSquad") return common;
   const squadId = String(raw.squadId ?? "");
   const expectedSquadHash = String(raw.expectedSquadHash ?? "");
   const invalid = () => new Error("FBL Skyhold | Некорректная команда управления обороной.");
@@ -136,6 +138,14 @@ function editDefense(holding, squad, operation, logic, hiddenBuildings) {
 
 export function applyDefenseOperation(holding, operation, { requester, logic }) {
   const { type, operationId, squadId, expectedSquadHash, resourceId } = operation;
+  if (type === "addDefenseSquad") {
+    holding.gm ??= {};
+    holding.gm.defense ??= {};
+    const squads = holding.gm.defense.squads ??= [];
+    squads.push({ id: makeId("squad"), name: `${squads.length + 1}-й отряд`, type: "line", sergeantId: "",
+      equipped: false, armamentResourceId: "", armamentSourceRoomId: "outdoors", memberIds: ["", "", "", ""], notes: "" });
+    return { ok: true, message: "Отряд создан." };
+  }
   const squads = holding.gm?.defense?.squads ?? [];
   const { row: squad } = squadId ? resolveStorageRow(squads, squadId) : { row: null };
   if (squadId && (!squad || stableDataHash(squad) !== expectedSquadHash)) return { ok: false, message: DEFENSE_SQUAD_CHANGED };

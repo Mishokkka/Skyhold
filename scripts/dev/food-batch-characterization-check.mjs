@@ -9,8 +9,10 @@ import {
   internalDemandBatchClockQd,
   isResourceBatchPeriodActive,
   nextInternalDemandBatchAvailabilityQd,
+  resourceBatchAgeQd,
   resourceBatchAvailableToInternalDemand,
   resourceBatchTotal,
+  setResourceBatchPeriodStep,
   splitResourceBatchParts,
   syncResourceRowBatches,
   takeResourceBatchById,
@@ -186,6 +188,15 @@ export function checkFoodBatchCharacterization() {
   const moved = takeResourceBatches(reservedStock, 2, { holding: reservedHolding });
   assert.deepEqual(moved.batches.map(({ qty, ageQd, internalDemandAvailableFromQd }) => [qty, ageQd, internalDemandAvailableFromQd]), [[2, 79, 40]],
     "the incoming units remain spendable with their original age and market eligibility");
+  const collision = { storage: { resources: [preparedRow("same", "bread", "outdoors", [{ id: "legacy-id", qty: 1, ageQd: 0 }])] } };
+  beginResourceBatchPeriod(collision);
+  setResourceBatchPeriodStep(collision, 3);
+  const stock = collision.storage.resources[0];
+  addResourceBatches(stock, { batches: [{ id: "legacy-id", qty: 1, ageQd: 5 }] }, { holding: collision });
+  const replacement = stock.batches.find(batch => batch.id !== "legacy-id");
+  assert.equal(resourceBatchAgeQd(collision, replacement), 8, "renaming a pre-period batch must carry its elapsed age");
+  finishResourceBatchPeriod(collision, { elapsedQd: 4 });
+  assert.equal(stock.batches.find(batch => batch.id === replacement.id).ageQd, 9);
   const normalizedReserved = mergeHoldingDefaults({
     ...clone(BASE_HOLDING),
     id: "reserved-normalization",

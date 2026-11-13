@@ -31,7 +31,11 @@ export function cancelProductionBatch(holding, line, { addMoney, addResource, ba
   let discardedQty = 0, expiredBatches = 0;
   for (const plan of plans) {
     if (plan.expired) expiredBatches++;
-    else refunds.push(...refundProductionInputs(holding, plan.receipt, 1, 1, { addMoney, addResource }));
+    else {
+      const result = refundProductionInputs(holding, plan.receipt, 1, 1, { addMoney, addResource });
+      refunds.push(...result.refunds);
+      discardedQty += result.spoiled.reduce((total, row) => total + row.qty, 0);
+    }
     discardedQty += plan.discardedQty ?? 0;
     clearProductionBatch(plan.batch);
     if (plan.batch !== line) line.waitingBatches = waitingProductionBatches(line).filter((batch) => batch !== plan.batch);

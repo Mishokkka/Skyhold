@@ -7,6 +7,7 @@ import { createSkyholdSplitStorage } from "../data/split-storage.js";
 import { prepareSkyholdCommit } from "../data/commit-preparation.js";
 import { makeStorageCommitMeta } from "../data/storage-commit.js";
 import { migrateData } from "../data/normalizers.js";
+import { COMMAND_ERROR } from "../data/command-result.js";
 import { MODULE_ID, SETTING_CATALOG, SETTING_DATA, SETTING_HOLDINGS, SETTING_META } from "../data/constants.js";
 
 const SKIP = Symbol("skip");
@@ -307,7 +308,8 @@ export async function checkStorageOperationCharacterization() {
       console.error = () => {};
       await assert.rejects(harness.executor({ type, operationId: `compensation-${type}`, holdingId: "holding-1", actorId: "actor-1",
         itemId: type === "depositItem" ? "deposit-item" : "stored-sword", qty: 1 }, { userId: harness.user.id }),
-      /persist failed; compensation failed/, "a false compensation receipt must be reported as an incomplete rollback");
+      (error) => error.code === COMMAND_ERROR.OUTCOME_UNKNOWN && error.cause?.message === "persist failed",
+      "a false compensation receipt must be reported as an incomplete rollback");
       assert.equal(harness.getHolding().storage.log.length, 0);
     } finally {
       console.error = originalError;
@@ -479,6 +481,27 @@ export async function checkStorageOperationCharacterization() {
   }
 
   {
+    const harness = createHarness({ isGM: false });
+    const holding = harness.getHolding();
+    holding.people = { list: [{ id: "wounded", workAssignment: "soldier", injuredDays: 4 }] };
+    holding.gm.defense = { squads: [{ id: "existing", type: "line", sergeantId: "wounded", memberIds: ["", "", "", ""] }] };
+    const existing = clone(holding.gm.defense.squads[0]);
+    const request = { type: "addDefenseSquad", holdingId: holding.id, operationId: "squad-add-denied" };
+    const player = { userId: harness.user.id, remote: true };
+    holding.gm.playersCanUseStorage = false;
+    assert.equal((await harness.executor(request, player)).ok, false, "creating a squad requires the defense permission");
+    holding.gm.playersCanEditDefense = true;
+    const add = { ...request, operationId: "squad-add" };
+    assert.equal((await harness.executor(add, player)).ok, true, "a wounded soldier in another squad cannot block adding a squad");
+    assert.equal((await harness.executor(add, player)).ok, true);
+    const saved = harness.getHolding();
+    assert.equal(saved.gm.defense.squads.length, 2, "replaying a request cannot add a second squad");
+    assert.deepEqual(saved.gm.defense.squads[0], existing);
+    assert.deepEqual(saved.gm.defense.squads[1].memberIds, ["", "", "", ""]);
+    assert.equal(saved.people.list[0].injuredDays, 4);
+  }
+
+  {
     const previousGame = globalThis.game;
     const previousFoundry = globalThis.foundry;
     const previousConst = globalThis.CONST;
@@ -604,6 +627,43 @@ export async function checkStorageOperationCharacterization() {
       assert.deepEqual(holding, beforeVeto);
       assert.deepEqual(actor.itemIds(), beforeVetoItems);
       actor.deleteEmbeddedDocuments = remove;
+
+      // The owner's native sheet can edit or remove the new stack before Skyhold's settings write rejects.
+      for (const change of ["quantity", "moved"]) {
+        const operationId = `sheet-${change}`;
+        const command = { ...withdraw, operationId, qty: 2 };
+        let writes = 0;
+        const destination = makeActor("other", user.id);
+        const failing = createStorageOperationExecutor({
+          getUser: () => gm, getActor: () => actor,
+          readCommittedData: () => ({ holdings: [holding], meta: { revision: 0 } }),
+          async updateHolding(_id, updater) {
+            writes++;
+            await updater(clone(holding));
+            const item = actor.items.contents.find(row => row.getFlag(MODULE_ID, "storageOperationId") === operationId);
+            if (change === "quantity") await item.update({ "system.quantity": 4 });
+            else {
+              destination.addItem({ ...item.toObject(), id: item.id });
+              actor.removeItem(item.id);
+            }
+            throw new Error("commit failed");
+          }
+        });
+        const savedError = console.error;
+        try {
+          console.error = () => {};
+          for (let retry = 0; retry < 2; retry++) {
+            await assert.rejects(failing(command, { userId: gm.id }),
+              (error) => error.code === COMMAND_ERROR.OUTCOME_UNKNOWN && error.operationId === operationId);
+          }
+        } finally { console.error = savedError; }
+        const item = (change === "quantity" ? actor : destination).items.contents
+          .find(row => row.getFlag(MODULE_ID, "storageOperationId") === operationId);
+        assert.equal(item?.system.quantity, change === "quantity" ? 4 : 2, "rollback must leave the owner's edit intact");
+        assert.equal(writes, 1, "retrying the same uncertain issuance must not create a second Item");
+        assert.deepEqual(holding, beforeVeto);
+        if (change === "quantity") actor.removeItem(item.id);
+      }
 
       const deposit = await executor({
         type: "depositItem",

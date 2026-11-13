@@ -22,6 +22,7 @@ import { storageEffectiveRowLoad, storageProfileLoadMultiplier } from "../../../
 import { indexStorageRows, resolveStorageRow, resolveStorageRows } from "../../../engines/storage/row-identity.js";
 import { resourceMatchesMaterialGroup } from "../../../core/material-groups.js";
 import { economyLedgerStorageRows } from "../../../engines/economy/ledger.js";
+import { perishableStorageExpiresInQd } from "../../../engines/economy/perishable-storage.js";
 import { FinanceStorageContextDomain } from "./storage/context-domain.js";
 import { FinanceStorageItemDocumentDomain } from "./storage/item-document-domain.js";
 import { composeDomainGroup } from "../compose-domain.js";
@@ -33,6 +34,7 @@ import {
   availableResourceRowQuantity,
   isResourceBatchPeriodActive,
   protectedResourceBatchIds,
+  resourceBatchAgeQd,
   splitResourceBatchParts,
   syncResourceRowBatches,
   takeResourceBatchById,
@@ -394,6 +396,7 @@ _restoreProductionResource(holding, resource, qty) {
   const dependencies = this._storagePlacementDependencies();
   return addStorageWithOverflow({
     holding, resource: { ...resource, roomId }, qty,
+    acceptBatch: (placed, batch) => perishableStorageExpiresInQd(holding, placed, resourceBatchAgeQd(holding, batch)) > 0,
     dependencies: {
       ...dependencies,
       storageAdd: (draft, placed, amount) => {

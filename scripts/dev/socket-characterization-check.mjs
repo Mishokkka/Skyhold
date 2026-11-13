@@ -209,6 +209,32 @@ export async function checkSocketCharacterization() {
       "an existing GM admission override must keep an explicit-QD plan usable without granting the player override rights"
     );
 
+    const hiddenWorkCurrent = clone(forgedExplicitAdmission);
+    Object.assign(hiddenWorkCurrent.holdings[0].buildings.list[0], { name: "Тайная мастерская", visibility: "gm" });
+    const unrelatedEdit = clone(hiddenWorkCurrent);
+    unrelatedEdit.holdings[0].overview.description = "Описание владения";
+    const unrelatedPatch = buildPlayerPatch(hiddenWorkCurrent, unrelatedEdit);
+    assert.equal(validatePlayerPatch(hiddenWorkCurrent, unrelatedPatch, "player-1").ok, true,
+      "an existing failed admission to a hidden building cannot disclose it or block an overview edit");
+    const rename = clone(hiddenWorkCurrent);
+    rename.holdings[0].people.list[0].name = "Новое имя";
+    assert.equal(validatePlayerPatch(hiddenWorkCurrent, buildPlayerPatch(hiddenWorkCurrent, rename), "player-1").ok, true,
+      "renaming the resident does not make a pre-existing admission issue new");
+    const increasedHiddenWork = clone(hiddenWorkCurrent);
+    increasedHiddenWork.holdings[0].people.list[0].workAllocations[0].normalQd += 1;
+    const hiddenError = validatePlayerPatch(hiddenWorkCurrent, buildPlayerPatch(hiddenWorkCurrent, increasedHiddenWork), "player-1");
+    assert.equal(hiddenError.ok, false);
+    assert.doesNotMatch(hiddenError.error, /Тайная мастерская|СИЛ/);
+
+    const legacyHiddenWork = clone(forgedHardAssignment);
+    const [secretWorkshop] = legacyHiddenWork.holdings[0].buildings.list;
+    Object.assign(secretWorkshop, { name: "Тайная мастерская", visibility: "gm" });
+    legacyHiddenWork.holdings[0].buildings.list.push({ id: "visible", name: "Открытая постройка", assignedWorkerIds: [] });
+    const renamePublicBuilding = clone(legacyHiddenWork);
+    renamePublicBuilding.holdings[0].buildings.list[1].name = "Новое название";
+    assert.equal(validatePlayerPatch(legacyHiddenWork, buildPlayerPatch(legacyHiddenWork, renamePublicBuilding), "player-1").ok, true,
+      "an existing failed admission in a legacy slot must not prevent renaming a different building");
+
     const exactCrewAssignment = clone(guardCurrent);
     exactCrewAssignment.holdings[0].people.list[0].workAssignment = "construction:crew-a";
     exactCrewAssignment.holdings[0].people.list[0].role = "Crew A";

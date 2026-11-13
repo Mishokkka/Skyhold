@@ -296,7 +296,7 @@ export function resourceBatchElapsedQd(holding, batch, elapsedQd = 0) {
   return birth === undefined ? 0 : Math.max(0, whole(elapsedQd) - birth);
 }
 
-function currentBatchAge(holding, batch) {
+export function resourceBatchAgeQd(holding, batch) {
   const step = activePeriods.get(holding)?.currentStep;
   return whole(batch.ageQd) + (step === null || step === undefined ? 0 : resourceBatchElapsedQd(holding, batch, step));
 }
@@ -326,7 +326,7 @@ export function addResourceBatches(row = {}, input = {}, {
   if (explicitBatches && incoming.length && row.batches.length) {
     const existingById = new Map(row.batches.map((batch) => [batch.id, batch]));
     const incomingIds = new Set(incoming.map((batch) => batch.id));
-    const birthSteps = activePeriods.get(holding)?.birthSteps;
+    const period = activePeriods.get(holding);
     for (const batch of incoming) {
       const existing = existingById.get(batch.id);
       if (!existing) continue;
@@ -338,7 +338,8 @@ export function addResourceBatches(row = {}, input = {}, {
       const sourceId = batch.id;
       batch.id = nextBatchId(row, makeId, holding, incomingIds);
       incomingIds.add(batch.id);
-      if (birthSteps?.has(sourceId)) birthSteps.set(batch.id, birthSteps.get(sourceId));
+      if (period?.oldBatchIds.has(sourceId)) period.oldBatchIds.add(batch.id);
+      else if (period?.birthSteps.has(sourceId)) period.birthSteps.set(batch.id, period.birthSteps.get(sourceId));
     }
   }
   row.batches.push(...incoming);
@@ -362,7 +363,7 @@ export function takeResourceBatches(row = {}, qty = 0, {
   const taken = [];
   // New daily lots retain their stored age until period close. Use their
   // virtual age for FIFO without writing that age into a receipt twice.
-  const ordered = [...row.batches].sort((a, b) => currentBatchAge(holding, b) - currentBatchAge(holding, a) || fifoSort(a, b));
+  const ordered = [...row.batches].sort((a, b) => resourceBatchAgeQd(holding, b) - resourceBatchAgeQd(holding, a) || fifoSort(a, b));
   for (const batch of ordered) {
     if (!remaining) break;
     const available = Math.max(0, batch.qty - whole(reservedBatchQuantities.get(batch.id), 0));
@@ -420,7 +421,7 @@ export function availableResourceBatchInventory(row = {}, holding = null, { comp
   const reserved = reservedResourceBatchQuantities(holding, row);
   return resourceBatchInventory(row, { compact: compact && !isResourceBatchPeriodActive(holding), protectedBatchIds: protectedResourceBatchIds(holding, row) }).map((batch) => ({
     ...batch,
-    ageQd: currentBatchAge(holding, batch),
+    ageQd: resourceBatchAgeQd(holding, batch),
     qty: Math.max(0, batch.qty - whole(reserved.get(batch.id), 0))
   })).filter((batch) => batch.qty > 0);
 }
