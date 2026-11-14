@@ -302,6 +302,12 @@ _setStorageResourceQuantity(holding, row, quantity) {
     const taken = takeResourceBatches(row, -delta, { holding, makeId });
     if (taken.takenQty !== -delta) throw new Error("Не удалось изменить количество партии.");
   } else {
+    const roomId = this._normalizeStorageRoomId(row.roomId ?? row.storageRoomId);
+    const room = this._storageRooms(holding, { includeUnavailable: true }).find((entry) => entry.id === roomId);
+    const load = delta * this._storageUnitLoad(row) * storageProfileLoadMultiplier(room, row);
+    if (!room?.available || (!room.unlimited && load > room.free + 0.0001)) {
+      return { ok: false, message: "Помещение недоступно или в нём мало места. Для пополнения с переносом излишка используйте добавление ресурса." };
+    }
     addResourceBatches(row, { qty: delta }, { holding, makeId });
   }
   this._appendStorageLog(holding, [{

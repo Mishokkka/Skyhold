@@ -8,14 +8,22 @@ import { createTransportOperationExecutor } from "../apps/transport-operation-ex
 import { SkyholdWorkflowService } from "../workflows/skyhold-workflow-service.js";
 import { SkyholdData } from "../data/store.js";
 import { normalizeSkyholdData, normalizeHoldingsPartition } from "../data/normalizers.js";
+import { SETTING_CATALOG, SETTING_META } from "../data/constants.js";
 
 globalThis.game = { user: { id: "gm", isGM: true }, users: [{ id: "gm", isGM: true, active: true }],
   settings: { get: () => undefined }, modules: new Map(), time: { worldTime: 0 } };
 globalThis.foundry = { utils: { deepClone: structuredClone } };
 globalThis.ui = { notifications: { warn() {}, info() {}, error() {} } };
 
+let fixtureRevision = 0;
+
 function harness(initial) {
   let stored = structuredClone(initial), sequence = 0;
+  const catalogRevision = ++fixtureRevision;
+  game.settings.get = (_scope, key) => {
+    if (key === SETTING_CATALOG) return stored.catalog;
+    if (key === SETTING_META) return { revision: catalogRevision };
+  };
   const token = Symbol("skip"), skip = value => ({ [token]: true, value });
   const transaction = async updater => {
     const draft = structuredClone(stored), result = await updater(draft, { skip });
@@ -229,7 +237,8 @@ assert.deepEqual(await splitTendays(true), await splitTendays(false), "a sequent
     { ...f.holding, people: { list: [{ id: "consumer", name: "Consumer", age: 30 }] } }
   ], f.data.catalog)[0];
   f.holding = f.data.holdings[0];
-  f.data.catalog.resources.push({ id: "bread", label: "Bread", foodReady: true, shelfLifeQd: 120, loadPoints: 4, basePriceCopper: 5 });
+  f.data.catalog.resources.push({ id: "bread", label: "Bread", foodEdible: true, foodType: "grain", shelfLifeQd: 120,
+    loadPoints: 4, basePriceCopper: 5 });
   const supplies = { ...feeder, id: "tenday-supplies", from: "a", to: "home", capacity: 80000 };
   const cargo = ["bread", "wood"].map(id => ({ lotId: id, resourceId: id, name: id, qty: 10, unitLoad: 4000, unitCopper: 5,
     ageQd: 0, shelfLifeQd: id === "bread" ? 120 : 0 }));
@@ -369,6 +378,88 @@ assert.deepEqual(await splitTendays(true), await splitTendays(false), "a sequent
   assert.equal(prepared.preparedHolding.special.transportV2.orders[0].stages[0].receipts[0].arrivalQd, 84);
   await h.apply(prepared);
 }
+for (const [arrivalQd, transitDeadline] of [[32, 8], [33, 8], [34, 8], [33, 80], [34, 4]]) {
+  const f = transportFixture();
+  f.holding.people.list = [];
+  f.holding.special.ships.list = [];
+  f.holding.storage.resources = [];
+  const service = { ...feeder, id: "milk-delivery", from: "a", to: "home", firstQd: arrivalQd - 1,
+    travelQd: 1, riskBps: 0, dispatchCopper: 0 };
+  const cargo = [{ lotId: "milk", resourceId: "milk", name: "Milk", qty: 2, unitLoad: 4, unitCopper: 3,
+    ageAtQd: arrivalQd - 1, shelfLifeQd: transitDeadline }];
+  bookTransportOrder({ state: f.data.meta.transportV2, holding: f.holding, services: [service],
+    plan: planTransportChain({ cargo, services: [service] }), id: "milk-import", direction: "inbound",
+    commercial: { targetRoomId: "outdoors" } });
+  const h = harness(f.data);
+  const prepared = await h.prepare();
+  await h.apply(prepared);
+  h.reload();
+  const order = h.holding().special.transportV2.orders[0];
+  assert.equal(order.received[0].qty, 2, "the transport receipt still reflects physical arrival");
+  const credited = arrivalQd > 33 ? 2 : 0;
+  const stock = h.holding().storage.resources.filter(row => row.resourceId === "milk").reduce((sum, row) => sum + row.qty, 0);
+  assert.equal(stock, credited);
+  const movements = h.holding().storage.log.filter(row => row.operationId === order.id && row.resourceId === "milk");
+  assert.deepEqual(movements.map(row => row.qty), credited ? [2] : [],
+    "the history credits only goods usable on storage terms and excludes spoilage before credit");
+  if (!credited) assert.ok(prepared.report.ledger.some(row => row.operationId === order.id
+    && row.kind === "notice" && /испорч/.test(row.note)), "the tenday still explains where the arriving goods went");
+}
+
+for (const departureQd of [7, 8, 9]) {
+  const f = transportFixture();
+  f.holding.people.list = [];
+  f.holding.special.ships.list = [];
+  f.holding.storage.resources = [{ id: "milk-stock", resourceId: "milk", roomId: "outdoors", qty: 3,
+    batches: [{ id: "milk-batch", qty: 3, ageQd: 0 }] }];
+  const service = { ...feeder, id: "milk-carrier", firstQd: departureQd, travelQd: 1, riskBps: 0, dispatchCopper: 0 };
+  // The accepted carriage has a longer frozen deadline than the current storage definition.
+  const cargo = [{ lotId: "milk", rowId: "milk-stock", batchId: "milk-batch", resourceId: "milk", name: "Milk",
+    qty: 2, unitLoad: 4, unitCopper: 3, shelfLifeQd: 80 }];
+  bookTransportOrder({ state: f.data.meta.transportV2, holding: f.holding, services: [service],
+    plan: planTransportChain({ cargo, services: [service] }), id: "milk-export", direction: "outbound" });
+  const h = harness(f.data);
+  const cash = h.holding().storage.moneyCopper;
+  const prepared = await h.prepare();
+  await h.apply(prepared);
+  h.reload();
+  const order = h.holding().special.transportV2.orders[0];
+  const fresh = departureQd < 8;
+  assert.equal(order.status, fresh ? "delivered" : "lost");
+  assert.equal(order.received.reduce((sum, lot) => sum + lot.qty, 0), fresh ? 2 : 0);
+  assert.equal(order.dispatched.milk, 2, "the whole promise is retired");
+  assert.equal(order.stages[0].receipts[0].cargo[0].spoiledQty ?? 0, fresh ? 0 : 2);
+  assert.equal(h.holding().storage.moneyCopper - cash, fresh ? 6 : 0);
+  const stockLog = h.holding().storage.log.filter(row => row.resourceId === "milk");
+  assert.equal(stockLog.reduce((sum, row) => sum + row.qty, 0), -3);
+  assert.equal(stockLog.filter(row => row.kind === "transport").reduce((sum, row) => sum + row.qty, 0), fresh ? -2 : 0);
+}
+
+{
+  const f = transportFixture();
+  f.holding.people.list = [];
+  f.holding.special.ships.list = [];
+  f.holding.storage.resources = [{ id: "shared-milk", resourceId: "milk", roomId: "outdoors", qty: 4,
+    batches: [{ id: "shared-lot", qty: 4, ageQd: 0 }] }];
+  for (const [id, date] of [["late-sale", 8], ["early-sale", 7]]) {
+    const service = { ...feeder, id, firstQd: date, travelQd: 1, riskBps: 0, dispatchCopper: 0 };
+    const cargo = [{ lotId: id, rowId: "shared-milk", batchId: "shared-lot", resourceId: "milk", qty: 2,
+      unitLoad: 4, unitCopper: 3, shelfLifeQd: 80 }];
+    bookTransportOrder({ state: f.data.meta.transportV2, holding: f.holding, services: [service],
+      plan: planTransportChain({ cargo, services: [service] }), id, direction: "outbound" });
+  }
+  const h = harness(f.data);
+  const beforeCopper = h.holding().storage.moneyCopper;
+  await h.apply(await h.prepare());
+  h.reload();
+  assert.deepEqual(h.holding().special.transportV2.orders.map(({ id, status }) => [id, status]),
+    [["late-sale", "lost"], ["early-sale", "delivered"]], "processing the late booking first must not erase the earlier two units");
+  assert.equal(h.holding().storage.moneyCopper - beforeCopper, 6);
+  const log = h.holding().storage.log.filter(row => row.resourceId === "milk");
+  assert.equal(log.reduce((sum, row) => sum + row.qty, 0), -4);
+  assert.deepEqual(log.filter(row => row.kind === "transport").map(row => [row.operationId, row.qty]), [["early-sale", -2]]);
+}
+
 // A warehouse expiry is already a stock movement; the later transport receipt
 // accounts for that spoiled promise without claiming a second warehouse dispatch.
 {

@@ -890,7 +890,7 @@ export async function checkStorageOperationCharacterization() {
       // its receipt, has become recoverable. Compensation must follow that outcome.
       for (const [type, blocked] of [
         ...["withdrawResource", "depositItem"].flatMap(type =>
-          ["holdings", "completion", "veto", "newer", "unreadable"].map(blocked => [type, blocked]))
+          ["holdings", "completion", "veto", "newer", "unreadable", "unverified"].map(blocked => [type, blocked]))
       ]) {
         const root = migrateData({ meta: { revision: 8 }, holdings: [makeHolding()], catalog: {} });
         const settings = new Map([[SETTING_META, root.meta], [SETTING_HOLDINGS, root.holdings],
@@ -903,6 +903,13 @@ export async function checkStorageOperationCharacterization() {
           },
           async set(_module, key, value) {
             if (blocked === "holdings" && key === SETTING_HOLDINGS) throw new Error("injected write failure");
+            if (blocked === "unverified" && key === SETTING_HOLDINGS) {
+              // The write made it to Foundry, but an overlapping split write
+              // left a mixed view and this call never acknowledged holdings.
+              settings.set(key, clone(value));
+              settings.set(SETTING_CATALOG, { ...settings.get(SETTING_CATALOG), resources: [{ id: "other-change" }] });
+              throw new Error("holdings response was lost");
+            }
             if (["completion", "newer", "unreadable"].includes(blocked) && key === SETTING_META && value.storageCommit?.writeComplete) {
               if (blocked === "newer") {
                 const fresh = clone(settings.get(SETTING_HOLDINGS));
@@ -944,6 +951,15 @@ export async function checkStorageOperationCharacterization() {
         assert.equal(stale.stale, true);
         assert.deepEqual(actor.itemIds(), idsBefore, "a stale transfer never touches the Actor");
         const attempt = run(request, { userId: gm.id });
+        if (blocked === "unverified") {
+          await assert.rejects(attempt, { code: COMMAND_ERROR.OUTCOME_UNKNOWN });
+          await assert.rejects(run(request, { userId: gm.id }), { code: COMMAND_ERROR.OUTCOME_UNKNOWN });
+          assert.ok(settings.get(SETTING_HOLDINGS)[0].log.some(row => row.operationId === request.operationId),
+            "a same-revision fallback is not proof that the transfer receipt was never written");
+          assert.equal(actor.itemIds().length, idsBefore.length + (deposit ? -1 : 1),
+            "an unverified mixed read must not trigger a second inventory write");
+          continue;
+        }
         const committed = !["holdings", "veto"].includes(blocked);
         if (!committed) {
           await assert.rejects(attempt, /injected write failure|не подтвердил запись/);

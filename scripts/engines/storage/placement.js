@@ -72,17 +72,16 @@ export function addStorageWithOverflow({ holding, resource = {}, qty = 0, depend
       placedResource = { ...placedResource, batches: split.batches };
     }
     let accepted = value;
-    // Transit supplies the frozen base deadline and already elapsed inbound age.
-    // Other placements use the material's storage deadline and current simulation age.
+    // Transit supplies elapsed age. The destination's current storage rules
+    // apply after unloading, as they do for any other placement.
     if (transferBatches || placedResource.ageQd > 0) {
-      const baseQd = placedResource.arrivalShelfLifeQd ?? storageShelfLifeForRow(placedResource);
+      const baseQd = storageShelfLifeForRow(placedResource);
       const lifetime = storageEffectiveShelfLifeQd(roomId === targetRoomId ? targetRoom : undefined, placedResource, baseQd);
       if (transferBatches && lifetime) {
         placedResource.batches = placedResource.batches.filter((batch) => resourceBatchAgeQd(holding, batch) < lifetime);
         accepted = placedResource.batches.reduce((sum, batch) => sum + batch.qty, 0);
       } else if (lifetime && Number(placedResource.ageQd) >= lifetime) accepted = 0;
     }
-    delete placedResource.arrivalShelfLifeQd;
     if (accepted) deps.storageAdd(holding, placedResource, accepted);
     placements.push({ roomId, qty: accepted, ...(accepted < value ? { spoiledQty: value - accepted } : {}), overflowFrom });
   };

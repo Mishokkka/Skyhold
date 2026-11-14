@@ -7,6 +7,7 @@ import { transportSourceToken } from "../../apps/domains/transport-context.js";
 import { createTransportOperationExecutor } from "../../apps/transport-operation-executor.js";
 import { SkyholdWorkflowService } from "../../workflows/skyhold-workflow-service.js";
 import { SkyholdData } from "../../data/store.js";
+import { SETTING_CATALOG, SETTING_META } from "../../data/constants.js";
 
 globalThis.game = { user: { id: "gm", isGM: true }, users: [{ id: "gm", isGM: true, active: true }],
   settings: { get: () => undefined }, modules: new Map(), time: { worldTime: 0 } };
@@ -15,7 +16,8 @@ globalThis.ui = { notifications: { warn() {}, info() {}, error() {} } };
 
 export function fixture({ two = false, kind = "charter", vehicles = 1, travelQd = 4, riskBps = 0 } = {}) {
   const f = transportFixture();
-  f.data.catalog.resources.push({ id: "bread", label: "Bread", foodReady: true, shelfLifeQd: 240, loadPoints: 4, basePriceCopper: 5 });
+  f.data.catalog.resources.push({ id: "bread", label: "Bread", foodEdible: true, foodType: "grain",
+    shelfLifeQd: 240, loadPoints: 4, basePriceCopper: 5 });
   f.data.holdings = (two ? ["first", "second"] : ["first"]).map(id => mergeHoldingDefaults({ ...f.holding, id, name: id,
     people: { list: [{ id: `person-${id}`, name: id, age: 30 }] }, storage: { moneyCopper: 500000, resources: [] },
     special: { ...f.holding.special, ships: { ...f.holding.special.ships, list: [] }, transportV2: { version: 2, orders: [] } } }));
@@ -42,8 +44,15 @@ export function book(f, holding, id, services, { resourceId = "bread", direction
   return order;
 }
 
+let fixtureRevision = 0;
+
 export function harness(initial) {
   let stored = structuredClone(initial), sequence = 0;
+  const catalogRevision = ++fixtureRevision;
+  game.settings.get = (_scope, setting) => {
+    if (setting === SETTING_CATALOG) return stored.catalog;
+    if (setting === SETTING_META) return { revision: catalogRevision };
+  };
   const key = Symbol("skip"), skip = value => ({ [key]: true, value });
   const transaction = async updater => {
     const draft = structuredClone(stored), result = await updater(draft, { skip });

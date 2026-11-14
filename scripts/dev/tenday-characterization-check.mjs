@@ -258,6 +258,17 @@ function checkSchoolResolutionMilestone() {
   assert.equal(holding.log[0].payload?.needsResolution, true);
   assert.equal(holding.log[0].payload?.resolutionKind, "school-milestone");
 
+  const stoppedLegacy = structuredClone(holding);
+  stoppedLegacy.people.list[0].age = 5;
+  stoppedLegacy.people.list[0].educationMilestones = [];
+  stoppedLegacy.buildings.list[0].serviceState.workedQd = 0;
+  assert.equal(harness._advanceResidentAges(stoppedLegacy, 1, period).educated, 0,
+    "a current trace with zero teaching cannot award a legacy school milestone");
+  delete stoppedLegacy.buildings.list[0].serviceState.activeWorkerIds;
+  stoppedLegacy.people.list[0].age = 5;
+  assert.equal(harness._advanceResidentAges(stoppedLegacy, 1, period).educated, 0,
+    "a date stamp without worker evidence cannot turn a legacy assignment into active teaching");
+
   const school = { ...structuredClone(DEFAULT_BUILDING_TEMPLATES.find((row) => row.id === "school")),
     id: "school-2", templateId: "school", constructionStatus: "built", buildProgress: 5 };
   const child = { ...holding.people.list[0], age: 5, educationMilestones: [] };

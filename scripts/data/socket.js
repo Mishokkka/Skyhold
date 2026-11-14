@@ -52,7 +52,7 @@ export function createSkyholdSocketApi({
    * Emit one pending request, rejecting its caller and releasing its ID on transport failure.
    * @returns {boolean} Whether emit completed without a synchronous error, not a GM acknowledgement.
    */
-  function emitRequest(pendingRequests, requestId, payload) {
+  function emitRequest(pendingRequests, requestId, payload, unconfirmed = null) {
     try {
       game.socket.emit(`module.${MODULE_ID}`, payload);
       return true;
@@ -60,7 +60,7 @@ export function createSkyholdSocketApi({
       const pending = pendingRequests.get(requestId);
       pendingRequests.delete(requestId);
       clearTimeout(pending?.timeout);
-      pending?.reject(commandError(commandFailure({ operationId: requestId,
+      pending?.reject(unconfirmed ?? commandError(commandFailure({ operationId: requestId,
         code: COMMAND_ERROR.SOCKET_UNAVAILABLE, message: error?.message, retryable: true })));
       return false;
     }
@@ -81,12 +81,13 @@ export function createSkyholdSocketApi({
       };
       const emitAttempt = () => {
         const targetGm = activeSkyholdGm();
-        if (!targetGm) return rejectPending(offlineError());
+        const unconfirmed = pinAuthority && pending.attempts > 0;
+        if (!targetGm) return rejectPending(unconfirmed ? timeoutError() : offlineError());
         pending.attempts += 1;
         pending.authorities.add(targetGm.id);
         if (!emitRequest(requests, requestId, {
           ...payload, requestId, userId: game.user?.id ?? null, targetGmId: targetGm.id, operation
-        })) return;
+        }, unconfirmed ? timeoutError() : null)) return;
         pending.timeout = setTimeout(() => {
           if (pending.attempts >= 2) return rejectPending(timeoutError());
           if (!pinAuthority || activeSkyholdGm()?.id === targetGm.id) return emitAttempt();

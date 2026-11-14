@@ -610,6 +610,12 @@ export async function checkSocketCharacterization() {
       game.user = requester;
       game.socket = { emit(_channel, payload) { messages.push(payload); } };
       try {
+        let attempts = 0;
+        game.socket = { emit() { if (++attempts === 2) throw new Error("socket lost during Actor retry"); } };
+        await assert.rejects(retryApi.requestStorageOperation({ type: "withdrawResource", operationId: "actor-retry-disconnect" }),
+          error => error?.code === "timeout" && /Сверьте склад и инвентарь/.test(error.message),
+          "losing the retry socket cannot change an already submitted Actor exchange into a definite failure");
+        game.socket = { emit(_channel, payload) { messages.push(payload); } };
         const transfer = retryApi.requestStorageOperation({ type: "withdrawResource", operationId: "actor-authority-changed" });
         first.active = false;
         await assert.rejects(transfer, error => error?.code === "timeout" && /Сверьте склад и инвентарь/.test(error.message));

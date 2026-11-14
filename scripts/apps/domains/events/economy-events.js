@@ -406,7 +406,8 @@ _schoolEducationContext(holding, periodKey) {
     if (building.functions?.culture !== true || !(id.includes("school") || name.includes("школ"))) continue;
     if (!periodKey || building.serviceState?.periodKey !== periodKey) continue;
     const service = buildingServiceBlockReasons(holding, building, "culture");
-    if (!service.active) continue;
+    if (!service.active || !(service.workforce.qd > 0)
+      || !Array.isArray(building.serviceState.activeWorkerIds)) continue;
     const adults = service.workforce.workers.filter((person) => ageGroupFromAge(person.age, person.race, person.subrace) !== "Ре");
     const minimum = Math.max(1, Math.floor(this._safeNumber(building.workersMin, 1)));
     if (adults.length < minimum) continue;

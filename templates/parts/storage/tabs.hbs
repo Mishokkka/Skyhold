@@ -20,6 +20,9 @@
           </div>
 
           {{#unless isGM}}{{#if canUseStorage}}<p class="fbls-help">Можно перемещать позиции между помещениями. Количество, продажи, казну и передачу предметов персонажам ведёт ГМ.</p>{{/if}}{{/unless}}
+          {{#if isGM}}{{#if pendingStorageTransfer}}
+            <button type="button" class="fbls-button compact" data-action="check-storage-transfer" data-storage-holding-id="{{holding.id}}" title="Проверить квитанцию обмена {{pendingStorageTransfer}}" aria-label="Проверить исход обмена"><i class="fa-solid fa-clipboard-check" aria-hidden="true"></i> Проверить исход обмена</button>
+          {{/if}}{{/if}}
 
           <div class="fbls-storage-global-search {{#if activeStorage.resources}}with-add-row{{/if}}">
             <label><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-storage-search value="{{storageContext.searchQuery}}" placeholder="Найти ресурс или предмет во всех помещениях…" autocomplete="off" /></label>

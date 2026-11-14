@@ -4,6 +4,8 @@ import { stableDataHash } from "../../../data/storage-commit.js";
 import { findReadableHoldingEntry, hiddenStorageRoomIds } from "../../../data/access-guard.js";
 import { holdingPermissionContext } from "../../../data/holding-permissions.js";
 import { COMMAND_ERROR } from "../../../data/command-result.js";
+import { findHoldingOperation } from "../../../data/operations.js";
+import { makeId } from "../../../data/utils.js";
 import { reservedResourceBatchQuantities } from "../../../core/resource-batches.js";
 import { reclassifyResourceRow } from "../../../core/resources.js";
 import { createSafeIcon, escapeHtml } from "../../../core/helpers.js";
@@ -24,7 +26,8 @@ export const StorageEventActions = {
     "pick-storage-resource": "_onPickStorageResource",
     "toggle-storage-room-rail": "_onToggleStorageRoomRail",
     "storage-row-actions": "_onStorageRowActions",
-    "storage-selection-move": "_onStorageSelectionMove"
+    "storage-selection-move": "_onStorageSelectionMove",
+    "check-storage-transfer": "_onCheckStorageTransfer"
   },
   publicClick: ["open-storage-item"]
 };
@@ -32,6 +35,7 @@ export const StorageEventActions = {
 const STORAGE_CONTEXT_MENU_WIDTH = 248;
 const STORAGE_CONTEXT_MENU_HEIGHT = 176;
 const RESERVED_RESOURCE_MESSAGE = "В позиции есть груз по перевозке. Сначала завершите или отмените заказ.";
+const pendingActorTransfers = new Map();
 
 function storagePanel(element) {
   return element?.closest?.("[data-storage-drop-zone]");
@@ -50,6 +54,59 @@ function createStorageContextMenuButton({ action = "", icon = "fa-solid fa-right
 }
 
 export const StorageEventDomain = {
+_pendingStorageTransfer(holdingId) {
+  if (!game.user?.isGM) return "";
+  const pending = pendingActorTransfers.get(holdingId);
+  return pending && !pending.inFlight ? pending.operationId : "";
+},
+
+async _requestStorageActorTransfer(request) {
+  const { holdingId } = request;
+  const existing = pendingActorTransfers.get(holdingId);
+  if (existing) {
+    const message = existing.inFlight ? "Дождитесь окончания текущего обмена."
+      : `Сначала проверьте исход обмена ${existing.operationId}.`;
+    return { ok: false, message };
+  }
+  const operationId = makeId("storage-op", 20);
+  const pending = { operationId, userId: String(game.user.id), inFlight: true };
+  pendingActorTransfers.set(holdingId, pending);
+  try {
+    const result = await requestStorageOperation({ ...request, operationId });
+    pendingActorTransfers.delete(holdingId);
+    return result;
+  } catch (error) {
+    if ([COMMAND_ERROR.TIMEOUT, COMMAND_ERROR.OUTCOME_UNKNOWN].includes(error?.code)) {
+      pending.inFlight = false;
+      this._activeTabContextCache?.clear?.();
+      this.requestRender({ focus: false, skipLoadingOverlay: true });
+    } else pendingActorTransfers.delete(holdingId);
+    throw error;
+  }
+},
+
+async _onCheckStorageTransfer(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  if (!game.user?.isGM) return;
+  const holdingId = String(event.currentTarget?.dataset?.storageHoldingId ?? "");
+  const pending = pendingActorTransfers.get(holdingId);
+  if (!pending || pending.inFlight) return;
+  const { holding } = findReadableHoldingEntry(SkyholdData.view(), holdingId);
+  const receipt = findHoldingOperation(holding, pending.operationId);
+  if (receipt?.type === "system" && receipt.payload?.userId === pending.userId && receipt.payload.result?.ok) {
+    ui.notifications.info(receipt.payload.result.message || "Обмен подтверждён.");
+  } else {
+    const message = `Квитанция обмена ${escapeHtml(pending.operationId)} пока недоступна. Завершить ожидание после ручной сверки склада и инвентаря?`;
+    const acknowledged = await this._confirmAction("Завершить сверку обмена", message);
+    if (!acknowledged) return;
+  }
+  if (pendingActorTransfers.get(holdingId) !== pending) return;
+  pendingActorTransfers.delete(holdingId);
+  this._activeTabContextCache?.clear?.();
+  this.requestRender({ focus: false, skipLoadingOverlay: true });
+},
+
 _onAddStorageResource(event) {
   event.preventDefault();
   event.stopPropagation();
@@ -318,7 +375,8 @@ async _onStorageRowFieldChange(field, rowType, property, value) {
   const result = await SkyholdData.updateHolding(context.holdingId, (holding) => {
     const { row, message } = resolveStorageRow(holding.storage?.[context.type], rowId);
     if (!row) return SkyholdData.skipTransaction({ ok: false, message });
-    if (row.resourceId !== (renderedMaterial ?? context.row.resourceId)
+    if (this._normalizeStorageRoomId(row.roomId ?? row.storageRoomId) !== context.roomId
+      || row.resourceId !== (renderedMaterial ?? context.row.resourceId)
       || (row[property] !== (expected ?? context.row[property]) && row[property] !== value)) {
       return SkyholdData.skipTransaction({ ok: false, message: STORAGE_ROW_CHANGED });
     }
@@ -333,7 +391,10 @@ async _onStorageRowFieldChange(field, rowType, property, value) {
     row[property] = value;
     return { ok: true };
   }, { fallback: false, reason: `storage:${context.type}:${property}` });
-  if (!result?.ok) ui.notifications.warn(result?.message ?? STORAGE_ROW_CHANGED);
+  if (!result?.ok) {
+    ui.notifications.warn(result?.message ?? STORAGE_ROW_CHANGED);
+    this.requestRender({ focus: false, skipLoadingOverlay: true });
+  }
 },
 
 async _executeStorageContextAction({ action = "", rowType = "resources", rowId = "", roomId = "outdoors", holdingId } = {}) {
@@ -669,7 +730,7 @@ async _onStorageDrop(event) {
   try {
     const parent = item.parent;
     const parentDocumentName = parent?.documentName ?? parent?.constructor?.documentName;
-    const result = await requestStorageOperation({
+    const result = await this._requestStorageActorTransfer({
       type: "depositItem",
       holdingId,
       actorId: parentDocumentName === "Actor" ? String(parent.id ?? "") : "",
@@ -698,7 +759,7 @@ async _withdrawStoredResource({ holdingId, expectedRevision, row = null, qty = 1
   const actorId = String(actor?.id ?? "");
   if (!actorId) return ui.notifications.warn("Не найден привязанный персонаж игрока.");
   try {
-    const result = await requestStorageOperation({
+    const result = await this._requestStorageActorTransfer({
       type: "withdrawResource",
       holdingId,
       expectedRevision,
@@ -781,7 +842,7 @@ async _giveStoredItem({ holdingId, expectedRevision, itemId = "", qty = 1, actor
   const actorId = String(actor?.id ?? "");
   if (!actorId) return ui.notifications.warn("Не найден привязанный персонаж игрока.");
   try {
-    const result = await requestStorageOperation({
+    const result = await this._requestStorageActorTransfer({
       type: "giveStoredItem",
       holdingId,
       expectedRevision,

@@ -408,11 +408,13 @@ export function preflightMarketOutboundDispatch({ resources = [], cargoReservati
   return { ok: true, prepared, sources };
 }
 
-export function applyMarketOutboundDispatch({ resources = [], cargoReservations = [], orderCargo = cargoReservations, conflicts } = {}) {
+export function applyMarketOutboundDispatch({ resources = [], cargoReservations = [], orderCargo = cargoReservations,
+  conflicts, canLoadSource = () => true } = {}) {
   const preflight = preflightMarketOutboundDispatch({ resources, cargoReservations, orderCargo, conflicts });
   if (!preflight.ok) return preflight;
+  const unavailable = new Set(preflight.prepared.filter((source) => !canLoadSource(source)));
   for (const requirement of preflight.prepared) {
-    requirement.batch.qty = whole(requirement.batch.qty) - requirement.qty;
+    if (!unavailable.has(requirement)) requirement.batch.qty = whole(requirement.batch.qty) - requirement.qty;
   }
   for (const row of new Set(preflight.prepared.map(({ row }) => row))) {
     row.batches = row.batches.filter((batch) => whole(batch?.qty) > 0);
@@ -420,7 +422,8 @@ export function applyMarketOutboundDispatch({ resources = [], cargoReservations 
   }
   const cargo = (cargoReservations ?? []).map((row, index) => {
     const source = preflight.sources[index];
-    return { ...row, ageQd: source?.ageQd ?? whole(row?.reservedAgeQd ?? row?.ageQd),
+    return { ...row, qty: unavailable.has(source) ? 0 : row.qty,
+      ageQd: source?.ageQd ?? whole(row?.reservedAgeQd ?? row?.ageQd),
       roomId: text(source?.row.roomId ?? source?.row.storageRoomId ?? row?.roomId) || "outdoors" };
   });
   return { ok: true, cargo, dispatchedQty: cargo.reduce((sum, row) => sum + whole(row?.qty), 0) };

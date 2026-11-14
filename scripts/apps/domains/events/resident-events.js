@@ -17,7 +17,8 @@ import { syncSelectionSummary } from "../../common/selection-summary.js";
 import { residentTraitTooltip } from "../../common/resident-trait-chips.js";
 import { confirmBuildingWorkerAdmission } from "../../common/building-worker-admission.js";
 import { transferResidentBetweenHoldings, vacatePoliticsRepresentative } from "../../../data/resident-assignments.js";
-import { staffAppointmentFor } from "../../../data/hybrid-labor.js";
+import { newHybridLaborIssues, staffAppointmentFor } from "../../../data/hybrid-labor.js";
+import { holdingWorkerAdmissionIssues } from "../../../engines/workers/building-qualification.js";
 import { normalizePerson } from "../../../data/normalizers/resident.js";
 
 const RESIDENT_CONTEXT_MENU_WIDTH = 230;
@@ -888,7 +889,7 @@ async _savePersonEditorDraft(event) {
       .filter(Boolean));
     const previewHolding = structuredClone(currentHolding);
     previewHolding.people.list[Number(workParts[2])] = previewPerson;
-    const allocationCheck = validateHoldingWorkAllocations(previewHolding);
+    const allocationCheck = validateHoldingWorkAllocations(previewHolding, { previousHolding: currentHolding });
     const blockingIssue = allocationCheck.issues.find((issue) => (
       String(issue?.personId ?? "") === String(previewPerson.id ?? "")
       || previewExplicitBuildingIds.has(String(issue?.buildingId ?? ""))
@@ -897,19 +898,13 @@ async _savePersonEditorDraft(event) {
       ui.notifications.warn(blockingIssue.message || "Некорректный план рабочих QD.");
       return false;
     }
-    for (const buildingId of previewExplicitBuildingIds) {
+    const admissionIssues = newHybridLaborIssues(holdingWorkerAdmissionIssues(currentHolding), holdingWorkerAdmissionIssues(previewHolding));
+    for (const { buildingId } of admissionIssues.filter((issue) => issue.personId === String(previewPerson.id))) {
       if (hidden.has(buildingId)) {
         ui.notifications.warn("Назначение недоступно.");
         return false;
       }
-      const building = (currentHolding.buildings?.list ?? []).find((row) => String(row?.id ?? "") === buildingId);
-      if (!building) continue;
-      const admission = this._buildingWorkerAdmission?.(building, previewPerson) ?? { eligible: true, hard: false, overridden: false };
-      if (!admission.hard || admission.eligible) continue;
-      if (admission.overridden) {
-        workAllocationAdmissionOverrides.push(building);
-        continue;
-      }
+      const building = currentHolding.buildings.list.find((row) => String(row.id) === buildingId);
       const decision = await confirmBuildingWorkerAdmission({ manager: this, building, person: previewPerson });
       if (!decision.allowed) {
         this.requestRender?.();

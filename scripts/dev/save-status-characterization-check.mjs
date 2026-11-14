@@ -269,6 +269,48 @@ try {
     assert.equal(notes.value, "Моя правка старой заметки", "refusal retains the draft for recovery");
   }
 
+  {
+    const { workerAdmission } = await import("../engines/workers/building-qualification.js");
+    const priorUser = game.user;
+    const building = { id: "workshop", name: "Кузница", constructionStatus: "built",
+      functions: { production: true }, productionLines: [{ id: "smithing", active: true, source: "workers" }],
+      workerProfile: { admission: { hard: true, text: "СИЛ 4+", clauses: [[{ attribute: "strength", minimum: 4 }]] } } };
+    const resident = { id: "worker", name: "Руна", age: 30, attributes: { strength: 2 },
+      workAllocationMode: "explicit", workAllocations: [{ id: "shift", sourceId: building.id, functionId: "production:smithing", normalQd: 2 }] };
+    const name = { ...field, value: resident.name };
+    const amount = { dataset: { field: "holdings.0.people.list.0.workAllocations.0.normalQd", type: "number" }, value: "2" };
+    const profile = { ...editor, dataset: { holdingId: "shift", residentId: resident.id }, closest: () => profile,
+      querySelectorAll: selector => selector === "[data-field]" ? [name, amount] : [] };
+    const live = { holdings: [{ id: "shift", visibility: "public",
+      gm: { playersCanEditResidents: true, playersCanEditBuildings: true }, buildings: { list: [building] }, people: { list: [resident] } }] };
+    const priorUsers = game.users;
+    const priorSocket = game.socket;
+    game.user = { id: "player", isGM: false };
+    game.users = [{ id: "gm", active: true, isGM: true }];
+    game.socket = { emit() {} };
+    try {
+      SkyholdData.get = () => structuredClone(live);
+      SkyholdData.transaction = async (updater) => updater(live);
+      const editorManager = { ...manager, _buildingWorkerAdmission: workerAdmission };
+      assert.equal(workerAdmission(building, resident).hard, true);
+      assert.equal(workerAdmission(building, resident).eligible, false);
+      captureResidentEditorDraft(profile, resident);
+      name.value = "Руна Кузнец";
+      const save = () => ResidentEventDomain._savePersonEditorDraft.call(editorManager, { currentTarget: profile });
+      assert.equal(await save(), true, "an existing admission problem cannot block the resident's unrelated name edit");
+      assert.equal(resident.name, name.value);
+      assert.equal(resident.workAllocations[0].normalQd, 2);
+      assert.equal(building.workerAdmissionOverrideIds, undefined);
+      amount.value = "3";
+      assert.equal(await save(), false, "extending the same ineligible assignment is a new violation");
+      assert.equal(resident.workAllocations[0].normalQd, 2);
+    } finally {
+      game.user = priorUser;
+      game.users = priorUsers;
+      game.socket = priorSocket;
+    }
+  }
+
   // The work select contains the current foreman role. A routine save must not
   // clear it as though it were an unknown building, including during injury.
   game.users = [{ id: "gm", active: true, isGM: true }];

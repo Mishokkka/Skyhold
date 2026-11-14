@@ -325,12 +325,10 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
     });
 
     let forwardToken = "";
-    let partitionsWritten = false;
     try {
       await writeSetting(SETTING_META, clone(startedMeta));
       if (holdingsDirty) await writeSetting(SETTING_HOLDINGS, clone(next.holdings), nextHashes.holdings);
       if (catalogDirty) await writeSetting(SETTING_CATALOG, clone(next.catalog), nextHashes.catalog);
-      partitionsWritten = true;
 
       next.meta = makeStorageCommitMeta(startedMeta, {
         writeId,
@@ -357,7 +355,9 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
         || persistedPartitionHashes.holdings !== nextHashes.holdings
         || persistedPartitionHashes.catalog !== nextHashes.catalog) {
         const observedRevision = toNumber(durable.meta?.revision, 0);
-        if (observedRevision > previousRevision || (partitionsWritten && persisted.unverified)) throw uncertain();
+        // A partition write can reach Foundry without acknowledging the caller.
+        // A fallback snapshot is not evidence that this attempt rolled back.
+        if (observedRevision > previousRevision || persisted.unverified) throw uncertain();
         throw error;
       }
       next.meta = durable.meta;

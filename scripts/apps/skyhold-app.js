@@ -553,6 +553,7 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
         workerContext
       }),
       storageContext: active?.storage ? this._storageContext(activeHolding, canUseStorage, this.activeStorageRoomId) : null,
+      pendingStorageTransfer: active?.storage ? this._pendingStorageTransfer(activeHolding?.id) : "",
       specialTabs: active?.special ? this._prepareSpecialTabs(activeHolding) : [],
       shipsContext: active?.externalMarket
         ? (await import("./ships-context.js")).prepareShipsContext(activeHolding, { revision: data.meta.revision, data }) : null,

@@ -10,6 +10,10 @@ import { normalizeStorageRoomId } from "../engines/storage/capacity.js";
 import { economyLedgerStorageRows } from "../engines/economy/ledger.js";
 import { buildTendayOperationPayload } from "../engines/tenday/operation-payload.js";
 import { ResidentDomain } from "../apps/domains/resident-domain.js";
+import { BuildingDomain } from "../apps/domains/building-domain.js";
+import { resourceUnitLoad } from "../core/resources.js";
+import { appendHoldingOperation } from "../data/operations.js";
+import { COMMAND_ERROR } from "../data/command-result.js";
 import { buildPlayerPatch, validatePlayerPatch } from "../data/player-write-guard.js";
 
 globalThis.foundry = { applications: { api: { ApplicationV2: class {}, HandlebarsApplicationMixin: Base => Base } } };
@@ -81,11 +85,11 @@ SkyholdData.updateHolding = async (id, updater) => {
   return result;
 };
 globalThis.HTMLTextAreaElement = class {};
-const manager = { ...FinanceStorageDomain, ...StorageEventDomain, ...NavigationEventDomain, activeHoldingId: "a",
+const manager = { ...BuildingDomain, ...FinanceStorageDomain, ...StorageEventDomain, ...NavigationEventDomain, activeHoldingId: "a",
   _onDefenseFieldChange: GmEventDomain._onDefenseFieldChange,
   _safeNumber: (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback,
   _normalizeStorageRoomId: normalizeStorageRoomId,
-  _formatNumber: String, _moneyContext: () => ({}), _resourcePriceCopper: () => 1,
+  _formatNumber: String, _moneyContext: () => ({}), _resourcePriceCopper: () => 1, _itemPriceCopper: () => 1,
   _canPlayerWriteFieldPath: () => game.user.isGM, _sanitizeTextBlock: value => value,
   _activeWritableHoldingId() { return this.activeHoldingId; },
   _canUseStorage: () => true, _warnNoActiveHolding: () => ui.notifications.warn("Владение недоступно."),
@@ -137,6 +141,73 @@ assert.equal(row(0).batches.find(batch => batch.id === "wood-batch").qty, 4);
 const afterOtherEdit = structuredClone(data);
 await qtyChange(8, "6");
 assert.deepEqual(data, afterOtherEdit, "an absolute edit in a stale field must not overwrite a newer balance");
+
+{
+  const holding = data.holdings[0];
+  const actor = { id: "retry-recipient", uuid: "Actor.retry-recipient" };
+  let command;
+  let writes = 0;
+  registerStorageOperationExecutor(async (operation) => {
+    command = operation;
+    writes++;
+    throw Object.assign(new Error("Ответ потерян"), { code: COMMAND_ERROR.TIMEOUT });
+  });
+  const issue = () => manager._withdrawStoredResource({ holdingId: holding.id, expectedRevision: data.meta.revision,
+    row: row(0), qty: 1, actor });
+  const previousError = console.error;
+  const confirm = manager._confirmAction;
+  try {
+    console.error = () => {};
+    await issue();
+    await issue();
+    assert.equal(writes, 1, "the ordinary action cannot start another transfer while the same inventory result is unknown");
+    const event = { preventDefault() {}, stopPropagation() {}, currentTarget: { dataset: { storageHoldingId: holding.id } } };
+    manager._confirmAction = async () => false;
+    await manager._onCheckStorageTransfer(event);
+    assert.equal(manager._pendingStorageTransfer(holding.id), command.operationId, "a missing receipt keeps the pending exchange visible");
+    appendHoldingOperation(holding, { type: "system", operationId: command.operationId,
+      payload: { userId: game.user.id, result: { ok: true, message: "Выдана одна единица" } } });
+    game.user.isGM = false;
+    await manager._onCheckStorageTransfer(event);
+    game.user.isGM = true;
+    assert.equal(manager._pendingStorageTransfer(holding.id), command.operationId, "players cannot clear a GM's reconciliation");
+    await manager._onCheckStorageTransfer(event);
+    assert.equal(manager._pendingStorageTransfer(holding.id), "");
+    assert.equal(writes, 1, "reconciliation reads the late receipt without running another Actor mutation");
+  } finally {
+    console.error = previousError;
+    manager._confirmAction = confirm;
+    holding.log = holding.log.filter(entry => entry.operationId !== command?.operationId);
+  }
+}
+
+{
+  const saved = structuredClone(data);
+  try {
+    const holding = data.holdings[0];
+    holding.buildings.list.push({ id: "small-room", name: "Кладовая", constructionStatus: "built",
+      functions: { storage: true }, storage: { capacity: 10 * resourceUnitLoad("wood") } });
+    holding.storage.resources = [{ ...wood, roomId: "small-room", qty: 6 }];
+    holding.special.transportV2.orders = [];
+    const edit = (value, defaultValue) => manager._onFieldChange({
+      preventDefault() {},
+      currentTarget: { value: String(value), defaultValue: String(defaultValue),
+        dataset: { type: "number", field: "holdings.0.storage.resources.0.qty" },
+        closest: () => ({ dataset: { storageHoldingId: "a", storageRowId: wood.id,
+          storageRowRoomId: "small-room", storageResourceId: "wood" } }) }
+    });
+    const before = structuredClone(data);
+    await edit(11, 6);
+    assert.deepEqual(data, before, "an absolute increase cannot overfill the rendered room or record a false credit");
+    await edit(10, 6);
+    assert.equal(row(0).qty, 10);
+    assert.equal(data.holdings[0].storage.log.at(-1).qty, 4);
+    await edit(9, 10);
+    assert.equal(row(0).qty, 9);
+  } finally {
+    Object.assign(data, saved);
+  }
+}
 
 {
   const savedHoldings = structuredClone(data.holdings);
@@ -664,6 +735,18 @@ const savedMovement = { holdings: [movementHolding] };
 deleteCollectionRow(savedMovement, "holdings.0.buildings.list", "hidden");
 const afterRemoval = mergeHoldingDefaults(savedMovement.holdings[0]);
 const currentRooms = rooms.filter(room => room.id !== "hidden");
+assert.ok(!afterRemoval.storage.items.some(row => row.roomId === "hidden"),
+  "deleting the last hidden room must not strand its items outside every room tab");
+const recoveredWood = afterRemoval.storage.resources.find(row => row.id === "hidden-wood");
+assert.equal(recoveredWood.roomId, "outdoors");
+assert.deepEqual(recoveredWood.batches, wood.batches, "relocation preserves the lots used by existing bookings");
+manager._storageRooms = () => currentRooms;
+const publicItemContext = manager._storageContext(afterRemoval, true, "outdoors");
+assert.equal(publicItemContext.visibleCount, afterRemoval.storage.resources.filter(row => row.qty > 0).length);
+manager.activeStorageTab = "items";
+assert.ok(manager._storageContext(afterRemoval, true, "outdoors").activeItemRows.some(row => row.id === "hidden-item"));
+manager.activeStorageTab = "log";
+manager._storageRooms = () => rooms;
 const history = manager._storageLogRows(afterRemoval, currentRooms).filter(row => row.operationId === "removed-room");
 assert.deepEqual(history.map(row => [row.qty, row.note]), [[1, "Открытый склад"]],
   "after the last hidden room was deleted the player sees the public credit without historical room text");
@@ -678,7 +761,7 @@ for (const file of ["resources", "items", "tabs", "log"]) {
   for (const match of template.matchAll(/{{#(if|unless|each)\s+([^}]+)}}|{{\/(if|unless|each)}}|<input\b[^>]*>|<button\b[^>]*>/g)) {
     if (match[1]) stack.push(match[2]);
     else if (match[3]) stack.pop();
-    else if (/data-field=|data-storage-money-field=|data-action="(?:adjust-storage-money|clear-storage-log|pick-storage-resource)"/.test(match[0])) {
+    else if (/data-field=|data-storage-money-field=|data-action="(?:adjust-storage-money|clear-storage-log|pick-storage-resource|check-storage-transfer)"/.test(match[0])) {
       assert.ok(stack.some(condition => /^(?:\.\.\/)?isGM$/.test(condition)), `${file}: a GM-only control must be gated by GM permissions`);
     }
   }

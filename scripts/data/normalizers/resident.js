@@ -5,6 +5,7 @@ import { normalizePersonWorkAllocations } from "../work-allocations.js";
 import { normalizeWorkerTypeSet } from "./building.js";
 import { normalizeStaffAppointment } from "../hybrid-labor.js";
 import { clearPersonFromAssignments } from "../resident-assignments.js";
+import { normalizeStorageRoomId } from "../../engines/storage/capacity.js";
 
 const OBSOLETE_RESIDENT_SKILL_VALUES = new Set([
   "-", "нет", "none",
@@ -46,6 +47,13 @@ export function clearBuildingReferences(holding, building) {
   const id = String(building?.id ?? "");
   const name = String(building?.name ?? "");
   if (!id && !name) return;
+  if (id) {
+    for (const rows of [holding.storage?.resources, holding.storage?.items]) {
+      for (const row of rows ?? []) {
+        if (normalizeStorageRoomId(row.roomId ?? row.storageRoomId) === id) row.roomId = "outdoors";
+      }
+    }
+  }
   for (const person of holding?.people?.list ?? []) {
     const assigned = String(person?.workAssignment ?? "");
     if (assigned === id || (name && assigned === name)) {
