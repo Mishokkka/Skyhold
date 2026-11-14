@@ -4,6 +4,35 @@ import { conflictingStorageLotKeys, indexStorageLots, matchingStorageLots } from
 export const transportOrders = (holding) => holding?.special?.transportV2?.orders ?? [];
 export const activeTransportOrder = (order) => !["delivered", "lost", "cancelled"].includes(order.status);
 
+export function committedTransportAllocation(run, claim) {
+  return claim?.manifestReady === true && Boolean(run?.incident || run?.riskChecked || ["travelling", "arrived"].includes(run?.status));
+}
+
+/** Goods already loaded can await a local stock debit for several periods. */
+export function confirmedOutboundCargo(holding, state) {
+  const result = new Map();
+  const orders = transportOrders(holding).filter(order => order.direction === "outbound" && activeTransportOrder(order));
+  if (!orders.length) return result;
+  const runs = new Map((state?.runs ?? []).map(run => [run.id, run]));
+  for (const order of orders) {
+    const stage = order.stages?.[0];
+    if (!stage) continue;
+    const receipts = new Set((stage.receipts ?? []).map(receipt => receipt.runId));
+    const quantities = new Map();
+    for (const scheduled of stage.runs ?? []) {
+      if (receipts.has(scheduled.id)) continue;
+      const run = runs.get(scheduled.id);
+      const claim = run?.claims?.find(entry => entry.holdingId === order.holdingId && entry.orderId === order.id && entry.stage === 0);
+      if (!committedTransportAllocation(run, claim)) continue;
+      for (const lot of claim.cargo) {
+        quantities.set(lot.lotId, (quantities.get(lot.lotId) ?? 0) + Math.max(0, lot.qty - (lot.spoiledQty ?? 0)));
+      }
+    }
+    if (quantities.size) result.set(order.id, quantities);
+  }
+  return result;
+}
+
 export function legacyActiveMarketOrders(holding) {
   const market = holding?.special?.market;
   return [
@@ -99,10 +128,11 @@ export function outboundStorageLotConflicts(holding) {
   ]);
 }
 
-export function expireTransportReservation(holding, row, batch) {
+export function expireTransportReservation(holding, row, batch, confirmedCargo) {
   const rowId = String(row?.id ?? "").trim();
   const batchId = String(batch?.id ?? "").trim();
-  if (!rowId || !batchId) return;
+  if (!rowId || !batchId) return 0;
+  let confirmedQty = 0;
   let sources, conflicts;
   for (const order of transportOrders(holding)) {
     if (!activeTransportOrder(order) || order.direction !== "outbound") continue;
@@ -112,10 +142,18 @@ export function expireTransportReservation(holding, row, batch) {
       conflicts ??= outboundStorageLotConflicts(holding);
       const { matches } = matchingStorageLots(sources, lot, conflicts);
       if (matches.length !== 1 || matches[0].row !== row || matches[0].batch !== batch) continue;
-      order.sourceSpoiledPending ??= {};
-      order.sourceSpoiledPending[lot.lotId] = Math.max(0, lot.qty - (order.dispatched?.[lot.lotId] ?? 0));
+      const remaining = Math.max(0, lot.qty - (order.dispatched?.[lot.lotId] ?? 0));
+      const loaded = Math.min(remaining, confirmedCargo?.get(order.id)?.get(lot.lotId) ?? 0);
+      confirmedQty += loaded;
+      if (remaining > loaded) {
+        order.sourceSpoiledPending ??= {};
+        order.sourceSpoiledPending[lot.lotId] = remaining - loaded;
+      } else if (order.sourceSpoiledPending) {
+        delete order.sourceSpoiledPending[lot.lotId];
+      }
     }
   }
+  return confirmedQty;
 }
 
 /** Transport is the only runtime model. This initializes an in-memory draft, never a world setting. */

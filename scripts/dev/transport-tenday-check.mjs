@@ -19,7 +19,7 @@ let fixtureRevision = 0;
 
 function harness(initial) {
   let stored = structuredClone(initial), sequence = 0;
-  const catalogRevision = ++fixtureRevision;
+  let catalogRevision = ++fixtureRevision;
   game.settings.get = (_scope, key) => {
     if (key === SETTING_CATALOG) return stored.catalog;
     if (key === SETTING_META) return { revision: catalogRevision };
@@ -36,6 +36,10 @@ function harness(initial) {
   workflow._postTendaySummaryChat = async () => {}; workflow.requestRender = () => {};
   const execute = createTransportOperationExecutor({ transaction, workflow: () => workflow, getUser: id => ({ id, isGM: id === "gm" }) });
   return { get data() { return stored; }, holding: id => stored.holdings.find(row => row.id === (id ?? stored.holdings[0].id)), workflow, execute,
+    async setShelfLife(resourceId, shelfLifeQd) {
+      await transaction(data => { data.catalog.resources.find(row => row.id === resourceId).shelfLifeQd = shelfLifeQd; });
+      catalogRevision = ++fixtureRevision;
+    },
     reload() { stored = normalizeSkyholdData(JSON.parse(JSON.stringify(stored))); },
     async prepare(qd = 40, holdingId = stored.holdings[0].id) {
       const before = structuredClone(stored);
@@ -378,6 +382,52 @@ assert.deepEqual(await splitTendays(true), await splitTendays(false), "a sequent
   assert.equal(prepared.preparedHolding.special.transportV2.orders[0].stages[0].receipts[0].arrivalQd, 84);
   await h.apply(prepared);
 }
+// A decision can commit the physical manifest before the holding's Apply.
+// A subsequent catalog edit cannot change what went aboard or the insured loss.
+for (const [departureQd, confirmedFresh] of [[1, true], [41, true], [1, false]]) {
+  const f = food({ lifetime: 100 });
+  const prior = f.holding.special.transportV2.orders[0];
+  f.holding.special.transportV2.orders = [];
+  f.data.meta.transportV2.runs = [];
+  f.holding.storage.resources[0].qty = 12;
+  f.holding.storage.resources[0].batches[0].qty = 12;
+  f.data.catalog.resources.find(row => row.id === "tenday-food").shelfLifeQd = confirmedFresh ? 100 : 1;
+  const service = { ...feeder, firstQd: departureQd };
+  bookTransportOrder({ state: f.data.meta.transportV2, holding: f.holding, services: [service],
+    plan: planTransportChain({ cargo: prior.cargo, services: [service] }), id: "confirmed-sale", direction: "outbound",
+    commercial: { marketId: "a", insuranceCoverageBps: 10000 } }).demandReservations = [];
+  const h = harness(f.data);
+  const beforeCash = h.holding().storage.moneyCopper;
+  const review = await h.prepare(departureQd < 40 ? 40 : 80);
+  await h.decide(review, { outcome: "loss", lossBps: 5000 });
+  const frozen = h.data.meta.transportV2.runs[0];
+  assert.equal(frozen.claims[0].cargo[0].spoiledQty, confirmedFresh ? 0 : 10);
+  assert.equal(Object.values(frozen.incident.lossAllocations)[0], confirmedFresh ? 5 : 0);
+  assert.equal(h.holding().storage.resources[0].qty, 12);
+  assert.equal(h.holding().special.transportV2.orders[0].stages[0].receipts.length, 0);
+  await h.setShelfLife("tenday-food", confirmedFresh ? 1 : 100);
+  h.reload();
+  if (departureQd > 40) {
+    await h.apply(await h.prepare());
+    h.reload();
+    assert.equal(h.holding().storage.resources[0]?.qty, 10, "only the two units that never left may spoil at the warehouse");
+  }
+  const prepared = await h.prepare();
+  await h.apply(prepared);
+  h.reload();
+  const order = h.holding().special.transportV2.orders[0], receipt = order.stages[0].receipts[0];
+  assert.equal(receipt.cargo[0].ageQd, frozen.claims[0].cargo[0].ageQd);
+  assert.equal(receipt.cargo[0].spoiledQty, confirmedFresh ? 0 : 10);
+  assert.equal(order.received.reduce((sum, lot) => sum + lot.qty, 0), confirmedFresh ? 5 : 0);
+  assert.equal(order.lostQty, confirmedFresh ? 5 : 0);
+  assert.equal(order.insurancePaidCopper, confirmedFresh ? 25 : 0);
+  assert.equal(h.holding().storage.moneyCopper - beforeCash, confirmedFresh ? 50 : 0);
+  assert.equal(h.holding().storage.resources.reduce((sum, row) => sum + row.qty, 0), confirmedFresh ? 0 : 12);
+  const stockLog = h.holding().storage.log.filter(row => row.resourceId === "tenday-food");
+  assert.equal(stockLog.reduce((sum, row) => sum + row.qty, 0), confirmedFresh ? -12 : 0);
+  assert.equal(stockLog.filter(row => row.kind === "transport").reduce((sum, row) => sum + row.qty, 0), confirmedFresh ? -10 : 0);
+}
+
 for (const [arrivalQd, transitDeadline] of [[32, 8], [33, 8], [34, 8], [33, 80], [34, 4]]) {
   const f = transportFixture();
   f.holding.people.list = [];

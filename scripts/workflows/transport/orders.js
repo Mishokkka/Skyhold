@@ -50,19 +50,18 @@ export function advanceTransportShipments(data, holding, targetQd, workflow, { l
   };
   let sourceConflicts;
   const report = advanceTransportOrders({ state, holding, targetQd: commonTargetQd, dependencies: {
-    dispatchCargo(order, cargo, atQd) {
+    dispatchCargo(order, cargo, atQd, { committed }) {
       const elapsed = Math.max(0, transportLocalQd(order, atQd) - Number(holding.gm?.calendaria?.lastQd ?? 0));
-      const available = cargo.map((lot) => {
-        const spoiled = Math.min(lot.qty, order.sourceSpoiledPending?.[lot.lotId] ?? 0);
-        lot.spoiledQty = spoiled;
-        return { ...lot, qty: lot.qty - spoiled };
-      }).filter((lot) => lot.qty > 0);
+      const spoiledAtWarehouse = lot => Math.min(lot.qty, order.sourceSpoiledPending?.[lot.lotId] ?? 0);
+      const available = cargo.map(lot => ({ ...lot,
+        qty: lot.qty - (committed ? lot.spoiledQty ?? 0 : spoiledAtWarehouse(lot))
+      })).filter(lot => lot.qty > 0);
       const dispatched = applyMarketOutboundDispatch({
         resources: holding.storage.resources, cargoReservations: available,
         conflicts: sourceConflicts ??= outboundStorageLotConflicts(holding),
         // Keep the undebited lot until the warehouse closes the period. An
         // earlier departure can still need it even if processed after this order.
-        canLoadSource: ({ row, ageQd }) => storageExpiresInQd(holding, row, ageQd + elapsed) > 0
+        canLoadSource: ({ row, ageQd }) => committed || storageExpiresInQd(holding, row, ageQd + elapsed) > 0
       });
       if (!dispatched.ok) {
         throw new Error(`${dispatched.message} Заказ ${order.id}, строка склада ${dispatched.rowId}, партия ${dispatched.batchId}. Сверьте исходный груз.`);
@@ -71,8 +70,9 @@ export function advanceTransportShipments(data, holding, targetQd, workflow, { l
       const dispatchedByLot = new Map(dispatched.cargo.map((row) => [row.lotId, row]));
       for (const lot of cargo) {
         const actual = dispatchedByLot.get(lot.lotId);
-        if (actual) lot.ageQd = actual.ageQd + elapsed;
-        if (lot.spoiledQty) order.sourceSpoiledPending[lot.lotId] -= lot.spoiledQty;
+        if (actual && !committed) lot.ageQd = actual.ageQd + elapsed;
+        const pending = Math.min(spoiledAtWarehouse(lot), lot.qty - (actual?.qty ?? 0));
+        if (pending) order.sourceSpoiledPending[lot.lotId] -= pending;
         lot.spoiledQty = lot.qty - (actual?.qty ?? 0);
         lot.ageAtQd = atQd;
         if (actual?.qty) entries.push({ kind: "transport", resourceId: lot.resourceId, name: lot.name, qty: -actual.qty,

@@ -1,9 +1,9 @@
 import { isPerishableFoodDefinition } from "../../core/perishable-food.js";
-import { expireTransportReservation } from "../../data/transport/state.js";
 import { buildingOperationalState } from "../../core/building-state.js";
 import {
   beginResourceBatchPeriod,
   cancelResourceBatchPeriod,
+  expireResourceBatch,
   finishResourceBatchPeriod,
   resourceBatchElapsedQd,
   resourceBatchTotal
@@ -44,8 +44,8 @@ export function perishableStorageExpiresInQd(holding, row = {}, ageQd = 0) {
     : Infinity;
 }
 
-export function beginPerishableStoragePeriod(holding) {
-  return beginResourceBatchPeriod(holding);
+export function beginPerishableStoragePeriod(holding, transportState) {
+  return beginResourceBatchPeriod(holding, { transportState });
 }
 
 export function cancelPerishableStoragePeriod(holding) {
@@ -60,10 +60,9 @@ export function expireProductionIngredients(holding, step, report, appendLedger)
     const deadlineQd = storageEffectiveShelfLifeQd(expirationRoom(holding, row), row, shelfLifeQd);
     const expired = (row.batches ?? []).filter((batch) => batch.ageQd + resourceBatchElapsedQd(holding, batch, step) >= deadlineQd);
     if (!expired.length) continue;
-    const ids = new Set(expired.map((batch) => batch.id));
-    const qty = resourceBatchTotal(expired);
-    for (const batch of expired) expireTransportReservation(holding, row, batch);
-    row.batches = row.batches.filter((batch) => !ids.has(batch.id));
+    const qty = expired.reduce((sum, batch) => sum + expireResourceBatch(holding, row, batch), 0);
+    if (!qty) continue;
+    row.batches = row.batches.filter((batch) => batch.qty > 0);
     row.qty = resourceBatchTotal(row.batches);
     const name = row.name || resourceLabel(row.resourceId);
     report.skipped.push(`${name}: испорчено сырья ${qty} перед производственной сменой.`);

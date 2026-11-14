@@ -1,5 +1,5 @@
 import { effectiveShelfLifeQd } from "./perishable-food.js";
-import { activeTransportOrder, expireTransportReservation, outboundStorageLotConflicts, remainingTransportCargo, transportOrders } from "../data/transport/state.js";
+import { activeTransportOrder, confirmedOutboundCargo, expireTransportReservation, outboundStorageLotConflicts, remainingTransportCargo, transportOrders } from "../data/transport/state.js";
 import { indexStorageLots, matchingStorageLots } from "../engines/storage/row-identity.js";
 
 import {
@@ -106,7 +106,7 @@ export function reservedResourceBatchQuantities(holding, row = {}, { excludeOper
   return result;
 }
 
-export function beginResourceBatchPeriod(holding, { makeId = null } = {}) {
+export function beginResourceBatchPeriod(holding, { makeId = null, transportState = null } = {}) {
   if (!holding || typeof holding !== "object") return { oldBatchIds: new Set() };
   const oldBatchIds = new Set();
   for (const batch of productionReservedBatches(holding)) oldBatchIds.add(batch.id);
@@ -114,13 +114,23 @@ export function beginResourceBatchPeriod(holding, { makeId = null } = {}) {
     syncResourceRowBatches(row, { makeId, protectedBatchIds: protectedResourceBatchIds(holding, row) });
     for (const batch of row.batches) oldBatchIds.add(batch.id);
   }
-  const state = { oldBatchIds, birthSteps: new Map(), currentStep: null };
+  const state = { oldBatchIds, birthSteps: new Map(), currentStep: null, transportState, confirmedOutbound: null };
   activePeriods.set(holding, state);
   return state;
 }
 
 export function cancelResourceBatchPeriod(holding) {
   if (holding && typeof holding === "object") activePeriods.delete(holding);
+}
+
+/** Keep the part already loaded aboard until the holding posts its dispatch. */
+export function expireResourceBatch(holding, row, batch) {
+  const period = activePeriods.get(holding);
+  if (period?.transportState) period.confirmedOutbound ??= confirmedOutboundCargo(holding, period.transportState);
+  const kept = Math.min(batch.qty, expireTransportReservation(holding, row, batch, period?.confirmedOutbound));
+  const expired = batch.qty - kept;
+  batch.qty = kept;
+  return expired;
 }
 
 /** Transient simulation clock: no persisted batch or world schema changes. */
@@ -301,14 +311,15 @@ export function finishResourceBatchPeriod(holding, {
       const kept = [];
       for (const batch of row.batches) {
         if (batch.ageQd >= deadlineQd) {
-          expireTransportReservation(holding, row, batch);
-          expired.push({
+          const qty = expireResourceBatch(holding, row, batch);
+          if (batch.qty > 0) kept.push(batch);
+          if (qty > 0) expired.push({
             rowId: String(row.id ?? ""),
             resourceId: String(row.resourceId ?? row.id ?? "custom"),
             name: String(row.name ?? row.label ?? ""),
             roomId: String(row.roomId ?? row.storageRoomId ?? "outdoors"),
             batchId: batch.id,
-            qty: batch.qty,
+            qty,
             ageQd: batch.ageQd,
             shelfLifeQd,
             effectiveShelfLifeQd: deadlineQd

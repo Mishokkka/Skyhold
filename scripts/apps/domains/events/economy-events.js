@@ -176,7 +176,7 @@ async _prepareTendayOperation({ holdingId = "", qd = 40, rationUnitsPerResident 
       message: "Перед расчётом хозяйства обработайте зависимые рейсы и разберите происшествия этого десятника. Решения сохраняются; груз и деньги будут проведены вместе с десятником." };
   }
 
-  beginPerishableStoragePeriod(previewHolding);
+  beginPerishableStoragePeriod(previewHolding, sharedTransportDraft);
   let rawReport;
   try {
     rawReport = await this._runEconomyForQd(previewHolding, periodQd, { operationId, createdAt: preparedAt, data: executionData });
