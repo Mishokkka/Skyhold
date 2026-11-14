@@ -1,6 +1,8 @@
-import { storageProfileMatches, storageEffectiveShelfLifeMultiplier } from "./specialization.js";
+import { resourceBatchAgeQd } from "../../core/resource-batches.js";
+import { storageShelfLifeForRow } from "../../core/resources.js";
+import { storageProfileMatches, storageEffectiveShelfLifeQd } from "./specialization.js";
 
-export function addStorageWithOverflow({ holding, resource = {}, qty = 0, acceptBatch, dependencies } = {}) {
+export function addStorageWithOverflow({ holding, resource = {}, qty = 0, dependencies } = {}) {
   const deps = dependencies ?? {};
   const required = [
     "safeNumber",
@@ -45,13 +47,13 @@ export function addStorageWithOverflow({ holding, resource = {}, qty = 0, accept
         if (split.shortfall) throw new RangeError("Automatic storage received fewer batches than requested");
         part.batches = split.batches; batches = split.remainingBatches;
       }
-      placements.push(...addStorageWithOverflow({ holding, resource: part, qty: fit, acceptBatch, dependencies: deps }));
+      placements.push(...addStorageWithOverflow({ holding, resource: part, qty: fit, dependencies: deps }));
       left -= fit;
       if (!left) return placements;
     }
     if (left) placements.push(...addStorageWithOverflow({ holding,
       resource: { ...resource, roomId: "outdoors", ...(Array.isArray(batches) ? { batches } : {}) },
-      qty: left, acceptBatch, dependencies: deps }));
+      qty: left, dependencies: deps }));
     return placements;
   }
   const targetRoom = rooms.find((room) => room.id === targetRoomId);
@@ -70,17 +72,16 @@ export function addStorageWithOverflow({ holding, resource = {}, qty = 0, accept
       placedResource = { ...placedResource, batches: split.batches };
     }
     let accepted = value;
-    const arrivalShelfLifeQd = Math.max(0, Number(placedResource.arrivalShelfLifeQd) || 0);
-    // A delivery may arrive partway through a long period. Check its end-of-period age
-    // in the actual destination (including overflow) before production or food can use it.
-    const lifetime = arrivalShelfLifeQd
-      ? arrivalShelfLifeQd * storageEffectiveShelfLifeMultiplier(rooms.find((candidate) => candidate.id === roomId), placedResource)
-      : Infinity;
-    if (transferBatches && (acceptBatch || arrivalShelfLifeQd)) {
-      placedResource.batches = placedResource.batches.filter((batch) =>
-        Number(batch.ageQd) < lifetime && (!acceptBatch || acceptBatch(placedResource, batch)));
-      accepted = placedResource.batches.reduce((sum, batch) => sum + batch.qty, 0);
-    } else if (arrivalShelfLifeQd && Number(placedResource.ageQd) >= lifetime) accepted = 0;
+    // Transit supplies the frozen base deadline and already elapsed inbound age.
+    // Other placements use the material's storage deadline and current simulation age.
+    if (transferBatches || placedResource.ageQd > 0) {
+      const baseQd = placedResource.arrivalShelfLifeQd ?? storageShelfLifeForRow(placedResource);
+      const lifetime = storageEffectiveShelfLifeQd(roomId === targetRoomId ? targetRoom : undefined, placedResource, baseQd);
+      if (transferBatches && lifetime) {
+        placedResource.batches = placedResource.batches.filter((batch) => resourceBatchAgeQd(holding, batch) < lifetime);
+        accepted = placedResource.batches.reduce((sum, batch) => sum + batch.qty, 0);
+      } else if (lifetime && Number(placedResource.ageQd) >= lifetime) accepted = 0;
+    }
     delete placedResource.arrivalShelfLifeQd;
     if (accepted) deps.storageAdd(holding, placedResource, accepted);
     placements.push({ roomId, qty: accepted, ...(accepted < value ? { spoiledQty: value - accepted } : {}), overflowFrom });

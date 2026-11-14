@@ -1106,6 +1106,7 @@ function validatePlayerBuildingSemantics(_current = {}, holding = {}, nextHoldin
 
   const residents = Array.isArray(nextHolding?.people?.list) ? nextHolding.people.list : [];
   const residentsById = new Map(residents.map((row) => [String(row?.id ?? ""), row]).filter(([id]) => Boolean(id)));
+  const priorAssignments = new Map((holding?.people?.list ?? []).map((row) => [String(row.id ?? ""), String(row.workAssignment ?? "")]));
   const residentIds = new Set(residentsById.keys());
   const explicitResidentIds = new Set(residents
     .filter((row) => String(row?.workAllocationMode ?? "") === "explicit")
@@ -1150,10 +1151,10 @@ function validatePlayerBuildingSemantics(_current = {}, holding = {}, nextHoldin
     return !child || Math.max(0, toNumber(person?.age, 0)) >= 12;
   };
 
-  const claimAssignment = (personId, owner, label) => {
-    if (explicitResidentIds.has(personId)) return "";
+  const claimAssignment = (personId, owner, label, continuing) => {
     const person = residentsById.get(personId);
-    if (!canReceiveWork(person)) return `Нельзя назначить на работу недоступного жителя: ${person?.name ?? personId}`;
+    // Injuries interrupt work in the simulation without releasing its slot.
+    if (!continuing && !canReceiveWork(person)) return `Нельзя назначить на работу недоступного жителя: ${person?.name ?? personId}`;
     const existing = assignmentOwnerByResidentId.get(personId);
     if (existing && existing !== owner) {
       if (existing.startsWith("building:") && hidden.has(existing.slice("building:".length))) return "Назначение недоступно. Его может проверить ГМ.";
@@ -1182,16 +1183,19 @@ function validatePlayerBuildingSemantics(_current = {}, holding = {}, nextHoldin
     const priorWorkers = new Set((old.assignedWorkerIds ?? []).map(String));
     for (const workerId of workers) {
       const resident = residentsById.get(workerId);
-      const admission = workerAdmission(row, resident);
+      const continuing = priorWorkers.has(workerId) && priorAssignments.get(workerId) === id;
       // The generic patch cannot change the admission rules or qualifying attributes.
-      if (!priorWorkers.has(workerId) && admission.hard && !admission.eligible && !admission.overridden) {
-        return buildingError(`Работник '${resident?.name ?? workerId}' не проходит обязательный допуск постройки '${row?.name ?? id}': ${admission.text}.`);
+      if (!continuing) {
+        const admission = workerAdmission(row, resident);
+        if (admission.hard && !admission.eligible && !admission.overridden) {
+          return buildingError(`Работник '${resident?.name ?? workerId}' не проходит обязательный допуск постройки '${row?.name ?? id}': ${admission.text}.`);
+        }
       }
       if (explicitResidentIds.has(workerId)) {
         return { ok: false, error: "Житель с явным планом QD не может одновременно занимать legacy-слот постройки." };
       }
       const owner = `building:${id}`;
-      const claimError = claimAssignment(workerId, owner, row?.name ?? id);
+      const claimError = claimAssignment(workerId, owner, row?.name ?? id, continuing);
       if (claimError) return buildingError(claimError);
       if (String(residentsById.get(workerId)?.workAssignment ?? "") !== id) {
         return buildingError(`Рабочий '${residentsById.get(workerId)?.name ?? workerId}' не подтверждает назначение в постройку '${row?.name ?? id}'.`);
@@ -1207,7 +1211,7 @@ function validatePlayerBuildingSemantics(_current = {}, holding = {}, nextHoldin
   if (!sameJson(beforeCrews.map((row) => String(row?.id ?? "")), crewRows.map((row) => String(row?.id ?? "")))) {
     return { ok: false, error: "Игрок не может добавлять, удалять или переставлять стройбригады через общий patch." };
   }
-  for (const crew of crewRows) {
+  for (const [index, crew] of crewRows.entries()) {
     const crewId = String(crew?.id ?? "");
     const memberIds = Array.isArray(crew?.memberIds) ? crew.memberIds.map((value) => String(value ?? "")).filter(Boolean) : [];
     const distributedIds = Array.isArray(crew?.distributedIds) ? crew.distributedIds.map((value) => String(value ?? "")).filter(Boolean) : [];
@@ -1225,24 +1229,30 @@ function validatePlayerBuildingSemantics(_current = {}, holding = {}, nextHoldin
     if (leaderId && memberIds.includes(leaderId)) {
       return { ok: false, error: `Руководитель не может одновременно занимать рабочий слот стройбригады '${crew?.name ?? crew?.id ?? "?"}'.` };
     }
+    const old = beforeCrews[index];
+    const priorMembers = new Set((old?.memberIds ?? []).map(String));
     for (const memberId of memberIds) {
       if (explicitResidentIds.has(memberId)) return { ok: false, error: "Житель с явным планом QD не может одновременно входить в стройбригаду." };
       const owner = `crew:${crewId}`;
-      const claimError = claimAssignment(memberId, owner, crew?.name ?? crewId);
+      const assignment = `construction:${crewId}`;
+      const continuing = priorMembers.has(memberId) && priorAssignments.get(memberId) === assignment;
+      const claimError = claimAssignment(memberId, owner, crew?.name ?? crewId, continuing);
       if (claimError) return { ok: false, error: claimError };
-      if (String(residentsById.get(memberId)?.workAssignment ?? "") !== `construction:${crewId}`) {
+      if (String(residentsById.get(memberId)?.workAssignment ?? "") !== assignment) {
         return { ok: false, error: `Участник '${residentsById.get(memberId)?.name ?? memberId}' не подтверждает назначение в стройбригаду '${crew?.name ?? crewId}'.` };
       }
     }
     if (leaderId) {
       const leader = residentsById.get(leaderId);
-      if (!leader || explicitResidentIds.has(leaderId) || !constructionLeaderQualification(leader).eligible) {
+      const assignment = `construction-leader:${crewId}`;
+      const continuing = String(old?.leaderId ?? "") === leaderId && priorAssignments.get(leaderId) === assignment;
+      if (!leader || explicitResidentIds.has(leaderId) || (!continuing && !constructionLeaderQualification(leader).eligible)) {
         return { ok: false, error: `У стройбригады '${crew?.name ?? crewId}' назначен неподходящий руководитель.` };
       }
       const owner = `crew-leader:${crewId}`;
-      const claimError = claimAssignment(leaderId, owner, crew?.name ?? crewId);
+      const claimError = claimAssignment(leaderId, owner, crew?.name ?? crewId, continuing);
       if (claimError) return { ok: false, error: claimError };
-      if (String(leader?.workAssignment ?? "") !== `construction-leader:${crewId}`) {
+      if (String(leader?.workAssignment ?? "") !== assignment) {
         return { ok: false, error: `Руководитель '${leader?.name ?? leaderId}' не подтверждает отдельное назначение в стройбригаду '${crew?.name ?? crewId}'.` };
       }
     }

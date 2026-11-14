@@ -1,3 +1,5 @@
+import { normalizeResourceId } from "../../core/resources.js";
+
 export const STORAGE_ROW_CHANGED = "Позиция склада изменилась. Откройте действие заново.";
 export const DUPLICATE_STORAGE_ROW = "У нескольких позиций склада одинаковый ID. Требуется проверка сохранения.";
 export const MAX_STORAGE_BATCH_ROWS = 200;
@@ -40,9 +42,10 @@ export function indexStorageLots(rows, onlyRowId = "") {
   for (const row of Array.isArray(rows) ? rows : []) {
     const rowId = String(row?.id ?? "").trim();
     if (!rowId || onlyRowId && rowId !== onlyRowId) continue;
-    if (!index.has(rowId)) index.set(rowId, { materials: new Set(), batches: new Map() });
-    const { materials, batches } = index.get(rowId);
-    materials.add(String(row.resourceId ?? row.id).trim());
+    if (!index.has(rowId)) index.set(rowId, { rows: [], batches: new Map() });
+    const entry = index.get(rowId);
+    entry.rows.push(row);
+    const { batches } = entry;
     for (const batch of Array.isArray(row.batches) ? row.batches : []) {
       const batchId = String(batch?.id ?? "").trim();
       if (!batchId) continue;
@@ -70,17 +73,34 @@ export function conflictingStorageLotKeys(cargo = []) {
   return conflicts;
 }
 
-/** A unique pair survives catalog renames. A known collision requires the frozen material ID. */
+/** Match the accepted material as well as the saved IDs. An old catalog entry
+ * may have been normalized to a current alias or to a custom row. */
 export function matchingStorageLots(index, cargo, conflicts) {
   const rowId = String(cargo?.rowId ?? cargo?.storageRowId ?? "").trim();
   const batchId = String(cargo?.batchId ?? "").trim();
   const entry = index.get(rowId);
   const lots = entry?.batches.get(batchId) ?? [];
   const resourceId = String(cargo?.resourceId ?? "").trim();
-  const materialRequired = Boolean(resourceId && entry?.materials.has(resourceId)
-    || conflicts?.has(storageLotKey(rowId, batchId)));
-  const matches = materialRequired || lots.length > 1 && resourceId
-    ? lots.filter(({ row }) => String(row.resourceId ?? row.id).trim() === resourceId)
-    : lots;
-  return { matches, materialRequired };
+  const materialOf = (row) => String(row.resourceId ?? row.id).trim();
+  if (!resourceId) return { matches: lots, compatibleRows: entry?.rows ?? [] };
+  const exactRows = (entry?.rows ?? []).filter((row) => materialOf(row) === resourceId);
+  const savedName = String(cargo.name ?? "").normalize("NFKC").trim().toLowerCase();
+  const sameCustomName = (row) => {
+    const name = String(row.name ?? "").normalize("NFKC").trim().toLowerCase();
+    return !savedName || !name || savedName === name;
+  };
+  if (exactRows.length || conflicts?.has(storageLotKey(rowId, batchId))) {
+    const compatibleRows = resourceId === "custom" ? exactRows.filter(sameCustomName) : exactRows;
+    return { matches: lots.filter(({ row }) => compatibleRows.includes(row)), compatibleRows };
+  }
+  const material = normalizeResourceId(resourceId);
+  const sameMaterial = (row) => {
+    const stored = materialOf(row);
+    if (stored === "custom") {
+      // Keep the old uniquely addressed custom lot after its definition was removed.
+      return material === "custom" && lots.length === 1 && sameCustomName(row);
+    }
+    return material !== "custom" && normalizeResourceId(stored) === material;
+  };
+  return { matches: lots.filter(({ row }) => sameMaterial(row)), compatibleRows: (entry?.rows ?? []).filter(sameMaterial) };
 }

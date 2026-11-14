@@ -95,6 +95,25 @@ export async function resolveFoundryActorReference({ actorId, actorUuid } = {}, 
     && actor.uuid === actorUuid ? actor : null;
 }
 
+export function foundryActorOwnedBy(actor, user) {
+  if (!actor || !user) return false;
+  if (user.isGM) return true;
+  const ownerLevel = globalThis.CONST?.DOCUMENT_OWNERSHIP_LEVELS?.OWNER ?? 3;
+  if (typeof actor.testUserPermission === "function") {
+    try {
+      return Boolean(actor.testUserPermission(user, ownerLevel));
+    } catch (_error) {}
+  }
+  if (user.character?.id && user.character.id === actor.id) return true;
+  const ownership = actor.ownership ?? actor.permission;
+  return Number(ownership?.[user.id] ?? ownership?.default ?? -1) >= ownerLevel;
+}
+
+export function hasOtherActiveActorOwner(actor, { user = globalThis.game?.user, users = globalThis.game?.users } = {}) {
+  return Array.from(users?.contents ?? users ?? []).some((candidate) =>
+    candidate?.active && candidate.id !== user?.id && foundryActorOwnedBy(actor, candidate));
+}
+
 export function foundryActorClass() {
   return requireApi(globalThis.foundry?.documents?.Actor, "foundry.documents.Actor");
 }

@@ -3,7 +3,7 @@ import { BUILTIN_RESOURCE_DEFS, RESOURCE_DEFS } from "../data/resources/builtin-
 import { readWorldResourceCatalogRows, worldResourceCatalogCacheKey } from "../data/resources/resource-catalog-settings.js";
 import { parseCurrencyCopper } from "./currency.js";
 import { materialGroup } from "./material-groups.js";
-import { syncResourceRowBatches } from "./resource-batches.js";
+import { syncResourceRowBatches } from "./resource-batch-data.js";
 
 export { BUILTIN_RESOURCE_DEFS, RESOURCE_DEFS };
 
@@ -448,6 +448,11 @@ export function resourceShelfLifeQd(...candidates) {
     return legacyShelfLifeQd(inline.shelfLife);
   }
   return nonNegativeInteger(definitionForCandidates(candidates)?.shelfLifeQd, 0);
+}
+
+export function storageShelfLifeForRow(row = {}) {
+  const id = storageResourceId(row);
+  return id === "custom" ? resourceShelfLifeQd(row) : resourceShelfLifeQd(id);
 }
 
 export function resourceCategoryTag(...candidates) {

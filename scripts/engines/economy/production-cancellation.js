@@ -1,6 +1,6 @@
 import { refundProductionInputs } from "./production-inputs.js";
 import { productionBatchLife, clearProductionBatch } from "./production-batch-life.js";
-import { perishableStorageExpiresInQd } from "./perishable-storage.js";
+import { storageExpiresInQd } from "./perishable-storage.js";
 import { waitingProductionBatches, stopProductionAfterDrain } from "./production-capacity.js";
 
 function cancellationPlan(holding, line) {
@@ -10,7 +10,7 @@ function cancellationPlan(holding, line) {
   const receipt = { ...line.workReservedInputs, entries: line.workReservedInputs.entries.map((entry) => {
     if (entry.kind === "money" || !Array.isArray(entry.batches)) return entry;
     if (entry.batches.reduce((sum, batch) => sum + batch.qty, 0) < entry.qty) throw new Error("Production input receipt is incomplete.");
-    const batches = entry.batches.filter((batch) => perishableStorageExpiresInQd(holding, entry.resource, batch.ageQd) > 0);
+    const batches = entry.batches.filter((batch) => storageExpiresInQd(holding, entry.resource, batch.ageQd) > 0);
     const qty = Math.min(entry.qty, batches.reduce((sum, batch) => sum + batch.qty, 0));
     discardedQty += Math.max(0, entry.qty - qty);
     return { ...entry, batches, qty };

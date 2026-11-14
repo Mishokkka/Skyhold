@@ -80,6 +80,12 @@ export function checkEconomyPeriodBoundaries() {
     "actual room protection applies, while expired overflow cannot become edible stock");
   assert.equal(placed.length, 1);
   assert.equal(placed[0].arrivalShelfLifeQd, undefined, "placement control flags are not saved");
+  rooms.at(-1).shelfLifeMultiplier = 1.01;
+  const deadline = addStorageWithOverflow({ holding: {}, resource: { resourceId: "milk", roomId: "cellar",
+    arrivalShelfLifeQd: 8, batches: [{ id: "deadline", qty: 2, ageQd: 8 }] }, qty: 2, dependencies: deps });
+  assert.deepEqual(deadline, [{ roomId: "cellar", qty: 0, spoiledQty: 2, overflowFrom: "" }],
+    "an arrival exactly at the whole-QD storage deadline cannot be credited");
+  assert.equal(placed.length, 1);
 
   const ship = { navigationMode: "world" };
   recordFleetFunds(ship, { externalDeltaCopper: 0, treasuryDeltaCopper: -1000, shipDeltaCopper: 1000 });

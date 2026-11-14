@@ -69,8 +69,9 @@ function makeActor(id, ownerId) {
       }));
     },
     async deleteEmbeddedDocuments(_type, ids = []) {
-      for (const itemId of ids) actor.removeItem(itemId);
-      return ids;
+      const removed = ids.map(id => rows.get(id)).filter(Boolean);
+      for (const item of removed) actor.removeItem(item.id);
+      return removed;
     },
     removeItem(itemId) {
       rows.delete(String(itemId));
@@ -664,6 +665,74 @@ export async function checkStorageOperationCharacterization() {
         assert.deepEqual(holding, beforeVeto);
         if (change === "quantity") actor.removeItem(item.id);
       }
+
+      const beforeCompensation = clone(holding);
+      const savedError = console.error;
+      const previousHooks = globalThis.Hooks;
+      const deleteHooks = new Map();
+      let hookId = 0;
+      let deleteCalls = 0;
+      let allowRollback = false;
+      globalThis.Hooks = {
+        on(name, callback) { assert.equal(name, "preDeleteItem"); deleteHooks.set(++hookId, callback); return hookId; },
+        off(name, id) { assert.equal(name, "preDeleteItem"); assert.ok(deleteHooks.delete(id)); }
+      };
+      actor.deleteEmbeddedDocuments = async (type, ids, options) => {
+        deleteCalls++;
+        // Another sheet edit occurs during Foundry's asynchronous preparation.
+        const item = actor.items.get(ids[0]);
+        if (!allowRollback) await item.update({ "system.quantity": 4 });
+        const allowed = ids.filter((id) => [...deleteHooks.values()]
+          .every((callback) => callback(actor.items.get(id), options) !== false));
+        return remove.call(actor, type, allowed);
+      };
+      const lateFailure = createStorageOperationExecutor({
+        getUser: () => gm, getActor: () => actor,
+        readCommittedData: () => ({ holdings: [holding], meta: { revision: 0 } }),
+        async updateHolding(_id, updater) {
+          await updater(clone(holding), { meta: { revision: 0 } });
+          throw new Error("persist failed");
+        }
+      });
+      try {
+        console.error = () => {};
+        for (const active of ["owner", "other-gm", "observer"]) {
+          deleteCalls = 0;
+          const other = active === "owner" ? user : { id: active, isGM: active === "other-gm" };
+          game.users = { contents: [gm, { ...other, active: true }] };
+          const command = { ...withdraw, operationId: `rollback-${active}`, qty: 2 };
+          for (let retry = 0; retry < 2; retry++) {
+            await assert.rejects(lateFailure(command, { userId: gm.id }),
+              error => error.code === COMMAND_ERROR.OUTCOME_UNKNOWN && error.message.includes(actor.uuid));
+          }
+          const item = actor.items.contents.find(row => row.getFlag(MODULE_ID, "storageOperationId") === command.operationId);
+          assert.equal(deleteCalls, active === "observer" ? 1 : 0, "do not start destructive rollback while another writer is online");
+          assert.equal(item?.system.quantity, active === "observer" ? 4 : 2, "the last check vetoes deletion after a late edit");
+          assert.deepEqual(holding, beforeCompensation);
+          actor.removeItem(item.id);
+        }
+        allowRollback = true;
+        game.users = { contents: [gm, { ...user, active: false }] };
+        await assert.rejects(lateFailure({ ...withdraw, operationId: "rollback-owner-offline" }, { userId: gm.id }), /persist failed$/);
+        assert.deepEqual(actor.itemIds(), beforeVetoItems, "a confirmed rejection still rolls back in a single-writer inventory");
+        assert.equal(deleteHooks.size, 0, "the hook is removed after both a veto and a successful rollback");
+      } finally {
+        console.error = savedError;
+        globalThis.Hooks = previousHooks;
+        delete game.users;
+        actor.deleteEmbeddedDocuments = remove;
+      }
+
+      // A deletion that did reach Foundry must be acknowledged with the actual deleted Item.
+      actor.deleteEmbeddedDocuments = async (type, ids) => {
+        await actor.items.get(ids[0]).update({ "system.quantity": 4 });
+        return remove.call(actor, type, ids);
+      };
+      const changedSource = await executor({ ...takeIn, operationId: "changed-deposit-source" }, { userId: gm.id });
+      assert.equal(changedSource.ok, false);
+      assert.equal(actor.items.get("real-deposit").system.quantity, 4, "restore the actual source version before allowing another deposit");
+      assert.deepEqual(holding, beforeCompensation);
+      actor.deleteEmbeddedDocuments = remove;
 
       const deposit = await executor({
         type: "depositItem",

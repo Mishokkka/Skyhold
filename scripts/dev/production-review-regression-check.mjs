@@ -97,6 +97,13 @@ export async function checkProductionReview() {
     const processingHolding = { gm: { calendaria: { lastQd: 40 } } };
     assert.equal(productionBatchLife(processingHolding, processing).expired, false, "Working cheese has its own deadline, not raw-milk shelf life");
     assert.equal(cancelProductionBatch(processingHolding, processing).discardedQty, 2, "Cancellation cannot restore spoiled raw milk");
+    const resin = { resourceId: "wood", active: true, workInputsReserved: true,
+      workReservedInputs: { version: 1, openedAtQd: 0, entries: [{
+        kind: "resource", qty: 2, resource: { resourceId: "custom", name: "Смола", categoryTag: "luxury", shelfLifeQd: 8 },
+        batches: [{ id: "raw-resin", ageQd: 8, qty: 2 }]
+      }] } };
+    assert.equal(cancelProductionBatch(processingHolding, resin, { addResource: assert.fail }).discardedQty, 2,
+      "an explicit deadline also applies to non-food ingredients");
     const freshRefunds = [];
     const fresh = { resourceId: "food-dairy", workInputsReserved: true, workReservedInputs: { version: 1, openedAtQd: 40, entries: [
       { kind: "resource", qty: 2, resource: { resourceId: "milk" }, batches: [{ id: "fresh", ageQd: 1, qty: 2 }] }

@@ -7,7 +7,7 @@ import { transportSourceToken } from "../apps/domains/transport-context.js";
 import { createTransportOperationExecutor } from "../apps/transport-operation-executor.js";
 import { SkyholdWorkflowService } from "../workflows/skyhold-workflow-service.js";
 import { SkyholdData } from "../data/store.js";
-import { normalizeSkyholdData, mergeHoldingDefaults } from "../data/normalizers.js";
+import { normalizeSkyholdData, normalizeHoldingsPartition } from "../data/normalizers.js";
 
 globalThis.game = { user: { id: "gm", isGM: true }, users: [{ id: "gm", isGM: true, active: true }],
   settings: { get: () => undefined }, modules: new Map(), time: { worldTime: 0 } };
@@ -212,6 +212,10 @@ async function splitTendays(batch) {
       await h.decide(prepared); prepared = await h.prepare(batch ? 80 : 40);
     }
     await h.apply(prepared);
+    if (!batch && period === 0) {
+      assert.equal(h.holding().storage.resources.find(row => row.id === "food-stock")?.resourceId, "tenday-food",
+        "closing the period preserves catalog identity for the remaining outbound lot");
+    }
   }
   const final = h.holding().special.transportV2.orders[0];
   return { clock: h.holding().gm.calendaria.lastQd, cash: h.holding().storage.moneyCopper,
@@ -221,7 +225,9 @@ assert.deepEqual(await splitTendays(true), await splitTendays(false), "a sequent
 
 {
   const f = food({ lifetime: 1000 });
-  f.data.holdings[0] = mergeHoldingDefaults({ ...f.holding, people: { list: [{ id: "consumer", name: "Consumer", age: 30 }] } });
+  f.data.holdings[0] = normalizeHoldingsPartition([
+    { ...f.holding, people: { list: [{ id: "consumer", name: "Consumer", age: 30 }] } }
+  ], f.data.catalog)[0];
   f.holding = f.data.holdings[0];
   f.data.catalog.resources.push({ id: "bread", label: "Bread", foodReady: true, shelfLifeQd: 120, loadPoints: 4, basePriceCopper: 5 });
   const supplies = { ...feeder, id: "tenday-supplies", from: "a", to: "home", capacity: 80000 };

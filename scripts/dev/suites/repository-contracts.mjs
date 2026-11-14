@@ -315,8 +315,10 @@ function checkStorageEngineBoundaries() {
     ["batch move", batchEngine]
   ]) {
     assertNoEngineGlobals(engine, `storage ${name} engine must not access application or UI globals`);
-    // Arrival spoilage and profile admission share the canonical storage rules.
-    const expectedImports = name === "placement" ? ["./specialization.js"] : [];
+    // Placing an aged batch uses the same simulation clock and material deadline as storage close.
+    const expectedImports = name === "placement"
+      ? ["../../core/resource-batches.js", "../../core/resources.js", "./specialization.js"]
+      : [];
     const imports = [...engine.matchAll(/^\s*import\s+[^;]+?from\s+["']([^"']+)["']/gm)].map((match) => match[1]);
     assert.deepEqual(imports, expectedImports, `storage ${name} engine may only import its declared domain helpers`);
     assert.doesNotMatch(engine, /\bimport\s*\(/, `storage ${name} engine must not hide dynamic runtime dependencies`);

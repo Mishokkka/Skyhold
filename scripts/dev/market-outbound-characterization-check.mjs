@@ -172,6 +172,12 @@ const missingSource = [structuredClone(beforeMixed[1])];
 assert.equal(applyMarketOutboundDispatch({ resources: missingSource, cargoReservations: [mixedCargo[0]],
   orderCargo: mixedCargo }).ok, false, "one run of a mixed contract cannot debit a different material after its own source disappears");
 assert.deepEqual(missingSource, [beforeMixed[1]]);
+assert.equal(marketOutboundAvailableQuantity({ resources: missingSource, resourceId: "stone",
+  outboundState: { orders: [{ cargoReservations: [mixedCargo[0]] }] } }), 5,
+  "the legacy stock adapter uses the same material validation even without a second contract");
+const aliasedWood = applyMarketOutboundDispatch({ resources: [structuredClone(beforeMixed[0])],
+  cargoReservations: [{ ...mixedCargo[0], resourceId: "Древесина" }] });
+assert.equal(aliasedWood.ok, true, "an unambiguous catalog alias can still resolve its accepted source");
 missingSource.unshift({ ...beforeMixed[0], qty: 0, batches: [] });
 assert.equal(applyMarketOutboundDispatch({ resources: missingSource, cargoReservations: [mixedCargo[0]] }).ok, false,
   "an empty row of the saved material proves its lot is missing even when a different row still has that batch ID");

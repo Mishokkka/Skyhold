@@ -2,9 +2,8 @@ import { MAX_OUTBOUND_CARGO_ROWS } from "../../data/market/outbound-state.js";
 import { marketMoneyInRange, MAX_MARKET_OPERATION_COPPER } from "../../data/market/money-limits.js";
 import { marketOutboundBatchPlans } from "./outbound-batches.js";
 import { allocateMarketTransportCharges, marketTransportPlanForOrder } from "../../data/market/transport-plan.js";
-import { conflictingStorageLotKeys, indexStorageLots, matchingStorageLots, storageLotKey as batchKey } from "../storage/row-identity.js";
-
-const TERMINAL_OUTBOUND_STATUSES = new Set(["delivered", "lost", "cancelled"]);
+import { reservedResourceBatchQuantities } from "../../core/resource-batches.js";
+import { conflictingStorageLotKeys, indexStorageLots, indexStorageRows, matchingStorageLots, storageLotKey as batchKey } from "../storage/row-identity.js";
 
 function whole(value, fallback = 0, max = 1_000_000_000) {
   const parsed = Number(value);
@@ -33,42 +32,23 @@ function tagMatches(tag = "", selector = "") {
   return candidate === target || candidate.startsWith(`${target}.`) || candidate.startsWith(`${target}-`);
 }
 
-function activeSoftReservation(order = {}) {
-  return !TERMINAL_OUTBOUND_STATUSES.has(text(order.status))
-    && text(order.dispatchStatus || "booked") === "booked";
-}
-
-export function marketOutboundSoftReservations(outboundState = {}, { excludeOperationId = "" } = {}) {
-  const excluded = text(excludeOperationId);
-  const reserved = new Map();
-  for (const order of outboundState?.orders ?? []) {
-    if (!activeSoftReservation(order) || (excluded && [order?.id, order?.operationId].some((id) => text(id) === excluded))) continue;
-    for (const cargo of order?.cargoReservations ?? order?.cargo ?? []) {
-      const rowId = text(cargo?.rowId ?? cargo?.storageRowId);
-      const id = text(cargo?.batchId);
-      const qty = whole(cargo?.qty);
-      if (!rowId || !id || !qty) continue;
-      const key = batchKey(rowId, id);
-      reserved.set(key, (reserved.get(key) ?? 0) + qty);
-    }
-  }
-  return reserved;
-}
-
 function inventoryBatches(resources = [], outboundState = {}, { excludeOperationId = "" } = {}) {
-  const reserved = marketOutboundSoftReservations(outboundState, { excludeOperationId });
+  const excluded = text(excludeOperationId);
+  const holding = { storage: { resources }, special: { market: { outbound: outboundState } } };
+  const uniqueRows = indexStorageRows(resources);
   const rows = [];
   for (const [rowIndex, row] of (Array.isArray(resources) ? resources : []).entries()) {
     const rowId = text(row?.id);
     const resourceId = text(row?.resourceId ?? row?.id);
-    if (!rowId || !resourceId) continue;
+    if (!rowId || !resourceId || uniqueRows.get(String(row.id ?? "")) !== row) continue;
+    const reserved = outboundState?.orders?.length ? reservedResourceBatchQuantities(holding, row, { excludeOperationId: excluded }) : null;
     const batches = Array.isArray(row?.batches) && row.batches.length
       ? row.batches
       : (whole(row?.qty) ? [{ id: `legacy-${rowIndex + 1}`, qty: whole(row.qty), ageQd: whole(row.ageQd) }] : []);
     for (const [batchIndex, batch] of batches.entries()) {
       const id = text(batch?.id) || `batch-${batchIndex + 1}`;
       const qty = whole(batch?.qty);
-      const reservedQty = reserved.get(batchKey(rowId, id)) ?? 0;
+      const reservedQty = reserved?.get(id) ?? 0;
       const availableQty = Math.max(0, qty - reservedQty);
       if (!availableQty) continue;
       rows.push({

@@ -5,7 +5,7 @@ import { composeDomainGroup } from "./domains/compose-domain.js";
 import { applyDefenseOperation, DEFENSE_OPERATIONS, normalizeDefenseOperation } from "./domains/defense-operation-domain.js";
 import { FinanceDomain } from "./domains/finance-domain.js";
 import { ResidentDomain } from "./domains/resident-domain.js";
-import { resolveFoundryActorReference, resolveFoundryUuid } from "../integrations/foundry-runtime.js";
+import { foundryActorOwnedBy, resolveFoundryActorReference, resolveFoundryUuid } from "../integrations/foundry-runtime.js";
 import { appendHoldingOperation, findHoldingOperation } from "../data/operations.js";
 import { hiddenStorageRoomIds } from "../data/access-guard.js";
 import { holdingPermissionContext } from "../data/holding-permissions.js";
@@ -41,6 +41,13 @@ function unknownTransferOutcome(operationId, cause, detail = "") {
   const message = `Исход обмена ${operationId} не подтверждён. Сверьте склад и инвентарь персонажа перед повтором.`;
   return Object.assign(new Error(detail ? `${message} ${detail}` : message, { cause }),
     { code: COMMAND_ERROR.OUTCOME_UNKNOWN, operationId });
+}
+
+function actorMutationSummary(receipt) {
+  const actor = receipt.actorUuid || receipt.actorId;
+  const items = receipt.items ?? [{ id: receipt.itemId, name: receipt.previousData?.name, qty: receipt.previousQuantity }];
+  const stacks = items.map(({ id, name, qty }) => [name, qty && `${qty} ед.`, id].filter(Boolean).join(", "));
+  return [actor, ...stacks].filter(Boolean).join(" · ");
 }
 
 function normalizeOperation(raw = {}) {
@@ -87,21 +94,6 @@ function normalizeOperation(raw = {}) {
       ? Math.max(0, Math.floor(Number(raw.expectedRevision))) : null,
     qty: Math.max(1, Math.min(1_000_000, Math.floor(Number(raw?.qty) || 1)))
   };
-}
-
-function userOwnsActor(actor, user) {
-  if (!actor || !user) return false;
-  if (user.isGM) return true;
-  const ownerLevel = globalThis.CONST?.DOCUMENT_OWNERSHIP_LEVELS?.OWNER ?? 3;
-  if (typeof actor.testUserPermission === "function") {
-    try {
-      return Boolean(actor.testUserPermission(user, ownerLevel));
-    } catch (_error) {}
-  }
-  if (String(user.character?.id ?? "") === String(actor.id ?? "")) return true;
-  const explicit = Number(actor.ownership?.[user.id] ?? actor.permission?.[user.id] ?? -1);
-  const fallback = Number(actor.ownership?.default ?? actor.permission?.default ?? -1);
-  return Math.max(explicit, fallback) >= ownerLevel;
 }
 
 function holdingAllowsOperation(holding, user) {
@@ -176,7 +168,7 @@ export function createStorageOperationExecutor({
     const holding = committed?.holdings?.find(row => row.id === operation.holdingId);
     const receipt = findHoldingOperation(holding, operation.operationId);
     return {
-      revision: Number(committed?.meta?.revision),
+      revision: holding && Number.isSafeInteger(committed?.meta?.revision) ? committed.meta.revision : null,
       result: matchingStorageReceipt(receipt, signature, userId) ? { ...receipt.payload.result, replay: true } : null
     };
   }
@@ -233,7 +225,7 @@ export function createStorageOperationExecutor({
           && (operation.type !== "depositItem" || operation.actorUuid || operation.actorId)) {
           return skipTransaction({ ok: false, message: "Персонаж-получатель не найден." });
         }
-        if (actor && !userOwnsActor(actor, requester)) {
+        if (actor && !foundryActorOwnedBy(actor, requester)) {
           return skipTransaction({ ok: false, message: "Нет прав владельца на выбранного персонажа." });
         }
 
@@ -349,8 +341,8 @@ export function createStorageOperationExecutor({
       if (actorMutation) {
         const outcome = readTransferOutcome(operation, signature, userId);
         if (outcome.result) return outcome.result;
-        if (error?.code === COMMAND_ERROR.OUTCOME_UNKNOWN || outcome.revision > transferRevision) {
-          throw unknownTransferOutcome(operation.operationId, error);
+        if (error?.code === COMMAND_ERROR.OUTCOME_UNKNOWN || outcome.revision !== transferRevision) {
+          throw unknownTransferOutcome(operation.operationId, error, actorMutationSummary(actorMutation));
         }
         try {
           await compensateActorMutation(actorMutation);

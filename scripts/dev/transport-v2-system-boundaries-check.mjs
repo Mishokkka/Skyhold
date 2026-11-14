@@ -173,6 +173,27 @@ for (const expireBread of [false, true]) {
     "cancelled orders retain evidence of an ambiguous physical source without reserving anything");
 }
 
+{
+  const h = holding("orphaned-booking");
+  const data = { meta: {}, holdings: [h], catalog: {} };
+  const state = ensureTransportState(data), services = [service()];
+  const lot = { ...cargo(2)[0], lotId: "meat", resourceId: "meat", rowId: "orphan-row", batchId: "orphan-lot" };
+  bookTransportOrder({ state, holding: h, services, direction: "outbound", id: "orphaned-meat",
+    plan: planTransportChain({ cargo: [lot], services }) });
+  h.storage.resources = [{ id: lot.rowId, resourceId: "wood", roomId: "outdoors", qty: 3,
+    forSale: true, batches: [{ id: lot.batchId, qty: 3, ageQd: 0 }] }];
+  const loaded = normalizeSkyholdData(data), target = loaded.holdings[0], [wood] = target.storage.resources;
+  const [order] = target.special.transportV2.orders;
+  assert.equal(reservedResourceBatchQuantities(target, wood).size, 0, "a different material is not reserved even without a second contract");
+  assert.equal(reservedResourceBatchQuantities(target, { id: wood.id }).size, 0, "an ID-only lookup must use the actual saved material");
+  const moneyBefore = target.storage.moneyCopper;
+  assert.throws(() => advanceTransportShipments(loaded, target, order.plan.arrivalQd, { _appendStorageLog: assert.fail }),
+    /Reserved outbound cargo changed.*orphaned-meat.*orphan-row.*orphan-lot/);
+  assert.equal(wood.qty, 3);
+  assert.equal(target.storage.moneyCopper, moneyBefore);
+  assert.deepEqual(order.dispatched, {});
+}
+
 // A4: reconstruct all balances, not just the first holding's dated recovery lots.
 for (const legacy of [false, true]) {
   const data = { meta: {}, holdings: [holding("a"), holding("b")] }, key = marketDemandKey("port", "wood");

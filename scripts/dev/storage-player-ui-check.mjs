@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { handleSkyholdSocketPayload, registerStorageOperationExecutor, SkyholdData } from "../data/store.js";
 import { stableDataHash } from "../data/storage-commit.js";
+import { deleteCollectionRow } from "../data/collection-operations.js";
 import { mergeHoldingDefaults } from "../data/normalizers.js";
 import { FinanceStorageDomain } from "../apps/domains/finance/storage-domain.js";
 import { prepareMarketOutboundContext } from "../apps/market/outbound-context.js";
@@ -461,11 +462,12 @@ warehouse.storage.log.push({ kind: "note", roomId: "outdoors", qty: 0, source: "
 const movementReceipt = (operationId, fromRoomId, toRoomId, actualRoomId) => ({
   operationId, type: "system",
   payload: { signature: JSON.stringify({ type: "batchMove", fromRoomId, toRoomId }),
-    result: { rowType: "items", placements: [{ roomId: actualRoomId }] } }
+    result: { rowType: "items", placements: [{ roomId: actualRoomId, label: "Ящик" }] } }
 });
 warehouse.log.push(movementReceipt("legacy-overflow", "shed", "outdoors", "hidden"),
   movementReceipt("public-item-move", "shed", "outdoors", "outdoors"));
 manager._storageRooms = () => [{ id: "outdoors", label: "Открытый склад", available: true },
+  { id: "shed", label: "Обычная кладовая", available: true },
   { id: "hidden", label: "Тайная кладовая", available: true }];
 manager.activeStorageTab = "log";
 const quote = { marketId: "market", outboundOffers: [{ resourceId: "wood", demand: 20, unitPriceCopper: 1 }] };
@@ -595,6 +597,27 @@ const deniedAssignment = validatePlayerPatch(afterGmChange, buildPlayerPatch(vis
 assert.equal(deniedAssignment.ok, false, "the authority must reject a now-hidden workplace even when resident fields have not changed");
 assert.doesNotMatch(deniedAssignment.error, /secret-work|Закрытый арсенал/);
 
+const recovering = structuredClone(afterGmChange);
+const recoveringHolding = recovering.holdings[0];
+recoveringHolding.people.list[0].injuredDays = 3;
+recoveringHolding.people.list[1].injuredDays = 2;
+recoveringHolding.constructionCrews.push({ id: "crew", name: "Бригада", leaderId: "recovering-leader", memberIds: ["recovering-builder"] });
+recoveringHolding.people.list.push(
+  { id: "recovering-leader", age: 30, injuredDays: 1, workAssignment: "construction-leader:crew" },
+  { id: "recovering-builder", age: 30, injuredDays: 1, workAssignment: "construction:crew" }
+);
+const renamed = structuredClone(recovering);
+renamed.holdings[0].buildings.list[1].name = "Открытая мастерская";
+assert.equal(validatePlayerPatch(recovering, buildPlayerPatch(recovering, renamed), "player").ok, true,
+  "an existing injury in a hidden building or a construction crew must not block unrelated public edits");
+const assigning = structuredClone(recovering);
+const newBuilding = assigning.holdings[0].buildings.list[1];
+newBuilding.assignedWorkerIds = ["available"];
+Object.assign(assigning.holdings[0].people.list[1], { workAssignment: newBuilding.id, role: newBuilding.workerRole || newBuilding.name });
+const newlyInjured = validatePlayerPatch(recovering, buildPlayerPatch(recovering, assigning), "player");
+assert.equal(newlyInjured.ok, false, "a new injured worker must still be refused at the authority");
+assert.match(newlyInjured.error, /недоступного жителя/);
+
 const playerProfile = structuredClone(visibleAtRender);
 playerProfile.holdings[0].gm.playersCanEditResidents = true;
 const editedProfile = structuredClone(playerProfile);
@@ -633,6 +656,21 @@ assert.deepEqual(movementHolding.storage.log.filter(entry => entry.operationId =
   .map(({ roomId, qty }) => [roomId, qty]), [["outdoors", -1], ["hidden", 1]]);
 assert.equal(manager._storageLogRows(movementHolding, rooms).some(entry => entry.operationId === "gm-overflow"), false,
   "player history hides both records of a GM move to a hidden overflow room");
+
+const movedOut = await move({ ...movement, operationId: "removed-room", fromRoomId: "hidden", toRoomId: "outdoors" }, { userId: "gm" });
+assert.equal(movedOut.ok, true);
+assert.equal(manager._storageLogRows(movementHolding, rooms).some(row => row.operationId === "removed-room"), false);
+const savedMovement = { holdings: [movementHolding] };
+deleteCollectionRow(savedMovement, "holdings.0.buildings.list", "hidden");
+const afterRemoval = mergeHoldingDefaults(savedMovement.holdings[0]);
+const currentRooms = rooms.filter(room => room.id !== "hidden");
+const history = manager._storageLogRows(afterRemoval, currentRooms).filter(row => row.operationId === "removed-room");
+assert.deepEqual(history.map(row => [row.qty, row.note]), [[1, "Открытый склад"]],
+  "after the last hidden room was deleted the player sees the public credit without historical room text");
+game.user.isGM = true;
+assert.ok(manager._storageLogRows(afterRemoval, currentRooms)
+  .some(row => row.operationId === "removed-room" && row.note.includes("Тайная кладовая")), "the GM retains the original detail");
+game.user.isGM = false;
 
 for (const file of ["resources", "items", "tabs", "log"]) {
   const template = readFileSync(`templates/parts/storage/${file}.hbs`, "utf8");

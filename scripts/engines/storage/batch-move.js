@@ -213,6 +213,11 @@ function prepareStorageBatchMove(options) {
     const placements = deps.addResourceWithOverflow(draft, {
       ...row, separateRow: row.resourceId === "custom", roomId: plan.toRoomId, batches: receipt.batches
     }, planned.qty);
+    const spoiled = placements.reduce((sum, placement) => sum + (placement.spoiledQty ?? 0), 0);
+    if (spoiled) {
+      return { plan: { ok: false, message: `В месте назначения испортится ${deps.formatNumber(spoiled)} ед. «${planned.label}». Выберите другое помещение.`,
+        rowType: plan.rowType, rows: [] } };
+    }
     if (placements.some((placement) => placement.roomId === plan.fromRoomId && placement.qty > 0)) {
       return { plan: { ok: false, message: `Нет места для всего объёма «${planned.label}». Уменьшите количество или выберите другое помещение.`,
         rowType: plan.rowType, rows: [] } };

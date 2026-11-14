@@ -6,6 +6,7 @@ import { clone, makeId } from "../../../data/utils.js";
 import { stableDataHash } from "../../../data/storage-commit.js";
 import { appendHoldingOperation } from "../../../data/operations.js";
 import { mergeHoldingDefaults } from "../../../data/normalizers.js";
+import { withResourceCatalog } from "../../../core/resources.js";
 import { normalizeLastEventRoll } from "../../../data/event-automation.js";
 import { adjustResidentAttributesForAgeTransition, ageGroupFromAge, ageThresholdsFor, raceKeyFromResident } from "../../../generators/resident-rules.js";
 import { isResidentInPopulation } from "../../../data/resident-presence.js";
@@ -227,7 +228,7 @@ async _prepareTendayOperation({ holdingId = "", qd = 40, rationUnitsPerResident 
   if ((events.events?.length ?? 0) > 40) {
     return { ok: false, blocked: true, message: "За период выпало больше 40 событий. Расчёт не записан: уменьшите число внешних проверок, чтобы сохранить все решения." };
   }
-  const preparedHolding = mergeHoldingDefaults(previewHolding);
+  const preparedHolding = withResourceCatalog(data?.catalog?.resources, () => mergeHoldingDefaults(previewHolding));
   const dueEvents = dueTendaySchedule(preparedHolding, clock.after);
   const changeSet = buildTendayChangeSet(sourceSnapshot, preparedHolding, {
     isFoodResource: (row) => this._isFoodResource(row),

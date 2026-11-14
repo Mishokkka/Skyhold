@@ -55,10 +55,13 @@ export function advanceTransportShipments(data, holding, targetQd, workflow, { l
         if (spoiled) { order.sourceSpoiledPending[lot.lotId] -= spoiled; lot.spoiledQty = spoiled; }
         return { ...lot, qty: lot.qty - spoiled };
       }).filter((lot) => lot.qty > 0);
-      const dispatched = check(applyMarketOutboundDispatch({
+      const dispatched = applyMarketOutboundDispatch({
         resources: holding.storage.resources, cargoReservations: available,
         conflicts: sourceConflicts ??= outboundStorageLotConflicts(holding)
-      }));
+      });
+      if (!dispatched.ok) {
+        throw new Error(`${dispatched.message} Заказ ${order.id}, строка склада ${dispatched.rowId}, партия ${dispatched.batchId}. Сверьте исходный груз.`);
+      }
       // Warehouse batches already reflect all completed economy periods. Add only the open interval.
       for (const lot of cargo) {
         const actual = dispatched.cargo.find((row) => row.lotId === lot.lotId);

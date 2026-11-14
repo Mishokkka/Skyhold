@@ -398,6 +398,30 @@ export function checkStorageCharacterization() {
   }
 
   {
+    const cold = makeHolding();
+    cold.buildings.list = [storageBuilding("cellar", 5)];
+    cold.buildings.list[0].storage.shelfLifeMultiplier = 3;
+    cold.storage.resources = [
+      resource("old-milk", "milk", 2, "cellar", { batches: [{ id: "milk-batch", qty: 2, ageQd: 8 }] }),
+      resource("wood-in-cellar", "wood", 1, "cellar")
+    ];
+    const before = clone(cold.storage);
+    const move = { fromRoomId: "cellar", toRoomId: "outdoors", rowIds: ["wood-in-cellar", "old-milk"] };
+    for (const result of [
+      storage._planStorageBatchMove(cold, move),
+      storage._applyStorageBatchMove(cold, move),
+      storage._applyStorageMove(cold, { ...move, resourceId: "milk", qty: 2 })
+    ]) {
+      assert.equal(result.ok, false);
+      assert.match(result.message, /испортится 2/);
+    }
+    assert.deepEqual(cold.storage, before, "rejecting a package with an expired destination must keep every selected lot and both journals unchanged");
+    cold.storage.resources[0].batches[0].ageQd = 7;
+    assert.equal(storage._applyStorageBatchMove(cold, move).ok, true);
+    assert.equal(cold.storage.resources.find(row => row.resourceId === "milk" && row.roomId === "outdoors")?.batches[0].ageQd, 7);
+  }
+
+  {
     const holding = makeHolding();
     holding.storage.resources = [resource("wood", "wood", 5, "outdoors", { name: "Wood" })];
     const rejected = storage._applyManualStorageChange(holding, {

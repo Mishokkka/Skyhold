@@ -5,7 +5,7 @@ import { stableDataHash } from "../../../../data/storage-commit.js";
 import { makeId } from "../../../../data/utils.js";
 import { itemQuantity, itemQuantityUpdateData, setItemQuantityData } from "../../../../engines/storage/item-quantity.js";
 import { resolveStorageRow, STORAGE_ROW_CHANGED } from "../../../../engines/storage/row-identity.js";
-import { resolveFoundryActorReference, resolveFoundryUuid } from "../../../../integrations/foundry-runtime.js";
+import { hasOtherActiveActorOwner, resolveFoundryActorReference, resolveFoundryUuid } from "../../../../integrations/foundry-runtime.js";
 
 function cloneFoundryData(value) {
   return foundry?.utils?.deepClone?.(value) ?? structuredClone(value);
@@ -28,6 +28,38 @@ function inventoryRollbackError(message, cause) {
   return Object.assign(new Error(message, { cause }), { code: COMMAND_ERROR.OUTCOME_UNKNOWN });
 }
 
+function rollbackReviewError(actor, items, reason) {
+  const stacks = items.map(({ name, qty, id }) => `«${name || id}» (${qty} ед., ID ${id})`).join(", ");
+  return inventoryRollbackError(`${reason} Проверьте инвентарь «${actor.name ?? actor.id}» (${actor.uuid ?? actor.id}) и предметы ${stacks}.`);
+}
+
+function requireUncontestedRollback(actor, items) {
+  // Foundry 13 writes embedded documents by ID without comparing their previous data.
+  // A different client can edit the inventory between the fingerprint check and the write.
+  if (!hasOtherActiveActorOwner(actor)) return;
+  throw rollbackReviewError(actor, items, "Автоматический откат отложен: инвентарь доступен ещё одному подключённому владельцу.");
+}
+
+async function deleteUnchangedActorItems(actor, items, { rollback = false } = {}) {
+  if (rollback) requireUncontestedRollback(actor, items);
+  const hashes = new Map(items.map(({ id, hash }) => [id, hash]));
+  const unchanged = (item) => actorItemHash(item) === hashes.get(String(item?.id ?? ""));
+  if (!items.every(({ id }) => unchanged(actor.items?.get?.(id)))) return [];
+  // Check again after Foundry's asynchronous preparation, as close to dispatch as the API allows.
+  const hooks = globalThis.Hooks;
+  if (!hooks?.on || !hooks?.off) return actor.deleteEmbeddedDocuments("Item", [...hashes.keys()]);
+  const guardId = makeId("skyhold-delete", 12);
+  const hook = hooks.on("preDeleteItem", (item, options) => {
+    if (options?.skyholdDeleteGuard !== guardId) return;
+    return unchanged(item) && (!rollback || !hasOtherActiveActorOwner(actor));
+  });
+  try {
+    return await actor.deleteEmbeddedDocuments("Item", [...hashes.keys()], { skyholdDeleteGuard: guardId });
+  } finally {
+    hooks.off("preDeleteItem", hook);
+  }
+}
+
 export const FinanceStorageItemDocumentDomain = {
 _setItemQuantityData(itemData = {}, qty = 1) {
   return setItemQuantityData(itemData, qty, { clone: cloneFoundryData });
@@ -46,6 +78,9 @@ async _removeQuantityFromActorItem(item, amount = 1) {
   const take = Math.max(1, Math.floor(this._safeNumber(amount, 1)));
   if (take > qty) return { ok: false };
   const previousData = item.toObject ? item.toObject() : cloneFoundryData(item);
+  const previousHash = stableDataHash(previousData);
+  const sourceStack = { id: item.id, name: item.name, qty, hash: previousHash };
+  if (actorItemHash(actor.items?.get?.(item.id)) !== previousHash) return { ok: false };
   const receipt = {
     ok: true,
     kind: qty > take ? "updated" : "deleted",
@@ -56,13 +91,15 @@ async _removeQuantityFromActorItem(item, amount = 1) {
     previousData
   };
   let failure;
+  let deletedItem;
   try {
     if (qty > take) {
       if (!item.update) return { ok: false };
       await item.update(itemQuantityUpdateData(qty - take));
     } else {
       if (!actor.deleteEmbeddedDocuments) return { ok: false };
-      await actor.deleteEmbeddedDocuments("Item", [item.id]);
+      const deleted = await deleteUnchangedActorItems(actor, [sourceStack]);
+      deletedItem = deleted?.find?.((document) => document?.id === item.id);
     }
   } catch (error) {
     failure = error;
@@ -70,6 +107,20 @@ async _removeQuantityFromActorItem(item, amount = 1) {
   const live = actor.items?.get?.(item.id);
   const remaining = live ? this._itemQuantity(live) : 0;
   receipt.afterHash = actorItemHash(live);
+  // The delete response can reveal an edit that the client only received after dispatch.
+  if (deletedItem && actorItemHash(deletedItem) !== previousHash) {
+    receipt.previousData = deletedItem.toObject();
+    receipt.previousQuantity = this._itemQuantity(deletedItem);
+    if (live || !await this._restoreActorItemRemoval(receipt)) {
+      throw rollbackReviewError(actor, [{ id: item.id, name: deletedItem.name, qty: receipt.previousQuantity }],
+        "Исходный предмет изменился во время приёма.");
+    }
+    return { ok: false, message: "Предмет изменился во время приёма. Проверьте инвентарь и начните приём заново." };
+  }
+  if (!failure && qty === take && !deletedItem) {
+    if (live) return { ok: false };
+    throw rollbackReviewError(actor, [sourceStack], "Foundry не подтвердил списание исходной стопки.");
+  }
   if (!failure && remaining === qty - take) return receipt;
   // An embedded operation may throw after the live document has changed.
   if (remaining !== qty && !await this._restoreActorItemRemoval(receipt)) {
@@ -90,25 +141,23 @@ async _restoreActorItemRemoval(receipt = null) {
     return item ? this._itemQuantity(item) : 0;
   };
   let itemId = receipt.itemId;
-  if (actorItemHash(findItem(itemId)) !== receipt.afterHash) return false;
+  const items = [{ name: receipt.previousData?.name, qty: expected, id: itemId }];
+  if (actorItemHash(findItem(itemId)) !== receipt.afterHash) {
+    throw rollbackReviewError(actor, items, "Исходная стопка изменилась во время обмена.");
+  }
+  requireUncontestedRollback(actor, items);
   let failure;
-  try {
-    if (!findItem(itemId) && actor.createEmbeddedDocuments && receipt.previousData) {
+  if (!findItem(itemId) && actor.createEmbeddedDocuments && receipt.previousData) {
+    try {
       const original = this._setItemQuantityData(receipt.previousData, expected);
-      try {
-        const [created] = await actor.createEmbeddedDocuments("Item", [original], { keepId: true }) ?? [];
-        itemId = created?.id ?? itemId;
-      } catch {
-        // A hook can throw after the document has already been added.
-        if (!findItem(itemId)) {
-          const fallback = cloneFoundryData(original);
-          delete fallback._id;
-          delete fallback.id;
-          const [created] = await actor.createEmbeddedDocuments("Item", [fallback]) ?? [];
-          itemId = created?.id ?? itemId;
-        }
-      }
+      const [created] = await actor.createEmbeddedDocuments("Item", [original], { keepId: true }) ?? [];
+      itemId = created?.id ?? itemId;
+    } catch (error) {
+      // A hook may have added the document before rejecting. Never retry creation with a different ID.
+      failure = error;
     }
+  }
+  try {
     if (quantityAt(itemId) !== expected) {
       await findItem(itemId)?.update?.(itemQuantityUpdateData(expected));
     }
@@ -129,14 +178,21 @@ async _removeCreatedActorItems(receipt = null) {
   if (!actor?.deleteEmbeddedDocuments || !receipt.items?.length) return false;
   // Foundry's native inventory is editable while Skyhold settings are being saved.
   // A missing Item may have been moved to another inventory or consumed.
-  if (!receipt.items.every(({ id, hash }) => hash !== null && actorItemHash(actor.items?.get?.(id)) === hash)) return false;
-  const itemIds = receipt.items.map(({ id }) => id);
-  try {
-    await actor.deleteEmbeddedDocuments("Item", itemIds);
-  } catch (error) {
-    if (itemIds.some((id) => actor.items?.get?.(id))) throw inventoryRollbackError("Не удалось отменить выдачу предмета.", error);
+  const items = receipt.items;
+  if (!items.every(({ id, hash }) => hash !== null && actorItemHash(actor.items?.get?.(id)) === hash)) {
+    throw rollbackReviewError(actor, items, "Выданная стопка изменилась или была перемещена.");
   }
-  return itemIds.every((id) => !actor.items?.get?.(id));
+  let removed;
+  try {
+    removed = await deleteUnchangedActorItems(actor, items, { rollback: true });
+  } catch (error) {
+    if (error?.code === COMMAND_ERROR.OUTCOME_UNKNOWN) throw error;
+    throw inventoryRollbackError("Foundry не подтвердил удаление выданного предмета при откате.", error);
+  }
+  const removedById = new Map(removed.map(item => [String(item.id), item]));
+  const exact = items.every(({ id, hash }) => !actor.items?.get?.(id) && actorItemHash(removedById.get(id)) === hash);
+  if (!exact) throw rollbackReviewError(actor, items, "Foundry не подтвердил удаление исходной выданной стопки при откате.");
+  return true;
 },
 
 /** Foundry can resolve a vetoed creation with an empty array. Confirm its result before debiting stock. */
@@ -158,7 +214,10 @@ async _createStorageTransferItem(actor, itemData, qty, operationId) {
     .map((item) => String(item.id)) : [];
   const itemIds = [...new Set([...returnedIds, ...markedIds])];
   const actorMutation = { kind: "created", actorId: String(actor.id ?? ""), actorUuid: String(actor.uuid ?? ""),
-    items: itemIds.map((id) => ({ id, hash: actorItemHash(actor.items?.get?.(id)) })) };
+    items: itemIds.map((id) => {
+      const item = actor.items?.get?.(id);
+      return { id, name: item?.name ?? itemData.name, qty: item ? this._itemQuantity(item) : qty, hash: actorItemHash(item) };
+    }) };
   const live = actor.items?.get?.(returnedIds[0]);
   if (!failure && returnedIds.length === 1 && itemIds.length === 1 && live && this._itemQuantity(live) === qty) {
     return { ok: true, actorMutation };
@@ -335,7 +394,7 @@ async _storageReceiveFoundryItem(holding, item, { roomId = "outdoors", operation
   try {
     if (source.requiresRemoval) {
       actorMutation = await this._removeQuantityFromActorItem(item, amount);
-      if (!actorMutation?.ok) return { ok: false, message: "Не удалось списать предмет из инвентаря персонажа." };
+      if (!actorMutation?.ok) return { ok: false, message: actorMutation?.message ?? "Не удалось списать предмет из инвентаря персонажа." };
     }
     if (resourceId !== null) {
       const id = resourceId;

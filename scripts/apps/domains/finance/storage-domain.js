@@ -18,11 +18,11 @@ import { applyStorageBatchMove, planStorageBatchMove } from "../../../engines/st
 import { payStorageCosts } from "../../../engines/storage/payment.js";
 import { planStorageCosts } from "../../../engines/storage/group-payment.js";
 import { addStorageWithOverflow } from "../../../engines/storage/placement.js";
+import { normalizeStorageRoomId } from "../../../engines/storage/capacity.js";
 import { storageEffectiveRowLoad, storageProfileLoadMultiplier } from "../../../engines/storage/specialization.js";
 import { indexStorageRows, resolveStorageRow, resolveStorageRows } from "../../../engines/storage/row-identity.js";
 import { resourceMatchesMaterialGroup } from "../../../core/material-groups.js";
 import { economyLedgerStorageRows } from "../../../engines/economy/ledger.js";
-import { perishableStorageExpiresInQd } from "../../../engines/economy/perishable-storage.js";
 import { FinanceStorageContextDomain } from "./storage/context-domain.js";
 import { FinanceStorageItemDocumentDomain } from "./storage/item-document-domain.js";
 import { composeDomainGroup } from "../compose-domain.js";
@@ -34,7 +34,6 @@ import {
   availableResourceRowQuantity,
   isResourceBatchPeriodActive,
   protectedResourceBatchIds,
-  resourceBatchAgeQd,
   splitResourceBatchParts,
   syncResourceRowBatches,
   takeResourceBatchById,
@@ -62,6 +61,56 @@ function publicStorageLogNote(row, visibleRoomNames) {
   }
   return note.replace(/(^| · |; |, )переполнение: ([\s\S]*)$/u,
     (match, prefix, label) => visibleRoomNames.has(label) ? match : `${prefix}переполнение`);
+}
+
+function isStorageMoveLog(row) {
+  return row.kind === "move-in" || row.kind === "move-out"
+    || (row.kind === "note" && row.source === "Пакетное перемещение");
+}
+
+function publicStorageLog(holding, log, roomsById, hiddenRooms) {
+  const roomId = normalizeStorageRoomId;
+  const hiddenRoom = (id) => hiddenRooms.has(roomId(id));
+  const movementRows = log.filter(isStorageMoveLog);
+  const movementIds = new Set(movementRows.map((row) => row.operationId).filter(Boolean));
+  const hiddenMoves = new Set(movementRows.filter((row) => row.operationId && hiddenRoom(row.roomId)).map((row) => row.operationId));
+  const receipts = new Map();
+  for (const operation of holding?.log ?? []) {
+    if (operation.type !== "system" || !movementIds.has(operation.operationId)) continue;
+    const placements = operation.payload?.result?.placements;
+    if (!Array.isArray(placements)) continue;
+    let request;
+    try {
+      request = JSON.parse(operation.payload.signature);
+    } catch {
+      continue;
+    }
+    if (request?.type !== "batchMove" || !request.fromRoomId || !request.toRoomId) continue;
+    const from = roomId(request.fromRoomId);
+    const to = roomId(request.toRoomId);
+    if (hiddenRoom(from) || hiddenRoom(to) || placements.some((placement) => hiddenRoom(placement.roomId))) {
+      hiddenMoves.add(operation.operationId);
+    }
+    receipts.set(operation.operationId, { from, to, placements });
+  }
+  return log.flatMap((row) => {
+    if (hiddenRoom(row.roomId)) return [];
+    if (!isStorageMoveLog(row)) return [row];
+    if (hiddenMoves.has(row.operationId) || !roomsById.has(roomId(row.roomId))) return [];
+    const receipt = receipts.get(row.operationId);
+    // Saved text can contain the name of a room since renamed, hidden or removed.
+    const fromLabel = roomsById.get(receipt?.from);
+    const toLabel = roomsById.get(receipt?.to);
+    if (row.kind === "note") {
+      if (!fromLabel || !toLabel || receipt.placements.some((placement) => !roomsById.has(roomId(placement.roomId)))) return [];
+      const notes = receipt.placements.filter((placement) => placement.label)
+        .map((placement) => `${placement.label} → ${roomsById.get(roomId(placement.roomId))}`);
+      return notes.length ? [{ ...row, note: notes.join(", ") }] : [];
+    }
+    const label = row.kind === "move-in" ? fromLabel : toLabel;
+    const direction = row.kind === "move-in" ? "из" : "в";
+    return [{ ...row, note: label ? `${direction} ${label}` : "" }];
+  });
 }
 
 function tendayStorageSourceIds(holding, rows, keyFor) {
@@ -93,36 +142,12 @@ _storageLogRows(holding, roomsArg = null) {
   const log = Array.isArray(holding?.storage?.log) ? holding.storage.log : [];
   const isGM = Boolean(globalThis.game?.user?.isGM);
   const hiddenRooms = hiddenStorageRoomIds(holding, isGM);
-  let visibleLog = log;
-  if (hiddenRooms.size) {
-    const hiddenRoom = (id) => hiddenRooms.has(this._normalizeStorageRoomId(id));
-    const isMove = (row) => row.kind === "move-in" || row.kind === "move-out"
-      || (row.kind === "note" && row.source === "Пакетное перемещение");
-    const hiddenMoves = new Set(log.filter((row) => isMove(row) && row.operationId && hiddenRoom(row.roomId)).map((row) => row.operationId));
-    const knownMoves = new Set();
-    // The receipts retain requested rooms and actual destinations even when the storage journal is truncated.
-    for (const operation of holding?.log ?? []) {
-      const result = operation.payload?.result;
-      if (!Array.isArray(result?.placements)) continue;
-      if (result.placements.some((placement) => hiddenRoom(placement.roomId))) hiddenMoves.add(operation.operationId);
-      let request;
-      try {
-        request = JSON.parse(operation.payload.signature);
-      } catch {
-        continue;
-      }
-      if (request?.type !== "batchMove" || !request.fromRoomId || !request.toRoomId) continue;
-      knownMoves.add(operation.operationId);
-      if (hiddenRoom(request.fromRoomId) || hiddenRoom(request.toRoomId)) hiddenMoves.add(operation.operationId);
-    }
-    visibleLog = log.filter((row) => !hiddenRoom(row.roomId) && !(isMove(row) && hiddenMoves.has(row.operationId)))
-      .filter((row) => !isMove(row) || row.kind !== "note" || knownMoves.has(row.operationId))
-      .map((row) => isMove(row) && !knownMoves.has(row.operationId) ? { ...row, note: "" } : row);
-  }
+  const visibleRooms = new Map(rooms.filter((room) => !hiddenRooms.has(room.id)).map((room) => [room.id, room.label]));
+  const visibleLog = isGM ? log : publicStorageLog(holding, log, visibleRooms, hiddenRooms);
   const rows = visibleLog.slice(-80).reverse();
   const sources = marketLogSources(holding, rows);
   const visibility = createMarketVisibility(this._contextData, { isGM });
-  const visibleRoomNames = new Set(rooms.filter((room) => !hiddenRooms.has(room.id)).map((room) => room.label));
+  const visibleRoomNames = new Set(visibleRooms.values());
   const sourceKey = (row, resourceId = storageResourceId(row)) => JSON.stringify([
     row.operationId, row.kind, resourceId, resourceId === "custom" ? row.name : "",
     isStorageMoneyResource(row) ? "" : this._normalizeStorageRoomId(row.roomId), Math.trunc(row.qty), row.source, row.note || ""
@@ -396,7 +421,6 @@ _restoreProductionResource(holding, resource, qty) {
   const dependencies = this._storagePlacementDependencies();
   return addStorageWithOverflow({
     holding, resource: { ...resource, roomId }, qty,
-    acceptBatch: (placed, batch) => perishableStorageExpiresInQd(holding, placed, resourceBatchAgeQd(holding, batch)) > 0,
     dependencies: {
       ...dependencies,
       storageAdd: (draft, placed, amount) => {
@@ -568,6 +592,7 @@ _applyStorageBatchMove(holding, options = {}) {
 
 _storageMoveDependencies() {
   return {
+    clone,
     safeNumber: (value, fallback = 0) => this._safeNumber(value, fallback),
     normalizeStorageRoomId: (roomId) => this._normalizeStorageRoomId(roomId),
     storageResourceId,

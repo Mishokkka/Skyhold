@@ -1,7 +1,14 @@
+import { effectiveShelfLifeQd } from "./perishable-food.js";
 import { activeTransportOrder, expireTransportReservation, outboundStorageLotConflicts, remainingTransportCargo, transportOrders } from "../data/transport/state.js";
 import { indexStorageLots, matchingStorageLots } from "../engines/storage/row-identity.js";
 
-export const MAX_RESOURCE_BATCHES = 8;
+import {
+  MAX_RESOURCE_BATCHES, compactResourceBatches, fifoSort, hasOwn, normalizeResourceBatches,
+  normalizedRowBatches, resourceBatchTotal, rowBatchPrefix, syncResourceRowBatches, whole
+} from "./resource-batch-data.js";
+
+export { MAX_RESOURCE_BATCHES, compactResourceBatches, normalizeResourceBatches, resourceBatchTotal, syncResourceRowBatches };
+
 export const INTERNAL_DEMAND_BATCH_COOLDOWN_QD = 40;
 
 const activePeriods = new WeakMap();
@@ -15,158 +22,6 @@ function productionReservedBatches(holding, rowId = null) {
       .flatMap((entry) => entry.batches ?? [])));
 }
 
-function whole(value, fallback = 0) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : fallback;
-}
-
-function hasOwn(value, key) {
-  return Boolean(value && typeof value === "object" && Object.prototype.hasOwnProperty.call(value, key));
-}
-
-function fallbackBatchId(index = 0) {
-  return `batch-${index + 1}`;
-}
-
-function safeIdPart(value = "") {
-  return String(value ?? "").trim().toLowerCase().replace(/[^a-z0-9а-яё_-]+/gi, "-").replace(/^-+|-+$/g, "") || "custom";
-}
-
-function rowBatchPrefix(row = {}) {
-  const resource = safeIdPart(row.resourceId ?? row.name ?? row.label);
-  const room = safeIdPart(row.roomId ?? row.storageRoomId ?? "outdoors");
-  return `batch-${resource}-${room}`;
-}
-
-function batchId(rawId, index, makeId) {
-  const id = String(rawId ?? "").trim();
-  if (id) return id;
-  const generated = typeof makeId === "function" ? String(makeId("batch", 12, index) ?? "").trim() : "";
-  return generated || fallbackBatchId(index);
-}
-
-function canonicalBatch(raw = {}, index = 0, makeId = null) {
-  const qty = whole(raw?.qty ?? raw?.quantity ?? raw?.count, 0);
-  if (!qty) return null;
-  const internalDemandAvailableFromQd = whole(raw?.internalDemandAvailableFromQd, 0);
-  return {
-    id: batchId(raw?.id, index, makeId),
-    qty,
-    ageQd: whole(raw?.ageQd, 0),
-    ...(internalDemandAvailableFromQd > 0 ? { internalDemandAvailableFromQd } : {})
-  };
-}
-
-function fifoSort(left, right) {
-  return right.ageQd - left.ageQd || String(left.id).localeCompare(String(right.id));
-}
-
-function mergeDuplicateIds(batches = []) {
-  const merged = new Map();
-  for (const batch of batches) {
-    const existing = merged.get(batch.id);
-    if (!existing) {
-      merged.set(batch.id, { ...batch });
-      continue;
-    }
-    existing.qty += batch.qty;
-    existing.ageQd = Math.max(existing.ageQd, batch.ageQd);
-    const internalDemandAvailableFromQd = Math.max(
-      whole(existing.internalDemandAvailableFromQd, 0),
-      whole(batch.internalDemandAvailableFromQd, 0)
-    );
-    if (internalDemandAvailableFromQd > 0) existing.internalDemandAvailableFromQd = internalDemandAvailableFromQd;
-    else delete existing.internalDemandAvailableFromQd;
-  }
-  return [...merged.values()];
-}
-
-function closestPair(batches = []) {
-  let best = null;
-  for (let left = 0; left < batches.length - 1; left += 1) {
-    for (let right = left + 1; right < batches.length; right += 1) {
-      const a = batches[left];
-      const b = batches[right];
-      const candidate = {
-        left,
-        right,
-        distance: Math.abs(a.ageQd - b.ageQd),
-        olderAge: Math.max(a.ageQd, b.ageQd),
-        idKey: [String(a.id), String(b.id)].sort().join("\u0000")
-      };
-      if (!best
-        || candidate.distance < best.distance
-        || (candidate.distance === best.distance && candidate.olderAge > best.olderAge)
-        || (candidate.distance === best.distance && candidate.olderAge === best.olderAge && candidate.idKey < best.idKey)) {
-        best = candidate;
-      }
-    }
-  }
-  return best;
-}
-
-export function compactResourceBatches(rawBatches = [], {
-  maxBatches = MAX_RESOURCE_BATCHES,
-  protectedBatchIds = new Set()
-} = {}) {
-  const limit = Math.max(1, whole(maxBatches, MAX_RESOURCE_BATCHES));
-  const protectedBatches = [];
-  const batches = [];
-  for (const batch of mergeDuplicateIds(rawBatches.map((batch, index) => canonicalBatch(batch, index)).filter(Boolean))) {
-    (protectedBatchIds.has(batch.id) ? protectedBatches : batches).push(batch);
-  }
-  // Active contracts keep their quantity, freshness and identity. The soft limit leaves
-  // at least one slot for unreserved stock even if old contracts use every normal slot.
-  const unreservedLimit = Math.max(1, limit - protectedBatches.length);
-  while (batches.length > unreservedLimit) {
-    const pair = closestPair(batches);
-    const left = batches[pair.left];
-    const right = batches[pair.right];
-    const older = left.ageQd > right.ageQd
-      ? left
-      : (right.ageQd > left.ageQd ? right : (String(left.id) <= String(right.id) ? left : right));
-    const merged = {
-      id: older.id,
-      qty: left.qty + right.qty,
-      ageQd: Math.max(left.ageQd, right.ageQd),
-      ...(
-        Math.max(
-          whole(left.internalDemandAvailableFromQd, 0),
-          whole(right.internalDemandAvailableFromQd, 0)
-        ) > 0
-          ? {
-            internalDemandAvailableFromQd: Math.max(
-              whole(left.internalDemandAvailableFromQd, 0),
-              whole(right.internalDemandAvailableFromQd, 0)
-            )
-          }
-          : {}
-      )
-    };
-    batches.splice(pair.right, 1);
-    batches.splice(pair.left, 1, merged);
-  }
-  return [...batches, ...protectedBatches].sort(fifoSort);
-}
-
-export function normalizeResourceBatches(rawBatches, {
-  fallbackQty = 0,
-  makeId = null,
-  maxBatches = MAX_RESOURCE_BATCHES,
-  compact = true,
-  protectedBatchIds = new Set()
-} = {}) {
-  const source = Array.isArray(rawBatches)
-    ? rawBatches
-    : (whole(fallbackQty, 0) ? [{ qty: whole(fallbackQty, 0), ageQd: 0 }] : []);
-  const batches = mergeDuplicateIds(source.map((batch, index) => canonicalBatch(batch, index, makeId)).filter(Boolean));
-  return compact ? compactResourceBatches(batches, { maxBatches, protectedBatchIds }) : batches.sort(fifoSort);
-}
-
-export function resourceBatchTotal(batches = []) {
-  return batches.reduce((sum, batch) => sum + whole(batch?.qty, 0), 0);
-}
-
 export function internalDemandBatchClockQd(holding = {}) {
   return whole(holding?.gm?.calendaria?.lastQd, 0);
 }
@@ -177,29 +32,6 @@ export function nextInternalDemandBatchAvailabilityQd(holding = {}, delayQd = IN
 
 export function resourceBatchAvailableToInternalDemand(batch = {}, holding = {}) {
   return whole(batch?.internalDemandAvailableFromQd, 0) <= internalDemandBatchClockQd(holding);
-}
-
-function normalizedRowBatches(row, {
-  compact = true,
-  maxBatches = MAX_RESOURCE_BATCHES,
-  protectedBatchIds = new Set()
-} = {}) {
-  const authoritative = hasOwn(row, "batches");
-  const prefix = rowBatchPrefix(row);
-  return normalizeResourceBatches(authoritative ? row.batches : null, {
-    fallbackQty: authoritative ? 0 : (row.qty ?? row.quantity ?? row.count),
-    makeId: (_kind, _length, index = 0) => `${prefix}-${index + 1}`,
-    compact,
-    maxBatches,
-    protectedBatchIds
-  });
-}
-
-export function syncResourceRowBatches(row = {}, options = {}) {
-  if (!row || typeof row !== "object") return row;
-  row.batches = normalizedRowBatches(row, options);
-  row.qty = resourceBatchTotal(row.batches);
-  return row;
 }
 
 function nextBatchId(row = {}, makeId = null, holding = null, excludedIds = []) {
@@ -230,35 +62,44 @@ export function protectedResourceBatchIds(holding, row = {}) {
     ...productionReservedBatches(holding, String(row?.id ?? "")).map((batch) => batch.id)]);
 }
 
-export function reservedResourceBatchQuantities(holding, row = {}) {
+export function reservedResourceBatchQuantities(holding, row = {}, { excludeOperationId = "" } = {}) {
   const rowId = String(row?.id ?? "").trim();
   if (!rowId) return new Map();
   const terminal = new Set(["delivered", "lost", "cancelled"]);
   const result = new Map();
-  const resourceId = String(row?.resourceId ?? "").trim();
-  const storedRows = holding?.storage?.resources;
-  let sources, conflicts;
-  let stored;
+  let sources, conflicts, sourceRows;
   const transports = transportOrders(holding).filter((order) => activeTransportOrder(order) && order.direction === "outbound")
     .map((order) => ({ cargoReservations: remainingTransportCargo(order) }));
   for (const order of [...(holding?.special?.market?.outbound?.orders ?? []), ...transports]) {
-    if (terminal.has(String(order?.status ?? "")) || String(order?.dispatchStatus ?? "booked") !== "booked") continue;
+    if (terminal.has(String(order?.status ?? "")) || String(order?.dispatchStatus || "booked") !== "booked"
+      || (excludeOperationId && [order?.id, order?.operationId].some((id) => String(id ?? "").trim() === excludeOperationId))) continue;
     const reservations = order?.cargoReservations ?? order?.cargo ?? [];
     for (const cargo of reservations) {
       if (String(cargo?.rowId ?? cargo?.storageRowId ?? "").trim() !== rowId) continue;
       const id = String(cargo?.batchId ?? "").trim();
       const qty = whole(cargo?.qty, 0);
       if (!id || !qty) continue;
-      conflicts ??= outboundStorageLotConflicts(holding);
       if (!sources) {
-        sources = indexStorageLots(storedRows, rowId);
-        stored = Array.isArray(storedRows) && storedRows.includes(row);
+        const storedRows = holding?.storage?.resources ?? [];
+        const addressedRows = storedRows.filter((candidate) => String(candidate?.id ?? "").trim() === rowId);
+        // Prefer physical rows from the holding. A copied row or an ID-only caller
+        // must not introduce a second lot into the index.
+        if (addressedRows.includes(row)) sourceRows = [row];
+        else if (row.resourceId || row.batches) {
+          sourceRows = addressedRows.filter((candidate) => candidate.resourceId === row.resourceId
+            && (candidate.roomId ?? candidate.storageRoomId) === (row.roomId ?? row.storageRoomId)
+            && (row.resourceId !== "custom" || candidate.name === row.name));
+        } else sourceRows = addressedRows;
+        if (!addressedRows.length && (row.resourceId || row.batches)) sourceRows = [row];
+        sources = indexStorageLots(addressedRows.length ? addressedRows : sourceRows, rowId);
       }
-      const { matches, materialRequired } = matchingStorageLots(sources, cargo, conflicts);
-      if (resourceId && materialRequired && resourceId !== String(cargo?.resourceId ?? "").trim()) continue;
-      // Unresolved reservations stay protected. Draft copies can be matched by their material.
-      if (matches.length && resourceId && !matches.some(({ row: source }) => source === row
-        || !stored && String(source.resourceId ?? source.id).trim() === resourceId)) continue;
+      if (sources.size) {
+        conflicts ??= outboundStorageLotConflicts(holding);
+        const { matches, compatibleRows } = matchingStorageLots(sources, cargo, conflicts);
+        // Keep compatible rows protected even when a booking no longer resolves a lot.
+        const candidates = matches.length ? matches.map((match) => match.row) : compatibleRows;
+        if (!candidates.some((candidate) => sourceRows.includes(candidate))) continue;
+      }
       result.set(id, (result.get(id) ?? 0) + qty);
     }
   }
@@ -437,6 +278,7 @@ export function finishResourceBatchPeriod(holding, {
   categoryTagForRow = () => "",
   isPerishableFoodForRow = (row) => ["food.raw", "food.prepared"].includes(categoryTagForRow(row)),
   roomMultiplierForRow = () => 1,
+  effectiveShelfLifeQdForRow = (row, baseQd) => effectiveShelfLifeQd(baseQd, isPerishableFoodForRow(row) ? roomMultiplierForRow(row) : 1),
   maxBatches = MAX_RESOURCE_BATCHES
 } = {}) {
   if (!holding || typeof holding !== "object") return { expiredQty: 0, expired: [] };
@@ -454,13 +296,11 @@ export function finishResourceBatchPeriod(holding, {
       batch.ageQd += resourceBatchElapsedQd(holding, batch, delta);
     }
     const shelfLifeQd = whole(shelfLifeQdForRow(row), 0);
-    const multiplierApplies = isPerishableFoodForRow(row);
-    const multiplier = multiplierApplies ? Math.max(1, Number(roomMultiplierForRow(row)) || 1) : 1;
-    const effectiveShelfLifeQd = shelfLifeQd > 0 ? Math.max(1, Math.floor(shelfLifeQd * multiplier)) : 0;
-    if (effectiveShelfLifeQd > 0) {
+    const deadlineQd = effectiveShelfLifeQdForRow(row, shelfLifeQd);
+    if (deadlineQd > 0) {
       const kept = [];
       for (const batch of row.batches) {
-        if (batch.ageQd >= effectiveShelfLifeQd) {
+        if (batch.ageQd >= deadlineQd) {
           expireTransportReservation(holding, row, batch);
           expired.push({
             rowId: String(row.id ?? ""),
@@ -471,7 +311,7 @@ export function finishResourceBatchPeriod(holding, {
             qty: batch.qty,
             ageQd: batch.ageQd,
             shelfLifeQd,
-            effectiveShelfLifeQd
+            effectiveShelfLifeQd: deadlineQd
           });
         } else kept.push(batch);
       }
