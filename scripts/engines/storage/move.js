@@ -1,6 +1,6 @@
 export function moveStorageResource({
   holding,
-  resourceId = "custom",
+  resourceId = "",
   name = "",
   qty = 0,
   fromRoomId = "outdoors",
@@ -12,8 +12,8 @@ export function moveStorageResource({
   const required = [
     "safeNumber",
     "normalizeStorageRoomId",
-    "normalizeResourceId",
-    "isMoneyResource",
+    "storageResourceId",
+    "isStorageMoneyResource",
     "resourceLabel",
     "resourceUnit",
     "storageFind",
@@ -23,7 +23,8 @@ export function moveStorageResource({
     "storageRoomLabel",
     "appendStorageLog",
     "storagePlacementText",
-    "formatNumber"
+    "formatNumber",
+    "clone"
   ];
   for (const dependency of required) {
     if (typeof deps[dependency] !== "function") throw new TypeError(`storage move engine requires dependencies.${dependency}`);
@@ -34,8 +35,8 @@ export function moveStorageResource({
   const fromRoom = deps.normalizeStorageRoomId(fromRoomId);
   const toRoom = deps.normalizeStorageRoomId(toRoomId);
   if (fromRoom === toRoom) return { ok: false, message: "Выбери разные склады." };
-  const id = deps.normalizeResourceId(resourceId, name);
-  if (deps.isMoneyResource(id, name)) {
+  const id = deps.storageResourceId({ resourceId, name });
+  if (deps.isStorageMoneyResource({ resourceId, name })) {
     return { ok: false, message: "Деньги перемещаются через казну, не через склады." };
   }
 
@@ -54,7 +55,8 @@ export function moveStorageResource({
 
   const unit = fromRow?.unit || deps.resourceUnit(id);
   const weight = deps.storageUnitLoad(fromRow ?? {});
-  const receipt = deps.storageTake(holding, {
+  const draft = { ...holding, storage: { ...holding.storage, resources: deps.clone(holding.storage.resources) } };
+  const receipt = deps.storageTake(draft, {
     resourceId: id,
     name: label,
     roomId: fromRoom,
@@ -64,10 +66,13 @@ export function moveStorageResource({
   }, amount);
   if (receipt.takenQty !== amount) throw new RangeError("storage move could not take the planned batch quantity");
   const placements = deps.storageAddWithOverflow(
-    holding,
-    { resourceId: id, name: label, roomId: toRoom, unit, weight, batches: receipt.batches },
+    draft,
+    { ...fromRow, separateRow: id === "custom", resourceId: id, name: label, roomId: toRoom, unit, weight, batches: receipt.batches },
     amount
   );
+  const spoiled = placements.reduce((sum, placement) => sum + (placement.spoiledQty ?? 0), 0);
+  if (spoiled) return { ok: false, message: `В месте назначения испортится ${deps.formatNumber(spoiled)} ед. «${label}». Выберите другое помещение.` };
+  holding.storage.resources = draft.storage.resources;
   const entries = [{
     kind: "move-out",
     resourceId: id,

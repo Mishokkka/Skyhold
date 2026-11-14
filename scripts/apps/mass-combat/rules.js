@@ -407,10 +407,7 @@ export function tagValue(state, side, key) {
   return 0;
 }
 
-export function commandPercentFromEffectiveness(effectiveness = 0) {
-  const steps = clamp(asNumber(effectiveness, 0), 0, 5);
-  return Math.min(0.25, steps * 0.05);
-}
+export { commandPercentFromEffectiveness } from "../../data/military-resident-rules.js";
 
 export function stateValue(state, key, fallback = 0) {
   return asNumber(state?.[key], fallback);

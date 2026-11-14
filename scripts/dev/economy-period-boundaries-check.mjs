@@ -60,7 +60,7 @@ export function checkEconomyPeriodBoundaries() {
   const placed = [];
   const deps = {
     safeNumber: (v, f = 0) => Number.isFinite(Number(v)) ? Number(v) : f,
-    normalizeResourceId: (v) => v, isMoneyResource: () => false,
+    storageResourceId: (row) => row.resourceId, isStorageMoneyResource: () => false,
     normalizeStorageRoomId: (v) => v || "outdoors", storageRooms: () => rooms,
     storageAdd: (_h, row, qty) => placed.push({ ...row, qty }),
     storageUnitLoad: () => 1, storageProfileLoadMultiplier, splitTransferBatches: splitResourceBatchParts
@@ -74,12 +74,17 @@ export function checkEconomyPeriodBoundaries() {
   assert.deepEqual(placed.map((row) => [row.roomId, row.qty]), [["general", 1], ["outdoors", 3]], "explicit rooms remain explicit");
   rooms.push({ id: "cellar", available: true, capacity: 2, used: 0, profileEffectFactor: 1, shelfLifeMultiplier: 2, profilePerishableFood: true });
   placed.length = 0;
-  const arrival = addStorageWithOverflow({ holding: {}, resource: { resourceId: "food-fruit", roomId: "cellar",
-    arrivalShelfLifeQd: 10, batches: [{ id: "arrival", qty: 4, ageQd: 15 }] }, qty: 4, dependencies: deps });
+  const arrival = addStorageWithOverflow({ holding: {}, resource: { resourceId: "milk", roomId: "cellar",
+    batches: [{ id: "arrival", qty: 4, ageQd: 15 }] }, qty: 4, dependencies: deps });
   assert.deepEqual(arrival.map((row) => [row.roomId, row.qty, row.spoiledQty ?? 0]), [["cellar", 2, 0], ["outdoors", 0, 2]],
     "actual room protection applies, while expired overflow cannot become edible stock");
   assert.equal(placed.length, 1);
-  assert.equal(placed[0].arrivalShelfLifeQd, undefined, "placement control flags are not saved");
+  rooms.at(-1).shelfLifeMultiplier = 1.01;
+  const deadline = addStorageWithOverflow({ holding: {}, resource: { resourceId: "milk", roomId: "cellar",
+    batches: [{ id: "deadline", qty: 2, ageQd: 8 }] }, qty: 2, dependencies: deps });
+  assert.deepEqual(deadline, [{ roomId: "cellar", qty: 0, spoiledQty: 2, overflowFrom: "" }],
+    "an arrival exactly at the whole-QD storage deadline cannot be credited");
+  assert.equal(placed.length, 1);
 
   const ship = { navigationMode: "world" };
   recordFleetFunds(ship, { externalDeltaCopper: 0, treasuryDeltaCopper: -1000, shipDeltaCopper: 1000 });

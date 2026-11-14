@@ -1,5 +1,7 @@
 import { economyLedgerTotals, normalizeEconomyLedger } from "../economy/ledger.js";
 
+export const SCHOOL_MILESTONE_REPORT_PREFIX = "Школьная веха: ";
+
 function copyValue(value) {
   if (value === undefined) return undefined;
   if (typeof globalThis.structuredClone === "function") return globalThis.structuredClone(value);

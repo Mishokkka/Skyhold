@@ -1,11 +1,13 @@
-import { storageProfileMatches, storageEffectiveShelfLifeMultiplier } from "./specialization.js";
+import { resourceBatchAgeQd } from "../../core/resource-batches.js";
+import { storageShelfLifeForRow } from "../../core/resources.js";
+import { storageProfileMatches, storageEffectiveShelfLifeQd } from "./specialization.js";
 
 export function addStorageWithOverflow({ holding, resource = {}, qty = 0, dependencies } = {}) {
   const deps = dependencies ?? {};
   const required = [
     "safeNumber",
-    "normalizeResourceId",
-    "isMoneyResource",
+    "storageResourceId",
+    "isStorageMoneyResource",
     "normalizeStorageRoomId",
     "storageRooms",
     "storageAdd",
@@ -19,8 +21,8 @@ export function addStorageWithOverflow({ holding, resource = {}, qty = 0, depend
 
   const amount = Math.max(0, Math.floor(deps.safeNumber(qty, 0)));
   if (!amount) return [];
-  const id = deps.normalizeResourceId(resource.resourceId, resource.id, resource.name);
-  if (deps.isMoneyResource(id, resource.name)) {
+  const id = deps.storageResourceId(resource);
+  if (deps.isStorageMoneyResource(resource)) {
     deps.storageAdd(holding, resource, amount);
     return [{ roomId: "", qty: amount, overflowFrom: "" }];
   }
@@ -50,7 +52,8 @@ export function addStorageWithOverflow({ holding, resource = {}, qty = 0, depend
       if (!left) return placements;
     }
     if (left) placements.push(...addStorageWithOverflow({ holding,
-      resource: { ...resource, roomId: "outdoors", ...(Array.isArray(batches) ? { batches } : {}) }, qty: left, dependencies: deps }));
+      resource: { ...resource, roomId: "outdoors", ...(Array.isArray(batches) ? { batches } : {}) },
+      qty: left, dependencies: deps }));
     return placements;
   }
   const targetRoom = rooms.find((room) => room.id === targetRoomId);
@@ -69,16 +72,16 @@ export function addStorageWithOverflow({ holding, resource = {}, qty = 0, depend
       placedResource = { ...placedResource, batches: split.batches };
     }
     let accepted = value;
-    const arrivalShelfLifeQd = Math.max(0, Number(placedResource.arrivalShelfLifeQd) || 0);
-    // A delivery may arrive partway through a long period. Check its end-of-period age
-    // in the actual destination (including overflow) before production or food can use it.
-    if (arrivalShelfLifeQd && Array.isArray(placedResource.batches)) {
-      const room = rooms.find((candidate) => candidate.id === roomId) ?? {};
-      const lifetime = arrivalShelfLifeQd * storageEffectiveShelfLifeMultiplier(room, placedResource);
-      placedResource.batches = placedResource.batches.filter((batch) => Number(batch.ageQd) < lifetime);
-      accepted = placedResource.batches.reduce((sum, batch) => sum + batch.qty, 0);
+    // Transit supplies elapsed age. The destination's current storage rules
+    // apply after unloading, as they do for any other placement.
+    if (transferBatches || placedResource.ageQd > 0) {
+      const baseQd = storageShelfLifeForRow(placedResource);
+      const lifetime = storageEffectiveShelfLifeQd(roomId === targetRoomId ? targetRoom : undefined, placedResource, baseQd);
+      if (transferBatches && lifetime) {
+        placedResource.batches = placedResource.batches.filter((batch) => resourceBatchAgeQd(holding, batch) < lifetime);
+        accepted = placedResource.batches.reduce((sum, batch) => sum + batch.qty, 0);
+      } else if (lifetime && Number(placedResource.ageQd) >= lifetime) accepted = 0;
     }
-    delete placedResource.arrivalShelfLifeQd;
     if (accepted) deps.storageAdd(holding, placedResource, accepted);
     placements.push({ roomId, qty: accepted, ...(accepted < value ? { spoiledQty: value - accepted } : {}), overflowFrom });
   };

@@ -13,6 +13,7 @@ import { COMMIT_SCOPES, normalizeCommitScope, prepareSkyholdCommit } from "./com
 import { MODULE_ID, SETTING_DATA } from "./constants.js";
 import { stableDataHash } from "./storage-commit.js";
 import { createGmWriteAuthority } from "./gm-write-authority.js";
+import { COMMAND_ERROR, commandError, commandFailure } from "./command-result.js";
 import { assertNoNewEntityCollisions } from "./entity-identity.js";
 import { holdingTransportLocationBlocker } from "./transport/state.js";
 
@@ -69,17 +70,30 @@ async function persistSkyholdData(data, options = {}) {
 async function commitSkyholdData(data, {
   scope = COMMIT_SCOPES.BOTH,
   baseRevision = data?.meta?.revision,
-  forceRollbackSnapshot = false
+  playerBase = null,
+  forceRollbackSnapshot = false,
+  localAuthority = false
 } = {}) {
   return measureSkyholdPerformance("SkyholdData.commit", async () => {
-    assertNoNewEntityCollisions(SkyholdData.view(), data);
+    const comparison = playerBase ?? SkyholdData.view();
+    const playerWrite = !localAuthority && !game.user?.isGM;
+    if (playerWrite && !playerBase && toNumber(comparison.meta?.revision, 0) !== toNumber(baseRevision, 0)) {
+      throw commandError(commandFailure({
+        code: COMMAND_ERROR.CONFLICT,
+        message: "Данные владения устарели. Обновите окно и повторите действие.",
+        revision: comparison.meta?.revision,
+        retryable: true
+      }));
+    }
+    assertNoNewEntityCollisions(comparison, data);
     const prepared = measureSkyholdPerformance("SkyholdData.normalize", () => prepareSkyholdCommit(data, { scope, baseRevision }));
     const next = prepared.data;
-    if (!game.user?.isGM) return requestGmDataPatch(next);
+    if (playerWrite) return socketApi.requestGmDataPatch(next, comparison);
     return gmWrites.requestCommit(next, {
       baseRevision,
       scope: prepared.scope,
-      forceRollbackSnapshot
+      forceRollbackSnapshot,
+      localAuthority
     });
   });
 }
@@ -125,14 +139,17 @@ export class SkyholdData {
   static async transaction(updater, {
     reason = "transaction",
     scope = COMMIT_SCOPES.BOTH,
-    forceRollbackSnapshot = false
+    forceRollbackSnapshot = false,
+    localAuthority = false
   } = {}) {
     if (typeof updater !== "function") {
       throw new Error("FBL Skyhold | SkyholdData.transaction requires an updater function.");
     }
 
     return enqueueSkyholdWrite(async () => {
-      const draft = SkyholdData.get();
+      if (localAuthority) gmWrites.assertAuthority();
+      const playerBase = !localAuthority && !game.user?.isGM ? SkyholdData.view() : null;
+      const draft = playerBase ? bindSharedMarkets(clone(playerBase)) : SkyholdData.get();
       const baseRevision = Math.max(0, toNumber(draft?.meta?.revision, 0));
       const result = await updater(draft, { reason, skip: skipTransaction });
       if (isSkippedTransaction(result)) return result.value;
@@ -140,7 +157,9 @@ export class SkyholdData {
         reason,
         scope: normalizeCommitScope(scope),
         baseRevision,
-        forceRollbackSnapshot
+        playerBase,
+        forceRollbackSnapshot,
+        localAuthority
       });
       return result === undefined ? saved : result;
     });
@@ -216,10 +235,10 @@ export class SkyholdData {
     }, { reason: "delete-holding", scope: COMMIT_SCOPES.HOLDINGS });
   }
 
-  static async updateHolding(holdingId, updater, { fallback = false, reason = "update-holding" } = {}) {
+  static async updateHolding(holdingId, updater, { fallback = false, reason = "update-holding", localAuthority = false } = {}) {
     return this.transaction(async (data) => {
       return updateHoldingInData(data, holdingId, updater, { fallback, skip: skipTransaction });
-    }, { reason, scope: COMMIT_SCOPES.HOLDINGS });
+    }, { reason, scope: COMMIT_SCOPES.HOLDINGS, localAuthority });
   }
 
   static async importLaputa() {
@@ -268,10 +287,6 @@ const socketApi = createSkyholdSocketApi({
     return constructionOperationExecutor(operation, context);
   }
 });
-
-function requestGmDataPatch(data) {
-  return socketApi.requestGmDataPatch(data);
-}
 
 export function registerStorageOperationExecutor(executor) {
   if (typeof executor !== "function") {

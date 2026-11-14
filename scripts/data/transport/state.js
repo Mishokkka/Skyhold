@@ -1,7 +1,45 @@
 import { transportEpochQd } from "./clock.js";
+import { conflictingStorageLotKeys, indexStorageLots, matchingStorageLots } from "../../engines/storage/row-identity.js";
 
 export const transportOrders = (holding) => holding?.special?.transportV2?.orders ?? [];
 export const activeTransportOrder = (order) => !["delivered", "lost", "cancelled"].includes(order.status);
+
+export function committedTransportAllocation(run, claim) {
+  return claim?.manifestReady === true && Boolean(run?.incident || run?.riskChecked || ["travelling", "arrived"].includes(run?.status));
+}
+
+/** Goods already loaded can await a local stock debit for several periods. */
+export function confirmedOutboundCargo(holding, state) {
+  const result = new Map();
+  const orders = transportOrders(holding).filter(order => order.direction === "outbound" && activeTransportOrder(order));
+  if (!orders.length) return result;
+  const runs = new Map((state?.runs ?? []).map(run => [run.id, run]));
+  for (const order of orders) {
+    const stage = order.stages?.[0];
+    if (!stage) continue;
+    const receipts = new Set((stage.receipts ?? []).map(receipt => receipt.runId));
+    const quantities = new Map();
+    for (const scheduled of stage.runs ?? []) {
+      if (receipts.has(scheduled.id)) continue;
+      const run = runs.get(scheduled.id);
+      const claim = run?.claims?.find(entry => entry.holdingId === order.holdingId && entry.orderId === order.id && entry.stage === 0);
+      if (!committedTransportAllocation(run, claim)) continue;
+      for (const lot of claim.cargo) {
+        quantities.set(lot.lotId, (quantities.get(lot.lotId) ?? 0) + Math.max(0, lot.qty - (lot.spoiledQty ?? 0)));
+      }
+    }
+    if (quantities.size) result.set(order.id, quantities);
+  }
+  return result;
+}
+
+export function legacyActiveMarketOrders(holding) {
+  const market = holding?.special?.market;
+  return [
+    ...(market?.orders ?? []).filter(activeTransportOrder).map(order => ({ order, direction: "inbound" })),
+    ...(market?.outbound?.orders ?? []).filter(activeTransportOrder).map(order => ({ order, direction: "outbound" }))
+  ];
+}
 
 /** Read the accepted service, never a later catalog quote, for a physical run. */
 export function transportRunService(data, runId) {
@@ -29,9 +67,8 @@ export function holdingTransportLocationBlocker(holding) {
   if (transportOrders(holding).some(transportOrderHasObligations)) {
     return "Сначала завершите перевозки поселения, расчёты и возвращение транспорта перед сменой домашней точки.";
   }
-  const market = holding?.special?.market ?? {};
-  if ([...(market.orders ?? []), ...(market.outbound?.orders ?? [])].some(order => activeTransportOrder(order))) {
-    return "Сначала завершите прежние входящие доставки и продажи во Внешней торговле.";
+  if (legacyActiveMarketOrders(holding).length) {
+    return "Перед переносом завершите доставки и продажи прежней версии. ГМ может сверить их в окне «Перевозки».";
   }
   return "";
 }
@@ -69,22 +106,54 @@ export function pruneCompletedTransportRuns(data) {
   });
 }
 
-export function transportCargoReservations(holding) {
-  return transportOrders(holding).filter((order) => activeTransportOrder(order) && order.direction === "outbound")
-    .flatMap((order) => (order.cargo ?? []).map((lot) => ({ ...lot, qty: Math.max(0, lot.qty - (order.dispatched?.[lot.lotId] ?? 0)
-      - (order.sourceSpoiledPending?.[lot.lotId] ?? 0)) })))
+export function remainingTransportCargo(order) {
+  return (order.cargo ?? []).map((lot) => ({ ...lot, qty: Math.max(0, lot.qty - (order.dispatched?.[lot.lotId] ?? 0)
+    - (order.sourceSpoiledPending?.[lot.lotId] ?? 0)) }))
     .filter((lot) => lot.qty > 0);
 }
 
-export function expireTransportReservation(holding, rowId, batchId) {
+export function transportCargoReservations(holding) {
+  return transportOrders(holding).filter((order) => activeTransportOrder(order) && order.direction === "outbound")
+    .flatMap(remainingTransportCargo);
+}
+
+/** A legacy collision can be recorded across separate contracts as well as within one. */
+export function outboundStorageLotConflicts(holding) {
+  // A completed contract can still explain a collision for a pending one.
+  const legacy = holding?.special?.market?.outbound?.orders ?? [];
+  const v2 = transportOrders(holding).filter(order => order.direction === "outbound");
+  return conflictingStorageLotKeys([
+    ...legacy.flatMap(order => order.cargoReservations ?? order.cargo ?? []),
+    ...v2.flatMap(order => order.cargo ?? [])
+  ]);
+}
+
+export function expireTransportReservation(holding, row, batch, confirmedCargo) {
+  const rowId = String(row?.id ?? "").trim();
+  const batchId = String(batch?.id ?? "").trim();
+  if (!rowId || !batchId) return 0;
+  let confirmedQty = 0;
+  let sources, conflicts;
   for (const order of transportOrders(holding)) {
     if (!activeTransportOrder(order) || order.direction !== "outbound") continue;
     for (const lot of order.cargo ?? []) {
-      if (lot.rowId !== rowId || lot.batchId !== batchId) continue;
-      order.sourceSpoiledPending ??= {};
-      order.sourceSpoiledPending[lot.lotId] = Math.max(0, lot.qty - (order.dispatched?.[lot.lotId] ?? 0));
+      if (String(lot.rowId ?? lot.storageRowId ?? "").trim() !== rowId || String(lot.batchId ?? "").trim() !== batchId) continue;
+      sources ??= indexStorageLots(holding?.storage?.resources, rowId);
+      conflicts ??= outboundStorageLotConflicts(holding);
+      const { matches } = matchingStorageLots(sources, lot, conflicts);
+      if (matches.length !== 1 || matches[0].row !== row || matches[0].batch !== batch) continue;
+      const remaining = Math.max(0, lot.qty - (order.dispatched?.[lot.lotId] ?? 0));
+      const loaded = Math.min(remaining, confirmedCargo?.get(order.id)?.get(lot.lotId) ?? 0);
+      confirmedQty += loaded;
+      if (remaining > loaded) {
+        order.sourceSpoiledPending ??= {};
+        order.sourceSpoiledPending[lot.lotId] = remaining - loaded;
+      } else if (order.sourceSpoiledPending) {
+        delete order.sourceSpoiledPending[lot.lotId];
+      }
     }
   }
+  return confirmedQty;
 }
 
 /** Transport is the only runtime model. This initializes an in-memory draft, never a world setting. */

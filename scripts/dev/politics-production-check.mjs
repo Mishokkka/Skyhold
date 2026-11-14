@@ -3,17 +3,17 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { clone } from "../data/utils.js";
 import { mergeHoldingDefaults } from "../data/normalizers.js";
-import { FinanceDomain } from "../apps/domains/finance-domain.js";
+import { SkyholdWorkflowService } from "../workflows/skyhold-workflow-service.js";
 import { runProductionCycle } from "../engines/economy/production-cycle.js";
 import { refundProductionInputs } from "../engines/economy/production-inputs.js";
 import { politicsProductionOutcome, setPoliticsRuntimeEffects } from "../engines/politics/runtime-effects.js";
-import { addResourceBatches, beginResourceBatchPeriod, finishResourceBatchPeriod } from "../core/resource-batches.js";
+import { addResourceBatches, beginResourceBatchPeriod, finishResourceBatchPeriod, setResourceBatchPeriodStep } from "../core/resource-batches.js";
 import { applyPreparedTenday } from "../apps/domains/events/tenday-preview.js";
 import { stableDataHash } from "../data/storage-commit.js";
 import { cancelProductionBatch } from "../engines/economy/production-cancellation.js";
 import { createConstructionOperationExecutor } from "../apps/construction-operation-executor.js";
 
-const storage = { ...FinanceDomain, _safeNumber: (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback };
+const storage = new SkyholdWorkflowService();
 const quantity = (holding, resourceId) => holding.storage.resources.filter((row) => row.resourceId === resourceId).reduce((sum, row) => sum + row.qty, 0);
 const report = () => ({ produced: [], consumed: [], skipped: [], formulas: [], work: [], ledger: [] });
 
@@ -148,6 +148,28 @@ export async function checkPoliticsProduction() {
   const expired = finishResourceBatchPeriod(perishable, { elapsedQd: 40, shelfLifeQdForRow: () => 60 });
   assert.equal(quantity(perishable, "wood"), 0);
   assert.equal(expired.expiredQty, 100, "refunds must not rejuvenate perishable input batches");
+
+  const coldRefund = fixture({ source: "time", workQd: 3 });
+  coldRefund.buildings.list.push({ id: "cold", constructionStatus: "built", functions: { storage: true },
+    storage: { capacity: 1, shelfLifeMultiplier: 3 } });
+  Object.assign(coldRefund.storage.resources[0], { resourceId: "milk", name: "Milk", roomId: "cold", qty: 2,
+    batches: [{ id: "old-milk", qty: 2, ageQd: 6 }] });
+  const coldDeps = { ...dependencies([0]),
+    parseResourceCosts: () => [{ resourceId: "milk", name: "Milk", qty: 2 }],
+    beforeStep: (holding, step) => setResourceBatchPeriodStep(holding, step)
+  };
+  const coldReport = report();
+  beginResourceBatchPeriod(coldRefund);
+  await runProductionCycle({ holding: coldRefund, qd: 1, report: coldReport, dependencies: coldDeps });
+  finishResourceBatchPeriod(coldRefund, { elapsedQd: 1 });
+  assert.equal(quantity(coldRefund, "milk"), 0);
+  storage._storageAdd(coldRefund, { resourceId: "wood", roomId: "cold" }, 1);
+  beginResourceBatchPeriod(coldRefund);
+  setPoliticsRuntimeEffects(coldRefund, { productionPercent: -5 });
+  await runProductionCycle({ holding: coldRefund, qd: 2, report: coldReport, dependencies: coldDeps });
+  assert.equal(quantity(coldRefund, "milk"), 0, "milk reaches age 8 during the period before it can be refunded outdoors");
+  assert.ok(coldReport.ledger.some(row => row.resourceId === "milk" && row.kind === "notice" && row.status === "expired"));
+  assert.ok(coldReport.ledger.every(row => row.resourceId !== "milk" || !(row.qty > 0)), "discarded inputs are never reported as stock");
 
   const legacy = fixture({ source: "workers" });
   Object.assign(legacy.buildings.list[0].productionLines[0], { workInputsReserved: true, workReservedOutputQty: 1 });

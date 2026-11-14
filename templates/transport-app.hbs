@@ -126,6 +126,10 @@
   </article>
   {{/each}}
 
+  {{#if legacyActive}}<details class="fbls-panel" data-fbls-disclosure="transport-legacy-active" open><summary>Незавершённые заказы прежней версии</summary>
+    <p>Эта версия не проводит и не отменяет их. Сверьте груз, резервы и оплату в копии мира. До обновления завершите или отмените эти заказы в прежней совместимой версии.</p>
+    {{#each legacyActive}}<article><strong>{{direction}} · {{market}} · {{id}}</strong><span>{{status}}</span><p>{{cargo}}</p></article>{{/each}}
+  </details>{{/if}}
   {{#if archive}}<details class="fbls-panel" data-fbls-disclosure="transport-history"><summary>История прежних заказов</summary>
     {{#each archive}}<article><strong>{{direction}} · {{market}}</strong><span>{{status}}</span><p>{{cargo}}</p></article>{{/each}}
   </details>{{/if}}

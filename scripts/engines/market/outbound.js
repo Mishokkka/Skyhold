@@ -2,8 +2,8 @@ import { MAX_OUTBOUND_CARGO_ROWS } from "../../data/market/outbound-state.js";
 import { marketMoneyInRange, MAX_MARKET_OPERATION_COPPER } from "../../data/market/money-limits.js";
 import { marketOutboundBatchPlans } from "./outbound-batches.js";
 import { allocateMarketTransportCharges, marketTransportPlanForOrder } from "../../data/market/transport-plan.js";
-
-const TERMINAL_OUTBOUND_STATUSES = new Set(["delivered", "lost", "cancelled"]);
+import { reservedResourceBatchQuantities } from "../../core/resource-batches.js";
+import { conflictingStorageLotKeys, indexStorageLots, indexStorageRows, matchingStorageLots, storageLotKey as batchKey } from "../storage/row-identity.js";
 
 function whole(value, fallback = 0, max = 1_000_000_000) {
   const parsed = Number(value);
@@ -32,46 +32,23 @@ function tagMatches(tag = "", selector = "") {
   return candidate === target || candidate.startsWith(`${target}.`) || candidate.startsWith(`${target}-`);
 }
 
-function batchKey(rowId = "", batchId = "") {
-  return `${encodeURIComponent(text(rowId))}::${encodeURIComponent(text(batchId))}`;
-}
-
-function activeSoftReservation(order = {}) {
-  return !TERMINAL_OUTBOUND_STATUSES.has(text(order.status))
-    && text(order.dispatchStatus || "booked") === "booked";
-}
-
-export function marketOutboundSoftReservations(outboundState = {}, { excludeOperationId = "" } = {}) {
-  const excluded = text(excludeOperationId);
-  const reserved = new Map();
-  for (const order of outboundState?.orders ?? []) {
-    if (!activeSoftReservation(order) || (excluded && [order?.id, order?.operationId].some((id) => text(id) === excluded))) continue;
-    for (const cargo of order?.cargoReservations ?? order?.cargo ?? []) {
-      const rowId = text(cargo?.rowId ?? cargo?.storageRowId);
-      const id = text(cargo?.batchId);
-      const qty = whole(cargo?.qty);
-      if (!rowId || !id || !qty) continue;
-      const key = batchKey(rowId, id);
-      reserved.set(key, (reserved.get(key) ?? 0) + qty);
-    }
-  }
-  return reserved;
-}
-
 function inventoryBatches(resources = [], outboundState = {}, { excludeOperationId = "" } = {}) {
-  const reserved = marketOutboundSoftReservations(outboundState, { excludeOperationId });
+  const excluded = text(excludeOperationId);
+  const holding = { storage: { resources }, special: { market: { outbound: outboundState } } };
+  const uniqueRows = indexStorageRows(resources);
   const rows = [];
   for (const [rowIndex, row] of (Array.isArray(resources) ? resources : []).entries()) {
     const rowId = text(row?.id);
     const resourceId = text(row?.resourceId ?? row?.id);
-    if (!rowId || !resourceId) continue;
+    if (!rowId || !resourceId || uniqueRows.get(String(row.id ?? "")) !== row) continue;
+    const reserved = outboundState?.orders?.length ? reservedResourceBatchQuantities(holding, row, { excludeOperationId: excluded }) : null;
     const batches = Array.isArray(row?.batches) && row.batches.length
       ? row.batches
       : (whole(row?.qty) ? [{ id: `legacy-${rowIndex + 1}`, qty: whole(row.qty), ageQd: whole(row.ageQd) }] : []);
     for (const [batchIndex, batch] of batches.entries()) {
       const id = text(batch?.id) || `batch-${batchIndex + 1}`;
       const qty = whole(batch?.qty);
-      const reservedQty = reserved.get(batchKey(rowId, id)) ?? 0;
+      const reservedQty = reserved?.get(id) ?? 0;
       const availableQty = Math.max(0, qty - reservedQty);
       if (!availableQty) continue;
       rows.push({
@@ -400,45 +377,55 @@ export function planMarketOutboundSale({
   return plan;
 }
 
-export function preflightMarketOutboundDispatch({ resources = [], cargoReservations = [] } = {}) {
-  const rowsById = new Map((Array.isArray(resources) ? resources : []).map((row) => [text(row?.id), row]));
+export function preflightMarketOutboundDispatch({ resources = [], cargoReservations = [], orderCargo = cargoReservations,
+  conflicts = conflictingStorageLotKeys(orderCargo) } = {}) {
+  const lots = indexStorageLots(resources);
   const grouped = new Map();
-  for (const cargo of cargoReservations ?? []) {
-    const rowId = text(cargo?.rowId);
+  const sources = [];
+  const stale = (rowId, batchId, qty, available = 0) => ({ ok: false, stale: true, rowId, batchId,
+    requested: qty, available, message: "Reserved outbound cargo changed before dispatch." });
+  for (const [index, cargo] of (cargoReservations ?? []).entries()) {
+    const rowId = text(cargo?.rowId ?? cargo?.storageRowId);
     const id = text(cargo?.batchId);
     const qty = whole(cargo?.qty);
-    if (!rowId || !id || !qty) continue;
-    const key = batchKey(rowId, id);
-    const previous = grouped.get(key);
-    if (previous) previous.qty += qty;
-    else grouped.set(key, { rowId, batchId: id, qty });
+    if (!qty) continue;
+    if (!rowId || !id) return stale(rowId, id, qty);
+    const { matches } = matchingStorageLots(lots, cargo, conflicts);
+    if (matches.length !== 1) return stale(rowId, id, qty);
+    const source = matches[0];
+    const { row, batch } = source;
+    if (!grouped.has(source)) grouped.set(source, { rowId, batchId: id, qty: 0, row, batch,
+      ageQd: whole(batch.ageQd, 0, Number.MAX_SAFE_INTEGER) });
+    const requirement = grouped.get(source);
+    requirement.qty += qty;
+    sources[index] = requirement;
   }
-  const prepared = [];
-  for (const requirement of grouped.values()) {
-    const row = rowsById.get(requirement.rowId);
-    const batch = Array.isArray(row?.batches) ? row.batches.find((candidate) => text(candidate?.id) === requirement.batchId) : null;
-    const available = whole(batch?.qty);
-    if (!row || !batch || available < requirement.qty) {
-      return { ok: false, stale: true, rowId: requirement.rowId, batchId: requirement.batchId, requested: requirement.qty, available, message: "Reserved outbound cargo changed before dispatch." };
-    }
-    prepared.push({ ...requirement, row, batch, ageQd: whole(batch.ageQd, 0, Number.MAX_SAFE_INTEGER) });
+  const prepared = [...grouped.values()];
+  for (const requirement of prepared) {
+    const available = whole(requirement.batch.qty);
+    if (available < requirement.qty) return stale(requirement.rowId, requirement.batchId, requirement.qty, available);
   }
-  return { ok: true, prepared };
+  return { ok: true, prepared, sources };
 }
 
-export function applyMarketOutboundDispatch({ resources = [], cargoReservations = [] } = {}) {
-  const preflight = preflightMarketOutboundDispatch({ resources, cargoReservations });
+export function applyMarketOutboundDispatch({ resources = [], cargoReservations = [], orderCargo = cargoReservations,
+  conflicts, canLoadSource = () => true } = {}) {
+  const preflight = preflightMarketOutboundDispatch({ resources, cargoReservations, orderCargo, conflicts });
   if (!preflight.ok) return preflight;
-  const actualAges = new Map(preflight.prepared.map((row) => [batchKey(row.rowId, row.batchId), row.ageQd]));
+  const unavailable = new Set(preflight.prepared.filter((source) => !canLoadSource(source)));
   for (const requirement of preflight.prepared) {
-    requirement.batch.qty = whole(requirement.batch.qty) - requirement.qty;
-    requirement.row.batches = requirement.row.batches.filter((batch) => whole(batch?.qty) > 0);
-    requirement.row.qty = requirement.row.batches.reduce((sum, batch) => sum + whole(batch?.qty), 0);
+    if (!unavailable.has(requirement)) requirement.batch.qty = whole(requirement.batch.qty) - requirement.qty;
   }
-  const cargo = (cargoReservations ?? []).map((row) => ({
-    ...row,
-    ageQd: actualAges.get(batchKey(row?.rowId, row?.batchId)) ?? whole(row?.reservedAgeQd ?? row?.ageQd)
-  }));
+  for (const row of new Set(preflight.prepared.map(({ row }) => row))) {
+    row.batches = row.batches.filter((batch) => whole(batch?.qty) > 0);
+    row.qty = row.batches.reduce((sum, batch) => sum + whole(batch?.qty), 0);
+  }
+  const cargo = (cargoReservations ?? []).map((row, index) => {
+    const source = preflight.sources[index];
+    return { ...row, qty: unavailable.has(source) ? 0 : row.qty,
+      ageQd: source?.ageQd ?? whole(row?.reservedAgeQd ?? row?.ageQd),
+      roomId: text(source?.row.roomId ?? source?.row.storageRoomId ?? row?.roomId) || "outdoors" };
+  });
   return { ok: true, cargo, dispatchedQty: cargo.reduce((sum, row) => sum + whole(row?.qty), 0) };
 }
 

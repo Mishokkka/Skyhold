@@ -4,7 +4,7 @@ import { SkyholdData, registerMarketOperationExecutor } from "../data/store.js";
 import { prepareMarketAuthorityContext } from "../apps/market/authority-context.js";
 import { prepareTransportContext, transportSourceToken } from "../apps/domains/transport-context.js";
 import { bookTransportOrder } from "../engines/transport/runtime.js";
-import { ensureTransportState } from "../data/transport/state.js";
+import { ensureTransportState, holdingTransportLocationBlocker } from "../data/transport/state.js";
 import { transportFixture, transportRequest, transportHarness } from "./fixtures/transport-v2.mjs";
 import { transportRiskLabel, transportStageRiskLabel, transportStageSchedule } from "../apps/domains/transport-view.js";
 import { normalizeSkyholdData } from "../data/normalizers.js";
@@ -102,15 +102,23 @@ order.stages[0].to = "home:holding";
 data.catalog.marketEconomy.countries[0].visibility = "gm";
 holding.special.market.orders = [{ id: "historical", status: "delivered", countryId: data.catalog.marketEconomy.countries[0].id,
   marketLabel: "PRIVATE MARKET", cargo: [{ name: "Cloth", qty: 2 }] }];
+holding.special.market.orders.push({ id: "legacy-pending", status: "pending", marketLabel: "PRIVATE OBLIGATION",
+  cargo: [{ name: "Old shipment", qty: 3 }] });
 const hidden = await app._prepareContext({});
 assert.equal(hidden.orders[0].market, "Скрытый рынок");
 assert.ok(hidden.orders[0].stages.every((stage) => stage.path === "Скрытый участок"));
 assert.equal(hidden.archive[0].market, "Скрытый рынок");
 assert.deepEqual(Object.keys(hidden.archive[0]).sort(), ["cargo", "direction", "market", "status"], "legacy history is read-only");
+assert.deepEqual(hidden.legacyActive, [], "players do not see the GM legacy reconciliation");
 order.stages[0].to = localEndpoint;
 game.user = gm;
 assert.equal((await app._prepareContext({})).orders[0].market, order.commercial.marketLabel);
 assert.equal((await app._prepareContext({})).archive[0].market, "PRIVATE MARKET");
+const beforeReconciliation = structuredClone(data);
+assert.deepEqual((await app._prepareContext({})).legacyActive, [{ id: "legacy-pending", direction: "Покупка",
+  status: "Ожидает исполнения", market: "PRIVATE OBLIGATION", cargo: "Old shipment × 3" }]);
+assert.match(holdingTransportLocationBlocker({ ...holding, special: { market: holding.special.market } }), /прежней версии.*Перевозки/);
+assert.deepEqual(data, beforeReconciliation, "diagnosing old obligations cannot execute or cancel the saved order");
 // Replacing a catalogue cannot make an unknown archived market public.
 const savedCountries = data.catalog.marketEconomy.countries, savedRegions = data.catalog.eventRegions;
 data.catalog.marketEconomy.countries = [];

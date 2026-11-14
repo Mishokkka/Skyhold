@@ -1,10 +1,7 @@
 import {
-  isMoneyResource,
-  normalizeResourceId,
+  isStorageMoneyResource,
+  storageResourceId,
   resourceDef,
-  resourceIcon,
-  resourceImage,
-  resourceItemUuid,
   resourceLabel,
   resourceUnitLoad,
   resourceOptions
@@ -19,11 +16,12 @@ import {
 import { buildStorageSearchRows } from "../../../../engines/storage/search.js";
 import { storageEffectiveRowLoad, storageProfileEffectFactor } from "../../../../engines/storage/specialization.js";
 import { financeBuildingFunctionBlockState } from "../../../../engines/economy/finance-obligations.js";
+import { hiddenStorageRoomIds } from "../../../../data/access-guard.js";
 
 export const FinanceStorageContextDomain = {
 _storageUnitLoad(resource = {}) {
   if (resource?.resourceId !== undefined && resource?.resourceId !== null && String(resource.resourceId).trim()) {
-    const id = normalizeResourceId(resource.resourceId, resource.name);
+    const id = storageResourceId(resource);
     return id === "custom" ? 1 : resourceUnitLoad(id);
   }
   return storageUnitLoad(resource);
@@ -32,6 +30,13 @@ _storageUnitLoad(resource = {}) {
 _storageRowLoad(row = {}) {
   const qty = Math.max(0, Math.floor(this._safeNumber(row?.qty ?? row?.quantity ?? row?.count, 0)));
   return qty * this._storageUnitLoad(row);
+},
+
+_storageItemDepositRoom(holding, item, preferredRoomId) {
+  const room = this._storageRooms(holding, { includeUnavailable: false }).find((entry) => entry.id === preferredRoomId);
+  if (!room?.available) return "outdoors";
+  const load = storageEffectiveRowLoad(room, item, this._storageRowLoad(item));
+  return room.unlimited || room.free + 0.0001 >= load ? room.id : "outdoors";
 },
 
 _formatStorageLoad(value = 0) {
@@ -55,9 +60,9 @@ _prepareStorageRows(holding, canEdit = false, roomsArg = null, rawRowsArg = null
     return roomLabelCache.get(id);
   };
   const rows = (Array.isArray(rawRowsArg) ? rawRowsArg : (holding?.storage?.resources ?? []))
-    .filter((row) => !isMoneyResource(row?.resourceId, row?.name));
+    .filter((row) => !isStorageMoneyResource(row));
   return rows.map((row, index) => {
-    const id = normalizeResourceId(row.resourceId, row.name);
+    const id = storageResourceId(row);
     const def = id !== "custom" ? resourceDef(id) : null;
     const label = id === "custom" ? (row.name || "Ресурс") : resourceLabel(id);
     const qty = this._safeNumber(row.qty, 0);
@@ -69,9 +74,9 @@ _prepareStorageRows(holding, canEdit = false, roomsArg = null, rawRowsArg = null
       _index: Number.isInteger(row.__storageIndex) ? row.__storageIndex : index,
       resourceId: id,
       label,
-      icon: resourceIcon(id),
-      img: id === "custom" ? String(row.img ?? "") : resourceImage(id),
-      itemUuid: row.itemUuid || resourceItemUuid(id),
+      icon: def?.icon ?? "fa-solid fa-cube",
+      img: id === "custom" ? String(row.img ?? "") : (def?.img ?? ""),
+      itemUuid: row.itemUuid || def?.itemUuid || "",
       category: def?.category ?? "Пользовательское",
       unit: "ед.",
       unitLoad: this._storageUnitLoad(row),
@@ -136,7 +141,7 @@ _prepareStorageItemRows(holding, canEdit = false, roomsArg = null, rawRowsArg = 
 
 _storageCapacityDependencies() {
   return {
-    isMoneyResource,
+    isStorageMoneyResource,
     safeNumber: (value, fallback = 0) => this._safeNumber(value, fallback),
     buildingFunctions: (building) => this._buildingFunctions(building),
     buildingStatus: (building) => this._buildingStatus(building),
@@ -178,18 +183,19 @@ _storageRoomsContext(holding, roomsArg = null) {
   return storageRoomsContext(rooms);
 },
 
-_storageSearchRows(holding, roomsArg = null) {
+_storageSearchRows(holding, roomsArg = null, hiddenRooms = hiddenStorageRoomIds(holding)) {
   const rooms = Array.isArray(roomsArg) ? roomsArg : this._storageRooms(holding, { includeUnavailable: true });
+  const visible = (row) => !hiddenRooms.has(this._normalizeStorageRoomId(row.roomId ?? row.storageRoomId));
   return buildStorageSearchRows({
-    resources: holding?.storage?.resources ?? [],
-    items: holding?.storage?.items ?? [],
+    resources: (holding?.storage?.resources ?? []).filter(visible),
+    items: (holding?.storage?.items ?? []).filter(visible),
     dependencies: {
       safeNumber: (value, fallback = 0) => this._safeNumber(value, fallback),
       itemQuantity: (item) => this._itemQuantity(item),
       normalizeRoomId: (roomId) => this._normalizeStorageRoomId(roomId),
       roomLabel: (roomId) => this._storageRoomLabelFromRooms(rooms, roomId),
       resourceLabel: (row) => {
-        const id = normalizeResourceId(row?.resourceId, row?.name);
+        const id = storageResourceId(row);
         return id === "custom" ? String(row?.name || "Ресурс") : resourceLabel(id);
       }
     }
@@ -214,9 +220,12 @@ _storageContext(holding, canEdit = false, activeRoomId = "outdoors") {
     };
   }
 
-  const roomsAll = this._storageRooms(holding, { includeUnavailable: true });
-  const rawRows = (holding?.storage?.resources ?? []).map((row, index) => ({ ...row, __storageIndex: index })).filter((row) => !isMoneyResource(row?.resourceId, row?.name));
-  const rawItemRows = (holding?.storage?.items ?? []).map((row, index) => ({ ...row, __storageIndex: index }));
+  const hiddenRooms = hiddenStorageRoomIds(holding);
+  const visible = (row) => !hiddenRooms.has(this._normalizeStorageRoomId(row.roomId ?? row.storageRoomId));
+  const roomsAll = this._storageRooms(holding, { includeUnavailable: true }).filter((room) => !hiddenRooms.has(room.id));
+  const rawRows = (holding?.storage?.resources ?? []).map((row, index) => ({ ...row, __storageIndex: index }))
+    .filter((row) => visible(row) && !isStorageMoneyResource(row));
+  const rawItemRows = (holding?.storage?.items ?? []).map((row, index) => ({ ...row, __storageIndex: index })).filter(visible);
   const visibleRawRows = rawRows.filter((row) => Math.abs(this._safeNumber(row.qty, 0)) >= 0.0001);
   const visibleItemRows = rawItemRows.filter((row) => this._itemQuantity(row) > 0);
   let activeRoom = this._normalizeStorageRoomId(activeRoomId);
@@ -235,9 +244,9 @@ _storageContext(holding, canEdit = false, activeRoomId = "outdoors") {
   const activeRoomRows = activeSubtab === "resources" ? this._prepareStorageRows(holding, canEdit, roomsAll, activeRawRows) : [];
   const activeItemRows = activeSubtab === "items" ? this._prepareStorageItemRows(holding, canEdit, roomsAll, activeRawItems) : [];
   const batchRowType = activeSubtab === "items" ? "items" : "resources";
-  const batchSet = this.storageBatchSelection?.[batchRowType] instanceof Set ? this.storageBatchSelection[batchRowType] : new Set();
+  const batchSet = this.storageBatchSelection?.get(holding?.id)?.[batchRowType];
   const batchRows = batchRowType === "items" ? activeItemRows : activeRoomRows;
-  for (const row of batchRows) row.batchSelected = batchSet.has(String(row.id ?? ""));
+  for (const row of batchRows) row.batchSelected = batchSet?.has(String(row.id ?? "")) ?? false;
   const selectedBatchRows = batchRows.filter((row) => row.batchSelected);
   const activeRoomInfo = roomsAll.find((room) => room.id === activeRoom) ?? roomsAll[0] ?? null;
   const resourceRooms = roomsAll.filter((room) => room.available || room.source === "base" || roomsWithRows.has(room.id)).map((room) => ({ ...room, active: room.id === activeRoom, itemCount: roomItemCounts.get(room.id) ?? 0 }));
@@ -265,7 +274,7 @@ _storageContext(holding, canEdit = false, activeRoomId = "outdoors") {
     defaultResourceId: defaultResourceOption.value,
     defaultResourceLabel: defaultResourceOption.label,
     actorOptions: [], hasActorOptions: false, targetActor,
-    searchQuery: String(this.storageSearchQuery ?? ""), searchRows: this._storageSearchRows(holding, roomsAll),
+    searchQuery: String(this.storageSearchQuery ?? ""), searchRows: this._storageSearchRows(holding, roomsAll, hiddenRooms),
     notes: holding?.storage?.notes ?? "",
     batchSelection: {
       rowType: batchRowType,

@@ -1,6 +1,7 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import { constructionContributionDetail, normalizeConstructionDiceRules } from "../../engines/workers/construction-dice.js";
 import { militaryDailyWage } from "../../engines/economy/military-wages.js";
+import { hasSergeantTraining } from "../../data/military-resident-rules.js";
 import { splitList } from "../../core/helpers.js";
 import { buildingOperationalState } from "../../core/building-state.js";
 import { makeId } from "../../data/utils.js";
@@ -88,7 +89,7 @@ _applyDefenseSalaries(holding) {
     for (const id of uniqueIds) {
       const person = people.get(id);
       if (!person) continue;
-      const isSergeant = String(squad?.sergeantId ?? "") === id && this._isSergeantCandidate?.(person);
+      const isSergeant = String(squad?.sergeantId ?? "") === id && hasSergeantTraining(person);
       person.workAssignment = "soldier";
       person.workAllocationMode = "legacy";
       person.role = `${isSergeant ? "Сержант" : "Солдат"}: ${squadName} (${typeLabel})`;

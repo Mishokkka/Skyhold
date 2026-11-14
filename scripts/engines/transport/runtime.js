@@ -1,7 +1,7 @@
 import { unreservedCargoArrivals, availableTransportCargo, allArrivalCargo, cargoQuantitiesMatch, ageTransportCargo as ageLot } from "./cargo-flow.js";
 import { cargoLoad, cargoValue, transportInteger, transportMoney, shipTransportFunding, TRANSPORT_LIMITS } from "./quantities.js";
 import { planTransportChain, validateTransportPlan, TransportPlanningUnavailableError } from "./planner.js";
-import { activeTransportOrder, transportOrders } from "../../data/transport/state.js";
+import { activeTransportOrder, committedTransportAllocation, transportOrders } from "../../data/transport/state.js";
 import { transportServicesShareFleet } from "./service-identity.js";
 import { deterministicUnit as deterministicMarketShipmentUnit } from "../../core/seeded-unit.js";
 import { transportRunReturnQd } from "./seasonal.js";
@@ -10,17 +10,13 @@ const clone = (value) => JSON.parse(JSON.stringify(value));
 const totalQty = (cargo) => cargo.reduce((sum, lot) => sum + lot.qty, 0);
 const runFor = (state, id) => state.runs.find((run) => run.id === id);
 
-function committedAllocation(run, claim) {
-  return claim?.manifestReady === true && Boolean(run.incident || run.riskChecked || ["travelling", "arrived"].includes(run.status));
-}
-
 /** Physical facts are immutable even while this holding has not recorded its local receipt. */
 function committedRunIds(state, order, stage) {
   const ids = new Set(stage.receipts.map(receipt => receipt.runId));
   for (const planned of stage.runs) {
     const physical = runFor(state, planned.id);
     const claim = physical?.claims.find(claim => claim.holdingId === order.holdingId && claim.orderId === order.id && claim.stage === stage.index);
-    if (physical && committedAllocation(physical, claim)) ids.add(planned.id);
+    if (committedTransportAllocation(physical, claim)) ids.add(planned.id);
   }
   return ids;
 }
@@ -46,7 +42,7 @@ function releaseRuns(state, order, fromStage = 0, keepIds = new Set(), throughSt
   for (const run of state.runs) {
     if (keepIds.has(run.id)) continue;
     const removed = run.claims.filter((claim) => claim.orderId === order.id && claim.holdingId === order.holdingId && claim.stage >= fromStage && claim.stage <= throughStage);
-    if (removed.some(claim => committedAllocation(run, claim))) throw new Error("Нельзя снять груз с подтверждённого физического рейса.");
+    if (removed.some(claim => committedTransportAllocation(run, claim))) throw new Error("Нельзя снять груз с подтверждённого физического рейса.");
     run.reservedLoad -= removed.reduce((sum, claim) => sum + claim.load, 0);
     run.claims = run.claims.filter((claim) => !removed.includes(claim));
   }
@@ -313,7 +309,7 @@ function retainSharedAllocations(state, order, stage, arrivals) {
   for (const planned of [...pendingRuns(stage)].sort((a, b) => a.startQd - b.startQd)) {
     const physical = runFor(state, planned.id);
     const claim = physical?.claims.find(row => row.holdingId === order.holdingId && row.orderId === order.id && row.stage === stage.index);
-    if (!claim || committedAllocation(physical, claim)) continue;
+    if (!claim || committedTransportAllocation(physical, claim)) continue;
     const available = new Map(availableTransportCargo(unassigned, [], physical.startQd, { age: false }).map(lot => [lot.lotId, lot.qty]));
     const booked = new Map(claim.cargo.map(lot => [lot.lotId, lot.qty]));
     const cargo = planned.cargo.flatMap(lot => {
@@ -488,7 +484,7 @@ export function advanceTransportOrders({ state, holding, targetQd, dependencies 
         if (!physical) throw new Error("Отсутствует забронированный рейс.");
         if (!receipt && physical.departureQd <= targetQd) {
           const claim = physical.claims.find(row => row.holdingId === order.holdingId && row.orderId === order.id && row.stage === stage.index);
-          const committed = committedAllocation(physical, claim);
+          const committed = committedTransportAllocation(physical, claim);
           const vehicle = waitForVehicle(state, physical);
           if (!committed && vehicle.pending) {
             waitingForVehicle = true;
@@ -509,8 +505,14 @@ export function advanceTransportOrders({ state, holding, targetQd, dependencies 
             if (!attemptRebooking(order, targetQd, () => rebookStage(state, order, stage, arrivals), stage.index)) { waitingForVehicle = true; blockedBookings.add(stage.index); break; }
             replanned = true; break;
           }
-          const cargo = scheduled.cargo.map(lot => ageLot({ ...available.get(lot.lotId), qty: lot.qty }, physical.departureQd, order.plan.startQd));
-          if (stage.index === 0 && order.direction === "outbound") dependencies.dispatchCargo?.(order, cargo, physical.departureQd);
+          const manifest = committed ? new Map(claim.cargo.map(lot => [lot.lotId, lot])) : null;
+          if (manifest && !cargoQuantitiesMatch(scheduled.cargo, claim.cargo)) {
+            throw new Error("Бронь груза отличается от подтверждённого рейса. Сверьте исходный груз.");
+          }
+          const cargo = scheduled.cargo.map(lot => ageLot({
+            ...available.get(lot.lotId), qty: lot.qty, ...manifest?.get(lot.lotId)
+          }, physical.departureQd, order.plan.startQd));
+          if (stage.index === 0 && order.direction === "outbound") dependencies.dispatchCargo(order, cargo, physical.departureQd, { committed });
           if (claim) claim.manifestReady = true;
           if (claim && !committed) claim.cargo = cargo.map(lot => ({ lotId: lot.lotId, qty: lot.qty,
             ageQd: lot.ageQd, ageAtQd: lot.ageAtQd, shelfLifeQd: lot.shelfLifeQd ?? 0, spoiledQty: lot.spoiledQty ?? 0 }));

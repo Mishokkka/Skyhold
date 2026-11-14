@@ -9,11 +9,12 @@ import { DEFAULT_SKYHOLD_DATA } from "../data/defaults/default-skyhold-data.js";
 import { migrateData } from "../data/normalizers.js";
 import { clone } from "../data/utils.js";
 import { createSkyholdSplitStorage } from "../data/split-storage.js";
+import { createSkyholdSocketApi } from "../data/socket.js";
 import { SETTING_META, SETTING_HOLDINGS, SETTING_CATALOG, SETTING_DATA } from "../data/constants.js";
 import { normalizeRandomEventTables } from "../data/random-events.js";
 import { stableDataHash } from "../data/storage-commit.js";
 import { RenderSchedulerMixin } from "../apps/common/render-scheduler.js";
-import { buildPlayerPatch } from "../data/player-write-guard.js";
+import { buildPlayerPatch, validatePlayerPatch } from "../data/player-write-guard.js";
 
 /** Verifies GM write authority, ownership, transport failures and render scheduling while restoring platform fixtures. */
 export async function checkUiOwnership() {
@@ -62,6 +63,9 @@ export async function checkUiOwnership() {
     const remote = createGmWriteAuthority({ user: () => second, authority: () => gm, sender: (key) => users.get(key),
       socket: () => ({ emit: (_channel, payload) => { transported = payload; } }), timeoutMs: 1000 });
     const draft = clone(data); draft.meta.revision = 9;
+    await assert.rejects(remote.requestCommit(draft, { baseRevision: 8, scope: "holdings", localAuthority: true }),
+      { code: "authority-offline" });
+    assert.equal(transported, undefined, "an Actor transfer commit must stop rather than leave the executing authority");
     const wait = remote.requestCommit(draft, { baseRevision: 8, scope: "holdings" });
     await remote.handle({ type: "gmCommitResponse", requestId: transported.requestId,
       operationId: transported.operationId, userId: second.id, gmId: gm.id,
@@ -70,6 +74,23 @@ export async function checkUiOwnership() {
     await remote.handle(responses.at(-1), gm.id);
     assert.equal((await wait).meta.revision, 9, "authenticated authority receipt must resolve the requesting GM");
     assert.equal(writes, 2);
+
+    const notifyDraft = clone(data); notifyDraft.meta.revision = 10;
+    const writerWithNotificationFailure = createGmWriteAuthority({
+      getData: () => data, user: () => gm, authority: () => gm,
+      persistData: async (saved) => ({ data: saved, changed: true }),
+      notifyChanged() { throw new Error("notification transport unavailable"); }
+    });
+    const previousWarning = console.warn;
+    const warnings = [];
+    try {
+      console.warn = (...args) => warnings.push(args);
+      const saved = await writerWithNotificationFailure.requestCommit(notifyDraft, { baseRevision: 9, scope: "holdings" });
+      assert.equal(saved.meta.revision, 10, "a notification error after the save must not become a failed commit");
+      assert.equal(warnings.length, 1);
+    } finally {
+      console.warn = previousWarning;
+    }
 
     for (const failAttempt of [1, 2]) {
       let attempts = 0;
@@ -94,7 +115,10 @@ export async function checkUiOwnership() {
     const settings = new Map([[SETTING_META, clone(data.meta)], [SETTING_HOLDINGS, clone(data.holdings)],
       [SETTING_CATALOG, clone(data.catalog)], [SETTING_DATA, clone(data)]]);
     const storage = createSkyholdSplitStorage({ settings: { get: (_module, key) => clone(settings.get(key)),
-      set: async (_module, key, value) => settings.set(key, clone(value)) } });
+      set: async (_module, key, value) => {
+        settings.set(key, clone(value));
+        return clone(value);
+      } } });
     const view = storage.getDataView();
     assert.throws(() => { view.holdings[0].name = "illegal"; }, TypeError);
     const mutable = storage.getData(); mutable.holdings[0].name = "draft";
@@ -113,6 +137,8 @@ export async function checkUiOwnership() {
     const permitted = SkyholdData.get();
     permitted.holdings[0].visibility = "public";
     permitted.holdings[0].gm.playersCanEditOverview = true;
+    permitted.holdings[0].gm.playersCanEditResidents = true;
+    permitted.holdings[0].people.list = [{ id: "resident-a", name: "Same name" }, { id: "resident-b", name: "Same name" }];
     await SkyholdData.set(permitted);
     const beforePlayer = SkyholdData.get();
     const playerDraft = clone(beforePlayer); playerDraft.holdings[0].overview.publicNotes = "Authenticated player note";
@@ -120,6 +146,47 @@ export async function checkUiOwnership() {
       userId: player.id, targetGmId: gm.id, patch: buildPlayerPatch(beforePlayer, playerDraft) }, player.id);
     assert.equal(storeResponses.at(-1)?.command?.ok, true, "public socket wrapper must forward the trusted sender ID");
     assert.equal(SkyholdData.view().holdings[0].overview.publicNotes, "Authenticated player note");
+
+    const base = SkyholdData.get();
+    const authorityApi = createSkyholdSocketApi({ getData: storage.getData, enqueueWrite: createWriteQueue(),
+      persistData: storage.persistData, notifyChanged() {} });
+    const requestSent = new Promise((resolve) => {
+      game.socket.emit = (_channel, payload) => {
+        storeResponses.push(payload);
+        if (payload.type === "playerDataPatchRequest") resolve(payload);
+      };
+    });
+    game.user = player;
+    const pendingPlayerSave = SkyholdData.transaction(async (playerRoot) => {
+      playerRoot.holdings[0].overview.description = "Player changed the description";
+      const gmRoot = storage.getData();
+      gmRoot.holdings[0].overview.publicNotes = "GM changed the note during the transaction";
+      gmRoot.meta.revision++;
+      await storage.persistData(gmRoot, { normalized: true, scope: "holdings" });
+    });
+    const playerRequest = await Promise.race([requestSent, pendingPlayerSave.then(() => {
+      throw new Error("Player transaction finished without requesting the authority GM");
+    })]);
+    game.user = gm;
+    await authorityApi.handleSkyholdSocketPayload(playerRequest, player.id);
+    game.user = player;
+    await handleSkyholdSocketPayload(storeResponses.at(-1), gm.id);
+    await pendingPlayerSave;
+    game.user = gm;
+    assert.equal(playerRequest.patch.baseRevision, base.meta.revision, "the patch must retain its draft revision");
+    assert.deepEqual(playerRequest.patch.changes.map((change) => change.path), ["holdings.0.overview.description"]);
+    const afterRace = SkyholdData.get();
+    assert.equal(afterRace.holdings[0].overview.description, "Player changed the description");
+    assert.equal(afterRace.holdings[0].overview.publicNotes, "GM changed the note during the transaction");
+
+    const renamedResident = clone(afterRace);
+    renamedResident.holdings[0].people.list[0].name = "First resident";
+    const renamePatch = buildPlayerPatch(afterRace, renamedResident);
+    const reorderedResidents = clone(afterRace);
+    reorderedResidents.meta.revision++;
+    reorderedResidents.holdings[0].people.list.reverse();
+    assert.equal(validatePlayerPatch(reorderedResidents, renamePatch, player.id).ok, false,
+      "equal old names must not allow a stale patch to edit a different resident at the same index");
 
     const { HoldingDomain } = await import("../apps/domains/holding-domain.js");
     const scopedData = { holdings: [{ id: "first", name: "First" }, { id: "second", name: "Second" }] };
@@ -143,7 +210,7 @@ export async function checkUiOwnership() {
     let authorityChecks = 0;
     const interruptedWrites = [];
     const interrupted = createSkyholdSplitStorage({ settings: { get: (_module, key) => clone(settings.get(key)),
-      set: async (_module, key) => { interruptedWrites.push(key); } }, assertWriteAuthority() {
+      set: async (_module, key, value) => { interruptedWrites.push(key); return clone(value); } }, assertWriteAuthority() {
       if (++authorityChecks > 1) throw Object.assign(new Error("authority changed"), { code: "authority-offline" });
     } });
     const interruptedDraft = interrupted.getData(); interruptedDraft.holdings[0].name = "interrupted";

@@ -224,9 +224,33 @@ export async function checkSplitStorageCharacterization() {
       holdings: recoveryNext.holdings,
       catalog: recoveryNext.catalog
     });
-    const forwardRecovered = createSkyholdSplitStorage({ settings: forwardHarness.settings }).getData();
+    const forwardStorage = createSkyholdSplitStorage({ settings: forwardHarness.settings });
+    const forwardRecovered = forwardStorage.getDataView();
     assert.equal(forwardRecovered.meta.revision, 21, "a completed single partition payload must recover forward after an interrupted final meta write");
     assert.equal(forwardRecovered.holdings[0].name, "After interrupted write", "forward recovery must retain the fully written target partition");
+    forwardStorage.resetMetrics();
+    assert.equal(forwardStorage.getDataView(), forwardRecovered, "after verifying the same forward commit, reuse its normalized root");
+    assert.equal(forwardStorage.getMetrics().normalizations, 0);
+    assert.equal(forwardStorage.getMetrics().readsByKey[SETTING_HOLDINGS], 1, "an incomplete marker still requires a fresh partition proof");
+    assert.equal(forwardStorage.getMetrics().readsByKey[SETTING_DATA] ?? 0, 0, "a verified target does not need a legacy rollback read");
+    assert.deepEqual(forwardHarness.writes, [], "reading a recovered commit must not write a marker");
+    forwardHarness.values.set(SETTING_HOLDINGS, clone(recoveryPrevious.holdings));
+    const revalidated = forwardStorage.getDataView();
+    assert.equal(revalidated.meta.revision, 20, "a change under the same pending marker must fall back to the coherent previous revision");
+    assert.equal(revalidated.holdings[0].name, "Before interrupted write");
+    forwardHarness.values.set(SETTING_HOLDINGS, clone(recoveryNext.holdings));
+    assert.equal(forwardStorage.getDataView().meta.storageCommit.recovered, "forward");
+    forwardHarness.values.set(SETTING_META, makeStorageCommitMeta(recoveryNext.meta, {
+      writeId: "forward-recovery",
+      previousRevision: 20,
+      holdings: recoveryNext.holdings,
+      catalog: recoveryNext.catalog,
+      complete: true,
+      now: "2026-07-10T00:01:00.000Z"
+    }));
+    const completedForward = forwardStorage.getDataView();
+    assert.equal(completedForward.meta.storageCommit.recovered, undefined, "a durable completion must replace the cached recovery metadata");
+    assert.equal(forwardStorage.getDataView(), completedForward, "the completed marker returns to the normal fast cache path");
 
     const rollbackNext = clone(recoveryPrevious);
     rollbackNext.meta.revision = 21;

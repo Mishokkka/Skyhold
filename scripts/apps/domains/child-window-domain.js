@@ -101,9 +101,10 @@ async _onOpenLaputaMigrationImporter(event) {
 async _onOpenBuildingCatalogMigration(event) {
   stopEvent(event);
   if (!game.user?.isGM) return;
+  const textOnly = event.currentTarget?.dataset?.action === "open-building-text-refresh";
   await ensureSkyholdStylesheet("secondary");
   const { SkyholdBuildingCatalogMigration } = await import("../editors/building-catalog-migration.js");
-  new SkyholdBuildingCatalogMigration({ owner: this }).render({ force: true, focus: true });
+  new SkyholdBuildingCatalogMigration({ owner: this, textOnly }).render({ force: true, focus: true });
 },
 
 async _onOpenHybridLaborMigration(event) {

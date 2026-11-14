@@ -12,6 +12,7 @@ import { isMedicalBuilding } from "../../../core/building-specials.js";
 import { evaluateArithmeticExpression, rollInlineDice } from "../../../core/formula.js";
 import {
   normalizeResourceId,
+  storageResourceId,
   resourceDef,
   resourceLabel
 } from "../../../core/resources.js";
@@ -1744,8 +1745,10 @@ async _runEconomyForQd(holding, periodQd = 40, { operationId = "", createdAt = "
     for (const row of transport) {
       report.work.push(`Перевозка ${row.orderId}: получено ${row.receivedQty} ед.; расходы доставки ${row.spentCopper} ММ.`);
     }
+    report.work.push(...transport.entries.filter((entry) => entry.kind === "note")
+      .map((entry) => `${entry.name}: ${entry.note}`));
     appendEconomyLedger(report, transport.entries.map((entry) => ({ ...entry, domain: "market",
-      kind: entry.resourceId === "money" ? "money" : "resource",
+      kind: entry.kind === "note" ? "notice" : entry.resourceId === "money" ? "money" : "resource",
       meta: { internalTransfer: entry.kind === "transfer", storageKind: entry.kind } })));
   }
 
@@ -1852,7 +1855,7 @@ async _runEconomyForQd(holding, periodQd = 40, { operationId = "", createdAt = "
 _foodConsumptionDependencies() {
   return {
     safeNumber: (value, fallback = 0) => this._safeNumber(value, fallback),
-    normalizeResourceId,
+    storageResourceId,
     resourceDef,
     resourceLabel,
     normalizeFoodRationUnits,

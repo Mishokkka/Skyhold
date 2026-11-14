@@ -10,7 +10,8 @@ export function refundProductionInputs(holding, receipt, lost, outputQty, {
   if (!receipt || receipt.version !== 1 || !Array.isArray(receipt.entries)) throw new Error("Unsupported production input receipt.");
   const base = whole(outputQty);
   const count = Math.min(base, whole(lost));
-  if (!base || !count) return [];
+  const refunds = [], spoiled = [];
+  if (!base || !count) return { refunds, spoiled };
   const groups = new Map();
   for (const entry of receipt.entries) {
     const resource = entry.resource ?? {};
@@ -18,7 +19,6 @@ export function refundProductionInputs(holding, receipt, lost, outputQty, {
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(entry);
   }
-  const refunded = [];
   for (const entries of groups.values()) {
     // The retained output pays the rounded-up indivisible material cost.
     let remaining = Math.floor(entries.reduce((sum, entry) => sum + whole(entry.qty), 0) * count / base);
@@ -28,7 +28,7 @@ export function refundProductionInputs(holding, receipt, lost, outputQty, {
       remaining -= qty;
       if (entry.kind === "money") {
         addMoney(holding, qty);
-        refunded.push({ resourceId: "money", name: "Деньги", roomId: "treasury", qty });
+        refunds.push({ resourceId: "money", name: "Деньги", roomId: "treasury", qty });
       } else {
         let rest = qty;
         const batches = [];
@@ -39,10 +39,18 @@ export function refundProductionInputs(holding, receipt, lost, outputQty, {
           if (!rest) break;
         }
         if (rest) throw new Error("Production input receipt is incomplete.");
-        addResource(holding, { ...entry.resource, batches }, qty);
-        refunded.push({ ...entry.resource, qty });
+        const placements = addResource(holding, { ...entry.resource, batches }, qty);
+        if (Array.isArray(placements)) {
+          for (const placement of placements) {
+            const placed = { ...entry.resource, roomId: placement.roomId };
+            if (placement.qty) refunds.push({ ...placed, qty: placement.qty });
+            if (placement.spoiledQty) spoiled.push({ ...placed, qty: placement.spoiledQty });
+          }
+        } else {
+          refunds.push({ ...entry.resource, qty });
+        }
       }
     }
   }
-  return refunded;
+  return { refunds, spoiled };
 }

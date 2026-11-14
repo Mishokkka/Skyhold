@@ -34,7 +34,7 @@
               {{/if}}
             </div>
           </div>
-          {{#if canManagePeople}}
+          {{#if canEditBuildings}}
             <template data-resident-work-option-catalog>
               {{#each rows.residentWorkOptionCatalog}}
                 <option value="{{value}}" data-resident-work-option-kind="{{kind}}" data-resident-work-option-available="{{available}}">{{label}}</option>
@@ -57,7 +57,7 @@
             </thead>
             <tbody>
               {{#each rows.people}}
-                <tr class="fbls-person-row {{deadClass}}" data-id="{{id}}" data-resident-search="{{searchText}}">
+                <tr class="fbls-person-row {{deadClass}}" data-id="{{id}}" data-holding-id="{{../holding.id}}" data-resident-search="{{searchText}}">
                   <td class="fbls-person-name">{{#if injured}}<span class="fbls-injury-mark {{injuredBadgeClass}}" title="{{injuredTitle}}"><b>{{injuredText}}</b><i class="fa-solid fa-plus"></i></span>{{/if}}<span class="fbls-person-name-text">{{name}}</span>{{#if awayOnShip}}<span class="fbls-status-pill fbls-chip" title="{{shipPresenceLabel}}" aria-label="{{shipPresenceLabel}}"><i class="fa-solid fa-ship" aria-hidden="true"></i> Вне поселения</span>{{/if}}{{#if dead}}<span class="fbls-status-pill fbls-chip dead">Погиб</span>{{/if}}</td>
                   <td>{{ageLine}}</td>
                   <td>{{raceLine}}</td>
@@ -68,12 +68,16 @@
                         <button type="button" class="fbls-button compact fbls-crew-shore-button" data-action="crew-shore-duty" data-resident-id="{{id}}" data-ship-id="{{assignedShipId}}" data-holding-id="{{../holding.id}}" data-revision="{{../data.meta.revision}}" {{#if transportBusy}}disabled{{/if}} title="{{#if transportBusy}}Дождитесь завершения транспортного заказа корабля{{else}}Считать обычным жителем до возвращения на корабль{{/if}}" aria-label="В поселение: {{name}}"><i class="fa-solid fa-person-walking" aria-hidden="true"></i> В поселение</button>
                       {{else}}На отдыхе{{/if}}
                     {{else}}
-                    {{#if ../canManagePeople}}
+                    {{#if workHidden}}
+                      {{workLabel}}
+                    {{else}}
+                    {{#if ../canEditBuildings}}
                       <select class="fbls-resident-work-select" data-resident-work-select-lazy data-resident-can-work="{{workCanAssign}}" data-resident-free-label="{{workFreeLabel}}" data-work-assignment-field="holdings.{{../holdingIndex}}.people.list.{{_index}}.workAssignment" title="{{workLabel}}" aria-label="Работа: {{name}}">
                         <option value="{{workInlineValue}}" selected>{{workInlineLabel}}</option>
                       </select>
                     {{else}}
                       {{workLabel}}
+                    {{/if}}
                     {{/if}}
                     {{/if}}
                   </td>

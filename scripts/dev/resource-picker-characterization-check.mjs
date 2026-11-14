@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { SkyholdData } from "../data/store.js";
+import { normalizeResourceRow } from "../core/resources.js";
 
 const previous = Object.fromEntries(["foundry", "game", "ui"].map(key => [key, globalThis[key]]));
 const original = { get: SkyholdData.get, transaction: SkyholdData.transaction, updateHolding: SkyholdData.updateHolding };
@@ -10,7 +11,8 @@ try {
   globalThis.foundry = { applications: { api: { ApplicationV2: class {}, HandlebarsApplicationMixin: Base => Base } } };
   globalThis.game = { user: { isGM: true } };
   const errors = [];
-  globalThis.ui = { notifications: { error: message => errors.push(message) } };
+  const warnings = [];
+  globalThis.ui = { notifications: { error: message => errors.push(message), warn: message => warnings.push(message) } };
   const { SkyholdResourceCatalogEditor } = await import("../apps/editors/resource-catalog-editor.js");
   const { SkyholdBuildingEditor } = await import("../apps/editors/building-editor.js");
   const { StorageEventDomain } = await import("../apps/domains/events/storage-events.js");
@@ -18,7 +20,8 @@ try {
   restorePicker = () => { SkyholdResourceCatalogEditor.pick = originalPick; };
   const originalPick = SkyholdResourceCatalogEditor.pick;
   SkyholdResourceCatalogEditor.pick = options => { picker = options; };
-  const event = dataset => ({ currentTarget: { dataset }, preventDefault() {} });
+  const event = (dataset, storageRowId) => ({ currentTarget: { dataset,
+    closest: () => ({ dataset: { storageHoldingId: "a", storageRowId } }) }, preventDefault() {} });
   const resource = { id: "stone", label: "Камень" };
   const app = Object.create(SkyholdBuildingEditor.prototype);
   app._canEditBuilding = () => true;
@@ -55,12 +58,13 @@ try {
 
   const data = { holdings: [
     { id: "a", storage: { resources: [{ id: "before", resourceId: "wood" }, { id: "target", resourceId: "iron" }] } },
-    { id: "b", storage: { resources: [{ id: "other", resourceId: "wood" }, { id: "other-2", resourceId: "iron" }] } }
+    { id: "b", storage: { resources: [{ id: "other", resourceId: "wood" }, { id: "target", resourceId: "iron" }] } }
   ] };
   SkyholdData.get = () => structuredClone(data);
   SkyholdData.updateHolding = async (id, updater, options) => {
     assert.equal(options.fallback, false);
-    return updater(data.holdings.find(holding => holding.id === id));
+    const result = await updater(data.holdings.find(holding => holding.id === id));
+    return result?.value ?? result;
   };
   const manager = {
     activeHoldingId: "a", _canUseStorage: () => true,
@@ -68,22 +72,58 @@ try {
     _updateActiveHolding(updater) { return updater(data.holdings.find(holding => holding.id === this.activeHoldingId)); },
     requestRender() {}
   };
-  StorageEventDomain._onPickStorageResource.call(manager, event({ storagePickerScope: "row", storageResourceIndex: "1" }));
+  StorageEventDomain._onPickStorageResource.call(manager, event({ storagePickerScope: "row" }, "target"));
   manager.activeHoldingId = "b";
   data.holdings[0].storage.resources.shift();
   await picker.onSelect(resource);
   assert.equal(data.holdings[0].storage.resources[0].resourceId, "stone", "a storage picker stays bound to its original holding and row");
   assert.equal(data.holdings[1].storage.resources[1].resourceId, "iron", "switching the manager cannot redirect a delayed selection");
+  StorageEventDomain._onPickStorageResource.call(manager, event({ storagePickerScope: "row" }, "target"));
+  await picker.onSelect({ id: "wood", label: "Древесина" });
+  assert.equal(data.holdings[0].storage.resources[0].resourceId, "wood", "a picker opened from the previous render must use that render's holding");
+  assert.equal(data.holdings[1].storage.resources[1].resourceId, "iron", "an equal row ID in the active holding cannot redirect the picker");
   manager.activeHoldingId = "a";
-  StorageEventDomain._onPickStorageResource.call(manager, event({ storagePickerScope: "row", storageResourceIndex: "0" }));
+  StorageEventDomain._onPickStorageResource.call(manager, event({ storagePickerScope: "row" }, "target"));
   data.holdings[0].storage.resources.splice(0, 1, { id: "new", resourceId: "wood" });
   await picker.onSelect(resource);
   assert.equal(data.holdings[0].storage.resources[0].resourceId, "wood", "deleting a storage row cannot target a replacement");
+  StorageEventDomain._onPickStorageResource.call(manager, event({ storagePickerScope: "row" }, "new"));
+  data.holdings[0].special = { transportV2: { orders: [{
+    id: "export", status: "booked", direction: "outbound", cargo: [{ lotId: "lot", rowId: "new", batchId: "batch", qty: 1 }]
+  }] } };
+  await picker.onSelect(resource);
+  assert.equal(data.holdings[0].storage.resources[0].resourceId, "wood", "booking during the picker must prevent reclassifying its cargo");
+  assert.match(warnings.at(-1), /груз по перевозке/);
+
+  const storage = data.holdings[0].storage;
+  data.holdings[0].special = {};
+  StorageEventDomain._onPickStorageResource.call(manager, event({ storagePickerScope: "row" }, "new"));
+  storage.resources.push({ id: "new", resourceId: "iron" });
+  const ambiguousRows = structuredClone(storage.resources);
+  await picker.onSelect(resource);
+  assert.deepEqual(storage.resources, ambiguousRows, "the picker must recheck row identity when a duplicate appears while it is open");
+  assert.match(warnings.at(-1), /одинаковый ID/);
+  picker = null;
+  StorageEventDomain._onPickStorageResource.call(manager, event({ storagePickerScope: "row" }, "new"));
+  assert.equal(picker, null, "an ambiguous storage row cannot open the picker");
+
+  storage.resources = [{ id: "wood", resourceId: "wood", name: "Древесина", roomId: "outdoors", qty: 3,
+    itemUuid: "Item.old-wood", itemId: "old-wood", cost: "99 мм", notes: "Опись",
+    batches: [{ id: "aged", qty: 3, ageQd: 8 }] }];
+  StorageEventDomain._onPickStorageResource.call(manager, event({ storagePickerScope: "row" }, "wood"));
+  await picker.onSelect({ id: "custom", label: "Другой материал…" });
+  const changed = normalizeResourceRow(storage.resources[0]);
+  assert.equal(changed.resourceId, "custom", "switching an old catalog row to a custom resource must survive normalization");
+  assert.equal(changed.itemUuid, "", "the previous catalog Item must not remain attached");
+  assert.equal(changed.cost, "", "the new custom material must not inherit the old market price");
+  assert.equal(changed.notes, "Опись");
+  assert.deepEqual(changed.batches, [{ id: "aged", qty: 3, ageQd: 8 }]);
+
   for (const isGM of [true, false]) {
     game.user.isGM = isGM;
     picker = null;
     manager._canUseStorage = () => false;
-    StorageEventDomain._onPickStorageResource.call(manager, event({ storagePickerScope: "row", storageResourceIndex: "0" }));
+    StorageEventDomain._onPickStorageResource.call(manager, event({ storagePickerScope: "row" }, changed.id));
     assert.equal(picker, null, "the original storage permission gate remains effective");
   }
   game.user.isGM = true;

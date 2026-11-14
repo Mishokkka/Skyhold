@@ -1,15 +1,19 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import { bindSharedMarketHolding, advanceSharedMarketClock } from "../../../data/market/shared-context.js";
 import { escapeHtml } from "../../../core/helpers.js";
-import { buildingOperationalState } from "../../../core/building-state.js";
 import { SkyholdData } from "../../../data/store.js";
 import { clone, makeId } from "../../../data/utils.js";
 import { stableDataHash } from "../../../data/storage-commit.js";
 import { appendHoldingOperation } from "../../../data/operations.js";
 import { mergeHoldingDefaults } from "../../../data/normalizers.js";
+import { withResourceCatalog } from "../../../core/resources.js";
 import { normalizeLastEventRoll } from "../../../data/event-automation.js";
 import { adjustResidentAttributesForAgeTransition, ageGroupFromAge, ageThresholdsFor, raceKeyFromResident } from "../../../generators/resident-rules.js";
-import { financeBuildingFunctionBlockState, financeWorkerBlockState } from "../../../engines/economy/finance-obligations.js";
+import { isResidentInPopulation } from "../../../data/resident-presence.js";
+import { buildingServiceBlockReasons } from "../../../engines/economy/building-service.js";
+import { financePeriodIdentity } from "../../../engines/economy/finance-period.js";
+import { buildingCompositionStatus, workerMatchesCompositionRequirement } from "../../../engines/workers/building-qualification.js";
+import { SCHOOL_MILESTONE_REPORT_PREFIX } from "../../../engines/tenday/operation-payload.js";
 import { addCalendariaQd, calendariaDateKey, formatCalendariaDateTime, getCalendariaSnapshot, parseCalendariaDateInput, timestampForCalendariaDate } from "../../../integrations/calendaria-bridge.js";
 import {
   advanceTendayClock,
@@ -172,7 +176,7 @@ async _prepareTendayOperation({ holdingId = "", qd = 40, rationUnitsPerResident 
       message: "Перед расчётом хозяйства обработайте зависимые рейсы и разберите происшествия этого десятника. Решения сохраняются; груз и деньги будут проведены вместе с десятником." };
   }
 
-  beginPerishableStoragePeriod(previewHolding);
+  beginPerishableStoragePeriod(previewHolding, sharedTransportDraft);
   let rawReport;
   try {
     rawReport = await this._runEconomyForQd(previewHolding, periodQd, { operationId, createdAt: preparedAt, data: executionData });
@@ -196,14 +200,13 @@ async _prepareTendayOperation({ holdingId = "", qd = 40, rationUnitsPerResident 
   // A game year is 240 days; count boundaries even when time advances by one day.
   const beforeAgeQd = Math.max(0, Number(sourceSnapshot?.gm?.calendaria?.lastQd) || 0);
   const elapsedYears = Math.floor((beforeAgeQd + periodQd) / 960) - Math.floor(beforeAgeQd / 960);
-  if (!calendariaGate.snapshot?.available && elapsedYears > 0) {
-    const aging = this._advanceResidentAges(previewHolding, elapsedYears);
-    if (aging.changed) rawReport.work.push(`Возрастные категории изменились: ${aging.changed}.`);
-    if (aging.educated) rawReport.work.push(`Школа дала развитие детям: ${aging.educated}.`);
-  }
-  const calendarAdvance = this._commitCalendariaEconomyAdvance(previewHolding, calendariaGate);
-  if (calendarAdvance?.aging?.changed) rawReport.work.push(`Возрастные категории изменились: ${calendarAdvance.aging.changed}.`);
-  if (calendarAdvance?.aging?.educated) rawReport.work.push(`Школа дала развитие детям: ${calendarAdvance.aging.educated}.`);
+  const agingOptions = { schoolPeriodKey: financePeriodIdentity(previewHolding, periodQd).periodKey };
+  const localAging = !calendariaGate.snapshot?.available && elapsedYears > 0
+    ? this._advanceResidentAges(previewHolding, elapsedYears, agingOptions) : null;
+  const calendarAdvance = this._commitCalendariaEconomyAdvance(previewHolding, calendariaGate, agingOptions);
+  const aging = calendarAdvance?.aging ?? localAging;
+  if (aging?.changed) rawReport.work.push(`Возрастные категории изменились: ${aging.changed}.`);
+  if (aging?.educated) rawReport.work.unshift(...aging.education);
   const clock = advanceTendayClock(previewHolding, periodQd);
   advanceSharedMarketClock(previewHolding);
   const marketStockRecovery = recoverMarketStock({
@@ -225,7 +228,7 @@ async _prepareTendayOperation({ holdingId = "", qd = 40, rationUnitsPerResident 
   if ((events.events?.length ?? 0) > 40) {
     return { ok: false, blocked: true, message: "За период выпало больше 40 событий. Расчёт не записан: уменьшите число внешних проверок, чтобы сохранить все решения." };
   }
-  const preparedHolding = mergeHoldingDefaults(previewHolding);
+  const preparedHolding = withResourceCatalog(data?.catalog?.resources, () => mergeHoldingDefaults(previewHolding));
   const dueEvents = dueTendaySchedule(preparedHolding, clock.after);
   const changeSet = buildTendayChangeSet(sourceSnapshot, preparedHolding, {
     isFoodResource: (row) => this._isFoodResource(row),
@@ -349,19 +352,21 @@ _advanceResidentRecovery(holding, days = 0) {
   return { recovered };
 },
 
-_advanceResidentAges(holding, years = 1) {
+_advanceResidentAges(holding, years = 1, { schoolPeriodKey = "" } = {}) {
   const count = Math.max(0, Math.floor(this._safeNumber(years, 0)));
   if (!count) return { aged: 0, changed: 0 };
-  const school = this._schoolEducationContext(holding);
+  const school = this._schoolEducationContext(holding, schoolPeriodKey);
   let aged = 0;
   let changed = 0;
-  let educated = 0;
+  const education = [];
   for (const person of holding?.people?.list ?? []) {
     if (!person || person.dead) continue;
     const oldAge = Math.max(0, Math.floor(this._safeNumber(person.age, 0)));
     const oldGroup = ageGroupFromAge(person.age, person.race, person.subrace);
     const newAge = Math.max(0, oldAge + count);
-    if (school.active) educated += this._applySchoolEducation(holding, person, oldAge, newAge, school);
+    if (school.active && isResidentInPopulation(person, holding)) {
+      for (const decision of this._applySchoolEducation(holding, person, oldAge, newAge, school)) education.push(decision);
+    }
     person.age = newAge;
     const newGroup = ageGroupFromAge(person.age, person.race, person.subrace);
     person.ageGroup = newGroup;
@@ -389,31 +394,33 @@ _advanceResidentAges(holding, years = 1) {
       person.notes = [String(person.notes ?? "").trim(), `${prefix}: ${transitionNotes.join("; ") || `${oldGroup} → ${newGroup}`}.`].filter(Boolean).join("\n");
     }
   }
-  return { aged, changed, educated };
+  return { aged, changed, educated: education.length, education };
 },
 
-_schoolEducationContext(holding) {
-  const buildings = (holding?.buildings?.list ?? []).filter((building) => {
+_schoolEducationContext(holding, periodKey) {
+  const teachers = new Set();
+  let publicSchool = false;
+  for (const building of holding?.buildings?.list ?? []) {
     const id = `${String(building?.id ?? "")} ${String(building?.templateId ?? "")}`.toLowerCase();
     const name = String(building?.name ?? "").toLowerCase();
-    if (!buildingOperationalState(building).operational || !(id === "school" || id.includes("school") || name.includes("школ"))) return false;
-    return !financeBuildingFunctionBlockState({ finance: holding?.finance, buildingId: String(building?.id ?? ""), functionId: "culture" }).blocked;
-  });
-  const peopleById = new Map((holding?.people?.list ?? []).map((person) => [String(person?.id ?? ""), person]));
-  const teachers = [];
-  for (const building of buildings) {
-    for (const id of Array.isArray(building?.assignedWorkerIds) ? building.assignedWorkerIds : []) {
-      const person = peopleById.get(String(id));
-      if (!person || person.dead || this._safeNumber(person?.injuredDays, 0) > 0) continue;
-      if (financeWorkerBlockState({ finance: holding?.finance, workerId: String(person?.id ?? "") }).blocked) continue;
-      const group = ageGroupFromAge(person.age, person.race, person.subrace);
-      if (group === "Ре") continue;
-      teachers.push(person);
+    if (building.functions?.culture !== true || !(id.includes("school") || name.includes("школ"))) continue;
+    if (!periodKey || building.serviceState?.periodKey !== periodKey) continue;
+    const service = buildingServiceBlockReasons(holding, building, "culture");
+    if (!service.active || !(service.workforce.qd > 0)
+      || !Array.isArray(building.serviceState.activeWorkerIds)) continue;
+    const adults = service.workforce.workers.filter((person) => ageGroupFromAge(person.age, person.race, person.subrace) !== "Ре");
+    const minimum = Math.max(1, Math.floor(this._safeNumber(building.workersMin, 1)));
+    if (adults.length < minimum) continue;
+    const composition = buildingCompositionStatus(building, adults, { excludeGroups: ["ЧУДОТВОРЕЦ"] });
+    if (!composition.met) continue;
+    for (const person of adults) {
+      if (!composition.requirements.length || composition.requirements.some((rule) => workerMatchesCompositionRequirement(person, rule))) {
+        teachers.add(person.id);
+        if (building.visibility !== "gm") publicSchool = true;
+      }
     }
   }
-  const teacherCount = teachers.length;
-  const requiredTeachers = buildings.length ? Math.min(...buildings.map((building) => Math.max(1, Math.floor(this._safeNumber(building?.workersMin, 1))))) : 1;
-  return { active: teacherCount >= requiredTeachers, teacherCount, requiredTeachers };
+  return { active: teachers.size > 0, teacherCount: teachers.size, publicSchool };
 },
 
 _childEducationMilestones(person = {}) {
@@ -428,24 +435,27 @@ _childEducationMilestones(person = {}) {
 
 _applySchoolEducation(holding, person = {}, oldAge = 0, newAge = 0, school = {}) {
   const oldGroup = ageGroupFromAge(oldAge, person.race, person.subrace);
-  if (oldGroup !== "Ре") return 0;
+  if (oldGroup !== "Ре") return [];
   if (!Array.isArray(person.educationMilestones)) person.educationMilestones = [];
   const done = new Set(person.educationMilestones.map((value) => String(value)));
-  let resolutions = 0;
+  const resolutions = [];
   for (const milestone of this._childEducationMilestones(person)) {
     if (done.has(milestone.key)) continue;
     if (!(oldAge < milestone.age && newAge >= milestone.age)) continue;
     person.educationMilestones.push(milestone.key);
     const operationId = `school-milestone:${String(person?.id ?? "resident")}:${milestone.key}:${milestone.age}`;
+    const summary = `${SCHOOL_MILESTONE_REPORT_PREFIX}${person.name || "Ребёнок"} · ${milestone.label}. ГМ определяет ролевой результат. Характеристики и черты сохраняются.`;
     appendHoldingOperation(holding, {
       operationId,
       type: "system",
       title: `Решение ГМа: обучение ${person.name || "ребёнка"}`,
-      summary: `${person.name || "Ребёнок"} достиг(ла) вехи «${milestone.label}» при работающей Школе. ГМ решает ролевой результат; характеристики и черты автоматически не меняются.`,
+      summary,
       payload: { needsResolution: true, resolutionKind: "school-milestone", residentId: person.id, milestone: milestone.key, age: milestone.age, teacherCount: school.teacherCount }
     });
-    person.notes = [String(person.notes ?? "").trim(), `Школа: достигнута веха «${milestone.label}»; результат ожидает решения ГМа.`].filter(Boolean).join("\n");
-    resolutions += 1;
+    if (school.publicSchool) {
+      person.notes = [String(person.notes ?? "").trim(), `Школа: достигнута веха «${milestone.label}».`].filter(Boolean).join("\n");
+    }
+    resolutions.push(summary);
   }
   return resolutions;
 },
@@ -480,7 +490,7 @@ _checkCalendariaEconomyAdvance(holding, qd = 0) {
   return { ok: true, snapshot, targetDateTime, targetTimestamp };
 },
 
-_commitCalendariaEconomyAdvance(holding, gate = {}) {
+_commitCalendariaEconomyAdvance(holding, gate = {}, agingOptions = {}) {
   const snapshot = gate.snapshot ?? getCalendariaSnapshot();
   if (!snapshot.available) return { available: false, aging: null, dateTime: null, timestamp: null };
   if (!holding.gm) holding.gm = {};
@@ -489,7 +499,7 @@ _commitCalendariaEconomyAdvance(holding, gate = {}) {
   const dateTime = gate.targetDateTime ?? snapshot.dateTime;
   let aging = null;
   if (previous && dateTime && Number.isFinite(Number(previous.year)) && Number.isFinite(Number(dateTime.year)) && Number(dateTime.year) > Number(previous.year)) {
-    aging = this._advanceResidentAges(holding, Math.max(1, Math.floor(Number(dateTime.year) - Number(previous.year))));
+    aging = this._advanceResidentAges(holding, Math.max(1, Math.floor(Number(dateTime.year) - Number(previous.year))), agingOptions);
   }
   const timestamp = Number.isFinite(gate.targetTimestamp) ? gate.targetTimestamp : snapshot.timestamp;
   holding.gm.calendaria.lastDateTime = dateTime ? (foundry?.utils?.deepClone?.(dateTime) ?? JSON.parse(JSON.stringify(dateTime))) : null;

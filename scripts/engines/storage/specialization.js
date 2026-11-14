@@ -1,5 +1,5 @@
-import { normalizeResourceId, resourceDef, resourceShelfLifeQd } from "../../core/resources.js";
-import { isPerishableFoodDefinition } from "../../core/perishable-food.js";
+import { resourceDef, resourceShelfLifeQd, storageResourceId } from "../../core/resources.js";
+import { effectiveShelfLifeQd, isPerishableFoodDefinition } from "../../core/perishable-food.js";
 import { buildingOperationalState } from "../../core/building-state.js";
 import { maintenanceEfficiencyFactor } from "../../data/economy/maintenance.js";
 import { financeBuildingFunctionBlockState, financeWorkerBlockState } from "../economy/finance-obligations.js";
@@ -14,7 +14,7 @@ function normalizedList(value) {
 }
 
 function definitionFor(resource = {}) {
-  const id = normalizeResourceId(resource?.resourceId, resource?.id, resource?.name);
+  const id = storageResourceId(resource);
   return { id, definition: id === "custom" ? resource : (resourceDef(id) ?? resource) };
 }
 
@@ -90,4 +90,11 @@ export function storageEffectiveShelfLifeMultiplier(room = {}, resource = {}) {
   if (!storageProfileMatches(room, resource) && !genericPerishableFood) return 1;
   const effect = Math.max(0, Math.min(1, Number(room?.profileEffectFactor) || 0));
   return 1 + ((target - 1) * effect);
+}
+
+export function storageEffectiveShelfLifeQd(room, resource, baseQd) {
+  if (!(baseQd > 0)) return 0;
+  const { definition } = definitionFor(resource);
+  const perishableFood = isPerishableFoodDefinition({ ...resource, ...definition, shelfLifeQd: baseQd });
+  return effectiveShelfLifeQd(baseQd, perishableFood ? storageEffectiveShelfLifeMultiplier(room, resource) : 1);
 }

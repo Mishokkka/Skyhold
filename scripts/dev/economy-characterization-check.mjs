@@ -923,7 +923,7 @@ export async function checkEconomyCharacterization() {
     assert.equal(isFoodResource({ resourceId: "food-protein", noAutoConsume: true }, dependencies), false, "row-level noAutoConsume must override edible catalog metadata");
     assert.equal(isFoodResource({ resourceId: "protected-food" }, {
       ...dependencies,
-      normalizeResourceId: () => "protected-food",
+      storageResourceId: () => "protected-food",
       resourceDef: () => ({ foodEdible: true, noAutoConsume: true })
     }), false, "definition-level noAutoConsume must protect an edible resource");
   }
@@ -1055,6 +1055,20 @@ export async function checkEconomyCharacterization() {
     assert.equal(directHolding.storage.moneyCopper, 4, "trade revenue must be credited to treasury");
     assert.equal(directReport.ledger.some((row) => row.domain === "trade" && row.kind === "resource" && row.qty === -2), true, "trade must ledger the sold stock");
     assert.equal(directReport.ledger.some((row) => row.domain === "trade" && row.kind === "money" && row.qty === 4), true, "trade must ledger the credited revenue");
+
+    const legacy = clone(sourceHolding);
+    const offered = legacy.storage.resources[0];
+    offered.roomId = "outdoors";
+    offered.batches = [{ id: "sale-lot", qty: 2, ageQd: 1 }];
+    legacy.storage.resources.unshift({ ...offered, forSale: false, batches: [{ id: "private-lot", qty: 2, ageQd: 9 }] });
+    legacy.special.transportV2 = { orders: [{ id: "booked", direction: "outbound", status: "booked",
+      cargo: [{ lotId: "cargo", rowId: offered.id, batchId: "sale-lot", qty: 1 }] }] };
+    const legacyReport = reportShape();
+    const legacyTrade = await economy._runTradeForQd(legacy, 4, legacyReport, economy._economyWorkerContext(legacy), { random });
+    assert.deepEqual(legacyTrade, { sold: 1, buyers: 1, revenue: 2 });
+    assert.deepEqual(legacy.storage.resources.map(row => row.qty), [2, 1],
+      "trade must debit only the physical row that was put on sale and protect its accepted cargo");
+    assert.equal(legacyReport.ledger.find(row => row.domain === "trade" && row.kind === "resource").roomId, "outdoors");
 
     const noReputationHolding = clone(sourceHolding);
     noReputationHolding.overview.reputation = 0;

@@ -1,10 +1,8 @@
-import { normalizeMarketOutboundState } from "../../data/market/outbound-state.js";
-import { transportCargoReservations } from "../../data/transport/state.js";
+import { availableResourceBatchInventory, resourceBatchTotal } from "../../core/resource-batches.js";
+import { hiddenStorageRoomIds } from "../../data/access-guard.js";
+import { indexStorageRows } from "../../engines/storage/row-identity.js";
 import { overlayMarketQuoteDemand } from "../../engines/market/demand.js";
-import {
-  marketOutboundAvailableQuantity,
-  planMarketOutboundSale
-} from "../../engines/market/outbound.js";
+import { planMarketOutboundSale } from "../../engines/market/outbound.js";
 
 function whole(value, fallback = 0) {
   const parsed = Number(value);
@@ -89,7 +87,8 @@ export function prepareMarketOutboundContext({
   organizations = [],
   routes = [],
   quantities = {},
-  insuranceEnabled = true
+  insuranceEnabled = true,
+  isGM = Boolean(globalThis.game?.user?.isGM)
 } = {}) {
   const empty = {
     offers: [],
@@ -103,11 +102,19 @@ export function prepareMarketOutboundContext({
 
   const definitionById = new Map((Array.isArray(resourceDefinitions) ? resourceDefinitions : [])
     .map((row) => [text(row?.id ?? row?.resourceId), row]));
-  const storageRows = (holding?.storage?.resources ?? []).filter((row) => row?.forSale && whole(row?.qty) > 0);
-  const outboundState = normalizeMarketOutboundState(holding?.special?.market?.outbound);
-  // The old market and the new planner observe the same protected warehouse lots.
-  outboundState.orders.push({ id: "transport-v2-reservations", status: "booked", dispatchStatus: "booked",
-    cargoReservations: transportCargoReservations(holding) });
+  const hiddenRooms = hiddenStorageRoomIds(holding, isGM);
+  const resources = holding?.storage?.resources ?? [];
+  const rowIndex = indexStorageRows(resources);
+  const storageRows = resources.filter((row) => row?.forSale && whole(row.qty) > 0
+    && rowIndex.get(String(row.id ?? "")) === row && !hiddenRooms.has(text(row.roomId ?? row.storageRoomId)));
+  const availableByResource = new Map();
+  const availableRows = storageRows.map((row) => {
+    const batches = availableResourceBatchInventory(row, holding);
+    const qty = resourceBatchTotal(batches);
+    const id = text(row.resourceId ?? row.id);
+    availableByResource.set(id, (availableByResource.get(id) ?? 0) + qty);
+    return { ...row, batches, qty };
+  });
   const grouped = resourceOfferGroups(quote.outboundOffers ?? []);
   const demandQuote = overlayMarketQuoteDemand({
     holding,
@@ -122,11 +129,7 @@ export function prepareMarketOutboundContext({
     .map((offer) => {
       const resourceId = text(offer.resourceId);
       const definition = definitionById.get(resourceId) ?? {};
-      const availableStock = marketOutboundAvailableQuantity({
-        resources: storageRows,
-        outboundState,
-        resourceId
-      });
+      const availableStock = availableByResource.get(resourceId) ?? 0;
       const availableDemand = whole(offer.demand);
       const available = Math.min(availableStock, availableDemand);
       const requested = Math.min(available, whole(quantities?.[resourceId]));
@@ -165,8 +168,7 @@ export function prepareMarketOutboundContext({
     tags: offer.tags
   }));
   const plan = lines.length ? planMarketOutboundSale({
-    resources: storageRows,
-    outboundState,
+    resources: availableRows,
     lines,
     routes,
     organizations,

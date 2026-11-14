@@ -13,6 +13,7 @@ import { bindSharedMarkets, sharedMarketEventTenday } from "../data/market/share
 import { prepareTransportContext } from "../apps/domains/transport-context.js";
 import { prepareMarketAuthorityContext } from "../apps/market/authority-context.js";
 import { createTransportOperationExecutor } from "../apps/transport-operation-executor.js";
+import { beginResourceBatchPeriod, finishResourceBatchPeriod } from "../core/resource-batches.js";
 
 globalThis.game = { user: { id: "gm", isGM: true }, users: [{ id: "gm", isGM: true, active: true }],
   settings: { get: () => undefined }, modules: new Map(), time: { worldTime: 0 }, socket: { emit() {} } };
@@ -42,6 +43,51 @@ function sale(f, cargo, services, id = "sale") {
   order.demandReservations = reservation.reservations;
   return order;
 }
+function ageWarehouse(f, elapsedQd) {
+  finishResourceBatchPeriod(f.holding, { elapsedQd, shelfLifeQdForRow: () => 20 });
+  f.holding.gm.calendaria.lastQd = elapsedQd;
+}
+
+await check("incoming item stacks use capacity at unloading", () => {
+  const { data, holding, workflow } = fixture();
+  holding.buildings.list = [{ id: "locker", name: "Кладовая", constructionStatus: "built",
+    storage: { capacity: 5 }, functions: { storage: true } }];
+  const services = [service()];
+  const purchased = lot({ lotId: "armor", name: "Доспех", resourceId: "custom", sourceType: "item", qty: 2,
+    item: { name: "Доспех", type: "armor", weight: "Heavy" } });
+  const order = bookTransportOrder({ state: data.meta.transportV2, holding, services, direction: "inbound", id: "buy-item",
+    commercial: { targetRoomId: "locker" }, plan: planTransportChain({ cargo: [purchased], services }) });
+  // Only two load points remain when the stack of two heavy items arrives.
+  holding.storage.items = [{ id: "existing", name: "Ящик", type: "gear", weight: "Heavy", qty: 1, roomId: "locker" }];
+  holding.buildings.list[0].storage.capacity = 4;
+  const roomBefore = workflow._storageRooms(holding, { includeUnavailable: false }).find(row => row.id === "locker");
+  assert.equal(roomBefore?.free, 2);
+  advanceTransportShipments(data, holding, order.plan.arrivalQd, workflow);
+  assert.equal(order.status, "delivered");
+  assert.deepEqual(holding.storage.items.map(({ name, qty, roomId }) => [name, qty, roomId]),
+    [["Ящик", 1, "locker"], ["Доспех", 2, "outdoors"]]);
+  const entry = holding.storage.log.find(row => row.kind === "transport-purchase");
+  assert.equal(entry?.roomId, "outdoors", "the journal identifies the actual destination");
+  assert.match(entry?.note, /переполнение: Кладовая/);
+});
+
+await check("incoming resource lots with pre-aged arrivals keep their freshness through tenday close", () => {
+  const { data, holding, workflow } = fixture();
+  const oldBatch = { id: "batch-1", qty: 1, ageQd: 20 };
+  holding.storage.resources = [{ id: "old-food", resourceId: "meat", roomId: "outdoors", qty: 1, batches: [oldBatch] }];
+  const services = [service({ firstQd: 30, travelQd: 2 })];
+  const purchased = lot({ lotId: "fresh-meat", resourceId: "meat", qty: 2, shelfLifeQd: 20 });
+  bookTransportOrder({ state: data.meta.transportV2, holding, services, direction: "inbound", id: "buy-meat",
+    plan: planTransportChain({ cargo: [purchased], services, startQd: 28 }) });
+  beginResourceBatchPeriod(holding);
+  advanceTransportShipments(data, holding, 40, workflow, { deferInternalDemand: true });
+  const result = finishResourceBatchPeriod(holding, { elapsedQd: 40, shelfLifeQdForRow: () => 20 });
+  assert.equal(result.expiredQty, 1, "only the preexisting lot should spoil");
+  const remaining = holding.storage.resources.flatMap(row => row.batches);
+  assert.deepEqual(remaining.map(({ qty, ageQd, internalDemandAvailableFromQd }) => [qty, ageQd, internalDemandAvailableFromQd]),
+    [[2, 12, 40]], "age includes time since dispatch and the tail of the tenday exactly once");
+});
+
 async function period(f) {
   let stored = structuredClone(f.data);
   const skipped = Symbol("skip");
@@ -68,10 +114,14 @@ await check("C1 unchanged connection carries actual warehouse age through real p
     batches: Array.from({ length: 8 }, (_, i) => ({ id: `batch-${i}`, qty: 1, ageQd: i * 2 + 1 })) }];
   const cargo = f.holding.storage.resources[0].batches.map(row => lot({ lotId: row.id, rowId: "meat-row", batchId: row.id,
     resourceId: "meat", qty: 1, ageQd: row.ageQd, shelfLifeQd: 20 }));
-  const order = sale(f, cargo, [service(), service({ id: "connection", from: "a", to: "b", firstQd: 2 })]);
+  const order = sale(f, cargo, [service({ firstQd: 2 }), service({ id: "connection", from: "a", to: "b", firstQd: 4 })]);
   const contract = structuredClone(order.plan);
   f.workflow._storageAddWithOverflow(f.holding, { resourceId: "meat", roomId: "outdoors", batches: [{ id: "incoming", qty: 1, ageQd: 17 }] }, 1);
-  assert.equal(f.holding.storage.resources[0].batches.find(row => row.id === "batch-7").ageQd, 17);
+  assert.equal(f.holding.storage.resources[0].batches.find(row => row.id === "batch-7").ageQd, 15,
+    "a free arrival must not advance the age of an already booked lot");
+  ageWarehouse(f, 2);
+  assert.equal(f.holding.storage.resources[0].batches.find(row => row.id === "batch-7").ageQd, 17,
+    "elapsed warehouse time advances the actual lot without changing the accepted terms");
   const data = await period(f), h = data.holdings[0], result = h.special.transportV2.orders[0];
   assert.deepEqual(result.plan, contract, "accepted prices and estimate remain immutable");
   assert.equal(result.received.reduce((sum, row) => sum + row.qty, 0), 7);
@@ -165,17 +215,18 @@ await check("I1 shared loss waits for the actual outbound warehouse manifest", (
   f.holding.id = "a-warehouse"; other.id = "z-purchase"; f.data.holdings.push(other);
   f.holding.storage.resources = [{ id: "meat-row", resourceId: "meat", qty: 8, roomId: "outdoors",
     batches: Array.from({ length: 8 }, (_, i) => ({ id: `batch-${i}`, qty: 1, ageQd: i * 2 + 1 })) }];
-  const services = [service({ firstQd: 2, riskBps: 10000 })], state = f.data.meta.transportV2;
+  const services = [service({ firstQd: 4, riskBps: 10000 })], state = f.data.meta.transportV2;
   const outbound = sale(f, [lot({ qty: 1, resourceId: "meat", rowId: "meat-row", batchId: "batch-7", ageQd: 15, shelfLifeQd: 20 })], services);
   const inbound = bookTransportOrder({ state, holding: other, services, id: "purchase", direction: "inbound",
     plan: planTransportChain({ cargo: [lot({ qty: 1 })], services, runs: state.runs }) });
   f.workflow._storageAddWithOverflow(f.holding, { resourceId: "meat", roomId: "outdoors", batches: [{ id: "incoming", qty: 1, ageQd: 17 }] }, 1);
-  advanceTransportShipments(f.data, other, 4, f.workflow);
+  ageWarehouse(f, 2);
+  advanceTransportShipments(f.data, other, 6, f.workflow);
   const run = state.runs[0];
   assert.throws(() => resolveTransportIncident(state, run.id, { outcome: "loss", lossBps: 5000 }), /состав груза/);
-  advanceTransportShipments(f.data, f.holding, 4, f.workflow);
+  advanceTransportShipments(f.data, f.holding, 6, f.workflow);
   resolveTransportIncident(state, run.id, { outcome: "loss", lossBps: 5000 });
-  for (const h of [other, f.holding]) advanceTransportShipments(f.data, h, 4, f.workflow);
+  for (const h of [other, f.holding]) advanceTransportShipments(f.data, h, 6, f.workflow);
   assert.equal(inbound.lostQty, 0, "50% of one eligible unit rounds to zero, spoiled cargo cannot affect other holdings");
   assert.equal(outbound.spoiledQty, 1); assert.equal(outbound.insurancePaidCopper, 0);
 });

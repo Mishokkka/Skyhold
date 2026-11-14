@@ -3,6 +3,7 @@ import { MODULE_ID } from "../../../data/constants.js";
 import { applyStaffAppointment, buildingLaborMode } from "../../../data/hybrid-labor.js";
 import { buildWorkAllocationTargets } from "../../../data/work-allocations.js";
 import { clearBuildingReferences } from "../../../data/normalizers/resident.js";
+import { normalizeStorageRoomId } from "../../../engines/storage/capacity.js";
 import { requestConstructionOperation, SkyholdData } from "../../../data/store.js";
 import { makeId } from "../../../data/utils.js";
 import { traitBadges } from "../../../generators/trait-definitions.js";
@@ -358,7 +359,11 @@ async _executeBuildingContextAction(buildingId = "", action = "") {
       ui.notifications.warn("Незавершённый проект нужно отменять через действие «Отменить проект».");
       return;
     }
-    const confirmed = await this._confirmAction?.("Удалить здание", `Удалить построенное здание «${name}»? Строительные материалы не возвращаются.`);
+    const hasStock = [holding.storage?.resources, holding.storage?.items].some((rows) => rows?.some((row) =>
+      row.qty > 0 && normalizeStorageRoomId(row.roomId ?? row.storageRoomId) === String(buildingId)));
+    const relocation = hasStock ? " Содержимое склада переместится под открытое небо." : "";
+    const confirmed = await this._confirmAction?.("Удалить здание",
+      `Удалить построенное здание «${escapeHtml(name)}»? Строительные материалы не возвращаются.${relocation}`);
     if (!confirmed) return;
     const deleted = await SkyholdData.updateHolding(holding.id, (freshHolding) => {
       const before = freshHolding.buildings?.list?.length ?? 0;

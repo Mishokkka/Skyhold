@@ -72,6 +72,7 @@ const SkyholdAppActions = {
     "open-ui-review": "_onOpenUiReview",
     "open-laputa-migration-importer": "_onOpenLaputaMigrationImporter",
     "open-building-catalog-migration": "_onOpenBuildingCatalogMigration",
+    "open-building-text-refresh": "_onOpenBuildingCatalogMigration",
     "open-hybrid-labor-migration": "_onOpenHybridLaborMigration"
   },
   publicClick: ["open-building-template-browser", "open-workforce-planner"]
@@ -91,7 +92,7 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
     this.storageRoomRailCollapsed = false;
     this.activePeopleTab = "living";
     this.activeSpecialTab = "records";
-    this.storageBatchSelection = { resources: new Set(), items: new Set() };
+    this.storageBatchSelection = new Map();
     this.storageSearchQuery = "";
     this._pendingStorageSearchTarget = null;
     this.crewEditor = null;
@@ -395,7 +396,7 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
       editingPersonId: this.editingPersonId,
       expandedPersonId: this.expandedPersonId,
       expandedBuildingId: this.expandedBuildingId,
-      storageBatchSelection: active.storage ? this.storageBatchSelection : null,
+      storageBatchSelection: active.storage ? this.storageBatchSelection.get(activeHolding?.id) : null,
       storageSearchQuery: active.storage ? this.storageSearchQuery : "",
       generatorConfig: active.gm ? this.generatorConfig : null,
       generatorPreview: active.gm ? this.generatorPreview : null,
@@ -552,6 +553,7 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
         workerContext
       }),
       storageContext: active?.storage ? this._storageContext(activeHolding, canUseStorage, this.activeStorageRoomId) : null,
+      pendingStorageTransfer: active?.storage ? this._pendingStorageTransfer(activeHolding?.id) : "",
       specialTabs: active?.special ? this._prepareSpecialTabs(activeHolding) : [],
       shipsContext: active?.externalMarket
         ? (await import("./ships-context.js")).prepareShipsContext(activeHolding, { revision: data.meta.revision, data }) : null,

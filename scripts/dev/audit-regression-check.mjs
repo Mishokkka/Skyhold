@@ -175,10 +175,11 @@ export async function checkAuditRegressions() {
     const { SkyholdResidentEditor } = await import("../apps/editors/resident-editor.js");
     const editor = new SkyholdResidentEditor();
     editor.element = { querySelector: () => ({}) };
-    editor._saveDraft = async () => false;
+    editor._saveStatus.markDirty();
+    editor._saveDraft = () => editor._saveStatus.track(async () => false);
     await editor.close();
     assert.notEqual(editor.closed, true, "failed save must leave the resident editor open");
-    editor._saveDraft = async () => true;
+    editor._saveDraft = () => editor._saveStatus.track(async () => true);
     await editor.close();
     assert.equal(editor.closed, true);
     SkyholdResidentEditor.instances.delete(editor);

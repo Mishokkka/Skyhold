@@ -11,6 +11,13 @@ export const workforcePlan = (holding) => holding?.workforcePlan ?? { version: W
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const visible = (row, isGM) => row && (isGM || row.visibility !== "gm");
 
+export function workforceIssueMessage(holding, issue, { isGM = false } = {}) {
+  if (!issue) return "";
+  const hidden = !isGM && ((holding.buildings?.list ?? []).some((row) => row.visibility === "gm" && String(row.id) === issue.buildingId)
+    || (holding.people?.list ?? []).some((row) => row.visibility === "gm" && String(row.id) === issue.personId));
+  return hidden ? "План конфликтует с недоступным назначением. Его может проверить ГМ." : issue.message;
+}
+
 export function workforceCapacity(person = {}) {
   return residentLaborCapacity(person);
 }
@@ -131,8 +138,9 @@ export function workforceChangeError(before, after, { isGM = false } = {}) {
       || !isGM && (before.buildings?.list ?? []).some((building) => building.visibility === "gm"
         && ((building.assignedWorkerIds ?? []).includes(prior.id) || [building.id, building.name].includes(prior.workAssignment)))) return "Назначения жителя содержат скрытую работу; их меняет ГМ.";
   }
-  return newHybridLaborIssues(
+  const issues = newHybridLaborIssues(
     validateHybridLaborHolding(before, { targets: buildWorkAllocationTargets(before) }).issues,
     validateHybridLaborHolding(after, { targets: byKey }).issues
-  )[0]?.message || "";
+  );
+  return workforceIssueMessage(after, issues[0], { isGM });
 }

@@ -70,6 +70,17 @@ export async function checkSocketCharacterization() {
     guardHolding.storage.moneyCopper = 10;
     guardHolding.storage.resources = [{ id: "wood", resourceId: "wood", name: "Wood", qty: 2 }];
     guardHolding.storage.items = [{ id: "sword", name: "Sword", qty: 1 }];
+    const legacyWarehouse = clone(guardCurrent);
+    legacyWarehouse.holdings[0].storage.resources.push({ id: "wood", resourceId: "stone", name: "Stone", qty: 4 });
+    const legacyEdit = clone(legacyWarehouse);
+    legacyEdit.holdings[0].overview.description = "Updated overview";
+    assert.equal(validatePlayerPatch(legacyWarehouse, buildPlayerPatch(legacyWarehouse, legacyEdit), "player-1").ok, true,
+      "existing warehouse ID collisions must not prevent an unrelated player edit");
+    legacyWarehouse.holdings[0].gm.playersCanEditSpecial = true;
+    const duplicateSpecial = clone(legacyWarehouse);
+    duplicateSpecial.holdings[0].special.list = [{ id: "twice", name: "One" }, { id: "twice", name: "Two" }];
+    assert.equal(validatePlayerPatch(legacyWarehouse, buildPlayerPatch(legacyWarehouse, duplicateSpecial), "player-1").ok, false,
+      "an ordinary patch may not create duplicate identities in an editable list");
     const forbiddenGenericMutations = [
       ["treasury money", (draft) => { draft.holdings[0].storage.moneyCopper = 999; }],
       ["stored resources", (draft) => { draft.holdings[0].storage.resources[0].qty = 999; }],
@@ -197,6 +208,32 @@ export async function checkSocketCharacterization() {
       true,
       "an existing GM admission override must keep an explicit-QD plan usable without granting the player override rights"
     );
+
+    const hiddenWorkCurrent = clone(forgedExplicitAdmission);
+    Object.assign(hiddenWorkCurrent.holdings[0].buildings.list[0], { name: "Тайная мастерская", visibility: "gm" });
+    const unrelatedEdit = clone(hiddenWorkCurrent);
+    unrelatedEdit.holdings[0].overview.description = "Описание владения";
+    const unrelatedPatch = buildPlayerPatch(hiddenWorkCurrent, unrelatedEdit);
+    assert.equal(validatePlayerPatch(hiddenWorkCurrent, unrelatedPatch, "player-1").ok, true,
+      "an existing failed admission to a hidden building cannot disclose it or block an overview edit");
+    const rename = clone(hiddenWorkCurrent);
+    rename.holdings[0].people.list[0].name = "Новое имя";
+    assert.equal(validatePlayerPatch(hiddenWorkCurrent, buildPlayerPatch(hiddenWorkCurrent, rename), "player-1").ok, true,
+      "renaming the resident does not make a pre-existing admission issue new");
+    const increasedHiddenWork = clone(hiddenWorkCurrent);
+    increasedHiddenWork.holdings[0].people.list[0].workAllocations[0].normalQd += 1;
+    const hiddenError = validatePlayerPatch(hiddenWorkCurrent, buildPlayerPatch(hiddenWorkCurrent, increasedHiddenWork), "player-1");
+    assert.equal(hiddenError.ok, false);
+    assert.doesNotMatch(hiddenError.error, /Тайная мастерская|СИЛ/);
+
+    const legacyHiddenWork = clone(forgedHardAssignment);
+    const [secretWorkshop] = legacyHiddenWork.holdings[0].buildings.list;
+    Object.assign(secretWorkshop, { name: "Тайная мастерская", visibility: "gm" });
+    legacyHiddenWork.holdings[0].buildings.list.push({ id: "visible", name: "Открытая постройка", assignedWorkerIds: [] });
+    const renamePublicBuilding = clone(legacyHiddenWork);
+    renamePublicBuilding.holdings[0].buildings.list[1].name = "Новое название";
+    assert.equal(validatePlayerPatch(legacyHiddenWork, buildPlayerPatch(legacyHiddenWork, renamePublicBuilding), "player-1").ok, true,
+      "an existing failed admission in a legacy slot must not prevent renaming a different building");
 
     const exactCrewAssignment = clone(guardCurrent);
     exactCrewAssignment.holdings[0].people.list[0].workAssignment = "construction:crew-a";
@@ -331,6 +368,43 @@ export async function checkSocketCharacterization() {
     assert.equal(directStorage.ok, true, "a GM storage operation must use the same configured executor");
     assert.equal(storageOperations, 2, "the direct GM path must execute exactly once");
     assert.equal(emitted.length, emittedBeforeDirectStorage, "the direct GM path must not round-trip through the socket");
+
+    const secondaryGm = { id: "gm-2", isGM: true, active: true };
+    game.users.contents.push(secondaryGm);
+    game.user = secondaryGm;
+    const secondaryStorage = api.requestStorageOperation({ ...storageRequest.operation, operationId: "storage-other-gm" });
+    assert.equal(storageOperations, 2, "a secondary GM must not touch the Actor before an authority commit");
+    const secondaryRequest = emitted.at(-1);
+    assert.equal(secondaryRequest.targetGmId, "gm-1");
+    game.user = game.users.contents.find(user => user.id === "gm-1");
+    await api.handleSkyholdSocketPayload(secondaryRequest, "player-1");
+    assert.equal(storageOperations, 2, "a player may not claim the secondary GM's identity");
+    const originalEmit = game.socket.emit;
+    const previousWarn = console.warn;
+    const responseCount = emitted.length;
+    try {
+      let responseFailed = false;
+      game.socket.emit = (channel, payload) => {
+        if (!responseFailed) {
+          responseFailed = true;
+          throw new Error("injected failure delivering the first receipt");
+        }
+        originalEmit(channel, payload);
+      };
+      console.warn = () => {};
+      await api.handleSkyholdSocketPayload(secondaryRequest, secondaryGm.id);
+      assert.equal(emitted.length, responseCount, "a lost success response must not be sent back as a failed operation");
+    } finally {
+      game.socket.emit = originalEmit;
+      console.warn = previousWarn;
+    }
+    assert.equal(storageOperations, 3, "the authority executes the authenticated GM's complete storage operation");
+    await api.handleSkyholdSocketPayload(secondaryRequest, secondaryGm.id);
+    const secondaryResponse = emitted.at(-1);
+    game.user = secondaryGm;
+    await api.handleSkyholdSocketPayload(secondaryResponse, "gm-1");
+    assert.equal((await secondaryStorage).operationId, "storage-other-gm");
+    game.user = game.users.contents.find(user => user.id === "gm-1");
 
     let forgedVictimWrites = 0;
     let forgedVictimActorMutations = 0;
@@ -526,6 +600,41 @@ export async function checkSocketCharacterization() {
         "player patches must reject the caller if the initial send or timed retry loses its transport");
       assert.equal(attempts, failAttempt);
     }
+    {
+      const originalUsers = game.users, originalUser = game.user, originalSocket = game.socket;
+      const first = { id: "gm-1", active: true, isGM: true };
+      const second = { id: "gm-2", active: true, isGM: true };
+      const requester = { id: "gm-3", active: true, isGM: true };
+      const messages = [];
+      game.users = { contents: [first, second, requester, originalUser] };
+      game.user = requester;
+      game.socket = { emit(_channel, payload) { messages.push(payload); } };
+      try {
+        let attempts = 0;
+        game.socket = { emit() { if (++attempts === 2) throw new Error("socket lost during Actor retry"); } };
+        await assert.rejects(retryApi.requestStorageOperation({ type: "withdrawResource", operationId: "actor-retry-disconnect" }),
+          error => error?.code === "timeout" && /Сверьте склад и инвентарь/.test(error.message),
+          "losing the retry socket cannot change an already submitted Actor exchange into a definite failure");
+        game.socket = { emit(_channel, payload) { messages.push(payload); } };
+        const transfer = retryApi.requestStorageOperation({ type: "withdrawResource", operationId: "actor-authority-changed" });
+        first.active = false;
+        await assert.rejects(transfer, error => error?.code === "timeout" && /Сверьте склад и инвентарь/.test(error.message));
+        assert.deepEqual(messages.map(row => row.targetGmId), ["gm-1"], "a new authority must not replay an unconfirmed Actor mutation");
+        messages.length = 0;
+        first.active = true;
+        game.user = originalUser;
+        const movement = retryApi.requestStorageOperation({ type: "batchMove", operationId: "storage-authority-changed" });
+        first.active = false;
+        await assert.rejects(movement, /timed out/);
+        assert.deepEqual(messages.map(row => [row.targetGmId, row.operation?.operationId]), [
+          ["gm-1", "storage-authority-changed"], ["gm-2", "storage-authority-changed"]
+        ], "ordinary storage retries still follow the authority without changing their ID");
+      } finally {
+        game.users = originalUsers;
+        game.user = originalUser;
+        game.socket = originalSocket;
+      }
+    }
     globalThis.game.socket = { emit(_channel, payload) { retryEmitted.push(payload); } };
     retryEmitted.length = 0;
     await assert.rejects(
@@ -537,7 +646,7 @@ export async function checkSocketCharacterization() {
         resourceId: "wood",
         qty: 1
       }),
-      /timed out/
+      error => error?.code === "timeout" && /Сверьте склад и инвентарь/.test(error.message)
     );
     assert.equal(retryEmitted.length, 2, "a timed-out storage operation must be retried once");
     assert.equal(retryEmitted[0].operation.operationId, retryEmitted[1].operation.operationId, "a retry must preserve the original operation id");

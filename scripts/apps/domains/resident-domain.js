@@ -1,5 +1,6 @@
-import { specialMoraleModifier } from "../../core/special-effects.js";
+import { isPublicSpecialNote, specialMoraleModifier } from "../../core/special-effects.js";
 import { residentLaborCapacity } from "../../data/labor-budget.js";
+import { hiddenBuildingIds, residentHasHiddenWork } from "../../data/access-guard.js";
 import { selectionSummary } from "../common/selection-summary.js";
 import { residentTraitTooltip } from "../common/resident-trait-chips.js";
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
@@ -8,6 +9,8 @@ import { CULTURE_NAMES } from "../../generators/name-pools.js";
 import { ageGroupFromAge, ageThresholdsFor, attributeSummary, normalizeBelief, raceKeyFromResident, socialBackgroundOptions, workerTypeFromAttributes, workerTypeStyleFromAttributes } from "../../generators/resident-rules.js";
 import { buildingOperationalState } from "../../core/building-state.js";
 import { resourceLabel } from "../../core/resources.js";
+import { stableDataHash } from "../../data/storage-commit.js";
+import { canEnrollDefenseResident, defenseArmamentInUse, DEFENSE_ARMAMENT_IDS, DEFENSE_ARMAMENT_IN_USE } from "./defense-operation-domain.js";
 import {
   buildingConfirmedHarmActive,
   buildingConfirmedLeisureCapacity,
@@ -21,7 +24,15 @@ import { politicsRuntimeEffects } from "../../engines/politics/runtime-effects.j
 import { isResidentAway, residentShipAssignment, shipForResident, isResidentRestingOnShip, isResidentInPopulation } from "../../data/resident-presence.js";
 import {
   COMMANDER_MIN_WITS,
+  commanderEffectiveness,
+  commandPercentFromEffectiveness,
+  DEFENSE_SQUAD_MIN_EFFICIENCY,
+  evaluateDefenseSquad,
+  hasMilitaryServiceBackground,
+  hasSergeantTraining,
+  isAvailableDefenseResident,
   MANAGER_SQUAD_TYPE_PROFILES,
+  militarySupplyResourceForArmament,
   residentSoldierEfficiency,
   residentSuitableForSquadType
 } from "../../data/military-resident-rules.js";
@@ -52,8 +63,8 @@ _prepareRows(holding, canEdit, activeTab = "overview", options = {}) {
     const workOptionsContext = this._residentWorkOptionsContext(holding);
     const hasRestingCrew = (holding.people?.list ?? []).some((person) => isResidentRestingOnShip(person, holding));
     const mode = options.activePeopleTab === "ship-crew" && hasRestingCrew ? "ship-crew" : "residents";
-    rows.people = this._preparePersonRows(holding, canEdit, mode, true, { workOptionsContext, editorPersonId: "" });
-    rows.residentWorkOptionCatalog = canEdit ? this._residentWorkOptionCatalog(workOptionsContext) : [];
+    rows.people = this._preparePersonRows(holding, canEdit, mode, true, { workOptionsContext, canEditInlineWork: canEditBuildings });
+    rows.residentWorkOptionCatalog = canEditBuildings ? this._residentWorkOptionCatalog(workOptionsContext) : [];
   }
 
   if (tab === "buildings") rows.buildings = this._prepareBuildingRows(holding, canEditBuildings, options);
@@ -61,7 +72,8 @@ _prepareRows(holding, canEdit, activeTab = "overview", options = {}) {
   if (tab === "special" || tab === "defense") {
     const decorate = (sourceRows) => (sourceRows ?? []).map((row, index) => ({ ...row, _index: index }));
     rows.special = decorate(holding.special?.list).filter(canViewSpecialRecord)
-      .map((row) => ({ ...row, isGmOnly: row.visibility === "gm" }));
+      .map(({ _index, ...row }) => ({ ...row, _index, isGmOnly: row.visibility === "gm",
+        canDeleteSpecialRecord: Boolean(globalThis.game?.user?.isGM) || isPublicSpecialNote(row) }));
     rows.cemetery = this._preparePersonRows(holding, canEdit, "cemetery", false);
   }
 
@@ -69,6 +81,7 @@ _prepareRows(holding, canEdit, activeTab = "overview", options = {}) {
 },
 
 _preparePersonRows(holding, canEdit = false, mode = "living", applyFilters = true, options = {}) {
+  const canEditInlineWork = options.canEditInlineWork ?? canEdit;
   const housingIndex = this._residentHousingIndex(holding);
   const workOptionsContext = options?.workOptionsContext ?? this._residentWorkOptionsContext(holding);
   const workAssignments = this._peopleWorkAssignments(holding, workOptionsContext);
@@ -92,7 +105,7 @@ _preparePersonRows(holding, canEdit = false, mode = "living", applyFilters = tru
   let workAllocationTargetMap = null;
 
   for (const { row, index } of sourceRows) {
-    const morale = this._calculatePersonMorale(row, holding, { housingIndex });
+    const morale = this._calculatePersonMorale(row, holding, { housingIndex, showWorkSources: Boolean(globalThis.game?.user?.isGM) });
     const isChild = this._isChildResident(row);
     const canWork = this._canResidentWork(row, holding);
     const shipAssignment = residentShipAssignment(row);
@@ -102,10 +115,13 @@ _preparePersonRows(holding, canEdit = false, mode = "living", applyFilters = tru
     const shipPresenceLabel = awayOnShip
       ? `На корабле «${String(assignedShip?.name || shipAssignment?.shipId || "неизвестный корабль")}»`
       : restingOnShip ? `Отдых на корабле «${assignedShip?.name || "корабль"}»` : "";
-    const rawWorkLabel = workAssignments.get(String(row.id)) || row.role || "";
+    const workHidden = residentHasHiddenWork(holding, row, workOptionsContext.hiddenBuildingIds);
+    const rawWorkLabel = workHidden ? "Назначение скрыто" : workAssignments.get(String(row.id)) || row.role || "";
     const settlementWorkLabel = rawWorkLabel && !["Свободен", "Без работы"].includes(String(rawWorkLabel)) ? rawWorkLabel : (isChild ? "Ребенок" : (rawWorkLabel || "Без работы"));
     const workLabel = shipPresenceLabel || settlementWorkLabel;
-    const homeLabel = this._homeLabel(row, holding, housingIndex);
+    const homeHidden = Boolean(workOptionsContext.hiddenBuildingIds?.size
+      && workOptionsContext.hiddenBuildingIds.has(String(this._findHomeBuilding(holding, row.home, housingIndex)?.id)));
+    const homeLabel = homeHidden ? "Жильё скрыто" : this._homeLabel(row, holding, housingIndex);
     const workerTypeLabel = this._workerType(row);
     const injuredDays = Math.max(0, this._safeNumber(row.injuredDays, 0));
     const isInjured = this._isResidentInjured(row);
@@ -136,6 +152,8 @@ _preparePersonRows(holding, canEdit = false, mode = "living", applyFilters = tru
       ageLine: this._ageLine(row),
       raceLine,
       workLabel,
+      workHidden,
+      homeHidden,
       awayOnShip,
       restingOnShip,
       transportBusy: Boolean(assignedShip?.transportOrderId),
@@ -168,7 +186,7 @@ _preparePersonRows(holding, canEdit = false, mode = "living", applyFilters = tru
       editing
     };
 
-    if (canEdit) {
+    if (canEditInlineWork && !workHidden) {
       const inlineWork = this._residentInlineWorkOption(row, workLabel, workOptionsContext);
       Object.assign(prepared, {
         workInlineValue: inlineWork.value,
@@ -179,7 +197,8 @@ _preparePersonRows(holding, canEdit = false, mode = "living", applyFilters = tru
     }
 
     if (editing) {
-      workAllocationTargets ??= buildWorkAllocationTargets(holding);
+      workAllocationTargets ??= buildWorkAllocationTargets(holding)
+        .filter((target) => !workOptionsContext.hiddenBuildingIds?.has(String(target.sourceId)));
       workAllocationTargetMap ??= new Map(workAllocationTargets.map((target) => [target.key, target]));
       const laborCapacity = residentLaborCapacity(row);
       const normalWorkCap = canWork ? laborCapacity.normalQd : 0;
@@ -189,7 +208,7 @@ _preparePersonRows(holding, canEdit = false, mode = "living", applyFilters = tru
         maximumNormalQd: normalWorkCap,
         maximumOvertimeQd: overtimeWorkCap
       });
-      const workAllocations = workAllocationValidation.rows.map((allocation, allocationIndex) => {
+      const workAllocations = workHidden ? [] : workAllocationValidation.rows.map((allocation, allocationIndex) => {
         const selectedKey = workAllocationTargetKey(allocation.sourceId, allocation.functionId);
         const targetOptions = workAllocationTargets.map((target) => ({
           value: target.key,
@@ -210,8 +229,8 @@ _preparePersonRows(holding, canEdit = false, mode = "living", applyFilters = tru
         };
       });
       Object.assign(prepared, {
-        homeOptions: this._homeOptions(holding, row.home, housingIndex),
-        workOptions: this._workOptions(holding, row, workOptionsContext),
+        homeOptions: homeHidden ? [] : this._homeOptions(holding, row.home, housingIndex, workOptionsContext.hiddenBuildingIds),
+        workOptions: workHidden ? [] : this._workOptions(holding, row, workOptionsContext),
         workAllocationExplicit: String(row?.workAllocationMode ?? "") === WORK_ALLOCATION_MODE_EXPLICIT,
         workAllocationModeOptions: [
           { value: "legacy", label: "Одно основное назначение", selected: String(row?.workAllocationMode ?? "legacy") !== WORK_ALLOCATION_MODE_EXPLICIT },
@@ -252,23 +271,25 @@ _squadTypeDefs() {
 },
 
 _isMilitaryBackgroundResident(person = {}) {
-  const text = String(person?.background ?? "").toLowerCase();
-  return /(солдат|ветеран|на[её]мник|страж|сторож|дозор|егерь|дезертир|канонир|артиллер|сап[её]р|тюремщик|палач|телохранитель|ополчен|мушкет|развед)/i.test(text);
+  return hasMilitaryServiceBackground(person);
 },
 
 _isCommanderCandidate(person = {}) {
-  if (!this._isSoldierResident(person) || this._isResidentInjured(person) || person?.dead) return false;
+  const servesInDefense = this._hasSoldierProfession(person) || person.workAssignment === "defenseCommander";
+  if (!servesInDefense || this._isChildResident(person) || this._isResidentInjured(person) || person.dead) return false;
   const attrs = person?.attributes ?? {};
   return this._safeNumber(attrs.wits, 0) >= COMMANDER_MIN_WITS;
 },
 
 _defenseRenderContext(holding) {
   const livingPeople = (holding?.people?.list ?? []).filter((person) => !person?.dead);
-  const activePeople = livingPeople.filter((person) => !this._isResidentInjured(person));
+  const activePeople = livingPeople.filter((person) => isAvailableDefenseResident(person, holding));
   return {
     livingPeople,
     activePeople,
+    activePeopleById: new Map(activePeople.map((person) => [String(person.id), person])),
     peopleById: new Map(livingPeople.map((person) => [String(person?.id ?? ""), person])),
+    hiddenBuildings: hiddenBuildingIds(holding),
     filteredCache: new Map(),
     efficiencyCache: new Map()
   };
@@ -290,8 +311,9 @@ _defensePersonOptions(holding, selected = "", { soldiersOnly = false, sergeantsO
   const cacheKey = `${soldiersOnly ? 1 : 0}|${sergeantsOnly ? 1 : 0}|${commandersOnly ? 1 : 0}|${String(squadType ?? "line")}`;
   if (!renderContext.filteredCache.has(cacheKey)) {
     renderContext.filteredCache.set(cacheKey, renderContext.activePeople.filter((person) => {
+      if (!canEnrollDefenseResident(holding, person, renderContext.hiddenBuildings)) return false;
       const hasProfession = this._hasSoldierProfession?.(person) === true;
-      if (commandersOnly) return hasProfession && !this._isChildResident?.(person) && this._isCommanderCandidate(person);
+      if (commandersOnly) return this._isCommanderCandidate(person);
       if (sergeantsOnly) return hasProfession && this._isSergeantCandidate(person) && this._isSuitableForSquadType(person, squadType);
       if (soldiersOnly) return hasProfession && this._isSuitableForSquadType(person, squadType);
       return this._isSuitableForSquadType(person, squadType);
@@ -302,23 +324,17 @@ _defensePersonOptions(holding, selected = "", { soldiersOnly = false, sergeantsO
   for (const person of filtered) {
     const id = String(person.id);
     if (excluded.has(id) && current !== id) continue;
-    const attrs = person?.attributes ?? {};
     const eff = this._cachedSoldierEfficiency(person, squadType, renderContext);
-    const text = [person?.type, person?.workerType, person?.role, person?.background, person?.traits, person?.notes].map((value) => String(value ?? "").toLowerCase()).join(" ");
-    const commanderEff = commandersOnly
-      ? Math.min(3, Math.max(0,
-        (this._safeNumber(attrs.wits, 0) >= COMMANDER_MIN_WITS || /команд|началь|офиц|тактик|стратег|разум|мыслител|писарь|уч[её]н|воевод|капитан/i.test(text) ? 1 : 0)
-        + (this._isMilitaryBackgroundResident(person) || this._isSoldierResident(person) ? 1 : 0)
-        + (/лидер|вожд|команд|офиц|капитан|тактик|стратег|авторитет|харизм|дисциплин/i.test(text) ? 1 : 0)))
-      : 0;
+    const commanderEff = commandersOnly ? commanderEffectiveness(person) : 0;
+    const commanderPercent = Math.round(commandPercentFromEffectiveness(commanderEff) * 100);
     const label = commandersOnly
-      ? `${person.name || "Без имени"} · ком. ${commanderEff}/3 · +${commanderEff * 7}%`
+      ? `${person.name || "Без имени"} · ком. ${commanderEff}/5 · +${commanderPercent}%`
       : `${person.name || "Без имени"} · эфф. ${this._formatNumber ? this._formatNumber(eff) : eff}${this._isSergeantCandidate(person) ? " · сержант" : ""}`;
     options.push({ value: id, label, selected: current === id, disabled: false });
   }
-  if (current && !options.some((item) => item.value === current) && !(soldiersOnly || sergeantsOnly || commandersOnly)) {
+  if (current && !options.some((item) => item.value === current)) {
     const person = renderContext.peopleById.get(current);
-    options.push({ value: current, label: `${person?.name || current} (недоступен для типа отряда)`, selected: true });
+    options.push({ value: current, label: `${person?.name || "Житель"} (недоступен)`, selected: true, disabled: true });
   }
   return options;
 },
@@ -334,43 +350,6 @@ _defenseAssignmentIds(holding) {
   return ids;
 },
 
-_sanitizeDefenseAssignments(holding) {
-  const defense = holding?.gm?.defense;
-  if (!defense || !Array.isArray(defense.squads)) return false;
-  let changed = false;
-  const people = new Map((holding?.people?.list ?? []).map((person) => [String(person.id), person]));
-  const used = new Set();
-  const commanderId = String(defense.commanderId ?? "");
-  if (commanderId) {
-    const commander = people.get(commanderId);
-    if (!commander || !this._hasSoldierProfession?.(commander) || !this._isCommanderCandidate(commander) || this._isChildResident?.(commander) || this._isResidentInjured(commander) || commander.dead) {
-      defense.commanderId = "";
-      changed = true;
-    } else used.add(commanderId);
-  }
-  for (const squad of defense.squads) {
-    let squadType = String(squad?.type ?? "line");
-    if (squadType === "militia") { squadType = "line"; squad.type = "line"; changed = true; }
-    const isAllowed = (id) => {
-      const person = people.get(String(id));
-      return person && this._hasSoldierProfession?.(person) && this._isSuitableForSquadType(person, squadType) && !this._isChildResident?.(person) && !this._isResidentInjured(person) && !person.dead;
-    };
-    const first = String(squad?.sergeantId ?? "");
-    if (first && (!isAllowed(first) || used.has(first))) { squad.sergeantId = ""; changed = true; }
-    else if (first) used.add(first);
-    const members = (Array.isArray(squad.memberIds) ? squad.memberIds : []).slice(0, 4);
-    while (members.length < 4) members.push("");
-    for (let i = 0; i < members.length; i += 1) {
-      const id = String(members[i] ?? "");
-      if (!id) { members[i] = ""; continue; }
-      if (!isAllowed(id) || used.has(id)) { members[i] = ""; changed = true; }
-      else { used.add(id); members[i] = id; }
-    }
-    squad.memberIds = members;
-  }
-  return changed;
-},
-
 _defenseContext(holding) {
   const defense = holding?.gm?.defense ?? {};
   const renderContext = this._defenseRenderContext(holding);
@@ -384,26 +363,22 @@ _defenseContext(holding) {
   const squads = squadsSource.map((squad, index) => {
     const memberIds = (Array.isArray(squad.memberIds) ? squad.memberIds : []).slice(0, 4);
     const firstSlotId = String(squad.sergeantId ?? "");
-    const combatantIds = [firstSlotId, ...memberIds.map((id) => String(id ?? ""))].filter(Boolean);
-    const uniqueCombatantIds = [...new Set(combatantIds)];
-    const combatants = uniqueCombatantIds.map((id) => peopleById.get(id)).filter(Boolean);
     const squadType = String(squad.type ?? "line") === "militia" ? "line" : String(squad.type ?? "line");
-    let effective = combatants.reduce((sum, person) => sum + this._cachedSoldierEfficiency(person, squadType, renderContext), 0);
+    const { combatants, effective, sergeantBonus, ready } = evaluateDefenseSquad(squad, renderContext.activePeopleById);
     const firstSlotPerson = peopleById.get(firstSlotId);
-    const hasSergeant = Boolean(firstSlotPerson && this._isSergeantCandidate(firstSlotPerson));
-    if (hasSergeant) effective += 0.5;
-    if (!Number.isFinite(Number(effective))) effective = 0;
-    const armamentResourceId = ["armament-simple", "armament-complex", "armament-elite"].includes(String(squad.armamentResourceId ?? ""))
+    const hasSergeant = sergeantBonus > 0;
+    const armamentResourceId = DEFENSE_ARMAMENT_IDS.includes(String(squad.armamentResourceId ?? ""))
       ? String(squad.armamentResourceId)
       : "";
     const equipped = Boolean(armamentResourceId);
-    const full = combatants.length >= 5 || effective >= 5;
-    const counted = equipped && full && effective >= 5;
+    const armamentLocked = defenseArmamentInUse(holding, squad);
+    const supplyId = militarySupplyResourceForArmament(armamentResourceId);
+    const counted = equipped && ready;
     const type = typeDefs[squadType] ?? typeDefs.line;
-    const excludedForSquad = allAssignedIds.filter((id) => !combatantIds.includes(String(id)));
     return {
       ...squad,
       _index: index,
+      squadHash: stableDataHash(squad),
       label: squad.name || `${index + 1}-й ${type.label.toLowerCase()}`,
       typeLabel: type.label,
       typeTag: type.tag,
@@ -411,9 +386,9 @@ _defenseContext(holding) {
       typeKey: type.counterTag ?? "infantry",
       typeHint: type.hint,
       typeOptions: Object.entries(typeDefs).map(([value, data]) => ({ value, label: data.label, selected: squadType === value })),
-      firstSlotOptions: this._defensePersonOptions(holding, squad.sergeantId, { soldiersOnly: true, excludedIds: excludedForSquad, squadType, renderContext }),
+      firstSlotOptions: this._defensePersonOptions(holding, firstSlotId, { soldiersOnly: true, excludedIds: allAssignedIds, squadType, renderContext }),
       firstSlotName: firstSlotPerson?.name ?? "—",
-      firstSlotRoleLabel: hasSergeant ? "Сержант" : "Солдат",
+      firstSlotRoleLabel: firstSlotPerson && hasSergeantTraining(firstSlotPerson) ? "Сержант" : "Солдат",
       memberSlots: Array.from({ length: 4 }, (_, slot) => {
         const id = String(memberIds[slot] ?? "");
         const person = peopleById.get(id);
@@ -425,33 +400,38 @@ _defenseContext(holding) {
       effective,
       hasSergeant,
       equipped,
+      armamentLocked,
+      armamentHelp: armamentLocked ? DEFENSE_ARMAMENT_IN_USE
+        : "Выдача списывает один комплект. От комплекта зависит вид припасов, а сила отряда определяется составом.",
       armamentResourceId,
       armamentLabel: armamentResourceId ? resourceLabel(armamentResourceId) : "Вооружение не выдано",
-      armamentOptions: ["armament-simple", "armament-complex", "armament-elite"].map((resourceId) => ({
+      armamentOptions: DEFENSE_ARMAMENT_IDS.map((resourceId) => ({
         value: resourceId,
         label: resourceLabel(resourceId),
+        supplyLabel: resourceLabel(militarySupplyResourceForArmament(resourceId)),
+        disabled: armamentLocked && militarySupplyResourceForArmament(resourceId) !== supplyId,
         selected: resourceId === (armamentResourceId || "armament-simple")
       })),
-      full,
       counted,
-      statusText: counted ? (hasSergeant ? "учитывается, сержант" : "учитывается") : (!equipped ? "нет вооружения" : (!full ? "неполный" : "эффективность < 5")),
+      statusText: counted ? (hasSergeant ? "учитывается, сержант" : "учитывается")
+        : (!equipped ? "нет вооружения" : `эффективность < ${DEFENSE_SQUAD_MIN_EFFICIENCY}`),
       statusClass: counted ? "ok" : "warning"
     };
   });
-  const countedEffective = squads.filter((s) => s.counted).reduce((sum, s) => sum + Number(s.effective || 0), 0);
-  const effectiveUnits = Math.floor(countedEffective / 5);
+  const countedSquads = squads.filter((s) => s.counted);
+  const countedEffective = countedSquads.reduce((sum, s) => sum + s.effective, 0);
   return {
     commanderId,
-    commanderName: commander?.name ?? "—",
+    commanderName: commander ? `${commander.name || "Без имени"}${renderContext.activePeopleById.has(commanderId) ? "" : " (вне строя)"}` : "—",
     commanderOptions: this._defensePersonOptions(holding, commanderId, { commandersOnly: true, excludedIds: allAssignedIds.filter((id) => String(id) !== commanderId), renderContext }),
     squads,
     hasSquads: squads.length > 0,
     soldierCount,
     countedEffectiveText: this._formatNumber ? this._formatNumber(countedEffective) : String(Math.round(countedEffective * 10) / 10),
-    effectiveUnits,
+    effectiveUnits: countedSquads.length,
     squadTypeSummary: Object.values(typeDefs).map((item) => `${item.label}: ${item.tag}`).join(" · "),
     equipmentCostText: "Одна единица Вооружения закрепляется за одним отрядом из пяти человек до замены, разоружения или расформирования.",
-    defenseHelpText: `Командир выбирается отдельно от отрядов: любой живой взрослый житель. Он не дает плоских кубов; его эффективность 0-3 дает +7%/+14%/+21% к боевой мощи армии. Эффективность: Разум/управленческий тип, военное прошлое, лидерские черты. Сержантом считается только солдат с военным социальным прошлым и любой характеристикой 5+. ${Object.values(typeDefs).map((item) => `${item.label}: ${item.tag}`).join(" · ")}. Первый слот отряда — сержант или обычный солдат; всего в отряде 5 бойцов. Один житель не может занимать несколько слотов. Недоукомплектованные отряды и отряды без закрепленной единицы Вооружения не считаются. Один участвующий отряд расходует одну подходящую единицу Военных припасов за весь бой; без неё он сохраняется, но лишается 20% огнестрельного бонуса и тегов Стрелки/Осадные.`
+    defenseHelpText: `Командир — взрослый военнослужащий с Разумом 4+ без ранения. Его эффективность от 0 до 5 даёт по +5% за единицу (до +25%). В отряде до пяти мест. К бою готовы отряды с комплектом и эффективностью от ${DEFENSE_SQUAD_MIN_EFFICIENCY} у бойцов в строю. Военное прошлое даёт прибавку к личной эффективности; сержант в первом слоте с военным прошлым и характеристикой 5+ даёт отряду +10%. ${Object.values(typeDefs).map((item) => `${item.label}: ${item.tag}`).join(" · ")}. Комплект определяет тип припасов: простое вооружение требует простых, сложное и элитное — сложных. Подходящие припасы дают готовому отряду +20% эффективности и сохраняют теги «Стрелки» и «Осадные». Один отряд расходует одну единицу за весь бой.`
   };
 },
 
@@ -505,7 +485,8 @@ _beliefOptions(current = "") {
 },
 
 _residentWorkOptionsContext(holding) {
-  const allBuildings = holding?.buildings?.list ?? [];
+  const hidden = hiddenBuildingIds(holding);
+  const allBuildings = (holding?.buildings?.list ?? []).filter((building) => !hidden.has(String(building.id)));
   const livingPeople = (holding?.people?.list ?? []).filter((person) => !person?.dead);
   const crews = this._constructionCrews(holding);
   const buildingsById = new Map();
@@ -540,7 +521,8 @@ _residentWorkOptionsContext(holding) {
     if (id) crewsById.set(id, crew);
   }
 
-  return { holding, allBuildings, buildingsById, crews, crewsById, availableBuildingIds, buildingRoleNames, buildingOptionsCache: new Map() };
+  return { holding, allBuildings, buildingsById, crews, crewsById, availableBuildingIds, buildingRoleNames,
+    hiddenBuildingIds: hidden, buildingOptionsCache: new Map() };
 },
 
 _residentWorkOptionBuildings(context, selected = "") {
@@ -781,7 +763,7 @@ _isMilitaryResidentLike(person = {}) {
 },
 
 _hasSoldierProfession(person = {}) {
-  return String(person?.workAssignment ?? "") === "soldier" || /^\s*(солдат|сержант)\b/i.test(String(person?.role ?? ""));
+  return String(person?.workAssignment ?? "") === "soldier" || /^\s*(?:солдат|сержант)(?:\s|:|$)/iu.test(String(person?.role ?? ""));
 },
 
 _isSoldierResident(person = {}) {
@@ -793,9 +775,7 @@ _isSoldierResident(person = {}) {
 
 _isSergeantCandidate(person = {}) {
   if (!this._isSoldierResident(person) || this._isResidentInjured(person) || person?.dead) return false;
-  if (!this._isMilitaryBackgroundResident(person)) return false;
-  const attrs = person?.attributes ?? {};
-  return [attrs.strength, attrs.agility, attrs.wits, attrs.empathy].some((value) => this._safeNumber(value, 0) >= 5);
+  return hasSergeantTraining(person);
 },
 
 _isSuitableForSquadType(person = {}, squadType = "line") {
@@ -865,7 +845,7 @@ _housingMorale(person, holding = null, housingIndex = null) {
   return { value: comfort + crowding, reason: parts.join(", ") };
 },
 
-_homeOptions(holding, currentHome = "", housingIndex = null) {
+_homeOptions(holding, currentHome = "", housingIndex = null, hidden = hiddenBuildingIds(holding)) {
   const current = String(currentHome ?? "").trim();
   const byValue = new Map();
   byValue.set("", { value: "", label: "Без дома", selected: this._isNoHome(current) });
@@ -876,7 +856,7 @@ _homeOptions(holding, currentHome = "", housingIndex = null) {
     if (!hasIndexedBuildings && !this._isResidentialBuilding(building)) continue;
     const id = String(building?.id ?? "").trim();
     const name = String(building?.name ?? "").trim();
-    if (!id || !name || byValue.has(id)) continue;
+    if (!id || !name || byValue.has(id) || hidden.has(id)) continue;
     const capacity = this._safeNumber(building?.housing?.capacity, 0);
     const occupied = this._housingOccupants(holding, building, housingIndex).length;
     const isSelected = current === id || current === name;
@@ -1114,6 +1094,11 @@ _calculatePersonMorale(person, holding = null, options = {}) {
   const workAuto = this._workMorale(person, holding);
   const workUnclamped = workManual + workAuto.value;
   const work = Math.max(-3, Math.min(3, Math.sign(workUnclamped) * Math.round(Math.abs(workUnclamped))));
+  const workReason = options.showWorkSources !== false ? workAuto.reason : [
+    Number.isFinite(workAuto.conditions) ? `условия: ${workAuto.conditions}` : "",
+    Number.isFinite(workAuto.pay) ? `оплата: ${workAuto.pay}` : "",
+    Number.isFinite(workAuto.overtime) ? `переработка: ${workAuto.overtime}` : ""
+  ].filter(Boolean).join(", ");
   const ration = this._rationMorale(person, holding);
   const homeManual = this._safeNumber(person?.moraleHome, 0);
   const homeAuto = this._housingMorale(person, holding, housingIndex);
@@ -1126,7 +1111,7 @@ _calculatePersonMorale(person, holding = null, options = {}) {
     `Итог: ${total}`,
     `База: ${base}`,
     `Питание: ${ration.value > 0 ? "+" : ""}${ration.value} (${ration.reason})`,
-    `Работа: ${work}${workAuto.reason ? ` (${workAuto.reason})` : ""}`,
+    `Работа: ${work}${workReason ? ` (${workReason})` : ""}`,
     `Жилье: ${home}${homeAuto.reason ? ` (${homeAuto.reason})` : ""}`
   ];
   if (traits.value) breakdown.push(`Черты: ${traits.value} (${traits.reasons.join(", ")})`);
