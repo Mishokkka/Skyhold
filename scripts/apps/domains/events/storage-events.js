@@ -4,6 +4,7 @@ import { stableDataHash } from "../../../data/storage-commit.js";
 import { findReadableHoldingEntry, hiddenStorageRoomIds } from "../../../data/access-guard.js";
 import { holdingPermissionContext } from "../../../data/holding-permissions.js";
 import { COMMAND_ERROR } from "../../../data/command-result.js";
+import { MAX_STORAGE_OPERATION_QUANTITY } from "../../../data/constants.js";
 import { findHoldingOperation } from "../../../data/operations.js";
 import { makeId } from "../../../data/utils.js";
 import { reservedResourceBatchQuantities } from "../../../core/resource-batches.js";
@@ -16,6 +17,7 @@ import { foundryItemClass, renderFoundryDocumentSheet, resolveFoundryUuid } from
 import { SkyholdResourceCatalogEditor } from "../../editors/resource-catalog-editor.js";
 import { SkyholdStorageActionDialog } from "../../storage-action-dialog.js";
 import { dispatchDelegatedAction } from "../../common/delegated-events.js";
+import { editHoldingTreasury } from "../finance/treasury-edit.js";
 
 export const StorageEventActions = {
   click: {
@@ -116,6 +118,9 @@ _onAddStorageResource(event) {
   const holdingId = String(panel?.dataset?.storageHoldingId ?? "");
   if (!holdingId) return this._warnNoActiveHolding();
   const roomId = this._normalizeStorageRoomId(panel?.dataset?.roomId);
+  const { holding } = findReadableHoldingEntry(SkyholdData.view(), holdingId, { fallback: false });
+  if (!holding) return this._warnNoActiveHolding();
+  const roomLabel = this._storageRoomLabel(holding, roomId);
   SkyholdResourceCatalogEditor.pick({
     onSelect: async (resource) => {
       const resourceId = String(resource?.id ?? "custom") || "custom";
@@ -123,13 +128,25 @@ _onAddStorageResource(event) {
         ? "Новый материал"
         : String(resource?.label ?? resourceId);
       try {
+        if (!game.user?.isGM) return;
+        const qty = await SkyholdStorageActionDialog.open({
+          anchor: this,
+          mode: "quantity",
+          title: `Добавить: ${name}`,
+          description: `Хранилище «${roomLabel}». Излишек будет размещён снаружи.`,
+          icon: "fa-solid fa-cubes",
+          confirmLabel: "Добавить ресурс",
+          value: 1,
+          max: MAX_STORAGE_OPERATION_QUANTITY
+        });
+        if (qty === null || !game.user?.isGM) return;
         const result = await requestStorageOperation({
           type: "addResourceRow",
           holdingId,
           resourceId,
           name,
           roomId,
-          qty: 1
+          qty
         });
         if (!result?.ok) {
           ui.notifications.warn(result?.message || "Не удалось добавить материал.");
@@ -138,11 +155,11 @@ _onAddStorageResource(event) {
         if (this.activeHoldingId === holdingId) {
           this.activeTab = "storage";
           this.activeStorageTab = "resources";
-          this.activeStorageRoomId = roomId;
+          this.activeStorageRoomId = this._normalizeStorageRoomId(result.roomId ?? roomId);
         }
         this._activeTabContextCache?.clear?.();
         this.requestRender({ focus: false, skipLoadingOverlay: true });
-        ui.notifications.info(result.message || `${name}: добавлена 1 ед.`);
+        ui.notifications.info(result.message || `${name}: добавлено ${qty} ед.`);
       } catch (error) {
         console.error("FBL Skyhold | Failed to add a selected storage resource", error);
         ui.notifications.error("Не удалось добавить материал. Подробности в консоли.");
@@ -632,12 +649,6 @@ async _openStorageDeleteDialog({ rowType = "resources", rowId = "", roomId = "ou
   this.requestRender({ focus: false, skipLoadingOverlay: true });
 },
 
-_moneyDenomFactor(key = "copper") {
-  if (key === "gold") return 100;
-  if (key === "silver") return 10;
-  return 1;
-},
-
 _readMoneyInputValue(value = "") {
   const text = String(value ?? "").trim().replace(",", ".");
   const match = text.match(/^([+-]?)(\d+(?:\.\d+)?)$/);
@@ -658,37 +669,20 @@ async _setStorageMoneyFromUi({ changedField = null, button = null, buttonDelta =
   const root = control?.closest?.(".fbls-storage-money-counter");
   const holdingId = String(storagePanel(control)?.dataset?.storageHoldingId ?? "");
   if (!root || !holdingId) return this._warnNoActiveHolding();
-  let delta = buttonDelta * this._moneyDenomFactor(buttonDenom);
-  let absolute = null;
-  const expected = Number(root.dataset.storageMoneyTotal);
+  let amount = buttonDelta;
+  let denomination = buttonDenom;
+  let relative = true;
   if (changedField) {
-    const denom = String(changedField.dataset.storageMoneyField ?? "copper");
+    denomination = String(changedField.dataset.storageMoneyField || "copper");
     const parsed = this._readMoneyInputValue(changedField.value);
     if (!parsed.ok) return ui.notifications.warn("Введи число или операцию вида +3 / -2.");
-    if (parsed.mode === "delta") delta = parsed.sign * parsed.value * this._moneyDenomFactor(denom);
-    else {
-      if (!Number.isSafeInteger(expected)) return ui.notifications.warn("Казна изменилась. Обновите окно и повторите правку.");
-      const denominations = { gold: Math.floor(expected / 100), silver: Math.floor(expected % 100 / 10), copper: expected % 10 };
-      denominations[denom] = parsed.value;
-      absolute = denominations.gold * 100 + denominations.silver * 10 + denominations.copper;
-    }
+    relative = parsed.mode === "delta";
+    amount = parsed.sign * parsed.value;
   }
   try {
-    const result = await SkyholdData.updateHolding(holdingId, (holding) => {
-      const before = this._moneyCopper(holding);
-      const total = Math.max(0, absolute ?? before + delta);
-      if (!Number.isSafeInteger(total)) return SkyholdData.skipTransaction({ ok: false, message: "Сумма выходит за допустимый диапазон." });
-      if (total === before) return SkyholdData.skipTransaction({ ok: true });
-      if (absolute !== null && before !== expected) {
-        return SkyholdData.skipTransaction({ ok: false, message: "Казна изменилась после открытия окна. Повторите правку." });
-      }
-      this._setMoneyCopper(holding, total);
-      const diff = total - before;
-      this._appendStorageLog(holding, [{ kind: diff > 0 ? "income" : "expense", resourceId: "money", name: "Деньги", qty: diff, source: "Казна", note: "Ручная правка" }]);
-      return { ok: true };
-    }, { fallback: false, reason: "storage:set-money" });
-    if (!result) return;
-    if (!result.ok) ui.notifications.warn(result.message);
+    const result = await editHoldingTreasury(holdingId, { amount, denomination, relative,
+      expectedCopper: Number(root.dataset.storageMoneyTotal) });
+    if (!result?.ok) ui.notifications.warn(result?.message ?? "Владение недоступно.");
     else if (this.activeHoldingId === holdingId) this.activeTab = "storage";
     this.requestRender();
   } catch (error) {

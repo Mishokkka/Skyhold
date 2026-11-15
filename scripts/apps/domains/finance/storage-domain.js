@@ -518,7 +518,8 @@ _applyManualStorageChange(holding, { resourceId = "", name = "", qty = 0, note =
     : [{ kind, resourceId: id, name: label, qty: amount, roomId: targetRoom, source: "Ручная правка", note, operationId }];
   this._appendStorageLog(holding, entries);
   const suffix = isStorageMoneyResource({ resourceId: id, name: label }) ? "" : (amount > 0 ? `; ${this._storagePlacementText(holding, placements)}` : ` → ${this._storageRoomLabel(holding, targetRoom)}`);
-  return { ok: true, message: `${label}: ${amount > 0 ? "+" : ""}${this._formatNumber(amount)}${suffix}.` };
+  return { ok: true, roomId: placements.find((item) => item.roomId === targetRoom)?.roomId ?? placements[0]?.roomId,
+    message: `${label}: ${amount > 0 ? "+" : ""}${this._formatNumber(amount)}${suffix}.` };
 },
 
 _applyStorageMove(holding, { resourceId = "", name = "", qty = 0, fromRoomId = "outdoors", toRoomId = "outdoors", note = "" } = {}) {

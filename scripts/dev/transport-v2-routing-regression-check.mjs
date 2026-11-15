@@ -96,7 +96,11 @@ for (const isGM of [true, false]) {
   const initial = prepareTransportContext({ ...f, request, isGM });
   const regular = initial.services.filter(service => service.kind === "regular");
   assert.equal(regular.length, 2, "both physical routes must reach schedule-aware planning");
-  const occupied = planTransportChain({ cargo: [{ lotId: "full", qty: 1, unitLoad: regular[0].capacity, unitCopper: 1 }], services: [regular[0]] });
+  const firstSlotCapacity = Math.min(regular[0].capacity, regular[0].loadingCapacity, regular[0].unloadingCapacity);
+  const occupied = planTransportChain({ cargo: [{ lotId: "full", qty: 1, unitLoad: firstSlotCapacity, unitCopper: 1 }], services: [regular[0]] });
+  const occupiedRun = occupied.stages[0].runs[0];
+  assert.equal(occupiedRun.departureQd, initial.plan.stages[0].runs[0].departureQd, "the competing order occupies the first departure");
+  assert.equal(occupiedRun.reservedLoad, occupiedRun.capacity, "the booked handling window is full");
   bookTransportOrder({ state: f.data.meta.transportV2, holding: { id: "other", storage: { moneyCopper: 1000000 }, special: {} },
     id: "occupied", direction: "inbound", services: [regular[0]], plan: occupied });
   const chosen = prepareTransportContext({ ...f, request, isGM });
@@ -104,6 +108,54 @@ for (const isGM of [true, false]) {
   assert.equal(chosen.plan.stages[0].service.id, regular[1].id);
   const pinned = prepareTransportContext({ ...f, request: { ...request, serviceIds: [regular[0].id] }, isGM });
   assert.ok(pinned.plan.arrivalQd > chosen.plan.arrivalQd, "an explicitly selected occupied road still keeps its own timetable");
+}
+
+for (const isGM of [true, false]) {
+  const f = transportFixture();
+  f.holding.type = "sky-island";
+  f.holding.gm.modifiers.marketLocalDistanceKm = 20;
+  Object.assign(f.data.catalog.eventRegions[0], { marketSizeId: "outpost", marketTimeFactor: 1 });
+  const request = transportRequest(f, "home", {}, isGM);
+  const offerId = Object.keys(request.quantities)[0];
+  request.quantities[offerId] = 1;
+  const quote = prepareTransportContext({ ...f, request, isGM });
+  const [{ service, runs: [run] }] = quote.plan.stages;
+  assert.equal(service.kind, "regular");
+  assert.equal(service.distanceKm, 20);
+  assert.equal(service.travelQd, 1, "20 km is one quarter-day of air travel");
+  assert.equal(service.loadingQd, 32, "the rate still uses the nominal full rotation");
+  assert.deepEqual([run.startQd, run.departureQd, run.arrivalQd], [3, 4, 6],
+    "one unit needs one QD at each end and catches the first flight");
+  const fast = prepareTransportContext({ ...f, request: { ...request, priority: "time" }, isGM });
+  assert.equal(fast.plan.stages[0].service.kind, "charter");
+  assert.equal(fast.plan.arrivalQd, 4);
+  assert.ok(fast.totalCopper > quote.totalCopper);
+
+  const pinned = { ...request, serviceIds: [service.id] };
+  const harness = transportHarness(f);
+  const first = await harness.book(pinned, `local-small-${isGM}`, isGM);
+  assert.equal(first.order.stages[0].runs[0].arrivalQd, 6, "authority books the date shown to the user");
+  const packed = await harness.book({ ...pinned, quantities: { [offerId]: run.capacity / run.reservedLoad - 1 } },
+    `local-shared-${isGM}`, isGM);
+  assert.equal(packed.order.stages[0].runs[0].id, run.id);
+  const physical = harness.data.meta.transportV2.runs.find(row => row.id === run.id);
+  assert.equal(physical.reservedLoad, physical.capacity);
+  assert.equal(physical.arrivalQd, 6, "additional cargo fits without changing the accepted date");
+  const overflow = await harness.book(pinned, `local-next-${isGM}`, isGM);
+  assert.equal(overflow.order.stages[0].runs[0].departureQd, 44, "a full handling window uses the next advertised departure");
+  harness.advance(6);
+  assert.equal(first.order.stages[0].runs[0].arrivalQd, 6);
+  assert.equal(harness.holding.special.transportV2.orders.find(row => row.id === first.order.id).status, "delivered");
+
+  for (const [ready, departure] of [[2, 4], [3, 4], [4, 44]]) {
+    f.holding.gm.calendaria.lastQd = ready;
+    const boundary = prepareTransportContext({ ...f, request: pinned, isGM });
+    assert.equal(boundary.plan.stages[0].runs[0].departureQd, departure, "loading completes before the published departure");
+  }
+  f.holding.gm.calendaria.lastQd = 0;
+  f.data.catalog.transportV2.overrides = { [service.id]: { loadingQd: 32, unloadingQd: 32 } };
+  const overridden = prepareTransportContext({ ...f, request: pinned, isGM });
+  assert.equal(overridden.plan.arrivalQd, 77, "explicit GM handling times take precedence");
 }
 
 for (const isGM of [true, false]) for (const direction of ["inbound", "outbound"]) {

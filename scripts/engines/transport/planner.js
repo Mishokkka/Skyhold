@@ -35,19 +35,36 @@ function checkService(service) {
   transportInteger(service.riskBps ?? 0, "вероятность происшествия", 0, 10000);
 }
 
-function regularSlot(service, readyQd, runs, horizon, cargo) {
-  let departure = Math.max(service.firstQd ?? 0, readyQd + (service.loadingQd ?? 0));
-  departure = (service.firstQd ?? 0) + Math.ceil((departure - (service.firstQd ?? 0)) / service.intervalQd) * service.intervalQd;
+function handlingQd(load, capacity, fixedQd) {
+  return capacity ? Math.max(1, Math.ceil(load / capacity)) : fixedQd ?? 0;
+}
+
+function regularSlot(service, readyQd, runs, horizon, cargo, load) {
+  const loadingQd = handlingQd(load, service.loadingCapacity, service.loadingQd);
+  const unloadingQd = handlingQd(load, service.unloadingCapacity, service.unloadingQd);
+  // Freeze the handling window at booking. Later cargo can share it within the
+  // booked loading and unloading capacity without moving either promised date.
+  const slotCapacity = Math.min(service.capacity,
+    service.loadingCapacity ? loadingQd * service.loadingCapacity : service.capacity,
+    service.unloadingCapacity ? unloadingQd * service.unloadingCapacity : service.capacity);
+  const first = service.firstQd ?? 0;
+  const earliest = Math.max(first, readyQd + (service.loadingCapacity ? 1 : loadingQd));
+  let departure = first + Math.ceil((earliest - first) / service.intervalQd) * service.intervalQd;
   for (; departure <= horizon; departure += service.intervalQd) {
     const id = slotId(service, departure);
     if (runs.some(run => occupied(run) && run.serviceId !== service.id && run.departureQd === departure
       && transportServicesShareFleet(run.serviceId, service.id))) continue;
     const existing = runs.find((run) => run.id === id && occupied(run));
     if (existing?.blocked || existing?.incident || existing?.riskChecked || ["travelling", "arrived"].includes(existing?.status)) continue;
-    if (existing && (existing.startQd < readyQd || existing.kind !== service.kind
+    if (existing && (existing.kind !== service.kind
       || !sameScheduledEndpoint(existing.from, service.from) || !sameScheduledEndpoint(existing.to, service.to))) continue;
-    const free = Math.min(service.capacity, existing?.capacity ?? service.capacity) - (existing?.reservedLoad ?? 0);
-    if (free >= 0 && cargo.some(lot => lot.unitLoad <= free)) return { id, departureQd: departure, free, vehicle: "regular", existing };
+    const startQd = existing?.startQd ?? departure - loadingQd;
+    if (startQd < readyQd) continue;
+    const capacity = existing?.capacity ?? slotCapacity;
+    const free = Math.min(service.capacity, capacity) - (existing?.reservedLoad ?? 0);
+    if (free >= 0 && cargo.some(lot => lot.unitLoad <= free)) {
+      return { id, departureQd: departure, startQd, unloadingQd, capacity, free, vehicle: "regular", existing };
+    }
   }
   return null;
 }
@@ -124,24 +141,24 @@ export function planTransportChain({ cargo, services, startQd = 0, runs = [], ho
         available = availableTransportCargo(arrivals, forwarded, availableAtQd, { age: false });
         const full = takeTransportCargo(available, service.capacity), fullLoad = cargoLoad(full.taken);
         timed = service.kind !== "regular" ? { ...service,
-          loadingQd: (service.preparationQd ?? 0) + (service.loadingCapacity ? Math.max(1, Math.ceil(fullLoad / service.loadingCapacity)) : service.loadingQd ?? 0),
-          unloadingQd: service.unloadingCapacity ? Math.max(1, Math.ceil(fullLoad / service.unloadingCapacity)) : service.unloadingQd ?? 0 } : service;
+          loadingQd: (service.preparationQd ?? 0) + handlingQd(fullLoad, service.loadingCapacity, service.loadingQd),
+          unloadingQd: handlingQd(fullLoad, service.unloadingCapacity, service.unloadingQd) } : service;
         const last = cargoQuantitiesMatch(full.taken, waiting);
         finalOwnReturn = service.kind === "owned" && last && service.returnAtEnd && services[index + 1]?.kind !== "owned";
         if (service.kind === "owned" && (finalOwnReturn || !last)) validateEmptyPath(service, finalOwnReturn ? "endReturn" : "return");
-        const termsAt = at => {
-          const evaluated = transportServiceAt(timed, at + (timed.loadingQd ?? 0),
+        const termsAt = (at, departure = at + (timed.loadingQd ?? 0)) => {
+          const evaluated = transportServiceAt(timed, departure,
             { unloadingQd: timed.unloadingQd, returnKind: finalOwnReturn ? "endReturn" : "return" });
           const backQd = service.kind === "regular" ? 0 : finalOwnReturn ? evaluated.endReturnQd ?? evaluated.returnQd ?? 0
             : (service.kind === "charter" || !last ? evaluated.returnQd ?? 0 : 0);
           return { service: evaluated, returnQd: backQd,
             durationQd: (timed.loadingQd ?? 0) + evaluated.travelQd + (timed.unloadingQd ?? 0) + backQd };
         };
-        slot = service.kind === "regular" ? regularSlot(service, availableAtQd, workingRuns, horizon, available)
+        slot = service.kind === "regular" ? regularSlot(service, availableAtQd, workingRuns, horizon, available, fullLoad)
           : charterSlot(timed, availableAtQd, workingRuns, horizon, termsAt);
         if (!slot) throw new TransportPlanningUnavailableError("no-slot", "Нет свободного транспорта в горизонте планирования.");
-        start = slot.existing?.startQd ?? slot.startQd ?? slot.departureQd - (timed.loadingQd ?? 0);
-        const terms = slot.terms ?? termsAt(start);
+        start = slot.startQd;
+        const terms = slot.terms ?? termsAt(start, slot.departureQd);
         timed = terms.service; returnQd = terms.returnQd;
         returnsToOrigin = returnQd > 0 || service.distanceKm === 0
           && (service.kind === "charter" || service.kind === "owned" && !last);
@@ -152,7 +169,7 @@ export function planTransportChain({ cargo, services, startQd = 0, runs = [], ho
       const packed = takeTransportCargo(available, slot.free);
       if (!packed.taken.length) throw new Error("Груз не помещается в транспорт.");
       const load = cargoLoad(packed.taken);
-      const arrivalQd = slot.existing?.arrivalQd ?? slot.departureQd + timed.travelQd + (timed.unloadingQd ?? 0);
+      const arrivalQd = slot.existing?.arrivalQd ?? slot.departureQd + timed.travelQd + (slot.unloadingQd ?? timed.unloadingQd ?? 0);
       if (arrivalQd > horizon) throw new TransportPlanningUnavailableError("horizon", "Доставка выходит за горизонт планирования.");
       const charge = transportServiceCharge(timed, load, arrivalQd + returnQd - start, returnQd);
       if (!service.storageIncluded) {
@@ -171,7 +188,7 @@ export function planTransportChain({ cargo, services, startQd = 0, runs = [], ho
         shipId: service.shipId ?? "", vehicle: slot.vehicle, from: service.from, to: service.to,
         startQd: start, departureQd: slot.departureQd, arrivalQd, releaseQd: arrivalQd + returnQd,
         releaseLocation: finalOwnReturn ? service.endReturnLocation ?? service.from : returnsToOrigin ? service.from : service.to,
-        capacity: service.capacity, reservedLoad: load, cargo: packed.taken, charge, status: "booked", riskBps: timed.riskBps ?? 0 };
+        capacity: slot.capacity ?? service.capacity, reservedLoad: load, cargo: packed.taken, charge, status: "booked", riskBps: timed.riskBps ?? 0 };
       if (slot.existing) {
         for (const key of ["startQd", "departureQd", "arrivalQd", "releaseQd", "releaseLocation", "capacity", "riskBps"]) run[key] = slot.existing[key];
       }

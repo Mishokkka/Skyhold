@@ -8,6 +8,7 @@ export const SETTING_MASS_COMBAT_TAGS = "massCombatTags";
 export const SETTING_DEBUG_LOGS = "debugLogs";
 export const SETTING_ROUTE_GRAPH_VIEW = "routeGraphView";
 export const SETTING_NORMAL_LABOR_QD = "normalLaborQdPerTenday";
+export const MAX_STORAGE_OPERATION_QUANTITY = 1_000_000;
 
 export function isActorStorageTransfer(type) {
   return type === "depositItem" || type === "withdrawResource" || type === "giveStoredItem";

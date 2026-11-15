@@ -3,6 +3,7 @@ import { worldMarketFixture } from "./world-ship-market-characterization-check.m
 import { getSkyholdWorkflowService } from "../workflows/skyhold-workflow-service.js";
 import { prepareMarketAuthorityContext } from "../apps/market/authority-context.js";
 import { transportOfferAccessFixture } from "./fixtures/transport-offer-access.mjs";
+import { SkyholdData } from "../data/store.js";
 
 globalThis.foundry = { applications: { api: {
   ApplicationV2: class { get state() { return 0; } async _prepareContext() { return {}; } }, HandlebarsApplicationMixin: (Base) => Base
@@ -10,17 +11,44 @@ globalThis.foundry = { applications: { api: {
 const { SkyholdMarketApp } = await import("../apps/market-app.js");
 for (const isGM of [true, false]) {
   const { data, holding } = transportOfferAccessFixture();
-  const initial = prepareMarketAuthorityContext({ data, holding, marketId: "a", isGM });
+  const gm = { id: "gm", isGM: true, active: true }, player = { id: "player", isGM: false, active: true };
+  globalThis.game = { user: isGM ? gm : player, users: [gm, player], modules: new Map(), settings: { get() {} }, socket: { emit() {} } };
+  let view = data;
+  SkyholdData.view = () => view;
+  const args = { data, holding, marketId: "a", isGM, outboundQuantities: { "test-freight": 2 } };
+  const automatic = prepareMarketAuthorityContext(args);
+  const carrierId = automatic.quote.carriers.find((row) => row.logistics?.routeAccessCost === 2).id;
+  const pinned = prepareMarketAuthorityContext({ ...args, carrierId });
+  assert.equal(pinned.outbound.plan?.ok, true, "a restrictive inbound chain cannot remove outbound goods");
+  assert.deepEqual(pinned.outbound.offers, automatic.outbound.offers);
+  assert.equal(pinned.outbound.plan.planToken, automatic.outbound.plan.planToken);
+
   const app = new SkyholdMarketApp({ holdingId: holding.id });
-  app.outboundQuantities = { "test-freight": 2 };
-  const args = { data, holding, market: initial.market, economy: initial.economy, resources: initial.resources, isGM };
-  const calculate = () => app._marketOutboundContext({ ...args, quote: app._marketQuote(holding, data, initial.market, args) });
-  const automatic = calculate();
-  app.carrierId = initial.quote.carriers.find((row) => row.logistics?.routeAccessCost === 2).id;
-  const pinned = calculate();
-  assert.equal(pinned.plan?.ok, true, "the actual window must retain outbound goods after choosing a restrictive inbound chain");
-  assert.deepEqual(pinned.offers, automatic.offers);
-  assert.equal(pinned.plan.planToken, automatic.plan.planToken);
+  app.marketId = "a";
+  app.outboundQuantities = args.outboundQuantities;
+  const initial = app._marketSnapshot();
+  assert.deepEqual(initial.outbound.offers, pinned.outbound.offers, "the normal goods window shows the same demand and stock");
+  assert.equal(initial.outbound.plan.revenueCopper, pinned.outbound.plan.revenueCopper);
+  assert.ok(initial.markets.every(market => market.offers.length === 0), "the market selector does not build every catalog");
+  const quote = initial.quote;
+  const offer = quote.offers.find(row => row.resourceId === "test-freight");
+  app.requestRender = () => {};
+  app._setMarketQuantity(offer.id, 2, offer.stock);
+  app._setOutboundQuantity("test-freight", 3, 20);
+  app.merchantSelections[offer.sourceOfferId] = offer.providerId;
+  assert.equal(app._marketSnapshot().quote, quote, "seller and quantity edits use the same live-data quote");
+  app.marketId = "home";
+  assert.notEqual(app._marketSnapshot().quote, quote);
+  app.marketId = "a";
+  assert.equal(app._marketSnapshot().quote, quote, "visiting another market preserves the cached quote for this snapshot");
+
+  view = structuredClone(view);
+  view.catalog.marketEconomy.baseOffers[0].priceOverrideCopper *= 2;
+  const repriced = app._marketSnapshot().quote;
+  assert.notEqual(repriced, quote, "changed world data invalidates quotes");
+  assert.equal(repriced.offers.find(row => row.id === offer.id).unitPriceCopper, offer.unitPriceCopper * 2);
+  game.user = isGM ? player : gm;
+  assert.notEqual(app._marketSnapshot().quote, repriced, "a role change invalidates the visibility-sensitive quote");
 }
 // Inline legacy route selection has been replaced by the shared transport checkout.
 // Goods browsing still honors permissions and preserves both directions independently.
@@ -56,4 +84,49 @@ try {
     }
   }
 } finally { workflow._storageRooms = previousRooms; globalThis.game = previousGame; }
-console.log("Transport UI: goods availability, storage permissions and unified GM/player buy/sell checkout passed.");
+
+{
+  const { data, holding } = worldMarketFixture();
+  let input = 0, prompts = 0, writes = 0, concurrentAmount = null;
+  const warnings = [];
+  globalThis.ui = { notifications: { warn: message => warnings.push(message) } };
+  globalThis.game.user = { id: "gm", isGM: true, active: true };
+  SkyholdData.view = () => data;
+  SkyholdData.skipTransaction = value => ({ skipped: value });
+  SkyholdData.updateHolding = async (id, updater, options) => {
+    assert.equal(id, holding.id); assert.equal(options.fallback, false);
+    const draft = structuredClone(holding);
+    const result = updater(draft);
+    if (result.skipped) return result.skipped;
+    writes += 1;
+    Object.assign(holding, draft);
+    return result;
+  };
+  foundry.applications.api.DialogV2 = { prompt: async config => {
+    prompts += 1;
+    if (concurrentAmount !== null) holding.storage.moneyCopper = concurrentAmount;
+    return input === null ? null : config.ok.callback(null, { form: { elements: { treasury: { valueAsNumber: input } } } });
+  } };
+  const app = new SkyholdMarketApp({ holdingId: holding.id });
+  app.requestRender = () => {};
+  const control = { dataset: { action: "market-edit-treasury" } };
+  const click = () => app._onClick({ target: { closest: () => control }, preventDefault() {} }, { contains: () => true });
+  await click();
+  assert.equal(holding.storage.moneyCopper, 0, "the exact total can be set to zero from the normal market action");
+  assert.equal(holding.storage.log.at(-1).qty, -500000);
+  assert.equal(writes, 1);
+  await click();
+  assert.equal(writes, 1, "saving the same total appends no accounting entry");
+  input = null;
+  await click();
+  assert.equal(writes, 1, "cancelling the form leaves the treasury intact");
+  input = 6; concurrentAmount = 9;
+  await click();
+  assert.equal(holding.storage.moneyCopper, 9);
+  assert.equal(writes, 1, "an older exact total may not overwrite a concurrent change");
+  assert.match(warnings.at(-1), /изменилась/);
+  game.user.isGM = false;
+  await click();
+  assert.equal(prompts, 4, "players never open the edit dialog");
+}
+console.log("Transport UI: goods availability, cached market quotes, unified checkout and GM-only treasury editing passed.");

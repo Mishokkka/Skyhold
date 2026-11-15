@@ -40,7 +40,8 @@ export function availableAuthorityMarkets(data, {
   holding,
   isGM = false,
   economy: preparedEconomy = null,
-  resources: preparedResources = null
+  resources: preparedResources = null,
+  offerLocationIds = null
 } = {}) {
   const locations = data?.catalog?.eventRegions ?? [];
   const resources = preparedResources ?? allResourceDefs({ catalogRows: data?.catalog?.resources });
@@ -61,7 +62,8 @@ export function availableAuthorityMarkets(data, {
     locations: reachableLocations,
     resources,
     isGM,
-    normalizedEconomy: true
+    normalizedEconomy: true,
+    offerLocationIds
   }).map((market) => {
     const routeAccessCost = accessByRegion.get(String(market.regionId ?? ""));
     return {
@@ -117,6 +119,8 @@ export function authorityMarketQuote({
   const locations = data?.catalog?.eventRegions ?? [];
   const economy = preparedEconomy ?? normalizeMarketEconomy(data?.catalog?.marketEconomy, { locations });
   const resources = preparedResources ?? allResourceDefs({ catalogRows: data?.catalog?.resources });
+  const routeAccessCost = market.routeAccessCost
+    ?? marketRegionAccessCostMap({ holding, regions: locations, dependencies: { regionResolver: marketRegionForValue } }).get(String(market.regionId));
   const { logistics, carriers, carrier } = authorityMarketLogistics({
     holding,
     data,
@@ -131,8 +135,7 @@ export function authorityMarketQuote({
   const quote = overlayMarketQuoteStock({
     holding,
     quote: prepareMarketQuote({ holding, market, resources, location: market.locationProfile, logistics,
-      offerAccessCost: discoverTransport ? market.routeAccessCost
-        ?? marketRegionAccessCostMap({ holding, regions: locations, dependencies: { regionResolver: marketRegionForValue } }).get(String(market.regionId)) : null })
+      offerAccessCost: discoverTransport ? routeAccessCost : null })
   });
   const allocated = allocateQuoteToMerchantProviders({
     offers: quote.offers,
@@ -148,8 +151,7 @@ export function authorityMarketQuote({
     location: market.locationProfile,
     // Offer discovery must not inherit a pinned inbound chain's access cost.
     // The selected outbound/own-ship route validates the full URS requirement later.
-    logistics: { ...logistics, routeAccessLevel: marketRegionAccessCostMap({ holding, regions: locations,
-      dependencies: { regionResolver: marketRegionForValue } }).get(String(market.regionId)) ?? logistics.routeAccessLevel },
+    logistics: { ...logistics, routeAccessLevel: routeAccessCost ?? logistics.routeAccessLevel },
     inboundOffers: allocated.priceOffers
   });
   return {

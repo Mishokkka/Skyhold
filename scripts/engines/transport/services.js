@@ -87,7 +87,7 @@ export function transportServicesFromRoutes(routes = [], rawConfiguration = {}, 
       const base = { from: source, to: destination, fromLabel: group.fromLabel, toLabel: group.toLabel, companyId: group.carrierId,
         ...transportHandlingTerms((from === to ? [from] : [from, to].filter(id => id !== homeRegionId)).map(id => handling.get(id))),
         label: `${group.carrierLabel} · ${group.modeLabel}`, mode: group.mode, visibility: group.visibility,
-        capacity, travelQd, loadingQd, unloadingQd,
+        capacity, travelQd, loadingQd, unloadingQd, loadingCapacity, unloadingCapacity,
         profitBps: config.carrierProfitBps, storageIncluded: true, storageMilliCopperPerLoadQd: 0,
         riskBps: transportRiskBps(group.riskExposureQd, config.riskBps),
         distanceKm: group.distanceKm, accessCost: group.accessCost };
@@ -96,7 +96,7 @@ export function transportServicesFromRoutes(routes = [], rawConfiguration = {}, 
         loadMilliCopper: regularTransportRate({ capacityLoad: group.capacityLoad, travelQd, loadingQd, unloadingQd,
           dailyCosts, returnDailyCosts, fixedCopper: Math.ceil(group.dispatchCopper + group.hireCopper + group.distanceCopper),
           loadMilliCopper, commercialLoadBps: config.commercialLoadBps }) };
-      const charter = { ...base, id: `charter:${key}`, kind: "charter", firstQd: 0, loadingCapacity, unloadingCapacity,
+      const charter = { ...base, id: `charter:${key}`, kind: "charter", firstQd: 0,
         preparationQd: config.charterPreparationQd,
         vehicles: config.charterVehicles, returnQd: travelQd,
         dispatchCopper, dailyCosts, returnDailyCosts, loadMilliCopper };

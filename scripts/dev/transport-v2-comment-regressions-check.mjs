@@ -41,7 +41,9 @@ for (const user of [gm, player]) for (const direction of ["inbound", "outbound"]
   const legacy = prepareMarketAuthorityContext({ ...f, marketId: "a", isGM: user.isGM });
   assert.equal(legacy.quote.logistics.routeAccessCost, 3);
   const app = new SkyholdMarketApp({ holdingId: f.holding.id });
-  const quote = app._marketQuote(f.holding, f.data, legacy.market, { isGM: user.isGM });
+  SkyholdData.view = () => f.data;
+  app.marketId = legacy.market.id;
+  const { quote } = app._marketSnapshot();
   const offer = quote.offers.find(row => row.resourceId === "test-freight");
   assert.ok(offer, "the ordinary market window shows cargo available on the own vessel's legal route");
   assert.equal(offer.requiredUrs, 3);

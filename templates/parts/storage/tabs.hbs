@@ -24,10 +24,10 @@
             <button type="button" class="fbls-button compact" data-action="check-storage-transfer" data-storage-holding-id="{{holding.id}}" title="Проверить квитанцию обмена {{pendingStorageTransfer}}" aria-label="Проверить исход обмена"><i class="fa-solid fa-clipboard-check" aria-hidden="true"></i> Проверить исход обмена</button>
           {{/if}}{{/if}}
 
-          <div class="fbls-storage-global-search {{#if activeStorage.resources}}with-add-row{{/if}}">
+          <div class="fbls-storage-global-search">
             <label><i class="fa-solid fa-magnifying-glass"></i><input type="search" data-storage-search value="{{storageContext.searchQuery}}" placeholder="Найти ресурс или предмет во всех помещениях…" autocomplete="off" /></label>
             {{#if activeStorage.resources}}
-              {{#if isGM}}<button type="button" class="fbls-button compact fbls-storage-add-row" data-action="add-storage-resource" aria-label="Выбрать материал для добавления"><i class="fa-solid fa-plus"></i><span>Материал</span></button>{{/if}}
+              {{#if isGM}}<button type="button" class="fbls-button fbls-button-role primary fbls-storage-add-row" data-action="add-storage-resource"><i class="fa-solid fa-plus" aria-hidden="true"></i><span>Добавить ресурс</span></button>{{/if}}
             {{/if}}
             <section class="fbls-storage-search-results" data-storage-search-panel hidden>
               <header><strong>Найдено: <span data-storage-search-count>0</span></strong><small data-storage-search-summary>по всем помещениям</small></header>

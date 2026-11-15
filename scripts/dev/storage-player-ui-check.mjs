@@ -858,13 +858,87 @@ game.user.isGM = false;
   }
 }
 
+{
+  const saved = structuredClone(data);
+  const pick = SkyholdResourceCatalogEditor.pick, dialog = SkyholdStorageActionDialog.open, storageRooms = manager._storageRooms;
+  let choose, amount = 7, switchHolding = false;
+  const commands = [];
+  const execute = createStorageOperationExecutor({ getUser: () => game.user });
+  registerStorageOperationExecutor((operation, sender) => {
+    commands.push(operation);
+    return execute(operation, sender);
+  });
+  try {
+    game.user.isGM = true;
+    manager.activeHoldingId = "a";
+    manager._storageRooms = FinanceStorageDomain._storageRooms;
+    const roomId = "new-stockroom";
+    const holding = data.holdings[0];
+    holding.buildings.list = [{ id: roomId, name: "Малая кладовая", constructionStatus: "built",
+      functions: { storage: true }, storage: { capacity: 5 * resourceUnitLoad("wood") } }];
+    holding.storage.resources = [];
+    holding.storage.log = [];
+    holding.special.transportV2.orders = [];
+    const open = () => manager._onAddStorageResource({ preventDefault() {}, stopPropagation() {},
+      currentTarget: { closest: () => ({ dataset: { storageHoldingId: holding.id, roomId } }) } });
+    const material = { id: "wood", label: "Дерево" };
+    const stock = () => data.holdings[0].storage.resources.map(row => [row.roomId, row.qty]).sort();
+    SkyholdResourceCatalogEditor.pick = options => { choose = options.onSelect; };
+    SkyholdStorageActionDialog.open = async (config) => {
+      assert.match(config.description, /Малая кладовая/);
+      if (switchHolding) manager.activeHoldingId = "b";
+      return amount;
+    };
+    open();
+    await choose(material);
+    assert.equal(manager.activeStorageRoomId, roomId);
+    assert.deepEqual(stock(), [[roomId, 5], ["outdoors", 2]], "the chosen amount is stored and excess appears outside");
+    assert.deepEqual(data.holdings[0].storage.log.map(row => [row.roomId, row.qty]),
+      [[roomId, 5], ["outdoors", 2]], "the journal reflects both actual placements");
+    assert.equal(commands[0].qty, 7);
+    const stored = structuredClone(data.holdings[0]);
+    const replay = await execute(commands[0], { userId: game.user.id });
+    assert.equal(replay.roomId, roomId);
+    assert.deepEqual(data.holdings[0], stored, "replay returns the original placement without adding another batch");
+
+    amount = 3;
+    open();
+    await choose(material);
+    assert.equal(manager.activeStorageRoomId, "outdoors", "show the actual room if nothing fit in the selected one");
+    assert.deepEqual(stock(), [[roomId, 5], ["outdoors", 5]]);
+    amount = null;
+    open();
+    await choose(material);
+    assert.equal(commands.length, 2, "cancelling the quantity prompt never issues a write");
+    amount = 1; switchHolding = true;
+    const other = structuredClone(data.holdings[1]);
+    open();
+    await choose(material);
+    assert.equal(commands.at(-1).holdingId, "a", "the dialog is tied to the holding it opened from");
+    assert.deepEqual(data.holdings[1], other);
+    assert.equal(manager.activeHoldingId, "b");
+
+    game.user.isGM = false;
+    choose = null;
+    open();
+    assert.equal(choose, null, "players cannot open the add-resource picker");
+    assert.equal(commands.length, 3);
+  } finally {
+    Object.assign(data, saved);
+    SkyholdResourceCatalogEditor.pick = pick;
+    SkyholdStorageActionDialog.open = dialog;
+    manager._storageRooms = storageRooms;
+    game.user.isGM = false;
+  }
+}
+
 for (const file of ["resources", "items", "tabs", "log"]) {
   const template = readFileSync(`templates/parts/storage/${file}.hbs`, "utf8");
   const stack = [];
   for (const match of template.matchAll(/{{#(if|unless|each)\s+([^}]+)}}|{{\/(if|unless|each)}}|<input\b[^>]*>|<button\b[^>]*>/g)) {
     if (match[1]) stack.push(match[2]);
     else if (match[3]) stack.pop();
-    else if (/data-field=|data-storage-money-field=|data-action="(?:adjust-storage-money|clear-storage-log|pick-storage-resource|check-storage-transfer)"/.test(match[0])) {
+    else if (/data-field=|data-storage-money-field=|data-action="(?:add-storage-resource|adjust-storage-money|clear-storage-log|pick-storage-resource|check-storage-transfer)"/.test(match[0])) {
       assert.ok(stack.some(condition => /^(?:\.\.\/)?isGM$/.test(condition)), `${file}: a GM-only control must be gated by GM permissions`);
     }
   }

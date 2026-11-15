@@ -3,7 +3,7 @@ import {
   storageResourceId,
   resourceBasePriceCopper
 } from "../../../core/resources.js";
-import { formatCopperCurrency } from "../../../core/currency.js";
+import { copperDenominations, formatCopperCurrency } from "../../../core/currency.js";
 import { calculatePlannedWorkerWage, financeObligationOutstandingCopper } from "../../../engines/economy/finance-obligations.js";
 import { financePeriodIdentity, prepareFinancePeriod } from "../../../engines/economy/finance-period.js";
 import { isResidentInPopulation } from "../../../data/resident-presence.js";
@@ -236,10 +236,7 @@ _addMoney(holding, amount = 0) {
 },
 
 _moneyContext(holding) {
-  const totalCopper = this._moneyCopper(holding);
-  const gold = Math.floor(totalCopper / 100);
-  const silver = Math.floor((totalCopper % 100) / 10);
-  const copper = totalCopper % 10;
+  const { totalCopper, gold, silver, copper } = copperDenominations(this._moneyCopper(holding));
   return {
     totalCopper,
     gold,

@@ -927,6 +927,12 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
     }, listenerOptions);
 
     root.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.isComposing
+        && event.target?.matches?.("[data-storage-money-field], [data-storage-row-id] input[data-field$='.qty']")) {
+        event.preventDefault();
+        event.target.blur();
+        return;
+      }
       if (event.key !== "Enter" && event.key !== " ") return;
       if (event.target?.closest?.("button, input, textarea, select, a[href], [contenteditable='true']")) return;
       const element = event.target?.closest?.("[data-action][role='button']");
