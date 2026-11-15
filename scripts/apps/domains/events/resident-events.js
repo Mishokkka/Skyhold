@@ -607,14 +607,14 @@ async _onDeleteRow(event) {
   const data = SkyholdData.view();
   const scope = collection.match(/^holdings\.(\d+)\.(.+)$/);
   const holdingId = button.dataset.holdingId ?? (scope ? data.holdings[Number(scope[1])]?.id : null);
+  if (scope?.[2] === "buildings.list") return this._executeBuildingContextAction(rowId, "delete", holdingId);
   const collectionIn = (root) => {
     if (!scope) return game.user?.isGM ? collection : "";
     const { holding, index } = findReadableHoldingEntry(root, holdingId);
     if (!holding) return "";
     if (!game.user?.isGM) {
       const permissions = holdingPermissionContext(holding);
-      if (!(scope[2] === "special.list" && permissions.canEditSpecial
-        || scope[2] === "buildings.list" && permissions.canEditBuildings)) return "";
+      if (!(scope[2] === "special.list" && permissions.canEditSpecial)) return "";
     }
     return index >= 0 ? `holdings.${index}.${scope[2]}` : "";
   };

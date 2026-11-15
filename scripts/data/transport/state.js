@@ -128,7 +128,7 @@ export function outboundStorageLotConflicts(holding) {
   ]);
 }
 
-export function expireTransportReservation(holding, row, batch, confirmedCargo) {
+export function expireTransportReservation(holding, row, batch, confirmedCargo, { preview = false } = {}) {
   const rowId = String(row?.id ?? "").trim();
   const batchId = String(batch?.id ?? "").trim();
   if (!rowId || !batchId) return 0;
@@ -145,6 +145,7 @@ export function expireTransportReservation(holding, row, batch, confirmedCargo) 
       const remaining = Math.max(0, lot.qty - (order.dispatched?.[lot.lotId] ?? 0));
       const loaded = Math.min(remaining, confirmedCargo?.get(order.id)?.get(lot.lotId) ?? 0);
       confirmedQty += loaded;
+      if (preview) continue;
       if (remaining > loaded) {
         order.sourceSpoiledPending ??= {};
         order.sourceSpoiledPending[lot.lotId] = remaining - loaded;

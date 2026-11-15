@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { SkyholdData } from "../data/store.js";
 import { normalizeResourceRow } from "../core/resources.js";
+import { FinanceStorageDomain } from "../apps/domains/finance/storage-domain.js";
+import { normalizeStorageRoomId } from "../engines/storage/capacity.js";
 
 const previous = Object.fromEntries(["foundry", "game", "ui"].map(key => [key, globalThis[key]]));
 const original = { get: SkyholdData.get, transaction: SkyholdData.transaction, updateHolding: SkyholdData.updateHolding };
@@ -21,7 +23,7 @@ try {
   const originalPick = SkyholdResourceCatalogEditor.pick;
   SkyholdResourceCatalogEditor.pick = options => { picker = options; };
   const event = (dataset, storageRowId) => ({ currentTarget: { dataset,
-    closest: () => ({ dataset: { storageHoldingId: "a", storageRowId } }) }, preventDefault() {} });
+    closest: () => ({ dataset: { storageHoldingId: "a", storageRowId, storageRowRoomId: "outdoors" } }) }, preventDefault() {} });
   const resource = { id: "stone", label: "Камень" };
   const app = Object.create(SkyholdBuildingEditor.prototype);
   app._canEditBuilding = () => true;
@@ -67,7 +69,11 @@ try {
     return result?.value ?? result;
   };
   const manager = {
+    ...FinanceStorageDomain,
     activeHoldingId: "a", _canUseStorage: () => true,
+    _normalizeStorageRoomId: normalizeStorageRoomId,
+    _safeNumber: (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback,
+    _storageRooms: () => [{ id: "outdoors", available: true, unlimited: true }],
     _activeWritableHoldingId() { return this.activeHoldingId; },
     _updateActiveHolding(updater) { return updater(data.holdings.find(holding => holding.id === this.activeHoldingId)); },
     requestRender() {}

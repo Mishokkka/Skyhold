@@ -28,6 +28,7 @@ import { FinanceStorageItemDocumentDomain } from "./storage/item-document-domain
 import { composeDomainGroup } from "../compose-domain.js";
 import { createMarketVisibility, marketLogSources } from "../../../data/market/visibility.js";
 import { hiddenStorageRoomIds } from "../../../data/access-guard.js";
+import { appendStorageLogEntries, BUILDING_DEMOLITION_LOG_SOURCE } from "../../../data/storage-log.js";
 import {
   addResourceBatches,
   availableResourceBatchInventory,
@@ -49,15 +50,20 @@ const PUBLIC_STORAGE_SOURCES = new Set([
   "Склад", "Ручная правка", "Перемещение", "Пакетное перемещение",
   "Инвентарь Foundry", "Предмет Foundry", "Выдача Foundry",
   "Казна", "Питание поселения", "Порча сырья", "Порча запасов", "Управление кадров",
-  "Перевозки", "Отправление груза"
+  "Перевозки", "Отправление груза", BUILDING_DEMOLITION_LOG_SOURCE
 ]);
 const MANUAL_STORAGE_LOG_KINDS = new Set(["manual-add", "manual-spend"]);
 
 function publicStorageLogNote(row, visibleRoomNames) {
-  const note = String(row.note ?? "");
+  let note = String(row.note ?? "");
   if (row.source === "Выдача Foundry" && note.startsWith("получатель: ")) return "";
   if ((row.source === "Предмет Foundry" || row.source === "Инвентарь Foundry") && note.startsWith("из ")) {
     return note.includes(" · переполнение: ") ? "переполнение" : "";
+  }
+  if (["production", "income"].includes(row.kind) && /^собрано у\s/u.test(note)) {
+    // Legacy collection records included the other building's name in free text.
+    const overflow = note.lastIndexOf("; переполнение: ");
+    note = "Собрано работником-потребителем" + (overflow >= 0 ? note.slice(overflow) : "");
   }
   return note.replace(/(^| · |; |, )переполнение: ([\s\S]*)$/u,
     (match, prefix, label) => visibleRoomNames.has(label) ? match : `${prefix}переполнение`);
@@ -95,6 +101,9 @@ function publicStorageLog(holding, log, roomsById, hiddenRooms) {
   }
   return log.flatMap((row) => {
     if (hiddenRoom(row.roomId)) return [];
+    if (row.source === BUILDING_DEMOLITION_LOG_SOURCE) {
+      return roomId(row.roomId) === "outdoors" ? [{ ...row, note: "" }] : [];
+    }
     if (!isStorageMoveLog(row)) return [row];
     if (hiddenMoves.has(row.operationId) || !roomsById.has(roomId(row.roomId))) return [];
     const receipt = receipts.get(row.operationId);
@@ -289,6 +298,14 @@ _storageAvailableRowQuantity(holding, row = {}) {
   return availableResourceRowQuantity(row, holding);
 },
 
+_storageRowFitsAfterEdit(holding, row, replacement) {
+  const roomId = this._normalizeStorageRoomId(row.roomId ?? row.storageRoomId);
+  const room = this._storageRooms(holding, { includeUnavailable: true }).find((entry) => entry.id === roomId);
+  const effectiveLoad = resource => storageEffectiveRowLoad(room, resource, this._storageRowLoad(resource));
+  const load = effectiveLoad(replacement) - effectiveLoad(row);
+  return load <= 0 || Boolean(room?.available && (room.unlimited || load <= room.free + 0.0001));
+},
+
 _setStorageResourceQuantity(holding, row, quantity) {
   if (!Number.isSafeInteger(quantity) || quantity < 0) {
     return { ok: false, message: "Введите целое неотрицательное количество." };
@@ -302,10 +319,7 @@ _setStorageResourceQuantity(holding, row, quantity) {
     const taken = takeResourceBatches(row, -delta, { holding, makeId });
     if (taken.takenQty !== -delta) throw new Error("Не удалось изменить количество партии.");
   } else {
-    const roomId = this._normalizeStorageRoomId(row.roomId ?? row.storageRoomId);
-    const room = this._storageRooms(holding, { includeUnavailable: true }).find((entry) => entry.id === roomId);
-    const load = delta * this._storageUnitLoad(row) * storageProfileLoadMultiplier(room, row);
-    if (!room?.available || (!room.unlimited && load > room.free + 0.0001)) {
+    if (!this._storageRowFitsAfterEdit(holding, row, { ...row, qty: quantity })) {
       return { ok: false, message: "Помещение недоступно или в нём мало места. Для пополнения с переносом излишка используйте добавление ресурса." };
     }
     addResourceBatches(row, { qty: delta }, { holding, makeId });
@@ -476,32 +490,7 @@ _storagePaymentDependencies() {
 },
 
 _appendStorageLog(holding, entries = []) {
-  if (!holding.storage) holding.storage = { notes: "", resources: [], moneyCopper: 0, log: [] };
-  if (!Array.isArray(holding.storage.log)) holding.storage.log = [];
-  const now = new Date().toISOString();
-  const laputaDateText = String(holding?.gm?.calendaria?.lastDateText ?? holding?.gm?.calendaria?.lastDateKey ?? "").trim();
-  for (const raw of entries) {
-    const qty = Math.trunc(this._safeNumber(raw?.qty, 0));
-    if (!qty && raw?.kind !== "note") continue;
-    const id = storageResourceId(raw);
-    const name = id === "custom" ? String(raw?.name ?? "Ресурс") : resourceLabel(id);
-    const roomId = isStorageMoneyResource(raw) ? "" : this._normalizeStorageRoomId(raw?.roomId ?? raw?.storageRoomId);
-    holding.storage.log.push({
-      id: makeId("slog", 12),
-      ts: raw?.ts ?? now,
-      laputaDateText: String(raw?.laputaDateText ?? raw?.holdingDateText ?? laputaDateText),
-      kind: String(raw?.kind ?? "manual"),
-      resourceId: id,
-      name,
-      qty,
-      roomId,
-      source: String(raw?.source ?? ""),
-      note: String(raw?.note ?? ""),
-      period: String(raw?.period ?? ""),
-      operationId: String(raw?.operationId ?? "")
-    });
-  }
-  holding.storage.log = holding.storage.log.slice(-250);
+  appendStorageLogEntries(holding, entries);
 },
 
 _applyManualStorageChange(holding, { resourceId = "", name = "", qty = 0, note = "", kind = "manual-add", roomId = "outdoors",

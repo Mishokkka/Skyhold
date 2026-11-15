@@ -193,7 +193,7 @@ async _prepareTendayOperation({ holdingId = "", qd = 40, rationUnitsPerResident 
   }
   const foodAvailable = Number(rawReport?.food?.availableBeforeConsumption);
   const readiness = await this._tendayReadinessContext(sourceSnapshot, {
-    foodProjection: Number.isFinite(foodAvailable) ? { available: foodAvailable } : null
+    foodProjection: Number.isFinite(foodAvailable) ? { available: foodAvailable, needed: rawReport?.food?.needed } : null
   });
   const recovery = this._advanceResidentRecovery(previewHolding, Math.floor(periodQd / 4));
   if (recovery.recovered) rawReport.work.push(`Выздоровело жителей: ${recovery.recovered}.`);

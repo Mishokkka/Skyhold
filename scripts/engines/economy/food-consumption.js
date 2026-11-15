@@ -73,6 +73,7 @@ export function runFoodConsumption({
   const compactBatches = !deps.isResourceBatchPeriodActive(holding);
   for (const row of edibleRows) deps.syncResourceRowBatches(row, { compact: compactBatches });
   const availableBeforeConsumption = edibleRows.reduce((sum, row) => sum + deps.availableResourceRowQuantity(row, holding), 0);
+  if (report?.food) report.food.availableBeforeConsumption = availableBeforeConsumption;
   const ration = deps.resolveFoodRation({
     residentDays,
     available: availableBeforeConsumption,
@@ -183,7 +184,6 @@ export function runFoodConsumption({
     report.food.needed += needed;
     report.food.eaten += eaten;
     report.food.hungryResidentDays += hungryResidentDays;
-    report.food.availableBeforeConsumption = availableBeforeConsumption;
     report.food.minimumNeeded = Math.max(0, Number(report.food.minimumNeeded) || 0) + ration.minimumTarget;
     report.food.selectedUnits = selectedUnits;
     report.food.selectedTier = ration.selectedTier;

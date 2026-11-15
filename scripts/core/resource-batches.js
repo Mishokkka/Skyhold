@@ -124,10 +124,10 @@ export function cancelResourceBatchPeriod(holding) {
 }
 
 /** Keep the part already loaded aboard until the holding posts its dispatch. */
-export function expireResourceBatch(holding, row, batch) {
+export function expireResourceBatch(holding, row, batch, confirmedCargo) {
   const period = activePeriods.get(holding);
   if (period?.transportState) period.confirmedOutbound ??= confirmedOutboundCargo(holding, period.transportState);
-  const kept = Math.min(batch.qty, expireTransportReservation(holding, row, batch, period?.confirmedOutbound));
+  const kept = Math.min(batch.qty, expireTransportReservation(holding, row, batch, confirmedCargo ?? period?.confirmedOutbound));
   const expired = batch.qty - kept;
   batch.qty = kept;
   return expired;

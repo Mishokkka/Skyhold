@@ -8,6 +8,7 @@ import { sellerQualification } from "../../../engines/workers/seller-qualificati
 import { rollD6Pool } from "../../../core/helpers.js";
 import { scaleProductionCosts } from "../../../core/production-expenses.js";
 import { advanceBuildingProject, buildingOperationalState } from "../../../core/building-state.js";
+import { hiddenBuildingIds } from "../../../data/access-guard.js";
 import { isMedicalBuilding } from "../../../core/building-specials.js";
 import { evaluateArithmeticExpression, rollInlineDice } from "../../../core/formula.js";
 import {
@@ -41,7 +42,7 @@ import {
   resolveConstructionAttempt
 } from "../../../engines/economy/construction-stages.js";
 import { isFoodResource, runFoodConsumption } from "../../../engines/economy/food-consumption.js";
-import { foodRationTierLabel, normalizeFoodRationUnits, resolveFoodRation } from "../../../engines/economy/food-rations.js";
+import { foodRationTarget, foodRationTierLabel, normalizeFoodRationUnits, resolveFoodRation } from "../../../engines/economy/food-rations.js";
 import { isResidentInPopulation } from "../../../data/resident-presence.js";
 import {
   applySettlementHunger,
@@ -73,6 +74,7 @@ import { beginPerishableStoragePeriod, cancelPerishableStoragePeriod, expireProd
 import { politicsPeriodIndex } from "../../../engines/politics/rules.js";
 import { finishPoliticsPeriod, politicsTributeObligation, preparePoliticsPeriod, refreshPoliticsPeriodEffects } from "../../../engines/politics/period.js";
 import { politicsDecisionContext } from "../../politics-decision-context.js";
+import { politicsRuntimeEffects } from "../../../engines/politics/runtime-effects.js";
 import { appendHoldingOperation } from "../../../data/operations.js";
 import {
   buildPlannedWorkSlots,
@@ -90,13 +92,17 @@ async _tendayReadinessContext(holding, { foodProjection: suppliedFoodProjection 
   const living = (holding?.people?.list ?? []).filter((person) => isResidentInPopulation(person, holding));
   const foodStored = (holding?.storage?.resources ?? [])
     .filter((row) => this._isFoodResource(row))
-    .reduce((sum, row) => sum + Math.max(0, Math.floor(this._safeNumber(row?.qty, 0))), 0);
+    .reduce((sum, row) => sum + availableResourceRowQuantity(row, holding), 0);
   const foodProjection = suppliedFoodProjection ?? await this._projectTendayFood(holding);
   const foodAvailable = foodProjection.available;
   const foodProduced = Math.max(0, foodAvailable - foodStored);
-  const foodNeeded = living.length * 10;
+  const foodNeeded = foodProjection.needed ?? foodRationTarget({
+    residents: living.length, days: 10, unitsPerTenday: holding.gm?.food?.rationUnitsPerResident,
+    multiplier: politicsRuntimeEffects(holding)?.foodMultiplier ?? 1
+  });
   const injured = living.filter((person) => this._safeNumber(person?.injuredDays, 0) > 0).length;
-  const buildings = holding?.buildings?.list ?? [];
+  const hidden = hiddenBuildingIds(holding);
+  const buildings = (holding?.buildings?.list ?? []).filter(building => !hidden.has(String(building.id)));
   const damaged = buildings.filter((building) => {
     const state = buildingOperationalState(building);
     return state.lifecycle === "active" && state.condition !== "intact";
@@ -177,7 +183,7 @@ async _projectTendayFood(holding) {
   }
   const available = (preview?.storage?.resources ?? [])
     .filter((row) => this._isFoodResource(row))
-    .reduce((sum, row) => sum + Math.max(0, Math.floor(this._safeNumber(row?.qty, 0))), 0);
+    .reduce((sum, row) => sum + availableResourceRowQuantity(row, preview), 0);
   return { available, report };
 },
 
@@ -216,7 +222,7 @@ async _runTradeForQd(holding, qd = 0, report = null, workerContext = null, { ran
   });
 },
 
-_pushProductionPlacement(report, holding, sourceName, resourceName, placements = [], extra = "", resourceId = "") {
+_pushProductionPlacement(report, holding, sourceName, resourceName, placements = [], extra = "", resourceId = "", { note = extra } = {}) {
   const normalizedResourceId = normalizeResourceId(resourceId, resourceName);
   for (const item of placements) {
     const room = item.roomId ? this._storageRoomLabel(holding, item.roomId) : "Счетчик денег";
@@ -230,7 +236,7 @@ _pushProductionPlacement(report, holding, sourceName, resourceName, placements =
       qty: item.qty,
       roomId: item.roomId,
       source: sourceName,
-      note: [extra.trim(), item.overflowFrom ? `переполнение: ${this._storageRoomLabel(holding, item.overflowFrom)}` : ""].filter(Boolean).join("; ")
+      note: [note.trim(), item.overflowFrom ? `переполнение: ${this._storageRoomLabel(holding, item.overflowFrom)}` : ""].filter(Boolean).join("; ")
     });
   }
 },
@@ -1380,7 +1386,8 @@ async _tryCollectResourceForConsumer(holding, consumerBuilding, resource, budget
       const placements = this._storageAddWithOverflow(holding, output, pending);
       line.pendingQty = 0;
       collected += pending;
-      this._pushProductionPlacement(report, holding, consumerBuilding.name || "Здание", output.name, placements, ` собрано у ${sourceBuilding.name || "здания"}`, output.resourceId);
+      this._pushProductionPlacement(report, holding, consumerBuilding.name || "Здание", output.name, placements,
+        ` собрано у ${sourceBuilding.name || "здания"}`, output.resourceId, { note: "Собрано работником-потребителем" });
     }
   }
   return collected;
@@ -1812,9 +1819,6 @@ async _runEconomyForQd(holding, periodQd = 40, { operationId = "", createdAt = "
 
   await this._runBuildingIncomeForQd(holding, qd, report, { buildings, workerContext, financeContext });
 
-  report.food.availableBeforeConsumption = (holding?.storage?.resources ?? [])
-    .filter((row) => this._isFoodResource(row))
-    .reduce((sum, row) => sum + Math.max(0, Math.floor(this._safeNumber(row?.qty, 0))), 0);
   this._runFoodConsumptionForQd(holding, qd, report, { residentPresenceDaysById });
   const fullyFed = report.food.needed > 0 && report.food.effectiveTier === report.food.selectedTier && !report.food.fallback
     && report.food.eaten >= report.food.needed;

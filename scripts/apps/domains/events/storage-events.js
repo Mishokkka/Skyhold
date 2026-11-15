@@ -8,6 +8,7 @@ import { findHoldingOperation } from "../../../data/operations.js";
 import { makeId } from "../../../data/utils.js";
 import { reservedResourceBatchQuantities } from "../../../core/resource-batches.js";
 import { reclassifyResourceRow } from "../../../core/resources.js";
+import { storageExpiresInQd } from "../../../engines/economy/perishable-storage.js";
 import { createSafeIcon, escapeHtml } from "../../../core/helpers.js";
 import { DUPLICATE_STORAGE_ROW, indexStorageRows, MAX_STORAGE_BATCH_ROWS, resolveStorageRow,
   STORAGE_BATCH_TOO_LARGE, STORAGE_ROW_CHANGED } from "../../../engines/storage/row-identity.js";
@@ -180,11 +181,15 @@ _onPickStorageResource(event) {
   const holdingId = String(card?.dataset?.storageHoldingId ?? "");
   const holding = data?.holdings?.find((entry) => String(entry.id) === holdingId);
   const rowId = card?.dataset?.storageRowId;
+  const roomId = this._normalizeStorageRoomId(card?.dataset?.storageRowRoomId);
   let source;
   if (scope === "row") {
     const { row, message } = resolveStorageRow(holding?.storage?.resources, rowId);
     if (!row) return ui.notifications.warn(message);
     if (button.dataset.resourceId && row.resourceId !== button.dataset.resourceId) return ui.notifications.warn(STORAGE_ROW_CHANGED);
+    if (this._normalizeStorageRoomId(row.roomId ?? row.storageRoomId) !== roomId) {
+      return ui.notifications.warn(STORAGE_ROW_CHANGED);
+    }
     if (reservedResourceBatchQuantities(holding, row).size) return ui.notifications.warn(RESERVED_RESOURCE_MESSAGE);
     source = row;
   }
@@ -195,7 +200,9 @@ _onPickStorageResource(event) {
         const result = await SkyholdData.updateHolding(holdingId, (draft) => {
           const { row, message } = resolveStorageRow(draft?.storage?.resources, rowId);
           if (!row) return SkyholdData.skipTransaction({ ok: false, message });
-          if (row.resourceId !== source.resourceId || row.name !== source.name) {
+          if (row.resourceId !== source.resourceId || row.name !== source.name
+            || this._normalizeStorageRoomId(row.roomId ?? row.storageRoomId) !== roomId
+            || stableDataHash(row.batches) !== stableDataHash(source.batches)) {
             return SkyholdData.skipTransaction({ ok: false, message: STORAGE_ROW_CHANGED });
           }
           if (reservedResourceBatchQuantities(draft, row).size) {
@@ -203,6 +210,12 @@ _onPickStorageResource(event) {
           }
           const replacement = reclassifyResourceRow(row, String(resource.id ?? "custom"));
           if (replacement === row) return SkyholdData.skipTransaction({ ok: true });
+          if (!this._storageRowFitsAfterEdit(draft, row, replacement)) {
+            return SkyholdData.skipTransaction({ ok: false, message: "Для нового материала в этом помещении недостаточно места. Сначала переместите часть запаса." });
+          }
+          if (replacement.batches.some(batch => storageExpiresInQd(draft, replacement, batch.ageQd) <= 0)) {
+            return SkyholdData.skipTransaction({ ok: false, message: "Для нового материала срок хранения одной из партий уже истёк. Сначала сверьте состав и возраст запасов." });
+          }
           draft.storage.resources[draft.storage.resources.indexOf(row)] = replacement;
           return { ok: true };
         }, { fallback: false, reason: "storage:pick-row-resource" });

@@ -9,6 +9,7 @@ import { SkyholdWorkflowService } from "../workflows/skyhold-workflow-service.js
 import { SkyholdData } from "../data/store.js";
 import { normalizeSkyholdData, normalizeHoldingsPartition } from "../data/normalizers.js";
 import { SETTING_CATALOG, SETTING_META } from "../data/constants.js";
+import { applyBuildingDemolition, planBuildingDemolition } from "../data/building-demolition.js";
 
 globalThis.game = { user: { id: "gm", isGM: true }, users: [{ id: "gm", isGM: true, active: true }],
   settings: { get: () => undefined }, modules: new Map(), time: { worldTime: 0 } };
@@ -384,7 +385,7 @@ assert.deepEqual(await splitTendays(true), await splitTendays(false), "a sequent
 }
 // A decision can commit the physical manifest before the holding's Apply.
 // A subsequent catalog edit cannot change what went aboard or the insured loss.
-for (const [departureQd, confirmedFresh] of [[1, true], [41, true], [1, false]]) {
+for (const [departureQd, confirmedFresh, demolish] of [[1, true], [41, true], [1, false], [41, true, true]]) {
   const f = food({ lifetime: 100 });
   const prior = f.holding.special.transportV2.orders[0];
   f.holding.special.transportV2.orders = [];
@@ -407,6 +408,17 @@ for (const [departureQd, confirmedFresh] of [[1, true], [41, true], [1, false]])
   assert.equal(h.holding().special.transportV2.orders[0].stages[0].receipts.length, 0);
   await h.setShelfLife("tenday-food", confirmedFresh ? 1 : 100);
   h.reload();
+  if (demolish) {
+    const holding = h.holding(), row = holding.storage.resources[0];
+    row.roomId = "cold-room"; row.batches[0].ageQd = 1;
+    holding.buildings.list.push({ id: "cold-room", name: "Погреб", visibility: "gm", functions: { storage: true } });
+    const plan = planBuildingDemolition(holding, "cold-room", h.data.meta.transportV2);
+    assert.equal(plan.spoiledQty, 2, "demolition previews only the unshipped part of the expired warehouse batch");
+    assert.equal(row.qty, 12, "opening demolition preview cannot post warehouse stock");
+    applyBuildingDemolition(holding, plan);
+    h.reload();
+    assert.equal(h.holding().storage.resources[0]?.qty, 10, "demolition must preserve the loaded units until local dispatch");
+  }
   if (departureQd > 40) {
     await h.apply(await h.prepare());
     h.reload();

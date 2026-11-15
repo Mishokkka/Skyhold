@@ -23,6 +23,8 @@ const { SkyholdStorageActionDialog } = await import("../apps/storage-action-dial
 const { NavigationEventDomain } = await import("../apps/domains/events/navigation-events.js");
 const { GmEventDomain } = await import("../apps/domains/events/gm-events.js");
 const { ResidentEventDomain } = await import("../apps/domains/events/resident-events.js");
+const { BuildingEventDomain } = await import("../apps/domains/events/building-events.js");
+const { SkyholdResourceCatalogEditor } = await import("../apps/editors/resource-catalog-editor.js");
 
 class Element {
   constructor(tag) { this.tag = tag; this.dataset = {}; this.style = {}; this.children = []; this.classList = { add() {} }; }
@@ -202,8 +204,45 @@ assert.deepEqual(data, afterOtherEdit, "an absolute edit in a stale field must n
     await edit(10, 6);
     assert.equal(row(0).qty, 10);
     assert.equal(data.holdings[0].storage.log.at(-1).qty, 4);
-    await edit(9, 10);
-    assert.equal(row(0).qty, 9);
+    const pick = SkyholdResourceCatalogEditor.pick;
+    let select;
+    try {
+      SkyholdResourceCatalogEditor.pick = options => { select = options.onSelect; };
+      const open = () => manager._onPickStorageResource({ preventDefault() {}, currentTarget: {
+        dataset: { storagePickerScope: "row", resourceId: row(0).resourceId },
+        closest: () => ({ dataset: { storageHoldingId: "a", storageRowId: wood.id, storageRowRoomId: "small-room" } })
+      } });
+      open();
+      const full = structuredClone(data);
+      await select({ id: "marble" });
+      assert.deepEqual(data, full, "the heavier material cannot double effective load through the picker");
+      await edit(9, 10);
+      open();
+      data.holdings[0].storage.resources[0].roomId = "outdoors";
+      await select({ id: "stone" });
+      assert.equal(row(0).resourceId, "wood", "the picker cannot change a row transferred from its rendered room");
+      data.holdings[0].storage.resources[0].roomId = "small-room";
+      open();
+      row(0).batches[0].ageQd = 8;
+      const aged = structuredClone(data);
+      await select({ id: "stone" });
+      assert.deepEqual(data, aged, "a changed batch needs a new material selection");
+      open();
+      await select({ id: "milk" });
+      assert.deepEqual(data, aged, "correcting material identity cannot introduce stock at its expiry boundary");
+      row(0).batches[0].ageQd = 4;
+      const room = data.holdings[0].buildings.list.find(entry => entry.id === "small-room");
+      room.storage.profileResourceIds = ["wood", "marble"];
+      room.storage.profileCapacityMultiplier = 0.5;
+      open();
+      await select({ id: "marble" });
+      assert.equal(row(0).resourceId, "marble");
+      assert.equal(row(0).qty, 9, "reclassification uses the effective load of the selected material");
+      assert.deepEqual(row(0).batches.map(({ qty, ageQd }) => [qty, ageQd]), [[5, 4], [4, 0]]);
+      assert.ok(manager._storageRooms(data.holdings[0]).find(entry => entry.id === "small-room").used <= room.storage.capacity);
+    } finally {
+      SkyholdResourceCatalogEditor.pick = pick;
+    }
   } finally {
     Object.assign(data, saved);
   }
@@ -621,6 +660,9 @@ productionReceipt("production-names", [
 productionReceipt("truncated-production", [output("public-producer", "Неполная квитанция", 5)], true);
 manager._appendStorageLog(production, [{ kind: "collect", resourceId: "wood", roomId: "outdoors",
   source: "Старая тайная кузница", qty: 6, operationId: "legacy-collection" }]);
+manager._appendStorageLog(production, [{ kind: "production", resourceId: "wood", roomId: "outdoors",
+  source: "Мастерская", qty: 2, note: "собрано у Старая тайная кузница; переполнение: Тайная кладовая",
+  operationId: "legacy-worker-collection" }]);
 for (const isGM of [true, false]) {
   game.user.isGM = isGM;
   const journal = manager._storageLogRows(production, rooms);
@@ -633,6 +675,10 @@ for (const isGM of [true, false]) {
   assert.equal(legacy.source, isGM ? "Старая тайная кузница" : "Источник недоступен",
     "a public building with the same name cannot identify an old collection entry");
   assert.equal(legacy.qty, 6, "redaction must retain the amount stored in a public room");
+  const workerCollection = journal.find(row => row.operationId === "legacy-worker-collection");
+  assert.equal(workerCollection.qty, 2);
+  assert.equal(workerCollection.note.includes("Старая тайная кузница"), isGM);
+  assert.equal(workerCollection.note.includes("Тайная кладовая"), isGM);
 }
 
 const staffing = mergeHoldingDefaults({
@@ -754,6 +800,63 @@ game.user.isGM = true;
 assert.ok(manager._storageLogRows(afterRemoval, currentRooms)
   .some(row => row.operationId === "removed-room" && row.note.includes("Тайная кладовая")), "the GM retains the original detail");
 game.user.isGM = false;
+
+{
+  const saved = structuredClone(data);
+  try {
+    const cold = { id: "cold", name: "Закрытый погреб", visibility: "gm", constructionStatus: "built",
+      functions: { storage: true }, storage: { capacity: 50, shelfLifeMultiplier: 3 } };
+    const milk = ageQd => ({ id: "milk-stock", resourceId: "milk", qty: 2, roomId: "cold",
+      batches: [{ id: "milk-batch", qty: 2, ageQd }] });
+    const reset = resources => {
+      data.holdings[0] = mergeHoldingDefaults({
+        ...saved.holdings[0], buildings: { list: [cold] },
+        storage: { resources, items: [], moneyCopper: 0, log: [] },
+        special: { transportV2: { version: 2, orders: [] } }
+      });
+    };
+    const demolition = { ...manager, ...BuildingEventDomain, activeHoldingId: "a" };
+    const remove = () => demolition._executeBuildingContextAction("cold", "delete");
+    reset([]);
+    let confirmation = "";
+    demolition._confirmAction = async (_title, text) => {
+      confirmation = text;
+      data.holdings[0].storage.resources.push(milk(8));
+      return true;
+    };
+    game.user.isGM = true;
+    await remove();
+    assert.doesNotMatch(confirmation, /под открытое небо/);
+    assert.equal(data.holdings[0].buildings.list.length, 1, "a later deposit invalidates the earlier empty-room confirmation");
+    assert.equal(data.holdings[0].storage.resources[0].roomId, "cold");
+    assert.deepEqual(data.holdings[0].storage.log, []);
+    demolition._confirmAction = async (_title, text) => { confirmation = text; return true; };
+    for (const ageQd of [7, 8, 9]) {
+      reset([milk(ageQd)]);
+      await remove();
+      const holding = data.holdings[0], stored = holding.storage.resources[0], expired = ageQd >= 8;
+      assert.equal(holding.buildings.list.length, 0);
+      assert.equal(stored.roomId, "outdoors");
+      assert.equal(stored.qty, expired ? 0 : 2);
+      assert.deepEqual(stored.batches, expired ? [] : milk(ageQd).batches);
+      assert.equal(confirmation.includes("2 ед. порчи"), expired);
+      assert.deepEqual(holding.storage.log.map(row => [row.kind, row.qty]), expired ? [["food", -2]] : [["move-out", -2], ["move-in", 2]]);
+      game.user.isGM = false;
+      const publicRows = demolition._storageLogRows(holding, [{ id: "outdoors", label: "Двор" }]);
+      assert.deepEqual(publicRows.map(row => row.qty), expired ? [] : [2]);
+      assert.doesNotMatch(JSON.stringify(publicRows), /Закрытый погреб/);
+      game.user.isGM = true;
+    }
+    reset([milk(7)]);
+    game.user.isGM = false;
+    const before = structuredClone(data);
+    await remove();
+    assert.deepEqual(data, before, "the ordinary demolition handler must refuse player calls before confirmation");
+  } finally {
+    Object.assign(data, saved);
+    game.user.isGM = false;
+  }
+}
 
 for (const file of ["resources", "items", "tabs", "log"]) {
   const template = readFileSync(`templates/parts/storage/${file}.hbs`, "utf8");
