@@ -15,6 +15,7 @@ CSS is split by ownership. Edit the narrowest file that owns the UI area. New wo
 - `parts/skyhold-forms.css` - shared inputs, selects, buttons, checkboxes and labels.
 - `parts/skyhold-form-flags.css` - shared compact checkbox labels and read-only states; domain files own only placement.
 - `parts/skyhold-form-bridge.css` - unlayered native form adapter for shared field, search and button roles.
+- `parts/skyhold-theme-isolation.css` - unlayered universal theme lock for all `.fbl-skyhold` windows and `DialogV2` popups so Foundry Light/Dark themes cannot alter window chrome, borders, Foundry CSS variables, scrollbars, selects or native dialog controls.
 - `parts/skyhold-foundry-bridge.css` - unlayered bridge for Foundry window chrome, ApplicationV2 content roots and native select menus. Keep it narrow; component layout stays in the layered owner files.
 - `parts/skyhold-ui-kit.css` - layout helpers and unified components (`toolbar`, `action-group`, `card-header`, `chip`, `field`).
 - `parts/skyhold-morale-dialog.css` - morale dialog content: totals, source cards, Control comparison, thresholds and GM details; native content/footer overrides remain in the Foundry bridge.

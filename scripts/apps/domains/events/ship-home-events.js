@@ -20,7 +20,7 @@ export async function placeShipHome(app, event) {
     const holding = data.holdings.find((row) => row.id === app.holdingId);
     if (!holding) throw new Error("Владение больше не найдено.");
     const preview = previewShipHomePlacement(data, holding, route, percent);
-    if (!await foundryDialogV2().confirm({ window: { title: "Домашняя точка на карте" }, modal: true,
+    if (!await foundryDialogV2().confirm({ classes: ["fbl-skyhold"], window: { title: "Домашняя точка на карте" }, modal: true,
       content: `<p>${escapeHtml(holding.name)}: ${escapeHtml(preview.route.from.label)} ← ${preview.fromKm} км · дом · ${preview.toKm} км → ${escapeHtml(preview.route.to.label)}.</p><p>Будет сохранена отдельная локация без рынка. Она станет регионом поселения и домашней точкой всех его кораблей. Существующая торговая связь останется.</p><p>Свободные предложения будут сброшены. При переносе прежние связи домашней точки заменятся двумя показанными. Принятые договоры и история сохранятся.</p>`
     })) return;
     await SkyholdData.transaction((draft) => {

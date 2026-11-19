@@ -114,7 +114,19 @@ export function checkUiContract({ root = DEFAULT_ROOT, hbsFiles = null } = {}) {
   if (!renderScheduler.includes("[data-render-scroll-key]")) failures.push("render scheduler must restore declared scroll regions after rerender");
 
   const routeCss = readFileSync(path.join(root, "styles/parts/market/route-graph.css"), "utf8");
+  const themeIsolationCss = readFileSync(path.join(root, "styles/parts/skyhold-theme-isolation.css"), "utf8");
   const foundryBridgeCss = readFileSync(path.join(root, "styles/parts/skyhold-foundry-bridge.css"), "utf8");
+  for (const required of ["color-scheme: dark", ".theme-light", ".theme-dark", "--color-text-primary:", "--color-border:", "--input-background-color:", "--button-background-color:", "> .window-header", ".fbl-skyhold.dialog"]) {
+    if (!themeIsolationCss.includes(required)) failures.push(`skyhold-theme-isolation.css missing universal theme lock: ${required}`);
+  }
+  for (const appFile of walkSources(path.join(root, "scripts/apps"))) {
+    const source = readFileSync(appFile, "utf8");
+    for (const match of source.matchAll(/DialogV2(?:\(\))?\??\.(?:confirm|prompt|wait)\(\s*\{([\s\S]{0,220})/g)) {
+      if (!/classes\s*:\s*\[[^\]]*["']fbl-skyhold["']/.test(match[1])) {
+        failures.push(`${sourceLabel(appFile, source, match.index, root)} DialogV2 call must opt into the fbl-skyhold theme class`);
+      }
+    }
+  }
   const financeDialogs = readFileSync(path.join(root, "scripts/apps/domains/events/finance-control-events.js"), "utf8");
   if (!/prompt\(\{\s*classes: \["fbl-skyhold", "fbl-skyhold-finance-dialog"\],\s*window: \{ title: "Передать денежное обязательство"/.test(financeDialogs)) failures.push("the finance-transfer select must retain the common Skyhold theme and the financial dialog owner");
   const tendayWindowCss = readFileSync(path.join(root, "styles/parts/tenday/tenday-window.css"), "utf8");

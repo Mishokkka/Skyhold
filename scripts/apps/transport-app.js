@@ -172,6 +172,7 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
         coveragePercent: configuration.insuranceCoverageBps / 100 },
       hasExcludedCompanies: Boolean(this.request?.excluded?.length),
       hasPins: Boolean(Object.keys(this.request?.pins ?? {}).length),
+      hasRefinementResets: Boolean(this.request?.excluded?.length || Object.keys(this.request?.pins ?? {}).length),
       ships: permissions.canManageShips ? (holding.special?.ships?.list ?? []).filter((ship) => ship.navigationMode === "world").map((ship) => ({
         id: ship.id, name: ship.name, selected: ship.id === this.request?.ownShipId, busy: Boolean(ship.activeVoyage || ship.orderBundle || ship.transportOrderId) })) : [] };
   }

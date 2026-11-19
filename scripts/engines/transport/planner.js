@@ -135,10 +135,12 @@ export function planTransportChain({ cargo, services, startQd = 0, runs = [], ho
       if (stages.reduce((sum, stage) => sum + stage.runs.length, 0) + stageRuns.length >= TRANSPORT_LIMITS.runs) throw new TransportPlanningUnavailableError("run-limit", "Слишком много отправлений. Уменьшите заказ.");
       const waiting = allArrivalCargo(remaining);
       if (waiting.some(lot => lot.unitLoad > service.capacity)) throw new Error("Одна единица товара больше вместимости транспорта.");
-      let availableAtQd = Math.max(minimumReadyQd, remaining[0].arrivalQd);
+      let observeAtQd = Math.max(minimumReadyQd, remaining[0].arrivalQd);
       let available, timed, slot, start, returnQd, finalOwnReturn, returnsToOrigin;
       while (true) {
-        available = availableTransportCargo(arrivals, forwarded, availableAtQd, { age: false });
+        available = availableTransportCargo(arrivals, forwarded, observeAtQd, { age: false });
+        const cargoReadyQd = Math.max(minimumReadyQd,
+          ...remaining.filter(wave => wave.arrivalQd <= observeAtQd).map(wave => wave.arrivalQd));
         const full = takeTransportCargo(available, service.capacity), fullLoad = cargoLoad(full.taken);
         timed = service.kind !== "regular" ? { ...service,
           loadingQd: (service.preparationQd ?? 0) + handlingQd(fullLoad, service.loadingCapacity, service.loadingQd),
@@ -154,8 +156,8 @@ export function planTransportChain({ cargo, services, startQd = 0, runs = [], ho
           return { service: evaluated, returnQd: backQd,
             durationQd: (timed.loadingQd ?? 0) + evaluated.travelQd + (timed.unloadingQd ?? 0) + backQd };
         };
-        slot = service.kind === "regular" ? regularSlot(service, availableAtQd, workingRuns, horizon, available, fullLoad)
-          : charterSlot(timed, availableAtQd, workingRuns, horizon, termsAt);
+        slot = service.kind === "regular" ? regularSlot(service, cargoReadyQd, workingRuns, horizon, available, fullLoad)
+          : charterSlot(timed, cargoReadyQd, workingRuns, horizon, termsAt);
         if (!slot) throw new TransportPlanningUnavailableError("no-slot", "Нет свободного транспорта в горизонте планирования.");
         start = slot.startQd;
         const terms = slot.terms ?? termsAt(start, slot.departureQd);
@@ -164,7 +166,7 @@ export function planTransportChain({ cargo, services, startQd = 0, runs = [], ho
           && (service.kind === "charter" || service.kind === "owned" && !last);
         const atStart = availableTransportCargo(arrivals, forwarded, start, { age: false });
         if (cargoQuantitiesMatch(available, atStart)) break;
-        availableAtQd = start;
+        observeAtQd = start;
       }
       const packed = takeTransportCargo(available, slot.free);
       if (!packed.taken.length) throw new Error("Груз не помещается в транспорт.");

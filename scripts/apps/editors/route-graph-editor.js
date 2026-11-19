@@ -530,7 +530,7 @@ export class SkyholdRouteGraphEditor extends FloatingTooltipsMixin(PendingFieldS
     const toId = String(element.dataset.routeTo ?? "");
     const routeId = String(element.dataset.routeId ?? "");
     if (!fromId || !toId || !game.user?.isGM) return;
-    if (!await foundryDialogV2().confirm({ window: { title: "Удалить маршрут" },
+    if (!await foundryDialogV2().confirm({ classes: ["fbl-skyhold"], window: { title: "Удалить маршрут" },
       content: "<p>Удалить этот маршрут между регионами? Действие нельзя отменить.</p>", modal: true })) return;
     const saved = await SkyholdData.transaction((data) => {
       const regions = normalizeEventRegionOptions(data?.catalog?.eventRegions, { fallback: false });
@@ -1295,7 +1295,7 @@ export class SkyholdRouteGraphEditor extends FloatingTooltipsMixin(PendingFieldS
         const network = parseRouteNetwork(JSON.parse(await file.text()));
         mergeRouteNetwork(SkyholdData.view().catalog, network);
         const routeCount = network.eventRegions.reduce((count, row) => count + row.marketLinks.length, 0);
-        const confirmed = await foundryDialogV2()?.confirm({ window: { title: "Импорт торговой сети" },
+        const confirmed = await foundryDialogV2()?.confirm({ classes: ["fbl-skyhold"], window: { title: "Импорт торговой сети" },
           content: "<p>Рынков: " + network.eventRegions.length + "; связей: " + routeCount
             + ".</p><p>Рынки с совпадающими ID будут обновлены, одноимённые маршруты заменены. Остальные рынки и связи сохранятся. Настройки карты и экономики будут заменены; справочники стран, товаров и организаций объединены по ID.</p>", modal: true });
         if (!confirmed || !game.user?.isGM) return;

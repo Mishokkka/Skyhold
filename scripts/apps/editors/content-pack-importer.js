@@ -207,7 +207,7 @@ export class SkyholdContentPackImporter extends RenderSchedulerMixin(HandlebarsA
       const message = `Этот импорт полностью очистит: ${scopes}. Затем набор будет установлен заново. Склады и поселения сохранятся. Продолжить?`;
       const DialogV2 = foundry?.applications?.api?.DialogV2;
       const confirmed = DialogV2?.confirm
-        ? await DialogV2.confirm({ window: { title: "Чистая установка набора" }, content: `<p>${message}</p>`, modal: true })
+        ? await DialogV2.confirm({ classes: ["fbl-skyhold"], window: { title: "Чистая установка набора" }, content: `<p>${message}</p>`, modal: true })
         : window.confirm(message);
       if (!confirmed) return;
     }

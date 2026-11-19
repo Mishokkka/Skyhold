@@ -117,6 +117,7 @@ async _onApplyEventEffects(event) {
   const preview = applyRandomEventEffects({ holding: previewHolding, effects: source.effects, dependencies: this._eventEffectDependencies() });
   if (!preview.ok) return ui.notifications.warn(preview.message);
   const confirmed = await foundryDialogV2().confirm({
+    classes: ["fbl-skyhold"],
     window: { title: `Применить эффекты: ${source.title || "Событие"}` },
     content: `<div class="fbls-dialog-text"><p>Изменения будут записаны в журнал операций.</p><ul>${preview.changes.map((change) => `<li>${escapeHtml(change.text)}</li>`).join("")}</ul></div>`,
     modal: true
@@ -164,6 +165,7 @@ async _applyTendayEventDecision({ holdingId = "", decisionId = "" } = {}) {
   const preview = applyRandomEventEffects({ holding: previewHolding, effects: previewSource?.effects ?? [], dependencies: this._eventEffectDependencies() });
   if (!preview.ok) return preview;
   const confirmed = await foundryDialogV2().confirm({
+    classes: ["fbl-skyhold"],
     window: { title: `Применить: ${source.title || "Событие"}` },
     content: `<div class="fbls-dialog-text"><p>Эффекты будут записаны как отдельная операция.</p><ul>${preview.changes.map((change) => `<li>${escapeHtml(change.text)}</li>`).join("")}</ul></div>`,
     modal: true
@@ -276,7 +278,7 @@ async _onArchiveScheduledEvent(event) {
   if (!game.user?.isGM) return;
   const scheduleId = String(event.currentTarget?.dataset?.eventScheduleId ?? "");
   if (!scheduleId) return;
-  const confirmed = await foundryDialogV2().confirm({ window: { title: "Архивировать событие" }, content: "<p>Убрать событие из активного плана в архив?</p>", modal: true });
+  const confirmed = await foundryDialogV2().confirm({ classes: ["fbl-skyhold"], window: { title: "Архивировать событие" }, content: "<p>Убрать событие из активного плана в архив?</p>", modal: true });
   if (!confirmed) return;
   const operationId = makeId("event-archive", 20);
   const result = await this._updateActiveHolding((holding) => {

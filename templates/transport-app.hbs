@@ -73,11 +73,13 @@
         </select>
       </label>{{/if}}
       </div>
-      <div class="fbls-action-group">
-        {{#if hasExcludedCompanies}}<button type="button" class="fbls-button fbls-button-role" data-action="transport-restore-companies">Сбросить исключения</button>{{/if}}
-        {{#if hasPins}}<button type="button" class="fbls-button fbls-button-role" data-action="transport-clear-pins">Снять закрепления участков</button>{{/if}}
-      </div>
     </details>
+    {{/if}}
+    {{#if hasRefinementResets}}
+    <div class="fbls-action-group">
+      {{#if hasExcludedCompanies}}<button type="button" class="fbls-button fbls-button-role" data-action="transport-restore-companies">Сбросить исключения</button>{{/if}}
+      {{#if hasPins}}<button type="button" class="fbls-button fbls-button-role" data-action="transport-clear-pins">Снять закрепления участков</button>{{/if}}
+    </div>
     {{/if}}
     {{#if selected}}
     <article class="fbls-panel fbls-stack fbls-transport-quote">

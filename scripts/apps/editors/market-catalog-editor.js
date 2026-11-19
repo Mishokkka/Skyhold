@@ -541,7 +541,7 @@ export class SkyholdMarketCatalogEditor extends FloatingTooltipsMixin(PendingFie
 
   async _confirm(message) {
     const DialogV2 = foundry?.applications?.api?.DialogV2;
-    if (DialogV2?.confirm) return DialogV2.confirm({ window: { title: "Экономика рынков" }, content: `<p>${message}</p>`, modal: true });
+    if (DialogV2?.confirm) return DialogV2.confirm({ classes: ["fbl-skyhold"], window: { title: "Экономика рынков" }, content: `<p>${message}</p>`, modal: true });
     return window.confirm(message);
   }
 

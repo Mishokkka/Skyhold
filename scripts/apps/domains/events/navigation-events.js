@@ -396,6 +396,7 @@ async _onFieldChange(event) {
 async _confirmAction(title, content) {
   try {
     return await foundryDialogV2().confirm({
+      classes: ["fbl-skyhold"],
       window: { title },
       content: `<p>${content}</p>`,
       modal: true
@@ -439,6 +440,7 @@ async _promptText({ title = "Ввод", label = "Значение", value = "" }
   const safeValue = escapeHtml(value);
   try {
       return await foundryDialogV2().prompt({
+        classes: ["fbl-skyhold"],
         window: { title: safeTitle },
         content: `<form class="fbls-prompt-form"><label><span>${safeLabel}</span><input type="text" name="value" value="${safeValue}" autofocus /></label></form>`,
         ok: {

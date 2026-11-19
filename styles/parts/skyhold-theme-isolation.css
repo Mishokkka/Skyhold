@@ -1,0 +1,330 @@
+/* FBL Skyhold: universal theme isolation from Foundry Light/Dark themes.
+   Loaded unlayered before window-specific bridges so every Skyhold ApplicationV2,
+   legacy window-app and DialogV2 renders with the exact same dark palette,
+   window chrome, borders, scrollbars and native controls in both Foundry themes. */
+
+.application.fbl-skyhold.fbl-skyhold,
+.window-app.fbl-skyhold.fbl-skyhold,
+.application.fbl-skyhold.fbl-skyhold.themed,
+.application.fbl-skyhold.fbl-skyhold.theme-light,
+.application.fbl-skyhold.fbl-skyhold.theme-dark,
+.window-app.fbl-skyhold.fbl-skyhold.theme-light,
+.window-app.fbl-skyhold.fbl-skyhold.theme-dark,
+.theme-light .application.fbl-skyhold.fbl-skyhold,
+.theme-light .window-app.fbl-skyhold.fbl-skyhold,
+.theme-dark .application.fbl-skyhold.fbl-skyhold,
+.theme-dark .window-app.fbl-skyhold.fbl-skyhold {
+  color-scheme: dark;
+  color: var(--fbls-text);
+  background: var(--fbls-bg);
+  border: 1px solid var(--fbls-surface-3);
+  box-shadow: 0 10px 28px var(--fbls-overlay-strong);
+  outline: none;
+  text-shadow: none;
+  scrollbar-color: var(--fbls-surface-3) var(--fbls-surface-0);
+
+  /* Override Foundry V13/V14 theme variables at the Skyhold root so light-theme
+     defaults never leak into window chrome, dialogs, links, tables or forms. */
+  --background: var(--fbls-surface-0);
+  --content-bg: var(--fbls-surface-0);
+  --header-background: var(--fbls-surface-2);
+  --color-bg-option: var(--fbls-surface-1);
+
+  --color-text-primary: var(--fbls-text);
+  --color-text-secondary: var(--fbls-muted);
+  --color-text-emphatic: var(--fbls-text-strong);
+  --color-text-subtle: var(--fbls-muted);
+  --color-text-selection: var(--fbls-on-accent);
+  --color-text-selection-bg: var(--fbls-accent);
+  --color-text-hyperlink: var(--fbls-accent);
+  --color-text-dark-primary: var(--fbls-text);
+  --color-text-dark-secondary: var(--fbls-muted);
+  --color-text-light-primary: var(--fbls-text-strong);
+  --color-text-light-highlight: var(--fbls-text-strong);
+
+  --color-border: var(--fbls-surface-3);
+  --color-border-light-primary: var(--fbls-surface-3);
+  --color-border-light-secondary: var(--fbls-surface-2);
+  --color-border-light-tertiary: var(--fbls-surface-2);
+  --color-border-dark: var(--fbls-surface-3);
+  --color-border-dark-primary: var(--fbls-surface-3);
+  --color-border-dark-secondary: var(--fbls-surface-2);
+  --color-border-dark-tertiary: var(--fbls-surface-2);
+  --color-border-highlight: var(--fbls-accent-border);
+  --color-border-highlight-alt: var(--fbls-accent);
+  --color-shadow-primary: var(--fbls-accent);
+  --color-shadow-highlight: var(--fbls-accent-border);
+
+  --color-scrollbar: var(--fbls-border-strong);
+  --color-scrollbar-track: var(--fbls-surface-0);
+  --color-scrollbar-border: var(--fbls-surface-2);
+
+  --input-background-color: var(--fbls-surface-1);
+  --input-border-color: var(--fbls-border);
+  --input-text-color: var(--fbls-text);
+  --input-placeholder-color: var(--fbls-placeholder);
+  --input-focus-outline-color: var(--fbls-accent-border);
+  --input-height: var(--fbls-control-height);
+
+  --button-background-color: var(--fbls-surface-2);
+  --button-border-color: var(--fbls-border-strong);
+  --button-text-color: var(--fbls-text);
+  --button-hover-background-color: var(--fbls-surface-3);
+  --button-hover-border-color: var(--fbls-accent-border);
+  --button-hover-text-color: var(--fbls-text-strong);
+  --button-focus-outline-color: var(--fbls-accent-border);
+
+  --table-header-bg-color: var(--fbls-surface-2);
+  --table-header-border-color: var(--fbls-border);
+  --table-header-text-color: var(--fbls-text-strong);
+  --table-row-color-even: var(--fbls-surface-soft);
+  --table-row-color-odd: transparent;
+
+  --content-link-background: var(--fbls-surface-2);
+  --content-link-border-color: var(--fbls-border);
+  --content-link-text-color: var(--fbls-text);
+}
+
+/* Uniform dark window header and resize chrome across all Skyhold windows. */
+.application.fbl-skyhold.fbl-skyhold > .window-header,
+.window-app.fbl-skyhold.fbl-skyhold > .window-header,
+.theme-light .application.fbl-skyhold.fbl-skyhold > .window-header,
+.theme-light .window-app.fbl-skyhold.fbl-skyhold > .window-header,
+.theme-dark .application.fbl-skyhold.fbl-skyhold > .window-header,
+.theme-dark .window-app.fbl-skyhold.fbl-skyhold > .window-header {
+  background: var(--fbls-surface-2);
+  color: var(--fbls-text-strong);
+  border-bottom: 1px solid var(--fbls-surface-3);
+  text-shadow: none;
+}
+
+.application.fbl-skyhold.fbl-skyhold > .window-header .window-title,
+.window-app.fbl-skyhold.fbl-skyhold > .window-header .window-title,
+.application.fbl-skyhold.fbl-skyhold > .window-header .window-icon,
+.window-app.fbl-skyhold.fbl-skyhold > .window-header .window-icon {
+  color: var(--fbls-text-strong);
+  text-shadow: none;
+}
+
+.application.fbl-skyhold.fbl-skyhold > .window-header button,
+.window-app.fbl-skyhold.fbl-skyhold > .window-header button,
+.application.fbl-skyhold.fbl-skyhold > .window-header a,
+.window-app.fbl-skyhold.fbl-skyhold > .window-header a,
+.application.fbl-skyhold.fbl-skyhold > .window-header .header-control,
+.window-app.fbl-skyhold.fbl-skyhold > .window-header .header-control,
+.application.fbl-skyhold.fbl-skyhold > .window-header .header-button,
+.window-app.fbl-skyhold.fbl-skyhold > .window-header .header-button {
+  color: var(--fbls-text);
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  text-shadow: none;
+}
+
+.application.fbl-skyhold.fbl-skyhold > .window-header button:hover,
+.window-app.fbl-skyhold.fbl-skyhold > .window-header button:hover,
+.application.fbl-skyhold.fbl-skyhold > .window-header button:focus-visible,
+.window-app.fbl-skyhold.fbl-skyhold > .window-header button:focus-visible,
+.application.fbl-skyhold.fbl-skyhold > .window-header a:hover,
+.window-app.fbl-skyhold.fbl-skyhold > .window-header a:hover,
+.application.fbl-skyhold.fbl-skyhold > .window-header .header-control:hover,
+.window-app.fbl-skyhold.fbl-skyhold > .window-header .header-control:hover,
+.application.fbl-skyhold.fbl-skyhold > .window-header .header-control:focus-visible,
+.window-app.fbl-skyhold.fbl-skyhold > .window-header .header-control:focus-visible,
+.application.fbl-skyhold.fbl-skyhold > .window-header .header-button:hover,
+.window-app.fbl-skyhold.fbl-skyhold > .window-header .header-button:hover {
+  color: var(--fbls-accent);
+  background: var(--fbls-panel);
+  text-shadow: none;
+}
+
+.application.fbl-skyhold.fbl-skyhold > .window-content,
+.window-app.fbl-skyhold.fbl-skyhold > .window-content,
+.theme-light .application.fbl-skyhold.fbl-skyhold > .window-content,
+.theme-light .window-app.fbl-skyhold.fbl-skyhold > .window-content,
+.theme-dark .application.fbl-skyhold.fbl-skyhold > .window-content,
+.theme-dark .window-app.fbl-skyhold.fbl-skyhold > .window-content {
+  color: var(--fbls-text);
+  background: var(--fbls-surface-0);
+  text-shadow: none;
+}
+
+.application.fbl-skyhold.fbl-skyhold > .window-resize-handle,
+.window-app.fbl-skyhold.fbl-skyhold > .window-resize-handle {
+  color: var(--fbls-muted);
+  background: transparent;
+}
+
+/* Native select menus remain dark and readable even under Foundry .theme-light. */
+.theme-light .application.fbl-skyhold.fbl-skyhold select,
+.theme-light .window-app.fbl-skyhold.fbl-skyhold select,
+.theme-dark .application.fbl-skyhold.fbl-skyhold select,
+.theme-dark .window-app.fbl-skyhold.fbl-skyhold select,
+.theme-light .application.fbl-skyhold.fbl-skyhold select option,
+.theme-light .window-app.fbl-skyhold.fbl-skyhold select option,
+.theme-dark .application.fbl-skyhold.fbl-skyhold select option,
+.theme-dark .window-app.fbl-skyhold.fbl-skyhold select option,
+.theme-light .application.fbl-skyhold.fbl-skyhold select optgroup,
+.theme-light .window-app.fbl-skyhold.fbl-skyhold select optgroup,
+.theme-dark .application.fbl-skyhold.fbl-skyhold select optgroup,
+.theme-dark .window-app.fbl-skyhold.fbl-skyhold select optgroup {
+  color-scheme: dark;
+  color: var(--fbls-text);
+  -webkit-text-fill-color: var(--fbls-text);
+  background: var(--fbls-surface-1);
+  border-color: var(--fbls-border);
+  opacity: 1;
+  text-shadow: none;
+}
+
+.theme-light .application.fbl-skyhold.fbl-skyhold select:disabled,
+.theme-light .window-app.fbl-skyhold.fbl-skyhold select:disabled,
+.theme-dark .application.fbl-skyhold.fbl-skyhold select:disabled,
+.theme-dark .window-app.fbl-skyhold.fbl-skyhold select:disabled,
+.theme-light .application.fbl-skyhold.fbl-skyhold select option:disabled,
+.theme-light .window-app.fbl-skyhold.fbl-skyhold select option:disabled,
+.theme-dark .application.fbl-skyhold.fbl-skyhold select option:disabled,
+.theme-dark .window-app.fbl-skyhold.fbl-skyhold select option:disabled,
+.theme-light .application.fbl-skyhold.fbl-skyhold select optgroup:disabled,
+.theme-light .window-app.fbl-skyhold.fbl-skyhold select optgroup:disabled,
+.theme-dark .application.fbl-skyhold.fbl-skyhold select optgroup:disabled,
+.theme-dark .window-app.fbl-skyhold.fbl-skyhold select optgroup:disabled,
+.theme-light .application.fbl-skyhold.fbl-skyhold select optgroup:disabled option,
+.theme-light .window-app.fbl-skyhold.fbl-skyhold select optgroup:disabled option,
+.theme-dark .application.fbl-skyhold.fbl-skyhold select optgroup:disabled option,
+.theme-dark .window-app.fbl-skyhold.fbl-skyhold select optgroup:disabled option {
+  color: var(--fbls-muted);
+  -webkit-text-fill-color: var(--fbls-muted);
+  background: var(--fbls-surface-1);
+  opacity: 1;
+}
+
+/* Uniform dark scrollbars inside Skyhold windows (specialized bridges may override). */
+.application.fbl-skyhold.fbl-skyhold *,
+.window-app.fbl-skyhold.fbl-skyhold * {
+  scrollbar-color: var(--fbls-border-strong) var(--fbls-surface-0);
+}
+
+.application.fbl-skyhold.fbl-skyhold *::-webkit-scrollbar,
+.window-app.fbl-skyhold.fbl-skyhold *::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+  background: var(--fbls-surface-0);
+}
+
+.application.fbl-skyhold.fbl-skyhold *::-webkit-scrollbar-track,
+.window-app.fbl-skyhold.fbl-skyhold *::-webkit-scrollbar-track,
+.application.fbl-skyhold.fbl-skyhold *::-webkit-scrollbar-corner,
+.window-app.fbl-skyhold.fbl-skyhold *::-webkit-scrollbar-corner {
+  background: var(--fbls-surface-0);
+}
+
+.application.fbl-skyhold.fbl-skyhold *::-webkit-scrollbar-thumb,
+.window-app.fbl-skyhold.fbl-skyhold *::-webkit-scrollbar-thumb {
+  border: 2px solid var(--fbls-surface-0);
+  border-radius: 999px;
+  background: var(--fbls-border-strong);
+}
+
+/* Shared Foundry DialogV2 confirm/prompt/wait dialogs with the Skyhold class. */
+.application.fbl-skyhold.dialog:not(.fbl-skyhold-morale-dialog) .dialog-form,
+.window-app.fbl-skyhold.dialog:not(.fbl-skyhold-morale-dialog) .dialog-form {
+  padding: 0.85rem 1rem;
+  gap: 0.75rem;
+  color: var(--fbls-text);
+  background: var(--fbls-surface-0);
+}
+
+.application.fbl-skyhold.dialog .dialog-content,
+.window-app.fbl-skyhold.dialog .dialog-content {
+  color: var(--fbls-text);
+}
+
+.application.fbl-skyhold.dialog .dialog-content p,
+.window-app.fbl-skyhold.dialog .dialog-content p,
+.application.fbl-skyhold.dialog .dialog-content li,
+.window-app.fbl-skyhold.dialog .dialog-content li,
+.application.fbl-skyhold.dialog .dialog-content label,
+.window-app.fbl-skyhold.dialog .dialog-content label,
+.application.fbl-skyhold.dialog .dialog-content span,
+.window-app.fbl-skyhold.dialog .dialog-content span,
+.application.fbl-skyhold.dialog .dialog-content strong,
+.window-app.fbl-skyhold.dialog .dialog-content strong,
+.application.fbl-skyhold.dialog .dialog-content code,
+.window-app.fbl-skyhold.dialog .dialog-content code {
+  color: inherit;
+  text-shadow: none;
+}
+
+.application.fbl-skyhold.dialog .dialog-content h1,
+.window-app.fbl-skyhold.dialog .dialog-content h1,
+.application.fbl-skyhold.dialog .dialog-content h2,
+.window-app.fbl-skyhold.dialog .dialog-content h2,
+.application.fbl-skyhold.dialog .dialog-content h3,
+.window-app.fbl-skyhold.dialog .dialog-content h3,
+.application.fbl-skyhold.dialog .dialog-content h4,
+.window-app.fbl-skyhold.dialog .dialog-content h4 {
+  color: var(--fbls-text-strong);
+  border-color: var(--fbls-border);
+  text-shadow: none;
+}
+
+.application.fbl-skyhold.dialog .dialog-content input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]):not([type="color"]):not([type="file"]),
+.window-app.fbl-skyhold.dialog .dialog-content input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]):not([type="color"]):not([type="file"]),
+.application.fbl-skyhold.dialog .dialog-content textarea,
+.window-app.fbl-skyhold.dialog .dialog-content textarea {
+  color: var(--fbls-text);
+  -webkit-text-fill-color: var(--fbls-text);
+  background: var(--fbls-surface-1);
+  border: 1px solid var(--fbls-border);
+  border-radius: var(--fbls-radius-sm);
+  box-shadow: none;
+}
+
+.application.fbl-skyhold.dialog .dialog-content input::placeholder,
+.window-app.fbl-skyhold.dialog .dialog-content input::placeholder,
+.application.fbl-skyhold.dialog .dialog-content textarea::placeholder,
+.window-app.fbl-skyhold.dialog .dialog-content textarea::placeholder {
+  color: var(--fbls-placeholder);
+  -webkit-text-fill-color: var(--fbls-placeholder);
+  opacity: 1;
+}
+
+.application.fbl-skyhold.dialog:not(.fbl-skyhold-morale-dialog) .form-footer,
+.window-app.fbl-skyhold.dialog:not(.fbl-skyhold-morale-dialog) .form-footer {
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--fbls-border);
+  background: transparent;
+}
+
+.application.fbl-skyhold.dialog .form-footer button,
+.window-app.fbl-skyhold.dialog .form-footer button {
+  min-height: var(--fbls-control-height);
+  color: var(--fbls-text);
+  -webkit-text-fill-color: var(--fbls-text);
+  background: var(--fbls-surface-2);
+  border: 1px solid var(--fbls-border-strong);
+  border-radius: var(--fbls-radius-sm);
+  box-shadow: none;
+  text-shadow: none;
+}
+
+.application.fbl-skyhold.dialog .form-footer button:hover,
+.window-app.fbl-skyhold.dialog .form-footer button:hover,
+.application.fbl-skyhold.dialog .form-footer button:focus-visible,
+.window-app.fbl-skyhold.dialog .form-footer button:focus-visible {
+  color: var(--fbls-text-strong);
+  -webkit-text-fill-color: var(--fbls-text-strong);
+  background: var(--fbls-surface-3);
+  border-color: var(--fbls-accent-border);
+}
+
+.application.fbl-skyhold.dialog .form-footer button[type="submit"],
+.window-app.fbl-skyhold.dialog .form-footer button[type="submit"],
+.application.fbl-skyhold.dialog .form-footer button.default,
+.window-app.fbl-skyhold.dialog .form-footer button.default {
+  color: var(--fbls-text-strong);
+  -webkit-text-fill-color: var(--fbls-text-strong);
+  background: var(--fbls-accent-bg);
+  border-color: var(--fbls-accent-border);
+}

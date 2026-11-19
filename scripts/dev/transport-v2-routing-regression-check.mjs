@@ -206,6 +206,26 @@ for (const isGM of [true, false]) for (const direction of ["inbound", "outbound"
   assert.equal(mixed.stages[0].runs[0].arrivalQd, full.arrivalQd);
   assert.deepEqual(mixed.stages[0].runs[0].cargo.map(lot => lot.lotId), ["zero"]);
   assert.equal(mixed.stages[0].runs[1].arrivalQd, full.arrivalQd + service.intervalQd);
+
+  // Re-observing arriving waves at the provisional loading start must keep
+  // actual cargo readiness separate from the observation timestamp.
+  const consolidating = { id: "regular-waves", kind: "regular", from: "a", to: "b", firstQd: 0, intervalQd: 10,
+    capacity: 100, loadingCapacity: 10, unloadingCapacity: 10, travelQd: 1 };
+  const wavePlan = planTransportChain({
+    cargo: [
+      { lotId: "wave-1", qty: 1, unitLoad: 10, unitCopper: 1 },
+      { lotId: "wave-2", qty: 1, unitLoad: 10, unitCopper: 1 }
+    ],
+    cargoArrivals: [
+      { arrivalQd: 0, cargo: [{ lotId: "wave-1", qty: 1, unitLoad: 10, unitCopper: 1 }] },
+      { arrivalQd: 5, cargo: [{ lotId: "wave-2", qty: 1, unitLoad: 10, unitCopper: 1 }] }
+    ],
+    services: [consolidating],
+    horizonQd: 15
+  });
+  assert.equal(wavePlan.stages[0].runs.length, 1);
+  assert.deepEqual([wavePlan.stages[0].runs[0].startQd, wavePlan.stages[0].runs[0].departureQd, wavePlan.stages[0].runs[0].arrivalQd],
+    [8, 10, 13], "both waves ready by QD 5 must start loading at QD 8 and catch the QD 10 departure");
 }
 
 {

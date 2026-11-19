@@ -124,7 +124,27 @@ for (const user of [gm, player]) {
   assert.equal(app.request.pins.a, undefined, "automatic choice removes a pin rather than storing an empty constraint");
   change({ transportExclude: "true" }, last.companyId);
   assert.ok(app.request.excluded.includes(last.companyId));
+  app.request.excluded = [...new Set((context.refinements.companies ?? []).map(row => row.id).concat(app.request.excluded))];
+  const allExcluded = await app._prepareContext({});
+  assert.equal(allExcluded.refinements.groups.length, 0, "excluding every company leaves no refinement groups");
+  assert.equal(allExcluded.hasExcludedCompanies, true);
+  assert.equal(allExcluded.hasRefinementResets, true, "reset actions stay available when all groups are excluded");
   await app._action(null, { dataset: { action: "transport-restore-companies" } });
   assert.deepEqual(app.request.excluded, []);
+}
+{
+  const fs = await import("node:fs");
+  const template = fs.readFileSync(new URL("../../templates/transport-app.hbs", import.meta.url), "utf8");
+  const stack = [];
+  let sawRestore = false;
+  for (const match of template.matchAll(/{{([#/])([^}]+)}}|data-action="transport-restore-companies"/g)) {
+    if (match[1] === "#") stack.push(match[2].trim());
+    else if (match[1] === "/") stack.pop();
+    else {
+      sawRestore = true;
+      assert.ok(!stack.includes("if refinements.groups"), "reset exclusions button must not be hidden inside refinements.groups");
+    }
+  }
+  assert.equal(sawRestore, true);
 }
 console.log("PR comments: GM/player market discovery, legal own import/export, stock/access refusal, replay/reload and UI recovery through actual handlers and authority booking passed.");
