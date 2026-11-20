@@ -103,8 +103,12 @@ for (const isGM of [true, false]) {
   assert.equal(occupiedRun.reservedLoad, occupiedRun.capacity, "the booked handling window is full");
   bookTransportOrder({ state: f.data.meta.transportV2, holding: { id: "other", storage: { moneyCopper: 1000000 }, special: {} },
     id: "occupied", direction: "inbound", services: [chosenService], plan: occupied });
-  const next = prepareTransportContext({ ...f, request, isGM });
-  assert.ok(next.plan.arrivalQd > initial.plan.arrivalQd, "when the first departure is full, the next advertised departure is booked");
+  const chosen = prepareTransportContext({ ...f, request, isGM });
+  assert.equal(chosen.plan.arrivalQd, initial.plan.arrivalQd);
+  assert.equal(chosen.plan.totalCopper, initial.plan.totalCopper);
+  assert.notEqual(chosen.plan.stages[0].service.id, chosenService.id, "schedule-aware search picks the free parallel route");
+  const pinned = prepareTransportContext({ ...f, request: { ...request, serviceIds: [chosenService.id] }, isGM });
+  assert.ok(pinned.plan.arrivalQd > chosen.plan.arrivalQd, "an explicitly selected occupied road still keeps its own timetable");
 }
 
 for (const isGM of [true, false]) {

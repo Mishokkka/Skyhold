@@ -4,7 +4,7 @@ import { MARKET_DEFAULT_TRANSPORT_CAPACITY_LOAD, MARKET_TRANSPORT_TARIFFS, edgeS
 import { marketTransportFreightFactor } from "../market/pricing.js";
 import { localMarketDistanceKm, referenceTransportCosts, configuredTransportCharges, transportPortHandlingQd, transportRiskBps } from "./economics.js";
 import { transportServicesFromRoutes } from "./services.js";
-import { transportServiceCompatibilityIds } from "./service-identity.js";
+import { isTransportServiceAllowed, transportServiceCompatibilityIds } from "./service-identity.js";
 import { transportOperatingCharge, TRANSPORT_LIMITS, TRANSPORT_LOAD_SCALE } from "./quantities.js";
 import { transportSeasonalMovement } from "./seasonal.js";
 import { worldShipTransportTerms } from "../ships/world-market.js";
@@ -123,6 +123,7 @@ function createLegBuilder({ holding, market, byId, organizations, countries, sea
   const capacityFor = (mode, carrier) => Math.max(1, finite(market?.[`${mode}CapacityLoad`], MARKET_DEFAULT_TRANSPORT_CAPACITY_LOAD[mode]))
     * Math.max(0.1, finite(carrier.capacityFactor, 1));
   const regionHidden = (id) => !isGM && countryRows.get(String(byId.get(id)?.countryId ?? id))?.visibility === "gm";
+  const countryDisabled = (id) => countryRows.get(String(byId.get(id)?.countryId ?? id))?.active === false;
   const makeLeg = (from, to, edge, mode, carrier, kind = "route") => {
     const source = byId.get(from), target = byId.get(to), place = factors(from), destination = factors(to);
     const season = edgeSeasonalModifier(edge, seasonId);
@@ -166,10 +167,19 @@ function createLegBuilder({ holding, market, byId, organizations, countries, sea
       freightFactor: marketTransportFreightFactor(mode) * priceFactor * delivery
     };
   };
-  return { factors, providers, makeLeg, regionHidden };
+  return { factors, providers, makeLeg, regionHidden, countryDisabled };
 }
 
-function estimateLegWeight(leg, cargoUnits, kind = "regular", continues = false) {
+function legBlockKey(from, to, routeId, mode, carrierKey) {
+  return `${from}|${to}|${String(routeId ?? "")}|${mode}|${carrierKey}`;
+}
+
+export function routeLegBlockKey(leg) {
+  const cKey = leg.carrierId === "independent-carriers" ? `${leg.carrierId}:${leg.fromCountryId}` : leg.carrierId;
+  return legBlockKey(leg.fromRegionId, leg.toRegionId, leg.routeId, leg.mode, cKey);
+}
+
+function estimateLegWeight(leg, cargoUnits, kind = "regular", continues = false, charterVehicles = 1) {
   const units = Math.max(1, Math.ceil(cargoUnits / Math.max(1, leg.capacityLoad)));
   const dispatch = continues ? 0 : (leg.dispatchCopper + leg.hireCopper) * units;
   const fixedCost = dispatch + leg.distanceCopper * units;
@@ -177,8 +187,10 @@ function estimateLegWeight(leg, cargoUnits, kind = "regular", continues = false)
   const transferWaitQd = continues ? 0 : (kind === "regular" ? 6 : 2) + TRANSFER_QD;
   const transferHandlingCopper = continues ? 0 : Math.ceil(cargoUnits * 0.5);
   if (kind === "charter") {
+    const waves = Math.max(1, Math.ceil(units / Math.max(1, Math.floor(finite(charterVehicles, 1)))));
     const tripOperating = leg.operatingCopper * 2 * units;
-    return { cost: fixedCost + tripOperating + loadCost + transferHandlingCopper, time: leg.movementQd + transferWaitQd };
+    const waveTime = leg.movementQd * (2 * waves - 1) + transferWaitQd;
+    return { cost: fixedCost + tripOperating + loadCost + transferHandlingCopper, time: waveTime };
   }
   const share = Math.min(1, Math.max(0.02, cargoUnits / Math.max(1, leg.capacityLoad * units)));
   const regularCost = (fixedCost + leg.operatingCopper * 2 * units) * share + loadCost + transferHandlingCopper;
@@ -223,7 +235,8 @@ export function findOptimalHiredRoute({
   holding = {}, market = {}, regions = [], organizations = [], countries = [],
   seasonId = "", direction = "inbound", accessLimit = 0, cargoLoad = 4000,
   kind = "regular", metric = "cost", regionFactors = null, isGM = false,
-  allowedModes = null, fromRegionId = "", toRegionId = "", allowFloatingLastMile = true
+  allowedModes = null, fromRegionId = "", toRegionId = "", allowFloatingLastMile = true,
+  blockedLegs = null, charterVehicles = 1
 } = {}) {
   const { byId, graph } = buildGraph(regions);
   const home = findHoldingRegion(holding, regions);
@@ -232,10 +245,15 @@ export function findOptimalHiredRoute({
   const endId = String(toRegionId || (direction === "outbound" ? market?.regionId ?? "" : homeId));
   if (!startId || !endId || !byId.has(startId) || !byId.has(endId)) return null;
 
-  const { factors, providers, makeLeg, regionHidden } = createLegBuilder({
+  const { factors, providers, makeLeg, regionHidden, countryDisabled } = createLegBuilder({
     holding, market, byId, organizations, countries, seasonId, regionFactors, isGM
   });
-  if (factors(startId).enabled === false || factors(endId).enabled === false) return null;
+  // A dedicated/non-market home point (marketEnabled: false) can still send and receive hired cargo
+  // as long as its country is active; foreign markets and local same-region markets must be open.
+  const endpointAllowed = (id) => (startId !== endId && id === homeId)
+    ? !countryDisabled(id)
+    : factors(id).enabled !== false;
+  if (!endpointAllowed(startId) || !endpointAllowed(endId)) return null;
   if (regionHidden(startId) || regionHidden(endId)) return null;
 
   const cargoUnits = Math.max(1, cargoLoad / TRANSPORT_LOAD_SCALE);
@@ -255,7 +273,8 @@ export function findOptimalHiredRoute({
     for (const mode of localModes) {
       for (const carrier of providers(startId, mode)) {
         const leg = makeLeg(startId, endId, { routeId: "", distanceKm: localMarketDistanceKm(holding) }, mode, carrier, "last-mile");
-        const weight = estimateLegWeight(leg, cargoUnits, kind, false);
+        if (blockedLegs?.has(routeLegBlockKey(leg))) continue;
+        const weight = estimateLegWeight(leg, cargoUnits, kind, false, charterVehicles);
         const primary = metric === "time" ? weight.time : weight.cost;
         const secondary = metric === "time" ? weight.cost : weight.time;
         if (!best || primary < best.primary - 1e-9 || (Math.abs(primary - best.primary) <= 1e-9 && secondary < best.secondary)) {
@@ -271,7 +290,8 @@ export function findOptimalHiredRoute({
     let best = null;
     for (const carrier of providers(homeId, "airship")) {
       const leg = makeLeg(homeId, homeId, { routeId: "" }, "airship", carrier, "last-mile");
-      const weight = estimateLegWeight(leg, cargoUnits, kind, false);
+      if (blockedLegs?.has(routeLegBlockKey(leg))) continue;
+      const weight = estimateLegWeight(leg, cargoUnits, kind, false, charterVehicles);
       const primary = metric === "time" ? weight.time : weight.cost;
       if (!best || primary < best.primary) best = { primary, leg, weight };
     }
@@ -330,7 +350,7 @@ export function findOptimalHiredRoute({
       const toRegion = byId.get(edge.to);
       if (!toRegion || regionHidden(edge.to)) continue;
       const toIsEnd = edge.to === endId;
-      if (toIsEnd && factors(edge.to).enabled === false) continue;
+      if (toIsEnd && !endpointAllowed(edge.to)) continue;
 
       const marketRegionId = String(market?.regionId ?? "");
       const marketModes = Array.isArray(market?.transportModes) && market.transportModes.length ? new Set(market.transportModes) : null;
@@ -359,11 +379,12 @@ export function findOptimalHiredRoute({
         for (const carrier of carriers) {
           const leg = makeLeg(current.node, edge.to, edge, mode, carrier);
           const cKey = carrier.id === "independent-carriers" ? `${carrier.id}:${leg.fromCountryId}` : carrier.id;
+          if (blockedLegs?.has(legBlockKey(current.node, edge.to, edge.routeId, mode, cKey))) continue;
           const continues = current.mode === mode && current.carrierKey === cKey && !needsFloatingHop;
           if (current.hops > 0 && !continues && factors(current.node).enabled === false) continue;
           const nextStages = current.stages + (continues ? 0 : 1) + (needsFloatingHop ? 1 : 0);
           if (nextStages > TRANSPORT_LIMITS.stages) continue;
-          const weight = estimateLegWeight(leg, cargoUnits, kind, continues);
+          const weight = estimateLegWeight(leg, cargoUnits, kind, continues, charterVehicles);
           const extraCost = needsFloatingHop ? floatingLastMile.weight.cost : 0;
           const extraTime = needsFloatingHop ? floatingLastMile.weight.time + TRANSFER_QD : 0;
           const edgePrimary = metric === "access" ? edge.ursCost : metric === "time" ? weight.time + extraTime : weight.cost + extraCost;
@@ -389,6 +410,56 @@ export function findOptimalHiredRoute({
     }
   }
   return null;
+}
+
+/**
+ * Bounded Yen-style multi-candidate search over fast Dijkstra.
+ * Explores distinct detours around busy vehicles, GM-hidden overrides, disabled or excluded services
+ * without exponential blowup (at most maxAttempts fast Dijkstra calls).
+ */
+export function findCandidateHiredRoutes(options = {}, { maxRoutes = 5, maxAttempts = 12, evaluate = null } = {}) {
+  const queue = [new Set()];
+  const triedBlocked = new Set([""]);
+  const seenRoutes = new Set();
+  const results = [];
+  let attempts = 0;
+
+  while (queue.length && results.length < maxRoutes && attempts < maxAttempts) {
+    const blockedLegs = queue.shift();
+    attempts++;
+    const route = findOptimalHiredRoute({ ...options, blockedLegs });
+    if (!route?.ok) continue;
+    const key = route.transportPlan?.key ?? "";
+    const legs = route.transportPlan?.legs ?? [];
+    const branch = (legKeys) => {
+      for (const legKey of legKeys) {
+        if (!legKey || blockedLegs.has(legKey)) continue;
+        const next = new Set(blockedLegs);
+        next.add(legKey);
+        const signature = [...next].sort().join("\u0000");
+        if (triedBlocked.has(signature)) continue;
+        triedBlocked.add(signature);
+        queue.push(next);
+      }
+    };
+    if (seenRoutes.has(key)) {
+      branch(legs.map(routeLegBlockKey));
+      continue;
+    }
+    seenRoutes.add(key);
+    const verdict = evaluate ? evaluate(route) : { ok: true, value: route };
+    if (verdict?.ok) {
+      results.push(verdict.value ?? route);
+      if (results.length < maxRoutes) {
+        const expand = verdict.expandLegKeys?.length ? verdict.expandLegKeys : legs.map(routeLegBlockKey);
+        branch(expand);
+      }
+    } else {
+      const rejectKeys = verdict?.blockedLegKeys?.length ? verdict.blockedLegKeys : legs.map(routeLegBlockKey);
+      branch(rejectKeys);
+    }
+  }
+  return results;
 }
 
 /** Fast diagnostic explaining why no hired route was found (always keeps the canonical prefix). */
@@ -449,11 +520,11 @@ export function diagnoseHiredRouteFailure({
 }
 
 /**
- * Scale a hired service to carry the full consignment in a single departure.
- * Large shipments hire multiple vessels/wagons and pay proportionally for them.
+ * Scale a scheduled (regular) hired service to carry the full consignment in a single departure.
+ * Charter services keep their native finite fleet (service.vehicles) so bookings never exceed real vessels.
  */
 export function scaleHiredServiceForCargo(service, totalLoad, overrides = {}) {
-  if (!service || service.kind === "owned" || !Number.isFinite(totalLoad) || totalLoad <= service.capacity) {
+  if (!service || service.kind !== "regular" || !Number.isFinite(totalLoad) || totalLoad <= service.capacity) {
     return { ...service, vehicleCount: 1 };
   }
   if (transportServiceCompatibilityIds(service.id).some((id) => overrides?.[id]?.capacity !== undefined)) {
@@ -640,7 +711,7 @@ function buildOwnShipService({ data, holding, ship, world, from, to, homeEndpoin
 export function findOptimalOwnShipServices({
   data, holding, ship, world, market, regions, organizations, countries, seasonId,
   direction, accessLimit, difficulty, cargoLoad, configuration, clockQd, regionFactors,
-  isGM, homeEndpoint, homeRegionId, returnHome, calendar, serviceEndpoints
+  isGM, homeEndpoint, homeRegionId, returnHome, calendar, serviceEndpoints, excluded = []
 }) {
   if (!ship) return { ok: false, reason: "Корабль не выбран." };
   if (ship.navigationMode !== "world" || ship.condition !== "ready" || ship.activeVoyage || ship.orderBundle || ship.transportOrderId) {
@@ -731,13 +802,30 @@ export function findOptimalOwnShipServices({
     const landFrom = direction === "inbound" ? marketRegionId : port.regionId;
     const landTo = direction === "inbound" ? port.regionId : marketRegionId;
     const reservedAirAccess = airReach.get(port.regionId) ?? 0;
-    const landRoute = findOptimalHiredRoute({
+    const landMatches = findCandidateHiredRoutes({
       holding, market, regions, organizations, countries, seasonId, direction,
       accessLimit: Math.max(0, cargoAccessLimit - reservedAirAccess), cargoLoad, kind: "regular", metric: "cost",
       regionFactors, isGM, allowedModes: LAND_MODES,
       fromRegionId: landFrom, toRegionId: landTo, allowFloatingLastMile: false
+    }, {
+      maxRoutes: 1,
+      maxAttempts: 6,
+      evaluate: (route) => {
+        const services = transportServicesFromRoutes([route], configuration, regions, {
+          ...serviceEndpoints, homeEndpoint: ""
+        })
+          .filter((row) => row.kind === "regular")
+          .map((row) => scaleHiredServiceForCargo(row, cargoLoad, configuration.overrides));
+        const allowed = services.filter((row) => isTransportServiceAllowed(row, { isGM, excluded }));
+        if (allowed.length === services.length && allowed.length && allowed[0].from === landFrom && allowed.at(-1).to === landTo) {
+          return { ok: true, value: { route, services: allowed } };
+        }
+        return { ok: false, blockedLegKeys: (route.transportPlan?.legs ?? []).map(routeLegBlockKey) };
+      }
     });
-    if (!landRoute?.ok) continue;
+    const landMatch = landMatches[0];
+    if (!landMatch) continue;
+    const { route: landRoute, services: landServices } = landMatch;
     const remainingAccess = cargoAccessLimit - landRoute.routeAccessCost;
     if (remainingAccess < 0) continue;
     try {
@@ -748,10 +836,6 @@ export function findOptimalOwnShipServices({
         cargoAccessLimit: remainingAccess, emptyAccessLimit: accessLimit, configuration, calendar, returnHome
       });
       if (!ownService.approachAvailable || (returnHome && !ownService.endReturnAvailable)) continue;
-      const landServices = transportServicesFromRoutes([landRoute], configuration, regions, {
-        ...serviceEndpoints, homeEndpoint: ""
-      }).filter((row) => row.kind === "regular").map((row) => scaleHiredServiceForCargo(row, cargoLoad, configuration.overrides));
-      if (!landServices.length) continue;
       const chain = direction === "inbound" ? [...landServices, ownService] : [ownService, ...landServices];
       const totalDistance = chain.reduce((sum, row) => sum + (row.distanceKm ?? 0), 0);
       const totalAccess = chain.reduce((sum, row) => sum + (row.accessCost ?? 0), 0);

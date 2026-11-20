@@ -26,6 +26,14 @@ export function transportServiceExcluded(service, excluded = []) {
   return excluded.includes(service.companyId) || transportServiceCompatibilityIds(service.id).some(id => excluded.includes(id));
 }
 
+/** Single canonical eligibility predicate shared across route discovery, quoting and confirmation. */
+export function isTransportServiceAllowed(service, { isGM = false, excluded = [] } = {}) {
+  return Boolean(service)
+    && service.enabled !== false
+    && (isGM || service.visibility !== "gm")
+    && !transportServiceExcluded(service, excluded);
+}
+
 /** Saved UI choices can follow an unambiguous old ID; never guess between physical paths. */
 export function resolveTransportSelections(services, request) {
   const ambiguous = new Set();

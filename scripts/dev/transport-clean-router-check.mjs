@@ -8,6 +8,7 @@ import { normalizeSkyholdData } from "../data/normalizers.js";
 import { ensureTransportState } from "../data/transport/state.js";
 import { transportServicesShareFleet } from "../engines/transport/service-identity.js";
 import { diagnoseHiredRouteFailure } from "../engines/transport/router.js";
+import { applyShipHomePlacement, shipHomeLocationContext } from "../apps/domains/ship-home-location.js";
 
 // 1. Whole-shipment hired scaling: cargo exceeding 1 vessel hires multiple vessels in ONE departure.
 {
@@ -31,21 +32,26 @@ import { diagnoseHiredRouteFailure } from "../engines/transport/router.js";
   assert.equal(large.plan.stages[0].service.vehicleCount, 2, "scales vehicle count cleanly");
   assert.ok(large.plan.totalCopper > small.plan.totalCopper, "transport charge itself scales for the second vessel");
 
-  // Scaled (:x2) charter shares fleet occupancy with the base (1-vessel) charter on the same physical path!
+  // Charter respects finite fleet size (charterVehicles): a 2-vessel load reserves BOTH real vessels,
+  // so a subsequent order on the same 2-vessel line must wait instead of spawning a 3rd ghost vessel.
   const fFleet = transportFixture();
-  fFleet.data.catalog.transportV2.charterVehicles = 1;
+  fFleet.data.catalog.transportV2.charterVehicles = 2;
   fFleet.data.catalog.marketEconomy.settings = { ...(fFleet.data.catalog.marketEconomy.settings ?? {}), airshipCapacityLoad: 20 };
   fFleet.data.catalog.marketEconomy.baseOffers[0].baseStock = 100;
   const hFleet = transportHarness(fFleet);
   const req1 = transportRequest(hFleet.fixture(), "a", { mode: "charter" }, true);
   const key1 = Object.keys(req1.quantities)[0];
-  req1.quantities[key1] = 10;
-  const booked1 = await hFleet.book(req1, "fleet-base-1", true);
-  const req2 = { ...req1, quantities: { [key1]: 30 } };
+  req1.quantities[key1] = 30;
+  const booked1 = await hFleet.book(req1, "fleet-two-vessels", true);
+  assert.equal(booked1.preview.plan.stages[0].runs.length, 2, "30-unit charter uses both real vehicles in one order");
+  assert.deepEqual(booked1.preview.plan.stages[0].runs.map((r) => r.vehicle).sort(), [0, 1]);
+  assert.equal(booked1.preview.plan.stages[0].runs[0].startQd, booked1.preview.plan.stages[0].runs[1].startQd,
+    "both free charter vehicles depart simultaneously");
+  const req2 = { ...req1, quantities: { [key1]: 5 } };
   const quote2 = prepareTransportContext({ ...hFleet.fixture(), request: req2, isGM: true });
-  assert.equal(quote2.plan.stages[0].service.vehicleCount, 2);
-  assert.ok(quote2.plan.stages[0].runs[0].startQd >= booked1.preview.plan.stages[0].runs[0].releaseQd,
-    "scaled :x2 booking waits for the base fleet vehicle instead of double-booking it");
+  const earliestFree = Math.min(...booked1.preview.plan.stages[0].runs.map((r) => r.releaseQd));
+  assert.ok(quote2.plan.stages[0].runs[0].startQd >= earliestFree,
+    "next charter on a full 2-vessel line waits for an actual returning vessel instead of overbooking");
 }
 
 // 2. Company modifiers & GM visibility are honored automatically on every edge.
@@ -315,6 +321,84 @@ import { diagnoseHiredRouteFailure } from "../engines/transport/router.js";
     const landOwned = prepareTransportOptions({ ...fLand, request: reqLand, isGM: true });
     assert.equal(landOwned.options.owned.ok, true, "longer-km / lower-URS land path to airship transfer port must be found");
     assert.equal(landOwned.options.owned.transferPortId, "port");
+
+    // 9. Multi-candidate schedule/override detours, unified enabled/visibility rules (incl. mixed own-ship),
+    //    and dedicated ship-home placement (marketEnabled: false) keeping hired options available.
+    const fDetour = transportFixture();
+    fDetour.data.catalog.transportV2.charterVehicles = 1;
+    fDetour.data.catalog.eventRegions = [
+      { value: "home", label: "Дом", countryId: "public", marketTransportModes: ["airship"],
+        marketLinks: [
+          { regionId: "a", distanceKm: 40, ursCost: 1, modes: ["airship"], routeId: "direct" },
+          { regionId: "mid", distanceKm: 30, ursCost: 1, modes: ["airship"], routeId: "via-mid-1" }
+        ] },
+      { value: "mid", label: "Обход", countryId: "public", marketTransportModes: ["airship"],
+        marketLinks: [{ regionId: "a", distanceKm: 30, ursCost: 1, modes: ["airship"], routeId: "via-mid-2" }] },
+      { value: "a", label: "Рынок А", countryId: "public", marketTransportModes: ["airship"], marketLinks: [] }
+    ];
+    fDetour.holding.gm.modifiers.marketConnectionsLevel = 10;
+    const hDetour = transportHarness(fDetour);
+    const reqDetour = transportRequest(hDetour.fixture(), "a", { mode: "charter" }, false);
+    const firstBook = await hDetour.book(reqDetour, "detour-occupy-direct", false);
+    assert.equal(firstBook.preview.plan.stages[0].service.distanceKm, 40, "first charter takes shortest direct route");
+    const secondQuote = prepareTransportContext({ ...hDetour.fixture(), request: reqDetour, isGM: false });
+    assert.equal(secondQuote.plan.stages[0].service.distanceKm, 60, "second charter takes free faster detour around busy direct vehicle");
+    assert.ok(secondQuote.plan.arrivalQd < firstBook.preview.plan.stages[0].runs[0].releaseQd + firstBook.preview.plan.stages[0].service.travelQd,
+      "free detour beats waiting for the busy direct charter");
+
+    // Disabled or GM-hidden override on shortest route: quote never offers disabled service & finds open detour instead!
+    const fOverride = transportFixture();
+    fOverride.data.catalog.eventRegions = structuredClone(fDetour.data.catalog.eventRegions);
+    fOverride.holding.gm.modifiers.marketConnectionsLevel = 10;
+    const reqOv = transportRequest(fOverride, "a", { mode: "regular" }, false);
+    const baseOv = prepareTransportContext({ ...fOverride, request: reqOv, isGM: false });
+    const directId = baseOv.plan.stages[0].service.id;
+    fOverride.data.catalog.transportV2.overrides = { [directId]: { enabled: false } };
+    const detourEnabled = prepareTransportContext({ ...fOverride, request: reqOv, isGM: false });
+    assert.equal(detourEnabled.plan.stages[0].service.distanceKm, 60, "disabled direct service routes cleanly via open detour");
+    fOverride.data.catalog.transportV2.overrides = { [directId]: { visibility: "gm" } };
+    const detourVisible = prepareTransportContext({ ...fOverride, request: reqOv, isGM: false });
+    assert.equal(detourVisible.plan.stages[0].service.distanceKm, 60, "GM-hidden direct service routes player via open public detour");
+
+    // When the ONLY service on the only route is disabled, quote itself rejects it (never fails only on confirm).
+    const fOnly = transportFixture();
+    const reqOnly = transportRequest(fOnly, "a", { mode: "regular" }, true);
+    const onlyId = prepareTransportContext({ ...fOnly, request: reqOnly, isGM: true }).plan.stages[0].service.id;
+    fOnly.data.catalog.transportV2.overrides = { [onlyId]: { enabled: false } };
+    const onlyOpts = prepareTransportOptions({ ...fOnly, request: reqOnly, isGM: true });
+    assert.equal(onlyOpts.options.regular.ok, false, "disabled sole service is rejected already at quote time");
+
+    // Mixed own-ship + land feeder must NOT allow a player to quote/book a GM-hidden land feeder.
+    const fMix = transportFixture();
+    fMix.holding.gm.modifiers.marketConnectionsLevel = 10;
+    fMix.data.catalog.eventRegions = [
+      { value: "home", label: "Дом", countryId: "public", marketTransportModes: ["airship"],
+        marketLinks: [{ regionId: "port", distanceKm: 80, ursCost: 1, modes: ["airship"] }] },
+      { value: "port", label: "Порт", countryId: "public", marketTransportModes: ["airship", "caravan"],
+        marketLinks: [{ regionId: "a", distanceKm: 40, ursCost: 1, modes: ["caravan"] }] },
+      { value: "a", label: "Рынок А", countryId: "public", marketTransportModes: ["caravan"], marketLinks: [] }
+    ];
+    const reqMix = transportRequest(fMix, "a", { direction: "inbound", mode: "owned", ownShipId: fMix.holding.special.ships.list[0].id }, false);
+    const gmMix = prepareTransportContext({ ...fMix, request: reqMix, isGM: true });
+    const landFeederId = gmMix.plan.stages[0].service.id;
+    fMix.data.catalog.transportV2.overrides = { [landFeederId]: { visibility: "gm" } };
+    const playerMix = prepareTransportOptions({ ...fMix, request: reqMix, isGM: false });
+    assert.equal(playerMix.options.owned.ok, false, "player cannot quote or book a mixed own-ship route through a GM-only land feeder");
+
+    // Dedicated ship-home location (marketEnabled: false) keeps hired regular & charter AND own ship available!
+    const fHome = transportFixture();
+    fHome.holding.type = "ship";
+    for (const [i, region] of fHome.data.catalog.eventRegions.entries()) {
+      region.marketMapX = 100 + i * 100; region.marketMapY = 100;
+    }
+    const homeRoute = shipHomeLocationContext(fHome.data, fHome.holding).routes[0];
+    assert.ok(homeRoute);
+    applyShipHomePlacement(fHome.data, fHome.holding, homeRoute.key, 50);
+    const reqHome = transportRequest(fHome, "a", { direction: "inbound" }, true);
+    const homeOpts = prepareTransportOptions({ ...fHome, request: reqHome, isGM: true });
+    assert.equal(homeOpts.options.regular.ok, true, "regular hired delivery works for dedicated ship-home (marketEnabled: false)");
+    assert.equal(homeOpts.options.charter.ok, true, "charter hired delivery works for dedicated ship-home (marketEnabled: false)");
+    assert.equal(homeOpts.options.owned.ok, true, "own ship works for dedicated ship-home");
   }
 }
 

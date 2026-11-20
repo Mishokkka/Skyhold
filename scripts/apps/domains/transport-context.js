@@ -1,8 +1,8 @@
 import { prepareTransportCommerce } from "../market/transport-commerce.js";
 import { transportServicesFromRoutes, validateTransportConfiguration } from "../../engines/transport/services.js";
-import { resolveTransportSelections, transportServiceExcluded } from "../../engines/transport/service-identity.js";
+import { isTransportServiceAllowed, resolveTransportSelections } from "../../engines/transport/service-identity.js";
 import { planTransportChain } from "../../engines/transport/planner.js";
-import { diagnoseHiredRouteFailure, findOptimalHiredRoute, findOptimalOwnShipServices, resolveSettlementAccessLevel, scaleHiredServiceForCargo } from "../../engines/transport/router.js";
+import { diagnoseHiredRouteFailure, findCandidateHiredRoutes, findOptimalOwnShipServices, resolveSettlementAccessLevel, routeLegBlockKey, scaleHiredServiceForCargo } from "../../engines/transport/router.js";
 import { cargoLoad, cargoValue, shipTransportFunding, transportLoad, transportMoney } from "../../engines/transport/quantities.js";
 import { stableDataHash } from "../../data/storage-commit.js";
 import { findHoldingRegion } from "../../engines/market/logistics.js";
@@ -141,21 +141,67 @@ function prepareEnvironment({ data, holding, request = {}, isGM = false }) {
   };
 }
 
+function compareHiredQuotes(kind, a, b) {
+  if (kind === "charter") {
+    return (a.plan.arrivalQd - b.plan.arrivalQd)
+      || (a.totalCopper - b.totalCopper)
+      || (a.plan.stages.length - b.plan.stages.length);
+  }
+  return (a.totalCopper - b.totalCopper)
+    || (a.plan.arrivalQd - b.plan.arrivalQd)
+    || (a.plan.stages.length - b.plan.stages.length);
+}
+
 function buildHiredOption(env, kind, request) {
   const { holding, context, regions, direction, access, difficulty, totalLoad, seasonId, regionFactors, isGM, configuration, serviceEndpoints, cargo, startQd, state } = env;
   const cargoAccessLimit = access.accessLevel - difficulty;
   if (cargoAccessLimit < 0) return { ok: false, error: `Для этого товара требуется УРС ${difficulty}, у поселения УРС ${access.accessLevel}.` };
-  const route = findOptimalHiredRoute({
+
+  let lastPlanError = "";
+  let ambiguousError = "";
+  const candidates = findCandidateHiredRoutes({
     holding, market: context.market, regions,
     organizations: context.economy?.organizations ?? [],
     countries: context.economy?.countries ?? [],
     seasonId, direction, accessLimit: cargoAccessLimit, cargoLoad: totalLoad,
-    kind, metric: kind === "charter" ? "time" : "cost", regionFactors, isGM
+    kind, metric: kind === "charter" ? "time" : "cost", regionFactors, isGM,
+    charterVehicles: configuration.charterVehicles
+  }, {
+    maxRoutes: 5,
+    maxAttempts: 12,
+    evaluate: (route) => {
+      const legs = route.transportPlan?.legs ?? [];
+      const allRouteServices = transportServicesFromRoutes([route], configuration, regions, serviceEndpoints)
+        .map((service) => scaleHiredServiceForCargo(service, totalLoad, configuration.overrides));
+      const allowedServices = allRouteServices.filter((service) => isTransportServiceAllowed(service, { isGM, excluded: request.excluded }));
+      const resolved = resolveTransportSelections(allowedServices, request);
+      if (resolved.ambiguous.length) {
+        ambiguousError = "Выбранная служба неоднозначна. Выберите вариант доставки заново.";
+        return { ok: false, blockedLegKeys: [] };
+      }
+      const selected = resolved.request.serviceIds?.length
+        ? resolved.request.serviceIds.map((id) => allowedServices.find((row) => row.id === id))
+        : allowedServices.filter((service) => service.kind === kind);
+      if (!selected.length || selected.some((row) => !row) || selected[0].from !== env.from || selected.at(-1).to !== env.to) {
+        // Route had a disabled, GM-hidden, or excluded service -> block its legs and explore open detours.
+        return { ok: false, blockedLegKeys: legs.map(routeLegBlockKey) };
+      }
+      try {
+        const plan = planTransportChain({ cargo, services: selected, startQd, runs: state?.runs ?? [] });
+        const quote = finalizeQuote({ plan, services: allowedServices, ship: null, env, request });
+        return { ok: true, value: quote, expandLegKeys: legs.map(routeLegBlockKey) };
+      } catch (error) {
+        lastPlanError = error.message;
+        return { ok: false, blockedLegKeys: legs.map(routeLegBlockKey) };
+      }
+    }
   });
-  if (!route?.ok) {
+
+  if (ambiguousError) return { ok: false, error: ambiguousError };
+  if (!candidates.length) {
     return {
       ok: false,
-      error: diagnoseHiredRouteFailure({
+      error: lastPlanError || diagnoseHiredRouteFailure({
         holding, market: context.market, regions,
         organizations: context.economy?.organizations ?? [],
         countries: context.economy?.countries ?? [],
@@ -163,26 +209,8 @@ function buildHiredOption(env, kind, request) {
       })
     };
   }
-  const rawServices = transportServicesFromRoutes([route], configuration, regions, serviceEndpoints)
-    .filter((service) => isGM || service.visibility !== "gm")
-    .map((service) => scaleHiredServiceForCargo(service, totalLoad, configuration.overrides));
-  const resolved = resolveTransportSelections(rawServices, request);
-  if (resolved.ambiguous.length) return { ok: false, error: "Выбранная служба неоднозначна. Выберите вариант доставки заново." };
-  const allServices = request.excluded?.length
-    ? rawServices.filter((service) => !transportServiceExcluded(service, request.excluded))
-    : rawServices;
-  const selected = resolved.request.serviceIds?.length
-    ? resolved.request.serviceIds.map((id) => allServices.find((row) => row.id === id))
-    : allServices.filter((service) => service.kind === kind);
-  if (!selected.length || selected.some((row) => !row) || selected[0].from !== env.from || selected.at(-1).to !== env.to) {
-    return { ok: false, error: "Для выбранного груза нет доступной перевозки." };
-  }
-  try {
-    const plan = planTransportChain({ cargo, services: selected, startQd, runs: state?.runs ?? [] });
-    return finalizeQuote({ plan, services: allServices, ship: null, env, request });
-  } catch (error) {
-    return { ok: false, error: error.message };
-  }
+  candidates.sort((a, b) => compareHiredQuotes(kind, a, b));
+  return candidates[0];
 }
 
 function buildOwnedOption(env, ship, request) {
@@ -198,10 +226,13 @@ function buildOwnedOption(env, ship, request) {
     seasonId, direction, accessLimit: access.accessLevel, difficulty, cargoLoad: totalLoad,
     configuration, clockQd: startQd - clockOffsetQd, regionFactors, isGM,
     homeEndpoint: endpoint, homeRegionId: home, returnHome: request.returnHome === true,
-    calendar, serviceEndpoints
+    calendar, serviceEndpoints, excluded: request.excluded
   });
   if (!found.ok) return { ok: false, error: found.reason, needsTimeSync: Boolean(found.needsTimeSync) };
-  if (!found.services?.length || found.services[0].from !== env.from || found.services.at(-1).to !== env.to) {
+  if (!found.services?.length
+    || found.services[0].from !== env.from
+    || found.services.at(-1).to !== env.to
+    || !found.services.every((row) => isTransportServiceAllowed(row, { isGM, excluded: request.excluded }))) {
     return { ok: false, error: "Нет доступного воздушного маршрута для своего корабля (проверьте УРС и воздушные порты)." };
   }
   try {
