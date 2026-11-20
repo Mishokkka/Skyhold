@@ -3,13 +3,13 @@ import { dispatchDelegatedAction } from "./common/delegated-events.js";
 import { MODULE_ID } from "../data/constants.js";
 import { SkyholdData } from "../data/store.js";
 
-import { findReadableHoldingEntry } from "../data/access-guard.js";
+import { findReadableHoldingEntry, hiddenStorageRoomIds } from "../data/access-guard.js";
 import { holdingPermissionContext } from "../data/holding-permissions.js";
 import { normalizeMarketEconomy } from "../data/market/economy.js";
 import { allResourceDefs } from "../core/resources.js";
-import { copperCurrencyParts, formatCopperCurrencyCompact, formatCopperCurrencyCompact as formatCopperCurrency } from "../core/currency.js";
+import { copperCurrencyParts, copperDenominations, formatCopperCurrencyCompact, formatCopperCurrencyCompact as formatCopperCurrency } from "../core/currency.js";
 
-import { resolveFoundryUuid } from "../integrations/foundry-runtime.js";
+import { foundryDialogV2, resolveFoundryUuid } from "../integrations/foundry-runtime.js";
 import { getSkyholdWorkflowService } from "../workflows/skyhold-workflow-service.js";
 import { RenderSchedulerMixin } from "./common/render-scheduler.js";
 import { bindImageFallbacks, capturePersistentImages, restorePersistentImages } from "./common/image-fallback.js";
@@ -21,7 +21,8 @@ import { groupMarketOffers, marketOfferGroupTotals, merchantAbbreviation, mercha
 
 import { prepareMarketOutboundContext } from "./market/outbound-context.js";
 
-import { availableAuthorityMarkets, authorityMarketLogistics, authorityMarketQuote, authorityOutboundRoutes, marketAuthoritySourceToken } from "./market/authority-context.js";
+import { availableAuthorityMarkets, authorityMarketQuote } from "./market/authority-context.js";
+import { editHoldingTreasury } from "./domains/finance/treasury-edit.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
@@ -57,6 +58,7 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
         existing._focusOutboundOrderId = String(outboundOrderId);
         existing._focusOutbound = true;
       }
+      existing._marketCache = null;
       existing.render({ force: true, focus: true });
       return existing;
     }
@@ -72,6 +74,18 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     return app;
   }
 
+  static rerenderOpen({ skipFocused = false } = {}) {
+    for (const app of this.instances.values()) {
+      const active = globalThis.document?.activeElement;
+      if (skipFocused && app.element?.contains(active) && active?.matches("input, select")) {
+        app._deferredFocusRender = true;
+        continue;
+      }
+      app._deferredFocusRender = false;
+      app.requestRender({ focus: false });
+    }
+  }
+
   constructor({ holdingId } = {}, options = {}) {
     super(options);
     this.holdingId = String(holdingId ?? "");
@@ -81,101 +95,47 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     this.kind = "all";
     this.marketId = "";
     this.merchantSelections = {};
-    this.carrierId = "";
     this.outboundQuantities = {};
     this._outboundDisclosures = new DisclosureState();
     this.ownShipId = "";
   }
 
   render(options = {}) {
+    this._deferredFocusRender = false;
     this._outboundDisclosures.capture();
     if (this.rendered && this.element) this._pendingPersistentImages = capturePersistentImages(this.element);
     return super.render(options);
   }
 
-  _availableMarkets(data, { holding = null, isGM = Boolean(game.user?.isGM), economy: preparedEconomy = null, resources: preparedResources = null } = {}) {
-    return availableAuthorityMarkets(data, { holding, isGM, economy: preparedEconomy, resources: preparedResources });
-  }
-
-  _marketLogistics(holding, data, market, { carrierId = this.carrierId, persistCarrier = false, isGM = Boolean(game.user?.isGM), economy = null } = {}) {
-    const result = authorityMarketLogistics({ holding, data, market, carrierId, isGM, economy });
-    if (persistCarrier) this.carrierId = String(result.carrier?.id ?? "");
-    return result;
-  }
-
-  _marketQuote(holding, data, market, { isGM = Boolean(game.user?.isGM), economy = null, resources = null } = {}) {
-    const quote = authorityMarketQuote({ holding, data, market, carrierId: this.carrierId, isGM, economy, resources, discoverTransport: true });
-    if (quote) this.carrierId = String(quote.selectedCarrierId ?? "");
-    return quote;
-  }
-
-  _marketSourceHash(data, holding, marketId = "") {
-    return marketAuthoritySourceToken({ data, holding, marketId, carrierId: this.carrierId });
-  }
-
-  _marketOutboundRoutes(options = {}) {
-    return authorityOutboundRoutes(options);
-  }
-
-  _marketOutboundContext({ holding, data, market, quote, economy, resources, isGM = Boolean(game.user?.isGM) } = {}) {
-    if (!holding || !market || !quote) return prepareMarketOutboundContext();
-    const outboundQuote = { ...quote, offers: quote.outboundOffers ?? quote.offers ?? [], countryId: String(market.countryId ?? "") };
-    const buyerOrganizations = (economy?.organizations ?? []).filter((organization) => isGM || organization?.visibility !== "gm");
-    const preliminary = prepareMarketOutboundContext({
-      holding,
-      quote: outboundQuote,
-      resourceDefinitions: resources,
-      organizations: buyerOrganizations,
-      quantities: this.outboundQuantities,
-      insuranceEnabled: this.outboundInsuranceEnabled
-    });
-    const transport = authorityMarketLogistics({ holding, data, market, economy, isGM,
-      direction: "outbound", carrierId: "auto-carriers" });
-    const routes = this._marketOutboundRoutes({
-      holding,
-      data,
-      market,
-      economy,
-      resources,
-      offers: preliminary.offers,
-      carriers: transport?.carriers ?? [],
-      carrierId: "auto-carriers",
-      preparedLogistics: transport?.logistics,
-      isGM
-    });
-    const result = prepareMarketOutboundContext({
-      holding,
-      quote: outboundQuote,
-      resourceDefinitions: resources,
-      organizations: buyerOrganizations,
-      routes,
-      quantities: this.outboundQuantities
-    });
-    return result;
-  }
-
   _marketSnapshot({ isGM = Boolean(game.user?.isGM) } = {}) {
     const data = SkyholdData.view();
-
-    const { holding } = findReadableHoldingEntry(data, this.holdingId, { fallback: false });
-    const locations = data?.catalog?.eventRegions ?? [];
-    const economy = normalizeMarketEconomy(data?.catalog?.marketEconomy, { locations });
-    const resources = allResourceDefs({ catalogRows: data?.catalog?.resources });
-    const markets = this._availableMarkets(data, { holding, isGM, economy, resources });
+    const userId = game.user?.id;
+    // The store replaces the read-only view after a commit. Cart edits reuse
+    // its catalog and quotes, separately for each user and visibility level.
+    if (this._marketCache?.data !== data || this._marketCache?.userId !== userId || this._marketCache?.isGM !== isGM) {
+      const { holding } = findReadableHoldingEntry(data, this.holdingId, { fallback: false });
+      const locations = data?.catalog?.eventRegions ?? [];
+      const economy = normalizeMarketEconomy(data?.catalog?.marketEconomy, { locations });
+      const resources = allResourceDefs({ catalogRows: data?.catalog?.resources });
+      const markets = availableAuthorityMarkets(data, { holding, isGM, economy, resources, offerLocationIds: [] });
+      this._marketCache = { data, userId, isGM, holding, economy, resources, markets, quotes: new Map() };
+    }
+    const { holding, economy, resources, markets, quotes } = this._marketCache;
     const market = markets.find((row) => row.id === this.marketId) ?? markets[0] ?? null;
-    if (market && market.id !== this.marketId) this.marketId = market.id;
-    if (!holding) return { data, holding: null, markets, market, quote: null, plan: null, outbound: null, sourceHash: "" };
-    const quote = this._marketQuote(holding, data, market, { isGM, economy, resources });
-    const outbound = this._marketOutboundContext({ holding, data, market, quote, economy, resources, isGM });
-    return {
-      data,
-      holding,
-      markets,
-      market,
-      quote,
-      outbound,
-      sourceHash: this._marketSourceHash(data, holding, market?.id)
-    };
+    if (!market) return { data, holding, markets, market, quote: null, outbound: null };
+    this.marketId = market.id;
+    if (!quotes.has(market.id)) {
+      const catalog = availableAuthorityMarkets(data, { holding, isGM, economy, resources, offerLocationIds: [market.id] });
+      const selected = catalog.find((row) => row.id === market.id);
+      quotes.set(market.id, authorityMarketQuote({ data, holding, market: selected, isGM, economy, resources, discoverTransport: true }));
+    }
+    const quote = quotes.get(market.id);
+    // This list shows stock, demand and gross proceeds. Transport V2 builds
+    // and validates the actual shipment when the user opens checkout.
+    const outbound = prepareMarketOutboundContext({
+      holding, quote, resourceDefinitions: resources, quantities: this.outboundQuantities, isGM
+    });
+    return { data, holding, markets, market, quote, outbound };
   }
 
   async _enrichMarketQuoteItems(quote) {
@@ -208,7 +168,8 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     let { holding, markets, market, quote, outbound } = this._marketSnapshot();
     const permissions = holdingPermissionContext(holding);
     const workflow = getSkyholdWorkflowService();
-    const rooms = holding ? workflow._storageRooms(holding, { includeUnavailable: false }) : [];
+    const hiddenRooms = hiddenStorageRoomIds(holding, permissions.isGM);
+    const rooms = holding ? workflow._storageRooms(holding, { includeUnavailable: false }).filter((room) => !hiddenRooms.has(room.id)) : [];
     const availableRoomIds = new Set(rooms.map((room) => String(room.id ?? "")));
     if (!availableRoomIds.has(this.targetRoomId)) {
       const preferred = String(holding?.special?.market?.preferredRoomId ?? "outdoors") || "outdoors";
@@ -259,6 +220,7 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
       marketOptions: markets.map((row) => ({ value: row.id, label: `${row.label} · ${row.routeAccessCost ? `УРС ${row.routeAccessCost}` : "локально"}`, selected: row.id === market?.id })),
       canPurchase: Boolean(holding && permissions.canUseStorage),
       canOrder: Boolean(holding && permissions.canUseStorage),
+      canEditTreasury: Boolean(holding && permissions.isGM),
       readOnlyReason: permissions.isGM ? "" : "Сделки на внешнем рынке подтверждает GM.",
       logisticsOk: routeLogistics?.ok !== false,
       logisticsReason: (routeLogistics?.reasons ?? []).join(" "),
@@ -334,6 +296,13 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     root.addEventListener("contextmenu", (event) => this._onContextMenu(event, root), listenerOptions);
     root.addEventListener("change", (event) => this._onChange(event, root), listenerOptions);
     root.addEventListener("input", (event) => this._onInput(event, root), listenerOptions);
+    root.addEventListener("focusout", (event) => {
+      if (!this._deferredFocusRender) return;
+      const next = event.relatedTarget;
+      if (next && root.contains(next) && next.matches?.("input, select")) return;
+      this._deferredFocusRender = false;
+      this.requestRender({ focus: false });
+    }, listenerOptions);
     this._applyFilters(root);
     if (this._focusOutboundOrderId || this._focusOutbound) {
       const orderId = this._focusOutboundOrderId;
@@ -386,6 +355,9 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     } else if (action === "market-transport-orders") {
       event.preventDefault();
       return import("./lazy-apps.js").then(({ openTransportApp }) => openTransportApp({ holdingId: this.holdingId }));
+    } else if (action === "market-edit-treasury") {
+      event.preventDefault();
+      return this._onEditTreasury();
     } else if (action === "market-buy") {
       event.preventDefault();
       return this._onBuy();
@@ -425,7 +397,6 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     const provider = event.target?.closest?.("[data-market-provider]");
     if (provider && root.contains(provider)) {
       this.marketId = String(provider.value ?? "");
-      this.carrierId = "";
       this.quantities = {};
       this.outboundQuantities = {};
       this.merchantSelections = {};
@@ -483,6 +454,31 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
 
   async _onBookOutbound() { return this._openTransport("outbound"); }
 
+  async _onEditTreasury() {
+    if (!game.user?.isGM || this._treasuryDialogOpen) return;
+    const holdingId = this.holdingId;
+    const { holding } = findReadableHoldingEntry(SkyholdData.view(), holdingId, { fallback: false });
+    if (!holding) return ui.notifications.warn("Владение недоступно.");
+    const expectedCopper = copperDenominations(holding.storage?.moneyCopper).totalCopper;
+    this._treasuryDialogOpen = true;
+    try {
+      const amount = await foundryDialogV2().prompt({
+        classes: ["fbl-skyhold"],
+        window: { title: "Казна" },
+        content: `<label class="fbls-field"><span>Новая сумма в медных монетах (ММ)</span>
+          <input class="fbls-control" type="number" name="treasury" min="0" max="${Number.MAX_SAFE_INTEGER}" step="1" value="${expectedCopper}" required autofocus></label>`,
+        ok: { label: "Установить сумму", callback: (_event, button) => button.form.elements.treasury.valueAsNumber },
+        rejectClose: false
+      });
+      if (amount === null) return;
+      const result = await editHoldingTreasury(holdingId, { amount, expectedCopper });
+      if (!result?.ok) ui.notifications.warn(result?.message ?? "Владение недоступно.");
+      this.requestRender({ focus: false });
+    } finally {
+      this._treasuryDialogOpen = false;
+    }
+  }
+
   async _openTransport(direction) {
     if (this._buyOperationPending) return;
     this._buyOperationPending = true;
@@ -502,6 +498,7 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
 
   async _onClose(options) {
     await super._onClose(options);
+    this._deferredFocusRender = false;
     this._marketAbortController?.abort?.();
     this._outboundDisclosures.close();
     hideFloatingTooltip(this);

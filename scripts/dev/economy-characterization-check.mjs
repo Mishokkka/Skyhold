@@ -810,13 +810,18 @@ export async function checkEconomyCharacterization() {
       expenseMode: "cycle"
     };
     holding.buildings.list = [
-      builtProductionBuilding("source", [sourceLine]),
+      builtProductionBuilding("source", [sourceLine], { visibility: "gm", name: "Тайная столярня" }),
       builtProductionBuilding("consumer", [consumerLine], { assignedWorkerIds: ["consumer-worker"] })
     ];
-    await economy._runEconomyForQd(holding, 4);
+    const report = await economy._runEconomyForQd(holding, 4);
+    economy._appendEconomyStorageLog(holding, report, { operationId: "worker-collection" });
     assert.equal(sourceLine.pendingQty, 0, "worker auto-collect must clear matching source pending output");
     assert.equal(quantity(holding, "stone"), 2, "consumer workers must use auto-collected inputs in the same QD");
     assert.equal(quantity(holding, "wood"), 0, "auto-collected inputs must be consumed by the requesting worker line");
+    assert.ok(report.produced.some(line => line.includes("Тайная столярня")), "the GM's production report retains the source");
+    const collected = holding.storage.log.find(row => /Собрано работником-потребителем/.test(row.note));
+    assert.equal(collected?.qty, 2, "the journal preserves the real collection count");
+    assert.doesNotMatch(collected.note, /Тайная столярня/, "the new journal entry never stores another building's name in free text");
   }
 
   {
@@ -860,6 +865,41 @@ export async function checkEconomyCharacterization() {
     assert.equal(readiness.foodAvailable, executed.food.availableBeforeConsumption,
       "Readiness must use the same staffed shifts and ingredient collection chain as actual execution");
     assert.equal(readiness.alerts.some((alert) => alert.key === "food"), true, "A two-unit forecast shortage must remain visible");
+  }
+
+  {
+    const holding = makeHolding();
+    holding.people.list = [{ id: "local", name: "Мельник", age: 32 }];
+    holding.buildings.list = [
+      { id: "hidden-project", name: "Тайный проект", visibility: "gm", constructionStatus: "planned" },
+      { id: "hidden-workshop", name: "Тайная кузница", visibility: "gm", constructionStatus: "built", workersMin: 1 },
+      { id: "public-project", name: "Открытый проект", constructionStatus: "planned" }
+    ];
+    holding.storage.resources = [resource("bread", 16, { id: "flour-stock", batches: [{ id: "flour-batch", qty: 16, ageQd: 0 }] })];
+    holding.special.transportV2 = { orders: [{
+      id: "ration-export", status: "booked", direction: "outbound",
+      cargo: [{ lotId: "ration-lot", rowId: "flour-stock", batchId: "flour-batch", resourceId: "bread", qty: 6 }]
+    }] };
+    const previousGame = globalThis.game;
+    try {
+      for (const isGM of [false, true]) {
+        globalThis.game = { ...previousGame, user: { isGM } };
+        for (const units of [5, 10, 15]) {
+          holding.gm.food.rationUnitsPerResident = units;
+          const readiness = await economy._tendayReadinessContext(holding);
+          const actual = (await economy._runEconomyForQd(clone(holding), 40)).food;
+          assert.deepEqual([readiness.foodAvailable, readiness.foodNeeded], [actual.availableBeforeConsumption, actual.needed]);
+          assert.deepEqual([readiness.foodStored, readiness.foodAvailable, readiness.foodNeeded], [10, 10, units]);
+          assert.equal(readiness.alerts.some(alert => alert.key === "food"), units > 10);
+          const alerts = JSON.stringify(readiness.alerts);
+          assert.match(alerts, /Открытый проект/u);
+          assert.equal(/Тайный проект|Тайная кузница/u.test(alerts), isGM);
+        }
+      }
+    } finally {
+      if (previousGame === undefined) delete globalThis.game;
+      else globalThis.game = previousGame;
+    }
   }
 
   {
@@ -923,7 +963,7 @@ export async function checkEconomyCharacterization() {
     assert.equal(isFoodResource({ resourceId: "food-protein", noAutoConsume: true }, dependencies), false, "row-level noAutoConsume must override edible catalog metadata");
     assert.equal(isFoodResource({ resourceId: "protected-food" }, {
       ...dependencies,
-      normalizeResourceId: () => "protected-food",
+      storageResourceId: () => "protected-food",
       resourceDef: () => ({ foodEdible: true, noAutoConsume: true })
     }), false, "definition-level noAutoConsume must protect an edible resource");
   }
@@ -1055,6 +1095,20 @@ export async function checkEconomyCharacterization() {
     assert.equal(directHolding.storage.moneyCopper, 4, "trade revenue must be credited to treasury");
     assert.equal(directReport.ledger.some((row) => row.domain === "trade" && row.kind === "resource" && row.qty === -2), true, "trade must ledger the sold stock");
     assert.equal(directReport.ledger.some((row) => row.domain === "trade" && row.kind === "money" && row.qty === 4), true, "trade must ledger the credited revenue");
+
+    const legacy = clone(sourceHolding);
+    const offered = legacy.storage.resources[0];
+    offered.roomId = "outdoors";
+    offered.batches = [{ id: "sale-lot", qty: 2, ageQd: 1 }];
+    legacy.storage.resources.unshift({ ...offered, forSale: false, batches: [{ id: "private-lot", qty: 2, ageQd: 9 }] });
+    legacy.special.transportV2 = { orders: [{ id: "booked", direction: "outbound", status: "booked",
+      cargo: [{ lotId: "cargo", rowId: offered.id, batchId: "sale-lot", qty: 1 }] }] };
+    const legacyReport = reportShape();
+    const legacyTrade = await economy._runTradeForQd(legacy, 4, legacyReport, economy._economyWorkerContext(legacy), { random });
+    assert.deepEqual(legacyTrade, { sold: 1, buyers: 1, revenue: 2 });
+    assert.deepEqual(legacy.storage.resources.map(row => row.qty), [2, 1],
+      "trade must debit only the physical row that was put on sale and protect its accepted cargo");
+    assert.equal(legacyReport.ledger.find(row => row.domain === "trade" && row.kind === "resource").roomId, "outdoors");
 
     const noReputationHolding = clone(sourceHolding);
     noReputationHolding.overview.reputation = 0;

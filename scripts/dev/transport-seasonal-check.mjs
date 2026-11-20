@@ -87,7 +87,8 @@ const cargo = qty => [{ lotId: "cargo", resourceId: "wood", qty, unitLoad: 4000,
     assert.notEqual(closed.id, existing.id, "new claims cannot board a flight whose physical outcome is already known");
     f.data.catalog.transportV2.overrides = { [service.id]: { travelQd: 9, riskBps: 17, loadCopper: 3 } };
     const manual = prepareTransportContext({ ...f, request, isGM: true }).plan.stages[0].runs[0];
-    assert.equal(manual.arrivalQd - manual.departureQd - service.unloadingQd, 9);
+    const unloadingQd = Math.max(1, Math.ceil(manual.reservedLoad / service.unloadingCapacity));
+    assert.equal(manual.arrivalQd - manual.departureQd - unloadingQd, 9);
     assert.equal(manual.riskBps, 17); assert.equal(manual.charge.loadCopper, 30,
       "explicit GM time, risk and fare overrides remain authoritative");
   }

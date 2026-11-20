@@ -16,6 +16,8 @@ import { previewSharedMarketMigration } from "../data/market/shared-migration.js
 import { prepareShipsContext, prepareShipWindowContext } from "../apps/ships-context.js";
 import { normalizeSkyholdData } from "../data/normalizers.js";
 import { preflightMarketOutboundDispatch } from "../engines/market/outbound.js";
+import { finishResourceBatchPeriod, reservedResourceBatchQuantities } from "../core/resource-batches.js";
+import { advanceTransportShipments } from "../workflows/transport/orders.js";
 
 const holding = id => ({ id, gm: { calendaria: { lastQd: 0 } }, storage: { moneyCopper: 1000000, resources: [] }, special: { market: {} } });
 const cargo = (qty = 10) => [{ lotId: "cloth", resourceId: "test-freight", qty, unitLoad: 4000, unitCopper: 5, ageQd: 0 }];
@@ -69,6 +71,22 @@ for (const shared of [false, true]) {
   assert.equal(data.holdings.length, 1);
 }
 
+{
+  const a = holding("legacy-holding"), b = holding("other-holding");
+  const order = { id: "old-order", status: "pending" };
+  const data = { meta: {}, holdings: [a, b] };
+  a.special.market.orders = [order];
+  const before = structuredClone(data);
+  assert.throws(() => deleteHoldingFromData(data, a.id), /прежней версии/);
+  assert.deepEqual(data, before, "deletion must preserve a pending legacy delivery and the other holding");
+  a.special.market.orders = [];
+  a.special.market.outbound = { orders: [{ ...order, status: "booked" }] };
+  assert.throws(() => deleteHoldingFromData(data, a.id), /прежней версии/);
+  a.special.market.outbound.orders[0].status = "cancelled";
+  deleteHoldingFromData(data, a.id);
+  assert.deepEqual(data.holdings, [b], "terminal legacy history must not block deletion");
+}
+
 // Independent check: coalescing equal warehouse rows must not invalidate frozen source references.
 {
   const h = holding("coalescing"), data = { meta: {}, holdings: [h], catalog: {} }, state = ensureTransportState(data);
@@ -83,6 +101,97 @@ for (const shared of [false, true]) {
   assert.equal(preflightMarketOutboundDispatch({ resources: saved.storage.resources, cargoReservations: saved.special.transportV2.orders[0].cargo }).ok, true,
     "normalization preserves the row and batch referenced by the transport contract");
   assert.deepEqual(saved.special.transportV2.orders[0].plan, order.plan);
+}
+
+for (const expireBread of [false, true]) {
+  const h = holding("saved-collision");
+  const original = { meta: {}, holdings: [h], catalog: {} };
+  const state = ensureTransportState(original);
+  h.storage.resources = [
+    { id: "shared", resourceId: "bread", roomId: "pantry", qty: 4, batches: [{ id: "lot", qty: 4, ageQd: 8 }] },
+    { id: "shared", resourceId: "stone", roomId: "outdoors", qty: 5, batches: [{ id: "lot", qty: 5, ageQd: 1 }] }
+  ];
+  const lots = [
+    { ...cargo(2)[0], lotId: "bread", rowId: "shared", batchId: "lot", resourceId: "bread", shelfLifeQd: 100 },
+    { ...cargo(3)[0], lotId: "stone", rowId: "shared", batchId: "lot", resourceId: "stone" }
+  ];
+  const services = [service()];
+  bookTransportOrder({ state, holding: h, services, direction: "outbound", id: "saved-mixed-order",
+    plan: planTransportChain({ cargo: lots, services }) });
+  const data = normalizeSkyholdData(original), loaded = data.holdings[0];
+  const order = loaded.special.transportV2.orders[0];
+  const [bread, stone] = loaded.storage.resources;
+  assert.deepEqual([bread, stone].map(row => reservedResourceBatchQuantities(loaded, row).get("lot")), [2, 3],
+    "each material's ordinary storage actions see only the reservation against its own physical lot");
+  if (expireBread) {
+    finishResourceBatchPeriod(loaded, { elapsedQd: 4, shelfLifeQdForRow: row => row.resourceId === "bread" ? 10 : 0 });
+    assert.deepEqual(order.sourceSpoiledPending, { bread: 2 }, "expiry of one physical lot cannot spoil a different material in the same contract");
+    assert.deepEqual([bread.qty, stone.qty], [0, 5]);
+  }
+  const log = [];
+  advanceTransportShipments(data, loaded, order.plan.arrivalQd, {
+    _appendStorageLog(_holding, entries) { log.push(...entries); }
+  });
+  assert.deepEqual([bread.qty, stone.qty], [expireBread ? 0 : 2, 2]);
+  assert.deepEqual(log.filter(row => row.kind === "transport").map(row => [row.resourceId, row.qty, row.roomId]), [
+    ...(expireBread ? [] : [["bread", -2, "pantry"]]), ["stone", -3, "outdoors"]
+  ], "saved mixed orders dispatch and log only the actual debits from each source room");
+  assert.equal(order.status, "delivered");
+}
+
+{
+  const h = holding("split-contracts");
+  const data = { meta: {}, holdings: [h], catalog: {} };
+  const state = ensureTransportState(data);
+  h.storage.resources = [
+    { id: "same-row", resourceId: "meat", roomId: "outdoors", qty: 1, batches: [{ id: "same-lot", qty: 1, ageQd: 18 }] },
+    { id: "same-row", resourceId: "wood", roomId: "outdoors", qty: 1, batches: [{ id: "same-lot", qty: 1, ageQd: 0 }] }
+  ];
+  const services = [service()];
+  for (const { resourceId } of h.storage.resources) {
+    const shipment = { ...cargo(1)[0], lotId: resourceId, rowId: "same-row", batchId: "same-lot", resourceId };
+    bookTransportOrder({ state, holding: h, services, direction: "outbound", id: `sale-${resourceId}`,
+      plan: planTransportChain({ cargo: [shipment], services, runs: state.runs }) });
+  }
+  const [meatOrder, woodOrder] = h.special.transportV2.orders;
+  // A warehouse split already expired the meat lot. A later closure pass must not
+  // treat the identically keyed wood as that meat order's source.
+  finishResourceBatchPeriod(h, { elapsedQd: 4, shelfLifeQdForRow: row => row.resourceId === "meat" ? 20 : 0 });
+  assert.equal(meatOrder.sourceSpoiledPending?.meat, 1);
+  h.storage.resources = h.storage.resources.filter(row => row.qty > 0);
+  assert.equal(reservedResourceBatchQuantities(h, h.storage.resources[0]).get("same-lot"), 1);
+  // Old records can have an empty lot removed before a spoilage mark was recorded.
+  delete meatOrder.sourceSpoiledPending;
+  assert.equal(reservedResourceBatchQuantities(h, h.storage.resources[0]).get("same-lot"), 1,
+    "the orphaned meat booking cannot also reserve the wood");
+  assert.throws(() => advanceTransportShipments(data, h, meatOrder.plan.arrivalQd, {}),
+    /Reserved outbound cargo changed/, "a missing source must stop before debiting the wood for the meat order");
+  assert.equal(h.storage.resources[0].qty, 1);
+  assert.equal(woodOrder.dispatched.wood ?? 0, 0);
+  woodOrder.status = "cancelled";
+  assert.equal(reservedResourceBatchQuantities(h, h.storage.resources[0]).size, 0,
+    "cancelled orders retain evidence of an ambiguous physical source without reserving anything");
+}
+
+{
+  const h = holding("orphaned-booking");
+  const data = { meta: {}, holdings: [h], catalog: {} };
+  const state = ensureTransportState(data), services = [service()];
+  const lot = { ...cargo(2)[0], lotId: "meat", resourceId: "meat", rowId: "orphan-row", batchId: "orphan-lot" };
+  bookTransportOrder({ state, holding: h, services, direction: "outbound", id: "orphaned-meat",
+    plan: planTransportChain({ cargo: [lot], services }) });
+  h.storage.resources = [{ id: lot.rowId, resourceId: "wood", roomId: "outdoors", qty: 3,
+    forSale: true, batches: [{ id: lot.batchId, qty: 3, ageQd: 0 }] }];
+  const loaded = normalizeSkyholdData(data), target = loaded.holdings[0], [wood] = target.storage.resources;
+  const [order] = target.special.transportV2.orders;
+  assert.equal(reservedResourceBatchQuantities(target, wood).size, 0, "a different material is not reserved even without a second contract");
+  assert.equal(reservedResourceBatchQuantities(target, { id: wood.id }).size, 0, "an ID-only lookup must use the actual saved material");
+  const moneyBefore = target.storage.moneyCopper;
+  assert.throws(() => advanceTransportShipments(loaded, target, order.plan.arrivalQd, { _appendStorageLog: assert.fail }),
+    /Reserved outbound cargo changed.*orphaned-meat.*orphan-row.*orphan-lot/);
+  assert.equal(wood.qty, 3);
+  assert.equal(target.storage.moneyCopper, moneyBefore);
+  assert.deepEqual(order.dispatched, {});
 }
 
 // A4: reconstruct all balances, not just the first holding's dated recovery lots.

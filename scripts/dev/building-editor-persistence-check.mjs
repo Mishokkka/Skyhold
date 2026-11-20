@@ -32,7 +32,11 @@ const values = new Map();
 const writes = [];
 const settings = {
   get: (_module, key) => structuredClone(values.get(key)),
-  set: async (_module, key, value) => { writes.push(key); values.set(key, structuredClone(value)); }
+  set: async (_module, key, value) => {
+    writes.push(key);
+    values.set(key, structuredClone(value));
+    return structuredClone(value);
+  }
 };
 const storage = createSkyholdSplitStorage({ settings });
 const initial = migrateData(structuredClone(DEFAULT_SKYHOLD_DATA));

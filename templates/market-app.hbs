@@ -20,6 +20,7 @@
         <button type="button" class="fbls-button" data-action="market-transport-orders"><i class="fa-solid fa-route" aria-hidden="true"></i> Перевозки</button>
         <span><i class="fa-solid fa-coins"></i> Казна</span>
         <span class="fbls-market-money prominent" aria-label="{{treasuryText}}">{{#each treasuryParts}}<span class="{{tone}}"><b>{{value}}</b><i>{{label}}</i></span>{{/each}}</span>
+        {{#if canEditTreasury}}<button type="button" class="fbls-button compact" data-action="market-edit-treasury" title="Установить сумму казны" aria-label="Установить сумму казны"><i class="fa-solid fa-pen" aria-hidden="true"></i></button>{{/if}}
       </div>
     </header>
 

@@ -52,10 +52,13 @@ export function createGmWriteAuthority({ getData, enqueueWrite, persistData, not
     assertNoNewEntityCollisions(current, request.data);
     const result = await persistData(request.data, { normalized: true, scope: normalizeCommitScope(request.scope),
       forceRollbackSnapshot: Boolean(request.forceRollbackSnapshot), withStatus: true });
-    if (result.changed) notifyChanged();
     const receipt = { meta: result.data.meta, changed: result.changed };
     completed.set(request.operationId, { signature, receipt });
     if (completed.size > 256) completed.delete(completed.keys().next().value);
+    if (result.changed) {
+      try { notifyChanged(); }
+      catch (error) { console.warn("FBL Skyhold | Saved GM commit could not notify open windows.", error); }
+    }
     return receipt;
   }
 
@@ -63,15 +66,15 @@ export function createGmWriteAuthority({ getData, enqueueWrite, persistData, not
    * Commit an already prepared GM draft locally or ask the current authority GM to commit it.
    * The caller already holds its write queue; remote retries retain one ID at the same authority.
    * @param {object} data Prepared root whose revision is one above baseRevision.
-   * @param {object} [options={}] Commit scope, base revision and rollback-snapshot requirement.
+   * @param {object} [options={}] Commit scope, base revision, rollback snapshot and authority locality.
    * @returns {Promise<object>} Draft with acknowledged metadata; rejects on conflict or transport failure.
    */
-  function requestCommit(data, { scope, baseRevision, forceRollbackSnapshot = false } = {}) {
+  function requestCommit(data, { scope, baseRevision, forceRollbackSnapshot = false, localAuthority = false } = {}) {
     if (!user()?.isGM) return Promise.reject(failure(COMMAND_ERROR.FORBIDDEN, "GM-коммит недоступен игроку."));
     const request = { operationId: makeId("gm-commit", 20), userId: user().id, data,
       scope: normalizeCommitScope(scope), expectedRevision: baseRevision, forceRollbackSnapshot };
     // Called from a transaction already holding this client's queue: never enqueue twice.
-    if (authority()?.id === user().id) return commitLocal(request).then((receipt) => ({ ...data, meta: receipt.meta }));
+    if (localAuthority || authority()?.id === user().id) return commitLocal(request).then((receipt) => ({ ...data, meta: receipt.meta }));
     if (!socket()?.emit || !authority()?.isGM) {
       return Promise.reject(failure(COMMAND_ERROR.SOCKET_UNAVAILABLE, "Нет связи с ГМом, отвечающим за запись."));
     }

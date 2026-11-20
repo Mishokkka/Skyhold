@@ -6,7 +6,8 @@ import { internalDemandBatchClockQd, nextInternalDemandBatchAvailabilityQd } fro
 import { cargoValue } from "../../engines/transport/quantities.js";
 import { stableDataHash } from "../../data/storage-commit.js";
 import { beginTransportShip, advanceTransportShip, recordTransportShipIncome } from "./ships.js";
-import { ensureTransportState, pruneCompletedTransportRuns } from "../../data/transport/state.js";
+import { ensureTransportState, outboundStorageLotConflicts, pruneCompletedTransportRuns } from "../../data/transport/state.js";
+import { storageExpiresInQd } from "../../engines/economy/perishable-storage.js";
 import { sharedMarketEventTenday, advanceSharedMarketClock } from "../../data/market/shared-context.js";
 import { recordTransportClock, transportHoldingQd, transportLocalQd } from "../../data/transport/clock.js";
 
@@ -47,21 +48,35 @@ export function advanceTransportShipments(data, holding, targetQd, workflow, { l
     }
     return result;
   };
+  let sourceConflicts;
   const report = advanceTransportOrders({ state, holding, targetQd: commonTargetQd, dependencies: {
-    dispatchCargo(order, cargo, atQd) {
-      const available = cargo.map((lot) => {
-        const spoiled = Math.min(lot.qty, order.sourceSpoiledPending?.[lot.lotId] ?? 0);
-        if (spoiled) { order.sourceSpoiledPending[lot.lotId] -= spoiled; lot.spoiledQty = spoiled; }
-        return { ...lot, qty: lot.qty - spoiled };
-      }).filter((lot) => lot.qty > 0);
-      const dispatched = check(applyMarketOutboundDispatch({ resources: holding.storage.resources, cargoReservations: available }));
+    dispatchCargo(order, cargo, atQd, { committed }) {
+      const elapsed = Math.max(0, transportLocalQd(order, atQd) - Number(holding.gm?.calendaria?.lastQd ?? 0));
+      const spoiledAtWarehouse = lot => Math.min(lot.qty, order.sourceSpoiledPending?.[lot.lotId] ?? 0);
+      const available = cargo.map(lot => ({ ...lot,
+        qty: lot.qty - (committed ? lot.spoiledQty ?? 0 : spoiledAtWarehouse(lot))
+      })).filter(lot => lot.qty > 0);
+      const dispatched = applyMarketOutboundDispatch({
+        resources: holding.storage.resources, cargoReservations: available,
+        conflicts: sourceConflicts ??= outboundStorageLotConflicts(holding),
+        // Keep the undebited lot until the warehouse closes the period. An
+        // earlier departure can still need it even if processed after this order.
+        canLoadSource: ({ row, ageQd }) => committed || storageExpiresInQd(holding, row, ageQd + elapsed) > 0
+      });
+      if (!dispatched.ok) {
+        throw new Error(`${dispatched.message} Заказ ${order.id}, строка склада ${dispatched.rowId}, партия ${dispatched.batchId}. Сверьте исходный груз.`);
+      }
       // Warehouse batches already reflect all completed economy periods. Add only the open interval.
+      const dispatchedByLot = new Map(dispatched.cargo.map((row) => [row.lotId, row]));
       for (const lot of cargo) {
-        const actual = dispatched.cargo.find((row) => row.lotId === lot.lotId);
-        if (actual) lot.ageQd = actual.ageQd + Math.max(0, transportLocalQd(order, atQd) - Number(holding.gm?.calendaria?.lastQd ?? 0));
+        const actual = dispatchedByLot.get(lot.lotId);
+        if (actual && !committed) lot.ageQd = actual.ageQd + elapsed;
+        const pending = Math.min(spoiledAtWarehouse(lot), lot.qty - (actual?.qty ?? 0));
+        if (pending) order.sourceSpoiledPending[lot.lotId] -= pending;
+        lot.spoiledQty = lot.qty - (actual?.qty ?? 0);
         lot.ageAtQd = atQd;
         if (actual?.qty) entries.push({ kind: "transport", resourceId: lot.resourceId, name: lot.name, qty: -actual.qty,
-          roomId: lot.roomId ?? "outdoors", source: "Отправление груза", operationId: order.id });
+          roomId: actual.roomId, source: "Отправление груза", operationId: order.id });
       }
     },
     receiveCargo(order, cargo, atQd, receipt) {
@@ -88,24 +103,25 @@ export function advanceTransportShipments(data, holding, targetQd, workflow, { l
         if (lot.sourceType === "item") {
           if (!lot.item) throw new Error("В договоре отсутствует сохранённый предмет.");
           holding.storage.items ??= [];
-          const item = structuredClone(lot.item);
-          const rooms = workflow._storageRooms?.(holding, { includeUnavailable: true });
+          const item = { ...structuredClone(lot.item), qty: lot.qty };
           const target = order.commercial.targetRoomId;
-          const roomId = rooms && !rooms.some((room) => room.id === target && room.available) ? "outdoors" : target;
+          const roomId = !target || target === "outdoors" ? "outdoors" : workflow._storageItemDepositRoom(holding, item, target);
           if (item.itemData && typeof workflow._setItemQuantityData === "function") item.itemData = workflow._setItemQuantityData(item.itemData, lot.qty);
-          holding.storage.items.push({ ...item, id: `transport-item-${stableDataHash([order.id, lot.lotId, lot.deliveryRunId])}`, qty: lot.qty,
+          holding.storage.items.push({ ...item, id: `transport-item-${stableDataHash([order.id, lot.lotId, lot.deliveryRunId])}`,
             roomId, internalDemandAvailableFromQd: availableFromQd });
           entries.push({ kind: "transport-purchase", resourceId: "custom", name: lot.name, qty: lot.qty,
-            roomId, source: order.commercial.marketLabel, operationId: order.id });
+            roomId, source: order.commercial.marketLabel,
+            note: target && roomId !== target ? `переполнение: ${workflow._storageRoomLabel(holding, target)}` : "",
+            operationId: order.id });
         } else {
           const placements = workflow._storageAddWithOverflow(holding, { ...lot, roomId: order.commercial.targetRoomId,
-            arrivalShelfLifeQd: lot.shelfLifeQd,
-            batches: [{ qty: lot.qty, ageQd: lot.ageQd + Math.max(0, commonTargetQd - atQd), internalDemandAvailableFromQd: availableFromQd }] }, lot.qty);
+            ageQd: lot.ageQd + Math.max(0, commonTargetQd - atQd), internalDemandAvailableFromQd: availableFromQd }, lot.qty);
           for (const placement of placements ?? [{ qty: lot.qty, roomId: order.commercial.targetRoomId }]) {
             if (placement.qty) entries.push({ kind: "transport-purchase", resourceId: lot.resourceId, name: lot.name, qty: placement.qty,
               roomId: placement.roomId, source: order.commercial.marketLabel, operationId: order.id });
-            if (placement.spoiledQty) entries.push({ kind: "market-spoilage", resourceId: lot.resourceId, name: lot.name, qty: -placement.spoiledQty,
-              roomId: placement.roomId, source: order.commercial.marketLabel, note: "Груз прибыл, но испортился до конца расчётного периода.", operationId: order.id });
+            if (placement.spoiledQty) entries.push({ kind: "note", resourceId: lot.resourceId, name: lot.name, qty: 0,
+              roomId: placement.roomId, source: order.commercial.marketLabel, status: "expired",
+              note: `${placement.spoiledQty} ед. груза прибыло, но было испорчено до зачисления на склад.`, operationId: order.id });
           }
           continue;
         }

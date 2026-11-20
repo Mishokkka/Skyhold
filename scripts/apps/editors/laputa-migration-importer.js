@@ -73,7 +73,7 @@ function errorText(error) {
 async function confirmAction({ title, message }) {
   const DialogV2 = foundry?.applications?.api?.DialogV2;
   if (DialogV2?.confirm) {
-    return DialogV2.confirm({ window: { title }, content: `<p>${message}</p>`, modal: true });
+    return DialogV2.confirm({ classes: ["fbl-skyhold"], window: { title }, content: `<p>${message}</p>`, modal: true });
   }
   return window.confirm(message);
 }

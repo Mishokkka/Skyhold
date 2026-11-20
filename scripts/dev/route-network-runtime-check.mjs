@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mixedMarketRouteFixture } from "./fixtures/mixed-market-route.mjs";
 import { exportRouteNetwork, parseRouteNetwork, mergeRouteNetwork } from "../apps/editors/route-network-transfer.js";
-import { authorityMarketLogistics, prepareMarketAuthorityContext } from "../apps/market/authority-context.js";
+import { authorityMarketLogistics, authorityMarketQuote, prepareMarketAuthorityContext } from "../apps/market/authority-context.js";
 import { worldMarketFixture } from "./world-ship-market-characterization-check.mjs";
 import { getSkyholdWorkflowService } from "../workflows/skyhold-workflow-service.js";
 import { checkCalendariaCharacterization } from "./calendaria-characterization-check.mjs";
@@ -61,7 +61,7 @@ for (const isGM of [false, true]) for (const direction of ["inbound", "outbound"
   assert.equal(authority.ok, true, "GM/player authority must accept a transfer from caravan to airship");
   assert.deepEqual(authority.routeModes, ["airship", "airship", "airship", "caravan"]);
   if (direction === "inbound") {
-    const displayed = SkyholdMarketApp.prototype._marketLogistics.call({ carrierId: "" }, input.holding, input.data, input.market, { isGM }).logistics;
+    const displayed = authorityMarketQuote({ ...input, discoverTransport: true }).logistics;
     assert.deepEqual(displayed, authority, "the window and authority must agree on mixed delivery");
   }
 }
@@ -72,9 +72,8 @@ for (const isGM of [false, true]) {
   const summerHolding = structuredClone(holding);
   summerHolding.gm.calendaria.lastDateText = "18 Зноеход, 881";
   const summerResult = authorityMarketLogistics({ holding: summerHolding, market, data: { catalog }, isGM }).logistics;
-  const displayContext = { carrierId: "" };
-  const displayed = SkyholdMarketApp.prototype._marketLogistics.call(displayContext, holding, { catalog }, market, { isGM }).logistics;
-  const summerDisplayed = SkyholdMarketApp.prototype._marketLogistics.call(displayContext, summerHolding, { catalog }, market, { isGM }).logistics;
+  const displayed = authorityMarketQuote({ holding, market, data: { catalog }, isGM, discoverTransport: true }).logistics;
+  const summerDisplayed = authorityMarketQuote({ holding: summerHolding, market, data: { catalog }, isGM, discoverTransport: true }).logistics;
   assert.deepEqual(displayed, winterResult, "the GM/player window must use the complete authority calendar and route contract");
   assert.deepEqual(summerDisplayed, summerResult, "UI and authority must agree after changing the season");
   assert.equal(winterResult.seasonId, "winter");
@@ -188,8 +187,9 @@ try {
     const view = prepareMarketAuthorityContext({ data, holding, marketId: "a", isGM, quantities });
     assert.equal(view.quote.logistics.transportMode, "rail"); assert.equal(view.plan.logistics.transportMode, "rail",
       "the priced plan now includes the wagon crew and draft teams, so this train is cheaper");
-    const app = new SkyholdMarketApp({ holdingId: holding.id }); app.quantities = quantities;
-    app._marketSnapshot = () => ({ ...view, data, holding }); app._enrichMarketQuoteItems = async (quote) => quote;
+    const app = new SkyholdMarketApp({ holdingId: holding.id }); app.quantities = quantities; app.marketId = "a";
+    assert.deepEqual(app._marketSnapshot().quote.logistics, view.quote.logistics,
+      "the actual market window uses the same selected route as the authority quote");
     const context = await app._prepareContext({});
     assert.equal(context.canConfirm, true);
     let opened;

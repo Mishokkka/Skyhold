@@ -3,7 +3,7 @@ import { SkyholdData, requestMarketOperation } from "../data/store.js";
 import { findReadableHoldingEntry } from "../data/access-guard.js";
 import { holdingPermissionContext } from "../data/holding-permissions.js";
 import { makeId } from "../data/utils.js";
-import { transportOrders } from "../data/transport/state.js";
+import { legacyActiveMarketOrders, transportOrders } from "../data/transport/state.js";
 import { canCancelTransportOrder } from "../engines/transport/runtime.js";
 import { transportHoldingQd } from "../data/transport/clock.js";
 import { TRANSPORT_SERVICE_DEFAULTS } from "../engines/transport/services.js";
@@ -17,8 +17,10 @@ import { transportHistoryPage, transportRefinements, transportRiskLabel, transpo
 import { createMarketVisibility } from "../data/market/visibility.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
-const days = (qd) => `${Math.max(0, qd) / 4} дн.`;
+const number = (value) => value.toLocaleString("ru-RU", { maximumFractionDigits: 2 });
+const days = (qd) => `${number(Math.max(0, qd) / 4)} дн.`;
 const statuses = { booked: "Забронировано", travelling: "В пути", waitingCarrier: "Ожидает освобождения транспорта", needsResolution: "Ожидает решения ГМ", delivered: "Доставлено", lost: "Груз утрачен", cancelled: "Отменено" };
+const legacyStatuses = { pending: "Ожидает исполнения", "in-transit": "В пути", delayed: "Задержан" };
 function stageInvoice(stage) {
   const parts = [["Подача", "dispatchCopper"], ["Тариф за груз", "loadCopper"], ["Содержание в пути и возврат", "operatingCopper"],
     ["Обработка", "handlingCopper"], ["Надбавка перевозчика", "profitCopper"], ["Скидка", "discountCopper"]].map(([label, key]) => {
@@ -36,7 +38,7 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
   static sessions = new Map();
   static inFlight = new Set();
   static DEFAULT_OPTIONS = { id: "fbls-transport", classes: ["fbl-skyhold", "fbls-secondary", "fbls-transport-window"], tag: "div",
-    window: { title: "Перевозки", resizable: true }, position: { width: 900, height: 760 },
+    window: { title: "Перевозки", icon: "fa-solid fa-route", resizable: true }, position: { width: 900, height: 760 },
     actions: Object.fromEntries(actions.map((action) => [action, function(event, target) { return this._action(event, target); }])) };
   static PARTS = { main: { template: `modules/${MODULE_ID}/templates/transport-app.hbs` } };
   static open({ holdingId, request = null } = {}) {
@@ -69,8 +71,9 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
     const visibility = createMarketVisibility(data, { isGM: permissions.isGM });
     const pointLabel = id => visibility.pointHidden(id) ? "скрытый порт"
       : String(id).endsWith(":holding") ? holding.name : data.catalog.eventRegions.find(row => row.value === id)?.label ?? id;
+    const endpointLabel = (id, label) => String(id).endsWith(":holding") ? holding.name : label || pointLabel(id);
     const path = (stage) => visibility.transportStageHidden(stage) ? "Скрытый участок"
-      : `${stage.service.fromLabel || stage.from} → ${stage.service.toLabel || stage.to}`;
+      : `${endpointLabel(stage.from, stage.service.fromLabel)} → ${endpointLabel(stage.to, stage.service.toLabel)}`;
     const shipTiming = (order) => {
       if (!order.ownShipId || order.shipArrived || order.status === "cancelled") return "";
       const last = order.stages.filter((stage) => stage.service.kind === "owned").flatMap((stage) => stage.runs).at(-1);
@@ -81,6 +84,9 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
       return `Ожидаемое освобождение через ${days((order.shipAbort?.releaseQd ?? physical.releaseQd) - clockQd)}: ${label}; при происшествии срок уточняется`;
     };
     const refinements = transportRefinements(quote?.services, this.request ?? {}, pointLabel);
+    const alternatives = quote?.search?.plans ?? [];
+    const earliest = alternatives.reduce((value, plan) => Math.min(value, plan.arrivalQd), Infinity);
+    const fastestArrival = quote?.plan && earliest < quote.plan.arrivalQd ? days(earliest - quote.plan.startQd) : "";
     const selected = quote?.plan ? {
       delivery: money(quote.totalCopper), value: money(quote.valueCopper), treasury: money(quote.treasuryCopper),
       arrival: days(quote.plan.arrivalQd - quote.plan.startQd), firstArrival: days(quote.plan.firstArrivalQd - quote.plan.startQd),
@@ -97,7 +103,12 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
       stages: quote.plan.stages.map((stage) => ({ path: path(stage), count: stage.runs.length,
         risk: transportStageRiskLabel(stage),
         label: stage.service.label, price: money(stage.totalCopper), invoice: stageInvoice(stage), from: stage.from, company: stage.service.companyId,
+        interval: stage.service.kind === "regular" ? days(stage.service.intervalQd) : "",
+        distance: Number.isFinite(stage.service.distanceKm) ? `${number(stage.service.distanceKm)} км` : "",
+        singleDeparture: stage.runs.length === 1,
         departures: stage.runs.map((run, index) => ({ number: index + 1, qty: run.cargo.reduce((sum, lot) => sum + lot.qty, 0),
+          start: days(run.startQd - quote.plan.startQd), handling: days(run.departureQd - run.startQd),
+          movementAndUnloading: days(run.arrivalQd - run.departureQd),
           departure: days(run.departureQd - quote.plan.startQd), arrival: days(run.arrivalQd - quote.plan.startQd), price: money(run.charge.totalCopper),
           risk: transportRiskLabel(run.riskBps) })),
         pinned: Boolean(this.request.pins?.[stage.from]),
@@ -131,21 +142,29 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
         awaitingCargo: [...new Set(run.claims.filter(claim => claim.manifestReady !== true)
           .map(claim => data.holdings.find(row => row.id === claim.holdingId)?.name ?? claim.holdingId))].join(", "),
         delayDays: this._incidentFields?.[run.id]?.delayDays ?? 1, lossPercent: this._incidentFields?.[run.id]?.lossPercent ?? 100 })) : [];
+    const legacyCargo = (row) => (row.cargo ?? row.cargoReservations ?? []).map((lot) => `${lot.name || lot.resourceId || "Товар"} × ${lot.qty}`).join(" · ");
+    const legacyActive = permissions.isGM ? legacyActiveMarketOrders(holding).map(({ order, direction }) => ({
+      id: order.id || order.operationId,
+      direction: direction === "inbound" ? "Покупка" : "Продажа",
+      status: legacyStatuses[order.status] || statuses[order.status] || order.status,
+      market: visibility.marketLabel(order),
+      cargo: legacyCargo(order)
+    })) : [];
     const archive = [...(holding.special?.market?.orders ?? []).map((row) => ({ ...row, direction: "Покупка" })),
       ...(holding.special?.market?.outbound?.orders ?? []).map((row) => ({ ...row, direction: "Продажа" }))]
       .filter((row) => ["delivered", "lost", "cancelled"].includes(row.status)).slice(-40).reverse().map((row) => ({
         direction: row.direction, status: statuses[row.status],
         market: visibility.marketLabel(row),
-        cargo: (row.cargo ?? row.cargoReservations ?? []).map((lot) => `${lot.name || lot.resourceId || "Товар"} × ${lot.qty}`).join(" · ") }));
+        cargo: legacyCargo(row) }));
     return { ...base, hasHolding: true, holdingName: holding.name, isGM: permissions.isGM, canUse: permissions.canUseStorage,
       canConfirm: Boolean(quote?.affordable && permissions.canUseStorage && (!quote.ship || permissions.canManageShips) && !this._pending && !this._busy),
-      selected, refinements, history: page.history, quoteError, error: this._error,
+      selected, fastestArrival, refinements, history: page.history, quoteError, error: this._error,
       transferPorts: (quote?.discovery?.ports ?? []).map(port => ({ value: port.regionId,
         label: pointLabel(port.regionId), selected: port.regionId === this.request?.transferPortId })),
       transferUnavailable: quote?.discovery?.requestedUnavailable ?? Boolean(this.request?.transferPortId),
       portSearchLimited: quote?.search?.limits.ports,
       routeSearchLimited: quote?.search?.limits.routes,
-      busy: this._busy || this.constructor.inFlight.has(this._pending?.operationId), pending: Boolean(this._pending), orders, incidents, archive,
+      busy: this._busy || this.constructor.inFlight.has(this._pending?.operationId), pending: Boolean(this._pending), orders, incidents, archive, legacyActive,
       hasRequest: Boolean(this.request), request: this.request, byTime: this.request?.priority === "time", configuration,
       configurationView: { intervalDays: configuration.regularIntervalQd / 4, phaseDays: configuration.regularFirstQd / 4,
         commercialPercent: configuration.commercialLoadBps / 100, insurancePercent: configuration.insuranceBps / 100,
@@ -153,6 +172,7 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
         coveragePercent: configuration.insuranceCoverageBps / 100 },
       hasExcludedCompanies: Boolean(this.request?.excluded?.length),
       hasPins: Boolean(Object.keys(this.request?.pins ?? {}).length),
+      hasRefinementResets: Boolean(this.request?.excluded?.length || Object.keys(this.request?.pins ?? {}).length),
       ships: permissions.canManageShips ? (holding.special?.ships?.list ?? []).filter((ship) => ship.navigationMode === "world").map((ship) => ({
         id: ship.id, name: ship.name, selected: ship.id === this.request?.ownShipId, busy: Boolean(ship.activeVoyage || ship.orderBundle || ship.transportOrderId) })) : [] };
   }

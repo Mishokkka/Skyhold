@@ -8,3 +8,9 @@ export function isPerishableFoodDefinition(definition = {}) {
     || ["food.raw", "food.prepared"].includes(tag)
     || tags.some((value) => ["food", "food.raw", "food.prepared"].includes(String(value).toLowerCase()));
 }
+
+/** Whole elapsed QD are compared with the same whole storage deadline at every boundary. */
+export function effectiveShelfLifeQd(baseQd, multiplier = 1) {
+  const base = Math.floor(Number(baseQd) || 0);
+  return base > 0 ? Math.max(1, Math.floor(base * Math.max(1, Number(multiplier) || 1))) : 0;
+}

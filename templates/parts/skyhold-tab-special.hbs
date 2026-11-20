@@ -19,7 +19,7 @@
           <div class="fbls-table-toolbar slim-toolbar">
             <span class="fbls-muted-text">Особые записи</span>
             {{#if canEditSpecial}}
-              <button type="button" class="fbls-button compact" data-action="add-row" data-collection="holdings.{{holdingIndex}}.special.list">
+              <button type="button" class="fbls-button compact" data-action="add-row" data-collection="holdings.{{holdingIndex}}.special.list" data-holding-id="{{holding.id}}">
                 <i class="fa-solid fa-plus"></i> Добавить
               </button>
             {{/if}}
@@ -51,7 +51,7 @@
                     {{/if}}
                   </td>
                   <td>{{#if ../canEditSpecial}}<textarea data-field="holdings.{{../holdingIndex}}.special.list.{{_index}}.notes" rows="2">{{notes}}</textarea>{{else}}{{notes}}{{/if}}</td>
-                  {{#if ../canEditSpecial}}<td><button type="button" class="fbls-icon-button danger" data-action="delete-row" data-collection="holdings.{{../holdingIndex}}.special.list" data-id="{{id}}" aria-label="Удалить особую запись {{name}}"><i class="fa-solid fa-trash"></i></button></td>{{/if}}
+                  {{#if ../canEditSpecial}}<td>{{#if canDeleteSpecialRecord}}<button type="button" class="fbls-icon-button danger" data-action="delete-row" data-collection="holdings.{{../holdingIndex}}.special.list" data-holding-id="{{../holding.id}}" data-id="{{id}}" aria-label="Удалить особую запись {{name}}"><i class="fa-solid fa-trash"></i></button>{{/if}}</td>{{/if}}
                 </tr>
               {{else}}
                 <tr><td colspan="5" class="fbls-empty">Записей пока нет.</td></tr>
@@ -73,7 +73,7 @@
                   <span>{{raceLine}}</span>
                   <span>{{#if ../canEdit}}<input type="text" data-field="holdings.{{../holdingIndex}}.people.list.{{_index}}.deathDate" value="{{deathDate}}" placeholder="дата" aria-label="Дата гибели {{name}}" />{{else}}{{deathDate}}{{/if}}</span>
                   <span>{{#if ../canEdit}}<input type="text" data-field="holdings.{{../holdingIndex}}.people.list.{{_index}}.deathNote" value="{{deathNote}}" placeholder="причина" aria-label="Причина гибели {{name}}" />{{else}}{{deathNote}}{{/if}}</span>
-                  {{#if ../canEdit}}<button type="button" class="fbls-icon-button" data-action="toggle-person-dead" data-id="{{id}}" data-dead="false" title="Вернуть из кладбища" aria-label="Вернуть {{name}} из кладбища"><i class="fa-solid fa-heart-pulse"></i></button>{{/if}}
+                  {{#if ../canEdit}}<button type="button" class="fbls-icon-button" data-action="toggle-person-dead" data-holding-id="{{../holding.id}}" data-id="{{id}}" data-dead="false" title="Вернуть из кладбища" aria-label="Вернуть {{name}} из кладбища"><i class="fa-solid fa-heart-pulse"></i></button>{{/if}}
                 </article>
               {{else}}
                 <p class="fbls-empty">Кладбище пусто.</p>

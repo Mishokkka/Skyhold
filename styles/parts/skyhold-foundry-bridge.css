@@ -24,7 +24,9 @@
   line-height: 1.25;
 }
 
-.application.fbl-skyhold-bank .window-content {
+.application.fbl-skyhold-bank .window-content,
+.application.fbls-transport-window > .window-content,
+.window-app.fbls-transport-window > .window-content {
   display: flex; flex-direction: column; min-height: 0; overflow: hidden; padding: 0; gap: 0;
   color: var(--fbls-text); background: var(--fbls-surface-0);
 }
@@ -684,14 +686,13 @@
   color: var(--fbls-text); background: var(--fbls-surface-0);
 }
 .application.fbls-workforce-window .window-header,
-.window-app.fbls-workforce-window .window-header {
+.window-app.fbls-workforce-window .window-header,
+.application.fbls-transport-window .window-header,
+.window-app.fbls-transport-window .window-header {
   background: var(--fbls-surface-2); color: var(--fbls-text-strong);
   border-bottom: 1px solid var(--fbls-accent-border); text-shadow: none;
 }
 .application.fbls-workforce-window .window-header .window-title,
-.window-app.fbls-workforce-window .window-header .window-title { color: var(--fbls-text-strong); text-shadow: none; }
-
-.fbls-transport-window .window-content {
-  overflow: auto;
-  padding: 1rem;
-}
+.window-app.fbls-workforce-window .window-header .window-title,
+.application.fbls-transport-window .window-header .window-title,
+.window-app.fbls-transport-window .window-header .window-title { color: var(--fbls-text-strong); text-shadow: none; }

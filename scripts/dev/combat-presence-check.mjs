@@ -4,6 +4,10 @@ import { defenseSquadProfile } from "../apps/mass-combat/sources.js";
 import { defenseCommanderBonus } from "../apps/mass-combat/modifiers.js";
 import { BuildingRowsDomain } from "../apps/domains/building/rows-domain.js";
 import { BuildingWorkerDomain } from "../apps/domains/building/worker-domain.js";
+import { ResidentDomain } from "../apps/domains/resident-domain.js";
+import { AssignmentDomain } from "../apps/domains/assignment-domain.js";
+import { applyDefenseOperation } from "../apps/domains/defense-operation-domain.js";
+import { stableDataHash } from "../data/storage-commit.js";
 
 const soldier = (id, away = false) => ({ id, name: id, age: 30, ageGroup: "Вз", role: "Солдат", workAssignment: "soldier",
   injuredDays: 0, attributes: { strength: 5, agility: 5, wits: 5, empathy: 5 },
@@ -16,11 +20,105 @@ assert.equal(holding.people.list[0].injuredDays, 0);
 assert.equal(holding.people.list[0].dead, undefined);
 
 const squadHolding = { people: { list: [soldier("absent", true), ...Array.from({ length: 5 }, (_, i) => soldier(`present-${i}`))] },
-  gm: { defense: { squads: [{ id: "squad", equipped: true, type: "line", sergeantId: "absent",
+  gm: { defense: { squads: [{ id: "squad", equipped: true, armamentResourceId: "armament-simple", type: "line", sergeantId: "absent",
     memberIds: ["present-0", "present-1", "present-2", "present-3"] }] } } };
 const profile = defenseSquadProfile(squadHolding);
 assert.ok(profile.sources.length, "fixture must retain a fighting squad");
 assert.ok(profile.sources.every(source => !source.participantIds.includes("absent")), "risk sources must contain actual combatants only");
+const roster = { ...ResidentDomain, _safeNumber: (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback };
+assert.equal(roster._defenseContext(squadHolding).squads[0].memberCount, 4);
+assert.equal(roster._defenseContext(squadHolding).squads[0].effective, profile.effective,
+  "defense and mass combat must use the same available roster and base efficiency");
+const marginal = structuredClone(squadHolding);
+for (const person of marginal.people.list) person.attributes = { strength: 3, agility: 3 };
+assert.equal(roster._defenseContext(marginal).effectiveUnits, 0, "four ordinary fighters must not be shown as a full unit");
+assert.equal(defenseSquadProfile(marginal).units, 0);
+const options = roster._defenseContext(marginal).squads[0].memberSlots[0].options;
+assert.ok(options.every(({ value }) => value !== "absent"), "an absent soldier cannot be offered as a new assignment");
+
+const trained = { people: { list: [] }, gm: { defense: { squads: [] } } };
+for (let index = 0; index < 2; index++) {
+  const people = Array.from({ length: 5 }, (_, slot) => ({ ...soldier(`v${index}-${slot}`), background: "Ветеран" }));
+  trained.people.list.push(...people);
+  trained.gm.defense.squads.push({ id: `veterans-${index}`, type: "line", equipped: true,
+    armamentResourceId: "armament-elite", sergeantId: people[0].id, memberIds: people.slice(1).map(({ id }) => id) });
+}
+const trainingProfile = defenseSquadProfile(trained);
+assert.equal(trainingProfile.sources[0].sergeantBonus, 0.10);
+assert.equal(roster._defenseContext(trained).effectiveUnits, 2, "high efficiency never creates a third squad");
+assert.equal(roster._defenseContext(trained).squads[0].effective, trainingProfile.squads[0].effective);
+const trainedByTitleOnly = structuredClone(trained);
+for (const person of trainedByTitleOnly.people.list) delete person.background;
+assert.equal(defenseSquadProfile(trainedByTitleOnly).sources[0].sergeantBonus, 0,
+  "assigning a role does not create the military past needed for a sergeant bonus");
+
+const thresholdSquad = marginal.gm.defense.squads[0];
+thresholdSquad.sergeantId = thresholdSquad.memberIds.pop();
+const thresholdSergeant = marginal.people.list.find(({ id }) => id === thresholdSquad.sergeantId);
+thresholdSergeant.attributes = { strength: 5, agility: 5 };
+thresholdSergeant.role = "Сержант";
+assert.equal(defenseSquadProfile(marginal).units, 0, "four residents below five effective fighters cannot field a unit");
+const suppliedEarlier = { battleId: "ongoing", militarySupplyBattleId: "ongoing", militarySuppliedSquadIds: [thresholdSquad.id] };
+assert.equal(defenseSquadProfile(marginal, suppliedEarlier).units, 0,
+  "after a casualty a previous supply plan cannot keep an understrength squad in the fight");
+for (const background of ["Бывший офицер", "Сержант гарнизона"]) {
+  thresholdSergeant.background = background;
+  const profile = defenseSquadProfile(marginal);
+  assert.equal(profile.units, 1, `${background}: recognized military training takes the squad across the threshold`);
+  assert.equal(profile.sources[0].sergeantBonus, 0.10);
+  assert.equal(profile.effective, 5.06);
+  assert.equal(roster._defenseContext(marginal).effectiveUnits, profile.units);
+}
+
+{
+  const veterans = Array.from({ length: 5 }, (_, i) => ({ ...soldier(`vet-${i}`), background: "Ветеран",
+    attributes: { strength: 3, agility: 3 } }));
+  const recruits = Array.from({ length: 5 }, (_, i) => ({ ...soldier(`recruit-${i}`), workAssignment: "", role: "Свободен" }));
+  const squad = { id: "best", type: "line", sergeantId: "", memberIds: ["", "", "", ""], armamentResourceId: "armament-simple", equipped: true };
+  const draft = { people: { list: [...veterans, ...recruits] }, gm: { defense: { squads: [squad] } } };
+  const fill = () => applyDefenseOperation(draft, { type: "fillDefenseSquad", squadId: squad.id, expectedSquadHash: stableDataHash(squad) },
+    { requester: { isGM: true }, logic: { ...roster, ...AssignmentDomain } });
+  assert.equal(fill().ok, true);
+  assert.equal(defenseSquadProfile(draft).effective, 7.5, "prefer the actual stronger formation over double-weighting a military label");
+  const officer = { ...soldier("officer"), background: "Офицер", attributes: { strength: 4, agility: 4, empathy: 5 } };
+  draft.people.list.push(officer);
+  assert.equal(fill().ok, true);
+  assert.equal(squad.sergeantId, "officer");
+  assert.equal(defenseSquadProfile(draft).effective, 8.14, "a lower personal score can still make the strongest leader");
+}
+
+{
+  const draft = structuredClone(trained);
+  const squad = draft.gm.defense.squads[0];
+  draft.gm.massCombat = { battleId: "fighting", phase: "active", round: 2,
+    militarySupplyBattleId: "fighting", militarySuppliesConsumed: true, militarySuppliedSquadIds: [squad.id] };
+  const action = { type: "unassignDefenseArmament", squadId: squad.id, operationId: "unequip", expectedSquadHash: stableDataHash(squad) };
+  const logic = {
+    _storageAddWithOverflow(_holding, row, qty) { return [{ roomId: row.roomId, qty }]; },
+    _appendStorageLog() {}
+  };
+  const before = structuredClone(draft);
+  for (const isGM of [true, false]) {
+    const requester = { isGM };
+    assert.equal(applyDefenseOperation(draft, action, { requester, logic }).ok, false,
+      "a supplied squad cannot remove its kit while the battle is active");
+    const incompatible = { ...action, type: "assignDefenseArmament", resourceId: "armament-simple" };
+    assert.equal(applyDefenseOperation(draft, incompatible, { requester, logic }).ok, false,
+      "a supplied squad cannot switch to a different ammunition type between rounds");
+    assert.deepEqual(draft, before);
+  }
+  const squadView = roster._defenseContext(draft).squads[0];
+  assert.equal(squadView.armamentLocked, true);
+  assert.deepEqual(squadView.armamentOptions.filter(option => option.disabled).map(option => option.value), ["armament-simple"]);
+  logic._storagePay = (_holding, costs) => ({ ok: true, costs: costs.map(row => ({ ...row, roomId: "outdoors" })) });
+  logic._normalizeStorageRoomId = id => id;
+  const compatible = { ...action, type: "assignDefenseArmament", resourceId: "armament-complex" };
+  assert.equal(applyDefenseOperation(draft, compatible, { requester: { isGM: true }, logic }).ok, true);
+  assert.equal(squad.armamentResourceId, "armament-complex", "a kit using the same type of ammunition remains compatible");
+  draft.gm.massCombat.phase = "terminal";
+  assert.equal(applyDefenseOperation(draft, { ...action, expectedSquadHash: stableDataHash(squad) },
+    { requester: { isGM: true }, logic }).ok, true, "a concluded battle releases the kit for ordinary warehouse operations");
+}
 
 const medical = { people: { list: [{ id: "doctor", injuredDays: 0, shipAssignment: { shipId: "ship", away: true } }] },
   buildings: { list: [{ id: "hospital", specialKind: "medical", constructionStatus: "built", assignedWorkerIds: ["doctor"] }] } };
@@ -60,6 +158,14 @@ const command = { ...squadHolding, gm: { defense: { commanderId: "absent" } } };
 assert.equal(defenseCommanderBonus(command, 10).percent, 0, "absent commanders cannot lead a settlement battle");
 command.gm.defense.commanderId = "present-0";
 assert.ok(defenseCommanderBonus(command, 10).percent > 0, "present commanders retain their bonus");
+const ordinaryCommander = { ...soldier("officer"), attributes: { strength: 3, agility: 3, wits: 4, empathy: 2 } };
+const commandHolding = { people: { list: [ordinaryCommander] }, gm: { defense: { commanderId: ordinaryCommander.id, squads: [] } } };
+assert.match(roster._defenseContext(commandHolding).commanderOptions.find(row => row.value === ordinaryCommander.id)?.label, /3\/5 · \+15%/);
+const baseCommand = defenseCommanderBonus(commandHolding).percent;
+ordinaryCommander.role = "Командир обороны: 5 солд.";
+ordinaryCommander.workAssignment = "defenseCommander";
+assert.equal(defenseCommanderBonus(commandHolding).percent, baseCommand, "appointment does not turn the derived title into leadership training");
+assert.equal(Math.round(baseCommand * 100), 15);
 const patients = { people: { list: [{ id: "away-patient", injuredDays: 5, shipAssignment: { shipId: "ship", away: true } },
   { id: "home-patient", injuredDays: 5 }] }, buildings: { list: [{ id: "hospital" }] } };
 const medicalApp = { ...BuildingRowsDomain, _safeNumber: (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback,

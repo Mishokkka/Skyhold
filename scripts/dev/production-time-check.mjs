@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { FinanceDomain } from "../apps/domains/finance-domain.js";
+import { SkyholdWorkflowService } from "../workflows/skyhold-workflow-service.js";
 import { mergeHoldingDefaults } from "../data/normalizers.js";
 import { normalizeBuilding } from "../data/normalizers/building.js";
 import { runProductionCycle } from "../engines/economy/production-cycle.js";
@@ -13,7 +13,7 @@ import { parseResourceCosts, resourceLabel } from "../core/resources.js";
 import { migrationCycleFixture } from "./building-catalog-cycle-migration-check.mjs";
 import { planBuildingCatalogMigration } from "../workflows/buildings/catalog-migration.js";
 
-const storage = { ...FinanceDomain, _safeNumber: (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback };
+const storage = new SkyholdWorkflowService();
 const report = () => ({ produced: [], consumed: [], skipped: [], formulas: [], work: [], ledger: [] });
 const quantity = (holding, id) => holding.storage.resources.filter((row) => row.resourceId === id).reduce((sum, row) => sum + row.qty, 0);
 const lineOf = (holding) => holding.buildings.list[0].productionLines[0];

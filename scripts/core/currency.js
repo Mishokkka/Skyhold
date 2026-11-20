@@ -29,11 +29,13 @@ export function parseCurrencyCopper(value = "", fallback = 0) {
   return Math.max(0, Math.round(total));
 }
 
+export function copperDenominations(value = 0) {
+  const totalCopper = Math.max(0, Math.floor(Number(value) || 0));
+  return { totalCopper, gold: Math.floor(totalCopper / 100), silver: Math.floor(totalCopper % 100 / 10), copper: totalCopper % 10 };
+}
+
 export function formatCopperCurrency(value = 0) {
-  const total = Math.max(0, Math.floor(Number(value) || 0));
-  const gold = Math.floor(total / 100);
-  const silver = Math.floor((total % 100) / 10);
-  const copper = total % 10;
+  const { gold, silver, copper } = copperDenominations(value);
   const parts = [];
   if (gold) parts.push(`${gold} ЗМ`);
   if (silver) parts.push(`${silver} СМ`);
@@ -42,11 +44,11 @@ export function formatCopperCurrency(value = 0) {
 }
 
 export function copperCurrencyParts(value = 0) {
-  const total = Math.max(0, Math.floor(Number(value) || 0));
+  const { gold, silver, copper } = copperDenominations(value);
   const denominations = [
-    { value: Math.floor(total / 100), label: "З", tone: "gold" },
-    { value: Math.floor((total % 100) / 10), label: "С", tone: "silver" },
-    { value: total % 10, label: "М", tone: "copper" }
+    { value: gold, label: "З", tone: "gold" },
+    { value: silver, label: "С", tone: "silver" },
+    { value: copper, label: "М", tone: "copper" }
   ];
   const visible = denominations.filter((part) => part.value > 0);
   return visible.length ? visible : [denominations[2]];

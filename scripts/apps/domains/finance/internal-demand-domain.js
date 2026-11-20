@@ -5,7 +5,7 @@ import {
   takeResourceBatchById
 } from "../../../core/resource-batches.js";
 import {
-  normalizeResourceId,
+  storageResourceId,
   resourceBasePriceCopper,
   resourceCategoryTag,
   resourceDef,
@@ -18,6 +18,7 @@ import {
 } from "../../../engines/economy/internal-demand.js";
 import { appendEconomyLedger } from "../../../engines/economy/ledger.js";
 import { perishableStorageExpiresInQd } from "../../../engines/economy/perishable-storage.js";
+import { indexStorageRows } from "../../../engines/storage/row-identity.js";
 import { settlementHungerFactor } from "../../../engines/economy/hunger.js";
 import { normalizeInternalDemandConfig, normalizeInternalDemandTrade } from "../../../data/economy/internal-demand.js";
 import { isResidentInPopulation } from "../../../data/resident-presence.js";
@@ -127,18 +128,24 @@ _internalDemandChannels(holding, financeContext = null, tendayCount = 1, workerC
 
 _internalDemandCandidates(holding, channels = []) {
   const candidates = [];
-  for (const row of holding?.storage?.resources ?? []) {
+  const resources = holding?.storage?.resources ?? [];
+  const resourceRows = indexStorageRows(resources);
+  for (const [rowIndex, row] of resources.entries()) {
     if (!row?.forSale) continue;
     const batches = availableResourceBatchInventory(row, holding)
       .filter((batch) => resourceBatchAvailableToInternalDemand(batch, holding));
     if (!batches.length) continue;
-    const resourceId = normalizeResourceId(row.resourceId, row.name);
+    const resourceId = storageResourceId(row);
     const definition = resourceId === "custom" ? row : resourceDef(resourceId);
     const basePriceCopper = resourceBasePriceCopper(definition);
     if (!basePriceCopper) continue;
+    const rowId = text(row.id);
     for (const batch of batches) {
+      const batchId = text(batch.id);
+      const unambiguous = resourceRows.get(rowId) === row && !rowId.includes(":") && !batchId.includes(":");
       candidates.push({
-        id: `resource:${text(row.id)}:${text(batch.id)}`,
+        // The plan and apply share this stock snapshot. Legacy rows can repeat both saved IDs.
+        id: unambiguous ? `resource:${rowId}:${batchId}` : `resource-row:${JSON.stringify([rowId, batchId, rowIndex])}`,
         kind: "resource",
         name: resourceId === "custom" ? text(row.name || "Ресурс") : resourceLabel(resourceId),
         qty: whole(batch.qty),
@@ -149,20 +156,23 @@ _internalDemandCandidates(holding, channels = []) {
         ageQd: whole(batch.ageQd),
         roomId: text(row.roomId ?? row.storageRoomId ?? "outdoors"),
         resourceId,
-        storageRowId: text(row.id),
-        batchId: text(batch.id),
+        storageRowId: rowId,
+        batchId,
         snapshot: row
       });
     }
   }
-  for (const row of holding?.storage?.items ?? []) {
+  const items = holding?.storage?.items ?? [];
+  const itemRows = indexStorageRows(items);
+  for (const [rowIndex, row] of items.entries()) {
     if (!row?.forSale) continue;
     if (whole(row.internalDemandAvailableFromQd) > internalDemandBatchClockQd(holding)) continue;
     const qty = whole(this._itemQuantity(row));
     const basePriceCopper = whole(this._itemPriceCopper(row));
     if (!qty || !basePriceCopper) continue;
+    const itemId = text(row.id);
     candidates.push({
-      id: `item:${text(row.id)}`,
+      id: itemRows.get(itemId) === row ? `item:${itemId}` : `item-row:${JSON.stringify([itemId, rowIndex])}`,
       kind: "item",
       name: text(row.name ?? row.itemData?.name ?? "Предмет"),
       qty,
@@ -170,7 +180,7 @@ _internalDemandCandidates(holding, channels = []) {
       categoryTag: "item",
       marketTags: [text(row.itemData?.type ?? row.itemType ?? "item")],
       roomId: text(row.roomId ?? row.storageRoomId ?? "outdoors"),
-      itemId: text(row.id),
+      itemId,
       snapshot: row
     });
   }

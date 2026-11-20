@@ -10,7 +10,7 @@ function costRoomMatches(row, cost, normalizeRoomId) {
   return normalizeRoomId(row?.roomId ?? row?.storageRoomId) === normalizeRoomId(cost.roomId ?? cost.storageRoomId);
 }
 
-export function planStorageCosts({ holding = {}, costs = [], dependencies = {} } = {}) {
+export function planStorageCosts({ holding = {}, costs = [], eligibleResourceRow, trackResourceSources = false, dependencies = {} } = {}) {
   const deps = requiredDependencies(dependencies);
   // Select one complete alternative per OR group against the entire recipe.
   // Planning never changes the stock; payment receives only concrete costs.
@@ -21,7 +21,7 @@ export function planStorageCosts({ holding = {}, costs = [], dependencies = {} }
     const choose = (index, selected) => {
       if (index === groups.length) {
         const ordered = [...fixed, ...selected].sort((a, b) => Number(Boolean(a.resourceGroup)) - Number(Boolean(b.resourceGroup)));
-        const plan = planStorageCosts({ holding, costs: ordered, dependencies: deps });
+        const plan = planStorageCosts({ holding, costs: ordered, eligibleResourceRow, trackResourceSources, dependencies: deps });
         failure ??= plan;
         return plan.ok ? plan : null;
       }
@@ -38,15 +38,19 @@ export function planStorageCosts({ holding = {}, costs = [], dependencies = {} }
     if (Array.isArray(row?.batches)) return row.batches;
     return [{ qty: row?.qty, ageQd: 0 }];
   };
-  const inventory = (holding?.storage?.resources ?? []).flatMap((row, index) => batchesForRow(row).map((batch, batchIndex) => ({
+  const rows = holding?.storage?.resources ?? [];
+  const eligibleRows = eligibleResourceRow ? rows.filter(eligibleResourceRow) : rows;
+  const inventory = eligibleRows.flatMap((row, index) => batchesForRow(row).map((batch, batchIndex) => ({
     row,
     index,
     batchIndex,
+    batchId: String(batch?.id ?? ""),
     ageQd: Math.max(0, Math.floor(deps.safeNumber(batch?.ageQd, 0))),
     remaining: Math.max(0, Math.floor(deps.safeNumber(batch?.qty, 0)))
   })));
   let moneyRemaining = Math.max(0, Math.floor(deps.safeNumber(holding?.storage?.moneyCopper, 0)));
   const concreteCosts = [];
+  const resourceSources = trackResourceSources ? new Map() : null;
   const missing = [];
 
   // Reserve exact ingredients before interchangeable groups, including recipes
@@ -56,7 +60,8 @@ export function planStorageCosts({ holding = {}, costs = [], dependencies = {} }
   for (const rawCost of orderedCosts) {
     const amount = Math.max(0, Math.ceil(deps.safeNumber(rawCost?.qty, 0)));
     if (!amount) continue;
-    if (deps.isMoneyResource(rawCost?.resourceId, rawCost?.id, rawCost?.name)) {
+    const storageRowId = String(rawCost?.storageRowId ?? "");
+    if (!storageRowId && deps.isMoneyResource(rawCost?.resourceId, rawCost?.id, rawCost?.name)) {
       const take = Math.min(moneyRemaining, amount);
       moneyRemaining -= take;
       if (take > 0) concreteCosts.push({ ...rawCost, qty: take });
@@ -68,6 +73,7 @@ export function planStorageCosts({ holding = {}, costs = [], dependencies = {} }
     const candidates = inventory
       .filter((entry) => entry.remaining > 0.0001)
       .filter((entry) => costRoomMatches(entry.row, rawCost, deps.normalizeRoomId))
+      .filter((entry) => !storageRowId || String(entry.row?.id ?? "") === storageRowId)
       .filter((entry) => groupId ? deps.resourceMatchesGroup(entry.row, groupId) : deps.storageResourceMatches(entry.row, rawCost));
     candidates.sort((left, right) => right.ageQd - left.ageQd || left.index - right.index || left.batchIndex - right.batchIndex);
 
@@ -80,7 +86,7 @@ export function planStorageCosts({ holding = {}, costs = [], dependencies = {} }
       entry.remaining -= take;
       rest -= take;
       have += take;
-      concreteCosts.push({
+      const cost = {
         ...rawCost,
         resourceGroup: "",
         resourceId: String(entry.row?.resourceId ?? entry.row?.id ?? "custom"),
@@ -88,10 +94,13 @@ export function planStorageCosts({ holding = {}, costs = [], dependencies = {} }
         roomId: deps.normalizeRoomId(entry.row?.roomId ?? entry.row?.storageRoomId),
         storageRowId: String(entry.row?.id ?? ""),
         qty: take
-      });
+      };
+      concreteCosts.push(cost);
+      // Live references are for this plan's draft only; durable costs and receipts keep their existing format.
+      resourceSources?.set(cost, { row: entry.row, batchId: entry.batchId });
     }
     if (rest > 0.0001) missing.push({ ...rawCost, qty: amount, have });
   }
 
-  return { ok: missing.length === 0, costs: concreteCosts, missing };
+  return { ok: missing.length === 0, costs: concreteCosts, missing, ...(resourceSources ? { resourceSources } : {}) };
 }

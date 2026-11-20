@@ -1,60 +1,51 @@
 import { isPerishableFoodDefinition } from "../../core/perishable-food.js";
-import { expireTransportReservation } from "../../data/transport/state.js";
 import { buildingOperationalState } from "../../core/building-state.js";
 import {
   beginResourceBatchPeriod,
   cancelResourceBatchPeriod,
+  expireResourceBatch,
   finishResourceBatchPeriod,
   resourceBatchElapsedQd,
   resourceBatchTotal
 } from "../../core/resource-batches.js";
 import {
-  normalizeResourceId,
-  resourceCategoryTag,
   resourceDef,
   resourceLabel,
-  resourceShelfLifeQd
+  storageResourceId,
+  storageShelfLifeForRow
 } from "../../core/resources.js";
-import { storageEffectiveShelfLifeMultiplier, storageProfileEffectFactor } from "../storage/specialization.js";
+import { normalizeStorageRoomId } from "../storage/capacity.js";
+import { storageEffectiveShelfLifeQd, storageProfileEffectFactor } from "../storage/specialization.js";
 
-function definitionForRow(row = {}) {
-  const id = normalizeResourceId(row.resourceId, row.id, row.name);
-  return { id, definition: id === "custom" ? null : resourceDef(id) };
+function definitionForRow(row) {
+  const id = storageResourceId(row);
+  return id === "custom" ? row : (resourceDef(id) ?? row);
 }
 
-function shelfLifeForRow(row = {}) {
-  const { id, definition } = definitionForRow(row);
-  return definition ? resourceShelfLifeQd(id) : resourceShelfLifeQd(row);
-}
-
-function categoryForRow(row = {}) {
-  const { id, definition } = definitionForRow(row);
-  return definition ? resourceCategoryTag(id) : resourceCategoryTag(row);
-}
-
-function roomMultiplierForRow(holding, row = {}) {
-  const roomId = String(row.roomId ?? row.storageRoomId ?? "outdoors") || "outdoors";
-  if (roomId === "outdoors") return 1;
+function expirationRoom(holding, row) {
+  const roomId = normalizeStorageRoomId(row.roomId ?? row.storageRoomId);
+  if (roomId === "outdoors") return undefined;
   const building = (holding?.buildings?.list ?? []).find((candidate) => String(candidate?.id ?? "") === roomId);
-  if (!building || !buildingOperationalState(building).operational) return 1;
-  const profileEffectFactor = storageProfileEffectFactor(holding, building);
-  return storageEffectiveShelfLifeMultiplier({
-    ...(building?.storage ?? {}),
-    profileEffectFactor
-  }, row);
+  if (!building || building.functions?.storage === false || !buildingOperationalState(building).operational) return undefined;
+  return { ...building.storage, profileEffectFactor: storageProfileEffectFactor(holding, building) };
 }
 
+export function storageExpiresInQd(holding, row = {}, ageQd = 0) {
+  const shelfLifeQd = storageShelfLifeForRow(row);
+  if (!shelfLifeQd) return Infinity;
+  const deadlineQd = storageEffectiveShelfLifeQd(expirationRoom(holding, row), row, shelfLifeQd);
+  return Math.max(0, deadlineQd - Math.max(0, Math.floor(Number(ageQd) || 0)));
+}
+
+// Internal demand gives urgency to food purchases only.
 export function perishableStorageExpiresInQd(holding, row = {}, ageQd = 0) {
-  if (!isPerishableFoodDefinition(definitionForRow(row).definition ?? row)) return Number.POSITIVE_INFINITY;
-  const shelfLifeQd = Math.max(0, Math.floor(Number(shelfLifeForRow(row)) || 0));
-  if (!shelfLifeQd) return Number.POSITIVE_INFINITY;
-  const multiplier = roomMultiplierForRow(holding, row);
-  const effectiveShelfLifeQd = Math.max(1, Math.floor(shelfLifeQd * multiplier));
-  return Math.max(0, effectiveShelfLifeQd - Math.max(0, Math.floor(Number(ageQd) || 0)));
+  return isPerishableFoodDefinition(definitionForRow(row))
+    ? storageExpiresInQd(holding, row, ageQd)
+    : Infinity;
 }
 
-export function beginPerishableStoragePeriod(holding) {
-  return beginResourceBatchPeriod(holding);
+export function beginPerishableStoragePeriod(holding, transportState) {
+  return beginResourceBatchPeriod(holding, { transportState });
 }
 
 export function cancelPerishableStoragePeriod(holding) {
@@ -64,15 +55,14 @@ export function cancelPerishableStoragePeriod(holding) {
 /** Raw ingredients may expire between the daily deliveries and processing shifts. */
 export function expireProductionIngredients(holding, step, report, appendLedger) {
   for (const row of holding?.storage?.resources ?? []) {
-    const definition = definitionForRow(row).definition ?? row;
-    if (!isPerishableFoodDefinition(definition) || definition.foodEdible) continue;
-    const expired = (row.batches ?? []).filter((batch) => perishableStorageExpiresInQd(holding, row,
-      batch.ageQd + resourceBatchElapsedQd(holding, batch, step)) <= 0);
+    const shelfLifeQd = storageShelfLifeForRow(row);
+    if (!shelfLifeQd || definitionForRow(row).foodEdible) continue;
+    const deadlineQd = storageEffectiveShelfLifeQd(expirationRoom(holding, row), row, shelfLifeQd);
+    const expired = (row.batches ?? []).filter((batch) => batch.ageQd + resourceBatchElapsedQd(holding, batch, step) >= deadlineQd);
     if (!expired.length) continue;
-    const ids = new Set(expired.map((batch) => batch.id));
-    const qty = resourceBatchTotal(expired);
-    for (const batch of expired) expireTransportReservation(holding, row.id, batch.id);
-    row.batches = row.batches.filter((batch) => !ids.has(batch.id));
+    const qty = expired.reduce((sum, batch) => sum + expireResourceBatch(holding, row, batch), 0);
+    if (!qty) continue;
+    row.batches = row.batches.filter((batch) => batch.qty > 0);
     row.qty = resourceBatchTotal(row.batches);
     const name = row.name || resourceLabel(row.resourceId);
     report.skipped.push(`${name}: испорчено сырья ${qty} перед производственной сменой.`);
@@ -92,10 +82,8 @@ export function finishPerishableStoragePeriod({
 } = {}) {
   const result = finishResourceBatchPeriod(holding, {
     elapsedQd,
-    shelfLifeQdForRow: shelfLifeForRow,
-    categoryTagForRow: categoryForRow,
-    isPerishableFoodForRow: (row) => isPerishableFoodDefinition(definitionForRow(row).definition ?? row),
-    roomMultiplierForRow: (row) => roomMultiplierForRow(holding, row)
+    shelfLifeQdForRow: storageShelfLifeForRow,
+    effectiveShelfLifeQdForRow: (row, baseQd) => storageEffectiveShelfLifeQd(expirationRoom(holding, row), row, baseQd)
   });
   if (!result.expiredQty) return result;
 

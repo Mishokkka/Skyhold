@@ -3,6 +3,7 @@ import { normalizeMarketEconomy } from "../../data/market/economy.js";
 import { selectMarketPurchaseCargo } from "../../engines/market/pricing.js";
 import { availableAuthorityMarkets, authorityMarketQuote } from "./authority-context.js";
 import { prepareMarketOutboundContext } from "./outbound-context.js";
+import { hiddenStorageRoomIds } from "../../data/access-guard.js";
 
 /** Goods, stock, demand and FIFO selection; physical eligibility belongs to v2. */
 export function prepareTransportCommerce({ data, holding, request = {}, isGM = false, searchBudget = null }) {
@@ -15,8 +16,12 @@ export function prepareTransportCommerce({ data, holding, request = {}, isGM = f
   const outbound = request.direction === "outbound" ? prepareMarketOutboundContext({
     holding, quote, resourceDefinitions: resources,
     organizations: economy.organizations.filter(row => isGM || row.visibility !== "gm"),
-    quantities: request.quantities
+    quantities: request.quantities,
+    isGM
   }) : null;
+  if (request.direction !== "outbound" && hiddenStorageRoomIds(holding, isGM).has(String(request.targetRoomId ?? "").trim())) {
+    throw new Error("Помещение для доставки недоступно.");
+  }
   const plan = request.direction === "outbound" ? null : selectMarketPurchaseCargo({
     quote, quantities: request.quantities, targetRoomId: request.targetRoomId
   });

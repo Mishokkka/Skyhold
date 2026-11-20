@@ -105,7 +105,8 @@ export function validateWorkAllocationPlan(rows = [], {
   const issues = [];
   const normalized = source.slice(0, MAX_WORK_ALLOCATIONS_PER_PERSON).map((row, index) => normalizeWorkAllocation(row, index));
   if (source.length > MAX_WORK_ALLOCATIONS_PER_PERSON) {
-    issues.push({ code: "allocation-count", message: `У одного работника допускается не более ${MAX_WORK_ALLOCATIONS_PER_PERSON} строк труда.` });
+    issues.push({ code: "allocation-count", actual: source.length, limit: MAX_WORK_ALLOCATIONS_PER_PERSON,
+      message: `У одного работника допускается не более ${MAX_WORK_ALLOCATIONS_PER_PERSON} строк труда.` });
   }
   const seenTargets = new Set();
   for (const row of normalized) {
@@ -117,16 +118,21 @@ export function validateWorkAllocationPlan(rows = [], {
     const target = key && targetMap ? targetMap.get(key) : null;
     if (hasWork && targetMap && !target) issues.push({ code: "allocation-unknown", allocationId: row.id, targetKey: key, message: "Выбранная рабочая функция больше недоступна." });
     if (row.overtimeQd > 0 && target && !target.overtimeAllowed) {
-      issues.push({ code: "allocation-overtime", allocationId: row.id, targetKey: key, message: "Эта функция не разрешает переработку." });
+      issues.push({ code: "allocation-overtime", allocationId: row.id, targetKey: key, actual: row.overtimeQd, limit: 0,
+        message: "Эта функция не разрешает переработку." });
     }
   }
   const totals = workAllocationTotals(normalized);
   const normalCap = whole(maximumNormalQd, WORK_ALLOCATION_NORMAL_QD_PER_TENDAY);
   const overtimeCap = whole(maximumOvertimeQd, WORK_ALLOCATION_OVERTIME_QD_PER_TENDAY);
-  if (totals.normalQd > normalCap) issues.push({ code: "allocation-normal-cap", message: `Обычный труд превышает ${normalCap} QD за период.` });
-  if (totals.overtimeQd > overtimeCap) issues.push({ code: "allocation-overtime-cap", message: `Переработка превышает ${overtimeCap} QD за период.` });
-  if (totals.overtimeQd > Math.floor(totals.normalQd / 2)) {
-    issues.push({ code: "allocation-overtime-days", message: "Каждый overtime-QD требует в тот же период два обычных рабочих QD выбранного дня." });
+  if (totals.normalQd > normalCap) issues.push({ code: "allocation-normal-cap", actual: totals.normalQd, limit: normalCap,
+    message: `Обычный труд превышает ${normalCap} QD за период.` });
+  if (totals.overtimeQd > overtimeCap) issues.push({ code: "allocation-overtime-cap", actual: totals.overtimeQd, limit: overtimeCap,
+    message: `Переработка превышает ${overtimeCap} QD за период.` });
+  const dailyOvertimeCap = Math.floor(totals.normalQd / 2);
+  if (totals.overtimeQd > dailyOvertimeCap) {
+    issues.push({ code: "allocation-overtime-days", actual: totals.overtimeQd, limit: dailyOvertimeCap,
+      message: "Каждый overtime-QD требует в тот же период два обычных рабочих QD выбранного дня." });
   }
   return { ok: issues.length === 0, rows: normalized, totals, issues };
 }
@@ -314,7 +320,8 @@ export function validateHoldingWorkAllocations(holding = {}, { previousHolding =
     if (["soldier", "defenseCommander", "construction"].includes(specialAssignment)
       || specialAssignment.startsWith("construction:")
       || specialAssignment.startsWith("construction-leader:")) {
-      issues.push({ code: "allocation-incompatible", personId, personName: text(person?.name) || "Житель", message: "Явный план QD несовместим с военным или строительным назначением." });
+      issues.push({ code: "allocation-incompatible", personId, personName: text(person?.name) || "Житель", evidence: specialAssignment,
+        message: "Явный план QD несовместим с военным или строительным назначением." });
     }
   }
 
@@ -324,14 +331,13 @@ export function validateHoldingWorkAllocations(holding = {}, { previousHolding =
     const workersMax = whole(building?.workersMax);
     const assigned = buildingStaffingWorkerIds(holding, buildingId).length;
     if (workersMax >= 0 && assigned > workersMax) {
-      issues.push({ code: "allocation-capacity", buildingId, buildingName: text(building?.name) || "Здание", message: `${text(building?.name) || "Здание"}: план использует ${assigned}/${workersMax} рабочих мест.` });
+      issues.push({ code: "allocation-capacity", buildingId, buildingName: text(building?.name) || "Здание", actual: assigned, limit: workersMax,
+        message: `${text(building?.name) || "Здание"}: план использует ${assigned}/${workersMax} рабочих мест.` });
     }
   }
-  const hybridIssues = validateHybridLaborHolding(holding, { targets: targetMap }).issues;
-  issues.push(...(previousHolding ? newHybridLaborIssues(
-    validateHybridLaborHolding(previousHolding, { targets: buildWorkAllocationTargets(previousHolding) }).issues, hybridIssues
-  ) : hybridIssues));
-  return { ok: issues.length === 0, targets, targetMap, plans, issues };
+  issues.push(...validateHybridLaborHolding(holding, { targets: targetMap }).issues);
+  const blockingIssues = previousHolding ? newHybridLaborIssues(validateHoldingWorkAllocations(previousHolding).issues, issues) : issues;
+  return { ok: blockingIssues.length === 0, targets, targetMap, plans, issues: blockingIssues };
 }
 
 export function plannedAssignmentQd(assignments = [], sourceId = "", functionId = "") {

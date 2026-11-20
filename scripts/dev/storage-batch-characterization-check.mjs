@@ -3,6 +3,8 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { applyStorageBatchMove, planStorageBatchMove } from "../engines/storage/batch-move.js";
 import { itemQuantity } from "../engines/storage/item-quantity.js";
+import { resolveStorageRows } from "../engines/storage/row-identity.js";
+import { storageEffectiveRowLoad } from "../engines/storage/specialization.js";
 import { createStorageOperationExecutor } from "../apps/storage-operation-executor.js";
 import {
   addResourceBatches,
@@ -52,8 +54,10 @@ function dependencies() {
     safeNumber: (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback,
     normalizeStorageRoomId,
     itemQuantity,
+    resolveStorageRows,
     storageRooms,
     storageRowLoad,
+    storageEffectiveRowLoad,
     storageRoomLabel: (holding, roomId) => storageRooms(holding).find((room) => room.id === roomId)?.label ?? roomId,
     clone,
     makeId: (prefix = "row") => `${prefix}-split`,
@@ -99,6 +103,25 @@ function dependencies() {
 export async function checkStorageBatchCharacterization() {
   const deps = dependencies();
   const holding = fixture();
+  const oversized = fixture();
+  oversized.storage.items = Array.from({ length: 201 }, (_, index) => ({
+    id: `stack-${index}`, roomId: "source", qty: 1, weight: 1
+  }));
+  const oversizedBefore = clone(oversized);
+  const selection = { holding: oversized, rowType: "items", rowIds: oversized.storage.items.map(({ id }) => id),
+    fromRoomId: "source", toRoomId: "outdoors", dependencies: deps };
+  assert.match(planStorageBatchMove(selection).message, /до 200/);
+  assert.equal(applyStorageBatchMove(selection).ok, false);
+  assert.deepEqual(oversized, oversizedBefore, "a large batch must fail atomically");
+  const rejectsOversized = createStorageOperationExecutor({
+    updateHolding: () => assert.fail("the authority must reject the oversize request before opening a draft")
+  });
+  await assert.rejects(rejectsOversized({ ...selection, type: "batchMove", holdingId: oversized.id, operationId: "too-large",
+    expectedRevision: 1 }, { userId: "player", remote: true }), /до 200/);
+  const reservedPreview = planStorageBatchMove({ holding, rowIds: ["res-a"], fromRoomId: "source", toRoomId: "target",
+    rowQuantities: { "res-a": 2 }, dependencies: { ...deps, resourceAvailableQuantity: () => 3 } });
+  assert.equal(reservedPreview.rows[0].load, 2, "reserved units must not inflate the load of a partial move");
+
   const plan = planStorageBatchMove({
     holding,
     rowType: "resources",
@@ -180,6 +203,74 @@ export async function checkStorageBatchCharacterization() {
   assert.equal(itemQuantity(partialItemHolding.storage.items.find((row) => row.id === "sitem-split")), 1, "a partial item move must create a target stack with the requested quantity");
   assert.equal(partialItemHolding.storage.items.find((row) => row.id === "sitem-split")?.roomId, "target", "the split item stack must move to the requested room when it fits");
 
+  const limitedHolding = fixture();
+  limitedHolding.storage.items = ["first", "second"].map(id => ({ id, name: id, roomId: "outdoors", weight: 2, qty: 1 }));
+  const limitedBefore = clone(limitedHolding);
+  const limited = {
+    holding: limitedHolding, rowType: "items", rowIds: ["first", "second"],
+    fromRoomId: "outdoors", toRoomId: "target", operationId: "insufficient-space",
+    dependencies: { ...deps, storageRooms: (target) => deps.storageRooms(target).filter(room => room.id !== "source") }
+  };
+  assert.equal(applyStorageBatchMove(limited).ok, false, "fitting only the first item must reject the entire batch");
+  assert.deepEqual(limitedHolding, limitedBefore, "rejection must leave both quantities, rooms and the journal intact");
+  assert.equal(planStorageBatchMove(limited).ok, false, "the same capacity failure must be reported during preview");
+  const complete = applyStorageBatchMove({ ...limited, operationId: "with-overflow-space", dependencies: deps });
+  assert.equal(complete.ok, true, "a complete batch may use an available overflow room");
+  assert.deepEqual(complete.placements.map(({ id, roomId }) => [id, roomId]), [["first", "target"], ["second", "source"]]);
+  assert.equal(limitedHolding.storage.log.length, 4, "each moved stack produces a paired journal entry");
+
+  const feasible = fixture();
+  feasible.storage.items = [
+    { id: "small", name: "Малый груз", roomId: "outdoors", weight: 5, qty: 1 },
+    { id: "large", name: "Большой груз", roomId: "outdoors", weight: 10, qty: 1 }
+  ];
+  const alternative = { holding: feasible, rowType: "items", rowIds: ["small", "large"],
+    fromRoomId: "outdoors", toRoomId: "target",
+    dependencies: { ...deps, storageRooms: () => [
+      { id: "outdoors", available: true, unlimited: true },
+      { id: "target", available: true, free: 10 },
+      { id: "source", available: true, free: 5 }
+    ] } };
+  const layout = planStorageBatchMove(alternative);
+  assert.equal(layout.ok, true, "the smaller stack must yield the only large room to the larger stack");
+  assert.deepEqual(layout.rows.map(row => row.roomId), ["source", "target"]);
+  assert.deepEqual(feasible.storage.items.map(row => row.roomId), ["outdoors", "outdoors"], "preview must be read-only");
+  const movedAlternative = applyStorageBatchMove(alternative);
+  assert.equal(movedAlternative.ok, true);
+  assert.deepEqual(feasible.storage.items.map(row => row.roomId), ["source", "target"]);
+
+  const crowded = fixture();
+  crowded.storage.items = Array.from({ length: 30 }, (_, index) => ({
+    id: `stack-${index}`, roomId: "outdoors", qty: 1, weight: index === 29 ? 30 : 1
+  }));
+  const crowdedLayout = planStorageBatchMove({ ...alternative, holding: crowded,
+    rowIds: crowded.storage.items.map(row => row.id),
+    dependencies: { ...deps, storageRooms: () => [
+      { id: "target", available: true, free: 30 },
+      { id: "source", available: true, free: 29 }
+    ] } });
+  assert.equal(crowdedLayout.ok, true, "stacks with only one fitting room must be considered before numerous interchangeable ones");
+  assert.deepEqual(crowdedLayout.rows.map(row => row.roomId), [...Array(29).fill("source"), "target"]);
+
+  const resourceAtSource = fixture();
+  resourceAtSource.storage.resources[0].roomId = "outdoors";
+  const resourceBefore = clone(resourceAtSource);
+  const overflowBack = { holding: resourceAtSource, rowIds: ["res-a"], fromRoomId: "outdoors",
+    toRoomId: "target", operationId: "resource-overflow-to-source", dependencies: deps };
+  assert.equal(applyStorageBatchMove(overflowBack).ok, false, "a resource batch must not report a move when part goes back to its source");
+  assert.deepEqual(resourceAtSource, resourceBefore, "a rejected move must preserve the original resource row, batches and journal");
+  assert.equal(planStorageBatchMove(overflowBack).ok, false, "preview reports the same resource overflow refusal");
+  assert.equal(applyStorageBatchMove({ ...overflowBack, rowQuantities: { "res-a": 2 } }).ok, true);
+
+  const ambiguousHolding = fixture();
+  ambiguousHolding.storage.resources.unshift({ id: "res-a", resourceId: "stone", name: "Камень", qty: 3, roomId: "target" });
+  const ambiguousBefore = clone(ambiguousHolding);
+  const ambiguous = applyStorageBatchMove({ holding: ambiguousHolding, rowIds: ["res-a"],
+    fromRoomId: "source", toRoomId: "target", dependencies: deps });
+  assert.equal(ambiguous.ok, false, "the selected ID must be unique even across rooms");
+  assert.match(ambiguous.message, /одинаковый ID/);
+  assert.deepEqual(ambiguousHolding, ambiguousBefore);
+
   const world = { meta: { revision: 7 }, holdings: [fixture()] };
   const logic = {
     _applyStorageBatchMove(target, options) {
@@ -226,6 +317,22 @@ export async function checkStorageBatchCharacterization() {
   const second = await executor(clone(command), { userId: "player-1", remote: true });
   assert.equal(first.ok, true, "authority executor must apply a permitted current batch");
   assert.deepEqual(second, first, "operation id must make repeated batch commands idempotent");
+
+  world.holdings[0] = fixture();
+  world.holdings[0].storage.resources[1].id = " res-a ";
+  const exactCommand = { ...command, operationId: "batch-exact-id", toRoomId: "outdoors",
+    rowIds: [" res-a "], rowQuantities: { " res-a ": 2 } };
+  const preview = planStorageBatchMove({ holding: world.holdings[0], ...exactCommand, dependencies: deps });
+  assert.deepEqual(preview.rows.map(({ id, qty }) => [id, qty]), [[" res-a ", 2]],
+    "preview must select the exact row and its partial quantity even when a trimmed ID also exists");
+  const exact = await executor(exactCommand, { userId: "player-1", remote: true });
+  assert.equal(exact.ok, true);
+  assert.deepEqual(world.holdings[0].storage.resources.slice(0, 2).map(({ id, qty }) => [id, qty]),
+    [["res-a", 5], [" res-a ", 2]]);
+  assert.deepEqual(exact.placements.map(({ id, qty }) => [id, qty]), [[" res-a ", 2]]);
+  const holdingAfterMove = clone(world.holdings[0]);
+  assert.deepEqual(await executor(exactCommand, { userId: "player-1", remote: true }), exact);
+  assert.deepEqual(world.holdings[0], holdingAfterMove, "retry must not move the remaining part");
 
   const addition = {
     type: "addResourceRow",

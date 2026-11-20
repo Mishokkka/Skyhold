@@ -1,8 +1,6 @@
-const ARMAMENT_SUPPLY = Object.freeze({
-  "armament-simple": "military-supplies-simple",
-  "armament-complex": "military-supplies-complex",
-  "armament-elite": "military-supplies-complex"
-});
+import { militarySupplyResourceForArmament } from "../../data/military-resident-rules.js";
+
+export { militarySupplyResourceForArmament };
 
 function text(value = "") {
   return String(value ?? "").trim();
@@ -10,10 +8,6 @@ function text(value = "") {
 
 function whole(value) {
   return Math.max(0, Math.floor(Number(value) || 0));
-}
-
-export function militarySupplyResourceForArmament(resourceId = "") {
-  return ARMAMENT_SUPPLY[text(resourceId)] ?? "";
 }
 
 function directResourceQuantity(holding = {}, resourceId = "") {

@@ -5,7 +5,7 @@ import { politicsRuntimeEffects } from "../politics/runtime-effects.js";
 function foodDependencies(dependencies = {}) {
   const required = [
     "safeNumber",
-    "normalizeResourceId",
+    "storageResourceId",
     "resourceDef",
     "resourceLabel",
     "formatNumber",
@@ -31,8 +31,8 @@ function foodDependencies(dependencies = {}) {
 
 export function isFoodResource(row = {}, dependencies = {}) {
   const deps = foodDependencies(dependencies);
-  const id = deps.normalizeResourceId(row.resourceId, row.id, row.name);
-  const definition = deps.resourceDef(id, row.name);
+  const id = deps.storageResourceId(row);
+  const definition = id === "custom" ? null : deps.resourceDef(id);
   if (row.noAutoConsume === true || definition?.noAutoConsume === true) return false;
   // A storage row is inventory, not a second resource definition. Legacy
   // holdings may still carry stale foodEdible=true metadata, but a known
@@ -73,6 +73,7 @@ export function runFoodConsumption({
   const compactBatches = !deps.isResourceBatchPeriodActive(holding);
   for (const row of edibleRows) deps.syncResourceRowBatches(row, { compact: compactBatches });
   const availableBeforeConsumption = edibleRows.reduce((sum, row) => sum + deps.availableResourceRowQuantity(row, holding), 0);
+  if (report?.food) report.food.availableBeforeConsumption = availableBeforeConsumption;
   const ration = deps.resolveFoodRation({
     residentDays,
     available: availableBeforeConsumption,
@@ -108,8 +109,8 @@ export function runFoodConsumption({
   }))).sort((left, right) => right.batch.ageQd - left.batch.ageQd || left.rowIndex - right.rowIndex || left.batchIndex - right.batchIndex);
 
   const foodGroup = (row) => {
-    const id = deps.normalizeResourceId(row.resourceId, row.id, row.name);
-    return String(id === "custom" ? row.foodType ?? "" : deps.resourceDef(id, row.name)?.foodType ?? "").trim().toLowerCase();
+    const id = deps.storageResourceId(row);
+    return String(id === "custom" ? row.foodType ?? "" : deps.resourceDef(id)?.foodType ?? "").trim().toLowerCase();
   };
   const groupStocks = new Map();
   for (const candidate of candidates) {
@@ -125,12 +126,11 @@ export function runFoodConsumption({
     if (!receipt) return 0;
     remaining -= receipt.qty;
     candidate.batch.qty -= receipt.qty;
-    const resourceId = deps.normalizeResourceId(candidate.row.resourceId, candidate.row.id, candidate.row.name);
+    const resourceId = deps.storageResourceId(candidate.row);
     const name = candidate.row.name || deps.resourceLabel(resourceId);
-    const key = String(candidate.row.id ?? candidate.rowIndex);
-    const summary = takenByRow.get(key) ?? { row: candidate.row, resourceId, name, qty: 0 };
+    const summary = takenByRow.get(candidate.row) ?? { row: candidate.row, resourceId, name, qty: 0 };
     summary.qty += receipt.qty;
-    takenByRow.set(key, summary);
+    takenByRow.set(candidate.row, summary);
     return receipt.qty;
   };
   // Secure modest shares of available groups; keep FIFO within each group.
@@ -147,7 +147,7 @@ export function runFoodConsumption({
   const dietTypes = new Set();
   const foodGroups = {};
   for (const { row, resourceId, name, qty: take } of takenByRow.values()) {
-    const definition = deps.resourceDef(resourceId, name);
+    const definition = resourceId === "custom" ? null : deps.resourceDef(resourceId);
     const foodType = String(resourceId === "custom" ? row.foodType : definition?.foodType || "").trim().toLowerCase();
     if (foodType) {
       dietTypes.add(foodType);
@@ -184,7 +184,6 @@ export function runFoodConsumption({
     report.food.needed += needed;
     report.food.eaten += eaten;
     report.food.hungryResidentDays += hungryResidentDays;
-    report.food.availableBeforeConsumption = availableBeforeConsumption;
     report.food.minimumNeeded = Math.max(0, Number(report.food.minimumNeeded) || 0) + ration.minimumTarget;
     report.food.selectedUnits = selectedUnits;
     report.food.selectedTier = ration.selectedTier;

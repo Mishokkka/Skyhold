@@ -234,6 +234,23 @@ export function checkInternalDemandCharacterization() {
   assert.equal(nextApply.applied.soldUnits, 3, "the next Apply must sell the released scheduled batch without a second cooldown");
   assert.equal(applyHolding.storage.resources[0].qty, 0);
 
+  const sameIds = structuredClone(applyHolding);
+  sameIds.gm.calendaria.lastQd = 0;
+  sameIds.storage.moneyCopper = 0;
+  sameIds.storage.resources = ["bread", "food-protein"].map((resourceId, index) => ({
+    id: "legacy-row", resourceId, roomId: index ? "cellar" : "outdoors", forSale: true,
+    batches: [{ id: "legacy-batch", qty: index + 2, ageQd: 10 - index }]
+  }));
+  const mixedReport = { ledger: [], work: [] };
+  const mixedSale = runtimeDemandDomain._runInternalDemandForQd(sameIds, 40, mixedReport, null, { operationId: "legacy-stock" });
+  assert.equal(mixedSale.ok, true);
+  assert.equal(mixedSale.applied.soldUnits, 5, "independent lots with the same saved IDs must both be sellable");
+  assert.deepEqual(sameIds.storage.resources.map(row => row.qty), [0, 0]);
+  assert.equal(sameIds.storage.moneyCopper, mixedSale.applied.revenueCopper);
+  assert.deepEqual(mixedReport.ledger.filter(entry => entry.kind === "resource")
+    .map(entry => [entry.resourceId, entry.roomId, entry.qty]).sort(),
+  [["bread", "outdoors", -2], ["food-protein", "cellar", -3]]);
+
   const servicePlan = planInternalDemand({
     pools: [{ id: "inn-visitors", budgetCopper: 30, allowedTags: ["service.inn"] }],
     channels: [channel("inn", { sourceIds: ["inn-visitors"], allowedTags: ["service.inn"], throughputUnits: 3, sellerEfficiency: 3 })],

@@ -1,10 +1,63 @@
-import { normalizeResourceId, resourceDef, resourceLabel, resourceOptions } from "../../../../core/resources.js";
+import { normalizeResourceId, resourceDef, resourceLabel, resourceOptions, storageResourceId } from "../../../../core/resources.js";
+import { COMMAND_ERROR } from "../../../../data/command-result.js";
+import { MODULE_ID } from "../../../../data/constants.js";
+import { stableDataHash } from "../../../../data/storage-commit.js";
 import { makeId } from "../../../../data/utils.js";
 import { itemQuantity, itemQuantityUpdateData, setItemQuantityData } from "../../../../engines/storage/item-quantity.js";
-import { resolveFoundryUuid } from "../../../../integrations/foundry-runtime.js";
+import { resolveStorageRow, STORAGE_ROW_CHANGED } from "../../../../engines/storage/row-identity.js";
+import { hasOtherActiveActorOwner, resolveFoundryActorReference, resolveFoundryUuid } from "../../../../integrations/foundry-runtime.js";
 
 function cloneFoundryData(value) {
   return foundry?.utils?.deepClone?.(value) ?? structuredClone(value);
+}
+
+function setStorageItemFlag(itemData, key, value) {
+  itemData.flags = { ...itemData.flags, [MODULE_ID]: { ...itemData.flags?.[MODULE_ID], [key]: value } };
+  return itemData;
+}
+
+function storageItemFlag(item, key) {
+  return item.getFlag?.(MODULE_ID, key) ?? item.flags?.[MODULE_ID]?.[key];
+}
+
+function actorItemHash(item) {
+  return item ? stableDataHash(item.toObject()) : null;
+}
+
+function inventoryRollbackError(message, cause) {
+  return Object.assign(new Error(message, { cause }), { code: COMMAND_ERROR.OUTCOME_UNKNOWN });
+}
+
+function rollbackReviewError(actor, items, reason) {
+  const stacks = items.map(({ name, qty, id }) => `«${name || id}» (${qty} ед., ID ${id})`).join(", ");
+  return inventoryRollbackError(`${reason} Проверьте инвентарь «${actor.name ?? actor.id}» (${actor.uuid ?? actor.id}) и предметы ${stacks}.`);
+}
+
+function requireUncontestedRollback(actor, items) {
+  // Foundry 13 writes embedded documents by ID without comparing their previous data.
+  // A different client can edit the inventory between the fingerprint check and the write.
+  if (!hasOtherActiveActorOwner(actor)) return;
+  throw rollbackReviewError(actor, items, "Автоматический откат отложен: инвентарь доступен ещё одному подключённому владельцу.");
+}
+
+async function deleteUnchangedActorItems(actor, items, { rollback = false } = {}) {
+  if (rollback) requireUncontestedRollback(actor, items);
+  const hashes = new Map(items.map(({ id, hash }) => [id, hash]));
+  const unchanged = (item) => actorItemHash(item) === hashes.get(String(item?.id ?? ""));
+  if (!items.every(({ id }) => unchanged(actor.items?.get?.(id)))) return [];
+  // Check again after Foundry's asynchronous preparation, as close to dispatch as the API allows.
+  const hooks = globalThis.Hooks;
+  if (!hooks?.on || !hooks?.off) return actor.deleteEmbeddedDocuments("Item", [...hashes.keys()]);
+  const guardId = makeId("skyhold-delete", 12);
+  const hook = hooks.on("preDeleteItem", (item, options) => {
+    if (options?.skyholdDeleteGuard !== guardId) return;
+    return unchanged(item) && (!rollback || !hasOtherActiveActorOwner(actor));
+  });
+  try {
+    return await actor.deleteEmbeddedDocuments("Item", [...hashes.keys()], { skyholdDeleteGuard: guardId });
+  } finally {
+    hooks.off("preDeleteItem", hook);
+  }
 }
 
 export const FinanceStorageItemDocumentDomain = {
@@ -23,7 +76,11 @@ async _removeQuantityFromActorItem(item, amount = 1) {
   if (!game.user?.isGM && !actor.isOwner) return { ok: false };
   const qty = this._itemQuantity(item);
   const take = Math.max(1, Math.floor(this._safeNumber(amount, 1)));
+  if (take > qty) return { ok: false };
   const previousData = item.toObject ? item.toObject() : cloneFoundryData(item);
+  const previousHash = stableDataHash(previousData);
+  const sourceStack = { id: item.id, name: item.name, qty, hash: previousHash };
+  if (actorItemHash(actor.items?.get?.(item.id)) !== previousHash) return { ok: false };
   const receipt = {
     ok: true,
     kind: qty > take ? "updated" : "deleted",
@@ -33,51 +90,149 @@ async _removeQuantityFromActorItem(item, amount = 1) {
     previousQuantity: qty,
     previousData
   };
-  if (qty > take && item.update) {
-    await item.update(itemQuantityUpdateData(qty - take));
-    return receipt;
+  let failure;
+  let deletedItem;
+  try {
+    if (qty > take) {
+      if (!item.update) return { ok: false };
+      await item.update(itemQuantityUpdateData(qty - take));
+    } else {
+      if (!actor.deleteEmbeddedDocuments) return { ok: false };
+      const deleted = await deleteUnchangedActorItems(actor, [sourceStack]);
+      deletedItem = deleted?.find?.((document) => document?.id === item.id);
+    }
+  } catch (error) {
+    failure = error;
   }
-  if (actor.deleteEmbeddedDocuments) {
-    await actor.deleteEmbeddedDocuments("Item", [item.id]);
-    return receipt;
+  const live = actor.items?.get?.(item.id);
+  const remaining = live ? this._itemQuantity(live) : 0;
+  receipt.afterHash = actorItemHash(live);
+  // The delete response can reveal an edit that the client only received after dispatch.
+  if (deletedItem && actorItemHash(deletedItem) !== previousHash) {
+    receipt.previousData = deletedItem.toObject();
+    receipt.previousQuantity = this._itemQuantity(deletedItem);
+    if (live || !await this._restoreActorItemRemoval(receipt)) {
+      throw rollbackReviewError(actor, [{ id: item.id, name: deletedItem.name, qty: receipt.previousQuantity }],
+        "Исходный предмет изменился во время приёма.");
+    }
+    return { ok: false, message: "Предмет изменился во время приёма. Проверьте инвентарь и начните приём заново." };
   }
+  if (!failure && qty === take && !deletedItem) {
+    if (live) return { ok: false };
+    throw rollbackReviewError(actor, [sourceStack], "Foundry не подтвердил списание исходной стопки.");
+  }
+  if (!failure && remaining === qty - take) return receipt;
+  // An embedded operation may throw after the live document has changed.
+  if (remaining !== qty && !await this._restoreActorItemRemoval(receipt)) {
+    throw inventoryRollbackError("Не удалось восстановить исходное количество предмета.", failure);
+  }
+  if (failure) throw failure;
   return { ok: false };
 },
 
 async _restoreActorItemRemoval(receipt = null) {
-  if (!receipt?.ok || !receipt.actorId) return false;
-  const actor = globalThis.game?.actors?.get?.(receipt.actorId) ?? (receipt.actorUuid ? await resolveFoundryUuid(receipt.actorUuid) : null);
+  if (!receipt?.ok || !(receipt.actorUuid || receipt.actorId)) return false;
+  const actor = await resolveFoundryActorReference(receipt);
   if (!actor) return false;
-  const existing = actor.items?.get?.(receipt.itemId);
-  if (existing?.update) {
-    await existing.update(itemQuantityUpdateData(receipt.previousQuantity));
-    return true;
+  const expected = receipt.previousQuantity;
+  const findItem = (id) => actor.items?.get?.(id);
+  const quantityAt = (id) => {
+    const item = findItem(id);
+    return item ? this._itemQuantity(item) : 0;
+  };
+  let itemId = receipt.itemId;
+  const items = [{ name: receipt.previousData?.name, qty: expected, id: itemId }];
+  if (actorItemHash(findItem(itemId)) !== receipt.afterHash) {
+    throw rollbackReviewError(actor, items, "Исходная стопка изменилась во время обмена.");
   }
-  if (!actor.createEmbeddedDocuments || !receipt.previousData) return false;
+  requireUncontestedRollback(actor, items);
+  let failure;
+  if (!findItem(itemId) && actor.createEmbeddedDocuments && receipt.previousData) {
+    try {
+      const original = this._setItemQuantityData(receipt.previousData, expected);
+      const [created] = await actor.createEmbeddedDocuments("Item", [original], { keepId: true }) ?? [];
+      itemId = created?.id ?? itemId;
+    } catch (error) {
+      // A hook may have added the document before rejecting. Never retry creation with a different ID.
+      failure = error;
+    }
+  }
   try {
-    await actor.createEmbeddedDocuments("Item", [receipt.previousData], { keepId: true });
-  } catch (_error) {
-    const fallback = cloneFoundryData(receipt.previousData);
-    delete fallback._id;
-    delete fallback.id;
-    await actor.createEmbeddedDocuments("Item", [fallback]);
+    if (quantityAt(itemId) !== expected) {
+      await findItem(itemId)?.update?.(itemQuantityUpdateData(expected));
+    }
+  } catch (error) {
+    failure = error;
   }
-  return true;
+  const actual = quantityAt(itemId);
+  if (actual === expected) return true;
+  const item = findItem(itemId);
+  const message = `Проверьте инвентарь «${actor.name ?? actor.id}». Для «${item?.name ?? receipt.previousData?.name ?? itemId}» после отката найдено ${actual} из ${expected}. ${item?.uuid ?? actor.uuid ?? ""}`.trim();
+  globalThis.ui?.notifications?.error?.(message);
+  throw inventoryRollbackError(message, failure);
 },
 
 async _removeCreatedActorItems(receipt = null) {
-  if (receipt?.kind !== "created" || !receipt.actorId) return false;
-  const actor = globalThis.game?.actors?.get?.(receipt.actorId) ?? (receipt.actorUuid ? await resolveFoundryUuid(receipt.actorUuid) : null);
-  const itemIds = (Array.isArray(receipt.itemIds) ? receipt.itemIds : []).map(String).filter(Boolean);
-  if (!actor?.deleteEmbeddedDocuments || !itemIds.length) return false;
-  const existingIds = itemIds.filter((id) => actor.items?.get?.(id));
-  if (!existingIds.length) return true;
-  await actor.deleteEmbeddedDocuments("Item", existingIds);
+  if (receipt?.kind !== "created" || !(receipt.actorUuid || receipt.actorId)) return false;
+  const actor = await resolveFoundryActorReference(receipt);
+  if (!actor?.deleteEmbeddedDocuments || !receipt.items?.length) return false;
+  // Foundry's native inventory is editable while Skyhold settings are being saved.
+  // A missing Item may have been moved to another inventory or consumed.
+  const items = receipt.items;
+  if (!items.every(({ id, hash }) => hash !== null && actorItemHash(actor.items?.get?.(id)) === hash)) {
+    throw rollbackReviewError(actor, items, "Выданная стопка изменилась или была перемещена.");
+  }
+  let removed;
+  try {
+    removed = await deleteUnchangedActorItems(actor, items, { rollback: true });
+  } catch (error) {
+    if (error?.code === COMMAND_ERROR.OUTCOME_UNKNOWN) throw error;
+    throw inventoryRollbackError("Foundry не подтвердил удаление выданного предмета при откате.", error);
+  }
+  const removedById = new Map(removed.map(item => [String(item.id), item]));
+  const exact = items.every(({ id, hash }) => !actor.items?.get?.(id) && actorItemHash(removedById.get(id)) === hash);
+  if (!exact) throw rollbackReviewError(actor, items, "Foundry не подтвердил удаление исходной выданной стопки при откате.");
   return true;
 },
 
+/** Foundry can resolve a vetoed creation with an empty array. Confirm its result before debiting stock. */
+async _createStorageTransferItem(actor, itemData, qty, operationId) {
+  if (operationId) setStorageItemFlag(itemData, "storageOperationId", operationId);
+  const priorIds = new Set((actor.items?.contents ?? []).map((item) => String(item.id)));
+  let created;
+  let failure;
+  try {
+    created = await actor.createEmbeddedDocuments("Item", [itemData]);
+  } catch (error) {
+    failure = error;
+  }
+  const returnedIds = (Array.isArray(created) ? created : []).map((item) => String(item?.id ?? item?._id ?? ""))
+    .filter((id) => id && !priorIds.has(id));
+  // The operation flag identifies only our new documents if the API rejects without returning them.
+  const markedIds = operationId ? (actor.items?.contents ?? [])
+    .filter((item) => storageItemFlag(item, "storageOperationId") === operationId && !priorIds.has(String(item.id)))
+    .map((item) => String(item.id)) : [];
+  const itemIds = [...new Set([...returnedIds, ...markedIds])];
+  const actorMutation = { kind: "created", actorId: String(actor.id ?? ""), actorUuid: String(actor.uuid ?? ""),
+    items: itemIds.map((id) => {
+      const item = actor.items?.get?.(id);
+      return { id, name: item?.name ?? itemData.name, qty: item ? this._itemQuantity(item) : qty, hash: actorItemHash(item) };
+    }) };
+  const live = actor.items?.get?.(returnedIds[0]);
+  if (!failure && returnedIds.length === 1 && itemIds.length === 1 && live && this._itemQuantity(live) === qty) {
+    return { ok: true, actorMutation };
+  }
+  if (itemIds.length && !await this._removeCreatedActorItems(actorMutation)) {
+    throw inventoryRollbackError("Не удалось отменить выдачу предмета.", failure);
+  }
+  if (failure) throw failure;
+  return { ok: false, message: returnedIds.length
+    ? "Foundry изменил количество при создании предмета. Выдача отменена."
+    : "Foundry не подтвердил создание предмета у персонажа." };
+},
+
 async _foundryItemDataForResource(resourceId = "custom", name = "Ресурс", qty = 1) {
-  const id = normalizeResourceId(resourceId, name);
+  const id = storageResourceId({ resourceId, name });
   const def = id !== "custom" ? resourceDef(id) : null;
   let source = null;
   const uuid = def?.itemUuid || "";
@@ -93,35 +248,36 @@ async _foundryItemDataForResource(resourceId = "custom", name = "Ресурс", 
     img: def?.img || "icons/svg/item-bag.svg",
     system: { quantity: 1, cost: def?.cost || "" }
   };
-  return this._setItemQuantityData(source, qty);
+  return setStorageItemFlag(this._setItemQuantityData(source, qty), "storageResourceId", id);
 },
 
-async _withdrawResourceToActor(holding, { resourceId = "custom", name = "", qty = 1, roomId = "outdoors", actorId = "", actor: actorArg = null, operationId = "" } = {}) {
+async _withdrawResourceToActor(holding, { resourceId = "custom", name = "", qty = 1, roomId = "outdoors", storageRowId = "", actorId = "", actor: actorArg = null, operationId = "" } = {}) {
   const actor = actorArg ?? (actorId ? globalThis.game?.actors?.get?.(actorId) : this._storageDefaultActor());
   if (!actor) return { ok: false, message: "У текущего пользователя нет привязанного персонажа-получателя." };
   const amount = Math.max(1, Math.floor(this._safeNumber(qty, 1)));
-  const id = normalizeResourceId(resourceId, name);
+  const id = storageResourceId({ resourceId, name });
   const label = id === "custom" ? (String(name).trim() || "Ресурс") : resourceLabel(id);
   const room = this._normalizeStorageRoomId(roomId);
-  const row = this._storageFind(holding, { resourceId: id, name: label, roomId: room });
-  const have = Math.max(0, this._safeNumber(row?.qty, 0));
-  if (have + 0.0001 < amount) return { ok: false, message: `В складе нет ${this._formatNumber(amount)} ${label}. Есть ${this._formatNumber(have)}.` };
-  const itemData = await this._foundryItemDataForResource(id, label, amount);
-  if (operationId) {
-    if (!itemData.flags || typeof itemData.flags !== "object") itemData.flags = {};
-    itemData.flags["fbl-skyhold"] = { ...(itemData.flags["fbl-skyhold"] ?? {}), storageOperationId: operationId };
+  if (storageRowId) {
+    const selection = resolveStorageRow(holding?.storage?.resources, storageRowId);
+    if (!selection.row) return { ok: false, message: selection.message };
   }
-  const created = await actor.createEmbeddedDocuments("Item", [itemData]);
-  const actorMutation = {
-    kind: "created", actorId: String(actor.id ?? ""), actorUuid: String(actor.uuid ?? ""),
-    itemIds: (Array.isArray(created) ? created : []).map((item) => String(item?.id ?? item?._id ?? "")).filter(Boolean)
-  };
+  const resource = { resourceId: id, name: label, roomId: room, storageRowId };
+  const row = this._storageFind(holding, resource);
+  if (!row) return { ok: false, message: STORAGE_ROW_CHANGED };
+  const have = this._storageAvailableRowQuantity(holding, row);
+  if (have < amount) return { ok: false, message: `На складе свободно ${this._formatNumber(have)} ед. ресурса «${label}». Запрошено ${this._formatNumber(amount)}.` };
+  const itemData = await this._foundryItemDataForResource(id, label, amount);
+  const transfer = await this._createStorageTransferItem(actor, itemData, amount, operationId);
+  if (!transfer.ok) return transfer;
+  const { actorMutation } = transfer;
   try {
-    this._storageAdd(holding, { resourceId: id, name: label, roomId: room }, -amount);
+    const taken = this._storageTake(holding, resource, amount);
+    if (taken.takenQty !== amount) throw new Error("Не удалось списать подтверждённое количество со склада.");
     this._appendStorageLog(holding, [{ kind: "manual-spend", resourceId: id, name: label, qty: -amount, roomId: room, source: "Выдача Foundry", note: `получатель: ${actor.name}`, operationId }]);
     return { ok: true, message: `${actor.name}: выдано ${this._formatNumber(amount)} ${label}.`, actorMutation };
   } catch (error) {
-    await this._removeCreatedActorItems(actorMutation);
+    if (!await this._removeCreatedActorItems(actorMutation)) throw inventoryRollbackError("Не удалось отменить выдачу предмета.", error);
     throw error;
   }
 },
@@ -131,32 +287,27 @@ async _giveStoredItemToActor(holding, { itemId = "", itemIndex = -1, qty = 1, ac
   if (!actor) return { ok: false, message: "У текущего пользователя нет привязанного персонажа-получателя." };
   if (!Array.isArray(holding?.storage?.items)) return { ok: false, message: "В хранилище нет предметов." };
   const stableId = String(itemId ?? "");
-  const index = stableId ? holding.storage.items.findIndex((item) => String(item?.id ?? "") === stableId) : Number(itemIndex);
-  const row = holding.storage.items[index];
-  if (!row) return { ok: false, message: "Предмет не найден." };
+  const items = holding.storage.items;
+  const { row, message } = stableId ? resolveStorageRow(items, stableId) : { row: items[Number(itemIndex)] };
+  if (!row) return { ok: false, message: message ?? "Предмет не найден." };
   const have = this._itemQuantity(row);
-  const amount = Math.max(1, Math.min(have, Math.floor(this._safeNumber(qty, 1))));
+  const amount = Math.max(1, Math.floor(this._safeNumber(qty, 1)));
+  if (amount > have) return { ok: false, message: `На складе осталось ${this._formatNumber(have)} ед. предмета «${row.name}».` };
   const itemData = this._setItemQuantityData(row.itemData ?? row, amount);
-  if (operationId) {
-    if (!itemData.flags || typeof itemData.flags !== "object") itemData.flags = {};
-    itemData.flags["fbl-skyhold"] = { ...(itemData.flags["fbl-skyhold"] ?? {}), storageOperationId: operationId };
-  }
-  const created = await actor.createEmbeddedDocuments("Item", [itemData]);
-  const actorMutation = {
-    kind: "created", actorId: String(actor.id ?? ""), actorUuid: String(actor.uuid ?? ""),
-    itemIds: (Array.isArray(created) ? created : []).map((item) => String(item?.id ?? item?._id ?? "")).filter(Boolean)
-  };
+  const transfer = await this._createStorageTransferItem(actor, itemData, amount, operationId);
+  if (!transfer.ok) return transfer;
+  const { actorMutation } = transfer;
   try {
     if (have > amount) {
       const remaining = have - amount;
       row.qty = remaining;
       if (row.itemData?.system && typeof row.itemData.system === "object") row.itemData.system.quantity = remaining;
       if (row.system && typeof row.system === "object") row.system.quantity = remaining;
-    } else holding.storage.items.splice(index, 1);
+    } else items.splice(items.indexOf(row), 1);
     this._appendStorageLog(holding, [{ kind: "manual-spend", resourceId: "custom", name: row.name, qty: -amount, roomId: row.roomId, source: "Выдача Foundry", note: `получатель: ${actor.name}`, operationId }]);
     return { ok: true, message: `${actor.name}: выдан предмет ${row.name} (${this._formatNumber(amount)}).`, actorMutation };
   } catch (error) {
-    await this._removeCreatedActorItems(actorMutation);
+    if (!await this._removeCreatedActorItems(actorMutation)) throw inventoryRollbackError("Не удалось отменить выдачу предмета.", error);
     throw error;
   }
 },
@@ -193,6 +344,9 @@ _itemTypeLabel(type = "") {
 },
 
 _resourceIdForFoundryItem(item = {}) {
+  const issuedId = storageItemFlag(item, "storageResourceId");
+  if (typeof issuedId === "string" && issuedId.trim()) return storageResourceId({ resourceId: issuedId });
+  if (item.type !== "rawMaterial") return null;
   const uuid = String(item.uuid ?? item.itemUuid ?? "");
   const id = String(item.id ?? item._id ?? "");
   const name = String(item.name ?? "");
@@ -232,28 +386,38 @@ async _storageReceiveFoundryItem(holding, item, { roomId = "outdoors", operation
   const amount = this._itemQuantity(item);
   const source = this._storageDepositSource(item);
   if (!source.ok) return source;
+  if (!amount) return { ok: false, message: "В стопке нет предметов." };
+  const resourceId = this._resourceIdForFoundryItem(item);
+  const snapshot = resourceId === null ? this._snapshotItemForStorage(item, amount, targetRoom) : null;
+  if (snapshot) snapshot.roomId = this._storageItemDepositRoom(holding, snapshot, targetRoom);
   let actorMutation = null;
   try {
     if (source.requiresRemoval) {
       actorMutation = await this._removeQuantityFromActorItem(item, amount);
-      if (!actorMutation?.ok) return { ok: false, message: "Не удалось списать предмет из инвентаря персонажа." };
+      if (!actorMutation?.ok) return { ok: false, message: actorMutation?.message ?? "Не удалось списать предмет из инвентаря персонажа." };
     }
-    if (String(item.type) === "rawMaterial") {
-      const resourceId = this._resourceIdForFoundryItem(item);
-      const id = resourceId === "custom" ? "custom" : resourceId;
+    if (resourceId !== null) {
+      const id = resourceId;
       const label = id === "custom" ? String(item.name ?? "Ресурс") : resourceLabel(id);
       const placements = this._storageAddWithOverflow(holding, { resourceId: id, name: label, roomId: targetRoom, img: item.img, itemUuid: item.uuid, itemId: item.id, itemType: item.type, weight: item.system?.weight ?? "" }, amount);
       this._appendStorageLog(holding, placements.map((place) => ({ kind: "manual-add", resourceId: id, name: label, qty: place.qty, roomId: place.roomId, source: "Инвентарь Foundry", note: (item.parent?.documentName ?? item.parent?.constructor?.documentName) === "Actor" ? `из ${item.parent.name}` : "перетаскивание", operationId })));
-      return { ok: true, message: `${label}: принято ${this._formatNumber(amount)}; ${this._storagePlacementText(holding, placements)}.`, actorMutation };
+      const placedRoom = placements.find((place) => place.roomId === targetRoom)?.roomId ?? placements[0]?.roomId;
+      return { ok: true, roomId: placedRoom, message: `${label}: принято ${this._formatNumber(amount)}; ${this._storagePlacementText(holding, placements)}.`, actorMutation };
     }
     if (!holding.storage) holding.storage = { notes: "", resources: [], items: [], moneyCopper: 0, log: [] };
     if (!Array.isArray(holding.storage.items)) holding.storage.items = [];
-    const snapshot = this._snapshotItemForStorage(item, amount, targetRoom);
     holding.storage.items.push(snapshot);
-    this._appendStorageLog(holding, [{ kind: "manual-add", resourceId: "custom", name: snapshot.name, qty: amount, roomId: targetRoom, source: "Предмет Foundry", note: snapshot.sourceActorName ? `из ${snapshot.sourceActorName}` : "перетаскивание", operationId }]);
-    return { ok: true, message: `${snapshot.name}: предмет принят в ${this._storageRoomLabel(holding, targetRoom)}.`, actorMutation };
+    const overflow = snapshot.roomId !== targetRoom;
+    const note = [snapshot.sourceActorName ? `из ${snapshot.sourceActorName}` : "перетаскивание",
+      overflow ? `переполнение: ${this._storageRoomLabel(holding, targetRoom)}` : ""].filter(Boolean).join(" · ");
+    this._appendStorageLog(holding, [{ kind: "manual-add", resourceId: "custom", name: snapshot.name, qty: amount,
+      roomId: snapshot.roomId, source: "Предмет Foundry", note, operationId }]);
+    const roomLabel = this._storageRoomLabel(holding, snapshot.roomId);
+    return { ok: true, roomId: snapshot.roomId, message: `${snapshot.name}: предмет принят в ${roomLabel}${overflow ? " (выбранное помещение недоступно или заполнено)" : ""}.`, actorMutation };
   } catch (error) {
-    if (actorMutation?.ok) await this._restoreActorItemRemoval(actorMutation);
+    if (actorMutation?.ok && !await this._restoreActorItemRemoval(actorMutation)) {
+      throw inventoryRollbackError("Не удалось восстановить предмет в инвентаре персонажа.", error);
+    }
     throw error;
   }
 }

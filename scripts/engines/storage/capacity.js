@@ -72,7 +72,7 @@ export function decorateStorageRoom(room = {}, { formatLoad = (value) => String(
 
 export function buildStorageRooms({ holding, includeUnavailable = true, dependencies } = {}) {
   const deps = dependencies ?? {};
-  const required = ["isMoneyResource", "safeNumber", "storageRowLoad", "buildingFunctions", "buildingStatus", "storageFunctionAvailable", "storageProfileEffectFactor", "storageEffectiveRowLoad", "formatNumber", "formatLoad"];
+  const required = ["isStorageMoneyResource", "safeNumber", "storageRowLoad", "buildingFunctions", "buildingStatus", "storageFunctionAvailable", "storageProfileEffectFactor", "storageEffectiveRowLoad", "formatNumber", "formatLoad"];
   for (const name of required) {
     if (typeof deps[name] !== "function") throw new TypeError(`storage capacity engine requires dependencies.${name}`);
   }
@@ -152,7 +152,7 @@ export function buildStorageRooms({ holding, includeUnavailable = true, dependen
     if (value > 0) room.used += value;
   };
   for (const row of Array.isArray(holding?.storage?.resources) ? holding.storage.resources : []) {
-    if (!deps.isMoneyResource(row?.resourceId, row?.name)) addLoad(row, deps.storageRowLoad(row));
+    if (!deps.isStorageMoneyResource(row)) addLoad(row, deps.storageRowLoad(row));
   }
   for (const row of Array.isArray(holding?.storage?.items) ? holding.storage.items : []) addLoad(row, deps.storageRowLoad(row));
   return rows.map((room) => decorateStorageRoom(room, { formatLoad: deps.formatLoad }));

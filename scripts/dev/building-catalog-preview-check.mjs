@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { ChildWindowDomain } from "../apps/domains/child-window-domain.js";
+import { dispatchSkyholdAction } from "../apps/events/action-router.js";
 import { SkyholdData } from "../data/store.js";
 import { clone } from "../data/utils.js";
 import { migrationCycleFixture } from "./building-catalog-cycle-migration-check.mjs";
@@ -8,9 +10,11 @@ export async function checkMigrationPreviewRefresh() {
   const originalGet = SkyholdData.get, originalTransaction = SkyholdData.transaction, originalError = console.error;
   const listeners = new Map(), errors = [];
   let world = migrationCycleFixture(), commits = 0, transactions = 0, renders = 0, serial = 0, confirm;
+  let opened, transactionOptions;
   const event = { preventDefault() {}, stopPropagation() {} };
   try {
     class Base {
+      render() { opened = this; }
       async _prepareContext() { return {}; }
       async _onClose() {}
     }
@@ -22,8 +26,9 @@ export async function checkMigrationPreviewRefresh() {
     globalThis.game = { user: { isGM: true } };
     globalThis.ui = { notifications: { error: message => errors.push(message), info() {} } };
     SkyholdData.get = () => clone(world);
-    SkyholdData.transaction = async mutate => {
+    SkyholdData.transaction = async (mutate, options) => {
       transactions += 1;
+      transactionOptions = options;
       const draft = clone(world);
       const result = mutate(draft, { skip: value => value });
       commits += 1; world = draft;
@@ -80,6 +85,30 @@ export async function checkMigrationPreviewRefresh() {
     assert.equal(commits, 0, "A stale confirmation must not apply a new unseen preview");
     assert.match(errors.at(-1), /изменились/);
     await app._onClose({});
+
+    const textButton = { dataset: { action: "open-building-text-refresh" } };
+    const openTextPreview = () => dispatchSkyholdAction(
+      ChildWindowDomain, event, textButton, "_onOpenBuildingCatalogMigration"
+    );
+    globalThis.game.user.isGM = false;
+    await openTextPreview();
+    assert.equal(opened, undefined, "Only the GM can open the text refresh");
+    globalThis.game.user.isGM = true;
+    const beforeTextRefresh = clone(world);
+    await openTextPreview();
+    context = await opened._prepareContext({});
+    assert.equal(context.textOnly, true);
+    assert.equal(context.canApply, true);
+    assert.ok(context.textUpdates.some(row => row.field === "effect" && row.before !== row.after));
+    assert.deepEqual(world, beforeTextRefresh);
+    const textApply = opened._onApply(event);
+    confirm(true); await textApply;
+    assert.equal(commits, 1, "Confirmed text preview applies exactly once");
+    assert.equal(transactionOptions.forceRollbackSnapshot, true);
+    assert.deepEqual(world.holdings, beforeTextRefresh.holdings);
+    assert.equal(world.meta.templateCatalogVersion, beforeTextRefresh.meta.templateCatalogVersion);
+    assert.equal((await opened._prepareContext({})).noChanges, true);
+    await opened._onClose({});
     assert.equal(listeners.size, 0, "Closed migration windows unsubscribe from data changes");
   } finally {
     SkyholdData.get = originalGet; SkyholdData.transaction = originalTransaction; console.error = originalError;

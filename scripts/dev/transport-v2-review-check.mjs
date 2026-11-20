@@ -38,7 +38,7 @@ await check("R1 period arrivals defer internal sale of resources and Items", () 
     bookTransportOrder({ state, holding: h, plan: planTransportChain({ cargo, services }), services, id: sourceType, direction: "inbound" });
     let availableFrom;
     advanceTransportShipments(data, h, 40, { _appendStorageLog() {}, _storageAddWithOverflow(_h, row) {
-      availableFrom = row.batches[0].internalDemandAvailableFromQd;
+      availableFrom = row.internalDemandAvailableFromQd;
     } }, { deferInternalDemand: true });
     if (sourceType === "item") availableFrom = h.storage.items[0].internalDemandAvailableFromQd;
     assert.equal(resourceBatchAvailableToInternalDemand({ internalDemandAvailableFromQd: availableFrom }, h), false);

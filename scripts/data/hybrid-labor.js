@@ -113,7 +113,8 @@ function reservedOccupation(holding, person) {
  */
 export function newHybridLaborIssues(previous = [], current = []) {
   const remaining = [...previous];
-  const identity = ({ message: _message, actual: _actual, limit: _limit, ...issue }) => JSON.stringify(issue);
+  const identity = ({ message: _message, actual: _actual, limit: _limit, personName: _personName, buildingName: _buildingName, ...issue }) =>
+    JSON.stringify(issue);
   return current.filter((issue) => {
     const key = identity(issue);
     const index = remaining.findIndex((prior) => identity(prior) === key

@@ -147,6 +147,14 @@ export function checkWorkAllocationCharacterization() {
   const overCapacityChecked = validateHoldingWorkAllocations(overCapacity);
   assert.equal(overCapacityChecked.ok, false, "a legacy slot must not be able to hide on top of an explicit split worker");
   assert.equal(overCapacityChecked.issues.some((issue) => issue.code === "allocation-capacity" && issue.buildingId === "inn"), true, "combined legacy and explicit staffing must enforce workersMax");
+  const renamedAtCapacity = clone(overCapacity);
+  const crowdedInn = renamedAtCapacity.buildings.list.find(building => building.id === "inn");
+  crowdedInn.name = "New Inn Name";
+  assert.equal(validateHoldingWorkAllocations(renamedAtCapacity, { previousHolding: overCapacity }).ok, true,
+    "renaming a building preserves an existing staffing issue");
+  crowdedInn.workersMax = 0;
+  assert.equal(validateHoldingWorkAllocations(renamedAtCapacity, { previousHolding: overCapacity }).ok, false,
+    "lowering the staffing limit of an already overbooked building worsens the issue");
 
   const assignmentHolding = clone(crossBuilding);
   assignmentHolding.people.list.push({ id: "slot-candidate", name: "Slot Candidate", workAssignment: "" });

@@ -665,6 +665,7 @@ export class SkyholdRandomEventEditor extends FloatingTooltipsMixin(RenderSchedu
     if (DialogV2?.confirm) {
       try {
         return await DialogV2.confirm({
+          classes: ["fbl-skyhold"],
           window: { title },
           content: `<p>${content}</p>`,
           modal: true

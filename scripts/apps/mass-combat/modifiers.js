@@ -1,14 +1,14 @@
 import {
   asInt,
   asNumber,
-  clamp,
   commandPercentFromEffectiveness,
   toSigned
 } from "./rules.js";
 import { getMassCombatTagCounters, tagLabel } from "./tag-config.js";
-import { isInjuredResident, isMilitaryBackgroundResident, personText } from "./residents.js";
-import { isResidentInPopulation } from "../../data/resident-presence.js";
+import { commanderEffectiveness, isAvailableDefenseResident } from "../../data/military-resident-rules.js";
 import { hasTag } from "./sources.js";
+
+export { commanderEffectiveness };
 
 function round1(value) {
   return Math.round(asNumber(value, 0) * 10) / 10;
@@ -22,17 +22,6 @@ function pct(value) {
   return `${Math.round(asNumber(value, 0) * 100)}%`;
 }
 
-export function commanderEffectiveness(person = {}) {
-  if (!person || person.dead || isInjuredResident(person)) return 0;
-  const attrs = person?.attributes && typeof person.attributes === "object" ? person.attributes : {};
-  const wits = asNumber(attrs.wits, 0);
-  const empathy = asNumber(attrs.empathy, 0);
-  let value = (wits + empathy) / 2;
-  if (isMilitaryBackgroundResident(person)) value += 1;
-  if (/(лидер|командир|офицер|тактик|стратег|харизмат|авторитет|leader|commander|officer|tactician|strategist)/i.test(personText(person))) value += 1;
-  return clamp(round2(value), 0, 5);
-}
-
 /**
  * Calculate the assigned local commander's percentage bonus, rounding dice upward.
  * Missing, absent, dead or injured commanders contribute no bonus.
@@ -40,7 +29,7 @@ export function commanderEffectiveness(person = {}) {
 export function defenseCommanderBonus(holding, armyDice = 0) {
   const id = String(holding?.gm?.defense?.commanderId ?? "");
   if (!id) return { value: 0, raw: 0, cap: 0, percent: 0, effectiveness: 0, label: "командир не назначен" };
-  const commander = (holding?.people?.list ?? []).find((person) => String(person.id) === id && isResidentInPopulation(person, holding) && !isInjuredResident(person));
+  const commander = (holding?.people?.list ?? []).find((person) => String(person.id) === id && isAvailableDefenseResident(person, holding));
   if (!commander) return { value: 0, raw: 0, cap: 0, percent: 0, effectiveness: 0, label: "командир недоступен" };
   const effectiveness = commanderEffectiveness(commander);
   const percent = commandPercentFromEffectiveness(effectiveness);

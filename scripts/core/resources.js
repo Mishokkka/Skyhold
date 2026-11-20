@@ -3,7 +3,7 @@ import { BUILTIN_RESOURCE_DEFS, RESOURCE_DEFS } from "../data/resources/builtin-
 import { readWorldResourceCatalogRows, worldResourceCatalogCacheKey } from "../data/resources/resource-catalog-settings.js";
 import { parseCurrencyCopper } from "./currency.js";
 import { materialGroup } from "./material-groups.js";
-import { syncResourceRowBatches } from "./resource-batches.js";
+import { syncResourceRowBatches } from "./resource-batch-data.js";
 
 export { BUILTIN_RESOURCE_DEFS, RESOURCE_DEFS };
 
@@ -322,6 +322,24 @@ export function normalizeResourceId(...candidates) {
   return normalizeResourceIdFromIndex(createResourceIndex(), candidates);
 }
 
+function isExplicitCustom(resourceId) {
+  return String(resourceId ?? "").trim().toLowerCase() === "custom";
+}
+
+function storageResourceIdFromIndex(index, row) {
+  return isExplicitCustom(row?.resourceId) ? "custom"
+    : normalizeResourceIdFromIndex(index, [row?.resourceId, row?.id, row?.name, row?.label]);
+}
+
+/** Resolve inventory material without treating an explicitly custom name as a catalog alias. */
+export function storageResourceId(row = {}) {
+  return storageResourceIdFromIndex(createResourceIndex(), row);
+}
+
+export function isStorageMoneyResource(row = {}) {
+  return !isExplicitCustom(row?.resourceId) && isMoneyResource(row?.resourceId, row?.id, row?.name, row?.label);
+}
+
 export function parseResourceCosts(text = "") {
   const raw = String(text ?? "").split(/\r?\n/).map((line) => line.split("#")[0]).join("\n").trim();
   if (!raw) return [];
@@ -365,6 +383,7 @@ export function resourceDef(...candidates) {
 function resourceCandidateValues(candidates = []) {
   return candidates.flatMap((candidate) => {
     if (!candidate || typeof candidate !== "object") return [candidate];
+    if (isExplicitCustom(candidate.resourceId)) return [];
     return [candidate.resourceId, candidate.id, candidate.name, candidate.label];
   }).filter((candidate) => candidate !== undefined && candidate !== null && candidate !== "");
 }
@@ -431,6 +450,11 @@ export function resourceShelfLifeQd(...candidates) {
   return nonNegativeInteger(definitionForCandidates(candidates)?.shelfLifeQd, 0);
 }
 
+export function storageShelfLifeForRow(row = {}) {
+  const id = storageResourceId(row);
+  return id === "custom" ? resourceShelfLifeQd(row) : resourceShelfLifeQd(id);
+}
+
 export function resourceCategoryTag(...candidates) {
   const direct = directCanonicalCandidate(candidates, "categoryTag");
   if (direct) return normalizeCategoryTagValue(direct.categoryTag);
@@ -447,7 +471,7 @@ export function resourceCategoryTag(...candidates) {
 export function resourceLabel(resource = "") {
   const index = createResourceIndex();
   if (resource && typeof resource === "object") {
-    const id = normalizeResourceIdFromIndex(index, [resource.id, resource.resourceId, resource.name, resource.label]);
+    const id = storageResourceIdFromIndex(index, resource);
     const def = id !== "custom" ? index.byId.get(id) : null;
     return def?.label ?? String(resource.name ?? resource.label ?? "Ресурс");
   }
@@ -481,7 +505,7 @@ export function isMoneyResource(...candidates) {
 
 export function resourceOptions(currentId = "", currentName = "", { includeMoney = true } = {}) {
   const index = createResourceIndex();
-  const selectedId = normalizeResourceIdFromIndex(index, [currentId, currentName]);
+  const selectedId = storageResourceIdFromIndex(index, { resourceId: currentId, name: currentName });
   const options = index.definitions
     .filter((resource) => includeMoney || !isMoneyResourceFromIndex(index, [resource.id, resource.label]))
     .map((resource) => ({
@@ -494,13 +518,12 @@ export function resourceOptions(currentId = "", currentName = "", { includeMoney
   return options;
 }
 
-export function normalizeResourceRow(row = {}, { compactBatches = true } = {}) {
+function resourceRowMetadata(row) {
   const index = createResourceIndex();
-  const id = normalizeResourceIdFromIndex(index, [row.resourceId, row.id, row.name, row.label]);
+  const id = storageResourceIdFromIndex(index, row);
   const def = id !== "custom" ? index.byId.get(id) : null;
   const name = String(row.name ?? row.label ?? def?.label ?? "Ресурс").replace(/^(Другое|Custom)\s*[:：-]\s*/i, "");
-  const normalized = {
-    id: String(row.rowId ?? row._rowId ?? row.uuid ?? row._id ?? row.key ?? row.id ?? makeGeneratedId("res", 12)),
+  return {
     resourceId: id,
     name: id === "custom" ? name : def.label,
     img: String(id === "custom" ? (row.img ?? "") : (def?.img ?? row.img ?? "")),
@@ -508,7 +531,6 @@ export function normalizeResourceRow(row = {}, { compactBatches = true } = {}) {
     itemId: String(row.itemId ?? def?.itemId ?? ""),
     itemType: String(row.itemType ?? def?.itemType ?? ""),
     cost: String(row.cost ?? def?.cost ?? ""),
-    qty: floorNonNegativeQuantity(row.qty ?? row.quantity ?? row.count, 0),
     unit: id === "money" || def?.isMoney ? "медн." : "ед.",
     notes: String(row.notes ?? ""),
     roomId: String(row.roomId ?? row.storageRoomId ?? "outdoors"),
@@ -519,8 +541,32 @@ export function normalizeResourceRow(row = {}, { compactBatches = true } = {}) {
     shelfLifeQd: nonNegativeInteger(row.shelfLifeQd, 0),
     categoryTag: normalizeCategoryTagValue(row.categoryTag)
   };
+}
+
+/** Stock can share a row only when its persisted material, room and policies agree. */
+export function storageResourceStackKey(row = {}) {
+  return JSON.stringify(resourceRowMetadata(row));
+}
+
+export function normalizeResourceRow(row = {}, { compactBatches = true } = {}) {
+  const normalized = {
+    id: String(row.rowId ?? row._rowId ?? row.uuid ?? row._id ?? row.key ?? row.id ?? makeGeneratedId("res", 12)),
+    ...resourceRowMetadata(row),
+    qty: floorNonNegativeQuantity(row.qty ?? row.quantity ?? row.count, 0)
+  };
   if (hasOwn(row, "batches")) normalized.batches = row.batches;
   return syncResourceRowBatches(normalized, { makeId: makeGeneratedId, compact: compactBatches });
+}
+
+/** Preserve a stock row's lots and policies while taking material metadata from the new catalog entry. */
+export function reclassifyResourceRow(row, resourceId) {
+  if (row.resourceId === resourceId) return row;
+  const custom = resourceId === "custom";
+  return normalizeResourceRow({
+    id: row.id, resourceId, name: custom ? "Свой ресурс" : undefined,
+    roomId: row.roomId, qty: row.qty, batches: row.batches, notes: row.notes,
+    forSale: row.forSale, noAutoConsume: row.noAutoConsume
+  }, { compactBatches: false });
 }
 
 
@@ -605,11 +651,4 @@ export function normalizeProductionLine(line = {}, makeId = null) {
     itemUuid: String(line?.itemUuid ?? def?.itemUuid ?? ""),
     itemId: String(line?.itemId ?? def?.itemId ?? "")
   };
-}
-
-export function storageResourceKey(resource = {}) {
-  const id = normalizeResourceId(resource.resourceId, resource.id, resource.name);
-  const roomId = String(resource.roomId ?? resource.storageRoomId ?? "outdoors") || "outdoors";
-  const resourceKey = id !== "custom" ? `id:${id}` : `custom:${normalizeKey(resource.name)}`;
-  return `room:${roomId}|${resourceKey}`;
 }

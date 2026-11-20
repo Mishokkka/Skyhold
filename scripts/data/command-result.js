@@ -2,6 +2,7 @@ export const COMMAND_ERROR = Object.freeze({
   AUTHORITY_OFFLINE: "authority-offline",
   SOCKET_UNAVAILABLE: "socket-unavailable",
   TIMEOUT: "timeout",
+  OUTCOME_UNKNOWN: "outcome-unknown",
   CONFLICT: "conflict",
   FORBIDDEN: "forbidden",
   INVALID: "invalid",

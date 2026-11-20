@@ -1,4 +1,19 @@
+import { ageGroupFromAge } from "../generators/resident-rules.js";
+import { isResidentInPopulation } from "./resident-presence.js";
+
 export const COMMANDER_MIN_WITS = 4;
+export const DEFENSE_SQUAD_MIN_EFFICIENCY = 5;
+
+const ARMAMENT_SUPPLY = Object.freeze({
+  "armament-simple": "military-supplies-simple",
+  "armament-complex": "military-supplies-complex",
+  "armament-elite": "military-supplies-complex"
+});
+
+export function militarySupplyResourceForArmament(resourceId = "") {
+  const id = String(resourceId ?? "").trim();
+  return Object.hasOwn(ARMAMENT_SUPPLY, id) ? ARMAMENT_SUPPLY[id] : "";
+}
 
 export const MILITARY_SQUAD_TYPE_PROFILES = Object.freeze({
   line: {
@@ -72,4 +87,65 @@ export function residentSoldierEfficiency(attributes = {}, type = "line", { mili
   }
   if (militaryBackground) value += 0.10;
   return Math.min(1.7, Math.round(value * 100) / 100);
+}
+
+export function hasMilitaryServiceBackground(person = {}) {
+  return /(солдат|ветеран|на[её]мник|страж|сторож|дозор|егерь|дезертир|канонир|артиллер|сап[её]р|тюремщик|палач|телохранитель|ополчен|мушкет|развед|офицер|сержант)/i.test(String(person.background ?? ""));
+}
+
+export function hasSergeantTraining(person = {}) {
+  const attrs = person.attributes ?? {};
+  return hasMilitaryServiceBackground(person)
+    && [attrs.strength, attrs.agility, attrs.wits, attrs.empathy].some((value) => number(value) >= 5);
+}
+
+function isDefenseInjured(person) {
+  if (Object.hasOwn(person, "injuredDays")) return number(person.injuredDays) > 0;
+  return /ранен|тяжело|сломлен|injured|wound/i.test(String(person.status ?? ""));
+}
+
+export function isAvailableDefenseResident(person, holding) {
+  if (!person || !isResidentInPopulation(person, holding) || isDefenseInjured(person)) return false;
+  const ageGroup = person.ageGroup ?? (person.age == null ? "" : ageGroupFromAge(person.age, person.race, person.subrace));
+  return ageGroup !== "Ре";
+}
+
+export function commandPercentFromEffectiveness(effectiveness = 0) {
+  return Math.min(5, Math.max(0, number(effectiveness))) * 0.05;
+}
+
+export function commanderEffectiveness(person = {}) {
+  if (!person || person.dead || isDefenseInjured(person)) return 0;
+  const attrs = person.attributes ?? {};
+  const experience = [person.background, person.traitsText ?? person.traits];
+  // The derived title is a result of appointment, not a leadership trait.
+  const leadership = /(лидер|командир|офицер|тактик|стратег|харизмат|авторитет|leader|commander|officer|tactician|strategist)/i
+    .test(experience.concat(person.notes, person.workerTypeLabel, person.type).join(" "));
+  const military = experience.some((background) => hasMilitaryServiceBackground({ background }));
+  const value = (number(attrs.wits) + number(attrs.empathy)) / 2 + Number(military) + Number(leadership);
+  return Math.min(5, Math.max(0, Math.round(value * 100) / 100));
+}
+
+/** The defense roster and the battle use one calculation, without loading the battle window. */
+export function evaluateDefenseSquad(squad, availablePeopleById, { supplied = false } = {}) {
+  const first = String(squad.sergeantId ?? "");
+  const members = Array.isArray(squad.memberIds) ? squad.memberIds : [];
+  const ids = new Set([first, ...members.slice(0, 4).map((id) => String(id ?? ""))].filter(Boolean));
+  const type = squad.type === "militia" ? "line" : squad.type;
+  const combatants = [];
+  let base = 0;
+  let sergeantBonus = 0;
+  for (const id of ids) {
+    const person = availablePeopleById.get(id);
+    if (!person) continue;
+    const efficiency = residentSoldierEfficiency(person.attributes, type, { militaryBackground: hasMilitaryServiceBackground(person) });
+    if (efficiency <= 0) continue;
+    combatants.push(person);
+    base += efficiency;
+    if (id === first && hasSergeantTraining(person)) sergeantBonus = 0.10;
+  }
+  const baseEffective = base * (1 + sergeantBonus);
+  const effective = Math.round(baseEffective * (supplied ? 1.20 : 1) * 100) / 100;
+  const ready = Math.round(baseEffective * 100) / 100 >= DEFENSE_SQUAD_MIN_EFFICIENCY;
+  return { combatants, effective, sergeantBonus, ready };
 }

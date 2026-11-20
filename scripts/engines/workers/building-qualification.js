@@ -152,11 +152,13 @@ export function holdingWorkerAdmissionIssues(holding = {}) {
   const issues = [];
   for (const person of holding?.people?.list ?? []) {
     if (String(person?.workAllocationMode ?? "") !== "explicit") continue;
-    const buildingIds = new Set((person?.workAllocations ?? [])
-      .filter((row) => Math.max(0, finiteInteger(row?.normalQd, 0)) + Math.max(0, finiteInteger(row?.overtimeQd, 0)) > 0)
-      .map((row) => String(row?.sourceId ?? ""))
-      .filter((id) => buildingsById.has(id)));
-    for (const buildingId of buildingIds) {
+    const plannedQd = new Map();
+    for (const row of person.workAllocations ?? []) {
+      const buildingId = String(row?.sourceId ?? "");
+      const qd = Math.max(0, finiteInteger(row?.normalQd, 0)) + Math.max(0, finiteInteger(row?.overtimeQd, 0));
+      if (qd && buildingsById.has(buildingId)) plannedQd.set(buildingId, (plannedQd.get(buildingId) ?? 0) + qd);
+    }
+    for (const [buildingId, qd] of plannedQd) {
       const building = buildingsById.get(buildingId);
       const admission = workerAdmission(building, person);
       if (!admission.hard || admission.eligible || admission.overridden) continue;
@@ -167,6 +169,8 @@ export function holdingWorkerAdmissionIssues(holding = {}) {
         personName: String(person?.name ?? "Житель"),
         buildingId,
         buildingName: String(building?.name ?? buildingId),
+        actual: qd,
+        limit: 0,
         message: `${String(person?.name ?? "Житель")}: нет обязательного допуска в «${String(building?.name ?? buildingId)}» (${admission.text}).`
       });
     }
@@ -275,7 +279,7 @@ export function compositionBackgrounds(row = {}) {
   return workerBackgroundGroupMembers(row.group === "ОХРАНА" ? "ВОЕННОЕ" : row.group);
 }
 
-function matchesCompositionRequirement(person, row) {
+export function workerMatchesCompositionRequirement(person, row) {
   if (!Array.isArray(row.backgrounds)) return workerMatchesCompositionGroup(person, row.group);
   const background = normalizeWorkerText(person.background);
   return Boolean(background) && row.backgrounds.some((name) => normalizeWorkerText(name) === background);
@@ -291,7 +295,7 @@ function matchCompositionSlots(slots, people) {
   const ownerByPerson = new Map();
   const assign = (slotIndex, visited) => {
     for (let index = 0; index < people.length; index += 1) {
-      if (visited.has(index) || !matchesCompositionRequirement(people[index], slots[slotIndex])) continue;
+      if (visited.has(index) || !workerMatchesCompositionRequirement(people[index], slots[slotIndex])) continue;
       visited.add(index);
       if (!ownerByPerson.has(index) || assign(ownerByPerson.get(index), visited)) {
         ownerByPerson.set(index, slotIndex);
@@ -310,7 +314,7 @@ export function buildingCompositionStatus(building = {}, assignedPeople = [], { 
   const people = assignedPeople.filter((person) => person && !person.dead && Number(person.injuredDays ?? 0) <= 0);
   const slots = requirements.flatMap((row) => Array.from({ length: row.count }, () => row));
   const met = matchCompositionSlots(slots, people);
-  const missing = requirements.filter((row) => people.filter((person) => matchesCompositionRequirement(person, row)).length < row.count);
+  const missing = requirements.filter((row) => people.filter((person) => workerMatchesCompositionRequirement(person, row)).length < row.count);
   return {
     met,
     requirements,

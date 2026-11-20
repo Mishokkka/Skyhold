@@ -1,8 +1,10 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import { sellerUnitSalePrice } from "../../../engines/workers/seller-qualification.js";
+import { takeResourceBatches } from "../../../core/resource-batches.js";
+import { makeId } from "../../../data/utils.js";
 import {
-  isMoneyResource,
-  normalizeResourceId,
+  isStorageMoneyResource,
+  storageResourceId,
   resourceLabel
 } from "../../../core/resources.js";
 
@@ -70,12 +72,12 @@ _tradeCandidates(holding, filters = {}) {
   const candidates = [];
   for (const row of holding?.storage?.resources ?? []) {
     if (!row?.forSale) continue;
-    if (isMoneyResource(row.resourceId, row.name)) continue;
+    if (isStorageMoneyResource(row)) continue;
     const qty = this._storageAvailableRowQuantity(holding, row);
     if (!qty) continue;
     const basePrice = this._resourcePriceCopper(row);
     if (!basePrice) continue;
-    const id = normalizeResourceId(row.resourceId, row.name);
+    const id = storageResourceId(row);
     const candidate = { kind: "resource", holding, row, name: id === "custom" ? (row.name || "Ресурс") : resourceLabel(id), qty, basePrice, roomId: this._normalizeStorageRoomId(row.roomId ?? row.storageRoomId) };
     if (this._tradeCandidateAllowed(candidate, filters)) candidates.push(candidate);
   }
@@ -94,12 +96,7 @@ _tradeCandidates(holding, filters = {}) {
 _tradeCandidateQuantity(candidate = {}) {
   if (!candidate?.row) return 0;
   if (candidate.kind === "resource") {
-    return this._storageQuantity(candidate.holding, {
-      resourceId: candidate.row.resourceId,
-      name: candidate.row.name,
-      roomId: candidate.row.roomId ?? candidate.row.storageRoomId,
-      storageRowId: candidate.row.id
-    });
+    return this._storageAvailableRowQuantity(candidate.holding, candidate.row);
   }
   return Math.max(0, Math.floor(this._itemQuantity(candidate.row)));
 },
@@ -110,14 +107,11 @@ _reduceTradeCandidate(candidate, qty = 1) {
   if (candidate.kind === "resource") {
     const have = this._tradeCandidateQuantity(candidate);
     const take = Math.min(have, amount);
-    const receipt = this._storageTake(candidate.holding, {
-      resourceId: candidate.row.resourceId,
-      name: candidate.row.name,
-      roomId: candidate.row.roomId ?? candidate.row.storageRoomId,
-      storageRowId: candidate.row.id
-    }, take);
+    if (!take) return 0;
+    // Candidates carry the physical row in this period's draft. A legacy ID can point to a different lot.
+    const receipt = takeResourceBatches(candidate.row, take, { holding: candidate.holding, makeId });
     candidate.qty = this._tradeCandidateQuantity(candidate);
-    return Math.max(0, Math.floor(this._safeNumber(receipt?.takenQty, 0)));
+    return receipt.takenQty;
   }
   const have = this._tradeCandidateQuantity(candidate);
   const take = Math.min(have, amount);

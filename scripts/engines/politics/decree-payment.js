@@ -1,11 +1,11 @@
 import { clone } from "../../data/utils.js";
-import { normalizeResourceId, resourceDef } from "../../core/resources.js";
+import { resourceDef, storageResourceId } from "../../core/resources.js";
 import { availableResourceBatchInventory, availableResourceRowQuantity,
   isResourceBatchPeriodActive, syncResourceRowBatches, takeResourceBatchById } from "../../core/resource-batches.js";
 
 function readyFood(row) {
-  const id = normalizeResourceId(row.resourceId, row.id, row.name);
-  const definition = resourceDef(id, row.name);
+  const id = storageResourceId(row);
+  const definition = id === "custom" ? null : resourceDef(id);
   if (row.noAutoConsume === true || definition?.noAutoConsume === true) return false;
   return id === "custom" ? row.foodEdible === true : definition?.foodEdible === true;
 }
@@ -34,7 +34,7 @@ export function preparePoliticsDecreePayment(holding = {}, { copper = 0, food = 
     const receipt = takeResourceBatchById(entry.row, entry.batch.id, Math.min(remaining, entry.batch.qty), { holding: draft });
     if (!receipt) continue;
     remaining -= receipt.qty;
-    taken.push({ resourceId: normalizeResourceId(entry.row.resourceId, entry.row.id, entry.row.name), qty: receipt.qty });
+    taken.push({ resourceId: storageResourceId(entry.row), qty: receipt.qty });
   }
   return remaining ? null : { storage: draft.storage, taken };
 }

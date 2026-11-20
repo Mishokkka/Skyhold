@@ -2,7 +2,7 @@
 import { MODULE_ID } from "../../../data/constants.js";
 import { applyStaffAppointment, buildingLaborMode } from "../../../data/hybrid-labor.js";
 import { buildWorkAllocationTargets } from "../../../data/work-allocations.js";
-import { clearBuildingReferences } from "../../../data/normalizers/resident.js";
+import { applyBuildingDemolition, planBuildingDemolition } from "../../../data/building-demolition.js";
 import { requestConstructionOperation, SkyholdData } from "../../../data/store.js";
 import { makeId } from "../../../data/utils.js";
 import { traitBadges } from "../../../generators/trait-definitions.js";
@@ -289,9 +289,9 @@ _closeBuildingContextMenu() {
   if (menu) menu.remove();
 },
 
-async _executeBuildingContextAction(buildingId = "", action = "") {
+async _executeBuildingContextAction(buildingId = "", action = "", holdingId = this.activeHoldingId) {
   const data = SkyholdData.get();
-  const holding = data.holdings.find((item) => item.id === this.activeHoldingId);
+  const holding = data.holdings.find((item) => item.id === holdingId);
   const building = (holding?.buildings?.list ?? []).find((item) => String(item.id ?? "") === String(buildingId));
   if (!holding || !building) return;
   const name = String(building?.name ?? "Здание");
@@ -354,22 +354,26 @@ async _executeBuildingContextAction(buildingId = "", action = "") {
     return;
   }
   if (action === "delete") {
+    if (!game.user?.isGM) return ui.notifications.warn("Удалять построенные здания может только ГМ.");
     if (isCancellableConstructionProject(building)) {
       ui.notifications.warn("Незавершённый проект нужно отменять через действие «Отменить проект».");
       return;
     }
-    const confirmed = await this._confirmAction?.("Удалить здание", `Удалить построенное здание «${name}»? Строительные материалы не возвращаются.`);
+    const plan = planBuildingDemolition(holding, buildingId, data.meta?.transportV2);
+    if (!plan) return ui.notifications.warn("Здание недоступно или его ID неоднозначен.");
+    const hasStock = [...plan.resources, ...plan.items].some(row => row.qty > 0);
+    const relocation = hasStock ? " Пригодные запасы и предметы переместятся под открытое небо." : "";
+    const spoilage = plan.spoiledQty ? ` Из запаса будет списано ${plan.spoiledQty} ед. порчи по уличному сроку годности.` : "";
+    const confirmed = await this._confirmAction?.("Удалить здание",
+      `Удалить построенное здание «${escapeHtml(name)}»? Строительные материалы не возвращаются.${relocation}${spoilage}`);
     if (!confirmed) return;
-    const deleted = await SkyholdData.updateHolding(holding.id, (freshHolding) => {
-      const before = freshHolding.buildings?.list?.length ?? 0;
-      const removed = freshHolding.buildings?.list?.find((item) => String(item.id ?? "") === String(buildingId));
-      if (!removed) return SkyholdData.skipTransaction(false);
-      clearBuildingReferences(freshHolding, removed);
-      if (!freshHolding.buildings) freshHolding.buildings = { list: [] };
-      freshHolding.buildings.list = (freshHolding.buildings.list ?? []).filter((item) => String(item.id ?? "") !== String(buildingId));
-      return freshHolding.buildings.list.length !== before;
+    const deleted = await SkyholdData.updateHolding(holding.id, (freshHolding, freshData) => {
+      const current = planBuildingDemolition(freshHolding, buildingId, freshData?.meta?.transportV2);
+      if (current?.token !== plan.token) return SkyholdData.skipTransaction(false);
+      applyBuildingDemolition(freshHolding, current);
+      return true;
     }, { reason: "building:context-delete" });
-    if (!deleted) return;
+    if (!deleted) return ui.notifications.warn("Здание или его запасы изменились. Заново откройте подтверждение.");
     this.requestRender();
     ui.notifications.info(`Здание «${name}» удалено.`);
     return;
@@ -404,9 +408,9 @@ async _showBuildingActionMenu(buildingId = "", position = null) {
         ? { action: "unmothball", icon: "fa-solid fa-power-off", label: "Снять консервацию" }
         : { action: "mothball", icon: "fa-solid fa-box-archive", label: "Законсервировать" }
       : null,
-    cancellableProject
-      ? { action: "cancel-project", icon: "fa-solid fa-hammer-circle-xmark", label: game.user?.isGM ? "Отменить проект" : "Отменить проект (только ГМ)", danger: true }
-      : { action: "delete", icon: "fa-solid fa-trash", label: "Удалить здание", danger: true }
+    game.user?.isGM ? cancellableProject
+      ? { action: "cancel-project", icon: "fa-solid fa-hammer-circle-xmark", label: "Отменить проект", danger: true }
+      : { action: "delete", icon: "fa-solid fa-trash", label: "Удалить здание", danger: true } : null
   ].filter(Boolean);
   const menu = document.createElement("div");
   menu.className = "fbl-skyhold fbls-building-context-menu";
@@ -434,7 +438,7 @@ async _showBuildingActionMenu(buildingId = "", position = null) {
     event.stopPropagation();
     const action = String(button.dataset.action ?? "");
     this._closeBuildingContextMenu();
-    await this._executeBuildingContextAction(buildingId, action);
+    await this._executeBuildingContextAction(buildingId, action, holding.id);
   }));
 },
 

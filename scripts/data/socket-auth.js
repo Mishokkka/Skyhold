@@ -7,11 +7,20 @@ export function socketSender(senderId) {
   return users?.get?.(senderId) ?? (users?.contents ?? []).find((user) => user.id === senderId) ?? null;
 }
 
-export function acceptsPlayerSocketRequest(payload, senderId) {
+function authoritySocketRequester(payload, senderId) {
   const sender = socketSender(senderId);
   const current = globalThis.game?.user;
-  return Boolean(sender && !sender.isGM && payload.userId === senderId
-    && current?.isGM && payload.targetGmId === current.id && activeSkyholdGm()?.id === current.id);
+  return sender && payload.userId === senderId && current?.isGM
+    && payload.targetGmId === current.id && activeSkyholdGm()?.id === current.id ? sender : null;
+}
+
+export function acceptsPlayerSocketRequest(payload, senderId) {
+  const sender = authoritySocketRequester(payload, senderId);
+  return Boolean(sender && !sender.isGM);
+}
+
+export function acceptsStorageSocketRequest(payload, senderId) {
+  return Boolean(authoritySocketRequester(payload, senderId));
 }
 
 export function acceptsGmSocketResponse(payload, senderId, pending) {
