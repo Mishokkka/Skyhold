@@ -41,6 +41,7 @@
 .fbl-skyhold .fbls-money-denom { display: inline-flex; align-items: center; gap: 0.18rem; margin: 0; }
 .fbl-skyhold .fbls-money-denom > span { min-width: 1.35rem; color: var(--fbls-muted); font-size: var(--fbls-type-compact-xs); text-align: right; }
 .fbl-skyhold .fbls-money-stepper { display: grid; grid-template-columns: var(--fbls-control-height) 2.55rem var(--fbls-control-height); gap: 0.1rem; }
+.fbl-skyhold .fbls-money-denom.gold .fbls-money-stepper { grid-template-columns: var(--fbls-control-height) 3.6rem var(--fbls-control-height); }
 .fbl-skyhold .fbls-money-stepper button,
 .fbl-skyhold .fbls-money-stepper input {
   width: auto; min-width: 0; height: var(--fbls-control-height); min-height: var(--fbls-control-height); margin: 0; padding: 0; text-align: center;
@@ -153,7 +154,7 @@
 .fbl-skyhold .fbls-storage-inventory-table { min-width: 0; overflow: hidden; }
 .fbl-skyhold .fbls-storage-resource-card {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 5.6rem 2.5rem 2rem;
+  grid-template-columns: minmax(0, 1fr) 6rem 2.5rem 2rem;
   grid-template-areas: "main qty sale actions";
   gap: 0.34rem; align-items: center; min-width: 0;
 }
@@ -165,7 +166,7 @@
 }
 .fbl-skyhold .fbls-storage-resource-grid,
 .fbl-skyhold .fbls-storage-item-grid {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(20rem, 100%), 1fr)); gap: 0 0.4rem; align-content: start;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(21rem, 100%), 1fr)); gap: 0 0.4rem; align-content: start;
   padding: 0.2rem 0.35rem 0.35rem;
 }
 .fbl-skyhold .fbls-storage-resource-card,
@@ -222,24 +223,30 @@
 }
 .fbl-skyhold .fbls-storage-item-open { margin: 0; padding: 0; border: 0; background: transparent; }
 .fbl-skyhold .fbls-storage-resource-name,
-.fbl-skyhold .fbls-storage-item-main > div { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr); gap: 0.38rem; align-items: center; min-width: 0; }
-.fbl-skyhold .fbls-storage-resource-name { grid-template-columns: minmax(0, 1fr) auto; }
+.fbl-skyhold .fbls-storage-item-main > div { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.08rem; align-items: start; min-width: 0; }
 .fbl-skyhold .fbls-storage-resource-card:has(.fbls-storage-resource-name.custom) { height: auto; min-height: 3.6rem; }
 .fbl-skyhold .fbls-storage-resource-name.custom {
   grid-template-columns: minmax(0, 0.85fr) minmax(7rem, 1fr);
   grid-template-rows: auto auto;
+  gap: 0.16rem 0.32rem;
+  align-items: center;
 }
 .fbl-skyhold .fbls-storage-resource-name.custom > input { width: 100%; min-width: 0; height: var(--fbls-control-height); min-height: var(--fbls-control-height); }
 .fbl-skyhold .fbls-storage-resource-name.custom > small { grid-column: 1 / -1; }
-.fbl-skyhold .fbls-storage-resource-name .fbls-storage-resource-picker { height: var(--fbls-control-height); min-height: var(--fbls-control-height); padding: 0; border: 0; background: transparent; }
+.fbl-skyhold .fbls-storage-resource-name .fbls-storage-resource-picker {
+  grid-template-columns: minmax(0, 1fr) auto; gap: 0.25rem; height: var(--fbls-control-height); min-height: var(--fbls-control-height); padding: 0; border: 0;
+  background: transparent; line-height: 1.2;
+}
+.fbl-skyhold .fbls-storage-resource-name .fbls-storage-resource-picker > i:first-child:not(:last-child) { display: none; }
+.fbl-skyhold .fbls-storage-resource-name .fbls-storage-resource-picker > i:last-child { color: var(--fbls-muted); font-size: 0.72em; }
 .fbl-skyhold .fbls-storage-resource-name .fbls-storage-resource-picker:hover { color: var(--fbls-accent); }
 .fbl-skyhold .fbls-storage-resource-name > strong,
 .fbl-skyhold .fbls-storage-item-main strong {
-  overflow: hidden; color: var(--fbls-text-strong); font-size: 0.86rem; text-overflow: ellipsis; white-space: nowrap;
+  overflow: hidden; color: var(--fbls-text-strong); font-size: 0.86rem; line-height: 1.2; text-overflow: ellipsis; white-space: nowrap;
 }
 .fbl-skyhold .fbls-storage-resource-name small,
 .fbl-skyhold .fbls-storage-item-main small {
-  overflow: hidden; color: var(--fbls-muted); font-size: var(--fbls-type-compact-xs); text-overflow: ellipsis; white-space: nowrap;
+  overflow: hidden; color: var(--fbls-muted); font-size: var(--fbls-type-compact-xs); line-height: 1.15; text-overflow: ellipsis; white-space: nowrap;
 }
 
 .fbl-skyhold .fbls-storage-resource-qty { grid-area: qty; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.2rem; align-items: center; }

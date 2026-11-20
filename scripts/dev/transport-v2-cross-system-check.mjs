@@ -286,21 +286,12 @@ await check("R6 nonselected ground alternatives cannot change a direct flight to
         }
         const sim = simulation(f.data), request = transportRequest(f, "a", { direction }, isGM);
         const quote = () => prepareTransportContext({ data: sim.data, holding: sim.holding(f.holding.id), request, isGM });
-        const initial = quote();
-        const direct = initial.services.find(row => row.kind === "regular" && row.mode === "airship"
-          && row.from === initial.from && row.to === initial.to);
-        assert.ok(direct, "the direct flight must connect to the actual holding endpoint");
-        request.pins = { [direct.from]: direct.id };
         const preview = quote();
+        const direct = preview.plan.stages[0].service;
         assert.equal(preview.plan.stages.length, 1, "a direct flight needs no additional local carriage");
-        if (mixed) {
-          const ground = initial.services.find(row => row.kind === "regular" && row.mode === "caravan");
-          request.pins = { [ground.from]: ground.id };
-          const groundPlan = quote().plan;
-          assert.equal(groundPlan.stages.length, 2, "ground cargo still requires its real local air leg");
-          assert.equal(groundPlan.stages[direction === "inbound" ? 1 : 0].service.mode, "airship");
-          request.pins = { [direct.from]: direct.id };
-        }
+        assert.equal(direct.mode, "airship");
+        assert.equal(direct.from, preview.from);
+        assert.equal(direct.to, preview.to);
         const operation = await sim.command(f.holding.id, "transport-book", { request, planToken: preview.planToken }, isGM ? "gm" : "player");
         sim.reload(); await sim.advance(f.holding.id, 80);
         const order = sim.holding(f.holding.id).special.transportV2.orders.find(row => row.id === operation.operationId);
@@ -309,6 +300,17 @@ await check("R6 nonselected ground alternatives cannot change a direct flight to
           arrival: preview.plan.arrivalQd, freight: order.money.spentCopper });
       }
       assert.deepEqual(results[1], results[0], "adding an unused route cannot change the selected flight or its execution");
+
+      // Ground-only link to a floating holding must append/prepend the mandatory local airship last-mile leg.
+      const groundOnly = withoutFleet(transportFixture()); groundOnly.holding.type = type;
+      groundOnly.data.catalog.eventRegions[0].marketTransportModes = ["airship", "caravan"];
+      groundOnly.data.catalog.eventRegions[1].marketTransportModes = ["caravan"];
+      groundOnly.data.catalog.eventRegions[0].marketLinks[0].modes = ["caravan"];
+      const groundReq = transportRequest(groundOnly, "a", { direction }, isGM);
+      const groundPreview = prepareTransportContext({ ...groundOnly, request: groundReq, isGM });
+      assert.equal(groundPreview.plan.stages.length, 2, "ground route to floating holding adds mandatory local airship leg");
+      assert.deepEqual(groundPreview.plan.stages.map((s) => s.service.mode),
+        direction === "inbound" ? ["caravan", "airship"] : ["airship", "caravan"]);
     }
   }
 });

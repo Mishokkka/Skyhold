@@ -307,3 +307,15 @@
   --fbls-button-background: var(--fbls-panel-strong);
   --fbls-button-text: var(--fbls-text);
 }
+.fbl-skyhold .fbls-button-role:disabled,
+.fbl-skyhold .fbls-button-role.primary:disabled,
+.fbl-skyhold .fbls-button-role.danger:disabled {
+  --fbls-button-border: var(--fbls-border);
+  --fbls-button-background: var(--fbls-surface-2);
+  --fbls-button-text: var(--fbls-muted);
+  border-color: var(--fbls-border);
+  background: var(--fbls-surface-2);
+  color: var(--fbls-muted);
+  opacity: 1;
+  cursor: not-allowed;
+}

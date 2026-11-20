@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { transportFixture, transportRequest, transportHarness } from "./fixtures/transport-v2.mjs";
 import { prepareTransportContext } from "../apps/domains/transport-context.js";
-import { legacyTransportServiceId, transportServicesShareFleet } from "../engines/transport/service-identity.js";
+import { legacyTransportServiceId, resolveTransportSelections, transportServicesShareFleet } from "../engines/transport/service-identity.js";
 import { planTransportChain } from "../engines/transport/planner.js";
 
 const previous = globalThis.game;
@@ -14,8 +14,8 @@ try {
     f.data.catalog.eventRegions = [region("home", [["short", 20], ["long", 80]]), region("short", [["a", 20]]), region("long", [["a", 80]]), region("a")];
     const request = transportRequest(f, "a", { direction }, isGM);
     const preview = prepareTransportContext({ ...f, request, isGM });
-    assert.deepEqual(preview.services.map(s => s.distanceKm).sort((a, b) => a - b), [40, 40, 160, 160]);
-    assert.equal(new Set(preview.services.map(s => s.id)).size, 4);
+    assert.deepEqual(preview.services.map(s => s.distanceKm).sort((a, b) => a - b), [40, 40]);
+    assert.equal(new Set(preview.services.map(s => s.id)).size, 2);
     assert.equal(preview.search.limited, false);
     assert.equal(preview.plan.stages[0].service.distanceKm, 40);
     const fixed = structuredClone(f.data);
@@ -23,11 +23,19 @@ try {
     const control = prepareTransportContext({ data: fixed, holding: fixed.holdings[0], request, isGM });
     assert.equal(preview.plan.totalCopper, control.plan.totalCopper);
     assert.equal(preview.plan.arrivalQd, control.plan.arrivalQd);
+    const longOnly = structuredClone(f.data);
+    longOnly.catalog.eventRegions.find(r => r.value === "home").marketLinks = [{ regionId: "long", distanceKm: 80, modes: ["airship"] }];
+    const longPreview = prepareTransportContext({ data: longOnly, holding: longOnly.holdings[0], request, isGM });
     for (const kind of ["regular", "charter"]) {
-      const [short, long] = preview.services.filter(s => s.kind === kind).sort((a, b) => a.distanceKm - b.distanceKm);
+      const short = preview.services.find(s => s.kind === kind);
+      const long = longPreview.services.find(s => s.kind === kind);
       const oldId = legacyTransportServiceId(short.id);
       assert.equal(oldId, legacyTransportServiceId(long.id), "the previous ID collided on these real paths");
       assert.equal(transportServicesShareFleet(short.id, long.id), false);
+      assert.deepEqual(resolveTransportSelections([short, long], { serviceIds: [oldId] }).ambiguous, [oldId],
+        "ambiguous legacy serviceIds must not silently pick one of two physical paths");
+      assert.throws(() => prepareTransportContext({ ...f, request: { ...request, serviceIds: [oldId] }, isGM }), /неоднозначна/,
+        "prepareTransportContext must reject ambiguous legacy serviceIds across multiple physical routes");
       const cargo = preview.plan.stages[0].runs.flatMap(run => run.cargo);
       const first = planTransportChain({ cargo, services: [short], startQd: 0 });
       const oldRun = { ...first.stages[0].runs[0], serviceId: oldId };
@@ -38,8 +46,9 @@ try {
       f.data.catalog.transportV2.overrides = { [oldId]: { riskBps: 700 }, [short.id]: { riskBps: 900 } };
       const inherited = prepareTransportContext({ ...f, request, isGM });
       assert.equal(inherited.services.find(s => s.id === short.id).riskBps, 900);
-      assert.equal(inherited.services.find(s => s.id === long.id).riskBps, 700);
-      assert.throws(() => prepareTransportContext({ ...f, request: { ...request, serviceIds: [oldId] }, isGM }), /нескольким физическим/);
+      longOnly.catalog.transportV2.overrides = { [oldId]: { riskBps: 700 }, [short.id]: { riskBps: 900 } };
+      const inheritedLong = prepareTransportContext({ data: longOnly, holding: longOnly.holdings[0], request, isGM });
+      assert.equal(inheritedLong.services.find(s => s.id === long.id).riskBps, 700);
       const excluded = prepareTransportContext({ ...f, request: { ...request, excluded: [oldId] }, isGM });
       assert.ok(excluded.plan.stages.every(stage => stage.service.kind !== kind));
       const unique = structuredClone(f.data);

@@ -427,6 +427,7 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
       moduleId: MODULE_ID,
       loadingImage: String(activeHolding?.gm?.loadingImage ?? ""),
       data,
+      isGM: canEdit,
       canEdit,
       permissions,
       authorityStatus: permissions.authorityStatus,

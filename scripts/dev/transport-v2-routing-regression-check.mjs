@@ -94,19 +94,20 @@ for (const isGM of [true, false]) {
   f.data.catalog.eventRegions[0].marketLinks = ["north", "south"].map(routeId => ({ regionId: "a", distanceKm: 150, modes: ["airship"], routeId }));
   const request = transportRequest(f, "a", {}, isGM);
   const initial = prepareTransportContext({ ...f, request, isGM });
-  const regular = initial.services.filter(service => service.kind === "regular");
-  assert.equal(regular.length, 2, "both physical routes must reach schedule-aware planning");
-  const firstSlotCapacity = Math.min(regular[0].capacity, regular[0].loadingCapacity, regular[0].unloadingCapacity);
-  const occupied = planTransportChain({ cargo: [{ lotId: "full", qty: 1, unitLoad: firstSlotCapacity, unitCopper: 1 }], services: [regular[0]] });
+  assert.equal(initial.search.limited, false, "parallel edges resolve without search-limit exhaustion");
+  const chosenService = initial.plan.stages[0].service;
+  const firstSlotCapacity = Math.min(chosenService.capacity, chosenService.loadingCapacity, chosenService.unloadingCapacity);
+  const occupied = planTransportChain({ cargo: [{ lotId: "full", qty: 1, unitLoad: firstSlotCapacity, unitCopper: 1 }], services: [chosenService] });
   const occupiedRun = occupied.stages[0].runs[0];
   assert.equal(occupiedRun.departureQd, initial.plan.stages[0].runs[0].departureQd, "the competing order occupies the first departure");
   assert.equal(occupiedRun.reservedLoad, occupiedRun.capacity, "the booked handling window is full");
   bookTransportOrder({ state: f.data.meta.transportV2, holding: { id: "other", storage: { moneyCopper: 1000000 }, special: {} },
-    id: "occupied", direction: "inbound", services: [regular[0]], plan: occupied });
+    id: "occupied", direction: "inbound", services: [chosenService], plan: occupied });
   const chosen = prepareTransportContext({ ...f, request, isGM });
-  assert.equal(chosen.plan.arrivalQd, initial.plan.arrivalQd); assert.equal(chosen.plan.totalCopper, initial.plan.totalCopper);
-  assert.equal(chosen.plan.stages[0].service.id, regular[1].id);
-  const pinned = prepareTransportContext({ ...f, request: { ...request, serviceIds: [regular[0].id] }, isGM });
+  assert.equal(chosen.plan.arrivalQd, initial.plan.arrivalQd);
+  assert.equal(chosen.plan.totalCopper, initial.plan.totalCopper);
+  assert.notEqual(chosen.plan.stages[0].service.id, chosenService.id, "schedule-aware search picks the free parallel route");
+  const pinned = prepareTransportContext({ ...f, request: { ...request, serviceIds: [chosenService.id] }, isGM });
   assert.ok(pinned.plan.arrivalQd > chosen.plan.arrivalQd, "an explicitly selected occupied road still keeps its own timetable");
 }
 

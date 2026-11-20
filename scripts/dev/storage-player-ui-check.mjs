@@ -932,6 +932,8 @@ game.user.isGM = false;
   }
 }
 
+const skyholdAppSource = readFileSync("scripts/apps/skyhold-app.js", "utf8");
+assert.match(skyholdAppSource, /\bisGM:\s*canEdit\b/, "SkyholdApp._prepareContext must expose isGM for GM-gated storage and manager templates");
 for (const file of ["resources", "items", "tabs", "log"]) {
   const template = readFileSync(`templates/parts/storage/${file}.hbs`, "utf8");
   const stack = [];

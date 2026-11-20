@@ -1,4 +1,5 @@
-const regionalServiceId = id => /^((?:regular|charter):[a-z0-9]+:route:[a-z0-9]+):holding:.+$/.exec(String(id))?.[1] ?? id;
+const unscaledServiceId = id => String(id).replace(/:x\d+$/, "");
+const regionalServiceId = id => /^((?:regular|charter):[a-z0-9]+:route:[a-z0-9]+):holding:.+$/.exec(unscaledServiceId(id))?.[1] ?? unscaledServiceId(id);
 
 /** New physical paths retain their former group ID as an explicit compatibility prefix. */
 export function legacyTransportServiceId(id) {
@@ -7,21 +8,30 @@ export function legacyTransportServiceId(id) {
     ?.slice(1, 3).join(":") ?? regional;
 }
 
-/** Most specific first: warehouse, previous regional path, then the old path group. */
+/** Most specific first: scaled, base warehouse, previous regional path, then the old path group. */
 export function transportServiceCompatibilityIds(id) {
-  return [...new Set([id, regionalServiceId(id), legacyTransportServiceId(id)])];
+  return [...new Set([id, unscaledServiceId(id), regionalServiceId(id), legacyTransportServiceId(id)])];
 }
 
 /** An old ambiguous allocation conservatively occupies each possible successor fleet.
  * Two fully identified new paths have independent vehicles and regular departures.
  */
 export function transportServicesShareFleet(a, b) {
-  return a === b || transportServiceCompatibilityIds(a).includes(b) || transportServiceCompatibilityIds(b).includes(a);
+  const baseA = unscaledServiceId(a), baseB = unscaledServiceId(b);
+  return baseA === baseB || transportServiceCompatibilityIds(a).includes(baseB) || transportServiceCompatibilityIds(b).includes(baseA);
 }
 
 export function transportServiceExcluded(service, excluded = []) {
   excluded ??= [];
   return excluded.includes(service.companyId) || transportServiceCompatibilityIds(service.id).some(id => excluded.includes(id));
+}
+
+/** Single canonical eligibility predicate shared across route discovery, quoting and confirmation. */
+export function isTransportServiceAllowed(service, { isGM = false, excluded = [] } = {}) {
+  return Boolean(service)
+    && service.enabled !== false
+    && (isGM || service.visibility !== "gm")
+    && !transportServiceExcluded(service, excluded);
 }
 
 /** Saved UI choices can follow an unambiguous old ID; never guess between physical paths. */
