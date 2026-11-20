@@ -205,10 +205,13 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
       ...(worldShips.length ? [makeChoice("owned", "Свой корабль", bundle.chosenShip?.name || "Собственное судно", bundle.options.owned, "fa-solid fa-ship")] : [])
     ] : [];
 
+    const holdingTreasuryCopper = Math.max(0, Number(holding.storage?.moneyCopper ?? 0));
     const selected = quote?.plan ? {
       delivery: money(quote.totalCopper),
       value: money(quote.valueCopper),
       treasury: money(quote.treasuryCopper),
+      holdingTreasury: money(holdingTreasuryCopper),
+      shortfall: quote.affordable ? "" : money(Math.max(0, quote.treasuryCopper - holdingTreasuryCopper)),
       arrival: days(quote.plan.arrivalQd - quote.plan.startQd),
       firstArrival: days(quote.plan.firstArrivalQd - quote.plan.startQd),
       splitArrival: quote.plan.firstArrivalQd !== quote.plan.arrivalQd,
@@ -309,9 +312,16 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
       market: visibility.marketLabel(row), cargo: legacyCargo(row)
     }));
 
+    const canConfirm = Boolean(quote?.affordable && permissions.canUseStorage && (!quote.ship || permissions.canManageShips) && !this._pending && !this._busy);
+    const confirmBlocker = !quote?.plan || canConfirm || this._busy || this._pending ? ""
+      : !quote.affordable ? `Не хватает денег в казне: сейчас ${money(holdingTreasuryCopper)}, требуется ${money(quote.treasuryCopper)} (не хватает ${money(Math.max(0, quote.treasuryCopper - holdingTreasuryCopper))}).`
+        : !permissions.canUseStorage ? "Нет прав оформлять заказы склада (или в мире нет активного ГМ)."
+          : quote.ship && !permissions.canManageShips ? "Нет прав отправлять собственный корабль."
+            : "";
+
     return {
       ...base, hasHolding: true, holdingName: holding.name, isGM: permissions.isGM, canUse: permissions.canUseStorage,
-      canConfirm: Boolean(quote?.affordable && permissions.canUseStorage && (!quote.ship || permissions.canManageShips) && !this._pending && !this._busy),
+      canConfirm, confirmBlocker,
       choices, selected, isOwnedMode: bundle?.activeMode === "owned",
       showShipPicker: worldShips.length > 1,
       needsShipTimeSync: Boolean(permissions.isGM && bundle?.options?.owned?.needsTimeSync),

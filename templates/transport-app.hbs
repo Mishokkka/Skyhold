@@ -58,13 +58,14 @@
         <h2 class="fbls-section-heading">Смета перевозки</h2>
         <div class="fbls-toolbar-group">
           <label class="fbls-checkbox-label fbls-choice-toggle"><input type="checkbox" data-transport-field="insurance" {{checked request.insurance}} /> <span>Страхование</span></label>
-          <button type="button" class="fbls-button fbls-button-role primary" data-action="transport-confirm" {{#unless canConfirm}}disabled{{/unless}}>{{#if busy}}Оформляем…{{else}}Подтвердить заказ{{/if}}</button>
+          <button type="button" class="fbls-button fbls-button-role primary" data-action="transport-confirm" {{#if confirmBlocker}}title="{{confirmBlocker}}"{{/if}} {{#unless canConfirm}}disabled{{/unless}}>{{#if busy}}Оформляем…{{else}}Подтвердить заказ{{/if}}</button>
         </div>
       </header>
+      {{#if confirmBlocker}}<p class="fbls-callout is-warning" role="status">{{confirmBlocker}}</p>{{/if}}
       <dl class="fbls-transport-metrics">
         <div><dt>Прибытие груза</dt><dd>{{selected.arrival}}</dd></div>
         <div><dt>Доставка и сборы</dt><dd>{{selected.delivery}}</dd></div>
-        <div><dt>Сейчас из казны</dt><dd>{{selected.treasury}}</dd></div>
+        <div><dt>Сейчас из казны</dt><dd>{{selected.treasury}}</dd><small>В казне: {{selected.holdingTreasury}}</small></div>
         <div><dt>{{#if selected.outbound}}Выручка за товар{{else}}Стоимость товара{{/if}}</dt><dd>{{selected.value}}</dd></div>
       </dl>
       {{#if selected.outbound}}<p>Чистый итог после доставки и сборов: <strong>{{selected.net}}</strong>. Зачисление {{#if selected.revenueOnBoard}}на борт корабля{{else}}в казну{{/if}}.</p>{{/if}}
