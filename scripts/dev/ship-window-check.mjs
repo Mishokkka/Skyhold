@@ -78,6 +78,8 @@ globalThis.foundry = { applications: { api: { ApplicationV2: OpeningApplication,
 const shipHelpers = new Map();
 globalThis.Handlebars = { registerHelper: (name, helper) => shipHelpers.set(name, helper) };
 const { SkyholdShipApp } = await import("../apps/ship-app.js");
+assert.equal(shipHelpers.get("fblsShipMoney")(1234), "12 З 3 С 4 М");
+assert.equal(shipHelpers.get("fblsShipMoney")(-250), "−2 З 5 С");
 assert.equal(shipHelpers.get("fblsShipGold")(1234), "12,34");
 assert.equal(shipHelpers.get("fblsShipGoldInput")(1234), "12.34");
 for (const isGM of [true, false]) {

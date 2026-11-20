@@ -1,5 +1,5 @@
 import { MODULE_ID } from "../data/constants.js";
-import { formatShipGold } from "../core/ship-gold.js";
+import { formatShipGold, formatShipMoney } from "../core/ship-gold.js";
 import { WindowFrameMixin } from "./common/window-frame.js";
 import { RenderSchedulerMixin } from "./common/render-scheduler.js";
 import { focusApplicationContent } from "./common/window-focus-keeper.js";
@@ -101,7 +101,10 @@ export class SkyholdUiReviewApp extends FloatingTooltipsMixin(WindowFrameMixin(R
       shipReview = shipReviewContext(savedShipReview);
       shipReview.mapHtml = renderShipReviewMap(shipReview);
       if (shipReview.isCurrent) shipReview.currentHtml = renderShipReviewCurrent(shipReview);
-      else globalThis.Handlebars?.registerHelper?.("fblsShipGold", formatShipGold);
+      else {
+        globalThis.Handlebars?.registerHelper?.("fblsShipGold", formatShipGold);
+        globalThis.Handlebars?.registerHelper?.("fblsShipMoney", formatShipMoney);
+      }
     }
     const proposals = UI_BUILDING_EDITOR_PROPOSALS.map(proposal => ({
       ...proposal, status: "Внесено", active: proposal.id === savedEditorDemoView.proposal,

@@ -14,7 +14,7 @@ import { prepareShipVoyagePresentation } from "./domains/ship-voyage-presentatio
 import { prepareShipFinancePresentation } from "./domains/ship-finance-presentation.js";
 import { shipPresentationTimelineQd } from "./domains/ship-command-availability.js";
 import { shipRemovalBlocker } from "../engines/ships/removal.js";
-import { formatShipGold, shipGoldInput } from "../core/ship-gold.js";
+import { formatShipGold, formatShipMoney, shipGoldInput } from "../core/ship-gold.js";
 import { shortestMarketRouteDistanceKm } from "../engines/market/logistics.js";
 import { allResourceDefs } from "../core/resources.js";
 import { clientCargoLifetime } from "../engines/ships/client-cargo.js";
@@ -59,10 +59,16 @@ function worldOfferRow(offer, worldContext) {
   const difficultyLabel = difficultyScore >= 7 ? "Опасный" : difficultyScore >= 4 ? "Сложный" : "Обычный";
   const approachKm = contract.pickup
     ? shortestMarketRouteDistanceKm(offer.from.regionId, contract.pickup.regionId, worldContext.regions, { mode: "airship" }) : 0;
+  const totalCostCopper = Number(costs.totalCopper ?? quote.operatingCopper ?? 0);
+  const recommendedBudgetCopper = Number(quote.recommendedBudgetCopper ?? styles[1]?.suggestedBudgetCopper ?? quote.operatingCopper ?? 0);
+  const returnReserveCopper = Number(quote.returnReserveCopper ?? 0);
+  const idleReserveCopper = Number(quote.idleReserveCopper ?? 0);
+  const outcomeReserveCopper = Math.max(0, recommendedBudgetCopper - totalCostCopper - returnReserveCopper - idleReserveCopper);
+  const recommendedReserveCopper = Math.max(0, recommendedBudgetCopper - totalCostCopper);
   return {
     ...offer,
     feeHint: contract.economics?.version === 1
-      ? `Плата за место на рейсе по общей себестоимости и штатной команде. Подлёт к погрузке и дорога домой не повышают плату. Пошлины и обработка включены. Доплата за особую услугу: ${formatShipGold(contract.economics.specialPremiumCopper)} ЗМ; за риск: ${formatShipGold(contract.economics.riskPremiumCopper)} ЗМ. ${contract.kind === "smuggling" ? "При срыве сделки плата может быть утрачена." : `При отмене заказчиком: ${contract.kind === "commission" ? 50 : 75}% платы до последствий перевозки.`}`
+      ? `Плата за место на рейсе по общей себестоимости и штатной команде. Подлёт к погрузке и дорога домой не повышают плату. Пошлины и обработка включены. Доплата за особую услугу: ${formatShipMoney(contract.economics.specialPremiumCopper)}; за риск: ${formatShipMoney(contract.economics.riskPremiumCopper)}. ${contract.kind === "smuggling" ? "При срыве сделки плата может быть утрачена." : `При отмене заказчиком: ${contract.kind === "commission" ? 50 : 75}% платы до последствий перевозки.`}`
       : "Плата сохранена по прежним условиям предложения. Дорогая фактическая команда не повышает плату; подход капитана и события меняют итог.",
     title: offer.title || `${KIND_LABELS[contract.kind] ?? "Заказ"}: ${offer?.to?.label ?? "порт"}`,
     destination: offer?.to?.label ?? "—", kindLabel: KIND_LABELS[contract.kind] ?? "Заказ",
@@ -77,20 +83,19 @@ function worldOfferRow(offer, worldContext) {
       unloadingDays: timing.unloadingQd / 4
     },
     rewardCopper: Number(quote.rewardCopper ?? contract.rewardCopper ?? 0),
-    recommendedBudgetCopper: Number(quote.recommendedBudgetCopper ?? styles[1]?.suggestedBudgetCopper ?? quote.operatingCopper ?? 0),
-    returnReserveCopper: Number(quote.returnReserveCopper ?? 0),
-    idleReserveCopper: Number(quote.idleReserveCopper ?? 0),
+    recommendedBudgetCopper,
+    recommendedReserveCopper,
+    returnReserveCopper,
+    idleReserveCopper,
     idleUpkeepCopperPerDay: Number(quote.idleUpkeepCopperPerDay ?? 0),
     pickupLabel: contract.pickup?.label || offer?.from?.label || "—",
     departureLabel: offer?.from?.label || "—",
-    outcomeReserveCopper: Math.max(0, Number(quote.recommendedBudgetCopper ?? 0)
-      - Number(costs.totalCopper ?? quote.operatingCopper ?? 0)
-      - Number(quote.returnReserveCopper ?? 0) - Number(quote.idleReserveCopper ?? 0)),
+    outcomeReserveCopper,
     recommendedBudgetGoldInput: shipGoldInput(Number(quote.recommendedBudgetCopper ?? 0)),
     costs: {
       foodCopper: Number(costs.foodCopper ?? 0), crewCopper: Number(costs.crewCopper ?? 0),
       upkeepCopper: Number(costs.upkeepCopper ?? 0), handlingCopper: Number(costs.handlingCopper ?? 0),
-      taxCopper: Number(costs.taxCopper ?? 0), totalCopper: Number(costs.totalCopper ?? quote.operatingCopper ?? 0)
+      taxCopper: Number(costs.taxCopper ?? 0), totalCopper: totalCostCopper
     }, styles, normalGuidance: styles[1]
   };
 }
@@ -217,6 +222,7 @@ function overviewShipRow(holding, ship, index, { permissions, period, data, visi
     abstractCrewCount: readiness?.abstractCount ?? 0,
     moneySummary,
     walletGold: formatShipGold(ship.onboardCopper ?? 0),
+    walletText: formatShipMoney(ship.onboardCopper ?? 0),
     nextAction: isWorld ? management.nextAction
       : ship.activeVoyage ? (awaitingOutcome ? "Подвести итог рейса" : "Дождаться возвращения") : "Открыть управление кораблём",
     permissionReason: management?.permissionReason ?? "",
@@ -345,6 +351,7 @@ export function prepareShipWindowContext(holding, { revision = 0, data = null, s
       ...management,
       timelineQd: shipQd, settlementQd, catchUpDays: Math.max(0, settlementQd - shipQd) / 4,
       walletGold: formatShipGold(ship.onboardCopper ?? 0),
+      walletText: formatShipMoney(ship.onboardCopper ?? 0),
       ownSale: ownSale ? { ...ownSale, marketLabel: visibility.marketLabel(ownSale) } : null,
       ownSaleCargoText: (ownSale?.cargo ?? []).map((row) => `${row.name || row.resourceId} ×${row.qty}`).slice(0, 5).join(" · "),
       ownSaleRemainingDays: Number(ownSale?.remainingQd ?? 0) / 4,
@@ -407,11 +414,20 @@ export function prepareShipWindowContext(holding, { revision = 0, data = null, s
     };
   });
 
+  const fleetAccountingRaw = fleetAccountingSummary(holding);
+  const fleetAccounting = {
+    ...fleetAccountingRaw,
+    netText: formatShipMoney(fleetAccountingRaw.netCopper),
+    incomeText: formatShipMoney(fleetAccountingRaw.incomeCopper),
+    expenseText: formatShipMoney(fleetAccountingRaw.expenseCopper),
+    homeIdleText: formatShipMoney(fleetAccountingRaw.homeIdleCopper),
+    portIdleText: formatShipMoney(fleetAccountingRaw.portIdleCopper)
+  };
   return {
     revision, period, detailMode: true, profiles: SHIP_PROFILES, canCreateProfile: permissions.isGM,
     canGenerateOffers: permissions.isGM && rows.some((row) => row.isLegacy)
       && (ships.offerPeriod === null || ships.offerPeriod === undefined || ships.offerPeriod === "" || Number(ships.offerPeriod) < period),
-    fleetAccounting: fleetAccountingSummary(holding),
+    fleetAccounting,
     offersGenerated: String(ships.offerPeriod) === String(period), worldIssues: worldContext.issues ?? [], rows,
     history: (ships.history ?? []).filter((row) => String(row?.shipId ?? "") === String(shipId ?? "")).slice(-10).reverse().map((row) => ({
       ...row, destination: visibility.pointLabel({ ...row.to, label: row.destination || row.to?.label }, row.destination || "—"),

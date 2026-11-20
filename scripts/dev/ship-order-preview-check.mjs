@@ -51,6 +51,9 @@ function freeze(value) {
       const single = previewShipOrders(data, holding, ship, { offerIds: ["first"], style });
       assert.equal(single.totalDurationQd, normal.quote.durationQd);
       assert.equal(single.totalOperatingCopper, normal.quote.operatingCopper);
+      assert.equal(single.recommendedReserveCopper, single.recommendedBudgetCopper - single.totalOperatingCopper);
+      assert.equal(single.effectiveBudgetCopper, single.recommendedBudgetCopper);
+      assert.equal(single.plannedReserveCopper, single.recommendedReserveCopper);
       assert.equal(single.totalDurationQd, single.flightQd + single.portQd);
       assert.equal(single.finalPoint.id, "a");
       assert.equal(single.legs[0].loadOnLegPoints, 0, "leave home empty");
@@ -62,6 +65,8 @@ function freeze(value) {
       assert.equal(preview.totalOperatingCopper, quote.totalOperatingCopper);
       assert.equal(preview.totalDurationQd, quote.totalDurationQd);
       assert.equal(preview.recommendedBudgetCopper, quote.recommendedBudgetCopper);
+      assert.equal(preview.recommendedReserveCopper, quote.returnReserveCopper + quote.idleReserveCopper + quote.outcomeReserveCopper);
+      assert.equal(preview.plannedReserveCopper, preview.recommendedReserveCopper);
       assert.deepEqual(preview.stops.map((stop) => stop.point.id), [holding.id, "origin", "a", "b"]);
       assert.deepEqual(preview.legs.map((leg) => leg.loadOnLegPoints), [0, 2400, 1800]);
       assert.deepEqual(preview.legs.map((leg) => leg.offerIds), [[], ["first", "second"], ["second", "pickup"]]);
@@ -137,9 +142,13 @@ function freeze(value) {
   ship.onboardCopper = 1000;
   ship.timelineQd = holding.gm.calendaria.lastQd = 4;
   ship.portBilling = { scope: "home", sinceQd: 0, lastCalculatedQd: 0, dailyCopper: 100, carriedCopper: 0, chargedCopper: 0 };
-  const withBill = get();
+    const withBill = get();
   assert.equal(withBill.debtCopper, 100);
   assert.equal(withBill.transferCopper, Math.max(0, withBill.recommendedBudgetCopper - 900));
+  const tripOnly = get(withBill.totalOperatingCopper);
+  assert.equal(tripOnly.canDepart, true, "trip-only budget without extra reserve remains sendable at home");
+  assert.equal(tripOnly.plannedReserveCopper, Math.max(0, Math.max(900, withBill.totalOperatingCopper) - withBill.totalOperatingCopper));
+  assert.equal(tripOnly.effectiveBudgetCopper, Math.max(900, withBill.totalOperatingCopper));
   assert.equal(get(0).canDepart, false, "explicit zero is not automatic budget");
   holding.storage.moneyCopper = 0;
   assert.equal(get().canDepart, false);
@@ -224,6 +233,11 @@ for (const isGM of [true, false]) {
   budgetField.value = "0";
   assert.equal(controller.calculate().plan.canDepart, false);
   assert.equal(controller.cache.basePlan, basePlan, "budget input reuses the market and route calculation");
+  budgetField.value = (basePlan.totalOperatingCopper / 100).toFixed(2);
+  const minimumBudget = controller.calculate();
+  assert.equal(minimumBudget.plan.canDepart, true);
+  assert.equal(minimumBudget.plan.plannedReserveCopper, 0);
+  assert.equal(minimumBudget.plan.reserveShortageCopper, basePlan.recommendedReserveCopper);
   budgetField.value = "";
   let refreshed = 0;
   controller.update = () => { refreshed++; };
@@ -241,4 +255,48 @@ for (const isGM of [true, false]) {
   assert.equal(controller.selected.size, 0);
 }
 
-console.log("Ship order preview: immutable quotes, 1–3 orders, pickup/capacity, bills, exact route geometry, stale/permission guards and GM/player command parity passed.");
+{
+  const { data, holding, ship } = fixture();
+  globalThis.game = { user: { id: "gm", isGM: true } };
+  const listeners = new Map();
+  let inputEvents = 0;
+  let focused = "";
+  const budgetField = { value: "", matches: (selector) => selector === "[data-ship-bundle-budget]",
+    dispatchEvent(event) { inputEvents += 1; listeners.get(event.type)?.({ target: this }); } };
+  const minimumButton = { dataset: { shipPlannerBudget: "", shipPlannerBudgetPreset: "minimum" },
+    focus() { focused = "minimum"; }, closest: (selector) => selector === "[data-ship-planner-budget]" ? minimumButton : null };
+  const output = { innerHTML: "", contains: (node) => node === minimumButton, querySelectorAll: () => [],
+    querySelector: (selector) => selector === '[data-ship-planner-budget-preset="minimum"]' ? minimumButton : null };
+  const root = {
+    querySelector: (selector) => ({ "[data-ship-planner-preview]": output, "[data-ship-bundle-budget]": budgetField,
+      "[data-ship-bundle-style]": { value: "normal" } })[selector] ?? null,
+    querySelectorAll: () => [],
+    addEventListener(type, fn) { listeners.set(type, fn); }
+  };
+  const previousHandlebars = globalThis.Handlebars;
+  const previousDocument = globalThis.document;
+  let lastContext = null;
+  globalThis.Handlebars = { partials: { "modules/fbl-skyhold/templates/parts/ship-window/order-preview.hbs": (ctx) => { lastContext = ctx; return "ok"; } } };
+  globalThis.document = { activeElement: minimumButton };
+  try {
+    const controller = new ShipOrderPlanner({ holdingId: holding.id, shipId: ship.id, getData: () => data });
+    controller.selected.add("first");
+    controller.bind(root);
+    assert.equal(lastContext.isAutoBudget, true);
+    assert.equal(lastContext.isTripOnlyBudget, false);
+    minimumButton.dataset.shipPlannerBudget = lastContext.totalOperatingGoldInput;
+    listeners.get("click")({ target: minimumButton });
+    assert.equal(inputEvents, 1, "preset button dispatches input so drafts stay synchronized");
+    assert.equal(budgetField.value, lastContext.totalOperatingGoldInput);
+    assert.equal(lastContext.isAutoBudget, false);
+    assert.equal(lastContext.isTripOnlyBudget, true);
+    assert.equal(lastContext.plannedReserveCopper, 0);
+    assert.equal(focused, "minimum", "re-rendering preview preserves focus on the activated budget preset");
+    controller.close();
+  } finally {
+    globalThis.Handlebars = previousHandlebars;
+    globalThis.document = previousDocument;
+  }
+}
+
+console.log("Ship order preview: immutable quotes, 1–3 orders, pickup/capacity, bills, exact route geometry, budget presets, stale/permission guards and GM/player command parity passed.");

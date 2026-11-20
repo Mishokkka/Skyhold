@@ -13,7 +13,7 @@ import { ShipEventDomain } from "./domains/events/ship-events.js";
 import { bindFloatingTooltips, hideFloatingTooltip } from "./common/floating-tooltip.js";
 import { WindowFrameMixin } from "./common/window-frame.js";
 import { configureWorldShipEconomy } from "../engines/ships/world-market.js";
-import { formatShipGold, parseShipGoldInput, shipGoldInput } from "../core/ship-gold.js";
+import { formatShipGold, formatShipMoney, parseShipGoldInput, shipGoldInput } from "../core/ship-gold.js";
 import { ShipOrderPlanner } from "./ship-order-planner.js";
 import { shipHomeLocationContext } from "./domains/ship-home-location.js";
 import { placeShipHome } from "./domains/events/ship-home-events.js";
@@ -21,6 +21,7 @@ import { navigateFromShip } from "./domains/ship-navigation.js";
 import { tabKeyTarget } from "./common/tab-navigation.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
+globalThis.Handlebars?.registerHelper?.("fblsShipMoney", (copper) => formatShipMoney(copper));
 globalThis.Handlebars?.registerHelper?.("fblsShipGold", (copper) => formatShipGold(copper));
 globalThis.Handlebars?.registerHelper?.("fblsShipGoldInput", (copper) => shipGoldInput(copper));
 const SHIP_OPERATIONS = new Set([

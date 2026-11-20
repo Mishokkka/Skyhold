@@ -1,6 +1,6 @@
 /* Standalone ship-management window. The compact fleet register stays in the main owner. */
 .fbls-order-workspace {
-  --fbls-order-tracks: minmax(0, 1fr) minmax(0, 1.4fr) minmax(7rem, 0.75fr) 16px;
+  --fbls-order-tracks: minmax(0, 1fr) minmax(0, 1.35fr) minmax(8.5rem, 0.9fr) 16px;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   align-items: start;
@@ -25,6 +25,8 @@
 .fbls-order-map-heading { padding: var(--fbls-gap-xs) var(--fbls-gap-sm); min-height: 32px; }
 .fbls-order-empty,
 .fbls-order-explanation { padding: var(--fbls-gap-sm); color: var(--fbls-muted); font-size: var(--fbls-type-compact-sm); }
+.fbls-order-budget-presets { padding: var(--fbls-gap-xs) var(--fbls-gap-sm); gap: var(--fbls-gap-sm); }
+.fbl-skyhold-ship [data-ship-planner-budget][aria-pressed="true"] { border-color: var(--fbls-accent); background: var(--fbls-accent-bg); }
 .fbls-route-view { position: relative; border: 1px solid var(--fbls-border-strong); border-radius: var(--fbls-radius-sm); overflow: hidden; }
 .fbls-route-view-tools { position: absolute; top: var(--fbls-gap-sm); right: var(--fbls-gap-sm); z-index: 1; padding: var(--fbls-gap-xs); border-radius: var(--fbls-radius-sm); background: var(--fbls-surface-1); }
 .fbls-route-pan > summary { display: grid; place-items: center; width: var(--fbls-control-height); min-height: var(--fbls-control-height); border: 1px solid var(--fbls-border-strong); border-radius: var(--fbls-radius-sm); background: var(--fbls-surface-2); list-style: none; }
@@ -136,6 +138,9 @@
   gap: var(--fbls-gap-md);
   margin: 0;
 }
+
+.fbl-skyhold-ship .fbls-ship-facts.fbls-ship-reserve-parts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.fbl-skyhold-ship .fbls-ship-facts.fbls-ship-reserve-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
 .fbl-skyhold-ship .fbls-ship-stats {
   flex: 0 0 auto;
@@ -299,9 +304,11 @@
 
 @container ship-window (max-width: 620px) {
   .fbl-skyhold-ship .fbls-ship-stats,
-  .fbl-skyhold-ship .fbls-ship-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fbl-skyhold-ship .fbls-ship-facts,
+  .fbl-skyhold-ship .fbls-ship-facts.fbls-ship-reserve-parts,
+  .fbl-skyhold-ship .fbls-ship-facts.fbls-ship-reserve-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .fbl-skyhold-ship .fbls-order-plan .fbls-order-totals { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .fbl-skyhold-ship .fbls-ship-order > summary { grid-template-columns: minmax(0, 1fr) minmax(7rem, auto) 16px; }
+  .fbl-skyhold-ship .fbls-ship-order > summary { grid-template-columns: minmax(0, 1fr) minmax(8rem, auto) 16px; }
   .fbl-skyhold-ship .fbls-order-select { grid-column: 1; }
   .fbl-skyhold-ship .fbls-order-destination { grid-column: 1; grid-row: 2; padding-left: calc(16px + var(--fbls-gap-sm)); }
   .fbl-skyhold-ship .fbls-order-prices { grid-column: 2; grid-row: 1 / 3; }
@@ -314,7 +321,9 @@
 @container ship-window (max-width: 420px) {
   .fbl-skyhold-ship .fbls-ship-form-grid,
   .fbl-skyhold-ship .fbls-ship-money-form:has([data-ship-reason]),
-  .fbl-skyhold-ship .fbls-ship-risk-grid { grid-template-columns: minmax(0, 1fr); }
+  .fbl-skyhold-ship .fbls-ship-risk-grid,
+  .fbl-skyhold-ship .fbls-ship-facts.fbls-ship-reserve-parts,
+  .fbl-skyhold-ship .fbls-ship-facts.fbls-ship-reserve-summary { grid-template-columns: minmax(0, 1fr); }
   .fbl-skyhold-ship .fbls-ship-heading { align-items: start; flex-direction: column; }
   .fbl-skyhold-ship .fbls-ship-tabs > button > i { display: none; }
   .fbls-order-command [data-ship-planned] { flex-basis: 100%; }

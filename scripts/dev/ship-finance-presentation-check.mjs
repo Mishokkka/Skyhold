@@ -142,9 +142,11 @@ assert.equal(finance.outing.canComparePlan, false);
 const template = readFileSync(new URL("../../templates/parts/ship-window/finance.hbs", import.meta.url), "utf8");
 const adjustmentPosition = template.indexOf('data-ship-disclosure="funds:');
 assert.ok(template.indexOf("Баланс и обязательства") < adjustmentPosition, "the approved compact balance summary precedes the manual adjustment form");
-for (const amount of ["walletGold", "moneySummary.obligationsCopper", "moneySummary.reserveCopper", "moneySummary.freeCopper"]) {
+for (const amount of ["moneySummary.walletCopper", "moneySummary.obligationsCopper", "moneySummary.reserveCopper", "moneySummary.freeCopper"]) {
   assert.ok(template.indexOf(amount) < adjustmentPosition, `${amount} is visible before a financial operation`);
 }
+assert.doesNotMatch(template, /fblsShipGold/, "ship finance uses unified З / С / М currency formatting");
+assert.match(template, /moneySummary\.contingencyReserveCopper/, "finance separates committed future legs from contingency reserve");
 assert.ok(template.indexOf("Неоплаченные обязательства") > adjustmentPosition, "the approved bill breakdown follows the operation, under a disclosure");
 assert.match(template, /report.canComparePlan/);
 assert.match(template, /#if hasAmount/);

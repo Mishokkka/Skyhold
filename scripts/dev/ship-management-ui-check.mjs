@@ -187,5 +187,7 @@ class TestMarket extends SkyholdMarketApp { render() { return Promise.resolve(th
 const preview = readFileSync("templates/parts/ship-window/order-preview.hbs", "utf8");
 assert.ok(preview.indexOf("nominalExitCopper") < preview.indexOf("data-ship-plan-details"), "full nominal result must be visible before the disclosures");
 assert.ok(preview.indexOf("settlementWithdrawalCopper") < preview.indexOf("data-ship-plan-details"));
+assert.ok(preview.indexOf("plannedReserveCopper") < preview.indexOf("data-ship-plan-details"), "single reserve figure must be visible before disclosures");
+assert.doesNotMatch(preview, /fblsShipGold/, "order preview uses unified З / С / М currency formatting");
 assert.match(readFileSync("templates/parts/ship-window/crew.hbs", "utf8"), /readiness\.warnings/);
 console.log("Ship management UI: GM/player state parity, empty boards, sales, delays, permissions, full-exit budget, read-only links and preserved market drafts passed.");

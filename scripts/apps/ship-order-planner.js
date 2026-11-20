@@ -1,7 +1,7 @@
 import { MODULE_ID } from "../data/constants.js";
 import { findReadableHoldingEntry } from "../data/access-guard.js";
 import { holdingPermissionContext } from "../data/holding-permissions.js";
-import { parseShipGoldInput } from "../core/ship-gold.js";
+import { parseShipGoldInput, shipGoldInput } from "../core/ship-gold.js";
 import { previewShipOrders, withShipOrderBudget } from "../engines/ships/order-preview.js";
 import { shipRouteMapContext, bindRouteMapView } from "./common/route-map-view.js";
 import { buildShipWorldContext } from "../engines/ships/world-market.js";
@@ -47,13 +47,25 @@ export class ShipOrderPlanner {
       }
       const focus = event.target.closest?.("[data-ship-planner-focus]");
       if (focus) this.highlight(focus.dataset.shipPlannerFocus);
+      const budgetPreset = event.target.closest?.("[data-ship-planner-budget]");
+      if (budgetPreset) {
+        const field = root.querySelector("[data-ship-bundle-budget]");
+        if (field) {
+          field.value = String(budgetPreset.dataset.shipPlannerBudget ?? "");
+          if (typeof Event === "function" && typeof field.dispatchEvent === "function") {
+            field.dispatchEvent(new Event("input", { bubbles: true }));
+          } else {
+            this.update();
+          }
+        }
+      }
     }, { signal });
     this.update();
   }
 
   parameters() {
     const budget = this.root.querySelector("[data-ship-bundle-budget]");
-    if (budget?.validity?.badInput) throw new Error("Укажите бюджет числом в ЗМ или полностью очистите поле для автоматического расчёта.");
+    if (budget?.validity?.badInput) throw new Error("Укажите бюджет числом в золотых (1 З = 100 М) или очистите поле для рекомендуемого запаса.");
     const value = String(budget?.value ?? "").trim();
     return { offerIds: [...this.selected], style: this.root.querySelector("[data-ship-bundle-style]")?.value ?? "normal",
       budgetCopper: value ? parseShipGoldInput(value) : null };
@@ -83,6 +95,7 @@ export class ShipOrderPlanner {
     this.mapController?.abort();
     const active = globalThis.document?.activeElement;
     const restoreClear = output.contains?.(active) && active?.hasAttribute?.("data-ship-planner-clear");
+    const restoreBudgetPreset = output.contains?.(active) ? String(active?.dataset?.shipPlannerBudgetPreset ?? "") : "";
     const disclosures = new Map([...output.querySelectorAll("details")].map((node) => [node.dataset.shipPlanDetails ?? "budget", node.open]));
     const restoreMapToggle = output.contains?.(active) && active?.hasAttribute?.("data-ship-planner-map-toggle");
     const context = { selectedCount: this.selected.size, mapOpen: this.mapOpen, mapPanelId: `ship-route-map-${this.holdingId}-${this.shipId}` };
@@ -94,10 +107,13 @@ export class ShipOrderPlanner {
     if (this.selected.size) {
       try {
         const result = this.calculate();
-        const { plan, permissions } = result;
+        const { plan, permissions, parameters } = result;
         const numbers = new Map(plan.offers.map((offer, index) => [offer.id, index + 1]));
         Object.assign(context, plan, { map: result.map, hasPlan: true, revision: result.revision,
           durationDays: plan.totalDurationQd / 4, flightDays: plan.flightQd / 4, portDays: plan.portQd / 4,
+          totalOperatingGoldInput: shipGoldInput(plan.totalOperatingCopper),
+          isAutoBudget: parameters.budgetCopper === null,
+          isTripOnlyBudget: parameters.budgetCopper === plan.totalOperatingCopper,
           canDepart: plan.canDepart && permissions.canManageShips,
           permissionReason: permissions.canManageShips ? "" : permissions.mayManageShips ? "Для отправления нужен активный ГМ." : "Доступен просмотр плана; управление кораблём не разрешено.",
           orders: plan.offers.map((offer) => ({ id: offer.id, focusIds: JSON.stringify([offer.id]), number: numbers.get(offer.id), title: offer.title,
@@ -155,6 +171,7 @@ export class ShipOrderPlanner {
     this.highlight(this.focusedOfferIds ?? "");
     if (restoreClear) (output.querySelector("[data-ship-planner-clear]") ?? root.querySelector("[data-ship-bundle-select]"))?.focus({ preventScroll: true });
     if (restoreMapToggle) output.querySelector("[data-ship-planner-map-toggle]")?.focus({ preventScroll: true });
+    if (restoreBudgetPreset) output.querySelector(`[data-ship-planner-budget-preset="${restoreBudgetPreset}"]`)?.focus({ preventScroll: true });
   }
 
   toggleMap() {

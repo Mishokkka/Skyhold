@@ -15,7 +15,7 @@ export function previewShipOrders(data, holding, ship, { offerIds = [], style = 
   if (!Array.isArray(offerIds) || offerIds.length < 1 || offerIds.length > 3) throw new Error("Выберите от одного до трёх заказов.");
   if (new Set(offerIds).size !== offerIds.length) throw new Error("Один заказ нельзя выбрать дважды.");
   if (!["normal", "cautious", "bold"].includes(style)) throw new Error("Неизвестный подход капитана.");
-  if (budgetCopper !== null && (!Number.isSafeInteger(budgetCopper) || budgetCopper < 0)) throw new Error("Укажите неотрицательный бюджет в ЗМ.");
+  if (budgetCopper !== null && (!Number.isSafeInteger(budgetCopper) || budgetCopper < 0)) throw new Error("Укажите неотрицательный бюджет в золотых.");
   const clockQd = worldShipTimelineQd(holding, ship);
   const period = Math.floor(clockQd / 40);
   const selected = offerIds.map((id) => (holding.special?.ships?.offers ?? []).find((offer) => offer.id === id));
@@ -126,6 +126,7 @@ export function previewShipOrders(data, holding, ship, { offerIds = [], style = 
   if (!calculationShip.portBilling && debtCopper > 0) blockers.push("Неоплаченный портовый счёт требует урегулирования перед отправлением.");
   const flightQd = legs.reduce((sum, leg) => sum + leg.flightQd, 0);
   const rewardCopper = offers.reduce((sum, offer) => sum + offer.contract.rewardCopper, 0);
+  const recommendedReserveCopper = Math.max(0, recommendedBudgetCopper - totalOperatingCopper);
   return withShipOrderBudget({
     offers, world, origin, finalPoint: stops.at(-1).point, stops, legs, style, clockQd,
     totalDurationQd, flightQd, portQd: totalDurationQd - flightQd, distanceKm,
@@ -133,7 +134,7 @@ export function previewShipOrders(data, holding, ship, { offerIds = [], style = 
     maxLoadPoints: Math.max(...legs.map((leg) => leg.loadOnLegPoints)),
     totalOperatingCopper, rewardCopper, plannedMarginCopper: rewardCopper - totalOperatingCopper,
     nominalExitCopper: rewardCopper - totalOperatingCopper - returnReserveCopper,
-    recommendedBudgetCopper, returnReserveCopper, idleReserveCopper, outcomeReserveCopper,
+    recommendedBudgetCopper, recommendedReserveCopper, returnReserveCopper, idleReserveCopper, outcomeReserveCopper,
     firstLegCopper, onboardCopper, debtCopper, homeDebtCopper, walletAfterDebt,
     settlementCopper: Number(holding.storage?.moneyCopper ?? 0),
     departureBlockers: blockers, atHome, isBundle: offers.length > 1,
@@ -143,9 +144,11 @@ export function previewShipOrders(data, holding, ship, { offerIds = [], style = 
 
 /** Budget typing must not rebuild markets, shortest paths or order permutations. */
 export function withShipOrderBudget(plan, budgetCopper = null) {
-  if (budgetCopper !== null && (!Number.isSafeInteger(budgetCopper) || budgetCopper < 0)) throw new Error("Укажите неотрицательный бюджет в ЗМ.");
-  const { atHome, recommendedBudgetCopper, walletAfterDebt, homeDebtCopper, firstLegCopper } = plan;
+  if (budgetCopper !== null && (!Number.isSafeInteger(budgetCopper) || budgetCopper < 0)) throw new Error("Укажите неотрицательный бюджет в золотых.");
+  const { atHome, totalOperatingCopper, recommendedBudgetCopper, walletAfterDebt, homeDebtCopper, firstLegCopper } = plan;
   const targetBudgetCopper = atHome ? (budgetCopper ?? recommendedBudgetCopper) : walletAfterDebt;
+  const effectiveBudgetCopper = atHome ? Math.max(walletAfterDebt, targetBudgetCopper) : walletAfterDebt;
+  const plannedReserveCopper = Math.max(0, effectiveBudgetCopper - totalOperatingCopper);
   const transferCopper = atHome ? Math.max(0, targetBudgetCopper - walletAfterDebt) : 0;
   const shortageCopper = atHome
     ? Math.max(0, homeDebtCopper + transferCopper - plan.settlementCopper)
@@ -153,7 +156,8 @@ export function withShipOrderBudget(plan, budgetCopper = null) {
   const blockers = [...plan.departureBlockers];
   if (atHome && targetBudgetCopper < firstLegCopper) blockers.push("Выбранный бюджет меньше расходов первого участка.");
   if (shortageCopper > 0) blockers.push("Не хватает денег для погашения стоянки и отправления с выбранным бюджетом.");
-  return { ...plan, targetBudgetCopper, transferCopper, settlementWithdrawalCopper: homeDebtCopper + transferCopper,
+  return { ...plan, targetBudgetCopper, effectiveBudgetCopper, plannedReserveCopper,
+    transferCopper, settlementWithdrawalCopper: homeDebtCopper + transferCopper,
     shortageCopper, blockers, canDepart: blockers.length === 0,
-    reserveShortageCopper: Math.max(0, recommendedBudgetCopper - Math.max(walletAfterDebt, targetBudgetCopper)) };
+    reserveShortageCopper: Math.max(0, recommendedBudgetCopper - effectiveBudgetCopper) };
 }

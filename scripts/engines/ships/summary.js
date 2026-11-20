@@ -56,11 +56,12 @@ export function shipMoneySummary(holding, ship, { returnOffer = null, clockQd = 
     .slice((ship.orderBundle?.nextStopIndex ?? 0) + (ship.activeVoyage ? 1 : 0))
     .reduce((sum, stop) => sum + amount(stop.legOffer?.quote?.operatingCopper), 0);
   const reserveKnown = calculationValid && (atHome || returning || Boolean(ship.orderBundle || quote || returnOffer));
-  const reserveCopper = returnReserveCopper + idleReserveCopper + incidentReserveCopper + remainingOperatingCopper;
+  const contingencyReserveCopper = returnReserveCopper + idleReserveCopper + incidentReserveCopper;
+  const reserveCopper = contingencyReserveCopper + remainingOperatingCopper;
   const remainderCopper = balanceCopper - obligationsCopper - reserveCopper;
   return {
     atHome, calculationValid, balanceCopper, walletCopper: amount(ship.onboardCopper), settlementCopper: amount(holding.storage?.moneyCopper), portDebtCopper, outcomeDueCopper, obligationsCopper,
-    returnReserveCopper, idleReserveCopper, incidentReserveCopper, remainingOperatingCopper, reserveCopper, reserveKnown,
+    returnReserveCopper, idleReserveCopper, incidentReserveCopper, remainingOperatingCopper, contingencyReserveCopper, reserveCopper, reserveKnown,
     freeCopper: reserveKnown ? Math.max(0, remainderCopper) : null,
     shortageCopper: Math.max(0, -remainderCopper),
     balanceLabel: atHome ? "Доступно дома" : "Деньги на борту"

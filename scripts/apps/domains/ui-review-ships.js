@@ -1,4 +1,4 @@
-import { formatShipGold } from "../../core/ship-gold.js";
+import { formatShipGold, formatShipMoney, shipGoldInput } from "../../core/ship-gold.js";
 import { tabKeyTarget } from "../common/tab-navigation.js";
 
 // Presentation fixtures only. No live ship context, authority commands or store imports.
@@ -52,6 +52,7 @@ export function shipReviewContext(state) {
     rewardCopper: reward, costs: { totalCopper: cost, foodCopper: 300, crewCopper: 800, upkeepCopper: 400, handlingCopper: cost - 1500, taxCopper: 0 },
     quote: { distanceKm: days * 80 + (id === "grain" ? 0 : 120) }, timing: { flightDays: days - 1, loadingDays: 0.5, unloadingDays: 0.5 },
     attention: { level: 2, label: "Низкое" }, returnReserveCopper: 900, idleReserveCopper: 300, outcomeReserveCopper: 500,
+    recommendedReserveCopper: 1700,
     recommendedBudgetCopper: cost + 1700, styles: [{ styleLabel: "Обычно", riskLabel: "Обычный риск", rewardRangeCopper: { min: reward, max: reward } }]
   }));
   const selected = offers.filter(row => row.selected);
@@ -76,10 +77,10 @@ export function shipReviewContext(state) {
   const ship = { id: "review-ship", index: 0, name: "Северная звезда", isWorld: true, atHome, inTransit, active,
     statusLabel, locationLabel: atHome ? "Скайхолд" : inTransit ? "Скайхолд → Ассур" : "Ассур", profileLabel: "Воздушный торговец", conditionLabel: "Исправен", commanderName: "Руна",
     nextAction, needsCrewAttention: !crewReady, needsMoneyAttention: blocked, permissionReason: canAct ? "" : "Только просмотр: действия недоступны.",
-    moneySummary: { calculationValid: true, balanceLabel: atHome ? "Доступно дома" : "На борту", balanceCopper: wallet + (atHome ? treasury : 0), settlementCopper: treasury,
-      freeCopper: free, reserveKnown: true, reserveCopper: reserve, obligationsCopper: obligations, portDebtCopper: obligations,
+    moneySummary: { calculationValid: true, balanceLabel: atHome ? "Доступно дома" : "На борту", walletCopper: wallet, balanceCopper: wallet + (atHome ? treasury : 0), settlementCopper: treasury,
+      freeCopper: free, reserveKnown: true, reserveCopper: reserve, contingencyReserveCopper: 2600, obligationsCopper: obligations, portDebtCopper: obligations,
       outcomeDueCopper: 0, returnReserveCopper: 1500, idleReserveCopper: 700, remainingOperatingCopper: 600, incidentReserveCopper: 400 },
-    walletGold: formatShipGold(wallet), homeUpkeepEnabled: true, homeUpkeepCopperPerDay: 320, capacityLoadPoints: 100, hiddenCapacityLoadPoints: 10,
+    walletGold: formatShipGold(wallet), walletText: formatShipMoney(wallet), homeUpkeepEnabled: true, homeUpkeepCopperPerDay: 320, capacityLoadPoints: 100, hiddenCapacityLoadPoints: 10,
     occupiedLoadPoints: active ? 60 : 0, speedKmPerDay: 120, readiness: { ready: crewReady, readyCount, requiredCount: 6,
       issues: !crewReady ? [{ message: empty ? "Назначьте команду перед отправлением." : "Бор ранен, Ида отсутствует: проверьте состав перед отправлением." }] : [], warnings: [] },
     crewRoster, crewOptions, hasCrewOptions: true, linkedCrewCount: crewRoster.length, abstractCrewCount: 0,
@@ -103,6 +104,9 @@ export function shipReviewContext(state) {
     distanceKm: selected.reduce((sum, row) => sum + row.quote.distanceKm, 0), maxLoadPoints: load, capacityLoadPoints: 100, finalPoint: { label: selected.at(-1)?.destination || "—" },
     totalOperatingCopper: cost, rewardCopper: reward, returnReserveCopper: selected.length ? 900 : 0,
     idleReserveCopper: selected.length ? 300 : 0, outcomeReserveCopper: selected.length ? 500 : 0,
+    recommendedReserveCopper: selected.length ? 1700 : 0, effectiveBudgetCopper: atHome ? Math.max(wallet, budget) : Math.max(0, wallet - obligations),
+    plannedReserveCopper: Math.max(0, (atHome ? Math.max(wallet, budget) : Math.max(0, wallet - obligations)) - cost),
+    totalOperatingGoldInput: shipGoldInput(cost), isAutoBudget: true, isTripOnlyBudget: false,
     nominalExitCopper: reward - cost - (selected.length ? 900 : 0), recommendedBudgetCopper: budget, onboardCopper: wallet, debtCopper: obligations,
     settlementWithdrawalCopper: Math.max(0, budget - wallet), transferCopper: Math.max(0, budget - wallet), plannedMarginCopper: reward - cost,
     blockers: !crewReady ? ["Команда не готова к отправлению."] : [], shortageCopper: Math.max(0, budget - (wallet + (atHome ? treasury : 0) - obligations)),
@@ -116,9 +120,10 @@ export function shipReviewContext(state) {
     scenarios: choices([["home", "Дома · подготовка"], ["blocked", "Не хватает команды и денег"], ["sailing", "В рейсе"], ["port", "В чужом порту"], ["sale", "Продажа своего груза"], ["empty", "Нет заказов и команды"]], state.scenario),
     permissions: choices([["gm", "ГМ"], ["edit", "Игрок с правом кораблей"], ["view", "Только просмотр"]], state.permission),
     widths: choices([["880", "880 px · обычное"], ["620", "620 px · узкое"], ["1100", "1100 px · широкое"]], state.width),
-    selectedCount: selected.length, selectedOffers: selected, load, cost: formatShipGold(cost), reward: formatShipGold(reward), budget: formatShipGold(budget),
-    canDepart, moneyReady, capacityReady: load <= 100, crewOptions, free: formatShipGold(free),
-    obligations: formatShipGold(obligations), reserve: formatShipGold(reserve),
+    selectedCount: selected.length, selectedOffers: selected, load, cost: formatShipMoney(cost), reward: formatShipMoney(reward), budget: formatShipMoney(budget),
+    budgetGoldInput: shipGoldInput(budget),
+    canDepart, moneyReady, capacityReady: load <= 100, crewOptions, free: formatShipMoney(free),
+    obligations: formatShipMoney(obligations), reserve: formatShipMoney(reserve),
     decisions: SHIP_REVIEW_SECTIONS.map(section => ({ ...section, ...state.decisions[section.id],
       options: choices([["", "Не решено"], ...SHIP_REVIEW_VARIANTS.map(v => [v.id, v.label]), ["custom", "Свой вариант / сочетание"]], state.decisions[section.id].choice) })),
     decisionCount: SHIP_REVIEW_SECTIONS.filter(({ id }) => state.decisions[id]?.choice).length,
@@ -136,6 +141,7 @@ export function renderShipReviewCurrent(context, handlebars = globalThis.Handleb
   const partial = handlebars.partials["modules/fbl-skyhold/templates/ship-app.hbs"];
   if (!partial) throw new Error("Ship review template is unavailable");
   handlebars.registerHelper("fblsShipGold", formatShipGold);
+  handlebars.registerHelper("fblsShipMoney", formatShipMoney);
   let html = (typeof partial === "function" ? partial : handlebars.compile(partial))(context.currentContext);
   const preview = handlebars.partials["modules/fbl-skyhold/templates/parts/ship-window/order-preview.hbs"];
   if (preview) html = html.replace(/(<div data-ship-planner-preview[^>]*>)(<\/div>)/, (_match, start, end) =>
