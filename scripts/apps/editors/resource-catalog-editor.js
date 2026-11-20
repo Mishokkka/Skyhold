@@ -291,7 +291,7 @@ export class SkyholdResourceRowEditor extends FloatingTooltipsMixin(PendingField
 
   async _confirm(content) {
     const DialogV2 = foundry?.applications?.api?.DialogV2;
-    if (DialogV2?.confirm) return DialogV2.confirm({ window: { title: "Ресурс" }, content: `<p>${content}</p>`, modal: true });
+    if (DialogV2?.confirm) return DialogV2.confirm({ classes: ["fbl-skyhold"], window: { title: "Ресурс" }, content: `<p>${content}</p>`, modal: true });
     return window.confirm(content);
   }
 

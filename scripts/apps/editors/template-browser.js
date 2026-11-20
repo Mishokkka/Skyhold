@@ -441,6 +441,7 @@ export class SkyholdBuildingTemplateBrowser extends RenderSchedulerMixin(Handleb
     if (DialogV2?.confirm) {
       try {
         return await DialogV2.confirm({
+          classes: ["fbl-skyhold"],
           window: { title: "Удалить шаблон" },
           content,
           yes: { label: "Удалить" },

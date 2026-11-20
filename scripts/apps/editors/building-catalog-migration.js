@@ -29,6 +29,7 @@ async function confirmApply(textOnly) {
   const DialogV2 = foundry?.applications?.api?.DialogV2;
   if (DialogV2?.confirm) {
     return DialogV2.confirm({
+      classes: ["fbl-skyhold"],
       window: { title: textOnly ? "Применить обновление текстов" : "Применить миграцию зданий" },
       content: `<p>${message}</p>`,
       modal: true

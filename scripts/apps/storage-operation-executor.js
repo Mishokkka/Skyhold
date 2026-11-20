@@ -10,7 +10,7 @@ import { appendHoldingOperation, findHoldingOperation } from "../data/operations
 import { hiddenStorageRoomIds } from "../data/access-guard.js";
 import { holdingPermissionContext } from "../data/holding-permissions.js";
 import { createWriteQueue } from "../data/write-queue.js";
-import { isActorStorageTransfer } from "../data/constants.js";
+import { isActorStorageTransfer, MAX_STORAGE_OPERATION_QUANTITY } from "../data/constants.js";
 import { COMMAND_ERROR } from "../data/command-result.js";
 import { MAX_STORAGE_BATCH_ROWS, STORAGE_BATCH_TOO_LARGE } from "../engines/storage/row-identity.js";
 
@@ -71,8 +71,12 @@ function normalizeOperation(raw = {}) {
     .map(([id, qty]) => {
       const amount = Number(qty);
       if (batchMove && (!Number.isSafeInteger(amount) || amount < 1)) throw operationError("Некорректное количество для перемещения.");
-      return [String(id), batchMove ? amount : Math.max(1, Math.min(1_000_000, Math.floor(amount || 1)))];
+      return [String(id), batchMove ? amount : Math.max(1, Math.min(MAX_STORAGE_OPERATION_QUANTITY, Math.floor(amount || 1)))];
     }));
+  const amount = Number(raw?.qty ?? 1);
+  if (type === "addResourceRow" && (!Number.isSafeInteger(amount) || amount < 1 || amount > MAX_STORAGE_OPERATION_QUANTITY)) {
+    throw operationError("Введите целое количество ресурса в допустимом диапазоне.");
+  }
   return {
     type,
     operationId,
@@ -92,7 +96,7 @@ function normalizeOperation(raw = {}) {
     rowQuantities,
     expectedRevision: raw?.expectedRevision != null && Number.isFinite(Number(raw.expectedRevision))
       ? Math.max(0, Math.floor(Number(raw.expectedRevision))) : null,
-    qty: Math.max(1, Math.min(1_000_000, Math.floor(Number(raw?.qty) || 1)))
+    qty: Math.max(1, Math.min(MAX_STORAGE_OPERATION_QUANTITY, Math.floor(amount || 1)))
   };
 }
 
@@ -129,7 +133,7 @@ function recordStorageResult(holding, operation, applied, signature, userId) {
     moved: Math.max(0, Number(applied.moved) || 0),
     rowType: applied.rowType,
     placements: Array.isArray(applied.placements) ? applied.placements : []
-  } : operation.type === "depositItem" && applied.roomId ? { roomId: applied.roomId } : {});
+  } : ["addResourceRow", "depositItem"].includes(operation.type) && applied.roomId ? { roomId: applied.roomId } : {});
   appendHoldingOperation(holding, { operationId: operation.operationId, type: "system",
     title: DEFENSE_OPERATIONS.has(operation.type) ? "Операция обороны" : "Операция хранилища",
     summary: response.message, payload: { signature, userId: String(userId), result: response } });

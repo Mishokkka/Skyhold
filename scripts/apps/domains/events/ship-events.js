@@ -185,6 +185,7 @@ export const ShipEventDomain = {
         const stops = reviewedPlan.stops.map((stop) => escapeHtml(stop.point.label)).join(" → ");
         const orders = reviewedPlan.offers.map((offer) => `<li>${escapeHtml(offer.title)}: ${escapeHtml((offer.contract.pickup ?? offer.from).label)} → ${escapeHtml(offer.to.label)}</li>`).join("");
         if (!await foundryDialogV2().confirm({
+          classes: ["fbl-skyhold"],
           window: { title: "Принять выбранные заказы" }, modal: true,
           content: `<ol>${orders}</ol><p>${stops}</p><p>${reviewedPlan.totalDurationQd / 4} дн. · расходы ${formatShipGold(reviewedPlan.totalOperatingCopper)} ЗМ · плата по договорам ${formatShipGold(reviewedPlan.rewardCopper)} ЗМ до случайных исходов.</p><p>Подход: ${escapeHtml(({ cautious: "Осторожно", normal: "Обычно", bold: "С риском" })[intent.style])}. ${reviewedPlan.atHome ? `На борт дополнительно ${formatShipGold(reviewedPlan.transferCopper)} ЗМ; из казны на стоянку ${formatShipGold(reviewedPlan.homeDebtCopper)} ЗМ.` : "Расходы оплачиваются с борта."} Конечный порт: ${escapeHtml(reviewedPlan.finalPoint.label)}. Возвращение домой не включено.</p><p>Промежуточные решения остаются за игроком. Экипаж уйдёт с работ поселения; после возвращения жильё и работы не восстановятся автоматически. ${reviewedPlan.departingAssignments?.length ? `Затронуто жителей: ${reviewedPlan.departingAssignments.length}. ${reviewedPlan.departingAssignments.slice(0, 5).map((row) => `${escapeHtml(row.name)}: ${escapeHtml(row.label)}`).join("; ")}.` : ""} Резервы не списываются заранее.</p>`
         })) { this._shipRetries.delete(key); return; }
@@ -194,6 +195,7 @@ export const ShipEventDomain = {
         const offer = quoteWorldShipRelocation(data, holding, ship, intent.destinationId, { context });
         const quote = offer.quote;
         if (!await foundryDialogV2().confirm({
+          classes: ["fbl-skyhold"],
           window: { title: `Передислокация: ${ship.name}` }, modal: true,
           content: `<p>${escapeHtml(offer.from.label)} → ${escapeHtml(offer.to.label)} · ${quote.distanceKm} км · ${quote.durationQd / 4} дн.</p><p>Плановые расходы: ${formatShipGold(quote.operatingCopper)} ЗМ. ${ship.location?.kind === "home" ? `Рекомендуемый бортовой бюджет: ${formatShipGold(quote.recommendedBudgetCopper)} ЗМ (путь, возвращение и стоянка).` : `Расходы спишутся с бортового кошелька; на борту ${formatShipGold(ship.onboardCopper ?? 0)} ЗМ.`} Платы заказчика нет.</p>`
         })) { this._shipRetries.delete(key); return; }
@@ -212,6 +214,7 @@ export const ShipEventDomain = {
         const budget = intent.budgetCopper == null ? plan.recommendedBudgetCopper : intent.budgetCopper;
         if (budget < plan.stops[0].legOffer.quote.operatingCopper) throw new Error("Бортового бюджета недостаточно для первого участка.");
         if (!await foundryDialogV2().confirm({
+          classes: ["fbl-skyhold"],
           window: { title: "Принять составной рейс" }, modal: true,
           content: `<p>${selected.length} заказа · ${plan.totalDurationQd / 4} дн. · ${plan.distanceKm} км.</p><ol>${rows}</ol><p>Плановые расходы: ${formatShipGold(plan.totalOperatingCopper)} ЗМ; плата по договорам: ${formatShipGold(reward)} ЗМ до случайных исходов. Рекомендуемый бюджет: ${formatShipGold(plan.recommendedBudgetCopper)} ЗМ = ${formatShipGold(plan.totalOperatingCopper)} ЗМ на участки + ${formatShipGold(plan.returnReserveCopper)} ЗМ домой + ${formatShipGold(plan.idleReserveCopper)} ЗМ на стоянку + ${formatShipGold(plan.outcomeReserveCopper)} ЗМ на исходы; на борт: ${formatShipGold(budget)} ЗМ.</p><p>Запас остаётся на борту до необходимости и не считается расходом. Заказы оплачиваются по мере доставки; стоянки и события могут изменить результат.</p>`
         })) {
@@ -220,10 +223,12 @@ export const ShipEventDomain = {
         }
       }
       if (type === "reroll-world" && !await foundryDialogV2().confirm({
+        classes: ["fbl-skyhold"],
         window: { title: "Обновить свободные заказы" }, modal: true,
         content: "<p>Заменить свободные предложения этого корабля в текущем порту? Выбранный план потребуется проверить заново.</p>"
       })) { this._shipRetries.delete(key); return; }
       if (type === "delete" && !await foundryDialogV2().confirm({
+        classes: ["fbl-skyhold"],
         window: { title: "Удалить корабль" },
         content: `<p>Удалить корабль «${escapeHtml(ship.name)}» и его предложения?</p><p>Экипаж останется жителями поселения, рабочие назначения и история завершённых рейсов сохранятся.</p>`,
         modal: true

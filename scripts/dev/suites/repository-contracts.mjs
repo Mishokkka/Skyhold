@@ -467,7 +467,10 @@ function checkMarketBoundaries() {
   assert.match(app, /openTransportApp/, "market checkout must open unified transport");
   assert.doesNotMatch(app, /_marketComparisonRows\(/, "market app must not eagerly calculate every route while opening the location selector");
   assert.match(app, /marketOptions:\s*markets\.map\(/, "market app must retain the compact location selector without the removed comparison pass");
-  assert.match(app, /return availableAuthorityMarkets\(data,/, "market browsing must delegate to the shared authority availability rules");
+  assert.match(app, /availableAuthorityMarkets\(data,\s*\{[^\n]*offerLocationIds:\s*\[\]\s*\}\)/,
+    "the market selector must use shared authority availability without composing offers for every location");
+  assert.match(app, /availableAuthorityMarkets\(data,\s*\{[^\n]*offerLocationIds:\s*\[market\.id\]\s*\}\)/,
+    "the selected market must compose only its own catalog through the same authority rules");
   assert.match(marketAuthority, /from "\.\.\/\.\.\/engines\/market\/logistics\.js"/, "shared market availability must consume the pure logistics engine");
   assert.match(marketAuthority, /from "\.\.\/\.\.\/engines\/market\/composition\.js"/, "shared market availability must compose countries and location specialties");
   assert.match(app, /groupMarketOffers/, "market app must retain per-provider stock selection");
@@ -544,7 +547,8 @@ function checkMarketBoundaries() {
   assert.doesNotMatch(marketTemplate, /\{\{locationText\}\}|title="Локация"/, "market header must never expose the settlement location");
   assert.match(marketTemplate, /title="Страна: {{marketCountryLabel}}"[\s\S]{0,300}title="Размер рынка: {{marketSizeLabel}}"[\s\S]{0,300}title="Состояние рынка: {{marketConditionLabel}}"/, "market header facts must preserve full country, size and state values in that order");
   assert.match(transportTemplate, /selected\.delivery[\s\S]+selected\.stages[\s\S]+transport-invoice/, "transport checkout separates total, stage calculations and goods/taxes");
-  assert.match(transportTemplate, /\{\{price\}\}[\s\S]{0,80}\{\{invoice\}\}/, "stage price and its cost breakdown stay together");
+  const quoteStageHeader = transportTemplate.match(/\{\{#each selected\.stages\}\}\s*<li\b[^>]*>([\s\S]*?)<details\b/)?.[1] ?? "";
+  assert.match(quoteStageHeader, /\{\{price\}\}[\s\S]*\{\{invoice\}\}/, "stage price and its cost breakdown stay together above the schedule");
   assert.doesNotMatch(transportTemplate, /transport-activate|unless enabled|if enabled/, "the branch has no transport switch or activation command");
   assert.match(marketCss, /\.fbls-market-shell\s*\{[\s\S]{0,180}flex-direction:\s*column/, "market shell must tolerate a variable number of notices without overlapping content");
   assert.match(marketCss, /\.fbls-market-price\s*\{[^}]*display:\s*flex[^}]*font-size:\s*var\(--fbls-type-compact-sm\)/, "market price and movement percentage must share a row at the canonical compact text scale");
@@ -1254,7 +1258,8 @@ function checkStorageTemplatePartials() {
   assert.match(roomRailText, /storageContext\.resourceRooms/, "shared storage room rail must render canonical room rows");
   assert.match(roomRailText, /data-market-offer-image|fbls-storage-room-tab-icon[\s\S]{0,220}\{\{#if img\}\}/, "storage room navigation must render its building image with an icon fallback");
   assert.match(storageCss, /fbls-storage-resource-card\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+5\.6rem\s+2\.5rem\s+2rem/, "storage cards must retain a shrinking text track and a dedicated keyboard action column");
-  assert.equal((storageEvents.match(/SkyholdStorageActionDialog\.open\(\{\s*anchor:\s*this,/g) ?? []).length, 4, "all storage context actions must anchor dialogs to the Skyhold window");
+  assert.equal((storageEvents.match(/SkyholdStorageActionDialog\.open\(\{\s*anchor:\s*this,/g) ?? []).length, 5,
+    "resource addition and the storage context actions must anchor dialogs to the Skyhold window");
   assert.match(storageDialog, /_centerOnAnchor\(\)[\s\S]{0,900}anchor\?\._captureWindowFrame/, "storage action dialogs must center against the captured parent-window frame");
   assert.match(buildingCardsCss, /fbls-building-card\.planned,[\s\S]{0,220}background:\s*var\(--fbls-blueprint-bg\)/, "construction cards must own their blueprint background in the eagerly loaded current-building stylesheet");
   assert.doesNotMatch(templateBrowserCss, /fbls-building-card\.(?:planned|building)/, "opening the lazy template browser must not be required to style construction cards");

@@ -485,6 +485,7 @@ export class SkyholdMassCombatApp extends RenderSchedulerMixin(HandlebarsApplica
     const DialogV2 = foundry?.applications?.api?.DialogV2;
     if (DialogV2?.wait) {
       return DialogV2.wait({
+        classes: ["fbl-skyhold"],
         window: { title: "Завершить бой" },
         content: "<p>Сохранить воспроизводимый снимок боя в архиве? Повреждённые здания можно сразу перевести в ремонт.</p>",
         buttons: [
@@ -931,7 +932,7 @@ export class SkyholdMassCombatApp extends RenderSchedulerMixin(HandlebarsApplica
 
   async _confirm(title, content) {
     try {
-      return await foundryDialogV2().confirm({ window: { title }, content: `<p>${escapeHtml(content)}</p>`, modal: true });
+      return await foundryDialogV2().confirm({ classes: ["fbl-skyhold"], window: { title }, content: `<p>${escapeHtml(content)}</p>`, modal: true });
     } catch (_error) {}
     return window.confirm(content);
   }
