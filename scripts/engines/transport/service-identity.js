@@ -1,4 +1,5 @@
-const regionalServiceId = id => /^((?:regular|charter):[a-z0-9]+:route:[a-z0-9]+):holding:.+$/.exec(String(id))?.[1] ?? id;
+const unscaledServiceId = id => String(id).replace(/:x\d+$/, "");
+const regionalServiceId = id => /^((?:regular|charter):[a-z0-9]+:route:[a-z0-9]+):holding:.+$/.exec(unscaledServiceId(id))?.[1] ?? unscaledServiceId(id);
 
 /** New physical paths retain their former group ID as an explicit compatibility prefix. */
 export function legacyTransportServiceId(id) {
@@ -7,9 +8,9 @@ export function legacyTransportServiceId(id) {
     ?.slice(1, 3).join(":") ?? regional;
 }
 
-/** Most specific first: warehouse, previous regional path, then the old path group. */
+/** Most specific first: scaled, base warehouse, previous regional path, then the old path group. */
 export function transportServiceCompatibilityIds(id) {
-  return [...new Set([id, regionalServiceId(id), legacyTransportServiceId(id)])];
+  return [...new Set([id, unscaledServiceId(id), regionalServiceId(id), legacyTransportServiceId(id)])];
 }
 
 /** An old ambiguous allocation conservatively occupies each possible successor fleet.

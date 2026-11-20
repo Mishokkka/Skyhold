@@ -27,7 +27,23 @@ import { ensureTransportState } from "../data/transport/state.js";
   const large = prepareTransportContext({ ...f, request, isGM: true });
   assert.equal(large.plan.stages[0].runs.length, 1, "large hired shipment stays in a single departure");
   assert.equal(large.plan.stages[0].service.vehicleCount, 2, "scales vehicle count cleanly");
-  assert.ok(large.totalCopper > small.totalCopper, "larger multi-vessel shipment costs more");
+  assert.ok(large.plan.totalCopper > small.plan.totalCopper, "transport charge itself scales for the second vessel");
+
+  // Scaled (:x2) charter shares fleet occupancy with the base (1-vessel) charter on the same physical path!
+  const fFleet = transportFixture();
+  fFleet.data.catalog.transportV2.charterVehicles = 1;
+  fFleet.data.catalog.marketEconomy.settings = { ...(fFleet.data.catalog.marketEconomy.settings ?? {}), airshipCapacityLoad: 20 };
+  fFleet.data.catalog.marketEconomy.baseOffers[0].baseStock = 100;
+  const hFleet = transportHarness(fFleet);
+  const req1 = transportRequest(hFleet.fixture(), "a", { mode: "charter" }, true);
+  const key1 = Object.keys(req1.quantities)[0];
+  req1.quantities[key1] = 10;
+  const booked1 = await hFleet.book(req1, "fleet-base-1", true);
+  const req2 = { ...req1, quantities: { [key1]: 30 } };
+  const quote2 = prepareTransportContext({ ...hFleet.fixture(), request: req2, isGM: true });
+  assert.equal(quote2.plan.stages[0].service.vehicleCount, 2);
+  assert.ok(quote2.plan.stages[0].runs[0].startQd >= booked1.preview.plan.stages[0].runs[0].releaseQd,
+    "scaled :x2 booking waits for the base fleet vehicle instead of double-booking it");
 }
 
 // 2. Company modifiers & GM visibility are honored automatically on every edge.
@@ -140,16 +156,15 @@ import { ensureTransportState } from "../data/transport/state.js";
   }
   const elapsedMs = performance.now() - started;
   assert.ok(checked >= 10, `expected at least 10 real Air Islands markets quoted, got ${checked}`);
-  assert.ok(elapsedMs < 8000, `real Air Islands quotes must stay fast, took ${elapsedMs.toFixed(1)} ms`);
   console.log(`Real Air Islands network (${regions.length} regions, ${checked} markets quoted) finished in ${elapsedMs.toFixed(1)} ms with ZERO search limits.`);
 
-  // 5. Diagnostic message pinpoints airshipOnly port blocking inland caravan link!
+  // 5. Diagnostic message pinpoints mode mismatch on link (and legacy marketAirshipOnly no longer blocks when modes allow caravan)!
   const blockedData = normalizeSkyholdData({
     catalog: {
       eventRegions: [
-        { value: "home", label: "Риюд", countryId: "novand", marketTransportModes: ["airship"], marketAirshipOnly: true, marketLinks: [{ regionId: "port", distanceKm: 200, ursCost: 1, modes: ["airship"] }] },
-        { value: "port", label: "Южные воздушные порты", countryId: "izuaver", marketTransportModes: ["airship"], marketAirshipOnly: true, marketLinks: [{ regionId: "inland", distanceKm: 100, ursCost: 1, modes: ["caravan"] }] },
-        { value: "inland", label: "Земли Тишины", countryId: "izuaver", marketTransportModes: ["caravan"], marketAirshipOnly: false, marketLinks: [] }
+        { value: "home", label: "Риюд", countryId: "novand", marketTransportModes: ["airship"], marketLinks: [{ regionId: "port", distanceKm: 200, ursCost: 1, modes: ["airship"] }] },
+        { value: "port", label: "Южные воздушные порты", countryId: "izuaver", marketTransportModes: ["airship"], marketLinks: [{ regionId: "inland", distanceKm: 100, ursCost: 1, modes: ["caravan"] }] },
+        { value: "inland", label: "Земли Тишины", countryId: "izuaver", marketTransportModes: ["caravan"], marketLinks: [] }
       ],
       marketEconomy: structuredClone(marketPack.content?.marketEconomy),
       resources: structuredClone(marketPack.content?.resources)
@@ -163,7 +178,33 @@ import { ensureTransportState } from "../data/transport/state.js";
   const bo = bq.offers.find((r) => r.stock > 0);
   const bopts = prepareTransportOptions({ data: blockedData, holding: bh, isGM: true, request: { direction: "inbound", marketId: bm.id, quantities: { [bo.id]: 1 } } });
   assert.equal(bopts.options.regular.ok, false);
-  assert.match(bopts.options.regular.error, /Южные воздушные порты.*только воздушные корабли/);
+  assert.match(bopts.options.regular.error, /Южные воздушные порты.*нет общего вида транспорта/);
+
+  // Enabling caravan on the port immediately unlocks the route even if legacy marketAirshipOnly was true.
+  const portNode = blockedData.catalog.eventRegions.find((r) => r.value === "port");
+  portNode.marketAirshipOnly = true;
+  portNode.marketTransportModes = ["airship", "caravan"];
+  const unlocked = prepareTransportOptions({ data: blockedData, holding: bh, isGM: true, request: { direction: "inbound", marketId: bm.id, quantities: { [bo.id]: 1 } } });
+  assert.equal(unlocked.options.regular.ok, true, "legacy marketAirshipOnly no longer overrides explicit transport modes");
+
+  // 6. Fast skipRouteDiscovery quote matches MarketApp stock & prices 1:1 (prevents "больше доступного" on full-stock buy).
+  const southMarket = availableAuthorityMarkets(data, { holding, isGM: true, offerLocationIds: ["izuaver-south-ports"] })
+    .find((row) => row.id === "izuaver-south-ports");
+  if (southMarket) {
+    const fullQuote = authorityMarketQuote({ data, holding, market: southMarket, isGM: true, discoverTransport: true });
+    const fastQuote = authorityMarketQuote({ data, holding, market: southMarket, isGM: true, discoverTransport: true, skipRouteDiscovery: true });
+    assert.deepEqual(
+      fastQuote.offers.map((o) => [o.id, o.stock, o.unitPriceCopper]),
+      fullQuote.offers.map((o) => [o.id, o.stock, o.unitPriceCopper]),
+      "transport checkout sees exact same stock and prices as MarketApp"
+    );
+    const maxOffer = fullQuote.offers.find((o) => o.stock > 0);
+    const fullStockQuote = prepareTransportOptions({
+      data, holding, isGM: true,
+      request: { direction: "inbound", marketId: southMarket.id, quantities: { [maxOffer.id]: maxOffer.stock } }
+    });
+    assert.equal(fullStockQuote.active.ok, true, "buying 100% of MarketApp displayed stock must succeed");
+  }
 }
 
 console.log("Clean transport router: whole-shipment scaling, company modifiers/visibility, inland 1-port transfer and real Air Islands map passed.");

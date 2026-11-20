@@ -126,24 +126,32 @@ export function authorityMarketQuote({
   if (skipRouteDiscovery) {
     const access = holdingMarketAccessLevel(holding);
     const homeRegion = findHoldingRegion(holding, locations, marketRegionForValue);
-    const originRegion = locations.find((row) => String(row?.value ?? "") === String(market.regionId ?? "")) ?? null;
+    const originRegion = marketRegionForValue(market.regionId, locations)
+      ?? locations.find((row) => String(row?.value ?? "") === String(market.regionId ?? ""))
+      ?? null;
     const originFactors = marketLocationFactors(originRegion, economy, locations, { normalizedEconomy: true });
     const homeFactors = marketLocationFactors(homeRegion, economy, locations, { normalizedEconomy: true });
-    const sameRegion = Boolean(homeRegion?.value && String(homeRegion.value) === String(market.regionId ?? ""));
+    const sameRegion = Boolean(homeRegion?.value && originRegion?.value && String(homeRegion.value) === String(originRegion.value));
+    const num = (value, fallback) => Number.isFinite(Number(value)) ? Number(value) : fallback;
+    const originPrice = Math.max(0.01, num(originFactors.price, 1));
+    const originImport = Math.max(0, num(originFactors.import, 1));
+    const originStock = Math.max(0, num(originFactors.availability, 1) * num(originFactors.export, 1));
+    const originExportTax = Math.max(0, Math.min(1, num(originFactors.exportTaxRate, 0)));
+    const homeImportTax = Math.max(0, Math.min(1, num(homeFactors.taxRate ?? homeRegion?.marketTaxRate, 0)));
     logistics = {
       ok: true,
       sameRegion,
       accessLevel: access.level,
       routeAccessCost: routeAccessCost ?? 0,
       routeAccessLevel: routeAccessCost ?? 0,
-      priceFactor: originFactors.price,
-      outboundPriceFactor: originFactors.buyPrice,
-      demandFactor: originFactors.demand,
-      stockFactor: originFactors.stock,
-      deliveryFactor: originFactors.delivery,
-      importTaxRate: homeFactors.taxRate,
-      exportTaxRate: originFactors.exportTaxRate,
-      taxRate: homeFactors.taxRate + originFactors.exportTaxRate
+      priceFactor: originPrice,
+      outboundPriceFactor: originPrice * originImport,
+      demandFactor: originImport,
+      stockFactor: originStock,
+      deliveryFactor: Math.max(0.01, num(originFactors.delivery, 1)),
+      importTaxRate: homeImportTax,
+      exportTaxRate: originExportTax,
+      taxRate: homeImportTax + originExportTax
     };
   } else {
     ({ logistics, carriers, carrier } = authorityMarketLogistics({

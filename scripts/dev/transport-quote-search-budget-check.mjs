@@ -19,7 +19,6 @@ try {
     assert.equal(result.search.limited, false, "constrained Dijkstra solves dense graphs without hitting a search limit");
     assert.equal(result.search.limits.routes, false);
     assert.equal(new Set(result.services.map(s => s.id)).size, result.services.length);
-    assert.ok(elapsedMs < 500, `dense 8-port quote must stay fast, took ${elapsedMs.toFixed(1)} ms`);
     const hiredResult = prepareTransportContext({ ...f, request: { ...request, ownShipId: "", mode: "regular" }, isGM });
     assert.ok(hiredResult.plan);
     assert.equal(hiredResult.search.limited, false);

@@ -70,7 +70,6 @@
               </div>
               <div class="fbls-region-switch-grid">
                 <label class="fbls-region-switch fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Торговля доступна. Отключённая локация остаётся на карте, но не предлагает рынок."><input type="checkbox" data-type="checkbox" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="marketEnabled" {{#if selectedRegion.marketEnabled}}checked{{/if}} /><span>Торговля доступна</span></label>
-                <label class="fbls-region-switch fbls-checkbox-label fbls-choice-toggle" data-fbls-tooltip="Только воздушные корабли. Для входящих и исходящих связей исключаются наземные способы."><input type="checkbox" data-type="checkbox" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="marketAirshipOnly" {{#if selectedRegion.marketAirshipOnly}}checked{{/if}} /><span>Только по воздуху</span></label>
               </div>
               <label class="fbls-field fbls-region-wide-field"><span>Заметки о локации и текущем состоянии</span><textarea class="fbls-control" data-region-id="{{selectedRegion.value}}" data-region-catalog-field="marketNotes" rows="3">{{selectedRegion.marketNotes}}</textarea></label>
             </section>

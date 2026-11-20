@@ -2,8 +2,9 @@ import { stableDataHash } from "../../data/storage-commit.js";
 import { carrierProvidersForRoute } from "../market/providers.js";
 import { MARKET_DEFAULT_TRANSPORT_CAPACITY_LOAD, MARKET_TRANSPORT_TARIFFS, edgeSeasonalModifier, findHoldingRegion, holdingMarketAccessLevel } from "../market/logistics.js";
 import { marketTransportFreightFactor } from "../market/pricing.js";
-import { localMarketDistanceKm, referenceTransportCosts, configuredTransportCharges, transportRiskBps } from "./economics.js";
+import { localMarketDistanceKm, referenceTransportCosts, configuredTransportCharges, transportPortHandlingQd, transportRiskBps } from "./economics.js";
 import { transportServicesFromRoutes } from "./services.js";
+import { transportServiceCompatibilityIds } from "./service-identity.js";
 import { transportOperatingCharge, TRANSPORT_LIMITS, TRANSPORT_LOAD_SCALE } from "./quantities.js";
 import { transportSeasonalMovement } from "./seasonal.js";
 import { worldShipTransportTerms } from "../ships/world-market.js";
@@ -92,8 +93,8 @@ function buildGraph(regions = []) {
 }
 
 function edgeModes(edge, fromRegion, toRegion, { allowedModes = null, fromStop = true, toStop = true } = {}) {
-  const mustFly = fromRegion?.marketAirshipOnly || toRegion?.marketAirshipOnly
-    || (fromRegion?.marketLandmassId && toRegion?.marketLandmassId && fromRegion.marketLandmassId !== toRegion.marketLandmassId);
+  const mustFly = Boolean(fromRegion?.marketLandmassId && toRegion?.marketLandmassId
+    && fromRegion.marketLandmassId !== toRegion.marketLandmassId);
   return (edge.modes?.length ? edge.modes : MODES).filter((mode) => MARKET_TRANSPORT_TARIFFS[mode]
     && (!allowedModes || allowedModes.has(mode))
     && (!mustFly || mode === "airship")
@@ -248,7 +249,7 @@ export function findOptimalHiredRoute({
     const localModes = (market.transportModes ?? MODES).filter((mode) =>
       (!permitted || permitted.has(mode))
       && (!region?.marketTransportModes || region.marketTransportModes.includes(mode))
-      && (!(floating || region?.marketAirshipOnly) || mode === "airship")
+      && (!floating || mode === "airship")
     );
     let best = null;
     for (const mode of localModes) {
@@ -331,8 +332,14 @@ export function findOptimalHiredRoute({
       const toIsEnd = edge.to === endId;
       if (toIsEnd && factors(edge.to).enabled === false) continue;
 
+      const marketRegionId = String(market?.regionId ?? "");
+      const marketModes = Array.isArray(market?.transportModes) && market.transportModes.length ? new Set(market.transportModes) : null;
+      let edgeAllowed = permitted;
+      if (marketModes && (current.node === marketRegionId || edge.to === marketRegionId)) {
+        edgeAllowed = permitted ? new Set([...permitted].filter((m) => marketModes.has(m))) : marketModes;
+      }
       const modes = edgeModes(edge, fromRegion, toRegion, {
-        allowedModes: permitted,
+        allowedModes: edgeAllowed,
         fromStop: true,
         toStop: true
       });
@@ -349,8 +356,7 @@ export function findOptimalHiredRoute({
         const carriers = providers(current.node, mode);
         if (!carriers.length) continue;
 
-        let bestNew = null;
-        let bestCont = null;
+        const byCarrier = new Map();
         for (const carrier of carriers) {
           const leg = makeLeg(current.node, edge.to, edge, mode, carrier);
           const cKey = carrier.id === "independent-carriers" ? `${carrier.id}:${leg.fromCountryId}` : carrier.id;
@@ -367,15 +373,11 @@ export function findOptimalHiredRoute({
             mode, carrierKey: cKey, prev: current, leg,
             extraLeg: needsFloatingHop ? { ...floatingLastMile.leg } : null
           };
-          if (continues) {
-            if (!bestCont || compare(candidate, bestCont) < 0) bestCont = candidate;
-          } else if (!bestNew || compare(candidate, bestNew) < 0) {
-            bestNew = candidate;
-          }
+          const prevBest = byCarrier.get(cKey);
+          if (!prevBest || compare(candidate, prevBest) < 0) byCarrier.set(cKey, candidate);
         }
 
-        for (const candidate of [bestCont, bestNew]) {
-          if (!candidate) continue;
+        for (const candidate of byCarrier.values()) {
           const nextKey = `${candidate.node}|${candidate.mode}|${candidate.carrierKey}`;
           if (isDominated(nextKey, candidate.access, candidate.stages, candidate.primary, candidate.secondary)) continue;
           recordState(nextKey, candidate.access, candidate.stages, candidate.primary, candidate.secondary);
@@ -429,11 +431,10 @@ export function diagnoseHiredRouteFailure({
     const a = byId.get(from), b = byId.get(edge.to);
     const allowed = edgeModes(edge, a, b, { fromStop: true, toStop: true });
     if (!allowed.length) {
-      const airshipBlocker = a?.marketAirshipOnly ? a : b?.marketAirshipOnly ? b : null;
-      if (airshipBlocker) {
-        return `${prefix}: узел «${airshipBlocker.label || airshipBlocker.value}» отмечен как «только воздушные корабли» — наземный транспорт не может стыковаться с ним.`;
+      if (a?.marketLandmassId && b?.marketLandmassId && a.marketLandmassId !== b.marketLandmassId) {
+        return `${prefix}: узлы «${a.label || from}» и «${b.label || edge.to}» на разных островах/материках — между ними допустим только воздушный корабль.`;
       }
-      return `${prefix}: на связи «${a?.label || from} → ${b?.label || edge.to}» нет общего вида транспорта между узлами.`;
+      return `${prefix}: на связи «${a?.label || from} → ${b?.label || edge.to}» нет общего вида транспорта между узлами (проверьте режимы узлов и связи).`;
     }
   }
   return `${prefix} (проверьте режимы узлов, УРС и доступность перевозчиков).`;
@@ -447,7 +448,9 @@ export function scaleHiredServiceForCargo(service, totalLoad, overrides = {}) {
   if (!service || service.kind === "owned" || !Number.isFinite(totalLoad) || totalLoad <= service.capacity) {
     return { ...service, vehicleCount: 1 };
   }
-  if (overrides?.[service.id]?.capacity !== undefined) return { ...service, vehicleCount: 1 };
+  if (transportServiceCompatibilityIds(service.id).some((id) => overrides?.[id]?.capacity !== undefined)) {
+    return { ...service, vehicleCount: 1 };
+  }
   const vehicleCount = Math.ceil(totalLoad / service.capacity);
   const scaleCosts = (costs) => costs
     ? Object.fromEntries(Object.entries(costs).map(([key, value]) => [key, Math.ceil(Number(value ?? 0) * vehicleCount)]))
@@ -551,13 +554,17 @@ function buildOwnShipService({ data, holding, ship, world, from, to, homeEndpoin
       return null;
     }
   };
-  const selectedRoute = routeFor(from, to, cargoAccessLimit);
-  const terms = worldShipTransportTerms(data, holding, ship, toRegion(from), toRegion(to), {
-    context: world, loadPoints: capacityPoints, maxAccess: cargoAccessLimit,
-    fromHome: from === homeEndpoint, toHome: to === homeEndpoint, selectedRoute
-  });
   const atPickup = position === from && positionAtHome === (from === homeEndpoint);
   const approach = safeEmpty(position, from, positionAtHome);
+  const fromPort = toRegion(from) === world.home.regionId && from === homeEndpoint
+    ? world.home : world.ports.find((port) => port.regionId === toRegion(from));
+  const loadingQd = fromPort ? transportPortHandlingQd(fromPort, capacityPoints) : 0;
+  const departureQd = baseStartQd + (approach?.durationQd ?? 0) + loadingQd;
+  const selectedRoute = routeFor(from, to, cargoAccessLimit, departureQd);
+  const terms = worldShipTransportTerms(data, holding, ship, toRegion(from), toRegion(to), {
+    context: world, loadPoints: capacityPoints, maxAccess: cargoAccessLimit,
+    fromHome: from === homeEndpoint, toHome: to === homeEndpoint, selectedRoute, startQd: departureQd
+  });
   const back = safeEmpty(to, from);
   const homeReturn = safeEmpty(to, homeEndpoint);
   const abortReturn = safeEmpty(from, homeEndpoint);
@@ -645,12 +652,16 @@ export function findOptimalOwnShipServices({
   const to = direction === "inbound" ? homeEndpoint : marketRegionId;
 
   // 1. Direct flight (works for local markets and any market with an airship port).
+  let directEmptyBlocked = false;
   try {
     const direct = buildOwnShipService({
       data, holding, ship, world, from, to, homeEndpoint,
       cargoAccessLimit, emptyAccessLimit: accessLimit, configuration, calendar, returnHome
     });
-    return { ok: true, services: [direct], transferPortLabel: "" };
+    if (direct.approachAvailable && (!returnHome || direct.endReturnAvailable)) {
+      return { ok: true, services: [direct], transferPortLabel: "" };
+    }
+    directEmptyBlocked = true;
   } catch (_directError) {
     // Market has no direct airship connection -> check single transfer at nearest airship port.
   }
@@ -706,9 +717,10 @@ export function findOptimalOwnShipServices({
   for (const port of airPorts) {
     const landFrom = direction === "inbound" ? marketRegionId : port.regionId;
     const landTo = direction === "inbound" ? port.regionId : marketRegionId;
+    const reservedAirAccess = airReach.get(port.regionId) ?? 0;
     const landRoute = findOptimalHiredRoute({
       holding, market, regions, organizations, countries, seasonId, direction,
-      accessLimit: cargoAccessLimit, cargoLoad, kind: "regular", metric: "cost",
+      accessLimit: Math.max(0, cargoAccessLimit - reservedAirAccess), cargoLoad, kind: "regular", metric: "cost",
       regionFactors, isGM, allowedModes: LAND_MODES,
       fromRegionId: landFrom, toRegionId: landTo, allowFloatingLastMile: false
     });
@@ -722,9 +734,10 @@ export function findOptimalOwnShipServices({
         data, holding, ship, world, from: ownFrom, to: ownTo, homeEndpoint,
         cargoAccessLimit: remainingAccess, emptyAccessLimit: accessLimit, configuration, calendar, returnHome
       });
+      if (!ownService.approachAvailable || (returnHome && !ownService.endReturnAvailable)) continue;
       const landServices = transportServicesFromRoutes([landRoute], configuration, regions, {
         ...serviceEndpoints, homeEndpoint: ""
-      }).filter((row) => row.kind === "regular").map((row) => scaleHiredServiceForCargo(row, cargoLoad));
+      }).filter((row) => row.kind === "regular").map((row) => scaleHiredServiceForCargo(row, cargoLoad, configuration.overrides));
       if (!landServices.length) continue;
       const chain = direction === "inbound" ? [...landServices, ownService] : [ownService, ...landServices];
       const totalDistance = chain.reduce((sum, row) => sum + (row.distanceKm ?? 0), 0);
@@ -736,7 +749,14 @@ export function findOptimalOwnShipServices({
       continue;
     }
   }
-  if (!best) return { ok: false, reason: "Нет доступного воздушного маршрута для своего корабля (проверьте УРС и воздушные порты)." };
+  if (!best) {
+    return {
+      ok: false,
+      reason: directEmptyBlocked
+        ? "Пустой перегон собственного корабля недоступен по маршруту или УРС."
+        : "Нет доступного воздушного маршрута для своего корабля (проверьте УРС и воздушные порты)."
+    };
+  }
   return { ok: true, services: best.services, transferPortLabel: best.transferPortLabel };
 }
 

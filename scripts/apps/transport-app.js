@@ -400,7 +400,7 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
       }
       if (type === "transport-cancel") op.orderId = target.dataset.order;
       if (type === "transport-fund") op.orderId = target.dataset.order;
-      if (type === "transport-ship-sync") op.shipId = this.request?.ownShipId || bundle?.chosenShip?.id || "";
+      if (type === "transport-ship-sync") op.shipId = bundle?.chosenShip?.id || this.request?.ownShipId || "";
       if (type === "transport-configure") op.configuration = this._configuration ?? data.catalog?.transportV2 ?? { ...TRANSPORT_SERVICE_DEFAULTS };
       if (type === "transport-incident") {
         op.runId = target.dataset.run;
