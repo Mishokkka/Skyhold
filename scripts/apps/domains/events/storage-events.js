@@ -421,10 +421,14 @@ async _onStorageRowFieldChange(field, rowType, property, value) {
     row[property] = value;
     return { ok: true };
   }, { fallback: false, reason: `storage:${context.type}:${property}` });
-  if (!result?.ok) {
-    ui.notifications.warn(result?.message ?? STORAGE_ROW_CHANGED);
-    this.requestRender({ focus: false, skipLoadingOverlay: true });
+  if (result?.ok) {
+    if (property === "forSale") field.defaultChecked = Boolean(value);
+    else if (property === "qty") field.defaultValue = String(quantity);
+    else if (property === "name") field.defaultValue = String(value ?? "");
+    return;
   }
+  ui.notifications.warn(result?.message ?? STORAGE_ROW_CHANGED);
+  this.requestRender({ focus: false, skipLoadingOverlay: true });
 },
 
 async _executeStorageContextAction({ action = "", rowType = "resources", rowId = "", roomId = "outdoors", holdingId } = {}) {
