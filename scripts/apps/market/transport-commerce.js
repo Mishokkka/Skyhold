@@ -18,7 +18,7 @@ export function prepareTransportCommerce({ data, holding, request = {}, isGM = f
   });
   const market = markets.find(row => row.id === marketId);
   if (!market) throw new Error("Этот рынок недоступен поселению.");
-  const quote = authorityMarketQuote({ data, holding, market, isGM, economy, resources, discoverTransport: true, searchBudget });
+  const quote = authorityMarketQuote({ data, holding, market, isGM, economy, resources, discoverTransport: true, skipRouteDiscovery: true, searchBudget });
   const outbound = request.direction === "outbound" ? prepareMarketOutboundContext({
     holding, quote, resourceDefinitions: resources,
     organizations: economy.organizations.filter(row => isGM || row.visibility !== "gm"),

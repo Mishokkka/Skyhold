@@ -2,7 +2,7 @@ import { prepareTransportCommerce } from "../market/transport-commerce.js";
 import { transportServicesFromRoutes, validateTransportConfiguration } from "../../engines/transport/services.js";
 import { resolveTransportSelections, transportServiceExcluded } from "../../engines/transport/service-identity.js";
 import { planTransportChain } from "../../engines/transport/planner.js";
-import { findOptimalHiredRoute, findOptimalOwnShipServices, resolveSettlementAccessLevel, scaleHiredServiceForCargo } from "../../engines/transport/router.js";
+import { diagnoseHiredRouteFailure, findOptimalHiredRoute, findOptimalOwnShipServices, resolveSettlementAccessLevel, scaleHiredServiceForCargo } from "../../engines/transport/router.js";
 import { cargoLoad, cargoValue, shipTransportFunding, transportLoad, transportMoney } from "../../engines/transport/quantities.js";
 import { stableDataHash } from "../../data/storage-commit.js";
 import { findHoldingRegion } from "../../engines/market/logistics.js";
@@ -152,7 +152,17 @@ function buildHiredOption(env, kind, request) {
     seasonId, direction, accessLimit: cargoAccessLimit, cargoLoad: totalLoad,
     kind, metric: kind === "charter" ? "time" : "cost", regionFactors, isGM
   });
-  if (!route?.ok) return { ok: false, error: "Для выбранного груза нет доступной перевозки (проверьте связи на карте и УРС)." };
+  if (!route?.ok) {
+    return {
+      ok: false,
+      error: diagnoseHiredRouteFailure({
+        holding, market: context.market, regions,
+        organizations: context.economy?.organizations ?? [],
+        countries: context.economy?.countries ?? [],
+        direction, accessLimit: cargoAccessLimit, regionFactors, isGM
+      })
+    };
+  }
   const rawServices = transportServicesFromRoutes([route], configuration, regions, serviceEndpoints)
     .filter((service) => isGM || service.visibility !== "gm")
     .map((service) => scaleHiredServiceForCargo(service, totalLoad, configuration.overrides));
@@ -208,11 +218,20 @@ export function prepareTransportOptions({ data, holding, request = {}, isGM = fa
   const regular = buildHiredOption(env, "regular", { ...request, mode: "regular", ownShipId: "" });
   const charter = buildHiredOption(env, "charter", { ...request, mode: "charter", ownShipId: "" });
   const owned = chosenShip ? buildOwnedOption(env, chosenShip, { ...request, mode: "owned", ownShipId: chosenShip.id }) : null;
-  const requestedMode = resolveMode(request);
+  const explicitMode = request.mode === "owned" || request.mode === "charter" || request.mode === "regular" ? request.mode : "";
   const options = { regular, charter, owned };
-  const activeMode = requestedMode === "owned" && owned ? "owned"
-    : requestedMode === "charter" ? "charter"
-      : "regular";
+  let activeMode;
+  if (explicitMode) {
+    activeMode = explicitMode === "owned" && owned ? "owned" : explicitMode === "charter" ? "charter" : "regular";
+  } else if (request.ownShipId && owned) {
+    activeMode = "owned";
+  } else if (request.priority === "time") {
+    activeMode = charter.ok ? "charter" : "regular";
+  } else if (regular.ok && charter.ok) {
+    activeMode = charter.totalCopper < regular.totalCopper ? "charter" : "regular";
+  } else {
+    activeMode = regular.ok ? "regular" : charter.ok ? "charter" : "regular";
+  }
   return {
     env,
     options,

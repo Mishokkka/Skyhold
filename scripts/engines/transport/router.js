@@ -1,10 +1,10 @@
 import { stableDataHash } from "../../data/storage-commit.js";
 import { carrierProvidersForRoute } from "../market/providers.js";
-import { MARKET_DEFAULT_TRANSPORT_CAPACITY_LOAD, MARKET_TRANSPORT_TARIFFS, edgeSeasonalModifier, findHoldingRegion, resolveMarketLogistics } from "../market/logistics.js";
+import { MARKET_DEFAULT_TRANSPORT_CAPACITY_LOAD, MARKET_TRANSPORT_TARIFFS, edgeSeasonalModifier, findHoldingRegion, holdingMarketAccessLevel } from "../market/logistics.js";
 import { marketTransportFreightFactor } from "../market/pricing.js";
 import { localMarketDistanceKm, referenceTransportCosts, configuredTransportCharges, transportRiskBps } from "./economics.js";
 import { transportServicesFromRoutes } from "./services.js";
-import { transportOperatingCharge, TRANSPORT_LOAD_SCALE } from "./quantities.js";
+import { transportOperatingCharge, TRANSPORT_LIMITS, TRANSPORT_LOAD_SCALE } from "./quantities.js";
 import { transportSeasonalMovement } from "./seasonal.js";
 import { worldShipTransportTerms } from "../ships/world-market.js";
 import { getShipProfile, shipCapacityLoadPoints } from "../ships/profiles.js";
@@ -173,13 +173,15 @@ function estimateLegWeight(leg, cargoUnits, kind = "regular", continues = false)
   const dispatch = continues ? 0 : (leg.dispatchCopper + leg.hireCopper) * units;
   const fixedCost = dispatch + leg.distanceCopper * units;
   const loadCost = cargoUnits * leg.loadCopperPerUnit;
+  const transferWaitQd = continues ? 0 : (kind === "regular" ? 6 : 2) + TRANSFER_QD;
+  const transferHandlingCopper = continues ? 0 : Math.ceil(cargoUnits * 0.5);
   if (kind === "charter") {
     const tripOperating = leg.operatingCopper * 2 * units;
-    return { cost: fixedCost + tripOperating + loadCost, time: leg.movementQd + (continues ? 0 : TRANSFER_QD) };
+    return { cost: fixedCost + tripOperating + loadCost + transferHandlingCopper, time: leg.movementQd + transferWaitQd };
   }
   const share = Math.min(1, Math.max(0.02, cargoUnits / Math.max(1, leg.capacityLoad * units)));
-  const regularCost = (fixedCost + leg.operatingCopper * 2 * units) * share + loadCost;
-  return { cost: regularCost, time: leg.movementQd + (continues ? 0 : TRANSFER_QD) };
+  const regularCost = (fixedCost + leg.operatingCopper * 2 * units) * share + loadCost + transferHandlingCopper;
+  return { cost: regularCost, time: leg.movementQd + transferWaitQd };
 }
 
 function finalizeRouteLegs(legs, direction, accessCost, accessLevel) {
@@ -276,19 +278,37 @@ export function findOptimalHiredRoute({
   };
   const floatingLastMile = floating && localAirshipAvailable ? pickBestLocalAirship() : null;
 
-  const compare = (a, b) => a.primary - b.primary || a.secondary - b.secondary || a.access - b.access || a.hops - b.hops;
+  const compare = (a, b) => a.primary - b.primary || a.secondary - b.secondary || a.access - b.access || a.stages - b.stages || a.hops - b.hops;
   const heap = new MinHeap(compare);
-  const bestState = new Map();
+  const pareto = new Map();
+  const hasVisited = (state, nodeId) => {
+    for (let cursor = state; cursor; cursor = cursor.prev) {
+      if (cursor.node === nodeId) return true;
+    }
+    return false;
+  };
+  const isDominated = (key, access, stages, primary, secondary) => {
+    const rows = pareto.get(key);
+    if (!rows) return false;
+    return rows.some((row) => row.access <= access && row.stages <= stages
+      && (row.primary < primary - 1e-9 || (Math.abs(row.primary - primary) <= 1e-9 && row.secondary <= secondary + 1e-9)));
+  };
+  const recordState = (key, access, stages, primary, secondary) => {
+    const rows = pareto.get(key) ?? [];
+    const kept = rows.filter((row) => !(access <= row.access && stages <= row.stages
+      && (primary < row.primary - 1e-9 || (Math.abs(primary - row.primary) <= 1e-9 && secondary <= row.secondary + 1e-9))));
+    kept.push({ access, stages, primary, secondary });
+    pareto.set(key, kept);
+  };
 
-  // State key: node + access + arrival mode + carrier (compact: only optimal carrier per mode reaches each state).
-  heap.push({ node: startId, access: 0, primary: 0, secondary: 0, hops: 0, mode: "", carrierKey: "", prev: null, leg: null, extraLeg: null });
+  heap.push({ node: startId, access: 0, stages: 0, primary: 0, secondary: 0, hops: 0, mode: "", carrierKey: "", prev: null, leg: null, extraLeg: null });
 
   while (heap.size) {
     const current = heap.pop();
-    const stateKey = `${current.node}|${current.access}|${current.mode}|${current.carrierKey}`;
-    const recorded = bestState.get(stateKey);
-    if (recorded && (recorded.primary < current.primary - 1e-9
-      || (Math.abs(recorded.primary - current.primary) <= 1e-9 && recorded.secondary < current.secondary - 1e-9))) continue;
+    const stateKey = `${current.node}|${current.mode}|${current.carrierKey}`;
+    const currentRows = pareto.get(stateKey);
+    if (currentRows && currentRows.some((row) => row.access <= current.access && row.stages <= current.stages
+      && (row.primary < current.primary - 1e-9 || (Math.abs(row.primary - current.primary) <= 1e-9 && row.secondary < current.secondary - 1e-9)))) continue;
 
     if (current.node === endId) {
       const legs = [];
@@ -305,6 +325,7 @@ export function findOptimalHiredRoute({
     for (const edge of graph.get(current.node) ?? []) {
       const nextAccess = current.access + edge.ursCost;
       if (nextAccess > maxAccess) continue;
+      if (hasVisited(current, edge.to)) continue;
       const toRegion = byId.get(edge.to);
       if (!toRegion || regionHidden(edge.to)) continue;
       const toIsEnd = edge.to === endId;
@@ -317,12 +338,10 @@ export function findOptimalHiredRoute({
       });
 
       for (const mode of modes) {
-        // Switching modes at an intermediate node requires both modes to be supported at that node.
         if (current.mode && current.mode !== mode) {
           if (fromRegion?.marketTransportModes && (!fromRegion.marketTransportModes.includes(current.mode) || !fromRegion.marketTransportModes.includes(mode))) continue;
           if (factors(current.node).enabled === false) continue;
         }
-        // Floating holding requires an airship last-mile if entering/leaving home by land.
         const needsFloatingHop = floating && mode !== "airship" && ((direction === "outbound" && current.node === homeId && current.hops === 0)
           || (direction === "inbound" && edge.to === homeId));
         if (needsFloatingHop && !floatingLastMile) continue;
@@ -330,20 +349,21 @@ export function findOptimalHiredRoute({
         const carriers = providers(current.node, mode);
         if (!carriers.length) continue;
 
-        // Evaluate carriers on this edge and keep the best overall + same-carrier continuation (if different).
         let bestNew = null;
         let bestCont = null;
         for (const carrier of carriers) {
           const leg = makeLeg(current.node, edge.to, edge, mode, carrier);
           const cKey = carrier.id === "independent-carriers" ? `${carrier.id}:${leg.fromCountryId}` : carrier.id;
           const continues = current.mode === mode && current.carrierKey === cKey && !needsFloatingHop;
+          const nextStages = current.stages + (continues ? 0 : 1) + (needsFloatingHop ? 1 : 0);
+          if (nextStages > TRANSPORT_LIMITS.stages) continue;
           const weight = estimateLegWeight(leg, cargoUnits, kind, continues);
           const extraCost = needsFloatingHop ? floatingLastMile.weight.cost : 0;
           const extraTime = needsFloatingHop ? floatingLastMile.weight.time + TRANSFER_QD : 0;
           const primary = current.primary + (metric === "time" ? weight.time + extraTime : weight.cost + extraCost);
           const secondary = current.secondary + (metric === "time" ? weight.cost + extraCost : weight.time + extraTime);
           const candidate = {
-            node: edge.to, access: nextAccess, primary, secondary, hops: current.hops + 1,
+            node: edge.to, access: nextAccess, stages: nextStages, primary, secondary, hops: current.hops + 1,
             mode, carrierKey: cKey, prev: current, leg,
             extraLeg: needsFloatingHop ? { ...floatingLastMile.leg } : null
           };
@@ -356,17 +376,67 @@ export function findOptimalHiredRoute({
 
         for (const candidate of [bestCont, bestNew]) {
           if (!candidate) continue;
-          const nextKey = `${candidate.node}|${candidate.access}|${candidate.mode}|${candidate.carrierKey}`;
-          const existing = bestState.get(nextKey);
-          if (existing && (existing.primary < candidate.primary - 1e-9
-            || (Math.abs(existing.primary - candidate.primary) <= 1e-9 && existing.secondary <= candidate.secondary + 1e-9))) continue;
-          bestState.set(nextKey, { primary: candidate.primary, secondary: candidate.secondary });
+          const nextKey = `${candidate.node}|${candidate.mode}|${candidate.carrierKey}`;
+          if (isDominated(nextKey, candidate.access, candidate.stages, candidate.primary, candidate.secondary)) continue;
+          recordState(nextKey, candidate.access, candidate.stages, candidate.primary, candidate.secondary);
           heap.push(candidate);
         }
       }
     }
   }
   return null;
+}
+
+/** Fast diagnostic explaining why no hired route was found (always keeps the canonical prefix). */
+export function diagnoseHiredRouteFailure({
+  holding = {}, market = {}, regions = [], organizations = [], countries = [],
+  direction = "inbound", accessLimit = 0, regionFactors = null, isGM = false
+} = {}) {
+  const prefix = "Для выбранного груза нет доступной перевозки";
+  const { byId, graph } = buildGraph(regions);
+  const homeId = String(findHoldingRegion(holding, regions)?.value ?? "");
+  const startId = String(direction === "outbound" ? homeId : market?.regionId ?? "");
+  const endId = String(direction === "outbound" ? market?.regionId ?? "" : homeId);
+  if (!startId || !endId || !byId.has(startId) || !byId.has(endId)) return `${prefix}: локация не найдена на карте.`;
+  if (startId === endId) return `${prefix}: на локальном рынке нет подходящего вида транспорта.`;
+
+  // 1. Check if a route exists with higher URS.
+  const unlimited = findOptimalHiredRoute({
+    holding, market, regions, organizations, countries, direction,
+    accessLimit: 99, cargoLoad: TRANSPORT_LOAD_SCALE, kind: "regular", metric: "cost", regionFactors, isGM
+  });
+  if (unlimited?.ok) {
+    return `${prefix}: требуется УРС ${unlimited.routeAccessCost}, доступно ${Math.max(0, Math.floor(accessLimit))}.`;
+  }
+
+  // 2. Check if any undirected graph path exists ignoring mode/airshipOnly restrictions.
+  const parent = new Map([[startId, null]]);
+  const queue = [startId];
+  for (let i = 0; i < queue.length && !parent.has(endId); i++) {
+    for (const edge of graph.get(queue[i]) ?? []) {
+      if (parent.has(edge.to)) continue;
+      parent.set(edge.to, { from: queue[i], edge });
+      queue.push(edge.to);
+    }
+  }
+  if (!parent.has(endId)) return `${prefix}: между локациями нет связи на карте маршрутов.`;
+
+  // 3. Pinpoint the first blocked edge on the shortest raw path (most common: airshipOnly port connected to an inland region).
+  const pathEdges = [];
+  for (let node = endId; parent.get(node); node = parent.get(node).from) pathEdges.push(parent.get(node));
+  pathEdges.reverse();
+  for (const { from, edge } of pathEdges) {
+    const a = byId.get(from), b = byId.get(edge.to);
+    const allowed = edgeModes(edge, a, b, { fromStop: true, toStop: true });
+    if (!allowed.length) {
+      const airshipBlocker = a?.marketAirshipOnly ? a : b?.marketAirshipOnly ? b : null;
+      if (airshipBlocker) {
+        return `${prefix}: узел «${airshipBlocker.label || airshipBlocker.value}» отмечен как «только воздушные корабли» — наземный транспорт не может стыковаться с ним.`;
+      }
+      return `${prefix}: на связи «${a?.label || from} → ${b?.label || edge.to}» нет общего вида транспорта между узлами.`;
+    }
+  }
+  return `${prefix} (проверьте режимы узлов, УРС и доступность перевозчиков).`;
 }
 
 /**
@@ -586,8 +656,52 @@ export function findOptimalOwnShipServices({
   }
 
   // 2. One clean transfer at a reachable airship port + hired land delivery (caravan/rail).
-  const airPorts = (world.ports ?? []).filter((port) => port.regionId !== marketRegionId
-    && (homeEndpoint !== homeRegionId || port.regionId !== homeRegionId));
+  // Fast land BFS first so we only inspect ports actually connected to the inland market by land.
+  const { byId, graph } = buildGraph(regions);
+  const landDist = new Map([[marketRegionId, { km: 0, access: 0 }]]);
+  const landHeap = new MinHeap((a, b) => a.km - b.km || a.access - b.access);
+  landHeap.push({ node: marketRegionId, km: 0, access: 0 });
+  while (landHeap.size) {
+    const cur = landHeap.pop();
+    const rec = landDist.get(cur.node);
+    if (rec && (rec.km < cur.km - 1e-9 || (Math.abs(rec.km - cur.km) <= 1e-9 && rec.access < cur.access))) continue;
+    for (const edge of graph.get(cur.node) ?? []) {
+      const nextAccess = cur.access + edge.ursCost;
+      if (nextAccess > cargoAccessLimit) continue;
+      const modes = edgeModes(edge, byId.get(cur.node), byId.get(edge.to), { allowedModes: LAND_MODES, fromStop: true, toStop: true });
+      if (!modes.length) continue;
+      const nextKm = cur.km + edge.distanceKm;
+      const existing = landDist.get(edge.to);
+      if (existing && existing.km <= nextKm + 1e-9 && existing.access <= nextAccess) continue;
+      landDist.set(edge.to, { km: nextKm, access: nextAccess });
+      landHeap.push({ node: edge.to, km: nextKm, access: nextAccess });
+    }
+  }
+  // Fast airship reachability from home (overflight allowed) so decoy ports with no air link are skipped in 0.1 ms.
+  const airReach = new Map([[homeRegionId, 0]]);
+  const airHeap = new MinHeap((a, b) => a.access - b.access);
+  airHeap.push({ node: homeRegionId, access: 0 });
+  while (airHeap.size) {
+    const cur = airHeap.pop();
+    if ((airReach.get(cur.node) ?? Infinity) < cur.access) continue;
+    for (const edge of graph.get(cur.node) ?? []) {
+      const nextAccess = cur.access + edge.ursCost;
+      if (nextAccess > cargoAccessLimit || (airReach.get(edge.to) ?? Infinity) <= nextAccess) continue;
+      const modes = edgeModes(edge, byId.get(cur.node), byId.get(edge.to), {
+        allowedModes: AIRSHIP_ONLY, fromStop: cur.node === homeRegionId, toStop: false
+      });
+      if (!modes.length) continue;
+      airReach.set(edge.to, nextAccess);
+      airHeap.push({ node: edge.to, access: nextAccess });
+    }
+  }
+  const airPorts = (world.ports ?? [])
+    .filter((port) => port.regionId !== marketRegionId
+      && (homeEndpoint !== homeRegionId || port.regionId !== homeRegionId)
+      && landDist.has(port.regionId)
+      && airReach.has(port.regionId)
+      && landDist.get(port.regionId).access + airReach.get(port.regionId) <= cargoAccessLimit)
+    .sort((a, b) => landDist.get(a.regionId).km - landDist.get(b.regionId).km);
   let best = null;
   for (const port of airPorts) {
     const landFrom = direction === "inbound" ? marketRegionId : port.regionId;
@@ -626,11 +740,15 @@ export function findOptimalOwnShipServices({
   return { ok: true, services: best.services, transferPortLabel: best.transferPortLabel };
 }
 
-export function resolveSettlementAccessLevel(holding, regions, market, { direction = "inbound", seasonId = "", dependencies = {} } = {}) {
-  const base = resolveMarketLogistics({ holding, market, regions, seasonId, direction, dependencies, singleRoute: true });
+export function resolveSettlementAccessLevel(holding, regions, market, { direction = "inbound", dependencies = {} } = {}) {
+  const access = holdingMarketAccessLevel(holding);
+  const home = findHoldingRegion(holding, regions);
+  const origin = (regions ?? []).find((row) => String(row?.value ?? "") === String(market?.regionId ?? "")) ?? null;
+  const originFactors = dependencies.regionFactors?.(origin) ?? {};
+  const homeFactors = dependencies.regionFactors?.(home) ?? {};
   return {
-    accessLevel: Number(base.accessLevel ?? 0),
-    importTaxRate: Number(base.importTaxRate ?? 0),
-    exportTaxRate: Number(base.exportTaxRate ?? 0)
+    accessLevel: Number(access.level ?? 0),
+    importTaxRate: Number((direction === "outbound" ? originFactors.taxRate : homeFactors.taxRate) ?? 0),
+    exportTaxRate: Number((direction === "outbound" ? homeFactors.exportTaxRate : originFactors.exportTaxRate) ?? 0)
   };
 }

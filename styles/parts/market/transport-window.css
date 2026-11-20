@@ -118,8 +118,27 @@
   color: var(--fbls-text-strong);
   font-size: var(--fbls-type-body);
 }
+.fbls-transport-choice-sub {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--fbls-gap-xs);
+  flex-wrap: wrap;
+}
+.fbls-transport-choice-badge {
+  border-color: var(--fbls-accent-border);
+  color: var(--fbls-accent);
+}
 .fbls-transport-choice-error {
   color: var(--fbls-warning);
+}
+.fbls-transport-order-cargo {
+  color: var(--fbls-text);
+  font-size: var(--fbls-type-compact);
+}
+.fbls-transport-order-cargo i {
+  color: var(--fbls-accent);
+  margin-inline-end: var(--fbls-gap-xs);
 }
 
 .fbls-transport-metrics {

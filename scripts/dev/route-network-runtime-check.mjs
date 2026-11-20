@@ -198,16 +198,13 @@ try {
     assert.deepEqual(opened.request.quantities, quantities, "the goods window passes its selected cargo to the transport window");
     const transport = new SkyholdTransportApp({ holdingId: holding.id });
     const available = prepareTransportContext({ data, holding, request: opened.request, isGM });
-    // V2 owns the route panel. Changing its chosen road must change both the
-    // displayed carrier and the physical plan; the retired cart had neither.
-    for (const [mode, distance, label] of [["caravan", 160, "Наземный караван"], ["rail", 80, "Железная дорога"]]) {
-      const selected = available.services.find(service => service.mode === mode && service.kind === "regular");
-      assert.ok(selected);
-      transport.request = { ...opened.request, pins: { [selected.from]: selected.id } };
+    assert.equal(available.plan.stages[0].service.mode, "rail", "automatic selection chooses the cheaper rail link");
+    assert.equal(available.plan.stages[0].service.distanceKm, 80);
+    for (const mode of ["regular", "charter"]) {
+      transport.request = { ...opened.request, mode };
       const route = await transport._prepareContext({});
-      assert.ok(route.selected.stages[0].label.includes(label), "the route panel describes the selected transport actually charged for");
-      assert.equal(transport._view.quote.plan.stages[0].service.id, selected.id);
-      assert.equal(transport._view.quote.plan.stages[0].service.distanceKm, distance);
+      assert.ok(route.selected.stages[0].label.includes("Железная дорога"), "the route panel describes the selected transport actually charged for");
+      assert.equal(transport._view.quote.plan.stages[0].service.distanceKm, 80);
       assert.equal(route.canConfirm, true);
     }
     app.quantities = {}; const empty = await app._prepareContext({});

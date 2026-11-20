@@ -47,6 +47,14 @@ function optionSummaryCarriers(quote, visibility) {
   return names.join(" → ");
 }
 
+function orderCargoSummary(cargo = []) {
+  const rows = (cargo ?? []).filter((lot) => Number(lot?.qty ?? 0) > 0);
+  if (!rows.length) return "";
+  const preview = rows.slice(0, 4).map((lot) => `${lot.name || lot.resourceId || "Товар"} × ${lot.qty}`);
+  if (rows.length > 4) preview.push(`и ещё ${rows.length - 4}`);
+  return preview.join(" · ");
+}
+
 function optionRiskLabel(quote) {
   if (!quote?.plan?.stages?.length) return "";
   const risks = quote.plan.stages.flatMap((stage) => stage.runs.map((run) => run.riskBps ?? 0));
@@ -79,8 +87,17 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
     let app = this.instances.get(holdingId);
     if (!app) { app = new this({ holdingId }); this.instances.set(holdingId, app); }
     if (request && !app._pending) {
-      const mode = request.mode ?? (request.ownShipId ? "owned" : request.priority === "time" ? "charter" : "regular");
-      app.request = { mode, priority: mode === "charter" ? "time" : "cost", insurance: true, reserveCopper: 0, returnHome: false, ...request };
+      const explicitMode = request.mode ?? (request.ownShipId ? "owned" : request.priority === "time" ? "charter" : "");
+      app.request = {
+        ...(explicitMode ? { mode: explicitMode } : {}),
+        priority: explicitMode === "charter" ? "time" : "cost",
+        insurance: true,
+        reserveCopper: 0,
+        returnHome: false,
+        ...request
+      };
+      app._bundleCache = null;
+      app._error = "";
     }
     app.render({ force: true, focus: true });
     return app;
@@ -106,19 +123,29 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
     const clockQd = Math.max(data.meta?.transportV2?.clockQd ?? 0, transportHoldingQd(data, holding));
 
     let bundle = null, quote = null, quoteError = "";
+    const liveSourceToken = transportSourceToken(data, holding);
     if (this.request) {
+      const cacheKey = `${liveSourceToken}|${permissions.isGM ? 1 : 0}|${JSON.stringify(this.request)}`;
       try {
-        bundle = prepareTransportOptions({ data, holding, request: this.request, isGM: permissions.isGM });
+        if (this._bundleCache?.key === cacheKey) {
+          bundle = this._bundleCache.bundle;
+        } else {
+          bundle = prepareTransportOptions({ data, holding, request: this.request, isGM: permissions.isGM });
+          this._bundleCache = { key: cacheKey, bundle };
+        }
         if (bundle.activeMode === "owned" && bundle.chosenShip && !this.request.ownShipId) {
           this.request.ownShipId = bundle.chosenShip.id;
         }
         quote = bundle.active?.ok ? bundle.active : null;
         quoteError = bundle.active?.ok ? "" : (bundle.active?.error ?? "");
       } catch (error) {
+        this._bundleCache = null;
         quoteError = error.message;
       }
+    } else {
+      this._bundleCache = null;
     }
-    this._view = { data, holding, permissions, bundle, quote, sourceToken: bundle?.sourceToken ?? transportSourceToken(data, holding) };
+    this._view = { data, holding, permissions, bundle, quote, sourceToken: bundle?.sourceToken ?? liveSourceToken };
 
     const visibility = createMarketVisibility(data, { isGM: permissions.isGM });
     const pointLabel = (id) => visibility.pointHidden(id) ? "скрытый порт"
@@ -146,10 +173,23 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
       }))
       : [];
 
+    const hiredOk = bundle ? [bundle.options.regular, bundle.options.charter].filter((row) => row?.ok) : [];
+    const cheapestHiredCopper = hiredOk.length ? Math.min(...hiredOk.map((row) => row.totalCopper)) : Infinity;
+    const fastestHiredQd = hiredOk.length ? Math.min(...hiredOk.map((row) => row.plan.arrivalQd - row.plan.startQd)) : Infinity;
+    const badgeFor = (mode, result) => {
+      if (!result?.ok || mode === "owned" || hiredOk.length < 2) return "";
+      const tags = [];
+      if (result.totalCopper === cheapestHiredCopper) tags.push("Выгоднее");
+      const dur = result.plan.arrivalQd - result.plan.startQd;
+      if (dur === fastestHiredQd && (bundle.options.regular.plan.arrivalQd !== bundle.options.charter.plan.arrivalQd)) tags.push("Быстрее");
+      return tags.join(" · ");
+    };
+
     const makeChoice = (mode, title, subtitle, result, icon) => ({
       mode, title, subtitle, icon,
       selected: bundle?.activeMode === mode,
       available: Boolean(result?.ok),
+      badge: badgeFor(mode, result),
       arrival: result?.ok ? days(result.plan.arrivalQd - result.plan.startQd) : "",
       delivery: result?.ok ? money(result.totalCopper) : "",
       treasury: result?.ok ? money(result.treasuryCopper) : "",
@@ -160,8 +200,8 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
     });
 
     const choices = bundle ? [
-      makeChoice("regular", "Дешевле", "Регулярный рейс", bundle.options.regular, "fa-solid fa-coins"),
-      makeChoice("charter", "Быстрее", "Наёмный чартер", bundle.options.charter, "fa-solid fa-bolt"),
+      makeChoice("regular", "Сборный рейс", "Регулярное расписание", bundle.options.regular, "fa-solid fa-boxes-stacked"),
+      makeChoice("charter", "Фрахт (чартер)", "Отдельный рейс без ожидания", bundle.options.charter, "fa-solid fa-bolt"),
       ...(worldShips.length ? [makeChoice("owned", "Свой корабль", bundle.chosenShip?.name || "Собственное судно", bundle.options.owned, "fa-solid fa-ship")] : [])
     ] : [];
 
@@ -237,8 +277,10 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
       shipReturnBlocked: order.shipAbort?.returnBlocked,
       shipTiming: shipTiming(order),
       canCancel: permissions.canUseStorage && canCancelTransportOrder(data.meta?.transportV2, order, clockQd),
+      cargoSummary: orderCargoSummary(order.cargo),
+      cargo: (order.cargo ?? []).map((lot) => ({ name: lot.name || lot.resourceId || "Товар", qty: lot.qty })),
       stages: order.stages.map((stage) => ({
-        index: stage.index, path: path(stage), count: stage.runs.length,
+        index: stage.index, path: path(stage), count: Math.max(stage.runs.length, stage.receipts?.length ?? 0),
         price: money(stage.totalCopper), invoice: stageInvoice(stage),
         departures: transportStageSchedule(stage, physicalRuns, clockQd, { cancelled: order.status === "cancelled" })
       }))
@@ -372,11 +414,16 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
       this.constructor.sessions.set(this.holdingId, op);
       await this._submit();
     } catch (error) {
-      this._error = error.message;
-      if (!["timeout", "authority-offline", "socket-unavailable"].includes(error.code) && !error.retryable) {
+      this._error = error?.message || String(error) || "Не удалось выполнить транспортную операцию.";
+      if (globalThis.ui?.notifications) {
+        console.error("FBL Skyhold | Transport action failed:", error);
+        globalThis.ui.notifications.error?.(this._error);
+      }
+      if (!["timeout", "authority-offline", "socket-unavailable"].includes(error?.code) && !error?.retryable) {
         this._pending = null;
         this.constructor.sessions.delete(this.holdingId);
       }
+      this.requestRender({ focus: false });
       this.constructor.rerenderOpen();
     }
   }
@@ -393,16 +440,23 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
       if (!result?.ok) throw new Error("Транспортная операция не подтверждена.");
       if (operation.type === "transport-book") {
         this.request = null;
+        this._bundleCache = null;
         const reopened = this.constructor.instances.get(this.holdingId);
-        if (reopened) reopened.request = null;
+        if (reopened) {
+          reopened.request = null;
+          reopened._bundleCache = null;
+        }
+        globalThis.ui?.notifications?.info?.("Заказ перевозки оформлен.");
       }
       this._pending = null;
       this.constructor.sessions.delete(this.holdingId);
       requestSkyholdAppRender();
+      this.requestRender({ focus: false });
       this.constructor.rerenderOpen();
     } finally {
       this.constructor.inFlight.delete(operation.operationId);
       this._busy = false;
+      this.requestRender({ focus: false });
       this.constructor.rerenderOpen();
     }
   }

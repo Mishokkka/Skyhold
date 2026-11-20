@@ -13,21 +13,6 @@
   </div>
   {{/if}}
 
-  {{#if isGM}}
-  <details class="fbls-panel" data-fbls-disclosure="transport-configuration"><summary>Условия новых перевозок</summary>
-    <p>Расписание и доступность ниже задают тарифы новых заказов. Принятые договоры сохраняют свои условия.</p>
-    <div class="fbls-transport-fields">
-      <label class="fbls-field"><span>Интервал регулярных рейсов, дни</span><input class="fbls-control" type="number" min="0.25" step="0.25" data-transport-config="regularIntervalQd" data-scale="4" value="{{configurationView.intervalDays}}" /></label>
-      <label class="fbls-field"><span>Сдвиг расписания, дни</span><input class="fbls-control" type="number" min="0" step="0.25" data-transport-config="regularFirstQd" data-scale="4" value="{{configurationView.phaseDays}}" /></label>
-      <label class="fbls-field"><span>Чартерных судов на линию</span><input class="fbls-control" type="number" min="1" max="10000" step="1" data-transport-config="charterVehicles" value="{{configuration.charterVehicles}}" /></label>
-      <label class="fbls-field"><span>Коммерческая загрузка, %</span><input class="fbls-control" type="number" min="0.01" max="100" step="0.01" data-transport-config="commercialLoadBps" data-scale="100" value="{{configurationView.commercialPercent}}" /></label>
-      <label class="fbls-field"><span>Надбавка перевозчика, %</span><input class="fbls-control" type="number" min="0" max="100" step="1" data-transport-config="carrierProfitBps" data-scale="100" value="{{configurationView.profitPercent}}" /></label>
-      <label class="fbls-field"><span>Минимальная страховка, %</span><input class="fbls-control" type="number" min="0" max="100" step="0.1" data-transport-config="insuranceBps" data-scale="100" value="{{configurationView.insurancePercent}}" /></label>
-    </div>
-    <button type="button" class="fbls-button fbls-button-role" data-action="transport-configure" {{#if busy}}disabled{{/if}}>Сохранить условия будущих заказов</button>
-  </details>
-  {{/if}}
-
   {{#if hasRequest}}
     {{#if choices}}
     <section class="fbls-transport-choices" aria-label="Способ доставки">
@@ -37,7 +22,7 @@
           <strong><i class="{{icon}}" aria-hidden="true"></i> {{title}}</strong>
           {{#if available}}<span class="fbls-chip is-compact">{{arrival}}</span>{{else}}<span class="fbls-chip is-compact">Недоступно</span>{{/if}}
         </span>
-        <small>{{subtitle}}</small>
+        <span class="fbls-transport-choice-sub"><small>{{subtitle}}</small>{{#if badge}}<span class="fbls-chip is-compact fbls-transport-choice-badge">{{badge}}</span>{{/if}}</span>
         {{#if available}}
           <span class="fbls-transport-choice-price">Доставка: <strong>{{delivery}}</strong></span>
           <small>{{summary}}{{#if risk}} · риск {{risk}}{{/if}}</small>
@@ -73,7 +58,7 @@
         <h2 class="fbls-section-heading">Смета перевозки</h2>
         <div class="fbls-toolbar-group">
           <label class="fbls-checkbox-label fbls-choice-toggle"><input type="checkbox" data-transport-field="insurance" {{checked request.insurance}} /> <span>Страхование</span></label>
-          <button type="button" class="fbls-button fbls-button-role primary" data-action="transport-confirm" {{#unless canConfirm}}disabled{{/unless}}>Подтвердить заказ</button>
+          <button type="button" class="fbls-button fbls-button-role primary" data-action="transport-confirm" {{#unless canConfirm}}disabled{{/unless}}>{{#if busy}}Оформляем…{{else}}Подтвердить заказ{{/if}}</button>
         </div>
       </header>
       <dl class="fbls-transport-metrics">
@@ -145,6 +130,7 @@
   {{#each orders}}
   <article class="fbls-panel fbls-stack">
     <div class="fbls-card-header"><strong>{{direction}} · {{market}}</strong><span class="fbls-chip">{{status}}</span></div>
+    {{#if cargoSummary}}<p class="fbls-transport-order-cargo"><i class="fa-solid fa-box-open" aria-hidden="true"></i> {{cargoSummary}}</p>{{/if}}
     <dl class="fbls-transport-metrics">
       <div><dt>Получено</dt><dd>{{received}} / {{total}} ед.</dd></div>
       <div><dt>Доставка и сборы</dt><dd>{{cost}}</dd></div>
@@ -160,7 +146,8 @@
       <p role="status">Дополнительные расходы судна: требуется ещё {{fundingNeeded}}.</p>
       {{#if canFund}}<button type="button" class="fbls-button" data-action="transport-fund" data-order="{{id}}">Добавить {{fundingNeeded}} из казны и продолжить</button>{{/if}}
     {{/if}}
-    <details data-fbls-disclosure="transport-order:{{id}}"><summary>Маршрут и расписание заказа</summary>
+    <details data-fbls-disclosure="transport-order:{{id}}"><summary>Маршрут и расписание заказа · состав груза</summary>
+      {{#if cargo.length}}<ul>{{#each cargo}}<li>{{name}} × {{qty}}</li>{{/each}}</ul>{{/if}}
       <ol>{{#each stages}}<li>
         <details data-fbls-disclosure="transport-order:{{../id}}:stage:{{index}}">
           <summary>{{path}} · отправлений: {{count}} · {{price}}</summary>
@@ -182,6 +169,21 @@
   {{#if archive}}<details class="fbls-panel" data-fbls-disclosure="transport-history"><summary>История прежних заказов</summary>
     {{#each archive}}<article><strong>{{direction}} · {{market}}</strong><span>{{status}}</span><p>{{cargo}}</p></article>{{/each}}
   </details>{{/if}}
+
+  {{#if isGM}}
+  <details class="fbls-panel" data-fbls-disclosure="transport-configuration"><summary>Настройки тарифов и расписания (ГМ)</summary>
+    <p>Глобальные правила расчёта для новых наёмных перевозок (на уже оформленные заказы не влияют).</p>
+    <div class="fbls-transport-fields">
+      <label class="fbls-field"><span>Интервал сборных рейсов, дни</span><input class="fbls-control" type="number" min="0.25" step="0.25" data-transport-config="regularIntervalQd" data-scale="4" value="{{configurationView.intervalDays}}" /></label>
+      <label class="fbls-field"><span>Сдвиг первого рейса, дни</span><input class="fbls-control" type="number" min="0" step="0.25" data-transport-config="regularFirstQd" data-scale="4" value="{{configurationView.phaseDays}}" /></label>
+      <label class="fbls-field"><span>Чартерных судов на линию</span><input class="fbls-control" type="number" min="1" max="10000" step="1" data-transport-config="charterVehicles" value="{{configuration.charterVehicles}}" /></label>
+      <label class="fbls-field"><span>Средняя загрузка сборного рейса, %</span><input class="fbls-control" type="number" min="0.01" max="100" step="0.01" data-transport-config="commercialLoadBps" data-scale="100" value="{{configurationView.commercialPercent}}" /></label>
+      <label class="fbls-field"><span>Наценка перевозчика, %</span><input class="fbls-control" type="number" min="0" max="100" step="1" data-transport-config="carrierProfitBps" data-scale="100" value="{{configurationView.profitPercent}}" /></label>
+      <label class="fbls-field"><span>Минимальная страховка, %</span><input class="fbls-control" type="number" min="0" max="100" step="0.1" data-transport-config="insuranceBps" data-scale="100" value="{{configurationView.insurancePercent}}" /></label>
+    </div>
+    <button type="button" class="fbls-button fbls-button-role" data-action="transport-configure" {{#if busy}}disabled{{/if}}>Сохранить настройки</button>
+  </details>
+  {{/if}}
   </div>
 {{else}}<div class="fbls-transport-content"><p class="fbls-callout is-error" role="alert">Поселение недоступно.</p></div>{{/if}}
 </div>

@@ -142,6 +142,28 @@ import { ensureTransportState } from "../data/transport/state.js";
   assert.ok(checked >= 10, `expected at least 10 real Air Islands markets quoted, got ${checked}`);
   assert.ok(elapsedMs < 8000, `real Air Islands quotes must stay fast, took ${elapsedMs.toFixed(1)} ms`);
   console.log(`Real Air Islands network (${regions.length} regions, ${checked} markets quoted) finished in ${elapsedMs.toFixed(1)} ms with ZERO search limits.`);
+
+  // 5. Diagnostic message pinpoints airshipOnly port blocking inland caravan link!
+  const blockedData = normalizeSkyholdData({
+    catalog: {
+      eventRegions: [
+        { value: "home", label: "Риюд", countryId: "novand", marketTransportModes: ["airship"], marketAirshipOnly: true, marketLinks: [{ regionId: "port", distanceKm: 200, ursCost: 1, modes: ["airship"] }] },
+        { value: "port", label: "Южные воздушные порты", countryId: "izuaver", marketTransportModes: ["airship"], marketAirshipOnly: true, marketLinks: [{ regionId: "inland", distanceKm: 100, ursCost: 1, modes: ["caravan"] }] },
+        { value: "inland", label: "Земли Тишины", countryId: "izuaver", marketTransportModes: ["caravan"], marketAirshipOnly: false, marketLinks: [] }
+      ],
+      marketEconomy: structuredClone(marketPack.content?.marketEconomy),
+      resources: structuredClone(marketPack.content?.resources)
+    }
+  });
+  ensureTransportState(blockedData);
+  const bh = blockedData.holdings[0];
+  bh.type = "village"; bh.overview.region = "home"; bh.gm.modifiers.marketConnectionsLevel = 10; bh.storage.moneyCopper = 10_000_000;
+  const bm = availableAuthorityMarkets(blockedData, { holding: bh, isGM: true, offerLocationIds: ["inland"] }).find((r) => r.id === "inland");
+  const bq = authorityMarketQuote({ data: blockedData, holding: bh, market: bm, isGM: true, discoverTransport: true, skipRouteDiscovery: true });
+  const bo = bq.offers.find((r) => r.stock > 0);
+  const bopts = prepareTransportOptions({ data: blockedData, holding: bh, isGM: true, request: { direction: "inbound", marketId: bm.id, quantities: { [bo.id]: 1 } } });
+  assert.equal(bopts.options.regular.ok, false);
+  assert.match(bopts.options.regular.error, /Южные воздушные порты.*только воздушные корабли/);
 }
 
 console.log("Clean transport router: whole-shipment scaling, company modifiers/visibility, inland 1-port transfer and real Air Islands map passed.");

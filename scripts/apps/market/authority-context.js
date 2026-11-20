@@ -4,6 +4,7 @@ import { marketRegionForValue } from "../../data/market/region-market.js";
 import { stableDataHash } from "../../data/storage-commit.js";
 import { effectiveMarketLocations, marketLocationFactors } from "../../engines/market/composition.js";
 import {
+  findHoldingRegion,
   holdingMarketAccessLevel,
   marketRegionAccessCostMap
 } from "../../engines/market/logistics.js";
@@ -113,7 +114,7 @@ export function authorityMarketQuote({
   isGM = false,
   economy: preparedEconomy = null,
   resources: preparedResources = null,
-  discoverTransport = false, searchBudget = null
+  discoverTransport = false, skipRouteDiscovery = false, searchBudget = null
 } = {}) {
   if (!market) return null;
   const locations = data?.catalog?.eventRegions ?? [];
@@ -121,15 +122,40 @@ export function authorityMarketQuote({
   const resources = preparedResources ?? allResourceDefs({ catalogRows: data?.catalog?.resources });
   const routeAccessCost = market.routeAccessCost
     ?? marketRegionAccessCostMap({ holding, regions: locations, dependencies: { regionResolver: marketRegionForValue } }).get(String(market.regionId));
-  const { logistics, carriers, carrier } = authorityMarketLogistics({
-    holding,
-    data,
-    market,
-    carrierId,
-    isGM,
-    searchBudget,
-    economy
-  });
+  let logistics, carriers = [], carrier = null;
+  if (skipRouteDiscovery) {
+    const access = holdingMarketAccessLevel(holding);
+    const homeRegion = findHoldingRegion(holding, locations, marketRegionForValue);
+    const originRegion = locations.find((row) => String(row?.value ?? "") === String(market.regionId ?? "")) ?? null;
+    const originFactors = marketLocationFactors(originRegion, economy, locations, { normalizedEconomy: true });
+    const homeFactors = marketLocationFactors(homeRegion, economy, locations, { normalizedEconomy: true });
+    const sameRegion = Boolean(homeRegion?.value && String(homeRegion.value) === String(market.regionId ?? ""));
+    logistics = {
+      ok: true,
+      sameRegion,
+      accessLevel: access.level,
+      routeAccessCost: routeAccessCost ?? 0,
+      routeAccessLevel: routeAccessCost ?? 0,
+      priceFactor: originFactors.price,
+      outboundPriceFactor: originFactors.buyPrice,
+      demandFactor: originFactors.demand,
+      stockFactor: originFactors.stock,
+      deliveryFactor: originFactors.delivery,
+      importTaxRate: homeFactors.taxRate,
+      exportTaxRate: originFactors.exportTaxRate,
+      taxRate: homeFactors.taxRate + originFactors.exportTaxRate
+    };
+  } else {
+    ({ logistics, carriers, carrier } = authorityMarketLogistics({
+      holding,
+      data,
+      market,
+      carrierId,
+      isGM,
+      searchBudget,
+      economy
+    }));
+  }
   // Discovery uses the regional lower bound: the selected vessel may take a
   // lower-access path than a hired carrier. V2 validates the actual full chain.
   const quote = overlayMarketQuoteStock({
