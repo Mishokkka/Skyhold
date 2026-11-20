@@ -34,6 +34,8 @@ try {
       assert.equal(transportServicesShareFleet(short.id, long.id), false);
       assert.deepEqual(resolveTransportSelections([short, long], { serviceIds: [oldId] }).ambiguous, [oldId],
         "ambiguous legacy serviceIds must not silently pick one of two physical paths");
+      assert.throws(() => prepareTransportContext({ ...f, request: { ...request, serviceIds: [oldId] }, isGM }), /неоднозначна/,
+        "prepareTransportContext must reject ambiguous legacy serviceIds across multiple physical routes");
       const cargo = preview.plan.stages[0].runs.flatMap(run => run.cargo);
       const first = planTransportChain({ cargo, services: [short], startQd: 0 });
       const oldRun = { ...first.stages[0].runs[0], serviceId: oldId };

@@ -300,6 +300,17 @@ await check("R6 nonselected ground alternatives cannot change a direct flight to
           arrival: preview.plan.arrivalQd, freight: order.money.spentCopper });
       }
       assert.deepEqual(results[1], results[0], "adding an unused route cannot change the selected flight or its execution");
+
+      // Ground-only link to a floating holding must append/prepend the mandatory local airship last-mile leg.
+      const groundOnly = withoutFleet(transportFixture()); groundOnly.holding.type = type;
+      groundOnly.data.catalog.eventRegions[0].marketTransportModes = ["airship", "caravan"];
+      groundOnly.data.catalog.eventRegions[1].marketTransportModes = ["caravan"];
+      groundOnly.data.catalog.eventRegions[0].marketLinks[0].modes = ["caravan"];
+      const groundReq = transportRequest(groundOnly, "a", { direction }, isGM);
+      const groundPreview = prepareTransportContext({ ...groundOnly, request: groundReq, isGM });
+      assert.equal(groundPreview.plan.stages.length, 2, "ground route to floating holding adds mandatory local airship leg");
+      assert.deepEqual(groundPreview.plan.stages.map((s) => s.service.mode),
+        direction === "inbound" ? ["caravan", "airship"] : ["airship", "caravan"]);
     }
   }
 });

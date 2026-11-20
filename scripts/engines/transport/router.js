@@ -5,6 +5,7 @@ import { marketTransportFreightFactor } from "../market/pricing.js";
 import { localMarketDistanceKm, referenceTransportCosts, configuredTransportCharges, transportPortHandlingQd, transportRiskBps } from "./economics.js";
 import { transportServicesFromRoutes } from "./services.js";
 import { isTransportServiceAllowed, transportServiceCompatibilityIds } from "./service-identity.js";
+import { planTransportChain } from "./planner.js";
 import { transportOperatingCharge, TRANSPORT_LIMITS, TRANSPORT_LOAD_SCALE } from "./quantities.js";
 import { transportSeasonalMovement } from "./seasonal.js";
 import { worldShipTransportTerms } from "../ships/world-market.js";
@@ -302,12 +303,6 @@ export function findOptimalHiredRoute({
   const compare = (a, b) => a.primary - b.primary || a.secondary - b.secondary || a.access - b.access || a.stages - b.stages || a.hops - b.hops;
   const heap = new MinHeap(compare);
   const pareto = new Map();
-  const hasVisited = (state, nodeId) => {
-    for (let cursor = state; cursor; cursor = cursor.prev) {
-      if (cursor.node === nodeId) return true;
-    }
-    return false;
-  };
   const isDominated = (key, access, stages, primary, secondary) => {
     const rows = pareto.get(key);
     if (!rows) return false;
@@ -346,7 +341,9 @@ export function findOptimalHiredRoute({
     for (const edge of graph.get(current.node) ?? []) {
       const nextAccess = current.access + edge.ursCost;
       if (nextAccess > maxAccess) continue;
-      if (hasVisited(current, edge.to)) continue;
+      // Never loop back to origin; strictly positive edge URS/cost/time + Pareto dominance on
+      // (node, mode, carrierKey) guarantees cycle-free states without pruning valid multimodal detours.
+      if (edge.to === startId) continue;
       const toRegion = byId.get(edge.to);
       if (!toRegion || regionHidden(edge.to)) continue;
       const toIsEnd = edge.to === endId;
@@ -417,7 +414,7 @@ export function findOptimalHiredRoute({
  * Explores distinct detours around busy vehicles, GM-hidden overrides, disabled or excluded services
  * without exponential blowup (at most maxAttempts fast Dijkstra calls).
  */
-export function findCandidateHiredRoutes(options = {}, { maxRoutes = 5, maxAttempts = 12, evaluate = null } = {}) {
+export function findCandidateHiredRoutes(options = {}, { maxRoutes = 5, maxAttempts = 32, evaluate = null } = {}) {
   const queue = [new Set()];
   const triedBlocked = new Set([""]);
   const seenRoutes = new Set();
@@ -459,7 +456,8 @@ export function findCandidateHiredRoutes(options = {}, { maxRoutes = 5, maxAttem
       branch(rejectKeys);
     }
   }
-  return results;
+  const limited = queue.length > 0 && results.length < maxRoutes && attempts >= maxAttempts;
+  return { routes: results, limited };
 }
 
 /** Fast diagnostic explaining why no hired route was found (always keeps the canonical prefix). */
@@ -478,13 +476,14 @@ export function diagnoseHiredRouteFailure({
   if (regionHidden(startId) || regionHidden(endId)) return `${prefix} (проверьте режимы узлов, УРС и доступность перевозчиков).`;
   if (startId === endId) return `${prefix}: на локальном рынке нет подходящего вида транспорта.`;
 
-  // 1. Check if a route exists with higher URS (minimize URS, not cost, so the hint shows the true minimum threshold).
+  // 1. Report an URS shortage only when the minimum reachable URS actually exceeds accessLimit.
+  const availableAccess = Math.max(0, Math.floor(accessLimit));
   const unlimited = findOptimalHiredRoute({
     holding, market, regions, organizations, countries, direction,
     accessLimit: 99, cargoLoad: TRANSPORT_LOAD_SCALE, kind: "regular", metric: "access", regionFactors, isGM
   });
-  if (unlimited?.ok) {
-    return `${prefix}: требуется УРС ${unlimited.routeAccessCost}, доступно ${Math.max(0, Math.floor(accessLimit))}.`;
+  if (unlimited?.ok && unlimited.routeAccessCost > availableAccess) {
+    return `${prefix}: требуется УРС ${unlimited.routeAccessCost}, доступно ${availableAccess}.`;
   }
 
   // 2. Check if any visible undirected graph path exists ignoring mode restrictions.
@@ -710,8 +709,9 @@ function buildOwnShipService({ data, holding, ship, world, from, to, homeEndpoin
  */
 export function findOptimalOwnShipServices({
   data, holding, ship, world, market, regions, organizations, countries, seasonId,
-  direction, accessLimit, difficulty, cargoLoad, configuration, clockQd, regionFactors,
-  isGM, homeEndpoint, homeRegionId, returnHome, calendar, serviceEndpoints, excluded = []
+  direction, accessLimit, difficulty, cargoLoad, cargo = null, startQd = 0, runs = [],
+  configuration, clockQd, regionFactors, isGM, homeEndpoint, homeRegionId, returnHome,
+  calendar, serviceEndpoints, excluded = [], ensureRouteMarkets = null
 }) {
   if (!ship) return { ok: false, reason: "Корабль не выбран." };
   if (ship.navigationMode !== "world" || ship.condition !== "ready" || ship.activeVoyage || ship.orderBundle || ship.transportOrderId) {
@@ -798,26 +798,39 @@ export function findOptimalOwnShipServices({
       && landDist.get(port.regionId).access + airReach.get(port.regionId) <= cargoAccessLimit)
     .sort((a, b) => landDist.get(a.regionId).km - landDist.get(b.regionId).km);
   let best = null;
+  const maxUnitLoad = Array.isArray(cargo) && cargo.length
+    ? Math.max(0, ...cargo.map((lot) => Number(lot?.unitLoad ?? 0)))
+    : 0;
   for (const port of airPorts) {
     const landFrom = direction === "inbound" ? marketRegionId : port.regionId;
     const landTo = direction === "inbound" ? port.regionId : marketRegionId;
     const reservedAirAccess = airReach.get(port.regionId) ?? 0;
-    const landMatches = findCandidateHiredRoutes({
+    const { routes: landMatches } = findCandidateHiredRoutes({
       holding, market, regions, organizations, countries, seasonId, direction,
       accessLimit: Math.max(0, cargoAccessLimit - reservedAirAccess), cargoLoad, kind: "regular", metric: "cost",
       regionFactors, isGM, allowedModes: LAND_MODES,
       fromRegionId: landFrom, toRegionId: landTo, allowFloatingLastMile: false
     }, {
       maxRoutes: 1,
-      maxAttempts: 6,
+      maxAttempts: 12,
       evaluate: (route) => {
-        const services = transportServicesFromRoutes([route], configuration, regions, {
-          ...serviceEndpoints, homeEndpoint: ""
-        })
+        const endpoints = ensureRouteMarkets
+          ? { ...serviceEndpoints, markets: ensureRouteMarkets(route), homeEndpoint: "" }
+          : { ...serviceEndpoints, homeEndpoint: "" };
+        const services = transportServicesFromRoutes([route], configuration, regions, endpoints)
           .filter((row) => row.kind === "regular")
           .map((row) => scaleHiredServiceForCargo(row, cargoLoad, configuration.overrides));
         const allowed = services.filter((row) => isTransportServiceAllowed(row, { isGM, excluded }));
-        if (allowed.length === services.length && allowed.length && allowed[0].from === landFrom && allowed.at(-1).to === landTo) {
+        if (allowed.length === services.length && allowed.length
+          && allowed[0].from === landFrom && allowed.at(-1).to === landTo
+          && allowed.every((row) => maxUnitLoad <= row.capacity)) {
+          if (cargo?.length) {
+            try {
+              planTransportChain({ cargo, services: allowed, startQd, runs });
+            } catch (_planError) {
+              return { ok: false, blockedLegKeys: (route.transportPlan?.legs ?? []).map(routeLegBlockKey) };
+            }
+          }
           return { ok: true, value: { route, services: allowed } };
         }
         return { ok: false, blockedLegKeys: (route.transportPlan?.legs ?? []).map(routeLegBlockKey) };

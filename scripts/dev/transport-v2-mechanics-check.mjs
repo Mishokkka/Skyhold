@@ -35,6 +35,20 @@ for (const isGM of [true, false]) {
   const { order } = await harness.book(request, `fast-route-${isGM}`, isGM);
   harness.advance(order.plan.arrivalQd);
   assert.equal(order.status, "delivered");
+
+  // Even if the first 13 shortest parallel routes are disabled by overrides, the 14th open route is still found.
+  const fMany = transportFixture();
+  fMany.data.catalog.transportV2.overrides ??= {};
+  fMany.data.catalog.eventRegions[0].marketLinks = Array.from({ length: 15 }, (_, index) => ({
+    regionId: "a", routeId: `opt-${index}`, distanceKm: 100 + index * 5, modes: ["airship"]
+  }));
+  const reqMany = transportRequest(fMany, "a", { mode: "regular" }, isGM);
+  for (let i = 0; i < 13; i++) {
+    const pick = prepareTransportContext({ ...fMany, request: reqMany, isGM });
+    fMany.data.catalog.transportV2.overrides[pick.plan.stages[0].service.id] = { enabled: false };
+  }
+  const fourteenth = prepareTransportContext({ ...fMany, request: reqMany, isGM });
+  assert.equal(fourteenth.plan.stages[0].service.distanceKm, 165, "finds the 14th open route after 13 disabled candidates");
 }
 
 // Explicit catch-up pays idle expenses once and exposes the real funding

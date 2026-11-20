@@ -6,7 +6,7 @@ import { diagnoseHiredRouteFailure, findCandidateHiredRoutes, findOptimalOwnShip
 import { cargoLoad, cargoValue, shipTransportFunding, transportLoad, transportMoney } from "../../engines/transport/quantities.js";
 import { stableDataHash } from "../../data/storage-commit.js";
 import { findHoldingRegion } from "../../engines/market/logistics.js";
-import { marketLocationFactors } from "../../engines/market/composition.js";
+import { effectiveMarketLocations, marketLocationFactors } from "../../engines/market/composition.js";
 import { cargoShelfLife } from "../../engines/market/cargo-aging.js";
 import { buildShipWorldContext } from "../../engines/ships/world-market.js";
 import { transportClockOffsetQd, transportHoldingQd } from "../../data/transport/clock.js";
@@ -60,7 +60,7 @@ function resolveMode(request = {}) {
   return request.priority === "time" ? "charter" : "regular";
 }
 
-function finalizeQuote({ plan, services, ship, transferPortId = "", transferPortLabel = "", env, request }) {
+function finalizeQuote({ plan, services, ship, transferPortId = "", transferPortLabel = "", limited = false, env, request }) {
   const { holding, context, direction, startQd, clockOffsetQd, configuration, access, cargo, lines, from, to, sourceToken } = env;
   const valueCopper = cargoValue(cargo);
   const taxCopper = Math.ceil(valueCopper * (access.importTaxRate + access.exportTaxRate));
@@ -91,7 +91,7 @@ function finalizeQuote({ plan, services, ship, transferPortId = "", transferPort
   return {
     ok: true,
     plan, services, commercial, ship, lines, transferPortId, transferPortLabel,
-    search: { plans: [plan], limited: false, limits: { ports: false, routes: false, plans: false }, failures: [] },
+    search: { plans: [plan], limited: Boolean(limited), limits: { ports: false, routes: Boolean(limited), plans: false }, failures: [] },
     treasuryCopper, valueCopper, totalCopper, clockOffsetQd,
     warnings: cargo
       .filter((lot) => lot.shelfLifeQd > 0 && lot.ageQd + plan.arrivalQd - startQd >= lot.shelfLifeQd)
@@ -129,6 +129,37 @@ function prepareEnvironment({ data, holding, request = {}, isGM = false }) {
     direction, seasonId, dependencies: { regionFactors }
   });
   const calendar = transportSeasonalCalendar(holding, startQd);
+  // Lazily hydrate local food offers only for intermediate regions that actually appear on a candidate route
+  // so transportRationPrice matches full market composition without loading offers for all 69 regions upfront.
+  const hydratedOfferRegions = new Set([context.market.regionId, home].filter(Boolean));
+  const marketsByRegion = new Map(context.markets.map((row) => [row.regionId, row]));
+  const regionById = new Map(regions.map((row) => [String(row?.value ?? ""), row]));
+  const ensureRouteMarkets = (route) => {
+    const missing = [];
+    for (const leg of route?.transportPlan?.legs ?? []) {
+      for (const id of [leg.fromRegionId, leg.toRegionId]) {
+        if (!id || hydratedOfferRegions.has(id)) continue;
+        hydratedOfferRegions.add(id);
+        const loc = regionById.get(id);
+        if (loc) missing.push(loc);
+      }
+    }
+    if (missing.length) {
+      const hydrated = effectiveMarketLocations({
+        economy: context.economy,
+        locations: missing,
+        resources: context.resources,
+        isGM,
+        normalizedEconomy: true,
+        offerLocationIds: missing.map((row) => row.value)
+      });
+      for (const row of hydrated) {
+        const existing = marketsByRegion.get(row.regionId);
+        marketsByRegion.set(row.regionId, existing ? { ...existing, offers: row.offers } : row);
+      }
+    }
+    return [...marketsByRegion.values()];
+  };
   const serviceEndpoints = {
     markets: context.markets, resources: context.resources,
     holdingId: holding.id, homeRegionId: home, homeEndpoint: endpoint, calendar
@@ -136,7 +167,7 @@ function prepareEnvironment({ data, holding, request = {}, isGM = false }) {
   return {
     data, holding, context, direction, cargo, lines, totalLoad: cargoLoad(cargo),
     configuration, regions, home, endpoint, from, to, state, clockOffsetQd, startQd,
-    difficulty, seasonId, regionFactors, access, calendar, serviceEndpoints, isGM,
+    difficulty, seasonId, regionFactors, access, calendar, serviceEndpoints, ensureRouteMarkets, isGM,
     sourceToken: transportSourceToken(data, holding)
   };
 }
@@ -153,13 +184,15 @@ function compareHiredQuotes(kind, a, b) {
 }
 
 function buildHiredOption(env, kind, request) {
-  const { holding, context, regions, direction, access, difficulty, totalLoad, seasonId, regionFactors, isGM, configuration, serviceEndpoints, cargo, startQd, state } = env;
+  const { holding, context, regions, direction, access, difficulty, totalLoad, seasonId, regionFactors, isGM, configuration, serviceEndpoints, ensureRouteMarkets, cargo, startQd, state } = env;
   const cargoAccessLimit = access.accessLevel - difficulty;
   if (cargoAccessLimit < 0) return { ok: false, error: `Для этого товара требуется УРС ${difficulty}, у поселения УРС ${access.accessLevel}.` };
 
   let lastPlanError = "";
   let ambiguousError = "";
-  const candidates = findCandidateHiredRoutes({
+  const explicitServiceIds = Array.isArray(request.serviceIds) && request.serviceIds.length > 0;
+  const allDiscoveredServices = new Map();
+  const { routes: candidates, limited } = findCandidateHiredRoutes({
     holding, market: context.market, regions,
     organizations: context.economy?.organizations ?? [],
     countries: context.economy?.countries ?? [],
@@ -168,12 +201,14 @@ function buildHiredOption(env, kind, request) {
     charterVehicles: configuration.charterVehicles
   }, {
     maxRoutes: 5,
-    maxAttempts: 12,
+    maxAttempts: 32,
     evaluate: (route) => {
       const legs = route.transportPlan?.legs ?? [];
-      const allRouteServices = transportServicesFromRoutes([route], configuration, regions, serviceEndpoints)
+      const endpoints = { ...serviceEndpoints, markets: ensureRouteMarkets(route) };
+      const allRouteServices = transportServicesFromRoutes([route], configuration, regions, endpoints)
         .map((service) => scaleHiredServiceForCargo(service, totalLoad, configuration.overrides));
       const allowedServices = allRouteServices.filter((service) => isTransportServiceAllowed(service, { isGM, excluded: request.excluded }));
+      for (const service of allowedServices) allDiscoveredServices.set(service.id, service);
       const resolved = resolveTransportSelections(allowedServices, request);
       if (resolved.ambiguous.length) {
         ambiguousError = "Выбранная служба неоднозначна. Выберите вариант доставки заново.";
@@ -198,7 +233,18 @@ function buildHiredOption(env, kind, request) {
   });
 
   if (ambiguousError) return { ok: false, error: ambiguousError };
+  // Detect legacy serviceIds that match services across multiple distinct physical routes.
+  if (explicitServiceIds && resolveTransportSelections([...allDiscoveredServices.values()], request).ambiguous.length) {
+    return { ok: false, error: "Выбранная служба неоднозначна. Выберите вариант доставки заново." };
+  }
   if (!candidates.length) {
+    if (limited) {
+      return {
+        ok: false,
+        limited: true,
+        error: "Превышен предел поиска маршрутов среди отключённых или занятых альтернатив. Уточните настройки перевозчиков."
+      };
+    }
     return {
       ok: false,
       error: lastPlanError || diagnoseHiredRouteFailure({
@@ -210,11 +256,15 @@ function buildHiredOption(env, kind, request) {
     };
   }
   candidates.sort((a, b) => compareHiredQuotes(kind, a, b));
+  if (limited) {
+    candidates[0].search.limited = true;
+    candidates[0].search.limits.routes = true;
+  }
   return candidates[0];
 }
 
 function buildOwnedOption(env, ship, request) {
-  const { data, holding, context, regions, direction, access, difficulty, totalLoad, seasonId, regionFactors, isGM, configuration, serviceEndpoints, home, endpoint, cargo, startQd, clockOffsetQd, state, calendar } = env;
+  const { data, holding, context, regions, direction, access, difficulty, totalLoad, seasonId, regionFactors, isGM, configuration, serviceEndpoints, ensureRouteMarkets, home, endpoint, cargo, startQd, clockOffsetQd, state, calendar } = env;
   if (!ship) return { ok: false, error: "У поселения нет корабля, доступного для мировых рейсов." };
   const world = buildShipWorldContext(data, holding, {
     offerLocationIds: [context.market.id, context.market.regionId, ship.location?.id, ship.location?.regionId].filter(Boolean)
@@ -224,9 +274,10 @@ function buildOwnedOption(env, ship, request) {
     organizations: context.economy?.organizations ?? [],
     countries: context.economy?.countries ?? [],
     seasonId, direction, accessLimit: access.accessLevel, difficulty, cargoLoad: totalLoad,
+    cargo, startQd, runs: state?.runs ?? [],
     configuration, clockQd: startQd - clockOffsetQd, regionFactors, isGM,
     homeEndpoint: endpoint, homeRegionId: home, returnHome: request.returnHome === true,
-    calendar, serviceEndpoints, excluded: request.excluded
+    calendar, serviceEndpoints, excluded: request.excluded, ensureRouteMarkets
   });
   if (!found.ok) return { ok: false, error: found.reason, needsTimeSync: Boolean(found.needsTimeSync) };
   if (!found.services?.length

@@ -534,8 +534,8 @@ function checkMarketBoundaries() {
   assert.match(routeEdgeTemplate, /route-edge-path-edit/, "route edge popout must expose waypoint editing");
   assert.match(marketTemplate, /data-market-provider/, "market UI must keep a compact market-location selector");
   assert.doesNotMatch(marketTemplate, /fbls-market-provider-comparison|Сравнение рынков-локаций/, "market UI must not spend vertical space on the removed location-comparison panel");
-  assert.match(transportTemplate, /data-transport-pin/, "transport UI must expose per-stage carrier selection");
-  assert.match(transportTemplate, /value="cost"[\s\S]{0,200}value="time"/, "transport compares actual price and whole-cargo arrival");
+  assert.match(transportTemplate, /data-action="transport-select-mode"/, "transport UI must expose the 3-choice delivery mode cards");
+  assert.match(transportTemplate, /fbls-transport-choices[\s\S]{0,600}data-mode="\{\{mode\}\}"/, "transport compares regular, charter and own-ship options side by side");
   assert.doesNotMatch(marketTemplate, /data-market-service|data-market-carrier/, "the old three-service checkout must be removed");
   assert.match(transportTemplate, /отправлений: \{\{count\}\}/, "stage batching remains explicit");
   assert.match(transportTemplate, /transport-departures:[\s\S]{0,400}each departures/, "each physical departure remains inspectable without mutating the order");
@@ -548,7 +548,7 @@ function checkMarketBoundaries() {
   assert.match(marketTemplate, /title="Страна: {{marketCountryLabel}}"[\s\S]{0,300}title="Размер рынка: {{marketSizeLabel}}"[\s\S]{0,300}title="Состояние рынка: {{marketConditionLabel}}"/, "market header facts must preserve full country, size and state values in that order");
   assert.match(transportTemplate, /selected\.delivery[\s\S]+selected\.stages[\s\S]+transport-invoice/, "transport checkout separates total, stage calculations and goods/taxes");
   const quoteStageHeader = transportTemplate.match(/\{\{#each selected\.stages\}\}\s*<li\b[^>]*>([\s\S]*?)<details\b/)?.[1] ?? "";
-  assert.match(quoteStageHeader, /\{\{price\}\}[\s\S]*\{\{invoice\}\}/, "stage price and its cost breakdown stay together above the schedule");
+  assert.match(quoteStageHeader, /\{\{price\}\}[\s\S]*\{\{label\}\}/, "stage price and carrier summary stay together above the schedule");
   assert.doesNotMatch(transportTemplate, /transport-activate|unless enabled|if enabled/, "the branch has no transport switch or activation command");
   assert.match(marketCss, /\.fbls-market-shell\s*\{[\s\S]{0,180}flex-direction:\s*column/, "market shell must tolerate a variable number of notices without overlapping content");
   assert.match(marketCss, /\.fbls-market-price\s*\{[^}]*display:\s*flex[^}]*font-size:\s*var\(--fbls-type-compact-sm\)/, "market price and movement percentage must share a row at the canonical compact text scale");
@@ -1257,7 +1257,7 @@ function checkStorageTemplatePartials() {
   assert.match(roomRailText, /toggle-storage-room-rail/, "shared storage room rail must expose its collapse control");
   assert.match(roomRailText, /storageContext\.resourceRooms/, "shared storage room rail must render canonical room rows");
   assert.match(roomRailText, /data-market-offer-image|fbls-storage-room-tab-icon[\s\S]{0,220}\{\{#if img\}\}/, "storage room navigation must render its building image with an icon fallback");
-  assert.match(storageCss, /fbls-storage-resource-card\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+5\.6rem\s+2\.5rem\s+2rem/, "storage cards must retain a shrinking text track and a dedicated keyboard action column");
+  assert.match(storageCss, /fbls-storage-resource-card\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+6rem\s+2\.5rem\s+2rem/, "storage cards must retain a shrinking text track and a dedicated keyboard action column");
   assert.equal((storageEvents.match(/SkyholdStorageActionDialog\.open\(\{\s*anchor:\s*this,/g) ?? []).length, 5,
     "resource addition and the storage context actions must anchor dialogs to the Skyhold window");
   assert.match(storageDialog, /_centerOnAnchor\(\)[\s\S]{0,900}anchor\?\._captureWindowFrame/, "storage action dialogs must center against the captured parent-window frame");

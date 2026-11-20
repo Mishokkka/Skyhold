@@ -134,7 +134,7 @@
 }
 .fbls-transport-order-cargo {
   color: var(--fbls-text);
-  font-size: var(--fbls-type-compact);
+  font-size: var(--fbls-type-compact-sm);
 }
 .fbls-transport-order-cargo i {
   color: var(--fbls-accent);

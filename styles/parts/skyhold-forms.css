@@ -316,6 +316,6 @@
   border-color: var(--fbls-border);
   background: var(--fbls-surface-2);
   color: var(--fbls-muted);
-  opacity: 0.62;
+  opacity: 1;
   cursor: not-allowed;
 }
