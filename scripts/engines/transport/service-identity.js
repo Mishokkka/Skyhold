@@ -17,7 +17,8 @@ export function transportServiceCompatibilityIds(id) {
  * Two fully identified new paths have independent vehicles and regular departures.
  */
 export function transportServicesShareFleet(a, b) {
-  return a === b || transportServiceCompatibilityIds(a).includes(b) || transportServiceCompatibilityIds(b).includes(a);
+  const baseA = unscaledServiceId(a), baseB = unscaledServiceId(b);
+  return baseA === baseB || transportServiceCompatibilityIds(a).includes(baseB) || transportServiceCompatibilityIds(b).includes(baseA);
 }
 
 export function transportServiceExcluded(service, excluded = []) {

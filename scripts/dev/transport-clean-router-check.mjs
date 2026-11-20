@@ -6,6 +6,8 @@ import { prepareTransportContext, prepareTransportOptions } from "../apps/domain
 import { availableAuthorityMarkets, authorityMarketQuote } from "../apps/market/authority-context.js";
 import { normalizeSkyholdData } from "../data/normalizers.js";
 import { ensureTransportState } from "../data/transport/state.js";
+import { transportServicesShareFleet } from "../engines/transport/service-identity.js";
+import { diagnoseHiredRouteFailure } from "../engines/transport/router.js";
 
 // 1. Whole-shipment hired scaling: cargo exceeding 1 vessel hires multiple vessels in ONE departure.
 {
@@ -190,20 +192,129 @@ import { ensureTransportState } from "../data/transport/state.js";
   // 6. Fast skipRouteDiscovery quote matches MarketApp stock & prices 1:1 (prevents "больше доступного" on full-stock buy).
   const southMarket = availableAuthorityMarkets(data, { holding, isGM: true, offerLocationIds: ["izuaver-south-ports"] })
     .find((row) => row.id === "izuaver-south-ports");
-  if (southMarket) {
-    const fullQuote = authorityMarketQuote({ data, holding, market: southMarket, isGM: true, discoverTransport: true });
-    const fastQuote = authorityMarketQuote({ data, holding, market: southMarket, isGM: true, discoverTransport: true, skipRouteDiscovery: true });
-    assert.deepEqual(
-      fastQuote.offers.map((o) => [o.id, o.stock, o.unitPriceCopper]),
-      fullQuote.offers.map((o) => [o.id, o.stock, o.unitPriceCopper]),
-      "transport checkout sees exact same stock and prices as MarketApp"
-    );
-    const maxOffer = fullQuote.offers.find((o) => o.stock > 0);
-    const fullStockQuote = prepareTransportOptions({
-      data, holding, isGM: true,
-      request: { direction: "inbound", marketId: southMarket.id, quantities: { [maxOffer.id]: maxOffer.stock } }
+  assert.ok(southMarket, "izuaver-south-ports must exist in bundled Air Islands pack");
+  const fullQuote = authorityMarketQuote({ data, holding, market: southMarket, isGM: true, discoverTransport: true });
+  const fastQuote = authorityMarketQuote({ data, holding, market: southMarket, isGM: true, discoverTransport: true, skipRouteDiscovery: true });
+  assert.deepEqual(
+    fastQuote.offers.map((o) => [o.id, o.stock, o.unitPriceCopper]),
+    fullQuote.offers.map((o) => [o.id, o.stock, o.unitPriceCopper]),
+    "transport checkout sees exact same stock and prices as MarketApp"
+  );
+  const maxOffer = fullQuote.offers.find((o) => o.stock > 0);
+  const fullStockQuote = prepareTransportOptions({
+    data, holding, isGM: true,
+    request: { direction: "inbound", marketId: southMarket.id, quantities: { [maxOffer.id]: maxOffer.stock } }
+  });
+  assert.equal(fullStockQuote.active.ok, true, "buying 100% of MarketApp displayed stock must succeed");
+
+  // 7. Fleet sharing across different scaled sizes (:x2 vs :x3) and canManageShips gate.
+  assert.equal(transportServicesShareFleet("charter:abc:route:def:x2", "charter:abc:route:def:x3"), true);
+  assert.equal(transportServicesShareFleet("charter:abc:route:def:x2", "charter:abc:route:def"), true);
+  assert.equal(transportServicesShareFleet("charter:abc:route:def:x2", "charter:abc:route:xyz:x3"), false);
+  assert.equal(transportServicesShareFleet("charter:abc:route:def:x2", "charter:abc"), true);
+  const fShip = transportFixture();
+  const shipReq = transportRequest(fShip, "a", { mode: "owned", ownShipId: fShip.holding.special.ships.list[0].id }, false);
+  const noShipPerm = prepareTransportOptions({ ...fShip, request: shipReq, isGM: false, canManageShips: false });
+  assert.equal(noShipPerm.options.owned, null, "players without ship permission do not evaluate own-ship options");
+  assert.notEqual(noShipPerm.activeMode, "owned", "players without ship permission never land on hidden owned mode");
+
+  // 8. Disabled intermediate node blocks carrier/country switch, reports true min URS, hides GM nodes in diagnostics,
+  //    rejects truncated GM-overridden chains, and preserves longer-km/lower-URS land routes to transfer ports.
+  {
+    const fMin = transportFixture();
+    fMin.data.catalog.eventRegions = [
+      { value: "home", label: "Дом", countryId: "public", marketTransportModes: ["caravan", "airship"],
+        marketLinks: [{ regionId: "mid-cheap", distanceKm: 10, ursCost: 4, modes: ["airship"] }, { regionId: "mid-urs", distanceKm: 300, ursCost: 2, modes: ["airship"] }] },
+      { value: "mid-cheap", label: "Дешёвый хаб", countryId: "public", marketTransportModes: ["airship"],
+        marketLinks: [{ regionId: "a", distanceKm: 10, ursCost: 1, modes: ["airship"] }] },
+      { value: "mid-urs", label: "Дешёвый по УРС", countryId: "public", marketTransportModes: ["airship"],
+        marketLinks: [{ regionId: "a", distanceKm: 300, ursCost: 1, modes: ["airship"] }] },
+      { value: "a", label: "Рынок А", countryId: "public", marketTransportModes: ["airship"], marketLinks: [] }
+    ];
+    const minDiag = diagnoseHiredRouteFailure({
+      holding: fMin.holding, market: { regionId: "a" }, regions: fMin.data.catalog.eventRegions,
+      organizations: fMin.data.catalog.marketEconomy.organizations,
+      countries: fMin.data.catalog.marketEconomy.countries,
+      direction: "inbound", accessLimit: 2, isGM: true
     });
-    assert.equal(fullStockQuote.active.ok, true, "buying 100% of MarketApp displayed stock must succeed");
+    assert.match(minDiag, /требуется УРС 3\b/, "diagnostic reports minimum URS (3), not cheapest route URS (5)");
+
+    // Player diagnostic must not leak GM-hidden intermediate node names.
+    const fHidden = transportFixture();
+    fHidden.data.catalog.marketEconomy.countries.push({ id: "secret-land", name: "Тайная страна", visibility: "gm", factors: {} });
+    fHidden.data.catalog.eventRegions = [
+      { value: "home", label: "Дом", countryId: "public", marketTransportModes: ["airship"],
+        marketLinks: [{ regionId: "secret-node", distanceKm: 40, ursCost: 1, modes: ["caravan"] }] },
+      { value: "secret-node", label: "Тайный Форт", countryId: "secret-land", marketTransportModes: ["caravan"],
+        marketLinks: [{ regionId: "a", distanceKm: 40, ursCost: 1, modes: ["caravan"] }] },
+      { value: "a", label: "Рынок А", countryId: "public", marketTransportModes: ["caravan"], marketLinks: [] }
+    ];
+    fHidden.holding.gm.modifiers.marketConnectionsLevel = 10;
+    const reqHidden = transportRequest(fHidden, "a", { direction: "inbound" }, true);
+    const playerDiag = prepareTransportOptions({ ...fHidden, request: reqHidden, isGM: false });
+    assert.equal(playerDiag.options.regular.ok, false);
+    assert.doesNotMatch(playerDiag.options.regular.error, /Тайный Форт|secret-node/);
+
+    // Disabled intermediate node cannot switch independent-carriers across countries, but allows same-service transit.
+    const fDis = transportFixture();
+    fDis.data.catalog.marketEconomy.countries.push(
+      { id: "c1", name: "Страна 1", visibility: "public", factors: {} },
+      { id: "c2", name: "Страна 2", visibility: "public", factors: {} }
+    );
+    fDis.data.catalog.eventRegions = [
+      { value: "home", label: "Дом", countryId: "c1", marketTransportModes: ["caravan"],
+        marketLinks: [{ regionId: "closed", distanceKm: 40, ursCost: 1, modes: ["caravan"] }] },
+      { value: "closed", label: "Закрытый пост", countryId: "c2", marketEnabled: false, marketTransportModes: ["caravan"],
+        marketLinks: [{ regionId: "a", distanceKm: 40, ursCost: 1, modes: ["caravan"] }] },
+      { value: "a", label: "Рынок А", countryId: "c1", marketTransportModes: ["caravan"], marketLinks: [] }
+    ];
+    fDis.data.catalog.marketEconomy.organizations = [];
+    fDis.holding.gm.modifiers.marketConnectionsLevel = 10;
+    const reqDis = transportRequest(fDis, "a", { direction: "inbound" }, true);
+    const disOpts = prepareTransportOptions({ ...fDis, request: reqDis, isGM: true });
+    assert.equal(disOpts.options.regular.ok, false, "disabled intermediate node must not allow carrier/country switch");
+    fDis.data.catalog.eventRegions[1].countryId = "c1";
+    const transitOpts = prepareTransportOptions({ ...fDis, request: reqDis, isGM: true });
+    assert.equal(transitOpts.options.regular.ok, true, "same-service transit through disabled intermediate node stays allowed");
+
+    // Truncated chain when an override hides one stage from players must fail cleanly.
+    const fTrunc = transportFixture();
+    fTrunc.data.catalog.marketEconomy.countries.push({ id: "c2", name: "Страна 2", visibility: "public", factors: {} });
+    fTrunc.data.catalog.eventRegions = [
+      { value: "home", label: "Дом", countryId: "public", marketTransportModes: ["airship"],
+        marketLinks: [{ regionId: "hub", distanceKm: 40, ursCost: 1, modes: ["airship"] }] },
+      { value: "hub", label: "Порт", countryId: "c2", marketTransportModes: ["airship", "caravan"],
+        marketLinks: [{ regionId: "a", distanceKm: 40, ursCost: 1, modes: ["caravan"] }] },
+      { value: "a", label: "Рынок А", countryId: "c2", marketTransportModes: ["caravan"], marketLinks: [] }
+    ];
+    fTrunc.holding.gm.modifiers.marketConnectionsLevel = 10;
+    const reqTrunc = transportRequest(fTrunc, "a", { direction: "inbound" }, false);
+    const fullPublic = prepareTransportOptions({ ...fTrunc, request: reqTrunc, isGM: false });
+    assert.equal(fullPublic.options.regular.ok, true);
+    assert.equal(fullPublic.options.regular.plan.stages.length, 2);
+    const firstStageId = fullPublic.options.regular.plan.stages[0].service.id;
+    fTrunc.data.catalog.transportV2.overrides = { [firstStageId]: { visibility: "gm" } };
+    const truncated = prepareTransportOptions({ ...fTrunc, request: reqTrunc, isGM: false });
+    assert.equal(truncated.options.regular.ok, false, "player must never receive a truncated chain when a stage is GM-only");
+
+    // Longer-km but lower-URS land path to an airship transfer port must NOT be pruned by a shorter/higher-URS detour.
+    const fLand = transportFixture();
+    fLand.holding.gm.modifiers.marketConnectionsLevel = 4;
+    fLand.data.catalog.eventRegions = [
+      { value: "home", label: "Дом", countryId: "public", marketTransportModes: ["airship"],
+        marketLinks: [{ regionId: "port", distanceKm: 80, ursCost: 1, modes: ["airship"] }] },
+      { value: "port", label: "Порт", countryId: "public", marketTransportModes: ["airship", "caravan"],
+        marketLinks: [{ regionId: "k", distanceKm: 20, ursCost: 1, modes: ["caravan"] }] },
+      { value: "k", label: "Узел К", countryId: "public", marketTransportModes: ["caravan"],
+        marketLinks: [{ regionId: "a", distanceKm: 200, ursCost: 1, modes: ["caravan"] }, { regionId: "x", distanceKm: 10, ursCost: 2, modes: ["caravan"] }] },
+      { value: "x", label: "Короткий путь", countryId: "public", marketTransportModes: ["caravan"],
+        marketLinks: [{ regionId: "a", distanceKm: 10, ursCost: 1, modes: ["caravan"] }] },
+      { value: "a", label: "Рынок А", countryId: "public", marketTransportModes: ["caravan"], marketLinks: [] }
+    ];
+    const reqLand = transportRequest(fLand, "a", { direction: "inbound", mode: "owned", ownShipId: fLand.holding.special.ships.list[0].id }, true);
+    const landOwned = prepareTransportOptions({ ...fLand, request: reqLand, isGM: true });
+    assert.equal(landOwned.options.owned.ok, true, "longer-km / lower-URS land path to airship transfer port must be found");
+    assert.equal(landOwned.options.owned.transferPortId, "port");
   }
 }
 

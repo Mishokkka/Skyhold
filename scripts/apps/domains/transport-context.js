@@ -60,7 +60,7 @@ function resolveMode(request = {}) {
   return request.priority === "time" ? "charter" : "regular";
 }
 
-function finalizeQuote({ plan, services, ship, transferPortLabel = "", env, request }) {
+function finalizeQuote({ plan, services, ship, transferPortId = "", transferPortLabel = "", env, request }) {
   const { holding, context, direction, startQd, clockOffsetQd, configuration, access, cargo, lines, from, to, sourceToken } = env;
   const valueCopper = cargoValue(cargo);
   const taxCopper = Math.ceil(valueCopper * (access.importTaxRate + access.exportTaxRate));
@@ -90,7 +90,7 @@ function finalizeQuote({ plan, services, ship, transferPortLabel = "", env, requ
   };
   return {
     ok: true,
-    plan, services, commercial, ship, lines, transferPortLabel,
+    plan, services, commercial, ship, lines, transferPortId, transferPortLabel,
     search: { plans: [plan], limited: false, limits: { ports: false, routes: false, plans: false }, failures: [] },
     treasuryCopper, valueCopper, totalCopper, clockOffsetQd,
     warnings: cargo
@@ -174,7 +174,9 @@ function buildHiredOption(env, kind, request) {
   const selected = resolved.request.serviceIds?.length
     ? resolved.request.serviceIds.map((id) => allServices.find((row) => row.id === id))
     : allServices.filter((service) => service.kind === kind);
-  if (!selected.length || selected.some((row) => !row)) return { ok: false, error: "Для выбранного груза нет доступной перевозки." };
+  if (!selected.length || selected.some((row) => !row) || selected[0].from !== env.from || selected.at(-1).to !== env.to) {
+    return { ok: false, error: "Для выбранного груза нет доступной перевозки." };
+  }
   try {
     const plan = planTransportChain({ cargo, services: selected, startQd, runs: state?.runs ?? [] });
     return finalizeQuote({ plan, services: allServices, ship: null, env, request });
@@ -199,18 +201,26 @@ function buildOwnedOption(env, ship, request) {
     calendar, serviceEndpoints
   });
   if (!found.ok) return { ok: false, error: found.reason, needsTimeSync: Boolean(found.needsTimeSync) };
+  if (!found.services?.length || found.services[0].from !== env.from || found.services.at(-1).to !== env.to) {
+    return { ok: false, error: "Нет доступного воздушного маршрута для своего корабля (проверьте УРС и воздушные порты)." };
+  }
   try {
     const plan = planTransportChain({ cargo, services: found.services, startQd, runs: state?.runs ?? [] });
-    return finalizeQuote({ plan, services: found.services, ship, transferPortLabel: found.transferPortLabel, env, request });
+    return finalizeQuote({
+      plan, services: found.services, ship,
+      transferPortId: found.transferPortId, transferPortLabel: found.transferPortLabel, env, request
+    });
   } catch (error) {
     return { ok: false, error: error.message };
   }
 }
 
 /** Compute all three clean checkout options (regular, charter, own ship) in one fast pass. */
-export function prepareTransportOptions({ data, holding, request = {}, isGM = false } = {}) {
+export function prepareTransportOptions({ data, holding, request = {}, isGM = false, canManageShips = true } = {}) {
   const env = prepareEnvironment({ data, holding, request, isGM });
-  const worldShips = (holding.special?.ships?.list ?? []).filter((ship) => ship.navigationMode === "world");
+  const worldShips = canManageShips
+    ? (holding.special?.ships?.list ?? []).filter((ship) => ship.navigationMode === "world")
+    : [];
   const chosenShip = (request.ownShipId ? worldShips.find((row) => row.id === request.ownShipId) : null)
     ?? worldShips.find((ship) => ship.condition === "ready" && !ship.activeVoyage && !ship.orderBundle && !ship.transportOrderId)
     ?? worldShips[0]
@@ -230,7 +240,7 @@ export function prepareTransportOptions({ data, holding, request = {}, isGM = fa
   } else if (regular.ok && charter.ok) {
     activeMode = charter.totalCopper < regular.totalCopper ? "charter" : "regular";
   } else {
-    activeMode = regular.ok ? "regular" : charter.ok ? "charter" : "regular";
+    activeMode = regular.ok ? "regular" : charter.ok ? "charter" : owned?.ok ? "owned" : "regular";
   }
   return {
     env,

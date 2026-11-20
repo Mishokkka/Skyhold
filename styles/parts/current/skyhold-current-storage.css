@@ -234,7 +234,7 @@
 .fbl-skyhold .fbls-storage-resource-name.custom > input { width: 100%; min-width: 0; height: var(--fbls-control-height); min-height: var(--fbls-control-height); }
 .fbl-skyhold .fbls-storage-resource-name.custom > small { grid-column: 1 / -1; }
 .fbl-skyhold .fbls-storage-resource-name .fbls-storage-resource-picker {
-  grid-template-columns: minmax(0, 1fr) auto; gap: 0.25rem; height: auto; min-height: 1.15rem; padding: 0; border: 0;
+  grid-template-columns: minmax(0, 1fr) auto; gap: 0.25rem; height: var(--fbls-control-height); min-height: var(--fbls-control-height); padding: 0; border: 0;
   background: transparent; line-height: 1.2;
 }
 .fbl-skyhold .fbls-storage-resource-name .fbls-storage-resource-picker > i:first-child:not(:last-child) { display: none; }

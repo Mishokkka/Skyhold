@@ -347,7 +347,6 @@ export function findOptimalHiredRoute({
       for (const mode of modes) {
         if (current.mode && current.mode !== mode) {
           if (fromRegion?.marketTransportModes && (!fromRegion.marketTransportModes.includes(current.mode) || !fromRegion.marketTransportModes.includes(mode))) continue;
-          if (factors(current.node).enabled === false) continue;
         }
         const needsFloatingHop = floating && mode !== "airship" && ((direction === "outbound" && current.node === homeId && current.hops === 0)
           || (direction === "inbound" && edge.to === homeId));
@@ -361,13 +360,16 @@ export function findOptimalHiredRoute({
           const leg = makeLeg(current.node, edge.to, edge, mode, carrier);
           const cKey = carrier.id === "independent-carriers" ? `${carrier.id}:${leg.fromCountryId}` : carrier.id;
           const continues = current.mode === mode && current.carrierKey === cKey && !needsFloatingHop;
+          if (current.hops > 0 && !continues && factors(current.node).enabled === false) continue;
           const nextStages = current.stages + (continues ? 0 : 1) + (needsFloatingHop ? 1 : 0);
           if (nextStages > TRANSPORT_LIMITS.stages) continue;
           const weight = estimateLegWeight(leg, cargoUnits, kind, continues);
           const extraCost = needsFloatingHop ? floatingLastMile.weight.cost : 0;
           const extraTime = needsFloatingHop ? floatingLastMile.weight.time + TRANSFER_QD : 0;
-          const primary = current.primary + (metric === "time" ? weight.time + extraTime : weight.cost + extraCost);
-          const secondary = current.secondary + (metric === "time" ? weight.cost + extraCost : weight.time + extraTime);
+          const edgePrimary = metric === "access" ? edge.ursCost : metric === "time" ? weight.time + extraTime : weight.cost + extraCost;
+          const edgeSecondary = metric === "time" ? weight.cost + extraCost : metric === "access" ? weight.cost + extraCost : weight.time + extraTime;
+          const primary = current.primary + edgePrimary;
+          const secondary = current.secondary + edgeSecondary;
           const candidate = {
             node: edge.to, access: nextAccess, stages: nextStages, primary, secondary, hops: current.hops + 1,
             mode, carrierKey: cKey, prev: current, leg,
@@ -396,34 +398,37 @@ export function diagnoseHiredRouteFailure({
 } = {}) {
   const prefix = "Для выбранного груза нет доступной перевозки";
   const { byId, graph } = buildGraph(regions);
+  const countryRows = new Map((countries ?? []).map((row) => [String(row.id), row]));
+  const regionHidden = (id) => !isGM && countryRows.get(String(byId.get(id)?.countryId ?? id))?.visibility === "gm";
   const homeId = String(findHoldingRegion(holding, regions)?.value ?? "");
   const startId = String(direction === "outbound" ? homeId : market?.regionId ?? "");
   const endId = String(direction === "outbound" ? market?.regionId ?? "" : homeId);
   if (!startId || !endId || !byId.has(startId) || !byId.has(endId)) return `${prefix}: локация не найдена на карте.`;
+  if (regionHidden(startId) || regionHidden(endId)) return `${prefix} (проверьте режимы узлов, УРС и доступность перевозчиков).`;
   if (startId === endId) return `${prefix}: на локальном рынке нет подходящего вида транспорта.`;
 
-  // 1. Check if a route exists with higher URS.
+  // 1. Check if a route exists with higher URS (minimize URS, not cost, so the hint shows the true minimum threshold).
   const unlimited = findOptimalHiredRoute({
     holding, market, regions, organizations, countries, direction,
-    accessLimit: 99, cargoLoad: TRANSPORT_LOAD_SCALE, kind: "regular", metric: "cost", regionFactors, isGM
+    accessLimit: 99, cargoLoad: TRANSPORT_LOAD_SCALE, kind: "regular", metric: "access", regionFactors, isGM
   });
   if (unlimited?.ok) {
     return `${prefix}: требуется УРС ${unlimited.routeAccessCost}, доступно ${Math.max(0, Math.floor(accessLimit))}.`;
   }
 
-  // 2. Check if any undirected graph path exists ignoring mode/airshipOnly restrictions.
+  // 2. Check if any visible undirected graph path exists ignoring mode restrictions.
   const parent = new Map([[startId, null]]);
   const queue = [startId];
   for (let i = 0; i < queue.length && !parent.has(endId); i++) {
     for (const edge of graph.get(queue[i]) ?? []) {
-      if (parent.has(edge.to)) continue;
+      if (parent.has(edge.to) || regionHidden(edge.to)) continue;
       parent.set(edge.to, { from: queue[i], edge });
       queue.push(edge.to);
     }
   }
   if (!parent.has(endId)) return `${prefix}: между локациями нет связи на карте маршрутов.`;
 
-  // 3. Pinpoint the first blocked edge on the shortest raw path (most common: airshipOnly port connected to an inland region).
+  // 3. Pinpoint the first blocked edge on the shortest visible raw path without leaking GM-only node names.
   const pathEdges = [];
   for (let node = endId; parent.get(node); node = parent.get(node).from) pathEdges.push(parent.get(node));
   pathEdges.reverse();
@@ -431,6 +436,9 @@ export function diagnoseHiredRouteFailure({
     const a = byId.get(from), b = byId.get(edge.to);
     const allowed = edgeModes(edge, a, b, { fromStop: true, toStop: true });
     if (!allowed.length) {
+      if (regionHidden(from) || regionHidden(edge.to)) {
+        return `${prefix} (проверьте режимы узлов, УРС и доступность перевозчиков).`;
+      }
       if (a?.marketLandmassId && b?.marketLandmassId && a.marketLandmassId !== b.marketLandmassId) {
         return `${prefix}: узлы «${a.label || from}» и «${b.label || edge.to}» на разных островах/материках — между ними допустим только воздушный корабль.`;
       }
@@ -542,20 +550,20 @@ function buildOwnShipService({ data, holding, ship, world, from, to, homeEndpoin
   const routeFor = (a, b, maxAccess, startQd = baseStartQd) => findFastestAirshipRoute(toRegion(a), toRegion(b), world.regions, {
     speedKmPerDay, calendar: { ...world.seasonalCalendar, fallbackSeasonId: world.seasonId }, startQd, maxAccess
   });
-  const safeEmpty = (a, b, aAtHome = a === homeEndpoint) => {
+  const safeEmpty = (a, b, aAtHome = a === homeEndpoint, startQd = baseStartQd) => {
     if (a === b && aAtHome === (b === homeEndpoint)) return null;
     try {
-      const selectedRoute = routeFor(a, b, emptyAccessLimit);
+      const selectedRoute = routeFor(a, b, emptyAccessLimit, startQd);
       return worldShipTransportTerms(data, holding, ship, toRegion(a), toRegion(b), {
         context: world, loadPoints: 0, maxAccess: emptyAccessLimit,
-        fromHome: aAtHome, toHome: b === homeEndpoint, selectedRoute
+        fromHome: aAtHome, toHome: b === homeEndpoint, selectedRoute, startQd
       });
     } catch (_error) {
       return null;
     }
   };
   const atPickup = position === from && positionAtHome === (from === homeEndpoint);
-  const approach = safeEmpty(position, from, positionAtHome);
+  const approach = safeEmpty(position, from, positionAtHome, baseStartQd);
   const fromPort = toRegion(from) === world.home.regionId && from === homeEndpoint
     ? world.home : world.ports.find((port) => port.regionId === toRegion(from));
   const loadingQd = fromPort ? transportPortHandlingQd(fromPort, capacityPoints) : 0;
@@ -565,9 +573,11 @@ function buildOwnShipService({ data, holding, ship, world, from, to, homeEndpoin
     context: world, loadPoints: capacityPoints, maxAccess: cargoAccessLimit,
     fromHome: from === homeEndpoint, toHome: to === homeEndpoint, selectedRoute, startQd: departureQd
   });
-  const back = safeEmpty(to, from);
-  const homeReturn = safeEmpty(to, homeEndpoint);
-  const abortReturn = safeEmpty(from, homeEndpoint);
+  const returnStartQd = departureQd + Number(terms.durationQd ?? 0) + Number(terms.unloadingQd ?? 0);
+  const abortStartQd = baseStartQd + (approach?.durationQd ?? 0);
+  const back = safeEmpty(to, from, undefined, returnStartQd);
+  const homeReturn = safeEmpty(to, homeEndpoint, undefined, returnStartQd);
+  const abortReturn = safeEmpty(from, homeEndpoint, undefined, abortStartQd);
   return {
     id: `owned:${ship.id}:${from}:${to}`,
     label: `${ship.name} · ${terms.distanceKm} км · УРС ${terms.accessCost}`,
@@ -659,7 +669,7 @@ export function findOptimalOwnShipServices({
       cargoAccessLimit, emptyAccessLimit: accessLimit, configuration, calendar, returnHome
     });
     if (direct.approachAvailable && (!returnHome || direct.endReturnAvailable)) {
-      return { ok: true, services: [direct], transferPortLabel: "" };
+      return { ok: true, services: [direct], transferPortId: "", transferPortLabel: "" };
     }
     directEmptyBlocked = true;
   } catch (_directError) {
@@ -667,25 +677,27 @@ export function findOptimalOwnShipServices({
   }
 
   // 2. One clean transfer at a reachable airship port + hired land delivery (caravan/rail).
-  // Fast land BFS first so we only inspect ports actually connected to the inland market by land.
+  // Minimum-URS land Dijkstra first so no longer-km/lower-URS path to a valid port is ever pruned away.
   const { byId, graph } = buildGraph(regions);
-  const landDist = new Map([[marketRegionId, { km: 0, access: 0 }]]);
-  const landHeap = new MinHeap((a, b) => a.km - b.km || a.access - b.access);
-  landHeap.push({ node: marketRegionId, km: 0, access: 0 });
+  const countryRows = new Map((countries ?? []).map((row) => [String(row.id), row]));
+  const regionHidden = (id) => !isGM && countryRows.get(String(byId.get(id)?.countryId ?? id))?.visibility === "gm";
+  const landDist = new Map([[marketRegionId, { access: 0, km: 0 }]]);
+  const landHeap = new MinHeap((a, b) => a.access - b.access || a.km - b.km);
+  landHeap.push({ node: marketRegionId, access: 0, km: 0 });
   while (landHeap.size) {
     const cur = landHeap.pop();
     const rec = landDist.get(cur.node);
-    if (rec && (rec.km < cur.km - 1e-9 || (Math.abs(rec.km - cur.km) <= 1e-9 && rec.access < cur.access))) continue;
+    if (rec && (rec.access < cur.access || (rec.access === cur.access && rec.km < cur.km - 1e-9))) continue;
     for (const edge of graph.get(cur.node) ?? []) {
       const nextAccess = cur.access + edge.ursCost;
-      if (nextAccess > cargoAccessLimit) continue;
+      if (nextAccess > cargoAccessLimit || regionHidden(edge.to)) continue;
       const modes = edgeModes(edge, byId.get(cur.node), byId.get(edge.to), { allowedModes: LAND_MODES, fromStop: true, toStop: true });
       if (!modes.length) continue;
       const nextKm = cur.km + edge.distanceKm;
       const existing = landDist.get(edge.to);
-      if (existing && existing.km <= nextKm + 1e-9 && existing.access <= nextAccess) continue;
-      landDist.set(edge.to, { km: nextKm, access: nextAccess });
-      landHeap.push({ node: edge.to, km: nextKm, access: nextAccess });
+      if (existing && (existing.access < nextAccess || (existing.access === nextAccess && existing.km <= nextKm + 1e-9))) continue;
+      landDist.set(edge.to, { access: nextAccess, km: nextKm });
+      landHeap.push({ node: edge.to, access: nextAccess, km: nextKm });
     }
   }
   // Fast airship reachability from home (overflight allowed) so decoy ports with no air link are skipped in 0.1 ms.
@@ -708,6 +720,7 @@ export function findOptimalOwnShipServices({
   }
   const airPorts = (world.ports ?? [])
     .filter((port) => port.regionId !== marketRegionId
+      && !regionHidden(port.regionId)
       && (homeEndpoint !== homeRegionId || port.regionId !== homeRegionId)
       && landDist.has(port.regionId)
       && airReach.has(port.regionId)
@@ -743,7 +756,7 @@ export function findOptimalOwnShipServices({
       const totalDistance = chain.reduce((sum, row) => sum + (row.distanceKm ?? 0), 0);
       const totalAccess = chain.reduce((sum, row) => sum + (row.accessCost ?? 0), 0);
       if (!best || totalDistance < best.totalDistance || (totalDistance === best.totalDistance && totalAccess < best.totalAccess)) {
-        best = { services: chain, totalDistance, totalAccess, transferPortLabel: port.label };
+        best = { services: chain, totalDistance, totalAccess, transferPortId: port.regionId, transferPortLabel: port.label };
       }
     } catch (_error) {
       continue;
@@ -757,7 +770,7 @@ export function findOptimalOwnShipServices({
         : "Нет доступного воздушного маршрута для своего корабля (проверьте УРС и воздушные порты)."
     };
   }
-  return { ok: true, services: best.services, transferPortLabel: best.transferPortLabel };
+  return { ok: true, services: best.services, transferPortId: best.transferPortId, transferPortLabel: best.transferPortLabel };
 }
 
 export function resolveSettlementAccessLevel(holding, regions, market, { direction = "inbound", dependencies = {} } = {}) {

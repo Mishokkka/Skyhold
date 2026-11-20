@@ -22,12 +22,20 @@ const days = (qd) => `${number(Math.max(0, qd) / 4)} дн.`;
 const statuses = { booked: "Забронировано", travelling: "В пути", waitingCarrier: "Ожидает освобождения транспорта", needsResolution: "Ожидает решения ГМ", delivered: "Доставлено", lost: "Груз утрачен", cancelled: "Отменено" };
 const legacyStatuses = { pending: "Ожидает исполнения", "in-transit": "В пути", delayed: "Задержан" };
 
+function pluralRu(count, one, few, many) {
+  const mod100 = count % 100, mod10 = count % 10;
+  if (mod100 >= 11 && mod100 <= 19) return many;
+  if (mod10 === 1) return one;
+  if (mod10 >= 2 && mod10 <= 4) return few;
+  return many;
+}
+
 function vehicleCountLabel(service) {
   const count = Math.max(1, Math.floor(Number(service?.vehicleCount ?? 1)));
   if (count <= 1) return "";
-  if (service.mode === "caravan") return `${count} каравана`;
-  if (service.mode === "rail") return `${count} состава`;
-  return `${count} судна`;
+  if (service.mode === "caravan") return `${count} ${pluralRu(count, "караван", "каравана", "караванов")}`;
+  if (service.mode === "rail") return `${count} ${pluralRu(count, "состав", "состава", "составов")}`;
+  return `${count} ${pluralRu(count, "судно", "судна", "судов")}`;
 }
 
 function stageInvoice(stage) {
@@ -125,12 +133,12 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
     let bundle = null, quote = null, quoteError = "";
     const liveSourceToken = transportSourceToken(data, holding);
     if (this.request) {
-      const cacheKey = `${liveSourceToken}|${permissions.isGM ? 1 : 0}|${JSON.stringify(this.request)}`;
+      const cacheKey = `${liveSourceToken}|${permissions.isGM ? 1 : 0}|${permissions.canManageShips ? 1 : 0}|${JSON.stringify(this.request)}`;
       try {
         if (this._bundleCache?.key === cacheKey) {
           bundle = this._bundleCache.bundle;
         } else {
-          bundle = prepareTransportOptions({ data, holding, request: this.request, isGM: permissions.isGM });
+          bundle = prepareTransportOptions({ data, holding, request: this.request, isGM: permissions.isGM, canManageShips: permissions.canManageShips });
           this._bundleCache = { key: cacheKey, bundle };
         }
         if (bundle.activeMode === "owned" && bundle.chosenShip && !this.request.ownShipId) {
@@ -195,7 +203,9 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
       treasury: result?.ok ? money(result.treasuryCopper) : "",
       summary: result?.ok ? optionSummaryCarriers(result, visibility) : "",
       risk: result?.ok ? optionRiskLabel(result) : "",
-      transferNote: result?.ok && result.transferPortLabel ? `Стыковка в порту: ${result.transferPortLabel}` : "",
+      transferNote: result?.ok && (result.transferPortId || result.transferPortLabel)
+        ? `Стыковка в порту: ${result.transferPortId && visibility.pointHidden(result.transferPortId) ? "скрытый порт" : (result.transferPortLabel || pointLabel(result.transferPortId))}`
+        : "",
       error: result?.ok ? "" : (result?.error ?? "Вариант недоступен")
     });
 
@@ -364,7 +374,8 @@ export class SkyholdTransportApp extends RenderSchedulerMixin(HandlebarsApplicat
         };
       } else if (this.request && field.dataset.transportField) {
         const key = field.dataset.transportField;
-        this.request[key] = field.type === "checkbox" ? field.checked : field.type === "number" ? Number(field.value) : field.value;
+        this.request[key] = field.type === "checkbox" ? field.checked
+          : field.type === "number" ? Math.max(0, Math.floor(Number(field.value) || 0)) : field.value;
         if (key === "ownShipId" && this.request.ownShipId) this.request.mode = "owned";
       }
       this.requestRender({ focus: false });

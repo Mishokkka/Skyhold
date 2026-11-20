@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { transportFixture, transportRequest, transportHarness } from "./fixtures/transport-v2.mjs";
 import { prepareTransportContext } from "../apps/domains/transport-context.js";
-import { legacyTransportServiceId, transportServicesShareFleet } from "../engines/transport/service-identity.js";
+import { legacyTransportServiceId, resolveTransportSelections, transportServicesShareFleet } from "../engines/transport/service-identity.js";
 import { planTransportChain } from "../engines/transport/planner.js";
 
 const previous = globalThis.game;
@@ -32,6 +32,8 @@ try {
       const oldId = legacyTransportServiceId(short.id);
       assert.equal(oldId, legacyTransportServiceId(long.id), "the previous ID collided on these real paths");
       assert.equal(transportServicesShareFleet(short.id, long.id), false);
+      assert.deepEqual(resolveTransportSelections([short, long], { serviceIds: [oldId] }).ambiguous, [oldId],
+        "ambiguous legacy serviceIds must not silently pick one of two physical paths");
       const cargo = preview.plan.stages[0].runs.flatMap(run => run.cargo);
       const first = planTransportChain({ cargo, services: [short], startQd: 0 });
       const oldRun = { ...first.stages[0].runs[0], serviceId: oldId };
