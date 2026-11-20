@@ -240,30 +240,30 @@
   color: var(--fbls-text);
 }
 
-.application.fbl-skyhold.dialog .dialog-content p,
-.window-app.fbl-skyhold.dialog .dialog-content p,
-.application.fbl-skyhold.dialog .dialog-content li,
-.window-app.fbl-skyhold.dialog .dialog-content li,
-.application.fbl-skyhold.dialog .dialog-content label,
-.window-app.fbl-skyhold.dialog .dialog-content label,
-.application.fbl-skyhold.dialog .dialog-content span,
-.window-app.fbl-skyhold.dialog .dialog-content span,
-.application.fbl-skyhold.dialog .dialog-content strong,
-.window-app.fbl-skyhold.dialog .dialog-content strong,
-.application.fbl-skyhold.dialog .dialog-content code,
-.window-app.fbl-skyhold.dialog .dialog-content code {
+.application.fbl-skyhold.dialog:not(.fbl-skyhold-morale-dialog) .dialog-content p,
+.window-app.fbl-skyhold.dialog:not(.fbl-skyhold-morale-dialog) .dialog-content p,
+.application.fbl-skyhold.dialog:not(.fbl-skyhold-morale-dialog) .dialog-content li,
+.window-app.fbl-skyhold.dialog:not(.fbl-skyhold-morale-dialog) .dialog-content li,
+.application.fbl-skyhold.dialog:not(.fbl-skyhold-morale-dialog) .dialog-content label,
+.window-app.fbl-skyhold.dialog:not(.fbl-skyhold-morale-dialog) .dialog-content label,
+.application.fbl-skyhold.dialog:not(.fbl-skyhold-morale-dialog) .dialog-content span,
+.window-app.fbl-skyhold.dialog:not(.fbl-skyhold-morale-dialog) .dialog-content span,
+.application.fbl-skyhold.dialog:not(.fbl-skyhold-morale-dialog) .dialog-content strong,
+.window-app.fbl-skyhold.dialog:not(.fbl-skyhold-morale-dialog) .dialog-content strong,
+.application.fbl-skyhold.dialog:not(.fbl-skyhold-morale-dialog) .dialog-content code,
+.window-app.fbl-skyhold.dialog:not(.fbl-skyhold-morale-dialog) .dialog-content code {
   color: inherit;
   text-shadow: none;
 }
 
-.application.fbl-skyhold.dialog .dialog-content h1,
-.window-app.fbl-skyhold.dialog .dialog-content h1,
-.application.fbl-skyhold.dialog .dialog-content h2,
-.window-app.fbl-skyhold.dialog .dialog-content h2,
-.application.fbl-skyhold.dialog .dialog-content h3,
-.window-app.fbl-skyhold.dialog .dialog-content h3,
-.application.fbl-skyhold.dialog .dialog-content h4,
-.window-app.fbl-skyhold.dialog .dialog-content h4 {
+.application.fbl-skyhold.dialog:not(.fbl-skyhold-morale-dialog) .dialog-content h1,
+.window-app.fbl-skyhold.dialog:not(.fbl-skyhold-morale-dialog) .dialog-content h1,
+.application.fbl-skyhold.dialog:not(.fbl-skyhold-morale-dialog) .dialog-content h2,
+.window-app.fbl-skyhold.dialog:not(.fbl-skyhold-morale-dialog) .dialog-content h2,
+.application.fbl-skyhold.dialog:not(.fbl-skyhold-morale-dialog) .dialog-content h3,
+.window-app.fbl-skyhold.dialog:not(.fbl-skyhold-morale-dialog) .dialog-content h3,
+.application.fbl-skyhold.dialog:not(.fbl-skyhold-morale-dialog) .dialog-content h4,
+.window-app.fbl-skyhold.dialog:not(.fbl-skyhold-morale-dialog) .dialog-content h4 {
   color: var(--fbls-text-strong);
   border-color: var(--fbls-border);
   text-shadow: none;

@@ -77,7 +77,11 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
   static rerenderOpen({ skipFocused = false } = {}) {
     for (const app of this.instances.values()) {
       const active = globalThis.document?.activeElement;
-      if (skipFocused && app.element?.contains(active) && active?.matches("input, select")) continue;
+      if (skipFocused && app.element?.contains(active) && active?.matches("input, select")) {
+        app._deferredFocusRender = true;
+        continue;
+      }
+      app._deferredFocusRender = false;
       app.requestRender({ focus: false });
     }
   }
@@ -97,6 +101,7 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
   }
 
   render(options = {}) {
+    this._deferredFocusRender = false;
     this._outboundDisclosures.capture();
     if (this.rendered && this.element) this._pendingPersistentImages = capturePersistentImages(this.element);
     return super.render(options);
@@ -291,6 +296,13 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
     root.addEventListener("contextmenu", (event) => this._onContextMenu(event, root), listenerOptions);
     root.addEventListener("change", (event) => this._onChange(event, root), listenerOptions);
     root.addEventListener("input", (event) => this._onInput(event, root), listenerOptions);
+    root.addEventListener("focusout", (event) => {
+      if (!this._deferredFocusRender) return;
+      const next = event.relatedTarget;
+      if (next && root.contains(next) && next.matches?.("input, select")) return;
+      this._deferredFocusRender = false;
+      this.requestRender({ focus: false });
+    }, listenerOptions);
     this._applyFilters(root);
     if (this._focusOutboundOrderId || this._focusOutbound) {
       const orderId = this._focusOutboundOrderId;
@@ -486,6 +498,7 @@ export class SkyholdMarketApp extends RenderSchedulerMixin(HandlebarsApplication
 
   async _onClose(options) {
     await super._onClose(options);
+    this._deferredFocusRender = false;
     this._marketAbortController?.abort?.();
     this._outboundDisclosures.close();
     hideFloatingTooltip(this);

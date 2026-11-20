@@ -6,7 +6,7 @@ import { transportOfferAccessFixture } from "./fixtures/transport-offer-access.m
 import { SkyholdData } from "../data/store.js";
 
 globalThis.foundry = { applications: { api: {
-  ApplicationV2: class { get state() { return 0; } async _prepareContext() { return {}; } }, HandlebarsApplicationMixin: (Base) => Base
+  ApplicationV2: class { get state() { return 0; } async _prepareContext() { return {}; } async _onRender() {} }, HandlebarsApplicationMixin: (Base) => Base
 } } };
 const { SkyholdMarketApp } = await import("../apps/market-app.js");
 for (const isGM of [true, false]) {
@@ -128,5 +128,38 @@ try {
   game.user.isGM = false;
   await click();
   assert.equal(prompts, 4, "players never open the edit dialog");
+}
+{
+  const previousDocument = globalThis.document;
+  const searchInput = { matches: selector => selector.includes("input") };
+  const otherSelect = { matches: selector => selector.includes("select") };
+  const outsideButton = { matches: () => false };
+  const listeners = new Map();
+  const root = {
+    contains: node => node === searchInput || node === otherSelect,
+    querySelectorAll: () => [],
+    querySelector: () => null,
+    addEventListener: (type, fn) => listeners.set(type, fn)
+  };
+  const app = new SkyholdMarketApp({ holdingId: "deferred-focus" });
+  let renders = 0;
+  app.element = root;
+  app.requestRender = () => { renders += 1; };
+  await app._onRender({}, {});
+  SkyholdMarketApp.instances.set(app.holdingId, app);
+  globalThis.document = { activeElement: searchInput };
+  try {
+    SkyholdMarketApp.rerenderOpen({ skipFocused: true });
+    assert.equal(renders, 0, "rerender waits while focus remains inside an input");
+    listeners.get("focusout")({ relatedTarget: otherSelect });
+    assert.equal(renders, 0, "moving focus directly to another input/select keeps the render deferred");
+    listeners.get("focusout")({ relatedTarget: outsideButton });
+    assert.equal(renders, 1, "leaving inputs/selects flushes the skipped market rerender");
+    listeners.get("focusout")({ relatedTarget: outsideButton });
+    assert.equal(renders, 1, "subsequent focusout does not trigger redundant rerenders");
+  } finally {
+    SkyholdMarketApp.instances.delete(app.holdingId);
+    globalThis.document = previousDocument;
+  }
 }
 console.log("Transport UI: goods availability, cached market quotes, unified checkout and GM-only treasury editing passed.");

@@ -54,6 +54,39 @@ function hasVisibleButtonText(body) {
   return Boolean(text);
 }
 
+function extractBalancedObject(source, openIndex) {
+  let depth = 0, quote = "";
+  const templateDepths = [];
+  for (let i = openIndex; i < source.length; i++) {
+    const ch = source[i], next = source[i + 1];
+    if (quote) {
+      if (ch === "\\") { i++; continue; }
+      if (quote === "`" && ch === "$" && next === "{") { templateDepths.push(depth); depth++; quote = ""; i++; continue; }
+      if (ch === quote) quote = "";
+      continue;
+    }
+    if (ch === "/" && next === "/") { i = source.indexOf("\n", i); if (i < 0) break; continue; }
+    if (ch === "/" && next === "*") { i = source.indexOf("*/", i + 2); if (i < 0) break; i++; continue; }
+    if (ch === "'" || ch === '"' || ch === "`") { quote = ch; continue; }
+    if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (templateDepths.length && templateDepths.at(-1) === depth) { templateDepths.pop(); quote = "`"; continue; }
+      if (depth === 0) return source.slice(openIndex, i + 1);
+    }
+  }
+  return source.slice(openIndex);
+}
+
+function findUnthemedDialogV2Calls(source) {
+  const missing = [];
+  for (const match of source.matchAll(/DialogV2(?:\(\))?\??\.(?:confirm|prompt|wait)\(\s*\{/g)) {
+    const objectText = extractBalancedObject(source, match.index + match[0].length - 1);
+    if (!/\bclasses\s*:\s*\[[^\]]*["']fbl-skyhold["']/.test(objectText)) missing.push(match.index);
+  }
+  return missing;
+}
+
 export function checkUiContract({ root = DEFAULT_ROOT, hbsFiles = null } = {}) {
   const files = hbsFiles ?? walkTemplates(path.join(root, "templates"));
   const failures = [];
@@ -119,12 +152,20 @@ export function checkUiContract({ root = DEFAULT_ROOT, hbsFiles = null } = {}) {
   for (const required of ["color-scheme: dark", ".theme-light", ".theme-dark", "--color-text-primary:", "--color-border:", "--input-background-color:", "--button-background-color:", "> .window-header", ".fbl-skyhold.dialog"]) {
     if (!themeIsolationCss.includes(required)) failures.push(`skyhold-theme-isolation.css missing universal theme lock: ${required}`);
   }
+  assert.deepEqual(
+    findUnthemedDialogV2Calls('DialogV2.confirm({ content: "A" });\nDialogV2.prompt({ classes: ["fbl-skyhold"], content: "B" });'),
+    [0],
+    "DialogV2 scanner must not credit a neighboring call's classes to an unthemed call"
+  );
+  assert.deepEqual(
+    findUnthemedDialogV2Calls(`DialogV2.confirm({ content: "${"x".repeat(300)}", classes: ["fbl-skyhold"] });`),
+    [],
+    "DialogV2 scanner must inspect the full options object past long content strings"
+  );
   for (const appFile of walkSources(path.join(root, "scripts/apps"))) {
     const source = readFileSync(appFile, "utf8");
-    for (const match of source.matchAll(/DialogV2(?:\(\))?\??\.(?:confirm|prompt|wait)\(\s*\{([\s\S]{0,220})/g)) {
-      if (!/classes\s*:\s*\[[^\]]*["']fbl-skyhold["']/.test(match[1])) {
-        failures.push(`${sourceLabel(appFile, source, match.index, root)} DialogV2 call must opt into the fbl-skyhold theme class`);
-      }
+    for (const index of findUnthemedDialogV2Calls(source)) {
+      failures.push(`${sourceLabel(appFile, source, index, root)} DialogV2 call must opt into the fbl-skyhold theme class`);
     }
   }
   const financeDialogs = readFileSync(path.join(root, "scripts/apps/domains/events/finance-control-events.js"), "utf8");
