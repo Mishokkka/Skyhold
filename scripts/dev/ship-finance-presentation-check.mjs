@@ -162,13 +162,18 @@ assert.equal(finance.outing.canComparePlan, false);
 
 const template = readFileSync(new URL("../../templates/parts/ship-window/finance.hbs", import.meta.url), "utf8");
 const adjustmentPosition = template.indexOf('data-ship-disclosure="funds:');
-assert.ok(template.indexOf("Баланс и обязательства") < adjustmentPosition, "the approved compact balance summary precedes the manual adjustment form");
+assert.ok(adjustmentPosition > 0, "finance template must contain manual adjustment disclosure");
+const balancePosition = template.indexOf("Баланс и обязательства");
+assert.ok(balancePosition >= 0 && balancePosition < adjustmentPosition, "the approved compact balance summary precedes the manual adjustment form");
 for (const amount of ["moneySummary.walletCopper", "moneySummary.obligationsCopper", "moneySummary.reserveCopper", "moneySummary.freeCopper"]) {
-  assert.ok(template.indexOf(amount) < adjustmentPosition, `${amount} is visible before a financial operation`);
+  const position = template.indexOf(amount);
+  assert.ok(position >= 0 && position < adjustmentPosition, `${amount} is visible before a financial operation`);
 }
 assert.doesNotMatch(template, /fblsShipGold/, "ship finance uses unified З / С / М currency formatting");
 assert.match(template, /moneySummary\.contingencyReserveCopper/, "finance separates committed future legs from contingency reserve");
-assert.ok(template.indexOf("financePresentation.futureLegsShortageCopper") < template.indexOf("financePresentation.contingencyShortageCopper"),
+const futureLegsPosition = template.indexOf("financePresentation.futureLegsShortageCopper");
+const contingencyPosition = template.indexOf("financePresentation.contingencyShortageCopper");
+assert.ok(futureLegsPosition >= 0 && contingencyPosition >= 0 && futureLegsPosition < contingencyPosition,
   "uncovered committed legs warning precedes optional reserve warning");
 assert.ok(template.indexOf("Неоплаченные обязательства") > adjustmentPosition, "the approved bill breakdown follows the operation, under a disclosure");
 assert.match(template, /report.canComparePlan/);

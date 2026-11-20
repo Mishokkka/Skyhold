@@ -30,7 +30,7 @@ export class ShipOrderPlanner {
 
   _writeDraftField(selector, value) {
     const field = this.root?.querySelector?.(selector);
-    if (!field || field.value === value) return;
+    if (!field || (field.value === value && !field.validity?.badInput)) return;
     const previous = this._syncingBudget;
     this._syncingBudget = true;
     try {

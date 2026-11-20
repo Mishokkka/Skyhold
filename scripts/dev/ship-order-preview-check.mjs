@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { worldMarketFixture } from "./world-ship-market-characterization-check.mjs";
+import { installTransportTestCalendar, transportTestDate, transportTestYearQd } from "./fixtures/transport-calendar.mjs";
 import { generateWorldShipOffers, quoteWorldShipBundle, repriceWorldShipOffer, worldShipTimeBreakdown } from "../engines/ships/world-market.js";
 import { advanceWorldShips, departWorldShip, departWorldShipBundle, resolveWorldShip, resolveWorldShipBundleStop } from "../engines/ships/world-voyage.js";
 import { previewShipOrders } from "../engines/ships/order-preview.js";
@@ -341,6 +342,26 @@ for (const isGM of [true, false]) {
     assert.equal(budgetField.value, "");
     assert.equal(lastContext.isAutoBudget, true);
     assert.equal(focused, "recommended");
+
+    // Clearing or switching to recommended must still assign "" when an incomplete numeric input sets validity.badInput with value === "".
+    let badInputCleared = false;
+    Object.defineProperty(budgetField, "value", {
+      configurable: true,
+      get() { return this._v ?? ""; },
+      set(next) { this._v = next; if (next === "" && this.validity?.badInput) { this.validity.badInput = false; badInputCleared = true; } }
+    });
+    budgetField._v = "";
+    budgetField.validity = { badInput: true };
+    listeners.get("input")({ target: budgetField });
+    assert.equal(modeField.value, "custom");
+    assert.match(lastContext.error, /Укажите бюджет числом/);
+    controller.clear();
+    assert.equal(badInputCleared, true, "clear() resets invalid incomplete numeric input even when value is already empty");
+    assert.equal(budgetField.validity.badInput, false);
+    controller.selected.add("first");
+    controller.update();
+    assert.equal(lastContext.error, undefined);
+    assert.equal(lastContext.hasPlan, true);
     controller.close();
   } finally {
     globalThis.Handlebars = previousHandlebars;
@@ -404,31 +425,77 @@ for (const isGM of [true, false]) {
   assert.equal(surplus.plannedReserveCopper, 500);
 }
 
-// P2: seasonal flight multipliers (speedup, slowdown, boundary transition) stay synchronized with quote timing.
-for (const [label, multiplier, clockQd] of [["winter-fast", 0.25, 0], ["winter-slow", 2, 0], ["season-boundary", 2, 36]]) {
-  const { data, holding, ship } = fixture();
-  data.catalog.marketEconomy.seasons = {
-    currentSeasonId: "winter",
-    sequence: ["winter", "spring"],
-    periodDays: 10
-  };
-  for (const region of data.catalog.eventRegions) {
-    for (const link of region.marketLinks ?? []) {
-      link.seasonalModifiers = { winter: { enabled: true, timeMultiplier: multiplier, costMultiplier: 1, riskMultiplier: 1 } };
-    }
-  }
-  ship.timelineQd = holding.gm.calendaria.lastQd = clockQd;
-  const single = previewShipOrders(data, holding, ship, { offerIds: ["first"] });
-  const timing = worldShipTimeBreakdown(single.world, single.offers[0]);
-  assert.equal(single.flightQd, timing.flightQd, `${label}: single flightQd matches seasonal quote`);
-  assert.equal(single.portQd, timing.loadingQd + timing.unloadingQd, `${label}: single portQd never goes negative`);
-  assert.ok(single.portQd >= 0);
-  assert.equal(single.legs.reduce((sum, leg) => sum + leg.flightQd, 0), single.flightQd);
+// P2: seasonal flight multipliers (speedup, slowdown, boundary transition) actually apply and stay synchronized with quote timing.
+{
+  const previousGame = globalThis.game;
+  globalThis.game = { user: { id: "gm", isGM: true }, settings: { get() {} }, modules: new Map() };
+  const calendar = installTransportTestCalendar(transportTestYearQd);
+  try {
+    const setupSeasonal = ({ timeFactor = null, clockQd = transportTestYearQd, dateText = "Хладоход" } = {}) => {
+      const state = fixture();
+      const { data, holding, ship } = state;
+      const period = Math.floor(clockQd / 40);
+      holding.gm.calendaria = { lastQd: clockQd, lastDateTime: transportTestDate(clockQd), lastDateText: dateText };
+      ship.timelineQd = clockQd;
+      for (const offer of holding.special.ships.offers) offer.period = period;
+      if (timeFactor !== null) {
+        for (const region of data.catalog.eventRegions) {
+          for (const link of region.marketLinks ?? []) {
+            link.seasonalModifiers = { winter: { enabled: true, timeFactor, costFactor: 1, riskFactor: 1 } };
+          }
+        }
+      }
+      return state;
+    };
 
-  const bundle = previewShipOrders(data, holding, ship, { offerIds: ["first", "second", "pickup"] });
-  assert.equal(bundle.totalDurationQd, bundle.flightQd + bundle.portQd, `${label}: bundle flight + port matches total`);
-  assert.ok(bundle.portQd >= 0, `${label}: bundle portQd never goes negative`);
-  assert.equal(bundle.legs.reduce((sum, leg) => sum + leg.flightQd, 0), bundle.flightQd);
+    const baseState = setupSeasonal();
+    const baseSingle = previewShipOrders(baseState.data, baseState.holding, baseState.ship, { offerIds: ["first"] });
+    const baseBundle = previewShipOrders(baseState.data, baseState.holding, baseState.ship, { offerIds: ["first", "second", "pickup"] });
+
+    const fastState = setupSeasonal({ timeFactor: 0.25 });
+    const fastSingle = previewShipOrders(fastState.data, fastState.holding, fastState.ship, { offerIds: ["first"] });
+    const fastTiming = worldShipTimeBreakdown(fastState.world ?? fastSingle.world, fastSingle.offers[0]);
+    const fastBundle = previewShipOrders(fastState.data, fastState.holding, fastState.ship, { offerIds: ["first", "second", "pickup"] });
+    assert.ok(fastSingle.flightQd < baseSingle.flightQd, "winter speedup reduces single-order flight duration");
+    assert.ok(fastBundle.flightQd < baseBundle.flightQd, "winter speedup reduces bundle flight duration");
+    assert.equal(fastSingle.flightQd, fastTiming.flightQd);
+    assert.equal(fastSingle.portQd, fastTiming.loadingQd + fastTiming.unloadingQd);
+    assert.ok(fastSingle.portQd >= 0 && fastBundle.portQd >= 0);
+    assert.equal(fastSingle.legs.reduce((sum, leg) => sum + leg.flightQd, 0), fastSingle.flightQd);
+    assert.equal(fastBundle.legs.reduce((sum, leg) => sum + leg.flightQd, 0), fastBundle.flightQd);
+    assert.equal(fastBundle.totalDurationQd, fastBundle.flightQd + fastBundle.portQd);
+
+    const slowState = setupSeasonal({ timeFactor: 2 });
+    const slowSingle = previewShipOrders(slowState.data, slowState.holding, slowState.ship, { offerIds: ["first"] });
+    const slowTiming = worldShipTimeBreakdown(slowSingle.world, slowSingle.offers[0]);
+    const slowBundle = previewShipOrders(slowState.data, slowState.holding, slowState.ship, { offerIds: ["first", "second", "pickup"] });
+    assert.ok(slowSingle.flightQd > baseSingle.flightQd, "winter slowdown increases single-order flight duration");
+    assert.ok(slowBundle.flightQd > baseBundle.flightQd, "winter slowdown increases bundle flight duration");
+    assert.equal(slowSingle.flightQd, slowTiming.flightQd);
+    assert.equal(slowSingle.portQd, slowTiming.loadingQd + slowTiming.unloadingQd);
+    assert.equal(slowBundle.totalDurationQd, slowBundle.flightQd + slowBundle.portQd);
+    assert.equal(slowBundle.legs.reduce((sum, leg) => sum + leg.flightQd, 0), slowBundle.flightQd);
+
+    // Day 28 midday of Хладоход (10 QD before Теплорост / spring): approach + start of delivery fly in winter (2x), finishing in spring (1x).
+    const boundaryQd = transportTestYearQd + 110;
+    calendar.setNow(boundaryQd);
+    const boundaryState = setupSeasonal({ timeFactor: 2, clockQd: boundaryQd });
+    const boundarySingle = previewShipOrders(boundaryState.data, boundaryState.holding, boundaryState.ship, { offerIds: ["first"] });
+    const boundaryTiming = worldShipTimeBreakdown(boundarySingle.world, boundarySingle.offers[0]);
+    const boundaryBundle = previewShipOrders(boundaryState.data, boundaryState.holding, boundaryState.ship, { offerIds: ["first", "second", "pickup"] });
+    assert.ok(boundarySingle.flightQd > baseSingle.flightQd && boundarySingle.flightQd < slowSingle.flightQd,
+      "season boundary yields intermediate duration between winter and spring");
+    assert.ok(boundaryBundle.flightQd > baseBundle.flightQd && boundaryBundle.flightQd < slowBundle.flightQd,
+      "bundle season boundary yields intermediate duration between winter and spring");
+    assert.equal(boundarySingle.flightQd, boundaryTiming.flightQd);
+    assert.equal(boundarySingle.portQd, boundaryTiming.loadingQd + boundaryTiming.unloadingQd);
+    assert.equal(boundarySingle.legs.reduce((sum, leg) => sum + leg.flightQd, 0), boundarySingle.flightQd);
+    assert.equal(boundaryBundle.totalDurationQd, boundaryBundle.flightQd + boundaryBundle.portQd);
+    assert.equal(boundaryBundle.legs.reduce((sum, leg) => sum + leg.flightQd, 0), boundaryBundle.flightQd);
+  } finally {
+    calendar.restore();
+    globalThis.game = previousGame;
+  }
 }
 
 console.log("Ship order preview: immutable quotes, 1–3 orders, cautious fees, seasonal leg timing, shortfall separation, dynamic budget presets, stale/permission guards and GM/player command parity passed.");

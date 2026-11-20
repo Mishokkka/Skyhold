@@ -187,10 +187,12 @@ class TestMarket extends SkyholdMarketApp { render() { return Promise.resolve(th
 }
 
 const preview = readFileSync("templates/parts/ship-window/order-preview.hbs", "utf8");
-assert.ok(preview.indexOf("nominalExitCopper") < preview.indexOf("data-ship-plan-details"), "full nominal result must be visible before the disclosures");
-assert.ok(preview.indexOf("settlementWithdrawalCopper") < preview.indexOf("data-ship-plan-details"));
-assert.ok(preview.indexOf("plannedReserveCopper") < preview.indexOf("data-ship-plan-details"), "single reserve figure must be visible before disclosures");
-assert.ok(preview.indexOf("mandatoryTripCopper") < preview.indexOf("data-ship-plan-details"), "mandatory trip cost including guaranteed approach fee precedes disclosures");
+const detailsPosition = preview.indexOf("data-ship-plan-details");
+assert.ok(detailsPosition > 0, "order preview must include collapsible details");
+for (const field of ["nominalExitCopper", "settlementWithdrawalCopper", "plannedReserveCopper", "mandatoryTripCopper"]) {
+  const position = preview.indexOf(field);
+  assert.ok(position >= 0 && position < detailsPosition, `${field} must appear before the disclosures`);
+}
 assert.match(preview, /Итог по смете с возвратом/);
 assert.doesNotMatch(preview, /fblsShipGold/, "order preview uses unified З / С / М currency formatting");
 assert.match(readFileSync("templates/parts/ship-window/crew.hbs", "utf8"), /readiness\.warnings/);
