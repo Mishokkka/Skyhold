@@ -286,21 +286,12 @@ await check("R6 nonselected ground alternatives cannot change a direct flight to
         }
         const sim = simulation(f.data), request = transportRequest(f, "a", { direction }, isGM);
         const quote = () => prepareTransportContext({ data: sim.data, holding: sim.holding(f.holding.id), request, isGM });
-        const initial = quote();
-        const direct = initial.services.find(row => row.kind === "regular" && row.mode === "airship"
-          && row.from === initial.from && row.to === initial.to);
-        assert.ok(direct, "the direct flight must connect to the actual holding endpoint");
-        request.pins = { [direct.from]: direct.id };
         const preview = quote();
+        const direct = preview.plan.stages[0].service;
         assert.equal(preview.plan.stages.length, 1, "a direct flight needs no additional local carriage");
-        if (mixed) {
-          const ground = initial.services.find(row => row.kind === "regular" && row.mode === "caravan");
-          request.pins = { [ground.from]: ground.id };
-          const groundPlan = quote().plan;
-          assert.equal(groundPlan.stages.length, 2, "ground cargo still requires its real local air leg");
-          assert.equal(groundPlan.stages[direction === "inbound" ? 1 : 0].service.mode, "airship");
-          request.pins = { [direct.from]: direct.id };
-        }
+        assert.equal(direct.mode, "airship");
+        assert.equal(direct.from, preview.from);
+        assert.equal(direct.to, preview.to);
         const operation = await sim.command(f.holding.id, "transport-book", { request, planToken: preview.planToken }, isGM ? "gm" : "player");
         sim.reload(); await sim.advance(f.holding.id, 80);
         const order = sim.holding(f.holding.id).special.transportV2.orders.find(row => row.id === operation.operationId);

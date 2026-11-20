@@ -2,8 +2,6 @@ import assert from "node:assert/strict";
 import { performance } from "node:perf_hooks";
 import { transportFixture, transportRequest } from "./fixtures/transport-v2.mjs";
 import { prepareTransportContext } from "../apps/domains/transport-context.js";
-import { worldShipRouteSearchBudget } from "../engines/ships/world-market.js";
-import { TRANSPORT_LIMITS } from "../engines/transport/quantities.js";
 
 const previous = globalThis.game;
 globalThis.game = { user: { id: "gm", isGM: true }, settings: { get() {} }, modules: new Map() };
@@ -14,29 +12,18 @@ try {
       seasonalModifiers: { winter: { enabled: true, timeFactor: 1 + (i + j) % 3, riskFactor: 1 } } })) }));
   const request = transportRequest(f, "a", { ownShipId: f.ship.id });
   for (const isGM of [true, false]) {
-    const budget = worldShipRouteSearchBudget(), initial = { ...budget }, begin = performance.now();
-    const result = prepareTransportContext({ ...f, request, isGM, searchBudget: budget });
+    const begin = performance.now();
+    const result = prepareTransportContext({ ...f, request, isGM });
+    const elapsedMs = performance.now() - begin;
     assert.ok(result.plan);
-    assert.equal(result.search.limited, true);
-    assert.equal(result.search.limits.routes, true, "partial discovery remains explicit even if a plan was found");
-    for (const key of ["labels", "routes", "hiredRoutes"]) {
-      assert.ok(budget[key] >= 0 && budget[key] < initial[key], `all ${key} work shares one quote budget`);
-    }
-    const hired = result.services.filter(s => s.kind !== "owned");
-    assert.ok(hired.length <= initial.hiredRoutes * 2 * TRANSPORT_LIMITS.stages);
+    assert.equal(result.search.limited, false, "constrained Dijkstra solves dense graphs without hitting a search limit");
+    assert.equal(result.search.limits.routes, false);
     assert.equal(new Set(result.services.map(s => s.id)).size, result.services.length);
-    console.log(`Dense eight-port quote (${isGM ? "GM" : "player"}): ${Math.round(performance.now() - begin)} ms; ${initial.labels - budget.labels} labels, ${initial.hiredRoutes - budget.hiredRoutes} hired paths.`);
-    const baseline = prepareTransportContext({ ...f, request, isGM,
-      searchBudget: { labels: 0, routes: 0, hiredRoutes: 0 } });
-    assert.ok(baseline.plan, "the known shortest own-ship path survives an exhausted alternatives budget");
-    assert.equal(baseline.search.limited, true);
-    const exhausted = prepareTransportContext({ ...f, isGM, allowIncomplete: true,
-      request: { ...request, pins: { a: "unavailable-service" } },
-      searchBudget: { labels: 0, routes: 0, hiredRoutes: 0 } });
-    assert.equal(exhausted.plan, null);
-    assert.equal(exhausted.search.limited, true);
-    assert.match(exhausted.error, /лимит/);
-    assert.doesNotMatch(exhausted.error, /нет доступной перевозки/);
+    assert.ok(elapsedMs < 500, `dense 8-port quote must stay fast, took ${elapsedMs.toFixed(1)} ms`);
+    const hiredResult = prepareTransportContext({ ...f, request: { ...request, ownShipId: "", mode: "regular" }, isGM });
+    assert.ok(hiredResult.plan);
+    assert.equal(hiredResult.search.limited, false);
+    console.log(`Dense eight-port quote (${isGM ? "GM" : "player"}): ${Math.round(elapsedMs)} ms, zero search limits.`);
   }
-  console.log("Transport quote search budget: shared hired/own discovery, bounded physical alternatives and truthful partial/no-plan results passed.");
+  console.log("Transport dense-graph routing: fast exact own-ship and hired quotes with zero search limits passed.");
 } finally { globalThis.game = previous; }

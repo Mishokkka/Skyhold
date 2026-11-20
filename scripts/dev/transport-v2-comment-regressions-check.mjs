@@ -69,82 +69,45 @@ for (const user of [gm, player]) for (const direction of ["inbound", "outbound"]
   assert.throws(() => prepareTransportContext({ ...f, request, isGM: user.isGM }), /больше доступного/);
 }
 
-// Check the enclosing template blocks, not just the presence of a selector.
+// The unified 3-choice checkout switches cleanly between regular, charter and own ship for GM and player.
 const template = fs.readFileSync(new URL("../../templates/transport-app.hbs", import.meta.url), "utf8");
-const stack = [];
-for (const match of template.matchAll(/{{([#/])([^}]+)}}|data-transport-(pin|exclude)=/g)) {
-  if (match[1] === "#") stack.push(match[2].trim());
-  else if (match[1] === "/") stack.pop();
-  else assert.ok(!stack.includes("if selected"), "refinement controls must render without a selected plan");
-}
+assert.match(template, /data-action="transport-select-mode"/, "transport checkout exposes the 3-mode choice cards");
+assert.doesNotMatch(template, /data-transport-pin=/, "manual per-leg pin clutter is removed");
+assert.doesNotMatch(template, /data-transport-exclude=/, "manual carrier exclusion clutter is removed");
+
 for (const user of [gm, player]) {
   game.user = user;
   const f = transportFixture();
-  f.data.catalog.eventRegions[0].marketLinks = Array.from({ length: 140 }, (_, index) => ({
-    regionId: "a", routeId: `path-${index}`, distanceKm: 150, modes: ["airship"]
-  }));
-  const request = transportRequest(f, "a", {}, user.isGM);
-  const initial = prepareTransportContext({ ...f, request, isGM: user.isGM });
-  const last = [...initial.services].sort((a, b) => a.id.localeCompare(b.id)).at(-1);
-  f.data.catalog.transportV2.overrides = Object.fromEntries(initial.services.filter(row => row.id !== last.id)
-    .map(row => [row.id, { capacity: 1 }]));
+  const request = transportRequest(f, "a", { mode: "regular" }, user.isGM);
   const h = transportHarness(f);
   SkyholdData.view = () => h.data;
   const app = new SkyholdTransportApp({ holdingId: f.holding.id });
   app.request = request;
   app.requestRender = () => {};
   let context = await app._prepareContext({});
-  assert.equal(context.selected, null);
-  assert.equal(context.canConfirm, false);
-  assert.match(context.quoteError, /Поиск достиг лимита/);
-  const group = context.refinements.groups.find(row => row.from === "a");
-  assert.ok(group.options.some(row => row.value === last.id));
-  const handlers = new Map();
-  app.element = { querySelectorAll: () => [], addEventListener: (type, callback) => handlers.set(type, callback) };
-  await app._onRender(context, {});
-  const change = (dataset, value) => handlers.get("change")({ target: { closest: () => ({ dataset, value }) } });
-  change({ transportPin: group.from }, last.id);
+  assert.equal(context.choices.length, 3, "shows regular, charter and own-ship choice cards");
+  assert.equal(context.choices.find(row => row.mode === "regular").selected, true);
+  assert.equal(context.canConfirm, true);
+  await app._action(null, { dataset: { action: "transport-select-mode", mode: "charter" } });
   context = await app._prepareContext({});
-  assert.equal(context.canConfirm, true, JSON.stringify({ error: context.quoteError, pins: app.request.pins, canUse: context.canUse }));
-  assert.equal(app.request.pins.a, last.id);
+  assert.equal(context.choices.find(row => row.mode === "charter").selected, true);
+  assert.equal(app.request.mode, "charter");
+  await app._action(null, { dataset: { action: "transport-select-mode", mode: "owned" } });
+  context = await app._prepareContext({});
+  assert.equal(context.choices.find(row => row.mode === "owned").selected, true);
+  assert.equal(context.isOwnedMode, true);
   let outcome, submitted;
   app._submit = async () => {
     submitted = structuredClone(app._pending);
+    SkyholdTransportApp.sessions.delete(app.holdingId);
+    app._pending = null;
     outcome = await h.execute(submitted, { userId: user.id, remote: !user.isGM });
   };
   await app._action(null, { dataset: { action: "transport-confirm" } });
   assert.equal(outcome?.ok, true, app._error);
   assert.equal(submitted.sourceToken, transportSourceToken(f.data, f.holding));
   const order = h.holding.special.transportV2.orders.at(-1);
-  h.advance(order.plan.arrivalQd);
+  h.advance(Math.max(order.plan.arrivalQd, order.plan.shipReleaseQd ?? 0));
   assert.equal(order.status, "delivered");
-  app._pending = null;
-  SkyholdTransportApp.sessions.delete(f.holding.id);
-  change({ transportPin: group.from }, "");
-  assert.equal(app.request.pins.a, undefined, "automatic choice removes a pin rather than storing an empty constraint");
-  change({ transportExclude: "true" }, last.companyId);
-  assert.ok(app.request.excluded.includes(last.companyId));
-  app.request.excluded = [...new Set((context.refinements.companies ?? []).map(row => row.id).concat(app.request.excluded))];
-  const allExcluded = await app._prepareContext({});
-  assert.equal(allExcluded.refinements.groups.length, 0, "excluding every company leaves no refinement groups");
-  assert.equal(allExcluded.hasExcludedCompanies, true);
-  assert.equal(allExcluded.hasRefinementResets, true, "reset actions stay available when all groups are excluded");
-  await app._action(null, { dataset: { action: "transport-restore-companies" } });
-  assert.deepEqual(app.request.excluded, []);
 }
-{
-  const fs = await import("node:fs");
-  const template = fs.readFileSync(new URL("../../templates/transport-app.hbs", import.meta.url), "utf8");
-  const stack = [];
-  let sawRestore = false;
-  for (const match of template.matchAll(/{{([#/])([^}]+)}}|data-action="transport-restore-companies"/g)) {
-    if (match[1] === "#") stack.push(match[2].trim());
-    else if (match[1] === "/") stack.pop();
-    else {
-      sawRestore = true;
-      assert.ok(!stack.includes("if refinements.groups"), "reset exclusions button must not be hidden inside refinements.groups");
-    }
-  }
-  assert.equal(sawRestore, true);
-}
-console.log("PR comments: GM/player market discovery, legal own import/export, stock/access refusal, replay/reload and UI recovery through actual handlers and authority booking passed.");
+console.log("PR comments: GM/player market discovery, legal own import/export, stock/access refusal, replay/reload and 3-choice UI booking passed.");

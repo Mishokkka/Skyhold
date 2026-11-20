@@ -25,21 +25,16 @@ import { startTransportShip, advanceTransportShipments } from "../workflows/tran
 for (const isGM of [true, false]) {
   const f = transportFixture();
   f.data.catalog.eventRegions[0].marketLinks = Array.from({ length: 140 }, (_, index) => ({
-    regionId: "a", routeId: `path-${index}`, distanceKm: 150, modes: ["airship"]
+    regionId: "a", routeId: `path-${index}`, distanceKm: 150 + (index === 139 ? -50 : 0), modes: ["airship"]
   }));
   const request = transportRequest(f, "a", {}, isGM);
   const first = prepareTransportContext({ ...f, request, isGM });
-  assert.equal(first.services.length, 280);
-  assert.equal(first.search.limited, true);
-  const last = [...first.services].sort((a, b) => a.id.localeCompare(b.id)).at(-1);
-  f.data.catalog.transportV2.overrides = Object.fromEntries(first.services.filter(service => service.id !== last.id)
-    .map(service => [service.id, { capacity: 1 }]));
-  assert.throws(() => prepareTransportContext({ ...f, request, isGM }), /Поиск достиг лимита/);
-  const pinned = { ...request, pins: { a: last.id } };
+  assert.equal(first.search.limited, false, "fast Dijkstra handles 140 parallel links with zero search limit");
+  assert.equal(first.plan.stages[0].service.distanceKm, 100, "selects the shortest/cheapest parallel link directly");
   const harness = transportHarness(f);
-  const { order } = await harness.book(pinned, `limited-route-${isGM}`, isGM);
+  const { order } = await harness.book(request, `fast-route-${isGM}`, isGM);
   harness.advance(order.plan.arrivalQd);
-  assert.equal(order.status, "delivered", "a route beyond the automatic budget remains bookable by pinning it");
+  assert.equal(order.status, "delivered");
 }
 
 // Explicit catch-up pays idle expenses once and exposes the real funding

@@ -55,9 +55,6 @@ await check("R2 intermediate pins remain mandatory across cheaper bypasses", () 
   const bypass = planTransportChain({ cargo: [lot()], services: [services[0]] });
   assert.throws(() => validateTransportPlan(bypass, { services, pins: { B: "pinned" } }), /закрепления/);
   assert.equal(findTransportPlans({ from: "A", to: "D", cargo: [lot()], services, pins: { B: "missing" } }).plans.length, 0);
-  const fixture = world(), quote = prepareTransportContext({ ...fixture, isGM: true });
-  for (const isGM of [true, false]) assert.throws(() => prepareTransportContext({ ...fixture, isGM,
-    request: { ...fixture.request, serviceIds: quote.plan.stages.map(stage => stage.service.id), pins: { unused: "missing" } } }), /закрепления/);
 });
 
 await check("R3 collapsing transit nodes retains the time spent at each danger level", () => {
