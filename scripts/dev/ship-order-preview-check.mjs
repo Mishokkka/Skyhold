@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { worldMarketFixture } from "./world-ship-market-characterization-check.mjs";
-import { generateWorldShipOffers, quoteWorldShipBundle, repriceWorldShipOffer } from "../engines/ships/world-market.js";
+import { generateWorldShipOffers, quoteWorldShipBundle, repriceWorldShipOffer, worldShipTimeBreakdown } from "../engines/ships/world-market.js";
+import { advanceWorldShips, departWorldShip, departWorldShipBundle, resolveWorldShip, resolveWorldShipBundleStop } from "../engines/ships/world-voyage.js";
 import { previewShipOrders } from "../engines/ships/order-preview.js";
 import { shipRouteMapContext } from "../apps/common/route-map-view.js";
 import { ShipOrderPlanner } from "../apps/ship-order-planner.js";
@@ -51,7 +52,8 @@ function freeze(value) {
       const single = previewShipOrders(data, holding, ship, { offerIds: ["first"], style });
       assert.equal(single.totalDurationQd, normal.quote.durationQd);
       assert.equal(single.totalOperatingCopper, normal.quote.operatingCopper);
-      assert.equal(single.recommendedReserveCopper, single.recommendedBudgetCopper - single.totalOperatingCopper);
+      assert.equal(single.mandatoryTripCopper, single.totalOperatingCopper + single.guaranteedStyleCostCopper);
+      assert.equal(single.recommendedReserveCopper, single.recommendedBudgetCopper - single.mandatoryTripCopper);
       assert.equal(single.effectiveBudgetCopper, single.recommendedBudgetCopper);
       assert.equal(single.plannedReserveCopper, single.recommendedReserveCopper);
       assert.equal(single.totalDurationQd, single.flightQd + single.portQd);
@@ -65,7 +67,8 @@ function freeze(value) {
       assert.equal(preview.totalOperatingCopper, quote.totalOperatingCopper);
       assert.equal(preview.totalDurationQd, quote.totalDurationQd);
       assert.equal(preview.recommendedBudgetCopper, quote.recommendedBudgetCopper);
-      assert.equal(preview.recommendedReserveCopper, quote.returnReserveCopper + quote.idleReserveCopper + quote.outcomeReserveCopper);
+      assert.equal(preview.mandatoryTripCopper, preview.totalOperatingCopper + preview.guaranteedStyleCostCopper);
+      assert.equal(preview.recommendedReserveCopper, preview.recommendedBudgetCopper - preview.mandatoryTripCopper);
       assert.equal(preview.plannedReserveCopper, preview.recommendedReserveCopper);
       assert.deepEqual(preview.stops.map((stop) => stop.point.id), [holding.id, "origin", "a", "b"]);
       assert.deepEqual(preview.legs.map((leg) => leg.loadOnLegPoints), [0, 2400, 1800]);
@@ -263,13 +266,19 @@ for (const isGM of [true, false]) {
   let focused = "";
   const budgetField = { value: "", matches: (selector) => selector === "[data-ship-bundle-budget]",
     dispatchEvent(event) { inputEvents += 1; listeners.get(event.type)?.({ target: this }); } };
-  const minimumButton = { dataset: { shipPlannerBudget: "", shipPlannerBudgetPreset: "minimum" },
-    focus() { focused = "minimum"; }, closest: (selector) => selector === "[data-ship-planner-budget]" ? minimumButton : null };
-  const output = { innerHTML: "", contains: (node) => node === minimumButton, querySelectorAll: () => [],
-    querySelector: (selector) => selector === '[data-ship-planner-budget-preset="minimum"]' ? minimumButton : null };
+  const modeField = { value: "recommended", matches: (selector) => selector === "[data-ship-bundle-budget-mode]",
+    dispatchEvent(event) { inputEvents += 1; listeners.get(event.type)?.({ target: this }); } };
+  const styleField = { value: "normal", matches: (selector) => selector === "[data-ship-bundle-style]" };
+  const minimumButton = { dataset: { shipPlannerBudgetPreset: "minimum" },
+    focus() { focused = "minimum"; }, closest: (selector) => selector === "[data-ship-planner-budget-preset]" ? minimumButton : null };
+  const recommendedButton = { dataset: { shipPlannerBudgetPreset: "recommended" },
+    focus() { focused = "recommended"; }, closest: (selector) => selector === "[data-ship-planner-budget-preset]" ? recommendedButton : null };
+  const output = { innerHTML: "", contains: (node) => node === minimumButton || node === recommendedButton, querySelectorAll: () => [],
+    querySelector: (selector) => selector === '[data-ship-planner-budget-preset="minimum"]' ? minimumButton
+      : selector === '[data-ship-planner-budget-preset="recommended"]' ? recommendedButton : null };
   const root = {
     querySelector: (selector) => ({ "[data-ship-planner-preview]": output, "[data-ship-bundle-budget]": budgetField,
-      "[data-ship-bundle-style]": { value: "normal" } })[selector] ?? null,
+      "[data-ship-bundle-budget-mode]": modeField, "[data-ship-bundle-style]": styleField })[selector] ?? null,
     querySelectorAll: () => [],
     addEventListener(type, fn) { listeners.set(type, fn); }
   };
@@ -284,14 +293,54 @@ for (const isGM of [true, false]) {
     controller.bind(root);
     assert.equal(lastContext.isAutoBudget, true);
     assert.equal(lastContext.isTripOnlyBudget, false);
-    minimumButton.dataset.shipPlannerBudget = lastContext.totalOperatingGoldInput;
+    const firstMandatory = lastContext.mandatoryTripCopper;
+
+    // Switching to "Только рейс" tracks mode separately and recalculates across order and style changes.
     listeners.get("click")({ target: minimumButton });
-    assert.equal(inputEvents, 1, "preset button dispatches input so drafts stay synchronized");
-    assert.equal(budgetField.value, lastContext.totalOperatingGoldInput);
+    assert.ok(inputEvents >= 1, "preset switch dispatches input so drafts stay synchronized");
+    assert.equal(modeField.value, "minimum");
+    assert.equal(budgetField.value, (firstMandatory / 100).toFixed(2));
     assert.equal(lastContext.isAutoBudget, false);
     assert.equal(lastContext.isTripOnlyBudget, true);
     assert.equal(lastContext.plannedReserveCopper, 0);
     assert.equal(focused, "minimum", "re-rendering preview preserves focus on the activated budget preset");
+
+    // Switching to a more expensive order recalculates minimum mode instead of leaving the old sum.
+    controller.selected.clear();
+    controller.selected.add("second");
+    controller.update();
+    const secondMandatory = lastContext.mandatoryTripCopper;
+    assert.notEqual(secondMandatory, firstMandatory);
+    assert.equal(lastContext.isTripOnlyBudget, true);
+    assert.equal(budgetField.value, (secondMandatory / 100).toFixed(2), "minimum mode follows the newly selected order");
+
+    // Switching to cautious adds guaranteed precaution fee to minimum mode automatically.
+    styleField.value = "cautious";
+    listeners.get("change")({ target: styleField });
+    assert.ok(lastContext.guaranteedStyleCostCopper > 0);
+    assert.equal(lastContext.mandatoryTripCopper, lastContext.totalOperatingCopper + lastContext.guaranteedStyleCostCopper);
+    assert.equal(budgetField.value, (lastContext.mandatoryTripCopper / 100).toFixed(2));
+    assert.equal(lastContext.nominalExitCopper, lastContext.rewardCopper - lastContext.mandatoryTripCopper - lastContext.returnReserveCopper);
+
+    // Switching back to the cheaper order lowers the budget so no excess is withdrawn from treasury.
+    styleField.value = "normal";
+    controller.selected.clear();
+    controller.selected.add("first");
+    controller.update();
+    assert.equal(budgetField.value, (firstMandatory / 100).toFixed(2));
+
+    // Manual input exits minimum mode into custom mode; switching back to recommended clears the field.
+    budgetField.value = "5.00";
+    listeners.get("input")({ target: budgetField });
+    assert.equal(modeField.value, "custom");
+    assert.equal(lastContext.isTripOnlyBudget, false);
+    assert.equal(lastContext.isAutoBudget, false);
+    globalThis.document.activeElement = recommendedButton;
+    listeners.get("click")({ target: recommendedButton });
+    assert.equal(modeField.value, "recommended");
+    assert.equal(budgetField.value, "");
+    assert.equal(lastContext.isAutoBudget, true);
+    assert.equal(focused, "recommended");
     controller.close();
   } finally {
     globalThis.Handlebars = previousHandlebars;
@@ -299,4 +348,87 @@ for (const isGM of [true, false]) {
   }
 }
 
-console.log("Ship order preview: immutable quotes, 1–3 orders, pickup/capacity, bills, exact route geometry, budget presets, stale/permission guards and GM/player command parity passed.");
+// P1: cautious single order and cautious bundle sent with "Только рейс" resolve a quiet trip without waitingFunds.
+{
+  const { data, holding, ship } = fixture();
+  ship.onboardCopper = 0;
+  const plan = previewShipOrders(data, holding, ship, { offerIds: ["first"], style: "cautious" });
+  assert.ok(plan.guaranteedStyleCostCopper > 0);
+  const tripOnly = previewShipOrders(data, holding, ship, { offerIds: ["first"], style: "cautious", budgetCopper: plan.mandatoryTripCopper });
+  assert.equal(tripOnly.canDepart, true);
+  assert.equal(tripOnly.plannedReserveCopper, 0);
+  assert.equal(tripOnly.firstLegShortageCopper, 0);
+  assert.equal(tripOnly.remainingTripShortageCopper, 0);
+  assert.equal(tripOnly.extraReserveShortageCopper, tripOnly.recommendedReserveCopper);
+  const departed = departWorldShip(holding, ship, { operationId: "cautious-min", offer: tripOnly.offers[0], style: "cautious", budgetCopper: tripOnly.mandatoryTripCopper, clockQd: 0 });
+  assert.equal(departed.ok, true);
+  assert.equal(ship.onboardCopper, plan.guaranteedStyleCostCopper, "precaution fee remains onboard for arrival resolution");
+  holding.gm.calendaria.lastQd = departed.arrivalQd;
+  advanceWorldShips(holding, departed.arrivalQd);
+  const resolved = resolveWorldShip(holding, ship, { operationId: "cautious-min-resolve", random: () => 0.99 });
+  assert.equal(resolved.waitingFunds, false, "quiet cautious arrival pays precaution fee and collects reward without GM intervention");
+  assert.equal(resolved.pending, false);
+  assert.equal(ship.onboardCopper, resolved.outcome.rewardCopper);
+}
+{
+  const { data, holding, ship } = fixture();
+  ship.onboardCopper = 0;
+  const plan = previewShipOrders(data, holding, ship, { offerIds: ["first", "second"], style: "cautious" });
+  assert.ok(plan.guaranteedStyleCostCopper > 0);
+  const bundleQuote = quoteWorldShipBundle(data, holding, ship, plan.offers);
+  const departed = departWorldShipBundle(holding, ship, { operationId: "cautious-bundle-min", plan: bundleQuote, style: "cautious", budgetCopper: plan.mandatoryTripCopper, clockQd: 0 });
+  assert.equal(departed.ok, true);
+  holding.gm.calendaria.lastQd = departed.arrivalQd;
+  advanceWorldShips(holding, departed.arrivalQd);
+  const firstStop = resolveWorldShipBundleStop(holding, ship, { operationId: "cautious-bundle-stop-0", bundleId: departed.bundleId, random: () => 0.99 });
+  assert.equal(firstStop.waitingFunds, false, "empty approach stop in a cautious bundle pays its guaranteed precaution fee cleanly");
+  assert.equal(firstStop.pending, false);
+}
+
+// P2: shortfall buckets separate first leg, remaining mandatory costs, and optional reserve cleanly.
+{
+  const { data, holding, ship } = fixture();
+  ship.onboardCopper = 0;
+  const zero = previewShipOrders(data, holding, ship, { offerIds: ["first"], style: "cautious", budgetCopper: 0 });
+  assert.equal(zero.canDepart, false);
+  assert.equal(zero.firstLegShortageCopper, zero.firstLegCopper);
+  assert.equal(zero.remainingTripShortageCopper, zero.guaranteedStyleCostCopper);
+  assert.equal(zero.extraReserveShortageCopper, zero.recommendedReserveCopper);
+  assert.equal(zero.firstLegShortageCopper + zero.remainingTripShortageCopper + zero.extraReserveShortageCopper, zero.reserveShortageCopper);
+  // Already-funded onboard wallet preserves surplus without extra treasury transfer.
+  ship.onboardCopper = zero.mandatoryTripCopper + 500;
+  const surplus = previewShipOrders(data, holding, ship, { offerIds: ["first"], style: "cautious", budgetCopper: zero.mandatoryTripCopper });
+  assert.equal(surplus.walletCoversTarget, true);
+  assert.equal(surplus.transferCopper, 0);
+  assert.equal(surplus.effectiveBudgetCopper, ship.onboardCopper);
+  assert.equal(surplus.plannedReserveCopper, 500);
+}
+
+// P2: seasonal flight multipliers (speedup, slowdown, boundary transition) stay synchronized with quote timing.
+for (const [label, multiplier, clockQd] of [["winter-fast", 0.25, 0], ["winter-slow", 2, 0], ["season-boundary", 2, 36]]) {
+  const { data, holding, ship } = fixture();
+  data.catalog.marketEconomy.seasons = {
+    currentSeasonId: "winter",
+    sequence: ["winter", "spring"],
+    periodDays: 10
+  };
+  for (const region of data.catalog.eventRegions) {
+    for (const link of region.marketLinks ?? []) {
+      link.seasonalModifiers = { winter: { enabled: true, timeMultiplier: multiplier, costMultiplier: 1, riskMultiplier: 1 } };
+    }
+  }
+  ship.timelineQd = holding.gm.calendaria.lastQd = clockQd;
+  const single = previewShipOrders(data, holding, ship, { offerIds: ["first"] });
+  const timing = worldShipTimeBreakdown(single.world, single.offers[0]);
+  assert.equal(single.flightQd, timing.flightQd, `${label}: single flightQd matches seasonal quote`);
+  assert.equal(single.portQd, timing.loadingQd + timing.unloadingQd, `${label}: single portQd never goes negative`);
+  assert.ok(single.portQd >= 0);
+  assert.equal(single.legs.reduce((sum, leg) => sum + leg.flightQd, 0), single.flightQd);
+
+  const bundle = previewShipOrders(data, holding, ship, { offerIds: ["first", "second", "pickup"] });
+  assert.equal(bundle.totalDurationQd, bundle.flightQd + bundle.portQd, `${label}: bundle flight + port matches total`);
+  assert.ok(bundle.portQd >= 0, `${label}: bundle portQd never goes negative`);
+  assert.equal(bundle.legs.reduce((sum, leg) => sum + leg.flightQd, 0), bundle.flightQd);
+}
+
+console.log("Ship order preview: immutable quotes, 1–3 orders, cautious fees, seasonal leg timing, shortfall separation, dynamic budget presets, stale/permission guards and GM/player command parity passed.");

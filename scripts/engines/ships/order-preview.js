@@ -1,12 +1,31 @@
 import { buildShipWorldContext, configureWorldShipEconomy, quoteWorldShipBundle, repriceWorldShipOffer, worldShipTimeBreakdown } from "./world-market.js";
 import { shortestMarketRoute } from "../market/logistics.js";
 import { contractGuidance } from "./contracts.js";
+import { bundleOperatingShares } from "./bundle-accounting.js";
 import { shipCapacityLoadPoints } from "./profiles.js";
 import { shipCrewReadiness } from "./crew-readiness.js";
 import { shipMoneySummary } from "./summary.js";
 import { worldShipTimelineQd } from "./world-voyage.js";
 
 const samePoint = (a, b) => a?.kind === b?.kind && a?.id === b?.id;
+
+function guaranteedSingleStyleCostCopper(offer, style) {
+  if (style !== "cautious") return 0;
+  const contract = offer?.contract;
+  if (contract?.economics?.version === 1) return Number(contract.economics.precautionCopper ?? 0);
+  const baseCost = Number(contract?.guidance?.operatingCopper ?? offer?.quote?.operatingCopper ?? 0)
+    + Number(contract?.guidance?.preparationCopper ?? contract?.routePlan?.preparationCopper ?? 0);
+  return Math.round(baseCost * 30 / 100);
+}
+
+function guaranteedBundleStyleCostCopper(offers, stops, totalOperatingCopper, style) {
+  if (style !== "cautious") return 0;
+  if (stops.length && stops.every((stop) => stop.economics?.version === 1)) {
+    return stops.reduce((sum, stop) => sum + Number(stop.economics.precautionCopper ?? 0), 0);
+  }
+  return bundleOperatingShares(offers, totalOperatingCopper)
+    .reduce((sum, share) => sum + Math.round(share * 30 / 100), 0);
+}
 
 /** Transient, read-only plan. Uses the departure quotes; never stores navigation or rolls outcomes. */
 export function previewShipOrders(data, holding, ship, { offerIds = [], style = "normal", budgetCopper = null } = {}) {
@@ -49,8 +68,8 @@ export function previewShipOrders(data, holding, ship, { offerIds = [], style = 
     return route;
   };
   let totalDurationQd, distanceKm, totalOperatingCopper, recommendedBudgetCopper;
-  let returnReserveCopper, idleReserveCopper, outcomeReserveCopper, firstLegCopper;
-  let stops, legs;
+  let returnReserveCopper, idleReserveCopper, outcomeReserveCopper, firstLegCopper, guaranteedStyleCostCopper;
+  let stops, legs, portQd;
   if (offers.length === 1) {
     const offer = offers[0];
     const { quote } = offer;
@@ -59,22 +78,29 @@ export function previewShipOrders(data, holding, ship, { offerIds = [], style = 
     const speed = quote.speedKmPerDay;
     legs = [];
     stops = [{ point: origin, pickupOfferIds: atOrigin.map((row) => row.id), deliveryOfferIds: [], loadAfterPoints: initialLoadPoints }];
+    let approachFlightQd = 0;
     if (offer.contract.pickup) {
       const route = routeBetween(origin, pickup);
-      legs.push({ from: origin, to: pickup, route, flightQd: Math.ceil(route.distanceKm * 4 / speed), loadOnLegPoints: 0, hiddenOnLegPoints: 0, offerIds: [] });
+      approachFlightQd = Number.isSafeInteger(quote.approachFlightQd) ? quote.approachFlightQd : Math.ceil(route.distanceKm * 4 / speed);
+      legs.push({ from: origin, to: pickup, route, flightQd: approachFlightQd, loadOnLegPoints: 0, hiddenOnLegPoints: 0, offerIds: [] });
       stops.push({ point: pickup, pickupOfferIds: [offer.id], deliveryOfferIds: [], loadAfterPoints: offer.contract.cargo.loadPoints });
     }
     const route = routeBetween(pickup, offer.to);
-    legs.push({ from: pickup, to: offer.to, route, flightQd: Math.ceil(route.distanceKm * 4 / speed), loadOnLegPoints: offer.contract.cargo.loadPoints, hiddenOnLegPoints: hidden(offer), offerIds: [offer.id] });
+    const deliveryFlightQd = Number.isSafeInteger(quote.deliveryFlightQd)
+      ? quote.deliveryFlightQd
+      : Math.max(0, timing.flightQd - approachFlightQd);
+    legs.push({ from: pickup, to: offer.to, route, flightQd: deliveryFlightQd, loadOnLegPoints: offer.contract.cargo.loadPoints, hiddenOnLegPoints: hidden(offer), offerIds: [offer.id] });
     stops.push({ point: offer.to, pickupOfferIds: [], deliveryOfferIds: [offer.id], loadAfterPoints: 0 });
     // Handling and approach remain exactly those of the single-order quote (no bundle minimum rest).
     stops[offer.contract.pickup ? 1 : 0].portQd = timing.loadingQd;
     stops.at(-1).portQd = timing.unloadingQd;
     totalDurationQd = quote.durationQd;
+    portQd = timing.loadingQd + timing.unloadingQd;
     distanceKm = quote.distanceKm;
     totalOperatingCopper = firstLegCopper = quote.operatingCopper;
     returnReserveCopper = quote.returnReserveCopper;
     idleReserveCopper = quote.idleReserveCopper;
+    guaranteedStyleCostCopper = guaranteedSingleStyleCostCopper(offer, style);
     recommendedBudgetCopper = Math.max(quote.recommendedBudgetCopper,
       contractGuidance(offer.contract, style).suggestedBudgetCopper + returnReserveCopper + idleReserveCopper);
     outcomeReserveCopper = recommendedBudgetCopper - totalOperatingCopper - returnReserveCopper - idleReserveCopper;
@@ -89,18 +115,23 @@ export function previewShipOrders(data, holding, ship, { offerIds = [], style = 
     }
     ({ totalDurationQd, distanceKm, totalOperatingCopper, recommendedBudgetCopper,
       returnReserveCopper, idleReserveCopper, outcomeReserveCopper } = plan);
+    guaranteedStyleCostCopper = guaranteedBundleStyleCostCopper(offers, plan.stops, totalOperatingCopper, style);
     firstLegCopper = plan.stops[0].legOffer.quote.operatingCopper;
     const carried = new Set(atOrigin.map((offer) => offer.id));
     stops = [{ point: origin, pickupOfferIds: [...carried], deliveryOfferIds: [], loadAfterPoints: initialLoadPoints }];
     legs = plan.stops.map((stop) => {
       const from = stop.legOffer.from;
       const route = routeBetween(from, stop.point);
-      const flightQd = Math.ceil(route.distanceKm * 4 / stop.legOffer.quote.speedKmPerDay);
+      const quoteDurationQd = Number(stop.legOffer.quote.durationQd ?? 0);
+      const handlingQd = stop.legOffer.quote.seasonal?.handlingQd;
+      const flightQd = Number.isSafeInteger(handlingQd)
+        ? Math.max(0, quoteDurationQd - handlingQd)
+        : Math.min(quoteDurationQd, Math.ceil(route.distanceKm * 4 / stop.legOffer.quote.speedKmPerDay));
       const leg = { from, to: stop.point, route, flightQd,
         loadOnLegPoints: stop.loadOnLegPoints, offerIds: [...carried],
         hiddenOnLegPoints: offers.filter((offer) => carried.has(offer.id)).reduce((sum, offer) => sum + hidden(offer), 0),
         operatingCopper: stop.legOffer.quote.operatingCopper,
-        durationQd: stop.legOffer.quote.durationQd };
+        durationQd: quoteDurationQd };
       // First bundle leg includes loading at the origin; don't invent a precise phase schedule yet.
       for (const id of stop.deliveryOfferIds) carried.delete(id);
       for (const id of stop.pickupOfferIds) carried.add(id);
@@ -125,16 +156,21 @@ export function previewShipOrders(data, holding, ship, { offerIds = [], style = 
   // A debt without a billing record cannot be settled by the existing departure operation.
   if (!calculationShip.portBilling && debtCopper > 0) blockers.push("Неоплаченный портовый счёт требует урегулирования перед отправлением.");
   const flightQd = legs.reduce((sum, leg) => sum + leg.flightQd, 0);
+  portQd ??= Math.max(0, totalDurationQd - flightQd);
   const rewardCopper = offers.reduce((sum, offer) => sum + offer.contract.rewardCopper, 0);
-  const recommendedReserveCopper = Math.max(0, recommendedBudgetCopper - totalOperatingCopper);
+  const mandatoryTripCopper = totalOperatingCopper + guaranteedStyleCostCopper;
+  const probabilisticOutcomeReserveCopper = Math.max(0, outcomeReserveCopper - guaranteedStyleCostCopper);
+  const recommendedReserveCopper = Math.max(0, recommendedBudgetCopper - mandatoryTripCopper);
   return withShipOrderBudget({
     offers, world, origin, finalPoint: stops.at(-1).point, stops, legs, style, clockQd,
-    totalDurationQd, flightQd, portQd: totalDurationQd - flightQd, distanceKm,
+    totalDurationQd, flightQd, portQd, distanceKm,
     initialLoadPoints, capacityLoadPoints, hiddenCapacityLoadPoints,
     maxLoadPoints: Math.max(...legs.map((leg) => leg.loadOnLegPoints)),
-    totalOperatingCopper, rewardCopper, plannedMarginCopper: rewardCopper - totalOperatingCopper,
-    nominalExitCopper: rewardCopper - totalOperatingCopper - returnReserveCopper,
-    recommendedBudgetCopper, recommendedReserveCopper, returnReserveCopper, idleReserveCopper, outcomeReserveCopper,
+    totalOperatingCopper, guaranteedStyleCostCopper, mandatoryTripCopper,
+    rewardCopper, plannedMarginCopper: rewardCopper - mandatoryTripCopper,
+    nominalExitCopper: rewardCopper - mandatoryTripCopper - returnReserveCopper,
+    recommendedBudgetCopper, recommendedReserveCopper, returnReserveCopper, idleReserveCopper,
+    outcomeReserveCopper, probabilisticOutcomeReserveCopper,
     firstLegCopper, onboardCopper, debtCopper, homeDebtCopper, walletAfterDebt,
     settlementCopper: Number(holding.storage?.moneyCopper ?? 0),
     departureBlockers: blockers, atHome, isBundle: offers.length > 1,
@@ -145,19 +181,24 @@ export function previewShipOrders(data, holding, ship, { offerIds = [], style = 
 /** Budget typing must not rebuild markets, shortest paths or order permutations. */
 export function withShipOrderBudget(plan, budgetCopper = null) {
   if (budgetCopper !== null && (!Number.isSafeInteger(budgetCopper) || budgetCopper < 0)) throw new Error("Укажите неотрицательный бюджет в золотых.");
-  const { atHome, totalOperatingCopper, recommendedBudgetCopper, walletAfterDebt, homeDebtCopper, firstLegCopper } = plan;
+  const { atHome, mandatoryTripCopper, recommendedBudgetCopper, walletAfterDebt, homeDebtCopper, firstLegCopper } = plan;
   const targetBudgetCopper = atHome ? (budgetCopper ?? recommendedBudgetCopper) : walletAfterDebt;
   const effectiveBudgetCopper = atHome ? Math.max(walletAfterDebt, targetBudgetCopper) : walletAfterDebt;
-  const plannedReserveCopper = Math.max(0, effectiveBudgetCopper - totalOperatingCopper);
+  const plannedReserveCopper = Math.max(0, effectiveBudgetCopper - mandatoryTripCopper);
   const transferCopper = atHome ? Math.max(0, targetBudgetCopper - walletAfterDebt) : 0;
   const shortageCopper = atHome
     ? Math.max(0, homeDebtCopper + transferCopper - plan.settlementCopper)
     : Math.max(0, plan.debtCopper + firstLegCopper - plan.onboardCopper);
+  const firstLegShortageCopper = Math.max(0, firstLegCopper - effectiveBudgetCopper);
+  const remainingTripShortageCopper = Math.max(0, mandatoryTripCopper - Math.max(effectiveBudgetCopper, firstLegCopper));
+  const extraReserveShortageCopper = Math.max(0, recommendedBudgetCopper - Math.max(effectiveBudgetCopper, mandatoryTripCopper));
   const blockers = [...plan.departureBlockers];
   if (atHome && targetBudgetCopper < firstLegCopper) blockers.push("Выбранный бюджет меньше расходов первого участка.");
   if (shortageCopper > 0) blockers.push("Не хватает денег для погашения стоянки и отправления с выбранным бюджетом.");
   return { ...plan, targetBudgetCopper, effectiveBudgetCopper, plannedReserveCopper,
     transferCopper, settlementWithdrawalCopper: homeDebtCopper + transferCopper,
-    shortageCopper, blockers, canDepart: blockers.length === 0,
+    shortageCopper, firstLegShortageCopper, remainingTripShortageCopper, extraReserveShortageCopper,
+    walletCoversTarget: atHome && walletAfterDebt > targetBudgetCopper,
+    blockers, canDepart: blockers.length === 0,
     reserveShortageCopper: Math.max(0, recommendedBudgetCopper - effectiveBudgetCopper) };
 }

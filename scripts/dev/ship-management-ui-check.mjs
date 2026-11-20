@@ -107,7 +107,9 @@ for (const [allowed, online, reason] of [[false, true, /не разрешил/],
   const before = JSON.stringify(f.data);
   for (const style of ["normal", "cautious", "bold"]) {
     const plan = previewShipOrders(f.data, f.holding, f.ship, { offerIds: [f.holding.special.ships.offers[0].id], style });
-    assert.equal(plan.nominalExitCopper, plan.rewardCopper - plan.totalOperatingCopper - plan.returnReserveCopper);
+    assert.equal(plan.nominalExitCopper, plan.rewardCopper - plan.totalOperatingCopper - plan.guaranteedStyleCostCopper - plan.returnReserveCopper);
+    if (style === "cautious") assert.ok(plan.guaranteedStyleCostCopper > 0, "cautious style exposes guaranteed precaution fee");
+    else assert.equal(plan.guaranteedStyleCostCopper, 0);
     assert.equal(plan.settlementWithdrawalCopper, plan.transferCopper + plan.homeDebtCopper);
     const custom = withShipOrderBudget(plan, plan.recommendedBudgetCopper + 123);
     assert.equal(custom.settlementWithdrawalCopper, custom.transferCopper + custom.homeDebtCopper);
@@ -188,6 +190,8 @@ const preview = readFileSync("templates/parts/ship-window/order-preview.hbs", "u
 assert.ok(preview.indexOf("nominalExitCopper") < preview.indexOf("data-ship-plan-details"), "full nominal result must be visible before the disclosures");
 assert.ok(preview.indexOf("settlementWithdrawalCopper") < preview.indexOf("data-ship-plan-details"));
 assert.ok(preview.indexOf("plannedReserveCopper") < preview.indexOf("data-ship-plan-details"), "single reserve figure must be visible before disclosures");
+assert.ok(preview.indexOf("mandatoryTripCopper") < preview.indexOf("data-ship-plan-details"), "mandatory trip cost including guaranteed approach fee precedes disclosures");
+assert.match(preview, /Итог по смете с возвратом/);
 assert.doesNotMatch(preview, /fblsShipGold/, "order preview uses unified З / С / М currency formatting");
 assert.match(readFileSync("templates/parts/ship-window/crew.hbs", "utf8"), /readiness\.warnings/);
 console.log("Ship management UI: GM/player state parity, empty boards, sales, delays, permissions, full-exit budget, read-only links and preserved market drafts passed.");

@@ -1,7 +1,7 @@
 <div class="fbls-toolbar"><div><h3 class="fbls-heading-section">Бортовая бухгалтерия</h3><p class="fbls-muted-text">1 З = 10 С = 100 М · запас и переводы не считаются расходами</p></div><span class="fbls-chip">{{#if atHome}}Доступна казна{{else}}Автономный бюджет{{/if}}</span></div>
 {{#unless moneySummary.calculationValid}}<p class="fbls-ship-notice">Финансовый снимок неполон или содержит некорректную сумму. ГМ должен проверить данные; свободные средства не рассчитаны.</p>{{/unless}}
-<dl class="fbls-ship-facts fbls-ship-box" aria-label="Баланс и обязательства"><div><dt>На борту</dt><dd>{{#if moneySummary.calculationValid}}{{fblsShipMoney moneySummary.walletCopper}}{{else}}Не рассчитан{{/if}}</dd></div><div><dt>Счета к оплате</dt><dd>{{#if moneySummary.calculationValid}}{{fblsShipMoney moneySummary.obligationsCopper}}{{else}}—{{/if}}</dd></div><div><dt>Запас на рейс</dt><dd>{{#if moneySummary.reserveKnown}}{{fblsShipMoney moneySummary.reserveCopper}}{{else}}Не рассчитан{{/if}}</dd></div><div><dt>{{#if atHome}}Свободно с казной{{else}}Свободно на борту{{/if}}</dt><dd>{{#if moneySummary.reserveKnown}}{{fblsShipMoney moneySummary.freeCopper}}{{else}}Не определено{{/if}}</dd></div></dl>
-<p class="fbls-muted-text">{{#if atHome}}Казна поселения: {{#if moneySummary.calculationValid}}{{fblsShipMoney moneySummary.settlementCopper}}{{else}}не рассчитана{{/if}}. {{/if}}Свободно = {{#if atHome}}борт + казна{{else}}борт{{/if}} − счета − запас.</p>
+<dl class="fbls-ship-facts fbls-ship-box" aria-label="Баланс и обязательства"><div><dt>На борту</dt><dd>{{#if moneySummary.calculationValid}}{{fblsShipMoney moneySummary.walletCopper}}{{else}}Не рассчитан{{/if}}</dd></div><div><dt>Счета к оплате</dt><dd>{{#if moneySummary.calculationValid}}{{fblsShipMoney moneySummary.obligationsCopper}}{{else}}—{{/if}}</dd></div><div><dt>{{#if moneySummary.remainingOperatingCopper}}Участки и запас{{else}}Запас на рейс{{/if}}</dt><dd>{{#if moneySummary.reserveKnown}}{{fblsShipMoney moneySummary.reserveCopper}}{{else}}Не рассчитан{{/if}}</dd></div><div><dt>{{#if atHome}}Свободно с казной{{else}}Свободно на борту{{/if}}</dt><dd>{{#if moneySummary.reserveKnown}}{{fblsShipMoney moneySummary.freeCopper}}{{else}}Не определено{{/if}}</dd></div></dl>
+<p class="fbls-muted-text">{{#if atHome}}Казна поселения: {{#if moneySummary.calculationValid}}{{fblsShipMoney moneySummary.settlementCopper}}{{else}}не рассчитана{{/if}}. {{/if}}Свободно = {{#if atHome}}борт + казна{{else}}борт{{/if}} − счета − {{#if moneySummary.remainingOperatingCopper}}участки и запас{{else}}запас{{/if}}.</p>
 {{#if canAdjust}}
 <details class="fbls-ship-box" data-ship-disclosure="funds:{{id}}" open><summary><strong>{{#if atHome}}Перевод между казной и кораблём{{else}}ГМ · бортовой расход или поступление{{/if}}</strong></summary>
   <div class="fbls-ship-form-grid fbls-ship-money-form" data-ship-draft-scope="funds:{{id}}">
@@ -12,7 +12,8 @@
   </div>
 </details>{{/if}}
 {{#if financePresentation.mandatoryShortageCopper}}<p class="fbls-ship-notice">Для оплаты счетов не хватает {{fblsShipMoney financePresentation.mandatoryShortageCopper}}.</p>{{/if}}
-{{#if financePresentation.reserveShortageCopper}}<p class="fbls-ship-notice">До рекомендуемого запаса не хватает {{fblsShipMoney financePresentation.reserveShortageCopper}} (это запас на будущее, а не счёт).</p>{{/if}}
+{{#if financePresentation.futureLegsShortageCopper}}<p class="fbls-ship-notice">Для следующих принятых участков рейса на борту пока не хватает {{fblsShipMoney financePresentation.futureLegsShortageCopper}} (их может покрыть плата за промежуточную доставку).</p>{{/if}}
+{{#if financePresentation.contingencyShortageCopper}}<p class="fbls-ship-notice">До рекомендуемого запаса на возврат, стоянку и исходы не хватает {{fblsShipMoney financePresentation.contingencyShortageCopper}} (это запас на будущее, а не счёт).</p>{{/if}}
 {{#if moneySummary.calculationValid}}
 <details class="fbls-ship-box" data-ship-disclosure="bills:{{id}}" aria-label="Неоплаченные обязательства корабля">
   <summary><strong>Счета к оплате</strong> · {{fblsShipMoney moneySummary.obligationsCopper}}</summary>
@@ -23,7 +24,7 @@
   <p class="fbls-muted-text">Эти суммы ещё не списаны. Счёт стоянки погашается при корабельной операции или расчёте; сохранённый исход требует подтверждения.</p>
 </details>
 <details class="fbls-ship-box" data-ship-disclosure="reserve:{{id}}" aria-label="Рекомендуемый запас корабля">
-  <summary><strong>Запас на путь и риски</strong> · {{#if moneySummary.reserveKnown}}{{fblsShipMoney moneySummary.reserveCopper}}{{else}}Не рассчитан полностью{{/if}}</summary>
+  <summary><strong>{{#if moneySummary.remainingOperatingCopper}}Следующие участки и запас{{else}}Запас на путь и риски{{/if}}</strong> · {{#if moneySummary.reserveKnown}}{{fblsShipMoney moneySummary.reserveCopper}}{{else}}Не рассчитан полностью{{/if}}</summary>
   {{#if atHome}}<p class="fbls-muted-text">Запас рассчитывается при выборе заказов в разделе «Рейсы». Дома доступны бортовой кошелёк и казна поселения.</p>{{else}}
   <dl class="fbls-ship-facts fbls-ship-reserve-summary">
     {{#if moneySummary.remainingOperatingCopper}}<div><dt>Оставшиеся участки рейса</dt><dd>{{fblsShipMoney moneySummary.remainingOperatingCopper}}</dd></div>{{/if}}

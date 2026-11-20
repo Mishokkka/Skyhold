@@ -339,12 +339,14 @@ function baseQuote(context, holding, ship, from, to, cargo, pickup = null) {
   const origin = pickup ?? from;
   const load = Number(cargo?.loadPoints ?? 0);
   const loadingQd = portHandlingQd(origin, load);
+  const unloadingQd = portHandlingQd(to, load);
   const clockQd = Number(ship.timelineQd ?? holding.gm?.calendaria?.lastQd ?? 0);
   const approach = pickup ? routeTerms(context, ship, from, pickup, { includeRisk: true, startQd: clockQd }) : null;
-  const approachQd = approach?.durationQd ?? 0;
-  const route = routeTerms(context, ship, origin, to, { includeRisk: true, startQd: clockQd + approachQd + loadingQd });
+  const approachFlightQd = approach?.durationQd ?? 0;
+  const route = routeTerms(context, ship, origin, to, { includeRisk: true, startQd: clockQd + approachFlightQd + loadingQd });
+  const deliveryFlightQd = route.durationQd;
   route.approachRiskExposureQd = 0;
-  route.durationQd += loadingQd + portHandlingQd(to, load);
+  route.durationQd += loadingQd + unloadingQd;
   if (route.durationQd > 100000) throw new Error("Маршрут слишком продолжительный.");
   const { costs, dailyCopper, foodUnitCopper } = costsFor(context, holding, ship, origin, to, route, cargo);
   if (approach) {
@@ -360,10 +362,10 @@ function baseQuote(context, holding, ship, from, to, cargo, pickup = null) {
   }
   const arrivalQd = clockQd + route.durationQd;
   const reserve = to.kind === "home" ? 0 : costsFor(context, holding, ship, to, context.home, routeTerms(context, ship, to, context.home, { startQd: arrivalQd })).costs.totalCopper;
-  if (cargo) startClientCargo(cargo, arrivalQd - route.durationQd + approachQd + loadingQd, loadingQd);
+  if (cargo) startClientCargo(cargo, arrivalQd - route.durationQd + approachFlightQd + loadingQd, loadingQd);
   const idleReserveCopper = to.kind === "home" ? 0 : shipIdleReserveCopper(dailyCopper, arrivalQd);
   return {
-    ...route, costs, operatingCopper: costs.totalCopper, preparationCopper: 0, rewardCopper: 0,
+    ...route, approachFlightQd, deliveryFlightQd, costs, operatingCopper: costs.totalCopper, preparationCopper: 0, rewardCopper: 0,
     idleUpkeepCopperPerDay: dailyCopper, returnReserveCopper: reserve,
     idleReserveCopper, recommendedBudgetCopper: money(costs.totalCopper + reserve + idleReserveCopper), foodUnitCopper
   };

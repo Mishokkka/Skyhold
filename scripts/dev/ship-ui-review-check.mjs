@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { createShipReviewState, shipReviewContext, formatShipReviewSummary, inertShipReviewHtml, SHIP_REVIEW_VARIANTS } from "../apps/domains/ui-review-ships.js";
+import { createShipReviewState, shipReviewContext, formatShipReviewSummary, inertShipReviewHtml, bindShipReview, SHIP_REVIEW_VARIANTS } from "../apps/domains/ui-review-ships.js";
 
 const draft = createShipReviewState();
 assert.equal(SHIP_REVIEW_VARIANTS.length, 4, "current view plus three alternatives");
@@ -31,6 +31,31 @@ assert.ok(shipReviewContext({ ...draft, scenario: "empty" }).crewOptions.every(r
 const before = JSON.stringify(draft);
 shipReviewContext(draft);
 assert.equal(JSON.stringify(draft), before, "preparing a sample does not mutate decisions or draft selections");
+{
+  const minimum = shipReviewContext({ ...draft, budgetMode: "minimum" });
+  assert.equal(minimum.plan.isTripOnlyBudget, true);
+  assert.equal(minimum.plan.isAutoBudget, false);
+  assert.equal(minimum.plan.targetBudgetCopper, undefined);
+  assert.equal(minimum.budgetGoldInput, "18.50");
+  const reviewState = createShipReviewState();
+  const listeners = new Map();
+  let renders = 0;
+  const app = { requestRender() { renders += 1; } };
+  const budgetField = { value: "" };
+  const presetButton = { dataset: { reviewSourceShipPlannerBudgetPreset: "minimum" }, closest: (sel) => sel === "button" ? presetButton : null };
+  const demo = {
+    contains: (node) => node === presetButton,
+    querySelector: (sel) => sel === "[data-review-source-ship-bundle-budget]" ? budgetField : null,
+    querySelectorAll: () => [],
+    addEventListener(type, fn) { listeners.set(type, fn); }
+  };
+  const root = { querySelector: (sel) => sel === "[data-ship-review]" ? demo : null };
+  bindShipReview(app, root, reviewState);
+  listeners.get("click")({ target: presetButton, preventDefault() {} });
+  assert.equal(reviewState.budgetMode, "minimum", "current-window review sample switches budget presets in local state");
+  assert.equal(renders, 1);
+  assert.equal(app._shipReviewFocus, '[data-review-source-ship-planner-budget-preset="minimum"]');
+}
 draft.decisions.crew = { choice: "compact", note: "Строки плотнее" };
 assert.match(formatShipReviewSummary(draft), /Экипаж: А · Компактные вкладки — Строки плотнее/);
 assert.doesNotMatch(formatShipReviewSummary(draft), /Редактор здания|Основное:|Строительство:/, "only this batch appears in the copyable text");

@@ -14,7 +14,7 @@ import { prepareShipVoyagePresentation } from "./domains/ship-voyage-presentatio
 import { prepareShipFinancePresentation } from "./domains/ship-finance-presentation.js";
 import { shipPresentationTimelineQd } from "./domains/ship-command-availability.js";
 import { shipRemovalBlocker } from "../engines/ships/removal.js";
-import { formatShipGold, formatShipMoney, shipGoldInput } from "../core/ship-gold.js";
+import { formatShipMoney, shipGoldInput } from "../core/ship-gold.js";
 import { shortestMarketRouteDistanceKm } from "../engines/market/logistics.js";
 import { allResourceDefs } from "../core/resources.js";
 import { clientCargoLifetime } from "../engines/ships/client-cargo.js";
@@ -221,12 +221,23 @@ function overviewShipRow(holding, ship, index, { permissions, period, data, visi
     totalCrewCount: readiness?.totalCount ?? Number(ship.crewTarget ?? ship.crewRefs?.length ?? 0),
     abstractCrewCount: readiness?.abstractCount ?? 0,
     moneySummary,
-    walletGold: formatShipGold(ship.onboardCopper ?? 0),
     walletText: formatShipMoney(ship.onboardCopper ?? 0),
     nextAction: isWorld ? management.nextAction
       : ship.activeVoyage ? (awaitingOutcome ? "Подвести итог рейса" : "Дождаться возвращения") : "Открыть управление кораблём",
     permissionReason: management?.permissionReason ?? "",
     canOpen: permissions.canView
+  };
+}
+
+function formattedFleetAccounting(holding) {
+  const raw = fleetAccountingSummary(holding);
+  return {
+    ...raw,
+    netText: formatShipMoney(raw.netCopper),
+    incomeText: formatShipMoney(raw.incomeCopper),
+    expenseText: formatShipMoney(raw.expenseCopper),
+    homeIdleText: formatShipMoney(raw.homeIdleCopper),
+    portIdleText: formatShipMoney(raw.portIdleCopper)
   };
 }
 
@@ -244,6 +255,7 @@ export function prepareShipsContext(holding, { revision = 0, data = null } = {})
     canCreateProfile: permissions.isGM,
     canGenerateOffers: permissions.isGM && rows.some((row) => row.isLegacy)
       && (ships.offerPeriod === null || ships.offerPeriod === undefined || ships.offerPeriod === "" || Number(ships.offerPeriod) < period),
+    fleetAccounting: formattedFleetAccounting(holding),
     offersGenerated: String(ships.offerPeriod) === String(period),
     worldIssues: [],
     rows,
@@ -350,7 +362,6 @@ export function prepareShipWindowContext(holding, { revision = 0, data = null, s
       readiness, moneySummary,
       ...management,
       timelineQd: shipQd, settlementQd, catchUpDays: Math.max(0, settlementQd - shipQd) / 4,
-      walletGold: formatShipGold(ship.onboardCopper ?? 0),
       walletText: formatShipMoney(ship.onboardCopper ?? 0),
       ownSale: ownSale ? { ...ownSale, marketLabel: visibility.marketLabel(ownSale) } : null,
       ownSaleCargoText: (ownSale?.cargo ?? []).map((row) => `${row.name || row.resourceId} ×${row.qty}`).slice(0, 5).join(" · "),
@@ -414,20 +425,10 @@ export function prepareShipWindowContext(holding, { revision = 0, data = null, s
     };
   });
 
-  const fleetAccountingRaw = fleetAccountingSummary(holding);
-  const fleetAccounting = {
-    ...fleetAccountingRaw,
-    netText: formatShipMoney(fleetAccountingRaw.netCopper),
-    incomeText: formatShipMoney(fleetAccountingRaw.incomeCopper),
-    expenseText: formatShipMoney(fleetAccountingRaw.expenseCopper),
-    homeIdleText: formatShipMoney(fleetAccountingRaw.homeIdleCopper),
-    portIdleText: formatShipMoney(fleetAccountingRaw.portIdleCopper)
-  };
   return {
     revision, period, detailMode: true, profiles: SHIP_PROFILES, canCreateProfile: permissions.isGM,
     canGenerateOffers: permissions.isGM && rows.some((row) => row.isLegacy)
       && (ships.offerPeriod === null || ships.offerPeriod === undefined || ships.offerPeriod === "" || Number(ships.offerPeriod) < period),
-    fleetAccounting,
     offersGenerated: String(ships.offerPeriod) === String(period), worldIssues: worldContext.issues ?? [], rows,
     history: (ships.history ?? []).filter((row) => String(row?.shipId ?? "") === String(shipId ?? "")).slice(-10).reverse().map((row) => ({
       ...row, destination: visibility.pointLabel({ ...row.to, label: row.destination || row.to?.label }, row.destination || "—"),

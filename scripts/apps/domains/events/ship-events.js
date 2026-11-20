@@ -184,10 +184,12 @@ export const ShipEventDomain = {
       if (reviewedPlan) {
         const stops = reviewedPlan.stops.map((stop) => escapeHtml(stop.point.label)).join(" → ");
         const orders = reviewedPlan.offers.map((offer) => `<li>${escapeHtml(offer.title)}: ${escapeHtml((offer.contract.pickup ?? offer.from).label)} → ${escapeHtml(offer.to.label)}</li>`).join("");
+        const styleFeeText = reviewedPlan.guaranteedStyleCostCopper
+          ? ` + осторожный подход ${formatShipMoney(reviewedPlan.guaranteedStyleCostCopper)}` : "";
         if (!await foundryDialogV2().confirm({
           classes: ["fbl-skyhold"],
           window: { title: "Принять выбранные заказы" }, modal: true,
-          content: `<ol>${orders}</ol><p>${stops}</p><p>${reviewedPlan.totalDurationQd / 4} дн. · расходы рейса ${formatShipMoney(reviewedPlan.totalOperatingCopper)} · плата по договорам ${formatShipMoney(reviewedPlan.rewardCopper)} до случайных исходов.</p><p>Подход: ${escapeHtml(({ cautious: "Осторожно", normal: "Обычно", bold: "С риском" })[intent.style])}. ${reviewedPlan.atHome ? `На борт к выходу: ${formatShipMoney(reviewedPlan.effectiveBudgetCopper)} (включая запас ${formatShipMoney(reviewedPlan.plannedReserveCopper)}). Из казны сейчас: ${formatShipMoney(reviewedPlan.settlementWithdrawalCopper)}${reviewedPlan.homeDebtCopper ? ` (в том числе стоянка ${formatShipMoney(reviewedPlan.homeDebtCopper)})` : ""}.` : "Расходы оплачиваются с борта."} Конечный порт: ${escapeHtml(reviewedPlan.finalPoint.label)}. Возвращение домой — отдельный приказ.</p><p>Промежуточные решения остаются за игроком. Экипаж уйдёт с работ поселения; после возвращения жильё и работы не восстановятся автоматически. ${reviewedPlan.departingAssignments?.length ? `Затронуто жителей: ${reviewedPlan.departingAssignments.length}. ${reviewedPlan.departingAssignments.slice(0, 5).map((row) => `${escapeHtml(row.name)}: ${escapeHtml(row.label)}`).join("; ")}.` : ""} Запас не списывается заранее и возвращается в казну дома.</p>`
+          content: `<ol>${orders}</ol><p>${stops}</p><p>${reviewedPlan.totalDurationQd / 4} дн. · расходы рейса ${formatShipMoney(reviewedPlan.totalOperatingCopper)}${styleFeeText} · плата по договорам ${formatShipMoney(reviewedPlan.rewardCopper)} до случайных исходов.</p><p>Подход: ${escapeHtml(({ cautious: "Осторожно", normal: "Обычно", bold: "С риском" })[intent.style])}. ${reviewedPlan.atHome ? `На борт к выходу: ${formatShipMoney(reviewedPlan.effectiveBudgetCopper)} (включая запас ${formatShipMoney(reviewedPlan.plannedReserveCopper)}). Из казны сейчас: ${formatShipMoney(reviewedPlan.settlementWithdrawalCopper)}${reviewedPlan.homeDebtCopper ? ` (в том числе стоянка ${formatShipMoney(reviewedPlan.homeDebtCopper)})` : ""}.` : "Расходы оплачиваются с борта."} Конечный порт: ${escapeHtml(reviewedPlan.finalPoint.label)}. Возвращение домой — отдельный приказ.</p><p>Промежуточные решения остаются за игроком. Экипаж уйдёт с работ поселения; после возвращения жильё и работы не восстановятся автоматически. ${reviewedPlan.departingAssignments?.length ? `Затронуто жителей: ${reviewedPlan.departingAssignments.length}. ${reviewedPlan.departingAssignments.slice(0, 5).map((row) => `${escapeHtml(row.name)}: ${escapeHtml(row.label)}`).join("; ")}.` : ""} Запас не списывается заранее и возвращается в казну дома.</p>`
         })) { this._shipRetries.delete(key); return; }
       }
       if (type === "relocate-world") {
@@ -240,10 +242,13 @@ export const ShipEventDomain = {
       const response = await requestShipOperation(operation);
       this._shipRetries.delete(key);
       if (response?.ok === false) {
-        const amount = Number(response.pendingPortBillCopper || response.requiredCopper || 0);
-        ui.notifications?.warn?.(amount > 0
-          ? `Кораблю не хватает ${formatShipMoney(amount)} для расходов и продолжения рейса.`
-          : "Корабль не может продолжить рейс: проверьте бортовую казну и расходы порта.");
+        const shortage = Number(response.shortageCopper || 0);
+        const totalDue = Number(response.pendingPortBillCopper || response.requiredCopper || 0);
+        ui.notifications?.warn?.(shortage > 0
+          ? `Кораблю не хватает ${formatShipMoney(shortage)} для расходов и продолжения рейса.`
+          : totalDue > 0
+            ? `Недостаточно средств для продолжения рейса. Нужно к оплате: ${formatShipMoney(totalDue)}.`
+            : "Корабль не может продолжить рейс: проверьте бортовую казну и расходы порта.");
         this.requestRender();
         return;
       }

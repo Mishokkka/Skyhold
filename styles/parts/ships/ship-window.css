@@ -26,7 +26,7 @@
 .fbls-order-empty,
 .fbls-order-explanation { padding: var(--fbls-gap-sm); color: var(--fbls-muted); font-size: var(--fbls-type-compact-sm); }
 .fbls-order-budget-presets { padding: var(--fbls-gap-xs) var(--fbls-gap-sm); gap: var(--fbls-gap-sm); }
-.fbl-skyhold-ship [data-ship-planner-budget][aria-pressed="true"] { border-color: var(--fbls-accent); background: var(--fbls-accent-bg); }
+.fbl-skyhold-ship [data-ship-planner-budget-preset][aria-pressed="true"] { border-color: var(--fbls-accent); background: var(--fbls-accent-bg); }
 .fbls-route-view { position: relative; border: 1px solid var(--fbls-border-strong); border-radius: var(--fbls-radius-sm); overflow: hidden; }
 .fbls-route-view-tools { position: absolute; top: var(--fbls-gap-sm); right: var(--fbls-gap-sm); z-index: 1; padding: var(--fbls-gap-xs); border-radius: var(--fbls-radius-sm); background: var(--fbls-surface-1); }
 .fbls-route-pan > summary { display: grid; place-items: center; width: var(--fbls-control-height); min-height: var(--fbls-control-height); border: 1px solid var(--fbls-border-strong); border-radius: var(--fbls-radius-sm); background: var(--fbls-surface-2); list-style: none; }

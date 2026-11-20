@@ -154,19 +154,25 @@ export function worldShipPortDebtCopper(ship, targetQd) {
 
 function settleIdleBilling(holding, ship, targetQd) {
   const row = ship.portBilling;
-  if (!row) return { paidCopper: 0, pendingCopper: integer(ship.pendingPortBillCopper ?? 0, "долг стоянки") };
+  if (!row) {
+    const pendingCopper = integer(ship.pendingPortBillCopper ?? 0, "долг стоянки");
+    const available = ship.location?.kind === "home"
+      ? integer(holding.storage.moneyCopper, "казна поселения") + integer(ship.onboardCopper ?? 0, "бортовой кошелёк")
+      : integer(ship.onboardCopper ?? 0, "бортовая казна");
+    return { paidCopper: 0, pendingCopper, shortageCopper: Math.max(0, pendingCopper - available) };
+  }
   const due = billingOutstanding(row, targetQd);
   row.lastCalculatedQd = Math.max(row.lastCalculatedQd, due.effectiveQd);
   if (!due.outstanding) {
     ship.pendingPortBillCopper = 0;
-    return { paidCopper: 0, pendingCopper: 0 };
+    return { paidCopper: 0, pendingCopper: 0, shortageCopper: 0 };
   }
   const available = row.scope === "home"
     ? integer(holding.storage.moneyCopper, "казна поселения") + integer(ship.onboardCopper ?? 0, "бортовой кошелёк")
     : integer(ship.onboardCopper, "бортовая казна");
   if (available < due.outstanding) {
     ship.pendingPortBillCopper = due.outstanding;
-    return { paidCopper: 0, pendingCopper: due.outstanding };
+    return { paidCopper: 0, pendingCopper: due.outstanding, shortageCopper: due.outstanding - available };
   }
   const receiptId = `${ship.id}:idle:${row.scope}:${row.sinceQd}:${due.effectiveQd}:${row.chargedCopper}`;
   const onboardPaidCopper = row.scope === "home"
@@ -309,7 +315,7 @@ export function departWorldShip(holding, ship, {
   const quote = normalizedQuote(ship, offer);
   const idle = settleIdleBilling(holding, ship, clock);
   if (idle.pendingCopper > 0) {
-    return { ok: false, blocked: true, shipId: ship.id, pendingPortBillCopper: idle.pendingCopper };
+    return { ok: false, blocked: true, shipId: ship.id, pendingPortBillCopper: idle.pendingCopper, shortageCopper: idle.shortageCopper };
   }
   const isHome = ship.location.kind === "home";
   let budget = budgetCopper == null ? quote.recommendedBudgetCopper : integer(budgetCopper, "бортовой бюджет");
@@ -333,7 +339,7 @@ export function departWorldShip(holding, ship, {
     beginShipOuting(ship, { voyageId: id, clockQd: clock, budgetCopper: ship.onboardCopper, preparationCopper: quote.preparationCopper });
     if (!funding.replay) recordShipOutingFunds(ship, funding.receipt, { clockQd: clock, reason: "Подготовка к выходу" });
   } else if (ship.onboardCopper < quote.operatingCopper) {
-    return { ok: false, blocked: true, shipId: ship.id, pendingPortBillCopper: 0, requiredCopper: quote.operatingCopper };
+    return { ok: false, blocked: true, shipId: ship.id, pendingPortBillCopper: 0, requiredCopper: quote.operatingCopper, shortageCopper: quote.operatingCopper - ship.onboardCopper };
   }
   const ledgerStart = Math.max(0, ship.worldLedger.length - (isHome ? 1 : 0));
   applyFunds(holding, ship, {
