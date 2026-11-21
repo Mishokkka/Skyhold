@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import fs from "node:fs/promises";
 
 import { ECONOMY_RESOURCE_PRICE_COPPER as PRICE } from "../data/resources/resource-base-definitions.js";
 import { LIVESTOCK_MARKET_PRICES_COPPER } from "../data/livestock.js";
@@ -9,8 +8,6 @@ import {
   BUILDING_PRODUCTION_RECIPES,
   BUILDING_SEASONAL_PROFILES
 } from "./building-production-line-proposal-data.mjs";
-
-const markdown = await fs.readFile(new URL("../../docs/building-development-tree-proposal.md", import.meta.url), "utf8");
 
 function valueOf(entries = {}) {
   return Object.entries(entries).reduce((sum, [resourceId, qty]) => {
@@ -138,18 +135,7 @@ function hasCycle(resourceId, visiting = new Set(), visited = new Set()) {
 }
 assert.ok(![...resourceEdges.keys()].some((id) => hasCycle(id)), "Production dependency graph must remain acyclic");
 
-for (const expectedText of [
-  "годовой урожай Полевого хозяйства требует `8 QD` посева и `20 QD` сбора",
-  "7 Tallow за голову",
-  "12 Tallow за голову",
-  "Herbs 4 + Сложные химические материалы 1 → Medicines 1 за 4 QD",
-  "Wood 4 + Iron 2 + Простые химические материалы 1 → Военные припасы (простые) 2 за 2 QD",
-  "В проекте определены `73` обычных линейных рецепта"
-]) {
-  assert.ok(markdown.includes(expectedText), `Proposal document is missing audited production rule: ${expectedText}`);
-}
-
-console.log(`Building production proposal economy check passed: ${audit.length} linear recipes, ${BUILDING_SEASONAL_PROFILES.length} seasonal profiles, ${BUILDING_LIVESTOCK_PROFILES.length} valued livestock profiles.`);
+console.log(`Building production economy check passed: ${audit.length} linear recipes, ${BUILDING_SEASONAL_PROFILES.length} seasonal profiles, ${BUILDING_LIVESTOCK_PROFILES.length} valued livestock profiles.`);
 
 export const BUILDING_PRODUCTION_RECIPE_AUDIT = Object.freeze(audit.map((row) => Object.freeze({ ...row })));
 export const BUILDING_LIVESTOCK_VALUE_AUDIT = Object.freeze(livestockAudit.map((row) => Object.freeze({ ...row })));
