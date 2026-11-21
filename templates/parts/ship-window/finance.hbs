@@ -1,7 +1,12 @@
-<div class="fbls-toolbar"><div><h3 class="fbls-heading-section">Бортовая бухгалтерия</h3><p class="fbls-muted-text">1 З = 10 С = 100 М · запас и переводы не считаются расходами</p></div><span class="fbls-chip">{{#if atHome}}Доступна казна{{else}}Автономный бюджет{{/if}}</span></div>
+<div class="fbls-toolbar"><div><h3 class="fbls-heading-section">Бортовая бухгалтерия</h3><p class="fbls-muted-text">1 З = 10 С = 100 М · запас и переводы не считаются расходами</p></div><span class="fbls-chip is-compact">{{#if atHome}}Доступна казна{{else}}Автономный бюджет{{/if}}</span></div>
 {{#unless moneySummary.calculationValid}}<p class="fbls-ship-notice">Финансовый снимок неполон или содержит некорректную сумму. ГМ должен проверить данные; свободные средства не рассчитаны.</p>{{/unless}}
-<dl class="fbls-ship-facts fbls-ship-box" aria-label="Баланс и обязательства"><div><dt>На борту</dt><dd>{{#if moneySummary.calculationValid}}{{fblsShipMoney moneySummary.walletCopper}}{{else}}Не рассчитан{{/if}}</dd></div><div><dt>Счета к оплате</dt><dd>{{#if moneySummary.calculationValid}}{{fblsShipMoney moneySummary.obligationsCopper}}{{else}}—{{/if}}</dd></div><div><dt>{{#if moneySummary.remainingOperatingCopper}}Участки и запас{{else}}Запас на рейс{{/if}}</dt><dd>{{#if moneySummary.reserveKnown}}{{fblsShipMoney moneySummary.reserveCopper}}{{else}}Не рассчитан{{/if}}</dd></div><div><dt>{{#if atHome}}Свободно с казной{{else}}Свободно на борту{{/if}}</dt><dd>{{#if moneySummary.reserveKnown}}{{fblsShipMoney moneySummary.freeCopper}}{{else}}Не определено{{/if}}</dd></div></dl>
-<p class="fbls-muted-text">{{#if atHome}}Казна поселения: {{#if moneySummary.calculationValid}}{{fblsShipMoney moneySummary.settlementCopper}}{{else}}не рассчитана{{/if}}. {{/if}}Свободно = {{#if atHome}}борт + казна{{else}}борт{{/if}} − счета − {{#if moneySummary.remainingOperatingCopper}}участки и запас{{else}}запас{{/if}}.</p>
+<dl class="fbls-ship-facts fbls-ship-box" aria-label="Баланс и обязательства">
+  <div><dt>На борту</dt><dd>{{#if moneySummary.calculationValid}}{{{fblsShipMoneyHtml moneySummary.walletCopper}}}{{else}}Не рассчитан{{/if}}</dd></div>
+  <div><dt>Счета к оплате</dt><dd>{{#if moneySummary.calculationValid}}{{{fblsShipMoneyHtml moneySummary.obligationsCopper}}}{{else}}—{{/if}}</dd></div>
+  <div><dt>{{#if moneySummary.remainingOperatingCopper}}Участки и запас{{else}}Запас на рейс{{/if}}</dt><dd>{{#if moneySummary.reserveKnown}}{{{fblsShipMoneyHtml moneySummary.reserveCopper}}}{{else}}Не рассчитан{{/if}}</dd></div>
+  <div tabindex="0" data-fbls-tooltip="Свободно = {{#if atHome}}борт + казна{{else}}борт{{/if}} − счета − {{#if moneySummary.remainingOperatingCopper}}участки и запас{{else}}запас{{/if}}."><dt>{{#if atHome}}Свободно с казной ⓘ{{else}}Свободно на борту ⓘ{{/if}}</dt><dd>{{#if moneySummary.reserveKnown}}{{{fblsShipMoneyHtml moneySummary.freeCopper}}}{{else}}Не определено{{/if}}</dd></div>
+</dl>
+{{#if atHome}}<div class="fbls-ship-meta-strip"><span>Казна поселения: {{#if moneySummary.calculationValid}}{{{fblsShipMoneyHtml moneySummary.settlementCopper}}}{{else}}не рассчитана{{/if}}</span></div>{{/if}}
 {{#if canAdjust}}
 <details class="fbls-ship-box" data-ship-disclosure="funds:{{id}}" open><summary><strong>{{#if atHome}}Перевод между казной и кораблём{{else}}ГМ · бортовой расход или поступление{{/if}}</strong></summary>
   <div class="fbls-ship-form-grid fbls-ship-money-form" data-ship-draft-scope="funds:{{id}}">
@@ -11,60 +16,64 @@
     <button type="button" class="fbls-button compact" data-action="ship-adjust" data-fbls-tooltip="{{#if atHome}}Перевод сохраняет общую сумму денег; внесённый запас доступен кораблю в первую очередь и учитывается при следующем отправлении.{{else}}Записать фактический расход или поступление в бортовой кошелёк и журнал.{{/if}}">Провести</button>
   </div>
 </details>{{/if}}
-{{#if financePresentation.mandatoryShortageCopper}}<p class="fbls-ship-notice">Для оплаты счетов не хватает {{fblsShipMoney financePresentation.mandatoryShortageCopper}}.</p>{{/if}}
-{{#if financePresentation.futureLegsShortageCopper}}<p class="fbls-ship-notice">Для следующих принятых участков рейса на борту пока не хватает {{fblsShipMoney financePresentation.futureLegsShortageCopper}} (их может покрыть плата за промежуточную доставку).</p>{{/if}}
-{{#if financePresentation.contingencyShortageCopper}}<p class="fbls-ship-notice">До рекомендуемого запаса на возврат, стоянку и исходы не хватает {{fblsShipMoney financePresentation.contingencyShortageCopper}} (это запас на будущее, а не счёт).</p>{{/if}}
+{{#if financePresentation.mandatoryShortageCopper}}<p class="fbls-ship-notice">Для оплаты счетов не хватает {{{fblsShipMoneyHtml financePresentation.mandatoryShortageCopper}}}.</p>{{/if}}
+{{#if financePresentation.futureLegsShortageCopper}}<p class="fbls-ship-notice">Для следующих принятых участков рейса на борту не хватает {{{fblsShipMoneyHtml financePresentation.futureLegsShortageCopper}}} (их может покрыть промежуточная плата).</p>{{/if}}
+{{#if financePresentation.contingencyShortageCopper}}<p class="fbls-ship-notice">До рекомендуемого запаса на возврат, стоянку и исходы не хватает {{{fblsShipMoneyHtml financePresentation.contingencyShortageCopper}}} (резерв, не счёт).</p>{{/if}}
 {{#if moneySummary.calculationValid}}
 <details class="fbls-ship-box" data-ship-disclosure="bills:{{id}}" aria-label="Неоплаченные обязательства корабля">
-  <summary><strong>Счета к оплате</strong> · {{fblsShipMoney moneySummary.obligationsCopper}}</summary>
+  <summary><strong>Счета к оплате</strong> · {{{fblsShipMoneyHtml moneySummary.obligationsCopper}}}</summary>
   <dl class="fbls-ship-facts">
-    <div><dt>Начисленная стоянка</dt><dd>{{fblsShipMoney moneySummary.portDebtCopper}}</dd></div>
-    <div><dt>Сохранённые исходы</dt><dd>{{fblsShipMoney moneySummary.outcomeDueCopper}}</dd></div>
+    <div tabindex="0" data-fbls-tooltip="Счёт стоянки погашается при следующей корабельной операции или расчёте."><dt>Начисленная стоянка ⓘ</dt><dd>{{{fblsShipMoneyHtml moneySummary.portDebtCopper}}}</dd></div>
+    <div tabindex="0" data-fbls-tooltip="Сохранённый исход требует подтверждения и наличия средств на борту."><dt>Сохранённые исходы ⓘ</dt><dd>{{{fblsShipMoneyHtml moneySummary.outcomeDueCopper}}}</dd></div>
   </dl>
-  <p class="fbls-muted-text">Эти суммы ещё не списаны. Счёт стоянки погашается при корабельной операции или расчёте; сохранённый исход требует подтверждения.</p>
 </details>
 <details class="fbls-ship-box" data-ship-disclosure="reserve:{{id}}" aria-label="Рекомендуемый запас корабля">
-  <summary><strong>{{#if moneySummary.remainingOperatingCopper}}Следующие участки и запас{{else}}Запас на путь и риски{{/if}}</strong> · {{#if moneySummary.reserveKnown}}{{fblsShipMoney moneySummary.reserveCopper}}{{else}}Не рассчитан полностью{{/if}}</summary>
-  {{#if atHome}}<p class="fbls-muted-text">Запас рассчитывается при выборе заказов в разделе «Рейсы». Дома доступны бортовой кошелёк и казна поселения.</p>{{else}}
+  <summary><strong>{{#if moneySummary.remainingOperatingCopper}}Следующие участки и запас{{else}}Запас на путь и риски{{/if}}</strong> · {{#if moneySummary.reserveKnown}}{{{fblsShipMoneyHtml moneySummary.reserveCopper}}}{{else}}Не рассчитан{{/if}}</summary>
+  {{#if atHome}}<p class="fbls-muted-text">Запас рассчитывается при выборе заказов в разделе «Рейсы».</p>{{else}}
   <dl class="fbls-ship-facts fbls-ship-reserve-summary">
-    {{#if moneySummary.remainingOperatingCopper}}<div><dt>Оставшиеся участки рейса</dt><dd>{{fblsShipMoney moneySummary.remainingOperatingCopper}}</dd></div>{{/if}}
-    <div><dt>Запас на возврат, стоянку и исходы</dt><dd>{{#if moneySummary.reserveKnown}}{{fblsShipMoney moneySummary.contingencyReserveCopper}}{{else}}Не рассчитан{{/if}}</dd></div>
+    {{#if moneySummary.remainingOperatingCopper}}<div><dt>Оставшиеся участки рейса</dt><dd>{{{fblsShipMoneyHtml moneySummary.remainingOperatingCopper}}}</dd></div>{{/if}}
+    <div><dt>Запас на возврат, стоянку и исходы</dt><dd>{{#if moneySummary.reserveKnown}}{{{fblsShipMoneyHtml moneySummary.contingencyReserveCopper}}}{{else}}Не рассчитан{{/if}}</dd></div>
   </dl>
-  <p class="fbls-muted-text">В том числе: путь домой {{#if moneySummary.reserveKnown}}{{fblsShipMoney moneySummary.returnReserveCopper}}{{else}}не рассчитан{{/if}} · стоянка {{fblsShipMoney moneySummary.idleReserveCopper}}{{#if moneySummary.incidentReserveCopper}} · риск исходов {{fblsShipMoney moneySummary.incidentReserveCopper}}{{/if}}. Запас остаётся на борту до фактической траты.</p>{{/if}}
-  <p><strong>{{#if atHome}}Свободно дома{{else}}Свободно на борту{{/if}}: {{#if moneySummary.reserveKnown}}{{fblsShipMoney moneySummary.freeCopper}}{{else}}не определено{{/if}}</strong> <span class="fbls-muted-text">после счетов и запаса</span></p>
+  <div class="fbls-cluster">
+    <span class="fbls-chip is-compact">Путь домой: {{#if moneySummary.reserveKnown}}{{{fblsShipMoneyHtml moneySummary.returnReserveCopper}}}{{else}}—{{/if}}</span>
+    <span class="fbls-chip is-compact">Стоянка: {{{fblsShipMoneyHtml moneySummary.idleReserveCopper}}}</span>
+    {{#if moneySummary.incidentReserveCopper}}<span class="fbls-chip is-compact">Риски: {{{fblsShipMoneyHtml moneySummary.incidentReserveCopper}}}</span>{{/if}}
+  </div>{{/if}}
+  <p><strong>{{#if atHome}}Свободно дома{{else}}Свободно на борту{{/if}}: {{#if moneySummary.reserveKnown}}{{{fblsShipMoneyHtml moneySummary.freeCopper}}}{{else}}не определено{{/if}}</strong> <span class="fbls-muted-text">после счетов и запаса</span></p>
 </details>
 {{/if}}
-{{#if financePresentation.pendingPayments.length}}<section class="fbls-ship-box" aria-label="Ожидаемые поступления"><strong>Ожидаемые поступления</strong>
-  {{#each financePresentation.pendingPayments}}<div class="fbls-ship-ledger-row"><span class="fbls-ship-ledger-description">{{label}}<br /><small>{{#if routeLabel}}{{routeLabel}} · {{/if}}{{basisLabel}}</small></span><strong>{{fblsShipMoney amountCopper}}</strong></div>{{/each}}
-  <p class="fbls-muted-text">Эти деньги пока недоступны для оплаты расходов и могут измениться после доставки и исходов.</p>
+{{#if financePresentation.pendingPayments.length}}<section class="fbls-ship-box" aria-label="Ожидаемые поступления"><div class="fbls-card-header"><strong>Ожидаемые поступления</strong><span class="fbls-chip is-compact" tabindex="0" data-fbls-tooltip="Эти деньги пока недоступны для оплаты расходов и могут измениться после доставки и исходов.">После доставки ⓘ</span></div>
+  {{#each financePresentation.pendingPayments}}<div class="fbls-ship-ledger-row"><span class="fbls-ship-ledger-description">{{label}}<br /><small>{{#if routeLabel}}{{routeLabel}} · {{/if}}{{basisLabel}}</small></span><strong>{{{fblsShipMoneyHtml amountCopper}}}</strong></div>{{/each}}
 </section>{{/if}}
 {{#with financePresentation.outing as |report|}}
 <section class="fbls-ship-box" aria-label="Денежный результат выхода корабля">
-  <div class="fbls-card-header"><h3 class="fbls-heading-section">{{#if report.ongoing}}Текущий выход{{else}}Последний выход{{/if}}</h3><div><small>Денежный результат</small><br /><strong>{{fblsShipMoney report.netCopper}}</strong></div></div>
+  <div class="fbls-card-header"><h3 class="fbls-heading-section">{{#if report.ongoing}}Текущий выход{{else}}Последний выход{{/if}}</h3><div tabindex="0" data-fbls-tooltip="Результат = поступления − расходы{{#if report.marketExpenseKnown}} (с учётом связанных операций казны){{/if}}. Переводы между бортом и казной в результат не входят."><small>Денежный результат ⓘ</small><br /><strong>{{{fblsShipMoneyHtml report.netCopper signed=true}}}</strong></div></div>
   {{#if report.partial}}<p class="fbls-ship-notice">Учёт начат после отправления. Итог охватывает только известные операции.</p>{{/if}}
   <dl class="fbls-ship-facts">
-    {{#unless report.partial}}<div><dt>Выделено кораблю дома</dt><dd>{{fblsShipMoney report.fundingCopper}}</dd></div>{{/unless}}
-    <div><dt>Получено на борт</dt><dd>{{fblsShipMoney report.incomeCopper}}</dd></div>
-    <div><dt>Оплачено кораблём</dt><dd>{{fblsShipMoney report.shipExpenseCopper}}</dd></div>
-    {{#if report.hasMarketExpenses}}<div><dt>{{#if report.hasTransport}}Расходы перевозок вне борта{{else}}Расходы продажи из казны{{/if}}</dt><dd>{{#if report.marketExpenseKnown}}{{fblsShipMoney report.marketExpenseCopper}}{{else}}Не подтверждены{{/if}}</dd></div>{{/if}}
-    {{#if report.treasuryIncomeCopper}}<div><dt>Выручка и страхование в казну</dt><dd>{{fblsShipMoney report.treasuryIncomeCopper}}</dd></div>{{/if}}
-    <div><dt>{{#if report.ongoing}}На борту сейчас{{else}}Передано домой{{/if}}</dt><dd>{{fblsShipMoney report.balanceCopper}}</dd></div>
+    {{#unless report.partial}}<div><dt>Выделено дома</dt><dd>{{{fblsShipMoneyHtml report.fundingCopper}}}</dd></div>{{/unless}}
+    <div><dt>Получено на борт</dt><dd>{{{fblsShipMoneyHtml report.incomeCopper}}}</dd></div>
+    <div><dt>Оплачено кораблём</dt><dd>{{{fblsShipMoneyHtml report.shipExpenseCopper}}}</dd></div>
+    {{#if report.hasMarketExpenses}}<div><dt>{{#if report.hasTransport}}Перевозки вне борта{{else}}Продажа из казны{{/if}}</dt><dd>{{#if report.marketExpenseKnown}}{{{fblsShipMoneyHtml report.marketExpenseCopper}}}{{else}}Не подтверждены{{/if}}</dd></div>{{/if}}
+    {{#if report.treasuryIncomeCopper}}<div><dt>Выручка в казну</dt><dd>{{{fblsShipMoneyHtml report.treasuryIncomeCopper}}}</dd></div>{{/if}}
+    <div><dt>{{#if report.ongoing}}На борту сейчас{{else}}Передано домой{{/if}}</dt><dd>{{{fblsShipMoneyHtml report.balanceCopper}}}</dd></div>
   </dl>
-  <p class="fbls-muted-text">Результат = поступления − расходы{{#if report.marketExpenseKnown}} (с учётом связанных операций казны){{/if}}. Переводы между бортом и казной в результат не входят. {{#if report.hasSale}}Себестоимость складского груза в этот результат не входит.{{else}}Другие расходы поселения и себестоимость складского груза в бортовой учёт не входят.{{/if}}</p>
-  {{#if report.hasTransport}}<p class="fbls-muted-text">Включены принятые перевозки с участием этого корабля; стоимость купленного груза учитывается как запас склада.</p>{{/if}}
-  {{#if report.saleCostsUnknown}}<p class="fbls-ship-notice">В записи продажи нет подтверждённой суммы оплаченных рыночных расходов. Она не вычтена из показанного результата; сравнение с планом недоступно.</p>{{/if}}
-  <p class="fbls-muted-text">Участков завершено {{report.completedLegs}} / {{report.startedLegs}} · {{report.durationDays}} дн. с учётом стоянок (на стоянки пришлось {{fblsShipMoney report.portExpenseCopper}}).</p>
-  {{#if report.obligationsCopper}}<p>Ещё не оплаченные счета: {{fblsShipMoney report.obligationsCopper}}. В проведённый результат они пока не включены.</p>{{/if}}
+  <div class="fbls-cluster">
+    <span class="fbls-chip is-compact">Участков {{report.completedLegs}} / {{report.startedLegs}}</span>
+    <span class="fbls-chip is-compact">{{report.durationDays}} дн.</span>
+    <span class="fbls-chip is-compact">Стоянки: {{{fblsShipMoneyHtml report.portExpenseCopper}}}</span>
+    {{#if report.obligationsCopper}}<span class="fbls-chip is-compact is-warning" tabindex="0" data-fbls-tooltip="Ещё не оплаченные счета в проведённый результат пока не включены.">Счета: {{{fblsShipMoneyHtml report.obligationsCopper}}}</span>{{/if}}
+  </div>
+  <p class="fbls-muted-text">Себестоимость складского груза и внутренние переводы в этот результат не входят.{{#if report.hasTransport}} Связанные перевозки учтены.{{/if}}</p>
+  {{#if report.saleCostsUnknown}}<p class="fbls-ship-notice">В записи продажи нет подтверждённой суммы оплаченных рыночных расходов; сравнение с планом недоступно.</p>{{/if}}
   <details data-ship-disclosure="outing:{{../id}}"><summary>Смета и журнал операций</summary>
     {{#unless report.partial}}
-      <dl class="fbls-ship-facts"><div><dt>Плановая плата</dt><dd>{{fblsShipMoney report.plannedIncomeCopper}}</dd></div><div><dt>Смета принятых участков</dt><dd>{{fblsShipMoney report.plannedExpenseCopper}}</dd></div><div><dt>Плановая разница</dt><dd>{{fblsShipMoney report.plannedNetCopper}}</dd></div><div><dt>Принятые участки</dt><dd>{{report.plannedDays}} дн.</dd></div></dl>
-      {{#if report.canComparePlan}}<p>Отклонение от сметы после завершения выхода: {{fblsShipMoney report.varianceCopper}}.</p>{{else if report.ongoing}}<p class="fbls-muted-text">Выход продолжается. Сравнить итог с планом можно после возвращения домой.</p>{{else if report.transportPending}}<p class="fbls-muted-text">Связанные перевозки или расчёты ещё не завершены. Сравнение с планом появится после их окончания.</p>{{else}}<p class="fbls-muted-text">Сравнение недоступно: оплаченные расходы продажи подтверждены не полностью.</p>{{/if}}
+      <dl class="fbls-ship-facts"><div><dt>Плановая плата</dt><dd>{{{fblsShipMoneyHtml report.plannedIncomeCopper}}}</dd></div><div><dt>Смета участков</dt><dd>{{{fblsShipMoneyHtml report.plannedExpenseCopper}}}</dd></div><div><dt>Плановая разница</dt><dd>{{{fblsShipMoneyHtml report.plannedNetCopper signed=true}}}</dd></div><div><dt>План срока</dt><dd>{{report.plannedDays}} дн.</dd></div></dl>
+      {{#if report.canComparePlan}}<p>Отклонение от сметы: <strong>{{{fblsShipMoneyHtml report.varianceCopper signed=true}}}</strong>.</p>{{else if report.ongoing}}<p class="fbls-muted-text">Сравнение с планом появится после возвращения домой.</p>{{else if report.transportPending}}<p class="fbls-muted-text">Связанные перевозки ещё не завершены.</p>{{else}}<p class="fbls-muted-text">Сравнение недоступно: оплаченные расходы продажи подтверждены не полностью.</p>{{/if}}
     {{/unless}}
-    <p class="fbls-muted-text">Переводы показаны отдельно от доходов и расходов; записи без денежной операции не имеют суммы.</p>
-    {{#each report.details}}<div class="fbls-ship-ledger-row"><span>{{#if timeLabel}}{{timeLabel}}{{else}}{{elapsedDays}} дн.{{/if}}</span><span class="fbls-ship-ledger-description"><strong>{{kindLabel}}</strong>{{#if isTransfer}} · перевод / выделение средств{{/if}}<br />{{reason}}</span><strong>{{#if hasAmount}}{{fblsShipMoney displayAmountCopper}}{{else}}—{{/if}}</strong></div>{{/each}}
+    {{#each report.details}}<div class="fbls-ship-ledger-row"><span>{{#if timeLabel}}{{timeLabel}}{{else}}{{elapsedDays}} дн.{{/if}}</span><span class="fbls-ship-ledger-description"><strong>{{kindLabel}}</strong>{{#if isTransfer}} · перевод{{/if}}<br />{{reason}}</span><strong>{{#if hasAmount}}{{{fblsShipMoneyHtml displayAmountCopper signed=true}}}{{else}}—{{/if}}</strong></div>{{/each}}
     {{#if report.omittedDetails}}<p class="fbls-muted-text">Ранних пояснений скрыто: {{report.omittedDetails}}. Их суммы учтены.</p>{{/if}}
   </details>
 </section>
 {{else}}<p class="fbls-muted-text">Отчёт путешествия появится после первой проведённой операции рейса.</p>{{/with}}
-{{#if attentionRecords.length}}<details class="fbls-ship-box" data-ship-disclosure="attention:{{id}}"><summary><strong>Известность по направлениям</strong></summary><div class="fbls-cluster">{{#each attentionRecords}}<span class="fbls-chip" tabindex="0" data-fbls-tooltip="Внимание ведётся отдельно по направлениям торговли. Уровень влияет на риск и набор предложений.">{{direction}} · {{level}}/10 · {{label}}</span>{{/each}}</div></details>{{/if}}
-{{#if @root.shipsContext.history.length}}<details class="fbls-ship-box" data-ship-disclosure="history:{{id}}"><summary>История рейсов и заказов</summary>{{#each @root.shipsContext.history}}<details><summary tabindex="0" data-fbls-tooltip="Денежный итог этой записи. Общий результат путешествия, включая расходы других участков, показан в сводном отчёте.">{{historyTitle}} · {{fblsShipMoney netCopper}}</summary>{{#if returnedCopper}}<p>Передано домой: {{fblsShipMoney returnedCopper}}</p>{{/if}}{{#if outcome}}<p>{{outcome.commercialLabel}} · {{outcome.eventLabel}} · задержка {{outcome.delayDays}} дн.</p>{{/if}}{{#each ledger}}<div class="fbls-ship-ledger-row"><span class="fbls-ship-ledger-description">{{label}}</span><strong>{{fblsShipMoney externalDeltaCopper}}</strong></div>{{/each}}</details>{{/each}}</details>{{/if}}
+{{#if attentionRecords.length}}<details class="fbls-ship-box" data-ship-disclosure="attention:{{id}}"><summary><strong>Известность по направлениям</strong></summary><div class="fbls-cluster">{{#each attentionRecords}}<span class="fbls-chip is-compact" tabindex="0" data-fbls-tooltip="Внимание ведётся отдельно по направлениям торговли. Уровень влияет на риск и набор предложений.">{{direction}} · {{level}}/10 · {{label}}</span>{{/each}}</div></details>{{/if}}
+{{#if @root.shipsContext.history.length}}<details class="fbls-ship-box" data-ship-disclosure="history:{{id}}"><summary>История рейсов и заказов</summary>{{#each @root.shipsContext.history}}<details><summary tabindex="0" data-fbls-tooltip="Денежный итог этой записи. Общий результат путешествия показан в сводном отчёте.">{{historyTitle}} · {{{fblsShipMoneyHtml netCopper signed=true}}}</summary>{{#if returnedCopper}}<p>Передано домой: {{{fblsShipMoneyHtml returnedCopper}}}</p>{{/if}}{{#if outcome}}<p>{{outcome.commercialLabel}} · {{outcome.eventLabel}} · задержка {{outcome.delayDays}} дн.</p>{{/if}}{{#each ledger}}<div class="fbls-ship-ledger-row"><span class="fbls-ship-ledger-description">{{label}}</span><strong>{{{fblsShipMoneyHtml externalDeltaCopper signed=true}}}</strong></div>{{/each}}</details>{{/each}}</details>{{/if}}

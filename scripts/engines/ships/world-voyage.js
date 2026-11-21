@@ -900,3 +900,9 @@ export function adjustWorldShipFunds(holding, ship, {
     paidPortBillCopper: bill.paidCopper
   };
 }
+
+export {
+  finalizeArrival as finalizeWorldShipArrival,
+  startIdleBilling as startWorldShipIdleBilling,
+  homeEndpoint as worldShipHomeEndpoint
+};

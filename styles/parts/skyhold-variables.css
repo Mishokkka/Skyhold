@@ -37,6 +37,13 @@
   --fbls-danger-border: rgba(181, 72, 72, 0.42);
   --fbls-info: #7db8cf;
   --fbls-info-soft: rgba(125, 184, 207, 0.18);
+  --fbls-coin-gold: var(--fbls-accent);
+  --fbls-coin-silver: var(--fbls-info);
+  --fbls-coin-copper: #ed9f60;
+  --fbls-order-profit-bg: linear-gradient(90deg, rgba(64, 158, 92, 0.03) 0%, rgba(64, 158, 92, 0.14) 100%);
+  --fbls-order-profit-hover: linear-gradient(90deg, rgba(64, 158, 92, 0.06) 0%, rgba(64, 158, 92, 0.19) 100%);
+  --fbls-order-loss-bg: linear-gradient(90deg, rgba(168, 62, 62, 0.03) 0%, rgba(168, 62, 62, 0.15) 100%);
+  --fbls-order-loss-hover: linear-gradient(90deg, rgba(168, 62, 62, 0.06) 0%, rgba(168, 62, 62, 0.21) 100%);
   --fbls-culture: #d09af6;
   --fbls-culture-soft: rgba(194, 139, 241, 0.18);
   --fbls-type-body: 0.875rem;

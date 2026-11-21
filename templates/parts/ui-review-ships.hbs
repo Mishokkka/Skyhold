@@ -23,8 +23,8 @@
           <div class="fbls-review-ship-strip fbls-cluster" aria-label="Состояние корабля">
             <span data-fbls-tooltip="Готовые к отправлению моряки / требуемый состав" tabindex="0"><i class="fa-solid fa-users" aria-hidden="true"></i> {{readyCount}} / 6</span>
             <span data-fbls-tooltip="Занято в трюме / полная вместимость, ед. груза" tabindex="0"><i class="fa-solid fa-box" aria-hidden="true"></i> {{ship.occupiedLoadPoints}} / 100</span>
-            <span data-fbls-tooltip="Деньги бортового кошелька; дома отдельно доступна казна" tabindex="0"><i class="fa-solid fa-coins" aria-hidden="true"></i> На борту {{ship.walletText}}</span>
-            {{#if atHome}}<span data-fbls-tooltip="Деньги поселения доступны кораблю только дома" tabindex="0">Казна {{fblsShipMoney ship.moneySummary.settlementCopper}}</span>{{/if}}
+            <span data-fbls-tooltip="Деньги бортового кошелька; дома отдельно доступна казна" tabindex="0"><i class="fa-solid fa-coins" aria-hidden="true"></i> На борту {{{ship.walletHtml}}}</span>
+            {{#if atHome}}<span data-fbls-tooltip="Деньги поселения доступны кораблю только дома" tabindex="0">Казна {{{fblsShipMoneyHtml ship.moneySummary.settlementCopper}}}</span>{{/if}}
           </div>
           {{#unless canAct}}<p class="fbls-callout is-info">Только просмотр · действия недоступны</p>{{/unless}}
           {{#if blocked}}<div class="fbls-callout is-warning"><strong>Отправление недоступно</strong><p>Команда 4 / 6 · на выбранный рейс не хватает денег.</p><div class="fbls-action-group"><button type="button" class="fbls-button fbls-button-role" data-ship-review-panel="crew">Проверить экипаж</button><button type="button" class="fbls-button fbls-button-role" data-ship-review-panel="finance">Проверить деньги</button></div></div>{{/if}}
@@ -45,8 +45,8 @@
                 {{#if showList}}<section class="fbls-review-ship-list fbls-stack" aria-label="Выбор заказов">
                   <div class="fbls-search"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><input type="search" class="fbls-control" data-ship-review-search="orders" value="{{search}}" placeholder="Груз или порт…" aria-label="Поиск заказов в примере" /></div>
                   {{#each ship.offers}}<div class="fbls-review-ship-offer {{#if selected}}is-selected{{/if}}" data-ship-review-offer>
-                    <label class="fbls-review-ship-pick"><input type="checkbox" data-ship-review-order value="{{id}}" {{#if selected}}checked{{/if}} {{#unless @root.shipReview.canAct}}disabled{{/unless}} aria-label="Включить в пример плана: {{title}}" /><span><strong>{{contract.cargo.name}}</strong><small data-fbls-tooltip="{{title}}">{{pickupLabel}} → {{destination}}</small></span></label>
-                    <div class="fbls-review-ship-offer-numbers"><span>{{contract.cargo.loadPoints}} ед. · {{durationDays}} дн.</span><span data-fbls-tooltip="Плата заказчика до расходов и возможных исходов" tabindex="0">Плата <strong>{{fblsShipMoney rewardCopper}}</strong></span><span>Расходы {{fblsShipMoney costs.totalCopper}}</span></div>
+                    <label class="fbls-review-ship-pick"><input type="checkbox" data-ship-review-order value="{{id}}" {{#if selected}}checked{{/if}} {{#unless @root.shipReview.canAct}}disabled{{/unless}} aria-label="Включить в пример плана: {{title}}" /><span><strong>{{cargoTitle}}</strong><small data-fbls-tooltip="{{title}}">{{pickupLabel}} → {{destination}}</small></span></label>
+                    <div class="fbls-review-ship-offer-numbers"><span>{{contract.cargo.loadPoints}} ед. · {{durationDays}} дн.</span><span data-fbls-tooltip="До возврата и случайных исходов: плата {{fblsShipMoney rewardCopper}} − расходы {{fblsShipMoney costs.totalCopper}}" tabindex="0">{{profitLabel}} <strong>{{{fblsShipMoneyHtml profitCopper signed=true}}}</strong></span></div>
                     <details><summary>Условия заказа</summary><p>{{title}}. Подход {{approachKm}} км, с грузом {{deliveryKm}} км. Обычный риск. Будущие происшествия, обратный путь и стоянка не входят в смету заказа.</p></details>
                   </div>{{/each}}
                   <div class="fbls-empty-state is-compact" data-ship-review-empty="orders" hidden>{{#if empty}}Заказов пока нет · получите предложения порта{{else}}По этому запросу заказов нет{{/if}}</div>

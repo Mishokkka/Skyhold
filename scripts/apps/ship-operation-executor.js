@@ -13,12 +13,26 @@ import { removeSettlementShip } from "../engines/ships/removal.js";
 import { installMagnifiqueCrewRoster, isMagnifiqueShip } from "../engines/ships/crew-roster.js";
 import { buildShipWorldContext, configureWorldShipEconomy, generateWorldShipOffers, quoteWorldShipReturn, quoteWorldShipRelocation, quoteWorldShipBundle, repriceWorldShipOffer } from "../engines/ships/world-market.js";
 import { initializeWorldShip, departWorldShip, departWorldShipBundle, continueWorldShipBundle, resolveWorldShip, resolveWorldShipBundleStop, adjustWorldShipFunds, advanceWorldShips, worldShipTimelineQd } from "../engines/ships/world-voyage.js";
+import {
+  gmMoveWorldShip,
+  gmSetShipCondition,
+  gmAdjustShipFunds,
+  gmArriveWorldShip,
+  gmCancelWorldShipVoyage,
+  gmClearWorldShipBills,
+  gmSyncWorldShipClock
+} from "../engines/ships/gm-override.js";
 
 const SHIP_OPERATION_TYPES = new Set([
   "create-profile", "adopt", "crew", "install-magnifique-crew", "generate-world", "reroll-world", "depart-world", "depart-bundle", "continue-bundle", "resolve-bundle", "return-home", "relocate-world", "resolve-world",
-  "depart", "adjust", "generate", "resolve", "delete", "shore-duty", "return-to-ship"
+  "depart", "adjust", "generate", "resolve", "delete", "shore-duty", "return-to-ship",
+  "gm-move", "gm-condition", "gm-funds", "gm-arrive", "gm-cancel-voyage", "gm-clear-bills", "gm-sync-clock"
 ]);
+const GM_OVERRIDE_TYPES = new Set(["gm-move", "gm-condition", "gm-funds", "gm-arrive", "gm-cancel-voyage", "gm-clear-bills", "gm-sync-clock"]);
+const GM_NON_MOVEMENT_OVERRIDES = new Set(["gm-condition", "gm-funds", "gm-clear-bills", "gm-sync-clock"]);
 const CONTRACT_STYLES = new Set(["cautious", "normal", "bold"]);
+const SHIP_CONDITIONS = new Set(["ready", "damaged", "maintenance"]);
+const GM_FUNDS_MODES = new Set(["set", "income", "expense"]);
 const MAX_OFFERS_PER_PERIOD = 80;
 const MAX_WORLD_LOCATION_LOCKS = 240;
 const WORLD_LOCK_RETENTION_PERIODS = 12;
@@ -90,7 +104,10 @@ export function createShipOperationExecutor({
       crewResidentIds: Array.isArray(raw?.crewResidentIds) ? raw.crewResidentIds.map(String) : [],
       residentId: ["shore-duty", "return-to-ship"].includes(raw?.type) ? String(raw?.residentId ?? "") : "",
       locationKind: String(raw?.locationKind ?? ""), locationId: String(raw?.locationId ?? ""),
-      destinationId: String(raw?.destinationId ?? "")
+      destinationKind: raw?.type === "gm-move" ? String(raw?.destinationKind ?? "") : "",
+      destinationId: String(raw?.destinationId ?? ""),
+      condition: raw?.type === "gm-condition" ? String(raw?.condition ?? "") : "",
+      fundsMode: raw?.type === "gm-funds" ? String(raw?.fundsMode ?? "") : ""
     };
     if (!SHIP_OPERATION_TYPES.has(operation.type) || !/^[A-Za-z0-9_-]{1,128}$/.test(operation.operationId ?? "")) fail("Некорректная операция корабля.");
     if (typeof operation.holdingId !== "string" || !operation.holdingId || operation.holdingId.length > 128) fail("Не указано поселение.");
@@ -104,14 +121,22 @@ export function createShipOperationExecutor({
     if (typeof operation.voyageId !== "string" || operation.voyageId.length > 128 || !["", "income", "expense", "deposit", "withdraw"].includes(operation.kind)) fail("Некорректные параметры рейса.");
     if (typeof operation.offerId !== "string" || operation.offerId.length > 128 || !CONTRACT_STYLES.has(operation.style)) fail("Некорректные параметры контракта.");
     if (operation.type === "relocate-world" && (!operation.destinationId || operation.destinationId.length > 128)) fail("Не указан порт назначения.");
-    if (operation.type !== "relocate-world") operation.destinationId = "";
+    if (operation.type === "gm-move") {
+      if (!["home", "market"].includes(operation.destinationKind)) fail("Не указан тип точки назначения.");
+      if (operation.destinationKind === "market" && (!operation.destinationId || operation.destinationId.length > 128)) fail("Не указан порт назначения.");
+      if (operation.destinationKind === "home") operation.destinationId = "";
+    }
+    if (!["relocate-world", "gm-move"].includes(operation.type)) operation.destinationId = "";
+    if (operation.type === "gm-condition" && !SHIP_CONDITIONS.has(operation.condition)) fail("Некорректное состояние корабля.");
+    if (operation.type === "gm-funds" && !GM_FUNDS_MODES.has(operation.fundsMode)) fail("Некорректный режим корректировки кошелька.");
     if (operation.type === "depart-bundle") {
       if (operation.offerIds.length < 2 || operation.offerIds.length > 3
         || operation.offerIds.some((id) => typeof id !== "string" || !id || id.length > 128)
         || new Set(operation.offerIds).size !== operation.offerIds.length) fail("Выберите два или три разных заказа.");
     } else operation.offerIds = [];
     if (!["depart", "depart-world", "depart-bundle"].includes(operation.type)) { operation.offerId = ""; operation.style = "normal"; }
-    if (operation.type !== "adjust") { operation.amountCopper = 0; operation.kind = ""; operation.reason = ""; }
+    if (!["adjust", "gm-funds"].includes(operation.type)) { operation.amountCopper = 0; operation.reason = ""; }
+    if (operation.type !== "adjust") operation.kind = "";
     if (!["adjust", "resolve", "resolve-world", "continue-bundle", "resolve-bundle"].includes(operation.type)) operation.voyageId = "";
     if (!["adopt", "create-profile"].includes(operation.type)) operation.profileId = "";
     if (operation.type !== "create-profile") operation.shipName = "";
@@ -184,17 +209,31 @@ export function createShipOperationExecutor({
       } else {
         ship = ships.list.find((row) => row.id === operation.shipId);
         if (!ship) fail("Корабль не найден.");
-        if (ship.transportOrderId) fail("Корабль занят транспортным заказом. Управляйте им в окне перевозок.", COMMAND_ERROR.CONFLICT);
+        if (ship.transportOrderId && !GM_NON_MOVEMENT_OVERRIDES.has(operation.type)) fail("Корабль занят транспортным заказом. Управляйте им в окне перевозок.", COMMAND_ERROR.CONFLICT);
         const clockQd = holding.gm?.calendaria?.lastQd ?? 0;
         const shipClockQd = ship.navigationMode === "world" ? worldShipTimelineQd(holding, ship) : clockQd;
-        if (ship.navigationMode === "world" && shipClockQd > clockQd) {
+        if (!GM_OVERRIDE_TYPES.has(operation.type) && ship.navigationMode === "world" && shipClockQd > clockQd) {
           fail("Дата поселения раньше времени корабля. Исправьте календарь перед новым приказом.", COMMAND_ERROR.CONFLICT);
         }
-        if (["delete", "generate-world", "reroll-world", "depart-world", "depart-bundle", "return-home", "relocate-world"].includes(operation.type)
+        if (["delete", "generate-world", "reroll-world", "depart-world", "depart-bundle", "return-home", "relocate-world", "gm-move", "gm-arrive", "gm-cancel-voyage"].includes(operation.type)
           && hasPendingOwnSale(holding, ship.id)) {
           fail("Сначала завершите продажу груза собственного корабля в порту.", COMMAND_ERROR.CONFLICT);
         }
-        if (operation.type === "delete") {
+        if (operation.type === "gm-move") {
+          payload = gmMoveWorldShip(data, holding, ship, { destinationKind: operation.destinationKind, destinationId: operation.destinationId, clockQd });
+        } else if (operation.type === "gm-condition") {
+          payload = gmSetShipCondition(ship, { condition: operation.condition });
+        } else if (operation.type === "gm-funds") {
+          payload = gmAdjustShipFunds(holding, ship, { operationId: operation.operationId, mode: operation.fundsMode, amountCopper: operation.amountCopper, reason: operation.reason, clockQd });
+        } else if (operation.type === "gm-arrive") {
+          payload = gmArriveWorldShip(holding, ship, { clockQd });
+        } else if (operation.type === "gm-cancel-voyage") {
+          payload = gmCancelWorldShipVoyage(data, holding, ship, { clockQd });
+        } else if (operation.type === "gm-clear-bills") {
+          payload = gmClearWorldShipBills(data, holding, ship, { clockQd });
+        } else if (operation.type === "gm-sync-clock") {
+          payload = gmSyncWorldShipClock(holding, ship, { clockQd });
+        } else if (operation.type === "delete") {
           payload = removeSettlementShip(holding, ship);
         } else if (operation.type === "shore-duty") {
           if (ship.navigationMode !== "world" || ship.location?.kind !== "home" || ship.activeVoyage || ship.status === "away") fail("Направить экипаж на работу можно только когда корабль дома.", COMMAND_ERROR.CONFLICT);
@@ -374,6 +413,13 @@ export function createShipOperationExecutor({
       appendHoldingOperation(holding, {
         operationId: operation.operationId, type: "ship-operation", createdAt: new Date().toISOString(),
         title: response.ok === false ? `Приказ корабля не выполнен: ${ship.name}`
+          : operation.type === "gm-move" ? `ГМ переместил корабль: ${ship.name}`
+          : operation.type === "gm-condition" ? `ГМ изменил состояние корабля: ${ship.name}`
+          : operation.type === "gm-funds" ? `ГМ скорректировал кошелёк корабля: ${ship.name}`
+          : operation.type === "gm-arrive" ? `ГМ завершил перелёт корабля: ${ship.name}`
+          : operation.type === "gm-cancel-voyage" ? `ГМ отменил рейс корабля: ${ship.name}`
+          : operation.type === "gm-clear-bills" ? `ГМ списал долг стоянки корабля: ${ship.name}`
+          : operation.type === "gm-sync-clock" ? `ГМ синхронизировал время корабля: ${ship.name}`
           : operation.type === "shore-duty" ? `Член экипажа направлен на работу в поселении: ${ship.name}`
           : operation.type === "return-to-ship" ? `Член экипажа вернулся на корабль: ${ship.name}`
           : operation.type === "reroll-world" ? `Обновлены заказы корабля: ${ship.name}`

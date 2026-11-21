@@ -10,9 +10,19 @@
 .fbls-order-list,
 .fbls-order-plan { min-width: 0; }
 
-.fbls-order-list { border: 1px solid var(--fbls-border-strong); border-radius: var(--fbls-radius-sm); }
+.fbls-order-list { border: 1px solid var(--fbls-border-strong); border-radius: var(--fbls-radius-sm); overflow: hidden; }
 .fbls-order-list > .fbls-ship-order + .fbls-ship-order { border-top: 1px solid var(--fbls-border); }
-.fbls-order-list > .is-selected { box-shadow: inset 3px 0 var(--fbls-accent); background: var(--fbls-accent-bg); }
+.fbl-skyhold-ship .fbls-order-list > .fbls-ship-order.is-profitable > summary { background: var(--fbls-order-profit-bg); }
+.fbl-skyhold-ship .fbls-order-list > .fbls-ship-order.is-profitable > summary:hover,
+.fbl-skyhold-ship .fbls-order-list > .fbls-ship-order.is-profitable[open] > summary { background: var(--fbls-order-profit-hover); }
+.fbl-skyhold-ship .fbls-order-list > .fbls-ship-order.is-loss > summary { background: var(--fbls-order-loss-bg); }
+.fbl-skyhold-ship .fbls-order-list > .fbls-ship-order.is-loss > summary:hover,
+.fbl-skyhold-ship .fbls-order-list > .fbls-ship-order.is-loss[open] > summary { background: var(--fbls-order-loss-hover); }
+.fbl-skyhold-ship .fbls-order-list > .is-selected { box-shadow: inset 3px 0 var(--fbls-accent); background: var(--fbls-accent-soft); }
+.fbl-skyhold-ship .fbls-order-list > .is-selected > summary { box-shadow: inset 3px 0 var(--fbls-accent); }
+.fbl-skyhold-ship .fbls-order-prices.is-profitable .fbls-order-profit-label { color: var(--fbls-success); font-weight: 600; }
+.fbl-skyhold-ship .fbls-order-prices.is-loss .fbls-order-profit-label { color: var(--fbls-danger); font-weight: 600; }
+.fbl-skyhold-ship .fbls-order-prices > strong { display: inline-flex; justify-content: flex-end; }
 .fbls-order-select { display: flex; align-items: center; gap: var(--fbls-gap-sm); min-width: 0; cursor: pointer; }
 .fbls-order-select > input { flex-shrink: 0; }
 .fbls-order-select > span { display: grid; min-width: 0; text-align: left; }
@@ -388,3 +398,18 @@
 .fbl-skyhold-ship .fbls-ship-order[hidden],
 .fbl-skyhold-ship .fbls-ship-roster tr[hidden] { display: none; }
 .fbl-skyhold-ship .fbls-order-plan:has(.fbls-order-command) { padding-bottom: 0; }
+.fbl-skyhold-ship .fbls-ship-heading-meta { margin-top: var(--fbls-gap-xs); gap: var(--fbls-gap-xs); }
+.fbl-skyhold-ship .fbls-chip.is-warning { border-color: var(--fbls-warning); background: var(--fbls-warning-soft); color: var(--fbls-warning); }
+.fbl-skyhold-ship .fbls-ship-gm-box { border-color: var(--fbls-accent-border); }
+.fbl-skyhold-ship .fbls-ship-gm-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: var(--fbls-gap-sm); }
+.fbl-skyhold-ship .fbls-ship-gm-funds-form { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(5rem, 0.7fr) minmax(0, 1.2fr) auto; align-items: end; gap: var(--fbls-gap-sm); }
+.fbl-skyhold-ship .fbls-ship-meta-strip { display: flex; flex-wrap: wrap; align-items: center; gap: var(--fbls-gap-xs) var(--fbls-gap-sm); font-size: var(--fbls-type-compact-sm); color: var(--fbls-muted); }
+
+@container ship-window (max-width: 620px) {
+  .fbl-skyhold-ship .fbls-ship-gm-funds-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@container ship-window (max-width: 420px) {
+  .fbl-skyhold-ship .fbls-ship-gm-row,
+  .fbl-skyhold-ship .fbls-ship-gm-funds-form { grid-template-columns: minmax(0, 1fr); }
+}

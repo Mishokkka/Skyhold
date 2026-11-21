@@ -85,6 +85,8 @@ globalThis.Handlebars = { registerHelper: (name, helper) => shipHelpers.set(name
 const { SkyholdShipApp } = await import("../apps/ship-app.js");
 assert.equal(shipHelpers.get("fblsShipMoney")(1234), "12 З 3 С 4 М");
 assert.equal(shipHelpers.get("fblsShipMoney")(-250), "−2 З 5 С");
+assert.match(shipHelpers.get("fblsShipMoneyHtml")(1234), /fbls-coin is-gold[\s\S]*12[\s\S]*is-silver[\s\S]*3[\s\S]*is-copper[\s\S]*4/);
+assert.match(shipHelpers.get("fblsShipMoneyHtml")(550, { hash: { signed: true } }), /fbls-money-sign">\+<\/span>/);
 assert.equal(shipHelpers.has("fblsShipGold"), false, "retired fblsShipGold helper must not stay registered");
 assert.equal(shipHelpers.get("fblsShipGoldInput")(1234), "12.34");
 for (const isGM of [true, false]) {

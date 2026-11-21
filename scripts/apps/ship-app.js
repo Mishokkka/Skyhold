@@ -13,7 +13,7 @@ import { ShipEventDomain } from "./domains/events/ship-events.js";
 import { bindFloatingTooltips, hideFloatingTooltip } from "./common/floating-tooltip.js";
 import { WindowFrameMixin } from "./common/window-frame.js";
 import { configureWorldShipEconomy } from "../engines/ships/world-market.js";
-import { formatShipMoney, parseShipGoldInput, shipGoldInput } from "../core/ship-gold.js";
+import { formatShipMoney, formatShipMoneyHtml, parseShipGoldInput, shipGoldInput } from "../core/ship-gold.js";
 import { ShipOrderPlanner } from "./ship-order-planner.js";
 import { shipHomeLocationContext } from "./domains/ship-home-location.js";
 import { placeShipHome } from "./domains/events/ship-home-events.js";
@@ -22,11 +22,16 @@ import { tabKeyTarget } from "./common/tab-navigation.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 globalThis.Handlebars?.registerHelper?.("fblsShipMoney", (copper) => formatShipMoney(copper));
+globalThis.Handlebars?.registerHelper?.("fblsShipMoneyHtml", (copper, options) => {
+  const html = formatShipMoneyHtml(copper, { signed: options?.hash?.signed === true });
+  return globalThis.Handlebars?.SafeString ? new globalThis.Handlebars.SafeString(html) : html;
+});
 globalThis.Handlebars?.registerHelper?.("fblsShipGoldInput", (copper) => shipGoldInput(copper));
 const SHIP_OPERATIONS = new Set([
   "ship-delete", "ship-adopt", "ship-install-magnifique-crew", "ship-save-crew",
   "ship-generate-world", "ship-reroll-world", "ship-depart-world", "ship-depart-bundle", "ship-continue-bundle", "ship-resolve-bundle", "ship-return-home", "ship-relocate-world",
-  "ship-resolve-world", "ship-depart", "ship-adjust", "ship-generate-offers", "ship-resolve"
+  "ship-resolve-world", "ship-depart", "ship-adjust", "ship-generate-offers", "ship-resolve",
+  "ship-gm-move", "ship-gm-condition", "ship-gm-funds", "ship-gm-arrive", "ship-gm-cancel-voyage", "ship-gm-clear-bills", "ship-gm-sync-clock"
 ]);
 const SHIP_FIELDS = new Set([
   "name", "commanderName", "homeUpkeepEnabled", "speedKmPerDay", "capacityLoadPoints", "hiddenCapacityLoadPoints", "routePlan.destination", "routePlan.distanceKm",

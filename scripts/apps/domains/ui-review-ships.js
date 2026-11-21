@@ -1,4 +1,4 @@
-import { formatShipMoney, shipGoldInput } from "../../core/ship-gold.js";
+import { formatShipMoney, formatShipMoneyHtml, shipGoldInput } from "../../core/ship-gold.js";
 import { tabKeyTarget } from "../common/tab-navigation.js";
 
 // Presentation fixtures only. No live ship context, authority commands or store imports.
@@ -45,16 +45,21 @@ export function shipReviewContext(state) {
   const assigned = empty ? [] : crewRows.filter(([id]) => state.crewAssigned.includes(id));
   const readyCount = empty ? 0 : Math.max(0, assigned.length - (blocked ? 2 : 0));
   const crewReady = readyCount >= 6;
-  const offers = empty || active ? [] : offerRows.map(([id, title, cargo, pickupLabel, destination, load, days, cost, reward]) => ({
-    id, title, pickupLabel, destination, departureLabel: atHome ? "Скайхолд" : "Ассур", selected: state.selected.includes(id),
-    contract: { cargo: { name: cargo, loadPoints: load, quantity: load } }, kindLabel: "Перевозка", durationDays: days,
-    difficultyLabel: "Обычный риск", approachKm: id === "grain" ? 0 : 120, deliveryKm: days * 80,
-    rewardCopper: reward, costs: { totalCopper: cost, foodCopper: 300, crewCopper: 800, upkeepCopper: 400, handlingCopper: cost - 1500, taxCopper: 0 },
-    quote: { distanceKm: days * 80 + (id === "grain" ? 0 : 120) }, timing: { flightDays: days - 1, loadingDays: 0.5, unloadingDays: 0.5 },
-    attention: { level: 2, label: "Низкое" }, returnReserveCopper: 900, idleReserveCopper: 300, outcomeReserveCopper: 500,
-    recommendedReserveCopper: 1700,
-    recommendedBudgetCopper: cost + 1700, styles: [{ styleLabel: "Обычно", riskLabel: "Обычный риск", rewardRangeCopper: { min: reward, max: reward } }]
-  }));
+  const offers = empty || active ? [] : offerRows.map(([id, title, cargo, pickupLabel, destination, load, days, cost, reward]) => {
+    const profitCopper = reward - cost;
+    return {
+      id, title, cargoTitle: cargo, pickupLabel, destination, departureLabel: atHome ? "Скайхолд" : "Ассур", selected: state.selected.includes(id),
+      contract: { cargo: { name: cargo, loadPoints: load, quantity: load } }, kindLabel: "Перевозка", durationDays: days,
+      difficultyLabel: "Обычный риск", approachKm: id === "grain" ? 0 : 120, deliveryKm: days * 80,
+      rewardCopper: reward, profitCopper, isProfitable: profitCopper > 0, isLoss: profitCopper < 0,
+      profitLabel: profitCopper < 0 ? "Убыль" : profitCopper > 0 ? "Прибыль" : "В ноль",
+      costs: { totalCopper: cost, foodCopper: 300, crewCopper: 800, upkeepCopper: 400, handlingCopper: cost - 1500, taxCopper: 0 },
+      quote: { distanceKm: days * 80 + (id === "grain" ? 0 : 120) }, timing: { flightDays: days - 1, loadingDays: 0.5, unloadingDays: 0.5, portDays: 1 },
+      attention: { level: 2, label: "Низкое" }, returnReserveCopper: 900, idleReserveCopper: 300, outcomeReserveCopper: 500,
+      recommendedReserveCopper: 1700,
+      recommendedBudgetCopper: cost + 1700, styles: [{ styleLabel: "Обычно", riskLabel: "Обычный риск", rewardRangeCopper: { min: reward, max: reward } }]
+    };
+  });
   const selected = offers.filter(row => row.selected);
   const load = selected.reduce((n, row) => n + row.contract.cargo.loadPoints, 0);
   const cost = selected.reduce((n, row) => n + row.costs.totalCopper, 0);
@@ -86,7 +91,14 @@ export function shipReviewContext(state) {
     moneySummary: { calculationValid: true, balanceLabel: atHome ? "Доступно дома" : "На борту", walletCopper: wallet, balanceCopper: wallet + (atHome ? treasury : 0), settlementCopper: treasury,
       freeCopper: free, reserveKnown: true, reserveCopper: reserve, contingencyReserveCopper: atHome ? 0 : 2600, obligationsCopper: obligations, portDebtCopper: obligations,
       outcomeDueCopper: 0, returnReserveCopper: 1500, idleReserveCopper: 700, remainingOperatingCopper: atHome ? 0 : 600, incidentReserveCopper: 400 },
-    walletText: formatShipMoney(wallet), homeUpkeepEnabled: true, homeUpkeepCopperPerDay: 320, capacityLoadPoints: 100, hiddenCapacityLoadPoints: 10,
+    walletText: formatShipMoney(wallet), walletHtml: formatShipMoneyHtml(wallet), isConditionWarning: false,
+    gmControl: isGM ? {
+      canMove: !ownSale, moveBlockedReason: "",
+      destinations: [{ value: "home:review-holding", label: "Домой · Скайхолд", selected: atHome }, { value: "market:assur", label: "Ассур", selected: !atHome }],
+      conditionOptions: [{ value: "ready", label: "Исправен", selected: true }, { value: "damaged", label: "Повреждён", selected: false }, { value: "maintenance", label: "На обслуживании", selected: false }],
+      canArrive: inTransit, canCancelVoyage: inTransit, canClearBills: obligations > 0, canSyncClock: false, walletGoldInput: shipGoldInput(wallet), timelineDays: 0, settlementDays: 0
+    } : null,
+    homeUpkeepEnabled: true, homeUpkeepCopperPerDay: 320, capacityLoadPoints: 100, hiddenCapacityLoadPoints: 10,
     occupiedLoadPoints: active ? 60 : 0, speedKmPerDay: 120, readiness: { ready: crewReady, readyCount, requiredCount: 6,
       issues: !crewReady ? [{ message: empty ? "Назначьте команду перед отправлением." : "Бор ранен, Ида отсутствует: проверьте состав перед отправлением." }] : [], warnings: [] },
     crewRoster, crewOptions, hasCrewOptions: true, linkedCrewCount: crewRoster.length, abstractCrewCount: 0,
@@ -153,6 +165,10 @@ export function renderShipReviewCurrent(context, handlebars = globalThis.Handleb
   const partial = handlebars.partials["modules/fbl-skyhold/templates/ship-app.hbs"];
   if (!partial) throw new Error("Ship review template is unavailable");
   handlebars.registerHelper("fblsShipMoney", formatShipMoney);
+  handlebars.registerHelper("fblsShipMoneyHtml", (copper, options) => {
+    const html = formatShipMoneyHtml(copper, { signed: options?.hash?.signed === true });
+    return handlebars.SafeString ? new handlebars.SafeString(html) : html;
+  });
   let html = (typeof partial === "function" ? partial : handlebars.compile(partial))(context.currentContext);
   const preview = handlebars.partials["modules/fbl-skyhold/templates/parts/ship-window/order-preview.hbs"];
   if (preview) html = html.replace(/(<div data-ship-planner-preview[^>]*>)(<\/div>)/, (_match, start, end) =>

@@ -233,5 +233,22 @@ export function completeShipOutingLeg(ship, summary = {}) {
   return ship.lastOuting;
 }
 
+/** Reconcile an active outing after a GM manual move or voyage cancellation without breaking leg invariants. */
+export function settleShipOutingByGm(ship, { clockQd = 0, reason = "Ручное изменение ГМа", finish = false } = {}) {
+  if (!ship?.currentOuting || ship.currentOuting.version !== VERSION) return null;
+  const clock = integer(clockQd, "время операции ГМа");
+  const report = update(ship, (next) => {
+    if (next.lastLegId && next.lastCompletedLegId !== next.lastLegId) {
+      next.lastCompletedLegId = next.lastLegId;
+    }
+    appendDetail(next, { kind: "gm-override", clockQd: clock, amountCopper: 0, reason });
+    if (finish) next.completedAtQd = clock;
+  });
+  if (!finish) return report;
+  ship.lastOuting = report;
+  delete ship.currentOuting;
+  return ship.lastOuting;
+}
+
 export const SHIP_OUTING_REPORT_VERSION = VERSION;
 export const SHIP_OUTING_DETAIL_LIMIT = MAX_DETAILS;

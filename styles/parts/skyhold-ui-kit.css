@@ -356,3 +356,38 @@
 .fbls-selection-field[open] > summary > i { transform: rotate(180deg); }
 .fbls-selection-field > .fbls-selected-traits { margin-top: 4px; }
 .fbls-selection-field .editor-chip { overflow-wrap: anywhere; }
+
+/* Color-coded З / С / М coin display shared across windows and dialogs. */
+.fbl-skyhold .fbls-money {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.28em;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.fbl-skyhold .fbls-money-sign {
+  color: var(--fbls-text-strong);
+  font-weight: 700;
+  margin-right: -0.14em;
+}
+
+.fbl-skyhold .fbls-coin {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.12em;
+}
+
+.fbl-skyhold .fbls-coin > b {
+  font-weight: 700;
+}
+
+.fbl-skyhold .fbls-coin > i {
+  font-size: 0.86em;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.fbl-skyhold .fbls-coin.is-gold { color: var(--fbls-coin-gold); }
+.fbl-skyhold .fbls-coin.is-silver { color: var(--fbls-coin-silver); }
+.fbl-skyhold .fbls-coin.is-copper { color: var(--fbls-coin-copper); }
