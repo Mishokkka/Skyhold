@@ -20,7 +20,7 @@
 | Обновление и расширение | [Переходы и восстановление](migrations.md), [формат content pack](content-pack-format.md), [API уникальных зданий](unique-buildings-api.md) |
 | Кампания | [Экипаж «Магнифика»](magnifique-crew-import.md), [торговый лор Воздушных Островов](air-islands-trade-lore.md) |
 
-Каталоги зданий и ресурсов генерируются из кода (`scripts/dev/build-building-catalog-reference.mjs` и `build-resource-catalog-reference.mjs`); `npm run docs:check` сверяет ссылки, якоря, оба каталога и достижимость дерева без записи.
+Каталоги зданий и ресурсов генерируются из кода (`scripts/dev/build-building-catalog-reference.mjs` и `build-resource-catalog-reference.mjs`); `npm run docs:check` сверяет ссылки, якоря, оба каталога и достижимость дерева без записи. Маршрут открытия конкретного здания: `node scripts/dev/building-development-reachability-check.mjs --route <id>`.
 
 ## Проекты — отдельно от реализации
 
@@ -37,4 +37,14 @@
 | [Перевозки](transport-v2-validation.md), [корабли](ships-manual-smoke.md), [карта и регионы](route-network-smoke.md) | Профильные ручные чеклисты |
 | [Производительность](performance-baseline.md) | Команды benchmark, runtime observer и контракты persistence |
 
-Архив закрытых аудитов (включая PR #14–#15) и исторические таблицы подготовки v14/v15 сохранены в истории Git.
+## Архив в истории Git
+
+Удалённые при ревизии документации отчёты и исторические таблицы доступны на ревизии `98df194` (последний коммит до очистки; см. также PR #14 и PR #15):
+
+| Архивные материалы (`98df194`) | Куда перенесены действующие правила и проверки |
+|---|---|
+| Аудиты PR #14–#15 (`documentation-audit-2026-11-10.md`, `independent-audit-2026-11-10.md`, `final-audit-2026-11-11.md`, `pr15-independent-audit-2026-11-12.md`) | [Общая матрица](manual-foundry-smoke-matrix.md) и регрессионные проверки `scripts/dev/` |
+| Утверждённый баланс и дерево v14/v15 (`building-development-approved.md`, `building-development-tree-proposal.md`, `building-preparation-revision-2026-09-05.md`) | [Каталог зданий v19](building-catalog.md), фикстура `scripts/dev/fixtures/building-approved-development.mjs` и `npm run development:check` |
+| Нормы ТО и кадров v15 (`building-maintenance-proposal.md`, `building-worker-affinity-proposal.md`) | [Труд и штат](labor-contract.md), [экономика](economy-contract.md), `building-development-reachability-check.mjs` и `npm run development:workers:check` |
+| Дамп маршрутов (`building-development-reachability.md`) | Проверка и отчёт по запросу: `node scripts/dev/building-development-reachability-check.mjs --route <id>` |
+| Разрозненные транспортные, рыночные и viewer-планы (`transport-*.md`, `parallel-market-routes-contract.md`, `public-viewer-implementation-plan.md`) | [Перевозки](transport-contract.md), [внешний рынок](external-market-contract.md), [карта и регионы](route-network-smoke.md), [реестр механик](mechanics-expansion-roadmap.md) |

@@ -7,6 +7,7 @@ assert.equal(rows.length, 126);
 const names = new Map(rows.map((row) => [row.id, row.name]));
 const vec = (value = {}) => ["food", "technology", "culture", "war"].map((key) => value[key] ?? 0).join("/");
 const safe = (value = "") => String(value).replaceAll("\n", " ").replaceAll("\r", "").trim();
+const sentence = (value = "") => (value.endsWith(".") ? value : `${value}.`);
 
 const FUNCTIONS = {
   production: "производство",
@@ -59,16 +60,40 @@ function formatHousing(housing) {
   return parts.join("; ");
 }
 
+function formatDefense(defense) {
+  if (!defense) return "";
+  const parts = [];
+  if (defense.base) parts.push(`база +${defense.base}`);
+  if (defense.perStep && defense.workerStep) parts.push(`+${defense.perStep} за каждые ${defense.workerStep} раб.`);
+  return parts.join("; ");
+}
+
 function formatStorage(storage) {
   if (!storage) return "";
   const parts = [`вместимость ${storage.capacity ?? 0}`];
   if (storage.shelfLifeMultiplier && storage.shelfLifeMultiplier !== 1) parts.push(`срок ×${storage.shelfLifeMultiplier}`);
   if (storage.security) parts.push(`охрана ${storage.security}`);
   if (storage.quality) parts.push(`качество ${storage.quality}`);
-  if (storage.profileLabel) {
+  if (storage.autoReceive === false) parts.push("без автоприёма");
+  const hasProfile = Boolean(
+    storage.profileLabel
+    || storage.profilePerishableFood
+    || storage.profileCategoryTags?.length
+    || storage.profileMarketTags?.length
+    || storage.profileResourceIds?.length
+    || (storage.profileCapacityMultiplier && storage.profileCapacityMultiplier !== 1)
+    || storage.profileRequiresStaff
+  );
+  if (hasProfile) {
+    const scope = [];
+    if (storage.profileLabel) scope.push(safe(storage.profileLabel));
+    if (storage.profilePerishableFood && !storage.profileLabel) scope.push("скоропортящаяся пища");
+    if (storage.profileCategoryTags?.length) scope.push(`категории: ${storage.profileCategoryTags.join(", ")}`);
+    if (storage.profileMarketTags?.length) scope.push(`теги: ${storage.profileMarketTags.join(", ")}`);
+    if (storage.profileResourceIds?.length) scope.push(`ресурсы: ${storage.profileResourceIds.join(", ")}`);
     const mult = storage.profileCapacityMultiplier && storage.profileCapacityMultiplier !== 1 ? ` (×${storage.profileCapacityMultiplier} нагрузки)` : "";
     const staff = storage.profileRequiresStaff ? ", нужен штат" : "";
-    parts.push(`профиль: ${safe(storage.profileLabel)}${mult}${staff}`);
+    parts.push(`профиль: ${scope.join("; ") || "специализированный"}${mult}${staff}`);
   }
   return parts.join("; ");
 }
@@ -116,7 +141,11 @@ function formatAgriculture(ag) {
   if (!ag?.crops?.length) return "";
   return ag.crops.map((crop) => {
     const seasons = (crop.sowingSeasons ?? []).map((s) => SEASONS[s] ?? s).join("/");
-    const flags = [crop.perennial ? "многолетн." : "", crop.readyExpiryQd ? `срок готовности ${crop.readyExpiryQd} QD` : ""].filter(Boolean).join(", ");
+    const flags = [
+      crop.perennial ? "многолетн." : "",
+      crop.annualHarvestLimit ? `лимит ${crop.annualHarvestLimit}/год` : "",
+      crop.readyExpiryQd ? `срок готовности ${crop.readyExpiryQd} QD` : ""
+    ].filter(Boolean).join(", ");
     return `${safe(crop.label)} → ${crop.outputQty} (посев ${seasons}: ${crop.sowingWorkQd} QD, рост ${crop.growingQd} QD, сбор ${crop.harvestWorkQd} QD${flags ? `, ${flags}` : ""})`;
   }).join("; ");
 }
@@ -124,17 +153,23 @@ function formatAgriculture(ag) {
 function formatLivestock(livestock) {
   if (!livestock?.enabled) return "";
   const options = (livestock.speciesOptions ?? [livestock.speciesId]).filter(Boolean).join(", ");
-  const cap = livestock.profile?.capacity ? `; вмест. ${livestock.profile.capacity}` : "";
-  return `виды: ${options || "—"} (по умолч. ${livestock.speciesId || "—"})${cap}`;
+  const profile = livestock.profile ?? {};
+  const details = [];
+  if (profile.capacity) details.push(`вмест. ${profile.capacity}`);
+  if (profile.headsPerFeedUnit) details.push(`корм 1 ед./${profile.headsPerFeedUnit} гол.`);
+  if (profile.maturityQd) details.push(`рост ${profile.maturityQd} QD`);
+  if (profile.woolPerHead) details.push(`шерсть ${profile.woolPerHead}/гол.`);
+  return `виды: ${options || "—"} (по умолч. ${livestock.speciesId || "—"})${details.length ? `; ${details.join(", ")}` : ""}`;
 }
 
 let text = `# Каталог зданий v${TEMPLATE_CATALOG_VERSION}\n\n`
-  + `Автогенерируемый справочник встроенного каталога (${rows.length} шаблонов: 124 дерева и 2 сюжетных). Источник — \`scripts/data/building-templates.js\`. Обновление: \`node scripts/dev/build-building-catalog-reference.mjs\` (сверка: \`--check\`). Сохранённые миры не меняются автоматически — см. [переходы](migrations.md).\n\n`
+  + `Автогенерируемый справочник встроенного каталога (${rows.length} шаблонов: 124 дерева и 2 сюжетных). Источник — \`scripts/data/building-templates.js\`. Обновление: \`node scripts/dev/build-building-catalog-reference.mjs\` (сверка: \`--check\`). Маршрут открытия конкретного здания: \`node scripts/dev/building-development-reachability-check.mjs --route <id>\`. Сохранённые миры не меняются автоматически — см. [переходы](migrations.md).\n\n`
   + `Обозначения: П/Т/К/В — Пища/Технология/Культура/Война; деньги — ММ (содержание за месяц, ставка за день); техобслуживание v2 — прямые QD/десятник (указано, если > 0); нулевые и пустые блоки опущены. Правила: [экономика](economy-contract.md), [труд](labor-contract.md), [службы](building-social-contract.md).\n\n`;
 
 for (const row of rows) {
+  const visTag = row.visibility && row.visibility !== "public" ? ` · видимость: ${row.visibility === "gm" ? "только ГМ" : row.visibility}` : "";
   text += `## ${safe(row.name)}\n\n`;
-  text += `\`${row.id}\` · ${safe(row.type)} · этап ${row.developmentStage ?? "сюжетный"} · треб. **${vec(row.requirements)}** · разв. **${vec(row.bonuses)}**\n\n`;
+  text += `\`${row.id}\` · ${safe(row.type)} · этап ${row.developmentStage ?? "сюжетный"} · треб. **${vec(row.requirements)}** · разв. **${vec(row.bonuses)}**${visTag}\n\n`;
 
   const materials = (row.materialCosts ?? []).map((cost) => `${safe(cost.name || cost.resourceId)} ${cost.qty}`).join(", ") || "нет";
   text += `- **Стройка:** ${row.buildTarget ?? 0} эт., сл. ${row.buildDifficulty ?? 0}; материалы: ${materials}.\n`;
@@ -146,7 +181,8 @@ for (const row of rows) {
   const fnList = Object.entries(FUNCTIONS).filter(([key]) => row.functions?.[key]).map(([, label]) => label).join(", ") || "нет";
   const social = [row.reputation ?? 0, row.moraleDelta ?? 0, row.workerMoraleDelta ?? 0];
   const socialStr = social.some((n) => n !== 0) ? `; Реп/Дов/Труд: ${social.join("/")}` : "";
-  text += `- **Функции:** ${fnList}${socialStr}.\n`;
+  const exclusiveStr = row.productionSelection?.exclusive ? "; выбор линии: одна активная" : "";
+  text += `- **Функции:** ${fnList}${socialStr}${exclusiveStr}.\n`;
 
   if ((row.activation?.minWorkers ?? 0) > 0 || (row.activation?.minOperationalQd ?? 0) > 0 || row.activation?.requiresMeaningfulResult) {
     text += `- **Активация:** от ${row.activation?.minWorkers ?? 0} раб., ${row.activation?.minOperationalQd ?? 0} QD${row.activation?.requiresMeaningfulResult ? ", нужен результат" : ""}.\n`;
@@ -160,7 +196,8 @@ for (const row of rows) {
   const deps = [
     ...(row.requiredBuildingIds ?? []).map(dependency),
     ...(row.requiredAnyBuildingIds?.length ? [`одно из: ${row.requiredAnyBuildingIds.map(dependency).join(" ИЛИ ")}`] : []),
-    ...(row.requiresConstructionCenter ? ["Центр Строительства"] : [])
+    ...(row.requiresConstructionCenter ? ["Центр Строительства"] : []),
+    ...(row.upgradesFromTemplateIds?.length ? [`улучшение из: ${row.upgradesFromTemplateIds.map((id) => names.get(id) ?? id).join(", ")}`] : [])
   ];
   if (deps.length) text += `- **Зависимости:** ${deps.join("; ")}.\n`;
 
@@ -179,28 +216,30 @@ for (const row of rows) {
   }
 
   const serviceText = formatService(row.service);
-  if (serviceText) text += `- **Услуга:** ${serviceText}.\n`;
+  if (serviceText) text += `- **Услуга:** ${sentence(serviceText)}\n`;
   const controlText = formatControl(row.control);
-  if (controlText) text += `- **Контроль:** ${controlText}.\n`;
+  if (controlText) text += `- **Контроль:** ${sentence(controlText)}\n`;
+  const defenseText = formatDefense(row.defense);
+  if (defenseText) text += `- **Оборона:** ${sentence(defenseText)}\n`;
   if (row.functions?.housing) {
     const housingText = formatHousing(row.housing);
-    if (housingText) text += `- **Жильё:** ${housingText}.\n`;
+    if (housingText) text += `- **Жильё:** ${sentence(housingText)}\n`;
   }
   if (row.functions?.storage) {
     const storageText = formatStorage(row.storage);
-    if (storageText) text += `- **Склад:** ${storageText}.\n`;
+    if (storageText) text += `- **Склад:** ${sentence(storageText)}\n`;
   }
   if (row.functions?.income) {
     const incomeText = formatIncome(row.income);
-    if (incomeText) text += `- **Доход:** ${incomeText}.\n`;
+    if (incomeText) text += `- **Доход:** ${sentence(incomeText)}\n`;
   }
   for (const line of row.productionLines ?? []) {
-    text += `- **Производство:** ${formatProductionLine(line)}.\n`;
+    text += `- **Производство:** ${sentence(formatProductionLine(line))}\n`;
   }
   const agText = formatAgriculture(row.agriculture);
-  if (agText) text += `- **Земледелие:** ${agText}.\n`;
+  if (agText) text += `- **Земледелие:** ${sentence(agText)}\n`;
   const liveText = formatLivestock(row.livestock);
-  if (liveText) text += `- **Животные:** ${liveText}.\n`;
+  if (liveText) text += `- **Животные:** ${sentence(liveText)}\n`;
 
   const prose = [safe(row.description), safe(row.effect), safe(row.notes)].filter(Boolean).join(" ");
   if (prose) text += `\n${prose}\n`;

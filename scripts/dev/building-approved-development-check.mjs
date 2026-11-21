@@ -1,16 +1,32 @@
 import assert from "node:assert/strict";
 import { DEFAULT_BUILDING_TEMPLATES } from "../data/building-templates.js";
-import { buildingCatalogV15Templates } from "../data/building-template-revision-v15.js";
 import { buildingDevelopmentRoute } from "./building-development-reachability-check.mjs";
+import {
+  APPROVED_BONUS_DECISIONS,
+  APPROVED_REQUIREMENT_DECISIONS,
+  LEISURE_BONUS_OVERRIDES
+} from "./fixtures/building-approved-development.mjs";
 import { normalizeSkyholdData } from "../data/normalizers.js";
 import { planBuildingCatalogMigration, applyBuildingCatalogMigration } from "../workflows/buildings/catalog-migration.js";
 
 const keys = ["food", "technology", "culture", "war"];
 const v = (row) => keys.map((key) => row[key]).join("/");
+const parse = (value) => Object.fromEntries(keys.map((key, index) => [key, Number(value.split("/")[index])]));
 
 export function checkApprovedBuildingDevelopment() {
   const rows = DEFAULT_BUILDING_TEMPLATES;
   const byId = new Map(rows.map((row) => [row.id, row]));
+
+  assert.equal(APPROVED_BONUS_DECISIONS.length, 60);
+  assert.equal(APPROVED_REQUIREMENT_DECISIONS.length, 37);
+  assert.equal(APPROVED_BONUS_DECISIONS.filter(([, before, after]) => before !== after).length, 50);
+
+  for (const [id, , after] of APPROVED_BONUS_DECISIONS) {
+    assert.equal(v(byId.get(id).bonuses), LEISURE_BONUS_OVERRIDES[id] ?? after, `${id}: approved bonus must not drift`);
+  }
+  for (const [id, , after] of APPROVED_REQUIREMENT_DECISIONS) {
+    assert.equal(v(byId.get(id).requirements), after, `${id}: approved requirement must not drift`);
+  }
 
   const overrides = {
     gallows: "0/0/0/1",
@@ -54,14 +70,16 @@ export function checkApprovedBuildingDevelopment() {
 
   // Existing v15 worlds must receive the revised rules through the explicit
   // replacement workflow too, without relying on a version-number downgrade.
-  const v15 = buildingCatalogV15Templates();
+  const old = structuredClone(rows);
+  for (const [id, before] of APPROVED_BONUS_DECISIONS) old.find((r) => r.id === id).bonuses = parse(before);
+  for (const [id, before] of APPROVED_REQUIREMENT_DECISIONS) old.find((r) => r.id === id).requirements = parse(before);
   const source = normalizeSkyholdData({
     meta: { templateCatalogVersion: 15, revision: 9 },
-    catalog: { buildings: v15 },
+    catalog: { buildings: old },
     holdings: [{
       id: "test",
       buildings: {
-        list: v15.map((r) => ({
+        list: old.map((r) => ({
           ...structuredClone(r),
           id: `instance-${r.id}`,
           templateId: r.id,
@@ -77,8 +95,11 @@ export function checkApprovedBuildingDevelopment() {
   const applied = applyBuildingCatalogMigration({ currentData: source, plan });
   assert.equal(applied.commitRequired, true);
   assert.deepEqual(source, snapshot);
-  for (const [id, expected] of Object.entries({ ...overrides, ...retained })) {
-    assert.equal(v(applied.data.holdings[0].buildings.list.find((r) => r.templateId === id).bonuses), expected, id);
+  for (const [id, , after] of APPROVED_BONUS_DECISIONS) {
+    assert.equal(v(applied.data.holdings[0].buildings.list.find((r) => r.templateId === id).bonuses), LEISURE_BONUS_OVERRIDES[id] ?? after, id);
+  }
+  for (const [id, , after] of APPROVED_REQUIREMENT_DECISIONS) {
+    assert.equal(v(applied.data.holdings[0].buildings.list.find((r) => r.templateId === id).requirements), after, id);
   }
   assert.equal(
     planBuildingCatalogMigration({ currentData: normalizeSkyholdData(applied.data), operationId: "repeat-approved", replaceCatalog: true }).hasChanges,

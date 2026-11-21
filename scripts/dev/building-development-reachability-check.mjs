@@ -151,8 +151,40 @@ export function checkTechnicalMaintenanceNorms() {
   return { technicalTemplates: TECHNICAL_MAINTENANCE_NORM_QD.size, ordinaryTemplates: nonTechnicalCount, totalNormQd };
 }
 
+/** Formats a human-readable unlock route for one target building (by ID or exact Russian name). */
+export function formatBuildingDevelopmentRoute(rows, query) {
+  const normalized = String(query ?? "").trim().toLowerCase();
+  const target = rows.find((row) => row.id.toLowerCase() === normalized || String(row.name ?? "").trim().toLowerCase() === normalized);
+  if (!target) {
+    throw new Error(`Unknown ordinary building template: "${query}". Pass a template ID (e.g. forge, town-hall) or exact name.`);
+  }
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const route = buildingDevelopmentRoute(rows, [target.id]);
+  const totals = parseVector("0/0/0/0");
+  const lines = [
+    `${target.name} (${target.id}) · этап ${target.developmentStage} · треб. ${vector(target.requirements)} · шагов: ${route.order.length}`
+  ];
+  route.order.forEach((id, index) => {
+    const step = byId.get(id);
+    for (const key of KEYS) totals[key] += rowBonus(step, key);
+    lines.push(`${String(index + 1).padStart(2, " ")}. ${step.name} [${step.id}] (эт. ${step.developmentStage}) +${vector(step.bonuses)} → ${vector(totals)}`);
+  });
+  return lines.join("\n");
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  const reachability = checkBuildingDevelopmentReachability();
-  const maintenance = checkTechnicalMaintenanceNorms();
-  console.log(`Development reachability v${reachability.version}: ${reachability.count}/124, ${reachability.waves} waves, max route ${reachability.maximumRoute}, totals ${reachability.totals}; technical maintenance ${maintenance.technicalTemplates} templates (${maintenance.totalNormQd} QD).`);
+  const routeFlagIndex = process.argv.indexOf("--route");
+  if (routeFlagIndex !== -1) {
+    const query = process.argv.slice(routeFlagIndex + 1).join(" ").trim();
+    if (!query) {
+      console.error("Usage: node scripts/dev/building-development-reachability-check.mjs --route <building-id|name>");
+      process.exit(1);
+    }
+    const ordinary = DEFAULT_BUILDING_TEMPLATES.filter((row) => Number.isInteger(row.developmentStage));
+    console.log(formatBuildingDevelopmentRoute(ordinary, query));
+  } else {
+    const reachability = checkBuildingDevelopmentReachability();
+    const maintenance = checkTechnicalMaintenanceNorms();
+    console.log(`Development reachability v${reachability.version}: ${reachability.count}/124, ${reachability.waves} waves, max route ${reachability.maximumRoute}, totals ${reachability.totals}; technical maintenance ${maintenance.technicalTemplates} templates (${maintenance.totalNormQd} QD).`);
+  }
 }
