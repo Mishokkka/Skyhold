@@ -3,6 +3,13 @@ import { transportInteger, transportMoney } from "../transport/quantities.js";
 const labels = { cautious: "Осторожно", normal: "Обычно", bold: "С риском" };
 const percent = (amount, rate) => Math.ceil(amount * rate / 100);
 
+export const CAPTAIN_TERMS = Object.freeze({ cautiousReductionPercent: 55, cleanPassageBonusPercent: 12 });
+
+export function captainStyleRiskBps(economics, style, riskBps) {
+  const rate = style === "cautious" ? 100 - (economics?.cautiousReductionPercent ?? 25) : style === "bold" ? 150 : 100;
+  return Math.min(10000, Math.ceil(riskBps * rate / 100));
+}
+
 function terms(contract, style) {
   const value = contract.economics;
   if (value?.version !== 1 || !Object.hasOwn(labels, style)) throw new Error("Неизвестные условия заказа.");
@@ -11,9 +18,9 @@ function terms(contract, style) {
   for (const key of ["repairCopper", "delayDailyCopper", "precautionCopper"]) transportInteger(value[key], key);
   transportInteger(value.riskBps, "риск заказа", 0, 10000);
   transportInteger(value.approachRiskBps ?? 0, "риск подлёта", 0, value.riskBps);
-  const factor = style === "cautious" ? 0.75 : style === "bold" ? 1.5 : 1;
-  return { ...value, riskBps: Math.min(10000, Math.ceil(value.riskBps * factor)),
-    approachRiskBps: Math.min(10000, Math.ceil((value.approachRiskBps ?? 0) * factor)) };
+  return { ...value, cleanPassageBonusPercent: value.cleanPassageBonusPercent ?? 2,
+    riskBps: captainStyleRiskBps(value, style, value.riskBps),
+    approachRiskBps: captainStyleRiskBps(value, style, value.approachRiskBps ?? 0) };
 }
 
 /** New agreements store their own terms. Old agreements continue through the legacy resolver. */
@@ -26,7 +33,7 @@ export function economicContractGuidance(contract, style, { commercialOnly = fal
     preparationCopper: contract.guidance?.preparationCopper ?? 0,
     minimumBudgetCopper: operating, suggestedBudgetCopper: transportMoney([operating, reserve]),
     rewardRangeCopper: { min: contract.kind === "smuggling" ? 0 : percent(contract.rewardCopper, contract.kind === "freight" ? 56.25 : 37.5),
-      max: contract.rewardCopper + (style === "bold" ? percent(contract.rewardCopper, 2) : 0) },
+      max: contract.rewardCopper + (style === "bold" ? percent(contract.rewardCopper, value.cleanPassageBonusPercent) : 0) },
     incidentPressure: value.riskBps / 1000, riskBps: value.riskBps };
 }
 
@@ -53,7 +60,7 @@ export function economicContractOutcome(contract, style, { commercialDice, incid
     }
   }
   const bonus = style === "bold" && rewardPercent === 100 && incident.cargoRewardPercent === 100
-    && incident.delayQd === 0 && sharedPassageAllowsBonus ? 2 : 0;
+    && incident.delayQd === 0 && sharedPassageAllowsBonus ? value.cleanPassageBonusPercent : 0;
   const rewardCopper = percent(percent(contract.rewardCopper, rewardPercent), incident.cargoRewardPercent) + percent(contract.rewardCopper, bonus);
   const expenseCopper = commercialOnly ? 0 : transportMoney([
     percent(value.repairCopper, incident.damagePercent), Math.ceil(value.delayDailyCopper * incident.delayQd / 4),

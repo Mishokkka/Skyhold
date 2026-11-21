@@ -4,9 +4,7 @@ import { regularTransportRate, referenceTransportCosts, transportServiceCharge, 
   transportPortHandlingQd, transportRiskBps, configuredTransportCharges } from "../transport/economics.js";
 import { transportHandlingTerms, transportMoney } from "../transport/quantities.js";
 
-/** A customer buys space between cargo ports. The player's approach, crew and return are not part of the fare. */
-export function customerTransportFare({ cargo, origin, destination, resources, configuration, referenceRoute, attention = 0, taxCopper = 0 }) {
-  const profile = getShipProfile(cargo.loadPoints <= 800 ? "cutter" : cargo.loadPoints <= 2000 ? "schooner" : "merchant-barque");
+function referenceCharge(profile, loadPoints, { cargo, origin, destination, resources, configuration, referenceRoute }) {
   const route = referenceRoute(profile);
   const capacityLoad = profile.capacityLoadPoints / 4;
   const factor = Math.max(0.01, origin.factors?.delivery ?? 1);
@@ -14,24 +12,50 @@ export function customerTransportFare({ cargo, origin, destination, resources, c
     dispatchCopper: MARKET_TRANSPORT_TARIFFS.airship.dispatchCopper, deliveryFactor: factor });
   const costsAt = (port, seasonalFactor = 1) => Object.fromEntries(Object.entries(referenceTransportCosts("airship", capacityLoad,
     transportRationPrice(resources, port)).dailyCosts).map(([key, amount]) => [key, Math.ceil(amount * factor * seasonalFactor)]));
+  const dailyCosts = costsAt(origin, route.operatingFactor), returnDailyCosts = costsAt(destination, route.returnOperatingFactor);
+  const loadingQd = transportPortHandlingQd(origin, profile.capacityLoadPoints);
+  const unloadingQd = transportPortHandlingQd(destination, profile.capacityLoadPoints);
+  const loadMilliCopper = Math.ceil(charges.loadCopperPerUnit * 1000);
   const service = { kind: "regular", dispatchCopper: 1, profitBps: configuration.carrierProfitBps,
     ...transportHandlingTerms([origin.locationProfile, destination.locationProfile]),
     loadMilliCopper: regularTransportRate({ capacityLoad, travelQd: route.durationQd, returnTravelQd: route.returnDurationQd,
-      loadingQd: transportPortHandlingQd(origin, profile.capacityLoadPoints),
-      unloadingQd: transportPortHandlingQd(destination, profile.capacityLoadPoints),
-      dailyCosts: costsAt(origin, route.operatingFactor), returnDailyCosts: costsAt(destination, route.returnOperatingFactor),
+      loadingQd, unloadingQd, dailyCosts, returnDailyCosts,
       fixedCopper: Math.ceil(charges.dispatchCopper + charges.hireCopper + charges.distanceCopper),
-      loadMilliCopper: Math.ceil(charges.loadCopperPerUnit * 1000),
+      loadMilliCopper,
       commercialLoadBps: configuration.commercialLoadBps }) };
-  const charge = transportServiceCharge(service, cargo.loadPoints * 1000, 0);
-  const riskBps = transportRiskBps(route.riskExposureQd * (cargo.kind === "smuggling" ? 2 + attention / 10 : 1), configuration.riskBps);
-  // Mail/passenger care and clandestine carriage are explicit services, never hidden cost reimbursement.
-  const specialPremiumBps = cargo.kind === "commission" ? 2500 : cargo.kind === "smuggling" ? 10000 : 0;
-  const specialPremiumCopper = Math.ceil((charge.totalCopper - charge.handlingCopper) * specialPremiumBps / 10000);
-  const riskPremiumCopper = Math.ceil((charge.totalCopper - charge.handlingCopper) * riskBps / 10000 * 0.25);
+  const charge = transportServiceCharge(service, loadPoints * 1000, 0);
+  let carriageCopper = charge.totalCopper - charge.handlingCopper;
+  const fill = loadPoints / profile.capacityLoadPoints;
+  if (cargo.kind === "freight" && fill > 0.6) {
+    const returnQd = route.returnDurationQd ?? route.durationQd;
+    const occupiedQd = configuration.charterPreparationQd + transportPortHandlingQd(origin, loadPoints)
+      + route.durationQd + transportPortHandlingQd(destination, loadPoints) + returnQd;
+    const charter = transportServiceCharge({ ...service, kind: "charter", dailyCosts, returnDailyCosts, loadMilliCopper,
+      dispatchCopper: Math.ceil(charges.dispatchCopper + charges.hireCopper + 2 * charges.distanceCopper) },
+    loadPoints * 1000, occupiedQd, returnQd);
+    carriageCopper += Math.round(Math.max(0, charter.totalCopper - charge.totalCopper) * Math.min(1, (fill - 0.6) / 0.4));
+  }
+  return { charge, carriageCopper, exposure: route.riskExposureQd };
+}
+
+/** A customer buys space between cargo ports, not the owner's crew or empty approach. */
+export function customerTransportFare(request) {
+  const { cargo, configuration, attention = 0, taxCopper = 0 } = request;
+  const profiles = ["cutter", "schooner", "merchant-barque"].map(getShipProfile);
+  const profile = profiles.find(row => cargo.loadPoints <= row.capacityLoadPoints) ?? profiles.at(-1);
+  let freightFloor = 0;
+  if (cargo.kind === "freight") for (const smaller of profiles) {
+    if (smaller === profile) break;
+    freightFloor = Math.max(freightFloor, referenceCharge(smaller, smaller.capacityLoadPoints, request).carriageCopper);
+  }
+  const { charge, carriageCopper, exposure } = referenceCharge(profile, cargo.loadPoints, request);
+  const regularCopper = charge.totalCopper - charge.handlingCopper;
+  const specialPremiumCopper = cargo.kind === "smuggling" ? Math.ceil(cargo.valueCopper * (35 + 2 * attention) / 100)
+    : cargo.kind === "commission" ? Math.ceil(regularCopper * 0.25) : Math.max(freightFloor, carriageCopper) - regularCopper;
+  const riskBps = transportRiskBps(exposure * (cargo.kind === "smuggling" ? 2 + attention / 10 : 1), configuration.riskBps);
+  const riskPremiumCopper = Math.ceil((regularCopper + specialPremiumCopper) * riskBps * 85 / 1_000_000);
   return { rewardCopper: transportMoney([charge.totalCopper, taxCopper, specialPremiumCopper, riskPremiumCopper]),
-    marketFeeCopper: charge.totalCopper, specialPremiumCopper, riskPremiumCopper, riskBps,
-    referenceProfileId: profile.id };
+    marketFeeCopper: charge.totalCopper, specialPremiumCopper, riskPremiumCopper, riskBps, referenceProfileId: profile.id };
 }
 
 /** Consumers can pay a delivery allowance; profitable resale can justify more. This is not merchant profit. */

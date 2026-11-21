@@ -3,6 +3,7 @@ import { applyShipFundsOperation } from "./funds.js";
 import { attentionLabel, contractGuidance, contractPrecautionCopper, resolveContractOutcome } from "./contracts.js";
 import { resolveBundlePassages, bundleOrderAllowsBonus, bundleStopAwaitsOutcome } from "./bundle-incidents.js";
 import { getShipProfile, shipCapacityLoadPoints } from "./profiles.js";
+import { isMagnifiqueShip } from "./crew-roster.js";
 import { bundleOperatingShares, bundlePrecautionCopper } from "./bundle-accounting.js";
 import { worldShipBundleLegAt } from "./bundle-leg.js";
 import { clientCargoOutcome, clientCargoLadenDelay, startClientCargo } from "./client-cargo.js";
@@ -287,6 +288,7 @@ export function initializeWorldShip(holding, ship, { profileId, clockQd }) {
   const profile = getShipProfile(profileId);
   ship.navigationMode = "world";
   ship.profileId = profile.id;
+  if (!ship.crewTarget && profile.id === "merchant-barque" && isMagnifiqueShip(ship)) ship.crewTarget = 36;
   for (const field of ["speedKmPerDay", "crewTarget", "capacityLoadPoints", "cargoTonnes"]) {
     if (ship[field] === null || ship[field] === undefined || ship[field] === 0) ship[field] = profile[field];
   }

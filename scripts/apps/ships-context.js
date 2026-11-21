@@ -66,9 +66,9 @@ function preparedGuidance(contract) {
     const guidance = contractGuidance(contract, style);
     const riskLabel = guidance.incidentPressure <= 3 ? "низкий" : guidance.incidentPressure <= 6 ? "заметный" : guidance.incidentPressure <= 8 ? "высокий" : "крайний";
     const modern = contract.economics?.version === 1;
-    const hints = { cautious: "Вероятность происшествия ниже на четверть; предусмотрены отдельные расходы на предосторожности.",
+    const hints = { cautious: `Риск происшествия ниже на ${contract.economics?.cautiousReductionPercent ?? 25}%; расходы на предосторожности: ${formatShipMoney(contract.economics?.precautionCopper ?? 0)}.`,
       normal: "Договорная плата. Ремонт и содержание при задержке рассчитываются отдельно.",
-      bold: "Вероятность происшествия выше в полтора раза; премия 2% за полное исполнение без задержек." };
+      bold: `Риск происшествия выше в полтора раза; премия ${contract.economics?.cleanPassageBonusPercent ?? 2}% за полное исполнение без задержек.` };
     return { ...guidance, riskLabel: modern ? `${(guidance.riskBps / 100).toLocaleString("ru-RU", { maximumFractionDigits: 2 })}%` : riskLabel,
       styleHint: modern ? hints[style] : STYLE_HINTS[style] };
   });
@@ -100,11 +100,14 @@ function worldOfferRow(offer, worldContext, resourceLabels = null) {
   const returnReserveCopper = Number(quote.returnReserveCopper ?? 0);
   const idleReserveCopper = Number(quote.idleReserveCopper ?? 0);
   const outcomeReserveCopper = Math.max(0, recommendedBudgetCopper - totalCostCopper - returnReserveCopper - idleReserveCopper);
+  const premiumLabel = contract.economics?.cautiousReductionPercent == null ? "за особую услугу"
+    : contract.kind === "smuggling" ? "за стоимость скрытого груза и внимание властей"
+      : contract.kind === "commission" ? "за почту и пассажиров" : "за крупную партию";
   const recommendedReserveCopper = Math.max(0, recommendedBudgetCopper - totalCostCopper);
   return {
     ...offer,
     feeHint: contract.economics?.version === 1
-      ? `Плата за место на рейсе по общей себестоимости и штатной команде. Подлёт к погрузке и дорога домой не повышают плату. Пошлины и обработка включены. Доплата за особую услугу: ${formatShipMoney(contract.economics.specialPremiumCopper)}; за риск: ${formatShipMoney(contract.economics.riskPremiumCopper)}. ${contract.kind === "smuggling" ? "При срыве сделки плата может быть утрачена." : `При отмене заказчиком: ${contract.kind === "commission" ? 50 : 75}% платы до последствий перевозки.`}`
+      ? `Плата по рыночному тарифу. Пустой подлёт и возврат домой не оплачиваются. Пошлины и обработка включены. Доплата ${premiumLabel}: ${formatShipMoney(contract.economics.specialPremiumCopper)}; за риск: ${formatShipMoney(contract.economics.riskPremiumCopper)}. ${contract.kind === "smuggling" ? "При срыве сделки плата может быть утрачена." : `При отмене заказчиком: ${contract.kind === "commission" ? 50 : 75}% платы до последствий перевозки.`}`
       : "Плата сохранена по прежним условиям предложения. Дорогая фактическая команда не повышает плату; подход капитана и события меняют итог.",
     title: normalizedOfferTitle(offer, cargoTitle),
     cargoTitle,
