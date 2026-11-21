@@ -8,6 +8,7 @@ import {
   finalizeWorldShipArrival,
   startWorldShipIdleBilling,
   worldShipHomeEndpoint,
+  worldShipPortDebtCopper,
   worldShipTimelineQd
 } from "./world-voyage.js";
 
@@ -34,6 +35,24 @@ function hasPendingOwnSale(holding, shipId) {
 function assertNoExternalBinding(holding, ship) {
   if (ship?.transportOrderId) throw new Error("Корабль занят транспортным заказом. Сначала завершите или отмените его в окне перевозок.");
   if (hasPendingOwnSale(holding, ship?.id)) throw new Error("У корабля есть активная продажа собственного товара. Сначала завершите её во «Внешнем рынке».");
+}
+
+export function gmShipClockBlockReason(ship, clockQd) {
+  const { activeVoyage, currentOuting } = ship;
+  const arrivedAtQd = activeVoyage?.arrivedAtQd ?? (activeVoyage?.awaitingOutcome ? activeVoyage.arrivalQd : 0);
+  const details = Array.isArray(currentOuting?.details) ? currentOuting.details : [];
+  const lastEventQd = details.reduce((latest, row) => Math.max(latest, row?.clockQd ?? 0),
+    Math.max(activeVoyage?.startedAtQd ?? 0, arrivedAtQd ?? 0, currentOuting?.startedAtQd ?? 0));
+  return clockQd < lastEventQd
+    ? "Дата поселения раньше уже записанных событий рейса. Установите дату последнего события или более позднюю."
+    : "";
+}
+
+function gmVoyageClock(ship, clockQd) {
+  const clock = integer(clockQd, "время", 0, Number.MAX_SAFE_INTEGER);
+  const reason = gmShipClockBlockReason(ship, clock);
+  if (reason) throw new Error(reason);
+  return clock;
 }
 
 function syncCrewForForeignPort(holding, ship, clockQd) {
@@ -82,12 +101,19 @@ function refreshBillingAfterGmChange(data, holding, ship, clockQd) {
   ship.portBilling.lastCalculatedQd = clockQd;
 }
 
+function carryOutstandingPortBill(ship, clockQd) {
+  const pending = integer(ship.pendingPortBillCopper ?? 0, "долг стоянки");
+  // The old billing row may have accrued charges that were never posted as pending.
+  ship.pendingPortBillCopper = Math.max(pending, worldShipPortDebtCopper(ship, clockQd));
+}
+
 /** GM manual placement: move a world ship immediately to home or any known region regardless of normal workflow rules. */
 export function gmMoveWorldShip(data, holding, ship, { destinationKind, destinationId = "", clockQd } = {}) {
   if (ship?.navigationMode !== "world") throw new Error("Ручное перемещение доступно для кораблей мирового рынка.");
   assertNoExternalBinding(holding, ship);
-  const clock = integer(clockQd, "время", 0, Number.MAX_SAFE_INTEGER);
+  const clock = gmVoyageClock(ship, clockQd);
   const target = resolveGmDestination(data, holding, destinationKind, destinationId);
+  carryOutstandingPortBill(ship, clock);
   const cancelledVoyage = Boolean(ship.activeVoyage || ship.orderBundle);
   ship.activeVoyage = null;
   ship.orderBundle = null;
@@ -160,7 +186,7 @@ export function gmAdjustShipFunds(holding, ship, { operationId, mode = "set", am
 export function gmArriveWorldShip(holding, ship, { clockQd } = {}) {
   if (ship?.navigationMode !== "world") throw new Error("Ускорение прибытия доступно для кораблей мирового рынка.");
   assertNoExternalBinding(holding, ship);
-  const clock = integer(clockQd, "время", 0, Number.MAX_SAFE_INTEGER);
+  const clock = gmVoyageClock(ship, clockQd);
   const voyage = ship.activeVoyage;
   if (voyage) {
     if (voyage.awaitingOutcome) throw new Error("Корабль уже прибыл и ожидает подведения итога.");
@@ -202,10 +228,11 @@ export function gmCancelWorldShipVoyage(data, holding, ship, { clockQd } = {}) {
   if (ship?.navigationMode !== "world") throw new Error("Отмена рейса доступна для кораблей мирового рынка.");
   assertNoExternalBinding(holding, ship);
   if (!ship.activeVoyage && !ship.orderBundle) throw new Error("У корабля нет активного рейса или составного заказа.");
-  const clock = integer(clockQd, "время", 0, Number.MAX_SAFE_INTEGER);
+  const clock = gmVoyageClock(ship, clockQd);
   const target = ship.location?.kind === "transit"
     ? clone(ship.activeVoyage?.quote?.from ?? worldShipHomeEndpoint(holding))
     : clone(ship.location ?? worldShipHomeEndpoint(holding));
+  carryOutstandingPortBill(ship, clock);
   ship.activeVoyage = null;
   ship.orderBundle = null;
   ship.location = target;
@@ -245,7 +272,7 @@ export function gmClearWorldShipBills(data, holding, ship, { clockQd } = {}) {
 /** GM manual clock sync: align ship timeline and billing/voyage clock markers to the current settlement date. */
 export function gmSyncWorldShipClock(holding, ship, { clockQd } = {}) {
   if (ship?.navigationMode !== "world") throw new Error("Синхронизация времени доступна для кораблей мирового рынка.");
-  const clock = integer(clockQd, "время", 0, Number.MAX_SAFE_INTEGER);
+  const clock = gmVoyageClock(ship, clockQd);
   const previousQd = worldShipTimelineQd(holding, ship);
   ship.timelineQd = clock;
   if (ship.portBilling) {

@@ -9,6 +9,7 @@ import { isMagnifiqueShip } from "../engines/ships/crew-roster.js";
 import { hasResidentSettlementWork, isResidentAway, isResidentRestingOnShip, residentShipAssignment } from "../data/resident-presence.js";
 import { shipCrewReadiness } from "../engines/ships/crew-readiness.js";
 import { shipMoneySummary, shipOutingSummary } from "../engines/ships/summary.js";
+import { gmShipClockBlockReason } from "../engines/ships/gm-override.js";
 import { prepareShipManagementState, shipTransportState } from "./domains/ship-management-state.js";
 import { prepareShipVoyagePresentation } from "./domains/ship-voyage-presentation.js";
 import { prepareShipFinancePresentation } from "./domains/ship-finance-presentation.js";
@@ -417,23 +418,24 @@ export function prepareShipWindowContext(holding, { revision = 0, data = null, s
           .sort((left, right) => left.label.localeCompare(right.label, "ru"))
       ];
       const condition = String(ship.condition ?? "ready");
-      const externalBlocked = Boolean(transport.busy || ownSale);
+      const clockBlockedReason = gmShipClockBlockReason(ship, settlementQd);
+      const canChangeVoyage = !clockBlockedReason && !transport.busy && !ownSale;
       return {
-        canMove: !externalBlocked,
-        moveBlockedReason: transport.busy ? "Корабль занят перевозкой; сначала завершите или отмените её в окне перевозок."
-          : ownSale ? "У корабля есть активная продажа собственного товара во «Внешнем рынке»." : "",
+        canMove: canChangeVoyage,
+        moveBlockedReason: clockBlockedReason || (transport.busy ? "Корабль занят перевозкой; сначала завершите или отмените её в окне перевозок."
+          : ownSale ? "У корабля есть активная продажа собственного товара во «Внешнем рынке»." : ""),
         destinations,
         conditionOptions: [
           { value: "ready", label: "Исправен", selected: condition === "ready" },
           { value: "damaged", label: "Повреждён", selected: condition === "damaged" },
           { value: "maintenance", label: "На обслуживании", selected: condition !== "ready" && condition !== "damaged" }
         ],
-        canArrive: Boolean(!externalBlocked && ((ship.activeVoyage && !ship.activeVoyage.awaitingOutcome)
+        canArrive: Boolean(canChangeVoyage && ((ship.activeVoyage && !ship.activeVoyage.awaitingOutcome)
           || ship.orderBundle?.status === "final-delay"
           || (ship.orderBundle?.delayUntilQd != null && ship.orderBundle.delayUntilQd > settlementQd))),
-        canCancelVoyage: Boolean(!externalBlocked && (ship.activeVoyage || ship.orderBundle)),
+        canCancelVoyage: Boolean(canChangeVoyage && (ship.activeVoyage || ship.orderBundle)),
         canClearBills: Boolean(Number(moneySummary?.portDebtCopper ?? 0) > 0 || Number(ship.pendingPortBillCopper ?? 0) > 0),
-        canSyncClock: Boolean(shipQd !== settlementQd),
+        canSyncClock: !clockBlockedReason && shipQd !== settlementQd,
         walletGoldInput: shipGoldInput(ship.onboardCopper ?? 0),
         timelineDays: shipQd / 4,
         settlementDays: settlementQd / 4

@@ -149,7 +149,8 @@ export function createShipOperationExecutor({
     }
     const user = getUser(userId);
     if (!user || (remote && user.isGM)) fail("Недопустимый отправитель операции.", COMMAND_ERROR.FORBIDDEN);
-    const signature = JSON.stringify(operation);
+    const { destinationKind: _destinationKind, condition: _condition, fundsMode: _fundsMode, ...standardOperation } = operation;
+    const signature = JSON.stringify(GM_OVERRIDE_TYPES.has(operation.type) ? operation : standardOperation);
     const result = await updateHolding(operation.holdingId, (holding, data) => {
       const playerOperation = ["generate-world", "depart-world", "depart-bundle", "continue-bundle", "resolve-bundle", "return-home", "relocate-world", "resolve-world", "depart", "resolve"].includes(operation.type)
         || (operation.type === "adjust" && ["deposit", "withdraw"].includes(operation.kind));
@@ -158,7 +159,11 @@ export function createShipOperationExecutor({
       if (!user.isGM && (holding.visibility === "gm" || !playerAllowed)) fail("Нет права на эту операцию корабля.", COMMAND_ERROR.FORBIDDEN);
       const prior = findHoldingOperation(holding, operation.operationId);
       if (prior) {
-        if (prior.type !== "ship-operation" || prior.payload.signature !== signature || prior.payload.userId !== userId) fail("Этот ID уже использован другой операцией.", COMMAND_ERROR.CONFLICT);
+        // The first GM override build also serialized empty override fields for ordinary commands.
+        if (prior.type !== "ship-operation" || prior.payload.userId !== userId
+          || (prior.payload.signature !== signature && prior.payload.signature !== JSON.stringify(operation))) {
+          fail("Этот ID уже использован другой операцией.", COMMAND_ERROR.CONFLICT);
+        }
         return skip({ ...prior.payload.result, replay: true });
       }
       if (operation.expectedRevision !== data.meta.revision) fail("Данные изменились. Проверьте рейс и повторите отправку.", COMMAND_ERROR.CONFLICT);

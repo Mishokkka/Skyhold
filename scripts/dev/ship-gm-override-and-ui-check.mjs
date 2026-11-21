@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { formatShipMoneyHtml, formatShipMoneySigned } from "../core/ship-gold.js";
 import { generateWorldShipOffers, quoteWorldShipReturn } from "../engines/ships/world-market.js";
-import { departWorldShip } from "../engines/ships/world-voyage.js";
+import { advanceWorldShips, departWorldShip, worldShipPortDebtCopper } from "../engines/ships/world-voyage.js";
 import { prepareShipWindowContext } from "../apps/ships-context.js";
 import { createShipOperationExecutor } from "../apps/ship-operation-executor.js";
 import { shipOperationIntent } from "../apps/domains/events/ship-events.js";
 import { COMMAND_ERROR } from "../data/command-result.js";
+import { findHoldingOperation } from "../data/operations.js";
 import { worldMarketFixture } from "./world-ship-market-characterization-check.mjs";
 
 function makeExecutor(state) {
@@ -300,4 +301,129 @@ function makeExecutor(state) {
   });
 }
 
-console.log("Ship GM overrides, coin color-coding HTML, cargo headlines and order profit/loss presentation passed.");
+function launchVoyageForGmControls(clockQd = 0) {
+  const { data, holding, ship } = worldMarketFixture();
+  holding.visibility = "public";
+  holding.gm.playersCanManageShips = true;
+  holding.gm.calendaria.lastQd = clockQd;
+  ship.timelineQd = clockQd;
+  const [offer] = generateWorldShipOffers(data, holding, ship, { period: Math.floor(clockQd / 40), clockQd, random: () => 0.4 });
+  const departure = departWorldShip(holding, ship, { operationId: "control-voyage", offer, clockQd });
+  assert.equal(departure.ok, true);
+  const state = { data };
+  const execute = makeExecutor(state);
+  const command = (type, params = {}) => execute({
+    type, holdingId: holding.id, shipId: ship.id, operationId: `${type}-${state.data.meta.revision}`,
+    expectedRevision: state.data.meta.revision, ...params
+  }, { userId: "gm" });
+  return { state, holding, ship, departure, command };
+}
+
+// GM movement notes remain safe to display after the ship leaves the hidden port and the report is saved.
+{
+  const { state, ship, command } = launchVoyageForGmControls();
+  const privateRegion = state.data.catalog.eventRegions.find((row) => row.value === "secret");
+  privateRegion.label = "Бухта Тихой Короны";
+  await command("gm-move", { destinationKind: "market", destinationId: privateRegion.value });
+  await command("gm-move", { destinationKind: "home" });
+  state.data = JSON.parse(JSON.stringify(state.data));
+  const readReport = (isGM) => {
+    globalThis.game.user = { id: isGM ? "gm" : "player", isGM };
+    const window = prepareShipWindowContext(state.data.holdings[0], { data: state.data, shipId: ship.id });
+    return window.rows[0].financePresentation.outing;
+  };
+  const playerReport = readReport(false);
+  const gmReport = readReport(true);
+  assert.equal(playerReport.ongoing, false);
+  assert.ok(playerReport.details.some((row) => row.kind === "gm-override"), "player still sees that the GM intervened");
+  assert.ok(gmReport.details.some((row) => row.reason.includes(privateRegion.label)), "GM retains the saved destination");
+  assert.ok(playerReport.details.every((row) => !row.reason.includes(privateRegion.label)), "saved GM notes must not reveal a hidden port in the player journal");
+}
+
+// Cancel and move both preserve the accrued bill, even before it has been posted as pending debt.
+for (const action of ["gm-move", "gm-cancel-voyage"]) {
+  const { state, holding, ship, departure, command } = launchVoyageForGmControls();
+  const clockQd = departure.arrivalQd + 40;
+  holding.gm.calendaria.lastQd = clockQd;
+  assert.equal(advanceWorldShips(holding, clockQd).awaiting.length, 1);
+  assert.equal(ship.pendingPortBillCopper, 0);
+  const due = worldShipPortDebtCopper(ship, clockQd);
+  const wallet = ship.onboardCopper;
+  assert.ok(due > 0 && wallet > due);
+  await command(action, action === "gm-move" ? { destinationKind: "market", destinationId: "b" } : {});
+  assert.equal(worldShipPortDebtCopper(state.data.holdings[0].special.ships.list[0], clockQd), due, action);
+  await command("gm-move", { destinationKind: "home" });
+  const homeHolding = state.data.holdings[0];
+  const homeShip = homeHolding.special.ships.list[0];
+  assert.equal(worldShipPortDebtCopper(homeShip, clockQd), due, "moving again neither waives nor doubles the unpaid balance");
+  assert.equal(homeShip.onboardCopper, wallet);
+  assert.deepEqual(advanceWorldShips(homeHolding, clockQd).expenses.map((row) => row.amountCopper), [due]);
+  assert.equal(homeShip.onboardCopper, wallet - due);
+  assert.deepEqual(advanceWorldShips(homeHolding, clockQd).expenses, [], "normal settlement pays the carried bill once");
+}
+
+{
+  const { state, holding, ship, command } = launchVoyageForGmControls(80);
+  holding.gm.calendaria.lastQd = 0;
+  const before = structuredClone(state.data);
+  const { gmControl } = prepareShipWindowContext(holding, { data: state.data, shipId: ship.id }).rows[0];
+  assert.match(gmControl.moveBlockedReason, /Дата поселения раньше/);
+  assert.deepEqual([gmControl.canSyncClock, gmControl.canArrive, gmControl.canCancelVoyage, gmControl.canMove], [false, false, false, false]);
+  for (const action of ["gm-sync-clock", "gm-arrive", "gm-cancel-voyage", "gm-move"]) {
+    const params = action === "gm-move" ? { destinationKind: "home" } : {};
+    await assert.rejects(command(action, params), /Дата поселения раньше/);
+  }
+  assert.deepEqual(state.data, before, "a rejected calendar correction does not change either the voyage or the holding");
+
+  advanceWorldShips(holding, 84);
+  holding.gm.calendaria.lastQd = 82;
+  const remainingQd = ship.activeVoyage.remainingQd;
+  await command("gm-sync-clock");
+  const syncedHolding = state.data.holdings[0];
+  const syncedShip = syncedHolding.special.ships.list[0];
+  assert.equal(syncedShip.activeVoyage.startedAtQd, 80);
+  assert.equal(syncedShip.activeVoyage.remainingQd, remainingQd);
+  assert.equal(syncedShip.activeVoyage.arrivalQd, 82 + remainingQd);
+  const arrivalQd = syncedShip.activeVoyage.arrivalQd;
+  assert.equal(advanceWorldShips(syncedHolding, arrivalQd).awaiting.length, 1);
+  syncedHolding.gm.calendaria.lastQd = arrivalQd - 1;
+  await assert.rejects(command("gm-sync-clock"), /Дата поселения раньше/, "a recorded arrival also anchors the clock");
+  delete syncedShip.activeVoyage.arrivedAtQd;
+  await assert.rejects(command("gm-sync-clock"), /Дата поселения раньше/, "an older awaiting voyage can use its stored arrival time");
+}
+
+// The same ordinary player command can recover its receipt from either pre-existing signature.
+{
+  const { data, holding, ship } = worldMarketFixture();
+  holding.visibility = "public";
+  holding.gm.playersCanManageShips = true;
+  const state = { data };
+  const execute = makeExecutor(state);
+  const actor = { userId: "player", remote: true };
+  const command = { type: "adjust", operationId: "deposit-retry", holdingId: holding.id, shipId: ship.id,
+    expectedRevision: data.meta.revision, kind: "deposit", amountCopper: 120, locationKind: "home", locationId: holding.id };
+  const mainSignature = {
+    type: command.type, operationId: command.operationId, holdingId: command.holdingId, shipId: command.shipId,
+    expectedRevision: command.expectedRevision, budgetCopper: 0, voyageId: "", amountCopper: 120, kind: "deposit", reason: "",
+    offerId: "", offerIds: [], style: "normal", profileId: "", shipName: "", crewResidentIds: [], residentId: "",
+    locationKind: "home", locationId: holding.id, destinationId: ""
+  };
+  const { destinationId, ...commonFields } = mainSignature;
+  const savedOnFirstOverrideBuild = { ...commonFields, destinationKind: "", destinationId, condition: "", fundsMode: "" };
+  const result = await execute(command, actor);
+  assert.equal(result.ok, true);
+  const saved = state.data.holdings[0];
+  const logged = findHoldingOperation(saved, command.operationId);
+  assert.equal(logged.payload.signature, JSON.stringify(mainSignature), "new ordinary commands retain the signature used on main");
+  const nextRevision = state.data.meta.revision;
+  for (const signature of [mainSignature, savedOnFirstOverrideBuild]) {
+    logged.payload.signature = JSON.stringify(signature);
+    assert.deepEqual(await execute(command, actor), { ...result, replay: true });
+    await assert.rejects(execute({ ...command, amountCopper: 121 }, actor), (error) => error.code === COMMAND_ERROR.CONFLICT);
+  }
+  assert.equal(state.data.meta.revision, nextRevision);
+  assert.equal(saved.special.ships.list[0].onboardCopper, 120);
+  assert.equal(state.data.holdings[0], saved);
+}
+
+console.log("Ship GM overrides, journal privacy, port debts, voyage chronology, saved replays and order presentation passed.");

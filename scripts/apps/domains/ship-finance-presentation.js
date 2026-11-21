@@ -10,16 +10,17 @@ const DETAIL_LABELS = Object.freeze({
   "partial-start": "Начало учёта"
 });
 
-function detailRow(row, hideRoutes = false) {
+function detailRow(row, { hideRoutes, isGM }) {
   const transfer = row.kind === "funding" || row.kind === "return";
   const routeNote = ["leg-start", "leg-complete", "outing-complete"].includes(row.kind)
     || row.kind === "expense" && String(row.reason ?? "").startsWith("Автоматические расходы:");
   return {
     ...row,
     kindLabel: DETAIL_LABELS[row.kind] || (row.amountCopper > 0 ? "Поступление" : row.amountCopper < 0 ? "Расход" : "Запись"),
-    // Old journal rows retain only text, not endpoint IDs. A private related
-    // transport outing therefore uses a neutral route, without editing history.
-    reason: hideRoutes && routeNote ? "Скрытый участок"
+    // GM overrides have no saved endpoint ID. Their text can name a hidden port
+    // even after the ship has moved on and the report no longer has that route.
+    reason: !isGM && row.kind === "gm-override" ? "ГМ вручную изменил ход рейса."
+      : hideRoutes && routeNote ? "Скрытый участок"
       : row.kind === "bundle-plan" ? "Договорная плата составных заказов включена в план." : row.reason,
     hasAmount: Number.isSafeInteger(row.amountCopper) && row.amountCopper !== 0,
     displayAmountCopper: transfer ? Math.abs(row.amountCopper) : row.amountCopper,
@@ -80,7 +81,7 @@ export function prepareShipFinancePresentation(holding, ship, { money, outingRep
     const currentRoutes = outingReport.ongoing ? [ship.activeVoyage?.quote, ...(ship.orderBundle?.orders ?? []).map(order => order.offer)] : [];
     const hideRoutes = transport.hideOutingRoutes || sale && visibility.marketHidden(sale)
       || [...relatedPassages, ...currentRoutes].some(visibility.routeHidden);
-    const details = [...(outingReport.details ?? []).map(row => detailRow(row, hideRoutes)), ...transport.details];
+    const details = [...(outingReport.details ?? []).map(row => detailRow(row, { hideRoutes, isGM })), ...transport.details];
     if (legacyExpenseKnown && legacyExpenseCopper > 0) details.push({
       kindLabel: "Расходы рынка", reason: `Продажа: ${visibility.marketLabel(sale)}. Оплачено казной при отправлении.`,
       timeLabel: "При отправлении", hasAmount: true, displayAmountCopper: -legacyExpenseCopper, isTransfer: false
