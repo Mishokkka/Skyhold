@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { worldMarketFixture } from "./world-ship-market-characterization-check.mjs";
 import { installTransportTestCalendar, transportTestDate, transportTestYearQd } from "./fixtures/transport-calendar.mjs";
-import { generateWorldShipOffers, quoteWorldShipBundle, repriceWorldShipOffer, worldShipTimeBreakdown } from "../engines/ships/world-market.js";
-import { advanceWorldShips, departWorldShip, departWorldShipBundle, resolveWorldShip, resolveWorldShipBundleStop } from "../engines/ships/world-voyage.js";
+import { generateWorldShipOffers, quoteWorldShipBundle, quoteWorldShipReturn, repriceWorldShipOffer, worldShipTimeBreakdown } from "../engines/ships/world-market.js";
+import { advanceWorldShips, continueWorldShipBundle, departWorldShip, departWorldShipBundle, resolveWorldShip, resolveWorldShipBundleStop } from "../engines/ships/world-voyage.js";
 import { previewShipOrders } from "../engines/ships/order-preview.js";
+import { shipOutingSummary } from "../engines/ships/summary.js";
+import { prepareShipFinancePresentation } from "../apps/domains/ship-finance-presentation.js";
 import { shipRouteMapContext } from "../apps/common/route-map-view.js";
 import { ShipOrderPlanner } from "../apps/ship-order-planner.js";
 import { shipOperationIntent } from "../apps/domains/events/ship-events.js";
@@ -369,7 +371,22 @@ for (const isGM of [true, false]) {
   }
 }
 
-// P1: cautious single order and cautious bundle sent with "Только рейс" resolve a quiet trip without waitingFunds.
+function assertQuietReturnMatchesPreview({ data, holding, ship }, plan) {
+  const offer = quoteWorldShipReturn(data, holding, ship);
+  assert.equal(offer.quote.operatingCopper, plan.returnReserveCopper);
+  const returned = departWorldShip(holding, ship, {
+    operationId: "quiet-return", offer, clockQd: ship.timelineQd
+  });
+  assert.equal(returned.ok, true);
+  advanceWorldShips(holding, returned.arrivalQd);
+  const report = shipOutingSummary(ship);
+  assert.equal(report.ongoing, false);
+  assert.equal(report.plannedNetCopper, plan.nominalExitCopper, "the final plan includes the same precaution fee as checkout");
+  assert.equal(report.netCopper, plan.nominalExitCopper, "a quiet outing costs exactly its mandatory expenses and return");
+  assert.equal(report.varianceCopper, 0, "a known fee is a planned expense");
+}
+
+// Cautious orders sent with "Только рейс" resolve a quiet trip without waitingFunds.
 {
   const { data, holding, ship } = fixture();
   ship.onboardCopper = 0;
@@ -390,6 +407,7 @@ for (const isGM of [true, false]) {
   assert.equal(resolved.waitingFunds, false, "quiet cautious arrival pays precaution fee and collects reward without GM intervention");
   assert.equal(resolved.pending, false);
   assert.equal(ship.onboardCopper, resolved.outcome.rewardCopper);
+  assertQuietReturnMatchesPreview({ data, holding, ship }, plan);
 }
 {
   const { data, holding, ship } = fixture();
@@ -399,11 +417,28 @@ for (const isGM of [true, false]) {
   const bundleQuote = quoteWorldShipBundle(data, holding, ship, plan.offers);
   const departed = departWorldShipBundle(holding, ship, { operationId: "cautious-bundle-min", plan: bundleQuote, style: "cautious", budgetCopper: plan.mandatoryTripCopper, clockQd: 0 });
   assert.equal(departed.ok, true);
+  const { outing } = prepareShipFinancePresentation(holding, ship, { data, outingReport: shipOutingSummary(ship) });
+  assert.equal(outing.plannedExpenseCopper, plan.mandatoryTripCopper, "the accepted plan includes the precaution fee on every leg, including the empty approach");
   holding.gm.calendaria.lastQd = departed.arrivalQd;
   advanceWorldShips(holding, departed.arrivalQd);
   const firstStop = resolveWorldShipBundleStop(holding, ship, { operationId: "cautious-bundle-stop-0", bundleId: departed.bundleId, random: () => 0.99 });
   assert.equal(firstStop.waitingFunds, false, "empty approach stop in a cautious bundle pays its guaranteed precaution fee cleanly");
   assert.equal(firstStop.pending, false);
+  for (let index = 1; index < bundleQuote.stops.length; index++) {
+    const next = continueWorldShipBundle(holding, ship, {
+      operationId: `cautious-bundle-leg-${index}`, bundleId: departed.bundleId, clockQd: ship.timelineQd
+    });
+    assert.equal(next.ok, true);
+    holding.gm.calendaria.lastQd = next.arrivalQd;
+    advanceWorldShips(holding, next.arrivalQd);
+    const result = resolveWorldShipBundleStop(holding, ship, {
+      operationId: `cautious-bundle-stop-${index}`, bundleId: departed.bundleId, random: () => 0.99
+    });
+    assert.equal(result.waitingFunds, false);
+    assert.equal(result.pending, false);
+  }
+  assert.equal(ship.orderBundle, null);
+  assertQuietReturnMatchesPreview({ data, holding, ship }, plan);
 }
 
 // P2: shortfall buckets separate first leg, remaining mandatory costs, and optional reserve cleanly.

@@ -1,31 +1,13 @@
 import { buildShipWorldContext, configureWorldShipEconomy, quoteWorldShipBundle, repriceWorldShipOffer, worldShipTimeBreakdown } from "./world-market.js";
 import { shortestMarketRoute } from "../market/logistics.js";
-import { contractGuidance } from "./contracts.js";
-import { bundleOperatingShares } from "./bundle-accounting.js";
+import { contractGuidance, contractPrecautionCopper } from "./contracts.js";
+import { bundlePrecautionCopper } from "./bundle-accounting.js";
 import { shipCapacityLoadPoints } from "./profiles.js";
 import { shipCrewReadiness } from "./crew-readiness.js";
 import { shipMoneySummary } from "./summary.js";
 import { worldShipTimelineQd } from "./world-voyage.js";
 
 const samePoint = (a, b) => a?.kind === b?.kind && a?.id === b?.id;
-
-function guaranteedSingleStyleCostCopper(offer, style) {
-  if (style !== "cautious") return 0;
-  const contract = offer?.contract;
-  if (contract?.economics?.version === 1) return Number(contract.economics.precautionCopper ?? 0);
-  const baseCost = Number(contract?.guidance?.operatingCopper ?? offer?.quote?.operatingCopper ?? 0)
-    + Number(contract?.guidance?.preparationCopper ?? contract?.routePlan?.preparationCopper ?? 0);
-  return Math.round(baseCost * 30 / 100);
-}
-
-function guaranteedBundleStyleCostCopper(offers, stops, totalOperatingCopper, style) {
-  if (style !== "cautious") return 0;
-  if (stops.length && stops.every((stop) => stop.economics?.version === 1)) {
-    return stops.reduce((sum, stop) => sum + Number(stop.economics.precautionCopper ?? 0), 0);
-  }
-  return bundleOperatingShares(offers, totalOperatingCopper)
-    .reduce((sum, share) => sum + Math.round(share * 30 / 100), 0);
-}
 
 /** Transient, read-only plan. Uses the departure quotes; never stores navigation or rolls outcomes. */
 export function previewShipOrders(data, holding, ship, { offerIds = [], style = "normal", budgetCopper = null } = {}) {
@@ -100,7 +82,7 @@ export function previewShipOrders(data, holding, ship, { offerIds = [], style = 
     totalOperatingCopper = firstLegCopper = quote.operatingCopper;
     returnReserveCopper = quote.returnReserveCopper;
     idleReserveCopper = quote.idleReserveCopper;
-    guaranteedStyleCostCopper = guaranteedSingleStyleCostCopper(offer, style);
+    guaranteedStyleCostCopper = contractPrecautionCopper(offer.contract, style);
     recommendedBudgetCopper = Math.max(quote.recommendedBudgetCopper,
       contractGuidance(offer.contract, style).suggestedBudgetCopper + returnReserveCopper + idleReserveCopper);
     outcomeReserveCopper = recommendedBudgetCopper - totalOperatingCopper - returnReserveCopper - idleReserveCopper;
@@ -115,7 +97,7 @@ export function previewShipOrders(data, holding, ship, { offerIds = [], style = 
     }
     ({ totalDurationQd, distanceKm, totalOperatingCopper, recommendedBudgetCopper,
       returnReserveCopper, idleReserveCopper, outcomeReserveCopper } = plan);
-    guaranteedStyleCostCopper = guaranteedBundleStyleCostCopper(offers, plan.stops, totalOperatingCopper, style);
+    guaranteedStyleCostCopper = bundlePrecautionCopper(offers, totalOperatingCopper, { stops: plan.stops, style });
     firstLegCopper = plan.stops[0].legOffer.quote.operatingCopper;
     const carried = new Set(atOrigin.map((offer) => offer.id));
     stops = [{ point: origin, pickupOfferIds: [...carried], deliveryOfferIds: [], loadAfterPoints: initialLoadPoints }];

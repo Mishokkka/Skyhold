@@ -132,7 +132,7 @@ export function ensurePartialShipOuting(ship, { voyageId, clockQd } = {}) {
 }
 
 /** Add the frozen plan of one accepted leg. Repeating the current leg is a no-op. */
-export function planShipOutingLeg(ship, voyage = {}) {
+export function planShipOutingLeg(ship, voyage = {}, { precautionCopper = 0 } = {}) {
   const voyageId = id(voyage?.id, "ID участка");
   const existing = current(ship);
   if (existing.lastLegId === voyageId) return existing;
@@ -140,7 +140,7 @@ export function planShipOutingLeg(ship, voyage = {}) {
     throw new Error("Предыдущий участок выхода ещё не завершён.");
   }
   const quote = voyage?.quote ?? {};
-  const operating = integer(quote.operatingCopper ?? quote.costs?.totalCopper ?? 0, "плановые расходы участка");
+  const operating = add(quote.operatingCopper ?? quote.costs?.totalCopper ?? 0, precautionCopper, "плановые расходы участка");
   const preparation = integer(quote.preparationCopper ?? 0, "плановая подготовка участка");
   const reward = integer(quote.rewardCopper ?? quote.contract?.rewardCopper ?? 0, "договорная плата участка");
   const zeroLocal = !quote.contract && quote.distanceKm === 0 && quote.from?.regionId === quote.to?.regionId;
@@ -159,12 +159,13 @@ export function planShipOutingLeg(ship, voyage = {}) {
   });
 }
 
-/** Record fees promised by a bundle once; its physical legs have no contract fee. */
-export function planShipOutingBundleRewards(ship, { rewardCopper, clockQd } = {}) {
+/** Record the bundle's agreed pay and fixed precaution costs once at acceptance. */
+export function planShipOutingBundleContracts(ship, { rewardCopper, precautionCopper, clockQd } = {}) {
   const reward = integer(rewardCopper, "плата составного рейса");
   const clock = integer(clockQd, "начало составного рейса");
   return update(ship, (report) => {
     report.plannedRewardCopper = add(report.plannedRewardCopper, reward, "плановая плата заказов");
+    report.plannedOperatingCopper = add(report.plannedOperatingCopper, precautionCopper, "плановые расходы составного рейса");
     appendDetail(report, { kind: "bundle-plan", clockQd: clock, reason: `Приняты составные заказы: ожидаемая плата ${reward}` });
   });
 }
