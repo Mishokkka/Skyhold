@@ -46,8 +46,8 @@
 .fbls-order-plan dd { overflow-wrap: anywhere; }
 .fbls-order-stops { padding-left: 1.5rem; margin: 0; }
 .fbls-order-stops li { margin-bottom: var(--fbls-gap-sm); }
-.fbls-order-stops span,
-.fbls-order-legs span { display: block; color: var(--fbls-muted); }
+.fbls-order-stops > li > span,
+.fbls-order-legs > p > span { display: block; color: var(--fbls-muted); }
 .fbls-order-legs p + p { margin-top: var(--fbls-gap-sm); }
 .fbls-route-view svg { display: block; width: 100%; height: clamp(320px, 48vh, 560px); background: var(--fbls-surface-1); touch-action: none; cursor: grab; }
 .fbls-route-view svg:active { cursor: grabbing; }
@@ -231,8 +231,8 @@
 .fbl-skyhold-ship .fbls-ship-order > summary:hover { background: var(--fbls-surface-2); }
 
 .fbl-skyhold-ship .fbls-ship-order > summary::-webkit-details-marker { display: none; }
-.fbl-skyhold-ship .fbls-ship-order > summary div,
-.fbl-skyhold-ship .fbls-ship-order > summary span { display: grid; min-width: 0; }
+.fbl-skyhold-ship .fbls-ship-order > summary > div,
+.fbl-skyhold-ship .fbls-ship-order > summary > span { display: grid; min-width: 0; }
 .fbl-skyhold-ship .fbls-ship-order > summary .fbls-order-prices { text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .fbl-skyhold-ship .fbls-order-select strong,
 .fbl-skyhold-ship .fbls-order-destination strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

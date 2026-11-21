@@ -139,6 +139,13 @@ function makeExecutor(state) {
   assert.match(summaryMatch[1], /\{\{profitLabel\}\}/);
   assert.match(summaryMatch[1], /\{\{\{fblsShipMoneyHtml profitCopper signed=true\}\}\}/);
   assert.doesNotMatch(summaryMatch[1], /<strong>Плата/, "collapsed order row shows profit/loss instead of Плата/Расходы");
+
+  const shipWindowCss = readFileSync(new URL("../../styles/parts/ships/ship-window.css", import.meta.url), "utf8");
+  assert.doesNotMatch(shipWindowCss, /> summary\s+span\b/, "summary span rules must target direct children so inline coin spans stay horizontal");
+  assert.doesNotMatch(shipWindowCss, /\.fbls-order-legs\s+span\b/, "order leg span rules must target direct children so inline coin spans stay horizontal");
+  const uiKitCss = readFileSync(new URL("../../styles/parts/skyhold-ui-kit.css", import.meta.url), "utf8");
+  assert.match(uiKitCss, /\.fbls-coin\.is-gold\s*>\s*b/, "coin colors apply to numeric values");
+  assert.match(uiKitCss, /\.fbls-coin\s*>\s*i\s*\{[^}]*color:\s*var\(--fbls-text\)[^}]*font-weight:\s*700/s, "coin denominations stay neutral bold text");
 }
 
 // 3. GM manual ship overrides: strict GM-only security, revision/idempotency, invariants & UI intent.
