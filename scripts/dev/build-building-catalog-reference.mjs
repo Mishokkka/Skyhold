@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
+import { resourceLabel } from "../core/resources.js";
 import { DEFAULT_BUILDING_TEMPLATES, TEMPLATE_CATALOG_VERSION } from "../data/building-templates.js";
 
 const rows = DEFAULT_BUILDING_TEMPLATES;
@@ -121,7 +122,10 @@ function formatIncome(income) {
 
 function formatProductionLine(line) {
   const name = safe(line.name || line.resource || line.resourceId || line.id);
-  const out = `${line.outputQty ?? 0} ${safe(line.resource || line.resourceId)}`;
+  const outputLabel = line.resourceId && line.resourceId !== "custom"
+    ? resourceLabel(line.resourceId)
+    : (line.resource || line.resourceId);
+  const out = `${line.outputQty ?? 0} ${safe(outputLabel)}`;
   const timing = [];
   if (line.source) timing.push(SOURCE_LABELS[line.source] ?? line.source);
   if (line.workQd) timing.push(`${line.workQd} QD`);
