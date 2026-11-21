@@ -13,6 +13,7 @@ const ship = {
 const before = JSON.stringify({ holding, ship });
 const summary = shipMoneySummary(holding, ship, { clockQd: 8, returnOffer: { quote: { operatingCopper: 100 } } });
 assert.equal(summary.portDebtCopper, 30, "project accrued unpaid charges without paying them");
+assert.equal(summary.contingencyReserveCopper, 140);
 assert.equal(summary.reserveCopper, 140);
 assert.equal(summary.freeCopper, 330);
 assert.equal(summary.balanceCopper, 500, "remote home funds are unavailable");

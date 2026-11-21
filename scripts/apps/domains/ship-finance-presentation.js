@@ -49,7 +49,12 @@ function pendingPayments(ship, ownSale, visibility) {
 export function prepareShipFinancePresentation(holding, ship, { money, outingReport, ownSale = null, data = null, isGM = true } = {}) {
   const visibility = createMarketVisibility(data, { isGM });
   const mandatoryShortageCopper = money?.calculationValid ? Math.max(0, money.obligationsCopper - money.balanceCopper) : null;
+  const remainingAfterBills = money?.calculationValid ? Math.max(0, money.balanceCopper - money.obligationsCopper) : null;
+  const futureLegsShortageCopper = money?.calculationValid
+    ? Math.max(0, amount(money.remainingOperatingCopper) - remainingAfterBills) : null;
   const reserveShortageCopper = money?.reserveKnown ? Math.max(0, money.shortageCopper - mandatoryShortageCopper) : null;
+  const contingencyShortageCopper = money?.reserveKnown
+    ? Math.max(0, reserveShortageCopper - futureLegsShortageCopper) : null;
   const transport = prepareShipTransportFinance(holding, ship, outingReport, { data, isGM });
   const payments = [...pendingPayments(ship, ownSale, visibility), ...transport.pendingPayments];
   let outing = null;
@@ -94,5 +99,5 @@ export function prepareShipFinancePresentation(holding, ship, { money, outingRep
       details
     };
   }
-  return { mandatoryShortageCopper, reserveShortageCopper, pendingPayments: payments, outing };
+  return { mandatoryShortageCopper, futureLegsShortageCopper, contingencyShortageCopper, reserveShortageCopper, pendingPayments: payments, outing };
 }

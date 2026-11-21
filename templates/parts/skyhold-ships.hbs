@@ -21,8 +21,8 @@
   {{/unless}}
 
   {{#if shipsContext.fleetAccounting.tracked}}
-  <details class="fbls-panel"><summary>Весь флот: денежный результат {{shipsContext.fleetAccounting.netCopper}} ММ</summary>
-    <p>С начала нового учёта (QD {{shipsContext.fleetAccounting.sinceQd}}): поступления {{shipsContext.fleetAccounting.incomeCopper}} ММ; расходы {{shipsContext.fleetAccounting.expenseCopper}} ММ, в том числе домашний простой {{shipsContext.fleetAccounting.homeIdleCopper}} ММ и стоянки {{shipsContext.fleetAccounting.portIdleCopper}} ММ.</p>
+  <details class="fbls-panel"><summary>Весь флот: денежный результат {{shipsContext.fleetAccounting.netText}}</summary>
+    <p>С начала нового учёта (QD {{shipsContext.fleetAccounting.sinceQd}}): поступления {{shipsContext.fleetAccounting.incomeText}}; расходы {{shipsContext.fleetAccounting.expenseText}}, в том числе домашний простой {{shipsContext.fleetAccounting.homeIdleText}} и стоянки {{shipsContext.fleetAccounting.portIdleText}}.</p>
     <p>Включены {{shipsContext.fleetAccounting.trackedShips}} из {{shipsContext.fleetAccounting.ships}} кораблей. Переводы между бортом и казной исключены. История до начала этого учёта не восстановлена; отчёты отдельных рейсов приведены отдельно.</p>
   </details>
   {{/if}}
@@ -47,7 +47,7 @@
             {{#if isWorld}}
               <span>Команда {{readiness.readyCount}} / {{readiness.requiredCount}}</span>
               {{#if abstractCrewCount}}<span class="fbls-muted-text">Безымянных моряков: {{abstractCrewCount}}</span>{{/if}}
-              <span>На борту: {{walletGold}} ЗМ</span>
+              <span>На борту: {{walletText}}</span>
             {{else}}
               <span>Команда {{linkedCrewCount}} / {{totalCrewCount}}</span>
             {{/if}}

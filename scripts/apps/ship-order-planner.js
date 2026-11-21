@@ -1,7 +1,7 @@
 import { MODULE_ID } from "../data/constants.js";
 import { findReadableHoldingEntry } from "../data/access-guard.js";
 import { holdingPermissionContext } from "../data/holding-permissions.js";
-import { parseShipGoldInput } from "../core/ship-gold.js";
+import { parseShipGoldInput, shipGoldInput } from "../core/ship-gold.js";
 import { previewShipOrders, withShipOrderBudget } from "../engines/ships/order-preview.js";
 import { shipRouteMapContext, bindRouteMapView } from "./common/route-map-view.js";
 import { buildShipWorldContext } from "../engines/ships/world-market.js";
@@ -15,9 +15,46 @@ export class ShipOrderPlanner {
     this.selected = new Set();
     this.viewport = {};
     this.mapOpen = false;
+    this.budgetMode = "recommended";
+    this._syncingBudget = false;
   }
 
-  clear() { this.selected.clear(); this.cache = null; this.focusedOfferIds = ""; }
+  clear() {
+    this.selected.clear();
+    this.cache = null;
+    this.focusedOfferIds = "";
+    this.budgetMode = "recommended";
+    this._writeDraftField("[data-ship-bundle-budget-mode]", "recommended");
+    this._writeDraftField("[data-ship-bundle-budget]", "");
+  }
+
+  _writeDraftField(selector, value) {
+    const field = this.root?.querySelector?.(selector);
+    if (!field || (field.value === value && !field.validity?.badInput)) return;
+    const previous = this._syncingBudget;
+    this._syncingBudget = true;
+    try {
+      field.value = value;
+      if (typeof Event === "function" && typeof field.dispatchEvent === "function") {
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    } finally {
+      this._syncingBudget = previous;
+    }
+  }
+
+  _readBudgetMode() {
+    const raw = String(this.root?.querySelector?.("[data-ship-bundle-budget-mode]")?.value ?? "");
+    return ["recommended", "minimum", "custom"].includes(raw) ? raw : this.budgetMode;
+  }
+
+  setBudgetMode(mode) {
+    const next = ["recommended", "minimum", "custom"].includes(mode) ? mode : "recommended";
+    this.budgetMode = next;
+    this._writeDraftField("[data-ship-bundle-budget-mode]", next);
+    if (next === "recommended") this._writeDraftField("[data-ship-bundle-budget]", "");
+    this.update();
+  }
 
   bind(root, signal) {
     this.mapController?.abort();
@@ -25,6 +62,7 @@ export class ShipOrderPlanner {
     this.signal = signal;
     const output = root.querySelector?.("[data-ship-planner-preview]");
     if (!output) return;
+    this.budgetMode = this._readBudgetMode();
     for (const field of root.querySelectorAll("[data-ship-bundle-select]")) field.checked = this.selected.has(field.value);
     root.addEventListener("change", (event) => {
       const field = event.target;
@@ -35,7 +73,13 @@ export class ShipOrderPlanner {
       } else if (field.matches?.("[data-ship-bundle-style]")) this.update();
     }, { signal });
     root.addEventListener("input", (event) => {
-      if (event.target.matches?.("[data-ship-bundle-budget]")) this.update();
+      if (this._syncingBudget) return;
+      if (event.target.matches?.("[data-ship-bundle-budget]")) {
+        const value = String(event.target.value ?? "").trim();
+        this.budgetMode = value || event.target.validity?.badInput ? "custom" : "recommended";
+        this._writeDraftField("[data-ship-bundle-budget-mode]", this.budgetMode);
+        this.update();
+      }
     }, { signal });
     root.addEventListener("click", (event) => {
       const mapToggle = event.target.closest?.("[data-ship-planner-map-toggle]");
@@ -47,15 +91,24 @@ export class ShipOrderPlanner {
       }
       const focus = event.target.closest?.("[data-ship-planner-focus]");
       if (focus) this.highlight(focus.dataset.shipPlannerFocus);
+      const budgetPreset = event.target.closest?.("[data-ship-planner-budget-preset]");
+      if (budgetPreset) {
+        this.setBudgetMode(budgetPreset.dataset.shipPlannerBudgetPreset === "minimum" ? "minimum" : "recommended");
+      }
     }, { signal });
     this.update();
   }
 
   parameters() {
+    const style = this.root.querySelector("[data-ship-bundle-style]")?.value ?? "normal";
+    const offerIds = [...this.selected];
+    const mode = this._readBudgetMode();
+    this.budgetMode = mode;
+    if (mode === "minimum") return { offerIds, style, budgetMode: "minimum", budgetCopper: null };
     const budget = this.root.querySelector("[data-ship-bundle-budget]");
-    if (budget?.validity?.badInput) throw new Error("Укажите бюджет числом в ЗМ или полностью очистите поле для автоматического расчёта.");
+    if (budget?.validity?.badInput) throw new Error("Укажите бюджет числом в золотых (1 З = 100 М) или очистите поле для рекомендуемого запаса.");
     const value = String(budget?.value ?? "").trim();
-    return { offerIds: [...this.selected], style: this.root.querySelector("[data-ship-bundle-style]")?.value ?? "normal",
+    return { offerIds, style, budgetMode: value ? "custom" : "recommended",
       budgetCopper: value ? parseShipGoldInput(value) : null };
   }
 
@@ -65,15 +118,19 @@ export class ShipOrderPlanner {
     if (!holding) throw new Error("Владение недоступно.");
     const ship = holding.special?.ships?.list?.find((row) => row.id === this.shipId);
     const parameters = this.parameters();
-    const key = JSON.stringify([data.meta?.revision, parameters]);
     const routeKey = JSON.stringify([data.meta?.revision, parameters.offerIds, parameters.style]);
     if (!this.cache || this.cache.data !== data || this.cache.routeKey !== routeKey) {
-      const basePlan = previewShipOrders(data, holding, ship, { ...parameters, budgetCopper: null });
+      const basePlan = previewShipOrders(data, holding, ship, { offerIds: parameters.offerIds, style: parameters.style, budgetCopper: null });
       this.cache = { data, routeKey, basePlan, map: shipRouteMapContext(basePlan, data.catalog?.marketRouteMap) };
     }
+    const resolvedBudgetCopper = parameters.budgetMode === "minimum"
+      ? (this.cache.basePlan.atHome ? this.cache.basePlan.mandatoryTripCopper : null)
+      : parameters.budgetCopper;
+    const resolvedParameters = { ...parameters, budgetCopper: resolvedBudgetCopper };
+    const key = JSON.stringify([data.meta?.revision, resolvedParameters]);
     const permissions = holdingPermissionContext(holding);
-    return { ...this.cache, key, plan: withShipOrderBudget(this.cache.basePlan, parameters.budgetCopper),
-      permissions, parameters, revision: Number(data.meta?.revision ?? 0) };
+    return { ...this.cache, key, plan: withShipOrderBudget(this.cache.basePlan, resolvedBudgetCopper),
+      permissions, parameters: resolvedParameters, revision: Number(data.meta?.revision ?? 0) };
   }
 
   update() {
@@ -83,6 +140,7 @@ export class ShipOrderPlanner {
     this.mapController?.abort();
     const active = globalThis.document?.activeElement;
     const restoreClear = output.contains?.(active) && active?.hasAttribute?.("data-ship-planner-clear");
+    const restoreBudgetPreset = output.contains?.(active) ? String(active?.dataset?.shipPlannerBudgetPreset ?? "") : "";
     const disclosures = new Map([...output.querySelectorAll("details")].map((node) => [node.dataset.shipPlanDetails ?? "budget", node.open]));
     const restoreMapToggle = output.contains?.(active) && active?.hasAttribute?.("data-ship-planner-map-toggle");
     const context = { selectedCount: this.selected.size, mapOpen: this.mapOpen, mapPanelId: `ship-route-map-${this.holdingId}-${this.shipId}` };
@@ -94,10 +152,15 @@ export class ShipOrderPlanner {
     if (this.selected.size) {
       try {
         const result = this.calculate();
-        const { plan, permissions } = result;
+        const { plan, permissions, parameters } = result;
+        if (parameters.budgetMode === "minimum" && plan.atHome) {
+          this._writeDraftField("[data-ship-bundle-budget]", shipGoldInput(plan.mandatoryTripCopper));
+        }
         const numbers = new Map(plan.offers.map((offer, index) => [offer.id, index + 1]));
         Object.assign(context, plan, { map: result.map, hasPlan: true, revision: result.revision,
           durationDays: plan.totalDurationQd / 4, flightDays: plan.flightQd / 4, portDays: plan.portQd / 4,
+          isAutoBudget: parameters.budgetMode === "recommended",
+          isTripOnlyBudget: parameters.budgetMode === "minimum",
           canDepart: plan.canDepart && permissions.canManageShips,
           permissionReason: permissions.canManageShips ? "" : permissions.mayManageShips ? "Для отправления нужен активный ГМ." : "Доступен просмотр плана; управление кораблём не разрешено.",
           orders: plan.offers.map((offer) => ({ id: offer.id, focusIds: JSON.stringify([offer.id]), number: numbers.get(offer.id), title: offer.title,
@@ -112,6 +175,7 @@ export class ShipOrderPlanner {
         this.reviewed = result;
       } catch (error) { context.error = error.message || "Не удалось рассчитать рейс."; }
     } else {
+      if (this._readBudgetMode() === "minimum") this._writeDraftField("[data-ship-bundle-budget]", "");
       try {
         const data = this.getData();
         const { holding } = findReadableHoldingEntry(data, this.holdingId, { fallback: false });
@@ -155,6 +219,7 @@ export class ShipOrderPlanner {
     this.highlight(this.focusedOfferIds ?? "");
     if (restoreClear) (output.querySelector("[data-ship-planner-clear]") ?? root.querySelector("[data-ship-bundle-select]"))?.focus({ preventScroll: true });
     if (restoreMapToggle) output.querySelector("[data-ship-planner-map-toggle]")?.focus({ preventScroll: true });
+    if (restoreBudgetPreset) output.querySelector(`[data-ship-planner-budget-preset="${restoreBudgetPreset}"]`)?.focus({ preventScroll: true });
   }
 
   toggleMap() {

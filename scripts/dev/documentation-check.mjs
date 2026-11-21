@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { isRuntimePackagePath } from "./runtime-package-manifest.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const ignored = new Set([".git", "node_modules", "dist", ".codex-tmp"]);
+const ignored = new Set([".git", "node_modules", "dist", "coverage", ".agents", ".codex", ".codex-tmp", "tmp", "outputs"]);
 function markdownFiles(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
     if (ignored.has(entry.name)) return [];
@@ -74,7 +74,7 @@ for (const file of files.filter(file => path.dirname(file) === path.join(root, "
   if (!linkedDocs.has(file)) failures.push(`Document absent from docs/README.md: ${path.relative(root, file)}`);
 }
 const index = readFileSync(path.join(root, "docs/README.md"), "utf8");
-for (const section of ["Действующие справочники", "Проекты — отдельно от реализации", "Исходные таблицы", "Проверки и доказательства"]) {
+for (const section of ["Действующие справочники", "Проекты — отдельно от реализации", "Проверки и методика"]) {
   assert.ok(index.includes(`## ${section}`), `Documentation index must separate ${section}`);
 }
 assert.deepEqual(failures, [], `Documentation links/index:\n${failures.join("\n")}`);

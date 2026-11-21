@@ -5,7 +5,7 @@ import { foundryDialogV2 } from "../../../integrations/foundry-runtime.js";
 import { escapeHtml } from "../../../core/helpers.js";
 import { openShipWindow } from "../../lazy-apps.js";
 import { buildShipWorldContext, quoteWorldShipBundle, quoteWorldShipRelocation, repriceWorldShipOffer } from "../../../engines/ships/world-market.js";
-import { formatShipGold, parseShipGoldInput } from "../../../core/ship-gold.js";
+import { formatShipMoney, parseShipGoldInput } from "../../../core/ship-gold.js";
 
 export function shipOperationIntent({ type, holding, ship = null, card = null, button }) {
   const shipId = String(ship?.id ?? "");
@@ -172,7 +172,7 @@ export const ShipEventDomain = {
     }
     let intent;
     try { intent = shipOperationIntent({ type, holding, ship, card, button }); }
-    catch (error) { ui.notifications?.error?.(error.message || "Некорректная сумма в ЗМ."); return; }
+    catch (error) { ui.notifications?.error?.(error.message || "Некорректная сумма."); return; }
     const key = JSON.stringify(intent);
     this._shipRetries ??= new Map();
     this._busyShips ??= new Set();
@@ -184,10 +184,12 @@ export const ShipEventDomain = {
       if (reviewedPlan) {
         const stops = reviewedPlan.stops.map((stop) => escapeHtml(stop.point.label)).join(" → ");
         const orders = reviewedPlan.offers.map((offer) => `<li>${escapeHtml(offer.title)}: ${escapeHtml((offer.contract.pickup ?? offer.from).label)} → ${escapeHtml(offer.to.label)}</li>`).join("");
+        const styleFeeText = reviewedPlan.guaranteedStyleCostCopper
+          ? ` + осторожный подход ${formatShipMoney(reviewedPlan.guaranteedStyleCostCopper)}` : "";
         if (!await foundryDialogV2().confirm({
           classes: ["fbl-skyhold"],
           window: { title: "Принять выбранные заказы" }, modal: true,
-          content: `<ol>${orders}</ol><p>${stops}</p><p>${reviewedPlan.totalDurationQd / 4} дн. · расходы ${formatShipGold(reviewedPlan.totalOperatingCopper)} ЗМ · плата по договорам ${formatShipGold(reviewedPlan.rewardCopper)} ЗМ до случайных исходов.</p><p>Подход: ${escapeHtml(({ cautious: "Осторожно", normal: "Обычно", bold: "С риском" })[intent.style])}. ${reviewedPlan.atHome ? `На борт дополнительно ${formatShipGold(reviewedPlan.transferCopper)} ЗМ; из казны на стоянку ${formatShipGold(reviewedPlan.homeDebtCopper)} ЗМ.` : "Расходы оплачиваются с борта."} Конечный порт: ${escapeHtml(reviewedPlan.finalPoint.label)}. Возвращение домой не включено.</p><p>Промежуточные решения остаются за игроком. Экипаж уйдёт с работ поселения; после возвращения жильё и работы не восстановятся автоматически. ${reviewedPlan.departingAssignments?.length ? `Затронуто жителей: ${reviewedPlan.departingAssignments.length}. ${reviewedPlan.departingAssignments.slice(0, 5).map((row) => `${escapeHtml(row.name)}: ${escapeHtml(row.label)}`).join("; ")}.` : ""} Резервы не списываются заранее.</p>`
+          content: `<ol>${orders}</ol><p>${stops}</p><p>${reviewedPlan.totalDurationQd / 4} дн. · расходы рейса ${formatShipMoney(reviewedPlan.totalOperatingCopper)}${styleFeeText} · плата по договорам ${formatShipMoney(reviewedPlan.rewardCopper)} до случайных исходов.</p><p>Подход: ${escapeHtml(({ cautious: "Осторожно", normal: "Обычно", bold: "С риском" })[intent.style])}. ${reviewedPlan.atHome ? `На борт к выходу: ${formatShipMoney(reviewedPlan.effectiveBudgetCopper)} (включая запас ${formatShipMoney(reviewedPlan.plannedReserveCopper)}). Из казны сейчас: ${formatShipMoney(reviewedPlan.settlementWithdrawalCopper)}${reviewedPlan.homeDebtCopper ? ` (в том числе стоянка ${formatShipMoney(reviewedPlan.homeDebtCopper)})` : ""}.` : "Расходы оплачиваются с борта."} Конечный порт: ${escapeHtml(reviewedPlan.finalPoint.label)}. Возвращение домой — отдельный приказ.</p><p>Промежуточные решения остаются за игроком. Экипаж уйдёт с работ поселения; после возвращения жильё и работы не восстановятся автоматически. ${reviewedPlan.departingAssignments?.length ? `Затронуто жителей: ${reviewedPlan.departingAssignments.length}. ${reviewedPlan.departingAssignments.slice(0, 5).map((row) => `${escapeHtml(row.name)}: ${escapeHtml(row.label)}`).join("; ")}.` : ""} Запас не списывается заранее и возвращается в казну дома.</p>`
         })) { this._shipRetries.delete(key); return; }
       }
       if (type === "relocate-world") {
@@ -197,7 +199,7 @@ export const ShipEventDomain = {
         if (!await foundryDialogV2().confirm({
           classes: ["fbl-skyhold"],
           window: { title: `Передислокация: ${ship.name}` }, modal: true,
-          content: `<p>${escapeHtml(offer.from.label)} → ${escapeHtml(offer.to.label)} · ${quote.distanceKm} км · ${quote.durationQd / 4} дн.</p><p>Плановые расходы: ${formatShipGold(quote.operatingCopper)} ЗМ. ${ship.location?.kind === "home" ? `Рекомендуемый бортовой бюджет: ${formatShipGold(quote.recommendedBudgetCopper)} ЗМ (путь, возвращение и стоянка).` : `Расходы спишутся с бортового кошелька; на борту ${formatShipGold(ship.onboardCopper ?? 0)} ЗМ.`} Платы заказчика нет.</p>`
+          content: `<p>${escapeHtml(offer.from.label)} → ${escapeHtml(offer.to.label)} · ${quote.distanceKm} км · ${quote.durationQd / 4} дн.</p><p>Плановые расходы: ${formatShipMoney(quote.operatingCopper)}. ${ship.location?.kind === "home" ? `На борт с запасом: ${formatShipMoney(quote.recommendedBudgetCopper)} (путь и запас на возвращение и стоянку).` : `Расходы спишутся с бортового кошелька; на борту ${formatShipMoney(ship.onboardCopper ?? 0)}.`} Платы заказчика нет.</p>`
         })) { this._shipRetries.delete(key); return; }
       }
       if (type === "depart-bundle" && !planned) {
@@ -209,14 +211,15 @@ export const ShipEventDomain = {
         const context = buildShipWorldContext(data, holding, { offerLocationIds: locationIds });
         const plan = quoteWorldShipBundle(data, holding, ship,
           selected.map((offer) => repriceWorldShipOffer(data, holding, ship, offer, { context })), { context });
-        const rows = plan.stops.map((stop) => `<li>${escapeHtml(stop.legOffer.from.label)} → ${escapeHtml(stop.point.label)} — ${stop.legOffer.quote.durationQd / 4} дн., трюм ${stop.loadOnLegPoints}/${plan.capacityLoadPoints}, расходы ${formatShipGold(stop.legOffer.quote.operatingCopper)} ЗМ</li>`).join("");
+        const rows = plan.stops.map((stop) => `<li>${escapeHtml(stop.legOffer.from.label)} → ${escapeHtml(stop.point.label)} — ${stop.legOffer.quote.durationQd / 4} дн., трюм ${stop.loadOnLegPoints}/${plan.capacityLoadPoints}, расходы ${formatShipMoney(stop.legOffer.quote.operatingCopper)}</li>`).join("");
         const reward = selected.reduce((sum, offer) => sum + Number(offer.contract.rewardCopper ?? 0), 0);
         const budget = intent.budgetCopper == null ? plan.recommendedBudgetCopper : intent.budgetCopper;
+        const recommendedReserve = Math.max(0, plan.recommendedBudgetCopper - plan.totalOperatingCopper);
         if (budget < plan.stops[0].legOffer.quote.operatingCopper) throw new Error("Бортового бюджета недостаточно для первого участка.");
         if (!await foundryDialogV2().confirm({
           classes: ["fbl-skyhold"],
           window: { title: "Принять составной рейс" }, modal: true,
-          content: `<p>${selected.length} заказа · ${plan.totalDurationQd / 4} дн. · ${plan.distanceKm} км.</p><ol>${rows}</ol><p>Плановые расходы: ${formatShipGold(plan.totalOperatingCopper)} ЗМ; плата по договорам: ${formatShipGold(reward)} ЗМ до случайных исходов. Рекомендуемый бюджет: ${formatShipGold(plan.recommendedBudgetCopper)} ЗМ = ${formatShipGold(plan.totalOperatingCopper)} ЗМ на участки + ${formatShipGold(plan.returnReserveCopper)} ЗМ домой + ${formatShipGold(plan.idleReserveCopper)} ЗМ на стоянку + ${formatShipGold(plan.outcomeReserveCopper)} ЗМ на исходы; на борт: ${formatShipGold(budget)} ЗМ.</p><p>Запас остаётся на борту до необходимости и не считается расходом. Заказы оплачиваются по мере доставки; стоянки и события могут изменить результат.</p>`
+          content: `<p>${selected.length} заказа · ${plan.totalDurationQd / 4} дн. · ${plan.distanceKm} км.</p><ol>${rows}</ol><p>Расходы рейса: ${formatShipMoney(plan.totalOperatingCopper)}; плата по договорам: ${formatShipMoney(reward)} до случайных исходов. Рекомендуемый запас сверх рейса: ${formatShipMoney(recommendedReserve)} (итого с запасом ${formatShipMoney(plan.recommendedBudgetCopper)}); на борт: ${formatShipMoney(budget)}.</p><p>Запас остаётся на борту до необходимости и возвращается в казну дома. Заказы оплачиваются по мере доставки; стоянки и события могут изменить результат.</p>`
         })) {
           this._shipRetries.delete(key);
           return;
@@ -239,10 +242,13 @@ export const ShipEventDomain = {
       const response = await requestShipOperation(operation);
       this._shipRetries.delete(key);
       if (response?.ok === false) {
-        const amount = Number(response.pendingPortBillCopper || response.requiredCopper || 0);
-        ui.notifications?.warn?.(amount > 0
-          ? `Кораблю не хватает ${formatShipGold(amount)} ЗМ для расходов и продолжения рейса.`
-          : "Корабль не может продолжить рейс: проверьте бортовую казну и расходы порта.");
+        const shortage = Number(response.shortageCopper || 0);
+        const totalDue = Number(response.pendingPortBillCopper || response.requiredCopper || 0);
+        ui.notifications?.warn?.(shortage > 0
+          ? `Кораблю не хватает ${formatShipMoney(shortage)} для расходов и продолжения рейса.`
+          : totalDue > 0
+            ? `Недостаточно средств для продолжения рейса. Нужно к оплате: ${formatShipMoney(totalDue)}.`
+            : "Корабль не может продолжить рейс: проверьте бортовую казну и расходы порта.");
         this.requestRender();
         return;
       }

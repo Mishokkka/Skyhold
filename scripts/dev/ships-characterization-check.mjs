@@ -4,7 +4,7 @@ import { createShipFunds, applyShipFundsOperation } from "../engines/ships/funds
 import { createDefaultShipsState, createShipRecord, normalizeShipsState } from "../data/ships.js";
 import { isPlayerWritablePath } from "../data/player-write-guard.js";
 import { mergeHoldingDefaults } from "../data/normalizers.js";
-import { formatShipGold, parseShipGoldInput, shipGoldInput } from "../core/ship-gold.js";
+import { formatShipGold, formatShipMoney, parseShipGoldInput, shipGoldInput } from "../core/ship-gold.js";
 
 const flight = (distanceMeters) => ({ type: "flight", distanceMeters });
 const port = (durationQd) => ({ type: "port", durationQd });
@@ -118,6 +118,14 @@ assert.equal(prepared.receipt.externalDeltaCopper, -100);
 assert.throws(() => applyShipFundsOperation(createShipFunds(399), { id: "prep", kind: "depart", amountCopper: 300, preparationCopper: 100 }), /Insufficient/);
 assert.throws(() => applyShipFundsOperation(prepared.state, { id: "overflow", kind: "income", amountCopper: Number.MAX_SAFE_INTEGER }));
 assert.equal(formatShipGold(12345), "123,45");
+assert.equal(formatShipMoney(0), "0 М");
+assert.equal(formatShipMoney(50), "5 С");
+assert.equal(formatShipMoney(12345), "123 З 4 С 5 М");
+assert.equal(formatShipMoney(-1850), "−18 З 5 С");
+assert.equal(formatShipMoney(null), "—");
+assert.equal(formatShipMoney(undefined), "—");
+assert.equal(formatShipMoney(NaN), "—");
+assert.equal(formatShipMoney(12.5), "—");
 assert.equal(shipGoldInput(12345), "123.45");
 assert.equal(parseShipGoldInput("123,45"), 12345);
 assert.equal(parseShipGoldInput("0.01"), 1);
