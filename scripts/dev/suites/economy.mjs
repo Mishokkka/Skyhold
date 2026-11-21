@@ -40,8 +40,7 @@ import { checkProductionWorkerBudgets } from "../production-worker-budget-check.
 import { checkInternalDemandCharacterization } from "../internal-demand-characterization-check.mjs";
 import { checkPreparationYear } from "../economy-preparation-year-check.mjs";
 import { checkPreparationSpecializations } from "../economy-preparation-specialization-check.mjs";
-import { checkMaintenanceProposal } from "../building-maintenance-proposal-check.mjs";
-import { checkPreparationRevision } from "../building-preparation-revision-check.mjs";
+import { checkBuildingDevelopmentReachability, checkTechnicalMaintenanceNorms } from "../building-development-reachability-check.mjs";
 import { checkArrivalProposal } from "../newcomer-arrival-proposal-check.mjs";
 
 /** Runs economy, production, market, ship and politics contracts without mutating a live Foundry world. */
@@ -49,8 +48,8 @@ export async function runEconomySuite() {
   checkInternalDemandCharacterization();
   checkPreparationYear();
   checkPreparationSpecializations();
-  checkMaintenanceProposal();
-  checkPreparationRevision();
+  checkTechnicalMaintenanceNorms();
+  checkBuildingDevelopmentReachability();
   checkArrivalProposal();
   await checkBankCharacterization();
   checkSharedMarkets();

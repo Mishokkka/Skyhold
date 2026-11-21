@@ -6,7 +6,7 @@ import { MAGNIFIQUE_CREW } from "../data/magnifique-crew.js";
 import { extractMagnifiqueCrew } from "./build-magnifique-crew.mjs";
 
 export async function checkMagnifiqueCrewContent() {
-  const additions = JSON.parse(await readFile(new URL("../../docs/magnifique-crew-additions.json", import.meta.url), "utf8"));
+  const additions = JSON.parse(await readFile(new URL("./sources/magnifique-crew-additions.json", import.meta.url), "utf8"));
   const originals = MAGNIFIQUE_CREW.filter((row) => row.origin === "compendium");
   assert.equal(originals.length, 27);
   assert.equal(additions.length, 9);
