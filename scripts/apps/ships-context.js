@@ -9,23 +9,53 @@ import { isMagnifiqueShip } from "../engines/ships/crew-roster.js";
 import { hasResidentSettlementWork, isResidentAway, isResidentRestingOnShip, residentShipAssignment } from "../data/resident-presence.js";
 import { shipCrewReadiness } from "../engines/ships/crew-readiness.js";
 import { shipMoneySummary, shipOutingSummary } from "../engines/ships/summary.js";
+import { gmShipClockBlockReason } from "../engines/ships/gm-override.js";
 import { prepareShipManagementState, shipTransportState } from "./domains/ship-management-state.js";
 import { prepareShipVoyagePresentation } from "./domains/ship-voyage-presentation.js";
 import { prepareShipFinancePresentation } from "./domains/ship-finance-presentation.js";
 import { shipPresentationTimelineQd } from "./domains/ship-command-availability.js";
 import { shipRemovalBlocker } from "../engines/ships/removal.js";
-import { formatShipGold, shipGoldInput } from "../core/ship-gold.js";
+import { formatShipMoney, formatShipMoneyHtml, shipGoldInput } from "../core/ship-gold.js";
 import { shortestMarketRouteDistanceKm } from "../engines/market/logistics.js";
 import { allResourceDefs } from "../core/resources.js";
 import { clientCargoLifetime } from "../engines/ships/client-cargo.js";
 import { createMarketVisibility } from "../data/market/visibility.js";
+import { normalizeEventRegionOptions } from "../data/random-events.js";
 
 const KIND_LABELS = Object.freeze({ freight: "Перевозка", commission: "Поручение", smuggling: "Контрабанда" });
+const CONDITION_LABELS = Object.freeze({ ready: "Исправен", damaged: "Повреждён", maintenance: "Требуется обслуживание" });
 const STYLE_HINTS = Object.freeze({
   cautious: "Дополнительные расходы на предосторожности: 30% базовой сметы; дорожное происшествие мягче на одну ступень.",
   normal: "Договорная плата и обычные расходы без поправки на подход.",
   bold: "Премия 25% только за успешное исполнение без задержки; тяжёлое происшествие добавит 25% базовой сметы к расходам."
 });
+
+function shipConditionLabel(condition) {
+  return CONDITION_LABELS[String(condition ?? "")] ?? "Требуется обслуживание";
+}
+
+function resolveCargoLabel(contract, resourceLabels, fallback = "") {
+  const explicit = String(contract?.cargo?.name ?? "").trim();
+  if (explicit) return explicit;
+  const resourceId = String(contract?.cargo?.resourceId ?? "").trim();
+  if (resourceId) {
+    const label = String(resourceLabels?.get?.(resourceId) ?? "").trim();
+    if (label) return label;
+  }
+  if (contract?.kind === "commission") return "Пассажиры и почта";
+  if (contract?.kind === "smuggling") return "Контрабандный груз";
+  if (contract?.kind === "freight") return "Торговый груз";
+  return String(fallback ?? "").trim() || "Груз";
+}
+
+function normalizedOfferTitle(offer, cargoTitle) {
+  const raw = String(offer?.title ?? "").trim();
+  const toLabel = offer?.to?.label ?? "порт";
+  const pickupLabel = offer?.contract?.pickup?.label ?? "";
+  if (raw && !raw.startsWith(":") && !raw.startsWith("→") && !raw.startsWith("—")) return raw;
+  const head = offer?.contract?.kind === "smuggling" ? `Груз без декларации (${cargoTitle})` : cargoTitle;
+  return `${head}${pickupLabel ? `: ${pickupLabel}` : ""} → ${toLabel}`;
+}
 
 function sameLocation(left, right) {
   return String(left?.kind ?? "") === String(right?.kind ?? "") && String(left?.id ?? "") === String(right?.id ?? "");
@@ -44,7 +74,7 @@ function preparedGuidance(contract) {
   });
 }
 
-function worldOfferRow(offer, worldContext) {
+function worldOfferRow(offer, worldContext, resourceLabels = null) {
   const contract = offer?.contract ?? {};
   const quote = offer?.quote ?? {};
   const styles = offer?.contract ? preparedGuidance(contract) : [];
@@ -59,12 +89,25 @@ function worldOfferRow(offer, worldContext) {
   const difficultyLabel = difficultyScore >= 7 ? "Опасный" : difficultyScore >= 4 ? "Сложный" : "Обычный";
   const approachKm = contract.pickup
     ? shortestMarketRouteDistanceKm(offer.from.regionId, contract.pickup.regionId, worldContext.regions, { mode: "airship" }) : 0;
+  const totalCostCopper = Number(costs.totalCopper ?? quote.operatingCopper ?? 0);
+  const rewardCopper = Number(quote.rewardCopper ?? contract.rewardCopper ?? 0);
+  const profitCopper = rewardCopper - totalCostCopper;
+  const isProfitable = profitCopper > 0;
+  const isLoss = profitCopper < 0;
+  const profitLabel = isLoss ? "Убыль" : isProfitable ? "Прибыль" : "В ноль";
+  const cargoTitle = resolveCargoLabel(contract, resourceLabels, KIND_LABELS[contract.kind] ?? "Заказ");
+  const recommendedBudgetCopper = Number(quote.recommendedBudgetCopper ?? styles[1]?.suggestedBudgetCopper ?? quote.operatingCopper ?? 0);
+  const returnReserveCopper = Number(quote.returnReserveCopper ?? 0);
+  const idleReserveCopper = Number(quote.idleReserveCopper ?? 0);
+  const outcomeReserveCopper = Math.max(0, recommendedBudgetCopper - totalCostCopper - returnReserveCopper - idleReserveCopper);
+  const recommendedReserveCopper = Math.max(0, recommendedBudgetCopper - totalCostCopper);
   return {
     ...offer,
     feeHint: contract.economics?.version === 1
-      ? `Плата за место на рейсе по общей себестоимости и штатной команде. Подлёт к погрузке и дорога домой не повышают плату. Пошлины и обработка включены. Доплата за особую услугу: ${formatShipGold(contract.economics.specialPremiumCopper)} ЗМ; за риск: ${formatShipGold(contract.economics.riskPremiumCopper)} ЗМ. ${contract.kind === "smuggling" ? "При срыве сделки плата может быть утрачена." : `При отмене заказчиком: ${contract.kind === "commission" ? 50 : 75}% платы до последствий перевозки.`}`
+      ? `Плата за место на рейсе по общей себестоимости и штатной команде. Подлёт к погрузке и дорога домой не повышают плату. Пошлины и обработка включены. Доплата за особую услугу: ${formatShipMoney(contract.economics.specialPremiumCopper)}; за риск: ${formatShipMoney(contract.economics.riskPremiumCopper)}. ${contract.kind === "smuggling" ? "При срыве сделки плата может быть утрачена." : `При отмене заказчиком: ${contract.kind === "commission" ? 50 : 75}% платы до последствий перевозки.`}`
       : "Плата сохранена по прежним условиям предложения. Дорогая фактическая команда не повышает плату; подход капитана и события меняют итог.",
-    title: offer.title || `${KIND_LABELS[contract.kind] ?? "Заказ"}: ${offer?.to?.label ?? "порт"}`,
+    title: normalizedOfferTitle(offer, cargoTitle),
+    cargoTitle,
     destination: offer?.to?.label ?? "—", kindLabel: KIND_LABELS[contract.kind] ?? "Заказ",
     attention: contract.attention ?? { level: 0, label: attentionLabel(0) },
     durationDays, difficultyLabel, cargoFreshnessHint,
@@ -74,23 +117,27 @@ function worldOfferRow(offer, worldContext) {
     timing: {
       flightDays: timing.flightQd / 4,
       loadingDays: timing.loadingQd / 4,
-      unloadingDays: timing.unloadingQd / 4
+      unloadingDays: timing.unloadingQd / 4,
+      portDays: (timing.loadingQd + timing.unloadingQd) / 4
     },
-    rewardCopper: Number(quote.rewardCopper ?? contract.rewardCopper ?? 0),
-    recommendedBudgetCopper: Number(quote.recommendedBudgetCopper ?? styles[1]?.suggestedBudgetCopper ?? quote.operatingCopper ?? 0),
-    returnReserveCopper: Number(quote.returnReserveCopper ?? 0),
-    idleReserveCopper: Number(quote.idleReserveCopper ?? 0),
+    rewardCopper,
+    profitCopper,
+    isProfitable,
+    isLoss,
+    profitLabel,
+    recommendedBudgetCopper,
+    recommendedReserveCopper,
+    returnReserveCopper,
+    idleReserveCopper,
     idleUpkeepCopperPerDay: Number(quote.idleUpkeepCopperPerDay ?? 0),
     pickupLabel: contract.pickup?.label || offer?.from?.label || "—",
     departureLabel: offer?.from?.label || "—",
-    outcomeReserveCopper: Math.max(0, Number(quote.recommendedBudgetCopper ?? 0)
-      - Number(costs.totalCopper ?? quote.operatingCopper ?? 0)
-      - Number(quote.returnReserveCopper ?? 0) - Number(quote.idleReserveCopper ?? 0)),
+    outcomeReserveCopper,
     recommendedBudgetGoldInput: shipGoldInput(Number(quote.recommendedBudgetCopper ?? 0)),
     costs: {
       foodCopper: Number(costs.foodCopper ?? 0), crewCopper: Number(costs.crewCopper ?? 0),
       upkeepCopper: Number(costs.upkeepCopper ?? 0), handlingCopper: Number(costs.handlingCopper ?? 0),
-      taxCopper: Number(costs.taxCopper ?? 0), totalCopper: Number(costs.totalCopper ?? quote.operatingCopper ?? 0)
+      taxCopper: Number(costs.taxCopper ?? 0), totalCopper: totalCostCopper
     }, styles, normalGuidance: styles[1]
   };
 }
@@ -206,7 +253,8 @@ function overviewShipRow(holding, ship, index, { permissions, period, data, visi
     inTransit,
     atHome,
     statusLabel: management?.statusLabel ?? (awaitingOutcome ? "Ожидает итога" : inTransit ? "В пути" : ship.status === "away" ? "В рейсе" : "В поселении"),
-    conditionLabel: ship.condition === "ready" ? "Исправен" : "Требуется обслуживание",
+    conditionLabel: shipConditionLabel(ship.condition),
+    isConditionWarning: ship.condition !== "ready",
     locationLabel: ship.location?.kind === "transit" && visibility.routeHidden(ship.activeVoyage?.quote) ? "В пути"
       : visibility.pointLabel(ship.location, atHome ? holding.name : inTransit ? "В пути" : "—"),
     profileLabel: profile?.label ?? ship.profileId ?? "Прежний ручной расчёт",
@@ -216,11 +264,29 @@ function overviewShipRow(holding, ship, index, { permissions, period, data, visi
     totalCrewCount: readiness?.totalCount ?? Number(ship.crewTarget ?? ship.crewRefs?.length ?? 0),
     abstractCrewCount: readiness?.abstractCount ?? 0,
     moneySummary,
-    walletGold: formatShipGold(ship.onboardCopper ?? 0),
+    walletText: formatShipMoney(ship.onboardCopper ?? 0),
+    walletHtml: formatShipMoneyHtml(ship.onboardCopper ?? 0),
     nextAction: isWorld ? management.nextAction
       : ship.activeVoyage ? (awaitingOutcome ? "Подвести итог рейса" : "Дождаться возвращения") : "Открыть управление кораблём",
     permissionReason: management?.permissionReason ?? "",
     canOpen: permissions.canView
+  };
+}
+
+function formattedFleetAccounting(holding) {
+  const raw = fleetAccountingSummary(holding);
+  return {
+    ...raw,
+    netText: formatShipMoney(raw.netCopper),
+    incomeText: formatShipMoney(raw.incomeCopper),
+    expenseText: formatShipMoney(raw.expenseCopper),
+    homeIdleText: formatShipMoney(raw.homeIdleCopper),
+    portIdleText: formatShipMoney(raw.portIdleCopper),
+    netHtml: formatShipMoneyHtml(raw.netCopper, { signed: true }),
+    incomeHtml: formatShipMoneyHtml(raw.incomeCopper),
+    expenseHtml: formatShipMoneyHtml(raw.expenseCopper),
+    homeIdleHtml: formatShipMoneyHtml(raw.homeIdleCopper),
+    portIdleHtml: formatShipMoneyHtml(raw.portIdleCopper)
   };
 }
 
@@ -238,6 +304,7 @@ export function prepareShipsContext(holding, { revision = 0, data = null } = {})
     canCreateProfile: permissions.isGM,
     canGenerateOffers: permissions.isGM && rows.some((row) => row.isLegacy)
       && (ships.offerPeriod === null || ships.offerPeriod === undefined || ships.offerPeriod === "" || Number(ships.offerPeriod) < period),
+    fleetAccounting: formattedFleetAccounting(holding),
     offersGenerated: String(ships.offerPeriod) === String(period),
     worldIssues: [],
     rows,
@@ -249,8 +316,9 @@ export function prepareShipWindowContext(holding, { revision = 0, data = null, s
   const permissions = holdingPermissionContext(holding);
   const visibility = createMarketVisibility(data, { isGM: permissions.isGM });
   const ships = holding.special?.ships ?? {};
-  const resourceLoads = new Map(allResourceDefs({ catalogRows: data?.catalog?.resources ?? [] })
-    .map((resource) => [resource.id, resource.loadPoints]));
+  const allResources = allResourceDefs({ catalogRows: data?.catalog?.resources ?? [] });
+  const resourceLoads = new Map(allResources.map((resource) => [resource.id, resource.loadPoints]));
+  const resourceLabels = new Map(allResources.map((resource) => [String(resource.id), String(resource.label || resource.id)]));
   const selectedShips = (ships.list ?? []).filter((ship) => String(ship?.id ?? "") === String(shipId ?? ""));
   const settlementQd = Number(holding.gm?.calendaria?.lastQd ?? 0);
   const shipQd = selectedShips[0]?.navigationMode === "world" ? shipPresentationTimelineQd(holding, selectedShips[0]) : settlementQd;
@@ -274,7 +342,7 @@ export function prepareShipWindowContext(holding, { revision = 0, data = null, s
       const currentOffer = offer.mode === "world" && data
         ? repriceWorldShipOffer(data, holding, ship, offer, { context: worldContext })
         : offer;
-      const row = offer.mode === "world" ? worldOfferRow(currentOffer, worldContext) : legacyOfferRow(currentOffer);
+      const row = offer.mode === "world" ? worldOfferRow(currentOffer, worldContext, resourceLabels) : legacyOfferRow(currentOffer);
       const rows = offersByShip.get(offer.shipId) ?? [];
       rows.push(row);
       offersByShip.set(offer.shipId, rows);
@@ -303,7 +371,7 @@ export function prepareShipWindowContext(holding, { revision = 0, data = null, s
     let returnOffer = null;
     let returnError = "";
     if (data && atForeignPort) {
-      try { returnOffer = worldOfferRow(quoteWorldShipReturn(data, holding, ship, { context: worldContext }), worldContext); }
+      try { returnOffer = worldOfferRow(quoteWorldShipReturn(data, holding, ship, { context: worldContext }), worldContext, resourceLabels); }
       catch (error) { returnError = visibility.pointHidden(ship.location?.regionId) && !permissions.isGM
         ? "Не удалось рассчитать возвращение из скрытого порта. Проверьте маршрут с ГМом." : error.message; }
     }
@@ -333,6 +401,48 @@ export function prepareShipWindowContext(holding, { revision = 0, data = null, s
       try { homeUpkeepCopperPerDay = quoteWorldShipHomeUpkeep(data, holding, ship, { context: worldContext }).homeUpkeepCopperPerDay; }
       catch (_error) { /* Keep the last configured rate when the catalog is unavailable. */ }
     }
+    const gmControl = permissions.isGM && isWorld ? (() => {
+      const openPortIds = new Set((worldContext.ports ?? []).map((port) => String(port.regionId)));
+      const regions = normalizeEventRegionOptions(data?.catalog?.eventRegions ?? [], { fallback: false });
+      const currentValue = ship.location?.kind === "home"
+        ? `home:${holding.id}`
+        : ship.location?.kind === "market" ? `market:${ship.location.regionId || ship.location.id}` : "";
+      const destinations = [
+        { value: `home:${holding.id}`, label: `Домой · ${holding.name || "Поселение"}`, selected: currentValue === `home:${holding.id}` },
+        ...regions
+          .map((region) => {
+            const value = `market:${region.value}`;
+            const tag = openPortIds.has(String(region.value)) ? "" : " (вне открытых портов)";
+            return { value, label: `${region.label || region.value}${tag}`, selected: currentValue === value };
+          })
+          .sort((left, right) => left.label.localeCompare(right.label, "ru"))
+      ];
+      const condition = String(ship.condition ?? "ready");
+      const clockBlockedReason = gmShipClockBlockReason(ship, settlementQd);
+      const canChangeVoyage = !clockBlockedReason && !transport.busy && !ownSale;
+      return {
+        canMove: canChangeVoyage,
+        moveBlockedReason: clockBlockedReason || (transport.busy ? "Корабль занят перевозкой; сначала завершите или отмените её в окне перевозок."
+          : ownSale ? "У корабля есть активная продажа собственного товара во «Внешнем рынке»." : ""),
+        destinations,
+        conditionOptions: [
+          { value: "ready", label: "Исправен", selected: condition === "ready" },
+          { value: "damaged", label: "Повреждён", selected: condition === "damaged" },
+          { value: "maintenance", label: "На обслуживании", selected: condition !== "ready" && condition !== "damaged" }
+        ],
+        canArrive: Boolean(canChangeVoyage && ((ship.activeVoyage && !ship.activeVoyage.awaitingOutcome)
+          || ship.orderBundle?.status === "final-delay"
+          || (ship.orderBundle?.delayUntilQd != null && ship.orderBundle.delayUntilQd > settlementQd))),
+        canCancelVoyage: Boolean(canChangeVoyage && (ship.activeVoyage || ship.orderBundle)),
+        canClearBills: Boolean(Number(moneySummary?.portDebtCopper ?? 0) > 0 || Number(ship.pendingPortBillCopper ?? 0) > 0),
+        canSyncClock: !clockBlockedReason && shipQd !== settlementQd,
+        walletGoldInput: shipGoldInput(ship.onboardCopper ?? 0),
+        timelineDays: shipQd / 4,
+        settlementDays: settlementQd / 4
+      };
+    })() : null;
+    const activeCargoTitle = ship.activeVoyage?.quote?.contract
+      ? resolveCargoLabel(ship.activeVoyage.quote.contract, resourceLabels) : "";
     return {
       ...ship, index, isWorld, isLegacy, inTransit, away: ship.status === "away",
       homeUpkeepCopperPerDay,
@@ -344,22 +454,29 @@ export function prepareShipWindowContext(holding, { revision = 0, data = null, s
       readiness, moneySummary,
       ...management,
       timelineQd: shipQd, settlementQd, catchUpDays: Math.max(0, settlementQd - shipQd) / 4,
-      walletGold: formatShipGold(ship.onboardCopper ?? 0),
+      walletText: formatShipMoney(ship.onboardCopper ?? 0),
+      walletHtml: formatShipMoneyHtml(ship.onboardCopper ?? 0),
+      activeCargoTitle,
+      gmControl,
       ownSale: ownSale ? { ...ownSale, marketLabel: visibility.marketLabel(ownSale) } : null,
       ownSaleCargoText: (ownSale?.cargo ?? []).map((row) => `${row.name || row.resourceId} ×${row.qty}`).slice(0, 5).join(" · "),
       ownSaleRemainingDays: Number(ownSale?.remainingQd ?? 0) / 4,
       ownSaleNeedsResolution: ownSale?.status === "needsResolution",
       voyagePresentation: prepareShipVoyagePresentation(holding, ship, { ownSale, visibility }),
       hasBundle: Boolean(bundle), bundleCurrentStop, bundleNextStop,
-      bundleOrders: (bundle?.orders ?? []).map((order) => ({
-        offerId: order.offerId, title: visibility.routeHidden(order.offer) ? "Заказ по скрытому маршруту" : order.offer.title,
-        destination: visibility.pointLabel(order.offer.to),
-        pickupLabel: visibility.pointLabel(order.offer.contract?.pickup ?? order.offer.from),
-        cargoName: order.offer.contract?.cargo?.name || order.offer.title,
-        stateLabel: order.state === "delivered" ? "Доставлен" : order.outcome && !order.outcomeApplied ? "Исход сохранён · ждёт оплаты" : order.state === "loaded" ? "На борту" : "Ожидает погрузки",
-        loadPoints: order.offer.contract?.cargo?.loadPoints ?? 0, rewardCopper: order.offer.contract?.rewardCopper ?? 0,
-        outcome: order.outcome
-      })),
+      bundleOrders: (bundle?.orders ?? []).map((order) => {
+        const cargoName = resolveCargoLabel(order.offer.contract, resourceLabels, order.offer.title);
+        return {
+          offerId: order.offerId,
+          title: visibility.routeHidden(order.offer) ? "Заказ по скрытому маршруту" : normalizedOfferTitle(order.offer, cargoName),
+          destination: visibility.pointLabel(order.offer.to),
+          pickupLabel: visibility.pointLabel(order.offer.contract?.pickup ?? order.offer.from),
+          cargoName,
+          stateLabel: order.state === "delivered" ? "Доставлен" : order.outcome && !order.outcomeApplied ? "Исход сохранён · ждёт оплаты" : order.state === "loaded" ? "На борту" : "Ожидает погрузки",
+          loadPoints: order.offer.contract?.cargo?.loadPoints ?? 0, rewardCopper: order.offer.contract?.rewardCopper ?? 0,
+          outcome: order.outcome
+        };
+      }),
       canResolveBundle: Boolean(management?.commands.resolveBundle?.allowed),
       canContinueBundle: Boolean(management?.commands.continueBundle?.allowed),
       bundleDelayDays: Math.max(0, Number(bundle?.delayUntilQd ?? 0) - Number(holding.gm?.calendaria?.lastQd ?? 0)) / 4,
@@ -367,7 +484,8 @@ export function prepareShipWindowContext(holding, { revision = 0, data = null, s
       financePresentation: isWorld ? prepareShipFinancePresentation(holding, ship, { money: moneySummary, outingReport, ownSale, data, isGM: permissions.isGM }) : null,
       nextAction: management?.nextAction ?? "",
       statusLabel: management?.statusLabel ?? (ship.status === "away" ? "В рейсе" : "В поселении"),
-      conditionLabel: ship.condition === "ready" ? "Исправен" : "Требуется обслуживание",
+      conditionLabel: shipConditionLabel(ship.condition),
+      isConditionWarning: ship.condition !== "ready",
       occupiedLoadPoints: ownSale ? (ownSale.dispatchStatus === "booked" ? 0 : (ownSale.cargo ?? []).reduce((sum, row) => sum + Number(row.qty || 0)
         * Number(resourceLoads.get(row.resourceId) ?? 0), 0))
         : bundle ? bundle.orders.reduce((sum, order) => sum + (order.state === "loaded" ? Number(order.offer.contract?.cargo?.loadPoints ?? 0) : 0), 0)
@@ -411,13 +529,12 @@ export function prepareShipWindowContext(holding, { revision = 0, data = null, s
     revision, period, detailMode: true, profiles: SHIP_PROFILES, canCreateProfile: permissions.isGM,
     canGenerateOffers: permissions.isGM && rows.some((row) => row.isLegacy)
       && (ships.offerPeriod === null || ships.offerPeriod === undefined || ships.offerPeriod === "" || Number(ships.offerPeriod) < period),
-    fleetAccounting: fleetAccountingSummary(holding),
     offersGenerated: String(ships.offerPeriod) === String(period), worldIssues: worldContext.issues ?? [], rows,
     history: (ships.history ?? []).filter((row) => String(row?.shipId ?? "") === String(shipId ?? "")).slice(-10).reverse().map((row) => ({
       ...row, destination: visibility.pointLabel({ ...row.to, label: row.destination || row.to?.label }, row.destination || "—"),
       outcome: row.outcome ? { ...row.outcome, delayDays: Number(row.outcome.delayQd ?? 0) / 4 } : null,
       historyTitle: row.contract
-        ? `${row.contract.cargo?.name || "Заказ"}: ${visibility.pointLabel(row.contract.pickup ?? row.from, "Порт")} → ${visibility.pointLabel(row.to, row.destination || "—")}`
+        ? `${resolveCargoLabel(row.contract, resourceLabels, "Заказ")}: ${visibility.pointLabel(row.contract.pickup ?? row.from, "Порт")} → ${visibility.pointLabel(row.to, row.destination || "—")}`
         : `${visibility.pointLabel(row.from, "Порт")} → ${visibility.pointLabel(row.to, row.destination || "—")}`,
       ledger: (row.ledger ?? []).map((entry) => ({ ...entry, label: visibility.routeHidden(row) ? "Операция по скрытому маршруту"
         : entry.reason || ({ depart: "Бортовой бюджет и подготовка", expense: "Снабжение", income: "Плата за рейс", return: "Возврат остатка" }[entry.kind] ?? "Операция") }))

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import path from "node:path";
-import { preparationRoute } from "./building-preparation-revision-check.mjs";
+import { buildingDevelopmentRoute as preparationRoute } from "./building-development-reachability-check.mjs";
 // These fixed economic scenarios characterize worlds before the explicit labor transition.
 // Hybrid staffing and actual tenday execution are covered by the hybrid-labor suite.
 import { BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION as DEFAULT_BUILDING_TEMPLATES } from "../data/building-templates.js";

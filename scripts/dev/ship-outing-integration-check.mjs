@@ -104,4 +104,27 @@ for (const inFlight of [false, true]) {
   advanceWorldShips(legacy.holding, 8);
   assert.equal(legacy.ship.lastOuting.partial, true);
 }
+{
+  const { holding, ship } = fixture();
+  const departed = departWorldShip(holding, ship, {
+    operationId: "legacy-cautious", offer: offer(ship, 1, { contract: true, preparationCopper: 10 }),
+    style: "cautious", budgetCopper: 133, clockQd: 0
+  });
+  assert.equal(departed.ok, true);
+  assert.equal(ship.currentOuting.plannedOperatingCopper, 133, "legacy precaution uses the cost of travel and preparation");
+  assert.equal(ship.currentOuting.plannedPreparationCopper, 10);
+  assert.equal(ship.onboardCopper, 33, "the planned fee is paid when resolving the outcome");
+}
+
+{
+  const { holding, ship } = fixture();
+  holding.storage.moneyCopper = 1_000_000_001;
+  delete ship.portBilling;
+  const result = advanceWorldShips(holding, 40);
+  assert.deepEqual(result.blocked, [], "an old ship without a bill advances even with a large treasury");
+  assert.deepEqual(result.expenses, []);
+  assert.equal(ship.timelineQd, 40);
+  assert.equal(holding.storage.moneyCopper, 1_000_000_001);
+}
+
 console.log("FBL Skyhold outing integration passed: 107 legs, bounded ledgers, preview, repeats, idle, return and old saves.");

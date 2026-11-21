@@ -5,7 +5,7 @@ import { foundryDialogV2 } from "../../../integrations/foundry-runtime.js";
 import { escapeHtml } from "../../../core/helpers.js";
 import { openShipWindow } from "../../lazy-apps.js";
 import { buildShipWorldContext, quoteWorldShipBundle, quoteWorldShipRelocation, repriceWorldShipOffer } from "../../../engines/ships/world-market.js";
-import { formatShipGold, parseShipGoldInput } from "../../../core/ship-gold.js";
+import { formatShipMoney, formatShipMoneyHtml, parseShipGoldInput } from "../../../core/ship-gold.js";
 
 export function shipOperationIntent({ type, holding, ship = null, card = null, button }) {
   const shipId = String(ship?.id ?? "");
@@ -22,7 +22,28 @@ export function shipOperationIntent({ type, holding, ship = null, card = null, b
     type, holdingId: holding.id, shipId,
     profileId: String(button.dataset.shipProfile ?? "merchant-barque")
   };
-  if (["install-magnifique-crew", "delete"].includes(type)) return { type, holdingId: holding.id, shipId };
+  if (["install-magnifique-crew", "delete", "gm-arrive", "gm-cancel-voyage", "gm-clear-bills", "gm-sync-clock"].includes(type)) {
+    return { type, holdingId: holding.id, shipId };
+  }
+  if (type === "gm-move") {
+    const rawDest = String(card?.querySelector("[data-ship-gm-destination]")?.value ?? "");
+    const sep = rawDest.indexOf(":");
+    const destinationKind = sep > 0 ? rawDest.slice(0, sep) : "";
+    const destinationId = sep > 0 ? rawDest.slice(sep + 1) : "";
+    if (!["home", "market"].includes(destinationKind)) throw new Error("Выберите точку назначения для перемещения.");
+    return { type, holdingId: holding.id, shipId, destinationKind, destinationId: destinationKind === "market" ? destinationId : "" };
+  }
+  if (type === "gm-condition") {
+    return { type, holdingId: holding.id, shipId, condition: String(card?.querySelector("[data-ship-gm-condition]")?.value ?? "") };
+  }
+  if (type === "gm-funds") {
+    return {
+      type, holdingId: holding.id, shipId,
+      fundsMode: String(card?.querySelector("[data-ship-gm-funds-mode]")?.value ?? "set"),
+      amountCopper: parseShipGoldInput(card?.querySelector("[data-ship-gm-funds-amount]")?.value ?? "0"),
+      reason: String(card?.querySelector("[data-ship-gm-funds-reason]")?.value ?? "").trim()
+    };
+  }
   if (type === "crew") {
     const controls = [...(card?.querySelectorAll?.("[data-ship-crew]") ?? [])];
     const crewResidentIds = controls.length === 1 && controls[0]?.multiple
@@ -115,7 +136,14 @@ export const ShipEventActions = {
     "ship-depart": "_onShipOperation",
     "ship-adjust": "_onShipOperation",
     "ship-generate-offers": "_onShipOperation",
-    "ship-resolve": "_onShipOperation"
+    "ship-resolve": "_onShipOperation",
+    "ship-gm-move": "_onShipOperation",
+    "ship-gm-condition": "_onShipOperation",
+    "ship-gm-funds": "_onShipOperation",
+    "ship-gm-arrive": "_onShipOperation",
+    "ship-gm-cancel-voyage": "_onShipOperation",
+    "ship-gm-clear-bills": "_onShipOperation",
+    "ship-gm-sync-clock": "_onShipOperation"
   },
   publicClick: ["ship-open", "ship-generate-world", "ship-depart-world", "ship-depart-bundle", "ship-continue-bundle", "ship-resolve-bundle", "ship-return-home", "ship-relocate-world", "ship-resolve-world", "ship-depart", "ship-resolve", "ship-adjust"]
 };
@@ -151,7 +179,10 @@ export const ShipEventDomain = {
       "ship-generate-world": "generate-world", "ship-reroll-world": "reroll-world", "ship-depart-world": "depart-world",
       "ship-depart-bundle": "depart-bundle", "ship-continue-bundle": "continue-bundle", "ship-resolve-bundle": "resolve-bundle", "ship-return-home": "return-home", "ship-relocate-world": "relocate-world",
       "ship-resolve-world": "resolve-world", "ship-depart": "depart", "ship-adjust": "adjust",
-      "ship-generate-offers": "generate", "ship-resolve": "resolve"
+      "ship-generate-offers": "generate", "ship-resolve": "resolve",
+      "ship-gm-move": "gm-move", "ship-gm-condition": "gm-condition", "ship-gm-funds": "gm-funds",
+      "ship-gm-arrive": "gm-arrive", "ship-gm-cancel-voyage": "gm-cancel-voyage",
+      "ship-gm-clear-bills": "gm-clear-bills", "ship-gm-sync-clock": "gm-sync-clock"
     })[action];
     if (!type) return;
     const managerOperation = ["generate-world", "depart-world", "depart-bundle", "continue-bundle", "resolve-bundle", "return-home", "relocate-world", "resolve-world", "depart", "resolve"].includes(type)
@@ -172,7 +203,7 @@ export const ShipEventDomain = {
     }
     let intent;
     try { intent = shipOperationIntent({ type, holding, ship, card, button }); }
-    catch (error) { ui.notifications?.error?.(error.message || "Некорректная сумма в ЗМ."); return; }
+    catch (error) { ui.notifications?.error?.(error.message || "Некорректная сумма."); return; }
     const key = JSON.stringify(intent);
     this._shipRetries ??= new Map();
     this._busyShips ??= new Set();
@@ -184,10 +215,12 @@ export const ShipEventDomain = {
       if (reviewedPlan) {
         const stops = reviewedPlan.stops.map((stop) => escapeHtml(stop.point.label)).join(" → ");
         const orders = reviewedPlan.offers.map((offer) => `<li>${escapeHtml(offer.title)}: ${escapeHtml((offer.contract.pickup ?? offer.from).label)} → ${escapeHtml(offer.to.label)}</li>`).join("");
+        const styleFeeText = reviewedPlan.guaranteedStyleCostCopper
+          ? ` + осторожный подход ${formatShipMoneyHtml(reviewedPlan.guaranteedStyleCostCopper)}` : "";
         if (!await foundryDialogV2().confirm({
           classes: ["fbl-skyhold"],
           window: { title: "Принять выбранные заказы" }, modal: true,
-          content: `<ol>${orders}</ol><p>${stops}</p><p>${reviewedPlan.totalDurationQd / 4} дн. · расходы ${formatShipGold(reviewedPlan.totalOperatingCopper)} ЗМ · плата по договорам ${formatShipGold(reviewedPlan.rewardCopper)} ЗМ до случайных исходов.</p><p>Подход: ${escapeHtml(({ cautious: "Осторожно", normal: "Обычно", bold: "С риском" })[intent.style])}. ${reviewedPlan.atHome ? `На борт дополнительно ${formatShipGold(reviewedPlan.transferCopper)} ЗМ; из казны на стоянку ${formatShipGold(reviewedPlan.homeDebtCopper)} ЗМ.` : "Расходы оплачиваются с борта."} Конечный порт: ${escapeHtml(reviewedPlan.finalPoint.label)}. Возвращение домой не включено.</p><p>Промежуточные решения остаются за игроком. Экипаж уйдёт с работ поселения; после возвращения жильё и работы не восстановятся автоматически. ${reviewedPlan.departingAssignments?.length ? `Затронуто жителей: ${reviewedPlan.departingAssignments.length}. ${reviewedPlan.departingAssignments.slice(0, 5).map((row) => `${escapeHtml(row.name)}: ${escapeHtml(row.label)}`).join("; ")}.` : ""} Резервы не списываются заранее.</p>`
+          content: `<ol>${orders}</ol><p>${stops}</p><p>${reviewedPlan.totalDurationQd / 4} дн. · расходы рейса ${formatShipMoneyHtml(reviewedPlan.totalOperatingCopper)}${styleFeeText} · плата по договорам ${formatShipMoneyHtml(reviewedPlan.rewardCopper)} до случайных исходов.</p><p>Подход: ${escapeHtml(({ cautious: "Осторожно", normal: "Обычно", bold: "С риском" })[intent.style])}. ${reviewedPlan.atHome ? `На борт к выходу: ${formatShipMoneyHtml(reviewedPlan.effectiveBudgetCopper)} (включая запас ${formatShipMoneyHtml(reviewedPlan.plannedReserveCopper)}). Из казны сейчас: ${formatShipMoneyHtml(reviewedPlan.settlementWithdrawalCopper)}${reviewedPlan.homeDebtCopper ? ` (в том числе стоянка ${formatShipMoneyHtml(reviewedPlan.homeDebtCopper)})` : ""}.` : "Расходы оплачиваются с борта."} Конечный порт: ${escapeHtml(reviewedPlan.finalPoint.label)}. Возвращение домой — отдельный приказ.</p><p>Промежуточные решения остаются за игроком. Экипаж уйдёт с работ поселения; после возвращения жильё и работы не восстановятся автоматически. ${reviewedPlan.departingAssignments?.length ? `Затронуто жителей: ${reviewedPlan.departingAssignments.length}. ${reviewedPlan.departingAssignments.slice(0, 5).map((row) => `${escapeHtml(row.name)}: ${escapeHtml(row.label)}`).join("; ")}.` : ""} Запас не списывается заранее и возвращается в казну дома.</p>`
         })) { this._shipRetries.delete(key); return; }
       }
       if (type === "relocate-world") {
@@ -197,7 +230,7 @@ export const ShipEventDomain = {
         if (!await foundryDialogV2().confirm({
           classes: ["fbl-skyhold"],
           window: { title: `Передислокация: ${ship.name}` }, modal: true,
-          content: `<p>${escapeHtml(offer.from.label)} → ${escapeHtml(offer.to.label)} · ${quote.distanceKm} км · ${quote.durationQd / 4} дн.</p><p>Плановые расходы: ${formatShipGold(quote.operatingCopper)} ЗМ. ${ship.location?.kind === "home" ? `Рекомендуемый бортовой бюджет: ${formatShipGold(quote.recommendedBudgetCopper)} ЗМ (путь, возвращение и стоянка).` : `Расходы спишутся с бортового кошелька; на борту ${formatShipGold(ship.onboardCopper ?? 0)} ЗМ.`} Платы заказчика нет.</p>`
+          content: `<p>${escapeHtml(offer.from.label)} → ${escapeHtml(offer.to.label)} · ${quote.distanceKm} км · ${quote.durationQd / 4} дн.</p><p>Плановые расходы: ${formatShipMoneyHtml(quote.operatingCopper)}. ${ship.location?.kind === "home" ? `На борт с запасом: ${formatShipMoneyHtml(quote.recommendedBudgetCopper)} (путь и запас на возвращение и стоянку).` : `Расходы спишутся с бортового кошелька; на борту ${formatShipMoneyHtml(ship.onboardCopper ?? 0)}.`} Платы заказчика нет.</p>`
         })) { this._shipRetries.delete(key); return; }
       }
       if (type === "depart-bundle" && !planned) {
@@ -209,18 +242,58 @@ export const ShipEventDomain = {
         const context = buildShipWorldContext(data, holding, { offerLocationIds: locationIds });
         const plan = quoteWorldShipBundle(data, holding, ship,
           selected.map((offer) => repriceWorldShipOffer(data, holding, ship, offer, { context })), { context });
-        const rows = plan.stops.map((stop) => `<li>${escapeHtml(stop.legOffer.from.label)} → ${escapeHtml(stop.point.label)} — ${stop.legOffer.quote.durationQd / 4} дн., трюм ${stop.loadOnLegPoints}/${plan.capacityLoadPoints}, расходы ${formatShipGold(stop.legOffer.quote.operatingCopper)} ЗМ</li>`).join("");
+        const rows = plan.stops.map((stop) => `<li>${escapeHtml(stop.legOffer.from.label)} → ${escapeHtml(stop.point.label)} — ${stop.legOffer.quote.durationQd / 4} дн., трюм ${stop.loadOnLegPoints}/${plan.capacityLoadPoints}, расходы ${formatShipMoneyHtml(stop.legOffer.quote.operatingCopper)}</li>`).join("");
         const reward = selected.reduce((sum, offer) => sum + Number(offer.contract.rewardCopper ?? 0), 0);
         const budget = intent.budgetCopper == null ? plan.recommendedBudgetCopper : intent.budgetCopper;
+        const recommendedReserve = Math.max(0, plan.recommendedBudgetCopper - plan.totalOperatingCopper);
         if (budget < plan.stops[0].legOffer.quote.operatingCopper) throw new Error("Бортового бюджета недостаточно для первого участка.");
         if (!await foundryDialogV2().confirm({
           classes: ["fbl-skyhold"],
           window: { title: "Принять составной рейс" }, modal: true,
-          content: `<p>${selected.length} заказа · ${plan.totalDurationQd / 4} дн. · ${plan.distanceKm} км.</p><ol>${rows}</ol><p>Плановые расходы: ${formatShipGold(plan.totalOperatingCopper)} ЗМ; плата по договорам: ${formatShipGold(reward)} ЗМ до случайных исходов. Рекомендуемый бюджет: ${formatShipGold(plan.recommendedBudgetCopper)} ЗМ = ${formatShipGold(plan.totalOperatingCopper)} ЗМ на участки + ${formatShipGold(plan.returnReserveCopper)} ЗМ домой + ${formatShipGold(plan.idleReserveCopper)} ЗМ на стоянку + ${formatShipGold(plan.outcomeReserveCopper)} ЗМ на исходы; на борт: ${formatShipGold(budget)} ЗМ.</p><p>Запас остаётся на борту до необходимости и не считается расходом. Заказы оплачиваются по мере доставки; стоянки и события могут изменить результат.</p>`
+          content: `<p>${selected.length} заказа · ${plan.totalDurationQd / 4} дн. · ${plan.distanceKm} км.</p><ol>${rows}</ol><p>Расходы рейса: ${formatShipMoneyHtml(plan.totalOperatingCopper)}; плата по договорам: ${formatShipMoneyHtml(reward)} до случайных исходов. Рекомендуемый запас сверх рейса: ${formatShipMoneyHtml(recommendedReserve)} (итого с запасом ${formatShipMoneyHtml(plan.recommendedBudgetCopper)}); на борт: ${formatShipMoneyHtml(budget)}.</p><p>Запас остаётся на борту до необходимости и возвращается в казну дома. Заказы оплачиваются по мере доставки; стоянки и события могут изменить результат.</p>`
         })) {
           this._shipRetries.delete(key);
           return;
         }
+      }
+      if (type === "gm-move") {
+        const destSelect = card?.querySelector("[data-ship-gm-destination]");
+        const destLabel = destSelect?.selectedOptions?.[0]?.textContent?.trim() || (intent.destinationKind === "home" ? holding.name : intent.destinationId);
+        const activeWarning = ship.activeVoyage || ship.orderBundle
+          ? "<p>Активный рейс или составной заказ будет отменён без броска исходов.</p>" : "";
+        if (!await foundryDialogV2().confirm({
+          classes: ["fbl-skyhold"],
+          window: { title: `ГМ · Переместить «${ship.name}»` }, modal: true,
+          content: `<p>Переместить корабль «${escapeHtml(ship.name)}» в точку <strong>${escapeHtml(destLabel)}</strong> в обход обычных правил?</p>${activeWarning}<p>Статус экипажа и расчёт стоянки обновятся для нового места; бортовой кошелёк (${formatShipMoneyHtml(ship.onboardCopper ?? 0)}) сохранится без изменений.</p>`
+        })) { this._shipRetries.delete(key); return; }
+      }
+      if (type === "gm-arrive" && !await foundryDialogV2().confirm({
+        classes: ["fbl-skyhold"],
+        window: { title: `ГМ · Завершить перелёт «${ship.name}»` }, modal: true,
+        content: `<p>Мгновенно завершить текущий перелёт или задержку корабля «${escapeHtml(ship.name)}»?</p><p>Если везётся контракт, откроется подведение итогов в порту прибытия; если это возвращение или порожний переход, прибытие завершится сразу.</p>`
+      })) { this._shipRetries.delete(key); return; }
+      if (type === "gm-cancel-voyage" && !await foundryDialogV2().confirm({
+        classes: ["fbl-skyhold"],
+        window: { title: `ГМ · Отменить рейс «${ship.name}»` }, modal: true,
+        content: `<p>Отменить текущий рейс или составной заказ корабля «${escapeHtml(ship.name)}» без броска исходов?</p><p>Корабль вернётся в порт отправления текущего участка (или останется в текущем порту), а уже проведённые списания останутся в журнале.</p>`
+      })) { this._shipRetries.delete(key); return; }
+      if (type === "gm-clear-bills" && !await foundryDialogV2().confirm({
+        classes: ["fbl-skyhold"],
+        window: { title: `ГМ · Списать долги стоянки «${ship.name}»` }, modal: true,
+        content: `<p>Обнулить накопленный долг стоянки корабля «${escapeHtml(ship.name)}» и начать отсчёт стоянки заново с текущей даты?</p>`
+      })) { this._shipRetries.delete(key); return; }
+      if (type === "gm-sync-clock" && !await foundryDialogV2().confirm({
+        classes: ["fbl-skyhold"],
+        window: { title: `ГМ · Синхронизировать время «${ship.name}»` }, modal: true,
+        content: `<p>Приравнять корабельное время «${escapeHtml(ship.name)}» к текущей дате поселения?</p><p>Это снимает блокировку расхождения календаря и пропускает накопленный остаток корабельных дней без начисления стоянки.</p>`
+      })) { this._shipRetries.delete(key); return; }
+      if (type === "gm-funds") {
+        const modeLabel = ({ set: "Задать точную сумму", income: "Добавить на борт", expense: "Списать с борта" })[intent.fundsMode] ?? intent.fundsMode;
+        if (!await foundryDialogV2().confirm({
+          classes: ["fbl-skyhold"],
+          window: { title: `ГМ · Кошелёк «${ship.name}»` }, modal: true,
+          content: `<p><strong>${escapeHtml(modeLabel)}:</strong> ${formatShipMoneyHtml(intent.amountCopper)} (сейчас на борту ${formatShipMoneyHtml(ship.onboardCopper ?? 0)}).</p><p>Казна поселения не изменяется; операция запишется в журнал корабля.</p>`
+        })) { this._shipRetries.delete(key); return; }
       }
       if (type === "reroll-world" && !await foundryDialogV2().confirm({
         classes: ["fbl-skyhold"],
@@ -239,10 +312,13 @@ export const ShipEventDomain = {
       const response = await requestShipOperation(operation);
       this._shipRetries.delete(key);
       if (response?.ok === false) {
-        const amount = Number(response.pendingPortBillCopper || response.requiredCopper || 0);
-        ui.notifications?.warn?.(amount > 0
-          ? `Кораблю не хватает ${formatShipGold(amount)} ЗМ для расходов и продолжения рейса.`
-          : "Корабль не может продолжить рейс: проверьте бортовую казну и расходы порта.");
+        const shortage = Number(response.shortageCopper || 0);
+        const totalDue = Number(response.pendingPortBillCopper || response.requiredCopper || 0);
+        ui.notifications?.warn?.(shortage > 0
+          ? `Кораблю не хватает ${formatShipMoney(shortage)} для расходов и продолжения рейса.`
+          : totalDue > 0
+            ? `Недостаточно средств для продолжения рейса. Нужно к оплате: ${formatShipMoney(totalDue)}.`
+            : "Корабль не может продолжить рейс: проверьте бортовую казну и расходы порта.");
         this.requestRender();
         return;
       }

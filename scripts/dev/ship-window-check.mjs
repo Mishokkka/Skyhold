@@ -3,6 +3,8 @@ import { prepareShipsContext, prepareShipWindowContext } from "../apps/ships-con
 import { createShipViewState } from "../apps/ships-view-state.js";
 import { shipOperationIntent } from "../apps/domains/events/ship-events.js";
 import { worldMarketFixture } from "./world-ship-market-characterization-check.mjs";
+import { departWorldShip } from "../engines/ships/world-voyage.js";
+import { quoteWorldShipRelocation } from "../engines/ships/world-market.js";
 import { SkyholdData } from "../data/store.js";
 
 globalThis.game = { user: { id: "gm", isGM: true } };
@@ -12,6 +14,9 @@ const blockedMarket = { catalog: { get marketEconomy() { throw new Error("overvi
 const overview = prepareShipsContext(holding, { data: blockedMarket });
 assert.equal(overview.detailMode, false);
 assert.equal(overview.rows.length, 1);
+assert.equal(overview.rows[0].walletGold, undefined, "legacy walletGold display field is retired");
+assert.equal(overview.rows[0].walletText, "0 М");
+assert.equal(overview.fleetAccounting.tracked, false);
 assert.equal(overview.rows[0].offers, undefined);
 assert.equal(overview.rows[0].crewOptions, undefined);
 assert.equal(overview.rows[0].outingReport, undefined);
@@ -78,7 +83,11 @@ globalThis.foundry = { applications: { api: { ApplicationV2: OpeningApplication,
 const shipHelpers = new Map();
 globalThis.Handlebars = { registerHelper: (name, helper) => shipHelpers.set(name, helper) };
 const { SkyholdShipApp } = await import("../apps/ship-app.js");
-assert.equal(shipHelpers.get("fblsShipGold")(1234), "12,34");
+assert.equal(shipHelpers.get("fblsShipMoney")(1234), "12 З 3 С 4 М");
+assert.equal(shipHelpers.get("fblsShipMoney")(-250), "−2 З 5 С");
+assert.match(shipHelpers.get("fblsShipMoneyHtml")(1234), /fbls-coin is-gold[\s\S]*12[\s\S]*is-silver[\s\S]*3[\s\S]*is-copper[\s\S]*4/);
+assert.match(shipHelpers.get("fblsShipMoneyHtml")(550, { hash: { signed: true } }), /fbls-money-sign">\+<\/span>/);
+assert.equal(shipHelpers.has("fblsShipGold"), false, "retired fblsShipGold helper must not stay registered");
 assert.equal(shipHelpers.get("fblsShipGoldInput")(1234), "12.34");
 for (const isGM of [true, false]) {
   game.user.isGM = isGM;
@@ -223,4 +232,24 @@ assert.equal(data.holdings[0].special.ships.list[0].capacityLoadPoints, capacity
     clearTimeout(timeout); console.error = originalError; ui.notifications = originalNotifications; delete globalThis.document;
   }
 }
-console.log("Ship window: lightweight overview, selected detail, crew membership/drafts, GM reroll intent, stale settings guards and lazy load failure feedback passed.");
+
+// Foreign relocation and port-bill blocks report exact remaining shortfall rather than total price.
+{
+  const f = worldMarketFixture();
+  f.ship.status = "away";
+  f.ship.location = { kind: "market", id: "a", regionId: "a", label: "a" };
+  f.ship.portBilling = { scope: "market", sinceQd: 0, lastCalculatedQd: 0, dailyCopper: 10, carriedCopper: 0, chargedCopper: 0 };
+  const offer = quoteWorldShipRelocation(f.data, f.holding, f.ship, "b");
+  f.ship.onboardCopper = offer.quote.operatingCopper - 1;
+  const blockedRelocation = departWorldShip(f.holding, f.ship, { operationId: "short-relocate", offer, clockQd: 0 });
+  assert.equal(blockedRelocation.ok, false);
+  assert.equal(blockedRelocation.requiredCopper, offer.quote.operatingCopper);
+  assert.equal(blockedRelocation.shortageCopper, 1, "relocation shortfall subtracts available onboard cash");
+
+  f.ship.onboardCopper = 15;
+  const blockedBill = departWorldShip(f.holding, f.ship, { operationId: "short-bill", offer, clockQd: 8 });
+  assert.equal(blockedBill.ok, false);
+  assert.equal(blockedBill.pendingPortBillCopper, 20);
+  assert.equal(blockedBill.shortageCopper, 5, "port-bill shortfall accounts for partially funded onboard wallet");
+}
+console.log("Ship window: lightweight overview, selected detail, crew membership/drafts, GM reroll intent, stale settings guards, exact shortfalls and lazy load failure feedback passed.");

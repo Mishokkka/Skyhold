@@ -1,4 +1,4 @@
-import { contractGuidance } from "./contracts.js";
+import { contractGuidance, legacyContractPrecautionCopper } from "./contracts.js";
 
 /** Integer shares in input order, with equal remainders settled by stable offer ID. */
 export function bundleOperatingShares(offers, totalCopper) {
@@ -25,6 +25,16 @@ export function bundleOperatingShares(offers, totalCopper) {
     remaining--;
   }
   return rows.map((row) => row.share);
+}
+
+/** Current contracts pay per physical leg. Legacy contracts pay per allocated share. */
+export function bundlePrecautionCopper(offers, totalCopper, { stops, style } = {}) {
+  if (style !== "cautious") return 0;
+  if (stops?.length && stops.every((stop) => stop.economics?.version === 1)) {
+    return stops.reduce((sum, stop) => sum + stop.economics.precautionCopper, 0);
+  }
+  return bundleOperatingShares(offers, totalCopper)
+    .reduce((sum, share) => sum + legacyContractPrecautionCopper(share, style), 0);
 }
 
 /** Derived from the accepted snapshot; no new persisted fields or load-time repair. */

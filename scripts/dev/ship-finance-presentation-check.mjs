@@ -25,9 +25,15 @@ let gmView;
 for (const isGM of [true, false]) {
   globalThis.game = { user: { id: isGM ? "gm" : "player", isGM },
     users: [{ id: "gm", isGM: true, active: true }], socket: { emit() { throw new Error("Viewing finance sent a mutation"); } } };
-  const overview = prepareShipsContext(f.holding, { data: f.data }).rows[0];
-  const detail = prepareShipWindowContext(f.holding, { data: f.data, shipId: f.ship.id }).rows[0];
+  const overviewContext = prepareShipsContext(f.holding, { data: f.data });
+  const overview = overviewContext.rows[0];
+  const detailContext = prepareShipWindowContext(f.holding, { data: f.data, shipId: f.ship.id });
+  const detail = detailContext.rows[0];
   assert.equal(overview.financePresentation, undefined, "the fleet overview must not compose financial journals");
+  assert.equal(overviewContext.fleetAccounting.tracked, true, "fleet overview exposes tracked fleet accounting to skyhold-ships.hbs");
+  assert.ok(overviewContext.fleetAccounting.expenseCopper > 0);
+  assert.match(overviewContext.fleetAccounting.expenseText, /[ЗСМ]/);
+  assert.equal(detailContext.fleetAccounting, undefined, "single-ship window does not needlessly aggregate the fleet");
   const finance = detail.financePresentation;
   assert.equal(finance.outing.plannedExpenseCopper, plan.totalOperatingCopper,
     "the accepted bundle plan includes every unstarted leg, not only already prepaid travel");
@@ -57,6 +63,21 @@ assert.equal(finance.reserveShortageCopper, null, "an unknown return cost cannot
 money = shipMoneySummary(holding, { ...ship, onboardCopper: Infinity });
 finance = prepareShipFinancePresentation(holding, ship, { money });
 assert.equal(finance.mandatoryShortageCopper, null, "invalid money is not presented as an exact unpaid shortage");
+assert.equal(finance.futureLegsShortageCopper, null);
+assert.equal(finance.contingencyShortageCopper, null);
+
+// Committed remaining bundle legs are surfaced separately from contingency reserve.
+{
+  const bundleMoney = {
+    calculationValid: true, reserveKnown: true, balanceCopper: 500, obligationsCopper: 0,
+    remainingOperatingCopper: 1200, contingencyReserveCopper: 300, reserveCopper: 1500, shortageCopper: 1000
+  };
+  const split = prepareShipFinancePresentation(holding, ship, { money: bundleMoney });
+  assert.equal(split.mandatoryShortageCopper, 0);
+  assert.equal(split.futureLegsShortageCopper, 700, "uncovered accepted legs are shown before optional reserve");
+  assert.equal(split.contingencyShortageCopper, 300);
+  assert.equal(split.futureLegsShortageCopper + split.contingencyShortageCopper, split.reserveShortageCopper);
+}
 
 const saved = {
   ...ship,
@@ -141,10 +162,19 @@ assert.equal(finance.outing.canComparePlan, false);
 
 const template = readFileSync(new URL("../../templates/parts/ship-window/finance.hbs", import.meta.url), "utf8");
 const adjustmentPosition = template.indexOf('data-ship-disclosure="funds:');
-assert.ok(template.indexOf("Баланс и обязательства") < adjustmentPosition, "the approved compact balance summary precedes the manual adjustment form");
-for (const amount of ["walletGold", "moneySummary.obligationsCopper", "moneySummary.reserveCopper", "moneySummary.freeCopper"]) {
-  assert.ok(template.indexOf(amount) < adjustmentPosition, `${amount} is visible before a financial operation`);
+assert.ok(adjustmentPosition > 0, "finance template must contain manual adjustment disclosure");
+const balancePosition = template.indexOf("Баланс и обязательства");
+assert.ok(balancePosition >= 0 && balancePosition < adjustmentPosition, "the approved compact balance summary precedes the manual adjustment form");
+for (const amount of ["moneySummary.walletCopper", "moneySummary.obligationsCopper", "moneySummary.reserveCopper", "moneySummary.freeCopper"]) {
+  const position = template.indexOf(amount);
+  assert.ok(position >= 0 && position < adjustmentPosition, `${amount} is visible before a financial operation`);
 }
+assert.doesNotMatch(template, /fblsShipGold/, "ship finance uses unified З / С / М currency formatting");
+assert.match(template, /moneySummary\.contingencyReserveCopper/, "finance separates committed future legs from contingency reserve");
+const futureLegsPosition = template.indexOf("financePresentation.futureLegsShortageCopper");
+const contingencyPosition = template.indexOf("financePresentation.contingencyShortageCopper");
+assert.ok(futureLegsPosition >= 0 && contingencyPosition >= 0 && futureLegsPosition < contingencyPosition,
+  "uncovered committed legs warning precedes optional reserve warning");
 assert.ok(template.indexOf("Неоплаченные обязательства") > adjustmentPosition, "the approved bill breakdown follows the operation, under a disclosure");
 assert.match(template, /report.canComparePlan/);
 assert.match(template, /#if hasAmount/);

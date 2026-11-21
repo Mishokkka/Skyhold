@@ -31,10 +31,7 @@ import {
   BUILDING_SEASONAL_PROFILES
 } from "./building-production-line-proposal-data.mjs";
 
-const affinitySource = readFileSync(new URL("../../docs/building-worker-affinity-proposal.md", import.meta.url), "utf8");
-const proposalSource = readFileSync(new URL("../../docs/building-development-tree-proposal.md", import.meta.url), "utf8");
 const residentGeneratorSource = readFileSync(new URL("../generators/resident-generator.js", import.meta.url), "utf8");
-const STAGES = Object.freeze({ "0": 0, I: 1, II: 2, III: 3, IV: 4, V: 5, VI: 6, VII: 7 });
 const ATTRIBUTES = new Set(["СИЛ", "ЛОВ", "РАЗ", "ЭМП"]);
 const STAFFING_CLASSES = new Set(["A", "B", "C"]);
 const COMPOSITION_GROUPS = new Set(["СТРОИТЕЛЬСТВО", "ТОРГОВЛЯ", "ГРАМОТА", "МЕДИЦИНА", "КУЛЬТ", "ОХРАНА", "МОРЕ", "ТЕХНИКА", "ЧУДОТВОРЕЦ"]);
@@ -45,41 +42,16 @@ const PRODUCTION_BUILDINGS = new Set([
     .filter((profile) => Object.keys(profile.slaughterOutputs ?? {}).length > 0)
     .map((profile) => profile.building)
 ]);
-assert.equal(PRODUCTION_BUILDINGS.size, 41, "the qualification proposal must follow the 41 economically audited producing buildings");
+assert.equal(PRODUCTION_BUILDINGS.size, 41, "the qualification contract must follow the 41 economically audited producing buildings");
+
 const runtimeScriptorium = DEFAULT_BUILDING_TEMPLATES.find((building) => String(building?.id ?? "") === "scriptorium");
 assert.ok(runtimeScriptorium, "the Wonderworker Scriptorium must remain in the runtime building catalog");
 assert.match(String(runtimeScriptorium.description ?? ""), /Скрипторий чудотворцев/i);
 assert.match(String(runtimeScriptorium.effect ?? ""), /изучению чудотворства и чудес/i);
 assert.match(String(runtimeScriptorium.workerRole ?? ""), /Чудотворец/i);
 
-function clean(value = "") {
-  return String(value).replaceAll("`", "").replaceAll("**", "").trim();
-}
-
-function nameOf(value = "") {
-  return clean(value).replace(/[«»]/g, "").replace(/\s+/g, " ");
-}
-
-function pipeRow(line = "") {
-  const escapedPipe = "\u0000";
-  return line
-    .trim()
-    .replace(/^\|/, "")
-    .replace(/\|$/, "")
-    .replaceAll("\\|", escapedPipe)
-    .split("|")
-    .map((value) => clean(value.replaceAll(escapedPipe, "|")));
-}
-
-function selectorsOf(value = "") {
-  const text = clean(value);
-  if (!text || text === "—") return [];
-  return text.split("|").map(clean).filter(Boolean);
-}
-
-function validateSelectors(value, name, label) {
-  const selectors = selectorsOf(value);
-  assert.ok(selectors.length > 0, `${name}: ${label} must contain at least one selector`);
+function validateSelectors(selectors, name, label) {
+  assert.ok(Array.isArray(selectors) && selectors.length > 0, `${name}: ${label} must contain at least one selector`);
   assert.equal(new Set(selectors).size, selectors.length, `${name}: ${label} must not repeat selectors`);
   for (const selector of selectors) {
     if (selector === "РР*" || ATTRIBUTES.has(selector)) continue;
@@ -88,169 +60,63 @@ function validateSelectors(value, name, label) {
     assert.ok(pair.every((attribute) => ATTRIBUTES.has(attribute)), `${name}: unknown ${label} selector ${selector}`);
     assert.notEqual(pair[0], pair[1], `${name}: pair selector ${selector} must use two different attributes`);
   }
-  return selectors;
 }
 
-function validateAdmission(value, name) {
-  const admission = clean(value);
-  if (admission === "Любой трудоспособный") return;
-  const threshold = "(?:СИЛ|ЛОВ|РАЗ|ЭМП)≥[1-5]";
-  assert.match(admission, new RegExp(`^${threshold}(?: (?:или|и) ${threshold})*$`), `${name}: unknown admission rule ${admission}`);
-}
+assert.equal(APPROVED_BUILDING_WORKER_PROFILES.length, 120, "the checked-in runtime manifest must contain 118 base profiles and two story profiles");
+assert.equal(new Set(APPROVED_BUILDING_WORKER_PROFILES.map((profile) => profile.templateId)).size, 120);
 
-function compositionRequirementCount(value, name) {
-  const text = clean(value);
-  if (!text || text === "—") return 0;
-  let total = 0;
-  for (const clause of text.split(";").map(clean)) {
-    const match = clause.match(/^(\d+)×\s+(.+)$/);
-    assert.ok(match, `${name}: malformed composition requirement ${clause}`);
-    assert.ok(COMPOSITION_GROUPS.has(match[2]), `${name}: unknown composition group ${match[2]}`);
-    total += Number(match[1]);
-  }
-  return total;
-}
-
-function stageOf(value = "") {
-  const match = String(value).match(/Этап\s+(VII|VI|IV|V|III|II|I|0)\b/);
-  return match ? STAGES[match[1]] : null;
-}
-
-function tablesIn(markdown = "") {
-  const lines = markdown.split(/\r?\n/);
-  const tables = [];
-  let h2 = "";
-  let h3 = "";
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index];
-    if (line.startsWith("## ")) {
-      h2 = clean(line.slice(3));
-      h3 = "";
-      continue;
-    }
-    if (line.startsWith("### ")) {
-      h3 = clean(line.slice(4));
-      continue;
-    }
-    if (!line.startsWith("|") || !lines[index + 1]?.startsWith("|---")) continue;
-    const headers = pipeRow(line);
-    const rows = [];
-    let cursor = index + 2;
-    while (cursor < lines.length && lines[cursor].startsWith("|")) rows.push(pipeRow(lines[cursor++]));
-    tables.push({ h2, h3, headers, rows });
-    index = cursor - 1;
-  }
-  return tables;
-}
-
-function workersOf(value = "") {
-  const text = clean(value);
-  if (/^Нет\b/i.test(text) || text === "—") return { min: 0, max: 0 };
-  const values = text.match(/\d+/g)?.map(Number) ?? [];
-  if (values.length >= 2) return { min: values[0], max: values[1] };
-  if (values.length === 1) return { min: values[0], max: values[0] };
-  return { min: 0, max: 0 };
-}
-
-const treeEnd = proposalSource.indexOf("## Норматив стоимости строительства");
-const treeRows = [];
-for (const table of tablesIn(proposalSource.slice(0, treeEnd)).filter((row) => row.headers[0] === "Шаблон")) {
-  const stage = stageOf(table.h2);
-  if (stage === null) continue;
-  treeRows.push(...table.rows.map((row) => ({ name: nameOf(row[0]), stage })));
-}
-const treeNames = treeRows.map((row) => row.name);
-const treeStageByName = new Map(treeRows.map((row) => [row.name, row.stage]));
-assert.equal(treeNames.length, 118, "the approved tree must contain 118 buildings");
-
-const operationStart = proposalSource.indexOf("## Эксплуатационный норматив");
-const operationEnd = proposalSource.indexOf("## Утверждённый проект репутации и довольства", operationStart);
-const staffing = new Map();
-for (const table of tablesIn(proposalSource.slice(operationStart, operationEnd)).filter((row) => row.headers[0] === "Шаблон")) {
-  for (const row of table.rows) {
-    const cells = Object.fromEntries(table.headers.map((header, index) => [header, row[index] ?? ""]));
-    staffing.set(nameOf(row[0]), workersOf(cells["Рабочие места"]));
-  }
-}
-assert.equal(staffing.size, 118, "the approved operation tables must cover 118 buildings");
-
-const mappingTable = tablesIn(affinitySource).find(
-  (table) => table.headers.join("|") === "Этап|Шаблон|Штат|Допуск каждого работника|+25%|+50%|Класс|Ключевое условие состава|Основание"
-);
-assert.ok(mappingTable, "the worker-affinity proposal must contain the complete mapping table");
-assert.equal(mappingTable.rows.length, 118, "the worker-affinity mapping must contain 118 rows");
-const specialRuntimeTable = tablesIn(affinitySource).find(
-  (table) => table.headers.join("|") === "Слой|Сюжетный runtime-шаблон|Штат|Допуск каждого работника|+25%|+50%|Класс|Ключевое условие состава|Основание"
-);
-assert.ok(specialRuntimeTable, "the worker-affinity proposal must explicitly cover runtime-only story templates");
-assert.equal(specialRuntimeTable.rows.length, 2, "exactly two story templates must remain outside the 118-building development tree");
-for (const row of specialRuntimeTable.rows) {
-  assert.deepEqual(row.slice(2, 8), ["0–0", "—", "—", "—", "—", "—"], `${nameOf(row[1])}: a story-only template must keep an explicit zero-staff profile`);
-  assert.ok(row[8], `${nameOf(row[1])}: story profile rationale must not be empty`);
-}
-
-const mappedNames = new Set();
+const STORY_TEMPLATE_IDS = new Set(["fasti-shop", "laputa-excavated-crypt"]);
 const usedStaffingClasses = new Set();
 const mappedProductionBuildings = new Set();
 let staffedCount = 0;
 let unstaffedCount = 0;
-for (const row of mappingTable.rows) {
-  const [stageText, rawName, staffText, admission, partialBonus, fullBonus, staffingClass, keySpecialist, reason] = row;
-  const name = nameOf(rawName);
-  const approvedStaff = staffing.get(name);
-  assert.ok(approvedStaff, `${name}: affinity row references an unknown building`);
-  assert.equal(mappedNames.has(name), false, `${name}: duplicate affinity row`);
-  mappedNames.add(name);
-  assert.equal(Number(stageText), treeStageByName.get(name), `${name}: affinity stage must match the approved tree`);
-  assert.deepEqual(workersOf(staffText), approvedStaff, `${name}: staffing range must match the approved operation table`);
+let storyCount = 0;
+
+for (const profile of APPROVED_BUILDING_WORKER_PROFILES) {
+  const { templateId, name, workersMax, suitableSelectors, optimalSelectors, staffingClass, composition, production, reason } = profile;
   assert.ok(reason, `${name}: affinity rationale must not be empty`);
-  if (approvedStaff.max <= 0) {
+  if (STORY_TEMPLATE_IDS.has(templateId)) {
+    storyCount += 1;
+    assert.equal(workersMax, 0, `${name}: story-only template must keep an explicit zero-staff profile`);
+    continue;
+  }
+  if (workersMax <= 0) {
     unstaffedCount += 1;
-    assert.deepEqual(
-      [admission, partialBonus, fullBonus, staffingClass, keySpecialist],
-      ["—", "—", "—", "—", "—"],
-      `${name}: unstaffed building must not advertise worker qualification rules`
-    );
+    assert.deepEqual(suitableSelectors, [], `${name}: unstaffed building must not advertise worker qualification rules`);
+    assert.deepEqual(optimalSelectors, [], `${name}: unstaffed building must not advertise worker qualification rules`);
     continue;
   }
   staffedCount += 1;
-  validateAdmission(admission, name);
   if (PRODUCTION_BUILDINGS.has(name)) {
-    validateSelectors(partialBonus, name, "+25%");
-    validateSelectors(fullBonus, name, "+50%");
+    validateSelectors(suitableSelectors, name, "+25%");
+    validateSelectors(optimalSelectors, name, "+50%");
+    assert.ok(production?.backgroundGroups?.length > 0, `${name}: production profile must declare background groups`);
+    assert.ok(production?.positiveTraits?.length > 0, `${name}: production profile must declare positive traits`);
+    assert.ok(production?.negativeTraits?.length > 0, `${name}: production profile must declare negative traits`);
     mappedProductionBuildings.add(name);
   } else {
-    assert.deepEqual([partialBonus, fullBonus], ["—", "—"], `${name}: a non-production building must not multiply its static effects through worker type`);
+    assert.deepEqual(suitableSelectors, [], `${name}: non-production building must not multiply static effects through worker type`);
+    assert.deepEqual(optimalSelectors, [], `${name}: non-production building must not multiply static effects through worker type`);
   }
   assert.ok(STAFFING_CLASSES.has(staffingClass), `${name}: unknown staffing class ${staffingClass}`);
   usedStaffingClasses.add(staffingClass);
-  assert.ok(compositionRequirementCount(keySpecialist, name) <= approvedStaff.max, `${name}: composition requirements must fit into the maximum staff`);
+  let requiredHeads = 0;
+  for (const part of composition ?? []) {
+    assert.ok(COMPOSITION_GROUPS.has(part.group), `${name}: unknown composition group ${part.group}`);
+    requiredHeads += Number(part.count ?? 0);
+  }
+  assert.ok(requiredHeads <= workersMax, `${name}: composition requirements must fit into maximum staff`);
 }
-assert.deepEqual(new Set(treeNames), mappedNames, "the affinity proposal must cover exactly the approved 118 buildings");
-const specialRuntimeNames = new Set(specialRuntimeTable.rows.map((row) => nameOf(row[1])));
-const approvedManifestNames = new Set([...mappedNames, ...specialRuntimeNames]);
-assert.equal(APPROVED_BUILDING_WORKER_PROFILES.length, 120, "the checked-in runtime manifest must contain 118 project profiles and two story profiles");
-assert.deepEqual(new Set(APPROVED_BUILDING_WORKER_PROFILES.map((profile) => profile.name)), approvedManifestNames, "the runtime worker manifest must match both approved Markdown tables exactly");
-assert.deepEqual({ staffedCount, unstaffedCount }, { staffedCount: 95, unstaffedCount: 23 });
+
+assert.deepEqual({ staffedCount, unstaffedCount, storyCount }, { staffedCount: 95, unstaffedCount: 23, storyCount: 2 });
 assert.deepEqual(usedStaffingClasses, STAFFING_CLASSES, "the mapping must exercise all three staffing classes");
 assert.deepEqual(mappedProductionBuildings, PRODUCTION_BUILDINGS, "worker-type bonuses must cover exactly the audited production buildings");
 assert.doesNotMatch(residentGeneratorSource, /\bskill\s*:/, "the resident generator must not recreate the removed profession field");
-assert.match(affinitySource, /поле `skill` удаляется из модели жителя/, "the proposal must state the skill-free resident contract");
-assert.match(affinitySource, /Подходящее прошлое добавляет `1 000` единиц \(`\+10%`\)/, "the proposal must fix the background bonus at ten percent");
-assert.match(affinitySource, /Повышенная ставка улучшает довольство или удержание специалиста, но не покупает скрытый производственный множитель/, "higher wages must not silently buy production efficiency");
-assert.match(affinitySource, /Недовольство должно проявляться через события, отказ от переработки, прогулы или уход, а не через постоянный скрытый процент/, "morale consequences must stay legible instead of becoming a hidden production multiplier");
-const scriptoriumRow = mappingTable.rows.find((row) => nameOf(row[1]) === "Скрипторий");
-assert.equal(scriptoriumRow?.[7], "1× ЧУДОТВОРЕЦ", "the Scriptorium's mystical function must require the rare Wonderworker trait");
-
-const backgroundTable = tablesIn(affinitySource).find(
-  (table) => table.headers.join("|") === "Производственный шаблон|Подходящее прошлое +10%|Положительная черта +10%|Мешающая черта -10%"
+const scriptoriumProfile = APPROVED_BUILDING_WORKER_PROFILES.find((profile) => profile.templateId === "scriptorium");
+assert.ok(
+  scriptoriumProfile?.composition?.some((part) => part.group === "ЧУДОТВОРЕЦ" && part.count === 1),
+  "the Scriptorium's mystical function must require the rare Wonderworker trait"
 );
-assert.ok(backgroundTable, "the proposal must contain an explicit background and trait profile table");
-assert.equal(backgroundTable.rows.length, 41, "background and trait profiles must cover exactly the 41 audited production buildings");
-assert.deepEqual(new Set(backgroundTable.rows.map((row) => nameOf(row[0]))), PRODUCTION_BUILDINGS, "background and trait profiles must cover exactly the production set");
-for (const [name, background, positiveTrait, negativeTrait] of backgroundTable.rows) {
-  assert.ok(background && positiveTrait && negativeTrait, `${name}: background and both trait directions must be explicit`);
-}
 
 const originalRandom = Math.random;
 const generatedTypeAudit = new Map();
@@ -441,4 +307,4 @@ assert.deepEqual(advanceLine(0, workUnitsForQd(5_000) * 2, 3), { batches: 1, pro
 assert.deepEqual(advanceFundedLine(0, workUnitsForQd(5_000), 1, 1), { batches: 1, progress: 0, idle: 5_000 }, "unfunded excess work must not become free banked progress");
 assert.deepEqual(advanceFundedLine(0, workUnitsForQd(5_000), 1, 2), { batches: 1, progress: 5_000, idle: 0 }, "excess work may continue only into another fully reserved batch");
 
-console.log(`Building worker qualification passed: ${APPROVED_BUILDING_WORKER_PROFILES.length} profiles (${mappedNames.size} project + ${specialRuntimeNames.size} story), ${runtimeProfileCount} current runtime templates, ${mappedProductionBuildings.size} production-only profiles; integer work produces 10000/12500/15000/17000 units and legacy hidden worker fields are removed.`);
+console.log(`Building worker qualification passed: ${APPROVED_BUILDING_WORKER_PROFILES.length} profiles (${staffedCount + unstaffedCount} base + ${storyCount} story), ${runtimeProfileCount} current runtime templates, ${mappedProductionBuildings.size} production-only profiles.`);

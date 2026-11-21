@@ -1,12 +1,12 @@
 import { recordFleetFunds } from "./fleet-accounting.js";
 import { applyShipFundsOperation } from "./funds.js";
-import { attentionLabel, contractGuidance, resolveContractOutcome } from "./contracts.js";
+import { attentionLabel, contractGuidance, contractPrecautionCopper, resolveContractOutcome } from "./contracts.js";
 import { resolveBundlePassages, bundleOrderAllowsBonus, bundleStopAwaitsOutcome } from "./bundle-incidents.js";
 import { getShipProfile, shipCapacityLoadPoints } from "./profiles.js";
-import { bundleOperatingShares } from "./bundle-accounting.js";
+import { bundleOperatingShares, bundlePrecautionCopper } from "./bundle-accounting.js";
 import { worldShipBundleLegAt } from "./bundle-leg.js";
 import { clientCargoOutcome, clientCargoLadenDelay, startClientCargo } from "./client-cargo.js";
-import { beginShipOuting, ensurePartialShipOuting, planShipOutingLeg, planShipOutingBundleRewards, recordShipOutingFunds, completeShipOutingLeg } from "./outing-report.js";
+import { beginShipOuting, ensurePartialShipOuting, planShipOutingLeg, planShipOutingBundleContracts, recordShipOutingFunds, completeShipOutingLeg } from "./outing-report.js";
 
 const MAX_MONEY = 1_000_000_000;
 const FORBIDDEN_KEYS = new Set(["__proto__", "prototype", "constructor"]);
@@ -154,19 +154,26 @@ export function worldShipPortDebtCopper(ship, targetQd) {
 
 function settleIdleBilling(holding, ship, targetQd) {
   const row = ship.portBilling;
-  if (!row) return { paidCopper: 0, pendingCopper: integer(ship.pendingPortBillCopper ?? 0, "долг стоянки") };
+  if (!row) {
+    const pendingCopper = integer(ship.pendingPortBillCopper ?? 0, "долг стоянки");
+    if (!pendingCopper) return { paidCopper: 0, pendingCopper: 0, shortageCopper: 0 };
+    const available = ship.location?.kind === "home"
+      ? integer(holding.storage.moneyCopper, "казна поселения") + integer(ship.onboardCopper ?? 0, "бортовой кошелёк")
+      : integer(ship.onboardCopper ?? 0, "бортовая казна");
+    return { paidCopper: 0, pendingCopper, shortageCopper: Math.max(0, pendingCopper - available) };
+  }
   const due = billingOutstanding(row, targetQd);
   row.lastCalculatedQd = Math.max(row.lastCalculatedQd, due.effectiveQd);
   if (!due.outstanding) {
     ship.pendingPortBillCopper = 0;
-    return { paidCopper: 0, pendingCopper: 0 };
+    return { paidCopper: 0, pendingCopper: 0, shortageCopper: 0 };
   }
   const available = row.scope === "home"
     ? integer(holding.storage.moneyCopper, "казна поселения") + integer(ship.onboardCopper ?? 0, "бортовой кошелёк")
     : integer(ship.onboardCopper, "бортовая казна");
   if (available < due.outstanding) {
     ship.pendingPortBillCopper = due.outstanding;
-    return { paidCopper: 0, pendingCopper: due.outstanding };
+    return { paidCopper: 0, pendingCopper: due.outstanding, shortageCopper: due.outstanding - available };
   }
   const receiptId = `${ship.id}:idle:${row.scope}:${row.sinceQd}:${due.effectiveQd}:${row.chargedCopper}`;
   const onboardPaidCopper = row.scope === "home"
@@ -307,9 +314,10 @@ export function departWorldShip(holding, ship, {
   const clock = integer(clockQd, "время", 0, Number.MAX_SAFE_INTEGER);
   if (clock < worldShipTimelineQd(holding, ship)) throw new Error("Приказ не может вернуться в прошлое корабля.");
   const quote = normalizedQuote(ship, offer);
+  const precautionCopper = contractPrecautionCopper(quote.contract, style);
   const idle = settleIdleBilling(holding, ship, clock);
   if (idle.pendingCopper > 0) {
-    return { ok: false, blocked: true, shipId: ship.id, pendingPortBillCopper: idle.pendingCopper };
+    return { ok: false, blocked: true, shipId: ship.id, pendingPortBillCopper: idle.pendingCopper, shortageCopper: idle.shortageCopper };
   }
   const isHome = ship.location.kind === "home";
   let budget = budgetCopper == null ? quote.recommendedBudgetCopper : integer(budgetCopper, "бортовой бюджет");
@@ -333,7 +341,7 @@ export function departWorldShip(holding, ship, {
     beginShipOuting(ship, { voyageId: id, clockQd: clock, budgetCopper: ship.onboardCopper, preparationCopper: quote.preparationCopper });
     if (!funding.replay) recordShipOutingFunds(ship, funding.receipt, { clockQd: clock, reason: "Подготовка к выходу" });
   } else if (ship.onboardCopper < quote.operatingCopper) {
-    return { ok: false, blocked: true, shipId: ship.id, pendingPortBillCopper: 0, requiredCopper: quote.operatingCopper };
+    return { ok: false, blocked: true, shipId: ship.id, pendingPortBillCopper: 0, requiredCopper: quote.operatingCopper, shortageCopper: quote.operatingCopper - ship.onboardCopper };
   }
   const ledgerStart = Math.max(0, ship.worldLedger.length - (isHome ? 1 : 0));
   applyFunds(holding, ship, {
@@ -363,7 +371,7 @@ export function departWorldShip(holding, ship, {
     ledgerStart
   };
   ship.timelineQd = clock;
-  planShipOutingLeg(ship, ship.activeVoyage);
+  planShipOutingLeg(ship, ship.activeVoyage, { precautionCopper });
   return {
     ok: true,
     voyageId: id,
@@ -389,12 +397,14 @@ export function departWorldShipBundle(holding, ship, { operationId: suppliedOper
   const stops = clone(plan.stops);
   const { offer: first, economics } = worldShipBundleLegAt(stops[0], clockQd);
   first.id = `${id}:leg:0`;
-  const departure = departWorldShip(holding, ship, { operationId: id, offer: first, style, budgetCopper, clockQd });
-  if (!departure.ok) return departure;
   const costDifference = first.quote.operatingCopper - stops[0].legOffer.quote.operatingCopper;
   const durationDifference = first.quote.durationQd - stops[0].legOffer.quote.durationQd;
+  const totalOperatingCopper = plan.totalOperatingCopper + costDifference;
   stops[0].legOffer = first;
   if (economics) stops[0].economics = economics;
+  const precautionCopper = bundlePrecautionCopper(plan.offers, totalOperatingCopper, { stops, style });
+  const departure = departWorldShip(holding, ship, { operationId: id, offer: first, style, budgetCopper, clockQd });
+  if (!departure.ok) return departure;
   const orders = plan.offers.map((offer) => ({
     offerId: offer.id, offer: clone(offer), style,
     state: offer.contract.pickup ? "waiting-pickup" : "loaded",
@@ -402,14 +412,14 @@ export function departWorldShipBundle(holding, ship, { operationId: suppliedOper
   }));
   ship.orderBundle = {
     id, orders, stops, nextStopIndex: 0, status: "travelling",
-    totalDurationQd: plan.totalDurationQd + durationDifference, totalOperatingCopper: plan.totalOperatingCopper + costDifference,
+    totalDurationQd: plan.totalDurationQd + durationDifference, totalOperatingCopper,
     recommendedBudgetCopper: plan.recommendedBudgetCopper + costDifference,
     returnReserveCopper: plan.returnReserveCopper, idleReserveCopper: plan.idleReserveCopper,
     delayUntilQd: null
   };
-  planShipOutingBundleRewards(ship, {
+  planShipOutingBundleContracts(ship, {
     rewardCopper: integer(orders.reduce((sum, order) => sum + order.offer.contract.rewardCopper, 0), "плата составного рейса"),
-    clockQd
+    precautionCopper, clockQd
   });
   return { ...departure, bundleId: id, orderCount: orders.length, stopCount: plan.stops.length };
 }
@@ -890,3 +900,9 @@ export function adjustWorldShipFunds(holding, ship, {
     paidPortBillCopper: bill.paidCopper
   };
 }
+
+export {
+  finalizeArrival as finalizeWorldShipArrival,
+  startIdleBilling as startWorldShipIdleBilling,
+  homeEndpoint as worldShipHomeEndpoint
+};

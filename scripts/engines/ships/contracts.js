@@ -61,6 +61,19 @@ function moneyAdd(left, right, name) {
   return integer(left + right, name);
 }
 
+export function legacyContractPrecautionCopper(baseCostCopper, style) {
+  return moneyPercent(baseCostCopper, STYLE_RULES[style].extraExpensePercent, "расход на осторожность");
+}
+
+/** Fixed cost of the captain's approach, including on a quiet passage. */
+export function contractPrecautionCopper(contract, style) {
+  if (!contract || style !== "cautious") return 0;
+  if (contract.economics?.version === 1) return integer(contract.economics.precautionCopper, "расход на осторожность");
+  const operating = contract.guidance?.operatingCopper ?? contract.operatingCopper ?? 0;
+  const preparation = contract.guidance?.preparationCopper ?? contract.routePlan?.preparationCopper ?? 0;
+  return legacyContractPrecautionCopper(moneyAdd(operating, preparation, "базовые расходы"), style);
+}
+
 function deepFreeze(value) {
   if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
   for (const child of Object.values(value)) deepFreeze(child);
@@ -159,7 +172,7 @@ export function contractGuidance(offer, style = "normal", { commercialOnly = fal
     return moneyAdd(eventCost, integer(Math.ceil(upkeepPerDay * incident.delayQd / 4), "содержание задержки"), "резерв происшествия");
   }));
   const commercialExpensePercent = offer.kind === "smuggling" ? 50 : offer.kind === "commission" ? 35 : 20;
-  const precautionCopper = moneyPercent(baseCost, rule.extraExpensePercent, "расход на осторожность");
+  const precautionCopper = legacyContractPrecautionCopper(baseCost, style);
   const reserveCopper = moneyAdd(moneyAdd(moneyPercent(baseCost, commercialExpensePercent, "коммерческий резерв"), incidentReserve, "полный резерв"), precautionCopper, "полный резерв");
   return {
     style, styleLabel: rule.label,
@@ -269,7 +282,7 @@ export function resolveContractOutcome(contract, style = "normal", { commercialD
   const commercialExpense = moneyPercent(baseCost, commercial.expensePercent, "расход коммерческого результата");
   const incidentExpense = moneyPercent(baseCost, incident.expensePercent, "расход происшествия");
   const severeExpense = incident.expensePercent >= 25 ? moneyPercent(baseCost, rule.severeExpensePercent, "расход рискованного хода") : 0;
-  const precautionExpense = moneyPercent(baseCost, rule.extraExpensePercent, "расход на осторожность");
+  const precautionExpense = legacyContractPrecautionCopper(baseCost, style);
   const upkeepPerDay = integer(contract?.routePlan?.upkeepPerDayCopper ?? 0, "содержание");
   const delayUpkeep = integer(Math.ceil(upkeepPerDay * incident.delayQd / 4), "содержание во время задержки");
   const expenseCopper = moneyAdd(moneyAdd(moneyAdd(moneyAdd(commercialExpense, incidentExpense, "расходы исхода"), delayUpkeep, "расходы исхода"), precautionExpense, "расходы исхода"), severeExpense, "расходы исхода");

@@ -339,12 +339,14 @@ function baseQuote(context, holding, ship, from, to, cargo, pickup = null) {
   const origin = pickup ?? from;
   const load = Number(cargo?.loadPoints ?? 0);
   const loadingQd = portHandlingQd(origin, load);
+  const unloadingQd = portHandlingQd(to, load);
   const clockQd = Number(ship.timelineQd ?? holding.gm?.calendaria?.lastQd ?? 0);
   const approach = pickup ? routeTerms(context, ship, from, pickup, { includeRisk: true, startQd: clockQd }) : null;
-  const approachQd = approach?.durationQd ?? 0;
-  const route = routeTerms(context, ship, origin, to, { includeRisk: true, startQd: clockQd + approachQd + loadingQd });
+  const approachFlightQd = approach?.durationQd ?? 0;
+  const route = routeTerms(context, ship, origin, to, { includeRisk: true, startQd: clockQd + approachFlightQd + loadingQd });
+  const deliveryFlightQd = route.durationQd;
   route.approachRiskExposureQd = 0;
-  route.durationQd += loadingQd + portHandlingQd(to, load);
+  route.durationQd += loadingQd + unloadingQd;
   if (route.durationQd > 100000) throw new Error("Маршрут слишком продолжительный.");
   const { costs, dailyCopper, foodUnitCopper } = costsFor(context, holding, ship, origin, to, route, cargo);
   if (approach) {
@@ -360,10 +362,10 @@ function baseQuote(context, holding, ship, from, to, cargo, pickup = null) {
   }
   const arrivalQd = clockQd + route.durationQd;
   const reserve = to.kind === "home" ? 0 : costsFor(context, holding, ship, to, context.home, routeTerms(context, ship, to, context.home, { startQd: arrivalQd })).costs.totalCopper;
-  if (cargo) startClientCargo(cargo, arrivalQd - route.durationQd + approachQd + loadingQd, loadingQd);
+  if (cargo) startClientCargo(cargo, arrivalQd - route.durationQd + approachFlightQd + loadingQd, loadingQd);
   const idleReserveCopper = to.kind === "home" ? 0 : shipIdleReserveCopper(dailyCopper, arrivalQd);
   return {
-    ...route, costs, operatingCopper: costs.totalCopper, preparationCopper: 0, rewardCopper: 0,
+    ...route, approachFlightQd, deliveryFlightQd, costs, operatingCopper: costs.totalCopper, preparationCopper: 0, rewardCopper: 0,
     idleUpkeepCopperPerDay: dailyCopper, returnReserveCopper: reserve,
     idleReserveCopper, recommendedBudgetCopper: money(costs.totalCopper + reserve + idleReserveCopper), foodUnitCopper
   };
@@ -590,6 +592,12 @@ export function repriceWorldShipOffer(data, holding, ship, offer, { context = nu
   const capacity = shipCapacityLoadPoints(ship);
   if (!cargo || !Number.isSafeInteger(cargo.loadPoints) || cargo.loadPoints < 0 || cargo.loadPoints > capacity
     || (offer.contract.kind === "smuggling" && cargo.loadPoints > Number(ship.hiddenCapacityLoadPoints || 0))) throw new Error("Кораблю не хватает вместимости для этого заказа.");
+  if (!String(cargo.name ?? "").trim()) {
+    const resource = offer.contract.kind === "commission" ? null : world.resources.find((row) => row.id === cargo.resourceId);
+    cargo.name = offer.contract.kind === "commission"
+      ? "Пассажиры и почта"
+      : (String(resource?.label ?? "").trim() || (offer.contract.kind === "smuggling" ? "Контрабандный груз" : "Торговый груз"));
+  }
   const quote = baseQuote(world, holding, ship, from, to, cargo, pickup);
   if (!clientCargoViableAt(cargo, Number(ship.timelineQd ?? holding.gm?.calendaria?.lastQd ?? 0) + quote.durationQd)) {
     throw new Error("Срок годности клиентского груза истечёт до доставки. Выберите другой заказ.");
@@ -607,7 +615,11 @@ export function repriceWorldShipOffer(data, holding, ship, offer, { context = nu
     delayDailyCopper: quote.idleUpkeepCopperPerDay };
   quote.rewardCopper = contract.rewardCopper;
   quote.recommendedBudgetCopper = money(contractGuidance(contract).suggestedBudgetCopper + quote.returnReserveCopper + quote.idleReserveCopper);
-  return { ...offer, from: point(from), to: point(to), quote, contract };
+  const rawTitle = String(offer.title ?? "").trim();
+  const title = rawTitle && !rawTitle.startsWith(":") && !rawTitle.startsWith("→") && !rawTitle.startsWith("—")
+    ? rawTitle
+    : `${contract.kind === "smuggling" ? "Груз без декларации" : cargo.name}${pickup ? `: ${pickup.label}` : ""} → ${to.label}`;
+  return { ...offer, title, from: point(from), to: point(to), quote, contract };
 }
 
 /** Customer-owned transport jobs. The settlement never buys or sells this cargo. */
@@ -684,12 +696,16 @@ export function generateWorldShipOffers(data, holding, ship, { period, random = 
       const good = candidates[attempt];
       const quantity = good ? Math.min(Math.floor(maxLoad * loadShare / good.loadPoints), availableQuantity(good)) : 0;
       if (kind !== "commission" && quantity <= 0) continue;
+      const resource = kind === "commission" ? null : world.resources.find((row) => row.id === good.resourceId);
+      const cargoName = kind === "commission"
+        ? "Пассажиры и почта"
+        : (String(good.name ?? "").trim() || String(resource?.label ?? good.resourceId ?? "").trim() || (kind === "smuggling" ? "Контрабандный груз" : "Торговый груз"));
       const cargo = { kind, resourceId: kind === "commission" ? "" : good.resourceId,
-        name: kind === "commission" ? "Пассажиры и почта" : good.name,
+        name: cargoName,
         quantity: kind === "commission" ? 1 : quantity,
         loadPoints: kind === "commission" ? maxLoad : quantity * good.loadPoints,
         valueCopper: kind === "commission" ? 0 : money(quantity * good.basePriceCopper * (origin.factors?.price ?? 1)) };
-      const lifetime = kind === "commission" ? 0 : Number(world.resources.find(row => row.id === cargo.resourceId)?.shelfLifeQd ?? 0);
+      const lifetime = kind === "commission" ? 0 : Number(resource?.shelfLifeQd ?? 0);
       if (lifetime > 0) cargo.shelfLifeQd = lifetime;
       const taxCopper = kind === "smuggling" ? 0 : money(cargo.valueCopper * (origin.factors?.exportTaxRate ?? 0))
         + money(cargo.valueCopper * (to.factors?.taxRate ?? 0));

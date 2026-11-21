@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-const skipped = new Set([".git", ".agents", ".codex", ".codex-tmp", "node_modules", "dist"]);
+const skipped = new Set([".git", ".agents", ".codex", ".codex-tmp", "node_modules", "dist", "coverage", "tmp", "outputs"]);
 
 function walk(dir, output = []) {
   for (const entry of readdirSync(dir)) {
