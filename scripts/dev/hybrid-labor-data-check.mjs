@@ -368,6 +368,38 @@ for (const replaceCatalog of [false, true]) {
   assert.equal(catalogPreview.targetData.holdings[0].buildings.list[0].labor, undefined,
     "recipe/catalog migration cannot opt a legacy instance into the new employment model");
 }
+  const wellTemplate = BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION.find(row => row.id === "well");
+  const passiveWell = DEFAULT_BUILDING_TEMPLATES.find(row => row.id === "well");
+  const well = { ...clone(wellTemplate), id: "configured-well", templateId: wellTemplate.id,
+    constructionStatus: "built", buildProgress: wellTemplate.buildTarget };
+  const staffProfile = { version: 1, mode: "staff", capacityQd: null };
+  const laborPlan = planHybridLaborMigration({
+    holding: { id: "well-holding", buildings: { list: [well] }, people: { list: [person("keeper")] } },
+    profiles: { [well.id]: staffProfile }
+  });
+  assert.equal(laborPlan.ok, true);
+  const staffCatalog = planHybridLaborCatalogMigration({ catalog: { buildings: [wellTemplate] }, profiles: { well: staffProfile } });
+  assert.equal(staffCatalog.ok, true);
+  const wellAppointment = { ...appointment(), buildingId: well.id, primaryFunctionId: "culture" };
+  for (const template of [passiveWell, staffCatalog.targetCatalog.buildings[0]]) {
+    for (const staffed of [false, true]) {
+      const holding = clone(laborPlan.targetHolding);
+      if (staffed) applyStaffAppointment(holding, "keeper", wellAppointment);
+      const source = { meta: { templateCatalogVersion: TEMPLATE_CATALOG_VERSION },
+        catalog: { buildings: [template] }, holdings: [holding] };
+      const preview = planBuildingCatalogMigration({ currentData: source, replaceCatalog: true, operationId: "refresh-with-custom-staff" });
+      assert.deepEqual(preview.blockingIssues, []);
+      assert.equal(preview.canApply, true);
+      const projected = preview.targetData.holdings[0];
+      assert.equal(buildingLaborMode(projected.buildings.list[0]), "staff");
+      assert.equal(projected.buildings.list[0].workersMax, wellTemplate.workersMax);
+      const refreshedTemplate = preview.targetData.catalog.buildings.find(row => row.id === "well");
+      assert.equal(buildingLaborMode(refreshedTemplate), buildingLaborMode(template));
+      assert.equal(refreshedTemplate.workersMax, template.workersMax);
+      if (!staffed) applyStaffAppointment(projected, "keeper", wellAppointment);
+      assert.equal(projected.people.list[0].staffAppointment.buildingId, well.id);
+    }
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

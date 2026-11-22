@@ -73,6 +73,22 @@ function copyOwn(target, source, fields) {
   for (const field of fields) if (own(source, field)) target[field] = clone(source[field]);
 }
 
+function preserveLaborConfiguration(source, target, legacyDefaults) {
+  const sourceMode = buildingLaborMode(source);
+  if (sourceMode !== buildingLaborMode(target)) {
+    const laborFields = sourceMode === "legacy" ? legacyDefaults : source;
+    if (laborFields) {
+      for (const field of LABOR_DEPENDENT_FIELDS) {
+        if (own(laborFields, field)) target[field] = clone(laborFields[field]);
+        else delete target[field];
+      }
+    }
+  }
+  // Recipe refresh and employment changes have separate previews.
+  if (own(source, "labor")) target.labor = clone(source.labor);
+  else delete target.labor;
+}
+
 function rootDependency(data = {}) {
   return {
     revision: whole(data?.meta?.revision),
@@ -291,15 +307,12 @@ function preserveTradeSelection(source = {}, target = {}) {
   }
 }
 
-function migrateBuildingInstance(source, targetTemplate, targetId, people, issues) {
+function migrateBuildingInstance(source, targetTemplate, targetId, people, issues, legacyDefaults) {
   const next = clone(targetTemplate);
   next.id = text(source?.id);
   next.templateId = targetId;
   copyOwn(next, source, USER_INSTANCE_FIELDS);
-  // Catalog recipes and labor contracts have separate explicit migration previews.
-  // Even a full catalog replacement must not opt old instances into new employment rules.
-  if (own(source, "labor")) next.labor = clone(source.labor);
-  else delete next.labor;
+  preserveLaborConfiguration(source, next, legacyDefaults);
   next.name = text(source?.name) || text(targetTemplate?.name) || "Здание";
   preserveConstructionState(source, next);
   preserveMaintenanceState(source, next);
@@ -420,17 +433,7 @@ export function planBuildingCatalogMigration({
     const id = text(target.id);
     if (!targetById.has(id)) continue;
     const saved = savedById.get(id);
-    if (replaceCatalog && saved) {
-      const legacy = legacyTargets.get(id);
-      if (buildingLaborMode(saved) === "legacy" && legacy) {
-        for (const field of LABOR_DEPENDENT_FIELDS) {
-          if (own(legacy, field)) target[field] = clone(legacy[field]);
-          else delete target[field];
-        }
-      }
-      if (own(saved, "labor")) target.labor = clone(saved.labor);
-      else delete target.labor;
-    }
+    if (replaceCatalog && saved) preserveLaborConfiguration(saved, target, legacyTargets.get(id));
     targetById.set(id, target);
   }
   const rows = [];
@@ -472,15 +475,7 @@ export function planBuildingCatalogMigration({
       let updated = prior;
       if (replaceCatalog) {
         const firstIssue = issues.length;
-        const selectedTemplate = clone(template);
-        if (buildingLaborMode(prior) === "legacy" && buildingLaborMode(selectedTemplate) !== "legacy") {
-          const legacy = legacyTargets.get(templateId);
-          if (legacy) for (const field of LABOR_DEPENDENT_FIELDS) {
-            if (own(legacy, field)) selectedTemplate[field] = clone(legacy[field]);
-            else delete selectedTemplate[field];
-          }
-        }
-        updated = migrateBuildingInstance(prior, selectedTemplate, templateId, people, issues);
+        updated = migrateBuildingInstance(prior, template, templateId, people, issues, legacyTargets.get(templateId));
         for (const issue of issues.slice(firstIssue)) Object.assign(issue, { holdingId: text(holding.id), holdingName: text(holding.name) });
       }
       const changed = replaceCatalog && stableDataHash(prior) !== stableDataHash(updated);
