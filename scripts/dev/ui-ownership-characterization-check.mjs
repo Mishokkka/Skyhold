@@ -6,7 +6,7 @@ import { createGmWriteAuthority } from "../data/gm-write-authority.js";
 import { createWriteQueue } from "../data/write-queue.js";
 import { assertAvailableEntityId, assertNoNewEntityCollisions } from "../data/entity-identity.js";
 import { DEFAULT_SKYHOLD_DATA } from "../data/defaults/default-skyhold-data.js";
-import { migrateData } from "../data/normalizers.js";
+import { normalizeSkyholdData } from "../data/normalizers.js";
 import { clone } from "../data/utils.js";
 import { createSkyholdSplitStorage } from "../data/split-storage.js";
 import { createSkyholdSocketApi } from "../data/socket.js";
@@ -34,7 +34,7 @@ export async function checkUiOwnership() {
       } } };
     globalThis.ui = { notifications: { warn() {}, info() {} } };
     globalThis.Hooks = { callAll() {} };
-    let data = migrateData(clone(DEFAULT_SKYHOLD_DATA));
+    let data = normalizeSkyholdData(clone(DEFAULT_SKYHOLD_DATA));
     data.meta.revision = 7;
     let writes = 0;
     const responses = [];

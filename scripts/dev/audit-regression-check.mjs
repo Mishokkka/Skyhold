@@ -3,7 +3,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { DEFAULT_SKYHOLD_DATA } from "../data/defaults/default-skyhold-data.js";
 import { clone } from "../data/utils.js";
-import { migrateData } from "../data/normalizers.js";
+import { normalizeSkyholdData } from "../data/normalizers.js";
 import { prepareSkyholdCommit } from "../data/commit-preparation.js";
 import { normalizeResourceId, withResourceCatalog } from "../core/resources.js";
 import { assertResourceCatalogUnused } from "../data/catalog-dependencies.js";
@@ -111,7 +111,7 @@ export async function checkAuditRegressions() {
     assert.equal(person.attributes.strength, 5, "import uses the undamaged maximum attribute");
     assert.equal(person.appearance, "Шрам; Высокий; Плащ");
 
-    let current = migrateData(clone(DEFAULT_SKYHOLD_DATA));
+    let current = normalizeSkyholdData(clone(DEFAULT_SKYHOLD_DATA));
     current.holdings[0].visibility = "all";
     current.holdings[0].gm.playersCanEditOverview = true;
     const proposed = clone(current);

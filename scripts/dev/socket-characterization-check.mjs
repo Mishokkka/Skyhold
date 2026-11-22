@@ -4,7 +4,7 @@ import { pathToFileURL } from "node:url";
 import { createSkyholdSocketApi } from "../data/socket.js";
 import { createStorageOperationExecutor } from "../apps/storage-operation-executor.js";
 import { DEFAULT_SKYHOLD_DATA } from "../data/defaults/default-skyhold-data.js";
-import { migrateData } from "../data/normalizers.js";
+import { normalizeSkyholdData } from "../data/normalizers.js";
 import { buildPlayerPatch, validatePlayerPatch } from "../data/player-write-guard.js";
 import { checkSocketPendingCharacterization } from "./socket-pending-characterization-check.mjs";
 
@@ -20,7 +20,7 @@ export async function checkSocketCharacterization() {
   const previousUi = globalThis.ui;
 
   try {
-    let current = migrateData(clone(DEFAULT_SKYHOLD_DATA));
+    let current = normalizeSkyholdData(clone(DEFAULT_SKYHOLD_DATA));
     current.holdings[0].visibility = "public";
     current.holdings[0].gm.playersCanEditOverview = true;
     current.holdings[0].gm.playersCanEditBuildings = true;

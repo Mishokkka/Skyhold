@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { SkyholdData } from "../data/store.js";
 import { DEFAULT_SKYHOLD_DATA } from "../data/defaults/default-skyhold-data.js";
-import { migrateData } from "../data/normalizers.js";
+import { normalizeSkyholdData } from "../data/normalizers.js";
 import { createSkyholdSplitStorage } from "../data/split-storage.js";
 import { prepareSkyholdCommit } from "../data/commit-preparation.js";
 import { MODULE_ID, SETTING_DATA, SETTING_META, SETTING_HOLDINGS, SETTING_CATALOG } from "../data/constants.js";
@@ -27,7 +27,7 @@ try {
   const { SkyholdBuildingTemplateBrowser } = await import("../apps/editors/template-browser.js");
   const { SkyholdMedicalBuildingApp } = await import("../apps/unique-buildings/medical-app.js");
   registerBuiltinUniqueBuildings();
-  const root = migrateData(structuredClone(DEFAULT_SKYHOLD_DATA));
+  const root = normalizeSkyholdData(structuredClone(DEFAULT_SKYHOLD_DATA));
   for (const kind of ["medical", "fasti-shop"]) root.catalog.buildings.push({
     id: `audit-${kind}`, name: `Original ${kind}`, special: { kind }, img: "before.webp", materialCosts: []
   });

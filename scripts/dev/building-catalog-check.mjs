@@ -176,7 +176,7 @@ export function checkBuildingTemplateCatalog({
   normalizedTemplates,
   builtinResources,
   parseResourceCosts,
-  migrateData,
+  normalizeSkyholdData,
   defaultData
 }) {
   assert.ok(Array.isArray(sources) && sources.length, "building catalog validation requires source arrays");
@@ -258,12 +258,12 @@ export function checkBuildingTemplateCatalog({
     primaryDev: "technology",
     functions: Object.fromEntries(FUNCTION_KEYS.map((key) => [key, false]))
   })));
-  const migratedProbe = migrateData(migrationProbe);
+  const migratedProbe = normalizeSkyholdData(migrationProbe);
   const migratedIds = new Set(migratedProbe.catalog.buildings.map((template) => template.id));
   for (const id of staleDeprecatedIds) {
     assert.ok(migratedIds.has(id), `scripts/data/building-templates.js: ordinary loading must preserve deprecated template "${id}" until an explicit operation`);
   }
-  const repairedProbe = migrateData(migrationProbe, { mode: "repair", destructive: true });
+  const repairedProbe = normalizeSkyholdData(migrationProbe, { mode: "repair", destructive: true });
   const repairedIds = new Set(repairedProbe.catalog.buildings.map((template) => template.id));
   for (const id of staleDeprecatedIds) {
     assert.ok(!repairedIds.has(id), `scripts/data/building-templates.js: explicit repair must remove deprecated template "${id}"`);

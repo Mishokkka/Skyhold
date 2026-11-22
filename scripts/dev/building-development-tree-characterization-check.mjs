@@ -11,7 +11,7 @@ import {
   buildingRequiresConstructionCenter,
   CONSTRUCTION_CENTER_TEMPLATE_ID
 } from "../data/building-development-tree.js";
-import { migrateData } from "../data/normalizers.js";
+import { normalizeSkyholdData } from "../data/normalizers.js";
 import { constructionCenterSuccessBonus } from "../engines/economy/construction-center.js";
 import { planBuildingCatalogMigration } from "../workflows/buildings/catalog-migration.js";
 
@@ -118,7 +118,7 @@ export function checkBuildingDevelopmentTreeCharacterization() {
   storedGatehouse.requirements = { food: 999, technology: 999, culture: 999, war: 999 };
   storedGatehouse.requiredAnyBuildingIds = [];
   storedGatehouse.wageDailyCopper = 777;
-  const migrated = migrateData({
+  const migrated = normalizeSkyholdData({
     meta: { templateCatalogVersion: TEMPLATE_CATALOG_VERSION },
     catalog: { buildings: stored },
     holdings: []
@@ -156,7 +156,7 @@ export function checkBuildingDevelopmentTreeCharacterization() {
     requirements: { food: 99, technology: 99, culture: 99, war: 99 },
     requiredBuildingIds: ["old-prerequisite"]
   };
-  const migratedLaputa = migrateData({
+  const migratedLaputa = normalizeSkyholdData({
     meta: { templateCatalogVersion: TEMPLATE_CATALOG_VERSION },
     catalog: { buildings: stored },
     holdings: [{
@@ -185,7 +185,7 @@ export function checkBuildingDevelopmentTreeCharacterization() {
   assert.equal(plannedProject.materialsAllocated, false, "migration must not invent prepayment for an unfinished project");
   assert.deepEqual(plannedProject.constructionMaterials?.prepaidRemaining ?? [], [], "only recorded material credit may survive");
 
-  const currentVersionLaputa = migrateData({
+  const currentVersionLaputa = normalizeSkyholdData({
     meta: { templateCatalogVersion: TEMPLATE_CATALOG_VERSION },
     catalog: { buildings: structuredClone(BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION) },
     holdings: [{

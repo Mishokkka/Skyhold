@@ -27,8 +27,8 @@ export function registerSettings() {
   });
 
   game.settings.register(MODULE_ID, SETTING_DATA, {
-    name: "Skyhold Data (legacy)",
-    hint: "Legacy combined data for FBL Skyhold Manager. Used only for migration/rollback.",
+    name: "Skyhold Recovery Snapshot",
+    hint: "Combined world data used for recovery and rollback.",
     scope: "world",
     config: false,
     type: Object,

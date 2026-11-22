@@ -1,6 +1,7 @@
 import { SETTING_CATALOG, SETTING_DATA, SETTING_HOLDINGS, SETTING_META, MODULE_ID } from "./constants.js";
 import { DEFAULT_SKYHOLD_DATA } from "./defaults/default-skyhold-data.js";
-import { migrateData } from "./normalizers.js";
+import { normalizeSkyholdData } from "./normalizers.js";
+import { assertSupportedWorldData } from "./storage-format.js";
 import { countSkyholdPerformance, measureSkyholdPerformance } from "./performance-observer.js";
 import { inspectStorageCommit, makeStorageCommitMeta, recoverStorageCommit, stableDataHash } from "./storage-commit.js";
 import { clone, makeId, toNumber } from "./utils.js";
@@ -48,7 +49,8 @@ function completeCommitToken(meta = {}) {
   const commit = meta?.storageCommit;
   if (!commit || commit.writeComplete !== true || commit.state !== "complete") return "";
   if (Math.max(0, toNumber(commit.revision, 0)) !== revision) return "";
-  return [revision, commit.writeId, commit.holdingsHash, commit.catalogHash].map((value) => String(value ?? "")).join(":");
+  return [revision, meta.schemaVersion, meta.templateCatalogVersion, commit.writeId, commit.holdingsHash, commit.catalogHash]
+    .map((value) => String(value ?? "")).join(":");
 }
 
 /** Hash persisted logical metadata while ignoring revision, lastUpdated and commit bookkeeping. */
@@ -136,7 +138,7 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
    * @param {object} [providedMeta] Already-read metadata to avoid another settings read.
    * @returns {object} Selected persisted root and, for forward recovery, the verified commit token.
    */
-  function readPersistedState(providedMeta) {
+  function selectPersistedState(providedMeta) {
     const split = {
       meta: clone(providedMeta ?? readSetting(SETTING_META) ?? DEFAULT_SKYHOLD_DATA.meta),
       holdings: clone(readSetting(SETTING_HOLDINGS) ?? DEFAULT_SKYHOLD_DATA.holdings),
@@ -199,6 +201,12 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
     return { data: split };
   }
 
+  function readPersistedState(providedMeta) {
+    const selected = selectPersistedState(providedMeta);
+    assertSupportedWorldData(selected.data);
+    return selected;
+  }
+
   function resolveData({ cloneResult = true } = {}) {
     const rawMeta = readSetting(SETTING_META) ?? DEFAULT_SKYHOLD_DATA.meta;
     const rawRevision = Math.max(0, toNumber(rawMeta?.revision, 0));
@@ -218,17 +226,17 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
     }
     metrics.cacheMisses += 1;
     metrics.normalizations += 1;
-    const migrated = measureSkyholdPerformance("SkyholdData.normalize", () => migrateData(stored));
-    cachedRevision = Math.max(0, toNumber(migrated?.meta?.revision, 0));
-    cachedCommitToken = completeCommitToken(migrated?.meta);
+    const normalized = measureSkyholdPerformance("SkyholdData.normalize", () => normalizeSkyholdData(stored));
+    cachedRevision = Math.max(0, toNumber(normalized?.meta?.revision, 0));
+    cachedCommitToken = completeCommitToken(normalized?.meta);
     cachedForwardToken = forwardToken;
-    // `migrated` is a fresh private root. Cache it directly and clone only the
+    // Cache the fresh private root directly and clone only the
     // value crossing the storage boundary instead of cloning the same large
     // settlement twice on every cache miss.
-    cachedData = freezeDataView(migrated);
+    cachedData = freezeDataView(normalized);
     cachedPartitionHashes = {
-      holdings: hashPartition("holdings", migrated.holdings),
-      catalog: hashPartition("catalog", migrated.catalog)
+      holdings: hashPartition("holdings", normalized.holdings),
+      catalog: hashPartition("catalog", normalized.catalog)
     };
     return cloneResult ? clone(cachedData) : cachedData;
   }
@@ -257,7 +265,7 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
     forceRollbackSnapshot = false
   } = {}) {
     const commitScope = normalizeCommitScope(scope);
-    const previous = cachedData ?? getDataView();
+    const previous = getDataView();
     if (!normalized) metrics.normalizations += 1;
     const next = normalized
       ? {
@@ -266,7 +274,8 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
           holdings: commitScope === COMMIT_SCOPES.CATALOG ? previous.holdings : clone(data?.holdings ?? []),
           catalog: commitScope === COMMIT_SCOPES.HOLDINGS ? previous.catalog : clone(data?.catalog ?? {})
         }
-      : measureSkyholdPerformance("SkyholdData.normalize", () => migrateData(data));
+      : measureSkyholdPerformance("SkyholdData.normalize", () => normalizeSkyholdData(data));
+    assertSupportedWorldData(next);
     // The shared view is frozen; the previous root is only
     // hashed or cloned for rollback below. Avoid a full eager clone here.
     if (!persistedPartitionHashes) {

@@ -7,7 +7,7 @@ import { prepareRowContext } from "../apps/editors/random-event/context.js";
 import { findReadableHoldingEntry } from "../data/access-guard.js";
 import { DEFAULT_SKYHOLD_DATA } from "../data/defaults/default-skyhold-data.js";
 import { normalizeMarketEconomy } from "../data/market/economy.js";
-import { migrateData } from "../data/normalizers.js";
+import { normalizeSkyholdData } from "../data/normalizers.js";
 import {
   eventRequirementFacts,
   normalizeEventRegionOptions,
@@ -31,7 +31,7 @@ function source(relativePath) {
 }
 
 export function checkReadOnlyViewCharacterization() {
-  const data = deepFreeze(migrateData(clone(DEFAULT_SKYHOLD_DATA)));
+  const data = deepFreeze(normalizeSkyholdData(clone(DEFAULT_SKYHOLD_DATA)));
   const beforeHash = stableDataHash(data);
   const holdingId = String(data.holdings[0]?.id ?? "");
   const { holding, index } = findReadableHoldingEntry(data, holdingId, { fallback: false });

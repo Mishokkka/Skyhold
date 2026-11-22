@@ -1,4 +1,5 @@
 import { MODULE_ID } from "./data/constants.js";
+import { UNSUPPORTED_WORLD_DATA } from "./data/storage-format.js";
 import { debugSkyholdLog } from "./data/debug.js";
 import { canCurrentUserOpenSkyhold, registerSettings } from "./data/settings.js";
 import {
@@ -55,7 +56,11 @@ async function preloadSkyholdTemplates() {
 
 function reportSkyholdOpenError(error) {
   console.error("FBL Skyhold Manager | open() failed", error);
-  ui?.notifications?.error?.("FBL Skyhold: окно не открылось. Подробности в консоли.");
+  let message = "FBL Skyhold: окно не открылось. Подробности в консоли.";
+  if (error?.code === UNSUPPORTED_WORLD_DATA) {
+    message = game.user?.isGM ? error.message : "FBL Skyhold: сохранение требует внимания ГМа.";
+  }
+  ui?.notifications?.error?.(message);
   return null;
 }
 

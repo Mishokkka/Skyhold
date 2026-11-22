@@ -1,7 +1,8 @@
-import { DEFAULT_BUILDING_TEMPLATES, DEPRECATED_TEMPLATE_IDS, TEMPLATE_CATALOG_VERSION } from "./building-templates.js";
+import { DEFAULT_BUILDING_TEMPLATES, DEPRECATED_TEMPLATE_IDS } from "./building-templates.js";
 import { DEFAULT_SKYHOLD_DATA } from "./defaults/default-skyhold-data.js";
 import { BASE_HOLDING, HOLDING_TYPES } from "./schema/base-holding.js";
 import { SKYHOLD_SCHEMA_VERSION } from "./schema-version.js";
+import { assertSupportedWorldData } from "./storage-format.js";
 import { normalizeResourceCatalogRow, normalizeResourceRow, storageResourceStackKey, withResourceCatalog } from "../core/resources.js";
 import {
   addResourceBatches,
@@ -48,7 +49,6 @@ function remapOutboundStorageRowId(holding, fromRowId = "", toRowId = "") {
     }
   }
 }
-const SCHEMA_VERSION_DEPRECATED_FIREPLACE_REMOVED = 46;
 const MARKET_ORDER_STATUSES = new Set(["pending", "in-transit", "delivered", "delayed", "needsResolution", "lost", "cancelled"]);
 const MARKET_DISPATCH_STATUSES = new Set(["booked", "departed", "delivered", "lost", "cancelled"]);
 const MARKET_RISK_STATUSES = new Set(["pending", "needsResolution", "resolved", "waived"]);
@@ -122,7 +122,7 @@ function normalizeMoraleSnapshot(value, people = []) {
   return normalized;
 }
 
-function normalizeMigrationOptions(stored, options = {}) {
+function normalizeStoredOptions(stored, options = {}) {
   return normalizeOptions({
     ...options,
     fromVersion: options.fromVersion ?? storedSchemaVersion(stored),
@@ -130,41 +130,25 @@ function normalizeMigrationOptions(stored, options = {}) {
   });
 }
 
-export function isBeforeSkyholdSchemaVersion(options = {}, version = SKYHOLD_SCHEMA_VERSION) {
-  return Math.max(0, Math.floor(toNumber(options.fromVersion, 0))) < Math.max(0, Math.floor(toNumber(version, 0)));
-}
-
 export function normalizeSkyholdData(stored, options = {}) {
-  return migrateData(stored, { mode: "load", destructive: false, ...options });
+  const source = stored ?? clone(DEFAULT_SKYHOLD_DATA);
+  if (!Array.isArray(source?.holdings)) assertSupportedWorldData(source);
+  const normalize = normalizeStoredOptions(source, options);
+  const storedTemplateVersion = Math.max(0, Math.floor(toNumber(source.meta?.templateCatalogVersion, 0)));
+  // The two large runtime partitions are normalized independently below.
+  const normalized = mergeDefaults(DEFAULT_SKYHOLD_DATA, { ...source, holdings: [], catalog: {} });
+  normalized.meta.schemaVersion = SKYHOLD_SCHEMA_VERSION;
+  normalized.catalog = normalizeCatalogPartition(source.catalog, normalize);
+  normalized.holdings = normalizeHoldingsPartition(source.holdings, normalized.catalog, normalize);
+  // Loading retains saved mechanics. An explicit catalog refresh can replace them.
+  normalized.meta.templateCatalogVersion = storedTemplateVersion;
+  normalized.meta.revision = Math.max(0, toNumber(normalized.meta.revision, 0));
+  ensureTransportState(normalized);
+  return normalized;
 }
 
 export function repairSkyholdData(stored, options = {}) {
-  return migrateData(stored, { mode: "repair", destructive: true, ...options });
-}
-
-export function migrateData(stored, options = {}) {
-  const normalize = normalizeMigrationOptions(stored, options);
-  if (!stored || typeof stored !== "object") return migrateData(clone(DEFAULT_SKYHOLD_DATA), normalize);
-
-  if (Array.isArray(stored.holdings)) {
-    const storedTemplateVersion = Math.max(0, Math.floor(toNumber(stored?.meta?.templateCatalogVersion, 0)));
-    // The two large runtime partitions are normalized independently below.
-    const migrated = mergeDefaults(DEFAULT_SKYHOLD_DATA, { ...stored, holdings: [], catalog: {} });
-    migrated.meta.schemaVersion = SKYHOLD_SCHEMA_VERSION;
-    migrated.catalog = normalizeCatalogPartition(stored.catalog, normalize);
-    migrated.holdings = normalizeHoldingsPartition(stored.holdings, migrated.catalog, normalize);
-    // Catalog mechanics are migrated only by the explicit Preview/Apply
-    // workflow. Loading preserves the saved catalog and its version, including
-    // an unknown legacy version; defaults are supplied by new-world creation.
-    migrated.meta.templateCatalogVersion = storedTemplateVersion;
-    migrated.meta.revision = Math.max(0, toNumber(migrated.meta.revision, 0));
-    ensureTransportState(migrated);
-    return migrated;
-  }
-
-  const migrated = migrateLegacySettlement(stored, normalize);
-  ensureTransportState(migrated);
-  return migrated;
+  return normalizeSkyholdData(stored, { mode: "repair", destructive: true, ...options });
 }
 
 export function normalizeCatalogPartition(storedCatalog, options = {}) {
@@ -238,71 +222,6 @@ export function reconcileHoldingRegions(holdings, catalog, { cloneOnWrite = fals
   return { holdings: next, changed };
 }
 
-function migrateLegacySettlement(stored, options = {}) {
-  const normalize = normalizeOptions(options);
-  const legacyHolding = mergeHoldingDefaults({
-    id: "legacy-skyhold",
-    name: stored?.overview?.settlementName ?? "Остров-летяга",
-    type: "sky-island",
-    owner: "",
-    visibility: "public",
-    overview: {
-      status: stored?.overview?.status ?? "Стабильно",
-      period: stored?.overview?.week ? `Неделя ${stored.overview.week}` : "Неделя 1",
-      description: stored?.overview?.description ?? "",
-      publicNotes: stored?.overview?.publicNotes ?? "",
-      population: Array.isArray(stored?.residents?.groups)
-        ? stored.residents.groups.reduce((sum, row) => sum + Number(row.count || 0), 0)
-        : 0
-    },
-    people: {
-      notes: stored?.residents?.notes ?? "",
-      list: (stored?.residents?.groups ?? []).map((row) => ({
-        id: row.id ?? makeId("person"),
-        name: row.name ?? "",
-        role: row.type ?? "",
-        race: "",
-        salary: 0,
-        salaryModifier: 0,
-        home: "",
-        status: row.status ?? "",
-        notes: row.notes ?? ""
-      }))
-    },
-    buildings: {
-      notes: stored?.buildings?.notes ?? "",
-      list: stored?.buildings?.list ?? []
-    },
-    special: {
-      notes: stored?.special?.notes ?? "",
-      list: stored?.special?.list ?? []
-    },
-    storage: {
-      notes: stored?.storage?.notes ?? "",
-      resources: stored?.storage?.resources ?? [],
-      items: stored?.storage?.items ?? [],
-      log: stored?.storage?.log ?? []
-    },
-    gm: {
-      notes: stored?.gm?.notes ?? "",
-      lastRoll: stored?.gm?.lastRoll ?? null
-    }
-  }, normalize);
-
-  return {
-    meta: {
-      schemaVersion: SKYHOLD_SCHEMA_VERSION,
-      templateCatalogVersion: normalize.destructive ? TEMPLATE_CATALOG_VERSION : Math.max(0, Math.floor(toNumber(stored?.meta?.templateCatalogVersion, 0))),
-      lastUpdated: stored?.meta?.lastUpdated ?? null,
-      revision: Math.max(0, toNumber(stored?.meta?.revision, 0)),
-      storageCommit: null
-    },
-    holdings: [legacyHolding],
-    catalog: normalizeCatalogPartition(stored?.catalog, normalize)
-  };
-}
-
-
 function mergeBuildingTemplateCatalog(rows = [], deletedIds = [], options = {}) {
   const normalize = normalizeOptions(options);
   const deleted = new Set((deletedIds ?? []).map((id) => String(id)));
@@ -352,13 +271,6 @@ function guessPrimaryDev(row = {}) {
   if (/храм|святилищ|библиот|рынок|баня|кладбищ|шпиль|зал/.test(text)) return "culture";
   if (/стен|башн|ров|решет|темниц|стрельбищ|лагерь|эшаф/.test(text)) return "war";
   return "technology";
-}
-
-function isDeprecatedFireplaceBuilding(building = {}) {
-  const id = String(building?.id ?? "").toLowerCase();
-  const templateId = String(building?.templateId ?? "").toLowerCase();
-  const name = String(building?.name ?? "").trim().toLowerCase();
-  return id === "fireplace" || templateId === "fireplace" || name === "\u043a\u0430\u043c\u0438\u043d";
 }
 
 function normalizeMarketCargoRow(row, fallbackRoomId = "outdoors") {
@@ -445,12 +357,6 @@ export function mergeHoldingDefaults(holding, options = {}) {
     }
   }
   if (!Array.isArray(merged.buildings.list)) merged.buildings.list = [];
-  if (isBeforeSkyholdSchemaVersion(normalize, SCHEMA_VERSION_DEPRECATED_FIREPLACE_REMOVED)) {
-    merged.buildings.list = merged.buildings.list.filter((building) => !isDeprecatedFireplaceBuilding(building));
-    for (const building of merged.buildings.list) {
-      if (Array.isArray(building.requiredBuildingIds)) building.requiredBuildingIds = building.requiredBuildingIds.filter((id) => String(id) !== "fireplace");
-    }
-  }
   if (!isPlainObject(merged.overview.development)) merged.overview.development = {};
   merged.overview.development.food = toNumber(merged.overview.development.food, 0);
   merged.overview.development.technology = toNumber(merged.overview.development.technology, 0);

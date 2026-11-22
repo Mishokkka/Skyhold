@@ -6,7 +6,7 @@ import {
   SETTING_HOLDINGS,
   SETTING_META
 } from "../data/constants.js";
-import { migrateData } from "../data/normalizers.js";
+import { normalizeSkyholdData } from "../data/normalizers.js";
 import { prepareSkyholdCommit } from "../data/commit-preparation.js";
 import { createSkyholdSplitStorage } from "../data/split-storage.js";
 import { makeStorageCommitMeta, stableDataHash } from "../data/storage-commit.js";
@@ -52,7 +52,7 @@ async function measureAsync(operation, iterations) {
 }
 
 function committedFixture(scenario) {
-  const root = migrateData(makeLargeSettlementFixture(scenario));
+  const root = normalizeSkyholdData(makeLargeSettlementFixture(scenario));
   root.meta = makeStorageCommitMeta(root.meta, {
     writeId: `performance-${scenario.key}`,
     previousRevision: 0,
@@ -112,7 +112,7 @@ for (const scenario of PERFORMANCE_SCENARIOS) {
   storage.resetMetrics();
   const iterations = scenario.key === "extreme" ? 8 : 12;
   const cloneResult = measure(() => clone(root), iterations);
-  const normalizeResult = measure(() => migrateData(root), iterations);
+  const normalizeResult = measure(() => normalizeSkyholdData(root), iterations);
   const hashResult = measure(() => stableDataHash(root.holdings), iterations);
   const legacyResult = measure(() => legacyRead(settings, root), iterations);
   const cachedResult = measure(() => storage.getData(), iterations);

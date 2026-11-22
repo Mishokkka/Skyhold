@@ -21,6 +21,7 @@ globalThis.game = {
 };
 globalThis.ui = { notifications: { error: text => errors.push(text) } };
 const { SkyholdApp } = await import("../apps/skyhold-app.js");
+const { assertSupportedWorldData } = await import("../data/storage-format.js");
 await import("../main.js");
 await hooks.get("init")();
 assert.equal(module.api, game.fblSkyhold, "both public API entrypoints share the same opener");
@@ -47,6 +48,12 @@ try {
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(errors.length, 3, "API and scene controls notify on synchronous and asynchronous failures");
   assert.equal(logged.length, 3);
+  SkyholdApp.open = () => assertSupportedWorldData({ meta: { schemaVersion: 71, templateCatalogVersion: 18 } });
+  assert.equal(game.fblSkyhold.open(), null);
+  assert.match(errors.at(-1), /схема 71, каталог 18.*830a292/, "A GM receives concrete recovery guidance");
+  game.user.isGM = false;
+  assert.equal(game.fblSkyhold.open(), null);
+  assert.match(errors.at(-1), /требует внимания ГМа/, "Players receive a concise world status");
 } finally {
   SkyholdApp.open = originalOpen;
   console.error = originalError;

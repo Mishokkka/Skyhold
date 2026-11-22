@@ -1,4 +1,4 @@
-import { migrateData, normalizeCatalogPartition, normalizeHoldingsPartition, reconcileHoldingRegions } from "./normalizers.js";
+import { normalizeSkyholdData, normalizeCatalogPartition, normalizeHoldingsPartition, reconcileHoldingRegions } from "./normalizers.js";
 import { SKYHOLD_SCHEMA_VERSION } from "./schema-version.js";
 import { clone, toNumber } from "./utils.js";
 
@@ -23,7 +23,7 @@ export function prepareSkyholdCommit(data, {
   let next;
 
   if (requestedScope === COMMIT_SCOPES.BOTH) {
-    next = migrateData(data);
+    next = normalizeSkyholdData(data);
   } else if (requestedScope === COMMIT_SCOPES.HOLDINGS) {
     next = {
       ...data,
