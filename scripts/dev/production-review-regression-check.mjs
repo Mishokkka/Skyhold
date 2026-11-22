@@ -17,7 +17,6 @@ import { beginPerishableStoragePeriod, expireProductionIngredients, finishPerish
 import { addResourceBatches, setResourceBatchPeriodStep, takeResourceBatches } from "../core/resource-batches.js";
 import { productionLineEconomics } from "../engines/economy/production-economics.js";
 import { planBuildingCatalogMigration } from "../workflows/buildings/catalog-migration.js";
-import { buildingCatalogV17Templates } from "../data/building-template-revision-v17.js";
 import { checkProductionHerdBalance } from "./production-herd-balance-check.mjs";
 import { prepareResourceCatalogEditor } from "../data/resources/resource-editor.js";
 
@@ -224,31 +223,28 @@ export async function checkProductionReview() {
     await app._runProductionCycleForQd(continuous, 80, report());
     assert.equal(quantity(continuous, "bread"), 1, "P05: the same automatic cycle is due within one sufficiently long call");
 
-    const previous = buildingCatalogV17Templates();
     for (const building of DEFAULT_BUILDING_TEMPLATES) for (const line of building.productionLines) {
       const result = productionLineEconomics(line, building);
       assert.ok(result.available, `${building.id}/${line.id}: all shipped recipes have priced inputs`);
       if (building.id !== "greenhouse-complex") assert.ok(result.marginMin >= 0, `${building.id}/${line.id}: covers raw inputs and ordinary production labor at base prices`);
     }
-    for (const id of ["lumbermill", "quarry", "grain-field", "garden", "fishing-pier"]) {
-      assert.deepEqual(DEFAULT_BUILDING_TEMPLATES.find((row) => row.id === id).productionLines, previous.find((row) => row.id === id).productionLines, `${id}: P06/P23 recipes are unchanged`);
-    }
-    const oldPharmacy = structuredClone(previous.find((row) => row.id === "apothecary"));
+    const oldPharmacy = structuredClone(DEFAULT_BUILDING_TEMPLATES.find((row) => row.id === "apothecary"));
     Object.assign(oldPharmacy, { id: "old-pharmacy", templateId: "apothecary", medical: { enabled: true },
       special: { kind: "medical", data: {} }, constructionStatus: "built", buildProgress: oldPharmacy.buildTarget });
-    const oldSheep = structuredClone(previous.find((row) => row.id === "sheepfold"));
+    const oldSheep = structuredClone(DEFAULT_BUILDING_TEMPLATES.find((row) => row.id === "sheepfold"));
     Object.assign(oldSheep, { id: "old-sheep", templateId: "sheepfold", constructionStatus: "built", buildProgress: oldSheep.buildTarget });
+    oldSheep.livestock.profile.capacity = 12;
     oldSheep.livestock.state = { ...oldSheep.livestock.state, adults: 6, breedingMales: 1 };
-    const migrationInput = { meta: { templateCatalogVersion: 17 }, catalog: { buildings: previous }, holdings: [
+    const migrationInput = { meta: { templateCatalogVersion: 19 }, catalog: { buildings: structuredClone(DEFAULT_BUILDING_TEMPLATES) }, holdings: [
       { id: "migration", people: { list: [] }, buildings: { list: [oldPharmacy, oldSheep] }, gm: {} }
     ] };
     const snapshot = structuredClone(migrationInput);
-    const planned = planBuildingCatalogMigration({ currentData: migrationInput, operationId: "v18-preview" });
+    const planned = planBuildingCatalogMigration({ currentData: migrationInput, operationId: "current-production-preview", replaceCatalog: true });
     assert.deepEqual(migrationInput, snapshot, "Catalog preview must not mutate or apply world data");
     const migrated = planned.targetData.holdings[0].buildings.list;
     assert.notEqual(inferBuildingSpecialKind(migrated[0]), "medical", "Explicit catalog update clears the old falsely inferred pharmacy medical flag");
     assert.equal(migrated[1].livestock.profile.capacity, 24);
-    assert.equal(migrated[1].livestock.state.adults, 6, "Migration changes capacity without inventing or deleting animals");
+    assert.equal(migrated[1].livestock.state.adults, 6, "Catalog update changes capacity without inventing or deleting animals");
     checkProductionHerdBalance();
   } finally {
     globalThis.game = previousGame;

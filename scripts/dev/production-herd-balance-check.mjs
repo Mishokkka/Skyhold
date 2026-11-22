@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { DEFAULT_BUILDING_TEMPLATES } from "../data/building-templates.js";
-import { buildingCatalogV17Templates } from "../data/building-template-revision-v17.js";
 import { normalizeLivestockBuilding } from "../data/livestock.js";
 import { normalizeLivestockState, planLivestockTenday } from "../engines/economy/livestock.js";
 import { resourceBasePriceCopper } from "../core/resources.js";
@@ -43,20 +42,16 @@ function simulate(building, breeders) {
 }
 
 export function checkProductionHerdBalance() {
-  const old = buildingCatalogV17Templates();
   const cases = [["pigsty", 3], ["sheepfold", 12], ["pasture", 8]];
   const current = cases.map(([id, breeders]) => simulate(DEFAULT_BUILDING_TEMPLATES.find((row) => row.id === id), breeders));
-  const baseline = [["pigsty", 3], ["sheepfold", 6]].map(([id, breeders]) => simulate(old.find((row) => row.id === id), breeders));
   assert.equal(current[1].capacity, 24, "The actual normalized sheepfold has room for breeding lambs");
   for (const herd of current.slice(0, 2)) for (const year of herd.years) {
     assert.equal(year.born, year.slaughter, "Renewable output in every 240-day year");
     assert.equal(year.adults, herd.breeders);
     assert.ok(year.balance > 0, `${herd.id}: recurring output covers feed, actual care/culling work and upkeep`);
   }
-  for (const herd of baseline) assert.ok(herd.years.reduce((sum, year) => sum + year.balance, 0) < 0,
-    "Reproduce the old three-year loss; a profitable culling year alone does not establish sustainability");
   assert.ok(current[2].years.every((year, index) => year.balance > current[1].years[index].balance), "Milk retains its approved economic advantage");
-  return { baseline, current };
+  return { current };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

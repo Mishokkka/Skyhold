@@ -94,6 +94,7 @@ export async function checkMigrationPreviewRefresh() {
     await openTextPreview();
     assert.equal(opened, undefined, "Only the GM can open the text refresh");
     globalThis.game.user.isGM = true;
+    world.catalog.buildings.find(row => row.id === "school").effect = "Оплаченный учитель открывает ролевые образовательные решения";
     const beforeTextRefresh = clone(world);
     await openTextPreview();
     context = await opened._prepareContext({});

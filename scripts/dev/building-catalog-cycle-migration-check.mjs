@@ -1,17 +1,17 @@
 import assert from "node:assert/strict";
-import { buildingCatalogV16Templates } from "../data/building-template-revision-v16.js";
+import { BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION, TEMPLATE_CATALOG_VERSION } from "../data/building-templates.js";
 import { normalizeSkyholdData } from "../data/normalizers.js";
 import { clone } from "../data/utils.js";
-import { PRODUCTION_STATE_FIELDS } from "../workflows/buildings/catalog-conflicts.js";
-import { applyBuildingCatalogMigration, planBuildingCatalogMigration } from "../workflows/buildings/catalog-migration.js";
+import { applyBuildingCatalogMigration, planBuildingCatalogMigration, PRODUCTION_STATE_FIELDS } from "../workflows/buildings/catalog-migration.js";
 import { runProductionCycle } from "../engines/economy/production-cycle.js";
 
 export function migrationCycleFixture() {
-  const templates = buildingCatalogV16Templates();
-  const data = normalizeSkyholdData({ meta: { templateCatalogVersion: 16, revision: 3 },
+  const templates = BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION;
+  const data = normalizeSkyholdData({ meta: { templateCatalogVersion: TEMPLATE_CATALOG_VERSION, revision: 3 },
     catalog: { buildings: clone(templates) }, holdings: [{ id: "laputa", name: "Лапута", people: { list: [] },
       storage: { moneyCopper: 73 }, buildings: { list: templates.filter(row => ["lumbermill", "quarry"].includes(row.id))
         .map(row => ({ ...clone(row), id: `built-${row.id}`, templateId: row.id, constructionStatus: "built", buildProgress: row.buildTarget })) } }] });
+  data.catalog.buildings.find(row => row.id === "well").reputation = 9;
   for (const building of data.holdings[0].buildings.list) Object.assign(building.productionLines[0], {
     pendingQty: 3, workProgressUnits: 5000, workInputsReserved: true, workReservedOutputQty: 2,
     workReservedFormula: "2", workReservedInputs: { version: 1, entries: [] },
@@ -23,7 +23,7 @@ export function migrationCycleFixture() {
 export async function checkMigrationProductionCarry() {
   const source = migrationCycleFixture();
   const snapshot = clone(source);
-  const args = { currentData: source, operationId: "carry-v16", replaceCatalog: true };
+  const args = { currentData: source, operationId: "carry-current", replaceCatalog: true };
   const plan = planBuildingCatalogMigration(args);
   assert.deepEqual(plan.blockingIssues, [], "Unchanged wood and stone batches may migrate while partly worked");
   assert.equal(plan.canApply, true);
@@ -44,7 +44,7 @@ export async function checkMigrationProductionCarry() {
   // A receipt is runtime state, not a per-field mechanics customization.
   const receipt = clone(source);
   receipt.holdings[0].buildings.list[0].productionLines[0].workReservedInputs.entries.push({ resourceId: "wood", qty: 1, roomId: "outdoors", batches: [{ id: "paid-batch", qty: 1, ageQd: 40 }] });
-  const receiptPlan = planBuildingCatalogMigration({ ...args, currentData: receipt, replaceCatalog: false });
+  const receiptPlan = planBuildingCatalogMigration({ ...args, currentData: receipt });
   assert.deepEqual(receiptPlan.blockingIssues, []);
   assert.deepEqual(receiptPlan.targetData.holdings[0].buildings.list[0].productionLines[0].workReservedInputs, receipt.holdings[0].buildings.list[0].productionLines[0].workReservedInputs);
 

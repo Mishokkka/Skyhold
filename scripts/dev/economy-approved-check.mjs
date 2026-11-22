@@ -116,10 +116,10 @@ export function checkApprovedEconomy() {
   assert.equal(combined.treasury.deficit, 15, "outstanding debt is a final balance, not a sum of balances");
 
   const template = structuredClone(DEFAULT_BUILDING_TEMPLATES.find((row) => row.id === "common-house"));
-  const project = { ...template, id: "project", templateId: template.id, templateVersion: 16, constructionStatus: "building", lifecycle: "building", buildTarget: 8, buildProgress: 2,
+  const project = { ...template, id: "project", templateId: template.id, templateVersion: 19, constructionStatus: "building", lifecycle: "building", buildTarget: 8, buildProgress: 2,
     materialCosts: [{ resourceId: "wood", qty: 80 }], constructionMaterials: { version: 1, mode: "staged", target: 8,
       totalCosts: [{ resourceId: "wood", qty: 80 }], spent: [{ resourceId: "wood", qty: 20 }], prepaidRemaining: [] } };
-  const data = { meta: { templateCatalogVersion: 16 }, catalog: { buildings: [template] },
+  const data = { meta: { templateCatalogVersion: 19 }, catalog: { buildings: [template] },
     holdings: [{ id: "home", buildings: { list: [project] }, people: { list: [] }, gm: {} }] };
   const capital = constructionCapitalBudget(data.holdings[0], project);
   assert.equal(capital.spent[0].qty, 20);
@@ -128,9 +128,7 @@ export function checkApprovedEconomy() {
     materialCosts: [{ resourceId: "money", qty: 80 }], materialsAllocated: true });
   assert.equal(prepaid.money, 0, "already prepaid money is not budgeted twice");
   assert.equal(prepaid.treasuryAfterMaterials, 100);
-  const initial = planBuildingCatalogMigration({ currentData: data, operationId: "migration" });
-  const resolutions = Object.fromEntries(initial.blockingIssues.filter((row) => row.canResolveMechanics).map((row) => [row.resolutionKey, "replace-mechanics"]));
-  const migrated = planBuildingCatalogMigration({ currentData: data, operationId: "migration", resolutions }).targetData.holdings[0].buildings.list[0];
+  const migrated = planBuildingCatalogMigration({ currentData: data, operationId: "refresh-project", replaceCatalog: true }).targetData.holdings[0].buildings.list[0];
   assert.equal(migrated.templateVersion, 19);
   assert.deepEqual(migrated.constructionMaterials.spent.map(({ resourceId, qty }) => ({ resourceId, qty })), project.constructionMaterials.spent);
   const refund = planConstructionCancellation({ holding: data.holdings[0], building: migrated, operationId: "cancel" });

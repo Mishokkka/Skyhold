@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { DEFAULT_BUILDING_TEMPLATES } from "../data/building-templates.js";
+import { DEFAULT_BUILDING_TEMPLATES, TEMPLATE_CATALOG_VERSION } from "../data/building-templates.js";
 import { buildingDevelopmentRoute } from "./building-development-reachability-check.mjs";
 import {
   APPROVED_BONUS_DECISIONS,
@@ -68,13 +68,12 @@ export function checkApprovedBuildingDevelopment() {
     assert.equal(v(row.requirements), "0/0/0/0");
   }
 
-  // Existing v15 worlds must receive the revised rules through the explicit
-  // replacement workflow too, without relying on a version-number downgrade.
+  // The explicit replacement also restores approved defaults in a customized current catalog.
   const old = structuredClone(rows);
   for (const [id, before] of APPROVED_BONUS_DECISIONS) old.find((r) => r.id === id).bonuses = parse(before);
   for (const [id, before] of APPROVED_REQUIREMENT_DECISIONS) old.find((r) => r.id === id).requirements = parse(before);
   const source = normalizeSkyholdData({
-    meta: { templateCatalogVersion: 15, revision: 9 },
+    meta: { templateCatalogVersion: TEMPLATE_CATALOG_VERSION, revision: 9 },
     catalog: { buildings: old },
     holdings: [{
       id: "test",
@@ -90,7 +89,7 @@ export function checkApprovedBuildingDevelopment() {
     }]
   });
   const snapshot = structuredClone(source);
-  const plan = planBuildingCatalogMigration({ currentData: source, operationId: "approved-development-v15", replaceCatalog: true });
+  const plan = planBuildingCatalogMigration({ currentData: source, operationId: "restore-approved-development", replaceCatalog: true });
   assert.deepEqual(plan.blockingIssues, []);
   const applied = applyBuildingCatalogMigration({ currentData: source, plan });
   assert.equal(applied.commitRequired, true);

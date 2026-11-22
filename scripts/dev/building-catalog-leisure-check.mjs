@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
 import { BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION, TEMPLATE_CATALOG_VERSION } from "../data/building-templates.js";
-import { buildingCatalogV15Templates } from "../data/building-template-revision-v15.js";
 import { normalizeCatalogPartition } from "../data/normalizers.js";
 import { normalizeResourceId } from "../core/resources.js";
 
-export function checkBuildingCatalogV16() {
+export function checkBuildingCatalogLeisure() {
   // Saved catalogs retain these contracts until the separate, explicit labor
   // transition. New hybrid templates are covered by building-labor-catalog-check.
   const rows = BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION;
@@ -13,8 +12,6 @@ export function checkBuildingCatalogV16() {
   assert.equal(rows.length, 126);
   assert.equal(byId.size, 126);
   assert.ok(rows.every((row) => row.templateVersion === 19));
-  const baseline = buildingCatalogV15Templates();
-  assert.ok(baseline.every((row) => byId.has(row.id)), "Every old template remains addressable for migration");
   const expected = { "festival-square": [10, 1, 2], alehouse: [12, 1, 5 / 3],
     "game-house": [20, 2, 2], "performance-house": [30, 3, 2], "promenade-garden": [20, 1, 1],
     "city-theatre": [60, 6, 2], museum: [40, 4, 2] };
@@ -47,7 +44,7 @@ export function checkBuildingCatalogV16() {
   assert.equal(byId.get("well").activation.minOperationalQd, 2);
   assert.equal(byId.get("gallows").activation.harmWhileOperational, true);
   const loaded = normalizeCatalogPartition({ buildings: rows });
-  assert.deepEqual(normalizeCatalogPartition(loaded), loaded, "current catalog preserves v16 leisure rules across loading");
+  assert.deepEqual(normalizeCatalogPartition(loaded), loaded, "Current leisure rules survive normalization");
   for (const row of loaded.buildings) {
     assert.equal(row.workerProfile?.workersMax ?? row.workersMax, row.workersMax);
     assert.equal(row.workerProfile?.workersMin ?? row.workersMin, row.workersMin);

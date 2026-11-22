@@ -338,39 +338,22 @@ const priorTemplate = clone(BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION.find((row
 priorTemplate.workersMax = 99;
 priorTemplate.workerProfile.workersMax = 99;
 const catalogSource = { meta: { revision: 1, templateCatalogVersion: TEMPLATE_CATALOG_VERSION },
-  catalog: { buildings: [priorTemplate] }, holdings: [{ id: "legacy-catalog", buildings: { list: [
-    { ...clone(priorTemplate), id: "old-mill", templateId: "lumbermill" }
+  catalog: { buildings: [priorTemplate] }, holdings: [{ id: "current-catalog", buildings: { list: [
+    { ...clone(priorTemplate), id: "configured-mill", templateId: "lumbermill" }
   ] }, people: { list: [] } }] };
 const normalCatalog = planBuildingCatalogMigration({ currentData: catalogSource, operationId: "normal-catalog" });
 assert.equal(normalCatalog.targetData.catalog.buildings.find((row) => row.id === "lumbermill").workersMax, 99, "current customized catalog rules survive a normal catalog preview");
-const customizedTemplate = clone(priorTemplate);
-Object.assign(customizedTemplate, { workersMin: 2, workerRole: "Custom millers", minOperationalQd: 7,
-  activationConditionText: "Custom service threshold" });
-customizedTemplate.workerProfile.workersMin = 2;
-Object.assign(customizedTemplate.activation, { minWorkers: 2, minOperationalQd: 7, requiresMeaningfulResult: true });
-const olderInstanceSource = clone(catalogSource);
-olderInstanceSource.catalog.buildings = [customizedTemplate];
-olderInstanceSource.holdings[0].buildings.list = [{ ...clone(customizedTemplate), id: "older-mill", templateId: "lumbermill",
-  templateVersion: TEMPLATE_CATALOG_VERSION - 1 }];
-const olderInstanceSnapshot = clone(olderInstanceSource);
-const customizedPreview = planBuildingCatalogMigration({ currentData: olderInstanceSource, operationId: "current-custom-catalog-old-instance" });
-assert.equal(customizedPreview.canApply, true, "A matching current legacy catalog and older instance need no invented conflict");
-const customizedInstance = customizedPreview.targetData.holdings[0].buildings.list[0];
-for (const field of ["workersMin", "workersMax", "workerProfile", "activation", "minOperationalQd", "activationConditionText", "workerRole"]) {
-  assert.deepEqual(customizedInstance[field], customizedTemplate[field], `${field}: current legacy catalog customization must reach the older instance`);
-}
-assert.equal(customizedInstance.labor, undefined);
-assert.deepEqual(olderInstanceSource, olderInstanceSnapshot, "Catalog Preview must not mutate saved custom rules");
 for (const templateId of ["inn", "well"]) {
   const builtinLegacyTemplate = clone(BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION.find((row) => row.id === templateId));
   const expectedLegacyRules = clone(builtinLegacyTemplate);
+  builtinLegacyTemplate.reputation = 99;
   normalizeBuilding(expectedLegacyRules);
   const builtinSource = clone(catalogSource);
   builtinSource.catalog.buildings = [clone(DEFAULT_BUILDING_TEMPLATES.find((row) => row.id === templateId))];
-  builtinSource.holdings[0].buildings.list = [{ ...clone(builtinLegacyTemplate), id: `builtin-old-${templateId}`, templateId,
-    templateVersion: TEMPLATE_CATALOG_VERSION - 1 }];
+  builtinSource.holdings[0].buildings.list = [{ ...clone(builtinLegacyTemplate), id: `builtin-configured-${templateId}`, templateId,
+    templateVersion: TEMPLATE_CATALOG_VERSION }];
   const builtinPreview = planBuildingCatalogMigration({ currentData: builtinSource,
-    operationId: `builtin-hybrid-template-old-${templateId}`, replaceCatalog: true });
+    operationId: `builtin-hybrid-template-${templateId}`, replaceCatalog: true });
   assert.equal(builtinPreview.canApply, true);
   const builtinInstance = builtinPreview.targetData.holdings[0].buildings.list[0];
   assert.equal(builtinInstance.labor, undefined, "A new built-in hybrid template cannot implicitly transition an existing instance");

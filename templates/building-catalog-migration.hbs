@@ -1,7 +1,7 @@
 <section class="fbls-content-pack-shell">
   <header class="fbls-content-pack-head">
     <div><h2>{{#if textOnly}}Тексты Школы и Банка{{else}}Обновление дерева зданий{{/if}}</h2>
-      {{#unless textOnly}}<p>Каталог v{{preview.sourceTemplateCatalogVersion}} → v{{targetVersion}} · шаблонов: {{preview.catalogTemplates}}</p>{{/unless}}
+      {{#unless textOnly}}<p>Каталог v{{targetVersion}} · шаблонов: {{preview.catalogTemplates}}</p>{{/unless}}
     </div>
     <button type="button" class="fbls-button compact" data-action="building-catalog-migration-refresh" title="Пересчитать обновление"><i class="fa-solid fa-arrows-rotate"></i> Обновить расчёт</button>
   </header>
@@ -36,7 +36,7 @@
     {{/if}}
     {{#if changedRows.length}}
       <article class="fbls-card"><h3>Обновляемые постройки</h3><div class="fbls-stack">
-        {{#each changedRows}}<article class="fbls-content-pack-row update"><strong>{{buildingName}}</strong><span>{{holdingName}} · {{mapping}}</span></article>{{/each}}
+        {{#each changedRows}}<article class="fbls-content-pack-row update"><strong>{{buildingName}}</strong><span>{{holdingName}} · {{targetTemplateId}}</span></article>{{/each}}
       </div>{{#if rowsTruncated}}<p>Показаны первые 80 построек.</p>{{/if}}</article>
     {{/if}}
     {{#unless textOnly}}<p>Сохраняются названия, заметки, жильцы, содержимое, повреждения и доля строительного прогресса. Начатые партии с прежним рецептом сохраняются вместе с прогрессом и резервом сырья. Несовместимые циклы и неизвестные соответствия не обнуляются. Перед записью создаётся копия для отката.</p>{{/unless}}
