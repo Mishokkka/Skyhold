@@ -94,8 +94,9 @@ function checkBundle(firstSeverity, lastSeverity = null) {
     const earlierDamage = id === "b" && firstSeverity === 1 ? 0.75 : 1;
     const laterDamage = lastSeverity === 1 ? 0.75 : 1;
     const allowedBonus = lastSeverity == null && (id === "pickup" || firstSeverity == null);
+    const bonusBase = Math.max(0, row.contract.rewardCopper - (row.contract.economics?.taxCopper ?? 0));
     const expected = Math.ceil(row.contract.rewardCopper * earlierDamage * laterDamage)
-      + (allowedBonus ? Math.ceil(row.contract.rewardCopper * 12 / 100) : 0);
+      + (allowedBonus ? Math.ceil(bonusBase * 6 / 100) : 0);
     assert.equal(row.outcome.rewardCopper, expected, `${id}: only this order's loaded passages determine the bonus`);
   }
   const afterLast = ship.onboardCopper;

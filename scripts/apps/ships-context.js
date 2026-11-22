@@ -1,7 +1,7 @@
 import { fleetAccountingSummary } from "../engines/ships/fleet-accounting.js";
 import { quoteShipDeparture } from "../engines/ships/runtime.js";
 import { attentionLabel, contractGuidance } from "../engines/ships/contracts.js";
-import { getShipProfile, SHIP_PROFILES } from "../engines/ships/profiles.js";
+import { getShipProfile, shipCapacityLoadPoints, SHIP_PROFILES } from "../engines/ships/profiles.js";
 import { buildShipWorldContext, quoteWorldShipReturn, quoteWorldShipHomeUpkeep, repriceWorldShipOffer, worldShipTimeBreakdown } from "../engines/ships/world-market.js";
 import { holdingPermissionContext } from "../data/holding-permissions.js";
 import { MAGNIFIQUE_CREW_VERSION } from "../data/magnifique-crew.js";
@@ -66,9 +66,11 @@ function preparedGuidance(contract) {
     const guidance = contractGuidance(contract, style);
     const riskLabel = guidance.incidentPressure <= 3 ? "низкий" : guidance.incidentPressure <= 6 ? "заметный" : guidance.incidentPressure <= 8 ? "высокий" : "крайний";
     const modern = contract.economics?.version === 1;
+    const boldFactor = ((contract.economics?.boldRiskPercent ?? 150) / 100).toLocaleString("ru-RU", { maximumFractionDigits: 2 });
+    const taxNote = contract.economics?.cleanPassageBonusPercent != null ? " от платы без пошлин" : "";
     const hints = { cautious: `Риск происшествия ниже на ${contract.economics?.cautiousReductionPercent ?? 25}%; расходы на предосторожности: ${formatShipMoney(contract.economics?.precautionCopper ?? 0)}.`,
       normal: "Договорная плата. Ремонт и содержание при задержке рассчитываются отдельно.",
-      bold: `Риск происшествия выше в полтора раза; премия ${contract.economics?.cleanPassageBonusPercent ?? 2}% за полное исполнение без задержек.` };
+      bold: `Риск происшествия выше в ${boldFactor} раза; премия ${contract.economics?.cleanPassageBonusPercent ?? 2}%${taxNote} за полное исполнение без задержек.` };
     return { ...guidance, riskLabel: modern ? `${(guidance.riskBps / 100).toLocaleString("ru-RU", { maximumFractionDigits: 2 })}%` : riskLabel,
       styleHint: modern ? hints[style] : STYLE_HINTS[style] };
   });
@@ -102,7 +104,7 @@ function worldOfferRow(offer, worldContext, resourceLabels = null) {
   const outcomeReserveCopper = Math.max(0, recommendedBudgetCopper - totalCostCopper - returnReserveCopper - idleReserveCopper);
   const premiumLabel = contract.economics?.cautiousReductionPercent == null ? "за особую услугу"
     : contract.kind === "smuggling" ? "за стоимость скрытого груза и внимание властей"
-      : contract.kind === "commission" ? "за почту и пассажиров" : "за крупную партию";
+      : contract.kind === "commission" ? "за почту и пассажиров" : "за объём и класс судна";
   const recommendedReserveCopper = Math.max(0, recommendedBudgetCopper - totalCostCopper);
   return {
     ...offer,
@@ -388,7 +390,33 @@ export function prepareShipWindowContext(holding, { revision = 0, data = null, s
     const offerLockKey = `${ship.id}|${ship.location?.kind ?? ""}:${ship.location?.id ?? ""}|${period}`;
     const worldOffersGenerated = Boolean(ships.worldOfferLocks?.[offerLockKey]);
     const moneySummary = isWorld ? shipMoneySummary(holding, ship, { returnOffer, clockQd: shipQd }) : null;
-    const availableOffers = offersByShip.get(ship.id) ?? [];
+    const watchReductionPercent = isWorld && ship.profileId === "merchant-barque" && profile && readiness
+      ? Math.round(25 * Math.min(profile.crewTarget, Math.max(0, readiness.readyCount - profile.crewTarget)) / profile.crewTarget)
+      : 0;
+    const rawOffers = offersByShip.get(ship.id) ?? [];
+    const shipCapacity = isWorld ? shipCapacityLoadPoints(ship) : 0;
+    const availableOffers = rawOffers.map((row) => {
+      let next = row;
+      if (watchReductionPercent > 0 && row.contract?.economics?.cautiousReductionPercent != null) {
+        next = { ...next, difficultyHint: `${next.difficultyHint} Усиленная вахта (${readiness.readyCount} чел.) снижает базовый риск на ${watchReductionPercent}%.` };
+      }
+      if (isWorld && row.contract?.kind === "commission") {
+        const pickupKey = row.contract.pickup?.id ?? row.from?.id ?? "";
+        const companion = rawOffers.find((candidate) => candidate.id !== row.id
+          && candidate.contract?.kind === "freight"
+          && (candidate.contract.pickup?.id ?? candidate.from?.id ?? "") === pickupKey
+          && candidate.to?.id === row.to?.id
+          && Number(candidate.contract.cargo?.loadPoints ?? 0) + Number(row.contract.cargo?.loadPoints ?? 0) <= shipCapacity);
+        if (companion) {
+          next = {
+            ...next,
+            isCompanion: true,
+            companionHint: `Попутно к фрахту («${companion.cargoTitle}»): в связке добавит ${formatShipMoney(row.rewardCopper)} выручки без лишнего перелёта.`
+          };
+        }
+      }
+      return next;
+    });
     const management = isWorld ? prepareShipManagementState(holding, ship, { permissions, readiness, money: moneySummary, offers: availableOffers, returnOffer }) : null;
     const relocationPorts = isWorld && !inTransit && !ship.orderBundle && !ownSale && !transport.busy
       ? worldContext.ports.filter((port) => port.regionId !== ship.location?.regionId

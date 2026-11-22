@@ -50,12 +50,20 @@ export function customerTransportFare(request) {
   }
   const { charge, carriageCopper, exposure } = referenceCharge(profile, cargo.loadPoints, request);
   const regularCopper = charge.totalCopper - charge.handlingCopper;
-  const specialPremiumCopper = cargo.kind === "smuggling" ? Math.ceil(cargo.valueCopper * (35 + 2 * attention) / 100)
-    : cargo.kind === "commission" ? Math.ceil(regularCopper * 0.25) : Math.max(freightFloor, carriageCopper) - regularCopper;
+  let specialPremiumCopper;
+  if (cargo.kind === "smuggling") {
+    const fullCarriage = referenceCharge(profile, profile.capacityLoadPoints, request).carriageCopper;
+    const capCopper = Math.ceil(fullCarriage * (400 + 20 * attention) / 100);
+    specialPremiumCopper = Math.min(capCopper, Math.ceil(cargo.valueCopper * (35 + 2 * attention) / 100));
+  } else if (cargo.kind === "commission") {
+    specialPremiumCopper = Math.ceil(regularCopper * 0.25);
+  } else {
+    specialPremiumCopper = Math.max(freightFloor, carriageCopper) - regularCopper;
+  }
   const riskBps = transportRiskBps(exposure * (cargo.kind === "smuggling" ? 2 + attention / 10 : 1), configuration.riskBps);
   const riskPremiumCopper = Math.ceil((regularCopper + specialPremiumCopper) * riskBps * 85 / 1_000_000);
   return { rewardCopper: transportMoney([charge.totalCopper, taxCopper, specialPremiumCopper, riskPremiumCopper]),
-    marketFeeCopper: charge.totalCopper, specialPremiumCopper, riskPremiumCopper, riskBps, referenceProfileId: profile.id };
+    marketFeeCopper: charge.totalCopper, specialPremiumCopper, riskPremiumCopper, taxCopper, riskBps, referenceProfileId: profile.id };
 }
 
 /** Consumers can pay a delivery allowance; profitable resale can justify more. This is not merchant profit. */

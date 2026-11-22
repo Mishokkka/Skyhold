@@ -655,7 +655,9 @@ export function generateWorldShipOffers(data, holding, ship, { period, random = 
     distanceByPort.set(port.id, route.distanceKm);
     return true;
   });
-  const pickupPorts = needsExternalPickup ? [...destinations].sort((left, right) => distanceByPort.get(left.id) - distanceByPort.get(right.id)).slice(0, 3) : destinations;
+  const pickupPorts = [...destinations]
+    .sort((left, right) => distanceByPort.get(left.id) - distanceByPort.get(right.id) || String(left.id).localeCompare(String(right.id)))
+    .slice(0, 3);
   if (!destinations.length) throw new Error("Нет доступных портов с воздушным маршрутом и путём домой. Проверьте связи на карте мирового рынка.");
   if (needsExternalPickup && destinations.length < 2) throw new Error("Для мирового заказа нужны два внешних поселения: погрузка и доставка. Домашнее поселение не является заказчиком. Добавьте доступные воздушные порты.");
   const draw = () => {
@@ -676,7 +678,7 @@ export function generateWorldShipOffers(data, holding, ship, { period, random = 
     const initialAttention = attentionLevel(ship, `port:${destination.id}`);
     const illegalChance = initialAttention >= 8 ? 0.8 : initialAttention >= 5 ? 0.55 : 0.25;
     const hidden = Math.max(0, Number(ship.hiddenCapacityLoadPoints || 0));
-    const kind = index === 0 ? (draw() < 0.2 ? "commission" : "freight")
+    const kind = index === 0 ? "freight"
       : index === 1 ? (draw() < 0.65 ? "commission" : "freight")
         : (draw() < illegalChance && hidden > 0 ? "smuggling" : "freight");
     const companion = kind === "commission" ? offers.find(row => row.kind === "freight" && row.contract.cargo.loadPoints < capacity) : null;
@@ -700,11 +702,16 @@ export function generateWorldShipOffers(data, holding, ship, { period, random = 
     const limit = kind === "smuggling" ? Math.min(capacity, hidden) : capacity;
     const bestLoad = goods.reduce((best, good) => Math.max(best, Math.min(limit, availableQuantity(good) * good.loadPoints)), 0);
     const suitable = goods.filter((good) => availableQuantity(good) * good.loadPoints >= Math.min(limit * 0.6, bestLoad));
-    const choice = suitable.length ? Math.floor(draw() * suitable.length) : 0;
-    const loadShare = suitable.length ? 0.6 + draw() * 0.35 : 0.6;
+    const valueDensity = (good) => Number(good.basePriceCopper ?? 0) / Math.max(1, Number(good.loadPoints ?? 1));
+    const pool = kind === "smuggling"
+      ? [...suitable].sort((left, right) => valueDensity(right) - valueDensity(left) || String(left.resourceId ?? "").localeCompare(String(right.resourceId ?? "")))
+        .slice(0, Math.max(1, Math.ceil(suitable.length / 2)))
+      : suitable;
+    const choice = pool.length ? Math.floor(draw() * pool.length) : 0;
+    const loadShare = pool.length ? 0.6 + draw() * 0.35 : 0.6;
     // Prefer a useful full lot, but test smaller consignments if the bulk goods cannot afford delivery.
-    const preferred = new Set(suitable);
-    const candidates = [...suitable.slice(choice), ...suitable.slice(0, choice), ...goods.filter(good => !preferred.has(good))];
+    const preferred = new Set(pool);
+    const candidates = [...pool.slice(choice), ...pool.slice(0, choice), ...goods.filter(good => !preferred.has(good))];
     const maxLoad = kind === "commission" ? Math.min(Math.max(1, Math.floor(capacity * 0.2)), capacity - (companion?.contract.cargo.loadPoints ?? 0)) : limit;
     const routeCache = new Map();
     const referenceRoute = profile => {
