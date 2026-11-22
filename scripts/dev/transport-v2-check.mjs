@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { cargoLoad, shipTransportFunding, transportLoad } from "../engines/transport/quantities.js";
-import { findTransportPlans, planTransportChain, validateTransportPlan } from "../engines/transport/planner.js";
+import { planTransportChain, validateTransportPlan } from "../engines/transport/planner.js";
 
 const lot = (qty = 4000) => [{ lotId: "ore-1", resourceId: "ore", qty, unitLoad: transportLoad(1), unitCopper: 5, ageQd: 17 }];
 const service = (id, from, to, capacity, extra = {}) => ({ id, label: id, kind: "charter", from, to,
@@ -37,13 +37,6 @@ assert.deepEqual(shipTransportFunding({ expensesCopper: 300, reserveCopper: 100,
 assert.equal(transportLoad(0.00025), 1);
 assert.throws(() => transportLoad(0.00001), /точности/);
 assert.equal(cargoLoad(lot(5)), 20000);
-const slower = service("slow", "A", "B", 100, { dispatchCopper: 10, travelQd: 20 });
-assert.equal(findTransportPlans({ from: "A", to: "B", cargo: lot(5), services: [regular, slower] }).plans[0].stages[0].service.id, "slow");
-assert.equal(findTransportPlans({ from: "A", to: "B", cargo: lot(5), services: [regular, slower], priority: "time" }).plans[0].stages[0].service.id, "daily");
-assert.equal(findTransportPlans({ from: "A", to: "B", cargo: lot(5), services: [regular, slower], pins: { A: "daily" } }).plans[0].stages[0].service.id, "daily");
 assert.throws(() => planTransportChain({ cargo: lot(5), services: [regular, service("broken", "C", "D", 10)] }), /Разрыв/);
 assert.throws(() => planTransportChain({ cargo: [{ ...lot(1)[0], unitLoad: transportLoad(101) }], services: [regular] }), /единица/);
-assert.equal(findTransportPlans({ from: "A", to: "B", cargo: lot(5), ownShipId: "s1", maxPaths: 2,
-  services: [...Array.from({ length: 300 }, (_, i) => ({ ...regular, id: `hired-${i}` })), own] }).plans[0]?.ownShipId, "s1",
-"hired-only candidates cannot exhaust the search before the explicitly requested own ship is considered");
 console.log("transport-v2: physical stages, shared slots, finite charter fleet, owned shuttles, funding, precision and independent confirmation passed");

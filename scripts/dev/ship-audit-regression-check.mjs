@@ -7,7 +7,7 @@ import { shipMoneySummary } from "../engines/ships/summary.js";
 import { shipRemovalBlocker } from "../engines/ships/removal.js";
 import { applyShipHomePlacement, shipHomeLocationContext } from "../apps/domains/ship-home-location.js";
 import { normalizeMarketOutboundState } from "../data/market/outbound-state.js";
-import { planMarketOutboundSale, preflightMarketOutboundBooking, applyMarketOutboundDispatch } from "../engines/market/outbound.js";
+import { planMarketOutboundSale, applyMarketOutboundDispatch } from "../engines/market/outbound.js";
 import { transportHistoryPage } from "../apps/domains/transport-view.js";
 import { transferResidentBetweenHoldings } from "../data/resident-assignments.js";
 import { buildPlayerPatch, validatePlayerPatch } from "../data/player-write-guard.js";
@@ -16,7 +16,7 @@ import { createSkyholdSocketApi } from "../data/socket.js";
 import { createShipViewState } from "../apps/ships-view-state.js";
 import { transportFixture, transportRequest } from "./fixtures/transport-v2.mjs";
 import { prepareTransportContext } from "../apps/domains/transport-context.js";
-import { applyShipFundsOperation, createShipFunds } from "../engines/ships/funds.js";
+import { applyShipFundsOperation } from "../engines/ships/funds.js";
 
 const clone = (value) => structuredClone(value);
 
@@ -36,7 +36,8 @@ const clone = (value) => structuredClone(value);
     holding.storage.moneyCopper = required;
     assert.equal(prepareTransportContext({ ...f, request, isGM: true }).affordable, true);
   }
-  const full = applyShipFundsOperation(createShipFunds(1_000_000_000), { id: "depart", kind: "depart", amountCopper: 1_000_000_000 }).state;
+  const funds = { settlementCopper: 1_000_000_000, onboardCopper: 0, status: "docked", receipts: [] };
+  const full = applyShipFundsOperation(funds, { id: "depart", kind: "depart", amountCopper: 1_000_000_000 }).state;
   const before = JSON.stringify(full);
   assert.throws(() => applyShipFundsOperation(full, { id: "overflow", kind: "income", amountCopper: 1 }), /1000000000/);
   assert.equal(JSON.stringify(full), before, "an overflowing operation must leave both balances untouched");
@@ -108,10 +109,8 @@ for (const weights of [[1, 1], [1, 1, 1], [1, 7, 3], [4000, 200, 800]]) {
   assert.equal(plan.ok, false);
   assert.match(plan.reasons.join(" "), /1000/);
   assert.equal(plan.cargoReservations.length, 1008);
-  assert.equal(preflightMarketOutboundBooking({ resources, cargoReservations: plan.cargoReservations }).ok, false);
   const smaller = planMarketOutboundSale({ ...input, lines: [{ resourceId: "wood", qty: 1000, unitPriceCopper: 3 }] });
   assert.equal(smaller.ok, true);
-  assert.equal(preflightMarketOutboundBooking({ resources, cargoReservations: smaller.cargoReservations }).ok, true);
   const normalized = normalizeMarketOutboundState({ orders: [{ id: "existing", status: "booked",
     cargoReservations: plan.cargoReservations, cargo: plan.cargoReservations, revenueCopper: plan.revenueCopper }] }).orders[0];
   assert.equal(normalized.cargo.length, 1008);

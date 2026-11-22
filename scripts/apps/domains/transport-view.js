@@ -1,6 +1,4 @@
 import { transportOrderHasObligations } from "../../data/transport/state.js";
-import { transportServiceExcluded, resolveTransportSelections } from "../../engines/transport/service-identity.js";
-import { TRANSPORT_LOAD_SCALE } from "../../engines/transport/quantities.js";
 
 export const TRANSPORT_HISTORY_PAGE_SIZE = 20;
 
@@ -55,23 +53,4 @@ export function transportHistoryPage(orders, page = 0) {
   const end = Math.max(0, history.length - current * TRANSPORT_HISTORY_PAGE_SIZE);
   return { orders: [...active.reverse(), ...history.slice(Math.max(0, end - TRANSPORT_HISTORY_PAGE_SIZE), end).reverse()],
     history: { count: history.length, page: current + 1, pages, previous: current > 0, next: current + 1 < pages } };
-}
-
-/** Refinement choices exist before a feasible plan; endpoint labels remain view-owned. */
-export function transportRefinements(services = [], request = {}, pointLabel = id => id) {
-  request = resolveTransportSelections(services, request).request;
-  const groups = new Map(), companies = new Map();
-  for (const service of services) {
-    if (service.enabled === false) continue;
-    if (service.companyId && !(request.excluded ?? []).includes(service.companyId)) {
-      companies.set(service.companyId, { id: service.companyId, label: service.label });
-    }
-    if (transportServiceExcluded(service, request.excluded)) continue;
-    if (!groups.has(service.from)) groups.set(service.from, { from: service.from, label: pointLabel(service.from),
-      automatic: !request.pins?.[service.from], options: [] });
-    const kind = service.kind === "owned" ? "свой корабль" : service.kind === "regular" ? "регулярный" : "чартер";
-    groups.get(service.from).options.push({ value: service.id, selected: request.pins?.[service.from] === service.id,
-      label: `${pointLabel(service.to)} · ${service.label} · ${kind} · до ${service.capacity / TRANSPORT_LOAD_SCALE} ед. нагрузки` });
-  }
-  return { groups: [...groups.values()], companies: [...companies.values()] };
 }

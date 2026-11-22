@@ -78,39 +78,6 @@ export function marketOutboundAvailableQuantity({ resources = [], outboundState 
     .reduce((sum, batch) => sum + batch.availableQty, 0);
 }
 
-export function preflightMarketOutboundBooking({ resources = [], outboundState = {}, cargoReservations = [], excludeOperationId = "" } = {}) {
-  if (cargoReservations.length > MAX_OUTBOUND_CARGO_ROWS) return { ok: false, capacityExceeded: true,
-    message: `В поставке больше ${MAX_OUTBOUND_CARGO_ROWS} грузовых партий. Разделите продажу на несколько поставок.` };
-  const available = new Map(inventoryBatches(resources, outboundState, { excludeOperationId })
-    .map((batch) => [batchKey(batch.rowId, batch.batchId), batch]));
-  const requested = new Map();
-  for (const cargo of cargoReservations ?? []) {
-    const rowId = text(cargo?.rowId);
-    const id = text(cargo?.batchId);
-    const qty = whole(cargo?.qty);
-    if (!rowId || !id || !qty) continue;
-    const key = batchKey(rowId, id);
-    const previous = requested.get(key);
-    if (previous) previous.qty += qty;
-    else requested.set(key, { rowId, batchId: id, qty });
-  }
-  for (const [key, requirement] of requested) {
-    const batch = available.get(key);
-    if (!batch || batch.availableQty < requirement.qty) {
-      return {
-        ok: false,
-        stale: true,
-        rowId: requirement.rowId,
-        batchId: requirement.batchId,
-        requested: requirement.qty,
-        available: batch?.availableQty ?? 0,
-        message: "Reserved outbound cargo changed after preview."
-      };
-    }
-  }
-  return { ok: true, reservedQty: [...requested.values()].reduce((sum, row) => sum + row.qty, 0) };
-}
-
 function buyerPresence(organization = {}, countryId = "") {
   const buyer = organization?.buyer && typeof organization.buyer === "object" ? organization.buyer : null;
   if (!buyer || buyer.enabled === false) return 0;
@@ -213,7 +180,7 @@ function pricedRoute(candidate = {}, cargoValueCopper = 0, insuranceEnabled = tr
   };
 }
 
-export function selectCheapestMarketOutboundRoute({ routes = [], cargoValueCopper = 0, insuranceEnabled = true } = {}) {
+function selectCheapestMarketOutboundRoute({ routes = [], cargoValueCopper = 0, insuranceEnabled = true } = {}) {
   const candidates = (Array.isArray(routes) ? routes : [])
     .filter((route) => route?.ok !== false)
     .map((route) => pricedRoute(route, whole(cargoValueCopper, 0, Number.MAX_SAFE_INTEGER), insuranceEnabled))

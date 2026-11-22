@@ -8,7 +8,7 @@ export const SHIP_REVIEW_VARIANTS = [
   { id: "split", label: "Б · Рабочий стол", hint: "Список и план рядом. Постоянная навигация слева; при узком окне колонки складываются." },
   { id: "steps", label: "В · Подготовка по шагам", hint: "Заказы → план → проверка. Меньше информации за раз, но больше переключений." }
 ];
-export const SHIP_REVIEW_SECTIONS = [
+const SHIP_REVIEW_SECTIONS = [
   { id: "layout", label: "Общая компоновка", panel: "orders" },
   { id: "orders", label: "Рейсы и заказы", panel: "orders" },
   { id: "crew", label: "Экипаж", panel: "crew" },

@@ -9,14 +9,6 @@ export function formatShipMoney(copper) {
   return `${sign}${formatCopperCurrencyCompact(Math.abs(value))}`;
 }
 
-export function formatShipMoneySigned(copper) {
-  if (copper === null || copper === undefined || copper === "") return "—";
-  const value = Number(copper);
-  if (!Number.isSafeInteger(value)) return "—";
-  const sign = value < 0 ? "−" : value > 0 ? "+" : "";
-  return `${sign}${formatCopperCurrencyCompact(Math.abs(value))}`;
-}
-
 /** Color-coded inline HTML for visible З / С / М amounts; never interpolates unvalidated strings. */
 export function formatShipMoneyHtml(copper, { signed = false } = {}) {
   if (copper === null || copper === undefined || copper === "") return "—";
@@ -28,15 +20,6 @@ export function formatShipMoneyHtml(copper, { signed = false } = {}) {
   const signHtml = sign ? `<span class="fbls-money-sign">${sign}</span>` : "";
   const partsHtml = parts.map((part) => `<span class="fbls-coin is-${part.tone}"><b>${part.value}</b><i>${part.label}</i></span>`).join("");
   return `<span class="fbls-money" aria-label="${plain}">${signHtml}${partsHtml}</span>`;
-}
-
-export function formatShipGold(copper) {
-  const value = Number(copper);
-  if (!Number.isSafeInteger(value)) return "—";
-  const sign = value < 0 ? "−" : "";
-  const whole = Math.floor(Math.abs(value) / 100);
-  const fraction = String(Math.abs(value) % 100).padStart(2, "0");
-  return `${sign}${whole.toLocaleString("ru-RU")},${fraction}`;
 }
 
 export function parseShipGoldInput(value) {

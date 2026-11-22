@@ -407,7 +407,7 @@ function checkMarketBoundaries() {
   const routeEdgeTemplate = readFileSync(path.join(root, "templates/route-edge-editor.hbs"), "utf8");
   const marketTemplate = readFileSync(path.join(root, "templates/market-app.hbs"), "utf8");
   const marketCss = readFileSync(path.join(root, "styles/parts/market/market.css"), "utf8");
-  const marketCheckoutCss = readFileSync(path.join(root, "styles/parts/market/market-checkout.css"), "utf8");
+  const transportCss = readFileSync(path.join(root, "styles/parts/market/transport-window.css"), "utf8");
   const imageFallback = readFileSync(path.join(root, "scripts/apps/common/image-fallback.js"), "utf8");
   const buildingTemplate = readFileSync(path.join(root, "templates/parts/skyhold-tab-buildings.hbs"), "utf8");
   const skyholdApp = readFileSync(path.join(root, "scripts/apps/skyhold-app.js"), "utf8");
@@ -547,12 +547,15 @@ function checkMarketBoundaries() {
   assert.doesNotMatch(marketTemplate, /\{\{locationText\}\}|title="Локация"/, "market header must never expose the settlement location");
   assert.match(marketTemplate, /title="Страна: {{marketCountryLabel}}"[\s\S]{0,300}title="Размер рынка: {{marketSizeLabel}}"[\s\S]{0,300}title="Состояние рынка: {{marketConditionLabel}}"/, "market header facts must preserve full country, size and state values in that order");
   assert.match(transportTemplate, /selected\.delivery[\s\S]+selected\.stages[\s\S]+transport-invoice/, "transport checkout separates total, stage calculations and goods/taxes");
+  const quote = transportTemplate.match(/<article class="[^"]*\bfbls-panel\b[^"]*\bfbls-transport-quote\b[^"]*">([\s\S]*?)<\/article>/)?.[1] ?? "";
+  assert.match(quote, /<details data-fbls-disclosure="transport-invoice">\s*<summary>[^<]+<\/summary>/, "checkout invoice must have a labeled disclosure in the quote panel");
   const quoteStageHeader = transportTemplate.match(/\{\{#each selected\.stages\}\}\s*<li\b[^>]*>([\s\S]*?)<details\b/)?.[1] ?? "";
   assert.match(quoteStageHeader, /\{\{price\}\}[\s\S]*\{\{label\}\}/, "stage price and carrier summary stay together above the schedule");
   assert.doesNotMatch(transportTemplate, /transport-activate|unless enabled|if enabled/, "the branch has no transport switch or activation command");
   assert.match(marketCss, /\.fbls-market-shell\s*\{[\s\S]{0,180}flex-direction:\s*column/, "market shell must tolerate a variable number of notices without overlapping content");
   assert.match(marketCss, /\.fbls-market-price\s*\{[^}]*display:\s*flex[^}]*font-size:\s*var\(--fbls-type-compact-sm\)/, "market price and movement percentage must share a row at the canonical compact text scale");
-  assert.match(marketCheckoutCss, /\.fbls-market-delivery-help\s*\{[^}]*border:[^}]*background:/, "delivery calculation disclosure must be visually discoverable in the checkout");
+  assert.match(transportCss, /\.fbls-transport-content \.fbls-panel\s*\{[^}]*border:[^}]*background:/, "the transport quote panel must be visually distinct");
+  assert.match(transportCss, /\.fbls-transport-content summary\s*\{[^}]*color:[^}]*cursor:\s*pointer/, "transport disclosures must have a visible, interactive summary");
   assert.doesNotMatch(marketCss, /\.fbls-market-provider-(?:comparison|card)/, "removed market-location comparison CSS must not remain in the active cascade");
   assert.match(marketCss, /--fbls-market-columns:[^;]+minmax\([^;]+;/, "market products must share one dense table grid contract");
   assert.match(marketCss, /\.fbls-market-offer-columns\s*\{[^}]*position:\s*sticky/, "market table headings must remain visible while long catalogs scroll");

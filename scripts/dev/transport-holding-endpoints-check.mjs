@@ -7,7 +7,6 @@ import { normalizeSkyholdData } from "../data/normalizers.js";
 import { planTransportChain } from "../engines/transport/planner.js";
 import { bookTransportOrder } from "../engines/transport/runtime.js";
 import { transportServicesShareFleet } from "../engines/transport/service-identity.js";
-import { transportRefinements } from "../apps/domains/transport-view.js";
 
 function fixture() {
   const f = transportFixture();
@@ -110,8 +109,6 @@ for (const kind of ["regular", "charter"]) for (const generation of ["regional",
     assert.ok(quoted.plan.stages[0].runs[0].startQd >= (kind === "regular" ? plan.stages[0].runs[0].startQd + service.intervalQd
       : plan.stages[0].runs[0].releaseQd), "old booking still occupies the transport time");
     assert.deepEqual(selectedRequest, before, "resolving an old choice is read-only");
-    const refinements = transportRefinements(quoted.services, { pins: { [selected.from]: previousId } });
-    assert.equal(refinements.groups.find(row => row.from === selected.from).options.find(row => row.selected)?.value, selected.id);
     const excluded = prepareTransportContext({ data: h.data, holding,
       request: { ...selectedRequest, serviceIds: undefined, excluded: [previousId] }, isGM: true });
     assert.ok(excluded.plan.stages.every(stage => stage.service.kind !== kind), "old exclusions cover their warehouse successors");

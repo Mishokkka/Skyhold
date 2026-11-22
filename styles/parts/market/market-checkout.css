@@ -66,31 +66,6 @@
 .fbls-market-cart-section > header { padding-bottom: 5px; border-bottom: 1px solid var(--fbls-border); }
 .fbls-market-cart-section > header strong { font-size: var(--fbls-type-compact-sm); }
 
-.fbls-market-delivery-help { font-size: var(--fbls-type-compact-xs); }
-.fbls-market-delivery-help summary { color: var(--fbls-accent); cursor: pointer; }
-
-.fbls-market-delivery-help {
-  margin-top: 7px;
-  border: 1px solid var(--fbls-accent-border);
-  border-radius: 7px;
-  background: var(--fbls-accent-soft);
-}
-
-.fbls-market-delivery-help > summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 7px;
-  padding: 6px 8px;
-  font-size: var(--fbls-type-compact-xs);
-  font-weight: 800;
-  list-style-position: inside;
-}
-
-.fbls-market-delivery-help > summary span { display: inline-flex; align-items: center; gap: 5px; }
-.fbls-market-delivery-help > summary strong { color: var(--fbls-text-strong); white-space: nowrap; }
-.fbls-market-delivery-help[open] > summary { border-bottom: 1px solid var(--fbls-accent-border); }
-
 .fbls-market-cart .fbls-action-group {
   display: grid;
   grid-template-columns: auto 1fr;

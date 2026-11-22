@@ -1,4 +1,4 @@
-import { isResidentAway, residentShipAssignment } from "../../data/resident-presence.js";
+import { residentShipAssignment } from "../../data/resident-presence.js";
 
 function text(value = "") {
   return String(value ?? "").trim();
@@ -234,5 +234,3 @@ export function disembarkShipCrew(holding = {}, ship = {}, clockQd = 0) {
   }
   return { ok: true, changed, shipId, clockQd: whole(clockQd), residentIds, clearedAssignments: 0, issues };
 }
-
-export { isResidentAway };

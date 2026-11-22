@@ -9,11 +9,6 @@ function requireFunds(balance, amount) {
   if (balance < amount) throw new RangeError("Insufficient funds");
 }
 
-export function createShipFunds(settlementCopper) {
-  money(settlementCopper, "settlementCopper");
-  return { settlementCopper, onboardCopper: 0, status: "docked", receipts: [] };
-}
-
 /** Pure immutable operation with replay/conflict detection within the supplied ledger. */
 export function applyShipFundsOperation(state, operation) {
   money(state.settlementCopper, "settlementCopper");

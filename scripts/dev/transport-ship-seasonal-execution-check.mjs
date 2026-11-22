@@ -6,7 +6,7 @@ import { buildShipWorldContext, generateWorldShipOffers, quoteWorldShipBundle, w
   worldShipTransportOptions } from "../engines/ships/world-market.js";
 import { departWorldShipBundle, advanceWorldShips, resolveWorldShipBundleStop, continueWorldShipBundle } from "../engines/ships/world-voyage.js";
 import { createShipOperationExecutor } from "../apps/ship-operation-executor.js";
-import { transportPeriodCosts, TRANSPORT_LIMITS } from "../engines/transport/quantities.js";
+import { transportPeriodCosts } from "../engines/transport/quantities.js";
 import { transportRiskBps } from "../engines/transport/economics.js";
 
 globalThis.game = { user: { id: "gm", isGM: true }, settings: { get() {} }, modules: new Map() };
