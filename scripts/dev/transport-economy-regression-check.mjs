@@ -11,6 +11,7 @@ import { customerTransportFare } from "../engines/ships/customer-fares.js";
 import { transportServicesFromRoutes, validateTransportConfiguration } from "../engines/transport/services.js";
 import { configuredTransportCharges, transportServiceCharge } from "../engines/transport/economics.js";
 import { planTransportChain } from "../engines/transport/planner.js";
+import { checkShipFreightTerms } from "./ship-freight-terms-check.mjs";
 
 const neverRoll = () => { throw new Error("A saved result was rerolled"); };
 function shipHarness(f) {
@@ -93,8 +94,9 @@ function checkBundle(firstSeverity, lastSeverity = null) {
     const earlierDamage = id === "b" && firstSeverity === 1 ? 0.75 : 1;
     const laterDamage = lastSeverity === 1 ? 0.75 : 1;
     const allowedBonus = lastSeverity == null && (id === "pickup" || firstSeverity == null);
+    const bonusBase = Math.max(0, row.contract.rewardCopper - (row.contract.economics?.taxCopper ?? 0));
     const expected = Math.ceil(row.contract.rewardCopper * earlierDamage * laterDamage)
-      + (allowedBonus ? Math.ceil(row.contract.rewardCopper * 0.02) : 0);
+      + (allowedBonus ? Math.ceil(bonusBase * 6 / 100) : 0);
     assert.equal(row.outcome.rewardCopper, expected, `${id}: only this order's loaded passages determine the bonus`);
   }
   const afterLast = ship.onboardCopper;
@@ -234,8 +236,10 @@ function checkFreightFallback() {
 function checkCommonRates() {
   const f = worldMarketFixture(), world = buildShipWorldContext(f.data, f.holding);
   const origin = world.ports.find(port => port.id === "a"), destination = world.ports.find(port => port.id === "b");
-  Object.assign(origin, { airshipHireCopper: 1200, deliveryDistanceCopper: 1.5, deliveryLoadDistanceCopper: 0.2 });
-  for (const loadPoints of [400, 1200, 3000]) for (const carrierProfitBps of [0, 2000, 5000]) {
+  Object.assign(origin, { deliveryDistanceCopper: 1.5, deliveryLoadDistanceCopper: 0.2 });
+  const fullLotCases = new Set();
+  for (const loadPoints of [400, 1200, 3000, 4000]) for (const carrierProfitBps of [0, 2000, 5000]) {
+    origin.airshipHireCopper = carrierProfitBps ? 1200 : 0;
     const configuration = validateTransportConfiguration({ riskBps: 0, carrierProfitBps });
     let profile, route;
     const fare = customerTransportFare({ cargo: { kind: "freight", loadPoints }, origin, destination, resources: world.resources, configuration,
@@ -248,11 +252,19 @@ function checkCommonRates() {
       routeId: "equal-terms", carrierId: "carrier", mode: "airship", capacityLoad: profile.capacityLoadPoints / 4,
       movementQd: route.durationQd, distanceKm: route.distanceKm, riskFactor: 1, operatingFactor: 1,
       ...configuredTransportCharges({ mode: "airship", distanceKm: route.distanceKm, settings: origin, dispatchCopper: 20 }) };
-    const service = transportServicesFromRoutes([{ transportPlan: { direction: "outbound", legs: [leg] } }], configuration, world.regions,
-      { markets: world.ports, resources: world.resources })[0];
+    const [service, charter] = transportServicesFromRoutes([{ transportPlan: { direction: "outbound", legs: [leg] } }], configuration, world.regions,
+      { markets: world.ports, resources: world.resources });
     assert.equal(fare.marketFeeCopper, transportServiceCharge(service, loadPoints * 1000, 0).totalCopper,
       "equal capacity, time, ports and settings give equal client and hired base fares");
+    if (loadPoints === 4000) {
+      const cycleQd = charter.preparationQd + charter.loadingQd + charter.travelQd + charter.unloadingQd + charter.returnQd;
+      const charterFee = transportServiceCharge(charter, loadPoints * 1000, cycleQd, charter.returnQd).totalCopper;
+      fullLotCases.add(charterFee > fare.marketFeeCopper);
+      assert.equal(fare.rewardCopper, Math.max(charterFee, fare.marketFeeCopper),
+        "a full barque earns the charter rate unless regular is already higher, with handling counted once");
+    }
   }
+  assert.equal(fullLotCases.size, 2, "test both a charter premium and a higher regular tariff");
   const local = { id: "zero-charter", kind: "charter", from: "warehouse", to: "port", distanceKm: 0,
     capacity: 10, travelQd: 0, loadingQd: 1, unloadingQd: 1, loadingCapacity: 10, unloadingCapacity: 10,
     operatingCopperPerQd: 1, returnQd: 0 };
@@ -274,4 +286,5 @@ checkLocalDistance();
 await checkLocalExecution();
 checkFreightFallback();
 checkCommonRates();
+checkShipFreightTerms();
 console.log("Transport economy regressions: cumulative bonuses, reload/retry, configured fares/budgets, board refresh, accepted terms, zero local execution, smaller freight and GM/player passed.");

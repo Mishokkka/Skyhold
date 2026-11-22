@@ -2,12 +2,13 @@ import { fleetAccountingSummary } from "../engines/ships/fleet-accounting.js";
 import { quoteShipDeparture } from "../engines/ships/runtime.js";
 import { attentionLabel, contractGuidance } from "../engines/ships/contracts.js";
 import { getShipProfile, SHIP_PROFILES } from "../engines/ships/profiles.js";
-import { buildShipWorldContext, quoteWorldShipReturn, quoteWorldShipHomeUpkeep, repriceWorldShipOffer, worldShipTimeBreakdown } from "../engines/ships/world-market.js";
+import { buildShipWorldContext, canCombineMailWithFreight, quoteWorldShipReturn, quoteWorldShipHomeUpkeep, repriceWorldShipOffer, worldShipTimeBreakdown } from "../engines/ships/world-market.js";
 import { holdingPermissionContext } from "../data/holding-permissions.js";
 import { MAGNIFIQUE_CREW_VERSION } from "../data/magnifique-crew.js";
 import { isMagnifiqueShip } from "../engines/ships/crew-roster.js";
 import { hasResidentSettlementWork, isResidentAway, isResidentRestingOnShip, residentShipAssignment } from "../data/resident-presence.js";
-import { shipCrewReadiness } from "../engines/ships/crew-readiness.js";
+import { shipCrewReadiness, shipWatchRiskReductionPercent } from "../engines/ships/crew-readiness.js";
+import { captainRiskTerms } from "../engines/ships/contract-economics.js";
 import { shipMoneySummary, shipOutingSummary } from "../engines/ships/summary.js";
 import { gmShipClockBlockReason } from "../engines/ships/gm-override.js";
 import { prepareShipManagementState, shipTransportState } from "./domains/ship-management-state.js";
@@ -66,9 +67,12 @@ function preparedGuidance(contract) {
     const guidance = contractGuidance(contract, style);
     const riskLabel = guidance.incidentPressure <= 3 ? "низкий" : guidance.incidentPressure <= 6 ? "заметный" : guidance.incidentPressure <= 8 ? "высокий" : "крайний";
     const modern = contract.economics?.version === 1;
-    const hints = { cautious: "Вероятность происшествия ниже на четверть; предусмотрены отдельные расходы на предосторожности.",
+    const { boldRiskPercent, cautiousReductionPercent } = captainRiskTerms(contract.economics);
+    const boldFactor = (boldRiskPercent / 100).toLocaleString("ru-RU", { maximumFractionDigits: 2 });
+    const taxNote = contract.economics?.cleanPassageBonusPercent != null ? " от платы без пошлин" : "";
+    const hints = { cautious: `Риск происшествия ниже на ${cautiousReductionPercent}%. Расходы на предосторожности — ${formatShipMoney(contract.economics?.precautionCopper ?? 0)}.`,
       normal: "Договорная плата. Ремонт и содержание при задержке рассчитываются отдельно.",
-      bold: "Вероятность происшествия выше в полтора раза; премия 2% за полное исполнение без задержек." };
+      bold: `Риск происшествия выше в ${boldFactor} раза; премия ${contract.economics?.cleanPassageBonusPercent ?? 2}%${taxNote} за полное исполнение без задержек.` };
     return { ...guidance, riskLabel: modern ? `${(guidance.riskBps / 100).toLocaleString("ru-RU", { maximumFractionDigits: 2 })}%` : riskLabel,
       styleHint: modern ? hints[style] : STYLE_HINTS[style] };
   });
@@ -100,11 +104,14 @@ function worldOfferRow(offer, worldContext, resourceLabels = null) {
   const returnReserveCopper = Number(quote.returnReserveCopper ?? 0);
   const idleReserveCopper = Number(quote.idleReserveCopper ?? 0);
   const outcomeReserveCopper = Math.max(0, recommendedBudgetCopper - totalCostCopper - returnReserveCopper - idleReserveCopper);
+  const premiumLabel = contract.economics?.cautiousReductionPercent == null ? "за особую услугу"
+    : contract.kind === "smuggling" ? "за стоимость скрытого груза и внимание властей"
+      : contract.kind === "commission" ? "за почту и пассажиров" : "за объём и класс судна";
   const recommendedReserveCopper = Math.max(0, recommendedBudgetCopper - totalCostCopper);
   return {
     ...offer,
     feeHint: contract.economics?.version === 1
-      ? `Плата за место на рейсе по общей себестоимости и штатной команде. Подлёт к погрузке и дорога домой не повышают плату. Пошлины и обработка включены. Доплата за особую услугу: ${formatShipMoney(contract.economics.specialPremiumCopper)}; за риск: ${formatShipMoney(contract.economics.riskPremiumCopper)}. ${contract.kind === "smuggling" ? "При срыве сделки плата может быть утрачена." : `При отмене заказчиком: ${contract.kind === "commission" ? 50 : 75}% платы до последствий перевозки.`}`
+      ? `Плата по рыночному тарифу. Пустой подлёт и возврат домой не оплачиваются. Пошлины и обработка включены. Доплата ${premiumLabel}: ${formatShipMoney(contract.economics.specialPremiumCopper)}; за риск: ${formatShipMoney(contract.economics.riskPremiumCopper)}. ${contract.kind === "smuggling" ? "При срыве сделки плата может быть утрачена." : `При отмене заказчиком: ${contract.kind === "commission" ? 50 : 75}% платы до последствий перевозки.`}`
       : "Плата сохранена по прежним условиям предложения. Дорогая фактическая команда не повышает плату; подход капитана и события меняют итог.",
     title: normalizedOfferTitle(offer, cargoTitle),
     cargoTitle,
@@ -385,7 +392,25 @@ export function prepareShipWindowContext(holding, { revision = 0, data = null, s
     const offerLockKey = `${ship.id}|${ship.location?.kind ?? ""}:${ship.location?.id ?? ""}|${period}`;
     const worldOffersGenerated = Boolean(ships.worldOfferLocks?.[offerLockKey]);
     const moneySummary = isWorld ? shipMoneySummary(holding, ship, { returnOffer, clockQd: shipQd }) : null;
-    const availableOffers = offersByShip.get(ship.id) ?? [];
+    const watchReductionPercent = Math.round(shipWatchRiskReductionPercent(ship, readiness?.readyCount ?? 0));
+    const rawOffers = offersByShip.get(ship.id) ?? [];
+    const availableOffers = rawOffers.map((row) => {
+      let next = row;
+      if (watchReductionPercent > 0 && row.contract?.economics?.cautiousReductionPercent != null) {
+        next = { ...next, difficultyHint: `${next.difficultyHint} Усиленная вахта (${readiness.readyCount} чел.) снижает базовый риск на ${watchReductionPercent}%.` };
+      }
+      if (data && isWorld && row.contract?.kind === "commission") {
+        const companion = rawOffers.find(candidate => canCombineMailWithFreight(data, holding, ship, candidate, row, { context: worldContext }));
+        if (companion) {
+          next = {
+            ...next,
+            isCompanion: true,
+            companionHint: `Попутно к фрахту («${companion.cargoTitle}»): в связке добавит ${formatShipMoney(row.rewardCopper)} выручки без лишнего перелёта.`
+          };
+        }
+      }
+      return next;
+    });
     const management = isWorld ? prepareShipManagementState(holding, ship, { permissions, readiness, money: moneySummary, offers: availableOffers, returnOffer }) : null;
     const relocationPorts = isWorld && !inTransit && !ship.orderBundle && !ownSale && !transport.busy
       ? worldContext.ports.filter((port) => port.regionId !== ship.location?.regionId

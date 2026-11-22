@@ -7,7 +7,8 @@ import { composeMarketLocation, effectiveMarketLocations, marketLocationFactors 
 import { shortestMarketRoute, marketAirshipRoutes } from "../market/logistics.js";
 import { getCalendariaSeasonSnapshot } from "../../integrations/calendaria-bridge.js";
 import { attentionLevel, attentionLabel, contractGuidance } from "./contracts.js";
-import { shipCrewComposition } from "./crew-readiness.js";
+import { shipCrewComposition, shipWatchRiskReductionPercent } from "./crew-readiness.js";
+import { CAPTAIN_TERMS, captainRiskTerms } from "./contract-economics.js";
 import { calculateShipCosts, getShipProfile, shipCapacityLoadPoints } from "./profiles.js";
 import { shipIdleReserveCopper } from "./fleet-accounting.js";
 import { bundleOutcomeReserves } from "./bundle-accounting.js";
@@ -380,6 +381,17 @@ function customerRouteRisk(quote, kind, attention, baseRiskBps) {
     approachRiskBps: transportRiskBps(approach, baseRiskBps) };
 }
 
+function watchRiskBps(holding, ship, baseRiskBps) {
+  if (ship.profileId !== "merchant-barque") return baseRiskBps;
+  const reduction = shipWatchRiskReductionPercent(ship, shipCrewComposition(holding, ship).readyCount);
+  return Math.round(baseRiskBps * (1 - reduction / 100));
+}
+
+function hullIncidentTerms(ship, currentTerms) {
+  const upkeep = getShipProfile(ship.profileId).upkeepDailyCopper;
+  return { repairCopper: upkeep * 30, precautionCopper: upkeep * (currentTerms ? 1 : 3) };
+}
+
 /** Plan several customer consignments without reserving stock or changing ship state. */
 export function quoteWorldShipBundle(data, holding, ship, offers, { context = null } = {}) {
   if (ship.navigationMode !== "world" || ship.activeVoyage || ship.orderBundle) throw new Error("Корабль уже занят рейсом.");
@@ -387,6 +399,19 @@ export function quoteWorldShipBundle(data, holding, ship, offers, { context = nu
   if (new Set(offers.map((offer) => offer?.id)).size !== offers.length) throw new Error("Один заказ нельзя выбрать дважды.");
   if (new Set(offers.map(offer => offer.contract?.economics?.version ?? 0)).size > 1) {
     throw new Error("Обновите свободные предложения перед объединением заказов с разными условиями.");
+  }
+  const firstEconomics = offers[0].contract?.economics;
+  const newEconomics = firstEconomics?.version === 1;
+  const currentTerms = newEconomics && firstEconomics.cautiousReductionPercent != null;
+  const passageTerms = captainRiskTerms(firstEconomics);
+  if (newEconomics && offers.slice(1).some(offer => {
+    const economics = offer.contract.economics;
+    const terms = captainRiskTerms(economics);
+    return (economics.cautiousReductionPercent != null) !== currentTerms
+      || terms.cautiousReductionPercent !== passageTerms.cautiousReductionPercent
+      || terms.boldRiskPercent !== passageTerms.boldRiskPercent;
+  })) {
+    throw new Error("У заказов разные условия капитана для общего перелёта. Обновите свободные предложения или выполните заказы отдельно.");
   }
   offers = structuredClone(offers);
   const world = context ?? buildShipWorldContext(data, holding, {
@@ -488,9 +513,9 @@ export function quoteWorldShipBundle(data, holding, ship, offers, { context = nu
   let previous = origin;
   let totalOperatingCopper = 0;
   let carriedLoadPoints = startingLoad;
-  const newEconomics = offers.every(offer => offer.contract.economics?.version === 1);
   const carriedIds = new Set(initialJobs.map(job => job.offer.id));
   const configuration = validateTransportConfiguration(data.catalog?.transportV2);
+  const baseRiskBps = currentTerms ? watchRiskBps(holding, ship, configuration.riskBps) : configuration.riskBps;
   let loadedClockQd = Number(ship.timelineQd ?? holding.gm?.calendaria?.lastQd ?? 0) + initialHandlingQd;
   for (const job of initialJobs) startClientCargo(job.offer.contract.cargo, loadedClockQd, initialHandlingQd);
   const plannedStops = best.sequence.map((port, index) => {
@@ -533,7 +558,7 @@ export function quoteWorldShipBundle(data, holding, ship, offers, { context = nu
         durationQd, distanceKm: route.distanceKm, speedKmPerDay: route.speedKmPerDay,
         operatingCopper: costs.totalCopper, preparationCopper: 0, rewardCopper: 0, costs,
         seasonal: structuredClone({ ...route.seasonal, handlingQd, loadingQd: index === 0 ? initialHandlingQd : 0,
-          dailyCosts: base.dailyCosts, baseRiskBps: configuration.riskBps, illegalRisk }),
+          dailyCosts: base.dailyCosts, baseRiskBps, illegalRisk }),
         idleUpkeepCopperPerDay: costsFor(world, holding, ship, port, port, { durationQd: 4 }).dailyCopper,
         idleReserveCopper: 0, returnReserveCopper: 0, recommendedBudgetCopper: costs.totalCopper
       }
@@ -543,9 +568,9 @@ export function quoteWorldShipBundle(data, holding, ship, offers, { context = nu
       deliveryOfferIds: deliveries.map((job) => job.offer.id), loadOnLegPoints,
       loadAfterPoints: carriedLoadPoints, legOffer,
       ...(newEconomics ? { cargoOfferIds, economics: { version: 1,
-        riskBps: transportRiskBps(route.riskExposureQd * illegalRisk, configuration.riskBps),
-        repairCopper: getShipProfile(ship.profileId).upkeepDailyCopper * 30,
-        precautionCopper: getShipProfile(ship.profileId).upkeepDailyCopper * 3,
+        riskBps: transportRiskBps(route.riskExposureQd * illegalRisk, baseRiskBps),
+        ...hullIncidentTerms(ship, currentTerms),
+        ...(currentTerms || firstEconomics.boldRiskPercent != null ? passageTerms : {}),
         delayDailyCopper: legOffer.quote.idleUpkeepCopperPerDay } } : {}) };
   });
   const last = best.sequence.at(-1);
@@ -608,11 +633,13 @@ export function repriceWorldShipOffer(data, holding, ship, offer, { context = nu
     guidance: { operatingCopper: quote.operatingCopper, preparationCopper: 0 },
     routePlan: { ...offer.contract.routePlan, upkeepPerDayCopper: quote.idleUpkeepCopperPerDay }
   };
-  if (contract.economics?.version === 1) contract.economics = { ...contract.economics,
-    ...customerRouteRisk(quote, contract.kind, contract.attention.level, validateTransportConfiguration(data.catalog?.transportV2).riskBps),
-    repairCopper: getShipProfile(ship.profileId).upkeepDailyCopper * 30,
-    precautionCopper: getShipProfile(ship.profileId).upkeepDailyCopper * 3,
-    delayDailyCopper: quote.idleUpkeepCopperPerDay };
+  if (contract.economics?.version === 1) {
+    const currentTerms = contract.economics.cautiousReductionPercent != null;
+    const { riskBps } = validateTransportConfiguration(data.catalog?.transportV2);
+    contract.economics = { ...contract.economics, ...hullIncidentTerms(ship, currentTerms),
+      ...customerRouteRisk(quote, contract.kind, contract.attention.level, currentTerms ? watchRiskBps(holding, ship, riskBps) : riskBps),
+      delayDailyCopper: quote.idleUpkeepCopperPerDay };
+  }
   quote.rewardCopper = contract.rewardCopper;
   quote.recommendedBudgetCopper = money(contractGuidance(contract).suggestedBudgetCopper + quote.returnReserveCopper + quote.idleReserveCopper);
   const rawTitle = String(offer.title ?? "").trim();
@@ -620,6 +647,19 @@ export function repriceWorldShipOffer(data, holding, ship, offer, { context = nu
     ? rawTitle
     : `${contract.kind === "smuggling" ? "Груз без декларации" : cargo.name}${pickup ? `: ${pickup.label}` : ""} → ${to.label}`;
   return { ...offer, title, from: point(from), to: point(to), quote, contract };
+}
+
+export function canCombineMailWithFreight(data, holding, ship, freight, mail, { context } = {}) {
+  if (freight.contract?.kind !== "freight" || mail.contract?.kind !== "commission"
+    || bundlePortKey(freight.contract.pickup ?? freight.from) !== bundlePortKey(mail.contract.pickup ?? mail.from)
+    || bundlePortKey(freight.to) !== bundlePortKey(mail.to)
+    || freight.contract.cargo.loadPoints + mail.contract.cargo.loadPoints > shipCapacityLoadPoints(ship)) return false;
+  try {
+    quoteWorldShipBundle(data, holding, ship, [freight, mail], { context });
+    return true;
+  } catch (_error) {
+    return false;
+  }
 }
 
 /** Customer-owned transport jobs. The settlement never buys or sells this cargo. */
@@ -631,7 +671,17 @@ export function generateWorldShipOffers(data, holding, ship, { period, random = 
   const needsExternalPickup = from.kind === "home" || from.regionId === world.home.regionId;
   const periodKey = String(period ?? "");
   if (!periodKey || periodKey.length > 80) throw new Error("Не указан период предложений.");
-  const destinations = world.ports.filter((port) => port.regionId !== from.regionId && port.regionId !== world.home.regionId && shortestMarketRoute(from.regionId, port.regionId, world.regions, { mode: "airship" }) && shortestMarketRoute(port.regionId, world.home.regionId, world.regions, { mode: "airship" }));
+  const distanceByPort = new Map();
+  const destinations = world.ports.filter(port => {
+    if (port.regionId === from.regionId || port.regionId === world.home.regionId) return false;
+    const route = shortestMarketRoute(from.regionId, port.regionId, world.regions, { mode: "airship" });
+    if (!route || !shortestMarketRoute(port.regionId, world.home.regionId, world.regions, { mode: "airship" })) return false;
+    distanceByPort.set(port.id, route.distanceKm);
+    return true;
+  });
+  const pickupPorts = [...destinations]
+    .sort((left, right) => distanceByPort.get(left.id) - distanceByPort.get(right.id) || String(left.id).localeCompare(String(right.id)))
+    .slice(0, 3);
   if (!destinations.length) throw new Error("Нет доступных портов с воздушным маршрутом и путём домой. Проверьте связи на карте мирового рынка.");
   if (needsExternalPickup && destinations.length < 2) throw new Error("Для мирового заказа нужны два внешних поселения: погрузка и доставка. Домашнее поселение не является заказчиком. Добавьте доступные воздушные порты.");
   const draw = () => {
@@ -642,41 +692,40 @@ export function generateWorldShipOffers(data, holding, ship, { period, random = 
   const capacity = shipCapacityLoadPoints(ship);
   if (!capacity) return [];
   const configuration = validateTransportConfiguration(data.catalog?.transportV2);
+  const baseRiskBps = watchRiskBps(holding, ship, configuration.riskBps);
   const activity = Math.max(0.6, Math.min(1.4, Number(from.factors?.availability ?? 1)));
   const boardRoll = Math.max(0, Math.min(0.999999, draw() + (activity - 1) * 0.1));
   const offerSlots = boardRoll < 0.05 ? 0 : boardRoll < 0.15 ? 1 : boardRoll < 0.25 ? 2 : boardRoll < 0.75 ? 3 : 4;
   const offers = [];
-  for (let index = 0; index < offerSlots; index++) {
-    const to = portWithOffers(world, destinations[Math.floor(draw() * destinations.length)]);
+  const quoteOffer = ({ to, pickup, kind, maxLoad, index }) => {
     const directionKey = `port:${to.id}`;
     const level = attentionLevel(ship, directionKey);
-    const illegalChance = level >= 8 ? 0.8 : level >= 5 ? 0.55 : 0.25;
-    const hidden = Math.max(0, Number(ship.hiddenCapacityLoadPoints || 0));
-    const kind = index === 0 ? (draw() < 0.2 ? "commission" : "freight")
-      : index === 1 ? (draw() < 0.65 ? "commission" : "freight")
-        : (draw() < illegalChance && hidden > 0 ? "smuggling" : "freight");
-    const pickupCandidates = needsExternalPickup || (index >= 2 && draw() < 0.35)
-      ? destinations.filter((port) => port.regionId !== to.regionId
-        && shortestMarketRoute(port.regionId, to.regionId, world.regions, { mode: "airship" })) : [];
-    const pickup = pickupCandidates.length ? portWithOffers(world, pickupCandidates[Math.floor(draw() * pickupCandidates.length)]) : null;
-    if (needsExternalPickup && !pickup) continue;
     const origin = pickup ?? from;
     const demandByResource = new Map((to.outboundOffers ?? []).map((row) => [row.resourceId, row]));
     const goods = (origin.offers ?? []).filter((row) => row.sourceType !== "item" && row.loadPoints > 0 && row.baseStock > 0 && demandByResource.get(row.resourceId)?.baseDemand > 0);
-    if (!goods.length && kind !== "commission") continue;
+    if (!goods.length && kind !== "commission") return null;
     const availableQuantity = (good) => Math.min(
       Math.floor(good.baseStock * (origin.factors?.availability ?? 1) * WHOLESALE_LOTS),
       Math.floor(demandByResource.get(good.resourceId).baseDemand * (to.factors?.availability ?? 1) * WHOLESALE_LOTS)
     );
-    const limit = kind === "smuggling" ? Math.min(capacity, hidden) : capacity;
-    const bestLoad = goods.reduce((best, good) => Math.max(best, Math.min(limit, availableQuantity(good) * good.loadPoints)), 0);
-    const suitable = goods.filter((good) => availableQuantity(good) * good.loadPoints >= Math.min(limit * 0.6, bestLoad));
-    const choice = suitable.length ? Math.floor(draw() * suitable.length) : 0;
-    const loadShare = suitable.length ? 0.6 + draw() * 0.35 : 0.6;
-    // Prefer a useful full lot, but test smaller consignments if the bulk goods cannot afford delivery.
-    const preferred = new Set(suitable);
-    const candidates = [...suitable.slice(choice), ...suitable.slice(0, choice), ...goods.filter(good => !preferred.has(good))];
-    const maxLoad = kind === "commission" ? Math.floor(capacity * 0.2) : limit;
+    let pool;
+    if (kind === "smuggling") {
+      const valueDensity = good => good.basePriceCopper / good.loadPoints;
+      const eligible = goods.filter(good => good.loadPoints <= maxLoad && availableQuantity(good) > 0)
+        .sort((left, right) => valueDensity(right) - valueDensity(left) || String(left.resourceId ?? "").localeCompare(String(right.resourceId ?? "")));
+      pool = eligible.slice(0, Math.ceil(eligible.length / 2));
+    } else {
+      const bestLoad = goods.reduce((best, good) => Math.max(best, Math.min(capacity, availableQuantity(good) * good.loadPoints)), 0);
+      pool = goods.filter(good => availableQuantity(good) * good.loadPoints >= Math.min(capacity * 0.6, bestLoad));
+    }
+    const choice = pool.length ? Math.floor(draw() * pool.length) : 0;
+    const loadShare = pool.length ? 0.6 + draw() * 0.35 : 0.6;
+    const candidates = [...pool.slice(choice), ...pool.slice(0, choice)];
+    if (kind === "freight") {
+      // Bulk freight can fall back to smaller consignments when the preferred goods cannot afford delivery.
+      const preferred = new Set(pool);
+      candidates.push(...goods.filter(good => !preferred.has(good)));
+    }
     const routeCache = new Map();
     const referenceRoute = profile => {
       if (!routeCache.has(profile.id)) {
@@ -693,8 +742,9 @@ export function generateWorldShipOffers(data, holding, ship, { period, random = 
     };
     let selected = null;
     for (let attempt = 0; attempt < (kind === "commission" ? 1 : candidates.length); attempt++) {
-      const good = candidates[attempt];
-      const quantity = good ? Math.min(Math.floor(maxLoad * loadShare / good.loadPoints), availableQuantity(good)) : 0;
+      const good = kind === "commission" ? null : candidates[attempt];
+      const minQuantity = kind === "smuggling" ? 1 : 0;
+      const quantity = good ? Math.min(Math.max(minQuantity, Math.floor(maxLoad * loadShare / good.loadPoints)), availableQuantity(good)) : 0;
       if (kind !== "commission" && quantity <= 0) continue;
       const resource = kind === "commission" ? null : world.resources.find((row) => row.id === good.resourceId);
       const cargoName = kind === "commission"
@@ -717,24 +767,50 @@ export function generateWorldShipOffers(data, holding, ship, { period, random = 
       if (quote && !clientCargoViableAt(cargo, Number(ship.timelineQd ?? holding.gm?.calendaria?.lastQd ?? 0) + quote.durationQd)) continue;
       selected = { cargo, fare, customerBudgetCopper, quote }; break;
     }
-    if (!selected) continue;
+    if (!selected) return null;
     const { cargo, fare, customerBudgetCopper } = selected;
     const quote = selected.quote ?? baseQuote(world, holding, ship, from, to, cargo, pickup);
     const rewardCopper = fare.rewardCopper;
-    const repairCopper = getShipProfile(ship.profileId).upkeepDailyCopper * 30;
     const contract = { kind, rewardCopper, directionKey, destination: to.label, attention: { level, label: attentionLabel(level) },
       guidance: { operatingCopper: quote.operatingCopper, preparationCopper: 0 },
       routePlan: { upkeepPerDayCopper: quote.idleUpkeepCopperPerDay }, cargo,
-      economics: { version: 1, ...fare, customerBudgetCopper, repairCopper,
-        ...customerRouteRisk(quote, kind, level, configuration.riskBps),
-        delayDailyCopper: quote.idleUpkeepCopperPerDay, precautionCopper: Math.ceil(repairCopper / 10) } };
+      economics: { version: 1, ...fare, customerBudgetCopper, ...hullIncidentTerms(ship, true), ...CAPTAIN_TERMS,
+        ...customerRouteRisk(quote, kind, level, baseRiskBps), delayDailyCopper: quote.idleUpkeepCopperPerDay } };
     if (pickup) contract.pickup = point(pickup);
     const guidance = contractGuidance(contract);
     quote.rewardCopper = rewardCopper;
     quote.recommendedBudgetCopper = money(guidance.suggestedBudgetCopper + quote.returnReserveCopper + quote.idleReserveCopper);
     const offerKey = [ship.id, from.kind, from.id, periodKey];
     const id = `world-${stableDataHash(offerKey)}-${stableDataHash([...offerKey].reverse())}-${index}`;
-    offers.push({ mode: "world", id, shipId: ship.id, period: periodKey, kind, title: `${kind === "smuggling" ? "Груз без декларации" : cargo.name}${pickup ? `: ${pickup.label}` : ""} → ${to.label}`, from: point(from), to: point(to), quote, contract });
+    return { mode: "world", id, shipId: ship.id, period: periodKey, kind, title: `${kind === "smuggling" ? "Груз без декларации" : cargo.name}${pickup ? `: ${pickup.label}` : ""} → ${to.label}`, from: point(from), to: point(to), quote, contract };
+  };
+  const hidden = Math.max(0, Number(ship.hiddenCapacityLoadPoints || 0));
+  const mailLoad = Math.max(1, Math.floor(capacity * 0.2));
+  for (let index = 0; index < offerSlots; index++) {
+    const destination = destinations[Math.floor(draw() * destinations.length)];
+    const attention = attentionLevel(ship, `port:${destination.id}`);
+    const illegalChance = attention >= 8 ? 0.8 : attention >= 5 ? 0.55 : 0.25;
+    const kind = index === 0 ? "freight"
+      : index === 1 ? (draw() < 0.65 ? "commission" : "freight")
+        : (draw() < illegalChance && hidden > 0 ? "smuggling" : "freight");
+    const companion = kind === "commission" ? offers.find(row => row.kind === "freight" && row.contract.cargo.loadPoints < capacity) : null;
+    if (companion) {
+      const mail = quoteOffer({ kind, index, to: portWithOffers(world, companion.to), pickup: portWithOffers(world, companion.contract.pickup),
+        maxLoad: Math.min(mailLoad, capacity - companion.contract.cargo.loadPoints) });
+      if (mail && canCombineMailWithFreight(data, holding, ship, companion, mail, { context: world })) {
+        offers.push(mail);
+        continue;
+      }
+    }
+    const to = portWithOffers(world, destination);
+    const pickupCandidates = needsExternalPickup || (index >= 2 && draw() < 0.35)
+      ? pickupPorts.filter((port) => port.regionId !== to.regionId
+        && shortestMarketRoute(port.regionId, to.regionId, world.regions, { mode: "airship" })) : [];
+    const pickup = pickupCandidates.length ? portWithOffers(world, pickupCandidates[Math.floor(draw() * pickupCandidates.length)]) : null;
+    if (needsExternalPickup && !pickup) continue;
+    const maxLoad = kind === "commission" ? mailLoad : kind === "smuggling" ? Math.min(capacity, hidden) : capacity;
+    const offer = quoteOffer({ to, pickup, kind, maxLoad, index });
+    if (offer) offers.push(offer);
   }
   return offers;
 }

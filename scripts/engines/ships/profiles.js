@@ -32,10 +32,10 @@ export const SHIP_PROFILES = deepFreeze({
     id: "merchant-barque",
     label: "Торговый барк",
     speedKmPerDay: 150,
-    crewTarget: 36,
+    crewTarget: 18,
     capacityLoadPoints: 4000,
     cargoTonnes: 500,
-    upkeepDailyCopper: 12,
+    upkeepDailyCopper: 60,
     handlingLoadRateCopper: 1
   },
   schooner: {

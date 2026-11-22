@@ -1,5 +1,6 @@
 import { cargoDeliveryQuantity } from "../market/cargo-aging.js";
 import { transportInteger } from "../transport/quantities.js";
+import { captainStyleRiskBps } from "./contract-economics.js";
 
 /** Existing cargo fields freeze the new agreement's lifetime; absent fields retain legacy terms. */
 export function clientCargoLifetime(cargo) {
@@ -26,7 +27,6 @@ export function clientCargoOutcome(contract, outcome, atQd, delayQd = outcome.de
 }
 
 export function clientCargoLadenDelay(contract, style, outcome) {
-  const factor = style === "cautious" ? 0.75 : style === "bold" ? 1.5 : 1;
-  const approachRisk = Math.min(10000, Math.ceil((contract.economics?.approachRiskBps ?? 0) * factor));
+  const approachRisk = captainStyleRiskBps(contract.economics, style, contract.economics?.approachRiskBps ?? 0);
   return outcome.passageRoll <= approachRisk ? 0 : outcome.delayQd;
 }

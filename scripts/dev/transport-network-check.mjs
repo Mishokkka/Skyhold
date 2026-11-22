@@ -229,7 +229,7 @@ export function exhaustivePlans(input, direction) {
           if (mode === "caravan") dailyCopper = Math.ceil(capacityLoad / 40) * (2 * 21 + 24);
           else if (mode === "rail") dailyCopper = (4 + Math.ceil(capacityLoad / 2000)) * 21 + 60 + Math.ceil(capacityLoad / 100) * 2;
           else {
-            const [capacity, crew, upkeep] = capacityLoad <= 200 ? [200, 8, 3] : capacityLoad <= 500 ? [500, 18, 6] : [1000, 36, 12];
+            const [capacity, crew, upkeep] = capacityLoad <= 200 ? [200, 8, 3] : capacityLoad <= 500 ? [500, 18, 6] : [1000, 18, 60];
             const scale = (capacityLoad / capacity) ** 0.85;
             dailyCopper = Math.max(2, Math.ceil(crew * scale)) * 21 + Math.max(1, Math.ceil(upkeep * scale));
           }

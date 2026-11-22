@@ -73,7 +73,8 @@ function offer(ship, from, to, {
 export function checkWorldShipCharacterization() {
   const barque = getShipProfile("merchant-barque");
   assert.equal(barque.speedKmPerDay, 150);
-  assert.equal(barque.crewTarget, 36);
+  assert.equal(barque.crewTarget, 18);
+  assert.equal(barque.upkeepDailyCopper, 60);
   assert.equal(barque.capacityLoadPoints, 4000);
   assert.equal(barque.cargoTonnes, 500);
   assert.ok(Object.isFrozen(SHIP_PROFILES) && Object.isFrozen(barque));
@@ -92,11 +93,11 @@ export function checkWorldShipCharacterization() {
   assert.deepEqual(costs, {
     foodCopper: 108,
     crewCopper: 648,
-    upkeepCopper: 18,
+    upkeepCopper: 90,
     handlingCopper: 15,
     taxCopper: 100,
-    operatingCopper: 889,
-    totalCopper: 889
+    operatingCopper: 961,
+    totalCopper: 961
   });
   assert.equal(calculateShipCosts({ profileId: "cutter" }, { durationQd: 1, crewDailyCopper: 0 }).crewCopper, 0);
   assert.throws(() => calculateShipCosts({ profileId: "cutter" }, { durationQd: 4, handlingLoadPoints: 801 }), /погрузочный объём/);
@@ -105,8 +106,9 @@ export function checkWorldShipCharacterization() {
   const poor = fixture(10);
   const poorAdvance = advanceWorldShips(poor.holding, 4);
   assert.equal(poor.holding.storage.moneyCopper, 10);
-  assert.equal(poor.ship.pendingPortBillCopper, 12);
-  assert.equal(poorAdvance.blocked[0].pendingPortBillCopper, 12);
+  assert.equal(poor.ship.crewTarget, 36, "the named Magnifique retains her full watch");
+  assert.equal(poor.ship.pendingPortBillCopper, 60);
+  assert.equal(poorAdvance.blocked[0].pendingPortBillCopper, 60);
   const poorDeparture = departWorldShip(poor.holding, poor.ship, {
     operationId: "blocked-home",
     clockQd: 4,
@@ -121,14 +123,14 @@ export function checkWorldShipCharacterization() {
   assert.equal(homeWallet.holding.storage.moneyCopper, 9900);
   assert.equal(homeWallet.ship.onboardCopper, 100);
   advanceWorldShips(homeWallet.holding, 4);
-  assert.equal(homeWallet.ship.onboardCopper, 88, "home upkeep spends the ship wallet before settlement money");
+  assert.equal(homeWallet.ship.onboardCopper, 40, "home upkeep spends the ship wallet before settlement money");
   assert.equal(homeWallet.holding.storage.moneyCopper, 9900);
-  adjustWorldShipFunds(homeWallet.holding, homeWallet.ship, { operationId: "wallet-withdraw", kind: "withdraw", amountCopper: 50 });
-  assert.equal(homeWallet.ship.onboardCopper, 38);
-  assert.equal(homeWallet.holding.storage.moneyCopper, 9950);
+  adjustWorldShipFunds(homeWallet.holding, homeWallet.ship, { operationId: "wallet-withdraw", kind: "withdraw", amountCopper: 30 });
+  assert.equal(homeWallet.ship.onboardCopper, 10);
+  assert.equal(homeWallet.holding.storage.moneyCopper, 9930);
   advanceWorldShips(homeWallet.holding, 20);
   assert.equal(homeWallet.ship.onboardCopper, 0);
-  assert.equal(homeWallet.holding.storage.moneyCopper, 9940, "the remainder of upkeep comes from shared treasury");
+  assert.equal(homeWallet.holding.storage.moneyCopper, 9700, "the remainder of upkeep comes from shared treasury");
 
   const rounded = fixture();
   rounded.ship.portBilling.dailyCopper = 5;
@@ -189,6 +191,7 @@ export function checkWorldShipCharacterization() {
 
   const chain = fixture();
   chain.ship.homeUpkeepCopperPerDay = 12;
+  chain.ship.portBilling.dailyCopper = 12;
   advanceWorldShips(chain.holding, 4);
   assert.equal(chain.holding.storage.moneyCopper, 9988);
   const home = { ...chain.ship.location };

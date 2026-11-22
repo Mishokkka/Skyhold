@@ -2,6 +2,7 @@ import { getShipProfile, calculateShipCosts } from "../engines/ships/profiles.js
 import { buildShipWorldContext, generateWorldShipOffers, quoteWorldShipBundle, quoteWorldShipRelocation, quoteWorldShipReturn } from "../engines/ships/world-market.js";
 import { contractGuidance, resolveContractOutcome } from "../engines/ships/contracts.js";
 import { resolveBundlePassages } from "../engines/ships/bundle-incidents.js";
+import { captainStyleRiskBps } from "../engines/ships/contract-economics.js";
 import { worldMarketFixture } from "./world-ship-market-characterization-check.mjs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,7 +41,7 @@ function fixture({ wage = 12, attention = 0, distanceFactor = 1, profileId = "me
 
 function weightedOutcomes(contract, style = "normal", commercialOnly = false) {
   const probability = contractGuidance(contract, style).riskBps / 10000;
-  const approachBps = Math.min(10000, Math.ceil((contract.economics.approachRiskBps ?? 0) * (style === "cautious" ? 0.75 : style === "bold" ? 1.5 : 1)));
+  const approachBps = captainStyleRiskBps(contract.economics, style, contract.economics.approachRiskBps ?? 0);
   const outcomes = [];
   for (let first = 1; first <= 6; first++) for (let second = 1; second <= 6; second++) {
     for (let incidentRoll = 1; incidentRoll <= 12; incidentRoll++) {
