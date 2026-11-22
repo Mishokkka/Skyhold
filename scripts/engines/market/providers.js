@@ -204,7 +204,7 @@ export function carrierProvidersForLogistics({ logistics = {}, ...options } = {}
   return [...result.values()].sort((a, b) => a.priceFactor - b.priceFactor || a.label.localeCompare(b.label, "ru"));
 }
 
-export function carrierCapacityForLogistics(logistics = {}, carrier = null) {
+function carrierCapacityForLogistics(logistics = {}, carrier = null) {
   const baseCapacityLoad = Math.max(0, finite(logistics?.baseCapacityLoad ?? logistics?.capacityLoad, 0));
   const capacityFactor = Math.max(0.1, finite(carrier?.capacityFactor, 1));
   return {
@@ -255,5 +255,3 @@ export function applyCarrierToLogistics(logistics = {}, carrier = null) {
     transportLabel: `${String(logistics.transportLabel ?? "Маршрут")} · ${String(carrier.label ?? "Перевозчик")}`
   };
 }
-
-export const MARKET_INDEPENDENT_PROVIDER_IDS = Object.freeze({ merchant: INDEPENDENT_MERCHANT_ID, carrier: INDEPENDENT_CARRIER_ID });

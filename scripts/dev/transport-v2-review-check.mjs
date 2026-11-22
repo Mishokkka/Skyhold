@@ -46,11 +46,10 @@ await check("R1 period arrivals defer internal sale of resources and Items", () 
   }
 });
 
-await check("R2 confirmation rejects a chain that skips an intermediate pin", () => {
-  const services = [service("direct"), service("via", { to: "B", dispatchCopper: 10 }),
-    service("pinned", { from: "B", dispatchCopper: 10 })];
-  const bypass = planTransportChain({ cargo: [lot()], services: [services[0]] });
-  assert.throws(() => validateTransportPlan(bypass, { services, pins: { B: "pinned" } }), /закрепления/);
+await check("R2 confirmation rejects a disabled service even with a matching schedule", () => {
+  const services = [service("disabled", { enabled: false })];
+  const plan = planTransportChain({ cargo: [lot()], services });
+  assert.throws(() => validateTransportPlan(plan, { services }), /больше недоступна/);
 });
 
 await check("R3 collapsing transit nodes retains the time spent at each danger level", () => {

@@ -7,7 +7,7 @@ import { hiddenStorageRoomIds } from "../../data/access-guard.js";
 import { findHoldingRegion } from "../../engines/market/logistics.js";
 
 /** Goods, stock, demand and FIFO selection; physical eligibility belongs to v2. */
-export function prepareTransportCommerce({ data, holding, request = {}, isGM = false, searchBudget = null }) {
+export function prepareTransportCommerce({ data, holding, request = {}, isGM = false }) {
   const economy = normalizeMarketEconomy(data?.catalog?.marketEconomy, { locations: data?.catalog?.eventRegions ?? [] });
   const resources = allResourceDefs({ catalogRows: data?.catalog?.resources });
   const marketId = String(request.marketId ?? "");
@@ -18,7 +18,7 @@ export function prepareTransportCommerce({ data, holding, request = {}, isGM = f
   });
   const market = markets.find(row => row.id === marketId);
   if (!market) throw new Error("Этот рынок недоступен поселению.");
-  const quote = authorityMarketQuote({ data, holding, market, isGM, economy, resources, discoverTransport: true, skipRouteDiscovery: true, searchBudget });
+  const quote = authorityMarketQuote({ data, holding, market, isGM, economy, resources, discoverTransport: true, skipRouteDiscovery: true });
   const outbound = request.direction === "outbound" ? prepareMarketOutboundContext({
     holding, quote, resourceDefinitions: resources,
     organizations: economy.organizations.filter(row => isGM || row.visibility !== "gm"),

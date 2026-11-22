@@ -2,8 +2,7 @@ import assert from "node:assert/strict";
 import { transportFixture, transportRequest, transportHarness } from "./fixtures/transport-v2.mjs";
 import { installTransportTestCalendar, transportTestDate, transportTestYearQd as epoch } from "./fixtures/transport-calendar.mjs";
 import { prepareTransportContext } from "../apps/domains/transport-context.js";
-import { buildShipWorldContext, generateWorldShipOffers, quoteWorldShipBundle, worldShipTransportTerms,
-  worldShipTransportOptions } from "../engines/ships/world-market.js";
+import { buildShipWorldContext, generateWorldShipOffers, quoteWorldShipBundle, worldShipTransportTerms } from "../engines/ships/world-market.js";
 import { departWorldShipBundle, advanceWorldShips, resolveWorldShipBundleStop, continueWorldShipBundle } from "../engines/ships/world-voyage.js";
 import { createShipOperationExecutor } from "../apps/ship-operation-executor.js";
 import { transportPeriodCosts } from "../engines/transport/quantities.js";
@@ -16,7 +15,7 @@ const region = (value, links = [], extra = {}) => ({ value, label: value, countr
   marketLinks: links.map(([regionId, distanceKm, seasonalModifiers = {}]) => ({ regionId, distanceKm, modes: ["airship"], seasonalModifiers })), ...extra });
 
 try {
-  // Both priorities compare complete own-ship plans, including empty approach/return.
+  // Own-ship quotes follow the departure season and keep the booked terms.
   for (const isGM of [true, false]) for (const priority of ["cost", "time"]) {
     const f = transportFixture(); f.holding.gm.calendaria.lastDateTime = transportTestDate(epoch);
     f.data.catalog.eventRegions = [
@@ -32,14 +31,13 @@ try {
     const control = structuredClone(f.data); control.catalog.eventRegions[0].marketLinks.shift();
     const alternate = prepareTransportContext({ data: control, holding: control.holdings[0], request, isGM });
     for (const key of ["arrivalQd", "totalCopper", "shipReleaseQd"]) assert.equal(quoted.plan[key], alternate.plan[key]);
-    const serviceId = quoted.plan.stages[0].service.id;
-    request.pins = { [quoted.from]: serviceId };
     const future = structuredClone(f.data), futureHolding = future.holdings[0], futureShip = futureHolding.special.ships.list[0];
-    Object.assign(futureHolding.gm.calendaria, { lastQd: 40, lastDateTime: transportTestDate(epoch + 40) });
-    futureShip.timelineQd = 40; futureShip.portBilling = null; future.meta.transportV2.clockQd = 40;
+    const futureQd = 120;
+    Object.assign(futureHolding.gm.calendaria, { lastQd: futureQd, lastDateTime: transportTestDate(epoch + futureQd) });
+    futureShip.timelineQd = futureQd; futureShip.portBilling = null; future.meta.transportV2.clockQd = futureQd;
     const futureRequest = transportRequest({ data: future, holding: futureHolding, ship: futureShip }, "a", request, isGM);
-    assert.ok(prepareTransportContext({ data: future, holding: futureHolding, request: futureRequest, isGM }).plan,
-      "a physical-route pin survives a later quote date");
+    const futureQuote = prepareTransportContext({ data: future, holding: futureHolding, request: futureRequest, isGM });
+    assert.equal(futureQuote.plan.stages[0].service.distanceKm, 150, "the shortcut is faster after winter");
     const h = transportHarness(f), { order, operation, preview } = await h.book(request, `winter-own-${isGM}-${priority}`, isGM);
     const frozen = structuredClone(order.stages[0].service.seasonal);
     h.data.catalog.eventRegions.forEach(row => { row.marketLinks = []; });
@@ -50,19 +48,7 @@ try {
     assert.equal((await h.execute(operation, { userId: isGM ? "gm" : "player", remote: !isGM })).replay, true);
     assert.deepEqual(h.data, saved);
   }
-  // Search exhaustion remains explicit even for a usable shortest-path fallback.
-  {
-    const f = transportFixture(), links = to => Array.from({ length: 150 }, (_, i) => ({
-      regionId: to, routeId: String(i), distanceKm: i + 1, ursCost: 1, modes: ["airship"], seasonalModifiers: winter
-    }));
-    f.holding.gm.calendaria.lastDateTime = transportTestDate(epoch);
-    f.data.catalog.eventRegions = [region("home"), region("a"), region("b")];
-    f.data.catalog.eventRegions[0].marketLinks = links("a"); f.data.catalog.eventRegions[1].marketLinks = links("b");
-    const result = worldShipTransportOptions(f.data, f.holding, f.ship, "home", "b", { maxAccess: 6 });
-    assert.equal(result.limited, true); assert.ok(result.terms.length);
-  }
-  // Dense seasonal graphs must share a quote budget, rather than preparing
-  // thousands of alternatives independently for every pair of ports.
+  // The live own-ship router handles dense seasonal graphs.
   {
     const f = transportFixture(), names = ["home", "a", "b", ...Array.from({ length: 5 }, (_, i) => `dense-${i}`)];
     f.data.catalog.eventRegions = names.map((name, i) => region(name, names.slice(i + 1).map((to, j) =>

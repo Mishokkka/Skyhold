@@ -124,4 +124,4 @@ for (const kind of ["regular", "charter"]) for (const generation of ["regional",
   delete h.data.catalog.transportV2.overrides[service.id]; assert.equal(quote().riskBps, 222);
   delete h.data.catalog.transportV2.overrides[regionalId]; assert.equal(quote().riskBps, 111);
 }
-console.log(`Transport warehouse endpoints: ${scenarios} real GM/player bookings, both directions/orders/fleets, local dates, reload/replay, shared regional lines and two generations of accepted IDs/settings/pins/exclusions passed.`);
+console.log(`Transport warehouse endpoints: ${scenarios} real GM/player bookings, both directions/orders/fleets, local dates, reload/replay, shared regional lines and two generations of accepted IDs, settings, selections and exclusions passed.`);

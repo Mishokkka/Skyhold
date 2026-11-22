@@ -1,5 +1,5 @@
 import { remainingCargoArrivals, availableTransportCargo, allArrivalCargo, cargoQuantitiesMatch } from "./cargo-flow.js";
-import { transportServicesShareFleet, transportServiceExcluded } from "./service-identity.js";
+import { transportServicesShareFleet } from "./service-identity.js";
 import { transportServiceCharge } from "./economics.js";
 import { cargoLoad, cargoValue, takeTransportCargo, transportInteger, transportMoney, transportOperatingCharge, transportRateCharge, transportWaitingCharge, TRANSPORT_LIMITS, TRANSPORT_LOAD_SCALE } from "./quantities.js";
 import { transportEmptyQd, transportServiceAt } from "./seasonal.js";
@@ -222,16 +222,10 @@ export function planTransportChain({ cargo, services, startQd = 0, runs = [], ho
     shipReleaseQd: lastOwn?.releaseQd ?? null, shipReleaseLocation: lastOwn?.releaseLocation ?? "" };
 }
 
-function transportChainMatchesConstraints(chain, { pins = {}, excluded = [] } = {}) {
-  return Object.entries(pins).every(([from, id]) => chain.some(service => service.from === from && service.id === id))
-    && chain.every(service => service.enabled !== false && !transportServiceExcluded(service, excluded));
-}
-
 /** Confirmation validates a submitted chain independently of the search heuristic. */
-export function validateTransportPlan(plan, { services, runs = [], startQd = plan?.startQd, pins = {}, excluded = [] } = {}) {
+export function validateTransportPlan(plan, { services, runs = [], startQd = plan?.startQd } = {}) {
   const selected = plan?.stages?.map((stage) => services.find((service) => service.id === stage.service.id));
-  if (!selected?.length || selected.some((service) => !service)) throw new Error("Услуга перевозки больше недоступна.");
-  if (!transportChainMatchesConstraints(selected, { pins, excluded })) throw new Error("Маршрут не соблюдает закрепления или исключения перевозчиков.");
+  if (!selected?.length || selected.some((service) => !service || service.enabled === false)) throw new Error("Услуга перевозки больше недоступна.");
   const fresh = planTransportChain({ cargo: plan.cargo, services: selected, startQd, runs });
   if (JSON.stringify(fresh) !== JSON.stringify(plan)) throw new Error("Условия или свободные места изменились. Обновите расчёт.");
   return fresh;

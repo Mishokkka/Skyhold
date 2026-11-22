@@ -107,4 +107,4 @@ for (let seed = 1; seed <= 60; seed++) {
     order.money.commercialSpentCopper + order.money.spentCopper, `money conservation ${seed}`);
 }
 
-console.log("Transport mechanics: honest search limits, GM/player pinned fallback, idle-payment audit/replay and 60 split/delay/loss conservation scenarios passed.");
+console.log("Transport mechanics: honest search limits, GM/player explicit service selection, idle-payment audit/replay and 60 split/delay/loss conservation scenarios passed.");

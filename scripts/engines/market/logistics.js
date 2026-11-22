@@ -221,14 +221,6 @@ export function shortestMarketRoute(fromId = "", toId = "", regions = [], { mode
   return null;
 }
 
-/** Bounded single-vessel alternatives; transit regions need no landing facility. */
-export function marketAirshipRoutes(from, to, regions, { maxAccess = Infinity, ...options } = {}) {
-  const byId = new Map(regions.map(region => [region.value, region]));
-  return marketTransportRoutes({ ...options, graph: routeGraph(regions), from, to, maxAccess,
-    modesForEdge: (node, edge) => edgeTransportModes(edge, byId.get(node), byId.get(edge.to),
-      { fromStop: node === from, toStop: edge.to === to }).includes("airship") ? ["airship"] : [] });
-}
-
 export function holdingMarketAccessLevel(holding = {}, { politicsMarketAccess = null } = {}) {
   const manual = holding?.gm?.modifiers?.marketConnectionsLevel;
   const legacy = holding?.special?.market?.accessLevelOverride;
@@ -284,8 +276,6 @@ export function resolveMarketLogistics({ holding = {}, market = {}, regions = []
     graph: routeGraph(regions), from: destination.value, to: origin.value, maxAccess: access.level,
     modesForEdge, preserveFirstMode: needsAerialDelivery, servicesForEdge: transportNetwork?.servicesForEdge,
     preservePhysicalRoutes: transportNetwork?.preservePhysicalRoutes,
-    searchBudget: transportNetwork?.searchBudget, maxRoutes: transportNetwork?.maxRoutes,
-    retainPartial: Boolean(transportNetwork?.searchBudget),
     termsForEdge: transportNetwork?.termsForEdge ?? ((edge, transport) => {
       const terms = TRANSPORT[transport];
       const seasonal = edgeSeasonalModifier(edge, seasonId);
@@ -334,7 +324,7 @@ export function resolveMarketLogistics({ holding = {}, market = {}, regions = []
   const fallbackMode = TRANSPORT[transportMode] ? transportMode : (usedModes[0] ?? "");
   const mode = TRANSPORT[fallbackMode] ?? null;
   const reasons = [];
-  if (search.limited && (!transportNetwork?.searchBudget || !graphRoute)) reasons.push("Сеть содержит слишком много альтернатив для точного расчёта. Упростите связи между рынками.");
+  if (search.limited) reasons.push("Сеть содержит слишком много альтернатив для точного расчёта. Упростите связи между рынками.");
   if (!destination) reasons.push("Регион поселения не найден в каталоге логистики.");
   if (origin && !originFactors.enabled) reasons.push("Торговля в регионе поставщика отключена.");
   if (destination && !destinationFactors.enabled) reasons.push("Регион поселения закрыт для торговли.");
@@ -438,7 +428,7 @@ export function resolveMarketLogistics({ holding = {}, market = {}, regions = []
       holding, market, regions, seasonId, dependencies, direction, accessLevel, transportNetwork, selectedRoute: route, singleRoute: true
     }), searchLimited: search.limited })).filter((route) => route.ok);
     // Keep search-limit failures: a partial search cannot establish the cheapest route.
-    if (!result.ok && (!search.limited || transportNetwork?.searchBudget) && candidates.length) return { ...candidates[0], routeCandidates: candidates };
+    if (!result.ok && !search.limited && candidates.length) return { ...candidates[0], routeCandidates: candidates };
     result.routeCandidates = candidates;
   }
   return result;
