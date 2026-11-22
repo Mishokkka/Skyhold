@@ -114,6 +114,9 @@ async function checkUnsupportedWorldData(current) {
   const cached = settingsHarness(current);
   const storage = createSkyholdSplitStorage({ settings: cached.settings });
   storage.getData();
+  await assert.rejects(() => storage.persistData(oldSchema), { code: UNSUPPORTED_WORLD_DATA },
+    "A direct save cannot normalize an unsupported proposal into the current format");
+  assert.deepEqual(cached.writes, []);
   cached.values.set(SETTING_META, oldSchema.meta);
   assert.throws(() => storage.getData(), { code: UNSUPPORTED_WORLD_DATA }, "An old format must invalidate an otherwise matching cache token");
   await assert.rejects(() => storage.persistData(current), { code: UNSUPPORTED_WORLD_DATA });

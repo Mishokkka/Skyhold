@@ -266,16 +266,17 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
   } = {}) {
     const commitScope = normalizeCommitScope(scope);
     const previous = getDataView();
-    if (!normalized) metrics.normalizations += 1;
-    const next = normalized
+    const proposed = normalized
       ? {
           ...data,
           meta: clone(data?.meta ?? {}),
           holdings: commitScope === COMMIT_SCOPES.CATALOG ? previous.holdings : clone(data?.holdings ?? []),
           catalog: commitScope === COMMIT_SCOPES.HOLDINGS ? previous.catalog : clone(data?.catalog ?? {})
         }
-      : measureSkyholdPerformance("SkyholdData.normalize", () => normalizeSkyholdData(data));
-    assertSupportedWorldData(next);
+      : data;
+    assertSupportedWorldData(proposed);
+    if (!normalized) metrics.normalizations += 1;
+    const next = normalized ? proposed : measureSkyholdPerformance("SkyholdData.normalize", () => normalizeSkyholdData(proposed));
     // The shared view is frozen; the previous root is only
     // hashed or cloned for rollback below. Avoid a full eager clone here.
     if (!persistedPartitionHashes) {
