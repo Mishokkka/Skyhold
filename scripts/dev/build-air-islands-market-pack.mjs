@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { createDefaultMarketEconomy, DEFAULT_MARKET_BASE_OFFERS, DEFAULT_MARKET_CONDITIONS, DEFAULT_MARKET_SIZE_PROFILES, DEFAULT_MARKET_SPECIALTIES } from "../data/market/economy.js";
 import { parseCurrencyCopper } from "../core/currency.js";
 import { BUILTIN_RESOURCE_DEFS, normalizeResourceCatalogRow } from "../core/resources.js";
-import { canonicalResourceId } from "../data/resources/resource-id-migration.js";
+import { canonicalResourceId } from "./market-pack-resource-ids.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const libraryPath = path.join(root, "examples/content-packs/air-islands-materials-and-country-markets.json");

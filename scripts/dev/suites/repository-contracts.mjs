@@ -3696,6 +3696,7 @@ export async function runRepositoryContracts() {
 
   assert.equal(dataBarrel.SkyholdData, store.SkyholdData, "data barrel must re-export SkyholdData");
   assert.equal(dataBarrel.DEFAULT_SKYHOLD_DATA, canonicalDefault, "data barrel must preserve default data export");
+  assert.equal(dataBarrel.migrateData, normalizers.normalizeSkyholdData, "existing macros can keep the old name for normalization");
   assert.equal(typeof dataBarrel.validatePlayerPatch, "function", "data barrel must expose player write guard helpers");
   assert.equal(typeof dataBarrel.createSkyholdSplitStorage, "function", "data barrel must expose split storage helpers");
   assert.equal(typeof dataBarrel.createSkyholdSocketApi, "function", "data barrel must expose socket helpers");

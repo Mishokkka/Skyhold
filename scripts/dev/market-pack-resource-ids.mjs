@@ -1,4 +1,4 @@
-import { RESOURCE_BASE_DEFINITIONS } from "./resource-base-definitions.js";
+import { RESOURCE_BASE_DEFINITIONS } from "../data/resources/resource-base-definitions.js";
 
 const CANONICAL_RESOURCE_IDS = new Set(RESOURCE_BASE_DEFINITIONS.map((row) => row.id));
 
@@ -14,8 +14,7 @@ export const LEGACY_LIVESTOCK_RESOURCE_IDS = Object.freeze({
   pigeons: "pigeons"
 });
 
-// One explicit owner for the destructive economy-v1 cutover. Several old
-// market commodities intentionally collapse into one manager-facing stock.
+// The market-pack generator folds older commodity IDs into canonical resources.
 export const LEGACY_RESOURCE_ID_MAP = Object.freeze({
   "black-coal": "fuel-solid",
   charcoal: "fuel-solid",

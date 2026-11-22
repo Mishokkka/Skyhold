@@ -869,7 +869,7 @@ function exploitFindings({ financeGaps, margins, conflicts, loadStats, survival 
       severity: "blocker",
       id: "zero-finance-defaults",
       evidence: `${financeGapCount} zero-cost or zero-maintenance defaults remain across ${financeGaps.economicTemplates} economic templates.`,
-      owner: "scripts/data/building-template-catalog/*.js",
+      owner: "scripts/data/building-template-catalog/approved.js",
       recommendation: "Seed positive integer wageDailyCopper, baseUpkeepMonthlyCopper and per-function operatingUpkeepMonthlyCopper before the Laputa cutover."
     });
   const unpaidSpecialFunctions = [
@@ -887,7 +887,7 @@ function exploitFindings({ financeGaps, margins, conflicts, loadStats, survival 
       severity: "high",
       id: "autonomous-grain",
       evidence: `grain-field is source=time and creates ${marginByBuilding.get("grain-field")?.outputQty ?? 0} Grain per tenday without consuming worker QD or requiring an assigned worker.`,
-      owner: "scripts/data/building-template-catalog/food.js and scripts/engines/economy/production-cycle.js",
+      owner: "scripts/data/building-template-catalog/approved.js and scripts/engines/economy/production-cycle.js",
       recommendation: "Candidate v1: source=workers, period=qd, outputQty=4, workQd=1."
     });
   const localPlantFood = templatesById.get("inn")?.productionLines?.some((row) => (
@@ -899,7 +899,7 @@ function exploitFindings({ financeGaps, margins, conflicts, loadStats, survival 
       severity: "high",
       id: "laputa-food-gap",
       evidence: `Empty-storage Laputa produces ${survival.preparedFood}/${survival.food.sparseNeed} units even for a sparse ration; plant ingredients cannot enter a complete local prepared-food recipe.`,
-      owner: "scripts/data/building-template-catalog/culture.js and food.js",
+      owner: "scripts/data/building-template-catalog/approved.js",
       recommendation: "Add one integer local Produce recipe (for example 3 Vegetables -> 3 Food (Fruit)) or a local Fruits output; provide an explicit opening food buffer."
     });
   if (!templatesById.get("mill")?.productionLines?.some((row) => row.resourceId === "animal-feed")) findings.push({
@@ -982,7 +982,7 @@ export function buildReport() {
     units: { money: "integer copper (MM)", load: "quarter-load points", labor: "QD", tendayQd: TENDAY_QD, normalWorkerQd: NORMAL_WORK_QD },
     sourceOwners: {
       resources: "scripts/data/resources/* plus full native economy content pack",
-      production: "scripts/data/building-template-catalog/*.js",
+      production: "scripts/data/building-template-catalog/approved.js",
       finance: "scripts/engines/economy/finance-period.js and finance-obligations.js",
       demand: "scripts/data/economy/internal-demand.js and scripts/engines/economy/internal-demand.js",
       food: "scripts/engines/economy/food-rations.js",

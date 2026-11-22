@@ -7,10 +7,10 @@ import {
   TEMPLATE_CATALOG_VERSION
 } from "../data/building-templates.js";
 import {
-  BUILDING_DEVELOPMENT_TREE_IDS_V1,
   buildingRequiresConstructionCenter,
   CONSTRUCTION_CENTER_TEMPLATE_ID
 } from "../data/building-development-tree.js";
+import { APPROVED_BUILDING_TEMPLATE_MANIFEST } from "../data/building-template-manifest.js";
 import { normalizeSkyholdData } from "../data/normalizers.js";
 import { constructionCenterSuccessBonus } from "../engines/economy/construction-center.js";
 import { planBuildingCatalogMigration } from "../workflows/buildings/catalog-migration.js";
@@ -31,11 +31,11 @@ function prerequisitesMet(template, built) {
 
 export function checkBuildingDevelopmentTreeCharacterization() {
   const ordinary = DEFAULT_BUILDING_TEMPLATES.filter((template) => !STORY_TEMPLATE_IDS.has(template.id));
-  assert.equal(ordinary.length, 124, "v16 retains the existing tree and adds five leisure venues");
+  assert.equal(ordinary.length, 124, "The current catalog has 124 ordinary templates");
   assert.deepEqual(
-    new Set(BUILDING_DEVELOPMENT_TREE_IDS_V1),
+    new Set(APPROVED_BUILDING_TEMPLATE_MANIFEST.map((template) => template.id)),
     new Set(ordinary.map((template) => template.id)),
-    "the development tree must cover exactly the ordinary catalog"
+    "the manifest must cover exactly the ordinary catalog"
   );
 
   const center = ordinary.find((template) => template.id === CONSTRUCTION_CENTER_TEMPLATE_ID);

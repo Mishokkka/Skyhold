@@ -14,7 +14,7 @@ import {
   LEGACY_RESOURCE_ID_MAP,
   isCanonicalResourceId,
   resourceMigrationTarget
-} from "../data/resources/resource-id-migration.js";
+} from "./market-pack-resource-ids.mjs";
 import { normalizeResourceCatalogRow, parseResourceCosts } from "../core/resources.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
