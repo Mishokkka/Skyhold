@@ -139,18 +139,11 @@ export function normalizeMarketOutboundState(value = {}) {
   };
 }
 
-export function retainMarketOutboundOrders(orders = [], archiveLimit = MAX_TERMINAL_OUTBOUND_ORDERS) {
+function retainMarketOutboundOrders(orders = [], archiveLimit = MAX_TERMINAL_OUTBOUND_ORDERS) {
   const terminal = new Set(["delivered", "lost", "cancelled"]);
   const rows = Array.isArray(orders) ? orders : [];
   const archived = rows.filter((order) => terminal.has(String(order?.status ?? "")));
   const limit = whole(archiveLimit, MAX_TERMINAL_OUTBOUND_ORDERS, MAX_TERMINAL_OUTBOUND_ORDERS);
   const keptArchive = new Set(limit > 0 ? archived.slice(-limit) : []);
   return rows.filter((order) => !terminal.has(String(order?.status ?? "")) || keptArchive.has(order));
-}
-
-export function activeMarketOutboundOrderCount(orders = []) {
-  const terminal = new Set(["delivered", "lost", "cancelled"]);
-  return (Array.isArray(orders) ? orders : [])
-    .filter((order) => !terminal.has(String(order?.status ?? "")))
-    .length;
 }

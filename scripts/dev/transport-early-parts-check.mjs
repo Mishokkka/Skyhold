@@ -5,6 +5,7 @@ import { transportFixture, transportRequest, transportHarness } from "./fixtures
 import { prepareTransportContext } from "../apps/domains/transport-context.js";
 import { mergeHoldingDefaults } from "../data/normalizers.js";
 import { startTransportShip, advanceTransportShipments } from "../workflows/transport/orders.js";
+import { resourceDef } from "../core/resources.js";
 
 const cargo = shelfLifeQd => [{ lotId: "food", resourceId: "grain", qty: 20, unitLoad: 1, unitCopper: 5, ageQd: 0, shelfLifeQd }];
 const first = { id: "early-first", kind: "regular", from: "A", to: "B", capacity: 10, travelQd: 4,
@@ -184,12 +185,12 @@ for (const isGM of [true, false]) for (const direction of ["inbound", "outbound"
   for (const id of Object.keys(request.quantities)) request.quantities[id] = 20;
   const initial = prepareTransportContext({ ...f, request, isGM });
   assert.equal(initial.plan.stages.length, 2);
-  request.pins = {};
+  request.serviceIds = [];
   f.data.catalog.transportV2.overrides = {};
   for (const [index, stage] of initial.plan.stages.entries()) {
     const service = initial.services.find(row => row.kind === "regular" && row.from === stage.from && row.to === stage.to);
     assert.ok(service);
-    request.pins[service.from] = service.id;
+    request.serviceIds.push(service.id);
     f.data.catalog.transportV2.overrides[service.id] = { capacity: 40000, loadingQd: 1, unloadingQd: 1,
       travelQd: 4, intervalQd: index ? 10 : 40, firstQd: 0 };
   }
@@ -206,6 +207,33 @@ for (const isGM of [true, false]) for (const direction of ["inbound", "outbound"
   order = h.holding.special.transportV2.orders.find(row => row.id === id);
   assert.equal(order.received.reduce((sum, lot) => sum + lot.qty, 0), 20);
   assert.equal(order.status, "delivered");
+}
+{
+  const f = transportFixture();
+  const bread = resourceDef("bread");
+  const request = transportRequest(f, "a", { direction: "outbound", mode: "regular" });
+  request.quantities = { bread: 15 };
+  f.data.catalog.marketEconomy.baseOffers[0].resourceId = "bread";
+  const older = { id: "older", qty: 10, ageQd: 1 };
+  const fresh = { id: "fresh", qty: 5, ageQd: 0 };
+  f.holding.storage.resources = [{ id: "bread-stock", resourceId: "bread", forSale: true, qty: 15, batches: [older, fresh] }];
+  const quote = () => prepareTransportContext({ ...f, request, isGM: true });
+  const initial = quote().plan;
+  f.data.catalog.transportV2.overrides = { [initial.stages[0].service.id]: { capacity: 10 * initial.cargo[0].unitLoad,
+    intervalQd: 8, firstQd: 0, loadingQd: 1, unloadingQd: 1, travelQd: 1 } };
+  const schedule = quote().plan;
+  const [early, late] = schedule.stages.at(-1).runs;
+  assert.ok(late.arrivalQd > early.arrivalQd + 1);
+  older.ageQd = bread.shelfLifeQd - (early.arrivalQd - schedule.startQd) - 1;
+  assert.deepEqual(quote().warnings, [], "each lot uses the arrival of its own final run");
+
+  older.qty = 11; fresh.qty = 4;
+  older.ageQd = bread.shelfLifeQd - (late.arrivalQd - schedule.startQd);
+  const split = quote();
+  assert.deepEqual(split.plan.stages.at(-1).runs.map(run => run.cargo.map(lot => [lot.batchId, lot.qty])),
+    [[["older", 10]], [["older", 1], ["fresh", 4]]]);
+  assert.equal(split.warnings.length, 1);
+  assert.match(split.warnings[0], /×1\b/, "only the share that expires at delivery is reported");
 }
 // Independent clock/stock oracle: arrivals occur before the loading work at the same quarter-day.
 for (let seed = 1; seed <= 30; seed++) {

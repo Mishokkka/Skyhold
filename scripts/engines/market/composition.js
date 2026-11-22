@@ -39,7 +39,7 @@ function materializationTagMatches(candidate = "", selector = "") {
   return tag === target || tag.startsWith(`${target}.`) || tag.startsWith(`${target}-`);
 }
 
-export function marketOfferTags(offer = {}, resource = {}) {
+function marketOfferTags(offer = {}, resource = {}) {
   const categoryTags = String(resource.categoryTag ?? "").trim()
     ? [resource.categoryTag]
     : (resource.materialGroups ?? []);
@@ -114,11 +114,6 @@ function combinedConditions(location = {}, country = {}, economy = {}) {
 function marketCountryFromEconomy(location = {}, economy = {}) {
   const countryId = String(location?.countryId ?? location?.marketCountryId ?? location?.value ?? "");
   return economy?.countries?.find((row) => row.id === countryId) ?? null;
-}
-
-export function marketCountryForLocation(location = {}, economySource = null, locations = []) {
-  const economy = normalizeMarketEconomy(economySource, { locations });
-  return marketCountryFromEconomy(location, economy);
 }
 
 export function marketLocationFactors(location = {}, economySource = null, locations = [], { normalizedEconomy = false } = {}) {

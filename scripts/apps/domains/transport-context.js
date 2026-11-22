@@ -1,6 +1,7 @@
 import { prepareTransportCommerce } from "../market/transport-commerce.js";
 import { transportServicesFromRoutes, validateTransportConfiguration } from "../../engines/transport/services.js";
 import { isTransportServiceAllowed, resolveTransportSelections } from "../../engines/transport/service-identity.js";
+import { ageTransportCargo } from "../../engines/transport/cargo-flow.js";
 import { planTransportChain } from "../../engines/transport/planner.js";
 import { diagnoseHiredRouteFailure, findCandidateHiredRoutes, findOptimalOwnShipServices, resolveSettlementAccessLevel, routeLegBlockKey, scaleHiredServiceForCargo } from "../../engines/transport/router.js";
 import { cargoLoad, cargoValue, shipTransportFunding, transportLoad, transportMoney } from "../../engines/transport/quantities.js";
@@ -60,8 +61,21 @@ function resolveMode(request = {}) {
   return request.priority === "time" ? "charter" : "regular";
 }
 
+function quoteExpiryWarnings(plan) {
+  const expiredQuantities = new Map();
+  for (const run of plan.stages.at(-1).runs) {
+    for (const lot of run.cargo) {
+      if (lot.shelfLifeQd > 0 && ageTransportCargo(lot, run.arrivalQd, plan.startQd).ageQd >= lot.shelfLifeQd) {
+        expiredQuantities.set(lot.lotId, (expiredQuantities.get(lot.lotId) ?? 0) + lot.qty);
+      }
+    }
+  }
+  return plan.cargo.filter(lot => expiredQuantities.has(lot.lotId)).map(lot =>
+    `${lot.name || lot.resourceId} ×${expiredQuantities.get(lot.lotId)} — срок хранения истечёт к прибытию. Порча не покрывается страховкой.`);
+}
+
 function finalizeQuote({ plan, services, ship, transferPortId = "", transferPortLabel = "", limited = false, env, request }) {
-  const { holding, context, direction, startQd, clockOffsetQd, configuration, access, cargo, lines, from, to, sourceToken } = env;
+  const { holding, context, direction, clockOffsetQd, configuration, access, cargo, lines, from, to, sourceToken } = env;
   const valueCopper = cargoValue(cargo);
   const taxCopper = Math.ceil(valueCopper * (access.importTaxRate + access.exportTaxRate));
   const insuranceCopper = request.insurance === false ? 0 : transportInsuranceCopper(plan, configuration);
@@ -93,9 +107,7 @@ function finalizeQuote({ plan, services, ship, transferPortId = "", transferPort
     plan, services, commercial, ship, lines, transferPortId, transferPortLabel,
     search: { plans: [plan], limited: Boolean(limited), limits: { ports: false, routes: Boolean(limited), plans: false }, failures: [] },
     treasuryCopper, valueCopper, totalCopper, clockOffsetQd,
-    warnings: cargo
-      .filter((lot) => lot.shelfLifeQd > 0 && lot.ageQd + plan.arrivalQd - startQd >= lot.shelfLifeQd)
-      .map((lot) => `${lot.name || lot.resourceId}: срок хранения истечёт до прибытия. Порча не покрывается страховкой.`),
+    warnings: quoteExpiryWarnings(plan),
     affordable: treasuryCopper <= (holding.storage.moneyCopper ?? 0),
     sourceToken,
     planToken: stableDataHash({ plan, commercial, treasuryCopper }),
@@ -190,7 +202,7 @@ function buildHiredOption(env, kind, request) {
 
   let lastPlanError = "";
   let ambiguousError = "";
-  const explicitServiceIds = Array.isArray(request.serviceIds) && request.serviceIds.length > 0;
+  const requestedServiceIds = request.serviceIds || [];
   const allDiscoveredServices = new Map();
   const { routes: candidates, limited } = findCandidateHiredRoutes({
     holding, market: context.market, regions,
@@ -209,13 +221,13 @@ function buildHiredOption(env, kind, request) {
         .map((service) => scaleHiredServiceForCargo(service, totalLoad, configuration.overrides));
       const allowedServices = allRouteServices.filter((service) => isTransportServiceAllowed(service, { isGM, excluded: request.excluded }));
       for (const service of allowedServices) allDiscoveredServices.set(service.id, service);
-      const resolved = resolveTransportSelections(allowedServices, request);
-      if (resolved.ambiguous.length) {
+      const { serviceIds, ambiguous } = resolveTransportSelections(allowedServices, requestedServiceIds);
+      if (ambiguous.length) {
         ambiguousError = "Выбранная служба неоднозначна. Выберите вариант доставки заново.";
         return { ok: false, blockedLegKeys: [] };
       }
-      const selected = resolved.request.serviceIds?.length
-        ? resolved.request.serviceIds.map((id) => allowedServices.find((row) => row.id === id))
+      const selected = serviceIds.length
+        ? serviceIds.map((id) => allowedServices.find((row) => row.id === id))
         : allowedServices.filter((service) => service.kind === kind);
       if (!selected.length || selected.some((row) => !row) || selected[0].from !== env.from || selected.at(-1).to !== env.to) {
         // Route had a disabled, GM-hidden, or excluded service -> block its legs and explore open detours.
@@ -234,7 +246,7 @@ function buildHiredOption(env, kind, request) {
 
   if (ambiguousError) return { ok: false, error: ambiguousError };
   // Detect legacy serviceIds that match services across multiple distinct physical routes.
-  if (explicitServiceIds && resolveTransportSelections([...allDiscoveredServices.values()], request).ambiguous.length) {
+  if (requestedServiceIds.length && resolveTransportSelections([...allDiscoveredServices.values()], requestedServiceIds).ambiguous.length) {
     return { ok: false, error: "Выбранная служба неоднозначна. Выберите вариант доставки заново." };
   }
   if (!candidates.length) {

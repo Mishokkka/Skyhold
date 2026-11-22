@@ -1,26 +1,9 @@
 import assert from "node:assert/strict";
 import { transportFixture, transportHarness, transportRequest } from "./fixtures/transport-v2.mjs";
 import { prepareTransportContext, transportSourceToken } from "../apps/domains/transport-context.js";
-import { findTransportPlans, planTransportChain } from "../engines/transport/planner.js";
+import { planTransportChain } from "../engines/transport/planner.js";
 import { bookTransportOrder, resolveTransportIncident } from "../engines/transport/runtime.js";
 import { startTransportShip, advanceTransportShipments } from "../workflows/transport/orders.js";
-
-// A budget is not a proof of optimality or absence. The cheaper/only viable
-// route can be beyond it; exhausting exactly the available paths is different.
-{
-  const cargo = [{ lotId: "test", qty: 1, unitLoad: 1, unitCopper: 1 }];
-  const services = [1, 2].map(n => ({ id: `service-${n}`, kind: "regular", from: "a", to: "b",
-    capacity: 10, intervalQd: 4, travelQd: 1, dispatchCopper: 3 - n }));
-  const args = { from: "a", to: "b", cargo, services };
-  const limited = findTransportPlans({ ...args, maxPaths: 1 });
-  const complete = findTransportPlans({ ...args, maxPaths: 2 });
-  assert.equal(limited.limited, true);
-  assert.equal(complete.limited, false);
-  assert.ok(complete.plans[0].totalCopper < limited.plans[0].totalCopper);
-  services[0].capacity = 0;
-  assert.equal(findTransportPlans({ ...args, maxPaths: 1 }).plans.length, 0);
-  assert.equal(findTransportPlans({ ...args, maxPaths: 1 }).limited, true);
-}
 
 for (const isGM of [true, false]) {
   const f = transportFixture();
@@ -124,4 +107,4 @@ for (let seed = 1; seed <= 60; seed++) {
     order.money.commercialSpentCopper + order.money.spentCopper, `money conservation ${seed}`);
 }
 
-console.log("Transport mechanics: honest search limits, GM/player pinned fallback, idle-payment audit/replay and 60 split/delay/loss conservation scenarios passed.");
+console.log("Transport mechanics: honest search limits, GM/player explicit service selection, idle-payment audit/replay and 60 split/delay/loss conservation scenarios passed.");

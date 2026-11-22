@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { transportHistoryFixture, transportHistoryApp } from "./fixtures/transport-history.mjs";
 import { transportSourceToken } from "../apps/domains/transport-context.js";
-import { marketAuthoritySourceToken } from "../apps/market/authority-context.js";
 import { transportRelevantHolding } from "../data/transport/state.js";
 import { transportHistoryPage, TRANSPORT_HISTORY_PAGE_SIZE } from "../apps/domains/transport-view.js";
 import { transportHarness, transportRequest } from "./fixtures/transport-v2.mjs";
@@ -11,14 +10,14 @@ f.append(1000);
 const orders = f.holding.special.transportV2.orders;
 assert.equal(orders.length, 1000);
 const snapshot = JSON.stringify(orders);
-const tokens = () => [transportSourceToken(f.data, f.holding), marketAuthoritySourceToken(f)];
-const original = tokens();
+const token = () => transportSourceToken(f.data, f.holding);
+const original = token();
 orders[0].history.push({ kind: "view-only-archive-note" });
-assert.deepEqual(tokens(), original, "completed transport history is irrelevant to both market and transport previews");
+assert.equal(token(), original, "completed transport history is irrelevant to transport previews");
 orders[0].history.pop();
 const stages = orders[0].stages;
 Object.defineProperty(orders[0], "stages", { configurable: true, get() { throw new Error("Old history must not be traversed."); } });
-assert.deepEqual(tokens(), original);
+assert.equal(token(), original);
 const app = await transportHistoryApp(f);
 let context = await app._prepareContext({});
 assert.equal(context.orders.length, TRANSPORT_HISTORY_PAGE_SIZE);
@@ -48,9 +47,9 @@ for (const page of [0, 25, 49]) {
   for (const row of unfinished) assert.ok(view.orders.includes(row), "active cargo, return and unpaid adjustments stay on every page");
 }
 assert.deepEqual(transportRelevantHolding(f.holding).special.transportV2.orders.map(row => row.id), ["active", "return", "bill"]);
-const prior = tokens();
+const prior = token();
 unfinished[1].plan.shipReleaseQd = 99999;
-assert.notDeepEqual(tokens(), prior, "an outstanding vessel return is still part of the validation token");
+assert.notEqual(token(), prior, "an outstanding vessel return is still part of the validation token");
 const mutations = [
   () => { f.holding.storage.moneyCopper++; },
   () => { f.holding.storage.resources[0].qty++; },
@@ -60,7 +59,7 @@ const mutations = [
   () => { f.data.catalog.transportV2.regularIntervalQd++; },
   () => { f.data.meta.sharedMarkets = { version: 1, stock: { test: 2 } }; }
 ];
-for (const mutate of mutations) { const before = tokens(); mutate(); assert.notDeepEqual(tokens(), before); }
+for (const mutate of mutations) { const before = token(); mutate(); assert.notEqual(token(), before); }
 
 // The separate revision check still rejects stale commands even when only archive data changed.
 const h = transportHarness(), request = transportRequest(h.fixture());

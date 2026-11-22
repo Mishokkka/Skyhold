@@ -3,7 +3,7 @@ import { worldMarketFixture } from "./world-ship-market-characterization-check.m
 import { ensureTransportState } from "../data/transport/state.js";
 import { prepareTransportContext } from "../apps/domains/transport-context.js";
 import { prepareMarketAuthorityContext } from "../apps/market/authority-context.js";
-import { planTransportChain, findTransportPlans, validateTransportPlan } from "../engines/transport/planner.js";
+import { planTransportChain, validateTransportPlan } from "../engines/transport/planner.js";
 import { transportServicesFromRoutes } from "../engines/transport/services.js";
 import { bookTransportOrder, advanceTransportOrders, resolveTransportIncident } from "../engines/transport/runtime.js";
 import { advanceTransportShipments } from "../workflows/transport/orders.js";
@@ -46,15 +46,10 @@ await check("R1 period arrivals defer internal sale of resources and Items", () 
   }
 });
 
-await check("R2 intermediate pins remain mandatory across cheaper bypasses", () => {
-  const services = [service("direct"), service("via", { to: "B", dispatchCopper: 10 }),
-    service("pinned", { from: "B", dispatchCopper: 10 })];
-  const result = findTransportPlans({ from: "A", to: "D", cargo: [lot()], services, pins: { B: "pinned" } });
-  assert.ok(result.plans.length > 0);
-  assert.ok(result.plans.every(plan => plan.stages.some(stage => stage.service.id === "pinned")));
-  const bypass = planTransportChain({ cargo: [lot()], services: [services[0]] });
-  assert.throws(() => validateTransportPlan(bypass, { services, pins: { B: "pinned" } }), /закрепления/);
-  assert.equal(findTransportPlans({ from: "A", to: "D", cargo: [lot()], services, pins: { B: "missing" } }).plans.length, 0);
+await check("R2 confirmation rejects a disabled service even with a matching schedule", () => {
+  const services = [service("disabled", { enabled: false })];
+  const plan = planTransportChain({ cargo: [lot()], services });
+  assert.throws(() => validateTransportPlan(plan, { services }), /больше недоступна/);
 });
 
 await check("R3 collapsing transit nodes retains the time spent at each danger level", () => {

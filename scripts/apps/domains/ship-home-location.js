@@ -7,10 +7,6 @@ import { holdingTransportLocationBlocker } from "../../data/transport/state.js";
 
 const sourceKey = (holding) => `fbl-skyhold:ship-home:${holding.id}`;
 
-export function shipHomePlacementBlocker(holding) {
-  return holdingTransportLocationBlocker(holding);
-}
-
 /** Uses the existing location/link schema; never places or moves anything on read. */
 export function shipHomeLocationContext(data, holding) {
   const world = buildShipWorldContext(data, holding, { offerLocationIds: [] });
@@ -27,7 +23,7 @@ export function shipHomeLocationContext(data, holding) {
     if (!(from.marketMapX || from.marketMapY) || !(to.marketMapX || to.marketMapY)) continue;
     routes.push({ key, from, to, link, label: `${from.label} → ${to.label} · ${link.distanceKm} км${link.routeId ? ` · ${link.routeId}` : ""}` });
   }
-  const blocker = shipHomePlacementBlocker(holding);
+  const blocker = holdingTransportLocationBlocker(holding);
   return { routes, blocker, canPlace: !blocker && routes.length > 0,
     dedicated: current?.contentSource === sourceKey(holding),
     locationLabel: current?.label ?? "Не задана", x: current?.marketMapX, y: current?.marketMapY };

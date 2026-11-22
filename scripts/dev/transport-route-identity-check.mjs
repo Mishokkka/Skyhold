@@ -32,10 +32,17 @@ try {
       const oldId = legacyTransportServiceId(short.id);
       assert.equal(oldId, legacyTransportServiceId(long.id), "the previous ID collided on these real paths");
       assert.equal(transportServicesShareFleet(short.id, long.id), false);
-      assert.deepEqual(resolveTransportSelections([short, long], { serviceIds: [oldId] }).ambiguous, [oldId],
+      assert.deepEqual(resolveTransportSelections([short, long], [oldId]).ambiguous, [oldId],
         "ambiguous legacy serviceIds must not silently pick one of two physical paths");
       assert.throws(() => prepareTransportContext({ ...f, request: { ...request, serviceIds: [oldId] }, isGM }), /неоднозначна/,
         "prepareTransportContext must reject ambiguous legacy serviceIds across multiple physical routes");
+      const explicit = { ...request, mode: kind, serviceIds: [short.id] };
+      const selected = prepareTransportContext({ ...f, request: explicit, isGM });
+      const withRetiredPin = prepareTransportContext({
+        ...f, request: { ...explicit, pins: { [short.from]: oldId } }, isGM
+      });
+      assert.equal(selected.plan.stages[0].service.id, short.id);
+      assert.deepEqual(withRetiredPin.plan, selected.plan, "a retired pin cannot invalidate an explicit current service");
       const cargo = preview.plan.stages[0].runs.flatMap(run => run.cargo);
       const first = planTransportChain({ cargo, services: [short], startQd: 0 });
       const oldRun = { ...first.stages[0].runs[0], serviceId: oldId };

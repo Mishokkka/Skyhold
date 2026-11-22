@@ -16,25 +16,11 @@ import { AUTO_CARRIERS, planMarketTransport } from "../../engines/market/transpo
 import { overlayMarketQuoteStock } from "../../engines/market/stock.js";
 import { getCalendariaSeasonSnapshot } from "../../integrations/calendaria-bridge.js";
 import { marketOutboundRouteFromPurchasePlan, prepareMarketOutboundContext } from "./outbound-context.js";
-import { transportRelevantHolding } from "../../data/transport/state.js";
 
 function marketSeasonId(holding = {}) {
   const calendaria = holding?.gm?.calendaria ?? {};
   const snapshot = getCalendariaSeasonSnapshot(calendaria.lastDateTime, calendaria.lastDateText);
   return String(snapshot?.season?.key ?? "").trim();
-}
-
-export function marketAuthoritySourceToken({ data, holding, marketId = "", carrierId = "" } = {}) {
-  return stableDataHash({
-    holding: transportRelevantHolding(holding),
-    sharedMarkets: data?.meta?.sharedMarkets,
-    eventRegions: data?.catalog?.eventRegions,
-    marketEconomy: data?.catalog?.marketEconomy,
-    marketRouteMap: data?.catalog?.marketRouteMap,
-    resources: data?.catalog?.resources,
-    marketId: String(marketId ?? ""),
-    carrierId: String(carrierId ?? "")
-  });
 }
 
 export function availableAuthorityMarkets(data, {
@@ -82,7 +68,7 @@ export function authorityMarketLogistics({
   carrierId = "",
   isGM = false,
   economy: preparedEconomy = null,
-  direction = "inbound", preservePhysicalRoutes = false, searchBudget = null
+  direction = "inbound", preservePhysicalRoutes = false
 } = {}) {
   if (!market) return { logistics: null, carriers: [], carrier: null };
   const locations = data?.catalog?.eventRegions ?? [];
@@ -98,7 +84,6 @@ export function authorityMarketLogistics({
     seasonId: marketSeasonId(holding),
     direction,
     preservePhysicalRoutes,
-    searchBudget,
     dependencies: {
       regionFactors: (region) => marketLocationFactors(region, economy, locations, { normalizedEconomy: true }),
       regionResolver: marketRegionForValue
@@ -114,7 +99,7 @@ export function authorityMarketQuote({
   isGM = false,
   economy: preparedEconomy = null,
   resources: preparedResources = null,
-  discoverTransport = false, skipRouteDiscovery = false, searchBudget = null
+  discoverTransport = false, skipRouteDiscovery = false
 } = {}) {
   if (!market) return null;
   const locations = data?.catalog?.eventRegions ?? [];
@@ -160,7 +145,6 @@ export function authorityMarketQuote({
       market,
       carrierId,
       isGM,
-      searchBudget,
       economy
     }));
   }

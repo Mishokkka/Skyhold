@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
-import { planShipVoyage, projectShipVoyage } from "../engines/ships/voyage.js";
-import { createShipFunds, applyShipFundsOperation } from "../engines/ships/funds.js";
+import { planShipVoyage } from "../engines/ships/voyage.js";
+import { applyShipFundsOperation } from "../engines/ships/funds.js";
 import { createDefaultShipsState, createShipRecord, normalizeShipsState } from "../data/ships.js";
 import { isPlayerWritablePath } from "../data/player-write-guard.js";
 import { mergeHoldingDefaults } from "../data/normalizers.js";
-import { formatShipGold, formatShipMoney, parseShipGoldInput, shipGoldInput } from "../core/ship-gold.js";
+import { formatShipMoney, parseShipGoldInput, shipGoldInput } from "../core/ship-gold.js";
 
 const flight = (distanceMeters) => ({ type: "flight", distanceMeters });
 const port = (durationQd) => ({ type: "port", durationQd });
+const dockedFunds = (settlementCopper) => ({ settlementCopper, onboardCopper: 0, status: "docked", receipts: [] });
 
 const emptyShips = createDefaultShipsState();
 assert.deepEqual(normalizeShipsState(undefined), emptyShips);
@@ -60,15 +61,6 @@ for (let startQd = 0; startQd < 8; startQd++) {
       const plan = planShipVoyage(args);
       assert.equal(plan.endQd, simulate(legs, startQd, 150));
       assert.equal(plan.durationQd, plan.totalFlightQd + plan.totalPortQd);
-      let previous = 0;
-      for (let atQd = startQd; atQd <= plan.endQd + 2; atQd++) {
-        const projection = projectShipVoyage({ ...args, atQd });
-        assert.ok(projection.distanceTravelledMeters >= previous);
-        assert.equal(projection.distanceTravelledMeters + projection.remainingDistanceMeters, distance * 2);
-        previous = projection.distanceTravelledMeters;
-        assert.equal(projection.completed, atQd >= plan.endQd);
-      }
-      assert.equal(previous, distance * 2);
     }
   }
 }
@@ -81,12 +73,11 @@ assert.equal(planShipVoyage({ legs: [flight(150000)], startQd: 3 }).durationQd, 
 assert.equal(planShipVoyage({ legs: [flight(300000)], startQd: 0 }).durationQd, 8);
 for (const bad of [-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
   assert.throws(() => planShipVoyage({ legs: [flight(bad)], startQd: 0 }));
-  assert.throws(() => createShipFunds(bad));
+  assert.throws(() => applyShipFundsOperation(dockedFunds(bad), { id: "invalid-funds", kind: "depart" }), /settlementCopper/);
 }
 assert.throws(() => planShipVoyage({ legs: [flight(1)], startQd: 0, speedKmPerDay: 0 }));
-assert.throws(() => projectShipVoyage({ legs: [flight(1)], startQd: 4, atQd: 3 }));
 
-let funds = createShipFunds(1000);
+let funds = dockedFunds(1000);
 const original = JSON.stringify(funds);
 const depart = { id: "voyage-1:depart", kind: "depart", amountCopper: 300 };
 let result = applyShipFundsOperation(funds, depart);
@@ -112,12 +103,11 @@ assert.equal(applyShipFundsOperation(funds, { id: "home", kind: "return" }).stat
 assert.equal(applyShipFundsOperation(funds, depart).state, funds); // Late network replay after return.
 assert.throws(() => applyShipFundsOperation(funds, { id: "home-again", kind: "return" }), /not away/);
 assert.throws(() => applyShipFundsOperation(funds, { id: "old-income", kind: "income", amountCopper: 1 }), /not away/);
-const prepared = applyShipFundsOperation(createShipFunds(400), { id: "prep", kind: "depart", amountCopper: 300, preparationCopper: 100 });
+const prepared = applyShipFundsOperation(dockedFunds(400), { id: "prep", kind: "depart", amountCopper: 300, preparationCopper: 100 });
 assert.equal(prepared.state.settlementCopper, 0);
 assert.equal(prepared.receipt.externalDeltaCopper, -100);
-assert.throws(() => applyShipFundsOperation(createShipFunds(399), { id: "prep", kind: "depart", amountCopper: 300, preparationCopper: 100 }), /Insufficient/);
+assert.throws(() => applyShipFundsOperation(dockedFunds(399), { id: "prep", kind: "depart", amountCopper: 300, preparationCopper: 100 }), /Insufficient/);
 assert.throws(() => applyShipFundsOperation(prepared.state, { id: "overflow", kind: "income", amountCopper: Number.MAX_SAFE_INTEGER }));
-assert.equal(formatShipGold(12345), "123,45");
 assert.equal(formatShipMoney(0), "0 М");
 assert.equal(formatShipMoney(50), "5 С");
 assert.equal(formatShipMoney(12345), "123 З 4 С 5 М");
@@ -130,7 +120,7 @@ assert.equal(shipGoldInput(12345), "123.45");
 assert.equal(parseShipGoldInput("123,45"), 12345);
 assert.equal(parseShipGoldInput("0.01"), 1);
 assert.throws(() => parseShipGoldInput("1.001"), /точностью/);
-let wallet = applyShipFundsOperation(createShipFunds(1000), { id: "fund", kind: "deposit", amountCopper: 300 }).state;
+let wallet = applyShipFundsOperation(dockedFunds(1000), { id: "fund", kind: "deposit", amountCopper: 300 }).state;
 assert.equal(wallet.settlementCopper, 700);
 assert.equal(wallet.onboardCopper, 300);
 wallet = applyShipFundsOperation(wallet, { id: "spend-at-home", kind: "withdraw", amountCopper: 100 }).state;

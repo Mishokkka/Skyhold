@@ -21,7 +21,7 @@ export function transportServicesShareFleet(a, b) {
   return baseA === baseB || transportServiceCompatibilityIds(a).includes(baseB) || transportServiceCompatibilityIds(b).includes(baseA);
 }
 
-export function transportServiceExcluded(service, excluded = []) {
+function transportServiceExcluded(service, excluded = []) {
   excluded ??= [];
   return excluded.includes(service.companyId) || transportServiceCompatibilityIds(service.id).some(id => excluded.includes(id));
 }
@@ -35,15 +35,13 @@ export function isTransportServiceAllowed(service, { isGM = false, excluded = []
 }
 
 /** Saved UI choices can follow an unambiguous old ID; never guess between physical paths. */
-export function resolveTransportSelections(services, request) {
+export function resolveTransportSelections(services, serviceIds) {
   const ambiguous = new Set();
-  const resolve = id => {
+  const resolvedIds = serviceIds.map(id => {
     if (!id || services.some(service => service.id === id)) return id;
     const matches = services.filter(service => transportServiceCompatibilityIds(service.id).includes(id));
     if (matches.length > 1) ambiguous.add(id);
     return matches.length === 1 ? matches[0].id : id;
-  };
-  return { request: { ...request,
-    pins: Object.fromEntries(Object.entries(request.pins ?? {}).map(([from, id]) => [from, resolve(id)])),
-    ...(request.serviceIds ? { serviceIds: request.serviceIds.map(resolve) } : {}) }, ambiguous: [...ambiguous] };
+  });
+  return { serviceIds: resolvedIds, ambiguous: [...ambiguous] };
 }

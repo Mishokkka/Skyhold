@@ -69,24 +69,6 @@ function appendOperationId(rows = [], id = "") {
   return [...new Set([...(Array.isArray(rows) ? rows : []), text(id)].filter(Boolean))].slice(-80);
 }
 
-export function marketDemandTendayIndex(holding = {}) {
-  return sharedMarketTenday(holding);
-}
-
-export function marketDemandPlanToken(lines = []) {
-  const rows = new Map();
-  for (const line of lines ?? []) {
-    const key = text(line?.demandKey);
-    if (!key) continue;
-    rows.set(key, {
-      key,
-      revision: integer(line.demandStateRevision, 0, 0, Number.MAX_SAFE_INTEGER),
-      baseDemand: integer(line.demandBaseDemand)
-    });
-  }
-  return JSON.stringify([...rows.values()].sort((left, right) => left.key.localeCompare(right.key)));
-}
-
 export function overlayMarketQuoteDemand({ holding = {}, quote = {} } = {}) {
   const demand = normalizeMarketDemandState(marketStateFor(holding, "demand"));
   const marketId = text(quote.marketId || "external-market");

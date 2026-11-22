@@ -36,10 +36,6 @@ function stockGroups(lines = [], marketId = "") {
   return [...groups.values()];
 }
 
-export function marketStockTendayIndex(holding = {}) {
-  return sharedMarketTenday(holding);
-}
-
 export function marketStockPlanToken(lines = []) {
   const rows = new Map();
   for (const line of lines ?? []) {

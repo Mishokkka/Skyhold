@@ -1,5 +1,5 @@
 import { remainingCargoArrivals, availableTransportCargo, allArrivalCargo, cargoQuantitiesMatch } from "./cargo-flow.js";
-import { transportServicesShareFleet, transportServiceExcluded } from "./service-identity.js";
+import { transportServicesShareFleet } from "./service-identity.js";
 import { transportServiceCharge } from "./economics.js";
 import { cargoLoad, cargoValue, takeTransportCargo, transportInteger, transportMoney, transportOperatingCharge, transportRateCharge, transportWaitingCharge, TRANSPORT_LIMITS, TRANSPORT_LOAD_SCALE } from "./quantities.js";
 import { transportEmptyQd, transportServiceAt } from "./seasonal.js";
@@ -222,55 +222,10 @@ export function planTransportChain({ cargo, services, startQd = 0, runs = [], ho
     shipReleaseQd: lastOwn?.releaseQd ?? null, shipReleaseLocation: lastOwn?.releaseLocation ?? "" };
 }
 
-
-export function transportChainMatchesConstraints(chain, { pins = {}, excluded = [] } = {}) {
-  return Object.entries(pins).every(([from, id]) => chain.some(service => service.from === from && service.id === id))
-    && chain.every(service => service.enabled !== false && !transportServiceExcluded(service, excluded));
-}
-
-export function findTransportPlans({ from, to, services = [], cargo, startQd = 0, runs = [], priority = "cost", pins = {}, excluded = [], ownShipId = "", maxPaths = TRANSPORT_LIMITS.paths, accessLimit = Infinity, preferredPoints = [] }) {
-  const plans = [], failures = new Set();
-  const candidates = [...services].sort((a, b) => Number(b.kind === "owned") - Number(a.kind === "owned")
-    || Number(preferredPoints.includes(b.to)) - Number(preferredPoints.includes(a.to))
-    || Number(b.to === to) - Number(a.to === to) || String(a.id).localeCompare(String(b.id)));
-  let searched = 0, limited = false, expanded = 0;
-  function visit(location, chain, visited) {
-    if (searched >= maxPaths || expanded++ >= maxPaths * TRANSPORT_LIMITS.stages) { limited = true; return; }
-    if (location === to) {
-      if (ownShipId && !chain.some((service) => service.shipId === ownShipId)) return;
-      if (!transportChainMatchesConstraints(chain, { pins, excluded })) return;
-      searched++;
-      try { plans.push(planTransportChain({ cargo, services: chain, startQd, runs })); }
-      catch (error) { failures.add(error.message); }
-      return;
-    }
-    if (chain.length >= TRANSPORT_LIMITS.stages) return;
-    const ownIndex = chain.findIndex((service) => service.kind === "owned");
-    const ownEnded = ownIndex >= 0 && chain.at(-1).kind !== "owned";
-    for (const service of candidates) {
-      if (service.enabled === false || service.from !== location || visited.has(service.to)
-        || chain.reduce((sum, row) => sum + (row.accessCost ?? 0), service.accessCost ?? 0) > accessLimit
-        || transportServiceExcluded(service, excluded)
-        || (pins[location] && pins[location] !== service.id)
-        || (service.kind === "owned" && (service.shipId !== ownShipId || ownEnded))) continue;
-      visit(service.to, [...chain, service], new Set([...visited, service.to]));
-      // Let the next eligible branch report exhaustion. Reaching the budget on
-      // the final branch alone does not mean any candidate was omitted.
-      if (limited) break;
-    }
-  }
-  visit(from, [], new Set([from]));
-  plans.sort((a, b) => (priority === "time" ? a.arrivalQd - b.arrivalQd : a.totalCopper - b.totalCopper)
-    || (priority === "time" ? a.totalCopper - b.totalCopper : a.arrivalQd - b.arrivalQd)
-    || a.stages.length - b.stages.length);
-  return { plans: plans.slice(0, 5), searched, limited, failures: [...failures] };
-}
-
 /** Confirmation validates a submitted chain independently of the search heuristic. */
-export function validateTransportPlan(plan, { services, runs = [], startQd = plan?.startQd, pins = {}, excluded = [] } = {}) {
+export function validateTransportPlan(plan, { services, runs = [], startQd = plan?.startQd } = {}) {
   const selected = plan?.stages?.map((stage) => services.find((service) => service.id === stage.service.id));
-  if (!selected?.length || selected.some((service) => !service)) throw new Error("Услуга перевозки больше недоступна.");
-  if (!transportChainMatchesConstraints(selected, { pins, excluded })) throw new Error("Маршрут не соблюдает закрепления или исключения перевозчиков.");
+  if (!selected?.length || selected.some((service) => !service || service.enabled === false)) throw new Error("Услуга перевозки больше недоступна.");
   const fresh = planTransportChain({ cargo: plan.cargo, services: selected, startQd, runs });
   if (JSON.stringify(fresh) !== JSON.stringify(plan)) throw new Error("Условия или свободные места изменились. Обновите расчёт.");
   return fresh;

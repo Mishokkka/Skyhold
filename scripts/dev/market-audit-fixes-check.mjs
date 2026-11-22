@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { pathToFileURL } from "node:url";
-import { marketPlanCargoExpiryWarnings } from "../engines/market/cargo-aging.js";
 import { planMarketOutboundSale, allocateMarketOutboundBuyers } from "../engines/market/outbound.js";
 import { marketOutboundBatchPlans } from "../engines/market/outbound-batches.js";
 
@@ -32,22 +31,6 @@ export async function checkMarketAuditFixes() {
     assert.deepEqual(capped.shipmentBatches.map((batch) => batch.maximumInsurancePayoutCopper), [1, 0, 0],
       "a zero allocated limit never becomes uncapped legacy coverage");
   }
-  {
-    const plan = { deliveryQd: 42, lines: [{ resourceId: "bread", qty: 1, shelfLifeQd: 40 }], shipmentBatches: [
-      { deliveryQd: 35, lines: [{ resourceId: "bread", name: "Хлеб", qty: 1, shelfLifeQd: 40 }] },
-      { deliveryQd: 42, lines: [{ resourceId: "wood", qty: 840, shelfLifeQd: 0 }] }
-    ] };
-    assert.deepEqual(marketPlanCargoExpiryWarnings(plan), [], "early bread uses its own arrival, not the last consignment");
-    plan.shipmentBatches[1].lines.push({ resourceId: "bread", name: "Хлеб", qty: 3, shelfLifeQd: 40 });
-    const warnings = marketPlanCargoExpiryWarnings(plan);
-    assert.equal(warnings.length, 1);
-    assert.match(warnings[0], /Партия 2.*Хлеб ×3.*не поступит на склад/);
-    assert.equal(warnings[0].includes("выручки"), false);
-    assert.match(marketPlanCargoExpiryWarnings({ deliveryQd: 8, cargoReservations: [
-      { name: "Старое мясо", qty: 2, reservedAgeQd: 15, shelfLifeQd: 20 }
-    ] }, { direction: "outbound" })[0], /×2.*выручки/);
-  }
-
-console.log("Market quote contracts: conserved buyer shares and policy rounding, physical-batch expiry warnings and inbound/outbound wording passed.");
+  console.log("Market quote contracts: conserved buyer shares and policy rounding passed.");
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await checkMarketAuditFixes();

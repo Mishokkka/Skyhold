@@ -232,7 +232,7 @@ function finalizeRouteLegs(legs, direction, accessCost, accessLevel) {
  * Fast constrained Dijkstra over physical edges and carrier modifiers.
  * Never disables dominance pruning, so even dense maps resolve in <1 ms with zero search-limit errors.
  */
-export function findOptimalHiredRoute({
+function findOptimalHiredRoute({
   holding = {}, market = {}, regions = [], organizations = [], countries = [],
   seasonId = "", direction = "inbound", accessLimit = 0, cargoLoad = 4000,
   kind = "regular", metric = "cost", regionFactors = null, isGM = false,

@@ -41,29 +41,3 @@ export function planShipVoyage({ legs, startQd, speedKmPerDay = 150 }) {
     legs: schedule
   };
 }
-
-/** Read-only projection; no rolls, payments or arrival side effects. */
-export function projectShipVoyage({ legs, startQd, speedKmPerDay = 150, atQd }) {
-  natural(atQd, "atQd");
-  const plan = planShipVoyage({ legs, startQd, speedKmPerDay });
-  if (atQd < startQd) throw new RangeError("atQd precedes departure");
-  const effectiveQd = Math.min(atQd, plan.endQd);
-  let distanceTravelledMeters = 0;
-  let completedLegs = 0;
-  for (const leg of plan.legs) {
-    if (effectiveQd >= leg.endQd) {
-      completedLegs++;
-      if (leg.type === "flight") distanceTravelledMeters += leg.distanceMeters;
-    } else if (effectiveQd > leg.startQd && leg.type === "flight") {
-      const elapsed = effectiveQd - leg.startQd;
-      distanceTravelledMeters += Math.min(leg.distanceMeters, elapsed * speedKmPerDay * 250);
-    }
-  }
-  const completed = effectiveQd === plan.endQd;
-  return {
-    completed, completedLegs, elapsedQd: effectiveQd - startQd,
-    remainingQd: plan.endQd - effectiveQd, endQd: plan.endQd,
-    distanceTravelledMeters, remainingDistanceMeters: plan.totalDistanceMeters - distanceTravelledMeters,
-    phase: completed ? "arrived" : plan.legs[completedLegs].type
-  };
-}

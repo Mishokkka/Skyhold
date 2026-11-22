@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { formatShipMoneyHtml, formatShipMoneySigned } from "../core/ship-gold.js";
+import { formatShipMoneyHtml } from "../core/ship-gold.js";
 import { generateWorldShipOffers, quoteWorldShipReturn } from "../engines/ships/world-market.js";
 import { advanceWorldShips, departWorldShip, worldShipPortDebtCopper } from "../engines/ships/world-voyage.js";
 import { prepareShipWindowContext } from "../apps/ships-context.js";
@@ -56,9 +56,6 @@ function makeExecutor(state) {
   assert.equal(formatShipMoneyHtml(null), "—");
   assert.equal(formatShipMoneyHtml(Number.NaN), "—");
   assert.equal(formatShipMoneyHtml(1.5), "—");
-  assert.equal(formatShipMoneySigned(150), "+1 З 5 С");
-  assert.equal(formatShipMoneySigned(-50), "−5 С");
-  assert.equal(formatShipMoneySigned(0), "0 М");
 }
 
 // 2. Freight/smuggling cargo headlines & profit/loss row presentation (including legacy blank cargo.name saves).

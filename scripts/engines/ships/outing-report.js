@@ -250,5 +250,4 @@ export function settleShipOutingByGm(ship, { clockQd = 0, reason = "Ручное
   return ship.lastOuting;
 }
 
-export const SHIP_OUTING_REPORT_VERSION = VERSION;
 export const SHIP_OUTING_DETAIL_LIMIT = MAX_DETAILS;
