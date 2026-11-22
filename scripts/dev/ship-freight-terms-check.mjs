@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { worldMarketFixture } from "./world-ship-market-characterization-check.mjs";
 import { customerTransportFare } from "../engines/ships/customer-fares.js";
 import { contractGuidance, resolveContractOutcome } from "../engines/ships/contracts.js";
@@ -27,6 +28,25 @@ export function checkShipFreightTerms() {
   assert.deepEqual(mail.to, freight.to);
   assert.ok(mail.contract.cargo.loadPoints > 0 && mail.contract.cargo.loadPoints + freight.contract.cargo.loadPoints <= ship.capacityLoadPoints);
   assert.equal(quoteWorldShipBundle(data, holding, ship, [freight, mail], { context }).stops.length, 2);
+
+  const earlierOffers = structuredClone([freight, mail]);
+  for (const row of earlierOffers) {
+    delete row.contract.economics.boldRiskPercent;
+    delete row.contract.economics.taxCopper;
+    row.contract.economics.cleanPassageBonusPercent = 12;
+  }
+  const earlierBundle = quoteWorldShipBundle(data, holding, ship, earlierOffers, { context });
+  for (const stop of earlierBundle.stops) {
+    const physicalTerms = { kind: "freight", rewardCopper: 0, economics: stop.economics };
+    assert.equal(contractGuidance(physicalTerms, "bold").riskBps, Math.min(10000, Math.ceil(stop.economics.riskBps * 1.5)),
+      "a board saved before the second captain rebalance retains its physical risk");
+  }
+  assert.throws(() => quoteWorldShipBundle(data, holding, ship, [freight, earlierOffers[1]], { context }), /разные условия капитана/);
+  const oldMail = structuredClone(mail);
+  delete oldMail.contract.economics.cautiousReductionPercent;
+  delete oldMail.contract.economics.boldRiskPercent;
+  delete oldMail.contract.economics.cleanPassageBonusPercent;
+  assert.throws(() => quoteWorldShipBundle(data, holding, ship, [freight, oldMail], { context }), /разные условия капитана/);
 
   // Remote pickups from an external port also stay within the 3 nearest ports.
   const portShip = structuredClone(ship);
@@ -58,6 +78,18 @@ export function checkShipFreightTerms() {
   assert.ok(smugOffer, "expected smuggling offer on high-attention board");
   assert.ok(["luxury-silk", "test-freight"].includes(smugOffer.contract.cargo.resourceId),
     "smuggling excludes bottom-half cheap bulk commodities");
+  for (const row of smugData.catalog.marketEconomy.baseOffers) {
+    if (["luxury-silk", "test-freight"].includes(row.resourceId)) row.baseStock = 1;
+  }
+  const scarceBoard = generateWorldShipOffers(smugData, smugHolding, smugShip, { period: 5, random: () => 0.5 });
+  const scarceOffer = scarceBoard.find(row => row.kind === "smuggling");
+  assert.ok(["luxury-silk", "test-freight"].includes(scarceOffer?.contract.cargo.resourceId),
+    "scarce valuable stock is eligible even when it cannot fill the hiding spaces");
+  for (const row of smugData.catalog.resources) {
+    if (["luxury-silk", "test-freight"].includes(row.id)) row.shelfLifeQd = 1;
+  }
+  const spoiledBoard = generateWorldShipOffers(smugData, smugHolding, smugShip, { period: 6, random: () => 0.5 });
+  assert.ok(!spoiledBoard.some(row => row.kind === "smuggling"), "unsuitable valuable lots do not fall back to the cheaper half");
 
   // UI context marks companion commission offers and barque extra-watch risk reduction.
   const uiData = structuredClone(data);
@@ -66,6 +98,12 @@ export function checkShipFreightTerms() {
   const uiMail = uiContext.rows[0].offers.find(row => row.kind === "commission");
   assert.equal(uiMail?.isCompanion, true, "companion commission is flagged in ship window context");
   assert.match(uiMail?.companionHint ?? "", /Попутно к фрахту/);
+  const ordersTemplate = readFileSync(new URL("../../templates/parts/ship-window/orders.hbs", import.meta.url), "utf8");
+  assert.match(ordersTemplate, /<label[^>]+data-fbls-tooltip="\{\{#if isCompanion\}\}\{\{companionHint\}\}/,
+    "the order label bubbles focus from the checkbox to the floating tooltip");
+  assert.match(ordersTemplate, /<input[^>]+data-ship-bundle-select[^>]+aria-description="\{\{companionHint\}\}"/,
+    "the focused chooser carries the companion explanation for assistive technology");
+  checkPerishableCompanion();
 
   const unitCost = id => {
     const profile = getShipProfile(id), capacity = profile.capacityLoadPoints / 4;
@@ -95,6 +133,19 @@ export function checkShipFreightTerms() {
   assert.equal(price("freight", 480).specialPremiumCopper, 0);
   assert.ok(price("freight", 600).specialPremiumCopper > 0);
   for (const boundary of [800, 2000]) assert.ok(price("freight", boundary + 1).rewardCopper >= price("freight", boundary).rewardCopper);
+  const seasonalFare = (loadPoints, riskierProfile, taxCopper = 0) => customerTransportFare({
+    cargo: { kind: "freight", loadPoints }, origin, destination, resources: context.resources, taxCopper,
+    referenceRoute: profile => ({ distanceKm: 1000, durationQd: Math.ceil(4000 / profile.speedKmPerDay),
+      riskExposureQd: profile.id === riskierProfile ? 24 : 0 }),
+    configuration: validateTransportConfiguration({ riskBps: 300 })
+  });
+  for (const [boundary, riskierProfile] of [[800, "cutter"], [2000, "schooner"]]) {
+    const smaller = seasonalFare(boundary, riskierProfile, 111);
+    const larger = seasonalFare(boundary + 1, riskierProfile, 111);
+    assert.ok(smaller.riskPremiumCopper > larger.riskPremiumCopper, "mismatched seasonal exposure at the size boundary");
+    assert.ok(larger.rewardCopper >= smaller.rewardCopper, "the loaded freight tariff stays monotone after the risk premium");
+    assert.equal(larger.rewardCopper - seasonalFare(boundary + 1, riskierProfile).rewardCopper, 111, "customs are added once");
+  }
   const contraband = price("smuggling", 20, 10000, 0, 300);
   assert.equal(contraband.specialPremiumCopper, 3500);
   assert.equal(price("smuggling", 20, 20000).specialPremiumCopper, 7000);
@@ -140,4 +191,32 @@ export function checkShipFreightTerms() {
   assert.deepEqual([200, 1000, 4500].map(risk => bestStyle(risk, 350)), ["bold", "normal", "cautious"]);
   assert.deepEqual([300, 2000].map(risk => bestStyle(risk, 4000)), ["bold", "cautious"],
     "on realistic 40Z barque freight, bold wins on safe routes while cautious wins on dangerous routes");
+}
+
+function checkPerishableCompanion() {
+  const { data, holding, ship } = worldMarketFixture();
+  data.catalog.marketEconomy.baseOffers[0].priceOverrideCopper = 300;
+  data.catalog.resources[0].shelfLifeQd = 15;
+  holding.visibility = "public";
+  holding.gm.playersCanManageShips = true;
+  const draws = [0.4, 0.4, 0.4, 0.4, 0.4, 0.9];
+  const offers = generateWorldShipOffers(data, holding, ship, { period: 0, random: () => draws.shift() ?? 0.4 });
+  const freight = offers.find(row => row.kind === "freight");
+  const mail = offers.find(row => row.kind === "commission");
+  assert.ok(freight && mail, "mail can still be offered independently");
+  assert.notEqual(mail.to.id, freight.to.id, "generation falls back to the originally drawn standalone destination");
+  const savedMail = { ...mail, to: freight.to, contract: { ...mail.contract, pickup: freight.contract.pickup } };
+  assert.throws(() => quoteWorldShipBundle(data, holding, ship, [freight, savedMail]), /нет совместимого маршрута/);
+  holding.special.ships.offers = [freight, savedMail];
+  const previousGame = globalThis.game;
+  try {
+    for (const isGM of [true, false]) {
+      globalThis.game = { user: { id: isGM ? "gm" : "player", isGM }, users: [{ id: "gm", isGM: true, active: true }] };
+      const row = prepareShipWindowContext(holding, { data, shipId: ship.id }).rows[0].offers.find(offer => offer.id === savedMail.id);
+      assert.ok(row, "incompatible mail remains available separately");
+      assert.ok(!row.isCompanion, "both roles see companion availability from the same route plan, including additional handling time");
+    }
+  } finally {
+    globalThis.game = previousGame;
+  }
 }

@@ -4,6 +4,13 @@ import { getShipProfile } from "./profiles.js";
 import { isMagnifiqueShip } from "./crew-roster.js";
 import { laborWageRate } from "../economy/labor-wage-rate.js";
 
+export function shipWatchRiskReductionPercent(ship, readyCount) {
+  if (ship?.profileId !== "merchant-barque") return 0;
+  const watch = getShipProfile(ship.profileId).crewTarget;
+  const extra = Math.min(watch, Math.max(0, readyCount - watch));
+  return 25 * extra / watch;
+}
+
 function text(value = "") {
   return String(value ?? "").trim();
 }

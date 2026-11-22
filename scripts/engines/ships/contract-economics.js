@@ -5,9 +5,14 @@ const percent = (amount, rate) => Math.ceil(amount * rate / 100);
 
 export const CAPTAIN_TERMS = Object.freeze({ cautiousReductionPercent: 55, boldRiskPercent: 200, cleanPassageBonusPercent: 6 });
 
+export function captainRiskTerms(economics) {
+  return { cautiousReductionPercent: economics?.cautiousReductionPercent ?? 25,
+    boldRiskPercent: economics?.boldRiskPercent ?? 150 };
+}
+
 export function captainStyleRiskBps(economics, style, riskBps) {
-  const rate = style === "cautious" ? 100 - (economics?.cautiousReductionPercent ?? 25)
-    : style === "bold" ? (economics?.boldRiskPercent ?? 150) : 100;
+  const { cautiousReductionPercent, boldRiskPercent } = captainRiskTerms(economics);
+  const rate = style === "cautious" ? 100 - cautiousReductionPercent : style === "bold" ? boldRiskPercent : 100;
   return Math.min(10000, Math.ceil(riskBps * rate / 100));
 }
 

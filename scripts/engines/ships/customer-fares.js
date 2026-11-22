@@ -38,15 +38,22 @@ function referenceCharge(profile, loadPoints, { cargo, origin, destination, reso
   return { charge, carriageCopper, exposure: route.riskExposureQd };
 }
 
+function riskPremium(carriageCopper, riskBps) {
+  return Math.ceil(carriageCopper * riskBps * 85 / 1_000_000);
+}
+
 /** A customer buys space between cargo ports, not the owner's crew or empty approach. */
 export function customerTransportFare(request) {
   const { cargo, configuration, attention = 0, taxCopper = 0 } = request;
   const profiles = ["cutter", "schooner", "merchant-barque"].map(getShipProfile);
   const profile = profiles.find(row => cargo.loadPoints <= row.capacityLoadPoints) ?? profiles.at(-1);
+  // Compare the all-in carriage tariffs before handling and tax. The reference sailing dates can have different risks.
   let freightFloor = 0;
   if (cargo.kind === "freight") for (const smaller of profiles) {
     if (smaller === profile) break;
-    freightFloor = Math.max(freightFloor, referenceCharge(smaller, smaller.capacityLoadPoints, request).carriageCopper);
+    const full = referenceCharge(smaller, smaller.capacityLoadPoints, request);
+    const smallerRiskBps = transportRiskBps(full.exposure, configuration.riskBps);
+    freightFloor = Math.max(freightFloor, full.carriageCopper + riskPremium(full.carriageCopper, smallerRiskBps));
   }
   const { charge, carriageCopper, exposure } = referenceCharge(profile, cargo.loadPoints, request);
   const regularCopper = charge.totalCopper - charge.handlingCopper;
@@ -58,10 +65,13 @@ export function customerTransportFare(request) {
   } else if (cargo.kind === "commission") {
     specialPremiumCopper = Math.ceil(regularCopper * 0.25);
   } else {
-    specialPremiumCopper = Math.max(freightFloor, carriageCopper) - regularCopper;
+    specialPremiumCopper = carriageCopper - regularCopper;
   }
   const riskBps = transportRiskBps(exposure * (cargo.kind === "smuggling" ? 2 + attention / 10 : 1), configuration.riskBps);
-  const riskPremiumCopper = Math.ceil((regularCopper + specialPremiumCopper) * riskBps * 85 / 1_000_000);
+  const riskPremiumCopper = riskPremium(regularCopper + specialPremiumCopper, riskBps);
+  if (cargo.kind === "freight") {
+    specialPremiumCopper = Math.max(freightFloor - regularCopper - riskPremiumCopper, specialPremiumCopper);
+  }
   return { rewardCopper: transportMoney([charge.totalCopper, taxCopper, specialPremiumCopper, riskPremiumCopper]),
     marketFeeCopper: charge.totalCopper, specialPremiumCopper, riskPremiumCopper, taxCopper, riskBps, referenceProfileId: profile.id };
 }
