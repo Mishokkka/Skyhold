@@ -90,14 +90,6 @@ async _onOpenUiReview(event) {
   SkyholdUiReviewApp.open();
 },
 
-async _onOpenLaputaMigrationImporter(event) {
-  stopEvent(event);
-  if (!game.user?.isGM) return;
-  await ensureSkyholdStylesheet("secondary");
-  const { SkyholdLaputaMigrationImporter } = await import("../editors/laputa-migration-importer.js");
-  new SkyholdLaputaMigrationImporter({ owner: this }).render({ force: true, focus: true });
-},
-
 async _onOpenBuildingCatalogMigration(event) {
   stopEvent(event);
   if (!game.user?.isGM) return;
