@@ -4,18 +4,18 @@ import { pathToFileURL } from "node:url";
 import { checkMigrationProductionCarry } from "./building-catalog-cycle-migration-check.mjs";
 import { checkMigrationPreviewRefresh } from "./building-catalog-preview-check.mjs";
 import { checkCatalogLoadBoundary } from "./building-catalog-load-boundary-check.mjs";
-import { checkBuildingCatalogFullTransition } from "./building-catalog-full-transition-check.mjs";
+import { checkAgricultureCatalogRefresh, checkBuildingCatalogFullTransition } from "./building-catalog-full-transition-check.mjs";
 
 checkCatalogLoadBoundary();
 checkBuildingCatalogFullTransition();
+checkAgricultureCatalogRefresh();
 
 import { BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION, DEFAULT_BUILDING_TEMPLATES, TEMPLATE_CATALOG_VERSION } from "../data/building-templates.js";
 import { clone } from "../data/utils.js";
 import {
   BUILDING_CATALOG_MIGRATION_NAMESPACE,
   applyBuildingCatalogMigration,
-  planBuildingCatalogMigration,
-  technicalMaintenanceMigrationIssues
+  planBuildingCatalogMigration
 } from "../workflows/buildings/catalog-migration.js";
 
 {
@@ -51,21 +51,6 @@ import {
   const changed = clone(source);
   changed.catalog.buildings[0].effect = "Новая авторская правка";
   assert.throws(() => applyBuildingCatalogMigration({ currentData: changed, plan }), { code: "target-catalog-hash" });
-}
-
-{
-  const before = { id: "holding", buildings: { list: [{ id: "mill", maintenance: { schemaVersion: 1 } }] },
-    people: { list: [{ id: "worker", workAllocationMode: "explicit", workAllocations: [
-      { sourceId: "maintenance", functionId: "maintenance", normalQd: 2 }
-    ] }] } };
-  const after = clone(before);
-  after.buildings.list[0].maintenance.schemaVersion = 2;
-  const snapshot = clone(before);
-  assert.equal(technicalMaintenanceMigrationIssues(before, after)[0].code, "legacy-maintenance-assignment");
-  assert.deepEqual(before, snapshot, "Preview must not redistribute legacy assignments automatically");
-  assert.deepEqual(technicalMaintenanceMigrationIssues(before, before), [], "Existing version 1 migration remains compatible");
-  before.people.list[0].workAllocations = [{ sourceId: "mill", functionId: "production", normalQd: 18 }];
-  assert.deepEqual(technicalMaintenanceMigrationIssues(before, after), []);
 }
 
 function template(id) {

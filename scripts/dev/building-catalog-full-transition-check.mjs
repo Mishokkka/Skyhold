@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION, TEMPLATE_CATALOG_VERSION } from "../data/building-templates.js";
+import { BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION, DEFAULT_BUILDING_TEMPLATES, TEMPLATE_CATALOG_VERSION } from "../data/building-templates.js";
 import { normalizeSkyholdData } from "../data/normalizers.js";
 import { clone } from "../data/utils.js";
 import { applyBuildingCatalogMigration, planBuildingCatalogMigration } from "../workflows/buildings/catalog-migration.js";
@@ -43,6 +43,17 @@ export function checkBuildingCatalogFullTransition() {
   assert.deepEqual(laborPlan.blockingIssues, []);
   assert.deepEqual(laborPlan.targetData.holdings[0].people.list[0].workAllocations, [laborSnapshot.holdings[0].people.list[0].workAllocations[1]], "Only obsolete general maintenance is released");
   assert.deepEqual(legacyLabor, laborSnapshot, "Forced preview still never writes the source");
+  legacyLabor.holdings[0].buildings.list.find(row => row.templateId === "lumbermill").maintenance.schemaVersion = 2;
+  legacyLabor.holdings[0].people.list[0].workAllocations.push({ sourceId: "instance-lumbermill", functionId: "maintenance", normalQd: 3 });
+  const alreadyTechnical = clone(legacyLabor);
+  const allocations = alreadyTechnical.holdings[0].people.list[0].workAllocations;
+  const releaseArgs = { currentData: alreadyTechnical, operationId: "refresh-technical-labor" };
+  const untouched = planBuildingCatalogMigration(releaseArgs);
+  assert.deepEqual(untouched.targetData.holdings[0].people.list[0].workAllocations, allocations);
+  const refreshed = planBuildingCatalogMigration({ ...releaseArgs, replaceCatalog: true });
+  assert.deepEqual(refreshed.blockingIssues, []);
+  assert.deepEqual(refreshed.targetData.holdings[0].people.list[0].workAllocations, allocations.slice(1));
+  assert.match(refreshed.decisions[0].detail, /освобождено 2 QD/);
   const applied = applyBuildingCatalogMigration({ currentData: source, plan, operationId: plan.operationId });
   const loaded = normalizeSkyholdData(applied.data);
   assert.equal(loaded.catalog.buildings.length, 126, "The current catalog is complete");
@@ -89,4 +100,64 @@ export function checkBuildingCatalogFullTransition() {
   loaded.meta.templateCatalogVersion = TEMPLATE_CATALOG_VERSION + 1;
   assert.throws(() => planBuildingCatalogMigration({ currentData: loaded, operationId: "no-downgrade" }),
     (error) => error.code === "source-version-newer", "An older module must not downgrade a newer world catalog");
+}
+
+export function checkAgricultureCatalogRefresh() {
+  const garden = DEFAULT_BUILDING_TEMPLATES.find(row => row.id === "garden");
+  const source = {
+    meta: { templateCatalogVersion: TEMPLATE_CATALOG_VERSION },
+    catalog: { buildings: [garden] },
+    holdings: [{ id: "garden-holding", buildings: { list: [
+      { ...clone(garden), id: "planted-garden", templateId: "garden", constructionStatus: "built", buildProgress: garden.buildTarget }
+    ] } }]
+  };
+  const instance = source.holdings[0].buildings.list[0];
+  const crop = instance.agriculture.crops.find(row => row.id === "vegetables");
+  instance.agriculture.state = {
+    phase: "harvesting", cropId: crop.id, readyAgeQd: crop.readyExpiryQd, harvestWorkQdTotal: 2,
+    harvestProgressQd: 1, harvestTotalQty: 480, harvestedQty: 240, readyQty: 240
+  };
+  const args = { currentData: source, operationId: "refresh-garden", replaceCatalog: true };
+  for (const [change, reason] of [
+    [{ resourceId: "herbs" }, /ресурс урожая/],
+    [{ expiryRule: "never" }, /правило срока/],
+    [{ readyExpiryQd: crop.readyExpiryQd + 40 }, /правило срока/]
+  ]) {
+    const priorCrop = clone(crop);
+    Object.assign(crop, change);
+    const before = clone(source);
+    const preview = planBuildingCatalogMigration(args);
+    assert.equal(preview.canApply, false);
+    assert.match(preview.blockingIssues.find(row => row.code === "agriculture-cycle-incompatible").detail, reason);
+    assert.throws(() => applyBuildingCatalogMigration({ currentData: source, plan: preview }), { code: "plan-blocked" });
+    assert.deepEqual(source, before);
+    Object.assign(crop, priorCrop);
+  }
+  crop.readyExpiryQd -= 40;
+  instance.agriculture.state.readyAgeQd = 20;
+  const compatible = planBuildingCatalogMigration(args);
+  assert.equal(compatible.canApply, true);
+  const state = compatible.targetData.holdings[0].buildings.list[0].agriculture.state;
+  assert.deepEqual([state.phase, state.cropId, state.harvestedQty, state.readyQty], ["harvesting", crop.id, 240, 240]);
+
+  instance.agriculture.state = { phase: "growing", cropId: crop.id, growingElapsedQd: 50 };
+  crop.outputQty += 1;
+  assert.match(planBuildingCatalogMigration(args).blockingIssues.find(row => row.code === "agriculture-cycle-incompatible").detail, /объём урожая/);
+  instance.agriculture.state = { phase: "empty" };
+  assert.equal(planBuildingCatalogMigration(args).canApply, true, "New cycles may use the updated recipe");
+
+  const promenade = DEFAULT_BUILDING_TEMPLATES.find(row => row.id === "promenade-garden");
+  const dormant = clone(instance.agriculture);
+  dormant.state = { phase: "growing", cropId: crop.id, growingElapsedQd: 20 };
+  const dormantSource = normalizeSkyholdData({
+    ...source,
+    holdings: [{ id: "promenade-holding", buildings: { list: [
+      { ...clone(promenade), id: "dormant-promenade", templateId: promenade.id, agriculture: dormant }
+    ] } }]
+  });
+  const dormantPreview = planBuildingCatalogMigration({ ...args, currentData: dormantSource });
+  assert.equal(dormantPreview.canApply, true, "An inactive saved profile must not block its own catalog refresh");
+  const dormantBuilding = dormantPreview.targetData.holdings[0].buildings.list[0];
+  assert.equal(dormantBuilding.functions.production, false);
+  assert.deepEqual(dormantBuilding.agriculture, dormantSource.holdings[0].buildings.list[0].agriculture);
 }

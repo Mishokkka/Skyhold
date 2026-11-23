@@ -102,6 +102,8 @@ export function agricultureKindForBuilding(building = {}) {
   if (templateId === "vineyard") return "vineyard";
   if (templateId === "hop-yard") return "hop-yard";
   if (templateId === "apiary") return "apiary";
+  // Infer from the name only when no template is linked and production is available.
+  if (text(building?.templateId) || building?.functions?.production === false) return "";
   const name = text(building?.name).toLocaleLowerCase("ru");
   if (/^поле(?:\s|$)/u.test(name)) return "field";
   if (/^сад(?:\s|$)/u.test(name)) return "garden";
@@ -170,7 +172,8 @@ export function normalizeAgricultureState(value = {}, { activeCropId = "" } = {}
   };
 }
 
-export function normalizeAgricultureBuilding(value = {}, { building = {} } = {}) {
+export function normalizeAgricultureBuilding(value = {}, { building = {}, includeInactive = false } = {}) {
+  if (!includeInactive && building?.functions?.production === false) return null;
   const kind = agricultureKindForBuilding({ ...building, agriculture: value });
   if (!kind) return null;
   const source = value && typeof value === "object" ? value : {};

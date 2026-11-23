@@ -11,7 +11,6 @@ import { clone } from "../../data/utils.js";
 import { workerAdmission } from "../../engines/workers/building-qualification.js";
 import { sourceMaterialState } from "../../engines/economy/construction-stages.js";
 import { validProductionTiming } from "../../engines/economy/production-timing.js";
-import { usesTechnicalMaintenance } from "../../data/economy/maintenance.js";
 import { MAINTENANCE_WORK_SOURCE_ID, MAINTENANCE_WORK_FUNCTION_ID, buildWorkAllocationTargets } from "../../data/work-allocations.js";
 import { buildingLaborMode, validateHybridLaborHolding } from "../../data/hybrid-labor.js";
 import { applyStandardBuildingText } from "./catalog-standard-text.js";
@@ -188,30 +187,56 @@ function migrateProductionLines(source = {}, target = {}, issues = [], label = "
   return targetLines;
 }
 
-function migrateAgriculture(source = {}, target = {}, issues = [], label = "Здание") {
-  if (!target?.agriculture) return undefined;
-  const prior = source?.agriculture && typeof source.agriculture === "object" ? source.agriculture : {};
-  const cropIds = new Set((target.agriculture.crops ?? []).map((crop) => text(crop?.id)).filter(Boolean));
-  const activeCropId = cropIds.has(text(prior.activeCropId)) ? text(prior.activeCropId) : text(target.agriculture.activeCropId);
-  const stateCropId = text(prior?.state?.cropId);
-  const statePhase = text(prior?.state?.phase);
-  if (stateCropId && !cropIds.has(stateCropId) && statePhase && statePhase !== "idle") {
+function agricultureCycleConflict(prior, next) {
+  const { phase, cropId } = prior.state;
+  if (phase === "empty") return "";
+  const crop = prior.crops.find((row) => row.id === cropId);
+  const replacement = next?.crops.find((row) => row.id === cropId);
+  if (!crop || !replacement || next.activeCropId !== cropId) return "культура цикла недоступна в новом профиле";
+  if (replacement.resourceId !== crop.resourceId) {
+    return `ресурс урожая меняется с «${crop.resourceId}» на «${replacement.resourceId}»`;
+  }
+  if (replacement.expiryRule !== "never" && (
+    replacement.expiryRule !== crop.expiryRule
+    || (crop.expiryRule === "qd" && replacement.readyExpiryQd < crop.readyExpiryQd)
+  )) return "новое правило срока может привести к преждевременной гибели урожая";
+  if ((phase === "sowing" || phase === "growing") && (
+    replacement.growingQd !== crop.growingQd
+    || replacement.outputQty !== crop.outputQty
+    || replacement.harvestWorkQd !== crop.harvestWorkQd
+  )) return "меняются сроки созревания, объём урожая или труд на сбор";
+  if (phase === "sowing" && (
+    replacement.sowingWorkQd !== crop.sowingWorkQd || replacement.perennial !== crop.perennial
+    || crop.sowingSeasons.some((season) => !replacement.sowingSeasons.includes(season))
+  )) return "меняются условия незавершённого посева";
+  return "";
+}
+
+function migrateAgriculture(source, target, issues, label) {
+  const saved = source.agriculture;
+  const prior = saved && normalizeAgricultureBuilding(saved, { building: source, includeInactive: true });
+  if (prior && source.functions?.production === false && target.functions?.production === false) return prior;
+  const canonical = target.agriculture;
+  const activeCropId = text(saved?.activeCropId);
+  const next = canonical && normalizeAgricultureBuilding({
+    ...canonical,
+    enabled: saved?.enabled ?? canonical.enabled,
+    activeCropId: canonical.crops?.some((crop) => crop.id === activeCropId) ? activeCropId : canonical.activeCropId,
+    outputRoomId: text(saved?.outputRoomId) || canonical.outputRoomId,
+    gmPriority: saved?.gmPriority ?? canonical.gmPriority,
+    operations: saved?.operations ?? canonical.operations,
+    state: prior?.state ?? canonical.state
+  }, { building: target, includeInactive: true });
+  const conflict = prior && agricultureCycleConflict(prior, target.functions?.production === false ? null : next);
+  if (conflict) {
     issues.push({
-      code: "agriculture-cycle-unmapped",
-      buildingId: text(source?.id),
+      code: "agriculture-cycle-incompatible",
+      buildingId: text(source.id),
       buildingName: label,
-      detail: `сезонный цикл культуры «${stateCropId}» отсутствует в новом профиле`
+      detail: `Сезонный цикл «${prior.state.cropId}» нельзя перенести: ${conflict}. Завершите цикл и обновите расчёт.`
     });
   }
-  return normalizeAgricultureBuilding({
-    ...clone(target.agriculture),
-    enabled: own(prior, "enabled") ? prior.enabled : target.agriculture.enabled,
-    activeCropId,
-    outputRoomId: text(prior.outputRoomId) || text(target.agriculture.outputRoomId),
-    gmPriority: own(prior, "gmPriority") ? prior.gmPriority : target.agriculture.gmPriority,
-    operations: prior.operations ?? target.agriculture.operations,
-    state: prior.state ?? target.agriculture.state
-  }, { building: target });
+  return next;
 }
 
 function livestockHeadcount(value = {}) {
@@ -319,7 +344,7 @@ function migrateBuildingInstance(source, targetTemplate, targetId, people, issue
   preserveSpecialConfiguration(source, next);
   preserveTradeSelection(source, next);
   next.productionLines = migrateProductionLines(source, next, issues, next.name);
-  if (next.agriculture) next.agriculture = migrateAgriculture(source, next, issues, next.name);
+  next.agriculture = migrateAgriculture(source, next, issues, next.name);
   if (next.livestock) next.livestock = migrateLivestock(source, next, issues, next.name);
   if (source?.productionSelection && typeof source.productionSelection === "object") {
     next.productionSelection = { ...clone(next.productionSelection ?? {}), ...clone(source.productionSelection) };
@@ -386,18 +411,18 @@ function invariant(condition, code, message, details = {}) {
   if (!condition) throw migrationError(code, message, details);
 }
 
-export function technicalMaintenanceMigrationIssues(before = {}, after = {}) {
-  const prior = new Map((before?.buildings?.list ?? []).map((building) => [text(building.id), building]));
-  const converted = (after?.buildings?.list ?? []).filter((building) => usesTechnicalMaintenance(building)
-    && prior.has(text(building.id)) && !usesTechnicalMaintenance(prior.get(text(building.id))));
-  if (!converted.length) return [];
-  return (before?.people?.list ?? []).filter((person) => person?.workAllocationMode === "explicit"
-    && (person.workAllocations ?? []).some((assignment) => assignment.sourceId === MAINTENANCE_WORK_SOURCE_ID
-      && assignment.functionId === MAINTENANCE_WORK_FUNCTION_ID
-      && Number(assignment.normalQd || 0) + Number(assignment.overtimeQd || 0) > 0))
-    .map((person) => ({ code: "legacy-maintenance-assignment", holdingId: text(before.id), workerId: text(person.id),
-      buildingId: text(converted[0].id), buildingName: text(converted[0].name),
-      detail: `${text(person.name) || text(person.id)}: общее назначение обслуживания требует явного перераспределения QD по зданиям перед переходом на техническую модель` }));
+function releaseGeneralMaintenanceAssignments(holding, decisions) {
+  for (const person of holding.people?.list ?? []) {
+    if (person.workAllocationMode !== "explicit") continue;
+    const rows = person.workAllocations ?? [];
+    const removed = rows.filter((row) => row.sourceId === MAINTENANCE_WORK_SOURCE_ID && row.functionId === MAINTENANCE_WORK_FUNCTION_ID);
+    if (!removed.length) continue;
+    person.workAllocations = rows.filter((row) => !removed.includes(row));
+    const releasedQd = removed.reduce((sum, row) => sum + whole(row.normalQd) + whole(row.overtimeQd), 0);
+    decisions.push({
+      detail: `${text(person.name) || text(person.id)} (${text(holding.name) || text(holding.id)}). Общее обслуживание снято, освобождено ${releasedQd} QD.`
+    });
+  }
 }
 
 export function planBuildingCatalogMigration({
@@ -493,16 +518,7 @@ export function planBuildingCatalogMigration({
   }
 
   for (const holding of targetData.holdings ?? []) {
-    if (replaceCatalog) {
-      const before = (currentData.holdings ?? []).find((row) => text(row.id) === text(holding.id));
-      for (const issue of technicalMaintenanceMigrationIssues(before, holding)) {
-        const person = holding.people.list.find((row) => text(row.id) === issue.workerId);
-        const removed = person.workAllocations.filter((row) => row.sourceId === MAINTENANCE_WORK_SOURCE_ID && row.functionId === MAINTENANCE_WORK_FUNCTION_ID);
-        person.workAllocations = person.workAllocations.filter((row) => !removed.includes(row));
-        decisions.push({ resolutionKey: issue.resolutionKey,
-          detail: `${text(person.name) || text(person.id)}: старое общее обслуживание снято в проекте переноса; освобождено ${removed.reduce((sum, row) => sum + whole(row.normalQd) + whole(row.overtimeQd), 0)} QD. Новые технические назначения потребуются отдельно.` });
-      }
-    }
+    if (replaceCatalog) releaseGeneralMaintenanceAssignments(holding, decisions);
     for (const issue of validateHybridLaborHolding(holding, { targets: buildWorkAllocationTargets(holding) }).issues) {
       issues.push({ ...issue, holdingId: text(holding.id), holdingName: text(holding.name), detail: issue.message });
     }

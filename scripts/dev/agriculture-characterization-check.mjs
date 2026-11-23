@@ -56,7 +56,27 @@ export function checkAgricultureCharacterization() {
   const oldGarden = { id: "old-garden", templateId: "garden", name: "Сад", productionLines: [{ id: "legacy", resourceId: "vegetables" }] };
   normalizeBuilding(oldGarden);
   assert.equal(oldGarden.agriculture.kind, "garden", "safe normal load must add canonical agriculture state to an old Garden instance");
+  assert.equal(oldGarden.functions.production, true, "An unflagged agricultural building remains operational");
   assert.equal(oldGarden.productionLines.length, 1, "safe agriculture normalization must preserve legacy data instead of destructively deleting it");
+
+  const promenade = structuredClone(DEFAULT_BUILDING_TEMPLATES.find(row => row.id === "promenade-garden"));
+  promenade.templateId = promenade.id;
+  normalizeBuilding(promenade);
+  assert.equal(promenade.agriculture, undefined, "A leisure template must not acquire a farm profile from its name");
+  const savedGarden = { ...structuredClone(garden), state: { ...garden.state, phase: "growing",
+    cropId: garden.activeCropId, growingElapsedQd: 20 } };
+  promenade.agriculture = structuredClone(savedGarden);
+  normalizeBuilding(promenade);
+  assert.deepEqual(promenade.agriculture, savedGarden, "Safe load preserves stored configuration and progress when production is off");
+  assert.equal(normalizeAgricultureBuilding(promenade.agriculture, { building: promenade }), null);
+  const period = planAgriculturePeriod({ buildings: [promenade], dependencies: {
+    isOperational: () => true,
+    isFunctionAllowed: () => true,
+    workQdForBuilding: () => assert.fail("A promenade must not request farm labor"),
+    calendarContextForOffset: () => calendar()
+  } });
+  assert.deepEqual(period.entries, []);
+  assert.deepEqual(period.resourceChanges, []);
 }
 
 {
