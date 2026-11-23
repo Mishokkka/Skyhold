@@ -432,6 +432,7 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
       authorityStatus: permissions.authorityStatus,
       writeAvailable: permissions.writeAvailable,
       canEditBuildings,
+      canReorderBuildings: canEdit && canEditBuildings,
       canUseStorage,
       canManagePeople,
       canManageDefense,
@@ -1028,6 +1029,8 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
       if (storageZone && root.contains(storageZone) && !storageZone.contains(event.relatedTarget)) storageZone.classList.remove("dragover");
       const residentZone = event.target?.closest?.("[data-resident-drop-zone]");
       if (residentZone && root.contains(residentZone) && !residentZone.contains(event.relatedTarget)) residentZone.classList.remove("dragover");
+      const buildingCard = event.target?.closest?.("[data-action='open-building-editor']");
+      if (buildingCard && root.contains(buildingCard)) dispatch(event, buildingCard, "_onBuildingDragLeave");
     }, listenerOptions);
 
     root.addEventListener("drop", (event) => {

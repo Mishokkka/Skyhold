@@ -1,6 +1,6 @@
 {{!-- Current building markup, copied verbatim except inert action/drag hooks. --}}
 {{#each currentBuildings}}
-<article class="fbls-building-card {{statusClass}} {{flavorClass}} {{#if headOnly}}head-only{{/if}} {{#unless unlocked}}locked{{/unless}}" data-review-inert-action="open-building-editor" data-id="{{id}}" data-building-id="{{id}}" data-building-name="{{name}}" data-holding-id="{{../holding.id}}" role="button" tabindex="0" aria-label="Открыть здание {{name}}" {{#if ../canEditBuildings}}data-review-inert-draggable="true"{{/if}}>
+<article class="fbls-building-card {{statusClass}} {{flavorClass}} {{#if headOnly}}head-only{{/if}} {{#unless unlocked}}locked{{/unless}}" data-review-inert-action="open-building-editor" data-id="{{id}}" data-building-id="{{id}}" role="button" tabindex="0" aria-label="Открыть здание {{name}}" {{#if ../canReorderBuildings}}data-review-inert-draggable="true"{{/if}}>
   <header class="fbls-building-card-head v2 fbls-card-header">
     <div class="fbls-building-card-media">
       <div class="fbls-building-card-icon">{{#if img}}<img src="{{img}}" alt="" />{{else}}<i class="{{icon}}"></i>{{/if}}</div>

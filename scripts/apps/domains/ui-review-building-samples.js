@@ -44,8 +44,9 @@ export function createReviewBuildingCases() {
 export function reviewCardSamples(kind) {
   const cases = createReviewBuildingCases();
   if (kind === "header") return { headerCases: [cases[0], cases[1], cases[4]].map(row => ({ ...row, headerOnly: true, currentBuildings: [{ ...row, headOnly: true,
-    hasCardBody: false, showStorageStrip: false, showHousingStrip: false }], canEditBuildings: true })) };
+    hasCardBody: false, showStorageStrip: false, showHousingStrip: false }], canEditBuildings: true, canReorderBuildings: true })) };
   if (kind === "details") return { detailCases: cases.map((row, index) => ({ ...row, selected: index === 0,
-    currentBuildings: [row], canEditBuildings: true })) };
-  return { currentBuildings: [cases[4], cases[1], cases[3], cases[0]], proposedBuildings: [cases[4], cases[1], cases[3], cases[0]], canEditBuildings: true };
+    currentBuildings: [row], canEditBuildings: true, canReorderBuildings: true })) };
+  return { currentBuildings: [cases[4], cases[1], cases[3], cases[0]], proposedBuildings: [cases[4], cases[1], cases[3], cases[0]],
+    canEditBuildings: true, canReorderBuildings: true };
 }
