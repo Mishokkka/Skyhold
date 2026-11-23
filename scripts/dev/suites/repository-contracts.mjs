@@ -2891,7 +2891,6 @@ export async function runRepositoryContracts() {
   assert.equal(legacyRepairBuilding.constructionStatus, "built", "completed repair must update the compatibility projection");
 
   const lifecycleMigrationRoot = clone(canonicalDefault);
-  lifecycleMigrationRoot.meta.schemaVersion = 53;
   lifecycleMigrationRoot.holdings = [clone(baseSchema.BASE_HOLDING)];
   lifecycleMigrationRoot.holdings[0].buildings.list = [{
     id: "migrated-repair",
@@ -2903,7 +2902,7 @@ export async function runRepositoryContracts() {
     repairProgress: 1,
     repairTarget: 3
   }];
-  const migratedRepair = normalizers.normalizeSkyholdData(lifecycleMigrationRoot).holdings[0].buildings.list[0];
+  const migratedRepair = normalizers.normalizeSkyholdData(lifecycleMigrationRoot, { fromVersion: 53 }).holdings[0].buildings.list[0];
   assert.equal(migratedRepair.lifecycle, "active", "schema 54 must migrate a legacy repair without changing lifecycle");
   assert.equal(migratedRepair.condition, "damaged", "schema 54 must migrate legacy damage into condition");
   assert.equal(migratedRepair.repair.active, true, "schema 54 must migrate legacy repair progress into an explicit process");
@@ -3626,12 +3625,11 @@ export async function runRepositoryContracts() {
 
   const legacyMassCombatData = clone(schema.DEFAULT_SKYHOLD_DATA);
   legacyMassCombatData.holdings = [clone(schema.BASE_HOLDING)];
-  legacyMassCombatData.meta.schemaVersion = normalizers.SKYHOLD_SCHEMA_VERSION - 1;
   delete legacyMassCombatData.holdings[0].gm.massCombat.attackerShooters;
   legacyMassCombatData.holdings[0].gm.massCombat.attackerFire = 2;
   legacyMassCombatData.holdings[0].gm.massCombat.attackerSourceTag1 = "sacred";
   legacyMassCombatData.holdings[0].gm.massCombat.attackerSourceEfficiency1 = 7.5;
-  const migratedMassCombatData = normalizers.normalizeSkyholdData(legacyMassCombatData);
+  const migratedMassCombatData = normalizers.normalizeSkyholdData(legacyMassCombatData, { fromVersion: normalizers.SKYHOLD_SCHEMA_VERSION - 1 });
   assert.equal(migratedMassCombatData.holdings[0].gm.massCombat.attackerShooters, 2, "stored legacy mass-combat tags must migrate to canonical fields");
   assert.equal(Object.hasOwn(migratedMassCombatData.holdings[0].gm.massCombat, "attackerFire"), false, "stored legacy mass-combat tag fields must be removed after migration");
   assert.equal(migratedMassCombatData.holdings[0].gm.massCombat.attackerSourcePrimaryTag1, "sacred", "stored source types must migrate to explicit primary-tag fields");

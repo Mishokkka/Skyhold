@@ -11,7 +11,7 @@ import {
   CONSTRUCTION_CENTER_TEMPLATE_ID
 } from "../data/building-development-tree.js";
 import { APPROVED_BUILDING_TEMPLATE_MANIFEST } from "../data/building-template-manifest.js";
-import { normalizeSkyholdData } from "../data/normalizers.js";
+import { normalizeSkyholdData, SKYHOLD_SCHEMA_VERSION } from "../data/normalizers.js";
 import { constructionCenterSuccessBonus } from "../engines/economy/construction-center.js";
 import { planBuildingCatalogMigration } from "../workflows/buildings/catalog-migration.js";
 
@@ -119,7 +119,7 @@ export function checkBuildingDevelopmentTreeCharacterization() {
   storedGatehouse.requiredAnyBuildingIds = [];
   storedGatehouse.wageDailyCopper = 777;
   const migrated = normalizeSkyholdData({
-    meta: { templateCatalogVersion: TEMPLATE_CATALOG_VERSION },
+    meta: { schemaVersion: SKYHOLD_SCHEMA_VERSION, templateCatalogVersion: TEMPLATE_CATALOG_VERSION },
     catalog: { buildings: stored },
     holdings: []
   });
@@ -157,7 +157,7 @@ export function checkBuildingDevelopmentTreeCharacterization() {
     requiredBuildingIds: ["old-prerequisite"]
   };
   const migratedLaputa = normalizeSkyholdData({
-    meta: { templateCatalogVersion: TEMPLATE_CATALOG_VERSION },
+    meta: { schemaVersion: SKYHOLD_SCHEMA_VERSION, templateCatalogVersion: TEMPLATE_CATALOG_VERSION },
     catalog: { buildings: stored },
     holdings: [{
       id: "laputa",
@@ -186,7 +186,7 @@ export function checkBuildingDevelopmentTreeCharacterization() {
   assert.deepEqual(plannedProject.constructionMaterials?.prepaidRemaining ?? [], [], "only recorded material credit may survive");
 
   const currentVersionLaputa = normalizeSkyholdData({
-    meta: { templateCatalogVersion: TEMPLATE_CATALOG_VERSION },
+    meta: { schemaVersion: SKYHOLD_SCHEMA_VERSION, templateCatalogVersion: TEMPLATE_CATALOG_VERSION },
     catalog: { buildings: structuredClone(BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION) },
     holdings: [{
       id: "laputa",

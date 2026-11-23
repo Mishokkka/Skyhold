@@ -12,6 +12,7 @@ import { copperCurrencyParts, formatCopperCurrencyCompact } from "../core/curren
 import { normalizeStorageLogRow } from "../data/normalizers/storage.js";
 import { buildHoldingOperationTimeline } from "../data/operation-timeline.js";
 import { mergeHoldingDefaults, normalizeSkyholdData } from "../data/normalizers.js";
+import { DEFAULT_SKYHOLD_DATA } from "../data/defaults/default-skyhold-data.js";
 
 function holding({ region = "Центральный городской порт", period = "Неделя 1", moneyCopper = 100000, reputation = 0, urs = 3 } = {}) {
   return {
@@ -133,10 +134,10 @@ const configuredRegions = normalizeEventRegionOptions([{
 }], { fallback: false });
 assert.equal(marketRegionForValue("  Центральный городской порт  ", configuredRegions)?.value, "central-port", "catalog resolver must match the Basis region label robustly");
 const migratedBlankRegion = normalizeSkyholdData({
-  meta: { schemaVersion: 59 },
+  meta: { ...DEFAULT_SKYHOLD_DATA.meta },
   holdings: [{ ...holding({ region: "" }), type: "settlement" }],
   catalog: { buildings: [], resources: [], markets: [], eventRegions: configuredRegions }
-});
+}, { fromVersion: 59 });
 assert.equal(migratedBlankRegion.holdings[0].overview.region, "central-port", "legacy visually-selected first region must be persisted during migration");
 const configuredLocation = marketLocationForHolding({
   holding: connected,

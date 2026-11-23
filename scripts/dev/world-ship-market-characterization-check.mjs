@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { mergeHoldingDefaults } from "../data/normalizers.js";
+import { DEFAULT_SKYHOLD_DATA } from "../data/defaults/default-skyhold-data.js";
 import { createShipRecord } from "../data/ships.js";
 import { shortestMarketRouteDistanceKm } from "../engines/market/logistics.js";
 import { buildShipWorldContext, configureWorldShipEconomy, generateWorldShipOffers, quoteWorldShipHomeUpkeep, quoteWorldShipReturn, quoteWorldShipRelocation, repriceWorldShipOffer, worldShipTimeBreakdown } from "../engines/ships/world-market.js";
@@ -20,7 +21,7 @@ export function worldMarketFixture() {
   ship.hiddenCapacityLoadPoints = 200;
   holding.special.ships.list.push(ship);
   const data = {
-    meta: { revision: 1 }, holdings: [holding],
+    meta: { ...DEFAULT_SKYHOLD_DATA.meta, revision: 1 }, holdings: [holding],
     catalog: {
       resources: [{ id: "test-freight", label: "Ткани", basePriceCopper: 30, loadPoints: 4 }],
       eventRegions: [region("home", [["a", 150]]), region("a", [["b", 300]]), region("b", []), region("secret", [], { countryId: "hidden" }), region("closed", [], { marketEnabled: false })],

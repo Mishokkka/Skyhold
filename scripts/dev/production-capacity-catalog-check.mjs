@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { DEFAULT_BUILDING_TEMPLATES, TEMPLATE_CATALOG_VERSION } from "../data/building-templates.js";
 import { parseResourceCosts } from "../core/resources.js";
-import { normalizeSkyholdData } from "../data/normalizers.js";
+import { normalizeSkyholdData, SKYHOLD_SCHEMA_VERSION } from "../data/normalizers.js";
 import { productionLineEconomics } from "../engines/economy/production-economics.js";
 import { planBuildingCatalogMigration, applyBuildingCatalogMigration } from "../workflows/buildings/catalog-migration.js";
 
@@ -31,7 +31,7 @@ export function checkProductionCapacityCatalog() {
     assert.ok(small.marginMin > 0, `${id}/${resource}: minimum load remains viable at catalog value before common overhead`);
   }
   const templates = structuredClone(DEFAULT_BUILDING_TEMPLATES);
-  const data = normalizeSkyholdData({ meta: { templateCatalogVersion: TEMPLATE_CATALOG_VERSION, revision: 7 }, catalog: { buildings: templates },
+  const data = normalizeSkyholdData({ meta: { schemaVersion: SKYHOLD_SCHEMA_VERSION, templateCatalogVersion: TEMPLATE_CATALOG_VERSION, revision: 7 }, catalog: { buildings: templates },
     holdings: [{ id: "capacity-refresh", buildings: { list: templates.filter((b) => expected.some(([id]) => b.id === id))
       .map((b) => ({ ...structuredClone(b), id: `built-${b.id}`, templateId: b.id })) } }] });
   const working = data.holdings[0].buildings.list.flatMap(building => building.productionLines).find(line => line.resourceId === "aged-cheese");

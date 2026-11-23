@@ -132,7 +132,7 @@ function normalizeStoredOptions(stored, options = {}) {
 
 export function normalizeSkyholdData(stored, options = {}) {
   const source = stored ?? clone(DEFAULT_SKYHOLD_DATA);
-  if (!Array.isArray(source?.holdings)) assertSupportedWorldData(source);
+  assertSupportedWorldData(source);
   const normalize = normalizeStoredOptions(source, options);
   const storedTemplateVersion = Math.max(0, Math.floor(toNumber(source.meta?.templateCatalogVersion, 0)));
   // The two large runtime partitions are normalized independently below.

@@ -6,7 +6,7 @@ import {
   APPROVED_REQUIREMENT_DECISIONS,
   LEISURE_BONUS_OVERRIDES
 } from "./fixtures/building-approved-development.mjs";
-import { normalizeSkyholdData } from "../data/normalizers.js";
+import { normalizeSkyholdData, SKYHOLD_SCHEMA_VERSION } from "../data/normalizers.js";
 import { planBuildingCatalogMigration, applyBuildingCatalogMigration } from "../workflows/buildings/catalog-migration.js";
 
 const keys = ["food", "technology", "culture", "war"];
@@ -73,7 +73,7 @@ export function checkApprovedBuildingDevelopment() {
   for (const [id, before] of APPROVED_BONUS_DECISIONS) old.find((r) => r.id === id).bonuses = parse(before);
   for (const [id, before] of APPROVED_REQUIREMENT_DECISIONS) old.find((r) => r.id === id).requirements = parse(before);
   const source = normalizeSkyholdData({
-    meta: { templateCatalogVersion: TEMPLATE_CATALOG_VERSION, revision: 9 },
+    meta: { schemaVersion: SKYHOLD_SCHEMA_VERSION, templateCatalogVersion: TEMPLATE_CATALOG_VERSION, revision: 9 },
     catalog: { buildings: old },
     holdings: [{
       id: "test",

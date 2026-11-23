@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION, TEMPLATE_CATALOG_VERSION } from "../data/building-templates.js";
-import { normalizeSkyholdData } from "../data/normalizers.js";
+import { normalizeSkyholdData, SKYHOLD_SCHEMA_VERSION } from "../data/normalizers.js";
 import { clone } from "../data/utils.js";
 import { applyBuildingCatalogMigration, planBuildingCatalogMigration, PRODUCTION_STATE_FIELDS } from "../workflows/buildings/catalog-migration.js";
 import { runProductionCycle } from "../engines/economy/production-cycle.js";
 
 export function migrationCycleFixture() {
   const templates = BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION;
-  const data = normalizeSkyholdData({ meta: { templateCatalogVersion: TEMPLATE_CATALOG_VERSION, revision: 3 },
+  const data = normalizeSkyholdData({ meta: { schemaVersion: SKYHOLD_SCHEMA_VERSION, templateCatalogVersion: TEMPLATE_CATALOG_VERSION, revision: 3 },
     catalog: { buildings: clone(templates) }, holdings: [{ id: "laputa", name: "Лапута", people: { list: [] },
       storage: { moneyCopper: 73 }, buildings: { list: templates.filter(row => ["lumbermill", "quarry"].includes(row.id))
         .map(row => ({ ...clone(row), id: `built-${row.id}`, templateId: row.id, constructionStatus: "built", buildProgress: row.buildTarget })) } }] });

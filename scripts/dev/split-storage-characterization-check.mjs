@@ -9,6 +9,7 @@ import {
   SETTING_META
 } from "../data/constants.js";
 import { DEFAULT_SKYHOLD_DATA } from "../data/defaults/default-skyhold-data.js";
+import { COMMIT_SCOPES, prepareSkyholdCommit } from "../data/commit-preparation.js";
 import { normalizeSkyholdData } from "../data/normalizers.js";
 import { createSkyholdSplitStorage } from "../data/split-storage.js";
 import { UNSUPPORTED_WORLD_DATA } from "../data/storage-format.js";
@@ -97,6 +98,19 @@ async function checkUnsupportedWorldData(current) {
   const newer = clone(current);
   newer.meta.schemaVersion += 1;
   const oldCombined = { overview: { settlementName: "Old single holding" } };
+  const newerCatalog = clone(current);
+  newerCatalog.meta.templateCatalogVersion += 1;
+  const missingSchema = clone(current);
+  delete missingSchema.meta.schemaVersion;
+  const invalidCatalog = { ...current, catalog: [] };
+  for (const unsupported of [oldSchema, oldCatalog, newer, newerCatalog, oldCombined, missingSchema, invalidCatalog]) {
+    assert.throws(() => normalizeSkyholdData(unsupported), { code: UNSUPPORTED_WORLD_DATA },
+      "Normalization must validate the original root before filling in current defaults");
+    for (const scope of Object.values(COMMIT_SCOPES)) {
+      assert.throws(() => prepareSkyholdCommit(unsupported, { scope }), { code: UNSUPPORTED_WORLD_DATA },
+        `Preparing a ${scope} commit must not produce a writable root from an unsupported source`);
+    }
+  }
   for (const harness of [
     settingsHarness(oldSchema),
     settingsHarness(oldCatalog),
