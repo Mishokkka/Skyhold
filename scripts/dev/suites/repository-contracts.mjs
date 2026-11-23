@@ -2489,8 +2489,8 @@ export async function runRepositoryContracts() {
     else delete globalThis.game;
   }
 
-  const normalizedOnce = normalizers.migrateData(clone(canonicalDefault));
-  const normalizedTwice = normalizers.migrateData(normalizedOnce);
+  const normalizedOnce = normalizers.normalizeSkyholdData(clone(canonicalDefault));
+  const normalizedTwice = normalizers.normalizeSkyholdData(normalizedOnce);
   assertJsonEqual(normalizedTwice, normalizedOnce, "normalizers must be idempotent");
   assert.equal(canonicalDefault.meta.schemaVersion, schemaVersion.SKYHOLD_SCHEMA_VERSION, "default schema version must use the canonical schema version");
   assert.equal(normalizers.SKYHOLD_SCHEMA_VERSION, schemaVersion.SKYHOLD_SCHEMA_VERSION, "normalizers must preserve the canonical schema version export");
@@ -2648,7 +2648,7 @@ export async function runRepositoryContracts() {
     normalizedTemplates: normalizedOnce.catalog.buildings,
     builtinResources: builtinResources.BUILTIN_RESOURCE_DEFS,
     parseResourceCosts: resources.parseResourceCosts,
-    migrateData: normalizers.migrateData,
+    normalizeSkyholdData: normalizers.normalizeSkyholdData,
     defaultData: canonicalDefault
   });
   const normalizedFastiTemplate = normalizedOnce.catalog.buildings.find((template) => template.id === "fasti-shop");
@@ -2667,11 +2667,11 @@ export async function runRepositoryContracts() {
     assignedWorkerIds: ["resident-a", "resident-b"]
   });
   fastiInstanceData.holdings[0].people.list.push({ id: "resident-a", name: "A", workAssignment: "fasti-instance", role: "Продавец" });
-  const normalizedFastiInstance = normalizers.migrateData(fastiInstanceData).holdings[0].buildings.list.find((building) => building.id === "fasti-instance");
+  const normalizedFastiInstance = normalizers.normalizeSkyholdData(fastiInstanceData).holdings[0].buildings.list.find((building) => building.id === "fasti-instance");
   assert.equal(normalizedFastiInstance.workersMin, 0, "Fasti shop instances must normalize away minimum staffing");
   assert.equal(normalizedFastiInstance.workersMax, 0, "Fasti shop instances must normalize away worker capacity");
   assert.deepEqual(normalizedFastiInstance.assignedWorkerIds, [], "Fasti shop instances must release stale worker slots");
-  const releasedFastiWorker = normalizers.migrateData(fastiInstanceData).holdings[0].people.list.find((person) => person.id === "resident-a");
+  const releasedFastiWorker = normalizers.normalizeSkyholdData(fastiInstanceData).holdings[0].people.list.find((person) => person.id === "resident-a");
   assert.equal(releasedFastiWorker.workAssignment, "", "Fasti shop normalization must release stale resident work assignments");
 
   const duplicateCatalogRowsData = clone(canonicalDefault);
@@ -2690,14 +2690,12 @@ export async function runRepositoryContracts() {
       { id: "material", name: "Straw", resourceId: "straw", qty: 1 }
     ]
   });
-  const normalizedDuplicateCatalogRows = normalizers.migrateData(duplicateCatalogRowsData);
+  const normalizedDuplicateCatalogRows = normalizers.normalizeSkyholdData(duplicateCatalogRowsData);
   const normalizedDuplicateTemplate = normalizedDuplicateCatalogRows.catalog.buildings.find((template) => template.id === "duplicate-nested-row-test");
   assert.deepEqual(normalizedDuplicateTemplate.productionLines.map((line) => line.id), ["line", "line-2"], "normalization must repair duplicate production line ids deterministically");
   assert.deepEqual(normalizedDuplicateTemplate.materialCosts.map((cost) => cost.id), ["material", "material-2"], "normalization must repair duplicate construction cost ids deterministically");
   assert.deepEqual(normalizedDuplicateTemplate.materialCosts.map((cost) => cost.resourceId), ["cloth", "straw"], "normalization must canonicalize construction resource ids");
 
-  assert.equal(normalizers.isBeforeSkyholdSchemaVersion({ fromVersion: normalizers.SKYHOLD_SCHEMA_VERSION - 1 }, normalizers.SKYHOLD_SCHEMA_VERSION), true, "migration context must identify older schema versions");
-  assert.equal(normalizers.isBeforeSkyholdSchemaVersion({ fromVersion: normalizers.SKYHOLD_SCHEMA_VERSION }, normalizers.SKYHOLD_SCHEMA_VERSION), false, "migration context must not treat current schema as old");
   const legacyTagPatch = massCombatState.normalizeMassCombatPatch({ attackerFire: 2 });
   assert.deepEqual(legacyTagPatch, { attackerShooters: 2 }, "legacy mass-combat tag patches must migrate without retaining the old field");
   const mixedTagPatch = massCombatState.normalizeMassCombatPatch({ attackerShooters: 3, attackerFire: 2 });
@@ -2798,7 +2796,7 @@ export async function runRepositoryContracts() {
   pendingFixtureRoot.holdings = [clone(baseSchema.BASE_HOLDING)];
   pendingFixtureRoot.holdings[0].id = "pending-holding";
   pendingFixtureRoot.holdings[0].name = "Pending Holding";
-  const pendingRoundHolding = normalizers.migrateData(pendingFixtureRoot).holdings[0];
+  const pendingRoundHolding = normalizers.normalizeSkyholdData(pendingFixtureRoot).holdings[0];
   pendingRoundHolding.gm.massCombat = {
     ...massCombatState.resetMassCombatState(),
     battleId: "pending-battle",
@@ -2843,7 +2841,7 @@ export async function runRepositoryContracts() {
   pendingPersistRoot.holdings = [clone(pendingRoundHolding)];
   pendingPersistRoot.holdings[0].gm.massCombat.pendingRound = clone(pendingCreated.pendingRound);
   pendingPersistRoot.holdings[0].gm.massCombat.phase = "pending";
-  const normalizedPendingRoot = normalizers.migrateData(pendingPersistRoot);
+  const normalizedPendingRoot = normalizers.normalizeSkyholdData(pendingPersistRoot);
   const normalizedPendingHolding = normalizedPendingRoot.holdings[0];
   const normalizedPendingApply = massCombatRoundResolution.applyPendingBattleRound({
     holding: normalizedPendingHolding,
@@ -2893,7 +2891,6 @@ export async function runRepositoryContracts() {
   assert.equal(legacyRepairBuilding.constructionStatus, "built", "completed repair must update the compatibility projection");
 
   const lifecycleMigrationRoot = clone(canonicalDefault);
-  lifecycleMigrationRoot.meta.schemaVersion = 53;
   lifecycleMigrationRoot.holdings = [clone(baseSchema.BASE_HOLDING)];
   lifecycleMigrationRoot.holdings[0].buildings.list = [{
     id: "migrated-repair",
@@ -2905,7 +2902,7 @@ export async function runRepositoryContracts() {
     repairProgress: 1,
     repairTarget: 3
   }];
-  const migratedRepair = normalizers.migrateData(lifecycleMigrationRoot).holdings[0].buildings.list[0];
+  const migratedRepair = normalizers.normalizeSkyholdData(lifecycleMigrationRoot, { fromVersion: 53 }).holdings[0].buildings.list[0];
   assert.equal(migratedRepair.lifecycle, "active", "schema 54 must migrate a legacy repair without changing lifecycle");
   assert.equal(migratedRepair.condition, "damaged", "schema 54 must migrate legacy damage into condition");
   assert.equal(migratedRepair.repair.active, true, "schema 54 must migrate legacy repair progress into an explicit process");
@@ -2969,7 +2966,7 @@ export async function runRepositoryContracts() {
   const archivePersistRoot = clone(canonicalDefault);
   archivePersistRoot.holdings = [clone(baseSchema.BASE_HOLDING)];
   archivePersistRoot.holdings[0].gm.massCombat = clone(archiveState);
-  const normalizedArchive = normalizers.migrateData(archivePersistRoot).holdings[0].gm.massCombat.archive;
+  const normalizedArchive = normalizers.normalizeSkyholdData(archivePersistRoot).holdings[0].gm.massCombat.archive;
   assert.equal(normalizedArchive.length, massCombatArchive.BATTLE_ARCHIVE_LIMIT, "normalization must preserve the bounded battle archive");
   assert.equal(normalizedArchive.at(-1).snapshot.battleId, "archive-battle-22", "normalization must preserve replayable archive snapshots");
 
@@ -3613,7 +3610,7 @@ export async function runRepositoryContracts() {
     { id: "workshop", name: "Workshop", workersMin: 0, workersMax: 1, assignedWorkerIds: ["worker"] }
   ];
   duplicateWorkerData.holdings = [duplicateWorkerHolding];
-  const normalizedDuplicateWorkers = normalizers.migrateData(duplicateWorkerData);
+  const normalizedDuplicateWorkers = normalizers.normalizeSkyholdData(duplicateWorkerData);
   const normalizedWorkerBuildings = normalizedDuplicateWorkers.holdings[0].buildings.list;
   assert.deepEqual(
     normalizedWorkerBuildings.map((building) => building.assignedWorkerIds[0]),
@@ -3628,12 +3625,11 @@ export async function runRepositoryContracts() {
 
   const legacyMassCombatData = clone(schema.DEFAULT_SKYHOLD_DATA);
   legacyMassCombatData.holdings = [clone(schema.BASE_HOLDING)];
-  legacyMassCombatData.meta.schemaVersion = normalizers.SKYHOLD_SCHEMA_VERSION - 1;
   delete legacyMassCombatData.holdings[0].gm.massCombat.attackerShooters;
   legacyMassCombatData.holdings[0].gm.massCombat.attackerFire = 2;
   legacyMassCombatData.holdings[0].gm.massCombat.attackerSourceTag1 = "sacred";
   legacyMassCombatData.holdings[0].gm.massCombat.attackerSourceEfficiency1 = 7.5;
-  const migratedMassCombatData = normalizers.migrateData(legacyMassCombatData);
+  const migratedMassCombatData = normalizers.normalizeSkyholdData(legacyMassCombatData, { fromVersion: normalizers.SKYHOLD_SCHEMA_VERSION - 1 });
   assert.equal(migratedMassCombatData.holdings[0].gm.massCombat.attackerShooters, 2, "stored legacy mass-combat tags must migrate to canonical fields");
   assert.equal(Object.hasOwn(migratedMassCombatData.holdings[0].gm.massCombat, "attackerFire"), false, "stored legacy mass-combat tag fields must be removed after migration");
   assert.equal(migratedMassCombatData.holdings[0].gm.massCombat.attackerSourcePrimaryTag1, "sacred", "stored source types must migrate to explicit primary-tag fields");
@@ -3644,7 +3640,7 @@ export async function runRepositoryContracts() {
   mixedMassCombatData.holdings = [clone(schema.BASE_HOLDING)];
   mixedMassCombatData.holdings[0].gm.massCombat.attackerShooters = 3;
   mixedMassCombatData.holdings[0].gm.massCombat.attackerFire = 2;
-  const normalizedMixedMassCombatData = normalizers.migrateData(mixedMassCombatData);
+  const normalizedMixedMassCombatData = normalizers.normalizeSkyholdData(mixedMassCombatData);
   assert.equal(normalizedMixedMassCombatData.holdings[0].gm.massCombat.attackerShooters, 3, "stored canonical tag values must not be overwritten by legacy values");
   assert.equal(Object.hasOwn(normalizedMixedMassCombatData.holdings[0].gm.massCombat, "attackerFire"), false, "redundant legacy tag fields must be removed from current data");
 
@@ -3698,6 +3694,7 @@ export async function runRepositoryContracts() {
 
   assert.equal(dataBarrel.SkyholdData, store.SkyholdData, "data barrel must re-export SkyholdData");
   assert.equal(dataBarrel.DEFAULT_SKYHOLD_DATA, canonicalDefault, "data barrel must preserve default data export");
+  assert.equal(dataBarrel.migrateData, normalizers.normalizeSkyholdData, "existing macros can keep the old name for normalization");
   assert.equal(typeof dataBarrel.validatePlayerPatch, "function", "data barrel must expose player write guard helpers");
   assert.equal(typeof dataBarrel.createSkyholdSplitStorage, "function", "data barrel must expose split storage helpers");
   assert.equal(typeof dataBarrel.createSkyholdSocketApi, "function", "data barrel must expose socket helpers");
@@ -3768,7 +3765,7 @@ export async function runRepositoryContracts() {
     functions: { production: false, income: false, defense: false, housing: false, storage: true, culture: false },
     storage: { capacity: 10 }
   }];
-  const softMedical = normalizers.migrateData(medicalData);
+  const softMedical = normalizers.normalizeSkyholdData(medicalData);
   const softBuilding = softMedical.holdings[0].buildings.list[0];
   assert.equal(softBuilding.functions.storage, true, "load normalization must not erase custom medical storage flag");
   assert.equal(softBuilding.workersMax, 8, "load normalization must not clamp custom medical worker max");
@@ -3787,7 +3784,7 @@ export async function runRepositoryContracts() {
     functions: { production: false, income: false, defense: false, housing: false, storage: false, culture: false },
     religion: { religious: true, faith: "local-cult", customFaith: "", notes: "" }
   }];
-  const religiousNormalized = normalizers.migrateData(religiousCustomData);
+  const religiousNormalized = normalizers.normalizeSkyholdData(religiousCustomData);
   assert.equal(religiousNormalized.holdings[0].buildings.list[0].functions.culture, false, "explicit culture=false must not be restored by religion.religious");
 
   const seasonData = clone(schema.DEFAULT_SKYHOLD_DATA);
@@ -3808,7 +3805,7 @@ export async function runRepositoryContracts() {
       seasons: { spring: true, summer: false, autumn: true, winter: false }
     }]
   }];
-  const seasonNormalized = normalizers.migrateData(seasonData);
+  const seasonNormalized = normalizers.normalizeSkyholdData(seasonData);
   assert.deepEqual(seasonNormalized.holdings[0].buildings.list[0].productionLines[0].seasons, { spring: true, summer: false, autumn: true, winter: false }, "production line seasons must survive normalization");
 
   const currentFireplaceData = clone(schema.DEFAULT_SKYHOLD_DATA);
@@ -3821,20 +3818,10 @@ export async function runRepositoryContracts() {
     type: "\u0418\u043d\u0442\u0435\u0440\u044c\u0435\u0440",
     workersMax: 1
   }];
-  const currentFireplaceNormalized = normalizers.migrateData(currentFireplaceData);
+  const currentFireplaceNormalized = normalizers.normalizeSkyholdData(currentFireplaceData);
   assert.equal(currentFireplaceNormalized.holdings[0].buildings.list.length, 1, "current schema must not delete a custom fireplace-like building on load");
 
-  const legacyFireplaceData = clone(currentFireplaceData);
-  legacyFireplaceData.meta.schemaVersion = 45;
-  legacyFireplaceData.holdings[0].buildings.list = [
-    { id: "fireplace", templateId: "fireplace", name: "\u041a\u0430\u043c\u0438\u043d", type: "\u0421\u0442\u0430\u0440\u044b\u0439 \u0448\u0430\u0431\u043b\u043e\u043d" },
-    { id: "legacy-hall", name: "\u0417\u0430\u043b", type: "\u041e\u0431\u0449\u0435\u0435", requiredBuildingIds: ["fireplace", "other-building"] }
-  ];
-  const legacyFireplaceNormalized = normalizers.migrateData(legacyFireplaceData);
-  assert.equal(legacyFireplaceNormalized.holdings[0].buildings.list.some((building) => building.id === "fireplace"), false, "old schema must remove deprecated fireplace template rows");
-  assert.deepEqual(legacyFireplaceNormalized.holdings[0].buildings.list.find((building) => building.id === "legacy-hall").requiredBuildingIds, ["other-building"], "old schema must remove deprecated fireplace prerequisites");
-
-  const current = normalizers.migrateData(clone(schema.DEFAULT_SKYHOLD_DATA));
+  const current = normalizers.normalizeSkyholdData(clone(schema.DEFAULT_SKYHOLD_DATA));
   current.holdings[0].gm.playersCanUseStorage = true;
   current.holdings[0].gm.playersCanEditOverview = true;
   const mixedPatch = {
@@ -4068,16 +4055,6 @@ export async function runRepositoryContracts() {
   const tampered = clone(split);
   tampered.holdings[0].name = "Подменено";
   assert.equal(store.inspectStorageCommit(tampered).ok, false, "storage commit hash mismatch must fail validation");
-
-  const legacy = normalizers.migrateData({
-    meta: { revision: 2 },
-    overview: { settlementName: "Старый остров", week: 4, description: "legacy" },
-    residents: { groups: [{ id: "old-resident", name: "Старик", count: 3, type: "Жители", status: "Работают" }] },
-    storage: { resources: [], items: [], log: [] }
-  });
-  assert.equal(legacy.holdings[0].id, "legacy-skyhold", "legacy settlement must migrate into a holding");
-  assert.equal(legacy.holdings[0].name, "Старый остров", "legacy settlement name must be preserved");
-  assert.equal(legacy.holdings[0].overview.population, 3, "legacy resident count must become population");
 
   const cssAudit = checkCssHygiene(cssFiles);
 

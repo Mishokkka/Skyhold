@@ -9,13 +9,15 @@ import {
   SETTING_META
 } from "../data/constants.js";
 import { DEFAULT_SKYHOLD_DATA } from "../data/defaults/default-skyhold-data.js";
-import { migrateData } from "../data/normalizers.js";
+import { COMMIT_SCOPES, prepareSkyholdCommit } from "../data/commit-preparation.js";
+import { normalizeSkyholdData } from "../data/normalizers.js";
 import { createSkyholdSplitStorage } from "../data/split-storage.js";
+import { UNSUPPORTED_WORLD_DATA } from "../data/storage-format.js";
 import { inspectStorageCommit, makeStorageCommitMeta, stableDataHash } from "../data/storage-commit.js";
 import { clone } from "../data/utils.js";
 
 function committedRoot({ revision = 1, holdingName = "Committed Holding", catalogName = "" } = {}) {
-  const root = migrateData(clone(DEFAULT_SKYHOLD_DATA));
+  const root = normalizeSkyholdData(clone(DEFAULT_SKYHOLD_DATA));
   root.meta.revision = revision;
   root.holdings[0].name = holdingName;
   if (catalogName && root.catalog.buildings[0]) root.catalog.buildings[0].name = catalogName;
@@ -88,12 +90,60 @@ function interruptedMeta(previous, next, { writeId = "interrupted" } = {}) {
   });
 }
 
+async function checkUnsupportedWorldData(current) {
+  const oldSchema = clone(current);
+  oldSchema.meta.schemaVersion -= 1;
+  const oldCatalog = clone(current);
+  oldCatalog.meta.templateCatalogVersion -= 1;
+  const newer = clone(current);
+  newer.meta.schemaVersion += 1;
+  const oldCombined = { overview: { settlementName: "Old single holding" } };
+  const newerCatalog = clone(current);
+  newerCatalog.meta.templateCatalogVersion += 1;
+  const missingSchema = clone(current);
+  delete missingSchema.meta.schemaVersion;
+  const invalidCatalog = { ...current, catalog: [] };
+  for (const unsupported of [oldSchema, oldCatalog, newer, newerCatalog, oldCombined, missingSchema, invalidCatalog]) {
+    assert.throws(() => normalizeSkyholdData(unsupported), { code: UNSUPPORTED_WORLD_DATA },
+      "Normalization must validate the original root before filling in current defaults");
+    for (const scope of Object.values(COMMIT_SCOPES)) {
+      assert.throws(() => prepareSkyholdCommit(unsupported, { scope }), { code: UNSUPPORTED_WORLD_DATA },
+        `Preparing a ${scope} commit must not produce a writable root from an unsupported source`);
+    }
+  }
+  for (const harness of [
+    settingsHarness(oldSchema),
+    settingsHarness(oldCatalog),
+    settingsHarness(newer),
+    settingsHarness(DEFAULT_SKYHOLD_DATA, { legacy: oldCombined })
+  ]) {
+    const previous = clone([...harness.values]);
+    const storage = createSkyholdSplitStorage({ settings: harness.settings });
+    assert.throws(() => storage.getData(), { code: UNSUPPORTED_WORLD_DATA });
+    assert.equal(storage.getMetrics().normalizations, 0, "Rejected data never reaches normalization");
+    await assert.rejects(() => storage.persistData(current), { code: UNSUPPORTED_WORLD_DATA });
+    assert.deepEqual(harness.writes, [], "Rejecting an unsupported world must not write settings");
+    assert.deepEqual([...harness.values], previous);
+  }
+  const cached = settingsHarness(current);
+  const storage = createSkyholdSplitStorage({ settings: cached.settings });
+  storage.getData();
+  await assert.rejects(() => storage.persistData(oldSchema), { code: UNSUPPORTED_WORLD_DATA },
+    "A direct save cannot normalize an unsupported proposal into the current format");
+  assert.deepEqual(cached.writes, []);
+  cached.values.set(SETTING_META, oldSchema.meta);
+  assert.throws(() => storage.getData(), { code: UNSUPPORTED_WORLD_DATA }, "An old format must invalidate an otherwise matching cache token");
+  await assert.rejects(() => storage.persistData(current), { code: UNSUPPORTED_WORLD_DATA });
+  assert.deepEqual(cached.writes, []);
+}
+
 /** Checks partition caching, write scopes and coherent metadata recovery using settings fixtures with injected write failures. */
 export async function checkSplitStorageCharacterization() {
   const previousWarn = console.warn;
   console.warn = () => {};
   try {
     const initial = committedRoot({ revision: 7 });
+    await checkUnsupportedWorldData(initial);
     const harness = settingsHarness(initial);
     const storage = createSkyholdSplitStorage({ settings: harness.settings });
     const first = storage.getData();
@@ -181,7 +231,6 @@ export async function checkSplitStorageCharacterization() {
     const beforeMetaOnly = storage.getData();
     const metaOnly = clone(beforeMetaOnly);
     metaOnly.meta.revision += 1;
-    metaOnly.meta.templateCatalogVersion += 1;
     metaOnly.meta.buildingCatalogMigration = {
       operationId: "metadata-only-migration",
       version: metaOnly.meta.templateCatalogVersion
@@ -264,6 +313,12 @@ export async function checkSplitStorageCharacterization() {
     const rolledBack = createSkyholdSplitStorage({ settings: rollbackHarness.settings }).getData();
     assert.equal(rolledBack.meta.revision, 20, "an interrupted commit before its partition write must recover the previous revision");
     assert.equal(rolledBack.holdings[0].name, "Before interrupted write", "rollback recovery must retain the previous partition payload");
+    const oldPending = { ...rollbackMeta, schemaVersion: rollbackMeta.schemaVersion - 1 };
+    const currentSnapshot = settingsHarness({ meta: oldPending, holdings: recoveryPrevious.holdings, catalog: recoveryPrevious.catalog },
+      { legacy: recoveryPrevious });
+    assert.equal(createSkyholdSplitStorage({ settings: currentSnapshot.settings }).getData().meta.schemaVersion, recoveryPrevious.meta.schemaVersion,
+      "Validate the selected current rollback snapshot instead of the rejected pending metadata");
+    assert.deepEqual(currentSnapshot.writes, []);
 
     const metadataHarness = settingsHarness(recoveryPrevious, { failWriteKey: SETTING_HOLDINGS });
     const metadataStorage = createSkyholdSplitStorage({ settings: metadataHarness.settings });

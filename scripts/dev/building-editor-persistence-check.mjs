@@ -5,7 +5,7 @@ import { pathToFileURL } from "node:url";
 import { Linter } from "eslint";
 import { fieldValue } from "../core/helpers.js";
 import { DEFAULT_SKYHOLD_DATA } from "../data/defaults/default-skyhold-data.js";
-import { migrateData } from "../data/normalizers.js";
+import { normalizeSkyholdData } from "../data/normalizers.js";
 import { prepareSkyholdCommit } from "../data/commit-preparation.js";
 import { createSkyholdSplitStorage } from "../data/split-storage.js";
 import { SETTING_CATALOG, SETTING_HOLDINGS } from "../data/constants.js";
@@ -39,7 +39,7 @@ const settings = {
   }
 };
 const storage = createSkyholdSplitStorage({ settings });
-const initial = migrateData(structuredClone(DEFAULT_SKYHOLD_DATA));
+const initial = normalizeSkyholdData(structuredClone(DEFAULT_SKYHOLD_DATA));
 initial.holdings[0].buildings.list = [{ ...structuredClone(initial.catalog.buildings[0]), id: "instance" }];
 await storage.persistData(initial);
 const skipped = Symbol("skip");

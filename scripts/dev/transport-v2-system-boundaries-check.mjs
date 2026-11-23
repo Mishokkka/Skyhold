@@ -15,6 +15,7 @@ import { bindSharedMarkets } from "../data/market/shared-context.js";
 import { previewSharedMarketMigration } from "../data/market/shared-migration.js";
 import { prepareShipsContext, prepareShipWindowContext } from "../apps/ships-context.js";
 import { normalizeSkyholdData } from "../data/normalizers.js";
+import { DEFAULT_SKYHOLD_DATA } from "../data/defaults/default-skyhold-data.js";
 import { preflightMarketOutboundDispatch } from "../engines/market/outbound.js";
 import { finishResourceBatchPeriod, reservedResourceBatchQuantities } from "../core/resource-batches.js";
 import { advanceTransportShipments } from "../workflows/transport/orders.js";
@@ -89,7 +90,7 @@ for (const shared of [false, true]) {
 
 // Independent check: coalescing equal warehouse rows must not invalidate frozen source references.
 {
-  const h = holding("coalescing"), data = { meta: {}, holdings: [h], catalog: {} }, state = ensureTransportState(data);
+  const h = holding("coalescing"), data = { meta: { ...DEFAULT_SKYHOLD_DATA.meta }, holdings: [h], catalog: {} }, state = ensureTransportState(data);
   h.storage.resources = ["first", "reserved"].map(id => ({ id, resourceId: "wood", qty: 10, roomId: id,
     batches: [{ id: `${id}-batch`, qty: 10, ageQd: 0 }] }));
   const lots = [{ ...cargo()[0], resourceId: "wood", rowId: "reserved", batchId: "reserved-batch" }];
@@ -105,7 +106,7 @@ for (const shared of [false, true]) {
 
 for (const expireBread of [false, true]) {
   const h = holding("saved-collision");
-  const original = { meta: {}, holdings: [h], catalog: {} };
+  const original = { meta: { ...DEFAULT_SKYHOLD_DATA.meta }, holdings: [h], catalog: {} };
   const state = ensureTransportState(original);
   h.storage.resources = [
     { id: "shared", resourceId: "bread", roomId: "pantry", qty: 4, batches: [{ id: "lot", qty: 4, ageQd: 8 }] },
@@ -175,7 +176,7 @@ for (const expireBread of [false, true]) {
 
 {
   const h = holding("orphaned-booking");
-  const data = { meta: {}, holdings: [h], catalog: {} };
+  const data = { meta: { ...DEFAULT_SKYHOLD_DATA.meta }, holdings: [h], catalog: {} };
   const state = ensureTransportState(data), services = [service()];
   const lot = { ...cargo(2)[0], lotId: "meat", resourceId: "meat", rowId: "orphan-row", batchId: "orphan-lot" };
   bookTransportOrder({ state, holding: h, services, direction: "outbound", id: "orphaned-meat",

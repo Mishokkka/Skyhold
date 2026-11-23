@@ -1,22 +1,15 @@
 import assert from "node:assert/strict";
-import { buildingCatalogV15Templates, BUILDING_CATALOG_V15_VERSION } from "../data/building-template-revision-v15.js";
-import { DEFAULT_BUILDING_TEMPLATES, TEMPLATE_CATALOG_VERSION } from "../data/building-templates.js";
+import { BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION, DEFAULT_BUILDING_TEMPLATES, TEMPLATE_CATALOG_VERSION } from "../data/building-templates.js";
 import { normalizeCatalogPartition } from "../data/normalizers.js";
 import { buildingServiceBlockReasons } from "../engines/economy/building-service.js";
 import { settlementControlSummary } from "../engines/settlement/control.js";
 
-export function checkBuildingCatalogV15() {
+export function checkBuildingCatalogTechnical() {
   const before = structuredClone(DEFAULT_BUILDING_TEMPLATES);
-  const rows = buildingCatalogV15Templates();
-  assert.equal(rows.length, 121);
-  assert.equal(new Set(rows.map((row) => row.id)).size, 121);
-  assert.equal(BUILDING_CATALOG_V15_VERSION, 15, "v15 remains the immutable baseline for saved worlds");
-  assert.equal(TEMPLATE_CATALOG_VERSION, 19, "Current approved economy is checked separately from historical v15");
+  const rows = BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION;
   assert.equal(rows.filter((row) => row.maintenance.requiredPoints > 0).length, 19);
-  assert.ok(rows.every((row) => row.maintenance.schemaVersion === 2 && row.templateVersion === 15));
+  assert.ok(rows.every((row) => row.maintenance.schemaVersion === 2 && row.templateVersion === TEMPLATE_CATALOG_VERSION));
   assert.equal(rows.filter((row) => row.prerequisiteModes).length, 14);
-  const tree = rows.filter((row) => !["fasti-shop", "laputa-excavated-crypt"].includes(row.id));
-  assert.deepEqual(["food", "technology", "culture", "war"].map((key) => tree.reduce((sum, row) => sum + row.bonuses[key], 0)), [104, 164, 149, 113]);
   for (const id of ["lazaret", "lighthouse"]) assert.equal(rows.find((row) => row.id === id).bonuses.food, 0);
   const normalized = normalizeCatalogPartition({ buildings: rows }).buildings;
   for (const row of rows) {
@@ -39,7 +32,6 @@ export function checkBuildingCatalogV15() {
   assert.equal(buildingServiceBlockReasons(holding, house).active, false);
   assert.equal(settlementControlSummary(holding).generalControl, 0);
   assert.deepEqual(DEFAULT_BUILDING_TEMPLATES, before, "Candidate generation and normalization cannot update the active catalog");
-  rows[0].name = "changed";
-  assert.notEqual(buildingCatalogV15Templates()[0].name, "changed", "Each Preview must get an isolated candidate");
-  return { templates: 121, technical: 19, dependencies: 14, house: true, activeCatalogUnchanged: true };
+  normalized[0].name = "changed";
+  assert.notEqual(rows[0].name, "changed", "A normalized draft is independent of the built-in templates");
 }

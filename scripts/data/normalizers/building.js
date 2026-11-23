@@ -138,9 +138,14 @@ export function normalizeBuilding(building, options = {}) {
   const livestock = normalizeLivestockBuilding(building.livestock, { building });
   if (livestock) building.livestock = livestock;
   else delete building.livestock;
-  const agriculture = normalizeAgricultureBuilding(building.agriculture, { building });
-  if (agriculture) building.agriculture = agriculture;
-  else delete building.agriculture;
+  const agriculture = normalizeAgricultureBuilding(building.agriculture, {
+    building: hadFunctionFlag.production ? building : { ...building, functions: undefined },
+    includeInactive: true
+  });
+  if (agriculture) {
+    building.agriculture = agriculture;
+    if (!hadFunctionFlag.production) building.functions.production = true;
+  } else delete building.agriculture;
 
   building.productionLines = ensureUniqueRowIds(building.productionLines.map((line) => {
     const normalized = normalizeProductionLine(line, makeId);

@@ -12,6 +12,7 @@ import { measureSkyholdPerformance } from "./performance-observer.js";
 import { COMMIT_SCOPES, normalizeCommitScope, prepareSkyholdCommit } from "./commit-preparation.js";
 import { MODULE_ID, SETTING_DATA } from "./constants.js";
 import { stableDataHash } from "./storage-commit.js";
+import { assertSupportedWorldData, UNSUPPORTED_WORLD_DATA } from "./storage-format.js";
 import { createGmWriteAuthority } from "./gm-write-authority.js";
 import { COMMAND_ERROR, commandError, commandFailure } from "./command-result.js";
 import { assertNoNewEntityCollisions } from "./entity-identity.js";
@@ -116,6 +117,7 @@ export class SkyholdData {
   }
 
   static async set(data, { reason = "set", baseRevision = data?.meta?.revision } = {}) {
+    assertSupportedWorldData(data);
     const draft = clone(data);
     return enqueueSkyholdWrite(() => commitSkyholdData(draft, { reason, baseRevision }));
   }
@@ -174,6 +176,12 @@ export class SkyholdData {
     const dataHash = stableDataHash(snapshot);
     const expected = String(expectedDataHash ?? "");
     if (expected && dataHash !== expected) return { ok: false, reason: "hash-mismatch", dataHash };
+    try {
+      assertSupportedWorldData(snapshot);
+    } catch (error) {
+      if (error?.code !== UNSUPPORTED_WORLD_DATA) throw error;
+      return { ok: false, reason: UNSUPPORTED_WORLD_DATA, message: error.message };
+    }
     return {
       ok: true,
       reason: "ready",

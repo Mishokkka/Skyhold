@@ -7,11 +7,11 @@ import {
   TEMPLATE_CATALOG_VERSION
 } from "../data/building-templates.js";
 import {
-  BUILDING_DEVELOPMENT_TREE_IDS_V1,
   buildingRequiresConstructionCenter,
   CONSTRUCTION_CENTER_TEMPLATE_ID
 } from "../data/building-development-tree.js";
-import { migrateData } from "../data/normalizers.js";
+import { APPROVED_BUILDING_TEMPLATE_MANIFEST } from "../data/building-template-manifest.js";
+import { normalizeSkyholdData, SKYHOLD_SCHEMA_VERSION } from "../data/normalizers.js";
 import { constructionCenterSuccessBonus } from "../engines/economy/construction-center.js";
 import { planBuildingCatalogMigration } from "../workflows/buildings/catalog-migration.js";
 
@@ -31,11 +31,11 @@ function prerequisitesMet(template, built) {
 
 export function checkBuildingDevelopmentTreeCharacterization() {
   const ordinary = DEFAULT_BUILDING_TEMPLATES.filter((template) => !STORY_TEMPLATE_IDS.has(template.id));
-  assert.equal(ordinary.length, 124, "v16 retains the existing tree and adds five leisure venues");
+  assert.equal(ordinary.length, 124, "The current catalog has 124 ordinary templates");
   assert.deepEqual(
-    new Set(BUILDING_DEVELOPMENT_TREE_IDS_V1),
+    new Set(APPROVED_BUILDING_TEMPLATE_MANIFEST.map((template) => template.id)),
     new Set(ordinary.map((template) => template.id)),
-    "the development tree must cover exactly the ordinary catalog"
+    "the manifest must cover exactly the ordinary catalog"
   );
 
   const center = ordinary.find((template) => template.id === CONSTRUCTION_CENTER_TEMPLATE_ID);
@@ -115,20 +115,19 @@ export function checkBuildingDevelopmentTreeCharacterization() {
 
   const stored = structuredClone(BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION);
   const storedGatehouse = stored.find((template) => template.id === "gatehouse");
-  storedGatehouse.templateVersion = TEMPLATE_CATALOG_VERSION - 1;
   storedGatehouse.requirements = { food: 999, technology: 999, culture: 999, war: 999 };
   storedGatehouse.requiredAnyBuildingIds = [];
   storedGatehouse.wageDailyCopper = 777;
-  const migrated = migrateData({
-    meta: { templateCatalogVersion: TEMPLATE_CATALOG_VERSION - 1 },
+  const migrated = normalizeSkyholdData({
+    meta: { schemaVersion: SKYHOLD_SCHEMA_VERSION, templateCatalogVersion: TEMPLATE_CATALOG_VERSION },
     catalog: { buildings: stored },
     holdings: []
   });
   const migratedGatehouse = migrated.catalog.buildings.find((template) => template.id === "gatehouse");
-  assert.deepEqual(migratedGatehouse.requirements, { food: 999, technology: 999, culture: 999, war: 999 }, "ordinary normalization must not silently rewrite an old catalog");
-  assert.deepEqual(migratedGatehouse.requiredAnyBuildingIds, [], "ordinary normalization must preserve old prerequisites until explicit Preview/Apply");
-  assert.equal(migratedGatehouse.wageDailyCopper, 777, "ordinary normalization must preserve old wage defaults until explicit Preview/Apply");
-  const catalogPlan = planBuildingCatalogMigration({ currentData: migrated, operationId: "development-tree-catalog" });
+  assert.deepEqual(migratedGatehouse.requirements, { food: 999, technology: 999, culture: 999, war: 999 }, "ordinary normalization must preserve a customized catalog");
+  assert.deepEqual(migratedGatehouse.requiredAnyBuildingIds, [], "ordinary normalization must preserve customized prerequisites until explicit Preview/Apply");
+  assert.equal(migratedGatehouse.wageDailyCopper, 777, "ordinary normalization must preserve customized wages until explicit Preview/Apply");
+  const catalogPlan = planBuildingCatalogMigration({ currentData: migrated, operationId: "development-tree-catalog", replaceCatalog: true });
   const plannedGatehouse = catalogPlan.targetData.catalog.buildings.find((template) => template.id === "gatehouse");
   assert.deepEqual(plannedGatehouse.requirements, { food: 0, technology: 22, culture: 0, war: 28 }, "explicit catalog migration installs the recalibrated Gatehouse threshold");
   assert.deepEqual(plannedGatehouse.requiredAnyBuildingIds, ["guard-tower", "ramparts"], "explicit catalog migration refreshes any-of prerequisites");
@@ -157,8 +156,8 @@ export function checkBuildingDevelopmentTreeCharacterization() {
     requirements: { food: 99, technology: 99, culture: 99, war: 99 },
     requiredBuildingIds: ["old-prerequisite"]
   };
-  const migratedLaputa = migrateData({
-    meta: { templateCatalogVersion: TEMPLATE_CATALOG_VERSION - 1 },
+  const migratedLaputa = normalizeSkyholdData({
+    meta: { schemaVersion: SKYHOLD_SCHEMA_VERSION, templateCatalogVersion: TEMPLATE_CATALOG_VERSION },
     catalog: { buildings: stored },
     holdings: [{
       id: "laputa",
@@ -174,10 +173,7 @@ export function checkBuildingDevelopmentTreeCharacterization() {
   assert.equal(migratedBath.materialCosts[0].qty, 777, "normal loading must preserve old construction records");
   assert.equal(migratedProject.wageDailyCopper, 777, "D1-A must preserve the frozen economy snapshot of an already-started project");
   assert.deepEqual(migratedProject.requiredBuildingIds, ["old-prerequisite"], "D1-A must preserve an already-started project's prerequisites");
-  const initialLaputaPlan = planBuildingCatalogMigration({ currentData: migratedLaputa, operationId: "development-tree-instances" });
-  assert.ok(initialLaputaPlan.blockingIssues.length > 0, "Changing saved building mechanics requires explicit choices");
-  const resolutions = Object.fromEntries(initialLaputaPlan.blockingIssues.filter((row) => row.canResolveMechanics).map((row) => [row.resolutionKey, "replace-mechanics"]));
-  const laputaPlan = planBuildingCatalogMigration({ currentData: migratedLaputa, operationId: "development-tree-instances", resolutions });
+  const laputaPlan = planBuildingCatalogMigration({ currentData: migratedLaputa, operationId: "development-tree-instances", replaceCatalog: true });
   assert.equal(laputaPlan.canApply, true, "Resolved old buildings must produce an applicable Preview");
   const plannedBath = laputaPlan.targetData.holdings[0].buildings.list.find((building) => building.id === "laputa-bath");
   const plannedProject = laputaPlan.targetData.holdings[0].buildings.list.find((building) => building.id === "laputa-project");
@@ -189,8 +185,8 @@ export function checkBuildingDevelopmentTreeCharacterization() {
   assert.equal(plannedProject.materialsAllocated, false, "migration must not invent prepayment for an unfinished project");
   assert.deepEqual(plannedProject.constructionMaterials?.prepaidRemaining ?? [], [], "only recorded material credit may survive");
 
-  const currentVersionLaputa = migrateData({
-    meta: { templateCatalogVersion: TEMPLATE_CATALOG_VERSION },
+  const currentVersionLaputa = normalizeSkyholdData({
+    meta: { schemaVersion: SKYHOLD_SCHEMA_VERSION, templateCatalogVersion: TEMPLATE_CATALOG_VERSION },
     catalog: { buildings: structuredClone(BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION) },
     holdings: [{
       id: "laputa",

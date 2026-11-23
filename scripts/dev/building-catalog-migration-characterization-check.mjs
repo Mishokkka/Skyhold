@@ -4,83 +4,57 @@ import { pathToFileURL } from "node:url";
 import { checkMigrationProductionCarry } from "./building-catalog-cycle-migration-check.mjs";
 import { checkMigrationPreviewRefresh } from "./building-catalog-preview-check.mjs";
 import { checkCatalogLoadBoundary } from "./building-catalog-load-boundary-check.mjs";
-import { checkBuildingCatalogFullTransition } from "./building-catalog-full-transition-check.mjs";
+import { checkAgricultureCatalogRefresh, checkBuildingCatalogFullTransition } from "./building-catalog-full-transition-check.mjs";
 
 checkCatalogLoadBoundary();
 checkBuildingCatalogFullTransition();
+checkAgricultureCatalogRefresh();
 
-import { DEFAULT_BUILDING_TEMPLATES, TEMPLATE_CATALOG_VERSION } from "../data/building-templates.js";
-import { BUILDING_TEMPLATES_CULTURE } from "../data/building-template-catalog/culture.js";
-import { BUILDING_CATALOG_V14_TEMPLATES } from "../data/building-template-v14-catalog.js";
-import { buildingCatalogV18Templates } from "../data/building-template-revision-v18.js";
+import { BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION, DEFAULT_BUILDING_TEMPLATES, TEMPLATE_CATALOG_VERSION } from "../data/building-templates.js";
 import { clone } from "../data/utils.js";
 import {
   BUILDING_CATALOG_MIGRATION_NAMESPACE,
   applyBuildingCatalogMigration,
-  planBuildingCatalogMigration,
-  technicalMaintenanceMigrationIssues
+  planBuildingCatalogMigration
 } from "../workflows/buildings/catalog-migration.js";
 
 {
-  const old = buildingCatalogV18Templates();
-  const school = old.find(row => row.id === "school");
-  const bank = old.find(row => row.id === "bank-exchange");
+  const school = { id: "school", effect: "Оплаченный учитель открывает ролевые образовательные решения",
+    notes: "Механика работает при годовом старении: шанс небольшой, но может дать +1 к характеристике и положительную черту." };
+  const bank = { id: "bank-exchange", effect: "Явные займы, вклады, гарантии и крупные договоры без пассивной эмиссии денег" };
   const newSchool = DEFAULT_BUILDING_TEMPLATES.find(row => row.id === "school");
   const newBank = DEFAULT_BUILDING_TEMPLATES.find(row => row.id === "bank-exchange");
-  for (const version of [18, TEMPLATE_CATALOG_VERSION]) {
-    const source = { meta: { revision: 7, templateCatalogVersion: version },
-      catalog: { buildings: [{ ...school, templateVersion: version, notes: "Записки ГМа" },
-        { ...bank, templateVersion: version, description: "Семейный банк", visibility: "gm" }] },
-      holdings: [{ id: "a", name: "A", buildings: { list: [
-        { ...school, id: "school-a", templateId: "school", templateVersion: version, effect: "Наши занятия" },
-        { id: "custom", name: "Школа", notes: school.notes }
-      ] } }] };
-    const before = clone(source);
-    const args = { currentData: source, operationId: `standard-text-${version}`, textOnly: true };
-    const plan = planBuildingCatalogMigration(args);
-    assert.deepEqual(source, before, "the preview must not write the world");
-    assert.equal(plan.canApply, true, "known old standard text must have a reviewable update even on the current catalog version");
-    assert.deepEqual(plan.textUpdates.map(row => row.field), ["effect", "effect", "notes"]);
-    const result = applyBuildingCatalogMigration({ currentData: source, plan });
-    const expected = clone(source);
-    expected.catalog.buildings[0].effect = newSchool.effect;
-    expected.catalog.buildings[1].effect = newBank.effect;
-    expected.holdings[0].buildings.list[0].notes = newSchool.notes;
-    assert.deepEqual(result.data.catalog, expected.catalog);
-    assert.deepEqual(result.data.holdings, expected.holdings);
-    assert.equal(result.data.meta.templateCatalogVersion, version, "a text update must not advance the installed catalog version");
-    assert.equal(applyBuildingCatalogMigration({ currentData: result.data, plan }).commitRequired, false);
-    assert.equal(planBuildingCatalogMigration({ ...args, currentData: result.data, operationId: "repeat-text" }).hasChanges, false);
-    const changed = clone(source);
-    changed.catalog.buildings[0].effect = "Новая авторская правка";
-    assert.throws(() => applyBuildingCatalogMigration({ currentData: changed, plan }), { code: "target-catalog-hash" });
-  }
-
-  const legacySchool = BUILDING_TEMPLATES_CULTURE.find(row => row.id === "school");
-  const legacyWorld = { meta: { templateCatalogVersion: legacySchool.templateVersion },
-    catalog: { buildings: [legacySchool] }, holdings: [] };
-  const legacyPlan = planBuildingCatalogMigration({ currentData: legacyWorld, operationId: "legacy-school-text", textOnly: true });
-  assert.deepEqual(legacyPlan.textUpdates.map(row => row.field), ["effect", "notes"]);
-  assert.equal(legacyPlan.targetData.catalog.buildings[0].effect, newSchool.effect);
-}
-
-{
-  const before = { id: "holding", buildings: { list: [{ id: "mill", maintenance: { schemaVersion: 1 } }] },
-    people: { list: [{ id: "worker", workAllocationMode: "explicit", workAllocations: [
-      { sourceId: "maintenance", functionId: "maintenance", normalQd: 2 }
-    ] }] } };
-  const after = clone(before);
-  after.buildings.list[0].maintenance.schemaVersion = 2;
-  const snapshot = clone(before);
-  assert.equal(technicalMaintenanceMigrationIssues(before, after)[0].code, "legacy-maintenance-assignment");
-  assert.deepEqual(before, snapshot, "Preview must not redistribute legacy assignments automatically");
-  assert.deepEqual(technicalMaintenanceMigrationIssues(before, before), [], "Existing version 1 migration remains compatible");
-  before.people.list[0].workAllocations = [{ sourceId: "mill", functionId: "production", normalQd: 18 }];
-  assert.deepEqual(technicalMaintenanceMigrationIssues(before, after), []);
+  const version = TEMPLATE_CATALOG_VERSION;
+  const source = { meta: { revision: 7, templateCatalogVersion: version },
+    catalog: { buildings: [{ ...school, templateVersion: version, notes: "Записки ГМа" },
+      { ...bank, templateVersion: version, description: "Семейный банк", visibility: "gm" }] },
+    holdings: [{ id: "a", name: "A", buildings: { list: [
+      { ...school, id: "school-a", templateId: "school", templateVersion: version, effect: "Наши занятия" },
+      { id: "custom", name: "Школа", notes: school.notes }
+    ] } }] };
+  const before = clone(source);
+  const args = { currentData: source, operationId: `standard-text-${version}`, textOnly: true };
+  const plan = planBuildingCatalogMigration(args);
+  assert.deepEqual(source, before, "the preview must not write the world");
+  assert.equal(plan.canApply, true, "known old standard text must have a reviewable update even on the current catalog version");
+  assert.deepEqual(plan.textUpdates.map(row => row.field), ["effect", "effect", "notes"]);
+  const result = applyBuildingCatalogMigration({ currentData: source, plan });
+  const expected = clone(source);
+  expected.catalog.buildings[0].effect = newSchool.effect;
+  expected.catalog.buildings[1].effect = newBank.effect;
+  expected.holdings[0].buildings.list[0].notes = newSchool.notes;
+  assert.deepEqual(result.data.catalog, expected.catalog);
+  assert.deepEqual(result.data.holdings, expected.holdings);
+  assert.equal(result.data.meta.templateCatalogVersion, version, "a text update must not advance the installed catalog version");
+  assert.equal(applyBuildingCatalogMigration({ currentData: result.data, plan }).commitRequired, false);
+  assert.equal(planBuildingCatalogMigration({ ...args, currentData: result.data, operationId: "repeat-text" }).hasChanges, false);
+  const changed = clone(source);
+  changed.catalog.buildings[0].effect = "Новая авторская правка";
+  assert.throws(() => applyBuildingCatalogMigration({ currentData: changed, plan }), { code: "target-catalog-hash" });
 }
 
 function template(id) {
-  return clone(BUILDING_CATALOG_V14_TEMPLATES.find((row) => row.id === id));
+  return clone(BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION.find((row) => row.id === id));
 }
 
 function fixture() {
@@ -88,7 +62,7 @@ function fixture() {
     ...template("lumbermill"),
     id: "lumbermill-instance",
     templateId: "lumbermill",
-    templateVersion: 12,
+    templateVersion: TEMPLATE_CATALOG_VERSION,
     name: "Лесоповал у обрыва",
     notes: "Пользовательская заметка",
     constructionStatus: "built",
@@ -111,7 +85,7 @@ function fixture() {
   };
   const oldTavern = {
     id: "old-tavern",
-    templateId: "tavern",
+    templateId: "inn",
     name: "Старая таверна",
     notes: "Не переименовывать",
     constructionStatus: "built",
@@ -121,7 +95,7 @@ function fixture() {
   };
   const legacyHouse = {
     id: "laputa-building-house-1",
-    templateId: "",
+    templateId: "common-house",
     name: "Дом-1",
     constructionStatus: "building",
     buildTarget: 8,
@@ -135,7 +109,7 @@ function fixture() {
     ...template("watch-post"),
     id: "watch-post-instance",
     templateId: "watch-post",
-    templateVersion: 12,
+    templateVersion: TEMPLATE_CATALOG_VERSION,
     name: "Старый дозор",
     constructionStatus: "built",
     assignedWorkerIds: [""]
@@ -148,11 +122,11 @@ function fixture() {
     customRule: { untouched: true }
   };
   return {
-    meta: { schemaVersion: 71, templateCatalogVersion: 13, revision: 7, storageCommit: null },
+    meta: { schemaVersion: 72, templateCatalogVersion: TEMPLATE_CATALOG_VERSION, revision: 7, storageCommit: null },
     catalog: {
       buildings: [
-        { ...template("lumbermill"), templateVersion: 12, reputation: 99 },
-        { id: "tavern", name: "Таверна", templateVersion: 12 },
+        { ...template("lumbermill"), templateVersion: TEMPLATE_CATALOG_VERSION, reputation: 99 },
+        template("inn"),
         { id: "custom-template", name: "Авторский шаблон", customRule: true }
       ],
       deletedBuildingTemplateIds: ["well", "custom-deleted"],
@@ -180,139 +154,75 @@ function fixture() {
 
 export function checkBuildingCatalogMigrationCharacterization() {
   const source = fixture();
-  const sourceSnapshot = clone(source);
-  {
-    const draft = fixture();
-    const person = draft.holdings[0].people.list[0];
-    person.workAllocationMode = "explicit";
-    person.workAllocations = [{ sourceId: "maintenance", functionId: "maintenance", normalQd: 2 },
-      { sourceId: "lumbermill-instance", functionId: "production", normalQd: 18 }];
-    const args = { currentData: draft, operationId: "release-old-maintenance" };
-    const blocked = planBuildingCatalogMigration(args);
-    const issue = blocked.blockingIssues.find((row) => row.canReleaseMaintenance);
-    assert.ok(issue);
-    const resolutions = { [issue.resolutionKey]: "release-maintenance" };
-    const resolved = planBuildingCatalogMigration({ ...args, resolutions });
-    assert.equal(resolved.decisions.length, 1);
-    assert.equal(resolved.targetData.holdings[0].people.list[0].workAllocations.length, 1);
-    assert.equal(person.workAllocations.length, 2, "Resolution changes only the projected copy");
-    assert.equal(resolved.canApply, false);
-    assert.ok(planBuildingCatalogMigration(args).blockingIssues.some((row) => row.canReleaseMaintenance), "Removing the local decision restores the conflict");
-    person.workAllocations[0].normalQd = 3;
-    assert.ok(planBuildingCatalogMigration({ ...args, resolutions }).blockingIssues.some((row) => row.canReleaseMaintenance), "Changed allocations invalidate the prior decision");
-  }
-  const nextPlan = planBuildingCatalogMigration({ currentData: source, operationId: "next-catalog-preview", createdAt: "2026-09-06T00:00:00.000Z" });
-  assert.equal(nextPlan.preview.catalogTemplates, 126);
-  assert.equal(nextPlan.preview.targetTemplateCatalogVersion, TEMPLATE_CATALOG_VERSION);
-  assert.equal(nextPlan.canApply, false, "Saved overrides block Apply until their choices are resolved");
-  assert.throws(() => applyBuildingCatalogMigration({ currentData: source, plan: nextPlan }), (error) => error.code === "plan-blocked");
-  assert.throws(() => applyBuildingCatalogMigration({ currentData: source, plan: { ...nextPlan, canApply: true } }), (error) => error.code === "plan-blocked", "Apply must reject unresolved choices independently of the UI flag");
-  assert.ok(nextPlan.targetData.catalog.buildings.some((row) => row.id === "meeting-house"));
-  assert.ok(!nextPlan.targetData.holdings[0].buildings.list.some((row) => row.templateId === "meeting-house"), "A new template never constructs itself");
-  assert.deepEqual(nextPlan.targetData.holdings[0].people, source.holdings[0].people);
-  assert.deepEqual(nextPlan.targetData.holdings[0].storage, source.holdings[0].storage);
-  assert.deepEqual(source, sourceSnapshot);
-  {
-    const conflict = nextPlan.blockingIssues.find((row) => row.canResolveMechanics && row.buildingId === "lumbermill" && row.beforeText === "99");
-    assert.ok(conflict, "A saved template override must not be silently replaced");
-    const args = { currentData: source, operationId: "choose-mechanics" };
-    const kept = planBuildingCatalogMigration({ ...args, resolutions: { [conflict.resolutionKey]: "keep-mechanics" } });
-    assert.equal(kept.targetData.catalog.buildings.find((row) => row.id === "lumbermill").reputation, 99);
-    const replaced = planBuildingCatalogMigration({ ...args, resolutions: { [conflict.resolutionKey]: "replace-mechanics" } });
-    assert.equal(replaced.targetData.catalog.buildings.find((row) => row.id === "lumbermill").reputation, template("lumbermill").reputation);
-    assert.deepEqual(source, sourceSnapshot);
-    const changed = clone(source);
-    changed.catalog.buildings.find((row) => row.id === "lumbermill").reputation = 98;
-    const fresh = planBuildingCatalogMigration({ ...args, currentData: changed, resolutions: { [conflict.resolutionKey]: "keep-mechanics" } });
-    assert.ok(fresh.blockingIssues.some((row) => row.canResolveMechanics && row.beforeText === "98"));
-    const construction = clone(source);
-    const project = construction.holdings[0].buildings.list.find((row) => row.id === "lumbermill-instance");
-    project.constructionStatus = "building";
-    project.buildTarget = template("lumbermill").buildTarget + 7;
-    project.buildProgress = 2;
-    const constructionPlan = planBuildingCatalogMigration({ ...args, currentData: construction });
-    const sizeIssue = constructionPlan.blockingIssues.find((row) => row.buildingId === project.id && row.detail.startsWith("Этапы строительства"));
-    assert.ok(sizeIssue);
-    const keptProject = planBuildingCatalogMigration({ ...args, currentData: construction, resolutions: { [sizeIssue.resolutionKey]: "keep-mechanics" } })
-      .targetData.holdings[0].buildings.list.find((row) => row.id === project.id);
-    assert.equal(keptProject.buildTarget, project.buildTarget);
-    assert.equal(keptProject.buildProgress, 2, "Resolve the construction norm before mapping progress, not afterwards");
-  }
-  const acceptedChoices = Object.fromEntries(nextPlan.blockingIssues.filter((row) => row.canResolveMechanics).map((row) => [row.resolutionKey, "replace-mechanics"]));
-  const plan = planBuildingCatalogMigration({
-    currentData: source,
-    resolutions: acceptedChoices,
-    operationId: "building-migration-test",
-    createdAt: "2026-09-05T00:00:00.000Z"
-  });
-  assert.deepEqual(source, sourceSnapshot, "Preview must never mutate current world data");
+  const snapshot = clone(source);
+  const safe = planBuildingCatalogMigration({ currentData: source, operationId: "add-missing-templates" });
+  assert.equal(safe.canApply, true);
+  assert.equal(safe.preview.catalogTemplates, 126);
+  assert.equal(safe.targetData.catalog.buildings.find(row => row.id === "lumbermill").reputation, 99);
+  assert.equal(safe.targetData.catalog.buildings.some(row => row.id === "custom-template" && row.customRule), true);
+  assert.deepEqual(safe.targetData.catalog.deletedBuildingTemplateIds, ["custom-deleted"]);
+  assert.deepEqual(safe.targetData.holdings, source.holdings, "A non-replacing update preserves current instances and custom mechanics");
+  assert.ok(safe.targetData.catalog.buildings.some(row => row.id === "meeting-house"));
+  assert.ok(!safe.targetData.holdings[0].buildings.list.some(row => row.templateId === "meeting-house"));
+
+  const forced = { currentData: source, replaceCatalog: true, operationId: "refresh-current-buildings" };
+  const custom = planBuildingCatalogMigration(forced);
+  assert.equal(custom.canApply, false);
+  assert.ok(custom.blockingIssues.some(row => row.code === "custom-instance-unmapped"));
+  assert.throws(() => applyBuildingCatalogMigration({ currentData: source, plan: { ...custom, canApply: true } }), { code: "plan-blocked" });
+  assert.deepEqual(source, snapshot, "Preview must leave the source intact even when it cannot be applied");
+
+  const editable = clone(source);
+  editable.holdings[0].buildings.list = editable.holdings[0].buildings.list.filter(row => row.templateId !== "custom-template");
+  const editableSnapshot = clone(editable);
+  const plan = planBuildingCatalogMigration({ ...forced, currentData: editable });
   assert.equal(plan.canApply, true);
   assert.equal(plan.preview.targetTemplateCatalogVersion, TEMPLATE_CATALOG_VERSION);
   assert.equal(plan.preview.changedInstances, 4);
-  assert.equal(plan.preview.customInstances, 1);
-  assert.equal(plan.preview.aliasInstances, 1);
-  assert.equal(plan.preview.knownLegacyInstances, 1);
-  assert.equal(plan.preview.blockingIssues, 0);
+  assert.deepEqual(editable, editableSnapshot);
 
-  const migrated = plan.targetData.holdings[0].buildings.list;
-  const lumbermill = migrated.find((row) => row.id === "lumbermill-instance");
-  assert.equal(lumbermill.name, "Лесоповал у обрыва", "instance names survive catalog migration");
+  const projected = plan.targetData.holdings[0];
+  assert.deepEqual(projected.people, editable.holdings[0].people);
+  assert.deepEqual(projected.storage, editable.holdings[0].storage);
+  const lumbermill = projected.buildings.list.find(row => row.id === "lumbermill-instance");
+  assert.equal(lumbermill.name, "Лесоповал у обрыва");
   assert.equal(lumbermill.notes, "Пользовательская заметка");
-  assert.equal(lumbermill.productionLines.find((row) => row.resourceId === "wood").outputQty, 2, "approved production mechanics replace the legacy exploit");
-  assert.equal(lumbermill.productionLines.find((row) => row.resourceId === "wood").pendingQty, 7, "already finished output survives on a matching line");
-  assert.equal(lumbermill.productionLines.find((row) => row.resourceId === "wood").active, false, "the player's line selection survives");
-  assert.deepEqual(lumbermill.assignedWorkerIds.filter(Boolean), ["worker-1"], "worker assignments survive when they fit the new capacity");
-
-  const inn = migrated.find((row) => row.id === "old-tavern");
-  assert.equal(inn.templateId, "inn", "a true deprecated identifier alias is converted directly");
+  const wood = lumbermill.productionLines.find(row => row.resourceId === "wood");
+  assert.deepEqual([wood.outputQty, wood.pendingQty, wood.active], [2, 7, false], "Completed output and line selection survive restoration of the default recipe");
+  assert.deepEqual(lumbermill.assignedWorkerIds.filter(Boolean), ["worker-1"]);
+  const inn = projected.buildings.list.find(row => row.id === "old-tavern");
+  assert.equal(inn.templateId, "inn");
   assert.equal(inn.name, "Старая таверна");
-  const house = migrated.find((row) => row.id === "laputa-building-house-1");
-  assert.equal(house.templateId, "common-house", "the known legacy Laputa instance map does not rely on fuzzy names");
-  assert.equal(house.buildProgress, 4, "unfinished projects preserve the original paid material schedule and stage scale");
-  assert.equal(house.buildTarget, 8);
-  assert.equal(house.materialsAllocated, true, "a started legacy project is not charged its construction materials again");
-  assert.equal(house.residents, 5);
+  const house = projected.buildings.list.find(row => row.templateId === "common-house");
+  assert.deepEqual([house.buildProgress, house.buildTarget, house.materialsAllocated, house.residents], [4, 8, true, 5]);
   assert.deepEqual(house.contents, [{ id: "chest", name: "Сундук", qty: 1 }]);
+  assert.equal(projected.buildings.list.find(row => row.id === "watch-post-instance").templateId, "watch-post",
+    "An approved upgrade relationship never grants a free upgrade during refresh");
 
-  const watch = migrated.find((row) => row.id === "watch-post-instance");
-  assert.equal(watch.templateId, "watch-post", "upgradesFromTemplateIds must not cause a free Sheriff Post upgrade");
-  assert.equal(migrated.find((row) => row.id === "custom-instance").customRule.untouched, true, "custom instances remain untouched");
-  assert.equal(plan.targetData.catalog.buildings.some((row) => row.id === "custom-template" && row.customRule === true), true, "custom catalog templates remain available");
-  assert.deepEqual(plan.targetData.catalog.deletedBuildingTemplateIds, ["custom-deleted"], "the approved catalog is restored without erasing custom tombstones");
-
-  const applied = applyBuildingCatalogMigration({ currentData: source, plan, operationId: plan.operationId });
+  const applied = applyBuildingCatalogMigration({ currentData: editable, plan });
   assert.equal(applied.commitRequired, true);
   assert.equal(applied.data.meta.templateCatalogVersion, TEMPLATE_CATALOG_VERSION);
   assert.equal(applied.marker.namespace, BUILDING_CATALOG_MIGRATION_NAMESPACE);
   assert.equal(applied.marker.operationId, plan.operationId);
-  const replay = applyBuildingCatalogMigration({ currentData: applied.data, plan, operationId: plan.operationId });
-  assert.equal(replay.alreadyApplied, true, "the same operationId is idempotent");
+  const replay = applyBuildingCatalogMigration({ currentData: applied.data, plan });
+  assert.equal(replay.alreadyApplied, true);
   assert.equal(replay.commitRequired, false);
 
-  const stale = fixture();
+  const stale = clone(editable);
   stale.meta.revision += 1;
-  assert.throws(
-    () => applyBuildingCatalogMigration({ currentData: stale, plan, operationId: plan.operationId }),
-    (error) => error?.code === "target-revision",
-    "Apply must refuse a world changed after Preview"
-  );
+  assert.throws(() => applyBuildingCatalogMigration({ currentData: stale, plan }), { code: "target-revision" });
+  stale.meta.revision -= 1;
+  stale.meta.templateCatalogVersion -= 1;
+  assert.throws(() => applyBuildingCatalogMigration({ currentData: stale, plan }), { code: "target-catalog-version" });
 
-  const blockedSource = fixture();
-  blockedSource.holdings[0].buildings.list.push({
-    id: "legacy-hut",
-    templateId: "hut",
-    name: "Старая хижина",
-    constructionStatus: "built"
-  });
+  const blockedSource = clone(editable);
+  blockedSource.holdings[0].buildings.list.push({ id: "legacy-hut", templateId: "hut", name: "Старая хижина" });
   blockedSource.holdings[0].buildings.list[0].productionLines[0].workProgressUnits = 5_000;
-  const blocked = planBuildingCatalogMigration({ currentData: blockedSource, operationId: "blocked-migration" });
+  const blocked = planBuildingCatalogMigration({ ...forced, currentData: blockedSource });
   assert.equal(blocked.canApply, false);
-  assert.equal(blocked.blockingIssues.some((row) => row.code === "deprecated-template-unmapped"), true, "ambiguous deprecated buildings require an explicit decision");
-  assert.equal(blocked.blockingIssues.some((row) => row.code === "production-in-progress"), true, "incomplete production reservations must be resolved before migration");
-  assert.throws(
-    () => applyBuildingCatalogMigration({ currentData: blockedSource, plan: blocked, operationId: blocked.operationId }),
-    (error) => error?.code === "plan-blocked"
-  );
+  assert.ok(blocked.blockingIssues.some(row => row.code === "deprecated-template-unmapped"));
+  assert.ok(blocked.blockingIssues.some(row => row.code === "production-in-progress"));
+  assert.throws(() => applyBuildingCatalogMigration({ currentData: blockedSource, plan: blocked }), { code: "plan-blocked" });
   return true;
 }
 
@@ -320,5 +230,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   checkBuildingCatalogMigrationCharacterization();
   await checkMigrationProductionCarry();
   await checkMigrationPreviewRefresh();
-  console.log("FBL Skyhold building catalog migration: exact aliases, state preservation, blockers, stale protection and idempotent Apply passed.");
+  console.log("FBL Skyhold building catalog refresh: saved state, incompatible recipes, revision checks and idempotent Apply passed.");
 }

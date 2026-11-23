@@ -9,6 +9,7 @@ import { BuildingMetaDomain } from "../apps/domains/building/meta-domain.js";
 import { ResidentDomain } from "../apps/domains/resident-domain.js";
 import { DEFAULT_BUILDING_TEMPLATES } from "../data/building-templates.js";
 import { normalizeSkyholdData } from "../data/normalizers.js";
+import { DEFAULT_SKYHOLD_DATA } from "../data/defaults/default-skyhold-data.js";
 import { clone } from "../data/utils.js";
 import { settlementControlSummary } from "../engines/settlement/control.js";
 
@@ -153,7 +154,7 @@ export function checkSettlementEffectsCharacterization() {
   assert.equal(hqControl.crimeDeficit, 2, "unrest-only Control never prevents theft checks");
 
   const normalized = normalizeSkyholdData({
-    meta: { schemaVersion: 71, templateCatalogVersion: 14 },
+    meta: { ...DEFAULT_SKYHOLD_DATA.meta },
     catalog: { buildings: [] },
     holdings: [{
       id: "snapshot-holding",

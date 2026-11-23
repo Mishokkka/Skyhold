@@ -7,11 +7,12 @@ import { reserveMarketDemand, settleMarketDemandReservations, recoverMarketDeman
 import { marketStockKey } from "../data/market/stock-state.js";
 import { marketDemandKey } from "../data/market/demand-state.js";
 import { normalizeSkyholdData } from "../data/normalizers.js";
+import { DEFAULT_SKYHOLD_DATA } from "../data/defaults/default-skyhold-data.js";
 import { pathToFileURL } from "node:url";
 export function checkSharedMarkets() {
 const holding = (id) => ({ id, gm: { calendaria: { lastQd: 0 } }, special: { market: {} } });
 {
-  const data = { meta: {}, catalog: {}, holdings: [holding("a"), holding("b")] };
+  const data = { meta: { ...DEFAULT_SKYHOLD_DATA.meta }, catalog: {}, holdings: [holding("a"), holding("b")] };
   const before = JSON.stringify(data);
   const preview = previewSharedMarketMigration(data);
   assert.equal(JSON.stringify(data), before, "preview never mutates world data");

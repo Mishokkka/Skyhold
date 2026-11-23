@@ -3,6 +3,7 @@ import path from "node:path";
 import { readFileSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { DEFAULT_BUILDING_TEMPLATES } from "../data/building-templates.js";
+import { DEFAULT_SKYHOLD_DATA } from "../data/defaults/default-skyhold-data.js";
 import { mergeHoldingDefaults } from "../data/normalizers.js";
 import { prepareSkyholdCommit } from "../data/commit-preparation.js";
 import { buildPlayerPatch, validatePlayerPatch } from "../data/player-write-guard.js";
@@ -40,7 +41,7 @@ function fixture() {
   });
   // This fixture tests real assignment/service rules without the catalog's composition contract.
   holding.buildings.list[0].workerProfile = null;
-  return { meta: { revision: 1 }, holdings: [holding], catalog: { buildings: copy(DEFAULT_BUILDING_TEMPLATES) } };
+  return { meta: { ...DEFAULT_SKYHOLD_DATA.meta, revision: 1 }, holdings: [holding], catalog: { buildings: copy(DEFAULT_BUILDING_TEMPLATES) } };
 }
 
 function memoryStore(initial, { player = false, normalize = false } = {}) {

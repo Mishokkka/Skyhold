@@ -30,7 +30,7 @@ async function confirmApply(textOnly) {
   if (DialogV2?.confirm) {
     return DialogV2.confirm({
       classes: ["fbl-skyhold"],
-      window: { title: textOnly ? "Применить обновление текстов" : "Применить миграцию зданий" },
+      window: { title: textOnly ? "Применить обновление текстов" : "Обновить каталог зданий" },
       content: `<p>${message}</p>`,
       modal: true
     });
@@ -87,15 +87,7 @@ export class SkyholdBuildingCatalogMigration extends FloatingTooltipsMixin(Rende
       ...row,
       label: `${row.buildingName || row.buildingId || "Здание"}: ${row.detail || row.code}`
     }));
-    const changedRows = (plan?.rows ?? []).filter((row) => row.changed).slice(0, 80).map((row) => ({
-      ...row,
-      mapping: row.sourceTemplateId && row.sourceTemplateId !== row.targetTemplateId
-        ? `${row.sourceTemplateId} → ${row.targetTemplateId}`
-        : row.targetTemplateId,
-      modeLabel: row.mode === "alias" ? "прямой alias"
-        : row.mode === "known-instance" ? "известный старый экземпляр"
-          : "тот же templateId"
-    }));
+    const changedRows = (plan?.rows ?? []).filter((row) => row.changed).slice(0, 80);
     return {
       ...context,
       preview,
@@ -172,17 +164,14 @@ export class SkyholdBuildingCatalogMigration extends FloatingTooltipsMixin(Rende
       });
       if (result?.alreadyApplied) this.status = "Эта операция уже была применена; повторной записи не было.";
       else if (plan.textOnly) this.status = `Обновлено стандартных полей: ${plan.textUpdates.length}. Сохранена копия для отката.`;
-      else this.status = `Каталог и ${result?.preview?.changedInstances ?? 0} экземпляров переведены на версию ${BUILDING_CATALOG_MIGRATION_VERSION}.`;
+      else this.status = `Обновлено построек: ${result?.preview?.changedInstances ?? 0}. Сохранена копия для отката.`;
       ui.notifications.info(this.status);
       this._preparePlan({ operationId: makeId("building-catalog-migration", 20) });
-      if (!result?.alreadyApplied && !plan.textOnly) {
-        this.status = `Миграция версии ${BUILDING_CATALOG_MIGRATION_VERSION} применена. Предыдущее состояние сохранено для отката.`;
-      }
       this.owner?.requestRender?.();
     } catch (error) {
       console.error("FBL Skyhold | Building catalog migration apply failed", error);
       this.error = errorText(error);
-      if (["target-revision", "target-catalog-hash", "target-holdings-hash"].includes(String(error?.code ?? ""))) {
+      if (["target-revision", "target-catalog-version", "target-catalog-hash", "target-holdings-hash"].includes(String(error?.code ?? ""))) {
         try {
           this._preparePlan({ operationId: plan.operationId });
           this.error = errorText(error);
@@ -208,7 +197,7 @@ export class SkyholdBuildingCatalogMigration extends FloatingTooltipsMixin(Rende
 SkyholdBuildingCatalogMigration.DEFAULT_OPTIONS = {
   classes: ["fbl-skyhold", "fbl-skyhold-content-pack-importer", "fbl-skyhold-building-catalog-migration"],
   tag: "section",
-  window: { title: "Миграция каталога зданий", icon: "fa-solid fa-building-circle-check", resizable: true },
+  window: { title: "Обновление каталога зданий", icon: "fa-solid fa-building-circle-check", resizable: true },
   position: { width: 780, height: 720 }
 };
 

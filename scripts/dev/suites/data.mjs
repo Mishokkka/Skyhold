@@ -11,8 +11,8 @@ import { checkSkyholdContextCharacterization } from "../context-characterization
 import { checkEconomyResourceCatalogCharacterization } from "../economy-resource-catalog-characterization-check.mjs";
 import { checkBuildingDevelopmentTreeCharacterization } from "../building-development-tree-characterization-check.mjs";
 import { checkResidentCharacterization } from "../resident-characterization-check.mjs";
-import { checkBuildingCatalogV15 } from "../building-catalog-v15-check.mjs";
-import { checkBuildingCatalogV16 } from "../building-catalog-v16-check.mjs";
+import { checkBuildingCatalogTechnical } from "../building-catalog-technical-check.mjs";
+import { checkBuildingCatalogLeisure } from "../building-catalog-leisure-check.mjs";
 import { checkApprovedBuildingDevelopment } from "../building-approved-development-check.mjs";
 import { checkMagnifiqueCrewContent } from "../magnifique-crew-content-check.mjs";
 import { checkPoliticsAvailability } from "../politics-availability-check.mjs";
@@ -27,8 +27,8 @@ export async function runDataSuite() {
   checkWorkerProfileEditor();
   checkPoliticsAvailability();
   checkPoliticsRules();
-  checkBuildingCatalogV15();
-  checkBuildingCatalogV16();
+  checkBuildingCatalogTechnical();
+  checkBuildingCatalogLeisure();
   checkApprovedBuildingDevelopment();
   checkCalendariaCharacterization();
   checkRandomEventsCharacterization();

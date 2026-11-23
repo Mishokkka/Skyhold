@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { normalizeCatalogPartition, normalizeSkyholdData } from "../data/normalizers.js";
+import { normalizeCatalogPartition, normalizeSkyholdData, SKYHOLD_SCHEMA_VERSION } from "../data/normalizers.js";
 import { DEFAULT_BUILDING_TEMPLATES, TEMPLATE_CATALOG_VERSION } from "../data/building-templates.js";
 
 export function checkCatalogLoadBoundary() {
@@ -29,16 +29,18 @@ export function checkCatalogLoadBoundary() {
   assert.equal(normalizeCatalogPartition({ buildings: [] }).buildings.length, 0);
   assert.equal(normalizeCatalogPartition({}).buildings.length, 0);
   assert.equal(normalizeCatalogPartition({ buildings: [{ id: "unknown-version" }] }).buildings[0].templateVersion, 0);
-  const root = normalizeSkyholdData({ meta: { templateCatalogVersion: 13 }, catalog: stored, holdings: [] });
-  assert.equal(root.meta.templateCatalogVersion, 13);
+  const meta = { schemaVersion: SKYHOLD_SCHEMA_VERSION, templateCatalogVersion: TEMPLATE_CATALOG_VERSION };
+  const root = normalizeSkyholdData({ meta, catalog: stored, holdings: [] });
+  assert.equal(root.meta.templateCatalogVersion, TEMPLATE_CATALOG_VERSION);
   assert.deepEqual(root.holdings, [], "An intentionally empty saved world cannot recreate preset settlements");
   assert.deepEqual(root.catalog.buildings.map((row) => row.id), ["watch-post", "private-template"]);
-  assert.equal(normalizeSkyholdData({ meta: {}, catalog: stored, holdings: [] }).meta.templateCatalogVersion, 0);
+  assert.throws(() => normalizeSkyholdData({ meta: { ...meta, templateCatalogVersion: 13 }, catalog: stored, holdings: [] }),
+    { code: "unsupported-world-data" }, "A retired catalog cannot be loaded as a current world");
+  assert.throws(() => normalizeSkyholdData({ meta: { schemaVersion: SKYHOLD_SCHEMA_VERSION }, catalog: stored, holdings: [] }),
+    { code: "unsupported-world-data" }, "A saved world must declare its catalog version");
   const fresh = normalizeSkyholdData(null);
-  const ancient = normalizeSkyholdData({ overview: { settlementName: "Legacy" }, buildings: { list: [] }, residents: { groups: [] } });
-  assert.equal(ancient.holdings.length, 1, "The original single settlement remains available after format conversion");
-  assert.equal(ancient.catalog.buildings.length, 0, "Converting an old storage shape cannot install current building mechanics");
-  assert.equal(ancient.meta.templateCatalogVersion, 0);
+  assert.throws(() => normalizeSkyholdData({ overview: { settlementName: "Legacy" }, buildings: { list: [] }, residents: { groups: [] } }),
+    { code: "unsupported-world-data" }, "The retired single-settlement format is never replaced by fresh defaults");
   assert.equal(fresh.meta.templateCatalogVersion, TEMPLATE_CATALOG_VERSION);
   assert.equal(fresh.catalog.buildings.length, DEFAULT_BUILDING_TEMPLATES.length);
   assert.deepEqual(normalizeCatalogPartition(fresh.catalog), fresh.catalog, "A normalized built-in catalog must not change on its second load");

@@ -338,39 +338,22 @@ const priorTemplate = clone(BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION.find((row
 priorTemplate.workersMax = 99;
 priorTemplate.workerProfile.workersMax = 99;
 const catalogSource = { meta: { revision: 1, templateCatalogVersion: TEMPLATE_CATALOG_VERSION },
-  catalog: { buildings: [priorTemplate] }, holdings: [{ id: "legacy-catalog", buildings: { list: [
-    { ...clone(priorTemplate), id: "old-mill", templateId: "lumbermill" }
+  catalog: { buildings: [priorTemplate] }, holdings: [{ id: "current-catalog", buildings: { list: [
+    { ...clone(priorTemplate), id: "configured-mill", templateId: "lumbermill" }
   ] }, people: { list: [] } }] };
 const normalCatalog = planBuildingCatalogMigration({ currentData: catalogSource, operationId: "normal-catalog" });
 assert.equal(normalCatalog.targetData.catalog.buildings.find((row) => row.id === "lumbermill").workersMax, 99, "current customized catalog rules survive a normal catalog preview");
-const customizedTemplate = clone(priorTemplate);
-Object.assign(customizedTemplate, { workersMin: 2, workerRole: "Custom millers", minOperationalQd: 7,
-  activationConditionText: "Custom service threshold" });
-customizedTemplate.workerProfile.workersMin = 2;
-Object.assign(customizedTemplate.activation, { minWorkers: 2, minOperationalQd: 7, requiresMeaningfulResult: true });
-const olderInstanceSource = clone(catalogSource);
-olderInstanceSource.catalog.buildings = [customizedTemplate];
-olderInstanceSource.holdings[0].buildings.list = [{ ...clone(customizedTemplate), id: "older-mill", templateId: "lumbermill",
-  templateVersion: TEMPLATE_CATALOG_VERSION - 1 }];
-const olderInstanceSnapshot = clone(olderInstanceSource);
-const customizedPreview = planBuildingCatalogMigration({ currentData: olderInstanceSource, operationId: "current-custom-catalog-old-instance" });
-assert.equal(customizedPreview.canApply, true, "A matching current legacy catalog and older instance need no invented conflict");
-const customizedInstance = customizedPreview.targetData.holdings[0].buildings.list[0];
-for (const field of ["workersMin", "workersMax", "workerProfile", "activation", "minOperationalQd", "activationConditionText", "workerRole"]) {
-  assert.deepEqual(customizedInstance[field], customizedTemplate[field], `${field}: current legacy catalog customization must reach the older instance`);
-}
-assert.equal(customizedInstance.labor, undefined);
-assert.deepEqual(olderInstanceSource, olderInstanceSnapshot, "Catalog Preview must not mutate saved custom rules");
 for (const templateId of ["inn", "well"]) {
   const builtinLegacyTemplate = clone(BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION.find((row) => row.id === templateId));
   const expectedLegacyRules = clone(builtinLegacyTemplate);
+  builtinLegacyTemplate.reputation = 99;
   normalizeBuilding(expectedLegacyRules);
   const builtinSource = clone(catalogSource);
   builtinSource.catalog.buildings = [clone(DEFAULT_BUILDING_TEMPLATES.find((row) => row.id === templateId))];
-  builtinSource.holdings[0].buildings.list = [{ ...clone(builtinLegacyTemplate), id: `builtin-old-${templateId}`, templateId,
-    templateVersion: TEMPLATE_CATALOG_VERSION - 1 }];
+  builtinSource.holdings[0].buildings.list = [{ ...clone(builtinLegacyTemplate), id: `builtin-configured-${templateId}`, templateId,
+    templateVersion: TEMPLATE_CATALOG_VERSION }];
   const builtinPreview = planBuildingCatalogMigration({ currentData: builtinSource,
-    operationId: `builtin-hybrid-template-old-${templateId}`, replaceCatalog: true });
+    operationId: `builtin-hybrid-template-${templateId}`, replaceCatalog: true });
   assert.equal(builtinPreview.canApply, true);
   const builtinInstance = builtinPreview.targetData.holdings[0].buildings.list[0];
   assert.equal(builtinInstance.labor, undefined, "A new built-in hybrid template cannot implicitly transition an existing instance");
@@ -385,6 +368,38 @@ for (const replaceCatalog of [false, true]) {
   assert.equal(catalogPreview.targetData.holdings[0].buildings.list[0].labor, undefined,
     "recipe/catalog migration cannot opt a legacy instance into the new employment model");
 }
+  const wellTemplate = BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION.find(row => row.id === "well");
+  const passiveWell = DEFAULT_BUILDING_TEMPLATES.find(row => row.id === "well");
+  const well = { ...clone(wellTemplate), id: "configured-well", templateId: wellTemplate.id,
+    constructionStatus: "built", buildProgress: wellTemplate.buildTarget };
+  const staffProfile = { version: 1, mode: "staff", capacityQd: null };
+  const laborPlan = planHybridLaborMigration({
+    holding: { id: "well-holding", buildings: { list: [well] }, people: { list: [person("keeper")] } },
+    profiles: { [well.id]: staffProfile }
+  });
+  assert.equal(laborPlan.ok, true);
+  const staffCatalog = planHybridLaborCatalogMigration({ catalog: { buildings: [wellTemplate] }, profiles: { well: staffProfile } });
+  assert.equal(staffCatalog.ok, true);
+  const wellAppointment = { ...appointment(), buildingId: well.id, primaryFunctionId: "culture" };
+  for (const template of [passiveWell, staffCatalog.targetCatalog.buildings[0]]) {
+    for (const staffed of [false, true]) {
+      const holding = clone(laborPlan.targetHolding);
+      if (staffed) applyStaffAppointment(holding, "keeper", wellAppointment);
+      const source = { meta: { templateCatalogVersion: TEMPLATE_CATALOG_VERSION },
+        catalog: { buildings: [template] }, holdings: [holding] };
+      const preview = planBuildingCatalogMigration({ currentData: source, replaceCatalog: true, operationId: "refresh-with-custom-staff" });
+      assert.deepEqual(preview.blockingIssues, []);
+      assert.equal(preview.canApply, true);
+      const projected = preview.targetData.holdings[0];
+      assert.equal(buildingLaborMode(projected.buildings.list[0]), "staff");
+      assert.equal(projected.buildings.list[0].workersMax, wellTemplate.workersMax);
+      const refreshedTemplate = preview.targetData.catalog.buildings.find(row => row.id === "well");
+      assert.equal(buildingLaborMode(refreshedTemplate), buildingLaborMode(template));
+      assert.equal(refreshedTemplate.workersMax, template.workersMax);
+      if (!staffed) applyStaffAppointment(projected, "keeper", wellAppointment);
+      assert.equal(projected.people.list[0].staffAppointment.buildingId, well.id);
+    }
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

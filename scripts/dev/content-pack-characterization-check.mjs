@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { applyContentPackImport, CONTENT_PACK_SCHEMA, normalizeContentPack, planContentPackImport } from "../data/content-packs.js";
 import { normalizeSkyholdData } from "../data/normalizers.js";
+import { DEFAULT_SKYHOLD_DATA } from "../data/defaults/default-skyhold-data.js";
 import { BUILTIN_RESOURCE_DEFS, normalizeResourceCatalogRow } from "../core/resources.js";
 import { ECONOMY_RESOURCE_CATALOG_SIZE } from "../data/resources/resource-base-definitions.js";
 import { composeMarketLocation } from "../engines/market/composition.js";
@@ -12,7 +13,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
 
 function dataFixture() {
   return {
-    meta: { revision: 5 },
+    meta: { ...DEFAULT_SKYHOLD_DATA.meta, revision: 5 },
     catalog: {
       buildings: [{ id: "example-wind-observatory", name: "Старая обсерватория", contentSource: "example.skyhold-companion", contentVersion: 1 }],
       resources: [],

@@ -7,7 +7,7 @@ import {
   agricultureDefaultCrops,
   normalizeAgricultureBuilding
 } from "../data/agriculture.js";
-import { BUILDING_TEMPLATES_FOOD } from "../data/building-template-catalog/food.js";
+import { DEFAULT_BUILDING_TEMPLATES } from "../data/building-templates.js";
 import { normalizeBuilding } from "../data/normalizers/building.js";
 import {
   agricultureStateSignature,
@@ -56,7 +56,27 @@ export function checkAgricultureCharacterization() {
   const oldGarden = { id: "old-garden", templateId: "garden", name: "Сад", productionLines: [{ id: "legacy", resourceId: "vegetables" }] };
   normalizeBuilding(oldGarden);
   assert.equal(oldGarden.agriculture.kind, "garden", "safe normal load must add canonical agriculture state to an old Garden instance");
+  assert.equal(oldGarden.functions.production, true, "An unflagged agricultural building remains operational");
   assert.equal(oldGarden.productionLines.length, 1, "safe agriculture normalization must preserve legacy data instead of destructively deleting it");
+
+  const promenade = structuredClone(DEFAULT_BUILDING_TEMPLATES.find(row => row.id === "promenade-garden"));
+  promenade.templateId = promenade.id;
+  normalizeBuilding(promenade);
+  assert.equal(promenade.agriculture, undefined, "A leisure template must not acquire a farm profile from its name");
+  const savedGarden = { ...structuredClone(garden), state: { ...garden.state, phase: "growing",
+    cropId: garden.activeCropId, growingElapsedQd: 20 } };
+  promenade.agriculture = structuredClone(savedGarden);
+  normalizeBuilding(promenade);
+  assert.deepEqual(promenade.agriculture, savedGarden, "Safe load preserves stored configuration and progress when production is off");
+  assert.equal(normalizeAgricultureBuilding(promenade.agriculture, { building: promenade }), null);
+  const period = planAgriculturePeriod({ buildings: [promenade], dependencies: {
+    isOperational: () => true,
+    isFunctionAllowed: () => true,
+    workQdForBuilding: () => assert.fail("A promenade must not request farm labor"),
+    calendarContextForOffset: () => calendar()
+  } });
+  assert.deepEqual(period.entries, []);
+  assert.deepEqual(period.resourceChanges, []);
 }
 
 {
@@ -255,22 +275,21 @@ export function checkAgricultureCharacterization() {
   const engineSource = fs.readFileSync(new URL("../engines/economy/agriculture.js", import.meta.url), "utf8");
   assert.doesNotMatch(engineSource, /Math\.random|game\.|foundry\.|Date\.now/, "pure agriculture planning must remain deterministic and Foundry-independent");
 
-  const fieldTemplate = BUILDING_TEMPLATES_FOOD.find((row) => row.id === "grain-field");
-  const gardenTemplate = BUILDING_TEMPLATES_FOOD.find((row) => row.id === "garden");
+  const fieldTemplate = DEFAULT_BUILDING_TEMPLATES.find((row) => row.id === "grain-field");
+  const gardenTemplate = DEFAULT_BUILDING_TEMPLATES.find((row) => row.id === "garden");
   assert.equal(fieldTemplate.productionLines.length, 0, "Field must not retain the legacy passive tenday line beside the agriculture cycle");
   assert.equal(gardenTemplate.productionLines.length, 0, "Garden must not retain legacy daily production beside the agriculture cycle");
   assert.equal(fieldTemplate.agriculture.activeCropId, "grain", "Field template must persist its canonical crop config");
-  assert.deepEqual(gardenTemplate.agriculture.crops.map((crop) => crop.id), ["vegetables", "herbs"], "Garden template must persist both current crop choices without Reforged content");
-  assert.deepEqual(
-    fieldTemplate.agriculture.crops.map((crop) => crop.outputQty),
-    agricultureDefaultCrops("field").map((crop) => crop.outputQty),
-    "Field template and fallback defaults must share one campaign yield scale"
-  );
-  assert.deepEqual(
-    gardenTemplate.agriculture.crops.map((crop) => crop.outputQty),
-    agricultureDefaultCrops("garden").map((crop) => crop.outputQty),
-    "Garden template and fallback defaults must share one campaign yield scale"
-  );
+  assert.deepEqual(fieldTemplate.agriculture.crops.map(({ id, outputQty }) => [id, outputQty]),
+    [["grain", 960], ["plant-fiber", 320], ["animal-feed", 240]], "Field must use the current catalog crops and yields");
+  assert.deepEqual(gardenTemplate.agriculture.crops.map(({ id, outputQty }) => [id, outputQty]),
+    [["vegetables", 480], ["fruits", 360], ["herbs", 80]], "Garden must use the current catalog crops and yields");
+  for (const [kind, template] of [["field", fieldTemplate], ["garden", gardenTemplate]]) {
+    for (const crop of agricultureDefaultCrops(kind)) {
+      assert.equal(template.agriculture.crops.find((row) => row.id === crop.id)?.outputQty, crop.outputQty,
+        `${kind} and its fallback must agree on the yield of ${crop.id}`);
+    }
+  }
 
   const templateSource = fs.readFileSync(new URL("../../templates/parts/building-editor/agriculture.hbs", import.meta.url), "utf8");
   const editorSource = fs.readFileSync(new URL("../apps/editors/building-editor.js", import.meta.url), "utf8");

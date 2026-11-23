@@ -5,6 +5,8 @@ import { transportFixture, transportRequest, transportHarness } from "./fixtures
 import { prepareTransportContext, prepareTransportOptions } from "../apps/domains/transport-context.js";
 import { availableAuthorityMarkets, authorityMarketQuote } from "../apps/market/authority-context.js";
 import { normalizeSkyholdData } from "../data/normalizers.js";
+import { DEFAULT_SKYHOLD_DATA } from "../data/defaults/default-skyhold-data.js";
+import { BASE_HOLDING } from "../data/schema/base-holding.js";
 import { ensureTransportState } from "../data/transport/state.js";
 import { transportServicesShareFleet } from "../engines/transport/service-identity.js";
 import { diagnoseHiredRouteFailure } from "../engines/transport/router.js";
@@ -132,6 +134,8 @@ import { applyShipHomePlacement, shipHomeLocationContext } from "../apps/domains
     regions[i].marketLinks = links;
   }
   const data = normalizeSkyholdData({
+    meta: { ...DEFAULT_SKYHOLD_DATA.meta },
+    holdings: [structuredClone(BASE_HOLDING)],
     catalog: {
       eventRegions: regions,
       marketEconomy: structuredClone(marketPack.content?.marketEconomy ?? networkPack.content?.marketEconomy),
@@ -168,6 +172,8 @@ import { applyShipHomePlacement, shipHomeLocationContext } from "../apps/domains
 
   // 5. Diagnostic message pinpoints mode mismatch on link (and legacy marketAirshipOnly no longer blocks when modes allow caravan)!
   const blockedData = normalizeSkyholdData({
+    meta: { ...DEFAULT_SKYHOLD_DATA.meta },
+    holdings: [structuredClone(BASE_HOLDING)],
     catalog: {
       eventRegions: [
         { value: "home", label: "Риюд", countryId: "novand", marketTransportModes: ["airship"], marketLinks: [{ regionId: "port", distanceKm: 200, ursCost: 1, modes: ["airship"] }] },

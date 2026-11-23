@@ -4,6 +4,7 @@ import { normalizeMarketEconomy } from "../data/market/economy.js";
 import { normalizeMarketOffer } from "../data/market/market-catalog.js";
 import { normalizeEventRegionOptions } from "../data/random-events.js";
 import { normalizeSkyholdData } from "../data/normalizers.js";
+import { DEFAULT_SKYHOLD_DATA } from "../data/defaults/default-skyhold-data.js";
 import { composeMarketLocation, effectiveMarketLocations, marketLocationFactors } from "../engines/market/composition.js";
 import { allocateQuoteToMerchantProviders, applyCarrierToLogistics, carrierProvidersForRoute, merchantProvidersForCountry } from "../engines/market/providers.js";
 import { normalizeResourceCatalogRow } from "../core/resources.js";
@@ -290,7 +291,7 @@ assert.equal(adjustedLogistics.capacityLoad, 150, "carrier capacity factor must 
 assert.equal(adjustedLogistics.carrierLabel, "Быстрые воздушные линии");
 
 const normalizedLegacy = normalizeSkyholdData({
-  meta: { schemaVersion: 65 },
+  meta: { ...DEFAULT_SKYHOLD_DATA.meta },
   holdings: [{ id: "legacy-holding", name: "Старое поселение", type: "settlement", overview: { region: "legacy-region" }, storage: { moneyCopper: 123 } }],
   catalog: {
     buildings: [],
@@ -298,7 +299,7 @@ const normalizedLegacy = normalizeSkyholdData({
     markets: [{ id: "obsolete-market", label: "Старый рынок", offers: [] }],
     eventRegions: [{ value: "legacy-region", label: "Старый регион", marketPriceFactor: 1.2 }]
   }
-});
+}, { fromVersion: 65 });
 assert.deepEqual(normalizedLegacy.catalog.markets, [], "schema 66 must discard legacy provider markets instead of migrating them");
 assert.equal(normalizedLegacy.catalog.resources[0].id, "legacy-resource", "discarding markets must not remove unrelated catalog content");
 assert.equal(normalizedLegacy.holdings[0].storage.moneyCopper, 123, "discarding markets must not alter settlement storage");

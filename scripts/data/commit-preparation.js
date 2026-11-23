@@ -1,5 +1,6 @@
-import { migrateData, normalizeCatalogPartition, normalizeHoldingsPartition, reconcileHoldingRegions } from "./normalizers.js";
+import { normalizeSkyholdData, normalizeCatalogPartition, normalizeHoldingsPartition, reconcileHoldingRegions } from "./normalizers.js";
 import { SKYHOLD_SCHEMA_VERSION } from "./schema-version.js";
+import { assertSupportedWorldData } from "./storage-format.js";
 import { clone, toNumber } from "./utils.js";
 
 export const COMMIT_SCOPES = Object.freeze({
@@ -17,13 +18,14 @@ export function prepareSkyholdCommit(data, {
   baseRevision = data?.meta?.revision,
   now = new Date().toISOString()
 } = {}) {
+  assertSupportedWorldData(data);
   const requestedScope = normalizeCommitScope(scope);
   const fromVersion = Math.max(0, toNumber(data?.meta?.schemaVersion, SKYHOLD_SCHEMA_VERSION));
   let effectiveScope = requestedScope;
   let next;
 
   if (requestedScope === COMMIT_SCOPES.BOTH) {
-    next = migrateData(data);
+    next = normalizeSkyholdData(data);
   } else if (requestedScope === COMMIT_SCOPES.HOLDINGS) {
     next = {
       ...data,

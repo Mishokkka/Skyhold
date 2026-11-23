@@ -12,6 +12,7 @@ import { marketDemandKey } from "../data/market/demand-state.js";
 import { resourceBatchAvailableToInternalDemand } from "../core/resource-batches.js";
 import { bindSharedMarkets, marketStateFor, sharedMarketEventTenday } from "../data/market/shared-context.js";
 import { normalizeSkyholdData } from "../data/normalizers.js";
+import { DEFAULT_SKYHOLD_DATA } from "../data/defaults/default-skyhold-data.js";
 
 const failures = [];
 async function check(name, test) {
@@ -141,7 +142,8 @@ await check("R6 partial external sales recover demand before the last arrival", 
 
 await check("R6 recovery dates survive shared-clock advancement and calendar step size", () => {
   function scenario(steps, reverse) {
-    const data = { meta: { sharedMarkets: { enabled: true, clockTenday: 0, demand: {}, stock: {} } }, holdings: [holding("left"), holding("right")] };
+    const data = { meta: { ...DEFAULT_SKYHOLD_DATA.meta, sharedMarkets: { enabled: true, clockTenday: 0, demand: {}, stock: {} } },
+      holdings: [holding("left"), holding("right")], catalog: {} };
     bindSharedMarkets(data);
     const state = ensureTransportState(data);
     for (const [index, h] of data.holdings.entries()) {

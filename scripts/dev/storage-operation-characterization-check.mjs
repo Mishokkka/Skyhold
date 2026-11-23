@@ -2,11 +2,12 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import assert from "node:assert/strict";
 import { createStorageOperationExecutor } from "../apps/storage-operation-executor.js";
+import { TEMPLATE_CATALOG_VERSION } from "../data/building-templates.js";
 import { clone } from "../data/utils.js";
 import { createSkyholdSplitStorage } from "../data/split-storage.js";
 import { prepareSkyholdCommit } from "../data/commit-preparation.js";
 import { makeStorageCommitMeta } from "../data/storage-commit.js";
-import { migrateData } from "../data/normalizers.js";
+import { normalizeSkyholdData, SKYHOLD_SCHEMA_VERSION } from "../data/normalizers.js";
 import { COMMAND_ERROR } from "../data/command-result.js";
 import { MODULE_ID, SETTING_CATALOG, SETTING_DATA, SETTING_HOLDINGS, SETTING_META } from "../data/constants.js";
 
@@ -892,7 +893,11 @@ export async function checkStorageOperationCharacterization() {
         ...["withdrawResource", "depositItem"].flatMap(type =>
           ["holdings", "completion", "veto", "newer", "unreadable", "unverified"].map(blocked => [type, blocked]))
       ]) {
-        const root = migrateData({ meta: { revision: 8 }, holdings: [makeHolding()], catalog: {} });
+        const root = normalizeSkyholdData({
+          meta: { schemaVersion: SKYHOLD_SCHEMA_VERSION, templateCatalogVersion: TEMPLATE_CATALOG_VERSION, revision: 8 },
+          holdings: [makeHolding()],
+          catalog: {}
+        });
         const settings = new Map([[SETTING_META, root.meta], [SETTING_HOLDINGS, root.holdings],
           [SETTING_CATALOG, root.catalog], [SETTING_DATA, root]]);
         let readable = true;

@@ -90,12 +90,10 @@ export function checkTransactionScopeCharacterization() {
   assert.deepEqual(failures, [], `every direct SkyholdData transaction needs an explicit, locally auditable scope:\n${failures.join("\n")}`);
 
   const contentImporter = readFileSync(path.join(root, "scripts/apps/editors/content-pack-importer.js"), "utf8");
-  const laputaImporter = readFileSync(path.join(root, "scripts/apps/editors/laputa-migration-importer.js"), "utf8");
   const holdingService = readFileSync(path.join(root, "scripts/data/holding-service.js"), "utf8");
   const store = readFileSync(path.join(root, "scripts/data/store.js"), "utf8");
   const regionEditor = readFileSync(path.join(root, "scripts/apps/editors/region-catalog-editor.js"), "utf8");
   assert.match(contentImporter, /content-pack:\$\{operationId\}`\s*,\s*scope:\s*["']both["']/, "content-pack import must retain both-partition scope");
-  assert.match(laputaImporter, /reason:\s*`laputa-economy-migration:[^`]+`[\s\S]{0,160}scope:\s*["']both["']/, "Laputa migration must retain both-partition scope");
   assert.match(holdingService, /holding-service:update-data["']\s*,\s*scope:\s*["']both["']/, "generic HoldingService updates must retain both-partition scope");
   assert.match(store, /reason:\s*["']import-laputa["']\s*,\s*scope:\s*COMMIT_SCOPES\.BOTH/, "Laputa import must retain both-partition scope");
   assert.match(regionEditor, /reason:\s*["']region-catalog:delete["']\s*,\s*scope:\s*["']both["']/, "region deletion must retain both-partition scope because it rewrites holding references");

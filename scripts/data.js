@@ -15,6 +15,7 @@ export * from "./data/holding-service.js";
 export * from "./data/laputa-import.js";
 export * from "./data/laputa-service.js";
 export * from "./data/normalizers.js";
+export { normalizeSkyholdData as migrateData } from "./data/normalizers.js";
 export * from "./data/player-write-guard.js";
 export * from "./data/socket.js";
 export * from "./data/split-storage.js";
