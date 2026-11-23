@@ -24,7 +24,12 @@ const { SkyholdApp } = await import("../apps/skyhold-app.js");
 const { assertSupportedWorldData } = await import("../data/storage-format.js");
 await import("../main.js");
 await hooks.get("init")();
+hooks.get("ready")();
 assert.equal(module.api, game.fblSkyhold, "both public API entrypoints share the same opener");
+assert.equal(typeof hooks.get("fblSkyholdDataChanged"), "function", "ready must finish installing the module hooks");
+for (const hook of ["dropCanvasData", "activateNote", "drawNote", "destroyNote", "hoverNote"]) {
+  assert.equal(hooks.has(hook), false, "Skyhold must leave canvas drops and Note interactions to Foundry");
+}
 
 const originalOpen = SkyholdApp.open;
 const originalError = console.error;

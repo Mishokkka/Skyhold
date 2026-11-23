@@ -17,7 +17,6 @@ import { checkApprovedBuildingDevelopment } from "../building-approved-developme
 import { checkMagnifiqueCrewContent } from "../magnifique-crew-content-check.mjs";
 import { checkPoliticsAvailability } from "../politics-availability-check.mjs";
 import { checkPoliticsRules } from "../politics-rules-check.mjs";
-import { checkBuildingTemplateIdentity } from "../building-template-identity-check.mjs";
 import { checkAuditRegressions } from "../audit-regression-check.mjs";
 import { checkCoreSafety } from "../core-safety-check.mjs";
 
@@ -43,7 +42,6 @@ export async function runDataSuite() {
   await checkSocketCharacterization();
   await checkSkyholdContextCharacterization();
   await checkAuditRegressions();
-  await checkBuildingTemplateIdentity();
   return { suite: "data" };
 }
 

@@ -10,6 +10,7 @@ import { selectionSummary, syncSelectionSummary } from "../apps/common/selection
 import { DisclosureState } from "../apps/common/disclosure-state.js";
 import { workerProfileEditorContext } from "../apps/editors/worker-profile-editor.js";
 import { residentTraitTooltip, residentTraitVisibleCount } from "../apps/common/resident-trait-chips.js";
+import { BuildingEventDomain } from "../apps/domains/events/building-events.js";
 
 assert.equal(residentTraitTooltip({ name: " Лидер ", description: " Ведёт за собой. " }), "Лидер\nВедёт за собой.");
 assert.equal(residentTraitTooltip({ name: "<Пользовательская черта>" }), "<Пользовательская черта>", "custom names remain text, including names without a description");
@@ -138,6 +139,47 @@ assert.equal(beforeSample.replace(/^[\s\S]*?{{#each currentBuildings}}\n/, "").r
   "the current-card comparison must match production markup, with only inert hooks changed");
 assert.doesNotMatch(beforeSample, /\sdata-action=|\sdraggable=|\sdata-building-construction-crew\b/,
   "review samples must not dispatch building mutations or drag operations");
+
+{
+  const holding = { buildings: { list: [{ id: "mill" }, { id: "garden" }] } };
+  let canEdit = true;
+  let writes = 0;
+  const manager = {
+    ...BuildingEventDomain,
+    _canEditBuildings: () => canEdit,
+    _updateActiveHolding(updater, options) {
+      assert.equal(options.reason, "building:reorder");
+      writes++;
+      return updater(holding);
+    },
+    requestRender() {}
+  };
+  const payload = new Map();
+  const drag = {
+    get types() { return [...payload.keys()]; },
+    getData: type => payload.get(type) ?? "",
+    setData: (type, value) => payload.set(type, value)
+  };
+  manager._onBuildingDragStart({ currentTarget: { dataset: { buildingId: "mill" } }, dataTransfer: drag });
+  assert.deepEqual([...payload.values()], ["mill"], "sorting needs only the building ID");
+  assert.equal(drag.getData("text/plain"), "", "sorting cannot emit a Foundry canvas drag payload");
+  assert.equal(drag.effectAllowed, "move");
+  let accepted = false;
+  const target = { dataset: { buildingId: "garden" } };
+  manager._onBuildingDragOver({
+    currentTarget: target, dataTransfer: { types: drag.types, getData: () => "" },
+    preventDefault() { accepted = true; }
+  });
+  assert.equal(accepted, true, "a building reorder is offered while drag data is in protected mode");
+  const drop = { currentTarget: target, dataTransfer: drag, preventDefault() {}, stopPropagation() {} };
+  canEdit = false;
+  await manager._onBuildingDrop(drop);
+  assert.equal(writes, 0, "read-only access cannot reorder cards");
+  canEdit = true;
+  await manager._onBuildingDrop(drop);
+  assert.equal(writes, 1);
+  assert.deepEqual(holding.buildings.list.map(row => row.id), ["garden", "mill"]);
+}
 
 const previous = { foundry: globalThis.foundry, game: globalThis.game, Handlebars: globalThis.Handlebars,
   setTimeout: globalThis.setTimeout, clearTimeout: globalThis.clearTimeout, ui: globalThis.ui };

@@ -22,7 +22,6 @@ import { rerenderLoadedSkyholdApps } from "./apps/lazy-apps.js";
 import { executeStorageOperation } from "./apps/storage-operation-executor.js";
 import { executeConstructionOperation } from "./apps/construction-operation-executor.js";
 import { detectCalendaria, getCalendariaSnapshot, getLastCalendariaSnapshot, installCalendariaBridge } from "./integrations/calendaria-bridge.js";
-import { installSceneNotesIntegration } from "./integrations/scene-notes.js";
 import { ensureSkyholdTemplateGroup } from "./apps/template-preload.js";
 import {
   getUniqueBuildingRegistration,
@@ -228,8 +227,6 @@ Hooks.once("ready", () => {
         console.error("FBL Skyhold | Socket payload failed", error);
       }
     });
-
-    installSceneNotesIntegration();
 
     Hooks.on("fblSkyholdDataChanged", () => {
       rerenderLoadedSkyholdApps({ skipFocused: true });

@@ -20,7 +20,6 @@ CSS is split by semantic ownership. Edit the narrowest owner file; never add ver
 - `parts/skyhold-ui-kit.css` — reusable layout helpers and primitives (see UI Kit below).
 - `parts/skyhold-core.css` — base shell, loading overlay, cards, tables, floating tooltips (`.fbls-floating-tooltip`).
 - `parts/skyhold-current-owners.css` — index for `parts/current/*`.
-- `parts/skyhold-integrations.css` — integration surfaces outside the app shell (scene-note building tooltips).
 
 ### Main Window & Manager Tabs
 - `parts/skyhold-header.css` — settlement header and authority strip (holding selector, Calendaria, population, morale, development, faith, reputation, defense statline).
