@@ -85,9 +85,12 @@ export const BUILDING_TEMPLATES_UNIQUE = [
     "moraleDelta": 0,
     "workerMoraleDelta": 0,
     "upkeep": 0,
+    "wageDailyCopper": 0,
+    "baseUpkeepMonthlyCopper": 18,
+    "operatingUpkeepMonthlyCopper": 0,
     "effect": "ЛАВКА РЕДКОСТЕЙ ФАСТИ ДИ ОТО ОТКРОЕТСЯ ПОСЛЕ ВКЛАДА В 3999.9 ЗМ",
     "notes": "Особое здание кампании Лапуты. Вклад берётся из денег владения.",
-    "templateVersion": 12,
+    "templateVersion": 19,
     "visibility": "gm"
   },
   {
@@ -154,7 +157,12 @@ export const BUILDING_TEMPLATES_UNIQUE = [
     "storage": {
       "capacity": 200,
       "security": 2,
-      "quality": 1
+      "quality": 1,
+      "profileLabel": "Скоропортящаяся пища",
+      "profilePerishableFood": true,
+      "profileCapacityMultiplier": 0.5,
+      "profileRequiresStaff": false,
+      "shelfLifeMultiplier": 2
     },
     "religion": {
       "religious": false,
@@ -166,9 +174,12 @@ export const BUILDING_TEMPLATES_UNIQUE = [
     "moraleDelta": 0,
     "workerMoraleDelta": 0,
     "upkeep": 0,
+    "wageDailyCopper": 0,
+    "baseUpkeepMonthlyCopper": 0,
+    "operatingUpkeepMonthlyCopper": 0,
     "effect": "Небольшой общий склад без производства, дохода и развития.",
     "notes": "Сюжетное хранилище Лапуты. Характеристики хранения задаёт этот шаблон.",
-    "templateVersion": 12,
+    "templateVersion": 19,
     "visibility": "public"
   }
 ];

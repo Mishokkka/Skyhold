@@ -13,14 +13,12 @@ import { sourceMaterialState } from "../../engines/economy/construction-stages.j
 import { validProductionTiming } from "../../engines/economy/production-timing.js";
 import { MAINTENANCE_WORK_SOURCE_ID, MAINTENANCE_WORK_FUNCTION_ID, buildWorkAllocationTargets } from "../../data/work-allocations.js";
 import { buildingLaborMode, validateHybridLaborHolding } from "../../data/hybrid-labor.js";
-import { applyStandardBuildingText } from "./catalog-standard-text.js";
 import { normalizeCatalogPartition } from "../../data/normalizers.js";
 import { normalizeBuilding } from "../../data/normalizers/building.js";
 
 export const BUILDING_CATALOG_MIGRATION_NAMESPACE = "fbl-skyhold.buildings.catalog";
 export const BUILDING_CATALOG_MIGRATION_VERSION = TEMPLATE_CATALOG_VERSION;
 const EMPTY_MIGRATION_COUNTS = Object.freeze({ direct: 0, custom: 0, deprecatedUnmapped: 0, changed: 0, unchanged: 0 });
-const TEXT_FIELD_LABELS = Object.freeze({ description: "Описание", effect: "Эффект", notes: "Заметки" });
 
 export const PRODUCTION_STATE_FIELDS = Object.freeze([
   "active", "autoCollect", "storageRoomId", "pendingQty", "workProgressUnits",
@@ -111,7 +109,7 @@ function canCarryProductionWork(prior, target) {
   if (!target) return false;
   const normalized = [prior, target].map((line) => {
     const building = { productionLines: [clone(line)] };
-    normalizeBuilding(building, { mode: "load", destructive: false, preserveTemplateMechanics: true });
+    normalizeBuilding(building, { mode: "load", preserveTemplateMechanics: true });
     return building.productionLines[0];
   });
   const waiting = prior.waitingBatches ?? [];
@@ -373,7 +371,7 @@ function migrateBuildingInstance(source, targetTemplate, targetId, people, issue
     if (!person || !workerAdmission(next, person).eligible) overrides.add(workerId);
   }
   next.workerAdmissionOverrideIds = [...overrides];
-  normalizeBuilding(next, { mode: "load", destructive: false, preserveTemplateMechanics: true, people });
+  normalizeBuilding(next, { mode: "load", preserveTemplateMechanics: true, people });
   // Contents are player inventory, not part of the catalog revision.
   if (own(source, "contents")) next.contents = clone(source.contents);
   return next;
@@ -429,8 +427,7 @@ export function planBuildingCatalogMigration({
   currentData = {},
   operationId = "",
   createdAt = new Date().toISOString(),
-  replaceCatalog = false,
-  textOnly = false
+  replaceCatalog = false
 } = {}) {
   invariant(currentData && typeof currentData === "object", "source-data", "Данные мира для Preview отсутствуют.");
   invariant(text(operationId), "operation-id", "Preview миграции требует operationId.");
@@ -439,18 +436,15 @@ export function planBuildingCatalogMigration({
   invariant(source.templateCatalogVersion <= targetVersion, "source-version-newer", "Каталог мира новее этой версии модуля; перенос на старые правила запрещён.");
   invariant(source.templateCatalogVersion === targetVersion, "source-version-older",
     `Для каталога v${source.templateCatalogVersion} откройте мир в прежней версии Skyhold с поддержкой перехода на v${targetVersion}.`);
-  if (textOnly) return planStandardBuildingTextUpdate({ currentData, source, operationId, createdAt });
   const targetTemplates = DEFAULT_BUILDING_TEMPLATES;
   const legacyTargets = new Map(BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION.map((row) => [row.id, row]));
   const targetById = new Map(targetTemplates.map((template) => [text(template?.id), template]));
   invariant(targetById.size === targetTemplates.length, "target-catalog", "Целевой каталог содержит пустые или повторные ID.");
 
   const targetData = clone(currentData);
-  targetData.catalog = catalogTarget(currentData.catalog, targetById);
-  if (replaceCatalog) {
-    targetData.catalog.buildings = clone(targetTemplates);
-    targetData.catalog.deletedBuildingTemplateIds = [];
-  }
+  targetData.catalog = replaceCatalog
+    ? { ...clone(currentData.catalog ?? {}), buildings: clone(targetTemplates), deletedBuildingTemplateIds: [] }
+    : catalogTarget(currentData.catalog, targetById);
   const issues = [];
   const decisions = [];
   const savedById = new Map((currentData.catalog?.buildings ?? []).map((row) => [text(row.id), row]));
@@ -526,38 +520,13 @@ export function planBuildingCatalogMigration({
   return completeMigrationPreview({ source, targetData, targetVersion, operationId, createdAt, counts, rows, issues, decisions });
 }
 
-function planStandardBuildingTextUpdate({ currentData, source, operationId, createdAt }) {
-  const targetData = clone(currentData);
-  const counts = { ...EMPTY_MIGRATION_COUNTS };
-  const textUpdates = [];
-  const update = (row, templateId, holding = null) => {
-    const changes = applyStandardBuildingText(row, templateId);
-    const label = text(row?.name) || text(templateId);
-    const location = holding ? (text(holding.name) || text(holding.id)) : "Шаблон";
-    for (const change of changes) {
-      textUpdates.push({ ...change, label, location, fieldLabel: TEXT_FIELD_LABELS[change.field] });
-    }
-    return changes.length > 0;
-  };
-  for (const template of targetData.catalog?.buildings ?? []) update(template, template.id);
-  for (const holding of targetData.holdings ?? []) {
-    for (const building of holding.buildings?.list ?? []) {
-      const changed = update(building, building.templateId, holding);
-      counts[changed ? "changed" : "unchanged"] += 1;
-    }
-  }
-  return completeMigrationPreview({ source, targetData, targetVersion: source.templateCatalogVersion, operationId, createdAt,
-    counts, textOnly: true, textUpdates });
-}
-
 function completeMigrationPreview({ source, targetData, targetVersion, operationId, createdAt, counts,
-  rows = [], issues = [], decisions = [], textOnly = false, textUpdates = [] }) {
+  rows = [], issues = [], decisions = [] }) {
   const targetCatalogHash = stableDataHash(targetData.catalog ?? {});
   const targetHoldingsHash = stableDataHash(targetData.holdings ?? []);
   const catalogChanged = source.catalogHash !== targetCatalogHash;
   const holdingsChanged = source.holdingsHash !== targetHoldingsHash;
-  const versionChanged = source.templateCatalogVersion !== targetVersion;
-  const hasChanges = catalogChanged || holdingsChanged || versionChanged;
+  const hasChanges = catalogChanged || holdingsChanged;
   const marker = {
     namespace: BUILDING_CATALOG_MIGRATION_NAMESPACE,
     version: BUILDING_CATALOG_MIGRATION_VERSION,
@@ -572,14 +541,12 @@ function completeMigrationPreview({ source, targetData, targetVersion, operation
   };
   targetData.meta = {
     ...clone(targetData.meta ?? {}),
-    ...(textOnly ? {} : { templateCatalogVersion: targetVersion }),
+    templateCatalogVersion: targetVersion,
     buildingCatalogMigration: marker
   };
   const blockingIssues = issues.map((issue) => ({ ...issue }));
   return {
     version: BUILDING_CATALOG_MIGRATION_VERSION,
-    textOnly,
-    textUpdates,
     operationId: text(operationId),
     createdAt: text(createdAt),
     source,
@@ -593,10 +560,10 @@ function completeMigrationPreview({ source, targetData, targetVersion, operation
     preview: {
       sourceTemplateCatalogVersion: source.templateCatalogVersion,
       targetTemplateCatalogVersion: targetVersion,
-      catalogTemplates: textOnly ? (targetData.catalog?.buildings?.length ?? 0) : DEFAULT_BUILDING_TEMPLATES.length,
-      customCatalogTemplates: textOnly ? 0 : targetData.catalog.buildings.length - DEFAULT_BUILDING_TEMPLATES.length,
+      catalogTemplates: DEFAULT_BUILDING_TEMPLATES.length,
+      customCatalogTemplates: targetData.catalog.buildings.length - DEFAULT_BUILDING_TEMPLATES.length,
       holdings: (targetData.holdings ?? []).length,
-      instances: textOnly ? counts.changed + counts.unchanged : rows.length,
+      instances: rows.length,
       changedInstances: counts.changed,
       unchangedInstances: counts.unchanged,
       directInstances: counts.direct,
@@ -604,8 +571,7 @@ function completeMigrationPreview({ source, targetData, targetVersion, operation
       unresolvedInstances: counts.deprecatedUnmapped,
       blockingIssues: blockingIssues.length,
       catalogChanged,
-      holdingsChanged,
-      versionChanged
+      holdingsChanged
     },
     targetData
   };
@@ -621,9 +587,9 @@ export function applyBuildingCatalogMigration({ currentData = {}, plan = null, o
   }
   invariant(plan.canApply === true, "plan-blocked", "Preview содержит блокирующие проблемы.", { issues: plan.blockingIssues ?? [] });
   invariant((plan.blockingIssues ?? []).length === 0, "plan-blocked", "Не все решения Preview приняты.");
-  const targetVersion = plan.textOnly ? whole(plan.source?.templateCatalogVersion) : TEMPLATE_CATALOG_VERSION;
-  invariant(targetVersion === TEMPLATE_CATALOG_VERSION && whole(plan?.target?.templateCatalogVersion) === targetVersion,
-    "target-version-disabled", "Применение этой редакции каталога ещё не включено.");
+  const targetVersion = TEMPLATE_CATALOG_VERSION;
+  invariant(whole(plan?.target?.templateCatalogVersion) === targetVersion,
+    "target-version-disabled", "Целевая версия каталога не совпадает с текущей версией модуля.");
   invariant(stableDataHash(plan?.targetData?.catalog ?? {}) === text(plan?.target?.catalogHash)
     && stableDataHash(plan?.targetData?.holdings ?? []) === text(plan?.target?.holdingsHash),
   "prepared-data-changed", "Подготовленные данные изменились после Preview; требуется новый расчёт.");

@@ -62,7 +62,11 @@ export function createShipSocketApi({ executeShipOperation, getData, writeTimeou
       result = await executeShipOperation(payload.operation, { userId: senderId, remote: true });
       command = commandSuccess({ operationId: payload.operationId, revision: getData()?.meta?.revision });
     } catch (error) {
-      command = commandFailure({ operationId: payload.operationId, code: error.code ?? COMMAND_ERROR.EXECUTION_FAILED, message: error.message, revision: getData()?.meta?.revision });
+      let revision = error?.revision ?? null;
+      if (revision === null) {
+        try { revision = getData()?.meta?.revision ?? null; } catch { revision = null; }
+      }
+      command = commandFailure({ operationId: payload.operationId, code: error.code ?? COMMAND_ERROR.EXECUTION_FAILED, message: error.message, revision });
     }
     game.socket?.emit?.(`module.${MODULE_ID}`, {
       type: "playerShipOperationResponse", requestId: payload.requestId, operationId: payload.operationId,

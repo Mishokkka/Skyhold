@@ -6,25 +6,6 @@ import { normalizeWorkerTypeSet } from "./building.js";
 import { normalizeStaffAppointment } from "../hybrid-labor.js";
 import { clearPersonFromAssignments } from "../resident-assignments.js";
 
-const OBSOLETE_RESIDENT_SKILL_VALUES = new Set([
-  "-", "нет", "none",
-  "builder", "trader", "scribe", "healer", "priest", "guard", "sailor", "engineer",
-  "разнорабочий", "силач", "ловкач", "умелец", "переговорщик", "строитель", "механик", "бригадир",
-  "ремесленник", "посыльный", "управленец", "мастеровой", "агент", "старшина", "полевой вожак", "мастер на все руки"
-]);
-
-export function legacyResidentTraitFromSkill(value = "") {
-  const raw = String(value ?? "").trim();
-  return raw && !OBSOLETE_RESIDENT_SKILL_VALUES.has(raw.toLowerCase()) ? raw : "";
-}
-
-function appendUniqueTrait(value = "", addition = "") {
-  const items = String(value ?? "").split(/[,;\n]/).map((item) => item.trim()).filter(Boolean);
-  const candidate = String(addition ?? "").trim();
-  if (candidate && !items.some((item) => item.toLowerCase() === candidate.toLowerCase())) items.push(candidate);
-  return items.join(", ");
-}
-
 /**
  * Remove deletion-related workforce locks and assignments from a caller-owned holding draft.
  * The resident row is normally already removed; any retained matching row also loses its home.
@@ -94,12 +75,10 @@ export function normalizeConstructionCrew(crew, index = 0) {
 }
 
 export function normalizePerson(person) {
-  const legacyTrait = legacyResidentTraitFromSkill(person?.skill);
   person.id = String(person.id || makeId("person"));
   person.name = String(person.name ?? "");
   person.role = String(person.role ?? person.workplace ?? person.work ?? "");
   person.workAssignment = String(person.workAssignment ?? "");
-  delete person.skill;
   person.sex = String(person.sex ?? "");
   person.race = String(person.race ?? "");
   person.subrace = String(person.subrace ?? "");
@@ -112,11 +91,11 @@ export function normalizePerson(person) {
   person.belief = normalizeBelief(person.belief ?? "");
   person.background = String(person.background ?? "");
   person.appearance = String(person.appearance ?? "");
-  person.traitsText = appendUniqueTrait(
-    person.traitsText ?? (Array.isArray(person.traits) ? person.traits.join(", ") : ""),
-    legacyTrait
-  );
-  delete person.workerTypeOverride;
+  person.traitsText = String(person.traitsText ?? (Array.isArray(person.traits) ? person.traits.join(", ") : ""))
+    .split(/[,;\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .join(", ");
   person.home = String(person.home ?? "");
   person.salary = toNumber(person.salary, 0);
   person.salaryModifier = toNumber(person.salaryModifier, 0);

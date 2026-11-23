@@ -42,7 +42,6 @@ export const NavigationEventActions = {
     "special-subtab": "_onSpecialSubtab",
     "open-market": "_onOpenMarket",
     "open-banks": "_onOpenBanks",
-    "shared-market-preview": "_onSharedMarketPreview",
     "open-politics": "_onOpenPolitics",
     "open-politics-balance": "_onOpenPoliticsBalance",
     "roll-holding-stat": "_onRollHoldingStat",
@@ -101,14 +100,6 @@ async _onOpenBanks(event) {
   event.stopPropagation();
   if (!this.activeHoldingId) return;
   await openBankApp({ holdingId: this.activeHoldingId });
-},
-
-async _onSharedMarketPreview(event) {
-  event.preventDefault();
-  event.stopPropagation();
-  if (!game.user?.isGM) return;
-  const { showSharedMarketMigration } = await import("../../market/shared-market-migration-dialog.js");
-  await showSharedMarketMigration();
 },
 
 _onOpenCrewEditor(event) {

@@ -4,7 +4,6 @@ import { createHolding } from "../data/holding-factory.js";
 import { addHoldingToData, deleteHoldingFromData } from "../data/holding-operations.js";
 import { ensureTransportState } from "../data/transport/state.js";
 import { bindSharedMarkets } from "../data/market/shared-context.js";
-import { previewSharedMarketMigration } from "../data/market/shared-migration.js";
 import { marketDemandKey, marketDemandRecoveryDuration } from "../data/market/demand-state.js";
 import { normalizeSkyholdData } from "../data/normalizers.js";
 import { prepareMarketAuthorityContext, authorityMarketLogistics } from "../apps/market/authority-context.js";
@@ -149,8 +148,8 @@ await check("R3 undated shared markets keep a new holding's common clock through
     created.gm.playersCanUseStorage = true; created.gm.modifiers.marketConnectionsLevel = 6;
     created.storage = structuredClone(f.holding.storage);
     addHoldingToData(f.data, created);
-    const prepared = previewSharedMarketMigration(f.data);
-    assert.equal(prepared.ok, true); f.data.meta.sharedMarkets = prepared.prepared;
+    delete f.data.meta.sharedMarkets;
+    bindSharedMarkets(f.data);
     const sim = simulation(f.data), holding = sim.holding(created.id);
     assert.equal(holding.special.transportV2.clockOffsetQd, 400);
     assert.equal(sim.data.meta.sharedMarkets.clockTenday, 10);

@@ -9,7 +9,7 @@ import { advanceTransportShipments } from "../workflows/transport/orders.js";
 import { reserveMarketDemand } from "../engines/market/demand.js";
 import { planMarketOutboundSale } from "../engines/market/outbound.js";
 import { marketDemandKey } from "../data/market/demand-state.js";
-import { bindSharedMarkets, sharedMarketEventTenday } from "../data/market/shared-context.js";
+import { bindSharedMarkets, marketStateFor, sharedMarketEventTenday } from "../data/market/shared-context.js";
 import { prepareTransportContext } from "../apps/domains/transport-context.js";
 import { prepareMarketAuthorityContext } from "../apps/market/authority-context.js";
 import { createTransportOperationExecutor } from "../apps/transport-operation-executor.js";
@@ -29,7 +29,7 @@ const service = (extra = {}) => ({ id: "carrier", from: "home", to: "a", kind: "
 const lot = (extra = {}) => ({ lotId: "wood", resourceId: "wood", qty: 10, unitLoad: 4000, unitCopper: 6, ageQd: 0, ...extra });
 function fixture() {
   const f = worldMarketFixture(); f.holding.special.ships.list = []; f.holding.people.list = [];
-  f.holding.storage.resources = []; ensureTransportState(f.data);
+  f.holding.storage.resources = []; ensureTransportState(f.data); bindSharedMarkets(f.data);
   const workflow = new SkyholdWorkflowService(); workflow._postTendaySummaryChat = async () => {}; workflow.requestRender = () => {};
   return { ...f, workflow };
 }
@@ -89,14 +89,14 @@ await check("incoming resource lots with pre-aged arrivals keep their freshness 
 });
 
 async function period(f) {
-  let stored = structuredClone(f.data);
+  let stored = bindSharedMarkets(structuredClone(f.data));
   const skipped = Symbol("skip");
-  SkyholdData.view = () => stored;
+  SkyholdData.view = () => bindSharedMarkets(stored);
   SkyholdData.skipTransaction = value => ({ [skipped]: true, value });
   SkyholdData.updateHolding = async (id, updater) => {
-    const draft = structuredClone(stored), result = await updater(draft.holdings.find(row => row.id === id), draft);
+    const draft = bindSharedMarkets(structuredClone(stored)), result = await updater(draft.holdings.find(row => row.id === id), draft);
     if (result?.[skipped]) return result.value;
-    draft.meta.revision++; stored = draft; return result;
+    draft.meta.revision++; stored = bindSharedMarkets(draft); return result;
   };
   const before = structuredClone(stored);
   const prepared = await f.workflow._prepareTendayOperation({ holdingId: f.holding.id, qd: 40, dataView: stored,
@@ -127,7 +127,7 @@ await check("C1 unchanged connection carries actual warehouse age through real p
   assert.equal(result.received.reduce((sum, row) => sum + row.qty, 0), 7);
   assert.equal(result.spoiledQty, 1); assert.equal(result.insurancePaidCopper, 0);
   assert.equal(result.stages[1].receipts[0].cargo.find(row => row.lotId === "batch-7").ageQd, 19);
-  assert.equal(h.special.market.demand[marketDemandKey("a", "meat")].recoveryLots.reduce((n, row) => n + row.qty, 0), 7);
+  assert.equal(marketStateFor(h, "demand")[marketDemandKey("a", "meat")].recoveryLots.reduce((n, row) => n + row.qty, 0), 7);
 });
 
 await check("C2 receipt calendar includes hour and minute at the decade boundary", () => {
@@ -257,7 +257,7 @@ await check("B3 demand identity is preserved across FIFO cargo and partial recei
   assert.equal(cargo.length, 2);
   const order = sale(f, cargo, [service({ capacity: 8000 })]);
   advanceTransportShipments(f.data, f.holding, 2, f.workflow);
-  const demand = id => f.holding.special.market.demand[marketDemandKey("a", id)];
+  const demand = id => marketStateFor(f.holding, "demand")[marketDemandKey("a", id)];
   assert.equal(demand("buyer-a").consumedOutstanding, 2); assert.equal(demand("buyer-a").reservedDemand, 0);
   assert.equal(demand("buyer-b").reservedDemand, 2); assert.equal(demand("buyer-b").consumedOutstanding, 0);
   advanceTransportShipments(f.data, f.holding, 42, f.workflow);

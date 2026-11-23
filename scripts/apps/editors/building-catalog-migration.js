@@ -22,15 +22,13 @@ function errorText(error) {
   return byCode[String(error?.code ?? "")] ?? error?.message ?? String(error);
 }
 
-async function confirmApply(textOnly) {
-  const message = textOnly
-    ? "Обновятся поля, совпадающие с прежними стандартными текстами Школы и Банка. Перед записью будет создана копия для отката. Продолжить?"
-    : "Всё дерево шаблонов будет заменено утверждённым каталогом. Связанные постройки получат новые характеристики. Жители, казна, имущество, названия и состояния построек сохранятся. Старое общее обслуживание будет снято, его QD освободятся для назначения конкретным зданиям. Перед записью будет создана rollback-копия. Продолжить?";
+async function confirmApply() {
+  const message = "Всё дерево шаблонов будет заменено утверждённым каталогом. Связанные постройки получат новые характеристики. Жители, казна, имущество, названия и состояния построек сохранятся. Старое общее обслуживание будет снято, его QD освободятся для назначения конкретным зданиям. Перед записью будет создана rollback-копия. Продолжить?";
   const DialogV2 = foundry?.applications?.api?.DialogV2;
   if (DialogV2?.confirm) {
     return DialogV2.confirm({
       classes: ["fbl-skyhold"],
-      window: { title: textOnly ? "Применить обновление текстов" : "Обновить каталог зданий" },
+      window: { title: "Обновить каталог зданий" },
       content: `<p>${message}</p>`,
       modal: true
     });
@@ -39,23 +37,26 @@ async function confirmApply(textOnly) {
 }
 
 export class SkyholdBuildingCatalogMigration extends FloatingTooltipsMixin(RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2))) {
-  constructor({ owner = null, textOnly = false } = {}, options = {}) {
-    super(textOnly ? { id: "fbls-building-text-refresh", ...options,
-      window: { ...options.window, title: "Тексты Школы и Банка" } } : options);
+  constructor({ owner = null } = {}, options = {}) {
+    super(options);
     this.owner = owner;
-    this.textOnly = textOnly;
     this.plan = null;
     this.error = "";
     this.status = "";
-    this._preparePlan();
+    try {
+      this._preparePlan();
+    } catch (error) {
+      console.error("FBL Skyhold | Building catalog migration preview failed", error);
+      this.plan = null;
+      this.error = errorText(error);
+    }
     this._dataHookId = globalThis.Hooks?.on?.("fblSkyholdDataChanged", () => this._onDataChanged());
   }
 
   _preparePlan({ operationId = this.plan?.operationId || makeId("building-catalog-migration", 20) } = {}) {
     this.plan = planBuildingCatalogMigration({
       currentData: SkyholdData.get(),
-      replaceCatalog: !this.textOnly,
-      textOnly: this.textOnly,
+      replaceCatalog: true,
       operationId,
       createdAt: new Date().toISOString()
     });
@@ -81,8 +82,6 @@ export class SkyholdBuildingCatalogMigration extends FloatingTooltipsMixin(Rende
     }
     const plan = this.plan;
     const preview = plan?.preview ?? {};
-    const textUpdateCount = plan?.textUpdates?.length ?? 0;
-    const textUpdates = plan?.textUpdates?.slice(0, 80) ?? [];
     const issueRows = (plan?.blockingIssues ?? []).slice(0, 80).map((row) => ({
       ...row,
       label: `${row.buildingName || row.buildingId || "Здание"}: ${row.detail || row.code}`
@@ -91,10 +90,6 @@ export class SkyholdBuildingCatalogMigration extends FloatingTooltipsMixin(Rende
     return {
       ...context,
       preview,
-      textOnly: this.textOnly,
-      textUpdateCount,
-      textUpdates,
-      textUpdatesTruncated: textUpdateCount > textUpdates.length,
       error: this.error,
       status: this.status,
       canApply: game.user?.isGM === true && plan?.canApply === true,
@@ -148,7 +143,7 @@ export class SkyholdBuildingCatalogMigration extends FloatingTooltipsMixin(Rende
     // Confirm this exact preview; changes while the dialog is open must fail the
     // transaction's revision/hash checks, never silently apply a newer preview.
     const plan = this.plan;
-    if (!await confirmApply(plan.textOnly)) return;
+    if (!await confirmApply()) return;
     try {
       const result = await SkyholdData.transaction((data, { skip }) => {
         const applied = applyBuildingCatalogMigration({ currentData: data, plan, operationId: plan.operationId });
@@ -163,7 +158,6 @@ export class SkyholdBuildingCatalogMigration extends FloatingTooltipsMixin(Rende
         forceRollbackSnapshot: true
       });
       if (result?.alreadyApplied) this.status = "Эта операция уже была применена; повторной записи не было.";
-      else if (plan.textOnly) this.status = `Обновлено стандартных полей: ${plan.textUpdates.length}. Сохранена копия для отката.`;
       else this.status = `Обновлено построек: ${result?.preview?.changedInstances ?? 0}. Сохранена копия для отката.`;
       ui.notifications.info(this.status);
       this._preparePlan({ operationId: makeId("building-catalog-migration", 20) });

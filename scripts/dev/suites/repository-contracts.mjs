@@ -67,17 +67,11 @@ function checkSchemaVersionSource(jsFiles) {
 }
 
 function checkDataModuleBoundaries(jsFiles) {
-  const schemaFacade = readFileSync(path.join(root, "scripts/data/schema.js"), "utf8");
   const baseSchema = readFileSync(path.join(root, "scripts/data/schema/base-holding.js"), "utf8");
   const defaultData = readFileSync(path.join(root, "scripts/data/defaults/default-skyhold-data.js"), "utf8");
   const workerTypes = readFileSync(path.join(root, "scripts/data/worker-types.js"), "utf8");
   const laputaCompatibility = readFileSync(path.join(root, "scripts/data/laputa-import.js"), "utf8");
   const laputaPreset = readFileSync(path.join(root, "scripts/data/presets/laputa.js"), "utf8");
-
-  assert.match(schemaFacade, /from "\.\/defaults\/default-skyhold-data\.js"/, "schema facade must preserve the default data compatibility export");
-  assert.match(schemaFacade, /from "\.\/schema\/base-holding\.js"/, "schema facade must preserve base holding compatibility exports");
-  assert.match(schemaFacade, /from "\.\/worker-types\.js"/, "schema facade must preserve worker type compatibility exports");
-  assert.doesNotMatch(schemaFacade, /\b(?:const|let|var)\s+(?:BASE_HOLDING|DEFAULT_SKYHOLD_DATA|CANONICAL_WORKER_TYPES)\b/, "schema facade must not regain canonical data ownership");
 
   assert.match(baseSchema, /export const BASE_HOLDING\s*=/, "base holding schema must own BASE_HOLDING");
   assert.match(baseSchema, /export const HOLDING_TYPES\s*=/, "base holding schema must own HOLDING_TYPES");
@@ -97,7 +91,6 @@ function checkDataModuleBoundaries(jsFiles) {
   assert.match(laputaPreset, /export const LAPUTA_IMPORT\s*=/, "presets/laputa.js must own the Laputa campaign data");
 
   const compatibilityConsumers = jsFiles
-    .filter((file) => file !== path.join(root, "scripts/data/schema.js"))
     .filter((file) => file !== path.join(root, "scripts/data.js"))
     .filter((file) => !rel(file).startsWith("scripts/dev/"));
   for (const file of compatibilityConsumers) {
@@ -1557,10 +1550,8 @@ export async function runRepositoryContracts() {
   checkCssCustomProperties(cssFiles);
 
   const normalizers = await import(pathToFileURL(path.join(root, "scripts/data/normalizers.js")));
-  const schema = await import(pathToFileURL(path.join(root, "scripts/data/schema.js")));
   const baseSchema = await import(pathToFileURL(path.join(root, "scripts/data/schema/base-holding.js")));
   const defaultData = await import(pathToFileURL(path.join(root, "scripts/data/defaults/default-skyhold-data.js")));
-  const workerTypes = await import(pathToFileURL(path.join(root, "scripts/data/worker-types.js")));
   const laputaCompatibility = await import(pathToFileURL(path.join(root, "scripts/data/laputa-import.js")));
   const laputaPreset = await import(pathToFileURL(path.join(root, "scripts/data/presets/laputa.js")));
   const restorationPreset = await import(pathToFileURL(path.join(root, "scripts/data/presets/restoration-settlement.js")));
@@ -2287,12 +2278,6 @@ export async function runRepositoryContracts() {
   assert.equal(massCombatCalculator.commanderEffectiveness, massCombatModifiers.commanderEffectiveness, "calculator must preserve its legacy commander export");
   assert.equal(massCombatCalculator.defenseCommanderBonus, massCombatModifiers.defenseCommanderBonus, "calculator must preserve its legacy commander bonus export");
 
-  assert.equal(schema.BASE_HOLDING, baseSchema.BASE_HOLDING, "schema facade must preserve the base holding export");
-  assert.equal(schema.HOLDING_TYPES, baseSchema.HOLDING_TYPES, "schema facade must preserve holding type exports");
-  assert.equal(schema.DEFAULT_SKYHOLD_DATA, defaultData.DEFAULT_SKYHOLD_DATA, "schema facade must preserve the default root export");
-  assert.equal(schema.CANONICAL_WORKER_TYPES, workerTypes.CANONICAL_WORKER_TYPES, "schema facade must preserve canonical worker types");
-  assert.equal(schema.LEGACY_WORKER_TYPE_MAP, workerTypes.LEGACY_WORKER_TYPE_MAP, "schema facade must preserve legacy worker aliases");
-  assert.equal(schema.BROAD_WORKER_TYPE_MAP, workerTypes.BROAD_WORKER_TYPE_MAP, "schema facade must preserve broad worker aliases");
   assert.equal(laputaCompatibility.LAPUTA_IMPORT, laputaPreset.LAPUTA_IMPORT, "Laputa compatibility export must preserve the canonical preset");
   assert.equal(dataBarrel.skipTransaction, store.skipTransaction, "public data barrel must expose the named transaction skip helper");
   assert.equal(dataBarrel.getSkyholdAuthorityState, authority.getSkyholdAuthorityState, "public data barrel must expose the authority state helper");
@@ -2695,26 +2680,17 @@ export async function runRepositoryContracts() {
   assert.deepEqual(normalizedDuplicateTemplate.materialCosts.map((cost) => cost.id), ["material", "material-2"], "normalization must repair duplicate construction cost ids deterministically");
   assert.deepEqual(normalizedDuplicateTemplate.materialCosts.map((cost) => cost.resourceId), ["cloth", "straw"], "normalization must canonicalize construction resource ids");
 
-  const legacyTagPatch = massCombatState.normalizeMassCombatPatch({ attackerFire: 2 });
-  assert.deepEqual(legacyTagPatch, { attackerShooters: 2 }, "legacy mass-combat tag patches must migrate without retaining the old field");
-  const mixedTagPatch = massCombatState.normalizeMassCombatPatch({ attackerShooters: 3, attackerFire: 2 });
-  assert.deepEqual(mixedTagPatch, { attackerShooters: 3 }, "canonical mass-combat tag fields must win over legacy fields");
-  assert.equal(massCombatRules.tagValue({ attackerFire: 2 }, "attacker", "shooters"), 2, "legacy tag values must remain readable before normalization");
-  assert.equal(massCombatRules.tagValue({ attackerShooters: 3, attackerFire: 2 }, "attacker", "shooters"), 3, "legacy and canonical tag values must never be added together");
-  const legacyTagMappings = [
-    ["Fire", "Shooters", "shooters"],
-    ["Recon", "Skirmishers", "skirmishers"],
-    ["Cavalry", "Mobile", "mobile"],
-    ["Engineering", "Sappers", "sappers"],
-    ["Monstrous", "Monsters", "monsters"]
-  ];
-  for (const [legacySuffix, canonicalSuffix, tagKey] of legacyTagMappings) {
-    const legacyKey = `defender${legacySuffix}`;
-    const canonicalKey = `defender${canonicalSuffix}`;
-    const normalizedTagPatch = massCombatState.normalizeMassCombatPatch({ [legacyKey]: 2 });
-    assert.deepEqual(normalizedTagPatch, { [canonicalKey]: 2 }, `${legacyKey} must migrate to ${canonicalKey}`);
-    assert.equal(massCombatRules.tagValue({ [legacyKey]: 2 }, "defender", tagKey), 2, `${legacyKey} must remain readable before normalization`);
-    assert.equal(massCombatRules.tagValue({ [canonicalKey]: 3, [legacyKey]: 2 }, "defender", tagKey), 3, `${canonicalKey} must take precedence over ${legacyKey}`);
+  const canonicalTagPatch = massCombatState.normalizeMassCombatPatch({ attackerShooters: 3, defenderSkirmishers: 2 });
+  assert.deepEqual(canonicalTagPatch, { attackerShooters: 3, defenderSkirmishers: 2 }, "canonical mass-combat tag patches must normalize cleanly");
+  for (const [suffix, tagKey] of [
+    ["Shooters", "shooters"],
+    ["Skirmishers", "skirmishers"],
+    ["Mobile", "mobile"],
+    ["Sappers", "sappers"],
+    ["Monsters", "monsters"]
+  ]) {
+    const canonicalKey = `defender${suffix}`;
+    assert.equal(massCombatRules.tagValue({ [canonicalKey]: 3 }, "defender", tagKey), 3, `${canonicalKey} must remain readable via tagValue`);
   }
 
   assert.deepEqual(
@@ -2728,9 +2704,9 @@ export async function runRepositoryContracts() {
     "explicit mass-combat limits must survive a scale change"
   );
   assert.deepEqual(
-    massCombatState.normalizeMassCombatPatch({ attackerSourceTag2: "sacred" }),
+    massCombatState.normalizeMassCombatPatch({ attackerSourcePrimaryTag2: "sacred" }),
     { attackerSourcePrimaryTag2: "sacred" },
-    "legacy source type patches must migrate to explicit primary-tag fields"
+    "explicit primary-tag source patches must survive normalization"
   );
   assert.equal(massCombatState.isAttackerPresetControlledField("attackerBS"), true, "preset-controlled attacker fields must be identifiable");
   assert.equal(massCombatState.isAttackerPresetControlledField("attackerSourcePrimaryTag1"), true, "manual source primary types must mark the preset custom");
@@ -2901,7 +2877,7 @@ export async function runRepositoryContracts() {
     repairProgress: 1,
     repairTarget: 3
   }];
-  const migratedRepair = normalizers.normalizeSkyholdData(lifecycleMigrationRoot, { fromVersion: 53 }).holdings[0].buildings.list[0];
+  const migratedRepair = normalizers.normalizeSkyholdData(lifecycleMigrationRoot).holdings[0].buildings.list[0];
   assert.equal(migratedRepair.lifecycle, "active", "schema 54 must migrate a legacy repair without changing lifecycle");
   assert.equal(migratedRepair.condition, "damaged", "schema 54 must migrate legacy damage into condition");
   assert.equal(migratedRepair.repair.active, true, "schema 54 must migrate legacy repair progress into an explicit process");
@@ -3600,8 +3576,8 @@ export async function runRepositoryContracts() {
   assert.equal(roundedImpactUp.defenderLossDelta, 2, "fractional impact rounding must be testable with an injected random source");
   assert.equal(roundedImpactDown.defenderLossDelta, 1, "fractional impact rounding must preserve the lower deterministic branch");
 
-  const duplicateWorkerData = clone(schema.DEFAULT_SKYHOLD_DATA);
-  const duplicateWorkerHolding = clone(schema.BASE_HOLDING);
+  const duplicateWorkerData = clone(defaultData.DEFAULT_SKYHOLD_DATA);
+  const duplicateWorkerHolding = clone(baseSchema.BASE_HOLDING);
   duplicateWorkerHolding.id = "duplicate-workers";
   duplicateWorkerHolding.people.list = [{ id: "worker", name: "Worker", workAssignment: "workshop", role: "Worker" }];
   duplicateWorkerHolding.buildings.list = [
@@ -3622,32 +3598,21 @@ export async function runRepositoryContracts() {
     "a resident must never occupy worker slots in several buildings simultaneously"
   );
 
-  const legacyMassCombatData = clone(schema.DEFAULT_SKYHOLD_DATA);
-  legacyMassCombatData.holdings = [clone(schema.BASE_HOLDING)];
-  delete legacyMassCombatData.holdings[0].gm.massCombat.attackerShooters;
-  legacyMassCombatData.holdings[0].gm.massCombat.attackerFire = 2;
-  legacyMassCombatData.holdings[0].gm.massCombat.attackerSourceTag1 = "sacred";
-  legacyMassCombatData.holdings[0].gm.massCombat.attackerSourceEfficiency1 = 7.5;
-  const migratedMassCombatData = normalizers.normalizeSkyholdData(legacyMassCombatData, { fromVersion: normalizers.SKYHOLD_SCHEMA_VERSION - 1 });
-  assert.equal(migratedMassCombatData.holdings[0].gm.massCombat.attackerShooters, 2, "stored legacy mass-combat tags must migrate to canonical fields");
-  assert.equal(Object.hasOwn(migratedMassCombatData.holdings[0].gm.massCombat, "attackerFire"), false, "stored legacy mass-combat tag fields must be removed after migration");
-  assert.equal(migratedMassCombatData.holdings[0].gm.massCombat.attackerSourcePrimaryTag1, "sacred", "stored source types must migrate to explicit primary-tag fields");
-  assert.equal(Object.hasOwn(migratedMassCombatData.holdings[0].gm.massCombat, "attackerSourceTag1"), false, "legacy source type fields must be removed after migration");
-  assert.equal(migratedMassCombatData.holdings[0].gm.massCombat.attackerSourceEfficiency1, 7.5, "stored individual source efficiency must survive normalization");
-
-  const mixedMassCombatData = clone(schema.DEFAULT_SKYHOLD_DATA);
-  mixedMassCombatData.holdings = [clone(schema.BASE_HOLDING)];
-  mixedMassCombatData.holdings[0].gm.massCombat.attackerShooters = 3;
-  mixedMassCombatData.holdings[0].gm.massCombat.attackerFire = 2;
-  const normalizedMixedMassCombatData = normalizers.normalizeSkyholdData(mixedMassCombatData);
-  assert.equal(normalizedMixedMassCombatData.holdings[0].gm.massCombat.attackerShooters, 3, "stored canonical tag values must not be overwritten by legacy values");
-  assert.equal(Object.hasOwn(normalizedMixedMassCombatData.holdings[0].gm.massCombat, "attackerFire"), false, "redundant legacy tag fields must be removed from current data");
+  const canonicalMassCombatData = clone(defaultData.DEFAULT_SKYHOLD_DATA);
+  canonicalMassCombatData.holdings = [clone(baseSchema.BASE_HOLDING)];
+  canonicalMassCombatData.holdings[0].gm.massCombat.attackerShooters = 3;
+  canonicalMassCombatData.holdings[0].gm.massCombat.attackerSourcePrimaryTag1 = "sacred";
+  canonicalMassCombatData.holdings[0].gm.massCombat.attackerSourceEfficiency1 = 7.5;
+  const normalizedMassCombatData = normalizers.normalizeSkyholdData(canonicalMassCombatData);
+  assert.equal(normalizedMassCombatData.holdings[0].gm.massCombat.attackerShooters, 3, "stored canonical tag values must survive normalization");
+  assert.equal(normalizedMassCombatData.holdings[0].gm.massCombat.attackerSourcePrimaryTag1, "sacred", "stored explicit primary-tag fields must survive normalization");
+  assert.equal(normalizedMassCombatData.holdings[0].gm.massCombat.attackerSourceEfficiency1, 7.5, "stored individual source efficiency must survive normalization");
 
   const holdingWithStaleBattleState = {
     gm: {
       massCombat: {
         ...massCombatState.resetMassCombatState(),
-        attackerSourceTag1: "shooters",
+        attackerSourcePrimaryTag1: "shooters",
         attackerCustomOne: 4,
         legacyUnknownField: "stale",
         battleId: "old-battle",
@@ -3752,8 +3717,8 @@ export async function runRepositoryContracts() {
     else delete globalThis.requestAnimationFrame;
   }
 
-  const medicalData = clone(schema.DEFAULT_SKYHOLD_DATA);
-  medicalData.holdings = [clone(schema.BASE_HOLDING)];
+  const medicalData = clone(defaultData.DEFAULT_SKYHOLD_DATA);
+  medicalData.holdings = [clone(baseSchema.BASE_HOLDING)];
   medicalData.holdings[0].id = "test-holding";
   medicalData.holdings[0].buildings.list = [{
     id: "med-1",
@@ -3769,12 +3734,8 @@ export async function runRepositoryContracts() {
   assert.equal(softBuilding.functions.storage, true, "load normalization must not erase custom medical storage flag");
   assert.equal(softBuilding.workersMax, 8, "load normalization must not clamp custom medical worker max");
 
-  const repairedMedical = normalizers.repairSkyholdData(medicalData);
-  const repairedBuilding = repairedMedical.holdings[0].buildings.list[0];
-  assert.equal(repairedBuilding.functions.storage, false, "repair mode may restore curated medical function flags");
-
-  const religiousCustomData = clone(schema.DEFAULT_SKYHOLD_DATA);
-  religiousCustomData.holdings = [clone(schema.BASE_HOLDING)];
+  const religiousCustomData = clone(defaultData.DEFAULT_SKYHOLD_DATA);
+  religiousCustomData.holdings = [clone(baseSchema.BASE_HOLDING)];
   religiousCustomData.holdings[0].id = "religion-test";
   religiousCustomData.holdings[0].buildings.list = [{
     id: "well-1",
@@ -3786,8 +3747,8 @@ export async function runRepositoryContracts() {
   const religiousNormalized = normalizers.normalizeSkyholdData(religiousCustomData);
   assert.equal(religiousNormalized.holdings[0].buildings.list[0].functions.culture, false, "explicit culture=false must not be restored by religion.religious");
 
-  const seasonData = clone(schema.DEFAULT_SKYHOLD_DATA);
-  seasonData.holdings = [clone(schema.BASE_HOLDING)];
+  const seasonData = clone(defaultData.DEFAULT_SKYHOLD_DATA);
+  seasonData.holdings = [clone(baseSchema.BASE_HOLDING)];
   seasonData.holdings[0].id = "season-test";
   seasonData.holdings[0].buildings.list = [{
     id: "woodcutters",
@@ -3807,9 +3768,9 @@ export async function runRepositoryContracts() {
   const seasonNormalized = normalizers.normalizeSkyholdData(seasonData);
   assert.deepEqual(seasonNormalized.holdings[0].buildings.list[0].productionLines[0].seasons, { spring: true, summer: false, autumn: true, winter: false }, "production line seasons must survive normalization");
 
-  const currentFireplaceData = clone(schema.DEFAULT_SKYHOLD_DATA);
+  const currentFireplaceData = clone(defaultData.DEFAULT_SKYHOLD_DATA);
   currentFireplaceData.meta.schemaVersion = normalizers.SKYHOLD_SCHEMA_VERSION;
-  currentFireplaceData.holdings = [clone(schema.BASE_HOLDING)];
+  currentFireplaceData.holdings = [clone(baseSchema.BASE_HOLDING)];
   currentFireplaceData.holdings[0].id = "current-fireplace-test";
   currentFireplaceData.holdings[0].buildings.list = [{
     id: "custom-fireplace",
@@ -3820,7 +3781,7 @@ export async function runRepositoryContracts() {
   const currentFireplaceNormalized = normalizers.normalizeSkyholdData(currentFireplaceData);
   assert.equal(currentFireplaceNormalized.holdings[0].buildings.list.length, 1, "current schema must not delete a custom fireplace-like building on load");
 
-  const current = normalizers.normalizeSkyholdData(clone(schema.DEFAULT_SKYHOLD_DATA));
+  const current = normalizers.normalizeSkyholdData(clone(defaultData.DEFAULT_SKYHOLD_DATA));
   current.holdings[0].gm.playersCanUseStorage = true;
   current.holdings[0].gm.playersCanEditOverview = true;
   const mixedPatch = {

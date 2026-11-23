@@ -45,6 +45,13 @@ export function createSkyholdSocketApi({
   writeTimeoutMs = GM_WRITE_TIMEOUT_MS
 } = {}) {
   const completedPlayerOperations = new Map();
+  const safeCurrentRevision = () => {
+    try {
+      return Math.max(0, toNumber(getData()?.meta?.revision, 0));
+    } catch {
+      return 0;
+    }
+  };
   const ships = createShipSocketApi({ executeShipOperation, getData, writeTimeoutMs });
   const politics = createPoliticsSocketApi({ executePoliticsOperation, getData, writeTimeoutMs });
 
@@ -475,7 +482,7 @@ export function createSkyholdSocketApi({
         console.error("FBL Skyhold | Failed to apply player market operation", error);
         const command = resultForError(error, {
           operationId,
-          revision: error?.revision ?? Math.max(0, toNumber(getData()?.meta?.revision, 0))
+          revision: error?.revision ?? safeCurrentRevision()
         });
         game.socket?.emit?.(`module.${MODULE_ID}`, {
           type: "playerMarketOperationResponse",
@@ -532,7 +539,7 @@ export function createSkyholdSocketApi({
         console.error("FBL Skyhold | Failed to apply player construction operation", error);
         const command = resultForError(error, {
           operationId,
-          revision: error?.revision ?? Math.max(0, toNumber(getData()?.meta?.revision, 0))
+          revision: error?.revision ?? safeCurrentRevision()
         });
         game.socket?.emit?.(`module.${MODULE_ID}`, {
           type: "playerConstructionOperationResponse",
@@ -634,7 +641,7 @@ export function createSkyholdSocketApi({
         console.error("FBL Skyhold | Failed to apply player patch request", error);
         const command = resultForError(error, {
           operationId,
-          revision: error?.revision ?? Math.max(0, toNumber(getData()?.meta?.revision, 0))
+          revision: error?.revision ?? safeCurrentRevision()
         });
         game.socket?.emit?.(`module.${MODULE_ID}`, {
           type: "playerDataPatchResponse",

@@ -10,48 +10,17 @@ checkCatalogLoadBoundary();
 checkBuildingCatalogFullTransition();
 checkAgricultureCatalogRefresh();
 
-import { BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION, DEFAULT_BUILDING_TEMPLATES, TEMPLATE_CATALOG_VERSION } from "../data/building-templates.js";
+import { BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION, TEMPLATE_CATALOG_VERSION } from "../data/building-templates.js";
+import { DEFAULT_SKYHOLD_DATA } from "../data/defaults/default-skyhold-data.js";
+import { normalizeSkyholdData } from "../data/normalizers.js";
+import { LAPUTA_IMPORT } from "../data/presets/laputa.js";
+import { validateHoldingWorkAllocations } from "../data/work-allocations.js";
 import { clone } from "../data/utils.js";
 import {
   BUILDING_CATALOG_MIGRATION_NAMESPACE,
   applyBuildingCatalogMigration,
   planBuildingCatalogMigration
 } from "../workflows/buildings/catalog-migration.js";
-
-{
-  const school = { id: "school", effect: "Оплаченный учитель открывает ролевые образовательные решения",
-    notes: "Механика работает при годовом старении: шанс небольшой, но может дать +1 к характеристике и положительную черту." };
-  const bank = { id: "bank-exchange", effect: "Явные займы, вклады, гарантии и крупные договоры без пассивной эмиссии денег" };
-  const newSchool = DEFAULT_BUILDING_TEMPLATES.find(row => row.id === "school");
-  const newBank = DEFAULT_BUILDING_TEMPLATES.find(row => row.id === "bank-exchange");
-  const version = TEMPLATE_CATALOG_VERSION;
-  const source = { meta: { revision: 7, templateCatalogVersion: version },
-    catalog: { buildings: [{ ...school, templateVersion: version, notes: "Записки ГМа" },
-      { ...bank, templateVersion: version, description: "Семейный банк", visibility: "gm" }] },
-    holdings: [{ id: "a", name: "A", buildings: { list: [
-      { ...school, id: "school-a", templateId: "school", templateVersion: version, effect: "Наши занятия" },
-      { id: "custom", name: "Школа", notes: school.notes }
-    ] } }] };
-  const before = clone(source);
-  const args = { currentData: source, operationId: `standard-text-${version}`, textOnly: true };
-  const plan = planBuildingCatalogMigration(args);
-  assert.deepEqual(source, before, "the preview must not write the world");
-  assert.equal(plan.canApply, true, "known old standard text must have a reviewable update even on the current catalog version");
-  assert.deepEqual(plan.textUpdates.map(row => row.field), ["effect", "effect", "notes"]);
-  const result = applyBuildingCatalogMigration({ currentData: source, plan });
-  const expected = clone(source);
-  expected.catalog.buildings[0].effect = newSchool.effect;
-  expected.catalog.buildings[1].effect = newBank.effect;
-  expected.holdings[0].buildings.list[0].notes = newSchool.notes;
-  assert.deepEqual(result.data.catalog, expected.catalog);
-  assert.deepEqual(result.data.holdings, expected.holdings);
-  assert.equal(result.data.meta.templateCatalogVersion, version, "a text update must not advance the installed catalog version");
-  assert.equal(applyBuildingCatalogMigration({ currentData: result.data, plan }).commitRequired, false);
-  assert.equal(planBuildingCatalogMigration({ ...args, currentData: result.data, operationId: "repeat-text" }).hasChanges, false);
-  const changed = clone(source);
-  changed.catalog.buildings[0].effect = "Новая авторская правка";
-  assert.throws(() => applyBuildingCatalogMigration({ currentData: changed, plan }), { code: "target-catalog-hash" });
-}
 
 function template(id) {
   return clone(BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION.find((row) => row.id === id));
@@ -223,6 +192,21 @@ export function checkBuildingCatalogMigrationCharacterization() {
   assert.ok(blocked.blockingIssues.some(row => row.code === "deprecated-template-unmapped"));
   assert.ok(blocked.blockingIssues.some(row => row.code === "production-in-progress"));
   assert.throws(() => applyBuildingCatalogMigration({ currentData: blockedSource, plan: blocked }), { code: "plan-blocked" });
+
+  const laputaWorld = normalizeSkyholdData({
+    meta: clone(DEFAULT_SKYHOLD_DATA.meta),
+    catalog: clone(DEFAULT_SKYHOLD_DATA.catalog),
+    holdings: [clone(LAPUTA_IMPORT.holding)]
+  });
+  const laputaAllocations = validateHoldingWorkAllocations(laputaWorld.holdings[0]);
+  assert.equal(laputaAllocations.ok, true, "Laputa preset buildings must have valid initial labor profiles");
+  const laputaPlan = planBuildingCatalogMigration({
+    currentData: laputaWorld,
+    replaceCatalog: true,
+    operationId: "laputa-preset-refresh"
+  });
+  assert.deepEqual(laputaPlan.blockingIssues, [], "Fresh Laputa preset must refresh cleanly without unresolved blockers");
+  assert.equal(laputaPlan.counts.deprecatedUnmapped, 0);
   return true;
 }
 

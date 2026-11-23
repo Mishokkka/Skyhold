@@ -1,42 +1,14 @@
 import { BASE_HOLDING } from "../schema/base-holding.js";
 import { clone, isPlainObject, makeId, mergeDefaults, toBoolean, toNumber } from "../utils.js";
 
-const SCHEMA_VERSION_MASS_COMBAT_FIELD_RENAMES = 46;
-const SCHEMA_VERSION_MASS_COMBAT_TAG_RENAMES = 46;
-const SCHEMA_VERSION_MASS_COMBAT_STRATEGY_RENAMES = 46;
-const SCHEMA_VERSION_MASS_COMBAT_SOURCE_PRIMARY_TAGS = 47;
-
-function normalizeOptions(options = {}) {
-  const fromVersion = Math.max(0, Math.floor(toNumber(options.fromVersion, 0)));
-  return { ...options, fromVersion };
-}
-
-function isBeforeSkyholdSchemaVersion(options = {}, version = 0) {
-  return Math.max(0, Math.floor(toNumber(options.fromVersion, 0))) < Math.max(0, Math.floor(toNumber(version, 0)));
-}
-
-function hasAnyOwnProperty(source = {}, keys = []) {
-  if (!isPlainObject(source)) return false;
-  return keys.some((key) => Object.prototype.hasOwnProperty.call(source, key));
-}
-
 export function normalizeDefenseSquad(row = {}) {
   if (!isPlainObject(row)) return null;
   const id = String(row.id || makeId("squad"));
-  const sourceMemberIds = Array.isArray(row.memberIds) ? row.memberIds.map((value) => String(value ?? "")) : [];
-  let sergeantId = String(row.sergeantId ?? "");
-  let memberIds = sourceMemberIds;
-  // До 1.1.6 отряд был "сержант + 5 солдат". Теперь первый слот общий:
-  // сержант или обычный солдат, всего 5 бойцов. Если старый отряд не имел
-  // сержанта, первый солдат переносится в общий первый слот.
-  if (!sergeantId && sourceMemberIds.length > 4) {
-    sergeantId = String(sourceMemberIds[0] ?? "");
-    memberIds = sourceMemberIds.slice(1);
-  }
-  const legacyEquipped = toBoolean(row.equipped, false);
+  const memberIds = Array.isArray(row.memberIds) ? row.memberIds.map((value) => String(value ?? "")) : [];
+  const sergeantId = String(row.sergeantId ?? "");
   const armamentResourceId = ["armament-simple", "armament-complex", "armament-elite"].includes(String(row.armamentResourceId ?? ""))
     ? String(row.armamentResourceId)
-    : (legacyEquipped ? "armament-simple" : "");
+    : "";
   return {
     id,
     name: String(row.name ?? "Отряд"),
@@ -99,42 +71,16 @@ function normalizeBattleArchive(entries) {
   }));
 }
 
-export function normalizeMassCombatState(state = {}, options = {}) {
-  const normalize = normalizeOptions(options);
+export function normalizeMassCombatState(state = {}) {
   const source = isPlainObject(state) ? state : {};
   const base = clone(BASE_HOLDING.gm.massCombat);
   const merged = mergeDefaults(base, source);
   delete merged.defenderSupply;
   delete merged.attackerSupply;
 
-  const legacySourcePrimaryKeys = Object.keys(source).filter((key) => /^attackerSourceTag\d+$/.test(key));
-  const migrateSourcePrimaryTags = isBeforeSkyholdSchemaVersion(normalize, SCHEMA_VERSION_MASS_COMBAT_SOURCE_PRIMARY_TAGS) || legacySourcePrimaryKeys.length > 0;
-  if (migrateSourcePrimaryTags) {
-    for (const legacyKey of legacySourcePrimaryKeys) {
-      const index = legacyKey.match(/\d+$/)?.[0];
-      if (!index) continue;
-      const modernKey = `attackerSourcePrimaryTag${index}`;
-      if (source[modernKey] === undefined) merged[modernKey] = String(source[legacyKey] ?? "");
-    }
-  }
   for (const key of Object.keys(merged)) {
-    if (/^attackerSourceTag\d+$/.test(key)) delete merged[key];
-    else if (/^attackerSourcePrimaryTag\d+$/.test(key)) merged[key] = String(merged[key] ?? "");
+    if (/^attackerSourcePrimaryTag\d+$/.test(key)) merged[key] = String(merged[key] ?? "");
     else if (/^attackerSourceEfficiency\d+$/.test(key)) merged[key] = Math.max(0, toNumber(merged[key], 0));
-  }
-
-  // Legacy 1.0.13 field migration. Old values stay readable instead of being discarded.
-  const legacyFieldKeys = ["defenderForce", "attackerForce", "defenderCommander", "attackerCommander", "defenderTerrain", "defenderLosses", "attackerLosses"];
-  const migrateLegacyFields = isBeforeSkyholdSchemaVersion(normalize, SCHEMA_VERSION_MASS_COMBAT_FIELD_RENAMES) || hasAnyOwnProperty(source, legacyFieldKeys);
-  if (migrateLegacyFields) {
-    if (source.defenderBS === undefined && source.defenderForce !== undefined) merged.defenderBS = source.defenderForce;
-    if (source.attackerBS === undefined && source.attackerForce !== undefined) merged.attackerBS = source.attackerForce;
-    if (source.defenderCommand === undefined && source.defenderCommander !== undefined) merged.defenderCommand = source.defenderCommander;
-    if (source.attackerCommand === undefined && source.attackerCommander !== undefined) merged.attackerCommand = source.attackerCommander;
-    if (source.defenderPosition === undefined && source.defenderTerrain !== undefined) merged.defenderPosition = source.defenderTerrain;
-    if (source.attackerSiege !== undefined && source.attackerSiege > 0) merged.attackerSiege = source.attackerSiege;
-    if (source.defenderLossSteps === undefined && source.defenderLosses !== undefined) merged.defenderLossSteps = source.defenderLosses;
-    if (source.attackerLossSteps === undefined && source.attackerLosses !== undefined) merged.attackerLossSteps = source.attackerLosses;
   }
 
   const numericKeys = [
@@ -149,28 +95,6 @@ export function normalizeMassCombatState(state = {}, options = {}) {
   for (const key of Object.keys(merged)) {
     if (/^(defender|attacker)[A-Z][A-Za-z0-9_]*-[A-Za-z0-9_-]*$/.test(key)) merged[key] = Math.max(0, toNumber(merged[key], 0));
   }
-  const tagMigrations = [
-    ["Fire", "Shooters"],
-    ["Recon", "Skirmishers"],
-    ["Cavalry", "Mobile"],
-    ["Engineering", "Sappers"],
-    ["Monstrous", "Monsters"]
-  ];
-  const legacyTagKeys = [];
-  for (const side of ["defender", "attacker"]) {
-    for (const [legacy] of tagMigrations) legacyTagKeys.push(`${side}${legacy}`);
-  }
-  const migrateLegacyTags = isBeforeSkyholdSchemaVersion(normalize, SCHEMA_VERSION_MASS_COMBAT_TAG_RENAMES) || hasAnyOwnProperty(source, legacyTagKeys);
-  if (migrateLegacyTags) {
-    for (const side of ["defender", "attacker"]) {
-      for (const [legacy, modern] of tagMigrations) {
-        const legacyKey = `${side}${legacy}`;
-        const modernKey = `${side}${modern}`;
-        if ((!source || source[modernKey] === undefined) && source?.[legacyKey] !== undefined) merged[modernKey] = Math.max(0, toNumber(source[legacyKey], 0));
-      }
-    }
-  }
-  for (const legacyKey of legacyTagKeys) delete merged[legacyKey];
   merged.round = Math.max(1, Math.floor(merged.round || 1));
   merged.defenderPosition = Math.max(0, Math.min(3, Math.floor(merged.defenderPosition || 0)));
   merged.attackerPosition = Math.max(0, Math.min(3, Math.floor(merged.attackerPosition || 0)));
@@ -195,36 +119,10 @@ export function normalizeMassCombatState(state = {}, options = {}) {
   merged.roundLimit = Math.max(1, Math.floor(merged.roundLimit || 3));
   merged.objectiveThreshold = Math.max(1, Math.floor(merged.objectiveThreshold || 2));
 
-  const legacyStrategyMap = {
-    cautious: "deepDefense",
-    balanced: "frontalAssault",
-    aggressive: "frontalAssault",
-    desperate: "frontalAssault",
-    defense: "holdFortifications",
-    allOutDefense: "holdFortifications",
-    sally: "counterattack",
-    rally: "deepDefense",
-    retreat: "fightingWithdrawal",
-    attack: "frontalAssault",
-    allOutAssault: "frontalAssault",
-    deliberateAssault: "bombardment",
-    skirmish: "probingAdvance",
-    raid: "raidWithdraw"
-  };
   const defenderStrategies = ["holdFortifications", "deepDefense", "counterattack", "protectCivilians", "protectObjective", "fightingWithdrawal", "parley"];
   const attackerStrategies = ["frontalAssault", "probingAdvance", "raidWithdraw", "sabotage", "bombardment", "breakthrough", "parley"];
-  const migrateLegacyStrategies = isBeforeSkyholdSchemaVersion(normalize, SCHEMA_VERSION_MASS_COMBAT_STRATEGY_RENAMES)
-    || Boolean(legacyStrategyMap[String(source.defenderStrategy)])
-    || Boolean(legacyStrategyMap[String(source.attackerStrategy)]);
-  if (migrateLegacyStrategies) {
-    merged.defenderStrategy = legacyStrategyMap[String(merged.defenderStrategy)] ?? String(merged.defenderStrategy);
-    merged.attackerStrategy = legacyStrategyMap[String(merged.attackerStrategy)] ?? String(merged.attackerStrategy);
-  } else {
-    merged.defenderStrategy = String(merged.defenderStrategy);
-    merged.attackerStrategy = String(merged.attackerStrategy);
-  }
-  if (!defenderStrategies.includes(merged.defenderStrategy)) merged.defenderStrategy = "holdFortifications";
-  if (!attackerStrategies.includes(merged.attackerStrategy)) merged.attackerStrategy = "frontalAssault";
+  merged.defenderStrategy = defenderStrategies.includes(String(merged.defenderStrategy)) ? String(merged.defenderStrategy) : "holdFortifications";
+  merged.attackerStrategy = attackerStrategies.includes(String(merged.attackerStrategy)) ? String(merged.attackerStrategy) : "frontalAssault";
 
   merged.schemaVersion = 2;
   merged.pendingRound = normalizePendingBattleRound(merged.pendingRound);

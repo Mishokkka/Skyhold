@@ -10,10 +10,6 @@ import { isPlainObject, makeId, toBoolean, toNumber } from "../utils.js";
 import { normalizeBuildingWorkerProfile, workerAdmission } from "../../engines/workers/building-qualification.js";
 import { buildingLaborMode, normalizeBuildingLabor } from "../hybrid-labor.js";
 
-function normalizeOptions(options = {}) {
-  return { ...options, destructive: toBoolean(options.destructive, false) };
-}
-
 function floorNonNegativeQuantity(value, fallback = 0) {
   return Math.max(0, Math.floor(toNumber(value, fallback)));
 }
@@ -77,7 +73,6 @@ function guessConstructionStatus(status) {
 
 export function normalizeBuilding(building, options = {}) {
   if (building.labor !== undefined) building.labor = normalizeBuildingLabor(building.labor);
-  const normalize = normalizeOptions(options);
   const hadWorkerProfile = isPlainObject(building?.workerProfile);
   building.id = String(building.id || makeId("building"));
   building.templateId = String(building.templateId ?? "");
@@ -438,18 +433,8 @@ export function normalizeBuilding(building, options = {}) {
       maxPatients: Math.max(0, toNumber(existingMedical.maxPatients ?? existingMedical.capacity, def.defaultMaxPatients) || def.defaultMaxPatients)
     };
 
-    // Normal load must not erase a GM's custom building configuration. The old
-    // medical migration force-disabled every normal building function and clamped
-    // workers to the curated medical profile. Keep that only for explicit repair.
-    if (normalize.destructive) {
-      building.workersMin = def.workersMin;
-      building.workersMax = Math.min(def.workersMax, Math.max(def.workersMin, toNumber(building.workersMax, def.workersMax) || def.workersMax));
-      if (!building.functions || typeof building.functions !== "object") building.functions = {};
-      for (const key of ["production", "income", "defense", "housing", "storage", "culture"]) building.functions[key] = false;
-    } else {
-      building.workersMin = toNumber(building.workersMin, def.workersMin);
-      building.workersMax = Math.max(building.workersMin, toNumber(building.workersMax, def.workersMax));
-    }
+    building.workersMin = toNumber(building.workersMin, def.workersMin);
+    building.workersMax = Math.max(building.workersMin, toNumber(building.workersMax, def.workersMax));
 
     if (!building.workerRole) building.workerRole = def.workerRole;
     if (!Array.isArray(building.productionLines)) building.productionLines = [];
@@ -459,9 +444,9 @@ export function normalizeBuilding(building, options = {}) {
   const introducedWorkerProfile = !hadWorkerProfile;
   // Catalog loading must not discover new admission rules by ID/name. An
   // explicit neutral profile also prevents consumers from falling back to the
-  // newer built-in profile later. Explicit repair retains curated inference.
+  // newer built-in profile later.
   const workerProfile = normalizeBuildingWorkerProfile(
-    !hadWorkerProfile && normalize.preserveTemplateMechanics ? { source: "legacy" } : building.workerProfile, building
+    !hadWorkerProfile && options?.preserveTemplateMechanics ? { source: "legacy" } : building.workerProfile, building
   );
   if (workerProfile) {
     building.workerProfile = workerProfile;
@@ -484,7 +469,7 @@ export function normalizeBuilding(building, options = {}) {
     // The worker migration is non-destructive: existing assignments remain in
     // place. When resident data is available, only workers who actually fail
     // the new hard gate receive a grandfathered GM override.
-    const people = Array.isArray(normalize.people) ? normalize.people : null;
+    const people = Array.isArray(options?.people) ? options.people : null;
     const peopleById = people ? new Map(people.map((person) => [String(person?.id ?? ""), person])) : null;
     const grandfatheredIds = building.assignedWorkerIds.filter((id) => {
       const workerId = String(id ?? "");

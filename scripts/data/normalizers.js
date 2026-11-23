@@ -1,4 +1,3 @@
-import { DEFAULT_BUILDING_TEMPLATES, DEPRECATED_TEMPLATE_IDS } from "./building-templates.js";
 import { DEFAULT_SKYHOLD_DATA } from "./defaults/default-skyhold-data.js";
 import { BASE_HOLDING, HOLDING_TYPES } from "./schema/base-holding.js";
 import { SKYHOLD_SCHEMA_VERSION } from "./schema-version.js";
@@ -20,6 +19,7 @@ import { normalizeEventArchive, normalizeEventHistory, normalizeEventSchedule, n
 import { clearBuildingReferences, clearPersonReferences, normalizeConstructionCrew, normalizePerson } from "./normalizers/resident.js";
 import { normalizeContentDoctrines } from "./content-packs.js";
 import { createDefaultMarketEconomy, normalizeMarketEconomy } from "./market/economy.js";
+import { ensureSharedMarketsState } from "./market/shared-context.js";
 import { normalizeMarketRouteMap } from "./market/route-map.js";
 import { normalizeMarketStockState } from "./market/stock-state.js";
 import { normalizeMarketDemandState } from "./market/demand-state.js";
@@ -53,20 +53,6 @@ const MARKET_ORDER_STATUSES = new Set(["pending", "in-transit", "delivered", "de
 const MARKET_DISPATCH_STATUSES = new Set(["booked", "departed", "delivered", "lost", "cancelled"]);
 const MARKET_RISK_STATUSES = new Set(["pending", "needsResolution", "resolved", "waived"]);
 const MARKET_RISK_OUTCOMES = new Set(["pending", "clear", "delayed", "lost", "waived"]);
-
-function normalizeOptions(options = {}) {
-  const fromVersion = Math.max(0, Math.floor(toNumber(options.fromVersion, 0)));
-  return {
-    mode: String(options.mode ?? "load"),
-    destructive: toBoolean(options.destructive, false),
-    fromVersion,
-    toVersion: Math.max(fromVersion, Math.floor(toNumber(options.toVersion, SKYHOLD_SCHEMA_VERSION)))
-  };
-}
-
-function storedSchemaVersion(stored) {
-  return Math.max(0, Math.floor(toNumber(stored?.meta?.schemaVersion, 0)));
-}
 
 function signedInteger(value, fallback = 0, minimum = -1000, maximum = 1000) {
   const parsed = Number(value);
@@ -122,48 +108,35 @@ function normalizeMoraleSnapshot(value, people = []) {
   return normalized;
 }
 
-function normalizeStoredOptions(stored, options = {}) {
-  return normalizeOptions({
-    ...options,
-    fromVersion: options.fromVersion ?? storedSchemaVersion(stored),
-    toVersion: SKYHOLD_SCHEMA_VERSION
-  });
-}
-
-export function normalizeSkyholdData(stored, options = {}) {
+export function normalizeSkyholdData(stored) {
   const source = stored ?? clone(DEFAULT_SKYHOLD_DATA);
   assertSupportedWorldData(source);
-  const normalize = normalizeStoredOptions(source, options);
   const storedTemplateVersion = Math.max(0, Math.floor(toNumber(source.meta?.templateCatalogVersion, 0)));
   // The two large runtime partitions are normalized independently below.
   const normalized = mergeDefaults(DEFAULT_SKYHOLD_DATA, { ...source, holdings: [], catalog: {} });
   normalized.meta.schemaVersion = SKYHOLD_SCHEMA_VERSION;
-  normalized.catalog = normalizeCatalogPartition(source.catalog, normalize);
-  normalized.holdings = normalizeHoldingsPartition(source.holdings, normalized.catalog, normalize);
+  normalized.catalog = normalizeCatalogPartition(source.catalog);
+  normalized.holdings = normalizeHoldingsPartition(source.holdings, normalized.catalog);
   // Loading retains saved mechanics. An explicit catalog refresh can replace them.
   normalized.meta.templateCatalogVersion = storedTemplateVersion;
   normalized.meta.revision = Math.max(0, toNumber(normalized.meta.revision, 0));
+  ensureSharedMarketsState(normalized, source.meta?.sharedMarkets);
   ensureTransportState(normalized);
   return normalized;
 }
 
-export function repairSkyholdData(stored, options = {}) {
-  return normalizeSkyholdData(stored, { mode: "repair", destructive: true, ...options });
+export function normalizeCatalogPartition(storedCatalog) {
+  return withResourceCatalog(storedCatalog?.resources, () => normalizeCatalogWithResources(storedCatalog));
 }
 
-export function normalizeCatalogPartition(storedCatalog, options = {}) {
-  return withResourceCatalog(storedCatalog?.resources, () => normalizeCatalogWithResources(storedCatalog, options));
-}
-
-function normalizeCatalogWithResources(storedCatalog, options = {}) {
-  const normalize = normalizeOptions(options);
+function normalizeCatalogWithResources(storedCatalog) {
   const stored = isPlainObject(storedCatalog) ? storedCatalog : {};
   const catalog = mergeDefaults(DEFAULT_SKYHOLD_DATA.catalog, stored);
   // A missing or empty saved list is not consent to install today's catalog.
   // New worlds already pass DEFAULT_SKYHOLD_DATA.catalog explicitly.
   catalog.buildings = Array.isArray(stored.buildings) ? clone(stored.buildings) : [];
   if (!Array.isArray(catalog.deletedBuildingTemplateIds)) catalog.deletedBuildingTemplateIds = [];
-  catalog.buildings = mergeBuildingTemplateCatalog(catalog.buildings, catalog.deletedBuildingTemplateIds, normalize);
+  catalog.buildings = mergeBuildingTemplateCatalog(catalog.buildings, catalog.deletedBuildingTemplateIds);
   if (!Array.isArray(catalog.resources)) catalog.resources = [];
   catalog.resources = catalog.resources.map((row) => normalizeResourceCatalogRow(row));
   catalog.marketRouteMap = normalizeMarketRouteMap(catalog.marketRouteMap);
@@ -174,9 +147,9 @@ function normalizeCatalogWithResources(storedCatalog, options = {}) {
     ? normalizeMarketEconomy(stored.marketEconomy, { locations: catalog.eventRegions })
     : createDefaultMarketEconomy(catalog.eventRegions);
   if (!hasStoredMarketEconomy) {
-    // Schema 66 promotes the former region-wide economy modifiers into the
-    // newly created country profile. Clear their location copies so the same
-    // factor is not multiplied twice. Legacy provider markets are discarded.
+    // Promote former region-wide economy modifiers into the newly created
+    // country profile. Clear their location copies so the same factor is not
+    // multiplied twice. Legacy provider markets are discarded.
     for (const location of catalog.eventRegions) {
       location.marketPriceFactor = null;
       location.marketAvailabilityFactor = null;
@@ -190,10 +163,9 @@ function normalizeCatalogWithResources(storedCatalog, options = {}) {
   return catalog;
 }
 
-export function normalizeHoldingsPartition(storedHoldings, catalog, options = {}) {
-  const normalize = normalizeOptions(options);
+export function normalizeHoldingsPartition(storedHoldings, catalog) {
   const holdings = Array.isArray(storedHoldings)
-    ? withResourceCatalog(catalog?.resources, () => storedHoldings.map((holding) => mergeHoldingDefaults(holding, normalize)))
+    ? withResourceCatalog(catalog?.resources, () => storedHoldings.map((holding) => mergeHoldingDefaults(holding)))
     : [];
   reconcileHoldingRegions(holdings, catalog);
   return holdings;
@@ -222,32 +194,21 @@ export function reconcileHoldingRegions(holdings, catalog, { cloneOnWrite = fals
   return { holdings: next, changed };
 }
 
-function mergeBuildingTemplateCatalog(rows = [], deletedIds = [], options = {}) {
-  const normalize = normalizeOptions(options);
+function mergeBuildingTemplateCatalog(rows = [], deletedIds = []) {
   const deleted = new Set((deletedIds ?? []).map((id) => String(id)));
   const map = new Map();
-  for (const template of normalize.destructive ? DEFAULT_BUILDING_TEMPLATES : []) {
-    const normalized = normalizeBuildingTemplate(template, normalize);
-    const normalizedId = String(normalized.id);
-    if (deleted.has(normalizedId)) continue;
-    map.set(normalizedId, normalized);
-  }
   for (const row of rows ?? []) {
     if (!row || typeof row !== "object") continue;
     const id = String(row.id ?? row.templateId ?? row.name ?? "").trim();
     if (!id || deleted.has(id)) continue;
-    if (normalize.destructive && DEPRECATED_TEMPLATE_IDS.has(id) && !map.has(id)) continue;
-    const base = map.get(id) ?? {};
-    const merged = mergeDefaults(base, row);
-    map.set(id, normalizeBuildingTemplate(merged, normalize));
+    map.set(id, normalizeBuildingTemplate(row));
   }
   return Array.from(map.values());
 }
 
-function normalizeBuildingTemplate(template = {}, options = {}) {
-  const normalize = normalizeOptions(options);
+function normalizeBuildingTemplate(template = {}) {
   const row = clone(template ?? {});
-  normalizeBuilding(row, { ...normalize, preserveTemplateMechanics: !normalize.destructive });
+  normalizeBuilding(row, { preserveTemplateMechanics: true });
   row.templateVersion = Math.max(0, Math.floor(toNumber(row.templateVersion, 0)));
   row.unlocked = toBoolean(row.unlocked, true);
   row.visibility = row.visibility === "gm" ? "gm" : "public";
@@ -311,8 +272,7 @@ function retainNormalizedMarketOrders(orders = [], archiveLimit = 300) {
   return orders.filter((order) => !terminalStatuses.has(String(order?.status ?? "")) || retainedArchive.has(order));
 }
 
-export function mergeHoldingDefaults(holding, options = {}) {
-  const normalize = normalizeOptions(options);
+export function mergeHoldingDefaults(holding) {
   const type = HOLDING_TYPES[holding?.type] ? holding.type : "settlement";
   const base = {
     ...BASE_HOLDING,
@@ -363,7 +323,7 @@ export function mergeHoldingDefaults(holding, options = {}) {
   merged.overview.development.culture = toNumber(merged.overview.development.culture, 0);
   merged.overview.development.war = toNumber(merged.overview.development.war, 0);
 
-  for (const building of merged.buildings.list) normalizeBuilding(building, { ...normalize, preserveTemplateMechanics: !normalize.destructive, people: merged.people.list });
+  for (const building of merged.buildings.list) normalizeBuilding(building, { preserveTemplateMechanics: true, people: merged.people.list });
   normalizeUniqueBuildingWorkers(merged);
   if (!Array.isArray(merged.special.list)) merged.special.list = [];
   merged.special.ships = normalizeShipsState(merged.special.ships);
@@ -619,7 +579,7 @@ export function mergeHoldingDefaults(holding, options = {}) {
   merged.gm.calendaria.lastDateTime = isPlainObject(merged.gm.calendaria.lastDateTime) ? merged.gm.calendaria.lastDateTime : null;
   merged.gm.calendaria.lastQd = Math.max(0, toNumber(merged.gm.calendaria.lastQd, 0));
 
-  merged.gm.massCombat = normalizeMassCombatState(holding?.gm?.massCombat, normalize);
+  merged.gm.massCombat = normalizeMassCombatState(holding?.gm?.massCombat);
 
   return merged;
 }

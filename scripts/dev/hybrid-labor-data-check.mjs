@@ -10,11 +10,8 @@ import { normalizeBuilding } from "../data/normalizers/building.js";
 import { clearPersonFromAssignments } from "../data/resident-assignments.js";
 import { mergeHoldingDefaults } from "../data/normalizers.js";
 import { buildPlayerPatch, validatePlayerPatch } from "../data/player-write-guard.js";
-import { planHybridLaborMigration, applyHybridLaborMigration, planHybridLaborCatalogMigration } from "../workflows/buildings/hybrid-labor-migration.js";
-import { executeHybridLaborMigration } from "../apps/hybrid-labor-migration-executor.js";
 import { planBuildingCatalogMigration } from "../workflows/buildings/catalog-migration.js";
 import { BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION, DEFAULT_BUILDING_TEMPLATES, TEMPLATE_CATALOG_VERSION } from "../data/building-templates.js";
-import { stableDataHash } from "../data/storage-commit.js";
 import { AssignmentDomain } from "../apps/domains/assignment-domain.js";
 
 const clone = (value) => structuredClone(value);
@@ -264,76 +261,7 @@ for (const isGM of [true, false]) {
 }
 }
 
-export async function checkHybridLaborMigration() {
-const old = fixture();
-delete old.buildings.list[0].labor;
-old.people.list[0].workAssignment = "staff";
-old.buildings.list[0].assignedWorkerIds = ["a"];
-old.buildings.list[0].productionLines[0].waitingBatches = [{ sentinel: "paid batch remains untouched" }];
-const oldSnapshot = clone(old);
-const ambiguous = planHybridLaborMigration({ holding: old, profiles: { staff: { version: 1, mode: "staff", capacityQd: null } } });
-assert.equal(ambiguous.ok, false);
-assert.ok(ambiguous.issues.some((issue) => issue.code === "labor-assignment-choice"));
-assert.deepEqual(old, oldSnapshot, "preview is read-only");
-const approved = planHybridLaborMigration({ holding: old, profiles: { staff: { version: 1, mode: "staff", capacityQd: null } }, staffAppointments: { a: appointment() } });
-assert.equal(approved.ok, true, approved.issues.map((issue) => issue.message).join("; "));
-const migrated = applyHybridLaborMigration({ holding: old, plan: approved });
-assert.deepEqual(migrated.buildings.list[0].productionLines, old.buildings.list[0].productionLines, "transition does not rewrite recipes or paid work");
-assert.throws(() => applyHybridLaborMigration({ holding: { ...old, name: "changed" }, plan: approved }), /изменилось/);
-const corrupted = clone(approved); corrupted.targetHolding.name = "tampered";
-assert.throws(() => applyHybridLaborMigration({ holding: old, plan: corrupted }), /изменён/);
-const restricted = fixture();
-restricted.buildings.list[0].workerProfile = { admission: { hard: true, clauses: [[{ attribute: "strength", minimum: 5 }]] } };
-const rejectedAdmission = planHybridLaborMigration({ holding: restricted, staffAppointments: { a: appointment() } });
-assert.equal(rejectedAdmission.ok, false, "the migration uses the same mandatory qualification as the planner");
-assert.ok(rejectedAdmission.issues.some((issue) => issue.code === "labor-staff-admission"));
-const forgedAdmission = clone(rejectedAdmission); forgedAdmission.ok = true; forgedAdmission.issues = [];
-assert.throws(() => applyHybridLaborMigration({ holding: restricted, plan: forgedAdmission }), /обязательный допуск/);
-restricted.buildings.list[0].workerAdmissionOverrideIds = ["a"];
-assert.equal(planHybridLaborMigration({ holding: restricted, staffAppointments: { a: appointment() } }).ok, true,
-  "a previously explicit GM qualification override remains valid in the migration");
-for (const kind of ["goals", "locks"]) {
-  const withReferences = fixture();
-  withReferences.buildings.list[1].productionLines.push({ ...clone(withReferences.buildings.list[1].productionLines[0]), id: "other" });
-  const reference = { sourceId: "qd", functionId: "production:logs", ...(kind === "goals" ? { normalQd: 10 } : { personId: "a" }) };
-  withReferences.workforcePlan[kind] = [reference, { ...reference, functionId: "production:other" }];
-  const collision = planHybridLaborMigration({ holding: withReferences, lineMappings: { "qd::production:other": "production:logs" } });
-  assert.equal(collision.ok, false, `mapping cannot merge two ${kind} implicitly`);
-  assert.ok(collision.issues.some((issue) => issue.code === "labor-plan-reference-collision"));
-  const forged = clone(collision); forged.ok = true; forged.issues = [];
-  forged.targetHash = stableDataHash(forged.targetHolding);
-  assert.throws(() => applyHybridLaborMigration({ holding: withReferences, plan: forged }), /несколько целей/, "Apply revalidates mapped reference uniqueness");
-  assert.equal(withReferences.workforcePlan[kind][1].functionId, "production:other", "preview never rewrites source references");
-}
-const catalog = { buildings: [{ ...clone(old.buildings.list[0]), id: "lumbermill", templateId: "lumbermill", assignedWorkerIds: [] }] };
-const catalogPlan = planHybridLaborCatalogMigration({ catalog });
-assert.equal(catalogPlan.ok, true);
-assert.deepEqual(catalogPlan.targetCatalog.buildings[0].productionLines, catalog.buildings[0].productionLines);
-assert.equal(catalog.buildings[0].labor, undefined);
-let stored = { meta: { revision: 1 }, holdings: [clone(old)], catalog: clone(catalog) }, writes = 0;
-const store = {
-  skipTransaction: (value) => ({ skipped: value }),
-  async transaction(fn) {
-    const candidate = clone(stored), result = await fn(candidate);
-    if (result?.skipped) return result.skipped;
-    stored = candidate; stored.meta.revision++; writes++;
-    return result;
-  }
-};
-const request = { holdingId: old.id, holdingPlan: approved, catalogPlan, expectedRevision: 1, operationId: "labor-transition-test" };
-assert.equal((await executeHybridLaborMigration(request, { store, getUser: () => ({ isGM: false }) })).ok, false);
-assert.equal(writes, 0);
-assert.equal((await executeHybridLaborMigration(request, { store, getUser: () => ({ isGM: true }) })).ok, true);
-assert.equal(writes, 1);
-assert.equal((await executeHybridLaborMigration(request, { store, getUser: () => ({ isGM: true }) })).replay, true);
-assert.equal(writes, 1, "replay never repeats migration or payment");
-await assert.rejects(() => executeHybridLaborMigration({ ...request, operationId: "stale" }, { store, getUser: () => ({ isGM: true }) }), /изменились/);
-assert.equal(writes, 1, "a stale preview never writes a partial holding/catalog result");
-const unchanged = planHybridLaborMigration({ holding: stored.holdings[0] });
-const noop = await executeHybridLaborMigration({ holdingId: old.id, holdingPlan: unchanged, expectedRevision: stored.meta.revision,
-  operationId: "labor-transition-noop" }, { store, getUser: () => ({ isGM: true }) });
-assert.equal(noop.unchanged, true);
-assert.equal(writes, 1, "an already transitioned preview does not create redundant writes or operation records");
+export async function checkHybridLaborCatalogCompatibility() {
 const priorTemplate = clone(BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION.find((row) => row.id === "lumbermill"));
 priorTemplate.workersMax = 99;
 priorTemplate.workerProfile.workersMax = 99;
@@ -370,20 +298,14 @@ for (const replaceCatalog of [false, true]) {
 }
   const wellTemplate = BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION.find(row => row.id === "well");
   const passiveWell = DEFAULT_BUILDING_TEMPLATES.find(row => row.id === "well");
-  const well = { ...clone(wellTemplate), id: "configured-well", templateId: wellTemplate.id,
-    constructionStatus: "built", buildProgress: wellTemplate.buildTarget };
   const staffProfile = { version: 1, mode: "staff", capacityQd: null };
-  const laborPlan = planHybridLaborMigration({
-    holding: { id: "well-holding", buildings: { list: [well] }, people: { list: [person("keeper")] } },
-    profiles: { [well.id]: staffProfile }
-  });
-  assert.equal(laborPlan.ok, true);
-  const staffCatalog = planHybridLaborCatalogMigration({ catalog: { buildings: [wellTemplate] }, profiles: { well: staffProfile } });
-  assert.equal(staffCatalog.ok, true);
+  const well = { ...clone(wellTemplate), id: "configured-well", templateId: wellTemplate.id,
+    constructionStatus: "built", buildProgress: wellTemplate.buildTarget, labor: clone(staffProfile) };
+  const staffWellTemplate = { ...clone(wellTemplate), labor: clone(staffProfile) };
   const wellAppointment = { ...appointment(), buildingId: well.id, primaryFunctionId: "culture" };
-  for (const template of [passiveWell, staffCatalog.targetCatalog.buildings[0]]) {
+  for (const template of [passiveWell, staffWellTemplate]) {
     for (const staffed of [false, true]) {
-      const holding = clone(laborPlan.targetHolding);
+      const holding = { id: "well-holding", buildings: { list: [clone(well)] }, people: { list: [person("keeper")] } };
       if (staffed) applyStaffAppointment(holding, "keeper", wellAppointment);
       const source = { meta: { templateCatalogVersion: TEMPLATE_CATALOG_VERSION },
         catalog: { buildings: [template] }, holdings: [holding] };
@@ -404,6 +326,6 @@ for (const replaceCatalog of [false, true]) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   await checkHybridLaborData();
-  await checkHybridLaborMigration();
-  console.log("Hybrid labor data/migration: legacy preservation, contracts, capacity, goals, GM/player security, preview, exact apply and replay passed.");
+  await checkHybridLaborCatalogCompatibility();
+  console.log("Hybrid labor data: legacy preservation, contracts, capacity, goals, GM/player security and catalog compatibility passed.");
 }

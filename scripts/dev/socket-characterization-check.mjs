@@ -3,6 +3,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { createSkyholdSocketApi } from "../data/socket.js";
 import { createStorageOperationExecutor } from "../apps/storage-operation-executor.js";
+import { UNSUPPORTED_WORLD_DATA } from "../data/storage-format.js";
 import { DEFAULT_SKYHOLD_DATA } from "../data/defaults/default-skyhold-data.js";
 import { normalizeSkyholdData } from "../data/normalizers.js";
 import { buildPlayerPatch, validatePlayerPatch } from "../data/player-write-guard.js";
@@ -761,6 +762,46 @@ export async function checkSocketCharacterization() {
     assert.equal(legacyHandled, false, "obsolete full-data player requests must not be handled");
     assert.deepEqual(persisted, persistedBeforeLegacy, "obsolete full-data requests must not mutate canonical data");
     assert.equal(emitted.length, emittedBeforeLegacy, "obsolete full-data requests must not receive a misleading success response");
+
+    {
+      const unsupportedEmits = [];
+      const previousSocket = globalThis.game.socket;
+      globalThis.game.user = { id: "gm-1", isGM: true };
+      globalThis.game.socket = { emit(_channel, payload) { unsupportedEmits.push(payload); } };
+      const unsupportedApi = createSkyholdSocketApi({
+        getData: () => { throw Object.assign(new Error("Данные мира не поддерживаются."), { code: UNSUPPORTED_WORLD_DATA }); },
+        enqueueWrite: async (operation) => operation(),
+        executeMarketOperation: async () => { throw new Error("fail-market"); },
+        executeConstructionOperation: async () => { throw new Error("fail-construction"); }
+      });
+      const prevConsoleError = console.error;
+      try {
+        console.error = () => {};
+        await unsupportedApi.handleSkyholdSocketPayload({
+          type: "playerDataPatchRequest", requestId: "unsup-patch", operationId: "unsup-patch",
+          expectedRevision: 0, userId: "player-1", targetGmId: "gm-1",
+          patch: { baseRevision: 0, changes: [] }
+        }, "player-1");
+        await unsupportedApi.handleSkyholdSocketPayload({
+          type: "playerMarketOperationRequest", requestId: "unsup-market", operationId: "unsup-market",
+          expectedRevision: 0, sourceToken: "t", userId: "player-1", targetGmId: "gm-1",
+          operation: { operationId: "unsup-market", expectedRevision: 0, sourceToken: "t" }
+        }, "player-1");
+        await unsupportedApi.handleSkyholdSocketPayload({
+          type: "playerConstructionOperationRequest", requestId: "unsup-build", operationId: "unsup-build",
+          expectedRevision: 0, userId: "player-1", targetGmId: "gm-1",
+          operation: { operationId: "unsup-build", expectedRevision: 0 }
+        }, "player-1");
+      } finally {
+        console.error = prevConsoleError;
+        globalThis.game.socket = previousSocket;
+      }
+      assert.equal(unsupportedEmits.length, 3);
+      for (const response of unsupportedEmits) {
+        assert.equal(response.ok, false);
+        assert.equal(response.revision, 0);
+      }
+    }
   } finally {
     if (previousGame === undefined) delete globalThis.game;
     else globalThis.game = previousGame;

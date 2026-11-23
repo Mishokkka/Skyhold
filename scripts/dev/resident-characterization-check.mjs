@@ -62,16 +62,6 @@ function checkAttributeContracts() {
   const extreme = { id: "extreme-attributes", age: 30, race: "Человек", attributes: { strength: 99, agility: -4, wits: 4.9, empathy: "bad" } };
   normalizePerson(extreme);
   assert.deepEqual(extreme.attributes, { strength: 6, agility: 1, wits: 4, empathy: 3 }, "stored resident attributes must be integer-clamped to 1..6");
-
-  const obsoleteProfession = { id: "old-profession", age: 30, race: "Человек", background: "лекарь", skill: "Healer", traitsText: "Надежный" };
-  normalizePerson(obsoleteProfession);
-  assert.equal(Object.hasOwn(obsoleteProfession, "skill"), false, "the obsolete resident profession field must be removed during normalization");
-  assert.equal(obsoleteProfession.traitsText, "Надежный", "derived profession markers must not be converted into duplicate traits");
-
-  const customLegacySkill = { id: "old-custom-skill", age: 30, race: "Человек", skill: "Автономность", traitsText: "Надежный" };
-  normalizePerson(customLegacySkill);
-  assert.equal(Object.hasOwn(customLegacySkill, "skill"), false);
-  assert.equal(customLegacySkill.traitsText, "Надежный, Автономность", "a non-profession legacy value must survive as a custom trait");
 }
 
 function checkGeneratedPopulation() {

@@ -5,7 +5,6 @@ import { DEFAULT_BUILDING_TEMPLATES } from "../data/building-templates.js";
 import { buildWorkAllocationTargets } from "../data/work-allocations.js";
 import { buildingHousingComfort } from "../engines/economy/building-service.js";
 import { BuildingEventDomain } from "../apps/domains/events/building-events.js";
-import { planHybridLaborMigration, planHybridLaborCatalogMigration } from "../workflows/buildings/hybrid-labor-migration.js";
 
 const quantity = (holding, id) => (holding.storage.resources ?? []).filter((row) => row.resourceId === id).reduce((sum, row) => sum + row.qty, 0);
 const template = (id) => structuredClone(DEFAULT_BUILDING_TEMPLATES.find((row) => row.id === id));
@@ -103,20 +102,6 @@ export async function checkHybridLaborFunctional() {
         assert.equal(f.building.serviceState.workedQdByFunction.housing, 20);
       }
     }
-
-    const warehouse = template("warehouse"); delete warehouse.labor;
-    Object.assign(warehouse, { id: "custom-warehouse", templateId: "warehouse", constructionStatus: "built", workersMax: 1,
-      functions: { ...warehouse.functions, production: true }, assignedWorkerIds: [],
-      productionLines: [{ id: "custom", source: "workers", active: true, resourceId: "wood", outputQty: 1, workQd: 1 }] });
-    const holding = { buildings: { list: [warehouse] }, people: { list: [] } };
-    const before = structuredClone(holding), automatic = planHybridLaborMigration({ holding });
-    assert.equal(automatic.ok, false, "A known template id cannot silently disable custom production");
-    assert.ok(automatic.issues.some((row) => row.code === "labor-profile-choice"));
-    const explicit = planHybridLaborMigration({ holding, profiles: { [warehouse.id]: { version: 1, mode: "qd", capacityQd: null } } });
-    assert.equal(explicit.ok, true);
-    assert.deepEqual(explicit.targetHolding.buildings.list[0].productionLines, warehouse.productionLines);
-    assert.deepEqual(holding, before, "Transition previews cannot mutate world data");
-    assert.equal(planHybridLaborCatalogMigration({ catalog: { buildings: [{ ...warehouse, id: "warehouse" }] } }).ok, false);
 
     const clearFixture = hybridRuntimeFixture({ count: 2 });
     clearFixture.holding.workforcePlan.locks = [{ personId: "worker-1", sourceId: "workshop", functionId: "production:main" }];

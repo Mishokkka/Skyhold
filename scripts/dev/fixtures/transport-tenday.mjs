@@ -5,6 +5,7 @@ import { planTransportChain } from "../../engines/transport/planner.js";
 import { bookTransportOrder } from "../../engines/transport/runtime.js";
 import { transportSourceToken } from "../../apps/domains/transport-context.js";
 import { createTransportOperationExecutor } from "../../apps/transport-operation-executor.js";
+import { bindSharedMarkets } from "../../data/market/shared-context.js";
 import { SkyholdWorkflowService } from "../../workflows/skyhold-workflow-service.js";
 import { SkyholdData } from "../../data/store.js";
 import { SETTING_CATALOG, SETTING_META } from "../../data/constants.js";
@@ -47,7 +48,7 @@ export function book(f, holding, id, services, { resourceId = "bread", direction
 let fixtureRevision = 0;
 
 export function harness(initial) {
-  let stored = structuredClone(initial), sequence = 0;
+  let stored = bindSharedMarkets(structuredClone(initial)), sequence = 0;
   const catalogRevision = ++fixtureRevision;
   game.settings.get = (_scope, setting) => {
     if (setting === SETTING_CATALOG) return stored.catalog;
@@ -55,16 +56,16 @@ export function harness(initial) {
   };
   const key = Symbol("skip"), skip = value => ({ [key]: true, value });
   const transaction = async updater => {
-    const draft = structuredClone(stored), result = await updater(draft, { skip });
+    const draft = bindSharedMarkets(structuredClone(stored)), result = await updater(draft, { skip });
     if (result?.[key]) return result.value;
-    draft.meta.revision++; stored = draft; return result;
+    draft.meta.revision++; stored = bindSharedMarkets(draft); return result;
   };
-  SkyholdData.view = () => stored; SkyholdData.skipTransaction = skip;
+  SkyholdData.view = () => bindSharedMarkets(stored); SkyholdData.skipTransaction = skip;
   SkyholdData.updateHolding = (id, updater) => transaction(draft => updater(draft.holdings.find(row => row.id === id), draft));
   const workflow = new SkyholdWorkflowService(); workflow._postTendaySummaryChat = async () => {}; workflow.requestRender = () => {};
   const execute = createTransportOperationExecutor({ transaction, workflow: () => workflow, getUser: id => ({ id, isGM: id === "gm" }) });
   return { workflow, execute, get data() { return stored; }, holding: (id = "first") => stored.holdings.find(row => row.id === id),
-    reload() { stored = normalizeSkyholdData(JSON.parse(JSON.stringify(stored))); },
+    reload() { stored = bindSharedMarkets(normalizeSkyholdData(JSON.parse(JSON.stringify(stored)))); },
     async prepare(id = "first", qd = 40, options = {}) {
       const before = structuredClone(stored);
       const result = await workflow._prepareTendayOperation({ holdingId: id, qd, dataView: stored, operationId: `carrier-period-${++sequence}`, pendingEventsCollected: true, ...options });

@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { advanceTransportShipments } from "../workflows/transport/orders.js";
 import { bindSharedMarkets, bindSharedMarketHolding, marketStateFor } from "../data/market/shared-context.js";
-import { previewSharedMarketMigration, applySharedMarketMigration } from "../data/market/shared-migration.js";
 import { reserveMarketStock, recoverMarketStock } from "../engines/market/stock.js";
 import { reserveMarketDemand, settleMarketDemandReservations, recoverMarketDemand } from "../engines/market/demand.js";
 import { marketStockKey } from "../data/market/stock-state.js";
@@ -12,11 +11,8 @@ import { pathToFileURL } from "node:url";
 export function checkSharedMarkets() {
 const holding = (id) => ({ id, gm: { calendaria: { lastQd: 0 } }, special: { market: {} } });
 {
-  const data = { meta: { ...DEFAULT_SKYHOLD_DATA.meta }, catalog: {}, holdings: [holding("a"), holding("b")] };
-  const before = JSON.stringify(data);
-  const preview = previewSharedMarketMigration(data);
-  assert.equal(JSON.stringify(data), before, "preview never mutates world data");
-  applySharedMarketMigration(data, preview.sourceToken);
+  const data = bindSharedMarkets({ meta: structuredClone(DEFAULT_SKYHOLD_DATA.meta), catalog: {}, holdings: [holding("a"), holding("b")] });
+  assert.equal(data.meta.sharedMarkets.enabled, true, "shared markets are enabled by default");
   const [a, b] = data.holdings;
   const lines = [{ id: "wood", qty: 7, stockBaseStock: 10, stockStateRevision: 0 }];
   assert.equal(reserveMarketStock({ holding: a, marketId: "port", operationId: "a-buy", lines }).ok, true);
@@ -37,15 +33,14 @@ const holding = (id) => ({ id, gm: { calendaria: { lastQd: 0 } }, special: { mar
   assert.deepEqual(marketStateFor(reloaded.holdings[1], "stock"), data.meta.sharedMarkets.stock);
 }
 {
-  const data = { meta: {}, catalog: {}, holdings: [holding("a"), holding("b")] };
+  const data = bindSharedMarkets({ meta: {}, catalog: {}, holdings: [holding("a"), holding("b")] });
   const [a, b] = data.holdings;
-  const reserve = (target, id, qty) => reserveMarketDemand({ holding: target, marketId: "port", operationId: id,
-    lines: [{ demandId: "wood", qty, demandBaseDemand: 10, demandStateRevision: 0 }] });
-  const ra = reserve(a, "a-sale", 3), rb = reserve(b, "b-sale", 4);
-  const preview = previewSharedMarketMigration(data);
-  assert.equal(preview.ok, true);
-  applySharedMarketMigration(data, preview.sourceToken);
   const key = marketDemandKey("port", "wood");
+  const reserve = (target, id, qty) => reserveMarketDemand({ holding: target, marketId: "port", operationId: id,
+    lines: [{ demandId: "wood", qty, demandBaseDemand: 10, demandStateRevision: marketStateFor(target, "demand")?.[key]?.revision ?? 0 }] });
+  const ra = reserve(a, "a-sale", 3), rb = reserve(b, "b-sale", 4);
+  assert.equal(ra.ok, true);
+  assert.equal(rb.ok, true);
   assert.equal(marketStateFor(a, "demand")[key].reservedDemand, 7);
   assert.equal(marketStateFor(b, "demand")[key].availableDemand, 3);
   settleMarketDemandReservations({ holding: a, reservations: ra.reservations, operationId: "a-arrive", outcome: "consumed" });
@@ -58,20 +53,18 @@ const holding = (id) => ({ id, gm: { calendaria: { lastQd: 0 } }, special: { mar
   assert.equal(JSON.stringify(data.meta.sharedMarkets.demand), once);
 }
 {
-  const data = { meta: {}, holdings: [holding("a"), holding("b")] };
-  for (const h of data.holdings) reserveMarketDemand({ holding: h, marketId: "port", operationId: h.id,
-    lines: [{ demandId: "wood", qty: 8, demandBaseDemand: 10, demandStateRevision: 0 }] });
-  const preview = previewSharedMarketMigration(data);
-  assert.equal(preview.ok, false, "merging must not erase excessive existing promises");
-  assert.match(preview.blockers.join(" "), /16/);
-  assert.throws(() => applySharedMarketMigration(data, preview.sourceToken));
-  assert.equal(data.meta.sharedMarkets, undefined);
+  const data = bindSharedMarkets({ meta: {}, holdings: [holding("a"), holding("b")] });
+  const [a, b] = data.holdings;
+  assert.equal(reserveMarketDemand({ holding: a, marketId: "port", operationId: a.id,
+    lines: [{ demandId: "wood", qty: 8, demandBaseDemand: 10, demandStateRevision: 0 }] }).ok, true);
+  assert.equal(reserveMarketDemand({ holding: b, marketId: "port", operationId: b.id,
+    lines: [{ demandId: "wood", qty: 8, demandBaseDemand: 10, demandStateRevision: 0 }] }).stale, true,
+    "shared demand prevents exceeding common capacity across holdings");
 }
 {
   const data = { meta: {}, holdings: [holding("dated")] };
   data.holdings[0].gm.calendaria.lastDateTime = { year: 2, month: 1, day: 1 };
-  const preview = previewSharedMarketMigration(data);
-  applySharedMarketMigration(data, preview.sourceToken);
+  bindSharedMarkets(data);
   const first = data.meta.sharedMarkets.clockTenday;
   reserveMarketStock({ holding: data.holdings[0], marketId: "port", operationId: "dated-buy",
     lines: [{ id: "wood", qty: 1, stockBaseStock: 10, stockStateRevision: 0 }] });
@@ -80,7 +73,7 @@ const holding = (id) => ({ id, gm: { calendaria: { lastQd: 0 } }, special: { mar
 {
   const data = { meta: {}, holdings: [holding("a"), holding("b")] };
   for (const h of data.holdings) h.gm.calendaria.lastDateTime = { year: 2, month: 1, day: 1 };
-  applySharedMarketMigration(data, previewSharedMarketMigration(data).sourceToken);
+  bindSharedMarkets(data);
   const reserved = reserveMarketDemand({ holding: data.holdings[0], marketId: "port", operationId: "runtime-sale",
     lines: [{ demandId: "wood", qty: 10, demandBaseDemand: 10, demandStateRevision: 0 }] });
   settleMarketDemandReservations({ holding: data.holdings[0], reservations: reserved.reservations, outcome: "consumed", operationId: "runtime-arrive" });
@@ -93,7 +86,7 @@ const holding = (id) => ({ id, gm: { calendaria: { lastQd: 0 } }, special: { mar
   advanceTransportShipments(data, data.holdings[1], 40, app);
   assert.equal(data.meta.sharedMarkets.clockTenday, once, "second holding at the same date cannot double global time");
 }
-console.log("Shared market: explicit migration, conserved promises, common stock/demand, isolated previews and one recovery per game date passed.");
+console.log("Shared market: default-enabled shared state, conserved promises, common stock/demand, isolated previews and one recovery per game date passed.");
 
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) checkSharedMarkets();

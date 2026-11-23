@@ -26,7 +26,6 @@ CSS is split by semantic ownership. Edit the narrowest owner file; never add ver
 - `parts/skyhold-morale-dialog.css` — morale dialog totals, source cards, Control comparison, thresholds and GM details.
 - `parts/skyhold-gm.css` — main GM tab (masonry dashboard, toggles, generated residents, defense controls, resource catalog, GM command disclosures).
 - `parts/skyhold-content-pack.css` — content-pack importer window and preview/conflict rows.
-- `parts/hybrid-labor-migration.css` — labor transition preview, mode selectors, resident decisions and bounded scroll area.
 - `parts/skyhold-resident-list.css` — People tab dense register (filters, table, details rows, injury/dead badges, actor drop zone, trait chips).
 - `parts/skyhold-resident-editor-v2.css` / `parts/residents/*` — expanded resident editor, generator and shared trait picker.
 - `parts/buildings/*` / `parts/building-systems/*` — base building list, development basics and subsystem controls.

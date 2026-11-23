@@ -502,11 +502,7 @@ export function attackerSourcesFromState(state = {}) {
       : autoBaseEfficiency;
     const templateTags = sourceTags[i];
     const templatePrimaryTag = primaryTag(templateTags);
-    const manualPrimaryTag = String(
-      state?.[`attackerSourcePrimaryTag${i + 1}`]
-      ?? state?.[`attackerSourceTag${i + 1}`]
-      ?? ""
-    ).trim();
+    const manualPrimaryTag = String(state?.[`attackerSourcePrimaryTag${i + 1}`] ?? "").trim();
     const validManualPrimaryTag = activeTags[manualPrimaryTag] ? manualPrimaryTag : "";
     const tags = tagsWithManualPrimary(templateTags, validManualPrimaryTag);
     const source = makeSource({

@@ -9,7 +9,7 @@ export const AGRICULTURE_KINDS = Object.freeze(["field", "garden", "vineyard", "
 // one Grain Field roughly four person-years of food and one vegetable Garden
 // roughly two. Herbs are a higher-value non-food alternative, so their harvest
 // is intentionally smaller. Building instances remain GM-editable.
-export const AGRICULTURE_CROP_OUTPUT_V1 = Object.freeze({
+const AGRICULTURE_CROP_OUTPUT = Object.freeze({
   grain: 960,
   vegetables: 480,
   herbs: 80
@@ -21,7 +21,7 @@ const DEFAULT_CROPS_BY_KIND = Object.freeze({
       id: "grain",
       label: "Зерно",
       resourceId: "grain",
-      outputQty: AGRICULTURE_CROP_OUTPUT_V1.grain,
+      outputQty: AGRICULTURE_CROP_OUTPUT.grain,
       sowingSeasons: ["spring"],
       sowingWorkQd: 8,
       growingQd: 480,
@@ -35,7 +35,7 @@ const DEFAULT_CROPS_BY_KIND = Object.freeze({
       id: "vegetables",
       label: "Овощи",
       resourceId: "vegetables",
-      outputQty: AGRICULTURE_CROP_OUTPUT_V1.vegetables,
+      outputQty: AGRICULTURE_CROP_OUTPUT.vegetables,
       sowingSeasons: ["spring", "summer"],
       sowingWorkQd: 4,
       growingQd: 120,
@@ -47,7 +47,7 @@ const DEFAULT_CROPS_BY_KIND = Object.freeze({
       id: "herbs",
       label: "Травы",
       resourceId: "herbs",
-      outputQty: AGRICULTURE_CROP_OUTPUT_V1.herbs,
+      outputQty: AGRICULTURE_CROP_OUTPUT.herbs,
       sowingSeasons: ["spring", "summer"],
       sowingWorkQd: 4,
       growingQd: 80,

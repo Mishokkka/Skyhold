@@ -247,11 +247,11 @@ export function checkBuildingTemplateCatalog({
   assert.ok(deprecatedIds instanceof Set, "scripts/data/building-templates.js: DEPRECATED_TEMPLATE_IDS must be a Set");
   for (const deprecatedId of deprecatedIds) {
     assert.ok(ID_PATTERN.test(deprecatedId), `scripts/data/building-templates.js: invalid deprecated template id "${deprecatedId}"`);
+    assert.equal(templateIds.has(deprecatedId), false, `scripts/data/building-templates.js: active template "${deprecatedId}" must not be listed in DEPRECATED_TEMPLATE_IDS`);
   }
 
-  const staleDeprecatedIds = [...deprecatedIds].filter((id) => !templateIds.has(id));
   const migrationProbe = JSON.parse(JSON.stringify(defaultData));
-  migrationProbe.catalog.buildings.push(...staleDeprecatedIds.map((id) => ({
+  migrationProbe.catalog.buildings.push(...[...deprecatedIds].map((id) => ({
     id,
     name: `Deprecated ${id}`,
     type: "Deprecated",
@@ -260,15 +260,7 @@ export function checkBuildingTemplateCatalog({
   })));
   const migratedProbe = normalizeSkyholdData(migrationProbe);
   const migratedIds = new Set(migratedProbe.catalog.buildings.map((template) => template.id));
-  for (const id of staleDeprecatedIds) {
+  for (const id of deprecatedIds) {
     assert.ok(migratedIds.has(id), `scripts/data/building-templates.js: ordinary loading must preserve deprecated template "${id}" until an explicit operation`);
-  }
-  const repairedProbe = normalizeSkyholdData(migrationProbe, { mode: "repair", destructive: true });
-  const repairedIds = new Set(repairedProbe.catalog.buildings.map((template) => template.id));
-  for (const id of staleDeprecatedIds) {
-    assert.ok(!repairedIds.has(id), `scripts/data/building-templates.js: explicit repair must remove deprecated template "${id}"`);
-  }
-  for (const id of [...deprecatedIds].filter((value) => templateIds.has(value))) {
-    assert.ok(migratedIds.has(id), `scripts/data/building-templates.js: active legacy template "${id}" must not be removed during migration`);
   }
 }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mixedMarketRouteFixture } from "./fixtures/mixed-market-route.mjs";
 import { DEFAULT_EXTERNAL_MARKET } from "../data/market/default-market.js";
-import { effectiveMarketCatalog, marketCatalogSummary, normalizeMarketCatalog } from "../data/market/market-catalog.js";
+import { normalizeMarketOffer } from "../data/market/market-catalog.js";
 import { marketLocationForHolding, marketRegionFactors, marketRegionForValue } from "../data/market/region-market.js";
 import { normalizeEventRegionOptions } from "../data/random-events.js";
 import { marketRouteDistanceKm, marketRoutePolylineLength, normalizeMarketRouteMap } from "../data/market/route-map.js";
@@ -20,6 +20,30 @@ function holding({ region = "Центральный городской порт"
     overview: { region, period, altitude: "", drift: "", reputation },
     storage: { moneyCopper },
     gm: { modifiers: { reputation: 0, marketConnectionsLevel: urs }, calendaria: { lastDateKey: "" } }
+  };
+}
+
+function marketFixture(row = {}) {
+  const modes = Array.isArray(row.transportModes)
+    ? row.transportModes
+    : String(row.transportModes ?? "").split(/[,;|\n]+/).map((item) => item.trim()).filter(Boolean);
+  return {
+    active: true,
+    visibility: "public",
+    quotePeriodDays: 10,
+    deliveryMode: "instant",
+    baseDeliveryQd: 8,
+    regionId: "",
+    accessLevelOverride: 0,
+    deliveryDistanceCopper: 0,
+    deliveryLoadDistanceCopper: 0,
+    airshipHireCopper: 120,
+    caravanCapacityLoad: 400,
+    railCapacityLoad: 8000,
+    airshipCapacityLoad: 4000,
+    ...row,
+    transportModes: modes.length ? modes : ["caravan", "rail", "airship"],
+    offers: (row.offers ?? []).map((offer, index) => normalizeMarketOffer(offer, index))
   };
 }
 
@@ -53,38 +77,6 @@ assert.deepEqual(
 );
 assert.equal(formatCopperCurrencyCompact(112), "1 З 1 С 2 М", "compact market currency must use one-letter denominations");
 assert.deepEqual(copperCurrencyParts(112).map(({ value, label, tone }) => [value, label, tone]), [[1, "З", "gold"], [1, "С", "silver"], [2, "М", "copper"]], "market currency must expose denomination tones to the template");
-const fallbackCatalog = effectiveMarketCatalog([]);
-assert.equal(fallbackCatalog.length, 1, "empty world catalog must retain the built-in market fallback");
-assert.equal(fallbackCatalog[0].offers.length, DEFAULT_EXTERNAL_MARKET.offers.length);
-const worldCatalog = normalizeMarketCatalog([
-  {
-    id: "external-market",
-    label: "Настроенный внешний рынок",
-    offers: [
-      { id: "market-wood", resourceId: "wood", kind: "material", basePriceCopper: 99, baseStock: 7, volatility: 0.1, load: 1 },
-      { id: "market-stone", resourceId: "stone", active: false, kind: "material", basePriceCopper: 5, baseStock: 1 }
-    ]
-  },
-  {
-    id: "guild-market",
-    label: "Гильдейская ярмарка",
-    origin: "Гильдия перевозчиков",
-    quotePeriodDays: 4,
-    deliveryMode: "scheduled",
-    baseDeliveryQd: 12,
-    offers: [{ id: "guild-item", sourceType: "item", itemUuid: "Compendium.world.goods.Item.example", name: "Набор инструментов", kind: "consumable", basePriceCopper: 40, baseStock: 5, load: 2, tags: "gear, tools" }]
-  }
-]);
-const effectiveWorldCatalog = effectiveMarketCatalog(worldCatalog);
-assert.equal(effectiveWorldCatalog.length, 2, "world catalog must add providers without removing the fallback provider");
-assert.equal(effectiveWorldCatalog[0].offers.find((offer) => offer.id === "market-wood").basePriceCopper, 99, "stable offer id must override the built-in offer");
-assert.equal(effectiveWorldCatalog[0].offers.find((offer) => offer.id === "market-stone").active, false, "disabled built-in offers must remain disabled after merge");
-assert.equal(effectiveWorldCatalog[1].offers[0].sourceType, "item");
-assert.equal(effectiveWorldCatalog[1].offers[0].itemUuid, "Compendium.world.goods.Item.example");
-assert.equal(effectiveWorldCatalog[1].deliveryMode, "scheduled");
-assert.equal(effectiveWorldCatalog[1].baseDeliveryQd, 12);
-assert.deepEqual(effectiveWorldCatalog[1].offers[0].tags, ["gear", "tools"]);
-assert.deepEqual(marketCatalogSummary(worldCatalog), { marketCount: 2, activeMarketCount: 2, offerCount: DEFAULT_EXTERNAL_MARKET.offers.length, hasOverride: true });
 const connected = holding();
 const quoteA = prepareMarketQuote({ holding: connected, market: DEFAULT_EXTERNAL_MARKET, resources });
 const quoteARepeat = prepareMarketQuote({ holding: connected, market: DEFAULT_EXTERNAL_MARKET, resources });
@@ -137,7 +129,7 @@ const migratedBlankRegion = normalizeSkyholdData({
   meta: { ...DEFAULT_SKYHOLD_DATA.meta },
   holdings: [{ ...holding({ region: "" }), type: "settlement" }],
   catalog: { buildings: [], resources: [], markets: [], eventRegions: configuredRegions }
-}, { fromVersion: 59 });
+});
 assert.equal(migratedBlankRegion.holdings[0].overview.region, "central-port", "legacy visually-selected first region must be persisted during migration");
 const configuredLocation = marketLocationForHolding({
   holding: connected,
@@ -198,7 +190,7 @@ const weightedRoute = shortestMarketRoute("weighted-a", "weighted-b", weightedRe
 assert.deepEqual(weightedRoute.path, ["weighted-a", "weighted-c", "weighted-b"], "route access must prefer the lower total URS cost over fewer links");
 assert.equal(weightedRoute.accessCost, 2, "route access must sum per-link URS costs");
 assert.equal(marketRegionAccessCostMap({ holding: holding({ region: "Weighted A" }), regions: weightedRegions, dependencies: { regionResolver: marketRegionForValue } }).get("weighted-b"), 2, "market reachability must use weighted URS costs");
-const novandMarket = normalizeMarketCatalog([{
+const novandMarket = marketFixture({
   id: "novand-wine",
   label: "Новандские винные дома",
   regionId: "novand",
@@ -213,7 +205,7 @@ const novandMarket = normalizeMarketCatalog([{
     { id: "novand-wine-offer", resourceId: "water", name: "Вино", basePriceCopper: 10, baseStock: 500, load: 1, accessDifficulty: 0 },
     { id: "novand-licensed-offer", resourceId: "custom", name: "Лицензируемый узел", basePriceCopper: 100, baseStock: 5, load: 1, accessDifficulty: 2 }
   ]
-}])[0];
+});
 const logisticsDependencies = { regionFactors: marketRegionFactors, regionResolver: marketRegionForValue };
 const novandLogistics = resolveMarketLogistics({ holding: developedHolding, market: novandMarket, regions: logisticsRegions, dependencies: logisticsDependencies });
 assert.equal(novandLogistics.ok, true);
@@ -235,20 +227,20 @@ assert.equal(movedLogistics.distanceKm, 80);
 assert.ok(novandLogistics.distanceFlatCopper > movedLogistics.distanceFlatCopper, "a longer route must cost more even when both routes require an airship");
 assert.ok(marketHistoricalFreightRate(novandLogistics) > marketHistoricalFreightRate(movedLogistics), "a longer, higher-URS route must produce a visibly higher value-based freight rate");
 assert.notDeepEqual(movedLogistics.routePath, novandLogistics.routePath, "moving the holding must replace the resolved route path");
-const ursExampleLocalMarket = normalizeMarketCatalog([{
+const ursExampleLocalMarket = marketFixture({
   id: "urs-example-local",
   label: "Local strategic goods",
   regionId: "fletchenrand",
   transportModes: "caravan, rail, airship",
   offers: [{ id: "urs-example-core", resourceId: "custom", name: "Crystal Core", basePriceCopper: 1000, baseStock: 1, load: 1, accessDifficulty: 4 }]
-}])[0];
-const ursExampleNeighborMarket = normalizeMarketCatalog([{
+});
+const ursExampleNeighborMarket = marketFixture({
   id: "urs-example-neighbor",
   label: "Neighbor common goods",
   regionId: "izauver",
   transportModes: "caravan, rail, airship",
   offers: [{ id: "urs-example-pastry", resourceId: "custom", name: "Sweet Pastry", basePriceCopper: 5, baseStock: 20, load: 1, accessDifficulty: 1 }]
-}])[0];
+});
 const ursExampleHolding1 = {
   ...developedHolding,
   gm: { ...developedHolding.gm, modifiers: { ...developedHolding.gm.modifiers, marketConnectionsLevel: 1 } }
@@ -408,7 +400,7 @@ const longAirshipRegions = normalizeEventRegionOptions([
   { value: "long-port", label: "Long Port", marketTransportModes: ["airship"], marketLinks: [] }
 ], { fallback: false });
 const longAirshipHolding = holding({ region: "Long Home", moneyCopper: 10_000_000, urs: 3 });
-const longAirshipMarket = normalizeMarketCatalog([{
+const longAirshipMarket = marketFixture({
   id: "long-airship-market",
   label: "Long Airship Market",
   regionId: "long-port",
@@ -418,7 +410,7 @@ const longAirshipMarket = normalizeMarketCatalog([{
   airshipHireCopper: 120,
   airshipCapacityLoad: 4000,
   offers: [{ id: "long-bulk", resourceId: "wood", name: "Wood", basePriceCopper: 1, baseStock: 10_000, load: 1, volatility: 0 }]
-}])[0];
+});
 const longAirshipLogistics = resolveMarketLogistics({ holding: longAirshipHolding, market: longAirshipMarket, regions: longAirshipRegions });
 const longAirshipQuote = prepareMarketQuote({ holding: longAirshipHolding, market: longAirshipMarket, resources, logistics: longAirshipLogistics });
 const longAirshipQuantities = { "long-bulk": 4000 };
