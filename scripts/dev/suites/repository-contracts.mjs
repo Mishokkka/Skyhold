@@ -954,7 +954,6 @@ function checkFloatingTooltipConsumers() {
   const helperFile = path.join(appRoot, "common/floating-tooltip.js");
   const helperSource = readFileSync(helperFile, "utf8");
   assert.match(helperSource, /className\s*=\s*["']fbl-skyhold fbls-floating-tooltip["']/, "body-level tooltips must carry the Skyhold theme scope");
-  assert.match(readFileSync(path.join(root, "scripts/integrations/scene-notes.js"), "utf8"), /className\s*=\s*["']fbl-skyhold fbls-building-note-tooltip["']/, "scene-note tooltips must carry the Skyhold theme scope");
   const buildingEventsSource = readFileSync(path.join(appRoot, "domains/events/building-events.js"), "utf8");
   assert.match(buildingEventsSource, /className\s*=\s*["']fbl-skyhold fbls-building-context-menu["']/, "building context menus must carry the Skyhold theme scope");
   assert.match(buildingEventsSource, /action:\s*["']cancel-project["'][\s\S]{0,250}Отменить проект/, "unfinished construction must expose a distinct project-cancellation action");

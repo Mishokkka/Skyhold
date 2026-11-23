@@ -96,23 +96,6 @@ assert.match(lazyAppsSource, /openMassCombatApp[\s\S]{0,360}ensureSkyholdTemplat
 assert.match(uniqueBuildingBaseSource, /_prepareContext\(options\)[\s\S]{0,120}ensureSkyholdTemplateGroup\("uniqueBuilding"\)/, "unique building windows must load their partials before first render");
 assert.match(templateBrowserSource, /class SkyholdBuildingTemplateEditor[\s\S]{0,500}_prepareContext\(options\)[\s\S]{0,120}ensureSkyholdTemplateGroup\("buildingEditor"\)/, "building template editor must load shared editor partials before first render");
 
-const sceneNotesSource = readFileSync(path.join(root, "scripts/integrations/scene-notes.js"), "utf8");
-assert.doesNotMatch(sceneNotesSource, /Hooks\.on\("clickNote"/, "scene notes must not register the undocumented clickNote hook");
-assert.match(sceneNotesSource, /Hooks\.on\("dropCanvasData"/, "scene-note drops must use the public V13/V14 dropCanvasData hook");
-assert.match(sceneNotesSource, /Hooks\.on\("hoverNote"/, "scene-note hover behavior must use the public placeable hook");
-assert.match(sceneNotesSource, /clientCoordinatesFromCanvas/, "scene-note tooltips must use the public Canvas coordinate adapter");
-assert.doesNotMatch(sceneNotesSource, /\bcanvas\?*\.app\b|globalThis\.PIXI\b|\bnote\?*\.controlIcon\b|\._icon\b|\.worldTransform\b/, "scene notes must not depend on private PIXI/Canvas internals");
-const noteDataBlock = sceneNotesSource.match(/const noteData = \{([\s\S]*?)\n\s*\};/)?.[1] ?? "";
-assert.ok(noteDataBlock, "scene notes must declare a Note document payload");
-assert.match(noteDataBlock, /\btexture\s*:\s*\{\s*src\s*:\s*texture\s*\}/, "scene notes must use the V13/V14 Note texture schema");
-assert.match(noteDataBlock, /\bglobal\s*:\s*false\b/, "scene notes must keep building notes scene-local");
-assert.doesNotMatch(noteDataBlock, /^\s*(?:icon|hidden|locked)\s*:/m, "scene notes must not write unsupported Note document fields");
-const paletteSource = readFileSync(path.join(root, "styles/parts/skyhold-variables.css"), "utf8");
-const strongTextColor = paletteSource.match(/--fbls-text-strong:\s*(#[\da-f]{6})\s*;/i)?.[1];
-const noteTextColor = noteDataBlock.match(/\btextColor:\s*"(#[\da-f]{6})"/i)?.[1];
-assert.ok(strongTextColor, "the shared strong-text color must be defined in the palette");
-assert.equal(noteTextColor?.toLowerCase(), strongTextColor.toLowerCase(), "new building Notes must use the shared strong-text color");
-
 const manifest = JSON.parse(readFileSync(path.join(root, "module.json"), "utf8"));
 assert.equal(Number.parseInt(manifest.compatibility?.minimum, 10), 13, "module must keep Foundry V13 as its minimum");
 assert.ok(Number.parseInt(manifest.compatibility?.verified, 10) >= 14, "module must declare V14 verification after the compatibility pass");

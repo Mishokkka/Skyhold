@@ -27,6 +27,7 @@ import {
 
 const BUILDING_CONTEXT_MENU_WIDTH = 280;
 const BUILDING_CONTEXT_MENU_HEIGHT = 260;
+const BUILDING_ORDER_DRAG_TYPE = `application/x-${MODULE_ID}-building-order`;
 const BUILDING_DRAG_CLICK_SUPPRESS_MS = 40;
 
 function clampAudioVolume(value, fallback = 0.45) {
@@ -469,31 +470,20 @@ async _onOpenBuildingEditor(event) {
   editor.render({ force: true, focus: true });
 },
 
+_canReorderBuildings() {
+  return Boolean(globalThis.game?.user?.isGM) && this._canEditBuildings();
+},
+
 _onBuildingDragStart(event) {
-  if (!this._canEditBuildings()) return;
+  if (!this._canReorderBuildings() || !event.dataTransfer) return;
   const card = event.currentTarget;
   const buildingId = String(card?.dataset?.buildingId || card?.dataset?.id || "");
   if (!buildingId) return;
-  const data = SkyholdData.get();
-  const holding = data.holdings.find((item) => String(item.id) === String(this.activeHoldingId));
-  const buildingIndex = (holding?.buildings?.list ?? []).findIndex((item) => String(item.id) === buildingId);
-  const building = buildingIndex >= 0 ? holding.buildings.list[buildingIndex] : null;
-  if (!holding || !building) return;
-  const prepared = this._prepareBuildingRow?.(holding, building, buildingIndex, true) ?? building;
-  const payload = {
-    type: "fbl-skyhold-building",
-    moduleId: MODULE_ID,
-    holdingId: String(holding.id ?? ""),
-    buildingId,
-    name: String(building.name ?? "Постройка"),
-    icon: String(prepared.icon ?? building.icon ?? "fa-solid fa-building"),
-    img: String(prepared.img ?? building.img ?? building.image ?? "")
-  };
   this._buildingDragActive = true;
   card.classList?.add?.("dragging");
-  event.dataTransfer?.setData?.("text/plain", JSON.stringify(payload));
-  event.dataTransfer?.setData?.(`application/${MODULE_ID}+json`, JSON.stringify(payload));
-  if (event.dataTransfer) event.dataTransfer.effectAllowed = "copyMove";
+  event.dataTransfer.clearData();
+  event.dataTransfer.setData(BUILDING_ORDER_DRAG_TYPE, buildingId);
+  event.dataTransfer.effectAllowed = "move";
 },
 
 _onBuildingDragEnd(event) {
@@ -502,31 +492,25 @@ _onBuildingDragEnd(event) {
 },
 
 _onBuildingDragOver(event) {
-  if (!this._canEditBuildings()) return;
+  if (!this._canReorderBuildings() || !event.dataTransfer?.types.includes(BUILDING_ORDER_DRAG_TYPE)) return;
   const target = event.currentTarget;
-  const draggedId = this._buildingDragIdFromEvent?.(event) || "";
   const targetId = String(target?.dataset?.buildingId || target?.dataset?.id || "");
-  if (!targetId || draggedId === targetId) return;
+  if (!targetId || target.classList.contains("dragging")) return;
   event.preventDefault();
-  if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
-  target.classList?.add?.("drag-over");
+  event.dataTransfer.dropEffect = "move";
+  target.classList.add("drag-over");
 },
 
-_buildingDragIdFromEvent(event) {
-  const raw = event.dataTransfer?.getData?.(`application/${MODULE_ID}+json`) || event.dataTransfer?.getData?.("text/plain") || "";
-  if (!raw) return "";
-  try {
-    const payload = JSON.parse(raw);
-    if (payload?.type !== "fbl-skyhold-building") return "";
-    return String(payload.buildingId ?? "");
-  } catch (_error) { return ""; }
+_onBuildingDragLeave(event) {
+  const target = event.currentTarget;
+  if (!target.contains(event.relatedTarget)) target.classList.remove("drag-over");
 },
 
 async _onBuildingDrop(event) {
-  if (!this._canEditBuildings()) return;
   const targetCard = event.currentTarget;
   targetCard?.classList?.remove?.("drag-over");
-  const draggedId = this._buildingDragIdFromEvent(event);
+  if (!this._canReorderBuildings()) return;
+  const draggedId = event.dataTransfer?.getData(BUILDING_ORDER_DRAG_TYPE);
   const targetId = String(targetCard?.dataset?.buildingId || targetCard?.dataset?.id || "");
   if (!draggedId || !targetId || draggedId === targetId) return;
   event.preventDefault();

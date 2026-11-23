@@ -21,7 +21,7 @@
 | Труд, штат, QD и план | `data/{hybrid-labor,work-allocations,workforce-plan}.js`, `engines/workers/`, `apps/domains/workforce-planner.js` |
 | Политика | `engines/politics/`, `data/politics-*.js`, `apps/politics-decision-context.js` |
 | Массовый бой | `apps/mass-combat/{calculator,round-resolution,casualties,damage,supplies}.js`, `apps/mass-combat.js` |
-| Foundry, календарь, отметки сцены | `integrations/{foundry-runtime,calendaria-bridge,scene-notes}.js` |
+| Foundry и календарь | `integrations/{foundry-runtime,calendaria-bridge}.js` |
 | Каталоги, контент и генераторы | `data/building-template-*`, `data/resources/`, `generators/`, `dev/` |
 
 ## Поток изменения данных

@@ -10,6 +10,7 @@ import { selectionSummary, syncSelectionSummary } from "../apps/common/selection
 import { DisclosureState } from "../apps/common/disclosure-state.js";
 import { workerProfileEditorContext } from "../apps/editors/worker-profile-editor.js";
 import { residentTraitTooltip, residentTraitVisibleCount } from "../apps/common/resident-trait-chips.js";
+import { BuildingEventDomain } from "../apps/domains/events/building-events.js";
 
 assert.equal(residentTraitTooltip({ name: " Лидер ", description: " Ведёт за собой. " }), "Лидер\nВедёт за собой.");
 assert.equal(residentTraitTooltip({ name: "<Пользовательская черта>" }), "<Пользовательская черта>", "custom names remain text, including names without a description");
@@ -142,6 +143,60 @@ assert.doesNotMatch(beforeSample, /\sdata-action=|\sdraggable=|\sdata-building-c
 const previous = { foundry: globalThis.foundry, game: globalThis.game, Handlebars: globalThis.Handlebars,
   setTimeout: globalThis.setTimeout, clearTimeout: globalThis.clearTimeout, ui: globalThis.ui };
 try {
+  globalThis.game = { user: { isGM: false } };
+  const holding = { buildings: { list: [{ id: "mill" }, { id: "garden" }] } };
+  let writes = 0;
+  const manager = {
+    ...BuildingEventDomain,
+    _canEditBuildings: () => true,
+    _updateActiveHolding(updater, options) {
+      assert.equal(options.reason, "building:reorder");
+      writes++;
+      return updater(holding);
+    },
+    requestRender() {}
+  };
+  const payload = new Map();
+  const drag = {
+    get types() { return [...payload.keys()]; },
+    getData: type => payload.get(type) ?? "",
+    clearData: () => payload.clear(),
+    setData: (type, value) => payload.set(type, value)
+  };
+  const start = { currentTarget: { dataset: { buildingId: "mill" } }, dataTransfer: drag };
+  manager._onBuildingDragStart(start);
+  assert.equal(payload.size, 0, "a player with building edit permission still cannot start a shared reorder");
+  globalThis.game.user.isGM = true;
+  drag.setData("text/plain", "building.webp");
+  drag.setData("text/uri-list", "building.webp");
+  manager._onBuildingDragStart(start);
+  assert.deepEqual([...payload.values()], ["mill"], "sorting needs only the building ID");
+  assert.equal(drag.getData("text/plain"), "", "sorting cannot emit a Foundry canvas drag payload");
+  assert.equal(drag.effectAllowed, "move");
+  const child = {};
+  const classes = new Set();
+  const target = { dataset: { buildingId: "garden" }, contains: node => node === child,
+    classList: { contains: name => classes.has(name), add: name => classes.add(name), remove: name => classes.delete(name) } };
+  const dragOver = {
+    currentTarget: target, dataTransfer: { types: drag.types, getData: () => assert.fail("drag data is protected during dragover") },
+    preventDefault() {}
+  };
+  manager._onBuildingDragOver(dragOver);
+  assert.equal(dragOver.dataTransfer.dropEffect, "move");
+  assert.equal(classes.has("drag-over"), true);
+  manager._onBuildingDragLeave({ currentTarget: target, relatedTarget: child });
+  assert.equal(classes.has("drag-over"), true, "hover stays active when entering a child of the same card");
+  manager._onBuildingDragLeave({ currentTarget: target, relatedTarget: null });
+  assert.equal(classes.has("drag-over"), false, "leaving the card for the scene or outside the window clears the highlight");
+  const drop = { currentTarget: target, dataTransfer: drag, preventDefault() {}, stopPropagation() {} };
+  globalThis.game.user.isGM = false;
+  await manager._onBuildingDrop(drop);
+  assert.equal(writes, 0, "the drop respects the GM-only shared reorder policy");
+  globalThis.game.user.isGM = true;
+  await manager._onBuildingDrop(drop);
+  assert.equal(writes, 1);
+  assert.deepEqual(holding.buildings.list.map(row => row.id), ["garden", "mill"]);
+
   class Base { async _prepareContext() { return {}; } }
   globalThis.Handlebars = { partials: {}, registerHelper() {} };
   globalThis.foundry = { applications: { api: { ApplicationV2: Base, HandlebarsApplicationMixin: Parent => Parent }, handlebars: {
@@ -215,6 +270,9 @@ try {
   globalThis.game.user.isGM = true;
   const app = new SkyholdUiReviewApp();
   const context = await app._prepareContext({});
+  const reviewTemplate = readFileSync(new URL("../../templates/ui-review-app.hbs", import.meta.url), "utf8");
+  assert.match(reviewTemplate, /\{\{history\.length\}\} пунктов/, "the archive count is derived from the displayed history");
+  assert.equal(context.history.length, 7, "the archive contains the remaining typography and palette decisions");
   assert.equal(context.proposalCount, 13);
   assert.equal(context.approvedAudits.length, 10);
   assert.equal(context.approvedBehaviors.length, 2);

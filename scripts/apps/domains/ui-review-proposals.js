@@ -62,15 +62,6 @@ export const UI_REVIEW_PROPOSALS = Object.freeze([
     example: "Тип «Эмпатия» остаётся фиолетовым; меняется только место определения цвета.",
     caution: "Градиенты смешанных типов и контраст нужно проверить в Foundry.",
     demo: "worker"
-  },
-  {
-    id: "scene-note", group: "color", title: "Подписи зданий на сцене",
-    where: "Только новые Foundry Notes",
-    before: "Hans Hand · 18 px · #f2efe6",
-    after: "Hans Hand · 18 px · общий светлый #f5eee2",
-    example: "Близкий белый цвет станет единым для новых отметок.",
-    caution: "Созданные ранее Notes не менять и не мигрировать.",
-    demo: "note"
   }
 ]);
 
