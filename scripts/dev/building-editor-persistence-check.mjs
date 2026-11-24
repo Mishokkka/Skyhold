@@ -13,7 +13,7 @@ import { SaveStatus } from "../apps/common/save-status.js";
 import { PendingFieldSavesMixin } from "../apps/common/pending-field-saves.js";
 import { buildingPickerValues } from "../apps/domains/building-editor-pickers.js";
 import { assertProductionIdentityUnchanged, createProductionTiming } from "../engines/economy/production-timing.js";
-import { validateBuildingLaborAndGoals, newLaborIssues, buildingLaborCapacityQd } from "../data/labor-model.js";
+import { validateBuildingLaborAndGoals, newLaborIssues, buildingLaborCapacityQd, uncollectibleProductionLine } from "../data/labor-model.js";
 import { buildWorkAllocationTargets } from "../data/work-allocations.js";
 
 export async function checkBuildingEditorPersistence() {
@@ -64,11 +64,11 @@ const foundry = { utils: {
   getProperty: (object, path) => path.split(".").reduce((row, key) => row?.[key], object)
 } };
 const warnings = [];
-const EditorMethods = new Function("SkyholdData", "foundry", "fieldValue", "buildingPickerValues", "requestSkyholdAppRender", "ui", "assertProductionIdentityUnchanged", "newLaborIssues", "validateBuildingLaborAndGoals", "buildWorkAllocationTargets",
+const EditorMethods = new Function("SkyholdData", "foundry", "fieldValue", "buildingPickerValues", "requestSkyholdAppRender", "ui", "assertProductionIdentityUnchanged", "newLaborIssues", "validateBuildingLaborAndGoals", "buildWorkAllocationTargets", "uncollectibleProductionLine",
   `return class { ${methods.join("\n")} }`)(dataApi, foundry, fieldValue,
   buildingPickerValues, () => {},
   { notifications: { error(message) { assert.fail(message); }, warn(message) { warnings.push(message); } } }, assertProductionIdentityUnchanged,
-  newLaborIssues, validateBuildingLaborAndGoals, buildWorkAllocationTargets);
+  newLaborIssues, validateBuildingLaborAndGoals, buildWorkAllocationTargets, uncollectibleProductionLine);
 const Editor = PendingFieldSavesMixin(EditorMethods);
 const reload = () => createSkyholdSplitStorage({ settings }).getData();
 for (const template of [true, false]) {

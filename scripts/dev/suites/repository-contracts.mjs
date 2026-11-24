@@ -1744,11 +1744,11 @@ export async function runRepositoryContracts() {
         workAllocations: [{ sourceId: "building-drift-full", functionId: "culture", normalQd: 20 }] }
     ] },
     buildings: { list: [
-      { id: "building-open", name: "Свободная мастерская", status: "built", workersMax: 2, labor: { version: 2, capacityQd: 40 }, functions: {} },
-      { id: "building-full", name: "Заполненная мастерская", status: "built", workersMax: 1, labor: { version: 2, capacityQd: 20 }, functions: {} },
-      { id: "building-zero", name: "Без рабочих мест", status: "built", workersMax: 0, labor: { version: 2, capacityQd: 0 }, functions: {} },
-      { id: "building-planned", name: "Только проект", constructionStatus: "planned", workersMax: 5, labor: { version: 2, capacityQd: 100 }, functions: {} },
-      { id: "building-drift-full", name: "Занято по жителю", status: "built", workersMax: 1, labor: { version: 2, capacityQd: 20 }, functions: {} }
+      { id: "building-open", name: "Свободная мастерская", status: "built", workersMax: 2, labor: { version: 2, capacityQd: 40 }, functions: { culture: true } },
+      { id: "building-full", name: "Заполненная мастерская", status: "built", workersMax: 1, labor: { version: 2, capacityQd: 20 }, functions: { culture: true } },
+      { id: "building-zero", name: "Без рабочих мест", status: "built", workersMax: 0, labor: { version: 2, capacityQd: 0 }, functions: { culture: true } },
+      { id: "building-planned", name: "Только проект", constructionStatus: "planned", workersMax: 5, labor: { version: 2, capacityQd: 100 }, functions: { culture: true } },
+      { id: "building-drift-full", name: "Занято по жителю", status: "built", workersMax: 1, labor: { version: 2, capacityQd: 20 }, functions: { culture: true } }
     ] },
     construction: { crews: [] }
   };
