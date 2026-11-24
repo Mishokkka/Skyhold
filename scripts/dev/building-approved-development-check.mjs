@@ -73,7 +73,7 @@ export function checkApprovedBuildingDevelopment() {
   for (const [id, before] of APPROVED_BONUS_DECISIONS) old.find((r) => r.id === id).bonuses = parse(before);
   for (const [id, before] of APPROVED_REQUIREMENT_DECISIONS) old.find((r) => r.id === id).requirements = parse(before);
   const source = normalizeSkyholdData({
-    meta: { schemaVersion: SKYHOLD_SCHEMA_VERSION, templateCatalogVersion: TEMPLATE_CATALOG_VERSION, revision: 9 },
+    meta: { schemaVersion: SKYHOLD_SCHEMA_VERSION, templateCatalogVersion: TEMPLATE_CATALOG_VERSION, sharedMarkets: { enabled: true, version: 1, clockTenday: 0, demand: {}, stock: {} }, revision: 9 },
     catalog: { buildings: old },
     holdings: [{
       id: "test",

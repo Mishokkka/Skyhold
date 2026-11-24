@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { SkyholdData } from "../data/store.js";
 import { DEFAULT_SKYHOLD_DATA } from "../data/defaults/default-skyhold-data.js";
 import { normalizeSkyholdData } from "../data/normalizers.js";
+import { UNSUPPORTED_WORLD_DATA } from "../data/storage-format.js";
 
 const renderedBanks = [], loadedTemplates = [];
 globalThis.foundry = { applications: { api: { ApplicationV2: class {
@@ -53,12 +54,19 @@ assert.ok(loadedTemplates.includes("modules/fbl-skyhold/templates/parts/save-sta
 SkyholdBankApp.instances.clear(); SkyholdData.view = previousView;
 
 assert.equal(DEFAULT_SKYHOLD_DATA.meta.sharedMarkets.enabled, true, "Shared markets are enabled by default in new worlds");
+for (const invalidShared of [undefined, { enabled: false }]) {
+  assert.throws(() => normalizeSkyholdData({
+    meta: { schemaVersion: 72, templateCatalogVersion: 19, ...(invalidShared ? { sharedMarkets: invalidShared } : {}) },
+    catalog: {},
+    holdings: [{ id: "village", special: {} }]
+  }), { code: UNSUPPORTED_WORLD_DATA }, "Saves without enabled shared markets must be rejected explicitly");
+}
 const normalized = normalizeSkyholdData({
-  meta: { schemaVersion: 72, templateCatalogVersion: 19 },
+  meta: { schemaVersion: 72, templateCatalogVersion: 19, sharedMarkets: { enabled: true } },
   catalog: {},
   holdings: [{ id: "village", special: {} }]
 });
-assert.equal(normalized.meta.sharedMarkets.enabled, true, "Normalized world data activates shared markets");
+assert.equal(normalized.meta.sharedMarkets.enabled, true, "Normalized world data keeps shared markets enabled");
 
 const external = readFileSync("templates/parts/skyhold-tab-external-market.hbs", "utf8");
 assert.match(external, /aria-label="Банки поселения"[\s\S]*data-action="open-banks"/);

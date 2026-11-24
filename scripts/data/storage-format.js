@@ -13,8 +13,17 @@ function savedVersion(value) {
 export function assertSupportedWorldData(data) {
   const schema = savedVersion(data?.meta?.schemaVersion);
   const catalog = savedVersion(data?.meta?.templateCatalogVersion);
+  const sharedMarketsEnabled = data?.meta?.sharedMarkets?.enabled === true;
   if (schema === SKYHOLD_SCHEMA_VERSION && catalog === TEMPLATE_CATALOG_VERSION
+    && sharedMarketsEnabled
     && Array.isArray(data?.holdings) && isPlainObject(data.catalog)) return;
+
+  if (schema === SKYHOLD_SCHEMA_VERSION && catalog === TEMPLATE_CATALOG_VERSION
+    && Array.isArray(data?.holdings) && isPlainObject(data.catalog)
+    && !sharedMarketsEnabled) {
+    const message = "Skyhold не может открыть сохранение без включённых общих рынков (meta.sharedMarkets.enabled !== true). Откройте копию мира на предыдущей версии Skyhold с миграциями (коммит 830a292) и завершите объединение рынков перед обновлением, либо создайте новый мир.";
+    throw Object.assign(new Error(message), { code: UNSUPPORTED_WORLD_DATA });
+  }
 
   const newer = schema > SKYHOLD_SCHEMA_VERSION || catalog > TEMPLATE_CATALOG_VERSION;
   const guidance = newer

@@ -201,7 +201,9 @@ function mergeBuildingTemplateCatalog(rows = [], deletedIds = []) {
     if (!row || typeof row !== "object") continue;
     const id = String(row.id ?? row.templateId ?? row.name ?? "").trim();
     if (!id || deleted.has(id)) continue;
-    map.set(id, normalizeBuildingTemplate(row));
+    const base = map.get(id) ?? {};
+    const merged = mergeDefaults(base, row);
+    map.set(id, normalizeBuildingTemplate(merged));
   }
   return Array.from(map.values());
 }

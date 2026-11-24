@@ -894,7 +894,7 @@ export async function checkStorageOperationCharacterization() {
           ["holdings", "completion", "veto", "newer", "unreadable", "unverified"].map(blocked => [type, blocked]))
       ]) {
         const root = normalizeSkyholdData({
-          meta: { schemaVersion: SKYHOLD_SCHEMA_VERSION, templateCatalogVersion: TEMPLATE_CATALOG_VERSION, revision: 8 },
+          meta: { schemaVersion: SKYHOLD_SCHEMA_VERSION, templateCatalogVersion: TEMPLATE_CATALOG_VERSION, sharedMarkets: { enabled: true, version: 1, clockTenday: 0, demand: {}, stock: {} }, revision: 8 },
           holdings: [makeHolding()],
           catalog: {}
         });

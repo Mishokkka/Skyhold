@@ -11,6 +11,7 @@ checkBuildingCatalogFullTransition();
 checkAgricultureCatalogRefresh();
 
 import { BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION, TEMPLATE_CATALOG_VERSION } from "../data/building-templates.js";
+import { proposedBuildingLaborProfile } from "../data/building-labor-catalog.js";
 import { DEFAULT_SKYHOLD_DATA } from "../data/defaults/default-skyhold-data.js";
 import { normalizeSkyholdData } from "../data/normalizers.js";
 import { LAPUTA_IMPORT } from "../data/presets/laputa.js";
@@ -91,7 +92,7 @@ function fixture() {
     customRule: { untouched: true }
   };
   return {
-    meta: { schemaVersion: 72, templateCatalogVersion: TEMPLATE_CATALOG_VERSION, revision: 7, storageCommit: null },
+    meta: { schemaVersion: 72, templateCatalogVersion: TEMPLATE_CATALOG_VERSION, sharedMarkets: { enabled: true, version: 1, clockTenday: 0, demand: {}, stock: {} }, revision: 7, storageCommit: null },
     catalog: {
       buildings: [
         { ...template("lumbermill"), templateVersion: TEMPLATE_CATALOG_VERSION, reputation: 99 },
@@ -200,6 +201,13 @@ export function checkBuildingCatalogMigrationCharacterization() {
   });
   const laputaAllocations = validateHoldingWorkAllocations(laputaWorld.holdings[0]);
   assert.equal(laputaAllocations.ok, true, "Laputa preset buildings must have valid initial labor profiles");
+  for (const building of laputaWorld.holdings[0].buildings.list) {
+    assert.deepEqual(
+      building.labor,
+      proposedBuildingLaborProfile(building.templateId),
+      `Laputa preset building ${building.id} (${building.templateId}) must match the catalog labor profile`
+    );
+  }
   const laputaPlan = planBuildingCatalogMigration({
     currentData: laputaWorld,
     replaceCatalog: true,

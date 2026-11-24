@@ -77,6 +77,7 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
   let cachedData = null;
   let cachedPartitionHashes = null;
   let persistedPartitionHashes = null;
+  let persistedMetaHash = "";
   let warnedCommitProblem = "";
   const metrics = {
     cacheHits: 0,
@@ -148,6 +149,7 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
       holdings: hashPartition("holdings", split.holdings),
       catalog: hashPartition("catalog", split.catalog)
     };
+    persistedMetaHash = logicalMetadataHash(split.meta);
 
     const splitRevision = Math.max(0, toNumber(split?.meta?.revision, 0));
     const commitInspection = inspectStorageCommit(split, {
@@ -287,6 +289,9 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
         catalog: hashPartition("catalog", storedCatalog)
       };
     }
+    if (!persistedMetaHash) {
+      persistedMetaHash = logicalMetadataHash(readSetting(SETTING_META) ?? DEFAULT_SKYHOLD_DATA.meta);
+    }
 
     const previousRevision = Math.max(0, toNumber(previous?.meta?.revision, 0));
     const logicalPreviousHashes = cachedPartitionHashes ?? {
@@ -297,11 +302,14 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
       holdings: commitScope === COMMIT_SCOPES.CATALOG ? logicalPreviousHashes.holdings : hashPartition("holdings", next.holdings),
       catalog: commitScope === COMMIT_SCOPES.HOLDINGS ? logicalPreviousHashes.catalog : hashPartition("catalog", next.catalog)
     };
+    const logicalPreviousMetaHash = logicalMetadataHash(previous.meta);
+    const nextMetaHash = logicalMetadataHash(next.meta);
     const holdingsDirty = nextHashes.holdings !== persistedPartitionHashes.holdings;
     const catalogDirty = nextHashes.catalog !== persistedPartitionHashes.catalog;
-    const metaDirty = logicalMetadataHash(next.meta) !== logicalMetadataHash(previous.meta);
+    const metaDirty = nextMetaHash !== logicalPreviousMetaHash || nextMetaHash !== persistedMetaHash;
     const splitMatchesLogicalPrevious = persistedPartitionHashes.holdings === logicalPreviousHashes.holdings
-      && persistedPartitionHashes.catalog === logicalPreviousHashes.catalog;
+      && persistedPartitionHashes.catalog === logicalPreviousHashes.catalog
+      && persistedMetaHash === logicalPreviousMetaHash;
     if (!holdingsDirty && !catalogDirty && !metaDirty && splitMatchesLogicalPrevious) {
       metrics.noOpWrites += 1;
       const result = clone(previous);
@@ -375,6 +383,7 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
     }
 
     persistedPartitionHashes = nextHashes;
+    persistedMetaHash = nextMetaHash;
     cachedPartitionHashes = nextHashes;
     cachedRevision = Math.max(0, toNumber(next?.meta?.revision, 0));
     cachedCommitToken = completeCommitToken(next.meta);

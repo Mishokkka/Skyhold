@@ -102,8 +102,12 @@ async function checkUnsupportedWorldData(current) {
   newerCatalog.meta.templateCatalogVersion += 1;
   const missingSchema = clone(current);
   delete missingSchema.meta.schemaVersion;
+  const missingSharedMarkets = clone(current);
+  delete missingSharedMarkets.meta.sharedMarkets;
+  const disabledSharedMarkets = clone(current);
+  disabledSharedMarkets.meta.sharedMarkets.enabled = false;
   const invalidCatalog = { ...current, catalog: [] };
-  for (const unsupported of [oldSchema, oldCatalog, newer, newerCatalog, oldCombined, missingSchema, invalidCatalog]) {
+  for (const unsupported of [oldSchema, oldCatalog, newer, newerCatalog, oldCombined, missingSchema, missingSharedMarkets, disabledSharedMarkets, invalidCatalog]) {
     assert.throws(() => normalizeSkyholdData(unsupported), { code: UNSUPPORTED_WORLD_DATA },
       "Normalization must validate the original root before filling in current defaults");
     for (const scope of Object.values(COMMIT_SCOPES)) {
@@ -115,6 +119,8 @@ async function checkUnsupportedWorldData(current) {
     settingsHarness(oldSchema),
     settingsHarness(oldCatalog),
     settingsHarness(newer),
+    settingsHarness(missingSharedMarkets),
+    settingsHarness(disabledSharedMarkets),
     settingsHarness(DEFAULT_SKYHOLD_DATA, { legacy: oldCombined })
   ]) {
     const previous = clone([...harness.values]);
@@ -335,6 +341,20 @@ export async function checkSplitStorageCharacterization() {
     assert.equal(metadataRecovered.holdings[0].name, beforeMetadataWrite.holdings[0].name);
     assert.equal(stableDataHash(metadataHarness.values.get(SETTING_DATA)), stableDataHash(beforeMetadataWrite),
       "a partition commit that changes logical metadata must snapshot the complete previous root");
+
+    const partialMetaRoot = committedRoot({ revision: 22 });
+    partialMetaRoot.meta.sharedMarkets = { enabled: true };
+    const partialMetaHarness = settingsHarness(partialMetaRoot);
+    const partialMetaStorage = createSkyholdSplitStorage({ settings: partialMetaHarness.settings });
+    const partialNext = partialMetaStorage.getData();
+    partialNext.meta.revision += 1;
+    partialNext.holdings[0].name = "Updated after read-normalized meta";
+    partialMetaStorage.resetMetrics();
+    await partialMetaStorage.persistData(partialNext, { normalized: true, scope: "holdings" });
+    assert.equal(partialMetaStorage.getMetrics().writesByKey[SETTING_DATA], 1,
+      "a single-partition commit after read-time metadata normalization must preserve a rollback snapshot");
+    assert.equal(partialMetaHarness.values.get(SETTING_DATA).meta.revision, 22);
+    assert.equal(partialMetaHarness.values.get(SETTING_DATA).holdings[0].name, "Committed Holding");
 
     const pristinePrevious = committedDefaultRoot({ revision: 20 });
     const pristineNext = clone(pristinePrevious);

@@ -7,7 +7,7 @@ import { applyBuildingCatalogMigration, planBuildingCatalogMigration } from "../
 export function checkBuildingCatalogFullTransition() {
   const savedTemplates = BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION.filter(row => row.id !== "meeting-house");
   const source = normalizeSkyholdData({
-    meta: { schemaVersion: SKYHOLD_SCHEMA_VERSION, templateCatalogVersion: TEMPLATE_CATALOG_VERSION, revision: 4 },
+    meta: { schemaVersion: SKYHOLD_SCHEMA_VERSION, templateCatalogVersion: TEMPLATE_CATALOG_VERSION, sharedMarkets: { enabled: true, version: 1, clockTenday: 0, demand: {}, stock: {} }, revision: 4 },
     catalog: { buildings: clone(savedTemplates) },
     holdings: [{ id: "transition", name: "Проверка полного перехода",
       people: { list: [{ id: "resident", name: "Раненый житель", injuredDays: 3,
@@ -105,7 +105,7 @@ export function checkBuildingCatalogFullTransition() {
 export function checkAgricultureCatalogRefresh() {
   const garden = DEFAULT_BUILDING_TEMPLATES.find(row => row.id === "garden");
   const source = {
-    meta: { schemaVersion: SKYHOLD_SCHEMA_VERSION, templateCatalogVersion: TEMPLATE_CATALOG_VERSION },
+    meta: { schemaVersion: SKYHOLD_SCHEMA_VERSION, templateCatalogVersion: TEMPLATE_CATALOG_VERSION, sharedMarkets: { enabled: true, version: 1, clockTenday: 0, demand: {}, stock: {} } },
     catalog: { buildings: [garden] },
     holdings: [{ id: "garden-holding", buildings: { list: [
       { ...clone(garden), id: "planted-garden", templateId: "garden", constructionStatus: "built", buildProgress: garden.buildTarget }
