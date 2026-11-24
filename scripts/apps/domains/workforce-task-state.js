@@ -104,7 +104,8 @@ export function workforceTaskState(holding, target, building, service, available
       state.idle = !target.collectionAvailable;
       state.certainIdle = state.idle;
       state.category = target.collectionAvailable ? "chosen" : "optional";
-      state.need = target.collectionAvailable ? Math.max(1, Number(line.collectQd) || 1) : 0;
+      const remainingCollect = Math.max(0, Math.ceil(Number(line.collectQd) || 0) - Math.max(0, Math.floor(Number(line.collectProgressQd) || 0)));
+      state.need = target.collectionAvailable ? Math.max(1, remainingCollect) : 0;
       state.note = target.collectionAvailable ? `Линия приостановлена; готово к сбору ${line.pendingQty} ЕД., сбор требует ${state.need} QD.`
         : "Линия приостановлена. Назначение сохранено; подготовка возобновится после включения линии.";
       return state;

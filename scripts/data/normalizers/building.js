@@ -7,7 +7,10 @@ import { normalizeLivestockBuilding } from "../livestock.js";
 import { normalizeInternalDemandTrade } from "../economy/internal-demand.js";
 import { isPlainObject, makeId, toBoolean, toNumber } from "../utils.js";
 import { normalizeBuildingWorkerProfile } from "../../engines/workers/building-qualification.js";
-import { normalizeBuildingLabor } from "../labor-model.js";
+import { normalizeBuildingLabor, reservedOccupation } from "../labor-model.js";
+import { residentLaborCapacity } from "../labor-budget.js";
+import { isResidentPresent } from "../resident-presence.js";
+import { buildingServiceFunctionId } from "../../engines/economy/building-service.js";
 
 function floorNonNegativeQuantity(value, fallback = 0) {
   return Math.max(0, Math.floor(toNumber(value, fallback)));
@@ -436,7 +439,6 @@ export function normalizeBuilding(building, options = {}) {
     if (!Array.isArray(building.productionLines)) building.productionLines = [];
   }
   building.workersAssigned = toNumber(building.workersAssigned, 0);
-  delete building.assignedWorkerIds;
   const introducedWorkerProfile = !hadWorkerProfile;
   // Catalog loading must not discover new admission rules by ID/name. An
   // explicit neutral profile also prevents consumers from falling back to the
@@ -454,6 +456,10 @@ export function normalizeBuilding(building, options = {}) {
   building.activation.minWorkers = 0;
   if (building.workerProfile) building.workerProfile.workersMin = 0;
   building.labor = normalizeBuildingLabor(building.labor, building);
+  if (Array.isArray(options?.people) && Array.isArray(building.assignedWorkerIds) && building.assignedWorkerIds.length) {
+    preserveLegacyBuildingAssignments({ buildings: { list: [building] }, people: { list: options.people } });
+  }
+  delete building.assignedWorkerIds;
   if (!Array.isArray(building.workerAdmissionOverrideIds)) building.workerAdmissionOverrideIds = [];
   building.workerAdmissionOverrideIds = [...new Set(building.workerAdmissionOverrideIds.map((id) => String(id ?? "")).filter(Boolean))];
   delete building.workerPrimaryAttribute;
@@ -475,6 +481,136 @@ export function normalizeBuilding(building, options = {}) {
   building.constructionCrewId = String(building.constructionCrewId ?? building.crewId ?? "");
   normalizeBuildingOperationalState(building);
   building.status = building.constructionStatus === "built" ? "Построено" : building.status;
+}
+
+function defaultLegacyFunctionId(building = {}) {
+  if (inferBuildingSpecialKind(building) === "fasti-shop") return "";
+  if (isMedicalBuilding(building)) return "medical";
+  if (building?.functions?.production !== false) {
+    if (building?.agriculture?.enabled) return "agriculture";
+    if (building?.livestock?.enabled) return "livestock";
+    const lines = Array.isArray(building?.productionLines) ? building.productionLines : [];
+    const idx = lines.findIndex((line) => line?.active !== false
+      && ((String(line?.source || "workers") === "workers") || (line?.requiresCollection && toNumber(line?.collectQd, 0) > 0)));
+    if (idx >= 0) return `production:${String(lines[idx]?.id ?? "").trim() || `line-${idx + 1}`}`;
+  }
+  const fns = building?.functions && typeof building.functions === "object" ? building.functions : {};
+  const serviceFn = buildingServiceFunctionId(building);
+  if (serviceFn && (fns[serviceFn] === true || serviceFn === "income" || serviceFn === "culture")) {
+    if (fns.income || fns.culture || fns.defense || fns.storage || fns.housing || building?.service || building?.control) {
+      return serviceFn;
+    }
+  }
+  for (const key of ["income", "culture", "defense", "storage", "housing"]) {
+    if (fns[key] === true) return key;
+  }
+  if (building?.income && (building.income.base || building.income.perWorker || building.income.formula || building.income.trade?.enabled)) return "income";
+  if (building?.control && (building.control.generalFlat || building.control.generalPerWorker || building.control.unrestOnlyFlat || building.control.unrestOnlyPerWorker)) return "defense";
+  return building?.service ? "culture" : "";
+}
+
+/**
+ * Migrate legacy `person.staffAppointment` and `building.assignedWorkerIds`
+ * into canonical `person.workAllocations` before normalizers delete old fields.
+ */
+export function preserveLegacyBuildingAssignments(holding) {
+  const people = Array.isArray(holding?.people?.list) ? holding.people.list : [];
+  const buildings = Array.isArray(holding?.buildings?.list) ? holding.buildings.list : [];
+  const hasStaff = people.some((person) => isPlainObject(person?.staffAppointment));
+  const hasAssigned = buildings.some((building) => Array.isArray(building?.assignedWorkerIds) && building.assignedWorkerIds.length > 0);
+  if (!hasStaff && !hasAssigned) return;
+
+  const peopleById = new Map(people.map((person) => [String(person?.id ?? "").trim(), person]).filter(([id]) => id));
+  const buildingsById = new Map(buildings.map((building) => [String(building?.id ?? "").trim(), building]).filter(([id]) => id));
+  const buildingUsedQd = new Map();
+  const personUsedNormal = new Map();
+  const personUsedOvertime = new Map();
+
+  for (const person of people) {
+    const pid = String(person?.id ?? "").trim();
+    if (!pid || person?.dead || !isResidentPresent(person)) continue;
+    let pNorm = 0;
+    let pOt = 0;
+    for (const row of Array.isArray(person.workAllocations) ? person.workAllocations : []) {
+      const src = String(row?.sourceId ?? "").trim();
+      const n = floorNonNegativeQuantity(row?.normalQd ?? row?.qd, 0);
+      const ot = floorNonNegativeQuantity(row?.overtimeQd, 0);
+      pNorm += n;
+      pOt += ot;
+      if (src && n + ot > 0) buildingUsedQd.set(src, (buildingUsedQd.get(src) ?? 0) + n + ot);
+    }
+    personUsedNormal.set(pid, pNorm);
+    personUsedOvertime.set(pid, pOt);
+  }
+
+  const pushLegacyAllocation = (person, building, { functionId = "", normalQd = null, overtimeQd = 0, dailyRateCopper = null } = {}) => {
+    const pid = String(person?.id ?? "").trim();
+    const bId = String(building?.id ?? "").trim();
+    if (!pid || !bId || person?.dead || !isResidentPresent(person)) return;
+    if (inferBuildingSpecialKind(building) === "fasti-shop") return;
+    if (reservedOccupation(holding, person)) return;
+    if (!Array.isArray(person.workAllocations)) person.workAllocations = [];
+    if (person.workAllocations.some((row) => String(row?.sourceId ?? "").trim() === bId
+      && floorNonNegativeQuantity(row?.normalQd ?? row?.qd, 0) + floorNonNegativeQuantity(row?.overtimeQd, 0) > 0)) {
+      return;
+    }
+    const fn = String(functionId ?? "").trim() || defaultLegacyFunctionId(building);
+    if (!fn) return;
+    const labor = normalizeBuildingLabor(building.labor, building);
+    if (labor.capacityQd === 0) return;
+
+    const pCap = residentLaborCapacity(person, holding);
+    const availPersonNormal = Math.max(0, pCap.normalQd - (personUsedNormal.get(pid) ?? 0));
+    const availPersonOt = Math.max(0, pCap.overtimeQd - (personUsedOvertime.get(pid) ?? 0));
+    const availBuilding = labor.capacityQd === null ? Infinity : Math.max(0, labor.capacityQd - (buildingUsedQd.get(bId) ?? 0));
+    if (availBuilding <= 0 || availPersonNormal <= 0) return;
+
+    const requestedNormal = normalQd === null || normalQd === undefined ? availPersonNormal : floorNonNegativeQuantity(normalQd, availPersonNormal);
+    const allocatedNormal = Math.min(requestedNormal, availPersonNormal, availBuilding);
+    const requestedOt = floorNonNegativeQuantity(overtimeQd, 0);
+    const allocatedOt = Math.min(requestedOt, availPersonOt, Math.floor(allocatedNormal / 2), Math.max(0, availBuilding - allocatedNormal));
+    if (allocatedNormal + allocatedOt <= 0) return;
+
+    person.workAllocations.push({
+      schemaVersion: 1,
+      id: makeId("work"),
+      sourceId: bId,
+      functionId: fn,
+      normalQd: allocatedNormal,
+      overtimeQd: allocatedOt
+    });
+    if (String(person.workAssignment ?? "").trim() === bId) person.workAssignment = "";
+    const hasOverride = person.wageDailyOverrideCopper !== null && person.wageDailyOverrideCopper !== undefined && person.wageDailyOverrideCopper !== "";
+    const legacyRate = Number(dailyRateCopper);
+    if (!hasOverride && Number.isFinite(legacyRate) && legacyRate > 0) {
+      person.wageDailyOverrideCopper = Math.floor(legacyRate);
+    }
+    personUsedNormal.set(pid, (personUsedNormal.get(pid) ?? 0) + allocatedNormal);
+    personUsedOvertime.set(pid, (personUsedOvertime.get(pid) ?? 0) + allocatedOt);
+    buildingUsedQd.set(bId, (buildingUsedQd.get(bId) ?? 0) + allocatedNormal + allocatedOt);
+  };
+
+  for (const person of people) {
+    if (!isPlainObject(person?.staffAppointment)) continue;
+    const appt = person.staffAppointment;
+    const building = buildingsById.get(String(appt.buildingId ?? appt.sourceId ?? person.workAssignment ?? "").trim());
+    if (!building) continue;
+    pushLegacyAllocation(person, building, {
+      functionId: appt.functionId,
+      normalQd: appt.normalQd ?? appt.qd,
+      overtimeQd: appt.overtimeQd,
+      dailyRateCopper: appt.dailyRateCopper ?? appt.wageDailyCopper
+    });
+  }
+
+  for (const building of buildings) {
+    if (!Array.isArray(building?.assignedWorkerIds) || !building.assignedWorkerIds.length) continue;
+    for (const workerId of building.assignedWorkerIds) {
+      const person = peopleById.get(String(workerId ?? "").trim());
+      if (!person) continue;
+      pushLegacyAllocation(person, building, {});
+    }
+  }
 }
 
 export function releaseWorkerlessSpecialAssignments(holding) {

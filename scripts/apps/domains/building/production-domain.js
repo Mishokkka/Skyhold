@@ -10,6 +10,7 @@ import {
 import { politicsRuntimeEffects } from "../../../engines/politics/runtime-effects.js";
 import { productionTimingText, productionIdentityLocked } from "../../../engines/economy/production-timing.js";
 import { productionCapacity, productionBatchStates, productionOccupiedQty } from "../../../engines/economy/production-capacity.js";
+import { buildingAcceptsWorkers } from "../../../data/labor-model.js";
 import { buildingWorkerIds } from "../../../data/work-allocations.js";
 
 export const BuildingProductionDomain = {
@@ -325,7 +326,10 @@ _pendingProductionRows(building, holding = null, buildingIndex = 0, linesArg = n
       qty: line.pendingQty,
       manualCollectionBlocked: line.collectQd > 0,
       collectionHint: line.collectQd > 0
-        ? `Сбор требует ${line.collectQd} QD. Назначьте эту линию в плане работ и проведите десятник.` : "Собрать готовый ресурс",
+        ? (!buildingAcceptsWorkers(building) && String(line.autoCollect ?? "none") !== "worker"
+          ? `Сбор требует ${line.collectQd} QD, но здание не принимает работников (предел 0 QD). Задайте предел QD > 0, включите сбор потребителем или обнулите QD сбора.`
+          : `Сбор требует ${line.collectQd} QD. Назначьте эту линию в плане работ и проведите десятник.`)
+        : "Собрать готовый ресурс",
       label: `${line.resource}: ${line.pendingQty}`
     }));
 },

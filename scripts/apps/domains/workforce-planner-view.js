@@ -56,6 +56,7 @@ export function workforceTaskGroups(model, matchingTasks = model.tasks) {
       + (people.length > 2 ? ` · ещё ${people.length - 2}` : "");
     const warnings = [...new Set(group.allTasks.flatMap((task) => task.warnings))];
     const capacityQd = buildingLaborCapacityQd(group.building);
+    const reservedQd = model.reservedQdByBuilding?.get(group.id) ?? (normalQd + overtimeQd);
     const acceptsWorkers = buildingAcceptsWorkers(group.building);
     return {
       ...group,
@@ -68,7 +69,7 @@ export function workforceTaskGroups(model, matchingTasks = model.tasks) {
         ? "Без работников"
         : capacityQd === null
           ? "Предел — объём работы и оборудование"
-          : `Труд: ${normalQd + overtimeQd} / ${capacityQd} QD за десятник`,
+          : `Труд: ${reservedQd} / ${capacityQd} QD за десятник`,
       normalQd,
       overtimeQd,
       totalQd: normalQd + overtimeQd,

@@ -60,7 +60,8 @@ export function normalizeWorkAllocation(value = {}, index = 0) {
     sourceId,
     functionId,
     normalQd: whole(source.normalQd ?? source.plannedNormalQd ?? source.qd),
-    overtimeQd: whole(source.overtimeQd ?? source.plannedOvertimeQd)
+    overtimeQd: whole(source.overtimeQd ?? source.plannedOvertimeQd),
+    ...(source.volunteer === true ? { volunteer: true, volunteerReason: text(source.volunteerReason) } : {})
   };
 }
 

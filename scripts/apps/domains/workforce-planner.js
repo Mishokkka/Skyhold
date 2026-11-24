@@ -1,4 +1,4 @@
-import { buildWorkAllocationTargets, buildPlannedWorkSlots, validateHoldingWorkAllocations } from "../../data/work-allocations.js";
+import { buildWorkAllocationTargets, buildPlannedWorkSlots, parseWorkAllocationTargetKey, validateHoldingWorkAllocations } from "../../data/work-allocations.js";
 import { isResidentInPopulation } from "../../data/resident-presence.js";
 import { DEFAULT_NORMAL_LABOR_QD, residentLaborCapacity } from "../../data/labor-budget.js";
 import { workforcePlan, workforceKey, workforceLockKey, workforceCapacity, workforceUnavailable, workforceChangeError } from "../../data/workforce-plan.js";
@@ -7,12 +7,26 @@ import { financePeriodIdentity } from "../../engines/economy/finance-period.js";
 import { calculatePlannedWorkerWage } from "../../engines/economy/finance-obligations.js";
 import { workforceTaskState, workforceOperationalMinimum, workforceProductionGoalState } from "./workforce-task-state.js";
 import { politicsRuntimeEffects } from "../../engines/politics/runtime-effects.js";
-import { buildingLaborCapacityQd, productionPreparationGoal } from "../../data/labor-model.js";
+import { buildingLaborCapacityQd, buildingReservedQd, productionPreparationGoal } from "../../data/labor-model.js";
 
 const clone = (value) => structuredClone(value);
 const sum = (rows, field) => rows.reduce((total, row) => total + Number(row[field] || 0), 0);
 const shown = (row, isGM) => isGM || row.visibility !== "gm";
 const hasWork = (row) => Number(row?.normalQd ?? 0) > 0 || Number(row?.overtimeQd ?? 0) > 0;
+
+function normalizeProductionGoals(goals) {
+  if (Array.isArray(goals)) return clone(goals);
+  if (!goals || typeof goals !== "object") return [];
+  const rows = [];
+  for (const [key, raw] of Object.entries(goals)) {
+    const parsed = parseWorkAllocationTargetKey(key);
+    const sourceId = parsed.sourceId || String(key ?? "").trim();
+    const functionId = parsed.functionId || "";
+    const preparedUnits = Math.max(0, Math.floor(Number(raw?.preparedUnits ?? raw) || 0));
+    if (sourceId && preparedUnits > 0) rows.push({ sourceId, functionId, preparedUnits });
+  }
+  return rows;
+}
 
 function effectiveLabor(service, holding, task, person) {
   if (!task.building || !["production", "agriculture", "livestock"].includes(task.kind)) return 1;
@@ -30,7 +44,7 @@ export function createWorkforceDraft(holding) {
     plan: {
       version: 2,
       locks: Array.isArray(plan?.locks) ? plan.locks : [],
-      productionGoals: Array.isArray(plan?.productionGoals) ? plan.productionGoals : []
+      productionGoals: normalizeProductionGoals(plan?.productionGoals)
     },
     edited: [],
     allocations: Object.fromEntries((holding.people?.list ?? []).map((person) => [
@@ -46,7 +60,7 @@ export function applyWorkforceDraft(holding, draft) {
   holding.workforcePlan = {
     version: 2,
     locks: Array.isArray(plan.locks) ? plan.locks : [],
-    productionGoals: Array.isArray(plan.productionGoals) ? plan.productionGoals : []
+    productionGoals: normalizeProductionGoals(plan.productionGoals)
   };
   for (const id of draft.edited) {
     const person = (holding.people?.list ?? []).find((row) => String(row.id) === id);
@@ -198,7 +212,9 @@ export function buildWorkforceModel(holding, draft, service, { isGM = false, pre
       }
     }
     if (task.assignments.length && task.building) {
-      const assignedPeople = people.filter((person) => staffByBuilding.get(task.buildingId)?.has(person.id)).map((row) => row.person);
+      const assignedPeople = task.building?.activation?.anyWorkingFunction === true
+        ? people.filter((person) => staffByBuilding.get(task.buildingId)?.has(person.id)).map((row) => row.person)
+        : task.assignments.map((row) => people.find((person) => person.id === row.personId)?.person).filter(Boolean);
       if (!buildingCompositionStatus(task.building, assignedPeople, { excludeGroups: ["ЧУДОТВОРЕЦ"] }).met) {
         task.warnings.push("Не выполнен обязательный состав специалистов");
       }
@@ -217,6 +233,9 @@ export function buildWorkforceModel(holding, draft, service, { isGM = false, pre
     }
     task.attention ||= Boolean(task.warnings.length);
   }
+  const reservedQdByBuilding = new Map(
+    (working.buildings?.list ?? []).map((building) => [String(building.id), buildingReservedQd(working, building.id)])
+  );
   // Pure time/content lines are informational; assigning labor would never advance them.
   for (const building of holding.buildings?.list ?? []) {
     if (!shown(building, isGM)) continue;
@@ -228,7 +247,7 @@ export function buildWorkforceModel(holding, draft, service, { isGM = false, pre
         note: "Эта линия не расходует QD жителей; управляйте ею в карточке здания.", assignments: [], warnings: [], normalQd: 0, overtimeQd: 0, totalQd: 0 });
     }
   }
-  return { holding, draft, people, tasks, taskMap, staffByBuilding,
+  return { holding, draft, people, tasks, taskMap, staffByBuilding, reservedQdByBuilding,
     free: sum(people, "free"), normalQd: sum(people.filter((row) => !row.unavailable), "normalQd"),
     overtimeQd: sum(people.filter((row) => !row.unavailable), "overtimeQd"), wage: sum(people.filter((row) => !row.unavailable), "wage"),
     requiredGap: sum(tasks.filter((row) => row.category === "required"), "careGap"),
@@ -250,7 +269,7 @@ export function workforceCandidate(model, person, task, service) {
     || (!task.assignable ? "На этой линии нельзя назначить труд" : "")
     || (admission?.hard && !admission.eligible && !admission.overridden ? "Нет обязательного допуска" : "")
     || (task.capacityQd !== null && !existing
-      && model.tasks.filter((row) => row.buildingId === task.buildingId).reduce((sum, row) => sum + row.totalQd, 0) >= task.capacityQd ? "Предел труда здания исчерпан" : "")
+      && (model.reservedQdByBuilding?.get(task.buildingId) ?? 0) >= task.capacityQd ? "Предел труда здания исчерпан" : "")
     || (!rate.ok ? "Нужна ставка или договорённость о бесплатной работе" : "");
   const productiveLabor = effectiveLabor(service, model.holding, task, person.person);
   return { ...person, reason, efficiency, effectiveLabor: productiveLabor, efficiencyText: `${Math.round(efficiency * 100)}%`,
@@ -330,7 +349,9 @@ export function proposeWorkforceAssignments(holding, draft, service, { isGM = fa
       .sort((a, b) => a.dailyRate - b.dailyRate || b.efficiency - a.efficiency || a.id.localeCompare(b.id));
     let coreIds = new Set();
     if (qd === null && task.building) {
-      const existingTeam = model.people.filter((person) => model.staffByBuilding.get(task.buildingId)?.has(person.id)).map((row) => row.person);
+      const existingTeam = task.building?.activation?.anyWorkingFunction === true
+        ? model.people.filter((person) => model.staffByBuilding.get(task.buildingId)?.has(person.id)).map((row) => row.person)
+        : task.assignments.map((row) => model.people.find((person) => person.id === row.personId)?.person).filter(Boolean);
       const composition = (team) => buildingCompositionStatus(task.building, team, { excludeGroups: ["ЧУДОТВОРЕЦ"] });
       let core = candidates.filter((person) => !person.reason && person.free > 0 && !existingTeam.some((row) => row.id === person.id));
       if (!composition([...existingTeam, ...core.map((row) => row.person)]).met) {
@@ -352,7 +373,7 @@ export function proposeWorkforceAssignments(holding, draft, service, { isGM = fa
       if (!needed) continue;
       let add = Math.min(candidate.free, needed);
       if (task.capacityQd !== null) {
-        const allocated = model.tasks.filter((row) => row.buildingId === task.buildingId).reduce((sum, row) => sum + row.totalQd, 0);
+        const allocated = model.reservedQdByBuilding?.get(task.buildingId) ?? 0;
         add = Math.min(add, Math.max(0, task.capacityQd - allocated));
       }
       if (qd === null && !task.dailyNeed && coreIds.size > 0) add = Math.min(add, Math.max(1, Math.ceil(needed / coreIds.size)));
@@ -369,7 +390,7 @@ export function proposeWorkforceAssignments(holding, draft, service, { isGM = fa
         add = Math.max(bestAdd, Math.min(candidate.free, task.remaining));
       }
       if (task.capacityQd !== null) {
-        const allocated = model.tasks.filter((row) => row.buildingId === task.buildingId).reduce((sum, row) => sum + row.totalQd, 0);
+        const allocated = model.reservedQdByBuilding?.get(task.buildingId) ?? 0;
         add = Math.min(add, Math.max(0, task.capacityQd - allocated));
       }
       if (!add) continue;

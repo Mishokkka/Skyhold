@@ -1,6 +1,7 @@
 import { buildingOperationalState } from "../../core/building-state.js";
 import { isResidentInPopulation } from "../../data/resident-presence.js";
-import { buildingWorkerIds } from "../../data/work-allocations.js";
+import { buildingWorkAllocationsForBuilding, buildingWorkerIds } from "../../data/work-allocations.js";
+import { normalLaborQdPerTenday } from "../../data/labor-budget.js";
 import { DEFENSE_SQUAD_MIN_EFFICIENCY, evaluateDefenseSquad, isAvailableDefenseResident } from "../../data/military-resident-rules.js";
 import {
   ATTACK_METHODS,
@@ -284,7 +285,16 @@ export function defenseGarrisonProfile(holding, { buildingEffectiveWorkers = nul
     for (const person of combatants) ids.add(String(person.id));
     const effSummary = typeof buildingEffectiveWorkers === "function" ? buildingEffectiveWorkers(holding, building) : null;
     let buildingEffective = Number.isFinite(Number(effSummary?.total)) ? Math.max(0, Number(effSummary.total)) : 0;
-    if (!buildingEffective && combatants.length) buildingEffective = combatants.reduce((sum, person) => sum + (soldierEfficiency(person, "line") || 0.75), 0);
+    if (!buildingEffective && combatants.length) {
+      const fullWorkerQd = Math.max(1, normalLaborQdPerTenday(holding));
+      buildingEffective = combatants.reduce((sum, person) => {
+        const allocatedQd = buildingWorkAllocationsForBuilding(person, building.id).reduce((acc, row) => (
+          acc + Math.max(0, Math.floor(Number(row?.normalQd ?? row?.qd ?? 0) || 0)) + Math.max(0, Math.floor(Number(row?.overtimeQd ?? 0) || 0))
+        ), 0);
+        const share = Math.min(1.5, allocatedQd / fullWorkerQd);
+        return sum + (soldierEfficiency(person, "line") || 0.75) * share;
+      }, 0);
+    }
     buildingEffective = round2(buildingEffective);
     effective += buildingEffective;
     const defense = building?.defense && typeof building.defense === "object" ? building.defense : {};

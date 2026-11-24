@@ -84,6 +84,8 @@ _internalDemandChannels(holding, financeContext = null, tendayCount = 1, workerC
     const assignedPeople = this._activeAssignedBuildingPeople(holding, building, workerContext, "income");
     const assigned = assignedPeople.length;
     if (!assigned) continue;
+    const minimumQd = this._buildingMinimumQdStatus?.(holding, building, workerContext, "income", Math.max(1, tendayCount));
+    if (minimumQd && !minimumQd.met) continue;
     const normalCapacityQd = 20 * Math.max(1, tendayCount);
     const workerShares = assignedPeople.map((person) => {
       const plannedQd = workerContext?.financeContext

@@ -2,7 +2,7 @@ import { resourceDef, resourceShelfLifeQd, storageResourceId } from "../../core/
 import { effectiveShelfLifeQd, isPerishableFoodDefinition } from "../../core/perishable-food.js";
 import { buildingOperationalState } from "../../core/building-state.js";
 import { financeBuildingFunctionBlockState } from "../economy/finance-obligations.js";
-import { buildingServiceEffectFactor } from "../economy/building-service.js";
+import { buildingServiceBlockReasons } from "../economy/building-service.js";
 
 function normalizedList(value) {
   return (Array.isArray(value) ? value : String(value ?? "").split(/[,;\n]/))
@@ -49,7 +49,10 @@ export function storageProfileEffectFactor(holding = {}, building = {}) {
   if (block.blocked) return 0;
 
   const storage = building?.storage ?? {};
-  if (storage.profileRequiresStaff === true) return buildingServiceEffectFactor(holding, building, "storage");
+  if (storage.profileRequiresStaff === true) {
+    const status = buildingServiceBlockReasons(holding, building, "storage");
+    return status.active && (status.workforce?.qd ?? 0) > 0 ? status.laborFactor : 0;
+  }
   return 1;
 }
 

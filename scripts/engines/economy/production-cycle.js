@@ -317,6 +317,15 @@ export async function runProductionCycle({
         let timing = productionTiming(line);
         const source = timing?.source ?? line.source;
         if (source === "time" && !line.workInputsReserved) {
+          const minimumQd = deps.buildingMinimumQdStatus?.(holding, building, workerContext);
+          if (minimumQd && minimumQd.met === false) {
+            const key = `minqd:${building.id ?? building.name}:${line.id ?? line.resource}`;
+            if (!compositionSkipped.has(key)) {
+              compositionSkipped.add(key);
+              report.skipped.push(`${building.name || "Здание"}: производственная функция остановлена — выделено ${minimumQd.actualQd} из ${minimumQd.requiredQd} QD.`);
+            }
+            continue;
+          }
           const name = deps.resourceLabel(deps.normalizeResourceId(line.resourceId, line.resource));
           // Released places become reusable next QD, so a whole waiting QD
           // cannot simultaneously count as a QD of its replacement batch.
@@ -352,6 +361,15 @@ export async function runProductionCycle({
         const period = ["qd", "day", "tenday"].includes(String(line.period ?? "")) ? String(line.period) : "day";
         const cycleDuration = Math.max(1, Math.ceil(deps.safeNumber(line.workQd ?? line.workerQD ?? line.cycleQd ?? line.cycleQD, 1)));
         if (!deps.periodDueOnStep(period, step, cycleDuration)) continue;
+        const minimumQd = deps.buildingMinimumQdStatus?.(holding, building, workerContext);
+        if (minimumQd && minimumQd.met === false) {
+          const key = `minqd:${building.id ?? building.name}:${line.id ?? line.resource}`;
+          if (!compositionSkipped.has(key)) {
+            compositionSkipped.add(key);
+            report.skipped.push(`${building.name || "Здание"}: производственная функция остановлена — выделено ${minimumQd.actualQd} из ${minimumQd.requiredQd} QD.`);
+          }
+          continue;
+        }
 
         const resourceId = deps.normalizeResourceId(line.resourceId, line.resource);
         const resourceName = resourceId === "custom" ? (line.resource || "Ресурс") : deps.resourceLabel(resourceId);

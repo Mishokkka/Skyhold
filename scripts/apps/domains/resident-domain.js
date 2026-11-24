@@ -520,6 +520,9 @@ _residentWorkOptionsContext(holding) {
     residentAssignments.get(buildingId).add(personId);
   }
 
+  const targets = buildWorkAllocationTargets(holding);
+  const buildingsWithAvailableTarget = new Set(targets.filter((target) => target.available).map((target) => String(target.sourceId)));
+
   for (const building of allBuildings) {
     const id = String(building?.id ?? "");
     const name = String(building?.name ?? "").trim();
@@ -528,7 +531,7 @@ _residentWorkOptionsContext(holding) {
     const cap = buildingLaborCapacityQd(building);
     const usedQd = allocatedQdByBuilding.get(id) ?? 0;
     const operational = buildingOperationalState(building).operational;
-    if (id && operational && buildingAcceptsWorkers(building) && (cap === null || usedQd < cap)) {
+    if (id && operational && buildingAcceptsWorkers(building) && buildingsWithAvailableTarget.has(id) && (cap === null || usedQd < cap)) {
       availableBuildingIds.add(id);
     }
   }
@@ -537,7 +540,7 @@ _residentWorkOptionsContext(holding) {
     if (id) crewsById.set(id, crew);
   }
 
-  const targetLabelsByKey = new Map(buildWorkAllocationTargets(holding).map((target) => [target.key, target]));
+  const targetLabelsByKey = new Map(targets.map((target) => [target.key, target]));
 
   return { holding, allBuildings, buildingsById, crews, crewsById, availableBuildingIds, buildingRoleNames,
     targetLabelsByKey, hiddenBuildingIds: hidden, buildingOptionsCache: new Map() };
@@ -609,10 +612,11 @@ _residentInlineWorkOption(person = {}, workLabel = "", workContext = null) {
   if (selected === "other") return { value: "other", label: "Другое", freeLabel, canWork };
 
   const activeAllocations = this._residentActiveWorkAllocations(person);
-  if (activeAllocations.length >= 2) {
+  const uniqueSources = [...new Set(activeAllocations.map((row) => String(row.sourceId)))];
+  if (uniqueSources.length >= 2) {
     return { value: "__mixed__", label: "Смешанная", freeLabel, canWork };
   }
-  const effectiveBuildingId = activeAllocations.length === 1 ? String(activeAllocations[0].sourceId) : selected;
+  const effectiveBuildingId = uniqueSources.length === 1 ? uniqueSources[0] : selected;
   const building = context.buildingsById.get(effectiveBuildingId);
   if (building) return { value: effectiveBuildingId, label: building.name || workLabel || "Без названия", freeLabel, canWork };
   if (selected) return free;
@@ -626,8 +630,9 @@ _residentInlineWorkOption(person = {}, workLabel = "", workContext = null) {
 _workOptions(holding, person = {}, workContext = null) {
   const rawSelected = String(person?.workAssignment ?? "");
   const activeAllocations = rawSelected ? [] : this._residentActiveWorkAllocations(person);
-  const isMixed = activeAllocations.length >= 2;
-  const selected = isMixed ? "__mixed__" : (activeAllocations.length === 1 ? String(activeAllocations[0].sourceId) : rawSelected);
+  const uniqueSources = [...new Set(activeAllocations.map((row) => String(row.sourceId)))];
+  const isMixed = uniqueSources.length >= 2;
+  const selected = isMixed ? "__mixed__" : (uniqueSources.length === 1 ? uniqueSources[0] : rawSelected);
   const role = String(person?.role ?? "").trim();
   const context = workContext ?? this._residentWorkOptionsContext(holding);
   const isChild = this._isChildResident(person);
@@ -759,11 +764,12 @@ _peopleWorkDetails(holding, workContext = null) {
           const qdText = `${qd} QD${ot ? ` + ${ot} OT` : ""}`;
           return fnName ? `${bName} (${fnName}): ${qdText}` : `${bName}: ${qdText}`;
         });
-        if (activeAllocations.length >= 2) {
+        const uniqueAllocationSources = [...new Set(activeAllocations.map((row) => String(row.sourceId)))];
+        if (uniqueAllocationSources.length >= 2) {
           details.set(id, { label: "Смешанная", tooltip: lines.join("\n"), mixed: true });
         } else {
-          const label = buildingsById.get(String(activeAllocations[0].sourceId))?.name || "Здание";
-          details.set(id, { label, tooltip: lines[0], mixed: false });
+          const label = buildingsById.get(uniqueAllocationSources[0])?.name || "Здание";
+          details.set(id, { label, tooltip: lines.join("\n"), mixed: false });
         }
       } else if (person?.role && String(person.role) !== "План QD") {
         const label = String(person.role);

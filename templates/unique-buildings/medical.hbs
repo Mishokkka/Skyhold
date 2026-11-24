@@ -58,7 +58,7 @@
               {{#if canManageEditorTabs}}
                 <label class="fbls-field">
                   <span>Назначить врача</span>
-                  <select class="fbls-control" data-building-worker-field="{{building.basePath}}.medicalDoctor" aria-label="Назначить врача в лазарет">
+                  <select class="fbls-control" data-building-worker-field="medical" aria-label="Назначить врача в лазарет">
                     {{#each building.medicalDoctorOptions}}<option value="{{id}}" {{#if disabled}}disabled{{/if}}>{{name}}{{#if hint}} · {{hint}}{{/if}}</option>{{/each}}
                   </select>
                 </label>

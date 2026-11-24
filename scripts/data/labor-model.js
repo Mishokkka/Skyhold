@@ -1,7 +1,7 @@
 import { DEFAULT_NORMAL_LABOR_QD, residentLaborCapacity } from "./labor-budget.js";
 import { buildingCompositionStatus, workerAdmission } from "../engines/workers/building-qualification.js";
 import { isSheriffAppointment } from "./control-appointments.js";
-import { residentShipAssignment } from "./resident-presence.js";
+import { isResidentPresent, residentShipAssignment } from "./resident-presence.js";
 
 export const LABOR_SCHEMA_VERSION = 2;
 export const MAX_PRODUCTION_GOAL_UNITS = 1_000_000;
@@ -56,6 +56,36 @@ export function buildingLaborCapacityQd(building = {}) {
 export function buildingAcceptsWorkers(building = {}) {
   const cap = buildingLaborCapacityQd(building);
   return cap === null || cap > 0;
+}
+
+export function uncollectibleProductionLine(building = {}) {
+  return (building?.productionLines ?? []).find((line) => (
+    line?.active !== false
+    && line?.requiresCollection === true
+    && Number(line?.collectQd) > 0
+    && !buildingAcceptsWorkers(building)
+    && String(line?.autoCollect ?? "none") !== "worker"
+  )) ?? null;
+}
+
+/**
+ * Total planned + overtime QD currently reserved on `buildingId` across living, present residents.
+ * Used uniformly by planner capacity labels, quick assignments, and Control picks.
+ */
+export function buildingReservedQd(holding = {}, buildingId = "", { excludePersonId = "" } = {}) {
+  const targetId = text(buildingId);
+  const excludedId = text(excludePersonId);
+  if (!targetId) return 0;
+  let sum = 0;
+  for (const person of holding?.people?.list ?? []) {
+    if (!person || person.dead || !isResidentPresent(person)) continue;
+    if (excludedId && text(person.id) === excludedId) continue;
+    for (const row of Array.isArray(person.workAllocations) ? person.workAllocations : []) {
+      if (text(row?.sourceId) !== targetId) continue;
+      sum += nonNegInt(row?.normalQd ?? row?.qd, 0) + nonNegInt(row?.overtimeQd, 0);
+    }
+  }
+  return sum;
 }
 
 export function buildingMinOperationalQd(building = {}) {
@@ -113,14 +143,18 @@ export function reservedOccupation(holding = {}, person = {}) {
       }
     }
 
-    for (const ship of holding?.special?.ships?.list ?? []) {
-      if ((ship?.crewResidentIds ?? []).some((id) => text(id) === personId)) {
-        return { kind: "ship", label: `Экипаж: ${text(ship?.name || ship?.id) || "корабль"}` };
-      }
-    }
     const voyage = residentShipAssignment(person);
     if (voyage?.away === true) {
       return { kind: "ship", label: "В плавании" };
+    }
+    const onShoreDuty = voyage?.shoreDuty === true;
+    const shoreShipId = text(voyage?.shipId);
+
+    for (const ship of holding?.special?.ships?.list ?? []) {
+      if (onShoreDuty && (!shoreShipId || text(ship?.id) === shoreShipId)) continue;
+      if ((ship?.crewResidentIds ?? []).some((id) => text(id) === personId)) {
+        return { kind: "ship", label: `Экипаж: ${text(ship?.name || ship?.id) || "корабль"}` };
+      }
     }
   }
 
@@ -130,7 +164,7 @@ export function reservedOccupation(holding = {}, person = {}) {
   if (workAssignment === "soldier" || workAssignment === "defenseCommander") {
     return { kind: "defense", label: "Военная служба" };
   }
-  if (workAssignment.startsWith("ship:")) {
+  if (workAssignment.startsWith("ship:") && residentShipAssignment(person)?.shoreDuty !== true) {
     return { kind: "ship", label: "Экипаж корабля" };
   }
   if (workAssignment === "sheriff" || workAssignment === "other" || isSheriffAppointment(person)) {
@@ -184,7 +218,7 @@ export function validateBuildingLaborAndGoals(holding = {}, { targets = null, sk
   const buildingWorkers = new Map();
 
   for (const person of holding?.people?.list ?? []) {
-    if (person?.dead) continue;
+    if (person?.dead || !isResidentPresent(person)) continue;
     const personId = text(person?.id);
     const personName = text(person?.name || personId) || "Житель";
     const allocations = Array.isArray(person?.workAllocations) ? person.workAllocations : [];
@@ -204,17 +238,36 @@ export function validateBuildingLaborAndGoals(holding = {}, { targets = null, sk
 
     const cap = residentLaborCapacity(person, holding);
     const maxTotal = cap.normalQd + cap.overtimeQd;
+    let totalNormalQd = 0;
+    let totalOvertimeQd = 0;
     let totalQd = 0;
     let nonOvertimeQd = 0;
 
     for (const row of positive) {
       const sourceId = text(row?.sourceId);
       const functionId = text(row?.functionId);
-      const qd = row?.qd !== undefined ? nonNegInt(row.qd, 0) : nonNegInt(row?.normalQd, 0) + nonNegInt(row?.overtimeQd, 0);
+      const rowNormalQd = nonNegInt(row?.normalQd ?? row?.qd, 0);
+      const rowOvertimeQd = nonNegInt(row?.overtimeQd, 0);
+      const qd = rowNormalQd + rowOvertimeQd;
+      totalNormalQd += rowNormalQd;
+      totalOvertimeQd += rowOvertimeQd;
       totalQd += qd;
       const key = laborTargetKey(sourceId, functionId);
       const target = targetsByKey.get(key) ?? targetsByKey.get(sourceId) ?? null;
-      if (target && target.overtimeAllowed === false) nonOvertimeQd += qd;
+      if (target && target.overtimeAllowed === false) {
+        nonOvertimeQd += qd;
+        if (rowOvertimeQd > 0 && !skipResidentBudget) {
+          issues.push({
+            code: "overtime-disallowed",
+            personId,
+            sourceId,
+            functionId,
+            actual: rowOvertimeQd,
+            limit: 0,
+            message: `${personName}: задача «${key || sourceId}» не разрешает переработку.`
+          });
+        }
+      }
       const building = buildingsById.get(text(target?.buildingId || sourceId));
       if (!building || !buildingAcceptsWorkers(building)) {
         if (!skipResidentBudget) {
@@ -266,6 +319,36 @@ export function validateBuildingLaborAndGoals(holding = {}, { targets = null, sk
         actual: nonOvertimeQd,
         limit: cap.normalQd,
         message: `${personName}: на задачи без переработки выделено ${nonOvertimeQd} QD при обычном бюджете ${cap.normalQd} QD.`
+      });
+    }
+
+    if (!skipResidentBudget && totalNormalQd > cap.normalQd) {
+      issues.push({
+        code: "resident-normal-cap",
+        personId,
+        actual: totalNormalQd,
+        limit: cap.normalQd,
+        message: `${personName}: обычный труд (${totalNormalQd} QD) превышает бюджет ${cap.normalQd} QD.`
+      });
+    }
+
+    if (!skipResidentBudget && totalOvertimeQd > cap.overtimeQd) {
+      issues.push({
+        code: "resident-overtime-cap",
+        personId,
+        actual: totalOvertimeQd,
+        limit: cap.overtimeQd,
+        message: `${personName}: переработка (${totalOvertimeQd} QD) превышает предел ${cap.overtimeQd} QD.`
+      });
+    }
+
+    if (!skipResidentBudget && totalOvertimeQd > Math.floor(totalNormalQd / 2)) {
+      issues.push({
+        code: "resident-overtime-days",
+        personId,
+        actual: totalOvertimeQd,
+        limit: Math.floor(totalNormalQd / 2),
+        message: `${personName}: каждый QD переработки требует два обычных рабочих QD.`
       });
     }
 

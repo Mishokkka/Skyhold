@@ -20,6 +20,8 @@ import {
   syncBuildingAudioTrackPlayback
 } from "../common/building-audio-track.js";
 import { renderFoundryFilePicker } from "../../integrations/foundry-runtime.js";
+import { newLaborIssues, validateBuildingLaborAndGoals } from "../../data/labor-model.js";
+import { buildWorkAllocationTargets } from "../../data/work-allocations.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
@@ -215,7 +217,21 @@ export class SkyholdUniqueBuildingApp extends WindowFrameMixin(RenderSchedulerMi
       if (value !== null && (!Number.isSafeInteger(value) || value < 0)) {
         throw new Error("Предел QD должен быть целым неотрицательным числом; пустое поле означает отсутствие предела.");
       }
-      await this._updateMutableBuilding(({ building }) => {
+      await this._updateMutableBuilding(({ holding, building }) => {
+        if (holding) {
+          const previewHolding = structuredClone(holding);
+          const previewBuilding = previewHolding.buildings?.list?.find((item) => String(item?.id ?? "") === String(building.id));
+          if (previewBuilding) {
+            const priorIssues = validateBuildingLaborAndGoals(holding, { targets: buildWorkAllocationTargets(holding), skipResidentBudget: true }).issues;
+            previewBuilding.labor = { version: 2, capacityQd: value };
+            previewBuilding.workersMin = 0;
+            if (previewBuilding.workerProfile) previewBuilding.workerProfile.workersMin = 0;
+            if (previewBuilding.activation) previewBuilding.activation.minWorkers = 0;
+            const nextIssues = validateBuildingLaborAndGoals(previewHolding, { targets: buildWorkAllocationTargets(previewHolding), skipResidentBudget: true }).issues;
+            const added = newLaborIssues(priorIssues, nextIssues);
+            if (added.length) throw new Error(added[0].message);
+          }
+        }
         building.labor = { version: 2, capacityQd: value };
         building.workersMin = 0;
         if (building.workerProfile) building.workerProfile.workersMin = 0;
@@ -260,18 +276,24 @@ export class SkyholdUniqueBuildingApp extends WindowFrameMixin(RenderSchedulerMi
     if (!this._canEditBuilding()) return;
     const field = event.currentTarget;
     const personId = String(field?.value ?? "").trim();
+    const functionId = field.dataset.buildingWorkerField === "medical" ? "medical" : undefined;
     const manager = getSkyholdManager();
     if (!manager) return;
     const current = this._getMutableBuilding();
     const person = (current.holding?.people?.list ?? []).find((row) => String(row?.id ?? "") === personId);
     const decision = await confirmBuildingWorkerAdmission({ manager, building: current.building, person });
     if (!decision.allowed) { this.requestRender(); return; }
+    const out = {};
     const updated = await this._updateMutableBuilding(({ holding, building }) => {
       if (!personId) return SkyholdData.skipTransaction(false);
-      return manager._assignPersonToBuilding(holding, personId, building.id, decision)
+      return manager._assignPersonToBuilding(holding, personId, building.id, { ...decision, functionId, out })
         || SkyholdData.skipTransaction(false);
     }, { reason: "unique-building:worker-change", requireHolding: true });
-    if (!updated) return;
+    if (!updated) {
+      if (out.reason) ui.notifications?.warn?.(out.reason);
+      this.requestRender();
+      return;
+    }
     this.requestRender();
     requestSkyholdAppRender();
   }

@@ -1,4 +1,5 @@
 import { ageGroupFromAge, clampAgeForRace, normalizeBelief, normalizeResidentAttribute, representativeAgeForGroup } from "../../generators/resident-rules.js";
+import { militaryDailyWage } from "../../engines/economy/military-wages.js";
 import { isPlainObject, makeId, toBoolean, toNumber } from "../utils.js";
 import { normalizePersonWorkAllocations } from "../work-allocations.js";
 import { normalizeWorkerTypeSet } from "./building.js";
@@ -71,7 +72,20 @@ export function normalizeConstructionCrew(crew, index = 0) {
   return normalized;
 }
 
-export function normalizePerson(person) {
+function isMilitaryResidentForSalary(person = {}, holding = null) {
+  const work = String(person?.workAssignment ?? "").trim();
+  if (work === "soldier" || work === "defenseCommander") return true;
+  const id = String(person?.id ?? "").trim();
+  if (!id || !holding) return false;
+  const defense = holding?.gm?.defense;
+  if (String(defense?.commanderId ?? "").trim() === id) return true;
+  return (defense?.squads ?? []).some((squad) => (
+    String(squad?.sergeantId ?? "").trim() === id
+    || (squad?.memberIds ?? []).some((memberId) => String(memberId ?? "").trim() === id)
+  ));
+}
+
+export function normalizePerson(person, { holding = null } = {}) {
   person.id = String(person.id || makeId("person"));
   person.name = String(person.name ?? "");
   person.role = String(person.role ?? person.workplace ?? person.work ?? "");
@@ -94,6 +108,19 @@ export function normalizePerson(person) {
     .filter(Boolean)
     .join(", ");
   person.home = String(person.home ?? "");
+  const hasExplicitWageOverride = person.wageDailyOverrideCopper !== null
+    && person.wageDailyOverrideCopper !== undefined
+    && person.wageDailyOverrideCopper !== "";
+  if (!hasExplicitWageOverride
+    && person.salaryModifier !== undefined
+    && person.salaryModifier !== null
+    && person.salaryModifier !== ""
+    && isMilitaryResidentForSalary(person, holding)) {
+    const mod = Math.trunc(toNumber(person.salaryModifier, 0));
+    if (mod !== 0) {
+      person.wageDailyOverrideCopper = Math.max(1, militaryDailyWage(holding ?? {}, person) + mod);
+    }
+  }
   delete person.salary;
   delete person.salaryModifier;
   delete person.staffAppointment;

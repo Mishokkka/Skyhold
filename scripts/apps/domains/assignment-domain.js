@@ -7,8 +7,8 @@ import { makeId } from "../../data/utils.js";
 import { clearPersonFromAssignments } from "../../data/resident-assignments.js";
 import { isResidentInPopulation } from "../../data/resident-presence.js";
 import { residentLaborCapacity } from "../../data/labor-budget.js";
-import { buildingAcceptsWorkers, buildingLaborCapacityQd } from "../../data/labor-model.js";
-import { buildingWorkerIds, buildWorkAllocationTargets } from "../../data/work-allocations.js";
+import { buildingAcceptsWorkers, buildingLaborCapacityQd, buildingReservedQd } from "../../data/labor-model.js";
+import { MAX_WORK_ALLOCATIONS_PER_PERSON, buildingWorkerIds, buildWorkAllocationTargets } from "../../data/work-allocations.js";
 import {
   constructionLeaderCoordinationBonus,
   constructionLeaderQualification
@@ -146,19 +146,22 @@ _assignPersonToBuilding(holding, personId, buildingId, options = {}) {
 
   const cap = residentLaborCapacity(person, holding);
   const currentAllocations = Array.isArray(person.workAllocations) ? person.workAllocations : [];
+  const existingTarget = currentAllocations.find((row) => String(row?.sourceId ?? "") === String(building.id)
+    && String(row?.functionId ?? "") === target.functionId);
+  if (!replace && !existingTarget && currentAllocations.length >= MAX_WORK_ALLOCATIONS_PER_PERSON) {
+    if (options.out && typeof options.out === "object") {
+      options.out.reason = `Достигнут лимит строк труда (${MAX_WORK_ALLOCATIONS_PER_PERSON}). Удалите лишние строки плана.`;
+    }
+    return false;
+  }
   const usedNormal = replace ? 0 : currentAllocations.reduce((sum, row) => sum + Math.max(0, Math.floor(Number(row?.normalQd ?? row?.qd ?? 0) || 0)), 0);
   const remainingNormal = Math.max(0, cap.normalQd - usedNormal);
   if (remainingNormal <= 0) return false;
 
   const capacityQd = buildingLaborCapacityQd(building);
-  const buildingUsedQd = capacityQd === null ? 0 : (holding?.people?.list ?? []).reduce((sum, worker) => {
-    if (worker?.dead || (replace && String(worker?.id) === String(personId))) return sum;
-    return sum + (worker?.workAllocations ?? []).reduce((inner, row) => (
-      String(row?.sourceId ?? "") === String(building.id)
-        ? inner + Math.max(0, Math.floor(Number(row?.normalQd ?? row?.qd ?? 0) || 0)) + Math.max(0, Math.floor(Number(row?.overtimeQd ?? 0) || 0))
-        : inner
-    ), 0);
-  }, 0);
+  const buildingUsedQd = capacityQd === null
+    ? 0
+    : buildingReservedQd(holding, building.id, { excludePersonId: replace ? personId : "" });
   const remainingBuilding = capacityQd === null ? remainingNormal : Math.max(0, capacityQd - buildingUsedQd);
   const requested = options.qd !== undefined ? Math.max(0, Math.floor(Number(options.qd) || 0)) : remainingNormal;
   const qd = Math.min(requested, remainingNormal, remainingBuilding);
@@ -194,16 +197,29 @@ _assignPersonToBuilding(holding, personId, buildingId, options = {}) {
   return true;
 },
 
-_removePersonFromBuilding(holding, buildingId, personId) {
+_removePersonFromBuilding(holding, buildingId, personId, { functionId = "" } = {}) {
   const person = this._findPerson(holding, personId);
   const targetId = String(buildingId ?? "");
+  const targetFn = String(functionId ?? "").trim();
   if (!person || !targetId || !Array.isArray(person.workAllocations)) return false;
-  const remaining = person.workAllocations.filter((row) => String(row?.sourceId ?? "") !== targetId);
+  const remaining = person.workAllocations.filter((row) => !(
+    String(row?.sourceId ?? "") === targetId && (!targetFn || String(row?.functionId ?? "") === targetFn)
+  ));
   if (remaining.length === person.workAllocations.length) return false;
   person.workAllocations = remaining;
+  const hasPositiveOnBuilding = remaining.some((row) => (
+    String(row?.sourceId ?? "") === targetId
+    && Math.max(0, Math.floor(Number(row?.normalQd ?? row?.qd ?? 0) || 0)) + Math.max(0, Math.floor(Number(row?.overtimeQd ?? 0) || 0)) > 0
+  ));
   const building = (holding?.buildings?.list ?? []).find((item) => String(item?.id ?? "") === targetId);
-  if (building && Array.isArray(building.workerAdmissionOverrideIds)) {
+  if (!hasPositiveOnBuilding && building && Array.isArray(building.workerAdmissionOverrideIds)) {
     building.workerAdmissionOverrideIds = building.workerAdmissionOverrideIds.filter((id) => String(id) !== String(personId));
+  }
+  const hasAnyActiveQd = remaining.some((row) => (
+    Math.max(0, Math.floor(Number(row?.normalQd ?? row?.qd ?? 0) || 0)) + Math.max(0, Math.floor(Number(row?.overtimeQd ?? 0) || 0)) > 0
+  ));
+  if (!hasAnyActiveQd && !String(person.workAssignment ?? "").trim() && String(person.role ?? "").trim() === "План QD") {
+    person.role = this._isChildResident?.(person) ? "Ребенок" : "Свободен";
   }
   return true;
 },

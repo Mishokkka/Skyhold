@@ -88,7 +88,7 @@ function settlementPlanForResident(holding, residentId, person) {
   };
 }
 
-function clearResidentSettlementAssignments(holding, residentId, person) {
+export function clearResidentSettlementAssignments(holding, residentId, person) {
   let cleared = 0;
   for (const building of holding?.buildings?.list ?? []) {
     if (Array.isArray(building?.workerAdmissionOverrideIds)) {

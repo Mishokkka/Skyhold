@@ -113,6 +113,8 @@ _agricultureCalendarContext(holding = {}, offsetQd = 0) {
 _agricultureAvailableWorkQd(holding, building, periodQd = 40, workerContext = null) {
   const people = this._activeAssignedBuildingPeople?.(holding, building, workerContext, "agriculture") ?? [];
   if (!(this._buildingCompositionStatus?.(holding, building, people, { excludeGroups: ["ЧУДОТВОРЕЦ"] })?.met ?? true)) return 0;
+  const minimumQd = this._buildingMinimumQdStatus?.(holding, building, workerContext, "agriculture", 1);
+  if (minimumQd && !minimumQd.met) return 0;
   const workUnits = people.reduce((sum, person) => {
     const realQd = workerContext?.financeContext
       ? (this._plannedWorkerFunctionQd?.(person, workerContext, building?.id, "agriculture") ?? 0)
@@ -213,7 +215,9 @@ _runScheduledAgricultureStep(holding, step, _report = null, {
     if (!needUnits) runtime.units = 0;
     const people = this._activeAssignedBuildingPeople?.(holding, building, workerContext, "agriculture") ?? [];
     const compositionMet = this._buildingCompositionStatus?.(holding, building, people, { excludeGroups: ["ЧУДОТВОРЕЦ"] })?.met !== false;
-    if (ready && compositionMet) {
+    const minimumQd = this._buildingMinimumQdStatus?.(holding, building, workerContext, "agriculture", 1);
+    const minimumQdMet = !minimumQd || minimumQd.met !== false;
+    if (ready && compositionMet && minimumQdMet) {
       for (const person of people) {
         if (runtime.units >= needUnits) break;
         const entry = this._workerBudgetEntry(holding, person, budgets, workerContext, building, "agriculture");

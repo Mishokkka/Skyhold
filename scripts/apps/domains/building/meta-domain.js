@@ -231,20 +231,22 @@ _workMoraleForPeriod(person, holding = null, options = {}) {
       sourceId: String(row?.sourceId ?? ""),
       functionId: String(row?.functionId ?? ""),
       normalQd: whole(row?.normalQd ?? row?.qd),
-      overtimeQd: whole(row?.overtimeQd)
+      overtimeQd: whole(row?.overtimeQd),
+      volunteer: row?.volunteer === true
     }));
     if (allocated.some((row) => row.normalQd + row.overtimeQd > 0)) {
       assignments = allocated;
     } else {
       const selected = String(person?.workAssignment ?? "").trim();
-      const building = buildingById.get(selected);
-      if (selected && !["other", "Свободен", "Без работы", "Ребенок"].includes(selected)) {
-        const overtimeQd = building && this._buildingHasOvertimeProduction?.(building) ? 10 : 0;
+      const isOutsideQdPost = selected.startsWith("construction")
+        || ["soldier", "defenseCommander", "sheriff"].includes(selected)
+        || selected.startsWith("ship:");
+      if (selected && isOutsideQdPost) {
         assignments = [{
           sourceId: selected,
-          functionId: building ? "production" : selected,
+          functionId: selected,
           normalQd: 20,
-          overtimeQd
+          overtimeQd: 0
         }];
       }
     }

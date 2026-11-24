@@ -938,6 +938,7 @@ async _savePersonEditorDraft(event) {
     if (overrideBuildings.some((building, index) => stableDataHash(building) !== stableDataHash(workAllocationAdmissionOverrides[index]))) {
       return SkyholdData.skipTransaction({ stale: true });
     }
+    const holdingBeforeWorkMutation = updatesWorkAllocations && !workUpdate ? structuredClone(target.holding) : null;
     const pathIn = (path) => residentScopedPath(target, path);
     let warnNoSlot = false;
 
@@ -962,8 +963,21 @@ async _savePersonEditorDraft(event) {
       const person = holding?.people?.list?.[personIndex];
       if (!holding || !person) continue;
       const savedAllocations = structuredClone(person.workAllocations ?? []);
+      const priorOverrideBuildingIds = new Set(
+        (holding.buildings?.list ?? [])
+          .filter((b) => Array.isArray(b?.workerAdmissionOverrideIds)
+            && b.workerAdmissionOverrideIds.some((id) => String(id) === String(person.id)))
+          .map((b) => String(b.id))
+      );
       this._clearPersonFromAssignments?.(holding, person.id);
       person.workAllocations = savedAllocations;
+      for (const b of holding.buildings?.list ?? []) {
+        if (!priorOverrideBuildingIds.has(String(b?.id ?? ""))) continue;
+        if (!Array.isArray(b.workerAdmissionOverrideIds)) b.workerAdmissionOverrideIds = [];
+        if (!b.workerAdmissionOverrideIds.some((id) => String(id) === String(person.id))) {
+          b.workerAdmissionOverrideIds.push(String(person.id));
+        }
+      }
       person.workAssignment = "";
       const hasActiveQd = savedAllocations.some((allocation) => (
         Math.max(0, Number(allocation?.normalQd ?? 0) || 0) + Math.max(0, Number(allocation?.overtimeQd ?? 0) || 0) > 0
@@ -978,6 +992,22 @@ async _savePersonEditorDraft(event) {
     for (const building of overrideBuildings) {
       if (!Array.isArray(building.workerAdmissionOverrideIds)) building.workerAdmissionOverrideIds = [];
       if (!building.workerAdmissionOverrideIds.some((id) => String(id) === address.personId)) building.workerAdmissionOverrideIds.push(address.personId);
+    }
+
+    if (holdingBeforeWorkMutation) {
+      const committedBuildingIds = new Set((target.person?.workAllocations ?? [])
+        .filter((allocation) => Math.max(0, Number(allocation?.normalQd ?? 0) || 0) + Math.max(0, Number(allocation?.overtimeQd ?? 0) || 0) > 0)
+        .map((allocation) => String(allocation?.sourceId ?? ""))
+        .filter(Boolean));
+      const txAllocationCheck = validateHoldingWorkAllocations(target.holding, { previousHolding: holdingBeforeWorkMutation });
+      const txBlockingIssue = txAllocationCheck.issues.find((issue) => (
+        issue?.code !== "admission-denied"
+        && (String(issue?.personId ?? "") === String(target.person?.id ?? "")
+          || committedBuildingIds.has(String(issue?.buildingId ?? "")))
+      ));
+      if (txBlockingIssue) {
+        return SkyholdData.skipTransaction({ stale: true, message: txBlockingIssue.message });
+      }
     }
 
     if (workUpdate) {
@@ -1019,7 +1049,7 @@ async _savePersonEditorDraft(event) {
   }, { reason: "resident:save-editor-draft", scope: "holdings" });
 
   if (result?.warnNoSlot) ui.notifications.warn("Назначение недоступно. Прежняя работа сохранена.");
-  if (result?.stale) ui.notifications.warn("Житель, место работы или права изменились. Скопируйте правку, обновите карточку и повторите её.");
+  if (result?.stale) ui.notifications.warn(result.message || "Житель, место работы или права изменились. Скопируйте правку, обновите карточку и повторите её.");
   if (result?.saved) {
     const committed = result.person;
     for (const [field, value] of submitted) baseline.fields.set(field, value);

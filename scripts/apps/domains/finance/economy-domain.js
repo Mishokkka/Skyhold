@@ -468,7 +468,8 @@ _financePlanInputs(holding, periodQd, identity) {
           normalQd,
           overtimeQd,
           dailyRateCopper: Math.max(0, Math.floor(this._safeNumber(fn?.wageDailyCopper, 0)))
-            || Math.max(0, Math.floor(this._safeNumber(building?.wageDailyCopper, 0)))
+            || Math.max(0, Math.floor(this._safeNumber(building?.wageDailyCopper, 0))),
+          ...(allocation?.volunteer === true ? { volunteer: true, volunteerReason: String(allocation?.volunteerReason ?? "") } : {})
         });
       }
       if (assignments.length || planIssues.length) workers.push({ ...workerBase, assignments, planIssues });
@@ -1130,6 +1131,7 @@ async _collectLineToStorage(holding, building, line, budgets, report, { by = "bu
   const roomId = this._normalizeStorageRoomId(line.storageRoomId ?? line.roomId);
   const placements = this._storageAddWithOverflow(holding, { resourceId, name: resourceName, roomId }, pending);
   line.pendingQty = 0;
+  line.collectProgressQd = 0;
   this._pushProductionPlacement(report, holding, building.name || "Здание", resourceName, placements, by === "worker" ? " собрано работником-потребителем" : " собрано", resourceId);
   return pending;
 },
@@ -1201,12 +1203,15 @@ async _tryCollectResourceForConsumer(holding, consumerBuilding, resource, budget
       const pending = Math.max(0, Math.floor(this._safeNumber(line.pendingQty, 0)));
       if (!pending) continue;
       const collectQd = Math.max(0, Math.ceil(this._safeNumber(line.collectQd, 0)));
-      if (collectQd > 0) {
-        const spent = this._spendBuildingWorkerQd(holding, consumerBuilding, budgets, collectQd, workerContext, consumerFunctionId);
+      const priorProgress = Math.max(0, Math.floor(this._safeNumber(line.collectProgressQd, 0)));
+      const remainingCollectQd = Math.max(0, collectQd - priorProgress);
+      if (remainingCollectQd > 0) {
+        const spent = this._spendBuildingWorkerQd(holding, consumerBuilding, budgets, remainingCollectQd, workerContext, consumerFunctionId);
         if (!spent.ok) continue;
       }
       const placements = this._storageAddWithOverflow(holding, output, pending);
       line.pendingQty = 0;
+      line.collectProgressQd = 0;
       collected += pending;
       this._pushProductionPlacement(report, holding, consumerBuilding.name || "Здание", output.name, placements,
         ` собрано у ${sourceBuilding.name || "здания"}`, output.resourceId, { note: "Собрано работником-потребителем" });
@@ -1307,12 +1312,15 @@ _buildingMinimumQdStatus(holding, building, workerContext = null, targetFunction
   const requiredQd = buildingMinOperationalQd(building) * Math.max(1, Math.floor(this._safeNumber(periodMultiplier, 1)));
   if (requiredQd <= 0) return { met: true, requiredQd: 0, actualQd: 0 };
   const serviceFn = buildingServiceFunctionId(building);
-  if (serviceFn !== "" && serviceFn !== targetFunction) return { met: true, requiredQd: 0, actualQd: 0 };
+  const matchesTarget = serviceFn === targetFunction
+    || (serviceFn === "production" && ["agriculture", "livestock"].includes(targetFunction));
+  if (serviceFn !== "" && !matchesTarget) return { met: true, requiredQd: 0, actualQd: 0 };
   const buildingId = String(building?.id ?? "");
   const matchesFn = (fnId) => {
     const id = String(fnId ?? "");
     if (serviceFn === "") return Boolean(id);
-    return targetFunction === "production" ? id.startsWith("production:") : id === targetFunction;
+    if (targetFunction === "production") return id.startsWith("production:") || id === "agriculture" || id === "livestock";
+    return id === targetFunction;
   };
   let actualQd = 0;
   for (const person of this._activeAssignedBuildingPeople(holding, building, workerContext)) {
@@ -1414,7 +1422,7 @@ async _runBuildingIncomeForQd(holding, qd, report, { buildings = holding?.buildi
     const income = building.income ?? {};
     const base = this._safeNumber(income.base, 0);
     const perWorker = this._safeNumber(income.perWorker, 0);
-    let total = (base * Math.min(1, workerEquivalents) + perWorker * eff) * incomePeriods;
+    let total = (base + perWorker * eff) * incomePeriods;
     let formulaResult = "";
     if (String(income.formula ?? "").trim()) {
       total = 0;

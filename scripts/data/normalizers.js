@@ -14,7 +14,7 @@ import { normalizePoliticsState } from "./politics-state.js";
 import { eventRegionOptionValue, normalizeEventRegionOptions, normalizeEventTagThresholds, normalizeRandomEventTables } from "./random-events.js";
 import { normalizeDefenseSquad, normalizeMassCombatState } from "./normalizers/combat.js";
 import { normalizeStorageItemRow, normalizeStorageLogRow } from "./normalizers/storage.js";
-import { normalizeBuilding, releaseWorkerlessSpecialAssignments } from "./normalizers/building.js";
+import { normalizeBuilding, preserveLegacyBuildingAssignments, releaseWorkerlessSpecialAssignments } from "./normalizers/building.js";
 import { normalizeEventArchive, normalizeEventHistory, normalizeEventSchedule, normalizeHoldingOperationLog, normalizeLastEventRoll } from "./normalizers/events.js";
 import { clearBuildingReferences, clearPersonReferences, normalizeConstructionCrew, normalizePerson } from "./normalizers/resident.js";
 import { normalizeContentDoctrines } from "./content-packs.js";
@@ -300,7 +300,9 @@ export function mergeHoldingDefaults(holding) {
   merged.constructionCrewIds = merged.constructionCrews[0]?.memberIds ?? [];
 
   if (!Array.isArray(merged.people.list)) merged.people.list = [];
-  for (const person of merged.people.list) normalizePerson(person);
+  if (!Array.isArray(merged.buildings.list)) merged.buildings.list = [];
+  preserveLegacyBuildingAssignments(merged);
+  for (const person of merged.people.list) normalizePerson(person, { holding: merged });
   const peopleById = new Map(merged.people.list.map((person) => [String(person?.id ?? ""), person]));
   for (const crew of merged.constructionCrews) {
     const leaderId = String(crew?.leaderId ?? "");
@@ -318,7 +320,6 @@ export function mergeHoldingDefaults(holding) {
       member.role = crew.name || "Стройбригада";
     }
   }
-  if (!Array.isArray(merged.buildings.list)) merged.buildings.list = [];
   if (!isPlainObject(merged.overview.development)) merged.overview.development = {};
   merged.overview.development.food = toNumber(merged.overview.development.food, 0);
   merged.overview.development.technology = toNumber(merged.overview.development.technology, 0);

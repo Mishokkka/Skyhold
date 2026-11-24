@@ -74,14 +74,18 @@ export async function executeControlWorkOperation(raw = {}, {
       if (action === "add") {
         if (!buildingOperationalState(building).operational) return fail("Назначение доступно после постройки и восстановления здания.");
         if (!controlResidentAvailable(holding, person, manager)) return fail("Житель занят или не может работать.");
+        const out = {};
         const assigned = manager._assignPersonToBuilding(holding, person.id, building.id, {
           functionId: controlServiceFunctionId(building),
-          allowAdmissionOverride: user?.isGM === true && raw.allowAdmissionOverride === true
+          allowAdmissionOverride: user?.isGM === true && raw.allowAdmissionOverride === true,
+          out
         });
-        if (!assigned) return fail("Нет свободных QD, вместимости здания или не выполнен обязательный допуск.");
+        if (!assigned) return fail(out.reason || "Нет свободных QD, вместимости здания или не выполнен обязательный допуск.");
         summary = `${person.name || "Житель"} назначен: ${building.name || "Учреждение"}.`;
       } else {
-        const removed = manager._removePersonFromBuilding?.(holding, building.id, person.id);
+        const removed = manager._removePersonFromBuilding?.(holding, building.id, person.id, {
+          functionId: controlServiceFunctionId(building)
+        });
         if (!removed) return fail("Рабочее назначение уже изменилось.");
         cleared = 1;
         summary = `${person.name || "Житель"} освобождён: ${building.name || "Учреждение"}.`;

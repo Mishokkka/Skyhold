@@ -43,6 +43,7 @@ import {
   buildingMinOperationalQd,
   newLaborIssues,
   reservedOccupation,
+  uncollectibleProductionLine,
   validateBuildingLaborAndGoals
 } from "../../data/labor-model.js";
 import {
@@ -686,6 +687,10 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(PendingFieldSavesMix
           if (value === 0) {
             building.activation = { ...building.activation, minOperationalQd: 0, requiresMeaningfulResult: false };
             building.minOperationalQd = 0;
+            const blockedLine = uncollectibleProductionLine(building);
+            if (blockedLine) {
+              throw new Error(`Нельзя задать 0 QD: линия «${blockedLine.resource || blockedLine.mode || "выпуск"}» требует сбора (${blockedLine.collectQd} QD) без сбора потребителем.`);
+            }
           }
         } else if (key === "minOperationalQd") {
           const raw = field.value.trim();
@@ -834,6 +839,7 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(PendingFieldSavesMix
     const value = fieldValue(field);
 
     try {
+      let collectionBlockedMessage = "";
       const updated = await this._saveTransaction((data) => {
         const scopedPath = this._resolveBuildingScopedPath(data, path);
         if (!scopedPath) return SkyholdData.skipTransaction(false);
@@ -854,9 +860,21 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(PendingFieldSavesMix
             }
           }
         }
+        const { building } = this._getMutableBuilding(data);
+        const blockedLine = uncollectibleProductionLine(building);
+        if (blockedLine && /\.(?:productionLines\.\d+\.(?:requiresCollection|collectQd|autoCollect|active)|functions\.production)$/.test(scopedPath)) {
+          collectionBlockedMessage = `Линия «${blockedLine.resource || blockedLine.mode || "выпуск"}» требует сбора (${blockedLine.collectQd} QD), но предел труда здания 0 QD. Включите «Сбор потребителем» или задайте предел QD > 0.`;
+          return SkyholdData.skipTransaction(false);
+        }
         return true;
       }, { reason: `building-editor:field:${path}`, scope: this.templateId ? "catalog" : "holdings" });
-      if (!updated) return;
+      if (!updated) {
+        if (collectionBlockedMessage) {
+          ui.notifications.warn(collectionBlockedMessage);
+          this.requestRender();
+        }
+        return;
+      }
       const shouldRefresh = /workersMax|workersMin|constructionStatus|lifecycle|condition|repair|requiredBuildingIds|materialCosts|contents|type$|functions|productionLines|expenseMode|autoCollect|income|livestock|defense|requirements|bonuses|religion|activation|service|control|repeatSettlementEffects|\.img$|\.image$|icon$/.test(path);
       if (shouldRefresh) this.requestRender();
     } catch (error) {

@@ -78,6 +78,8 @@ _livestockSeasonContext(holding = {}, cycleIndex = 0) {
 _livestockAvailableWorkQd(holding, building, periodQd = 40, workerContext = null, stepOffset = null) {
   const people = this._activeAssignedBuildingPeople?.(holding, building, workerContext, "livestock") ?? [];
   if (!(this._buildingCompositionStatus?.(holding, building, people, { excludeGroups: ["ЧУДОТВОРЕЦ"] })?.met ?? true)) return 0;
+  const minimumQd = this._buildingMinimumQdStatus?.(holding, building, workerContext, "livestock", 1);
+  if (minimumQd && !minimumQd.met) return 0;
   const workUnits = people.reduce((sum, person) => {
     let realQd = workerContext?.financeContext
       ? (this._plannedWorkerFunctionQd?.(person, workerContext, building?.id, "livestock") ?? 0)
