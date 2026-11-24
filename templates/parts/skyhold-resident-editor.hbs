@@ -106,10 +106,6 @@
         {{/if}}
         {{/if}}
       </label>
-      <label class="num-field person-maintenance-points">
-        <span data-fbls-tooltip="Целые очки трудового обслуживания за десятник. 0 означает, что этот житель их не создаёт; значение задаётся явно и не переносится между десятниками.">Очки обслуж.</span>
-        <input type="number" min="0" step="1" data-type="number" data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.maintenancePointsPerTenday" value="{{maintenancePointsPerTenday}}" />
-      </label>
     </div>
     <div class="fbls-work-block fbls-work-background-block">
       <label class="person-background">
@@ -124,15 +120,9 @@
   </fieldset>
 
   {{#unless workHidden}}
-  <fieldset class="fbls-work-allocation-set {{#if workAllocationExplicit}}is-explicit{{else}}is-legacy{{/if}}" {{#if onBoardOnly}}disabled{{else}}{{#unless @root.canEditBuildings}}disabled{{/unless}}{{/if}}>
+  <fieldset class="fbls-work-allocation-set is-explicit" {{#if onBoardOnly}}disabled{{else}}{{#unless @root.canEditBuildings}}disabled{{/unless}}{{/if}}>
     <legend>План труда на десятник</legend>
     <div class="fbls-work-allocation-toolbar">
-      <label class="fbls-field fbls-work-allocation-mode">
-        <span data-fbls-tooltip="Основное назначение сохраняет прежнее поведение. Явный план позволяет разделить 20 обычных QD и до 10 overtime-QD между функциями; один QD принадлежит только одной строке.">Режим</span>
-        <select data-field="holdings.{{@root.holdingIndex}}.people.list.{{_index}}.workAllocationMode">
-          {{#each workAllocationModeOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
-        </select>
-      </label>
       <div class="fbls-work-allocation-total-field">
         <span>Выделено</span>
         <strong class="fbls-work-allocation-total {{#unless workAllocationValid}}has-warning{{/unless}}" data-fbls-tooltip="{{workAllocationIssueText}}">{{workAllocationNormalQd}}/{{workAllocationNormalCap}} QD + {{workAllocationOvertimeQd}}/{{workAllocationOvertimeCap}} OT</strong>
@@ -153,24 +143,20 @@
             </label>
             <label class="fbls-field fbls-work-allocation-qd">
               <span>Обычн. QD</span>
-              <input type="number" min="0" max="20" step="1" data-type="number" data-field="holdings.{{@root.holdingIndex}}.people.list.{{../_index}}.workAllocations.{{_index}}.normalQd" value="{{normalQd}}" />
+              <input type="number" min="0" max="{{../workAllocationNormalCap}}" step="1" data-type="number" data-field="holdings.{{@root.holdingIndex}}.people.list.{{../_index}}.workAllocations.{{_index}}.normalQd" value="{{normalQd}}" />
             </label>
             <label class="fbls-field fbls-work-allocation-qd">
               <span data-fbls-tooltip="Overtime разрешён только функциям с включённой переработкой. Каждый OT-QD стоит полную дневную ставку.">OT QD</span>
-              <input type="number" min="0" max="10" step="1" data-type="number" data-field="holdings.{{@root.holdingIndex}}.people.list.{{../_index}}.workAllocations.{{_index}}.overtimeQd" value="{{overtimeQd}}" />
+              <input type="number" min="0" max="{{../workAllocationOvertimeCap}}" step="1" data-type="number" data-field="holdings.{{@root.holdingIndex}}.people.list.{{../_index}}.workAllocations.{{_index}}.overtimeQd" value="{{overtimeQd}}" />
             </label>
             <button type="button" class="fbls-button compact icon-only danger" data-action="remove-work-allocation" data-person-id="{{../id}}" data-allocation-id="{{id}}" title="Убрать функцию" aria-label="Убрать функцию из рабочего плана">
               <i class="fa-solid fa-trash" aria-hidden="true"></i>
             </button>
-            <div class="fbls-work-allocation-contract fbls-cluster">
-              <label class="fbls-checkbox-label"><input type="checkbox" data-type="checkbox" data-field="holdings.{{@root.holdingIndex}}.people.list.{{../_index}}.workAllocations.{{_index}}.volunteer" {{#if volunteer}}checked{{/if}} {{#unless @root.isGM}}disabled{{/unless}} /><span>Эта работа без оплаты</span></label>
-              <label class="fbls-field"><span>Основание договорённости</span><input type="text" data-field="holdings.{{@root.holdingIndex}}.people.list.{{../_index}}.workAllocations.{{_index}}.volunteerReason" value="{{volunteerReason}}" placeholder="Например: долг за спасение" {{#unless @root.isGM}}disabled{{/unless}} /></label>
-            </div>
           </div>
         {{/each}}
       </div>
     {{else}}
-      <p class="fbls-muted-text">Строк нет. В явном режиме житель без выделенных QD не работает и не получает зарплату.</p>
+      <p class="fbls-muted-text">Работы в зданиях не назначены. Добавьте функцию или выберите постоянную роль выше.</p>
     {{/if}}
   </fieldset>
   {{/unless}}

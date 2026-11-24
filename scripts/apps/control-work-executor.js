@@ -4,7 +4,7 @@ import { holdingPermissionContext } from "../data/holding-permissions.js";
 import { isSheriffAppointment } from "../data/control-appointments.js";
 import { appendHoldingOperation, findHoldingOperation } from "../data/operations.js";
 import { buildingOperationalState } from "../core/building-state.js";
-import { WORK_ALLOCATION_MODE_EXPLICIT } from "../data/work-allocations.js";
+import { controlServiceFunctionId } from "../engines/settlement/control.js";
 import { controlResidentAvailable, hasControlEffect } from "./domains/control-context.js";
 import { getSkyholdManager } from "./registry.js";
 
@@ -49,7 +49,7 @@ export async function executeControlWorkOperation(raw = {}, {
     if (action === "sheriff") {
       if (person && !controlResidentAvailable(holding, person, manager, { sheriff: true })) return fail("Житель занят или не может работать. Сначала освободите его от прежней работы.");
       const sheriffs = (holding.people?.list ?? []).filter((row) => isSheriffAppointment(row) && !row.dead);
-      if (sheriffs.some((row) => row.workAllocationMode === WORK_ALLOCATION_MODE_EXPLICIT
+      if (sheriffs.some((row) => (row.workAllocations ?? []).some((work) => Number(work?.normalQd ?? work?.qd ?? 0) > 0 || Number(work?.overtimeQd ?? 0) > 0)
         || manager._assignedWorkerSet?.(holding)?.has(String(row.id)) || !user?.isGM && row.visibility === "gm")) {
         return fail("Прежний шериф связан с другим назначением. Сначала освободите его в разделе жителей.");
       }
@@ -63,10 +63,9 @@ export async function executeControlWorkOperation(raw = {}, {
       }
       if (person) {
         manager._clearPersonFromAssignments(holding, person.id);
-        person.workAllocationMode = "legacy";
+        person.workAllocations = [];
         person.workAssignment = "other";
         person.role = "Шериф";
-        manager._applyPersonSalaryForAssignment?.(holding, person, null);
       }
       summary = person ? `Шериф: ${person.name || "Житель"}.` : "Должность шерифа освобождена.";
     } else {
@@ -76,15 +75,14 @@ export async function executeControlWorkOperation(raw = {}, {
         if (!buildingOperationalState(building).operational) return fail("Назначение доступно после постройки и восстановления здания.");
         if (!controlResidentAvailable(holding, person, manager)) return fail("Житель занят или не может работать.");
         const assigned = manager._assignPersonToBuilding(holding, person.id, building.id, {
+          functionId: controlServiceFunctionId(building),
           allowAdmissionOverride: user?.isGM === true && raw.allowAdmissionOverride === true
         });
-        if (!assigned) return fail("Нет свободного места или не выполнен обязательный допуск.");
+        if (!assigned) return fail("Нет свободных QD, вместимости здания или не выполнен обязательный допуск.");
         summary = `${person.name || "Житель"} назначен: ${building.name || "Учреждение"}.`;
       } else {
-        if (person.workAllocationMode === WORK_ALLOCATION_MODE_EXPLICIT) return fail("Явный план QD изменяется в редакторе жителя.");
-        const slot = (building.assignedWorkerIds ?? []).findIndex((id) => String(id) === residentId);
-        if (slot < 0 || String(person.workAssignment) !== buildingId) return fail("Рабочее назначение уже изменилось.");
-        if (!manager._setBuildingSlot?.(holding, building.id, slot, "")) return fail("Не удалось освободить рабочее место.");
+        const removed = manager._removePersonFromBuilding?.(holding, building.id, person.id);
+        if (!removed) return fail("Рабочее назначение уже изменилось.");
         cleared = 1;
         summary = `${person.name || "Житель"} освобождён: ${building.name || "Учреждение"}.`;
       }

@@ -151,11 +151,13 @@ export function holdingWorkerAdmissionIssues(holding = {}) {
     .filter(([id]) => Boolean(id)));
   const issues = [];
   for (const person of holding?.people?.list ?? []) {
-    if (String(person?.workAllocationMode ?? "") !== "explicit") continue;
+    if (person?.dead) continue;
     const plannedQd = new Map();
     for (const row of person.workAllocations ?? []) {
       const buildingId = String(row?.sourceId ?? "");
-      const qd = Math.max(0, finiteInteger(row?.normalQd, 0)) + Math.max(0, finiteInteger(row?.overtimeQd, 0));
+      const qd = row?.qd !== undefined
+        ? Math.max(0, finiteInteger(row.qd, 0))
+        : Math.max(0, finiteInteger(row?.normalQd, 0)) + Math.max(0, finiteInteger(row?.overtimeQd, 0));
       if (qd && buildingsById.has(buildingId)) plannedQd.set(buildingId, (plannedQd.get(buildingId) ?? 0) + qd);
     }
     for (const [buildingId, qd] of plannedQd) {

@@ -31,7 +31,7 @@ export function tendayDependencySnapshot(data = {}, holdingId = "") {
   if (!holding) return null;
   return {
     holding,
-    normalLaborQdPerTenday: normalLaborQdPerTenday(),
+    normalLaborQdPerTenday: normalLaborQdPerTenday(holding),
     ...(data?.meta?.sharedMarkets ? { sharedMarkets: data.meta.sharedMarkets } : {}),
     ...(data?.meta?.transportV2 ? { transportV2: data.meta.transportV2 } : {}),
     catalog: {

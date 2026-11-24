@@ -25,6 +25,8 @@ const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
 const BASE_ACTIONS = {
   "unique-building-tab": "_onUniqueBuildingTab",
+  "unique-remove-worker": "_onRemoveUniqueBuildingWorker",
+  "open-unique-workforce-planner": "_onOpenWorkforcePlanner",
   "pick-unique-building-image": "_onPickBuildingImage",
   "clear-unique-building-image": "_onClearBuildingImage",
   "roll-construction": "_onRollConstruction",
@@ -101,6 +103,9 @@ export class SkyholdUniqueBuildingApp extends WindowFrameMixin(RenderSchedulerMi
     });
     root.querySelectorAll("[data-building-worker-field]").forEach((field) => {
       field.addEventListener("change", (event) => this._onBuildingWorkerChange(event));
+    });
+    root.querySelectorAll("[data-building-labor-field]").forEach((field) => {
+      field.addEventListener("change", (event) => this._onLaborFieldChange(event));
     });
   }
 
@@ -199,20 +204,71 @@ export class SkyholdUniqueBuildingApp extends WindowFrameMixin(RenderSchedulerMi
     requestSkyholdAppRender();
   }
 
+  async _onLaborFieldChange(event) {
+    event.preventDefault();
+    if (!game.user?.isGM) return;
+    const field = event.currentTarget;
+    if (field.dataset.buildingLaborField !== "capacityQd") return;
+    try {
+      const raw = field.value.trim();
+      const value = raw === "" ? null : Number(raw);
+      if (value !== null && (!Number.isSafeInteger(value) || value < 0)) {
+        throw new Error("Предел QD должен быть целым неотрицательным числом; пустое поле означает отсутствие предела.");
+      }
+      await this._updateMutableBuilding(({ building }) => {
+        building.labor = { version: 2, capacityQd: value };
+        building.workersMin = 0;
+        if (building.workerProfile) building.workerProfile.workersMin = 0;
+        if (building.activation) building.activation.minWorkers = 0;
+        return true;
+      }, { reason: "unique-building:labor" });
+      this.requestRender();
+      requestSkyholdAppRender();
+    } catch (error) {
+      ui.notifications.warn(error?.message || "Не удалось изменить параметры труда.");
+      this.requestRender();
+    }
+  }
+
+  async _onRemoveUniqueBuildingWorker(event) {
+    event.preventDefault();
+    if (!this._canEditBuilding()) return;
+    const personId = String(event.currentTarget?.dataset?.personId ?? "").trim();
+    const manager = getSkyholdManager();
+    if (!manager || !personId) return;
+    const updated = await this._updateMutableBuilding(({ holding, building }) => (
+      manager._removePersonFromBuilding(holding, building.id, personId) || SkyholdData.skipTransaction(false)
+    ), { reason: "unique-building:remove-worker", requireHolding: true });
+    if (!updated) return;
+    this.requestRender();
+    requestSkyholdAppRender();
+  }
+
+  async _onOpenWorkforcePlanner(event) {
+    event.preventDefault();
+    const { openWorkforcePlanner } = await import("../lazy-apps.js");
+    const { buildWorkAllocationTargets } = await import("../../data/work-allocations.js");
+    const { holding, building } = this._getMutableBuilding();
+    const targetKey = holding && building
+      ? buildWorkAllocationTargets(holding).find((row) => String(row.sourceId) === String(building.id))?.key
+      : "";
+    return openWorkforcePlanner({ holdingId: this.holdingId, targetKey });
+  }
+
   async _onBuildingWorkerChange(event) {
     event.preventDefault();
     if (!this._canEditBuilding()) return;
     const field = event.currentTarget;
-    const slotMatch = String(field?.dataset?.buildingWorkerField ?? "").match(/\.assignedWorkerIds\.(\d+)$/);
-    if (!slotMatch) return;
+    const personId = String(field?.value ?? "").trim();
     const manager = getSkyholdManager();
     if (!manager) return;
     const current = this._getMutableBuilding();
-    const person = (current.holding?.people?.list ?? []).find((row) => String(row?.id ?? "") === String(field.value ?? ""));
+    const person = (current.holding?.people?.list ?? []).find((row) => String(row?.id ?? "") === personId);
     const decision = await confirmBuildingWorkerAdmission({ manager, building: current.building, person });
     if (!decision.allowed) { this.requestRender(); return; }
     const updated = await this._updateMutableBuilding(({ holding, building }) => {
-      return manager._setBuildingSlot(holding, building.id, Number(slotMatch[1]), field.value || "", decision)
+      if (!personId) return SkyholdData.skipTransaction(false);
+      return manager._assignPersonToBuilding(holding, personId, building.id, decision)
         || SkyholdData.skipTransaction(false);
     }, { reason: "unique-building:worker-change", requireHolding: true });
     if (!updated) return;

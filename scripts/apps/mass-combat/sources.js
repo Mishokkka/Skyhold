@@ -1,5 +1,6 @@
 import { buildingOperationalState } from "../../core/building-state.js";
 import { isResidentInPopulation } from "../../data/resident-presence.js";
+import { buildingWorkerIds } from "../../data/work-allocations.js";
 import { DEFENSE_SQUAD_MIN_EFFICIENCY, evaluateDefenseSquad, isAvailableDefenseResident } from "../../data/military-resident-rules.js";
 import {
   ATTACK_METHODS,
@@ -278,7 +279,7 @@ export function defenseGarrisonProfile(holding, { buildingEffectiveWorkers = nul
   const sources = [];
   let effective = 0;
   for (const building of buildings) {
-    const assigned = (Array.isArray(building?.assignedWorkerIds) ? building.assignedWorkerIds : []).map((id) => String(id ?? "")).filter(Boolean);
+    const assigned = buildingWorkerIds(holding, building.id);
     const combatants = assigned.map((id) => byId.get(id)).filter(Boolean);
     for (const person of combatants) ids.add(String(person.id));
     const effSummary = typeof buildingEffectiveWorkers === "function" ? buildingEffectiveWorkers(holding, building) : null;

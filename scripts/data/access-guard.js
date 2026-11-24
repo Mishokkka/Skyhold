@@ -19,10 +19,8 @@ export const hiddenStorageRoomIds = hiddenBuildingIds;
 
 export function residentHasHiddenWork(holding, person, hidden = hiddenBuildingIds(holding)) {
   if (!person || !hidden.size) return false;
-  if ([person.workAssignment, person.staffAppointment?.buildingId, ...(person.workAllocations ?? []).map((row) => row?.sourceId)]
-    .some((id) => hidden.has(String(id ?? "")))) return true;
-  return (holding?.buildings?.list ?? []).some((building) => hidden.has(String(building.id))
-    && (building.assignedWorkerIds ?? []).some((id) => String(id) === String(person.id)));
+  return [person.workAssignment, ...(person.workAllocations ?? []).map((row) => row?.sourceId)]
+    .some((id) => hidden.has(String(id ?? "")));
 }
 
 export function findHoldingIndex(data, holdingId, { fallback = false } = {}) {

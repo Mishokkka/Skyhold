@@ -1,8 +1,10 @@
 import { buildingOperationalState } from "../../core/building-state.js";
 import { isSheriffAppointment } from "../../data/control-appointments.js";
 import { holdingPermissionContext } from "../../data/holding-permissions.js";
-import { buildingStaffingWorkerIds, WORK_ALLOCATION_MODE_EXPLICIT } from "../../data/work-allocations.js";
+import { buildingAcceptsWorkers, buildingLaborCapacityQd } from "../../data/labor-model.js";
+import { buildingWorkerIds } from "../../data/work-allocations.js";
 import { buildingServiceBlockReasons } from "../../engines/economy/building-service.js";
+import { controlServiceFunctionId } from "../../engines/settlement/control.js";
 
 const CHAIN_IDS = ["sheriff-post", "guard-house", "guard-precinct", "court"];
 const DEVELOPMENT_LABELS = { food: "Пища", technology: "Технологии", culture: "Культура", war: "Война" };
@@ -31,7 +33,7 @@ export function controlEffectText(control = {}) {
 /** Only free residents enter the picker: assigning here never silently replaces another job or QD plan. */
 export function controlResidentAvailable(holding, person, manager, { sheriff = false, assignedIds = null } = {}) {
   if (!manager?._canResidentWork?.(person, holding)) return false;
-  if (String(person?.workAllocationMode ?? "") === WORK_ALLOCATION_MODE_EXPLICIT) return false;
+  if ((person?.workAllocations ?? []).some((row) => Number(row?.normalQd ?? row?.qd ?? 0) > 0 || Number(row?.overtimeQd ?? 0) > 0)) return false;
   if ((assignedIds ?? manager?._assignedWorkerSet?.(holding))?.has(String(person.id))) return false;
   if (sheriff && isSheriffAppointment(person)) return true;
   return !String(person?.workAssignment ?? "")
@@ -61,24 +63,30 @@ export function prepareControlContext(holding, catalog = [], summary = {}, manag
     .map((person) => ({ id: person.id, name: person.name || "Житель", selected: String(person.id) === selectedSheriffId,
       disabled: String(person.id) !== selectedSheriffId && !controlResidentAvailable(holding, person, manager, { sheriff: true, assignedIds }) }));
 
-  const jobs = buildings.filter((building) => hasControlEffect(building) && visible(building, user) && whole(building.workersMax) > 0)
+  const jobs = buildings.filter((building) => hasControlEffect(building) && visible(building, user) && buildingAcceptsWorkers(building))
     .map((building) => {
       const state = buildingOperationalState(building);
-      const workerIds = buildingStaffingWorkerIds(holding, building.id);
+      const workerIds = buildingWorkerIds(holding, building.id);
       const workers = workerIds.map((id) => {
         const person = peopleById.get(String(id));
-        const explicit = person?.workAllocationMode === WORK_ALLOCATION_MODE_EXPLICIT;
         return { id, name: person && visible(person, user) ? person.name || "Житель" : "Скрытый или отсутствующий житель",
-          explicit, canRemove: canAssign && !explicit && Boolean(person && visible(person, user)) };
+          canRemove: canAssign && Boolean(person && visible(person, user)) };
       });
       const candidates = freePeople.filter((person) => {
         const admission = manager?._buildingWorkerAdmission?.(building, person);
         return user?.isGM || !admission?.hard || admission.eligible || admission.overridden;
       }).map((person) => ({ id: person.id, name: person.name || "Житель" }));
+      const capacityQd = buildingLaborCapacityQd(building);
+      const allocatedQd = workers.reduce((sum, worker) => {
+        const p = peopleById.get(String(worker.id));
+        return sum + (p?.workAllocations ?? [])
+          .filter((row) => String(row?.sourceId ?? "") === String(building.id))
+          .reduce((s, row) => s + whole(row?.normalQd ?? row?.qd) + whole(row?.overtimeQd), 0);
+      }, 0);
       return { id: building.id, name: building.name || "Здание", role: building.workerRole || "Сотрудник учреждения",
-        workers, hasWorkers: workers.length > 0, max: whole(building.workersMax), min: whole(building.activation?.minWorkers ?? building.workersMin),
+        workers, hasWorkers: workers.length > 0, capacityQd, allocatedQd,
         count: workerIds.length, qd: whole(building.activation?.minOperationalQd), admission: building.workerProfile?.admission?.text || "",
-        candidates, canAdd: canAssign && state.operational && workerIds.length < whole(building.workersMax) && candidates.length > 0,
+        candidates, canAdd: canAssign && state.operational && (capacityQd === null || allocatedQd < capacityQd) && candidates.length > 0,
         stateLabel: state.label };
     });
 
@@ -92,7 +100,7 @@ export function prepareControlContext(holding, catalog = [], summary = {}, manag
     const owned = buildings.filter((building) => String(building.templateId || building.id) === String(template.id) && visible(building, user));
     const instances = owned.map((building) => {
       const state = buildingOperationalState(building);
-      const status = buildingServiceBlockReasons(holding, building);
+      const status = buildingServiceBlockReasons(holding, building, controlServiceFunctionId(building));
       const source = sourcesById.get(String(building.id));
       return { id: building.id, name: building.name || template.name, stateLabel: state.label, active: Boolean(source),
         actualEffects: source ? `Общий ${source.general} · беспорядки +${source.unrestOnly} · охват ${source.capacity}${source.ceiling === null ? "" : ` · предел ${source.ceiling}`}` : "Сейчас Контроль не даёт",

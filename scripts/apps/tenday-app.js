@@ -93,21 +93,6 @@ function financeReportRows(finance = {}, owner = null) {
   });
 }
 
-function maintenanceReportRows(maintenance = {}) {
-  const rows = [];
-  const available = Math.max(0, Math.floor(finiteNumber(maintenance?.availablePoints, 0)));
-  const allocated = Math.max(0, Math.floor(finiteNumber(maintenance?.allocatedPoints, 0)));
-  const unused = Math.max(0, Math.floor(finiteNumber(maintenance?.unusedPoints, 0)));
-  if (available || allocated || unused) rows.push(`Очки: доступно ${available}, распределено ${allocated}, не перенесено ${unused}.`);
-  for (const building of maintenance?.buildings ?? []) {
-    const backlog = Math.max(0, Math.floor(finiteNumber(building?.backlogAfter, 0)));
-    const factor = Math.max(0, Math.min(1, finiteNumber(building?.efficiencyFactor, 1)));
-    const resolution = building?.needsResolution ? "; требуется решение GM" : "";
-    rows.push(`${building?.name || "Здание"}: распределено ${building?.allocatedPoints ?? 0} очк.; backlog ${backlog}; эффективность ${Math.round(factor * 100)}%${resolution}.`);
-  }
-  return rows;
-}
-
 function economySections(report = {}, owner = null) {
   return [
     { key: "ledger-truncated", title: "Сокращённый журнал", icon: "fa-solid fa-list", rows: report?.ledgerTruncated ? [`Показано ${report.ledger?.length ?? 0} из ${report.ledgerCount ?? 0} операций; денежные итоги включают весь период.`] : [] },
@@ -119,7 +104,6 @@ function economySections(report = {}, owner = null) {
     { key: "trade", title: "Торговля", icon: "fa-solid fa-shop", rows: report?.tradeSummary?.lines ?? [] },
     { key: "treasury", title: "Казна", icon: "fa-solid fa-vault", rows: report?.treasurySummary?.lines ?? [] },
     { key: "finance", title: "Денежные обязательства", icon: "fa-solid fa-file-invoice-dollar", rows: financeReportRows(report?.finance, owner) },
-    { key: "maintenance", title: "Трудовое обслуживание", icon: "fa-solid fa-screwdriver-wrench", rows: maintenanceReportRows(report?.maintenance) },
     { key: "work", title: "Другие процессы", icon: "fa-solid fa-list-check", rows: report?.work ?? [] },
     { key: "skipped", title: "Не выполнено", icon: "fa-solid fa-triangle-exclamation", rows: report?.skipped ?? [], warning: true },
     { key: "formulas", title: "Броски и формулы", icon: "fa-solid fa-square-root-variable", rows: report?.formulas ?? [], technical: true }

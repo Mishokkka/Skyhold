@@ -1,9 +1,7 @@
 import { ageGroupFromAge, clampAgeForRace, normalizeBelief, normalizeResidentAttribute, representativeAgeForGroup } from "../../generators/resident-rules.js";
 import { isPlainObject, makeId, toBoolean, toNumber } from "../utils.js";
-import { normalizeMaintenancePointsPerTenday } from "../economy/maintenance.js";
 import { normalizePersonWorkAllocations } from "../work-allocations.js";
 import { normalizeWorkerTypeSet } from "./building.js";
-import { normalizeStaffAppointment } from "../hybrid-labor.js";
 import { clearPersonFromAssignments } from "../resident-assignments.js";
 
 /**
@@ -38,9 +36,8 @@ export function clearBuildingReferences(holding, building) {
     if (Array.isArray(person?.workAllocations)) {
       person.workAllocations = person.workAllocations.filter((row) => String(row?.sourceId ?? "") !== id);
     }
-    if (person.staffAppointment?.buildingId === id) delete person.staffAppointment;
   }
-  for (const kind of ["goals", "locks", "productionGoals"]) {
+  for (const kind of ["locks", "productionGoals"]) {
     if (Array.isArray(holding?.workforcePlan?.[kind])) {
       holding.workforcePlan[kind] = holding.workforcePlan[kind].filter((row) => String(row?.sourceId ?? "") !== id);
     }
@@ -97,8 +94,10 @@ export function normalizePerson(person) {
     .filter(Boolean)
     .join(", ");
   person.home = String(person.home ?? "");
-  person.salary = toNumber(person.salary, 0);
-  person.salaryModifier = toNumber(person.salaryModifier, 0);
+  delete person.salary;
+  delete person.salaryModifier;
+  delete person.staffAppointment;
+  delete person.maintenancePointsPerTenday;
   person.wageDailyOverrideCopper = person.wageDailyOverrideCopper === null
     || person.wageDailyOverrideCopper === undefined
     || person.wageDailyOverrideCopper === ""
@@ -107,8 +106,6 @@ export function normalizePerson(person) {
   person.volunteerLabor = toBoolean(person.volunteerLabor, false);
   person.volunteerReason = String(person.volunteerReason ?? "");
   normalizePersonWorkAllocations(person);
-  if (person.staffAppointment !== undefined) person.staffAppointment = normalizeStaffAppointment(person.staffAppointment);
-  person.maintenancePointsPerTenday = normalizeMaintenancePointsPerTenday(person.maintenancePointsPerTenday);
   if (!isPlainObject(person.attributes)) person.attributes = {};
   for (const key of ["strength", "agility", "wits", "empathy"]) {
     person.attributes[key] = normalizeResidentAttribute(person.attributes[key], 3);

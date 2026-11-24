@@ -630,6 +630,7 @@ export function normalizeProductionLine(line = {}, makeId = null) {
     expenseMode,
     requiresCollection: Boolean(line?.requiresCollection ?? line?.collect ?? false),
     collectQd: ceilNonNegativeQuantity(line?.collectQd ?? line?.collectionQd, 0),
+    collectProgressQd: floorNonNegativeQuantity(line?.collectProgressQd, 0),
     autoCollect,
     overtime: Boolean(line?.overtime ?? line?.overwork ?? false),
     // Integer production work (1 QD = 10,000 units). Inputs are consumed when

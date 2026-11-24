@@ -1,4 +1,3 @@
-import { minimumStaffStatus } from "../workers/minimum-staff.js";
 import { politicsRuntimeEffects, politicsProductionOutcome, politicsProductionBonus } from "../politics/runtime-effects.js";
 import { productionBatchShelfLifeQd, productionBatchLife, clearProductionBatch } from "./production-batch-life.js";
 import { createProductionTiming, productionTiming, productionTimingText, validProductionTiming, PRODUCTION_WORK_UNITS as WORK_UNITS_PER_QD } from "./production-timing.js";
@@ -151,8 +150,7 @@ export async function runProductionCycle({
       qd: 1,
       workqd: timed ? 0 : Math.max(1, whole(line.workQd ?? line.workerQD ?? line.cycleQd ?? line.cycleQD, 1))
     });
-    const maintenanceFactor = timed ? Math.max(0, Math.min(1, deps.safeNumber(deps.maintenanceEfficiencyFactor?.(building) ?? 1, 1))) : 1;
-    const fullOutputQty = whole(output.qty * maintenanceFactor);
+    const fullOutputQty = whole(output.qty);
     if (!fullOutputQty) return { ok: false, reason: `${resourceName}: рецепт не даёт целого выхода.` };
     let outputQty = capacity ? Math.min(fullOutputQty, free) : fullOutputQty;
     if (remainingGoal !== null) {
@@ -229,9 +227,8 @@ export async function runProductionCycle({
 
   const staffLineCanWork = async (building, line, assignedPeople, step) => {
     if (!line || deps.lineFinanceAllowed?.(building, line) === false
-      || deps.buildingTechnicalReady?.(building, step) === false
       || !deps.lineSeasonAllowed(line, deps.getSeasonSnapshot(holding, step) ?? null)) return false;
-    if (line.requiresCollection && whole(line.pendingQty) > 0) return deps.staffCanCollectLine?.(building, line, workerContext) ?? true;
+    if (line.requiresCollection && whole(line.pendingQty) > 0) return true;
     if (line.active === false) return false;
     const timing = productionTiming(line);
     if (timing?.phase === "work") return true;
@@ -262,8 +259,9 @@ export async function runProductionCycle({
     if (capacity && affordableProductionBatch(limit, costsFor, (costs) => deps.storageCanPay(holding, costs)) >= minimum) return true;
     const costs = costsFor(capacity ? minimum : limit);
     const payment = deps.storageCanPay(holding, costs);
-    return payment.ok || deps.canCollectProductionInputs?.(holding, building, costs, workerContext, line) === true;
+    return payment.ok;
   };
+  void staffLineCanWork;
 
   for (let step = 0; step < periodQd; step += 1) {
     releasedCapacityThisStep.clear();
@@ -293,9 +291,6 @@ export async function runProductionCycle({
     }
     if (step % 4 === 0) deps.resetWorkerBudgets(holding, budgets, workerContext, step);
     deps.accrueWorkerBudgets(holding, budgets, workerContext, step);
-    // Snapshot simultaneous staffing before any line spends this step's labor.
-    const stepStaffing = new Map(buildings.map((building) => [building,
-      deps.minimumStaffStatus?.(holding, building, workerContext, budgets, step)]));
 
     // Waiting consumes calendar QD, never worker budgets. Starting raw materials
     // and partial progress survive period boundaries, pauses, and reloads.
@@ -304,7 +299,7 @@ export async function runProductionCycle({
     for (const building of buildings) {
       if (deps.buildingStatus(building).value !== "built" || !deps.buildingFunctions(building).production) continue;
       for (const line of building.productionLines ?? []) {
-        if (line?.active === false || deps.lineFinanceAllowed?.(building, line) === false || deps.buildingTechnicalReady?.(building, step) === false || !deps.lineSeasonAllowed(line, productionSeasonSnapshot)) continue;
+        if (line?.active === false || deps.lineFinanceAllowed?.(building, line) === false || !deps.lineSeasonAllowed(line, productionSeasonSnapshot)) continue;
         let releasedQty = 0;
         // Existing queued batches each age once, including while another batch
         // is being prepared. Newly finished labor enters this loop next QD.
@@ -351,7 +346,7 @@ export async function runProductionCycle({
     for (const building of buildings) {
       if (deps.buildingStatus(building).value !== "built" || !deps.buildingFunctions(building).production) continue;
       for (const line of Array.isArray(building.productionLines) ? building.productionLines : []) {
-        if (line?.active === false || deps.lineFinanceAllowed?.(building, line) === false || deps.buildingTechnicalReady?.(building, step) === false || !deps.lineSeasonAllowed(line, productionSeasonSnapshot)) continue;
+        if (line?.active === false || deps.lineFinanceAllowed?.(building, line) === false || !deps.lineSeasonAllowed(line, productionSeasonSnapshot)) continue;
         const source = ["workers", "time", "content"].includes(String(line.source ?? "")) ? String(line.source) : "workers";
         if (source !== "content" || line.workInputsReserved || completedThisStep.has(line)) continue;
         const period = ["qd", "day", "tenday"].includes(String(line.period ?? "")) ? String(line.period) : "day";
@@ -368,8 +363,7 @@ export async function runProductionCycle({
         const workerSummary = deps.buildingEffectiveWorkers(holding, building, workerContext);
         const output = await deps.lineOutputForCycle(line, { eff: workerSummary.total, workers: workerSummary.assigned, cycles: multiplier, qd: 1, workqd: 0 });
         if (output.formula) report.formulas.push(`${building.name || "Здание"} / ${resourceName}: ${output.formula}`);
-        const maintenanceFactor = Math.max(0, Math.min(1, deps.safeNumber(deps.maintenanceEfficiencyFactor?.(building) ?? 1, 1)));
-        const total = whole(output.qty * multiplier * maintenanceFactor);
+        const total = whole(output.qty * multiplier);
         if (!total) continue;
 
         const costsPer = deps.parseResourceCosts(line.expenses);
@@ -394,7 +388,6 @@ export async function runProductionCycle({
       }
     }
 
-    await deps.prepareStaffWorkerStep?.(holding, budgets, workerContext, step, { lineCanWork: staffLineCanWork, report });
     for (const building of buildings) {
       if (deps.buildingStatus(building).value === "built") await deps.autoCollectBuilding(holding, building, budgets, report, workerContext);
     }
@@ -404,7 +397,7 @@ export async function runProductionCycle({
     for (const building of buildings) {
       if (deps.buildingStatus(building).value !== "built" || !deps.buildingFunctions(building).production) continue;
       for (const line of Array.isArray(building.productionLines) ? building.productionLines : []) {
-        if (line?.active === false || deps.lineFinanceAllowed?.(building, line) === false || deps.buildingTechnicalReady?.(building, step) === false || !deps.lineSeasonAllowed(line, productionSeasonSnapshot)) continue;
+        if (line?.active === false || deps.lineFinanceAllowed?.(building, line) === false || !deps.lineSeasonAllowed(line, productionSeasonSnapshot)) continue;
         const timing = productionTiming(line);
         const source = timing?.source ?? (["workers", "time", "content"].includes(String(line.source ?? "")) ? String(line.source) : "workers");
         if (source !== "workers") continue;
@@ -414,18 +407,17 @@ export async function runProductionCycle({
         if (whole(line.pendingQty) > 0 && deps.lineCollectionTakesPriority?.(building, line)) continue;
         const assignedPeople = deps.assignedBuildingPeople(holding, building, workerContext, line);
         if (!assignedPeople.length) continue;
-        const staffing = stepStaffing.get(building) ?? minimumStaffStatus(building, assignedPeople);
-        if (!staffing.met) {
-          const key = `staff:${building.id ?? building.name}`;
-          if (staffing.count > 0 && !compositionSkipped.has(key)) {
+        const minimumQd = deps.buildingMinimumQdStatus?.(holding, building, workerContext);
+        if (minimumQd && minimumQd.met === false) {
+          const key = `minqd:${building.id ?? building.name}:${line.id ?? line.resource}`;
+          if (!compositionSkipped.has(key)) {
             compositionSkipped.add(key);
-            report.skipped.push(`${building.name || "Здание"}: производство остановлено — ${staffing.text}.`);
+            report.skipped.push(`${building.name || "Здание"}: производственная функция остановлена — выделено ${minimumQd.actualQd} из ${minimumQd.requiredQd} QD.`);
           }
           continue;
         }
-        // Specialists belong to the building's simultaneous shift. One shift
-        // can supervise several lines, but a one-QD visit cannot staff ten days.
-        const composition = deps.buildingCompositionStatus(building, staffing.people ?? assignedPeople, { excludeGroups: ["ЧУДОТВОРЕЦ"] });
+        const buildingPeople = deps.allBuildingPeople?.(holding, building, workerContext) ?? assignedPeople;
+        const composition = deps.buildingCompositionStatus(building, buildingPeople, { excludeGroups: ["ЧУДОТВОРЕЦ"] });
         if (!composition.met) {
           const key = `${building.id ?? building.name}:${line.id ?? line.resource}`;
           if (!compositionSkipped.has(key)) {
@@ -444,9 +436,7 @@ export async function runProductionCycle({
         for (const person of assignedPeople) {
           const entry = deps.workerBudgetEntry(holding, person, budgets, workerContext, building, line);
           const efficiency = Math.max(0, deps.personBuildingEfficiency(holding, building, person, workerContext));
-          const maintenanceBasisPoints = Math.max(0, Math.round(deps.safeNumber(deps.maintenanceEfficiencyFactor?.(building) ?? 1, 1) * 10_000));
-          const qualificationWorkUnits = Math.max(0, Math.round(efficiency * WORK_UNITS_PER_QD));
-          const workUnitsPerQd = Math.floor((qualificationWorkUnits * maintenanceBasisPoints) / 10_000);
+          const workUnitsPerQd = Math.max(0, Math.round(efficiency * WORK_UNITS_PER_QD));
           if (!workUnitsPerQd) continue;
 
           while (line.active !== false && productionTiming(line)?.phase !== "waiting" && deps.safeNumber(entry.available, 0) + 0.0001 >= 1) {
@@ -464,7 +454,6 @@ export async function runProductionCycle({
                 entry.available = Math.max(0, deps.safeNumber(entry.available, 0) - 1);
                 entry.spent += 1;
                 lineSummary.qdSpent += 1;
-                deps.recordWorkerWork?.(workerContext, entry, building, line, 1);
               }
               const target = productionTiming(line)?.workTargetUnits ?? workTargetUnits;
               const needed = target - whole(line.workProgressUnits);

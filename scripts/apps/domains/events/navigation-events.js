@@ -360,17 +360,6 @@ async _onFieldChange(event) {
       }, { reason: `resource-catalog:field:${path}`, scope: "catalog" });
     } else if (defenseField) {
       await this._onDefenseFieldChange(field, value);
-    } else if (/^holdings\.\d+\.people\.list\.\d+\.salaryModifier$/.test(path) && this._applyPersonSalaryForAssignment) {
-      await SkyholdData.transaction((data) => {
-        const scopedPath = this._resolveActiveHoldingScopedPath(data, path);
-        if (!scopedPath) return SkyholdData.skipTransaction(false);
-        foundry.utils.setProperty(data, scopedPath, value);
-        const match = scopedPath.match(/^holdings\.(\d+)\.people\.list\.(\d+)\.salaryModifier$/);
-        const holding = data.holdings?.[Number(match?.[1] ?? -1)];
-        const person = holding?.people?.list?.[Number(match?.[2] ?? -1)];
-        const building = (holding?.buildings?.list ?? []).find((item) => String(item.id) === String(person?.workAssignment));
-        if (holding && person) this._applyPersonSalaryForAssignment(holding, person, building ?? null);
-      }, { reason: `field:${path}`, scope: "holdings" });
     } else {
       const updated = await this._updateActiveHoldingPath(path, value, { reason: `field:${path}` });
       if (!updated) return;

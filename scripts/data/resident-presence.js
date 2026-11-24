@@ -32,13 +32,11 @@ export function shipForResident(person = {}, holding = null) {
 }
 
 export function hasResidentSettlementWork(person = {}, holding = null) {
-  if (person.staffAppointment?.buildingId) return true;
-  if (text(person.workAssignment) || (person.workAllocations ?? []).some((row) => Number(row.normalQd ?? row.qd) > 0 || Number(row.overtimeQd) > 0)) return true;
+  if (text(person.workAssignment) || (person.workAllocations ?? []).some((row) => Math.max(0, Number(row?.normalQd ?? row?.qd ?? 0) || 0) + Math.max(0, Number(row?.overtimeQd ?? 0) || 0) > 0)) return true;
   if (!holding) return false;
   const id = text(person.id);
   if (!id) return false;
   const contains = (ids) => (ids ?? []).some((value) => text(value) === id);
-  if ((holding.buildings?.list ?? []).some((row) => contains(row.assignedWorkerIds))) return true;
   if (contains(holding.constructionCrewIds) || (holding.constructionCrews ?? []).some((row) =>
     contains(row.memberIds) || contains(row.distributedIds) || text(row.leaderId) === id || text(row.distributedLeaderId) === id)) return true;
   const defense = holding.gm?.defense;

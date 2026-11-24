@@ -1,8 +1,11 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import { DEFAULT_NORMAL_LABOR_QD, normalLaborQdPerTenday } from "../../../data/labor-budget.js";
-import { buildingLaborMode, staffAppointmentFor, staffAppointmentWorkFunctions, productionPreparationGoal } from "../../../data/hybrid-labor.js";
-import { minimumStaffStatus } from "../../../engines/workers/minimum-staff.js";
-import { staffBudgetView } from "../../../engines/workers/staff-runtime.js";
+import {
+  buildingAcceptsWorkers,
+  buildingMinOperationalQd,
+  productionPreparationGoal
+} from "../../../data/labor-model.js";
+import { buildingServiceFunctionId } from "../../../engines/economy/building-service.js";
 import { militaryDailyWage } from "../../../engines/economy/military-wages.js";
 import { sellerQualification } from "../../../engines/workers/seller-qualification.js";
 import { rollD6Pool } from "../../../core/helpers.js";
@@ -56,8 +59,7 @@ import {
   CONSTRUCTION_LEADER_WAGE_DAILY_COPPER,
   CONSTRUCTION_WORKER_WAGE_DAILY_COPPER
 } from "../../../engines/workers/construction-leadership.js";
-import { buildingCompositionStatus, holdingWorkerAdmissionIssues } from "../../../engines/workers/building-qualification.js";
-import { normalizeBuildingMaintenance, usesTechnicalMaintenance } from "../../../data/economy/maintenance.js";
+import { buildingCompositionStatus } from "../../../engines/workers/building-qualification.js";
 import { runTrade } from "../../../engines/economy/trade.js";
 import { foundryRollClass } from "../../../integrations/foundry-runtime.js";
 import { runTreasuryCosts } from "../../../engines/economy/treasury-costs.js";
@@ -77,13 +79,10 @@ import { politicsDecisionContext } from "../../politics-decision-context.js";
 import { politicsRuntimeEffects } from "../../../engines/politics/runtime-effects.js";
 import { appendHoldingOperation } from "../../../data/operations.js";
 import {
+  buildingWorkerIds,
   buildPlannedWorkSlots,
-  explicitWorkerIdsForBuilding,
-  MAINTENANCE_WORK_FUNCTION_ID,
-  MAINTENANCE_WORK_SOURCE_ID,
   plannedAssignmentQd,
-  validateHoldingWorkAllocations,
-  WORK_ALLOCATION_MODE_EXPLICIT
+  validateHoldingWorkAllocations
 } from "../../../data/work-allocations.js";
 
 export const FinanceEconomyDomain = {
@@ -112,16 +111,9 @@ async _tendayReadinessContext(holding, { foodProjection: suppliedFoodProjection 
     const project = state.lifecycle === "planned" || state.lifecycle === "building" || state.repairActive;
     return project && !String(building?.constructionCrewId ?? "").trim();
   });
-  const understaffed = buildings.filter((building) => {
-    if (buildingLaborMode(building) !== "legacy" || !buildingOperationalState(building).operational) return false;
-    const minimum = Math.max(0, this._safeNumber(building?.workersMin, 0));
-    const assigned = (building?.assignedWorkerIds ?? []).filter(Boolean).length;
-    return minimum > assigned;
-  });
   const alerts = [];
   if (foodAvailable < foodNeeded) alerts.push({ key: "food", severity: "danger", icon: "fa-solid fa-bowl-food", title: "Не хватает пищи", text: `${foodAvailable}/${foodNeeded} с учётом прогнозируемого производства${foodProduced ? ` (+${foodProduced})` : ""}; дефицит ${foodNeeded - foodAvailable}.` });
   if (projectsWithoutCrew.length) alerts.push({ key: "projects", severity: "danger", icon: "fa-solid fa-person-digging", title: "Проекты без бригады", text: `${projectsWithoutCrew.length}: ${projectsWithoutCrew.slice(0, 3).map((row) => row.name || "Объект").join(", ")}.` });
-  if (understaffed.length) alerts.push({ key: "workers", severity: "warning", icon: "fa-solid fa-user-clock", title: "Не хватает работников", text: understaffed.slice(0, 5).map((building) => `${building.name || "Здание"} ${(building.assignedWorkerIds ?? []).filter(Boolean).length}/${Math.max(0, this._safeNumber(building.workersMin, 0))}`).join(" · ") + (understaffed.length > 5 ? ` · ещё ${understaffed.length - 5}` : "") + "." });
   if (damaged.length) alerts.push({ key: "damage", severity: "warning", icon: "fa-solid fa-house-crack", title: "Повреждённые здания", text: `${damaged.length} зданий повреждено или разрушено.` });
   if (injured) alerts.push({ key: "injured", severity: "info", icon: "fa-solid fa-user-injured", title: "Раненые жители", text: `${injured} жителей продолжат восстановление в течение десятника.` });
   return {
@@ -161,12 +153,7 @@ async _projectTendayFood(holding) {
   const operationId = "food-projection";
   beginPerishableStoragePeriod(preview);
   try {
-    // Use funded function slots and the staff dispatcher, just as execution
-    // does. Bare assigned-worker IDs cannot represent the hybrid labor plan.
     const financeContext = this._prepareFinanceForQd(preview, 40, report, { operationId });
-    const maintenance = this._runMaintenanceForQd(preview, 40, report, { operationId, financeContext });
-    if (!maintenance.ok) throw new Error(maintenance.message || "Не удалось рассчитать обслуживание для прогноза пищи.");
-    this._prepareTechnicalServiceRestarts(preview, financeContext, report);
     const workerContext = this._economyWorkerContext(preview, { financeContext });
     this._runInstitutionConsumables(preview, 40, report, workerContext, financeContext);
     const agriculture = this._runAgricultureForQd(preview, 40, report, { operationId, workerContext, financeContext });
@@ -318,7 +305,7 @@ _financeFunctionAllowed(financeContext = null, building = {}, functionId = "") {
 },
 
 _financePlanInputs(holding, periodQd, identity) {
-  const normalLaborBudget = normalLaborQdPerTenday();
+  const normalLaborBudget = normalLaborQdPerTenday(holding);
   const finance = holding?.finance ?? {};
   const oldBlockers = financeObligationBlockers({
     finance,
@@ -332,7 +319,6 @@ _financePlanInputs(holding, periodQd, identity) {
   ));
   const peopleById = new Map(people.map((person) => [String(person.id ?? ""), person]));
   const buildingsByAssignment = new Map();
-  const buildingAssignmentByWorkerId = new Map();
   const buildingPlans = [];
 
   for (const building of holding?.buildings?.list ?? []) {
@@ -340,20 +326,16 @@ _financePlanInputs(holding, periodQd, identity) {
     if (!buildingId || this._buildingStatus(building).value !== "built") continue;
     buildingsByAssignment.set(buildingId, building);
     if (building?.name) buildingsByAssignment.set(String(building.name), building);
-    for (const workerId of building?.assignedWorkerIds ?? []) {
-      const id = String(workerId ?? "");
-      if (id && !buildingAssignmentByWorkerId.has(id)) buildingAssignmentByWorkerId.set(id, building);
-    }
     const rawFunctions = this._buildingFunctions(building);
     const functions = [];
+    const acceptsWorkers = buildingAcceptsWorkers(building);
     if (rawFunctions.production) {
       const lines = this._isAgricultureBuilding(building)
         ? []
         : (Array.isArray(building?.productionLines) ? building.productionLines : []);
       for (let index = 0; index < lines.length; index += 1) {
         const line = lines[index];
-        const pendingCollection = ["staff", "qd"].includes(buildingLaborMode(building))
-          && line?.requiresCollection === true && this._safeNumber(line?.pendingQty, 0) > 0;
+        const pendingCollection = line?.requiresCollection === true && this._safeNumber(line?.pendingQty, 0) > 0;
         if (line?.active === false && !pendingCollection) continue;
         functions.push({
           id: this._financeLineFunctionId(line, index),
@@ -374,7 +356,7 @@ _financePlanInputs(holding, periodQd, identity) {
       const agricultureFunction = this._agricultureFinanceFunction(building, holding, periodQd);
       if (agricultureFunction) functions.push(agricultureFunction);
     }
-    if (rawFunctions.income) {
+    if (rawFunctions.income && acceptsWorkers) {
       functions.push({
         id: "income",
         name: "Доход и внутренняя торговля",
@@ -392,27 +374,22 @@ _financePlanInputs(holding, periodQd, identity) {
       [rawFunctions.defense, "defense", "Оборона"],
       [rawFunctions.culture, "culture", "Услуги учреждения"],
       [rawFunctions.storage, "storage", "Охрана и работа склада"],
-      [rawFunctions.housing && ["staff", "qd"].includes(buildingLaborMode(building)), "housing", "Уход за жильём"],
+      [rawFunctions.housing, "housing", "Уход за жильём"],
       [isMedicalBuilding(building), "medical", "Медицинская помощь"]
     ];
-    for (const [enabled, id, name] of staffedFunctions) {
-      if (!enabled || functions.some((fn) => fn.id === id)) continue;
-      if (buildingLaborMode(building) === "legacy" && this._safeNumber(building?.workersMin, 0) <= 0
-        && this._safeNumber(building?.wageDailyCopper, 0) <= 0
-        && this._safeNumber(building?.operatingUpkeepMonthlyCopper, 0) <= 0) continue;
-      functions.push({
-        id,
-        name,
-        active: true,
-        source: "workers",
-        overtime: false,
-        wageDailyCopper: Math.max(0, Math.floor(this._safeNumber(building?.wageDailyCopper, 0))),
-        operatingUpkeepMonthlyCopper: 0
-      });
-    }
-    if (usesTechnicalMaintenance(building) && normalizeBuildingMaintenance(building.maintenance).requiredPoints > 0) {
-      functions.push({ id: MAINTENANCE_WORK_FUNCTION_ID, name: "Техобслуживание", active: true, source: "workers", overtime: false,
-        wageDailyCopper: 18, operatingUpkeepMonthlyCopper: 0 });
+    if (acceptsWorkers) {
+      for (const [enabled, id, name] of staffedFunctions) {
+        if (!enabled || functions.some((fn) => fn.id === id)) continue;
+        functions.push({
+          id,
+          name,
+          active: true,
+          source: "workers",
+          overtime: false,
+          wageDailyCopper: Math.max(0, Math.floor(this._safeNumber(building?.wageDailyCopper, 0))),
+          operatingUpkeepMonthlyCopper: 0
+        });
+      }
     }
     functions.push({ id: "operation", name: "Общая эксплуатация здания", active: false, source: "shared",
       operatingUpkeepMonthlyCopper: Math.max(0, Math.floor(this._safeNumber(building?.operatingUpkeepMonthlyCopper, 0))) });
@@ -435,17 +412,14 @@ _financePlanInputs(holding, periodQd, identity) {
     .map((building) => String(building?.constructionCrewId ?? ""))
     .filter(Boolean));
   const workAllocationCheck = validateHoldingWorkAllocations(holding);
-  const workAdmissionIssues = holdingWorkerAdmissionIssues(holding);
   const buildingPlanById = new Map(buildingPlans.map((building) => [String(building.id), building]));
   const workers = [];
   for (const person of people) {
     const workerId = String(person?.id ?? "");
     if (!workerId || oldBlockers.workers[workerId]?.blocked) continue;
     const childWorker = this._isChildResident?.(person) === true;
-    // Protected posts still use separate service/roll systems. Do not discount
-    // their pay while leaving their work unchanged during the QD transition.
-    const post = String(person?.workAssignment ?? "");
-    const protectedAssignment = post.startsWith("construction") || ["soldier", "defenseCommander", "other"].includes(post);
+    const post = String(person?.workAssignment ?? "").trim();
+    const protectedAssignment = post.startsWith("construction") || ["soldier", "defenseCommander", "other", "sheriff"].includes(post) || post.startsWith("ship:");
     const normalQdPerTenday = protectedAssignment ? DEFAULT_NORMAL_LABOR_QD : normalLaborBudget;
     const normalQdPerDay = childWorker ? 1 : 2;
     const overtimeQdPerDay = childWorker ? 0 : 1;
@@ -468,44 +442,9 @@ _financePlanInputs(holding, periodQd, identity) {
       normalQdPerDay,
       overtimeQdPerDay
     };
-    const staffAppointment = staffAppointmentFor(person);
-    if (staffAppointment) {
-      const buildingId = String(staffAppointment.buildingId ?? "");
-      const building = buildingsByAssignment.get(buildingId)
-        ?? (holding?.buildings?.list ?? []).find((row) => String(row.id) === buildingId);
-      const planIssues = [...workAllocationCheck.issues, ...workAdmissionIssues].filter((issue) => {
-        const personId = String(issue?.personId ?? issue?.workerId ?? "");
-        return personId ? personId === workerId : String(issue?.buildingId ?? "") === buildingId;
-      });
-      if (!building || buildingLaborMode(building) !== "staff") {
-        planIssues.push({ code: "staff-building", personId: workerId, message: "Постоянное назначение относится к недоступному штатному зданию." });
-      }
-      const blocker = oldBlockers.buildings[buildingId] ?? {};
-      // A stopped employer suspends paid slots, not the permanent agreement.
-      // A debt on one actual function still leaves the reserve available.
-      const staffBlocked = blocker.mothballed || blocker.baseDebtCopper > 0
-        || blocker.operatingByFunction?.operation?.debtCopper > 0
-        || blocker.operatingByFunction?.staff?.debtCopper > 0;
-      workers.push({
-        ...workerBase,
-        wageOverrideCopper: staffAppointment.wageDailyCopper,
-        volunteer: staffAppointment.volunteer === true,
-        volunteerReason: String(staffAppointment.volunteerReason ?? ""),
-        staffAppointment: clone(staffAppointment),
-        staffOvertimeFunctions: (buildingPlanById.get(buildingId)?.functions ?? []).filter((fn) => fn.overtime).map((fn) => fn.id),
-        planIssues,
-        assignments: staffBlocked ? [] : [{
-          sourceId: buildingId, functionId: "staff",
-          normalQd: periodCapacity.normalQd,
-          overtimeQd: Math.max(0, Math.floor(this._safeNumber(staffAppointment.overtimeQd, 0))),
-          dailyRateCopper: staffAppointment.wageDailyCopper
-        }]
-      });
-      continue;
-    }
-    if (String(person?.workAllocationMode ?? "") === WORK_ALLOCATION_MODE_EXPLICIT) {
+    if (!protectedAssignment) {
       const validation = workAllocationCheck.plans.get(workerId) ?? { rows: [], issues: [] };
-      const planIssues = [...workAllocationCheck.issues, ...workAdmissionIssues].filter((issue) => {
+      const planIssues = workAllocationCheck.issues.filter((issue) => {
         const personId = String(issue?.personId ?? issue?.workerId ?? "");
         return personId ? personId === workerId
           : issue?.buildingId && validation.rows.some((row) => String(row?.sourceId ?? "") === String(issue.buildingId));
@@ -517,11 +456,6 @@ _financePlanInputs(holding, periodQd, identity) {
         if (!normalQd && !overtimeQd) continue;
         const sourceId = String(allocation?.sourceId ?? "");
         const functionId = String(allocation?.functionId ?? "");
-        if (sourceId === MAINTENANCE_WORK_SOURCE_ID && functionId === MAINTENANCE_WORK_FUNCTION_ID) {
-          assignments.push({ sourceId, functionId, normalQd, overtimeQd, dailyRateCopper: 12,
-            volunteer: allocation.volunteer === true, volunteerReason: allocation.volunteerReason });
-          continue;
-        }
         const buildingPlan = buildingPlanById.get(sourceId);
         const building = buildingsByAssignment.get(sourceId);
         const fn = buildingPlan?.functions?.find((row) => String(row?.id ?? "") === functionId && (row?.source === "workers" || row.workerCollection));
@@ -533,7 +467,6 @@ _financePlanInputs(holding, periodQd, identity) {
           functionId,
           normalQd,
           overtimeQd,
-          volunteer: allocation.volunteer === true, volunteerReason: allocation.volunteerReason,
           dailyRateCopper: Math.max(0, Math.floor(this._safeNumber(fn?.wageDailyCopper, 0)))
             || Math.max(0, Math.floor(this._safeNumber(building?.wageDailyCopper, 0)))
         });
@@ -541,58 +474,38 @@ _financePlanInputs(holding, periodQd, identity) {
       if (assignments.length || planIssues.length) workers.push({ ...workerBase, assignments, planIssues });
       continue;
     }
-    const slottedBuilding = buildingAssignmentByWorkerId.get(workerId);
-    const assignment = String(person?.workAssignment ?? slottedBuilding?.id ?? "").trim()
-      || String(slottedBuilding?.id ?? "");
-    if (!assignment || ["Свободен", "Без работы", "Ребенок"].includes(assignment)) continue;
-    let sourceId = assignment;
-    let functionId = assignment;
+
+    let sourceId = post;
+    let functionId = post;
     let dailyRateCopper = 0;
-    let overtime = false;
-    const building = buildingsByAssignment.get(assignment);
-    if (building) {
-      const buildingPlan = buildingPlans.find((row) => row.id === String(building.id));
-      const blocker = oldBlockers.buildings[String(building.id)] ?? {};
-      const eligibleFunctions = (buildingPlan?.functions ?? []).filter((fn) => (
-        !blocker.mothballed
-        && !(blocker.baseDebtCopper > 0)
-        && !(blocker.operatingByFunction?.operation?.debtCopper > 0)
-        && !(blocker.operatingByFunction?.[fn.id]?.debtCopper > 0)
-      ));
-      if (!eligibleFunctions.length) continue;
-      const workerFunction = eligibleFunctions.find((fn) => fn.source === "workers") ?? eligibleFunctions[0];
-      sourceId = String(building.id);
-      functionId = workerFunction.id;
-      dailyRateCopper = workerFunction.wageDailyCopper
-        || Math.max(0, Math.floor(this._safeNumber(building?.wageDailyCopper, 0)))
-        || dailyRateCopper;
-      overtime = eligibleFunctions.some((fn) => fn.source === "workers" && fn.overtime);
-    } else if (["soldier", "defenseCommander"].includes(assignment)) {
+    if (["soldier", "defenseCommander"].includes(post)) {
       dailyRateCopper = militaryDailyWage(holding, person);
-    } else if (assignment === "other") {
-      dailyRateCopper = Math.max(0, Math.floor(this._safeNumber(person?.salary, 0)));
-    } else if (assignment.startsWith("construction-leader:")) {
-      const crewId = assignment.slice("construction-leader:".length);
+    } else if (post === "other" || post === "sheriff") {
+      dailyRateCopper = Math.max(0, Math.floor(this._safeNumber(person?.wageDailyOverrideCopper, 0)));
+    } else if (post.startsWith("construction-leader:")) {
+      const crewId = post.slice("construction-leader:".length);
       if (!activeCrewIds.has(crewId)) continue;
       sourceId = crewId;
       functionId = "construction-leader";
       dailyRateCopper = CONSTRUCTION_LEADER_WAGE_DAILY_COPPER;
-    } else if (assignment.startsWith("construction:")) {
-      const crewId = assignment.slice("construction:".length);
+    } else if (post.startsWith("construction:")) {
+      const crewId = post.slice("construction:".length);
       if (!activeCrewIds.has(crewId)) continue;
       const crew = crews.get(crewId);
       sourceId = crewId;
       functionId = "construction";
       dailyRateCopper = Math.max(0, Math.floor(this._safeNumber(crew?.wageDailyCopper, 0))) || CONSTRUCTION_WORKER_WAGE_DAILY_COPPER;
-    } else if (assignment === "construction") {
+    } else if (post === "construction") {
       const crew = [...crews.values()][0];
       if (!crew || !activeCrewIds.has(String(crew.id))) continue;
       sourceId = String(crew.id);
       functionId = "construction";
       dailyRateCopper = Math.max(0, Math.floor(this._safeNumber(crew?.wageDailyCopper, 0))) || CONSTRUCTION_WORKER_WAGE_DAILY_COPPER;
+    } else {
+      continue;
     }
     const plannedQd = plannedWorkerQd(periodQd, {
-      overtime: overtime && overtimeQdPerDay > 0,
+      overtime: false,
       normalQdPerDay,
       overtimeQdPerDay,
       normalQdPerTenday
@@ -612,13 +525,8 @@ _financePlanInputs(holding, periodQd, identity) {
   const plannedFunctionKeys = new Set(workers.flatMap((worker) => {
     const validLaborContract = worker.volunteer
       ? true
-      : (worker.assignments ?? []).some((assignment) => assignment?.volunteer === true || this._safeNumber(assignment?.dailyRateCopper, 0) > 0 || this._safeNumber(worker?.wageOverrideCopper, 0) > 0);
+      : (worker.assignments ?? []).some((assignment) => this._safeNumber(assignment?.dailyRateCopper, 0) > 0 || this._safeNumber(worker?.wageOverrideCopper, 0) > 0);
     if (!validLaborContract) return [];
-    if (worker.staffAppointment) {
-      if (!(worker.assignments ?? []).some((row) => row.normalQd + row.overtimeQd > 0)) return [];
-      return staffAppointmentWorkFunctions(worker.staffAppointment)
-        .map((functionId) => this._financeFunctionKey(worker.staffAppointment.buildingId, functionId));
-    }
     return (worker.assignments ?? []).map((assignment) => this._financeFunctionKey(assignment.sourceId, assignment.functionId));
   }));
   for (const building of buildingPlans) {
@@ -655,34 +563,21 @@ _financeExecutionContext(result = {}, { oldBlockers = null, plannedWorkers = [],
   mergeBuildingBlockers(blockers.buildings);
   const plannedAssignmentsByWorkerId = new Map();
   const plannedWorkSlotsByWorkerId = new Map();
-  const staffAppointmentsByWorkerId = new Map();
-  const staffOvertimeFunctionsByWorkerId = new Map();
   for (const worker of plannedWorkers ?? []) {
     const workerId = String(worker?.id ?? "");
     if (!workerId || blockedWorkerIds.has(workerId)) continue;
-    if (worker.staffAppointment) {
-      staffAppointmentsByWorkerId.set(workerId, clone(worker.staffAppointment));
-      staffOvertimeFunctionsByWorkerId.set(workerId, new Set(worker.staffOvertimeFunctions ?? []));
-    }
     const assignments = (worker?.assignments ?? []).map((assignment) => ({
       sourceId: String(assignment?.sourceId ?? ""),
       functionId: String(assignment?.functionId ?? ""),
       normalQd: Math.max(0, Math.floor(this._safeNumber(assignment?.normalQd, 0))),
-      overtimeQd: Math.max(0, Math.floor(this._safeNumber(assignment?.overtimeQd, 0))),
-      ...(assignment?.volunteer === true ? { volunteer: true, volunteerReason: String(assignment.volunteerReason ?? "") } : {})
+      overtimeQd: Math.max(0, Math.floor(this._safeNumber(assignment?.overtimeQd, 0)))
     })).filter((assignment) => assignment.sourceId && assignment.functionId && (assignment.normalQd > 0 || assignment.overtimeQd > 0));
     if (assignments.length) {
       plannedAssignmentsByWorkerId.set(workerId, assignments);
-      const scheduledAssignments = [...assignments].sort((left, right) => {
-        const technical = (row) => row.functionId === MAINTENANCE_WORK_FUNCTION_ID && row.sourceId !== MAINTENANCE_WORK_SOURCE_ID;
-        return Number(technical(right)) - Number(technical(left));
-      });
-      const spreadStaffCare = worker.staffAppointment && staffAppointmentWorkFunctions(worker.staffAppointment).includes("livestock");
-      const slots = buildPlannedWorkSlots(spreadStaffCare ? scheduledAssignments.map((row) => ({ ...row, functionId: "livestock" })) : scheduledAssignments, periodQd, {
+      const slots = buildPlannedWorkSlots(assignments, periodQd, {
         normalQdPerDay: worker?.normalQdPerDay,
         overtimeQdPerDay: worker?.overtimeQdPerDay
       });
-      if (spreadStaffCare) for (const slot of slots.values()) slot.functionId = "staff";
       plannedWorkSlotsByWorkerId.set(workerId, slots);
     }
   }
@@ -693,13 +588,6 @@ _financeExecutionContext(result = {}, { oldBlockers = null, plannedWorkers = [],
     operatingBlockedFunctionKeys,
     plannedAssignmentsByWorkerId,
     plannedWorkSlotsByWorkerId,
-    staffAppointmentsByWorkerId,
-    staffOvertimeFunctionsByWorkerId,
-    staffWorkByWorkerId: new Map(),
-    staffCurrentFunctionByWorkerId: new Map(),
-    staffWorkLedger: [],
-    staffReservedStepsByWorkerId: new Map(),
-    staffExecutionComplete: false,
     periodQd: Math.max(0, Math.floor(this._safeNumber(periodQd, 40))),
     result
   };
@@ -714,25 +602,17 @@ _personnelOfficeCashback(holding, result = {}, inputs = {}, financeContext = nul
   const officeIds = new Set(offices.map((building) => String(building?.id ?? "")));
   const coverage = Math.max(0, ...offices.map((building) => {
     if (!this._financeFunctionAllowed(financeContext, building, "income")) return 0;
-    const staffMode = buildingLaborMode(building) === "staff";
-    if (staffMode && !financeContext?.staffExecutionComplete) return 0;
-    const assignmentsFor = (worker) => staffMode
-      ? financeContext?.staffWorkByWorkerId?.get(String(worker.id)) ?? []
-      : worker?.assignments ?? [];
     const workers = (inputs?.workers ?? []).filter((worker) => (
       !financeContext?.blockedWorkerIds?.has(String(worker?.id ?? ""))
-      && assignmentsFor(worker).some((assignment) => (
+      && (worker?.assignments ?? []).some((assignment) => (
         String(assignment?.sourceId ?? "") === String(building?.id ?? "")
         && String(assignment?.functionId ?? "") === "income"
         && this._safeNumber(assignment?.normalQd, 0) + this._safeNumber(assignment?.overtimeQd, 0) > 0
       ))
     ));
-    if (buildingLaborMode(building) === "legacy") {
-      return workers.length >= Math.max(1, Math.floor(this._safeNumber(building?.workersMin, 1))) ? 1 : 0;
-    }
-    const qd = workers.reduce((sum, worker) => sum + plannedAssignmentQd(assignmentsFor(worker), String(building.id), "income"), 0);
-    const required = Math.max(1, this._safeNumber(building.activation?.minOperationalQd ?? building.minOperationalQd, 0) || 20);
-    return Math.min(1, qd / required);
+    const qd = workers.reduce((sum, worker) => sum + plannedAssignmentQd(worker?.assignments ?? [], String(building.id), "income"), 0);
+    const required = Math.max(1, buildingMinOperationalQd(building));
+    return qd >= required ? 1 : 0;
   }));
 
   const obligations = new Map((result?.finance?.obligations ?? []).map((row) => [String(row?.id ?? ""), row]));
@@ -794,13 +674,7 @@ _prepareFinanceForQd(holding, periodQd, report, { operationId = "", createdAt = 
   holding.finance = result.finance;
   const executionContext = this._financeExecutionContext(result, { oldBlockers: inputs.oldBlockers, plannedWorkers: inputs.workers, periodQd });
   executionContext.periodIdentity = identity;
-  executionContext.technicalRestartIds = new Set((holding?.buildings?.list ?? [])
-    .filter((building) => usesTechnicalMaintenance(building)
-      && normalizeBuildingMaintenance(building.maintenance).requiredPoints > 0
-      && (building?.serviceState?.active !== true || Number(building?.serviceState?.workedQd ?? 0) <= 0))
-    .map((building) => String(building.id)));
   const cashback = this._personnelOfficeCashback(holding, result, inputs, executionContext);
-  executionContext.personnelOfficeInputs = inputs;
   executionContext.personnelOfficeCashbackCopper = cashback.copper;
   executionContext.financeOperationId = financeOperationId;
   this._setMoneyCopper(holding, result.treasuryCopper + cashback.copper);
@@ -873,12 +747,10 @@ _prepareFinanceForQd(holding, periodQd, report, { operationId = "", createdAt = 
   return executionContext;
 },
 
-_runInstitutionConsumables(holding, qd, report, workerContext, financeContext, { staffStartBuildingId = "" } = {}) {
+_runInstitutionConsumables(holding, qd, report, workerContext, financeContext) {
   const cycles = Math.floor(Math.max(0, this._safeNumber(qd, 0)) / 40);
   if (!cycles) return;
   for (const building of holding?.buildings?.list ?? []) {
-    const staffMode = buildingLaborMode(building) === "staff";
-    if (staffStartBuildingId ? !staffMode || String(building.id) !== staffStartBuildingId : staffMode) continue;
     const alternatives = Array.isArray(building?.fuelAlternatives) ? building.fuelAlternatives : [];
     if (!alternatives.length || this._buildingStatus(building).value !== "built") continue;
     const functionId = "culture";
@@ -886,6 +758,7 @@ _runInstitutionConsumables(holding, qd, report, workerContext, financeContext, {
     const block = (reason) => {
       financeContext?.operatingBlockedFunctionKeys?.add(key);
       building.serviceState = {
+        fuelBlocked: true,
         functionId,
         active: false,
         periodKey: String(financeContext?.periodIdentity?.periodKey ?? ""),
@@ -894,18 +767,14 @@ _runInstitutionConsumables(holding, qd, report, workerContext, financeContext, {
       report.skipped.push(`${building.name || "Здание"}: ${reason}`);
     };
     if (!this._financeFunctionAllowed(financeContext, building, functionId)) {
-      building.serviceState = {
-        functionId,
-        active: false,
-        periodKey: String(financeContext?.periodIdentity?.periodKey ?? ""),
-        reason: "активная услуга остановлена финансовыми обязательствами."
-      };
+      delete building.serviceState;
       continue;
     }
     const workers = this._activeAssignedBuildingPeople(holding, building, workerContext, functionId);
-    const minimum = buildingLaborMode(building) === "legacy" ? Math.max(1, Math.floor(this._safeNumber(building?.workersMin, 1))) : 1;
-    if (workers.length < minimum) {
-      block("активная услуга не работает — нет оплаченного минимального штата.");
+    const actualQd = workers.reduce((sum, person) => sum + this._plannedWorkerFunctionQd(person, workerContext, building.id, functionId), 0);
+    const requiredQd = Math.max(1, buildingMinOperationalQd(building));
+    if (actualQd < requiredQd) {
+      block("активная услуга не работает — не выделено достаточно QD.");
       continue;
     }
     const selected = alternatives.find((row) => String(row?.resourceId ?? "") === String(building?.fuelChoice ?? "")) ?? alternatives[0];
@@ -916,12 +785,7 @@ _runInstitutionConsumables(holding, qd, report, workerContext, financeContext, {
       continue;
     }
     this._storagePay(holding, payment.costs);
-    building.serviceState = {
-      functionId,
-      active: true,
-      periodKey: String(financeContext?.periodIdentity?.periodKey ?? ""),
-      reason: ""
-    };
+    delete building.serviceState;
     report.consumed.push(`${building.name || "Здание"}: ${selected.label || selected.resourceId} × ${cycles}`);
     appendEconomyLedger(report, payment.costs.map((row) => ({
       domain: "services",
@@ -937,23 +801,18 @@ _runInstitutionConsumables(holding, qd, report, workerContext, financeContext, {
   }
 },
 
-_runInstitutionResolutions(holding, report, workerContext, financeContext, { operationId = "", createdAt = "", staffOnly = false } = {}) {
+_runInstitutionResolutions(holding, report, workerContext, financeContext, { operationId = "", createdAt = "" } = {}) {
   const identity = financeContext?.periodIdentity;
   if (!identity) return;
   const monthIndexes = [];
   for (let index = identity.periodIndex; index <= identity.lastPeriodIndex; index += 1) if (index % 3 === 0) monthIndexes.push(index / 3);
   if (!monthIndexes.length) return;
   for (const agency of holding?.buildings?.list ?? []) {
-    if ((buildingLaborMode(agency) === "staff") !== staffOnly) continue;
     if (String(agency?.templateId ?? agency?.id ?? "") !== "hiring-agency" || this._buildingStatus(agency).value !== "built") continue;
     if (!this._financeFunctionAllowed(financeContext, agency, "culture")) continue;
     const workers = this._activeAssignedBuildingPeople(holding, agency, workerContext, "culture");
-    if (buildingLaborMode(agency) === "legacy") {
-      if (workers.length < Math.max(1, Math.floor(this._safeNumber(agency?.workersMin, 1)))) continue;
-    } else {
-      const actual = workers.reduce((sum, person) => sum + this._plannedWorkerFunctionQd(person, workerContext, agency.id, "culture"), 0);
-      if (actual < Math.max(1, this._safeNumber(agency.activation?.minOperationalQd ?? agency.minOperationalQd, 0) || 20)) continue;
-    }
+    const actual = workers.reduce((sum, person) => sum + this._plannedWorkerFunctionQd(person, workerContext, agency.id, "culture"), 0);
+    if (actual < Math.max(1, buildingMinOperationalQd(agency))) continue;
     for (const monthIndex of monthIndexes) {
       const resolutionId = `${operationId || "economy"}:hiring-agency:${agency.id}:month-${monthIndex}`;
       appendHoldingOperation(holding, {
@@ -990,17 +849,12 @@ _economyWorkerContext(holding, { financeContext = null } = {}) {
     if (id) buildingsByAssignment.set(id, building);
     if (name) buildingsByAssignment.set(name, building);
 
-    const legacyAssignedIds = (building?.assignedWorkerIds ?? []).filter(Boolean).map((workerId) => String(workerId))
-      .filter((workerId) => activePeopleById.get(workerId)?.workAllocationMode !== WORK_ALLOCATION_MODE_EXPLICIT);
     const plannedAssignedIds = financeContext
       ? [...(financeContext?.plannedAssignmentsByWorkerId?.entries?.() ?? [])]
-        .filter(([, assignments]) => assignments.some((assignment) => String(assignment?.sourceId ?? "") === id && assignment?.functionId !== MAINTENANCE_WORK_FUNCTION_ID))
+        .filter(([, assignments]) => assignments.some((assignment) => String(assignment?.sourceId ?? "") === id))
         .map(([workerId]) => String(workerId))
-      : explicitWorkerIdsForBuilding(holding, id);
-    const staffIds = [...(financeContext?.staffAppointmentsByWorkerId ?? [])]
-      .filter(([, appointment]) => String(appointment.buildingId) === id)
-      .map(([workerId]) => workerId);
-    const assignedIds = [...new Set([...legacyAssignedIds, ...plannedAssignedIds, ...staffIds])];
+      : buildingWorkerIds(holding, id);
+    const assignedIds = [...new Set(plannedAssignedIds)];
     const economyAssignedPeople = assignedIds
       .map((workerId) => activePeopleById.get(workerId))
       .filter((person) => person && !financeContext?.blockedWorkerIds?.has(String(person.id)));
@@ -1019,7 +873,6 @@ _economyWorkerContext(holding, { financeContext = null } = {}) {
     buildingsByAssignment,
     buildingWorkers,
     overtimeByBuilding,
-    assignedWorkerIds: this._assignedWorkerSet?.(holding) ?? new Set(),
     personBuildingEfficiency: new Map(),
     effectiveWorkers: new Map(),
     financeContext
@@ -1042,8 +895,7 @@ _collectProductionLine(holding, building, line, { ignoreWorkTime = false } = {})
   const pending = Math.max(0, Math.floor(this._safeNumber(line?.pendingQty, 0)));
   if (!pending) return { ok: false, message: "Нечего собирать." };
   const collectQd = Math.max(0, Math.ceil(this._safeNumber(line?.collectQd, 0)));
-  if (collectQd > 0 && ["staff", "qd"].includes(buildingLaborMode(building))
-    && !(ignoreWorkTime && globalThis.game?.user?.isGM === true)) {
+  if (collectQd > 0 && !(ignoreWorkTime && globalThis.game?.user?.isGM === true)) {
     return { ok: false, message: `Для сбора нужно ${collectQd} QD. Назначьте сбор в плане работ и проведите десятник.` };
   }
   if (!ignoreWorkTime && collectQd > 0) {
@@ -1100,32 +952,14 @@ _assignedBuildingPeople(holding, building, workerContext = null, functionId = ""
     const buildingId = String(building?.id ?? "");
     return people.filter((person) => {
       const id = String(person?.id ?? "");
-      const staff = workerContext.financeContext.staffAppointmentsByWorkerId?.get(id);
-      if (staff) {
-        if (String(staff.buildingId) !== buildingId) return false;
-        return workerContext.financeContext.staffExecutionComplete
-          ? (workerContext.financeContext.staffWorkByWorkerId?.get(id) ?? []).some((row) => row.functionId === selectedFunctionId && row.normalQd + row.overtimeQd > 0)
-          : staffAppointmentWorkFunctions(staff).includes(selectedFunctionId);
-      }
       return (workerContext.financeContext.plannedAssignmentsByWorkerId?.get(id) ?? [])
         .some((assignment) => assignment.sourceId === buildingId && assignment.functionId === selectedFunctionId);
     });
   }
   const cached = workerContext?.buildingWorkers?.get(building)?.assignedPeople;
   if (cached) return cached.filter((person) => isResidentInPopulation(person, holding));
-  const ids = (building?.assignedWorkerIds ?? []).filter(Boolean).map((id) => String(id));
-  const people = holding?.people?.list ?? [];
-  return ids.map((id) => people.find((person) => String(person.id) === id)).filter((person) => person && isResidentInPopulation(person, holding));
-},
-
-_buildingMinimumStaffStatus(holding, building, workerContext = null) {
-  const people = this._activeAssignedBuildingPeople(holding, building, workerContext).filter((person) => {
-    if (!workerContext?.financeContext) return true;
-    return (workerContext.financeContext.plannedAssignmentsByWorkerId?.get(String(person.id)) ?? [])
-      .some((row) => row.sourceId === String(building.id) && row.functionId !== MAINTENANCE_WORK_FUNCTION_ID
-        && row.normalQd + row.overtimeQd > 0);
-  });
-  return minimumStaffStatus(buildingLaborMode(building) === "legacy" ? building : { ...building, workersMin: 0 }, people);
+  const ids = new Set(buildingWorkerIds(holding, String(building?.id ?? "")));
+  return (holding?.people?.list ?? []).filter((person) => ids.has(String(person?.id ?? "")) && isResidentInPopulation(person, holding));
 },
 
 _activeAssignedBuildingPeople(holding, building, workerContext = null, functionId = "") {
@@ -1138,10 +972,6 @@ _activeAssignedBuildingPeople(holding, building, workerContext = null, functionI
 
 _plannedWorkerFunctionQd(person, workerContext = null, sourceId = "", functionId = "") {
   if (!workerContext?.financeContext) return 0;
-  const workerId = String(person?.id ?? "");
-  if (workerContext.financeContext.staffAppointmentsByWorkerId?.has(workerId)) {
-    return plannedAssignmentQd(workerContext.financeContext.staffWorkByWorkerId?.get(workerId) ?? [], sourceId, functionId);
-  }
   return plannedAssignmentQd(
     workerContext.financeContext.plannedAssignmentsByWorkerId?.get(String(person?.id ?? "")) ?? [],
     sourceId,
@@ -1157,22 +987,22 @@ _workerBudgetEntry(holding, person, budgets, workerContext = null, building = nu
   const id = String(person?.id ?? "");
   const sourceId = String(building?.id ?? "");
   const selectedFunctionId = String(functionId ?? "");
-  const staff = workerContext?.financeContext?.staffAppointmentsByWorkerId?.get(id);
-  const key = staff
-    ? this._workerBudgetKey(id, staff.buildingId, "staff")
-    : workerContext?.financeContext && sourceId && selectedFunctionId
+  const key = workerContext?.financeContext && sourceId && selectedFunctionId
     ? this._workerBudgetKey(id, sourceId, selectedFunctionId)
     : id;
   const raw = budgets.get(key);
-  const view = (entry) => staff ? staffBudgetView(entry, selectedFunctionId,
-    workerContext.financeContext.staffOvertimeFunctionsByWorkerId?.get(id)?.has(selectedFunctionId)) : entry;
-  if (raw && typeof raw === "object") return view(raw);
+  if (raw && typeof raw === "object") return raw;
   const limit = this._personDailyWorkQdLimit(holding, person, workerContext);
-  const entry = { available: this._safeNumber(raw, 0), spent: 0, limit, workerId: id,
-    sourceId: staff?.buildingId ?? sourceId, functionId: staff ? "staff" : selectedFunctionId,
-    ...(staff ? { staff: true, tokens: [] } : {}) };
+  const entry = {
+    available: this._safeNumber(raw, 0),
+    spent: 0,
+    limit,
+    workerId: id,
+    sourceId,
+    functionId: selectedFunctionId
+  };
   budgets.set(key, entry);
-  return view(entry);
+  return entry;
 },
 
 _workerBudgetEntriesForBuilding(person, budgets, building, workerContext = null, functionId = "") {
@@ -1180,16 +1010,6 @@ _workerBudgetEntriesForBuilding(person, budgets, building, workerContext = null,
   const workerId = String(person?.id ?? "");
   const sourceId = String(building?.id ?? "");
   const selectedFunctionId = String(functionId ?? "");
-  const staff = workerContext.financeContext.staffAppointmentsByWorkerId?.get(workerId);
-  if (staff) {
-    if (String(staff.buildingId) !== sourceId || selectedFunctionId && !staffAppointmentWorkFunctions(staff).includes(selectedFunctionId)) return [];
-    const entry = budgets.get(this._workerBudgetKey(workerId, sourceId, "staff"));
-    const currentFunction = selectedFunctionId || workerContext.financeContext.staffCurrentFunctionByWorkerId?.get(workerId);
-    if (Number.isInteger(workerContext.financeContext.staffStep)
-      && workerContext.financeContext.staffCurrentFunctionByWorkerId.get(workerId) !== currentFunction) return [];
-    return entry && currentFunction ? [staffBudgetView(entry, currentFunction,
-      workerContext.financeContext.staffOvertimeFunctionsByWorkerId?.get(workerId)?.has(currentFunction))] : [];
-  }
   const assignments = workerContext.financeContext.plannedAssignmentsByWorkerId?.get(workerId) ?? [];
   const functionIds = [...new Set(assignments
     .filter((assignment) => assignment.sourceId === sourceId && (!selectedFunctionId || assignment.functionId === selectedFunctionId))
@@ -1224,14 +1044,8 @@ _accrueWorkerBudgets(holding, budgets, workerContext = null, step = 0) {
     for (const [workerId, slots] of workerContext.financeContext.plannedWorkSlotsByWorkerId ?? []) {
       const slot = slots.get(Math.max(0, Math.floor(this._safeNumber(step, 0))));
       if (!slot) continue;
-      if (workerContext.financeContext.staffReservedStepsByWorkerId?.get(workerId)?.has(step)) continue;
       const key = this._workerBudgetKey(workerId, slot.sourceId, slot.functionId);
       const entry = budgets.get(key) ?? { available: 0, spent: 0, limit: slot.overtime ? 3 : 2, workerId, sourceId: slot.sourceId, functionId: slot.functionId };
-      if (workerContext.financeContext.staffAppointmentsByWorkerId?.has(workerId)) {
-        entry.staff = true;
-        entry.tokens ??= [];
-        entry.tokens.push({ step, overtime: slot.overtime, qd: 1 });
-      }
       entry.available += 1;
       budgets.set(key, entry);
     }
@@ -1267,7 +1081,6 @@ _spendBuildingWorkerQd(holding, building, budgets, needed = 0, workerContext = n
     const take = Math.min(budget, rest);
     entry.available = budget - take;
     entry.spent += take;
-    if (entry.staff) this._recordStaffWorkQd?.(workerContext, entry, functionId || entry.selectedFunctionId, take);
     rest -= take;
     spent += take;
   }
@@ -1325,30 +1138,40 @@ async _autoCollectBuilding(holding, building, budgets, report, workerContext = n
   for (const line of building?.productionLines ?? []) {
     if (!line?.requiresCollection || !(line.pendingQty > 0)) continue;
     const functionId = this._financeLineFunctionId(line, (building.productionLines ?? []).indexOf(line));
-    const selectedStaff = [...(workerContext?.financeContext?.staffAppointmentsByWorkerId ?? [])].some(([workerId, appointment]) => (
-      String(appointment.buildingId) === String(building.id)
-      && workerContext.financeContext.staffCurrentFunctionByWorkerId?.get(workerId) === functionId
-    ));
-    const mode = buildingLaborMode(building);
-    const hybrid = mode === "staff" || mode === "qd";
-    const available = hybrid ? this._assignedBuildingPeople(holding, building, workerContext, functionId)
-      .flatMap((person) => this._workerBudgetEntriesForBuilding(person, budgets, building, workerContext, functionId))
-      .reduce((sum, entry) => sum + Math.max(0, this._safeNumber(entry.available, 0)), 0) : 0;
-    const selectedQd = mode === "qd" && available > 0;
-    if (String(line.autoCollect ?? "none") !== "building" && !selectedStaff && !selectedQd) continue;
+    const entries = this._assignedBuildingPeople(holding, building, workerContext, functionId)
+      .flatMap((person) => this._workerBudgetEntriesForBuilding(person, budgets, building, workerContext, functionId));
+    const available = entries.reduce((sum, entry) => sum + Math.max(0, this._safeNumber(entry.available, 0)), 0);
+    if (String(line.autoCollect ?? "none") !== "building" && available <= 0) continue;
     if (!this._financeFunctionAllowed(financeContext, building, functionId)) continue;
     const collectionKey = `${building.id}::${functionId}`;
     const collectQd = Math.max(0, Math.ceil(this._safeNumber(line.collectQd, 0)));
-    // A collection is indivisible. Wait for this day's funded QD to accrue;
-    // an intermediate step with only part of the budget is not a failed job.
-    if (hybrid && available + 0.0001 < collectQd) {
-      if (financeContext) {
-        financeContext.deferredCollections ??= new Map();
-        financeContext.deferredCollections.set(collectionKey, { building, line, collectQd });
+    if (collectQd > 0) {
+      let progress = Math.max(0, Math.floor(this._safeNumber(line.collectProgressQd, 0)));
+      for (const entry of entries) {
+        if (progress >= collectQd) break;
+        const budget = Math.max(0, this._safeNumber(entry.available, 0));
+        if (budget <= 0) continue;
+        const take = Math.min(budget, collectQd - progress);
+        entry.available = budget - take;
+        entry.spent += take;
+        progress += take;
       }
-      continue;
+      line.collectProgressQd = progress;
+      if (progress + 0.0001 < collectQd) {
+        if (financeContext) {
+          financeContext.deferredCollections ??= new Map();
+          financeContext.deferredCollections.set(collectionKey, { building, line, collectQd, progressQd: progress });
+        }
+        continue;
+      }
+      line.collectProgressQd = 0;
     }
-    await this._collectLineToStorage(holding, building, line, budgets, report, { by: "building", workerContext });
+    const resourceId = normalizeResourceId(line.resourceId, line.resource);
+    const resourceName = resourceId === "custom" ? (String(line.resource ?? "Ресурс") || "Ресурс") : resourceLabel(resourceId);
+    const roomId = this._normalizeStorageRoomId(line.storageRoomId ?? line.roomId);
+    const placements = this._storageAddWithOverflow(holding, { resourceId, name: resourceName, roomId }, Math.floor(this._safeNumber(line.pendingQty, 0)));
+    line.pendingQty = 0;
+    this._pushProductionPlacement(report, holding, building.name || "Здание", resourceName, placements, " собрано", resourceId);
     financeContext?.deferredCollections?.delete(collectionKey);
   }
 },
@@ -1379,8 +1202,7 @@ async _tryCollectResourceForConsumer(holding, consumerBuilding, resource, budget
       if (!pending) continue;
       const collectQd = Math.max(0, Math.ceil(this._safeNumber(line.collectQd, 0)));
       if (collectQd > 0) {
-        const functionId = buildingLaborMode(consumerBuilding) === "legacy" ? "" : consumerFunctionId;
-        const spent = this._spendBuildingWorkerQd(holding, consumerBuilding, budgets, collectQd, workerContext, functionId);
+        const spent = this._spendBuildingWorkerQd(holding, consumerBuilding, budgets, collectQd, workerContext, consumerFunctionId);
         if (!spent.ok) continue;
       }
       const placements = this._storageAddWithOverflow(holding, output, pending);
@@ -1431,7 +1253,6 @@ _productionCycleDependencies({ holding: sourceHolding = null, lineOutputForCycle
       building,
       this._financeLineFunctionId(line)
     ),
-    buildingTechnicalReady: (building, step) => this._technicalMaintenanceReady(building, financeContext, step),
     lineSeasonAllowed: (line, snapshot) => this._lineSeasonAllowed ? this._lineSeasonAllowed(line, snapshot) : true,
     periodDueOnStep: (period, step, cycles) => this._periodDueOnStep(period, step, cycles),
     normalizeResourceId,
@@ -1453,13 +1274,12 @@ _productionCycleDependencies({ holding: sourceHolding = null, lineOutputForCycle
     pushProductionPlacement: (report, holding, source, resource, placements, extra, resourceId) => this._pushProductionPlacement(report, holding, source, resource, placements, extra, resourceId),
     appendLedger: (report, entries) => appendEconomyLedger(report, entries),
     autoCollectBuilding: (holding, building, budgets, report, workerContext) => this._autoCollectBuilding(holding, building, budgets, report, workerContext, financeContext),
-    lineCollectionTakesPriority: (building, line) => ["staff", "qd"].includes(buildingLaborMode(building))
-      && line.requiresCollection && this._safeNumber(line.collectQd, 0) > 0,
+    lineCollectionTakesPriority: (building, line) => Boolean(line?.requiresCollection && this._safeNumber(line?.collectQd, 0) > 0),
     assignedBuildingPeople: (holding, building, workerContext, line) => {
       const functionId = this._financeLineFunctionId(line, (building?.productionLines ?? []).indexOf(line));
-      return this._assignedBuildingPeople(holding, building, workerContext, functionId)
-        .filter((person) => this._staffSelectedForFunction(person, building, functionId, workerContext));
+      return this._activeAssignedBuildingPeople(holding, building, workerContext, functionId);
     },
+    allBuildingPeople: (holding, building, workerContext) => this._activeAssignedBuildingPeople(holding, building, workerContext),
     workerBudgetEntry: (holding, person, budgets, workerContext, building, line) => this._workerBudgetEntry(
       holding,
       person,
@@ -1473,30 +1293,39 @@ _productionCycleDependencies({ holding: sourceHolding = null, lineOutputForCycle
       sourceHolding ?? {}, String(building?.id ?? ""),
       this._financeLineFunctionId(line, (building?.productionLines ?? []).indexOf(line))
     ),
-    prepareStaffWorkerStep: (holding, budgets, workerContext, step, options) => this._prepareStaffWorkerStep(holding, budgets, workerContext, step, options),
-    canCollectProductionInputs: (holding, building, costs, workerContext, line) => this._canCollectStaffProductionInputs(holding, building, costs, workerContext, line),
-    staffCanCollectLine: (building, line, workerContext) => this._staffCanCollectLine(building, line, workerContext),
-    recordWorkerWork: (workerContext, entry, building, line, qd) => this._recordStaffWorkQd(workerContext, entry,
-      this._financeLineFunctionId(line, (building.productionLines ?? []).indexOf(line)), qd),
-    minimumStaffStatus: (holding, building, workerContext, budgets, step) => {
-      const people = this._activeAssignedBuildingPeople(holding, building, workerContext).filter((person) => {
-        if (workerContext?.financeContext) {
-          const slot = workerContext.financeContext.plannedWorkSlotsByWorkerId?.get(String(person.id))?.get(step);
-          return slot?.sourceId === String(building.id) && slot.functionId !== MAINTENANCE_WORK_FUNCTION_ID;
-        }
-        return this._workerBudgetEntriesForBuilding(person, budgets, building, workerContext)
-          .some((entry) => entry.available >= 1);
-      });
-      return { ...minimumStaffStatus(buildingLaborMode(building) === "legacy" ? building : { ...building, workersMin: 0 }, people), people };
-    },
     buildingCompositionStatus: (building, people, options) => buildingCompositionStatus(building, people, options),
-    maintenanceEfficiencyFactor: (building) => this._maintenanceEfficiencyFactor?.(building) ?? 1,
+    buildingMinimumQdStatus: (holding, building, workerContext) => this._buildingMinimumQdStatus(holding, building, workerContext, "production", 1),
     storageQuantity: (holding, resource) => this._storageQuantity(holding, resource),
     tryCollectResourceForConsumer: (holding, building, resourceId, budgets, report, workerContext, line, cost) => this._tryCollectResourceForConsumer(
       holding, building, cost ?? resourceId, budgets, report, workerContext, financeContext,
       this._financeLineFunctionId(line, (building.productionLines ?? []).indexOf(line))),
     formatNumber: (value) => this._formatNumber(value)
   };
+},
+
+_buildingMinimumQdStatus(holding, building, workerContext = null, targetFunction = "production", periodMultiplier = 1) {
+  const requiredQd = buildingMinOperationalQd(building) * Math.max(1, Math.floor(this._safeNumber(periodMultiplier, 1)));
+  if (requiredQd <= 0) return { met: true, requiredQd: 0, actualQd: 0 };
+  const serviceFn = buildingServiceFunctionId(building);
+  if (serviceFn !== "" && serviceFn !== targetFunction) return { met: true, requiredQd: 0, actualQd: 0 };
+  const buildingId = String(building?.id ?? "");
+  const matchesFn = (fnId) => {
+    const id = String(fnId ?? "");
+    if (serviceFn === "") return Boolean(id);
+    return targetFunction === "production" ? id.startsWith("production:") : id === targetFunction;
+  };
+  let actualQd = 0;
+  for (const person of this._activeAssignedBuildingPeople(holding, building, workerContext)) {
+    const rows = workerContext?.financeContext
+      ? (workerContext.financeContext.plannedAssignmentsByWorkerId?.get(String(person?.id ?? "")) ?? [])
+      : (person?.workAllocations ?? []);
+    for (const row of rows) {
+      if (String(row?.sourceId ?? "") !== buildingId || !matchesFn(row?.functionId)) continue;
+      actualQd += Math.max(0, this._safeNumber(row?.normalQd ?? row?.qd, 0))
+        + Math.max(0, this._safeNumber(row?.overtimeQd, 0));
+    }
+  }
+  return { met: actualQd >= requiredQd, requiredQd, actualQd };
 },
 
 async _runProductionCycleForQd(holding, qd, report, { buildings = holding?.buildings?.list ?? [], budgets = new Map(), workerContext = null, lineOutputForCycle = null, financeContext = null, afterStep = null } = {}) {
@@ -1510,103 +1339,6 @@ async _runProductionCycleForQd(holding, qd, report, { buildings = holding?.build
     afterStep,
     dependencies: this._productionCycleDependencies({ holding, lineOutputForCycle, financeContext })
   });
-},
-
-_recordBuildingServiceActivity(holding, report, financeContext = null) {
-  const periodKey = String(financeContext?.periodIdentity?.periodKey ?? "");
-  const assignments = [...(financeContext?.plannedAssignmentsByWorkerId?.entries?.() ?? [])].flatMap(([workerId, rows]) => (
-    (financeContext.staffAppointmentsByWorkerId?.has(workerId) ? financeContext.staffWorkByWorkerId?.get(workerId) ?? [] : rows ?? [])
-      .filter((assignment) => assignment?.functionId !== MAINTENANCE_WORK_FUNCTION_ID)
-      .map((assignment) => ({ ...assignment, workerId: String(workerId ?? "") }))
-  ));
-  const positiveLedgerSourceIds = new Set(report?.positiveLedgerSourceIds ?? (report?.ledger ?? [])
-    .filter((entry) => Number(entry?.qty) > 0)
-    .map((entry) => String(entry?.sourceId ?? ""))
-    .filter(Boolean));
-  for (const building of holding?.buildings?.list ?? []) {
-    const buildingId = String(building?.id ?? "");
-    const readyAssignments = buildingLaborMode(building) === "staff" ? assignments
-      : financeContext?.technicalServiceAssignments?.get(buildingId)
-        ?? (this._technicalMaintenanceReady(building, financeContext, financeContext?.periodQd ?? 40) ? assignments : []);
-    const workedQd = readyAssignments.reduce((sum, assignment) => (
-      String(assignment?.sourceId ?? "") === buildingId
-        ? sum + Math.max(0, Math.floor(this._safeNumber(assignment?.normalQd, 0))) + Math.max(0, Math.floor(this._safeNumber(assignment?.overtimeQd, 0)))
-        : sum
-    ), 0);
-    const buildingAssignments = readyAssignments.filter((assignment) => String(assignment?.sourceId ?? "") === buildingId);
-    const activeWorkerIds = [...new Set(buildingAssignments.map((assignment) => String(assignment?.workerId ?? "")).filter(Boolean))];
-    const workedQdByFunction = {};
-    const workedQdByWorkerAndFunction = {};
-    const workerIdsByFunction = {};
-    for (const assignment of buildingAssignments) {
-      const functionId = String(assignment?.functionId ?? "");
-      if (!functionId) continue;
-      const assignmentQd = Math.max(0, Math.floor(this._safeNumber(assignment?.normalQd, 0)))
-        + Math.max(0, Math.floor(this._safeNumber(assignment?.overtimeQd, 0)));
-      if (assignmentQd <= 0) continue;
-      const workerId = String(assignment.workerId ?? "");
-      if (workerId) {
-        const work = workedQdByWorkerAndFunction[workerId] ??= {};
-        work[functionId] = (work[functionId] ?? 0) + assignmentQd;
-        if (functionId.startsWith("production:")) work.production = (work.production ?? 0) + assignmentQd;
-      }
-      workedQdByFunction[functionId] = (workedQdByFunction[functionId] ?? 0) + assignmentQd;
-      if (!workerIdsByFunction[functionId]) workerIdsByFunction[functionId] = new Set();
-      if (assignment?.workerId) workerIdsByFunction[functionId].add(String(assignment.workerId));
-      if (functionId.startsWith("production:")) {
-        workedQdByFunction.production = (workedQdByFunction.production ?? 0) + assignmentQd;
-        if (!workerIdsByFunction.production) workerIdsByFunction.production = new Set();
-        if (assignment?.workerId) workerIdsByFunction.production.add(String(assignment.workerId));
-      }
-    }
-    const activeWorkerIdsByFunction = Object.fromEntries(Object.entries(workerIdsByFunction)
-      .map(([functionId, ids]) => [functionId, [...ids]]));
-    const meaningfulResult = positiveLedgerSourceIds.has(buildingId);
-    const functions = this._buildingFunctions(building);
-    const functionId = building?.activation?.requiresMeaningfulResult === true && functions.production ? "production"
-      : functions.culture ? "culture"
-      : functions.income ? "income"
-        : functions.defense ? "defense"
-          : functions.production ? "production"
-            : functions.storage ? "storage"
-              : "culture";
-    const previous = building?.serviceState && typeof building.serviceState === "object" ? building.serviceState : {};
-    const externallyStopped = previous.active === false
-      && String(previous.periodKey ?? "") === periodKey
-      && Boolean(String(previous.reason ?? "").trim());
-    const minWorkers = buildingLaborMode(building) === "legacy"
-      ? Math.max(0, Math.floor(this._safeNumber(building?.workersMin, 0)), Math.floor(this._safeNumber(building?.activation?.minWorkers, 0)))
-      : 0;
-    const minOperationalQd = Math.max(0, Math.floor(this._safeNumber(building?.activation?.minOperationalQd ?? building?.minOperationalQd, 0)));
-    const mode = buildingLaborMode(building);
-    const laborActive = mode === "passive" || (mode === "legacy"
-      ? activeWorkerIds.length >= minWorkers && workedQd >= minOperationalQd
-      : workedQd > 0);
-    const resultActive = building?.activation?.requiresMeaningfulResult !== true || meaningfulResult;
-    const meaningfulResultByFunction = {
-      ...(previous.periodKey === periodKey && previous?.meaningfulResultByFunction && typeof previous.meaningfulResultByFunction === "object"
-        ? previous.meaningfulResultByFunction : {})
-    };
-    for (const recordedFunction of Object.keys(workedQdByFunction)) meaningfulResultByFunction[recordedFunction] = false;
-    if (meaningfulResult && functions.production) meaningfulResultByFunction.production = true;
-    building.serviceState = {
-      ...previous,
-      functionId,
-      active: !externallyStopped && laborActive && resultActive,
-      periodKey,
-      workedQd,
-      workedQdByFunction,
-      activeWorkerIds,
-      activeWorkerIdsByFunction,
-      workedQdByWorkerAndFunction,
-      meaningfulResult,
-      meaningfulResultByFunction,
-      reason: externallyStopped ? String(previous.reason ?? "")
-        : !laborActive ? "За период не выполнен порог фактического труда."
-        : !resultActive ? "За период нет содержательного результата функции."
-          : ""
-    };
-  }
 },
 
 async _runProductionAndLivestockForQd(holding, qd, report, { operationId = "", buildings = holding?.buildings?.list ?? [], budgets = new Map(), workerContext = null, financeContext = null, lineOutputForCycle = null } = {}) {
@@ -1632,10 +1364,9 @@ async _runProductionAndLivestockForQd(holding, qd, report, { operationId = "", b
     }
   });
   this._flushScheduledAgricultureReport?.(holding, report, financeContext);
-  this._finishStaffExecution(holding, report, financeContext);
-  for (const [key, { building, line, collectQd }] of financeContext?.deferredCollections ?? []) {
-    if (!(line.pendingQty > 0) || financeContext.staffCollectionWarnings?.has(key)) continue;
-    report.skipped.push(`${building.name || "Здание"} · ${resourceLabel(normalizeResourceId(line.resourceId, line.resource))}: сбор не завершён — требуется ${collectQd} QD за один день; осталось ${line.pendingQty} ЕД. Назначьте достаточно времени сборщикам.`);
+  for (const [, { building, line, collectQd, progressQd = 0 }] of financeContext?.deferredCollections ?? []) {
+    if (!(line.pendingQty > 0)) continue;
+    report.skipped.push(`${building.name || "Здание"} · ${resourceLabel(normalizeResourceId(line.resourceId, line.resource))}: сбор не завершён (${progressQd}/${collectQd} QD); осталось ${line.pendingQty} ЕД.`);
   }
 },
 
@@ -1659,13 +1390,14 @@ async _runBuildingIncomeForQd(holding, qd, report, { buildings = holding?.buildi
     const incomePeriods = Math.floor(qd / 40);
     if (incomePeriods <= 0) continue;
     const assignedPeople = this._activeAssignedBuildingPeople(holding, building, workerContext, "income");
-    if (!this._buildingMinimumStaffStatus(holding, building, workerContext).met) {
-      report.skipped.push(`${building.name || "Здание"}: доход остановлен — не набран минимальный штат.`);
-      continue;
-    }
     const assigned = assignedPeople.length;
     if (!assigned) {
       report.skipped.push(`${building.name || "Здание"}: доход не получен — работник не назначен.`);
+      continue;
+    }
+    const minimumQd = this._buildingMinimumQdStatus(holding, building, workerContext, "income", incomePeriods);
+    if (!minimumQd.met) {
+      report.skipped.push(`${building.name || "Здание"}: доход остановлен — выделено ${minimumQd.actualQd} из ${minimumQd.requiredQd} QD.`);
       continue;
     }
     const normalCapacityQd = 20 * incomePeriods;
@@ -1682,14 +1414,13 @@ async _runBuildingIncomeForQd(holding, qd, report, { buildings = holding?.buildi
     const income = building.income ?? {};
     const base = this._safeNumber(income.base, 0);
     const perWorker = this._safeNumber(income.perWorker, 0);
-    const maintenanceFactor = this._maintenanceEfficiencyFactor?.(building) ?? 1;
-    let total = (base * Math.min(1, workerEquivalents) + perWorker * eff) * incomePeriods * maintenanceFactor;
+    let total = (base * Math.min(1, workerEquivalents) + perWorker * eff) * incomePeriods;
     let formulaResult = "";
     if (String(income.formula ?? "").trim()) {
       total = 0;
       for (let i = 0; i < incomePeriods; i += 1) {
         const rolled = await this._rollFormulaTotal(income.formula, { eff, workers: workerEquivalents, base, cycles: incomePeriods, qd, workqd: workerEquivalents * normalCapacityQd });
-        total += Math.floor(rolled.total * maintenanceFactor);
+        total += Math.floor(rolled.total);
         formulaResult = rolled.result;
         report.formulas.push(`${building.name || "Здание"} / Доход ${i + 1}/${incomePeriods}: ${income.formula} → ${rolled.result} = ${rolled.total}`);
       }
@@ -1715,8 +1446,14 @@ async _runBuildingIncomeForQd(holding, qd, report, { buildings = holding?.buildi
 
 async _runEconomyForQd(holding, periodQd = 40, { operationId = "", createdAt = "", data = null } = {}) {
   const qd = Math.max(1, Math.floor(this._safeNumber(periodQd, 40)));
-  if (qd !== 40 && (holding?.buildings?.list ?? []).some((building) => ["staff", "qd", "passive"].includes(buildingLaborMode(building)))) {
-    throw new Error("Новая система труда рассчитывается по одному десятнику. Проведите каждый десятник отдельно.");
+  const hasPlannedLabor = (holding?.people?.list ?? []).some((person) => (
+    !person?.dead
+    && (person?.workAllocations ?? []).some((row) => (
+      (Number(row?.normalQd ?? row?.qd ?? 0) || 0) + (Number(row?.overtimeQd ?? 0) || 0) > 0
+    ))
+  ));
+  if (qd !== 40 && hasPlannedLabor) {
+    throw new Error("Система труда рассчитывается по одному десятнику (40 QD). Проведите каждый десятник отдельно.");
   }
   const label = this._periodLabel(qd);
   const report = { periodQd: qd, periodLabel: label, produced: [], consumed: [], skipped: [], income: [], formulas: [], work: [], ledger: [], food: { needed: 0, eaten: 0, hungryResidentDays: 0, availableBeforeConsumption: 0, lines: [] }, construction: { attempts: 0, completed: 0, lines: [] }, trade: { buyers: 0, sold: 0, revenue: 0, purchases: [] }, treasury: { spent: 0, deficit: 0, lines: [] } };
@@ -1784,12 +1521,6 @@ async _runEconomyForQd(holding, periodQd = 40, { operationId = "", createdAt = "
     for (const row of ships.blocked) report.skipped.push(`${row.name}: ${row.message}`);
   }
   const financeContext = this._prepareFinanceForQd(holding, qd, report, { operationId, createdAt });
-  const maintenanceResult = this._runMaintenanceForQd(holding, qd, report, {
-    operationId: operationId ? `${operationId}:maintenance` : "",
-    financeContext
-  });
-  if (!maintenanceResult.ok) throw new Error(maintenanceResult.message || "Не удалось рассчитать трудовое обслуживание зданий.");
-  this._prepareTechnicalServiceRestarts(holding, financeContext, report);
   const workerContext = this._economyWorkerContext(holding, { financeContext });
   this._runInstitutionConsumables(holding, qd, report, workerContext, financeContext);
   this._runInstitutionResolutions(holding, report, workerContext, financeContext, { operationId, createdAt });
@@ -1814,8 +1545,6 @@ async _runEconomyForQd(holding, periodQd = 40, { operationId = "", createdAt = "
   });
   if (!agricultureResult.ok) throw new Error(agricultureResult.message || "Не удалось рассчитать сельское хозяйство.");
   await this._runProductionAndLivestockForQd(holding, qd, report, { operationId, buildings, budgets, workerContext, financeContext });
-  this._settleStaffPersonnelCashback(holding, report, financeContext);
-  this._runInstitutionResolutions(holding, report, workerContext, financeContext, { operationId, createdAt, staffOnly: true });
 
   await this._runBuildingIncomeForQd(holding, qd, report, { buildings, workerContext, financeContext });
 
@@ -1828,7 +1557,6 @@ async _runEconomyForQd(holding, periodQd = 40, { operationId = "", createdAt = "
     operationId: operationId ? `${operationId}:internal-demand` : "",
     workerContext
   });
-  this._recordBuildingServiceActivity(holding, report, financeContext);
   // Final political rewards observe the services that actually worked this period.
   const finalPoliticsContext = politicsDecisionContext(holding, this, { data });
   delete finalPoliticsContext.networkPaid;

@@ -69,6 +69,9 @@ export const BASE_HOLDING = {
   finance: createDefaultFinanceObligationsState(),
   politics: createDefaultPoliticsState(),
   gm: {
+    labor: {
+      daysOffPerTenday: 0
+    },
     economy: {
       internalDemand: {
         populationBudgetPerResidentCopper: 12,

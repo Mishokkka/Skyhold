@@ -2,7 +2,7 @@
 
 .fbl-skyhold-building-editor .fbls-worker-top-row {
   display: grid;
-  grid-template-columns: 4.7rem 4.7rem minmax(11rem, 1fr) 5.5rem 5.6rem 5.4rem;
+  grid-template-columns: minmax(11rem, 1fr) 5.5rem minmax(9rem, auto);
   align-items: end;
   gap: 0.36rem;
 }
@@ -113,26 +113,25 @@
 
 .fbl-skyhold-building-editor .fbls-assigned-worker-area {
   display: grid;
-  gap: 0.3rem;
+  gap: 0.35rem;
   margin-top: 0.18rem;
 }
 
-.fbl-skyhold-building-editor .fbls-worker-slot-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
+.fbl-skyhold-building-editor .fbls-building-assign-bar {
+  align-items: end;
   gap: 0.35rem;
-  margin-top: 0.2rem;
 }
 
-.fbl-skyhold-building-editor .fbls-worker-slot-grid label {
-  grid-template-columns: 2.2rem minmax(0, 1fr);
-  align-items: center;
-  gap: 0.3rem;
+.fbl-skyhold-building-editor .fbls-building-assign-bar > select[data-building-assign-person] {
+  flex: 1 1 13rem;
+  min-width: 10rem;
 }
 
-.fbl-skyhold-building-editor .fbls-worker-slot-grid label span {
-  margin: 0;
-  color: var(--fbls-dim);
+.fbl-skyhold-building-editor .fbls-building-assign-bar > label.fbls-field {
+  flex: 0 0 4.5rem;
+}
+
+.fbl-skyhold-building-editor .fbls-building-assign-bar > label.fbls-field input {
   text-align: center;
 }
 

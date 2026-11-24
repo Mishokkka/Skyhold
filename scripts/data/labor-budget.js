@@ -1,16 +1,29 @@
-import { MODULE_ID, SETTING_NORMAL_LABOR_QD } from "./constants.js";
 import { ageGroupFromAge, ageThresholdsFor, raceKeyFromResident } from "../generators/resident-rules.js";
 
+export const DEFAULT_DAYS_OFF_PER_TENDAY = 0;
+export const MAX_DAYS_OFF_PER_TENDAY = 5;
 export const DEFAULT_NORMAL_LABOR_QD = 20;
 
-/** A personal budget, not the length of a tenday or a change to the wage unit. */
-export function normalLaborQdPerTenday() {
-  let value;
-  try { value = globalThis.game?.settings?.get(MODULE_ID, SETTING_NORMAL_LABOR_QD); } catch { /* Offline/unregistered: historical default. */ }
-  return Number.isSafeInteger(value) && value >= 0 && value <= DEFAULT_NORMAL_LABOR_QD ? value : DEFAULT_NORMAL_LABOR_QD;
+function toDaysOff(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return DEFAULT_DAYS_OFF_PER_TENDAY;
+  return Math.max(DEFAULT_DAYS_OFF_PER_TENDAY, Math.min(MAX_DAYS_OFF_PER_TENDAY, Math.floor(num)));
 }
 
-export function residentLaborCapacity(person = {}, normalQd = normalLaborQdPerTenday()) {
+export function holdingDaysOffPerTenday(holding = null) {
+  return toDaysOff(holding?.gm?.labor?.daysOffPerTenday ?? DEFAULT_DAYS_OFF_PER_TENDAY);
+}
+
+/** A personal budget based on holding days off, not a change to the 2 QD/day wage unit. */
+export function normalLaborQdPerTenday(holding = null) {
+  const daysOff = holdingDaysOffPerTenday(holding);
+  return (10 - daysOff) * 2;
+}
+
+export function residentLaborCapacity(person = {}, holdingOrNormalQd = null) {
+  const normalQd = typeof holdingOrNormalQd === "number" && Number.isFinite(holdingOrNormalQd)
+    ? Math.max(0, Math.min(DEFAULT_NORMAL_LABOR_QD, Math.floor(holdingOrNormalQd)))
+    : normalLaborQdPerTenday(holdingOrNormalQd);
   const child = String(person.ageGroup ?? ageGroupFromAge(person.age, person.race, person.subrace)) === "Ре";
   const threshold = Math.min(Math.max(0, Number(ageThresholdsFor(raceKeyFromResident(person))?.young ?? 18) - 1), 12);
   return {

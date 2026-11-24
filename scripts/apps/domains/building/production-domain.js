@@ -10,7 +10,7 @@ import {
 import { politicsRuntimeEffects } from "../../../engines/politics/runtime-effects.js";
 import { productionTimingText, productionIdentityLocked } from "../../../engines/economy/production-timing.js";
 import { productionCapacity, productionBatchStates, productionOccupiedQty } from "../../../engines/economy/production-capacity.js";
-import { buildingLaborMode } from "../../../data/hybrid-labor.js";
+import { buildingWorkerIds } from "../../../data/work-allocations.js";
 
 export const BuildingProductionDomain = {
 _productionSeasonDefs() {
@@ -323,8 +323,8 @@ _pendingProductionRows(building, holding = null, buildingIndex = 0, linesArg = n
       lineIndex: line._index,
       resource: line.resource,
       qty: line.pendingQty,
-      manualCollectionBlocked: ["staff", "qd"].includes(buildingLaborMode(building)) && line.collectQd > 0,
-      collectionHint: ["staff", "qd"].includes(buildingLaborMode(building)) && line.collectQd > 0
+      manualCollectionBlocked: line.collectQd > 0,
+      collectionHint: line.collectQd > 0
         ? `Сбор требует ${line.collectQd} QD. Назначьте эту линию в плане работ и проведите десятник.` : "Собрать готовый ресурс",
       label: `${line.resource}: ${line.pendingQty}`
     }));
@@ -359,8 +359,7 @@ _buildingIncomeSummary(building, holding = null, workerContext = null, workerEff
     text: "1",
     title: "1 = 50% базовой цены, 2 = 100%, 3 = 150%."
   };
-  const maintenanceFactor = this._maintenanceEfficiencyFactor?.(building) ?? (this._safeNumber(building?.maintenance?.backlogTendays, 0) >= 2 ? 0.5 : 1);
-  const total = Math.floor((base + perWorker * eff) * maintenanceFactor);
+  const total = Math.floor(base + perWorker * eff);
   return {
     base,
     perWorker,
@@ -405,21 +404,19 @@ _buildingDefenseSummary(building, holding = null, workerContext = null, statusAr
   const base = this._safeNumber(defense.base, 0);
   const perStep = this._safeNumber(defense.perStep, 0);
   const workerStep = Math.max(0, this._safeNumber(defense.workerStep, 0));
-  const assigned = (building?.assignedWorkerIds ?? []).filter(Boolean).length;
+  const assigned = holding ? buildingWorkerIds(holding, building?.id).length : 0;
   const effSummary = workerEfficiencyArg ?? (this._buildingEffectiveWorkers ? this._buildingEffectiveWorkers(holding, building, workerContext) : { total: assigned, detail: `${assigned} раб.` });
-  const defenseStatus = holding && buildingLaborMode(building) !== "legacy"
-    ? buildingServiceBlockReasons(holding, building, "defense") : null;
+  const defenseStatus = holding ? buildingServiceBlockReasons(holding, building, "defense") : null;
   const effectiveWorkers = defenseStatus ? (defenseStatus.active ? defenseStatus.workforce.equivalentWorkers : 0)
     : Number.isFinite(Number(effSummary?.total)) ? Math.max(0, Number(effSummary.total)) : 0;
-  const maintenanceFactor = Math.max(0, Math.min(1, this._maintenanceEfficiencyFactor?.(building) ?? 1));
-  const structuralBase = Math.max(0, Math.floor(base * maintenanceFactor));
+  const structuralBase = Math.max(0, Math.floor(base));
   const fromWorkers = workerStep > 0 ? Math.floor(effectiveWorkers / workerStep) * perStep : 0;
   const total = Math.max(0, structuralBase + fromWorkers);
   const hasDefense = Boolean(base || perStep || workerStep);
   const effText = this._formatNumber ? this._formatNumber(effectiveWorkers) : String(Math.round(effectiveWorkers * 100) / 100);
   const detail = workerStep > 0
     ? `${structuralBase} структура + ${fromWorkers} за эфф. ${effText}/${workerStep} оплаченных раб. (${effSummary?.detail || "нет деталей"})`
-    : `${structuralBase} структурная защита${maintenanceFactor < 1 ? ` (обслуживание ×${maintenanceFactor})` : ""}`;
+    : `${structuralBase} структурная защита`;
   return { base, structuralBase, perStep, workerStep, assigned, effectiveWorkers, fromWorkers, total, hasDefense, detail };
 },
 
@@ -432,7 +429,7 @@ _reputationSummary(holding, _moraleStateArg = null) {
     const socialStatus = rawValue > 0 ? buildingConfirmedSocialStatus(holding, building) : null;
     if (rawValue > 0 && !socialStatus.active) continue;
     if (rawValue < 0 && !buildingConfirmedHarmActive(holding, building)) continue;
-    const serviceFactor = rawValue > 0 ? socialStatus.maintenanceFactor * (socialStatus.laborFactor ?? 1) : 1;
+    const serviceFactor = rawValue > 0 ? (socialStatus.laborFactor ?? 1) : 1;
     const activeValue = scaleIntegerBuildingEffect(rawValue, serviceFactor);
     if (!activeValue) continue;
     const templateId = String(building?.templateId ?? "").trim().toLowerCase();
@@ -541,8 +538,7 @@ _buildingProductionSummary(building, assignedCount = 0, holding = null, workerCo
   const flat = this._safeNumber(building?.productionAmount, 0);
   const formula = String(building?.productionFormula ?? "").trim();
   const eff = workerEfficiencyArg ?? this._buildingEffectiveWorkers(holding, building, workerContext);
-  const maintenanceFactor = this._maintenanceEfficiencyFactor?.(building) ?? (this._safeNumber(building?.maintenance?.backlogTendays, 0) >= 2 ? 0.5 : 1);
-  const total = Math.floor((flat + per * eff.total) * maintenanceFactor);
+  const total = Math.floor(flat + per * eff.total);
   return { resource: resource || "—", assignedCount, flat, per, formula, total, effectiveWorkers: eff.total, leaderBonus: eff.leaderBonus, isMoney: this._isMoneyResource(resource) };
 },
 
@@ -558,7 +554,7 @@ _buildingMoneyIncome(building, holdingArg = null, workerContext = null, linesArg
     if (!line.active) continue;
     if (this._isMoneyResource(line.resource)) total += line.total;
   }
-  const legacy = this._buildingProductionSummary(building, Array.isArray(building?.assignedWorkerIds) ? building.assignedWorkerIds.filter(Boolean).length : 0, holding, workerContext, workerEfficiency);
+  const legacy = this._buildingProductionSummary(building, holding ? buildingWorkerIds(holding, building?.id).length : 0, holding, workerContext, workerEfficiency);
   const text = `${building?.productionResource ?? ""} ${building?.production ?? ""}`;
   if (!total && (legacy.isMoney || this._isMoneyResource(text))) total += legacy.total || this._safeNumber(building?.productionAmount, 0);
   return total;

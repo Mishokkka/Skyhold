@@ -73,8 +73,8 @@ function fillDefenseSquad(holding, squad, logic, hiddenBuildings) {
     .filter(([id, person]) => !taken.has(id) && canEnrollDefenseResident(holding, person, hiddenBuildings))
     .map(([id, resident]) => {
       const efficiency = logic._soldierEfficiency(resident, squadType);
-      const free = logic._hasSoldierProfession(resident) || (!resident.workAssignment && !resident.staffAppointment
-        && !(resident.workAllocationMode === "explicit" && resident.workAllocations?.some((work) => work.normalQd || work.overtimeQd)));
+      const free = logic._hasSoldierProfession(resident) || (!resident.workAssignment
+        && !(resident.workAllocations?.some((work) => Number(work?.qd ?? work?.normalQd ?? 0) > 0 || Number(work?.overtimeQd ?? 0) > 0)));
       return { id, efficiency, kept: Number(existing.has(id)), free: Number(free) };
     })
     .filter((entry) => entry.efficiency > 0)

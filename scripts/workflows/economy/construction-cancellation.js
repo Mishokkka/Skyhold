@@ -69,23 +69,26 @@ function replayResult(existing, buildingId, operationId) {
 
 function releaseAssignedWorkers(holding, building, dependencies = {}) {
   const buildingId = text(building?.id);
-  const assignedIds = [...new Set((Array.isArray(building?.assignedWorkerIds) ? building.assignedWorkerIds : [])
-    .map((id) => text(id))
-    .filter(Boolean))];
   const clearedWorkerIds = [];
   const people = Array.isArray(holding?.people?.list) ? holding.people.list : [];
-  for (const personId of assignedIds) {
-    const person = people.find((row) => text(row?.id) === personId);
-    if (!person || text(person.workAssignment) !== buildingId) continue;
-    if (typeof dependencies.setPersonFree === "function") dependencies.setPersonFree(holding, personId);
-    else {
-      person.workAssignment = "";
-      person.role = "Свободен";
-      person.salary = 0;
+  for (const person of people) {
+    const personId = text(person?.id);
+    if (!personId) continue;
+    let touched = false;
+    if (Array.isArray(person.workAllocations) && person.workAllocations.some((row) => text(row?.sourceId) === buildingId)) {
+      person.workAllocations = person.workAllocations.filter((row) => text(row?.sourceId) !== buildingId);
+      touched = true;
     }
-    clearedWorkerIds.push(personId);
+    if (text(person.workAssignment) === buildingId) {
+      if (typeof dependencies.setPersonFree === "function") dependencies.setPersonFree(holding, personId);
+      else {
+        person.workAssignment = "";
+        person.role = "Свободен";
+      }
+      touched = true;
+    }
+    if (touched) clearedWorkerIds.push(personId);
   }
-  building.assignedWorkerIds = [];
   return clearedWorkerIds;
 }
 

@@ -43,14 +43,14 @@ function validateCrewResidents(holding = {}, ship = {}) {
 
 function settlementPlanForResident(holding, residentId, person) {
   const buildings = [];
+  const allocatedIds = new Set((Array.isArray(person?.workAllocations) ? person.workAllocations : [])
+    .filter((row) => Number(row?.normalQd ?? row?.qd ?? 0) > 0 || Number(row?.overtimeQd ?? 0) > 0)
+    .map((row) => text(row?.sourceId))
+    .filter(Boolean));
   for (const building of holding?.buildings?.list ?? []) {
     const buildingId = text(building?.id);
-    const workerSlots = [];
-    for (const [index, value] of (building?.assignedWorkerIds ?? []).entries()) {
-      if (text(value) === residentId) workerSlots.push(index);
-    }
     const admissionOverride = (building?.workerAdmissionOverrideIds ?? []).some((value) => text(value) === residentId);
-    if (workerSlots.length || admissionOverride) buildings.push({ buildingId, workerSlots, admissionOverride });
+    if (allocatedIds.has(buildingId) || admissionOverride) buildings.push({ buildingId, admissionOverride });
   }
 
   const construction = [];
@@ -77,7 +77,6 @@ function settlementPlanForResident(holding, residentId, person) {
 
   return {
     workAssignment: text(person?.workAssignment),
-    workAllocationMode: text(person?.workAllocationMode),
     workAllocations: clone(Array.isArray(person?.workAllocations) ? person.workAllocations : []),
     buildings,
     construction,
@@ -92,13 +91,6 @@ function settlementPlanForResident(holding, residentId, person) {
 function clearResidentSettlementAssignments(holding, residentId, person) {
   let cleared = 0;
   for (const building of holding?.buildings?.list ?? []) {
-    if (Array.isArray(building?.assignedWorkerIds)) {
-      building.assignedWorkerIds = building.assignedWorkerIds.map((value) => {
-        if (text(value) !== residentId) return value;
-        cleared += 1;
-        return "";
-      });
-    }
     if (Array.isArray(building?.workerAdmissionOverrideIds)) {
       const before = building.workerAdmissionOverrideIds.length;
       building.workerAdmissionOverrideIds = building.workerAdmissionOverrideIds.filter((value) => text(value) !== residentId);
@@ -147,13 +139,8 @@ function clearResidentSettlementAssignments(holding, residentId, person) {
   }
 
   if (text(person?.workAssignment)) cleared += 1;
-  if (person?.staffAppointment !== undefined) {
-    delete person.staffAppointment;
-    cleared += 1;
-  }
   if (Array.isArray(person?.workAllocations) && person.workAllocations.length) cleared += person.workAllocations.length;
   person.workAssignment = "";
-  person.workAllocationMode = "legacy";
   person.workAllocations = [];
   if (text(person.home)) cleared += 1;
   person.home = "";

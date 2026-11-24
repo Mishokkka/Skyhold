@@ -152,6 +152,12 @@
           </article>
 
           <article class="fbls-card fbls-gm-card fbls-gm-mod-card">
+            <h2><i class="fa-solid fa-calendar-days"></i> Труд и выходные</h2>
+            <label class="fbls-field"><span>Выходных за десятник (0–5)</span><input type="number" min="0" max="5" step="1" data-type="number" data-field="holdings.{{holdingIndex}}.gm.labor.daysOffPerTenday" value="{{holding.gm.labor.daysOffPerTenday}}" /></label>
+            <p class="fbls-muted-text compact">Норма взрослого: (10 − выходные) × 2 QD, сверхурочно: 50% от нормы.</p>
+          </article>
+
+          <article class="fbls-card fbls-gm-card fbls-gm-mod-card">
             <h2><i class="fa-solid fa-basket-shopping"></i> Внутренний спрос</h2>
             <p class="fbls-muted-text compact">Бюджеты покупателей внутри поселения: жителей, гостей Трактира и посетителей Рынка. За десятник работающие торговые здания продают им товары склада, отмеченные для продажи, и услуги; выручка поступает в казну. Это отдельный механизм от заказов внешнего рынка.</p>
             <div class="fbls-gm-mod-grid">
@@ -259,7 +265,7 @@
                       <label><span>РАЗ</span><input type="number" min="1" max="6" step="1" data-type="number" data-generator-person-index="{{_index}}" data-generator-person-field="attributes.wits" value="{{attributes.wits}}" /></label>
                       <label><span>ЭМП</span><input type="number" min="1" max="6" step="1" data-type="number" data-generator-person-index="{{_index}}" data-generator-person-field="attributes.empathy" value="{{attributes.empathy}}" /></label>
                       <label><span>Дов. база</span><input type="number" data-type="number" data-generator-person-index="{{_index}}" data-generator-person-field="moraleBase" value="{{moraleBase}}" /></label>
-                      <label><span>Оплата</span><input type="number" data-type="number" data-generator-person-index="{{_index}}" data-generator-person-field="salary" value="{{salary}}" /></label>
+                      <label><span>Своя ставка</span><input type="number" min="0" step="1" data-type="nullable-number" data-generator-person-index="{{_index}}" data-generator-person-field="wageDailyOverrideCopper" value="{{wageDailyOverrideCopper}}" placeholder="по месту" /></label>
                       <label class="traits"><span>Черты</span><input type="text" data-generator-person-index="{{_index}}" data-generator-person-field="traitsText" value="{{traitsText}}" /></label>
                       <label class="appearance"><span>Внешность</span><textarea rows="2" data-generator-person-index="{{_index}}" data-generator-person-field="appearance">{{appearance}}</textarea></label>
                     </div>

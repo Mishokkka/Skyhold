@@ -54,9 +54,13 @@ _onGeneratedPersonFieldChange(event) {
   const attributeFields = new Set(["attributes.strength", "attributes.agility", "attributes.wits", "attributes.empathy"]);
   if (attributeFields.has(key)) {
     value = normalizeResidentAttribute(value, 3);
-  } else if (["age", "salary", "moraleBase", "moraleWork", "moraleHome", "moraleManual"].includes(key)) {
+  } else if (["age", "moraleBase", "moraleWork", "moraleHome", "moraleManual"].includes(key)) {
     const parsed = Number(value);
     value = Number.isFinite(parsed) ? parsed : 0;
+  } else if (key === "wageDailyOverrideCopper") {
+    const raw = String(value ?? "").trim();
+    const parsed = raw === "" ? null : Number(raw);
+    value = parsed !== null && Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : null;
   }
   if (key === "_selected") value = Boolean(value);
   if (key.includes(".")) foundry.utils.setProperty(this.generatorPreview[index], key, value);

@@ -44,7 +44,6 @@
 .fbls-cost-row, .fbls-prereq-row { gap: 0.3rem; }
 .fbls-two-textareas { display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; grid-column: 1 / -1; }
 .fbls-two-textareas textarea { min-height: 4.2rem; }
-.fbls-worker-slot-grid.compact-slots { grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); max-height: 14rem; overflow: auto; padding-right: 0.2rem; }
 
 .fbl-skyhold-crew-editor .crew-card-v2 { margin-bottom: 0.65rem; padding: 0; overflow: hidden; border-color: var(--fbls-accent-border); background: var(--fbls-info-soft); }
 .fbl-skyhold-crew-editor .fbls-crew-headline { display: grid; grid-template-columns: minmax(13rem, 1fr) auto auto; gap: 0.65rem; align-items: center; padding: 0.55rem 0.65rem; border-bottom: 1px solid var(--fbls-border); background: var(--fbls-surface-soft); }

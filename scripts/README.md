@@ -18,7 +18,7 @@
 | Производство, еда, расходы, аграрка | `engines/economy/`, адаптеры — `apps/domains/finance/` |
 | Рынок и перевозки | `engines/market/`, `data/market/`; `engines/transport/` (включая `router.js`), `workflows/transport/`, `data/transport/`; UI — `apps/{market-app,transport-app}.js` |
 | Корабль и экипаж | `engines/ships/`, `apps/{ship-operation-executor,ships-context,ship-app}.js` |
-| Труд, штат, QD и план | `data/{hybrid-labor,work-allocations,workforce-plan}.js`, `engines/workers/`, `apps/domains/workforce-planner.js` |
+| Труд, QD и план | `data/{labor-model,labor-budget,work-allocations,workforce-plan}.js`, `engines/workers/`, `apps/domains/workforce-planner.js` |
 | Политика | `engines/politics/`, `data/politics-*.js`, `apps/politics-decision-context.js` |
 | Массовый бой | `apps/mass-combat/{calculator,round-resolution,casualties,damage,supplies}.js`, `apps/mass-combat.js` |
 | Foundry и календарь | `integrations/{foundry-runtime,calendaria-bridge}.js` |

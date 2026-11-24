@@ -1,5 +1,6 @@
 import { makeId } from "../../data/utils.js";
 import { isResidentInPopulation } from "../../data/resident-presence.js";
+import { buildingWorkerIds } from "../../data/work-allocations.js";
 import { clearPersonFromAssignments } from "../../data/resident-assignments.js";
 import { isMedicalBuilding } from "../../core/building-specials.js";
 import { asInt, clamp, militiaThreshold } from "./rules.js";
@@ -29,7 +30,7 @@ export function medicalSupport(holding, { battleLost = false, medicalAssignments
   const medicalBuildings = built.filter((building) => isMedicalBuilding(building));
   const workers = new Map();
   for (const building of medicalBuildings) {
-    for (const id of (Array.isArray(building.assignedWorkerIds) ? building.assignedWorkerIds : [])) {
+    for (const id of buildingWorkerIds(holding, building.id)) {
       const person = (holding?.people?.list ?? []).find((row) => String(row.id) === String(id) && isResidentInPopulation(row, holding) && !isInjuredResident(row));
       if (person) workers.set(String(person.id), person);
     }
@@ -48,7 +49,7 @@ export function medicalSupport(holding, { battleLost = false, medicalAssignments
         capacity += Math.max(0, asInt(stats?.capacity, 0));
         workerEfficiency += Math.max(0, Number(stats?.efficiency ?? 0) || 0);
       } else {
-        const assignedWorkers = (building.assignedWorkerIds ?? []).filter((id) => workers.has(String(id))).length;
+        const assignedWorkers = buildingWorkerIds(holding, building.id).filter((id) => workers.has(String(id))).length;
         capacity += assignedWorkers * 5;
       }
     }
@@ -89,7 +90,7 @@ export function defenderCasualtyCandidates(holding, state = {}, calc = {}) {
   }
 
   for (const building of builtBuildings(holding).filter((building) => isDefenseBuilding(building))) {
-    for (const id of (Array.isArray(building?.assignedWorkerIds) ? building.assignedWorkerIds : [])) add(id);
+    for (const id of buildingWorkerIds(holding, building.id)) add(id);
   }
 
   for (const person of people) {

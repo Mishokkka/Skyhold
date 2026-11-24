@@ -4,14 +4,14 @@ import { livestockHeadcount } from "../../engines/economy/livestock.js";
 import { productionTiming, productionTimingText, PRODUCTION_WORK_UNITS } from "../../engines/economy/production-timing.js";
 import { productionCapacity, productionOccupiedQty, waitingProductionBatches, productionBatchCosts, affordableProductionBatch } from "../../engines/economy/production-capacity.js";
 import { buildingServiceFunctionId } from "../../engines/economy/building-service.js";
-import { buildingLaborMode } from "../../data/hybrid-labor.js";
+import { buildingAcceptsWorkers, buildingMinOperationalQd } from "../../data/labor-model.js";
 
 /** Deterministic estimate for worker selection; execution owns actual starts and results. */
 export function workforceProductionGoalState(building, functionId, preparedUnits = 0) {
   const line = (building?.productionLines ?? []).find((row) => `production:${row.id}` === functionId);
   const formula = String(line?.formula ?? "").trim();
   const fullQty = formula ? /^\d+$/.test(formula) ? Number(formula) : 0 : Number(line?.outputQty ?? line?.output ?? line?.quantity ?? 1);
-  const allowed = ["staff", "qd"].includes(buildingLaborMode(building))
+  const allowed = buildingAcceptsWorkers(building)
     && line?.source === "workers" && Number.isSafeInteger(fullQty) && fullQty > 0;
   if (!allowed || !preparedUnits) return { allowed, effectiveNeed: 0, warning: "" };
   const timing = productionTiming(line);
@@ -26,8 +26,6 @@ export function workforceProductionGoalState(building, functionId, preparedUnits
   const residual = remaining % maximum;
   const unsupportedRemainder = residual > 0 && residual < minimum;
   const targetUnits = Math.max(1, Math.ceil(Number(line.workQd) || 1)) * PRODUCTION_WORK_UNITS;
-  // Match each possible equipment load, including the executor's integer-unit
-  // rounding. The recipe's full output can exceed the equipment's capacity.
   const fullBatches = Math.floor(remaining / maximum);
   const workUnits = fullBatches * Math.ceil(targetUnits * maximum / fullQty)
     + (residual && !unsupportedRemainder ? Math.ceil(targetUnits * residual / fullQty) : 0);
@@ -39,25 +37,33 @@ export function workforceProductionGoalState(building, functionId, preparedUnits
 /** Share the effect's scope between its display and opt-in worker selection. */
 export function workforceOperationalMinimum(building, tasks) {
   if (!building) return null;
-  const whole = (value) => Math.max(0, Math.floor(Number(value) || 0));
-  const activation = building.activation ?? {};
-  const functionId = buildingLaborMode(building) === "legacy" && activation.requiresMeaningfulResult ? "" : buildingServiceFunctionId(building);
-  const relevant = tasks.filter((task) => task.kind !== "maintenance" && task.assignable
+  const functionId = buildingServiceFunctionId(building);
+  const relevant = tasks.filter((task) => task.assignable
     && (!functionId || task.functionId === functionId || functionId === "production" && task.functionId?.startsWith("production:")));
-  const minQd = whole(activation.minOperationalQd ?? building.minOperationalQd);
+  const minQd = buildingMinOperationalQd(building);
   const qd = relevant.reduce((sum, task) => sum + Number(task.normalQd || 0) + Number(task.overtimeQd || 0), 0);
-  return { minQd, minWorkers: buildingLaborMode(building) === "legacy" ? Math.max(whole(building.workersMin), whole(activation.minWorkers)) : 0, functionId, relevant, qd,
-    workers: new Set(relevant.flatMap((task) => task.assignments.map((row) => row.personId))).size, gap: Math.max(0, minQd - qd) };
+  return {
+    minQd,
+    minWorkers: 0,
+    functionId,
+    relevant,
+    qd,
+    workers: new Set(relevant.flatMap((task) => task.assignments.map((row) => row.personId))).size,
+    gap: Math.max(0, minQd - qd)
+  };
 }
 
 /** Describe present work, not a promise that all inputs or future daily events will cooperate. */
 export function workforceTaskState(holding, target, building, service, availableFunction) {
-  const state = { category: "optional", need: 0, effectiveNeed: 0, dailyNeed: 0, idle: false,
-    note: "Работа по желанию. Свободные места не создают потребность в труде.", finite: false };
-  if (target.kind === "maintenance") {
-    state.note = "Обслуживание: объём и покрытие проверяются в расчёте десятника. Цель QD задаётся вручную.";
-    return state;
-  }
+  const state = {
+    category: "optional",
+    need: 0,
+    effectiveNeed: 0,
+    dailyNeed: 0,
+    idle: false,
+    note: "Работа по желанию. Свободные места не создают потребность в труде.",
+    finite: false
+  };
   if (target.kind === "agriculture") {
     const agriculture = normalizeAgricultureBuilding(building.agriculture, { building });
     const crop = agriculture.crops.find((row) => row.id === (agriculture.state.cropId || agriculture.activeCropId));
@@ -116,7 +122,6 @@ export function workforceTaskState(holding, target, building, service, available
     if (capacity > 0) state.note += ` Занято ${occupied} из ${capacity} ед.; запуск от ${line.batchStartQty || 1} ед.`;
     if (waitingDays.length) state.note += ` Ближайшая выдержка: ${Math.min(...waitingDays)} дн. Ожидание не расходует рабочие QD.`;
     if ((capacity > 0 && capacity - occupied < Math.max(1, Number(line.batchStartQty) || 1) || waiting.length && (!capacity || line.repeat === false)) && timing?.phase !== "work") {
-      // Report only certain present unavailability. Do not free future QD automatically.
       state.idle = true;
       state.certainIdle = waitingDays.length > 0 && Math.min(...waitingDays) > 10 && !line.pendingQty;
       state.note += " Сейчас нет места для подготовки. Освобождение вместимости может вернуть работу в этом десятнике.";
@@ -137,10 +142,6 @@ export function workforceTaskState(holding, target, building, service, available
     }
     return state;
   }
-  state.note = buildingLaborMode(building) === "staff"
-    ? "Постоянная служба. Сотрудник занят весь десятник по одной ставке; работа другой службы учитывается отдельно."
-    : buildingLaborMode(building) === "qd"
-      ? "Служба по выбору поселения. Результат зависит от выделенного ей труда; число прежних мест не ограничивает исполнителей."
-      : "Служба по выбору поселения. Минимум людей относится ко всему зданию; назначение на одну функцию не оплачивает вторую автоматически.";
+  state.note = "Служба по выбору поселения. Активируется на 100% сразу при достижении минимального порога QD.";
   return state;
 }

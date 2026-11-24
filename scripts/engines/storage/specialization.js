@@ -1,10 +1,7 @@
 import { resourceDef, resourceShelfLifeQd, storageResourceId } from "../../core/resources.js";
 import { effectiveShelfLifeQd, isPerishableFoodDefinition } from "../../core/perishable-food.js";
 import { buildingOperationalState } from "../../core/building-state.js";
-import { maintenanceEfficiencyFactor } from "../../data/economy/maintenance.js";
-import { financeBuildingFunctionBlockState, financeWorkerBlockState } from "../economy/finance-obligations.js";
-import { buildingLaborMode } from "../../data/hybrid-labor.js";
-import { isResidentPresent } from "../../data/resident-presence.js";
+import { financeBuildingFunctionBlockState } from "../economy/finance-obligations.js";
 import { buildingServiceEffectFactor } from "../economy/building-service.js";
 
 function normalizedList(value) {
@@ -52,22 +49,8 @@ export function storageProfileEffectFactor(holding = {}, building = {}) {
   if (block.blocked) return 0;
 
   const storage = building?.storage ?? {};
-  if (storage.profileRequiresStaff === true) {
-    if (buildingLaborMode(building) !== "legacy") return buildingServiceEffectFactor(holding, building, "storage");
-    const people = new Map((holding?.people?.list ?? []).map((person) => [String(person?.id ?? ""), person]));
-    const staffed = (building?.assignedWorkerIds ?? []).filter((workerId) => {
-      const id = String(workerId ?? "");
-      const person = people.get(id);
-      return id
-        && person
-        && !person.dead
-        && isResidentPresent(person)
-        && Math.max(0, Number(person?.injuredDays) || 0) <= 0
-        && !financeWorkerBlockState({ finance: holding?.finance, workerId: id }).blocked;
-    }).length;
-    if (staffed < Math.max(1, Math.floor(Number(building?.workersMin) || 0))) return 0;
-  }
-  return Math.max(0, Math.min(1, maintenanceEfficiencyFactor(building?.maintenance)));
+  if (storage.profileRequiresStaff === true) return buildingServiceEffectFactor(holding, building, "storage");
+  return 1;
 }
 
 export function storageProfileLoadMultiplier(room = {}, resource = {}) {

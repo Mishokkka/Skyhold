@@ -95,8 +95,7 @@ _internalDemandChannels(holding, financeContext = null, tendayCount = 1, workerC
     const sellerWorkerEfficiency = assignedPeople.reduce((sum, person, index) => (
       sum + Math.max(0, finite(this._personBuildingEfficiency(holding, building, person, workerContext, { purpose: "trade" }), 0)) * workerShares[index]
     ), 0);
-    const maintenanceFactor = this._maintenanceEfficiencyFactor?.(building) ?? 1;
-    const effectiveWorkers = sellerWorkerEfficiency * maintenanceFactor;
+    const effectiveWorkers = sellerWorkerEfficiency;
     if (!effectiveWorkers) continue;
     const sellerEfficiency = staffedWorkers > 0 ? sellerWorkerEfficiency / staffedWorkers : 0;
     const buildingId = text(building.id);

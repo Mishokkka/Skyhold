@@ -137,10 +137,11 @@ export class SkyholdResidentEditor extends WindowFrameMixin(RenderSchedulerMixin
     this._selectionDisclosures.bind(root);
     const editor = root.querySelector(".fbls-person-editor.v2");
     if (editor && context.canWriteField) {
-      const allocationMode = editor.querySelector("[data-field$='.workAllocationMode']")?.dataset.field;
+      const personPath = editor.querySelector("[data-field]")?.dataset?.field?.match(/^(holdings\.\d+\.people\.list\.\d+)\./)?.[1] ?? "";
+      const workAllocationsPath = personPath ? `${personPath}.workAllocations` : "";
       for (const field of editor.querySelectorAll("[data-field], [data-work-assignment-field], [data-work-allocation-target], [data-trait-add-field], [data-traits-field]")) {
         const { field: path, workAssignmentField, workAllocationTarget, traitAddField, traitsField } = field.dataset;
-        const allocationPath = workAllocationTarget === undefined ? "" : allocationMode;
+        const allocationPath = workAllocationTarget === undefined ? "" : workAllocationsPath;
         if (!context.canWriteField(path || workAssignmentField || allocationPath || traitAddField || traitsField)) field.disabled = true;
       }
       captureResidentEditorDraft(editor, context.draftPerson);
@@ -159,7 +160,7 @@ export class SkyholdResidentEditor extends WindowFrameMixin(RenderSchedulerMixin
     }, listener);
 
     root.querySelectorAll("[data-field]").forEach((field) => field.addEventListener("change", () => {
-      return this._saveDraft(field, { render: String(field.dataset.field ?? "").endsWith(".workAllocationMode") });
+      return this._saveDraft(field, { render: String(field.dataset.field ?? "").includes(".workAllocations.") });
     }, listener));
     root.querySelectorAll("[data-work-allocation-target]").forEach((field) => field.addEventListener("change", () => {
       return this._saveDraft(field, { render: true });

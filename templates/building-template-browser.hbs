@@ -67,7 +67,7 @@
               {{#unless materialsOk}}<p class="fbls-template-material-warning">Материалы можно довезти после создания проекта.</p>{{/unless}}
             </section>
             <section class="fbls-template-panel"><h4><i class="fa-solid fa-users-gear" aria-hidden="true"></i> Работа и содержание</h4>
-              <dl><div><dt>Работники</dt><dd>{{staffingText}}</dd></div><div><dt>Ставка / день</dt><dd>{{wageText}}</dd></div><div><dt>База / месяц</dt><dd>{{baseUpkeepText}}</dd></div><div><dt>При работе / месяц</dt><dd>{{operatingUpkeepText}}</dd></div><div><dt>Обслуживание</dt><dd>{{maintenanceText}}</dd></div>
+              <dl><div><dt>Труд</dt><dd>{{staffingText}}</dd></div><div><dt>Ставка / день</dt><dd>{{wageText}}</dd></div><div><dt>База / месяц</dt><dd>{{baseUpkeepText}}</dd></div><div><dt>При работе / месяц</dt><dd>{{operatingUpkeepText}}</dd></div>
               {{#if workerRole}}<div><dt>Должность</dt><dd>{{workerRole}}</dd></div>{{/if}}
               {{#if workerMoraleDelta}}<div><dt>Мораль работников</dt><dd>{{workerMoraleDelta}}</dd></div>{{/if}}</dl>
               {{#if workerProfile.admission.text}}<div class="fbls-template-rule"><span>{{#if workerProfile.admission.hard}}Допуск к работе{{else}}Рекомендуемый работник{{/if}}</span><p>{{workerProfile.admission.text}}</p></div>{{/if}}

@@ -24,12 +24,10 @@ export function clearPersonFromAssignments(holding, personId) {
   const id = String(personId ?? "");
   if (!id || !holding || typeof holding !== "object") return false;
   const person = (holding.people?.list ?? []).find((row) => String(row.id) === id);
-  if (person) delete person.staffAppointment;
+  if (person) person.workAllocations = [];
   if (Array.isArray(holding.constructionCrewIds)) holding.constructionCrewIds = holding.constructionCrewIds.filter((value) => String(value) !== id);
 
   for (const building of holding?.buildings?.list ?? []) {
-    if (!Array.isArray(building.assignedWorkerIds)) building.assignedWorkerIds = [];
-    building.assignedWorkerIds = building.assignedWorkerIds.map((value) => String(value) === id ? "" : value);
     if (Array.isArray(building.workerAdmissionOverrideIds)) building.workerAdmissionOverrideIds = building.workerAdmissionOverrideIds.filter((value) => String(value) !== id);
   }
   for (const crew of holding?.constructionCrews ?? []) {

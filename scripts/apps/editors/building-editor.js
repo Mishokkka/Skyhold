@@ -37,12 +37,30 @@ import { getMassCombatRelationTags } from "../mass-combat/tag-config.js";
 import { livestockHeadcount } from "../../engines/economy/livestock.js";
 import { renderFoundryFilePicker } from "../../integrations/foundry-runtime.js";
 import { SkyholdResourceCatalogEditor } from "./resource-catalog-editor.js";
-import { buildingLaborMode, validateHybridLaborHolding, newHybridLaborIssues } from "../../data/hybrid-labor.js";
-import { buildWorkAllocationTargets } from "../../data/work-allocations.js";
+import {
+  buildingAcceptsWorkers,
+  buildingLaborCapacityQd,
+  buildingMinOperationalQd,
+  newLaborIssues,
+  reservedOccupation,
+  validateBuildingLaborAndGoals
+} from "../../data/labor-model.js";
+import {
+  buildWorkAllocationTargets,
+  buildingWorkAllocationsForBuilding,
+  validateHoldingWorkAllocations,
+  workAllocationTargetKey
+} from "../../data/work-allocations.js";
+import { residentLaborCapacity } from "../../data/labor-budget.js";
+import { isResidentInPopulation } from "../../data/resident-presence.js";
+import { workerTypeFromAttributes } from "../../generators/resident-rules.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
 const BUILDING_EDITOR_ACTIONS = {
+  "building-assign-worker": "_onAssignBuildingWorker",
+  "building-remove-worker": "_onRemoveBuildingWorker",
+  "open-building-workforce-planner": "_onOpenBuildingWorkforcePlanner",
   "worker-profile-pick": "_onWorkerProfileEdit",
   "worker-profile-up": "_onWorkerProfileEdit",
   "worker-profile-add": "_onWorkerProfileEdit",
@@ -299,13 +317,13 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(PendingFieldSavesMix
   }
 
   _prepareEditorTabs(building, { holding, data } = {}) {
-    const laborMode = buildingLaborMode(building);
-    building.laborLegacy = laborMode === "legacy";
-    building.laborQd = laborMode === "qd";
-    building.laborStaffSlots = ["legacy", "staff"].includes(laborMode);
-    building.laborCapacityValue = building.labor?.capacityQd ?? "";
-    building.laborModeOptions = [["legacy", "Прежние правила"], ["staff", "Постоянный штат"], ["qd", "Задания по QD"], ["passive", "Без работников"]]
-      .map(([value, label]) => ({ value, label, selected: value === laborMode, disabled: value === "legacy" && laborMode !== "legacy" }));
+    const capacityQd = buildingLaborCapacityQd(building);
+    building.laborAcceptsWorkers = buildingAcceptsWorkers(building);
+    building.laborQd = building.laborAcceptsWorkers;
+    building.laborCapacityValue = capacityQd ?? "";
+    building.laborMinOperationalQd = buildingMinOperationalQd(building);
+    building.laborCapacityLabel = capacityQd === 0 ? "Без работников" : (capacityQd === null ? "Без предела" : `${capacityQd} QD`);
+    this._prepareBuildingWorkerAssignmentView(building, holding);
     prepareProductionEconomics(this, building);
     building.workerProfileEditor = workerProfileEditorContext(building);
     this._workerProfileSignature = JSON.stringify(editableWorkerProfile(building));
@@ -558,38 +576,251 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(PendingFieldSavesMix
     return "";
   }
 
+  _prepareBuildingWorkerAssignmentView(building, holding) {
+    const capacityQd = buildingLaborCapacityQd(building);
+    if (!holding || this.templateId || !buildingAcceptsWorkers(building)) {
+      building.buildingWorkerAssignments = [];
+      building.buildingAssignTargets = [];
+      building.hasMultipleAssignTargets = false;
+      building.defaultAssignTarget = null;
+      building.buildingAssignCandidates = [];
+      building.laborPlannedQd = 0;
+      building.defaultAssignQd = 0;
+      return;
+    }
+    const buildingId = String(building?.id ?? "");
+    const allTargets = buildWorkAllocationTargets(holding).filter((target) => target.sourceId === buildingId);
+    const targetsByKey = new Map(allTargets.map((target) => [workAllocationTargetKey(target.sourceId, target.functionId), target]));
+    building.buildingAssignTargets = allTargets
+      .filter((target) => target.available !== false)
+      .map((target) => ({
+        key: target.key,
+        functionId: target.functionId,
+        label: target.functionLabel || target.label,
+        overtimeAllowed: target.overtimeAllowed
+      }));
+    building.hasMultipleAssignTargets = building.buildingAssignTargets.length > 1;
+    building.defaultAssignTarget = building.buildingAssignTargets[0] ?? null;
+
+    const manager = getActiveSkyholdManager();
+    const assignments = [];
+    let laborPlannedQd = 0;
+    for (const person of holding?.people?.list ?? []) {
+      const personId = String(person?.id ?? "");
+      if (!personId || person?.dead) continue;
+      for (const allocation of buildingWorkAllocationsForBuilding(person, buildingId)) {
+        const normalQd = Math.max(0, Math.floor(Number(allocation?.normalQd ?? 0) || 0));
+        const overtimeQd = Math.max(0, Math.floor(Number(allocation?.overtimeQd ?? 0) || 0));
+        laborPlannedQd += normalQd + overtimeQd;
+        const fnId = String(allocation?.functionId ?? "");
+        const target = targetsByKey.get(workAllocationTargetKey(buildingId, fnId));
+        assignments.push({
+          personId,
+          personName: String(person?.name || "Житель"),
+          allocationId: String(allocation?.id ?? ""),
+          functionId: fnId,
+          functionLabel: String(target?.functionLabel || target?.label || fnId || "Работа"),
+          normalQd,
+          overtimeQd,
+          qdLine: `${normalQd} QD${overtimeQd ? ` + ${overtimeQd} OT` : ""}`
+        });
+      }
+    }
+    building.buildingWorkerAssignments = assignments;
+    building.laborPlannedQd = laborPlannedQd;
+
+    const candidates = [];
+    for (const person of holding?.people?.list ?? []) {
+      const personId = String(person?.id ?? "");
+      if (!personId || person?.dead || !isResidentInPopulation(person, holding)) continue;
+      if ((Number(person?.injuredDays ?? 0) || 0) > 0) continue;
+      if (manager?._canResidentWork && !manager._canResidentWork(person, holding)) continue;
+      if (reservedOccupation(holding, person)) continue;
+      const cap = residentLaborCapacity(person, holding);
+      let usedNormal = 0;
+      let usedOvertime = 0;
+      for (const allocation of person?.workAllocations ?? []) {
+        usedNormal += Math.max(0, Math.floor(Number(allocation?.normalQd ?? allocation?.qd ?? 0) || 0));
+        usedOvertime += Math.max(0, Math.floor(Number(allocation?.overtimeQd ?? 0) || 0));
+      }
+      const freeNormalQd = Math.max(0, cap.normalQd - usedNormal);
+      const freeOvertimeQd = Math.max(0, cap.overtimeQd - usedOvertime);
+      if (freeNormalQd <= 0 && freeOvertimeQd <= 0) continue;
+      const admission = manager?._buildingWorkerAdmission?.(building, person) ?? { eligible: true, hard: false, overridden: false, text: "—" };
+      const eff = manager?._workerEfficiencyForPerson?.(holding, building, person);
+      const effText = eff?.details?.length ? eff.details.join(", ") : "база 100%";
+      const admissionHint = admission.eligible
+        ? "допуск"
+        : (admission.overridden ? "GM-допуск" : (admission.hard ? `нет допуска: ${admission.text}` : `рек.: ${admission.text}`));
+      candidates.push({
+        id: personId,
+        name: String(person?.name || "Без имени"),
+        freeNormalQd,
+        freeOvertimeQd,
+        disabled: Boolean(admission.hard && !admission.eligible && !admission.overridden && !game.user?.isGM),
+        hint: `${workerTypeFromAttributes(person?.attributes ?? {})} · ${freeNormalQd} QD · ${admissionHint} · ${effText}`
+      });
+    }
+    building.buildingAssignCandidates = candidates;
+    const firstAvailable = candidates.find((c) => !c.disabled)?.freeNormalQd ?? 20;
+    const remainingCap = capacityQd === null ? firstAvailable : Math.max(1, capacityQd - laborPlannedQd);
+    building.defaultAssignQd = Math.max(1, Math.min(firstAvailable || 20, remainingCap));
+  }
+
   async _onLaborFieldChange(event) {
     event.preventDefault();
     if (!game.user?.isGM) return;
     const field = event.currentTarget, key = field.dataset.buildingLaborField;
     try {
-      await this._updateMutableBuilding(({ holding, building }) => {
-        if (key === "mode") {
-          if (!["staff", "qd", "passive"].includes(field.value)) return SkyholdData.skipTransaction(false);
-          const staff = (holding?.people?.list ?? []).filter((person) => person.staffAppointment?.buildingId === building.id);
-          if (field.value !== "staff" && staff.length) {
-            throw new Error(`Смена режима затрагивает штат: ${staff.map((person) => person.name || person.id).join(", ")}. Сначала снимите этих сотрудников из штата в плане работ, затем смените режим.`);
+      await this._updateMutableBuilding(({ building }) => {
+        if (key === "capacityQd") {
+          const raw = field.value.trim();
+          const value = raw === "" ? null : Number(raw);
+          if (value !== null && (!Number.isSafeInteger(value) || value < 0)) {
+            throw new Error("Предел QD должен быть целым неотрицательным числом; пустое поле означает отсутствие предела.");
           }
-          building.labor = { version: 1, mode: field.value, capacityQd: building.labor?.capacityQd ?? null };
+          building.labor = { version: 2, capacityQd: value };
           building.workersMin = 0;
           if (building.workerProfile) building.workerProfile.workersMin = 0;
           if (building.activation) building.activation.minWorkers = 0;
-          if (field.value === "passive") {
+          if (value === 0) {
             building.activation = { ...building.activation, minOperationalQd: 0, requiresMeaningfulResult: false };
             building.minOperationalQd = 0;
           }
-        } else if (key === "capacityQd" && buildingLaborMode(building) === "qd") {
-          const value = field.value.trim() === "" ? null : Number(field.value);
-          if (value !== null && (!Number.isSafeInteger(value) || value < 0)) throw new Error("Предел QD должен быть целым неотрицательным числом; пустое поле означает отсутствие предела.");
-          building.labor.capacityQd = value;
+        } else if (key === "minOperationalQd") {
+          const raw = field.value.trim();
+          const value = raw === "" ? 0 : Number(raw);
+          if (!Number.isSafeInteger(value) || value < 0) {
+            throw new Error("Минимум QD для работы должен быть целым неотрицательным числом.");
+          }
+          building.activation = { ...building.activation, minOperationalQd: value };
+          building.minOperationalQd = value;
         } else return SkyholdData.skipTransaction(false);
         return true;
       }, { reason: "building-editor:labor" });
       this.requestRender(); requestSkyholdAppRender();
     } catch (error) {
-      ui.notifications.warn(error.message || "Не удалось изменить способ работы.");
+      ui.notifications.warn(error.message || "Не удалось изменить параметры труда здания.");
       this.requestRender();
     }
+  }
+
+  async _onAssignBuildingWorker(event) {
+    event.preventDefault();
+    if (!this._canEditBuilding() || this.templateId) return;
+    const bar = event.currentTarget?.closest?.(".fbls-building-assign-bar");
+    if (!bar) return;
+    const personId = String(bar.querySelector("[data-building-assign-person]")?.value ?? "").trim();
+    const functionId = String(bar.querySelector("[data-building-assign-function]")?.value ?? "").trim();
+    const normalQd = Math.max(0, Math.floor(Number(bar.querySelector("[data-building-assign-qd]")?.value ?? 0) || 0));
+    const overtimeQd = Math.max(0, Math.floor(Number(bar.querySelector("[data-building-assign-ot]")?.value ?? 0) || 0));
+    if (!personId || !functionId) {
+      ui.notifications?.warn?.("Выберите жителя и функцию здания.");
+      return;
+    }
+    if (normalQd + overtimeQd <= 0) {
+      ui.notifications?.warn?.("Укажите положительное число QD для назначения.");
+      return;
+    }
+    const manager = getActiveSkyholdManager({ warn: true });
+    const current = this._getMutableBuilding();
+    const person = (current.holding?.people?.list ?? []).find((row) => String(row?.id ?? "") === personId);
+    if (!current.holding || !current.building || !person) return;
+    const decision = await confirmBuildingWorkerAdmission({ manager, building: current.building, person });
+    if (!decision.allowed) {
+      this.requestRender();
+      return;
+    }
+    let rejectionMessage = "";
+    const updated = await this._updateMutableBuilding(({ holding, building }) => {
+      const previewHolding = structuredClone(holding);
+      const targetBuilding = previewHolding.buildings?.list?.find((item) => String(item?.id ?? "") === String(building.id));
+      const targetPerson = previewHolding.people?.list?.find((row) => String(row?.id ?? "") === personId);
+      if (!targetBuilding || !targetPerson) return SkyholdData.skipTransaction(false);
+      if (!Array.isArray(targetPerson.workAllocations)) targetPerson.workAllocations = [];
+      const existing = targetPerson.workAllocations.find((row) => (
+        String(row?.sourceId ?? "") === String(targetBuilding.id)
+        && String(row?.functionId ?? "") === functionId
+      ));
+      if (existing) {
+        existing.normalQd = Math.max(0, Math.floor(Number(existing.normalQd ?? 0) || 0)) + normalQd;
+        existing.overtimeQd = Math.max(0, Math.floor(Number(existing.overtimeQd ?? 0) || 0)) + overtimeQd;
+      } else {
+        targetPerson.workAllocations.push({
+          schemaVersion: 1,
+          id: makeId("work"),
+          sourceId: String(targetBuilding.id),
+          functionId,
+          normalQd,
+          overtimeQd
+        });
+      }
+      targetPerson.workAssignment = "";
+      if (decision.allowAdmissionOverride) {
+        if (!Array.isArray(targetBuilding.workerAdmissionOverrideIds)) targetBuilding.workerAdmissionOverrideIds = [];
+        if (!targetBuilding.workerAdmissionOverrideIds.some((id) => String(id) === personId)) {
+          targetBuilding.workerAdmissionOverrideIds.push(personId);
+        }
+      }
+      const check = validateHoldingWorkAllocations(previewHolding, { previousHolding: holding });
+      if (!check.ok) {
+        rejectionMessage = check.issues[0]?.message || "Назначение не прошло проверку плана труда.";
+        return SkyholdData.skipTransaction(false);
+      }
+      const realPerson = holding.people?.list?.find((row) => String(row?.id ?? "") === personId);
+      if (!realPerson) return SkyholdData.skipTransaction(false);
+      realPerson.workAllocations = targetPerson.workAllocations;
+      realPerson.workAssignment = "";
+      if (!String(realPerson.role ?? "").trim() || ["Свободен", "Без работы"].includes(String(realPerson.role))) {
+        realPerson.role = "План QD";
+      }
+      if (decision.allowAdmissionOverride) {
+        building.workerAdmissionOverrideIds = targetBuilding.workerAdmissionOverrideIds;
+      }
+      return true;
+    }, { reason: "building-editor:assign-worker", requireHolding: true });
+    if (!updated) {
+      if (rejectionMessage) ui.notifications?.warn?.(rejectionMessage);
+      return;
+    }
+    this.requestRender();
+    requestSkyholdAppRender();
+  }
+
+  async _onRemoveBuildingWorker(event) {
+    event.preventDefault();
+    if (!this._canEditBuilding() || this.templateId) return;
+    const personId = String(event.currentTarget?.dataset?.personId ?? "").trim();
+    const allocationId = String(event.currentTarget?.dataset?.allocationId ?? "").trim();
+    if (!personId) return;
+    const updated = await this._updateMutableBuilding(({ holding, building }) => {
+      const person = (holding?.people?.list ?? []).find((row) => String(row?.id ?? "") === personId);
+      if (!person || !Array.isArray(person.workAllocations)) return SkyholdData.skipTransaction(false);
+      const buildingId = String(building.id ?? "");
+      const before = person.workAllocations.length;
+      person.workAllocations = person.workAllocations.filter((row) => (
+        allocationId ? String(row?.id ?? "") !== allocationId : String(row?.sourceId ?? "") !== buildingId
+      ));
+      if (person.workAllocations.length === before) return SkyholdData.skipTransaction(false);
+      if (!person.workAllocations.length && !String(person.workAssignment ?? "").trim() && String(person.role ?? "") === "План QD") {
+        person.role = "Свободен";
+      }
+      return true;
+    }, { reason: "building-editor:remove-worker", requireHolding: true });
+    if (!updated) return;
+    this.requestRender();
+    requestSkyholdAppRender();
+  }
+
+  async _onOpenBuildingWorkforcePlanner(event) {
+    event.preventDefault();
+    if (this.templateId) return;
+    const { openWorkforcePlanner } = await import("../lazy-apps.js");
+    const { holding, building } = this._getMutableBuilding();
+    const targetKey = holding && building
+      ? buildWorkAllocationTargets(holding).find((row) => String(row.sourceId) === String(building.id))?.key
+      : "";
+    return openWorkforcePlanner({ holdingId: this.holdingId, targetKey });
   }
 
   async _onFieldChange(event) {
@@ -699,30 +930,14 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(PendingFieldSavesMix
     const field = event.currentTarget;
     const path = field.dataset.buildingWorkerField;
     if (!path) return;
-    const parts = path.match(/\.assignedWorkerIds\.(\d+)$/);
     try {
-      if (parts) {
-        const manager = getActiveSkyholdManager({ warn: true });
-        if (!manager) return;
-        const current = this._getMutableBuilding();
-        const person = (current.holding?.people?.list ?? []).find((row) => String(row?.id ?? "") === String(field.value ?? ""));
-        const decision = await confirmBuildingWorkerAdmission({ manager, building: current.building, person });
-        if (!decision.allowed) { this.requestRender(); return; }
-        const updated = await this._updateMutableBuilding(({ holding, building }) => {
-          if (!holding || !building) return SkyholdData.skipTransaction(false);
-          return manager._setBuildingSlot(holding, building.id, Number(parts[1]), field.value || "", decision)
-            || SkyholdData.skipTransaction(false);
-        }, { reason: "building-editor:worker-change", requireHolding: true });
-        if (!updated) return;
-      } else {
-        const updated = await this._saveTransaction((data) => {
-          const scopedPath = this._resolveBuildingScopedPath(data, path);
-          if (!scopedPath) return SkyholdData.skipTransaction(false);
-          foundry.utils.setProperty(data, scopedPath, field.value || "");
-          return true;
-        }, { reason: "building-editor:worker-change", scope: this.templateId ? "catalog" : "holdings" });
-        if (!updated) return;
-      }
+      const updated = await this._saveTransaction((data) => {
+        const scopedPath = this._resolveBuildingScopedPath(data, path);
+        if (!scopedPath) return SkyholdData.skipTransaction(false);
+        foundry.utils.setProperty(data, scopedPath, field.value || "");
+        return true;
+      }, { reason: "building-editor:worker-change", scope: this.templateId ? "catalog" : "holdings" });
+      if (!updated) return;
       this.requestRender();
     } catch (error) {
       console.error("FBL Skyhold | Failed to assign building worker", error);
@@ -1300,14 +1515,14 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(PendingFieldSavesMix
       const priorContext = this._getMutableBuilding(data);
       const before = (priorContext?.building?.productionLines ?? []).map((line) => ({ ...line }));
       const priorHolding = priorContext.holding ?? { buildings: { list: priorContext.building ? [priorContext.building] : [] }, people: { list: [] } };
-      const priorIssues = validateHybridLaborHolding(priorHolding, { targets: buildWorkAllocationTargets(priorHolding) }).issues;
+      const priorIssues = validateBuildingLaborAndGoals(priorHolding, { targets: buildWorkAllocationTargets(priorHolding) }).issues;
       const result = await updater(data);
       assertProductionIdentityUnchanged(before, this._getMutableBuilding(data)?.building?.productionLines ?? []);
       const context = this._getMutableBuilding(data);
       if (context.building) {
         const holding = context.holding ?? { buildings: { list: [context.building] }, people: { list: [] } };
-        const validation = validateHybridLaborHolding(holding, { targets: buildWorkAllocationTargets(holding) });
-        const added = newHybridLaborIssues(priorIssues, validation.issues);
+        const validation = validateBuildingLaborAndGoals(holding, { targets: buildWorkAllocationTargets(holding) });
+        const added = newLaborIssues(priorIssues, validation.issues);
         if (added.length) throw new Error(added[0].message);
       }
       return result;

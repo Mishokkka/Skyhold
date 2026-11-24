@@ -89,10 +89,13 @@ const GROUPS = [
 
 const profiles = {};
 const notes = {};
+const staffProfileIds = new Set();
 for (const group of GROUPS) {
   for (const id of group.ids) {
     if (Object.hasOwn(profiles, id)) throw new Error(`Duplicate building labor profile: ${id}`);
-    profiles[id] = Object.freeze({ version: 1, mode: group.mode, capacityQd: group.capacityQd });
+    if (group.mode === "staff") staffProfileIds.add(id);
+    const capacityQd = group.mode === "passive" ? 0 : (group.capacityQd ?? null);
+    profiles[id] = Object.freeze({ version: 2, capacityQd });
     notes[id] = Object.freeze({ limitKind: group.limitKind, reason: group.reason });
   }
 }
@@ -111,23 +114,27 @@ export function proposedBuildingLaborProfile(templateId) {
  * preparing a migration target. Not a normalizer for saved/customized buildings.
  */
 export function applyApprovedBuildingLaborProfile(template) {
-  const labor = proposedBuildingLaborProfile(template?.templateId || template?.id);
-  if (!labor) return { ...template };
-  const passive = labor.mode === "passive";
+  const id = String(template?.templateId || template?.id || "");
+  const baseLabor = proposedBuildingLaborProfile(id);
+  if (!baseLabor) return { ...template };
+  const staff = staffProfileIds.has(id);
+  const capacityQd = staff
+    ? Math.max(0, Math.floor(Number(template?.workersMax ?? 0))) * 20
+    : baseLabor.capacityQd;
+  const labor = { version: 2, capacityQd };
+  const passive = capacityQd === 0;
   const workersMax = passive ? 0 : template.workersMax;
   const activation = {
     ...template.activation,
     minWorkers: 0,
-    ...(["inn", "tavern"].includes(template?.templateId || template?.id) && template.functions?.culture === true
+    ...(["inn", "tavern"].includes(id) && template.functions?.culture === true
       ? { anyWorkingFunction: false } : {}),
     ...(passive ? { minOperationalQd: 0, requiresMeaningfulResult: false } : {})
   };
   const activationConditionText = passive
-    ? "Пассивный объект: постоянные работники и регулярные QD не требуются. Состояние сооружения и специальные условия сохраняются."
-    : labor.mode === "staff"
-      ? "Работы выполняет постоянный штат. Общего минимума людей нет; допуски, требуемая работа и условия каждой услуги сохраняются."
-      : "Работы выполняются по выделенным QD. Число разных исполнителей не ограничено прежними штатными местами; учитываются труд задачи, квалификация и вместимость оборудования.";
-  return {
+    ? "Пассивный объект: работники и регулярные QD не требуются. Состояние сооружения и специальные условия сохраняются."
+    : "Работы выполняются по выделенным QD. Учитываются порог запуска, допуски, обязательный состав и вместимость.";
+  const next = {
     ...template,
     labor,
     workersMin: 0,
@@ -139,4 +146,6 @@ export function applyApprovedBuildingLaborProfile(template) {
     activation,
     activationConditionText
   };
+  delete next.maintenance;
+  return next;
 }

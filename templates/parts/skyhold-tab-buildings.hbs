@@ -74,9 +74,8 @@
                 </div>
 
                 <div class="fbls-building-head-meta">
-                  {{#if laborLegacy}}<span class="fbls-chip is-compact" title="Здание сохраняет прежние правила труда до явного перехода ГМа">Старые правила</span>{{/if}}
                   {{#if hasUpkeep}}<span class="fbls-head-chip fbls-chip upkeep" data-fbls-tooltip="Содержание, ММ"><i class="fa-solid fa-coins"></i><b>{{upkeepLine}}</b></span>{{/if}}
-                  {{#if hasWorkerCapacity}}<span class="fbls-head-chip fbls-chip workers" data-fbls-tooltip="Работники, занято/максимум"><i class="fa-solid fa-users"></i><b>{{workerCountLine}}</b></span>{{/if}}
+                  {{#if hasWorkerCapacity}}<span class="fbls-head-chip fbls-chip workers" data-fbls-tooltip="Труд здания за десятник, QD"><i class="fa-solid fa-users"></i><b>{{workerCountLine}}</b></span>{{/if}}
                   {{#if isMedicalBuilding}}<span class="fbls-head-chip fbls-chip medical" data-fbls-tooltip="Койкоместа, занято/всего"><i class="fa-solid fa-bed-pulse"></i><b>{{medicalSummary.used}}/{{medicalSummary.capacity}}</b></span>{{/if}}
                 </div>
               </header>

@@ -2,6 +2,7 @@
 import { workerTypeStyleFromAttributes } from "../../../generators/resident-rules.js";
 import { splitList, WORKER_TYPE_OPTIONS } from "../../../core/helpers.js";
 import { isResidentInPopulation } from "../../../data/resident-presence.js";
+import { buildingWorkerIds } from "../../../data/work-allocations.js";
 import {
   buildingCompositionStatus,
   workerAdmission,
@@ -70,7 +71,7 @@ _buildingWorkerProfileSummary(building = {}) {
 },
 
 _buildingCompositionStatus(holding = {}, building = {}, assignedPeople = null, options = {}) {
-  const people = assignedPeople ?? (building?.assignedWorkerIds ?? [])
+  const people = assignedPeople ?? buildingWorkerIds(holding, building)
     .map((id) => (holding?.people?.list ?? []).find((person) => String(person?.id ?? "") === String(id ?? "")))
     .filter(Boolean);
   return buildingCompositionStatus(building, people, options);
@@ -105,7 +106,7 @@ _workerEfficiencyForPerson(_holding, building, person) {
 _buildingEffectiveWorkers(holding, building, workerContext = null) {
   if (workerContext?.effectiveWorkers?.has(building)) return workerContext.effectiveWorkers.get(building);
   const cachedWorkers = workerContext?.buildingWorkers?.get(building);
-  const assignedIds = cachedWorkers?.assignedIds ?? (building?.assignedWorkerIds ?? []).filter(Boolean).map(String);
+  const assignedIds = cachedWorkers?.assignedIds ?? buildingWorkerIds(holding, building);
   const activeAssignedPeople = (workerContext?.financeContext ? cachedWorkers?.economyAssignedPeople : cachedWorkers?.activeAssignedPeople) ?? null;
   const allPeople = holding?.people?.list ?? [];
   const assignedPeople = activeAssignedPeople ?? assignedIds
@@ -122,8 +123,6 @@ _buildingEffectiveWorkers(holding, building, workerContext = null) {
   }
   const composition = buildingCompositionStatus(building, assignedPeople, { excludeGroups: ["ЧУДОТВОРЕЦ"] });
   if (!composition.met) details.push(`не выполнен состав: ${composition.text}`);
-  const maintenanceFactor = Math.max(0, Math.min(1, this._maintenanceEfficiencyFactor?.(building)
-    ?? (this._safeNumber(building?.maintenance?.backlogTendays, 0) >= 2 ? 0.5 : 1)));
   const result = {
     assigned: assignedIds.length,
     total: assignedPeople.length,
@@ -131,7 +130,7 @@ _buildingEffectiveWorkers(holding, building, workerContext = null) {
     productionWorkUnitsPerQd,
     suitableCount,
     leaderBonus: 0,
-    maintenanceFactor,
+    maintenanceFactor: 1,
     composition,
     detail: [`${assignedPeople.length} раб.`, ...details].join(" · ")
   };

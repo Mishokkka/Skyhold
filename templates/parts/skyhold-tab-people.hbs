@@ -72,11 +72,11 @@
                       {{workLabel}}
                     {{else}}
                     {{#if ../canEditBuildings}}
-                      <select class="fbls-resident-work-select" data-resident-work-select-lazy data-resident-can-work="{{workCanAssign}}" data-resident-free-label="{{workFreeLabel}}" data-work-assignment-field="holdings.{{../holdingIndex}}.people.list.{{_index}}.workAssignment" title="{{workLabel}}" aria-label="Работа: {{name}}">
+                      <select class="fbls-resident-work-select" data-resident-work-select-lazy data-resident-can-work="{{workCanAssign}}" data-resident-free-label="{{workFreeLabel}}" data-work-assignment-field="holdings.{{../holdingIndex}}.people.list.{{_index}}.workAssignment" title="{{workTooltip}}" aria-label="Работа: {{name}}">
                         <option value="{{workInlineValue}}" selected>{{workInlineLabel}}</option>
                       </select>
                     {{else}}
-                      {{workLabel}}
+                      <span {{#if mixedWork}}class="fbls-note-tip" data-fbls-tooltip="{{workTooltip}}"{{/if}}>{{workLabel}}</span>
                     {{/if}}
                     {{/if}}
                     {{/if}}

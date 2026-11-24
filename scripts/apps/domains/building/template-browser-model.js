@@ -3,6 +3,7 @@ import { buildingOperationalState } from "../../../core/building-state.js";
 import { parseResourceCosts, resourceLabel } from "../../../core/resources.js";
 import { formatCopperCurrency } from "../../../core/currency.js";
 import { buildingNominalMorale } from "../../../engines/economy/building-service.js";
+import { buildingLaborCapacityQd, buildingMinOperationalQd } from "../../../data/labor-model.js";
 
 export function normalizeTemplateSearch(value = "") {
   const text = String(value ?? "")
@@ -119,11 +120,16 @@ export function templatePassport(row, rows, productionLines = []) {
     hasDependencies: all.length > 0 || Boolean(row.requiredAnyBuildingIds?.length),
     dependenciesText: [all.length ? `Все: ${all.map(label).join(", ")}` : "",
       row.requiredAnyBuildingIds?.length ? `Одно из: ${row.requiredAnyBuildingIds.map(label).join(" или ")}` : ""].filter(Boolean).join(". ") || "Нет",
-    staffingText: `${row.workersMin ?? 0}–${row.workersMax ?? 0}`,
+    staffingText: (() => {
+      const capQd = buildingLaborCapacityQd(row);
+      const minQd = buildingMinOperationalQd(row);
+      if (capQd === 0) return "Без работников";
+      const capText = capQd === null ? "Без предела" : `до ${capQd} QD / десятник`;
+      return minQd > 0 ? `${capText} (мин. ${minQd} QD)` : capText;
+    })(),
     wageText: formatCopperCurrency(row.wageDailyCopper ?? 0),
     baseUpkeepText: formatCopperCurrency(row.baseUpkeepMonthlyCopper ?? 0),
     operatingUpkeepText: formatCopperCurrency(row.operatingUpkeepMonthlyCopper ?? 0),
-    maintenanceText: `${row.maintenance?.requiredPoints ?? 0} QD / десятник`,
     recipes: productionLines.filter((line) => line.active !== false).map((line) => ({
       name: row.productionLines?.find((item) => String(item.id) === line.id)?.name || line.mode || "Производство",
       inputs: line.expenses || "Без материалов",
