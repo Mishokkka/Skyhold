@@ -120,7 +120,7 @@ export function normalizeSkyholdData(stored) {
   // Loading retains saved mechanics. An explicit catalog refresh can replace them.
   normalized.meta.templateCatalogVersion = storedTemplateVersion;
   normalized.meta.revision = Math.max(0, toNumber(normalized.meta.revision, 0));
-  ensureSharedMarketsState(normalized, source.meta?.sharedMarkets);
+  ensureSharedMarketsState(normalized, source.meta?.sharedMarkets ?? null);
   ensureTransportState(normalized);
   return normalized;
 }

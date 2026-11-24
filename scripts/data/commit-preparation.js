@@ -52,6 +52,8 @@ export function prepareSkyholdCommit(data, {
   ));
   next.meta.lastUpdated = now;
   next.meta.revision = Math.max(0, toNumber(baseRevision, 0)) + 1;
-  ensureSharedMarketsState(next, data?.meta?.sharedMarkets);
+  if (requestedScope !== COMMIT_SCOPES.BOTH) {
+    ensureSharedMarketsState(next, data?.meta?.sharedMarkets ?? null);
+  }
   return { data: next, scope: effectiveScope };
 }

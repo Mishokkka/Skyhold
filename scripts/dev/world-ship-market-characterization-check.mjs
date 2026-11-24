@@ -21,7 +21,7 @@ export function worldMarketFixture() {
   ship.hiddenCapacityLoadPoints = 200;
   holding.special.ships.list.push(ship);
   const data = {
-    meta: { ...DEFAULT_SKYHOLD_DATA.meta, revision: 1 }, holdings: [holding],
+    meta: { ...structuredClone(DEFAULT_SKYHOLD_DATA.meta), revision: 1 }, holdings: [holding],
     catalog: {
       resources: [{ id: "test-freight", label: "Ткани", basePriceCopper: 30, loadPoints: 4 }],
       eventRegions: [region("home", [["a", 150]]), region("a", [["b", 300]]), region("b", []), region("secret", [], { countryId: "hidden" }), region("closed", [], { marketEnabled: false })],
@@ -280,6 +280,9 @@ export function checkWorldShipMarketCharacterization() {
   longIds.holding.id = "дом".repeat(30);
   longIds.ship.id = "корабль".repeat(15);
   assert.ok(generateWorldShipOffers(longIds.data, longIds.holding, longIds.ship, { period: 0, random: () => 0.4 }).every((offer) => offer.id.length <= 128), "localized long port/ship IDs must produce sendable operation IDs");
+  const secondFixture = worldMarketFixture();
+  assert.notEqual(secondFixture.data.meta.sharedMarkets, DEFAULT_SKYHOLD_DATA.meta.sharedMarkets, "worldMarketFixture must isolate meta.sharedMarkets from DEFAULT_SKYHOLD_DATA");
+  assert.notEqual(secondFixture.data.meta.sharedMarkets, longIds.data.meta.sharedMarkets, "each worldMarketFixture instance must own an independent meta.sharedMarkets object");
   return { offers: offers.length, fullCycle: true };
 }
 
