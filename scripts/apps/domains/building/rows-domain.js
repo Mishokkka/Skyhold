@@ -7,7 +7,7 @@ import { buildingOperationalState } from "../../../core/building-state.js";
 import { buildingAppearance } from "../../../core/building-appearance.js";
 import { buildingRequiresConstructionCenter } from "../../../data/building-development-tree.js";
 import { buildingWorkerIds, buildingWorkAllocationsForBuilding } from "../../../data/work-allocations.js";
-import { buildingConstructionPrerequisitesMet, buildingHousingComfort, buildingNominalMorale, buildingWonderworkingActive } from "../../../engines/economy/building-service.js";
+import { buildingConstructionPrerequisitesMet, buildingHousingComfort, buildingNominalMorale, buildingServiceBlockReasons, buildingWonderworkingActive } from "../../../engines/economy/building-service.js";
 import { isResidentInPopulation } from "../../../data/resident-presence.js";
 import { buildingAcceptsWorkers, buildingLaborCapacityQd, reservedOccupation } from "../../../data/labor-model.js";
 import { normalLaborQdPerTenday, residentLaborCapacity } from "../../../data/labor-budget.js";
@@ -63,17 +63,18 @@ _medicalBuildingBaseRows(holding) {
   return (holding?.buildings?.list ?? []).filter((building) => this._isMedicalBuildingRecord(building));
 },
 
-_medicalCapacityForBuilding(holding, building, workerContext = null) {
+_medicalCapacityForBuilding(holding, building, _workerContext = null) {
   const def = SPECIAL_BUILDING_KINDS.medical;
   const built = buildingOperationalState(building).operational;
-  const efficiency = this._buildingEffectiveWorkers?.(holding, building, workerContext) ?? { assigned: 0, total: 0 };
-  const assigned = Math.max(0, this._safeNumber(efficiency.assigned, 0));
-  const total = Math.max(0, this._safeNumber(efficiency.total, 0));
+  const status = buildingServiceBlockReasons(holding, building, "medical");
+  const assigned = status.workforce?.count ?? 0;
+  const visibleAssigned = (status.workforce?.workers ?? []).filter((person) => person?.visibility !== "gm").length;
+  const total = status.active ? Math.max(0, this._safeNumber(status.workforce?.equivalentWorkers, 0)) : 0;
   const perEfficiency = Math.max(1, this._safeNumber(building?.medical?.patientsPerEfficiency, def.patientsPerEfficiency) || def.patientsPerEfficiency);
   const maxPatients = Math.max(0, this._safeNumber(building?.medical?.maxPatients ?? building?.medical?.capacity, def.defaultMaxPatients) || def.defaultMaxPatients);
-  const rawCapacity = built && assigned > 0 ? Math.floor(total * perEfficiency) : 0;
+  const rawCapacity = built && status.active && assigned > 0 ? Math.floor(total * perEfficiency) : 0;
   const capacity = Math.min(maxPatients, rawCapacity);
-  return { assigned, efficiency: total, perEfficiency, maxPatients, rawCapacity, capacity, built };
+  return { assigned, visibleAssigned, efficiency: total, perEfficiency, maxPatients, rawCapacity, capacity, built, active: status.active, blockReasons: status.reasons ?? [] };
 },
 
 _medicalAssignments(holding, workerContext = null) {
@@ -96,15 +97,16 @@ _medicalAssignments(holding, workerContext = null) {
   return result;
 },
 
-_medicalBuildingSummary(holding, building, workerEfficiency = null, assignmentsArg = null) {
+_medicalBuildingSummary(holding, building, _workerEfficiency = null, assignmentsArg = null, options = {}) {
+  const isGM = Boolean(options?.isGM ?? (typeof game !== "undefined" ? game?.user?.isGM : false));
   const assignments = assignmentsArg instanceof Map ? assignmentsArg : this._medicalAssignments(holding);
-  const own = assignments.get(String(building?.id ?? "")) ?? { patients: [], overflow: [], totalPatients: 0, capacity: 0, assigned: 0, efficiency: 0, perEfficiency: 5, built: false };
-  const efficiency = workerEfficiency ? Math.max(0, this._safeNumber(workerEfficiency.totalRaw ?? workerEfficiency.total, own.efficiency)) : own.efficiency;
-  const assigned = workerEfficiency ? Math.max(0, this._safeNumber(workerEfficiency.assigned, own.assigned)) : own.assigned;
+  const own = assignments.get(String(building?.id ?? "")) ?? { patients: [], overflow: [], totalPatients: 0, capacity: 0, assigned: 0, visibleAssigned: 0, efficiency: 0, perEfficiency: 5, built: false, blockReasons: [] };
+  const efficiency = Math.max(0, this._safeNumber(own.efficiency, 0));
+  const assigned = Math.max(0, this._safeNumber(isGM ? own.assigned : (own.visibleAssigned ?? own.assigned), 0));
   const capacity = own.capacity;
-  const used = own.patients.length;
-  const free = Math.max(0, capacity - used);
-  const patientRows = own.patients.map((person) => ({
+  const visiblePatients = (own.patients ?? []).filter((person) => isGM || person?.visibility !== "gm");
+  const visibleOverflow = (own.overflow ?? []).filter((person) => isGM || person?.visibility !== "gm");
+  const patientRows = visiblePatients.map((person) => ({
     id: person.id,
     name: person.name || "Без имени",
     label: this._medicalPatientLabel(person),
@@ -112,10 +114,13 @@ _medicalBuildingSummary(holding, building, workerEfficiency = null, assignmentsA
     status: String(person?.status ?? ""),
     notes: String(person?.notes ?? "")
   }));
-  const overflowRows = own.overflow.map((person) => ({ id: person.id, name: person.name || "Без имени", label: this._medicalPatientLabel(person) }));
+  const overflowRows = visibleOverflow.map((person) => ({ id: person.id, name: person.name || "Без имени", label: this._medicalPatientLabel(person) }));
+  const used = isGM ? (own.patients?.length ?? 0) : patientRows.length;
+  const free = Math.max(0, capacity - used);
+  const blockText = (own.blockReasons ?? []).map((reason) => reason?.text).filter(Boolean).join("; ");
   const tooltip = patientRows.length
     ? patientRows.map((person) => `${person.name}: ${person.label}`).join("; ")
-    : (capacity ? "Свободные койки есть, пациентов нет." : (assigned ? "Эффективности врачей не хватает для палат." : "Без врачей лазарет не работает."));
+    : (capacity ? "Свободные койки есть, пациентов нет." : (blockText || (assigned ? "Эффективности врачей не хватает для палат." : "Без врачей лазарет не работает.")));
   return {
     enabled: true,
     doctors: assigned,
@@ -128,7 +133,7 @@ _medicalBuildingSummary(holding, building, workerEfficiency = null, assignmentsA
     capacity,
     used,
     free,
-    totalPatients: own.totalPatients ?? 0,
+    totalPatients: isGM ? (own.totalPatients ?? 0) : (patientRows.length + overflowRows.length),
     overflow: overflowRows.length,
     patientRows,
     overflowRows,
@@ -164,6 +169,7 @@ _prepareBuildingRows(holding, canEdit, options = {}) {
   }
   const prepareOptions = {
     contextMode: "card",
+    isGM: Boolean(typeof game !== "undefined" ? game?.user?.isGM : false),
     cardSettlementEffects: cardSettlementEffects(this, holding),
     holdingIndex: this._holdingIndex(holding),
     workerContext,
@@ -180,6 +186,7 @@ _prepareBuildingRows(holding, canEdit, options = {}) {
 
 _prepareBuildingRow(holding, row, index, canEdit, storageRoomsArg = null, options = {}) {
   const cardOnly = options?.contextMode === "card";
+  const isGM = Boolean(options?.isGM ?? (typeof game !== "undefined" ? game?.user?.isGM : false));
   const holdingIndex = Number.isInteger(options?.holdingIndex) ? options.holdingIndex : this._holdingIndex(holding);
   const recordPath = options?.basePath || `holdings.${holdingIndex}.buildings.list.${index}`;
   const isTemplate = Boolean(options?.isTemplate);
@@ -212,14 +219,16 @@ _prepareBuildingRow(holding, row, index, canEdit, storageRoomsArg = null, option
     return {
       id: String(person?.id ?? ""),
       name: String(person?.name ?? "Житель"),
+      visible: isGM || person?.visibility !== "gm",
       normalQd,
       overtimeQd,
       qdLine: `${normalQd} QD${overtimeQd ? ` + ${overtimeQd} OT` : ""}`,
       functionCount: allocations.length
     };
   }).filter((worker) => worker.id && (worker.normalQd > 0 || worker.overtimeQd > 0));
-  const plannedQd = allPlannedWorkerRows.reduce((sum, worker) => sum + worker.normalQd + worker.overtimeQd, 0);
-  const plannedWorkerRows = cardOnly ? [] : allPlannedWorkerRows;
+  const visibleWorkerRows = allPlannedWorkerRows.filter((worker) => worker.visible);
+  const plannedQd = (isGM ? allPlannedWorkerRows : visibleWorkerRows).reduce((sum, worker) => sum + worker.normalQd + worker.overtimeQd, 0);
+  const plannedWorkerRows = cardOnly ? [] : visibleWorkerRows;
   const productionLines = this._prepareProductionLines(row, index, holding, storageRooms, holdingIndex, recordPath, { includeEditorOptions: !cardOnly });
   const agricultureView = cardOnly ? null : (this._prepareAgricultureBuildingView?.(holding, row, recordPath, storageRooms) ?? null);
   const livestockView = cardOnly ? null : (this._prepareLivestockBuildingView?.(holding, row, recordPath, storageRooms) ?? null);
@@ -310,7 +319,8 @@ _prepareBuildingRow(holding, row, index, canEdit, storageRoomsArg = null, option
   const housingFree = housingCapacity > 0 ? Math.max(0, housingCapacity - housingUsed) : Infinity;
   const housingFillClass = housingCapacity <= 0 ? "unlimited-capacity" : (housingUsed >= housingCapacity ? "full-capacity" : (housingUsed / Math.max(1, housingCapacity) >= 0.75 ? "near-capacity" : "ok-capacity"));
   const housingFillPercent = housingCapacity <= 0 ? 0 : Math.max(0, Math.min(100, Math.round((housingUsed / Math.max(1, housingCapacity)) * 100)));
-  const medicalSummary = isMedicalBuilding ? this._medicalBuildingSummary(holding, row, workerEfficiency, options?.medicalAssignments) : null;
+  const medicalSummary = isMedicalBuilding ? this._medicalBuildingSummary(holding, row, workerEfficiency, options?.medicalAssignments, { isGM }) : null;
+  if (medicalSummary && !isGM) medicalSummary.doctors = visibleWorkerRows.length;
   if (medicalSummary) medicalSummary.maxPatientsPath = `${recordPath}.medical.maxPatients`;
   const buildingFlavorClass = isMedicalBuilding ? (specialDefinition?.cssClass || "medical-building") : "";
   const categoryOptions = cardOnly ? null : categoryOptionsAll.filter((item) => item.id !== "all").map((item) => ({
@@ -684,7 +694,7 @@ _prepareBuildingRow(holding, row, index, canEdit, storageRoomsArg = null, option
     laborCapacityValue: workerCapacityQd ?? "",
     laborCapacityLabel: workerCapacityQd === 0 ? "Без работников" : (workerCapacityQd === null ? "Без предела" : `${workerCapacityQd} QD`),
     laborPlannedQd: plannedQd,
-    medicalDoctorOptions: isMedicalBuilding && !cardOnly && canEdit ? this._medicalDoctorOptions(holding, row) : [],
+    medicalDoctorOptions: isMedicalBuilding && !cardOnly && canEdit ? this._medicalDoctorOptions(holding, row, { isGM }) : [],
     assignedCount,
     workersLine: plannedQd > 0 || workerCapacityQd !== null
       ? (workerCapacityQd === null ? `${plannedQd} QD` : `${plannedQd}/${workerCapacityQd} QD`)
@@ -855,10 +865,11 @@ _buildingHousingSlots(holding, building, buildingIndex, capacity = null, occupan
   return slots;
 },
 
-_medicalDoctorOptions(holding, building) {
-  const options = [{ id: "", name: "— Назначить врача —", disabled: false, hint: "" }];
+_medicalDoctorOptions(holding, building, options = {}) {
+  const isGM = Boolean(options?.isGM ?? (typeof game !== "undefined" ? game?.user?.isGM : false));
+  const optionsList = [{ id: "", name: "— Назначить врача —", disabled: false, hint: "" }];
   const people = (holding?.people?.list ?? [])
-    .filter((person) => person && !person.dead && isResidentInPopulation(person, holding) && this._safeNumber(person?.injuredDays, 0) <= 0);
+    .filter((person) => person && !person.dead && (isGM || person.visibility !== "gm") && isResidentInPopulation(person, holding) && this._safeNumber(person?.injuredDays, 0) <= 0);
   for (const person of people) {
     const id = String(person.id ?? "");
     if (!id) continue;
@@ -874,14 +885,14 @@ _medicalDoctorOptions(holding, building) {
     const admissionHint = admission.eligible
       ? "допуск"
       : (admission.overridden ? "GM-допуск" : (admission.hard ? `нет допуска: ${admission.text}` : `рек.: ${admission.text}`));
-    options.push({
+    optionsList.push({
       id,
       name: person.name || "Без имени",
-      disabled: Boolean(admission.hard && !admission.eligible && !admission.overridden && !game.user?.isGM),
+      disabled: Boolean(admission.hard && !admission.eligible && !admission.overridden && !isGM),
       hint: `${this._workerType(person)} · ${freeNormal} QD · ${admissionHint} · ${qualification}`
     });
   }
-  return options;
+  return optionsList;
 },
 
 _buildingWorkerSlots() {

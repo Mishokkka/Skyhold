@@ -5,7 +5,6 @@ import {
   buildingMinOperationalQd,
   productionPreparationGoal
 } from "../../../data/labor-model.js";
-import { buildingServiceFunctionId } from "../../../engines/economy/building-service.js";
 import { militaryDailyWage } from "../../../engines/economy/military-wages.js";
 import { sellerQualification } from "../../../engines/workers/seller-qualification.js";
 import { rollD6Pool } from "../../../core/helpers.js";
@@ -64,6 +63,7 @@ import { runTrade } from "../../../engines/economy/trade.js";
 import { foundryRollClass } from "../../../integrations/foundry-runtime.js";
 import { runTreasuryCosts } from "../../../engines/economy/treasury-costs.js";
 import {
+  calculatePlannedWorkerWage,
   financeObligationBlockers,
   financeObligationOutstandingCopper,
   reconcileFinanceObligationOrphans
@@ -524,11 +524,9 @@ _financePlanInputs(holding, periodQd, identity) {
     });
   }
   const plannedFunctionKeys = new Set(workers.flatMap((worker) => {
-    const validLaborContract = worker.volunteer
-      ? true
-      : (worker.assignments ?? []).some((assignment) => this._safeNumber(assignment?.dailyRateCopper, 0) > 0 || this._safeNumber(worker?.wageOverrideCopper, 0) > 0);
-    if (!validLaborContract) return [];
-    return (worker.assignments ?? []).map((assignment) => this._financeFunctionKey(assignment.sourceId, assignment.functionId));
+    const priced = calculatePlannedWorkerWage(worker);
+    if (!priced.ok) return [];
+    return (priced.assignments ?? []).map((assignment) => this._financeFunctionKey(assignment.sourceId, assignment.functionId));
   }));
   for (const building of buildingPlans) {
     for (const fn of building.functions) {
@@ -1194,24 +1192,36 @@ async _tryCollectResourceForConsumer(holding, consumerBuilding, resource, budget
   let collected = 0;
   for (const sourceBuilding of holding?.buildings?.list ?? []) {
     if (this._buildingStatus(sourceBuilding).value !== "built") continue;
-    for (const line of sourceBuilding?.productionLines ?? []) {
+    const lines = Array.isArray(sourceBuilding?.productionLines) ? sourceBuilding.productionLines : [];
+    for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+      const line = lines[lineIndex];
       if (!line?.requiresCollection || String(line.autoCollect ?? "none") !== "worker") continue;
-      if (!this._financeFunctionAllowed(financeContext, sourceBuilding, this._financeLineFunctionId(line))) continue;
+      if (!this._financeFunctionAllowed(financeContext, sourceBuilding, this._financeLineFunctionId(line, lineIndex))) continue;
       const output = this._productionCollectionResource(line);
       if (!this._productionInputMatches(output, cost)) continue;
       // В этом режиме рабочий здания-потребителя тратит время, чтобы забрать готовый ресурс из другого здания.
       const pending = Math.max(0, Math.floor(this._safeNumber(line.pendingQty, 0)));
       if (!pending) continue;
       const collectQd = Math.max(0, Math.ceil(this._safeNumber(line.collectQd, 0)));
-      const priorProgress = Math.max(0, Math.floor(this._safeNumber(line.collectProgressQd, 0)));
-      const remainingCollectQd = Math.max(0, collectQd - priorProgress);
-      if (remainingCollectQd > 0) {
-        const spent = this._spendBuildingWorkerQd(holding, consumerBuilding, budgets, remainingCollectQd, workerContext, consumerFunctionId);
-        if (!spent.ok) continue;
+      if (collectQd > 0) {
+        let progress = Math.max(0, Math.floor(this._safeNumber(line.collectProgressQd, 0)));
+        const entries = [...new Set(this._assignedBuildingPeople(holding, consumerBuilding, workerContext, consumerFunctionId)
+          .flatMap((person) => this._workerBudgetEntriesForBuilding(person, budgets, consumerBuilding, workerContext, consumerFunctionId)))];
+        for (const entry of entries) {
+          if (progress >= collectQd) break;
+          const budget = Math.max(0, this._safeNumber(entry.available, 0));
+          if (budget <= 0) continue;
+          const take = Math.min(budget, collectQd - progress);
+          entry.available = budget - take;
+          entry.spent += take;
+          progress += take;
+        }
+        line.collectProgressQd = progress;
+        if (progress + 0.0001 < collectQd) continue;
+        line.collectProgressQd = 0;
       }
       const placements = this._storageAddWithOverflow(holding, output, pending);
       line.pendingQty = 0;
-      line.collectProgressQd = 0;
       collected += pending;
       this._pushProductionPlacement(report, holding, consumerBuilding.name || "Здание", output.name, placements,
         ` собрано у ${sourceBuilding.name || "здания"}`, output.resourceId, { note: "Собрано работником-потребителем" });
@@ -1311,14 +1321,11 @@ _productionCycleDependencies({ holding: sourceHolding = null, lineOutputForCycle
 _buildingMinimumQdStatus(holding, building, workerContext = null, targetFunction = "production", periodMultiplier = 1) {
   const requiredQd = buildingMinOperationalQd(building) * Math.max(1, Math.floor(this._safeNumber(periodMultiplier, 1)));
   if (requiredQd <= 0) return { met: true, requiredQd: 0, actualQd: 0 };
-  const serviceFn = buildingServiceFunctionId(building);
-  const matchesTarget = serviceFn === targetFunction
-    || (serviceFn === "production" && ["agriculture", "livestock"].includes(targetFunction));
-  if (serviceFn !== "" && !matchesTarget) return { met: true, requiredQd: 0, actualQd: 0 };
+  const anyWorking = building?.activation?.anyWorkingFunction === true;
   const buildingId = String(building?.id ?? "");
   const matchesFn = (fnId) => {
     const id = String(fnId ?? "");
-    if (serviceFn === "") return Boolean(id);
+    if (anyWorking) return Boolean(id);
     if (targetFunction === "production") return id.startsWith("production:") || id === "agriculture" || id === "livestock";
     return id === targetFunction;
   };

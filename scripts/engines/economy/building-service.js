@@ -1,10 +1,11 @@
 import { buildingOperationalState } from "../../core/building-state.js";
 import { isMedicalBuilding } from "../../core/building-specials.js";
 import { isResidentPresent } from "../../data/resident-presence.js";
-import { normalLaborQdPerTenday } from "../../data/labor-budget.js";
+import { normalLaborQdPerTenday, residentLaborCapacity } from "../../data/labor-budget.js";
 import { financeBuildingFunctionBlockState, financeWorkerBlockState } from "./finance-obligations.js";
-import { buildingCompositionStatus } from "../workers/building-qualification.js";
-import { buildingAcceptsWorkers, buildingMinOperationalQd } from "../../data/labor-model.js";
+import { laborWageRate } from "./labor-wage-rate.js";
+import { buildingCompositionStatus, workerAdmission } from "../workers/building-qualification.js";
+import { buildingAcceptsWorkers, buildingMinOperationalQd, reservedOccupation } from "../../data/labor-model.js";
 
 function text(value = "") {
   return String(value ?? "").trim();
@@ -120,13 +121,43 @@ function hasActiveServiceContract(building = {}) {
   );
 }
 
+function functionDailyRate(building = {}, functionId = "") {
+  const fn = text(functionId);
+  if (fn.startsWith("production:")) {
+    const lineId = fn.slice("production:".length);
+    const lines = Array.isArray(building?.productionLines) ? building.productionLines : [];
+    const line = lines.find((item, index) => (text(item?.id) || `line-${index + 1}`) === lineId);
+    return whole(line?.wageDailyCopper) || whole(building?.wageDailyCopper);
+  }
+  if (fn === "agriculture") return whole(building?.agriculture?.wageDailyCopper) || whole(building?.wageDailyCopper);
+  if (fn === "livestock") return whole(building?.livestock?.wageDailyCopper) || whole(building?.wageDailyCopper);
+  if (fn === "income") return whole(building?.income?.wageDailyCopper) || whole(building?.wageDailyCopper);
+  return whole(building?.wageDailyCopper);
+}
+
+function targetAllowsOvertime(building = {}, functionId = "") {
+  const fn = text(functionId);
+  if (!fn.startsWith("production:")) return false;
+  const lineId = fn.slice("production:".length);
+  const lines = Array.isArray(building?.productionLines) ? building.productionLines : [];
+  const line = lines.find((item, index) => (text(item?.id) || `line-${index + 1}`) === lineId);
+  return line?.overtime === true;
+}
+
 export function buildingActiveWorkerSummary(holding = {}, building = {}, functionIdArg = "") {
   const functionId = text(functionIdArg);
   const fullWorkerQd = Math.max(1, normalLaborQdPerTenday(holding));
   const workers = [];
+  const rejectedReasons = [];
   let qd = 0;
   let equivalentWorkers = 0;
-  if (!buildingAcceptsWorkers(building)) return { workers, count: 0, qd: 0, equivalentWorkers: 0, fullWorkerQd };
+  if (!buildingAcceptsWorkers(building)) {
+    return { workers, count: 0, qd: 0, equivalentWorkers: 0, fullWorkerQd, rejectedReasons };
+  }
+
+  const targetBuildingId = text(building?.id);
+  const buildingsById = new Map((holding?.buildings?.list ?? []).map((item) => [text(item?.id), item]));
+  if (targetBuildingId) buildingsById.set(targetBuildingId, building);
 
   for (const person of holding?.people?.list ?? []) {
     const id = text(person?.id);
@@ -134,11 +165,55 @@ export function buildingActiveWorkerSummary(holding = {}, building = {}, functio
     if (financeWorkerBlockState({ finance: holding?.finance, workerId: id }).blocked) continue;
     const workerQd = workerAllocatedQd(person, building, functionId);
     if (workerQd <= 0) continue;
+    const reserved = reservedOccupation(holding, person);
+    if (reserved) {
+      rejectedReasons.push(`${text(person?.name) || "Житель"}: ${reserved.label}`);
+      continue;
+    }
+    const admission = workerAdmission(building, person);
+    if (admission?.hard && !admission.eligible && !admission.overridden) {
+      rejectedReasons.push(`${text(person?.name) || "Житель"}: нет допуска`);
+      continue;
+    }
+    const rows = Array.isArray(person?.workAllocations) ? person.workAllocations : [];
+    const cap = residentLaborCapacity(person, holding);
+    let totalNormalQd = 0;
+    let totalOvertimeQd = 0;
+    let contractValid = true;
+    for (const row of rows) {
+      const rowNormalQd = whole(row?.normalQd ?? row?.qd);
+      const rowOvertimeQd = whole(row?.overtimeQd);
+      if (!rowNormalQd && !rowOvertimeQd) continue;
+      totalNormalQd += rowNormalQd;
+      totalOvertimeQd += rowOvertimeQd;
+      const rowBuilding = buildingsById.get(text(row?.sourceId));
+      if (!rowBuilding) continue;
+      if (rowOvertimeQd > 0 && !targetAllowsOvertime(rowBuilding, row?.functionId)) {
+        rejectedReasons.push(`${text(person?.name) || "Житель"}: сверхурочные недоступны`);
+        contractValid = false;
+        break;
+      }
+      const wage = laborWageRate({
+        volunteer: person?.volunteerLabor === true || row?.volunteer === true,
+        wageOverrideCopper: person?.wageDailyOverrideCopper,
+        dailyRateCopper: functionDailyRate(rowBuilding, row?.functionId)
+      });
+      if (!wage.ok) {
+        rejectedReasons.push(`${text(person?.name) || "Житель"}: нужна ставка или договор о бесплатном труде`);
+        contractValid = false;
+        break;
+      }
+    }
+    if (!contractValid) continue;
+    if (totalNormalQd > cap.normalQd || totalOvertimeQd > cap.overtimeQd || totalOvertimeQd > Math.floor(totalNormalQd / 2)) {
+      rejectedReasons.push(`${text(person?.name) || "Житель"}: план (${totalNormalQd}+${totalOvertimeQd} QD) превышает лимит (${cap.normalQd}+${cap.overtimeQd} QD)`);
+      continue;
+    }
     workers.push(person);
     qd += workerQd;
     equivalentWorkers += Math.min(1, workerQd / fullWorkerQd);
   }
-  return { workers, count: workers.length, qd, equivalentWorkers, fullWorkerQd };
+  return { workers, count: workers.length, qd, equivalentWorkers, fullWorkerQd, rejectedReasons: [...new Set(rejectedReasons)] };
 }
 
 /**
@@ -197,12 +272,14 @@ export function buildingServiceBlockReasons(holding = {}, building = {}, functio
     building?.service
     || building?.activation?.requiresMeaningfulResult === true
     || hasStaffedHousingComfort(building)
+    || isMedicalBuilding(building)
   );
   const requiredQd = acceptsWorkers
     ? (configuredMinQd > 0 ? configuredMinQd : (needsStaffedService ? 1 : 0))
     : 0;
   if (requiredQd > 0 && workforce.qd < requiredQd) {
-    reasons.push({ code: "qd-missing", text: `нужно QD: ${requiredQd}, выделено: ${workforce.qd}` });
+    const suffix = workforce.rejectedReasons?.length ? ` (${workforce.rejectedReasons.join("; ")})` : "";
+    reasons.push({ code: "qd-missing", text: `нужно QD: ${requiredQd}, выделено: ${workforce.qd}${suffix}` });
   }
   if (acceptsWorkers && workforce.count > 0 && !buildingCompositionStatus(building, workforce.workers, { excludeGroups: ["ЧУДОТВОРЕЦ"] }).met) {
     reasons.push({ code: "composition-missing", text: "не выполнено обязательное условие состава работников" });

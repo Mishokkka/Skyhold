@@ -226,9 +226,11 @@ export function buildWorkforceModel(holding, draft, service, { isGM = false, pre
     const activation = task.building?.activation;
     if (activation?.minOperationalQd > 0) {
       task.note += ` Порог активации: ${activation.minOperationalQd} QD (включается на 100%).`;
-      if (activation.anyWorkingFunction && task.staff > 0) {
-        const total = tasks.filter((row) => row.buildingId === task.buildingId).reduce((sum, row) => sum + row.normalQd + row.overtimeQd, 0);
-        if (total < activation.minOperationalQd) task.warnings.push(`Для эффекта здания выделено ${total} из ${activation.minOperationalQd} QD`);
+      const relevantTotal = activation.anyWorkingFunction
+        ? (task.staff > 0 ? tasks.filter((row) => row.buildingId === task.buildingId).reduce((sum, row) => sum + row.normalQd + row.overtimeQd, 0) : null)
+        : (task.totalQd > 0 ? workforceOperationalMinimum(task.building, tasks.filter((row) => row.buildingId === task.buildingId), task.functionId)?.qd ?? 0 : null);
+      if (relevantTotal !== null && relevantTotal < activation.minOperationalQd) {
+        task.warnings.push(`Для эффекта здания выделено ${relevantTotal} из ${activation.minOperationalQd} QD`);
       }
     }
     task.attention ||= Boolean(task.warnings.length);
@@ -336,7 +338,7 @@ export function proposeWorkforceAssignments(holding, draft, service, { isGM = fa
   if (!chosen.length) skipped.push("Нет обязательного ухода или задач подготовки. Выберите работу и задайте её объём.");
   for (const initial of chosen) {
     let task = model.taskMap.get(initial.key);
-    const readMinimum = () => workforceOperationalMinimum(task.building, model.tasks.filter((row) => row.buildingId === task.buildingId));
+    const readMinimum = () => workforceOperationalMinimum(task.building, model.tasks.filter((row) => row.buildingId === task.buildingId), task.functionId);
     const minimum = useBuildingMinimum && taskKeys ? readMinimum() : null;
     const effectMinimum = minimum?.minQd > 0 && minimum.relevant.some((row) => row.key === task.key) ? minimum : null;
     const effectGap = () => effectMinimum ? readMinimum().gap : 0;

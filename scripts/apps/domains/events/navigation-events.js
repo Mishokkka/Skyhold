@@ -1,6 +1,7 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import { createHolding } from "../../../data/holding-factory.js";
 import { SkyholdData } from "../../../data/store.js";
+import { daysOffConflictSummary } from "../../../data/labor-budget.js";
 import { isResidentInPopulation } from "../../../data/resident-presence.js";
 import { findReadableHoldingEntry } from "../../../data/access-guard.js";
 import { normalizeBelief } from "../../../generators/resident-rules.js";
@@ -360,6 +361,32 @@ async _onFieldChange(event) {
       }, { reason: `resource-catalog:field:${path}`, scope: "catalog" });
     } else if (defenseField) {
       await this._onDefenseFieldChange(field, value);
+    } else if (path.endsWith(".gm.labor.daysOffPerTenday")) {
+      if (!game.user?.isGM) return;
+      const data = SkyholdData.view();
+      const holdingId = this._activeWritableHoldingId(data);
+      const holding = (data?.holdings ?? []).find((row) => String(row?.id ?? "") === String(holdingId ?? ""));
+      const summary = daysOffConflictSummary(holding, value);
+      value = summary.daysOff;
+      if (summary.hasConflicts) {
+        const preview = summary.conflicts.slice(0, 6)
+          .map((row) => `${escapeHtml(row.name)}: ${row.normalQd}+${row.overtimeQd} QD (лимит ${row.maxNormalQd}+${row.maxOvertimeQd})`)
+          .join("<br>");
+        const extra = summary.conflicts.length > 6 ? `<br>… и ещё ${summary.conflicts.length - 6}` : "";
+        const confirmed = await this._confirmAction(
+          "Выходные за десятник",
+          `При ${value} вых./дес. планы ${summary.conflicts.length} жителей превышают новый бюджет и будут остановлены в расчёте до правки:<br><br>${preview}${extra}<br><br>Планы не удалятся. Сохранить новое число выходных?`
+        );
+        if (!confirmed) {
+          this.requestRender();
+          return;
+        }
+      }
+      const updated = await this._updateActiveHoldingPath(path, value, { reason: `field:${path}` });
+      if (!updated) return;
+      if (summary.hasConflicts) {
+        ui.notifications?.warn?.(`Выходные сохранены (${value}), но планы ${summary.conflicts.length} жителей требуют правки в «Плане работ».`);
+      }
     } else {
       const updated = await this._updateActiveHoldingPath(path, value, { reason: `field:${path}` });
       if (!updated) return;

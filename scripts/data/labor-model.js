@@ -41,6 +41,12 @@ export function normalizeBuildingLabor(value, building = {}) {
 
   const mode = text(value.mode);
   if (mode === "passive") return { version: LABOR_SCHEMA_VERSION, capacityQd: 0 };
+  if (mode === "staff" || mode === "legacy") {
+    const explicitCap = value.capacityQd !== null && value.capacityQd !== undefined && value.capacityQd !== ""
+      ? nonNegInt(value.capacityQd, fallbackCap)
+      : fallbackCap;
+    return { version: LABOR_SCHEMA_VERSION, capacityQd: explicitCap };
+  }
   if (value.capacityQd === null) return { version: LABOR_SCHEMA_VERSION, capacityQd: null };
   if (value.capacityQd !== undefined && value.capacityQd !== "") {
     return { version: LABOR_SCHEMA_VERSION, capacityQd: nonNegInt(value.capacityQd, fallbackCap) };
@@ -205,6 +211,7 @@ export function newLaborIssues(previous = [], current = []) {
  */
 export function validateBuildingLaborAndGoals(holding = {}, { targets = null, skipResidentBudget = false } = {}) {
   const issues = [];
+  const warnings = [];
   const buildingsById = new Map((holding?.buildings?.list ?? []).map((b) => [text(b?.id), b]));
   const hasExplicitTargets = targets instanceof Map || Array.isArray(targets);
   const targetList = targets instanceof Map ? [...targets.values()] : (Array.isArray(targets) ? targets : []);
@@ -379,7 +386,7 @@ export function validateBuildingLaborAndGoals(holding = {}, { targets = null, sk
     const workers = [...(buildingWorkers.get(buildingId)?.values() ?? [])];
     const composition = buildingCompositionStatus(building, workers, { excludeGroups: ["ЧУДОТВОРЕЦ"] });
     if (!composition.met) {
-      issues.push({
+      warnings.push({
         code: "composition-unmet",
         buildingId,
         message: `«${building.name || buildingId}»: не выполнен обязательный состав (${composition.text}).`
@@ -387,5 +394,5 @@ export function validateBuildingLaborAndGoals(holding = {}, { targets = null, sk
     }
   }
 
-  return { ok: issues.length === 0, issues };
+  return { ok: issues.length === 0, issues, warnings };
 }

@@ -7,13 +7,16 @@ export function militaryDailyWage(holding = {}, person = {}) {
   if (override !== null && override !== undefined && override !== "" && Number.isFinite(Number(override))) {
     return Math.max(0, Math.floor(Number(override)));
   }
+  const modifier = Number.isFinite(Number(person?.militarySalaryModifier))
+    ? Math.trunc(Number(person.militarySalaryModifier))
+    : 0;
   const defense = holding.gm?.defense ?? {};
   if (person.workAssignment === "defenseCommander") {
     const soldiers = (holding.people?.list ?? []).filter((row) => !row.dead && row.workAssignment === "soldier").length;
-    return Math.max(1, Math.min(48, 24 + 2 * Math.ceil(soldiers / 5)));
+    return Math.max(1, Math.min(48, 24 + 2 * Math.ceil(soldiers / 5)) + modifier);
   }
   const squad = (defense.squads ?? []).find((row) => String(row.sergeantId ?? "") === String(person.id)
     || (row.memberIds ?? []).some((id) => String(id) === String(person.id)));
   const base = MILITARY_DAILY_RATES[squad?.type] ?? MILITARY_DAILY_RATES.line;
-  return Math.max(1, base + (squad && String(squad.sergeantId) === String(person.id) ? 4 : 0));
+  return Math.max(1, base + (squad && String(squad.sergeantId) === String(person.id) ? 4 : 0) + modifier);
 }

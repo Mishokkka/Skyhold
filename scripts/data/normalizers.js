@@ -524,6 +524,25 @@ export function mergeHoldingDefaults(holding) {
   merged.log = normalizeHoldingOperationLog(merged.log);
   merged.finance = normalizeFinanceObligationsState(merged.finance);
   merged.politics = normalizePoliticsState(merged.politics);
+  if (isPlainObject(merged.workforcePlan)) {
+    const rawGoals = merged.workforcePlan.productionGoals;
+    const productionGoals = Array.isArray(rawGoals)
+      ? rawGoals
+      : (isPlainObject(rawGoals)
+        ? Object.entries(rawGoals).map(([key, raw]) => {
+            const splitAt = key.indexOf("::");
+            const sourceId = splitAt > 0 ? key.slice(0, splitAt).trim() : String(key ?? "").trim();
+            const functionId = splitAt > 0 ? key.slice(splitAt + 2).trim() : "";
+            const preparedUnits = Math.max(0, Math.floor(toNumber(raw?.preparedUnits ?? raw, 0)));
+            return sourceId && preparedUnits > 0 ? { sourceId, functionId, preparedUnits } : null;
+          }).filter(Boolean)
+        : []);
+    merged.workforcePlan = {
+      version: 2,
+      locks: Array.isArray(merged.workforcePlan.locks) ? merged.workforcePlan.locks : [],
+      productionGoals
+    };
+  }
   if (!isPlainObject(merged.gm)) merged.gm = {};
   if (!isPlainObject(merged.gm.labor)) merged.gm.labor = {};
   merged.gm.labor.daysOffPerTenday = Math.max(0, Math.min(5, Math.floor(toNumber(merged.gm.labor.daysOffPerTenday, 0))));

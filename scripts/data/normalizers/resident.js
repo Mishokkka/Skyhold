@@ -1,5 +1,4 @@
 import { ageGroupFromAge, clampAgeForRace, normalizeBelief, normalizeResidentAttribute, representativeAgeForGroup } from "../../generators/resident-rules.js";
-import { militaryDailyWage } from "../../engines/economy/military-wages.js";
 import { isPlainObject, makeId, toBoolean, toNumber } from "../utils.js";
 import { normalizePersonWorkAllocations } from "../work-allocations.js";
 import { normalizeWorkerTypeSet } from "./building.js";
@@ -111,14 +110,19 @@ export function normalizePerson(person, { holding = null } = {}) {
   const hasExplicitWageOverride = person.wageDailyOverrideCopper !== null
     && person.wageDailyOverrideCopper !== undefined
     && person.wageDailyOverrideCopper !== "";
-  if (!hasExplicitWageOverride
+  const existingMilMod = person.militarySalaryModifier;
+  if (existingMilMod !== undefined && existingMilMod !== null && existingMilMod !== "") {
+    const mod = Math.trunc(toNumber(existingMilMod, 0));
+    if (mod !== 0) person.militarySalaryModifier = mod;
+    else delete person.militarySalaryModifier;
+  } else if (!hasExplicitWageOverride
     && person.salaryModifier !== undefined
     && person.salaryModifier !== null
     && person.salaryModifier !== ""
     && isMilitaryResidentForSalary(person, holding)) {
     const mod = Math.trunc(toNumber(person.salaryModifier, 0));
     if (mod !== 0) {
-      person.wageDailyOverrideCopper = Math.max(1, militaryDailyWage(holding ?? {}, person) + mod);
+      person.militarySalaryModifier = mod;
     }
   }
   delete person.salary;

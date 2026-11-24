@@ -543,12 +543,21 @@ export function preserveLegacyBuildingAssignments(holding) {
     personUsedOvertime.set(pid, pOt);
   }
 
-  const pushLegacyAllocation = (person, building, { functionId = "", normalQd = null, overtimeQd = 0, dailyRateCopper = null } = {}) => {
+  const pushLegacyAllocation = (person, building, {
+    functionId = "",
+    normalQd = null,
+    overtimeQd = 0,
+    dailyRateCopper = null,
+    volunteer = false,
+    volunteerReason = "",
+    allowAway = false
+  } = {}) => {
     const pid = String(person?.id ?? "").trim();
     const bId = String(building?.id ?? "").trim();
-    if (!pid || !bId || person?.dead || !isResidentPresent(person)) return;
+    const isPresent = isResidentPresent(person);
+    if (!pid || !bId || person?.dead || (!allowAway && !isPresent)) return;
     if (inferBuildingSpecialKind(building) === "fasti-shop") return;
-    if (reservedOccupation(holding, person)) return;
+    if (isPresent && reservedOccupation(holding, person)) return;
     if (!Array.isArray(person.workAllocations)) person.workAllocations = [];
     if (person.workAllocations.some((row) => String(row?.sourceId ?? "").trim() === bId
       && floorNonNegativeQuantity(row?.normalQd ?? row?.qd, 0) + floorNonNegativeQuantity(row?.overtimeQd, 0) > 0)) {
@@ -562,7 +571,9 @@ export function preserveLegacyBuildingAssignments(holding) {
     const pCap = residentLaborCapacity(person, holding);
     const availPersonNormal = Math.max(0, pCap.normalQd - (personUsedNormal.get(pid) ?? 0));
     const availPersonOt = Math.max(0, pCap.overtimeQd - (personUsedOvertime.get(pid) ?? 0));
-    const availBuilding = labor.capacityQd === null ? Infinity : Math.max(0, labor.capacityQd - (buildingUsedQd.get(bId) ?? 0));
+    const availBuilding = !isPresent
+      ? (labor.capacityQd === null ? Infinity : labor.capacityQd)
+      : (labor.capacityQd === null ? Infinity : Math.max(0, labor.capacityQd - (buildingUsedQd.get(bId) ?? 0)));
     if (availBuilding <= 0 || availPersonNormal <= 0) return;
 
     const requestedNormal = normalQd === null || normalQd === undefined ? availPersonNormal : floorNonNegativeQuantity(normalQd, availPersonNormal);
@@ -571,23 +582,25 @@ export function preserveLegacyBuildingAssignments(holding) {
     const allocatedOt = Math.min(requestedOt, availPersonOt, Math.floor(allocatedNormal / 2), Math.max(0, availBuilding - allocatedNormal));
     if (allocatedNormal + allocatedOt <= 0) return;
 
+    const cleanReason = String(volunteerReason ?? "").trim();
     person.workAllocations.push({
       schemaVersion: 1,
-      id: makeId("work"),
+      id: `legacy-${bId}-${fn}`,
       sourceId: bId,
       functionId: fn,
       normalQd: allocatedNormal,
-      overtimeQd: allocatedOt
+      overtimeQd: allocatedOt,
+      ...(volunteer === true ? { volunteer: true, volunteerReason: cleanReason } : {})
     });
     if (String(person.workAssignment ?? "").trim() === bId) person.workAssignment = "";
     const hasOverride = person.wageDailyOverrideCopper !== null && person.wageDailyOverrideCopper !== undefined && person.wageDailyOverrideCopper !== "";
     const legacyRate = Number(dailyRateCopper);
-    if (!hasOverride && Number.isFinite(legacyRate) && legacyRate > 0) {
+    if (volunteer !== true && !hasOverride && Number.isFinite(legacyRate) && legacyRate > 0) {
       person.wageDailyOverrideCopper = Math.floor(legacyRate);
     }
     personUsedNormal.set(pid, (personUsedNormal.get(pid) ?? 0) + allocatedNormal);
     personUsedOvertime.set(pid, (personUsedOvertime.get(pid) ?? 0) + allocatedOt);
-    buildingUsedQd.set(bId, (buildingUsedQd.get(bId) ?? 0) + allocatedNormal + allocatedOt);
+    if (isPresent) buildingUsedQd.set(bId, (buildingUsedQd.get(bId) ?? 0) + allocatedNormal + allocatedOt);
   };
 
   for (const person of people) {
@@ -596,10 +609,13 @@ export function preserveLegacyBuildingAssignments(holding) {
     const building = buildingsById.get(String(appt.buildingId ?? appt.sourceId ?? person.workAssignment ?? "").trim());
     if (!building) continue;
     pushLegacyAllocation(person, building, {
-      functionId: appt.functionId,
+      functionId: appt.primaryFunctionId || appt.functionId || appt.reserveFunctionId,
       normalQd: appt.normalQd ?? appt.qd,
       overtimeQd: appt.overtimeQd,
-      dailyRateCopper: appt.dailyRateCopper ?? appt.wageDailyCopper
+      dailyRateCopper: appt.wageDailyCopper ?? appt.dailyRateCopper,
+      volunteer: appt.volunteer === true,
+      volunteerReason: appt.volunteerReason ?? "",
+      allowAway: true
     });
   }
 
@@ -608,7 +624,9 @@ export function preserveLegacyBuildingAssignments(holding) {
     for (const workerId of building.assignedWorkerIds) {
       const person = peopleById.get(String(workerId ?? "").trim());
       if (!person) continue;
-      pushLegacyAllocation(person, building, {});
+      pushLegacyAllocation(person, building, {
+        allowAway: String(person.workAssignment ?? "").trim() === String(building?.id ?? "").trim()
+      });
     }
   }
 }

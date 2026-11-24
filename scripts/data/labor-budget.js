@@ -31,3 +31,34 @@ export function residentLaborCapacity(person = {}, holdingOrNormalQd = null) {
     overtimeQd: child ? 0 : Math.floor(normalQd / 2)
   };
 }
+
+export function daysOffConflictSummary(holding = {}, nextDaysOff = 0) {
+  const daysOff = toDaysOff(nextDaysOff);
+  const probeHolding = {
+    ...holding,
+    gm: { ...(holding?.gm ?? {}), labor: { ...(holding?.gm?.labor ?? {}), daysOffPerTenday: daysOff } }
+  };
+  const conflicts = [];
+  for (const person of holding?.people?.list ?? []) {
+    if (!person || person.dead || person?.shipAssignment?.away === true) continue;
+    let normalQd = 0;
+    let overtimeQd = 0;
+    for (const row of Array.isArray(person.workAllocations) ? person.workAllocations : []) {
+      normalQd += Math.max(0, Math.floor(Number(row?.normalQd ?? row?.qd ?? 0) || 0));
+      overtimeQd += Math.max(0, Math.floor(Number(row?.overtimeQd ?? 0) || 0));
+    }
+    if (normalQd + overtimeQd <= 0) continue;
+    const cap = residentLaborCapacity(person, probeHolding);
+    if (normalQd > cap.normalQd || overtimeQd > cap.overtimeQd || overtimeQd > Math.floor(normalQd / 2)) {
+      conflicts.push({
+        personId: String(person.id ?? ""),
+        name: String(person.name || person.id || "Житель"),
+        normalQd,
+        overtimeQd,
+        maxNormalQd: cap.normalQd,
+        maxOvertimeQd: cap.overtimeQd
+      });
+    }
+  }
+  return { daysOff, conflicts, hasConflicts: conflicts.length > 0 };
+}

@@ -69,7 +69,7 @@ export class SkyholdUniqueBuildingApp extends WindowFrameMixin(RenderSchedulerMi
     const permissions = holdingPermissionContext(holding);
     const canManageEditorTabs = permissions.isGM;
     const canEdit = permissions.canEditBuildings;
-    const prepared = building && manager ? manager._prepareBuildingRow(holding, building, buildingIndex, canEdit) : building;
+    const prepared = building && manager ? manager._prepareBuildingRow(holding, building, buildingIndex, canEdit, null, { isGM: permissions.isGM }) : building;
     if (prepared) this._prepareUniqueBuildingTabs(prepared, { canManageEditorTabs });
     return {
       ...context,
