@@ -56,7 +56,11 @@ export function createPoliticsSocketApi({ executePoliticsOperation, getData, wri
         : commandFailure({ operationId: payload.operationId, code: result?.conflict ? COMMAND_ERROR.CONFLICT : COMMAND_ERROR.FORBIDDEN,
           message: result?.reason || "Политическое действие отклонено.", revision: getData()?.meta?.revision });
     } catch (error) {
-      command = commandFailure({ operationId: payload.operationId, code: error.code ?? COMMAND_ERROR.EXECUTION_FAILED, message: error.message, revision: getData()?.meta?.revision });
+      let revision = error?.revision ?? null;
+      if (revision === null) {
+        try { revision = getData()?.meta?.revision ?? null; } catch { revision = null; }
+      }
+      command = commandFailure({ operationId: payload.operationId, code: error.code ?? COMMAND_ERROR.EXECUTION_FAILED, message: error.message, revision });
     }
     game.socket?.emit?.(`module.${MODULE_ID}`, { type: "playerPoliticsOperationResponse", requestId: payload.requestId, operationId: payload.operationId,
       userId: payload.userId, gmId: game.user.id, ok: command.ok, command, result });

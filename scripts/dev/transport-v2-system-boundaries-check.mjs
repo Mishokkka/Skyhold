@@ -12,7 +12,6 @@ import { MAX_MARKET_OPERATION_COPPER } from "../data/market/money-limits.js";
 import { reserveMarketDemand, settleMarketDemandReservations, recoverMarketDemand } from "../engines/market/demand.js";
 import { marketDemandKey, normalizeMarketDemandState } from "../data/market/demand-state.js";
 import { bindSharedMarkets } from "../data/market/shared-context.js";
-import { previewSharedMarketMigration } from "../data/market/shared-migration.js";
 import { prepareShipsContext, prepareShipWindowContext } from "../apps/ships-context.js";
 import { normalizeSkyholdData } from "../data/normalizers.js";
 import { DEFAULT_SKYHOLD_DATA } from "../data/defaults/default-skyhold-data.js";
@@ -195,21 +194,19 @@ for (const expireBread of [false, true]) {
   assert.deepEqual(order.dispatched, {});
 }
 
-// A4: reconstruct all balances, not just the first holding's dated recovery lots.
-for (const legacy of [false, true]) {
-  const data = { meta: {}, holdings: [holding("a"), holding("b")] }, key = marketDemandKey("port", "wood");
+// A4: shared market tracks all holdings' recovery lots and prevents double recovery on the same tenday.
+{
+  const data = { meta: { sharedMarkets: { enabled: true, version: 1, clockTenday: 0, demand: {}, stock: {} } },
+    holdings: [holding("a"), holding("b")] }, key = marketDemandKey("port", "wood");
+  bindSharedMarkets(data);
   for (const h of data.holdings) {
     const r = reserveMarketDemand({ holding: h, marketId: "port", operationId: h.id,
-      lines: [{ demandId: "wood", qty: 10, demandBaseDemand: 100, demandStateRevision: 0 }] });
+      lines: [{ demandId: "wood", qty: 10, demandBaseDemand: 100, demandStateRevision: data.meta.sharedMarkets.demand[key]?.revision ?? 0 }] });
     assert.equal(settleMarketDemandReservations({ holding: h, reservations: r.reservations,
       operationId: `${h.id}-sold`, outcome: "consumed", occurredTenday: 0 }).ok, true);
   }
-  if (legacy) delete data.holdings[1].special.market.demand[key].recoveryLots;
-  const before = structuredClone(data), preview = previewSharedMarketMigration(data);
-  assert.deepEqual(data, before, "only the prepared draft is inspected");
-  assert.equal(preview.prepared.demand[key].consumedOutstanding, 20);
-  data.meta.sharedMarkets = { ...preview.prepared, demand: normalizeMarketDemandState(preview.prepared.demand) };
-  bindSharedMarkets(data);
+  assert.equal(data.meta.sharedMarkets.demand[key].consumedOutstanding, 20);
+  data.meta.sharedMarkets.demand = normalizeMarketDemandState(data.meta.sharedMarkets.demand);
   recoverMarketDemand({ holding: data.holdings[0], currentTenday: 0 });
   assert.equal(data.meta.sharedMarkets.demand[key].consumedOutstanding, 20);
   recoverMarketDemand({ holding: data.holdings[0], currentTenday: 1 });

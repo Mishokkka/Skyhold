@@ -14,7 +14,7 @@ import { issueBankLoan } from "../engines/economy/banking.js";
 import { openBankDeposit } from "../engines/economy/bank-deposits.js";
 import { createShipRecord } from "../data/ships.js";
 import { departShip } from "../engines/ships/runtime.js";
-import { previewSharedMarketMigration, applySharedMarketMigration } from "../data/market/shared-migration.js";
+import { bindSharedMarkets } from "../data/market/shared-context.js";
 import { reserveMarketStock } from "../engines/market/stock.js";
 import { reserveMarketDemand, settleMarketDemandReservations } from "../engines/market/demand.js";
 import { buildTendayOperationPayload, hydrateTendayOperation } from "../engines/tenday/operation-payload.js";
@@ -215,7 +215,7 @@ async function checkSharedClock() {
   const data = dataFor(makeHolding());
   data.holdings[0].gm.calendaria.lastDateTime = addCalendariaQd(state.now, -40);
   data.holdings.push({ ...structuredClone(data.holdings[0]), id: "second-settlement" });
-  applySharedMarketMigration(data, previewSharedMarketMigration(data).sourceToken);
+  bindSharedMarkets(data);
   const first = data.holdings[0];
   assert.equal(reserveMarketStock({ holding: first, marketId: "port", operationId: "buy",
     lines: [{ id: "wood", qty: 10, stockBaseStock: 10, stockStateRevision: 0 }] }).ok, true);

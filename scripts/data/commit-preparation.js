@@ -1,4 +1,5 @@
 import { normalizeSkyholdData, normalizeCatalogPartition, normalizeHoldingsPartition, reconcileHoldingRegions } from "./normalizers.js";
+import { ensureSharedMarketsState } from "./market/shared-context.js";
 import { SKYHOLD_SCHEMA_VERSION } from "./schema-version.js";
 import { assertSupportedWorldData } from "./storage-format.js";
 import { clone, toNumber } from "./utils.js";
@@ -20,7 +21,6 @@ export function prepareSkyholdCommit(data, {
 } = {}) {
   assertSupportedWorldData(data);
   const requestedScope = normalizeCommitScope(scope);
-  const fromVersion = Math.max(0, toNumber(data?.meta?.schemaVersion, SKYHOLD_SCHEMA_VERSION));
   let effectiveScope = requestedScope;
   let next;
 
@@ -30,11 +30,11 @@ export function prepareSkyholdCommit(data, {
     next = {
       ...data,
       meta: clone(data?.meta ?? {}),
-      holdings: normalizeHoldingsPartition(data?.holdings, data?.catalog, { fromVersion }),
+      holdings: normalizeHoldingsPartition(data?.holdings, data?.catalog),
       catalog: data?.catalog
     };
   } else {
-    const catalog = normalizeCatalogPartition(data?.catalog, { fromVersion });
+    const catalog = normalizeCatalogPartition(data?.catalog);
     const reconciliation = reconcileHoldingRegions(data?.holdings, catalog, { cloneOnWrite: true });
     effectiveScope = reconciliation.changed ? COMMIT_SCOPES.BOTH : COMMIT_SCOPES.CATALOG;
     next = {
@@ -52,5 +52,8 @@ export function prepareSkyholdCommit(data, {
   ));
   next.meta.lastUpdated = now;
   next.meta.revision = Math.max(0, toNumber(baseRevision, 0)) + 1;
+  if (requestedScope !== COMMIT_SCOPES.BOTH) {
+    ensureSharedMarketsState(next, data?.meta?.sharedMarkets ?? null);
+  }
   return { data: next, scope: effectiveScope };
 }

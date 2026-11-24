@@ -18,6 +18,7 @@ import { bookTransportOrder } from "../engines/transport/runtime.js";
 import { advanceTransportShipments } from "../workflows/transport/orders.js";
 import { reserveMarketDemand } from "../engines/market/demand.js";
 import { marketDemandKey } from "../data/market/demand-state.js";
+import { bindSharedMarkets, marketStateFor } from "../data/market/shared-context.js";
 
 globalThis.game = { user: { id: "gm", isGM: true }, users: [{ id: "gm", isGM: true, active: true }],
   settings: { get: () => undefined }, modules: new Map(), time: { worldTime: 0 }, socket: { emit() {} } };
@@ -25,14 +26,14 @@ globalThis.foundry = { utils: { deepClone: structuredClone } };
 globalThis.ui = { notifications: { warn() {}, info() {}, error() {} } };
 
 function harness(data) {
-  let stored = structuredClone(data), sequence = 0;
+  let stored = bindSharedMarkets(structuredClone(data)), sequence = 0;
   const skipped = Symbol("skip"), skip = value => ({ [skipped]: true, value });
   const transaction = async updater => {
-    const draft = structuredClone(stored), result = await updater(draft, { skip });
+    const draft = bindSharedMarkets(structuredClone(stored)), result = await updater(draft, { skip });
     if (result?.[skipped]) return result.value;
-    draft.meta.revision++; stored = draft; return result;
+    draft.meta.revision++; stored = bindSharedMarkets(draft); return result;
   };
-  SkyholdData.view = () => stored;
+  SkyholdData.view = () => bindSharedMarkets(stored);
   SkyholdData.skipTransaction = skip;
   SkyholdData.updateHolding = (id, updater) => transaction(draft => updater(draft.holdings.find(row => row.id === id), draft));
   const workflow = new SkyholdWorkflowService();
@@ -173,6 +174,7 @@ delete globalThis.CALENDARIA;
 {
   const f = worldMarketFixture(); f.holding.special.ships.list = []; f.holding.people.list = [];
   const state = ensureTransportState(f.data);
+  bindSharedMarkets(f.data);
   f.holding.storage.resources = [{ id: "raw-meat", resourceId: "meat", qty: 20, roomId: "outdoors",
     batches: [{ id: "raw-batch", qty: 20, ageQd: 0 }] }];
   const cargo = [{ lotId: "raw", resourceId: "meat", rowId: "raw-meat", batchId: "raw-batch", qty: 20,
@@ -193,8 +195,8 @@ delete globalThis.CALENDARIA;
   await h.period(id, 80);
   const finished = h.holding(id).special.transportV2.orders[0];
   assert.equal(finished.status, "delivered"); assert.equal(finished.spoiledQty, 10); assert.equal(finished.insurancePaidCopper, 0);
-  assert.equal(h.holding(id).special.market.demand[marketDemandKey("a", "meat")].reservedDemand, 0);
-  const unexpected = structuredClone(f.data);
+  assert.equal(marketStateFor(h.holding(id), "demand")[marketDemandKey("a", "meat")].reservedDemand, 0);
+  const unexpected = bindSharedMarkets(structuredClone(f.data));
   unexpected.holdings[0].storage.resources[0].batches = []; unexpected.holdings[0].storage.resources[0].qty = 0;
   assert.throws(() => advanceTransportShipments(unexpected, unexpected.holdings[0], 40, h.workflow), /Reserved outbound cargo changed/,
     "unexpected missing inventory remains an error, distinct from registered natural expiry");

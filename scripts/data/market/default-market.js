@@ -86,7 +86,6 @@ export const DEFAULT_EXTERNAL_MARKET_OFFERS = RESOURCE_BASE_DEFINITIONS
   });
 
 export const DEFAULT_EXTERNAL_MARKET = {
-  schemaVersion: 2,
   id: "external-market",
   label: "Внешний рынок",
   quotePeriodDays: 10,

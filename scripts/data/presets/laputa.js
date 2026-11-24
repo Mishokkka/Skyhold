@@ -151,7 +151,8 @@ export const LAPUTA_IMPORT = {
       list: [
         {
           id: "laputa-building-lumbermill",
-          templateId: "",
+          templateId: "lumbermill",
+          labor: { version: 1, mode: "staff", capacityQd: null },
           name: "Лесоповал",
           type: "Производство",
           level: 1,
@@ -166,7 +167,8 @@ export const LAPUTA_IMPORT = {
         },
         {
           id: "laputa-building-well",
-          templateId: "",
+          templateId: "well",
+          labor: { version: 1, mode: "passive", capacityQd: 0 },
           name: "Колодец",
           type: "Инфраструктура",
           level: 1,
@@ -181,7 +183,8 @@ export const LAPUTA_IMPORT = {
         },
         {
           id: "laputa-building-quarry",
-          templateId: "",
+          templateId: "quarry",
+          labor: { version: 1, mode: "staff", capacityQd: null },
           name: "Каменоломня",
           type: "Производство",
           level: 1,
@@ -196,7 +199,8 @@ export const LAPUTA_IMPORT = {
         },
         {
           id: "laputa-building-pier",
-          templateId: "",
+          templateId: "pier",
+          labor: { version: 1, mode: "passive", capacityQd: 0 },
           name: "Пирс",
           type: "Инфраструктура",
           level: 1,
@@ -211,7 +215,8 @@ export const LAPUTA_IMPORT = {
         },
         {
           id: "laputa-building-tent-camp",
-          templateId: "",
+          templateId: "tent-camp",
+          labor: { version: 1, mode: "passive", capacityQd: 0 },
           name: "Палаточный лагерь",
           type: "Жилье",
           level: 1,
@@ -226,7 +231,8 @@ export const LAPUTA_IMPORT = {
         },
         {
           id: "laputa-building-lighthouse",
-          templateId: "",
+          templateId: "lighthouse",
+          labor: { version: 1, mode: "staff", capacityQd: null },
           name: "Маяк",
           type: "Навигация",
           level: 1,
@@ -241,7 +247,8 @@ export const LAPUTA_IMPORT = {
         },
         {
           id: "laputa-building-house-1",
-          templateId: "",
+          templateId: "common-house",
+          labor: { version: 1, mode: "passive", capacityQd: 0 },
           name: "Дом-1",
           type: "Жилье",
           level: 1,
@@ -256,7 +263,8 @@ export const LAPUTA_IMPORT = {
         },
         {
           id: "laputa-building-house-2",
-          templateId: "",
+          templateId: "common-house",
+          labor: { version: 1, mode: "passive", capacityQd: 0 },
           name: "Дом-2",
           type: "Жилье",
           level: 1,
@@ -271,7 +279,8 @@ export const LAPUTA_IMPORT = {
         },
         {
           id: "laputa-building-tavern",
-          templateId: "",
+          templateId: "inn",
+          labor: { version: 1, mode: "staff", capacityQd: null },
           name: "Таверна",
           type: "Социальное",
           level: 1,
@@ -286,7 +295,8 @@ export const LAPUTA_IMPORT = {
         },
         {
           id: "laputa-building-pigeon-house",
-          templateId: "",
+          templateId: "dovecote",
+          labor: { version: 1, mode: "passive", capacityQd: 0 },
           name: "Голубятня",
           type: "Связь",
           level: 1,
@@ -301,7 +311,8 @@ export const LAPUTA_IMPORT = {
         },
         {
           id: "laputa-building-garden",
-          templateId: "",
+          templateId: "garden",
+          labor: { version: 1, mode: "qd", capacityQd: null },
           name: "Сад",
           type: "Сельское хозяйство",
           level: 1,
@@ -316,7 +327,8 @@ export const LAPUTA_IMPORT = {
         },
         {
           id: "laputa-building-pasture",
-          templateId: "",
+          templateId: "pasture",
+          labor: { version: 1, mode: "qd", capacityQd: null },
           name: "Пастбище",
           type: "Сельское хозяйство",
           level: 1,

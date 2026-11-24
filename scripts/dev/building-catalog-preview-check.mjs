@@ -85,32 +85,32 @@ export async function checkMigrationPreviewRefresh() {
     assert.equal(commits, 0, "A stale confirmation must not apply a new unseen preview");
     assert.match(errors.at(-1), /изменились/);
     await app._onClose({});
+    assert.equal(listeners.size, 0, "Closed migration windows unsubscribe from data changes");
 
-    const textButton = { dataset: { action: "open-building-text-refresh" } };
-    const openTextPreview = () => dispatchSkyholdAction(
-      ChildWindowDomain, event, textButton, "_onOpenBuildingCatalogMigration"
+    const openCatalogPreview = () => dispatchSkyholdAction(
+      ChildWindowDomain, event, { dataset: { action: "open-building-catalog-migration" } }, "_onOpenBuildingCatalogMigration"
     );
     globalThis.game.user.isGM = false;
-    await openTextPreview();
-    assert.equal(opened, undefined, "Only the GM can open the text refresh");
+    await openCatalogPreview();
+    assert.equal(opened, undefined, "Only the GM can open catalog migration preview");
     globalThis.game.user.isGM = true;
-    world.catalog.buildings.find(row => row.id === "school").effect = "Оплаченный учитель открывает ролевые образовательные решения";
-    const beforeTextRefresh = clone(world);
-    await openTextPreview();
-    context = await opened._prepareContext({});
-    assert.equal(context.textOnly, true);
-    assert.equal(context.canApply, true);
-    assert.ok(context.textUpdates.some(row => row.field === "effect" && row.before !== row.after));
-    assert.deepEqual(world, beforeTextRefresh);
-    const textApply = opened._onApply(event);
-    confirm(true); await textApply;
-    assert.equal(commits, 1, "Confirmed text preview applies exactly once");
+    await openCatalogPreview();
+    assert.equal(Boolean(opened), true, "GM action opens catalog migration preview");
+    const launchedApply = opened._onApply(event);
+    confirm(true);
+    await launchedApply;
     assert.equal(transactionOptions.forceRollbackSnapshot, true);
-    assert.deepEqual(world.holdings, beforeTextRefresh.holdings);
-    assert.equal(world.meta.templateCatalogVersion, beforeTextRefresh.meta.templateCatalogVersion);
-    assert.equal((await opened._prepareContext({})).noChanges, true);
     await opened._onClose({});
-    assert.equal(listeners.size, 0, "Closed migration windows unsubscribe from data changes");
+    assert.equal(listeners.size, 0, "Launched migration window unsubscribes from data changes on close");
+
+    SkyholdData.get = () => { throw Object.assign(new Error("Данные мира не поддерживаются."), { code: "unsupported-world-data" }); };
+    const failedApp = new SkyholdBuildingCatalogMigration();
+    const failedContext = await failedApp._prepareContext({});
+    assert.equal(failedApp.plan, null);
+    assert.equal(failedContext.canApply, false);
+    assert.match(failedContext.error, /не поддерживаются/);
+    await failedApp._onClose({});
+    assert.equal(listeners.size, 0, "Errored migration windows also unsubscribe cleanly on close");
   } finally {
     SkyholdData.get = originalGet; SkyholdData.transaction = originalTransaction; console.error = originalError;
     for (const [key, value] of Object.entries(globals)) {

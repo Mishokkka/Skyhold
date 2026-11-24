@@ -31,7 +31,7 @@ export function checkProductionCapacityCatalog() {
     assert.ok(small.marginMin > 0, `${id}/${resource}: minimum load remains viable at catalog value before common overhead`);
   }
   const templates = structuredClone(DEFAULT_BUILDING_TEMPLATES);
-  const data = normalizeSkyholdData({ meta: { schemaVersion: SKYHOLD_SCHEMA_VERSION, templateCatalogVersion: TEMPLATE_CATALOG_VERSION, revision: 7 }, catalog: { buildings: templates },
+  const data = normalizeSkyholdData({ meta: { schemaVersion: SKYHOLD_SCHEMA_VERSION, templateCatalogVersion: TEMPLATE_CATALOG_VERSION, sharedMarkets: { enabled: true, version: 1, clockTenday: 0, demand: {}, stock: {} }, revision: 7 }, catalog: { buildings: templates },
     holdings: [{ id: "capacity-refresh", buildings: { list: templates.filter((b) => expected.some(([id]) => b.id === id))
       .map((b) => ({ ...structuredClone(b), id: `built-${b.id}`, templateId: b.id })) } }] });
   const working = data.holdings[0].buildings.list.flatMap(building => building.productionLines).find(line => line.resourceId === "aged-cheese");

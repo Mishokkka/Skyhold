@@ -326,7 +326,7 @@ function applyContentPackToDraft({ data, plan, resolutions = {} } = {}) {
       data.catalog.eventRegions = [];
       delete data.catalog.marketRouteMap;
       data.catalog.marketEconomy = {
-        schemaVersion: 2,
+        schemaVersion: 3,
         settings: clone(plan.pack.content.marketEconomy.settings),
         baseOffers: [],
         countries: [],

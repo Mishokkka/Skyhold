@@ -70,9 +70,7 @@ const SkyholdAppActions = {
     "open-market-catalog-editor": "_onOpenMarketCatalogEditor",
     "open-content-pack-importer": "_onOpenContentPackImporter",
     "open-ui-review": "_onOpenUiReview",
-    "open-building-catalog-migration": "_onOpenBuildingCatalogMigration",
-    "open-building-text-refresh": "_onOpenBuildingCatalogMigration",
-    "open-hybrid-labor-migration": "_onOpenHybridLaborMigration"
+    "open-building-catalog-migration": "_onOpenBuildingCatalogMigration"
   },
   publicClick: ["open-building-template-browser", "open-workforce-planner"]
 };
@@ -580,8 +578,7 @@ export class SkyholdApp extends WindowFrameMixin(HandlebarsApplicationMixin(Appl
         : { rows: [], builtins: "", builtinCount: 0, hasRows: false },
       marketCatalog: active?.gm
         ? this._marketCatalogContext(data)
-        : { marketCount: 0, activeMarketCount: 0, offerCount: 0, hasOverride: false },
-      sharedMarketMigrationAvailable: canEdit && !data.meta?.sharedMarkets?.enabled
+        : { marketCount: 0, activeMarketCount: 0, offerCount: 0, hasOverride: false }
     };
   }
 

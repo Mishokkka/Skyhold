@@ -13,6 +13,13 @@ export const DEFAULT_SKYHOLD_DATA = {
     schemaVersion: SKYHOLD_SCHEMA_VERSION,
     templateCatalogVersion: TEMPLATE_CATALOG_VERSION,
     buildingCatalogMigration: null,
+    sharedMarkets: {
+      enabled: true,
+      version: 1,
+      clockTenday: 0,
+      demand: {},
+      stock: {}
+    },
     lastUpdated: null,
     revision: 0,
     storageCommit: null

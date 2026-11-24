@@ -158,24 +158,13 @@ assert.deepEqual(
   "transport capacity defaults must be normalized into editable market settings"
 );
 
-const migratedLegacyCapacities = normalizeMarketEconomy({
-  schemaVersion: 1,
-  settings: { caravanCapacityLoad: 80, railCapacityLoad: 480, airshipCapacityLoad: 200 }
-});
-assert.deepEqual(
-  [migratedLegacyCapacities.settings.caravanCapacityLoad, migratedLegacyCapacities.settings.railCapacityLoad, migratedLegacyCapacities.settings.airshipCapacityLoad],
-  [400, 8000, 4000],
-  "legacy default capacities must migrate without requiring a content-pack reimport"
-);
-
 const preservedCustomCapacities = normalizeMarketEconomy({
-  schemaVersion: 1,
   settings: { caravanCapacityLoad: 600, railCapacityLoad: 9000, airshipCapacityLoad: 5000 }
 });
 assert.deepEqual(
   [preservedCustomCapacities.settings.caravanCapacityLoad, preservedCustomCapacities.settings.railCapacityLoad, preservedCustomCapacities.settings.airshipCapacityLoad],
   [600, 9000, 5000],
-  "custom capacities from older worlds must remain untouched"
+  "custom capacities must remain untouched"
 );
 
 const portMarket = composeMarketLocation({ location: locations[0], economy, resources, locations });
@@ -299,7 +288,7 @@ const normalizedLegacy = normalizeSkyholdData({
     markets: [{ id: "obsolete-market", label: "Старый рынок", offers: [] }],
     eventRegions: [{ value: "legacy-region", label: "Старый регион", marketPriceFactor: 1.2 }]
   }
-}, { fromVersion: 65 });
+});
 assert.deepEqual(normalizedLegacy.catalog.markets, [], "schema 66 must discard legacy provider markets instead of migrating them");
 assert.equal(normalizedLegacy.catalog.resources[0].id, "legacy-resource", "discarding markets must not remove unrelated catalog content");
 assert.equal(normalizedLegacy.holdings[0].storage.moneyCopper, 123, "discarding markets must not alter settlement storage");

@@ -7,7 +7,7 @@ import { runProductionCycle } from "../engines/economy/production-cycle.js";
 
 export function migrationCycleFixture() {
   const templates = BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION;
-  const data = normalizeSkyholdData({ meta: { schemaVersion: SKYHOLD_SCHEMA_VERSION, templateCatalogVersion: TEMPLATE_CATALOG_VERSION, revision: 3 },
+  const data = normalizeSkyholdData({ meta: { schemaVersion: SKYHOLD_SCHEMA_VERSION, templateCatalogVersion: TEMPLATE_CATALOG_VERSION, sharedMarkets: { enabled: true, version: 1, clockTenday: 0, demand: {}, stock: {} }, revision: 3 },
     catalog: { buildings: clone(templates) }, holdings: [{ id: "laputa", name: "Лапута", people: { list: [] },
       storage: { moneyCopper: 73 }, buildings: { list: templates.filter(row => ["lumbermill", "quarry"].includes(row.id))
         .map(row => ({ ...clone(row), id: `built-${row.id}`, templateId: row.id, constructionStatus: "built", buildProgress: row.buildTarget })) } }] });

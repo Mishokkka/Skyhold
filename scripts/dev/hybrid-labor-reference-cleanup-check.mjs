@@ -5,8 +5,6 @@ import { deleteCollectionRow } from "../data/collection-operations.js";
 import { clearPersonFromAssignments, transferResidentBetweenHoldings } from "../data/resident-assignments.js";
 import { mergeHoldingDefaults } from "../data/normalizers.js";
 import { workforceChangeError } from "../data/workforce-plan.js";
-import { planHybridLaborMigration, applyHybridLaborMigration } from "../workflows/buildings/hybrid-labor-migration.js";
-import { executeHybridLaborMigration } from "../apps/hybrid-labor-migration-executor.js";
 
 const copy = (value) => structuredClone(value);
 function fixture() {
@@ -43,8 +41,6 @@ export async function checkHybridLaborReferenceCleanup() {
     deleteCollectionRow(data, "holdings.0.people.list", "worker");
     assert.equal(data.holdings[0].people.list.some((person) => person.id === "worker"), false);
     assertRemainingPlan(data.holdings[0], original);
-    assert.equal(planHybridLaborMigration({ holding: data.holdings[0] }).ok, true,
-      "ordinary deletion must not leave a migration-blocking person reference");
   } finally {
     if (previousFoundry === undefined) delete globalThis.foundry;
     else globalThis.foundry = previousFoundry;
@@ -55,25 +51,14 @@ export async function checkHybridLaborReferenceCleanup() {
   assertRemainingPlan(source, original);
   assert.equal(target.people.list[0].id, "worker");
   assert.equal(target.workforcePlan, undefined, "source locks must not follow a resident to another settlement");
-  assert.equal(planHybridLaborMigration({ holding: source }).ok, true);
   const jobChange = fixture();
   clearPersonFromAssignments(jobChange, "worker");
   assert.deepEqual(jobChange.workforcePlan, original.workforcePlan, "ordinary assignment clearing is not resident removal");
 
   const damaged = fixture();
   damaged.people.list = damaged.people.list.filter((person) => person.id !== "worker");
-  const damagedSnapshot = copy(damaged);
-  assert.equal(planHybridLaborMigration({ holding: damaged }).ok, false, "old orphaned locks require an explicit repair decision");
   assert.deepEqual(mergeHoldingDefaults(copy(damaged)).workforcePlan.locks, damaged.workforcePlan.locks,
     "ordinary normalization must preserve existing references");
-  const repaired = planHybridLaborMigration({ holding: damaged, clearUnavailablePlanReferences: true });
-  assert.equal(repaired.ok, true, "explicit unavailable-reference cleanup also covers missing residents");
-  assertRemainingPlan(repaired.targetHolding, damagedSnapshot);
-  assert.deepEqual(damaged, damagedSnapshot, "migration preview never mutates its input");
-  assert.deepEqual(applyHybridLaborMigration({ holding: damaged, plan: repaired }), repaired.targetHolding);
-  assert.equal((await executeHybridLaborMigration({ holdingId: damaged.id, holdingPlan: repaired, operationId: "orphan-lock-cleanup", expectedRevision: 1 }, {
-    getUser: () => ({ isGM: false }), store: { transaction: () => assert.fail("player migration repair must not enter persistence") }
-  })).ok, false);
 
   const hidden = fixture(), hiddenRemoval = copy(hidden);
   hiddenRemoval.workforcePlan.locks = hiddenRemoval.workforcePlan.locks.filter((row) => row.personId !== "hidden");

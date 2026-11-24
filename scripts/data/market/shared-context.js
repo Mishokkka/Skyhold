@@ -2,6 +2,51 @@ import { economyCalendarQd } from "../../core/economy-calendar.js";
 import { getCalendariaHoursPerDay } from "../../integrations/calendaria-bridge.js";
 
 const owners = new WeakMap();
+function initialSharedClockTenday(data) {
+  const hoursPerDay = getCalendariaHoursPerDay();
+  let maxTenday = 0;
+  for (const holding of data?.holdings ?? []) {
+    const local = Math.max(0, Math.floor((Number(holding?.gm?.calendaria?.lastQd) || 0) / 40));
+    const calendarQd = economyCalendarQd(holding, hoursPerDay);
+    const dated = calendarQd === null ? local : Math.floor(calendarQd / 40);
+    maxTenday = Math.max(maxTenday, dated);
+  }
+  return maxTenday;
+}
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+export function ensureSharedMarketsState(data, storedSharedMarkets = data?.meta?.sharedMarkets) {
+  if (!data || typeof data !== "object" || Object.isFrozen(data)) return data;
+  if (!isPlainObject(data.meta)) data.meta = {};
+  if (Object.isFrozen(data.meta)) return data;
+  const existing = isPlainObject(storedSharedMarkets) ? storedSharedMarkets : null;
+  const current = isPlainObject(data.meta.sharedMarkets) ? data.meta.sharedMarkets : (existing ?? {});
+  const rawClock = existing?.clockTenday;
+  const hasStoredClock = rawClock !== undefined && rawClock !== null && rawClock !== "" && Number.isFinite(Number(rawClock));
+  const storedClock = hasStoredClock ? Math.max(0, Math.floor(Number(rawClock))) : null;
+  if (
+    hasStoredClock
+    && current.enabled === true
+    && Number.isInteger(current.version) && current.version >= 1
+    && current.clockTenday === storedClock
+    && isPlainObject(current.demand)
+    && isPlainObject(current.stock)
+  ) {
+    return data;
+  }
+  const clockTenday = storedClock ?? initialSharedClockTenday(data);
+  data.meta.sharedMarkets = {
+    ...current,
+    enabled: true,
+    version: Math.max(1, Math.floor(Number(current.version) || 1)),
+    clockTenday,
+    demand: isPlainObject(current.demand) ? current.demand : {},
+    stock: isPlainObject(current.stock) ? current.stock : {}
+  };
+  return data;
+}
 export function bindSharedMarketHolding(holding, state) {
   if (holding && typeof holding === "object") {
     if (state?.enabled === true) owners.set(holding, state);
@@ -10,6 +55,7 @@ export function bindSharedMarketHolding(holding, state) {
   return holding;
 }
 export function bindSharedMarkets(data) {
+  ensureSharedMarketsState(data);
   for (const holding of data?.holdings ?? []) bindSharedMarketHolding(holding, data?.meta?.sharedMarkets);
   return data;
 }

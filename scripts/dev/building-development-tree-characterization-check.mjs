@@ -119,7 +119,7 @@ export function checkBuildingDevelopmentTreeCharacterization() {
   storedGatehouse.requiredAnyBuildingIds = [];
   storedGatehouse.wageDailyCopper = 777;
   const migrated = normalizeSkyholdData({
-    meta: { schemaVersion: SKYHOLD_SCHEMA_VERSION, templateCatalogVersion: TEMPLATE_CATALOG_VERSION },
+    meta: { schemaVersion: SKYHOLD_SCHEMA_VERSION, templateCatalogVersion: TEMPLATE_CATALOG_VERSION, sharedMarkets: { enabled: true, version: 1, clockTenday: 0, demand: {}, stock: {} } },
     catalog: { buildings: stored },
     holdings: []
   });
@@ -157,7 +157,7 @@ export function checkBuildingDevelopmentTreeCharacterization() {
     requiredBuildingIds: ["old-prerequisite"]
   };
   const migratedLaputa = normalizeSkyholdData({
-    meta: { schemaVersion: SKYHOLD_SCHEMA_VERSION, templateCatalogVersion: TEMPLATE_CATALOG_VERSION },
+    meta: { schemaVersion: SKYHOLD_SCHEMA_VERSION, templateCatalogVersion: TEMPLATE_CATALOG_VERSION, sharedMarkets: { enabled: true, version: 1, clockTenday: 0, demand: {}, stock: {} } },
     catalog: { buildings: stored },
     holdings: [{
       id: "laputa",
@@ -186,7 +186,7 @@ export function checkBuildingDevelopmentTreeCharacterization() {
   assert.deepEqual(plannedProject.constructionMaterials?.prepaidRemaining ?? [], [], "only recorded material credit may survive");
 
   const currentVersionLaputa = normalizeSkyholdData({
-    meta: { schemaVersion: SKYHOLD_SCHEMA_VERSION, templateCatalogVersion: TEMPLATE_CATALOG_VERSION },
+    meta: { schemaVersion: SKYHOLD_SCHEMA_VERSION, templateCatalogVersion: TEMPLATE_CATALOG_VERSION, sharedMarkets: { enabled: true, version: 1, clockTenday: 0, demand: {}, stock: {} } },
     catalog: { buildings: structuredClone(BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION) },
     holdings: [{
       id: "laputa",

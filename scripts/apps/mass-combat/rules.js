@@ -4,14 +4,6 @@ import {
   tagLabel
 } from "./tag-config.js";
 
-export const LEGACY_TAG_FIELD_MAP = {
-  fire: "shooters",
-  recon: "skirmishers",
-  cavalry: "mobile",
-  engineering: "sappers",
-  monstrous: "monsters"
-};
-
 export { COUNTER_STRENGTH };
 export const ATTACK_METHODS = {
   frontalAssault: {
@@ -399,11 +391,6 @@ export function tagValue(state, side, key) {
   const prefix = side === "defender" ? "defender" : "attacker";
   const canonical = `${prefix}${capitalized(key)}`;
   if (state?.[canonical] !== undefined) return Math.max(0, asNumber(state[canonical], 0));
-  for (const [legacy, mapped] of Object.entries(LEGACY_TAG_FIELD_MAP)) {
-    if (mapped !== key) continue;
-    const legacyKey = `${prefix}${capitalized(legacy)}`;
-    if (state?.[legacyKey] !== undefined) return Math.max(0, asNumber(state[legacyKey], 0));
-  }
   return 0;
 }
 

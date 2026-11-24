@@ -469,11 +469,6 @@ export function normalizeMarketEconomy(source = null, { locations = [] } = {}) {
   const hasSource = source && typeof source === "object" && !Array.isArray(source);
   const row = hasSource ? source : {};
   const settings = row.settings && typeof row.settings === "object" ? row.settings : {};
-  const sourceSchemaVersion = Math.max(1, Math.floor(toNumber(row.schemaVersion, 1)));
-  const hasLegacyCapacityDefaults = sourceSchemaVersion < 2
-    && Number(settings.caravanCapacityLoad) === 80
-    && Number(settings.railCapacityLoad) === 480
-    && Number(settings.airshipCapacityLoad) === 200;
   const baseOffers = Array.isArray(row.baseOffers) ? row.baseOffers : DEFAULT_MARKET_BASE_OFFERS;
   const sizeProfiles = Array.isArray(row.sizeProfiles) ? row.sizeProfiles : DEFAULT_MARKET_SIZE_PROFILES;
   const conditions = Array.isArray(row.conditions) ? row.conditions : DEFAULT_MARKET_CONDITIONS;
@@ -488,9 +483,9 @@ export function normalizeMarketEconomy(source = null, { locations = [] } = {}) {
       deliveryDistanceCopper: bounded(settings.deliveryDistanceCopper, 0, 0, 1_000_000),
       deliveryLoadDistanceCopper: bounded(settings.deliveryLoadDistanceCopper, 0, 0, 1_000_000),
       airshipHireCopper: bounded(settings.airshipHireCopper, 120, 0, 10_000_000),
-      caravanCapacityLoad: hasLegacyCapacityDefaults ? 400 : bounded(settings.caravanCapacityLoad, 400, 1, 1_000_000),
-      railCapacityLoad: hasLegacyCapacityDefaults ? 8000 : bounded(settings.railCapacityLoad, 8000, 1, 1_000_000),
-      airshipCapacityLoad: hasLegacyCapacityDefaults ? 4000 : bounded(settings.airshipCapacityLoad, 4000, 1, 1_000_000),
+      caravanCapacityLoad: bounded(settings.caravanCapacityLoad, 400, 1, 1_000_000),
+      railCapacityLoad: bounded(settings.railCapacityLoad, 8000, 1, 1_000_000),
+      airshipCapacityLoad: bounded(settings.airshipCapacityLoad, 4000, 1, 1_000_000),
       handlingFlatCopper: bounded(settings.handlingFlatCopper, 8, 0, 1_000_000),
       handlingSubtotalRate: bounded(settings.handlingSubtotalRate, 0.02, 0, 0.4),
       handlingLoadCopper: bounded(settings.handlingLoadCopper, 0.1, 0, 1_000_000)

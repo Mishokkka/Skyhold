@@ -60,5 +60,5 @@
 
 - Планировщик показывает работы, жителей, блокировки, цели, закрепления и черновик автопредложения (учитывает текущие запасы и сезон без обещания будущих поставок и глобального оптимума); запись идёт только по явному сохранению.
 - Схема: `building.labor = { version: 1, mode, capacityQd }`; `person.staffAppointment` (`buildingId`, `primaryFunctionId`, `reserveFunctionId`, `wageDailyCopper`, `overtimeQd`, `volunteer`, `volunteerReason`, v1); `holding.workforcePlan` (v2: `goals`, `locks`, `productionGoals`).
-- План v1 и смешанные поселения читаются; неизвестные/ошибочные данные сохраняются для явной диагностики. Переход старых назначений — отдельный Preview/Apply ([migrations.md](migrations.md)); сохранения игрока проходят authority-GM.
+- План v1 и смешанные поселения читаются; неизвестные/ошибочные данные сохраняются для явной диагностики; сохранения игрока проходят authority-GM.
 - Владельцы: `scripts/data/{hybrid-labor,labor-budget,work-allocations,workforce-plan}.js`, `scripts/engines/workers/`, `scripts/apps/domains/workforce-planner.js`. Актуальные параметры зданий — [каталог](building-catalog.md); проверки — `workers:check`, `work:check`, `workforce:check`, `hybrid:check` и [общая матрица](manual-foundry-smoke-matrix.md); отложенные идеи (выходные, смены, сброс прогресса) — [реестр](mechanics-expansion-roadmap.md).

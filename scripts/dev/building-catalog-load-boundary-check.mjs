@@ -29,15 +29,17 @@ export function checkCatalogLoadBoundary() {
   assert.equal(normalizeCatalogPartition({ buildings: [] }).buildings.length, 0);
   assert.equal(normalizeCatalogPartition({}).buildings.length, 0);
   assert.equal(normalizeCatalogPartition({ buildings: [{ id: "unknown-version" }] }).buildings[0].templateVersion, 0);
-  const meta = { schemaVersion: SKYHOLD_SCHEMA_VERSION, templateCatalogVersion: TEMPLATE_CATALOG_VERSION };
+  const meta = { schemaVersion: SKYHOLD_SCHEMA_VERSION, templateCatalogVersion: TEMPLATE_CATALOG_VERSION, sharedMarkets: { enabled: true, version: 1, clockTenday: 0, demand: {}, stock: {} } };
   const root = normalizeSkyholdData({ meta, catalog: stored, holdings: [] });
   assert.equal(root.meta.templateCatalogVersion, TEMPLATE_CATALOG_VERSION);
   assert.deepEqual(root.holdings, [], "An intentionally empty saved world cannot recreate preset settlements");
   assert.deepEqual(root.catalog.buildings.map((row) => row.id), ["watch-post", "private-template"]);
   assert.throws(() => normalizeSkyholdData({ meta: { ...meta, templateCatalogVersion: 13 }, catalog: stored, holdings: [] }),
     { code: "unsupported-world-data" }, "A retired catalog cannot be loaded as a current world");
-  assert.throws(() => normalizeSkyholdData({ meta: { schemaVersion: SKYHOLD_SCHEMA_VERSION }, catalog: stored, holdings: [] }),
+  assert.throws(() => normalizeSkyholdData({ meta: { schemaVersion: SKYHOLD_SCHEMA_VERSION, sharedMarkets: meta.sharedMarkets }, catalog: stored, holdings: [] }),
     { code: "unsupported-world-data" }, "A saved world must declare its catalog version");
+  assert.throws(() => normalizeSkyholdData({ meta: { schemaVersion: SKYHOLD_SCHEMA_VERSION, templateCatalogVersion: TEMPLATE_CATALOG_VERSION }, catalog: stored, holdings: [] }),
+    { code: "unsupported-world-data" }, "A saved world must have shared markets enabled");
   const fresh = normalizeSkyholdData(null);
   assert.throws(() => normalizeSkyholdData({ overview: { settlementName: "Legacy" }, buildings: { list: [] }, residents: { groups: [] } }),
     { code: "unsupported-world-data" }, "The retired single-settlement format is never replaced by fresh defaults");
@@ -60,6 +62,16 @@ export function checkCatalogLoadBoundary() {
   assert.deepEqual(normalizeCatalogPartition(leisureLoaded), leisureLoaded, "Leisure rules must survive repeated normalization");
   const oldService = normalizeCatalogPartition({ buildings: [{ id: "old-bath", service: { capacity: 100 }, moraleDelta: 3 }] });
   assert.equal(Object.hasOwn(oldService.buildings[0].service, "leisure"), false, "Loading an old fixed service must not convert it to leisure");
+  const duplicateMerged = normalizeCatalogPartition({
+    buildings: [
+      { id: "warehouse", name: "Склад", effect: "Эффект ГМа", reputation: 5 },
+      { id: "warehouse", name: "Склад II" }
+    ]
+  });
+  assert.equal(duplicateMerged.buildings.length, 1);
+  assert.equal(duplicateMerged.buildings[0].name, "Склад II");
+  assert.equal(duplicateMerged.buildings[0].effect, "Эффект ГМа", "Duplicate template ID rows must preserve prior GM customization");
+  assert.equal(duplicateMerged.buildings[0].reputation, 5);
   return { savedTemplates: 2, newWorldTemplates: fresh.catalog.buildings.length, unknownVersion: 0 };
 }
 
