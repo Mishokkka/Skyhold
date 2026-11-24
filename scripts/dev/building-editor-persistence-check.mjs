@@ -13,7 +13,7 @@ import { SaveStatus } from "../apps/common/save-status.js";
 import { PendingFieldSavesMixin } from "../apps/common/pending-field-saves.js";
 import { buildingPickerValues } from "../apps/domains/building-editor-pickers.js";
 import { assertProductionIdentityUnchanged, createProductionTiming } from "../engines/economy/production-timing.js";
-import { validateHybridLaborHolding, newHybridLaborIssues, buildingLaborMode, applyStaffAppointment } from "../data/hybrid-labor.js";
+import { validateBuildingLaborAndGoals, newLaborIssues, buildingLaborCapacityQd } from "../data/labor-model.js";
 import { buildWorkAllocationTargets } from "../data/work-allocations.js";
 
 export async function checkBuildingEditorPersistence() {
@@ -64,11 +64,11 @@ const foundry = { utils: {
   getProperty: (object, path) => path.split(".").reduce((row, key) => row?.[key], object)
 } };
 const warnings = [];
-const EditorMethods = new Function("SkyholdData", "foundry", "fieldValue", "buildingPickerValues", "requestSkyholdAppRender", "ui", "assertProductionIdentityUnchanged", "newHybridLaborIssues", "validateHybridLaborHolding", "buildWorkAllocationTargets", "buildingLaborMode",
+const EditorMethods = new Function("SkyholdData", "foundry", "fieldValue", "buildingPickerValues", "requestSkyholdAppRender", "ui", "assertProductionIdentityUnchanged", "newLaborIssues", "validateBuildingLaborAndGoals", "buildWorkAllocationTargets",
   `return class { ${methods.join("\n")} }`)(dataApi, foundry, fieldValue,
   buildingPickerValues, () => {},
   { notifications: { error(message) { assert.fail(message); }, warn(message) { warnings.push(message); } } }, assertProductionIdentityUnchanged,
-  newHybridLaborIssues, validateHybridLaborHolding, buildWorkAllocationTargets, buildingLaborMode);
+  newLaborIssues, validateBuildingLaborAndGoals, buildWorkAllocationTargets);
 const Editor = PendingFieldSavesMixin(EditorMethods);
 const reload = () => createSkyholdSplitStorage({ settings }).getData();
 for (const template of [true, false]) {
@@ -144,12 +144,15 @@ for (const template of [true, false]) {
 const damaged = reload();
 damaged.holdings[0].buildings.list.push({
   id: "broken-employer", name: "Broken employer", constructionStatus: "built", workersMin: 0, workersMax: 1,
-  labor: { version: 1, mode: "staff", capacityQd: null }, assignedWorkerIds: ["stale-worker"],
+  labor: { version: 2, capacityQd: 20 },
   functions: { production: true }, productionLines: []
 });
-damaged.holdings[0].people.list.push({ id: "stale-worker", name: "Stale worker", age: 30, workAssignment: "broken-employer",
-  staffAppointment: { version: 1, buildingId: "broken-employer", primaryFunctionId: "production:deleted",
-    reserveFunctionId: "", wageDailyCopper: 12, overtimeQd: 0, volunteer: false, volunteerReason: "" } });
+damaged.holdings[0].people.list.push({
+  id: "stale-worker",
+  name: "Stale worker",
+  age: 30,
+  workAllocations: [{ schemaVersion: 1, id: "stale-qd", sourceId: "broken-employer", functionId: "production:deleted", normalQd: 20, overtimeQd: 0 }]
+});
 await storage.persistData(damaged);
 const editor = new Editor();
 editor._saveStatus = new SaveStatus();
@@ -164,49 +167,53 @@ await editor._updateMutableBuilding(({ building }) => { building.name = "Renamed
 assert.equal(reload().holdings[0].buildings.list[buildingIndex].name, "Renamed employer",
   "Renaming the affected building must not turn an unchanged issue into a new one");
 let writeCount = writes.length;
-await assert.rejects(editor._updateMutableBuilding(({ building }) => { building.workersMax = 0; }), /штатных мест/);
+await assert.rejects(editor._updateMutableBuilding(({ building }) => { building.productionLines = []; building.labor = { version: 2, capacityQd: 10 }; }), /при пределе 10 QD/);
 assert.equal(writes.length, writeCount, "An old broken reference cannot authorize a new capacity violation");
 await editor._updateMutableBuilding(({ building }) => {
   building.productionLines.push({ id: "deleted", active: true, source: "workers", resourceId: "wood", outputQty: 1, workQd: 1 });
 });
-assert.equal(validateHybridLaborHolding(reload().holdings[0], { targets: buildWorkAllocationTargets(reload().holdings[0]) }).ok, true);
+assert.equal(validateBuildingLaborAndGoals(reload().holdings[0], { targets: buildWorkAllocationTargets(reload().holdings[0]) }).ok, true);
 writeCount = writes.length;
-await assert.rejects(editor._updateMutableBuilding(({ building }) => { building.productionLines = []; }), /недоступна/);
+await assert.rejects(editor._updateMutableBuilding(({ building }) => { building.productionLines = []; }), /не принимает работников|недоступна/);
 assert.equal(writes.length, writeCount, "Deleting a restored contracted line is a new error and cannot persist");
 
 const priorGame = globalThis.game;
 try {
   globalThis.game = { user: { isGM: true } };
   editor.requestRender = () => {};
-  const modeEvent = { preventDefault() {}, currentTarget: { dataset: { buildingLaborField: "mode" }, value: "qd" } };
+  const capEvent = { preventDefault() {}, currentTarget: { dataset: { buildingLaborField: "capacityQd" }, value: "10" } };
   writeCount = writes.length;
-  await editor._onLaborFieldChange(modeEvent);
-  assert.equal(writes.length, writeCount, "A mode change cannot strand current staff contracts");
-  assert.match(warnings.at(-1), /Stale worker.*Сначала снимите/);
-  assert.equal(reload().holdings[0].buildings.list[buildingIndex].labor.mode, "staff");
-  await editor._updateMutableBuilding(({ holding }) => applyStaffAppointment(holding, "stale-worker", null));
-  await editor._onLaborFieldChange(modeEvent);
-  assert.equal(reload().holdings[0].buildings.list[buildingIndex].labor.mode, "qd");
-  assert.equal(reload().holdings[0].people.list.find((person) => person.id === "stale-worker").staffAppointment, undefined);
-  await editor._updateMutableBuilding(({ holding, building }) => {
-    const person = holding.people.list.find((row) => row.id === "stale-worker");
-    person.workAllocationMode = "explicit";
-    person.workAllocations = [{ schemaVersion: 1, id: "mode-switch-qd", sourceId: building.id,
-      functionId: "production:deleted", normalQd: 4, overtimeQd: 0 }];
+  await editor._onLaborFieldChange(capEvent);
+  assert.equal(writes.length, writeCount, "Reducing building QD cap below assigned QD cannot persist");
+  assert.match(warnings.at(-1), /при пределе 10 QD/);
+  assert.equal(buildingLaborCapacityQd(reload().holdings[0].buildings.list[buildingIndex]), 20);
+
+  capEvent.currentTarget.value = "";
+  await editor._onLaborFieldChange(capEvent);
+  assert.equal(buildingLaborCapacityQd(reload().holdings[0].buildings.list[buildingIndex]), null, "Blank cap removes QD ceiling");
+
+  const minEvent = { preventDefault() {}, currentTarget: { dataset: { buildingLaborField: "minOperationalQd" }, value: "12" } };
+  await editor._onLaborFieldChange(minEvent);
+  assert.equal(reload().holdings[0].buildings.list[buildingIndex].activation.minOperationalQd, 12);
+
+  capEvent.currentTarget.value = "0";
+  writeCount = writes.length;
+  await editor._onLaborFieldChange(capEvent);
+  assert.equal(writes.length, writeCount, "Setting building cap to 0 cannot strand assigned QD");
+  assert.equal(buildingLaborCapacityQd(reload().holdings[0].buildings.list[buildingIndex]), null);
+
+  await editor._updateMutableBuilding(({ holding }) => {
+    holding.people.list.find((row) => row.id === "stale-worker").workAllocations = [];
   });
-  const plannedBeforeModeChange = reload();
-  modeEvent.currentTarget.value = "passive";
-  writeCount = writes.length;
-  await editor._onLaborFieldChange(modeEvent);
-  assert.match(warnings.at(-1), /не принимает обычные задания/);
-  assert.equal(writes.length, writeCount, "A QD-to-passive change cannot write any partition while planned work is assigned");
-  assert.deepEqual(reload(), plannedBeforeModeChange,
-    "A rejected editor mode switch must preserve the reloaded building and all residents' allocations");
+  await editor._onLaborFieldChange(capEvent);
+  assert.equal(buildingLaborCapacityQd(reload().holdings[0].buildings.list[buildingIndex]), 0);
+  assert.equal(reload().holdings[0].buildings.list[buildingIndex].activation.minOperationalQd, 0);
+
   globalThis.game.user.isGM = false;
   writeCount = writes.length;
-  modeEvent.currentTarget.value = "passive";
-  await editor._onLaborFieldChange(modeEvent);
-  assert.equal(writes.length, writeCount, "A player cannot change the building labor mode");
+  capEvent.currentTarget.value = "40";
+  await editor._onLaborFieldChange(capEvent);
+  assert.equal(writes.length, writeCount, "A player cannot change the building labor capacity");
 } finally { globalThis.game = priorGame; }
 }
 

@@ -2,8 +2,7 @@ import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-// Match the unchanged pre-transition economy fixture used by yearlyPlan.
-import { BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION as DEFAULT_BUILDING_TEMPLATES } from "../data/building-templates.js";
+import { DEFAULT_BUILDING_TEMPLATES } from "../data/building-templates.js";
 import { yearlyPlan, preparationProductionTradePlan } from "./economy-preparation-year-check.mjs";
 
 // An explicit finite-order sensitivity scenario. These buyers/suppliers are

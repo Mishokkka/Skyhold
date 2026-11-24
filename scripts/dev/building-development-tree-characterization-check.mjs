@@ -3,7 +3,6 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   DEFAULT_BUILDING_TEMPLATES,
-  BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION,
   TEMPLATE_CATALOG_VERSION
 } from "../data/building-templates.js";
 import {
@@ -61,14 +60,10 @@ export function checkBuildingDevelopmentTreeCharacterization() {
   );
   const bathhouse = ordinary.find((template) => template.id === "bathhouse");
   assert.equal(bathhouse?.operatingUpkeepMonthlyCopper, 144, "Bathhouse must keep the approved reduced monthly operating cost");
-  const oldBathhouse = BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION.find((template) => template.id === "bathhouse");
-  assert.deepEqual([oldBathhouse?.workersMin, oldBathhouse?.workersMax], [2, 2], "Saved legacy Bathhouse retains its indivisible two-person staff until explicit transition");
-  assert.deepEqual([bathhouse?.labor.mode, bathhouse?.workersMin, bathhouse?.workersMax], ["staff", 0, 2], "New Bathhouse keeps two staff places and scales service by actual labor");
+  assert.deepEqual([bathhouse?.labor.capacityQd, bathhouse?.workersMin, bathhouse?.workersMax], [40, 0, 2], "New Bathhouse keeps two worker places (40 QD) and binary minOperationalQd activation");
   assert.equal((bathhouse?.productionLines ?? []).some((line) => /fuel|топлив/i.test(`${line.resourceId} ${line.expenses}`)), false, "Bathhouse must not add automatic fuel consumption");
   const dovecote = ordinary.find((template) => template.id === "dovecote");
-  const oldDovecote = BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION.find((template) => template.id === "dovecote");
-  assert.deepEqual([oldDovecote?.workersMin, oldDovecote?.workersMax], [1, 1], "Saved v16 Dovecote retains its historical caretaker until explicit transition");
-  assert.deepEqual([dovecote?.labor.mode, dovecote?.workersMin, dovecote?.workersMax], ["passive", 0, 0], "New Dovecote has no invented permanent staff");
+  assert.deepEqual([dovecote?.labor.capacityQd, dovecote?.workersMin, dovecote?.workersMax], [0, 0, 0], "New Dovecote is passive with zero workers");
   assert.equal((dovecote?.productionLines ?? []).length, 0, "Dovecote must not simulate pigeon resources or production");
   const centerHolding = { buildings: { list: [{
     id: "center-1",
@@ -113,7 +108,7 @@ export function checkBuildingDevelopmentTreeCharacterization() {
   ]);
   assert.deepEqual(totals, { food: 102, technology: 164, culture: 149, war: 113 });
 
-  const stored = structuredClone(BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION);
+  const stored = structuredClone(DEFAULT_BUILDING_TEMPLATES);
   const storedGatehouse = stored.find((template) => template.id === "gatehouse");
   storedGatehouse.requirements = { food: 999, technology: 999, culture: 999, war: 999 };
   storedGatehouse.requiredAnyBuildingIds = [];
@@ -187,7 +182,7 @@ export function checkBuildingDevelopmentTreeCharacterization() {
 
   const currentVersionLaputa = normalizeSkyholdData({
     meta: { schemaVersion: SKYHOLD_SCHEMA_VERSION, templateCatalogVersion: TEMPLATE_CATALOG_VERSION, sharedMarkets: { enabled: true, version: 1, clockTenday: 0, demand: {}, stock: {} } },
-    catalog: { buildings: structuredClone(BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION) },
+    catalog: { buildings: structuredClone(DEFAULT_BUILDING_TEMPLATES) },
     holdings: [{
       id: "laputa",
       name: "Лапута",
@@ -200,16 +195,12 @@ export function checkBuildingDevelopmentTreeCharacterization() {
         status: "Построено",
         workersMin: 1,
         workersMax: 4,
-        assignedWorkerIds: ["", "", "", ""]
+        labor: { version: 2, capacityQd: 80 }
       }] }
     }]
   });
   const currentVersionMine = currentVersionLaputa.holdings[0].buildings.list[0];
-  assert.deepEqual(
-    [currentVersionMine.workersMin, currentVersionMine.workersMax],
-    [1, 4],
-    "loading a current-version world must preserve a saved instance's staffing until explicit migration"
-  );
+  assert.equal(currentVersionMine.labor.capacityQd, 80, "loading a current-version world must preserve a saved instance's v2 QD capacity");
   assert.equal(currentVersionMine.workerProfile?.templateId, "mine", "the staffing migration must attach the approved qualification profile to an existing building");
 
   return { waves, totals };

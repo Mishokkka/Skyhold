@@ -8,7 +8,7 @@ import { stableDataHash } from "../data/storage-commit.js";
 import { addCalendariaQd, timestampForCalendariaDate } from "../integrations/calendaria-bridge.js";
 import { combineTendayReports } from "../engines/tenday/sequential.js";
 import { createEconomyHarness, makeHolding } from "./economy-characterization-check.mjs";
-import { hybridRuntimeFixture } from "./hybrid-labor-runtime-check.mjs";
+import { unifiedRuntimeFixture } from "./unified-labor-check.mjs";
 import { BANK_PRESETS } from "../data/banks.js";
 import { issueBankLoan } from "../engines/economy/banking.js";
 import { openBankDeposit } from "../engines/economy/bank-deposits.js";
@@ -96,14 +96,15 @@ function checkCalendarGate() {
 
 async function checkBatches() {
   delete globalThis.CALENDARIA;
-  for (const mode of ["staff", "qd", "passive"]) {
-    const { holding, harness } = hybridRuntimeFixture({ goal: null });
-    holding.buildings.list[0].labor.mode = mode;
+  for (const capacityQd of [40, null, 0]) {
+    const { holding, harness } = unifiedRuntimeFixture({ goal: null });
+    holding.buildings.list[0].labor = { version: 2, capacityQd };
+    if (capacityQd === 0) holding.people.list[0].workAllocations = [];
     const data = dataFor(holding);
     const before = stableDataHash(data);
     const app = owner(harness);
     const batch = await prepare(app, data, 120, "batch");
-    assert.equal(batch.ok, true, mode);
+    assert.equal(batch.ok, true, String(capacityQd));
     assert.equal(stableDataHash(data), before, "preparation must not mutate source data");
     let singleData = data;
     for (let index = 0; index < 3; index++) {
@@ -165,7 +166,7 @@ async function checkPhysicalTime() {
   delete globalThis.CALENDARIA;
   const outcomes = [];
   for (const efficiency of [0.5, 1, 2, 4]) {
-    const { holding, harness } = hybridRuntimeFixture({ goal: null });
+    const { holding, harness } = unifiedRuntimeFixture({ goal: null });
     harness._personBuildingEfficiency = () => efficiency;
     const data = dataFor(holding);
     data.catalog.banks = [structuredClone(BANK_PRESETS[0])];
@@ -194,7 +195,7 @@ async function checkPhysicalTime() {
   for (const result of outcomes.slice(1)) assert.deepEqual(result, outcomes[0],
     "efficiency changes output, never bank time, voyage time or the price of the same physical work");
 
-  const injured = hybridRuntimeFixture({ goal: null });
+  const injured = unifiedRuntimeFixture({ goal: null });
   injured.person.injuredDays = 5;
   injured.person.status = "Ранен";
   const healed = await prepare(owner(injured.harness), dataFor(injured.holding), 80);

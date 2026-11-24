@@ -22,7 +22,6 @@ function canonicalBuilding(templateId, id, extra = {}) {
     constructionStatus: "built",
     lifecycle: "active",
     condition: "intact",
-    assignedWorkerIds: [],
     ...extra
   };
 }
@@ -98,13 +97,13 @@ export function checkSettlementEffectsCharacterization() {
   const residents = Array.from({ length: 150 }, (_value, index) => person(`resident-${index + 1}`));
   const bathWorkersA = [residents[0].id, residents[1].id];
   const bathWorkersB = [residents[2].id, residents[3].id];
-  const bathA = canonicalBuilding("bathhouse", "bath-a", { assignedWorkerIds: bathWorkersA });
+  const bathA = canonicalBuilding("bathhouse", "bath-a");
   const well = operationalDependency("well");
   const oneBathHolding = { people: { list: residents }, buildings: { list: [well, bathA] }, finance: {}, gm: { modifiers: {} }, special: { list: [] } };
   confirmSocialWork(oneBathHolding, bathA, bathWorkersA);
   const oneBath = harness._buildingMoraleSummary(oneBathHolding);
   assert.equal(oneBath.total, 2, "a +3 service covering 100 of 150 residents rounds to +2");
-  const bathB = canonicalBuilding("bathhouse", "bath-b", { assignedWorkerIds: bathWorkersB });
+  const bathB = canonicalBuilding("bathhouse", "bath-b");
   const twoBathHolding = { ...oneBathHolding, buildings: { list: [well, bathA, bathB] } };
   confirmSocialWork(twoBathHolding, bathB, bathWorkersB);
   const twoBath = harness._buildingMoraleSummary(twoBathHolding);
@@ -119,10 +118,11 @@ export function checkSettlementEffectsCharacterization() {
   const unpleasantSummary = harness._buildingMoraleSummary({ people: { list: residents.slice(0, 10) }, buildings: { list: unpleasant }, finance: {} });
   assert.equal(unpleasantSummary.total, -4, "every active repeated negative building stacks its penalty");
 
-  const sheriff = person("sheriff", { name: "Шериф", role: "Шериф", workAssignment: "sheriff-post-instance", background: "солдат" });
-  const deputy = person("deputy");
-  const population = [sheriff, deputy, ...Array.from({ length: 23 }, (_value, index) => person(`citizen-${index + 1}`))];
-  const sheriffPost = canonicalBuilding("sheriff-post", "sheriff-post-instance", { assignedWorkerIds: [sheriff.id, deputy.id, ""] });
+  const sheriff = person("sheriff", { name: "Шериф", role: "Шериф", workAssignment: "other", background: "солдат" });
+  const deputyA = person("deputy-a", { background: "сторож", workAllocations: [{ sourceId: "sheriff-post-instance", functionId: "defense", normalQd: 20, overtimeQd: 0 }] });
+  const deputyB = person("deputy-b", { background: "солдат", workAllocations: [{ sourceId: "sheriff-post-instance", functionId: "defense", normalQd: 20, overtimeQd: 0 }] });
+  const population = [sheriff, deputyA, deputyB, ...Array.from({ length: 22 }, (_value, index) => person(`citizen-${index + 1}`))];
+  const sheriffPost = canonicalBuilding("sheriff-post", "sheriff-post-instance");
   const controlled = settlementControlSummary({ people: { list: population }, buildings: { list: [sheriffPost] }, finance: {} }, { rawMorale: -12 });
   assert.equal(controlled.population, 25);
   assert.equal(controlled.orderRequirement, 3, "one point of general Control is required per ten residents, rounded up");
@@ -135,13 +135,16 @@ export function checkSettlementEffectsCharacterization() {
   assert.equal(uncovered.institutionalCeiling, null, "partial institutional coverage cannot impose a settlement-wide ceiling");
   assert.equal(uncovered.disorderMorale, -12, "without full institutional coverage Control reduces the incident pool but cannot suppress settlement-wide discontent");
 
-  for (const row of population.slice(0, 6)) row.attributes = { ...row.attributes, wits: 4 };
-  population[0].background = "солдат";
-  population[1].background = "ветеран";
-  population[2].background = "сторож";
-  population[3].background = "писарь";
-  const headquartersWorkers = population.slice(0, 6).map((row) => row.id);
-  const headquarters = canonicalBuilding("main-headquarters", "hq", { assignedWorkerIds: [...headquartersWorkers, ...Array(12).fill("")] });
+  const headquartersStaff = population.slice(1, 7);
+  for (const row of headquartersStaff) {
+    row.attributes = { ...row.attributes, wits: 4 };
+    row.workAllocations = [{ sourceId: "hq", functionId: "defense", normalQd: 20, overtimeQd: 0 }];
+  }
+  headquartersStaff[0].background = "солдат";
+  headquartersStaff[1].background = "ветеран";
+  headquartersStaff[2].background = "сторож";
+  headquartersStaff[3].background = "писарь";
+  const headquarters = canonicalBuilding("main-headquarters", "hq");
   const headquartersDependencies = [
     operationalDependency("garrison-administration"),
     operationalDependency("military-academy"),

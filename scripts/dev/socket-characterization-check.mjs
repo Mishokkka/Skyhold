@@ -44,7 +44,7 @@ export async function checkSocketCharacterization() {
       effect: "",
       notes: "",
       workersMax: 1,
-      assignedWorkerIds: [""],
+      labor: { version: 2, capacityQd: 20 },
       constructionCrewId: "",
       baseUpkeepMonthlyCopper: 3,
       operatingUpkeepMonthlyCopper: 3,
@@ -135,17 +135,35 @@ export async function checkSocketCharacterization() {
     );
 
     const exactWorkerAssignment = clone(guardCurrent);
-    exactWorkerAssignment.holdings[0].people.list[0].workAssignment = "socket-project";
-    exactWorkerAssignment.holdings[0].people.list[0].role = "Socket Project";
-    exactWorkerAssignment.holdings[0].buildings.list[0].assignedWorkerIds = ["resident"];
-    const exactWorkerValidation = validatePlayerPatch(guardCurrent, buildPlayerPatch(guardCurrent, exactWorkerAssignment), "player-1");
+    Object.assign(exactWorkerAssignment.holdings[0].buildings.list[0], {
+      lifecycle: "active",
+      constructionStatus: "built",
+      status: "Построено",
+      functions: { production: true }
+    });
+    const exactWorkerBase = clone(exactWorkerAssignment);
+    exactWorkerAssignment.holdings[0].people.list[0].workAllocations = [{
+      schemaVersion: 1,
+      id: "valid-qd",
+      sourceId: "socket-project",
+      functionId: "production:line",
+      normalQd: 10,
+      overtimeQd: 0
+    }];
+    const exactWorkerValidation = validatePlayerPatch(exactWorkerBase, buildPlayerPatch(exactWorkerBase, exactWorkerAssignment), "player-1");
     assert.equal(
       exactWorkerValidation.ok,
       true,
-      `an exact bidirectional worker assignment within workersMax must preserve the player planner workflow: ${exactWorkerValidation.error ?? "unknown"}`
+      `a valid QD worker allocation within capacityQd must preserve the player planner workflow: ${exactWorkerValidation.error ?? "unknown"}`
     );
 
     const hardAdmissionCurrent = clone(guardCurrent);
+    Object.assign(hardAdmissionCurrent.holdings[0].buildings.list[0], {
+      lifecycle: "active",
+      constructionStatus: "built",
+      status: "Построено",
+      functions: { production: true }
+    });
     hardAdmissionCurrent.holdings[0].people.list[0].attributes = { strength: 2, agility: 3, wits: 3, empathy: 3 };
     hardAdmissionCurrent.holdings[0].buildings.list[0].workerProfile = {
       version: 1,
@@ -156,36 +174,9 @@ export async function checkSocketCharacterization() {
         clauses: [[{ attribute: "strength", minimum: 4 }]]
       }
     };
-    const forgedHardAssignment = clone(hardAdmissionCurrent);
-    forgedHardAssignment.holdings[0].people.list[0].workAssignment = "socket-project";
-    forgedHardAssignment.holdings[0].people.list[0].role = "Socket Project";
-    forgedHardAssignment.holdings[0].buildings.list[0].assignedWorkerIds = ["resident"];
-    assert.equal(
-      validatePlayerPatch(hardAdmissionCurrent, buildPlayerPatch(hardAdmissionCurrent, forgedHardAssignment), "player-1").ok,
-      false,
-      "the authority guard must reject a player-forged hard-admission assignment even when the bidirectional slots match"
-    );
-    hardAdmissionCurrent.holdings[0].buildings.list[0].workerAdmissionOverrideIds = ["resident"];
-    const grandfatheredHardAssignment = clone(hardAdmissionCurrent);
-    grandfatheredHardAssignment.holdings[0].people.list[0].workAssignment = "socket-project";
-    grandfatheredHardAssignment.holdings[0].people.list[0].role = "Socket Project";
-    grandfatheredHardAssignment.holdings[0].buildings.list[0].assignedWorkerIds = ["resident"];
-    assert.equal(
-      validatePlayerPatch(hardAdmissionCurrent, buildPlayerPatch(hardAdmissionCurrent, grandfatheredHardAssignment), "player-1").ok,
-      true,
-      "an unchanged GM-created admission override must keep a legacy assignment usable through the player planner"
-    );
-
     const explicitHardCurrent = clone(hardAdmissionCurrent);
     explicitHardCurrent.holdings[0].buildings.list[0].workerAdmissionOverrideIds = [];
-    Object.assign(explicitHardCurrent.holdings[0].buildings.list[0], {
-      lifecycle: "active",
-      constructionStatus: "built",
-      status: "Построено",
-      functions: { production: true }
-    });
     const forgedExplicitAdmission = clone(explicitHardCurrent);
-    forgedExplicitAdmission.holdings[0].people.list[0].workAllocationMode = "explicit";
     forgedExplicitAdmission.holdings[0].people.list[0].workAssignment = "";
     forgedExplicitAdmission.holdings[0].people.list[0].workAllocations = [{
       schemaVersion: 1,
@@ -227,14 +218,12 @@ export async function checkSocketCharacterization() {
     assert.equal(hiddenError.ok, false);
     assert.doesNotMatch(hiddenError.error, /Тайная мастерская|СИЛ/);
 
-    const legacyHiddenWork = clone(forgedHardAssignment);
-    const [secretWorkshop] = legacyHiddenWork.holdings[0].buildings.list;
-    Object.assign(secretWorkshop, { name: "Тайная мастерская", visibility: "gm" });
-    legacyHiddenWork.holdings[0].buildings.list.push({ id: "visible", name: "Открытая постройка", assignedWorkerIds: [] });
-    const renamePublicBuilding = clone(legacyHiddenWork);
+    const hiddenRenameOther = clone(hiddenWorkCurrent);
+    hiddenRenameOther.holdings[0].buildings.list.push({ id: "visible", name: "Открытая постройка", labor: { version: 2, capacityQd: 0 } });
+    const renamePublicBuilding = clone(hiddenRenameOther);
     renamePublicBuilding.holdings[0].buildings.list[1].name = "Новое название";
-    assert.equal(validatePlayerPatch(legacyHiddenWork, buildPlayerPatch(legacyHiddenWork, renamePublicBuilding), "player-1").ok, true,
-      "an existing failed admission in a legacy slot must not prevent renaming a different building");
+    assert.equal(validatePlayerPatch(hiddenRenameOther, buildPlayerPatch(hiddenRenameOther, renamePublicBuilding), "player-1").ok, true,
+      "an existing failed admission in a hidden building must not prevent renaming a different building");
 
     const exactCrewAssignment = clone(guardCurrent);
     exactCrewAssignment.holdings[0].people.list[0].workAssignment = "construction:crew-a";
@@ -245,16 +234,6 @@ export async function checkSocketCharacterization() {
       exactCrewValidation.ok,
       true,
       `an exact bidirectional, exclusive crew assignment must preserve the player crew editor workflow: ${exactCrewValidation.error ?? "unknown"}`
-    );
-
-    const explicitInLegacySlot = clone(guardCurrent);
-    explicitInLegacySlot.holdings[0].people.list[0].workAllocationMode = "explicit";
-    explicitInLegacySlot.holdings[0].people.list[0].workAllocations = [];
-    explicitInLegacySlot.holdings[0].buildings.list[0].assignedWorkerIds = ["resident"];
-    assert.equal(
-      validatePlayerPatch(guardCurrent, buildPlayerPatch(guardCurrent, explicitInLegacySlot), "player-1").ok,
-      false,
-      "an explicit-QD resident must not also occupy a legacy building slot"
     );
 
     const emitted = [];

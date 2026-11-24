@@ -119,32 +119,35 @@ export function checkReputationCharacterization() {
   assert.deepEqual(fractionalSummary.buildings.map((row) => row.value), [-4, 4]);
 
   const staffedBuilding = building("bathhouse", "bathhouse", 5, {
-    workersMin: 1,
+    workersMin: 0,
     workersMax: 2,
-    activation: { minWorkers: 1 },
-    functions: { culture: true },
-    assignedWorkerIds: ["attendant"],
-    maintenance: { backlogTendays: 2 }
+    labor: { version: 2, capacityQd: 40 },
+    activation: { minOperationalQd: 20 },
+    functions: { culture: true }
   });
   const staffedHolding = {
-    people: { list: [{ id: "attendant", dead: false, injuredDays: 0 }] },
+    people: { list: [{
+      id: "attendant", dead: false, injuredDays: 0,
+      workAllocations: [{ sourceId: "bathhouse", functionId: "culture", normalQd: 20, overtimeQd: 0 }]
+    }] },
     buildings: { list: [staffedBuilding] },
     finance: {}
   };
-  assert.equal(buildingServiceEffectFactor(staffedHolding, staffedBuilding), 0.5, "a staffed active service with two missed maintenance tendays must run at half effect");
+  assert.equal(buildingServiceEffectFactor(staffedHolding, staffedBuilding), 1, "a staffed active service runs at full effect with no maintenance penalty");
   assert.equal(scaleIntegerBuildingEffect(5, 0.5), 3, "partial positive effects use symmetric whole-number rounding");
-  staffedBuilding.assignedWorkerIds = [];
-  assert.equal(buildingServiceEffectFactor(staffedHolding, staffedBuilding), 0, "an active institution without its minimum staff must give no settlement effect");
+  staffedHolding.people.list[0].workAllocations = [];
+  assert.equal(buildingServiceEffectFactor(staffedHolding, staffedBuilding), 0, "an active institution below minOperationalQd must give no settlement effect");
   const passiveMonument = building("spire", "spire", 5, {
     workersMin: 0,
     workersMax: 0,
+    labor: { version: 2, capacityQd: 0 },
     workerProfile: { workersMin: 0, workersMax: 0, composition: [] },
     functions: { culture: true },
-    serviceState: { functionId: "culture", active: false },
-    maintenance: { backlogTendays: 9 }
+    service: { capacity: 1 }
   });
-  assert.equal(buildingServiceEffectFactor(staffedHolding, passiveMonument), 1, "The generic readiness helper preserves passive structural behavior");
-  assert.equal(buildingConfirmedSocialStatus(staffedHolding, passiveMonument).active, false, "Positive reputation never inherits passive structural readiness");
+  assert.equal(buildingServiceEffectFactor(staffedHolding, passiveMonument), 1, "passive buildings without worker capacity remain active");
+  passiveMonument.lifecycle = "disabled";
+  assert.equal(buildingConfirmedSocialStatus(staffedHolding, passiveMonument).active, false, "disabled buildings must be inactive");
 
   return { repeated: repeatedSummary.rawTotal, legacy: legacySummary.rawTotal, negative: negativeSummary.rawTotal };
 }

@@ -5,6 +5,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { DEFAULT_BUILDING_TEMPLATES } from "../data/building-templates.js";
 import { DEFAULT_SKYHOLD_DATA } from "../data/defaults/default-skyhold-data.js";
 import { mergeHoldingDefaults } from "../data/normalizers.js";
+import { buildingWorkerIds } from "../data/work-allocations.js";
 import { prepareSkyholdCommit } from "../data/commit-preparation.js";
 import { buildPlayerPatch, validatePlayerPatch } from "../data/player-write-guard.js";
 import { AssignmentDomain } from "../apps/domains/assignment-domain.js";
@@ -35,9 +36,9 @@ function fixture() {
       ...(id === "away" ? { shipAssignment: { shipId: "ship", away: true } } : {})
     })) },
     buildings: { list: [{ id: "post", templateId: "sheriff-post", name: "Местная охрана", workerRole: "",
-      lifecycle: "active", condition: "intact", constructionStatus: "built", workersMin: 1, workersMax: 2,
-      assignedWorkerIds: ["", ""], workerAdmissionOverrideIds: [], functions: { defense: true },
-      activation: { minWorkers: 1, minOperationalQd: 20 }, control: { generalPerWorker: 1, maximum: 2, ceiling: -10, capacity: 20 } }] }
+      lifecycle: "active", condition: "intact", constructionStatus: "built", workersMin: 0, workersMax: 2,
+      labor: { version: 2, capacityQd: 40 }, workerAdmissionOverrideIds: [], functions: { defense: true },
+      activation: { minWorkers: 0, minOperationalQd: 20 }, control: { generalPerWorker: 1, maximum: 2, ceiling: -10, capacity: 20 } }] }
   });
   // This fixture tests real assignment/service rules without the catalog's composition contract.
   holding.buildings.list[0].workerProfile = null;
@@ -88,7 +89,7 @@ export async function checkControlTab() {
     assert.equal(context.chain[1].present, false);
     assert.match(context.chain[1].effects, /максимум 6.*охват 60.*−?[-]5/);
     assert.match(context.chain[1].prerequisites, /Пост шерифа/);
-    assert.match(context.chain[0].instances[0].reasons, /работников/);
+    assert.match(context.chain[0].instances[0].reasons, /нужно QD: 20, выделено: 0/);
     assert.equal(context.jobs[0].candidates.some((row) => ["child", "away"].includes(row.id)), false);
 
     const store = memoryStore(data);
@@ -115,10 +116,10 @@ export async function checkControlTab() {
     assert.equal((await execute("sheriff", "")).ok, true);
     assert.equal(settlementControlSummary(store.view().holdings[0]).generalControl, 0);
     assert.equal((await execute("add", "alice")).ok, true);
-    assert.equal(store.view().holdings[0].people.list[0].role, "Местная охрана");
+    assert.deepEqual(buildingWorkerIds(store.view().holdings[0], "post"), ["alice"]);
     assert.equal(settlementControlSummary(store.view().holdings[0]).generalControl, 1);
     assert.equal((await execute("remove", "alice")).ok, true);
-    assert.equal(store.view().holdings[0].buildings.list[0].assignedWorkerIds.some(Boolean), false);
+    assert.equal(buildingWorkerIds(store.view().holdings[0], "post").length, 0);
     assert.equal((await execute("sheriff", "away")).ok, false);
     assert.equal((await execute("sheriff", "child")).ok, false);
 
@@ -149,7 +150,7 @@ export async function checkControlTab() {
     const normalizedStore = memoryStore(fixture(), { player: true, normalize: true });
     assert.equal((await executeControlWorkOperation({ ...hardOperation, operationId: "normalized-add", residentId: "alice" },
       { store: normalizedStore, getManager: () => manager })).ok, true, "ordinary commit normalization and GM validation preserve work assignments");
-    assert.equal(normalizedStore.view().holdings[0].people.list[0].workAssignment, "post");
+    assert.equal(normalizedStore.view().holdings[0].people.list[0].workAllocations?.[0]?.sourceId, "post");
     assert.equal((await executeControlWorkOperation({ ...hardOperation, operationId: "normalized-remove", action: "remove", residentId: "alice", expectedRevision: 2 },
       { store: normalizedStore, getManager: () => manager })).ok, true);
     assert.equal((await executeControlWorkOperation({ ...hardOperation, operationId: "normalized-sheriff", action: "sheriff", buildingId: "", residentId: "alice", expectedRevision: 3 },
@@ -183,7 +184,6 @@ export async function checkControlTab() {
     const wrongRole = copy(bad);
     wrongRole.holdings[0].people.list[0].workAssignment = "post";
     wrongRole.holdings[0].people.list[0].role = "Чужая роль";
-    wrongRole.holdings[0].buildings.list[0].assignedWorkerIds[0] = "alice";
     assert.equal(validatePlayerPatch(bad, buildPlayerPatch(bad, wrongRole)).ok, false);
     const forbiddenCustom = copy(bad);
     forbiddenCustom.holdings[0].people.list[0].workAssignment = "other";
@@ -209,17 +209,19 @@ export async function checkControlTab() {
     assert.doesNotMatch(hiddenContext.chain.find((row) => row.id === "guard-house").prerequisites, /Пост шерифа/);
 
     globalThis.game.user = gm;
-    const explicit = fixture();
-    const explicitPerson = explicit.holdings[0].people.list[0];
-    explicitPerson.workAllocationMode = "explicit";
-    explicitPerson.workAllocations = [{ id: "qd", sourceId: "post", functionId: "defense", normalQd: 20, overtimeQd: 0 }];
-    const explicitContext = prepareControlContext(explicit.holdings[0], data.catalog.buildings, {}, manager);
-    assert.equal(explicitContext.jobs[0].workers[0].explicit, true);
-    assert.equal(explicitContext.jobs[0].workers[0].canRemove, false);
-    const explicitStore = memoryStore(explicit);
+    const partial = fixture();
+    const partialPerson = partial.holdings[0].people.list[0];
+    partialPerson.workAllocations = [
+      { id: "qd-post", sourceId: "post", functionId: "defense", normalQd: 20, overtimeQd: 0 },
+      { id: "qd-other", sourceId: "farm", functionId: "production:grain", normalQd: 10, overtimeQd: 0 }
+    ];
+    const partialContext = prepareControlContext(partial.holdings[0], data.catalog.buildings, {}, manager);
+    assert.equal(partialContext.jobs[0].workers[0].canRemove, true);
+    const partialStore = memoryStore(partial);
     assert.equal((await executeControlWorkOperation({ ...hardOperation, action: "remove", residentId: "alice" },
-      { store: explicitStore, getManager: () => manager })).ok, false);
-    assert.equal(explicitStore.commits(), 0);
+      { store: partialStore, getManager: () => manager })).ok, true);
+    assert.equal(partialStore.commits(), 1);
+    assert.deepEqual(partialStore.view().holdings[0].people.list[0].workAllocations.map((row) => row.sourceId), ["farm"]);
 
     const stopped = fixture();
     stopped.holdings[0].buildings.list[0].lifecycle = "disabled";
@@ -280,7 +282,7 @@ export async function checkControlTab() {
       globalThis.game.user = gm;
       const viewHolding = windowStore.view().holdings[0];
       viewHolding.buildings.list.push({ id: "hidden-source", name: "Секретная охрана", visibility: "gm",
-        lifecycle: "active", condition: "intact", workersMin: 0, workersMax: 0, assignedWorkerIds: [],
+        lifecycle: "active", condition: "intact", workersMin: 0, workersMax: 0, labor: { version: 2, capacityQd: 0 },
         activation: { minWorkers: 0, minOperationalQd: 0 }, control: { generalFlat: 2 } });
       app.activeTab = "cabinet";
       const gmView = await app._prepareContext({});

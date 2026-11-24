@@ -53,7 +53,8 @@ function builtProductionBuilding(id, productionLines, extra = {}) {
     constructionStatus: "built",
     status: "Построено",
     functions: { production: true, income: false, ...(extra.functions ?? {}) },
-    assignedWorkerIds: extra.assignedWorkerIds ?? [],
+    labor: extra.labor ?? { version: 2, capacityQd: 40 },
+    workersMax: extra.workersMax ?? 2,
     productionLines,
     ...extra
   };
@@ -126,9 +127,11 @@ export function createEconomyHarness() {
     },
 
     _buildingEffectiveWorkers(holding, building) {
-      const assigned = (building.assignedWorkerIds ?? [])
-        .map((id) => (holding.people.list ?? []).find((person) => String(person.id) === String(id)))
-        .filter((person) => person && !person.dead && Number(person.injuredDays ?? 0) <= 0);
+      const id = String(building?.id ?? "");
+      const assigned = (holding.people?.list ?? [])
+        .filter((person) => person && !person.dead && Number(person.injuredDays ?? 0) <= 0
+          && (person.workAllocations ?? []).some((row) => String(row?.sourceId ?? "") === id
+            && Number(row?.normalQd ?? row?.qd ?? 0) + Number(row?.overtimeQd ?? 0) > 0));
       return {
         assigned: assigned.length,
         total: assigned.reduce((sum, person) => sum + Number(person.testEfficiency ?? 1), 0),
@@ -161,7 +164,9 @@ export function createEconomyHarness() {
     },
 
     _assignedWorkerSet(holding) {
-      return new Set((holding.buildings.list ?? []).flatMap((building) => building.assignedWorkerIds ?? []).map(String));
+      return new Set((holding.people?.list ?? [])
+        .filter((person) => (person?.workAllocations ?? []).some((row) => Number(row?.normalQd ?? row?.qd ?? 0) + Number(row?.overtimeQd ?? 0) > 0))
+        .map((person) => String(person.id)));
     },
 
     _storageRooms() {
@@ -240,12 +245,12 @@ export async function checkEconomyCharacterization() {
 
   {
     const holding = makeHolding();
-    holding.people.list = [{ id: "or-worker", name: "Мастер", workAssignment: "or-workshop" }];
+    holding.people.list = [{ id: "or-worker", name: "Мастер", workAllocations: [{ sourceId: "or-workshop", functionId: "production:or-line", normalQd: 20 }] }];
     holding.storage.resources = [resource("wood", 2)];
     holding.buildings.list = [builtProductionBuilding("or-workshop", [{
       id: "or-line", active: true, source: "workers", workQd: 1, resourceId: "grain", outputQty: 1,
       expenses: "wood 2 ИЛИ stone 1; wood 1", expenseMode: "cycle"
-    }], { assignedWorkerIds: ["or-worker"] })];
+    }])];
     let collected = false;
     await runProductionCycle({ holding, qd: 1, report: reportShape(), budgets: new Map(),
       workerContext: economy._economyWorkerContext(holding), dependencies: {
@@ -379,7 +384,8 @@ export async function checkEconomyCharacterization() {
 
   {
     const holding = makeHolding();
-    holding.people.list = [{ id: "fractional-worker", name: "Работник", workAssignment: "fractional-runtime", volunteerLabor: true, volunteerReason: "characterization fixture" }];
+    holding.people.list = [{ id: "fractional-worker", name: "Работник", volunteerLabor: true, volunteerReason: "characterization fixture",
+      workAllocations: [{ sourceId: "fractional-runtime", functionId: "production:fractional-runtime-line", normalQd: 2 }] }];
     holding.storage.resources = [resource("wood", 2, { name: "Wood" })];
     holding.buildings.list = [builtProductionBuilding("fractional-runtime", [{
       id: "fractional-runtime-line",
@@ -390,8 +396,8 @@ export async function checkEconomyCharacterization() {
       outputQty: 1.8,
       expenses: "Wood 1.2",
       expenseMode: "cycle"
-    }], { assignedWorkerIds: ["fractional-worker"] })];
-    const report = await economy._runEconomyForQd(holding, 4);
+    }])];
+    const report = await economy._runEconomyForQd(holding, 40);
     assert.equal(quantity(holding, "stone"), 1, "a 1.8 runtime output must create exactly one resource unit");
     assert.equal(quantity(holding, "wood"), 0, "a 1.2 positive recipe cost must consume two resource units");
     assert.equal(holding.storage.resources.every((row) => Number.isInteger(row.qty)), true, "production must leave only whole storage quantities");
@@ -400,7 +406,8 @@ export async function checkEconomyCharacterization() {
 
   {
     const holding = makeHolding();
-    holding.people.list = [{ id: "worker", name: "Работник", workAssignment: "worker-mill", volunteerLabor: true, volunteerReason: "characterization fixture" }];
+    holding.people.list = [{ id: "worker", name: "Работник", volunteerLabor: true, volunteerReason: "characterization fixture",
+      workAllocations: [{ sourceId: "worker-mill", functionId: "production:stone-workers", normalQd: 2 }] }];
     holding.buildings.list = [builtProductionBuilding("worker-mill", [{
       id: "stone-workers",
       active: true,
@@ -410,9 +417,9 @@ export async function checkEconomyCharacterization() {
       resource: "Stone",
       outputQty: 2,
       storageRoomId: "outdoors"
-    }], { assignedWorkerIds: ["worker"] })];
-    await economy._runEconomyForQd(holding, 4);
-    assert.equal(quantity(holding, "stone"), 4, "one worker must spend the normal two daily work QD on production");
+    }])];
+    await economy._runEconomyForQd(holding, 40);
+    assert.equal(quantity(holding, "stone"), 4, "two planned work QD must produce four units");
   }
 
   {
@@ -422,7 +429,6 @@ export async function checkEconomyCharacterization() {
       name: "Разделённый доброволец",
       attributes: { strength: 3, agility: 3, wits: 3, empathy: 3 },
       workAssignment: "",
-      workAllocationMode: "explicit",
       workAllocations: [
         { id: "split-wood", sourceId: "split-lumber", functionId: "production:wood-line", normalQd: 10, overtimeQd: 0 },
         { id: "split-stone", sourceId: "split-quarry", functionId: "production:stone-line", normalQd: 10, overtimeQd: 0 }
@@ -441,7 +447,7 @@ export async function checkEconomyCharacterization() {
         outputQty: 1,
         wageDailyCopper: 12,
         storageRoomId: "outdoors"
-      }], { name: "Лесоповал", workersMax: 1, wageDailyCopper: 12, assignedWorkerIds: [] }),
+      }], { name: "Лесоповал", workersMax: 1, wageDailyCopper: 12 }),
       builtProductionBuilding("split-quarry", [{
         id: "stone-line",
         active: true,
@@ -452,7 +458,7 @@ export async function checkEconomyCharacterization() {
         outputQty: 1,
         wageDailyCopper: 12,
         storageRoomId: "outdoors"
-      }], { name: "Малая каменоломня", workersMin: 1, workersMax: 2, wageDailyCopper: 12, assignedWorkerIds: [] })
+      }], { name: "Малая каменоломня", workersMax: 2, wageDailyCopper: 12, activation: { minOperationalQd: 10 } })
     ];
     const report = await economy._runEconomyForQd(holding, 40);
     assert.equal(quantity(holding, "wood"), 10, "an explicit 10-QD lumber allocation must produce its full integer output");
@@ -470,7 +476,7 @@ export async function checkEconomyCharacterization() {
     holding.people.list = ["worker-a", "worker-b"].map((id) => ({
       id,
       name: id,
-      workAssignment: "scaled-mill",
+      workAllocations: [{ sourceId: "scaled-mill", functionId: "production:scaled-workers", normalQd: 2 }],
       volunteerLabor: true,
       volunteerReason: "characterization fixture"
     }));
@@ -483,14 +489,15 @@ export async function checkEconomyCharacterization() {
       resource: "Stone",
       outputQty: 2,
       storageRoomId: "outdoors"
-    }], { workersMin: 1, workersMax: 2, assignedWorkerIds: ["worker-a", "worker-b"] })];
-    await economy._runEconomyForQd(holding, 4);
+    }], { workersMax: 2, labor: { version: 2, capacityQd: 40 } })];
+    await economy._runEconomyForQd(holding, 40);
     assert.equal(quantity(holding, "stone"), 8, "two ordinary workers must produce exactly twice the one-worker output when no other bottleneck applies");
   }
 
   {
     const holding = makeHolding();
-    holding.people.list = [{ id: "worker", name: "Работник", workAssignment: "understaffed-mill", volunteerLabor: true, volunteerReason: "characterization fixture" }];
+    holding.people.list = [{ id: "worker", name: "Работник", volunteerLabor: true, volunteerReason: "characterization fixture",
+      workAllocations: [{ sourceId: "understaffed-mill", functionId: "production:understaffed-workers", normalQd: 10 }] }];
     holding.buildings.list = [builtProductionBuilding("understaffed-mill", [{
       id: "understaffed-workers",
       active: true,
@@ -500,9 +507,9 @@ export async function checkEconomyCharacterization() {
       resource: "Stone",
       outputQty: 2,
       storageRoomId: "outdoors"
-    }], { workersMin: 2, workersMax: 4, assignedWorkerIds: ["worker", "", "", ""] })];
-    await economy._runEconomyForQd(holding, 4);
-    assert.equal(quantity(holding, "stone"), 0, "the approved mandatory minimum must stop an understaffed production team");
+    }], { workersMax: 4, labor: { version: 2, capacityQd: 80 }, activation: { minOperationalQd: 20, anyWorkingFunction: true } })];
+    await economy._runEconomyForQd(holding, 40);
+    assert.equal(quantity(holding, "stone"), 0, "the approved binary minOperationalQd threshold must stop an understaffed production line");
   }
 
   {
@@ -526,7 +533,7 @@ export async function checkEconomyCharacterization() {
 
   {
     const holding = makeHolding();
-    holding.people.list = [{ id: "master", name: "Мастер", workAssignment: "efficient-cycle" }];
+    holding.people.list = [{ id: "master", name: "Мастер", workAllocations: [{ sourceId: "efficient-cycle", functionId: "production:efficient-cycle-line", normalQd: 20 }] }];
     holding.storage.resources = [resource("wood", 4)];
     holding.buildings.list = [builtProductionBuilding("efficient-cycle", [{
       id: "efficient-cycle-line",
@@ -537,7 +544,7 @@ export async function checkEconomyCharacterization() {
       outputQty: 4,
       expenses: "Wood 2",
       expenseMode: "cycle"
-    }], { assignedWorkerIds: ["master"] })];
+    }])];
     const report = reportShape();
     const workerContext = economy._economyWorkerContext(holding);
     await runProductionCycle({
@@ -557,7 +564,7 @@ export async function checkEconomyCharacterization() {
 
   {
     const holding = makeHolding();
-    holding.people.list = [{ id: "qualified", name: "Квалифицированный", workAssignment: "qualified-cycle" }];
+    holding.people.list = [{ id: "qualified", name: "Квалифицированный", workAllocations: [{ sourceId: "qualified-cycle", functionId: "production:qualified-cycle-line", normalQd: 20 }] }];
     holding.storage.resources = [resource("wood", 4)];
     holding.buildings.list = [builtProductionBuilding("qualified-cycle", [{
       id: "qualified-cycle-line",
@@ -568,7 +575,7 @@ export async function checkEconomyCharacterization() {
       outputQty: 4,
       expenses: "Wood 2",
       expenseMode: "cycle"
-    }], { assignedWorkerIds: ["qualified"] })];
+    }])];
     const line = holding.buildings.list[0].productionLines[0];
     const dependencies = {
       ...economy._productionCycleDependencies(),
@@ -651,7 +658,7 @@ export async function checkEconomyCharacterization() {
 
   {
     const holding = makeHolding();
-    holding.people.list = [{ id: "qualified", name: "Квалифицированный", workAssignment: "unfunded-carry" }];
+    holding.people.list = [{ id: "qualified", name: "Квалифицированный", workAllocations: [{ sourceId: "unfunded-carry", functionId: "production:unfunded-carry-line", normalQd: 20 }] }];
     holding.storage.resources = [resource("wood", 2)];
     holding.buildings.list = [builtProductionBuilding("unfunded-carry", [{
       id: "unfunded-carry-line",
@@ -662,7 +669,7 @@ export async function checkEconomyCharacterization() {
       outputQty: 4,
       expenses: "Wood 2",
       expenseMode: "cycle"
-    }], { assignedWorkerIds: ["qualified"] })];
+    }])];
     const line = holding.buildings.list[0].productionLines[0];
     const dependencies = {
       ...economy._productionCycleDependencies(),
@@ -682,7 +689,8 @@ export async function checkEconomyCharacterization() {
 
   {
     const holding = makeHolding();
-    holding.people.list = [{ id: "worker", name: "Работник", workAssignment: "unit-cost", volunteerLabor: true, volunteerReason: "characterization fixture" }];
+    holding.people.list = [{ id: "worker", name: "Работник", volunteerLabor: true, volunteerReason: "characterization fixture",
+      workAllocations: [{ sourceId: "unit-cost", functionId: "production:unit-cost-line", normalQd: 2 }] }];
     holding.storage.resources = [resource("wood", 3)];
     holding.buildings.list = [builtProductionBuilding("unit-cost", [{
       id: "unit-cost-line",
@@ -693,8 +701,8 @@ export async function checkEconomyCharacterization() {
       outputQty: 4,
       expenses: "Wood 1",
       expenseMode: "unit"
-    }], { assignedWorkerIds: ["worker"] })];
-    const report = await economy._runEconomyForQd(holding, 4);
+    }])];
+    const report = await economy._runEconomyForQd(holding, 40);
     assert.equal(quantity(holding, "wood"), 3, "an underfunded unit-cost batch must not reserve or consume a partial input set");
     assert.equal(quantity(holding, "stone"), 0, "worker production must emit only a complete funded batch, never an affordable fraction");
     assert.equal(report.skipped.some((line) => /не хватает .* для новой партии/.test(line)), true, "an unaffordable whole batch must be reported");
@@ -702,7 +710,8 @@ export async function checkEconomyCharacterization() {
 
   {
     const holding = makeHolding();
-    holding.people.list = [{ id: "cook", name: "Повар", workAssignment: "group-cost", volunteerLabor: true, volunteerReason: "characterization fixture" }];
+    holding.people.list = [{ id: "cook", name: "Повар", volunteerLabor: true, volunteerReason: "characterization fixture",
+      workAllocations: [{ sourceId: "group-cost", functionId: "production:edible-group-line", normalQd: 2 }] }];
     holding.storage.resources = [resource("milk", 2, { name: "Milk" }), resource("meat", 1, { name: "Meat" })];
     holding.buildings.list = [builtProductionBuilding("group-cost", [{
       id: "edible-group-line",
@@ -713,8 +722,8 @@ export async function checkEconomyCharacterization() {
       outputQty: 4,
       expenses: "Milk 2; Meat 1",
       expenseMode: "cycle"
-    }], { assignedWorkerIds: ["cook"] })];
-    const report = await economy._runEconomyForQd(holding, 4);
+    }])];
+    const report = await economy._runEconomyForQd(holding, 40);
     assert.equal(quantity(holding, "milk"), 0, "an explicit milk expense must consume only matching milk stock");
     assert.equal(quantity(holding, "meat"), 0, "an explicit meat expense must consume only matching meat stock");
     assert.equal(quantity(holding, "stone"), 4, "a payable explicit cycle expense must allow the full production output");
@@ -785,13 +794,15 @@ export async function checkEconomyCharacterization() {
 
   {
     const holding = makeHolding();
-    holding.people.list = [{ id: "consumer-worker", name: "Мельник", workAssignment: "consumer", volunteerLabor: true, volunteerReason: "characterization fixture" }];
+    holding.people.list = [{ id: "consumer-worker", name: "Мельник", volunteerLabor: true, volunteerReason: "characterization fixture",
+      workAllocations: [{ sourceId: "consumer", functionId: "production:worker-auto-consumer", normalQd: 20 }] }];
     const sourceLine = {
       id: "worker-auto-source",
       active: true,
       source: "time",
       period: "day",
       workQd: 1,
+      repeat: false,
       resourceId: "wood",
       outputQty: 2,
       requiresCollection: true,
@@ -811,9 +822,9 @@ export async function checkEconomyCharacterization() {
     };
     holding.buildings.list = [
       builtProductionBuilding("source", [sourceLine], { visibility: "gm", name: "Тайная столярня" }),
-      builtProductionBuilding("consumer", [consumerLine], { assignedWorkerIds: ["consumer-worker"] })
+      builtProductionBuilding("consumer", [consumerLine])
     ];
-    const report = await economy._runEconomyForQd(holding, 4);
+    const report = await economy._runEconomyForQd(holding, 40);
     economy._appendEconomyStorageLog(holding, report, { operationId: "worker-collection" });
     assert.equal(sourceLine.pendingQty, 0, "worker auto-collect must clear matching source pending output");
     assert.equal(quantity(holding, "stone"), 2, "consumer workers must use auto-collected inputs in the same QD");
@@ -827,7 +838,8 @@ export async function checkEconomyCharacterization() {
   {
     const holding = makeHolding();
     holding.people.list = [
-      { id: "tavern-worker", name: "Трактирщик", workAssignment: "tavern", volunteerLabor: true, volunteerReason: "characterization fixture" },
+      { id: "tavern-worker", name: "Трактирщик", volunteerLabor: true, volunteerReason: "characterization fixture",
+        workAllocations: [{ sourceId: "tavern", functionId: "production:tavern-food", normalQd: 20 }] },
       { id: "resident", name: "Житель" }
     ];
     const milkLine = {
@@ -855,16 +867,21 @@ export async function checkEconomyCharacterization() {
     };
     holding.buildings.list = [
       builtProductionBuilding("pasture", [milkLine], { name: "Пастбище" }),
-      builtProductionBuilding("tavern", [foodLine], { name: "Таверна", assignedWorkerIds: ["tavern-worker"], workersMin: 1 })
+      builtProductionBuilding("tavern", [foodLine], { name: "Таверна" })
     ];
     const readiness = await economy._tendayReadinessContext(holding);
     assert.equal(readiness.foodStored, 0, "tenday readiness must distinguish current food reserves from forecast output");
     const execution = clone(holding);
     const executed = await economy._runEconomyForQd(execution, 40);
-    assert.equal(readiness.foodProduced, 18, "Milk arrives after the first day's staffed shift; processing has nine days of funded shifts");
+    assert.equal(readiness.foodProduced, 20, "Same-day evening milk completes processing within the daily worker QD budget");
     assert.equal(readiness.foodAvailable, executed.food.availableBeforeConsumption,
       "Readiness must use the same staffed shifts and ingredient collection chain as actual execution");
-    assert.equal(readiness.alerts.some((alert) => alert.key === "food"), true, "A two-unit forecast shortage must remain visible");
+    assert.equal(readiness.alerts.some((alert) => alert.key === "food"), false, "Full 20 QD covers the 20-unit requirement");
+    const shortHolding = clone(holding);
+    shortHolding.people.list[0].workAllocations[0].normalQd = 18;
+    const shortReadiness = await economy._tendayReadinessContext(shortHolding);
+    assert.equal(shortReadiness.foodProduced, 18);
+    assert.equal(shortReadiness.alerts.some((alert) => alert.key === "food"), true, "A two-unit forecast shortage must remain visible");
   }
 
   {
@@ -872,7 +889,7 @@ export async function checkEconomyCharacterization() {
     holding.people.list = [{ id: "local", name: "Мельник", age: 32 }];
     holding.buildings.list = [
       { id: "hidden-project", name: "Тайный проект", visibility: "gm", constructionStatus: "planned" },
-      { id: "hidden-workshop", name: "Тайная кузница", visibility: "gm", constructionStatus: "built", workersMin: 1 },
+      { id: "hidden-workshop", name: "Тайная кузница", visibility: "gm", constructionStatus: "built", workersMax: 1, labor: { version: 2, capacityQd: 20 }, activation: { minOperationalQd: 20 } },
       { id: "public-project", name: "Открытый проект", constructionStatus: "planned" }
     ];
     holding.storage.resources = [resource("bread", 16, { id: "flour-stock", batches: [{ id: "flour-batch", qty: 16, ageQd: 0 }] })];
@@ -970,13 +987,14 @@ export async function checkEconomyCharacterization() {
 
   {
     const holding = makeHolding();
-    holding.people.list = [{ id: "keeper", name: "Управляющий", dead: false, volunteerLabor: true, volunteerReason: "characterization fixture" }];
+    holding.people.list = [{ id: "keeper", name: "Управляющий", dead: false, volunteerLabor: true, volunteerReason: "characterization fixture",
+      workAllocations: [{ sourceId: "passive-income", functionId: "income", normalQd: 20 }] }];
     holding.buildings.list = [{
       id: "passive-income",
       name: "Доходное здание",
       constructionStatus: "built",
       functions: { production: false, income: true },
-      assignedWorkerIds: ["keeper"],
+      labor: { version: 2, capacityQd: 40 },
       income: { base: 100, perWorker: 0, trade: { enabled: false } }
     }];
     const report = await economy._runEconomyForQd(holding, 40);
@@ -984,13 +1002,15 @@ export async function checkEconomyCharacterization() {
     assert.equal(report.income.some((line) => /Деньги \+100/.test(line)), true, "staffed income must be recorded in the report");
 
     const unstaffed = makeHolding();
-    unstaffed.buildings.list = [{ ...holding.buildings.list[0], assignedWorkerIds: [] }];
+    unstaffed.people.list = [{ id: "keeper", name: "Управляющий", dead: false, workAllocations: [] }];
+    unstaffed.buildings.list = [{ ...holding.buildings.list[0] }];
     const unstaffedReport = await economy._runEconomyForQd(unstaffed, 40);
     assert.equal(unstaffed.storage.moneyCopper, 0, "an unstaffed income building must not create money");
     assert.equal(unstaffedReport.skipped.includes("Доходное здание: доход не получен — работник не назначен."), true, "unstaffed income must explain why it was skipped");
 
     const unavailable = makeHolding();
-    unavailable.people.list = [{ id: "keeper", name: "Управляющий", dead: true }];
+    unavailable.people.list = [{ id: "keeper", name: "Управляющий", dead: true,
+      workAllocations: [{ sourceId: "passive-income", functionId: "income", normalQd: 20 }] }];
     unavailable.buildings.list = [{ ...holding.buildings.list[0] }];
     await economy._runEconomyForQd(unavailable, 40);
     assert.equal(unavailable.storage.moneyCopper, 0, "a dead assigned resident must not unlock passive building income");
@@ -1004,10 +1024,9 @@ export async function checkEconomyCharacterization() {
       _buildingStatus: () => ({ value: "built" }),
       _financeFunctionAllowed: (_finance, building) => building.id !== "blocked",
       _activeAssignedBuildingPeople: () => [{ id: "worker" }],
-      _buildingMinimumStaffStatus: () => ({ met: true }),
-      _plannedWorkerFunctionQd: () => 20,
+      _buildingMinimumQdStatus: () => ({ met: true }),
+      _plannedWorkerFunctionQd: () => 40,
       _personBuildingEfficiency: () => 1,
-      _maintenanceEfficiencyFactor: () => 0.5,
       _rollFormulaTotal: async (_formula, argumentsForRoll) => {
         rollArguments.push(argumentsForRoll);
         const total = formulaRolls.shift();
@@ -1018,11 +1037,11 @@ export async function checkEconomyCharacterization() {
     direct.buildings.list = [source, { ...source, id: "trading", income: { ...source.income, trade: { enabled: true } } },
       { ...source, id: "blocked" }];
     await incomePhase._runBuildingIncomeForQd(direct, 80, directReport, { workerContext: { financeContext: {} } });
-    assert.equal(direct.storage.moneyCopper, 6, "maintenance rounding is applied to each tenday formula roll before their total is credited");
+    assert.equal(direct.storage.moneyCopper, 13, "each tenday formula roll floors to whole copper before totaling");
     assert.equal(directReport.ledger.filter((row) => row.domain === "income").length, 1, "trading and blocked buildings must not duplicate the fixed-income credit");
-    assert.equal(directReport.ledger.find((row) => row.domain === "income").qty, 6);
+    assert.equal(directReport.ledger.find((row) => row.domain === "income").qty, 13);
     assert.equal(directReport.formulas.length, 2, "each complete tenday keeps its own formula result");
-    assert.ok(rollArguments.every((argumentsForRoll) => argumentsForRoll.cycles === 2 && argumentsForRoll.workers === 0.5));
+    assert.ok(rollArguments.every((argumentsForRoll) => argumentsForRoll.cycles === 2 && argumentsForRoll.workers === 1));
     assert.equal(directReport.skipped.length, 1, "unpaid income remains a visible skip while trading buildings use their own accounting");
   }
 
@@ -1030,13 +1049,14 @@ export async function checkEconomyCharacterization() {
     const sourceHolding = makeHolding();
     sourceHolding.overview.reputation = 1;
     sourceHolding.storage.resources = [resource("wood", 2, { name: "Wood", cost: "10 C", forSale: true })];
-    sourceHolding.people.list = [{ id: "merchant", name: "Торговец", dead: false }];
+    sourceHolding.people.list = [{ id: "merchant", name: "Торговец", dead: false,
+      workAllocations: [{ sourceId: "shop", functionId: "income", normalQd: 20 }] }];
     sourceHolding.buildings.list = [{
       id: "shop",
       name: "Лавка",
       constructionStatus: "built",
       functions: { production: false, income: true },
-      assignedWorkerIds: ["merchant"],
+      labor: { version: 2, capacityQd: 40 },
       income: {
         base: 0,
         perWorker: 0,
@@ -1049,7 +1069,7 @@ export async function checkEconomyCharacterization() {
     const wrapperReport = clone(directReport);
     const random = () => 0.999;
     const unstaffedHolding = clone(sourceHolding);
-    unstaffedHolding.buildings.list[0].assignedWorkerIds = [];
+    unstaffedHolding.people.list[0].workAllocations = [];
     const unstaffedReport = reportShape();
     const unstaffedTrade = await runTrade({
       holding: unstaffedHolding,
@@ -1131,7 +1151,7 @@ export async function checkEconomyCharacterization() {
       id: "upkeep",
       constructionStatus: "built",
       functions: { production: false, income: false },
-      upkeep: 30
+      upkeep: 90
     }];
     sourceHolding.storage.moneyCopper = 25;
     const directHolding = clone(sourceHolding);
@@ -1150,7 +1170,7 @@ export async function checkEconomyCharacterization() {
     assert.deepEqual(wrapperTreasury, directTreasury, "FinanceDomain treasury wrapper must preserve the direct engine result");
     assert.deepEqual(wrapperHolding, directHolding, "FinanceDomain treasury wrapper must preserve the direct engine draft");
     assert.deepEqual(wrapperReport, directReport, "FinanceDomain treasury wrapper must preserve the direct engine report");
-    assert.deepEqual(directTreasury, { spent: 25, deficit: 5, salaryCost: 20, upkeepCost: 10 }, "treasury costs must combine tenday salaries and one-third monthly upkeep");
+    assert.deepEqual(directTreasury, { spent: 25, deficit: 5, salaryCost: 0, upkeepCost: 30 }, "treasury costs ignore removed legacy salaries while settling one-third monthly upkeep and deficits");
     assert.equal(directHolding.storage.moneyCopper, 0, "treasury costs must never make money negative");
     assert.equal(directReport.ledger.some((row) => row.domain === "treasury" && row.kind === "money" && row.qty === -25), true, "treasury must ledger the exact paid amount");
 

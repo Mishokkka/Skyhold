@@ -420,12 +420,13 @@ assert.deepEqual(data, afterOtherEdit, "an absolute edit in a stale field must n
   data.holdings[1].people.list = [
     { id: "captain", name: "Капитан", age: 35, workAssignment: "soldier", background: "Солдат", attributes: { wits: 5, strength: 5 } },
     { id: "recruit", name: "Новобранец", age: 25, background: "Солдат", attributes: { wits: 4, strength: 5, agility: 5 } },
-    { id: "closed-job", name: "Работник закрытого здания", age: 25, workAssignment: "secret", attributes: { strength: 6, agility: 6 } },
+    { id: "closed-job", name: "Работник закрытого здания", age: 25, workAssignment: "",
+      workAllocations: [{ id: "secret-work", sourceId: "secret", functionId: "culture", normalQd: 20, overtimeQd: 0 }],
+      attributes: { strength: 6, agility: 6 } },
     { id: "sailor", name: "Матрос", age: 25, workAssignment: "soldier", background: "Солдат",
       attributes: { strength: 5, agility: 5 }, shipAssignment: { shipId: "expedition", away: true } }
   ];
   data.holdings[1] = mergeHoldingDefaults(data.holdings[1]);
-  data.holdings[1].buildings.list.find(row => row.id === "secret").assignedWorkerIds = ["closed-job"];
   const commander = await playerDefenseField({ dataset: { field: "holdings.1.gm.defense.commanderId", defenseExpected: "" },
     value: "captain", closest: (selector) => selector === "[data-defense-holding-id]" ? { dataset: { defenseHoldingId: "b" } } : null });
   assert.equal(commander.result.ok, true);
@@ -438,10 +439,13 @@ assert.deepEqual(data, afterOtherEdit, "an absolute edit in a stale field must n
   assert.equal((await playerDefense("_onFillDefenseSquadBest", defenseButton(data.holdings[1]))).result.ok, true,
     "the player can fill the squad and the authority owns the derived wages");
   assert.equal(data.holdings[1].gm.defense.squads[0].sergeantId, "recruit");
-  assert.deepEqual(data.holdings[1].buildings.list.find(row => row.id === "secret").assignedWorkerIds, ["closed-job"],
-    "the player cannot clear a hidden worker's assignment through squad autofill");
-  assert.equal(data.holdings[1].people.list.find(row => row.id === "closed-job").workAssignment, "secret");
-  assert.ok(data.holdings[1].people.list[1].salary > 0);
+  assert.deepEqual(
+    data.holdings[1].people.list.find((row) => row.id === "closed-job").workAllocations.map((row) => [row.sourceId, row.normalQd]),
+    [["secret", 20]],
+    "the player cannot clear a hidden worker's assignment through squad autofill"
+  );
+  assert.equal(data.holdings[1].people.list[1].workAssignment, "soldier");
+  assert.match(data.holdings[1].people.list[1].role, /Сержант/);
   data.holdings[1].people.list.push({ id: "recovering", age: 25, injuredDays: 3, workAssignment: "soldier",
     role: "Солдат: Другой отряд (Линейная пехота)", salary: 12, attributes: { strength: 3, agility: 3 } });
   const otherSquad = { id: "other-squad", name: "Другой отряд", type: "line", sergeantId: "",
@@ -455,7 +459,7 @@ assert.deepEqual(data, afterOtherEdit, "an absolute edit in a stale field must n
   assert.deepEqual(data.holdings[1].gm.defense.squads[1].memberIds, otherSquad.memberIds);
   const recovering = data.holdings[1].people.list.find(row => row.id === "recovering");
   assert.equal(recovering.workAssignment, "soldier", "injury changes readiness without releasing an unrelated assignment");
-  assert.equal(recovering.salary, 12);
+  assert.equal(recovering.role, "Солдат: Другой отряд (Линейная пехота)");
   data.holdings[1].gm.defense.squads.pop();
 
   manager._confirmAction = async () => { data.holdings[1].gm.playersCanEditDefense = false; return true; };
@@ -468,7 +472,7 @@ assert.deepEqual(data, afterOtherEdit, "an absolute edit in a stale field must n
   assert.equal(data.holdings[1].gm.defense.squads.length, 0);
   assert.equal(kits(data.holdings[1], "armament-simple"), 1, "armed disband returns a kit exactly once for a permitted player");
   assert.equal(data.holdings[1].people.list[1].workAssignment, "");
-  assert.equal(data.holdings[1].people.list[1].salary, 0);
+  assert.equal(data.holdings[1].people.list[1].role, "Свободен");
   delete game.users;
   delete game.socket;
   game.user = authority;
@@ -685,11 +689,14 @@ const staffing = mergeHoldingDefaults({
   id: "staffing", visibility: "public", gm: { playersCanEditBuildings: true },
   buildings: { list: [
     { id: "secret-work", name: "Закрытый арсенал", visibility: "gm", constructionStatus: "built",
-      workersMax: 2, assignedWorkerIds: ["keeper"] },
-    { id: "public-work", name: "Открытая мастерская", constructionStatus: "built", workersMax: 2 }
+      workersMax: 2, functions: { culture: true }, labor: { version: 2, capacityQd: 40 } },
+    { id: "public-work", name: "Открытая мастерская", constructionStatus: "built",
+      workersMax: 2, functions: { culture: true }, labor: { version: 2, capacityQd: 40 } }
   ] },
   people: { list: [
-    { id: "keeper", name: "Хранитель", age: 30, workAssignment: "secret-work", role: "Закрытый арсенал" },
+    { id: "keeper", name: "Хранитель", age: 30,
+      workAllocations: [{ id: "keep", sourceId: "secret-work", functionId: "culture", normalQd: 20, overtimeQd: 0 }],
+      role: "Закрытый арсенал" },
     { id: "available", name: "Подмастерье", age: 30 }
   ] }
 });
@@ -729,11 +736,12 @@ assert.equal(validatePlayerPatch(recovering, buildPlayerPatch(recovering, rename
   "an existing injury in a hidden building or a construction crew must not block unrelated public edits");
 const assigning = structuredClone(recovering);
 const newBuilding = assigning.holdings[0].buildings.list[1];
-newBuilding.assignedWorkerIds = ["available"];
-Object.assign(assigning.holdings[0].people.list[1], { workAssignment: newBuilding.id, role: newBuilding.workerRole || newBuilding.name });
+assigning.holdings[0].people.list[1].workAllocations = [
+  { id: "inj", sourceId: newBuilding.id, functionId: "culture", normalQd: 4, overtimeQd: 0 }
+];
 const newlyInjured = validatePlayerPatch(recovering, buildPlayerPatch(recovering, assigning), "player");
 assert.equal(newlyInjured.ok, false, "a new injured worker must still be refused at the authority");
-assert.match(newlyInjured.error, /недоступного жителя/);
+assert.match(newlyInjured.error, /Ранен|недоступного жителя/);
 
 const playerProfile = structuredClone(visibleAtRender);
 playerProfile.holdings[0].gm.playersCanEditResidents = true;

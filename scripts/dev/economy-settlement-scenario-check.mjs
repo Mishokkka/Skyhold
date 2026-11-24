@@ -8,7 +8,9 @@ import { mergeHoldingDefaults } from "../data/normalizers.js";
 import { SkyholdData } from "../data/store.js";
 import { SkyholdWorkflowService } from "../workflows/skyhold-workflow-service.js";
 import { beginPerishableStoragePeriod, finishPerishableStoragePeriod } from "../engines/economy/perishable-storage.js";
-import { MAINTENANCE_WORK_FUNCTION_ID } from "../data/work-allocations.js";
+import { validateHoldingWorkAllocations } from "../data/work-allocations.js";
+import { buildingLaborCapacityQd } from "../data/labor-model.js";
+import { buildingServiceEffectFactor } from "../engines/economy/building-service.js";
 import { preparationProductionTradePlan } from "./economy-preparation-year-check.mjs";
 import { marketDemandKey } from "../data/market/demand-state.js";
 import { planMarketOutboundSale } from "../engines/market/outbound.js";
@@ -20,7 +22,6 @@ import { transportLoad, cargoLoad, cargoValue } from "../engines/transport/quant
 import { ensureTransportState } from "../data/transport/state.js";
 import { advanceTransportShipments } from "../workflows/transport/orders.js";
 import { parseResourceCosts, resourceDef } from "../core/resources.js";
-import { applyStaffAppointment, buildingLaborMode, validateHybridLaborHolding } from "../data/hybrid-labor.js";
 
 const total = (h, id) => h.storage.resources.filter((r) => r.resourceId === id).reduce((sum, r) => sum + r.qty, 0);
 /**
@@ -43,7 +44,7 @@ export async function settlementScenario({ population = 12, demandFactor = 1, pr
   const initialMoney = 1000000, initialFlour = population * 10, initialGrain = population * 150 - initialFlour;
   let h = mergeHoldingDefaults({ id: "scenario-village", name: "Сценарий", overview: { reputation: 0 },
     people: { list: Array.from({ length: population }, (_, i) => ({ id: "p" + i, name: "Житель " + i, age: 30,
-      attributes: { strength: 3, agility: 3, wits: 3, empathy: 3 }, workAllocationMode: "explicit", workAllocations: [] })) },
+      attributes: { strength: 3, agility: 3, wits: 3, empathy: 3 }, workAllocations: [] })) },
     buildings: { list: [] }, storage: { moneyCopper: initialMoney, resources: [{ id: "seed-stock", resourceId: "grain", qty: initialGrain,
       roomId: "barn0", batches: [{ id: "initial-grain", qty: initialGrain, ageQd: 0 }] },
     { id: "milling-buffer", resourceId: "flour", qty: initialFlour, roomId: "barn0",
@@ -54,7 +55,7 @@ export async function settlementScenario({ population = 12, demandFactor = 1, pr
     for (let i = 0; i < count; i++) {
       const b = structuredClone(template);
       Object.assign(b, { id: id + i, templateId: id, built: true, constructionStatus: "built", status: "Построено",
-        buildProgress: b.buildTarget, assignedWorkerIds: [] });
+        buildProgress: b.buildTarget });
       for (const [j, line] of (b.productionLines ?? []).entries()) line.active = j === 0;
       h.buildings.list.push(b);
     }
@@ -80,12 +81,10 @@ export async function settlementScenario({ population = 12, demandFactor = 1, pr
         }
       }
       for (const p of h.people.list) {
-        applyStaffAppointment(h, p.id, null);
-        p.workAllocationMode = "explicit";
+        p.workAssignment = "";
         p.workAllocations = [];
       }
-      h.workforcePlan = { version: 2, goals: [], locks: [], productionGoals: [] };
-      for (const b of h.buildings.list) b.assignedWorkerIds = [];
+      h.workforcePlan = { version: 2, locks: [], productionGoals: [] };
       const millLine = h.buildings.list.find((b) => b.templateId === "mill").productionLines[0];
       const bakeryLine = h.buildings.list.find((b) => b.templateId === "bakery").productionLines[0];
       const bakeryInputs = parseResourceCosts(bakeryLine.expenses);
@@ -105,56 +104,46 @@ export async function settlementScenario({ population = 12, demandFactor = 1, pr
         heatingInputCost += cost;
         h.storage.resources.push({ id: `heating-${input.resourceId}-${period}`, resourceId: input.resourceId, qty, roomId: "outdoors" });
       }
-      /** Assigns one resident under the building's labor mode and records the reserved budget and shared output goal. */
+      const buildingUsedQd = new Map();
+      /** Assigns one resident under the unified QD model and records reserved work. */
       const job = (b, fn, qd) => {
         if (qd <= 0) return;
         const p = h.people.list[personIndex++];
         assert.ok(p, "The plan must fit the real population");
         const amount = Math.min(20, qd);
-        if (buildingLaborMode(b) === "staff" && fn !== MAINTENANCE_WORK_FUNCTION_ID) {
-          applyStaffAppointment(h, p.id, { version: 1, buildingId: b.id, primaryFunctionId: fn,
-            reserveFunctionId: "", wageDailyCopper: 12, overtimeQd: 0, volunteer: false, volunteerReason: "" });
-          // A permanent employee reserves their whole normal budget, including
-          // idle time after a shared production goal has been reached.
-          plannedQd += 20;
-          if (fn.startsWith("production:") && ["mill", "bakery"].includes(b.templateId)) {
-            const line = b.productionLines.find((row) => fn === "production:" + row.id);
-            const preparedUnits = amount / line.workQd * line.outputQty;
-            const goal = h.workforcePlan.productionGoals.find((row) => row.sourceId === b.id && row.functionId === fn);
-            if (goal) goal.preparedUnits += preparedUnits;
-            else h.workforcePlan.productionGoals.push({ sourceId: b.id, functionId: fn, preparedUnits });
-          }
-        } else {
-          p.workAllocations = [{ id: "job-" + p.id, sourceId: b.id, functionId: fn, normalQd: amount, overtimeQd: 0 }];
-          plannedQd += amount;
-        }
+        p.workAllocations = [{ id: "job-" + p.id, sourceId: b.id, functionId: fn, normalQd: amount, overtimeQd: 0 }];
+        buildingUsedQd.set(b.id, (buildingUsedQd.get(b.id) ?? 0) + amount);
+        plannedQd += amount;
       };
       for (const b of h.buildings.list) {
-        if (b.maintenance.requiredPoints > 0) job(b, MAINTENANCE_WORK_FUNCTION_ID, b.maintenance.requiredPoints);
         // Reserve harvest slots when the crop ripens during this tenday too.
         // Waiting for a ready crop at the next period boundary loses up to nine
         // days of its shelf life; scheduled work cannot be applied retroactively.
         if (b.agriculture && app._agricultureFinanceFunction(b, h, 40) && !(missedSowing && period < 6)) job(b, "agriculture", 20);
         if (["mill", "bakery"].includes(b.templateId)) {
           const line = b.productionLines[0];
-          const slots = Math.max(0, b.workersMax - b.assignedWorkerIds.length);
-          for (let slot = 0; slot < slots; slot++) {
+          const cap = buildingLaborCapacityQd(b);
+          while (cap === null || (buildingUsedQd.get(b.id) ?? 0) < cap) {
             const need = b.templateId === "mill" ? flourNeed : breadNeed;
             // Split workers at completed recipe cycles, not at an arbitrary
             // 20-QD boundary that leaves several ovens with unfinished batches.
-            const amount = Math.min(Math.floor(20 / line.workQd) * line.workQd, need);
+            const remaining = cap === null ? 20 : Math.min(20, cap - (buildingUsedQd.get(b.id) ?? 0));
+            const amount = Math.min(Math.floor(remaining / line.workQd) * line.workQd, need);
             if (!amount) break;
             job(b, "production:" + line.id, amount);
             if (b.templateId === "mill") flourNeed -= amount;
             else breadNeed -= amount;
           }
         }
-        if (["bathhouse", "meeting-house"].includes(b.templateId)) for (let i = 0; i < Math.max(1, b.workersMin); i++) job(b, "culture", 20);
-        if (["lumbermill", "quarry"].includes(b.templateId)) for (let i = 0; i < Math.max(1, b.workersMin); i++) job(b, "production:" + b.productionLines[0].id, 20);
+        if (["bathhouse", "meeting-house"].includes(b.templateId)) {
+          const qd = Math.max(20, b.activation?.minOperationalQd || 0);
+          job(b, "culture", Math.min(20, qd));
+        }
+        if (["lumbermill", "quarry"].includes(b.templateId)) job(b, "production:" + b.productionLines[0].id, 20);
       }
       assert.equal(flourNeed, 0, "the built mills must cover all planned flour work");
       assert.equal(breadNeed, 0, "the built bakeries must cover all planned bread work");
-      const labor = validateHybridLaborHolding(h);
+      const labor = validateHoldingWorkAllocations(h);
       assert.equal(labor.ok, true, JSON.stringify(labor.issues));
       beginPerishableStoragePeriod(h);
       const report = await app._runEconomyForQd(h, 40, { operationId: "year-" + period, createdAt: "2026-10-08", data: SkyholdData.view() });
@@ -162,7 +151,7 @@ export async function settlementScenario({ population = 12, demandFactor = 1, pr
       h.gm.calendaria.lastQd += 40;
       let bookedExportQty = 0, bookedExportValueCopper = 0;
       for (const b of h.buildings.list.filter((row) => ["bathhouse", "meeting-house"].includes(row.templateId))) {
-        assert.equal(b.serviceState?.active, true, b.templateId + " must be staffed and funded");
+        assert.equal(buildingServiceEffectFactor(h, b), 1, b.templateId + " must be staffed and funded");
       }
       if (population >= 20) for (const buildingId of population >= 50 ? ["lumbermill", "quarry"] : ["lumbermill"]) {
         const b = h.buildings.list.find((row) => row.templateId === buildingId), line = b.productionLines[0], id = line.resourceId;

@@ -10,7 +10,7 @@ checkCatalogLoadBoundary();
 checkBuildingCatalogFullTransition();
 checkAgricultureCatalogRefresh();
 
-import { BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION, TEMPLATE_CATALOG_VERSION } from "../data/building-templates.js";
+import { DEFAULT_BUILDING_TEMPLATES, TEMPLATE_CATALOG_VERSION } from "../data/building-templates.js";
 import { proposedBuildingLaborProfile } from "../data/building-labor-catalog.js";
 import { DEFAULT_SKYHOLD_DATA } from "../data/defaults/default-skyhold-data.js";
 import { normalizeSkyholdData } from "../data/normalizers.js";
@@ -24,10 +24,12 @@ import {
 } from "../workflows/buildings/catalog-migration.js";
 
 function template(id) {
-  return clone(BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION.find((row) => row.id === id));
+  return clone(DEFAULT_BUILDING_TEMPLATES.find((row) => row.id === id));
 }
 
 function fixture() {
+  const rareWoodLine = clone(template("lumbermill").productionLines[1]);
+  rareWoodLine.active = true;
   const oldLumbermill = {
     ...template("lumbermill"),
     id: "lumbermill-instance",
@@ -38,7 +40,7 @@ function fixture() {
     constructionStatus: "built",
     buildTarget: 9,
     buildProgress: 9,
-    assignedWorkerIds: ["worker-1"],
+    workerAdmissionOverrideIds: ["worker-1"],
     productionLines: [{
       id: "old-wood-line",
       resourceId: "wood",
@@ -51,7 +53,7 @@ function fixture() {
       workProgressUnits: 0,
       workInputsReserved: false,
       workReservedOutputQty: 0
-    }]
+    }, rareWoodLine]
   };
   const oldTavern = {
     id: "old-tavern",
@@ -60,8 +62,7 @@ function fixture() {
     notes: "Не переименовывать",
     constructionStatus: "built",
     buildTarget: 2,
-    buildProgress: 2,
-    assignedWorkerIds: []
+    buildProgress: 2
   };
   const legacyHouse = {
     id: "laputa-building-house-1",
@@ -72,8 +73,7 @@ function fixture() {
     buildProgress: 4,
     materialsAllocated: true,
     residents: 5,
-    contents: [{ id: "chest", name: "Сундук", qty: 1 }],
-    assignedWorkerIds: []
+    contents: [{ id: "chest", name: "Сундук", qty: 1 }]
   };
   const watchPost = {
     ...template("watch-post"),
@@ -81,8 +81,7 @@ function fixture() {
     templateId: "watch-post",
     templateVersion: TEMPLATE_CATALOG_VERSION,
     name: "Старый дозор",
-    constructionStatus: "built",
-    assignedWorkerIds: [""]
+    constructionStatus: "built"
   };
   const custom = {
     id: "custom-instance",
@@ -113,7 +112,8 @@ function fixture() {
           injuredDays: 0,
           attributes: { strength: 2, agility: 3, wits: 3, empathy: 3 },
           traits: [],
-          traitsText: ""
+          traitsText: "",
+          workAllocations: [{ id: "alloc-1", sourceId: "lumbermill-instance", functionId: "production:line-rare-wood", normalQd: 20, overtimeQd: 0 }]
         }]
       },
       buildings: { list: [oldLumbermill, oldTavern, legacyHouse, watchPost, custom] },
@@ -159,7 +159,7 @@ export function checkBuildingCatalogMigrationCharacterization() {
   assert.equal(lumbermill.notes, "Пользовательская заметка");
   const wood = lumbermill.productionLines.find(row => row.resourceId === "wood");
   assert.deepEqual([wood.outputQty, wood.pendingQty, wood.active], [2, 7, false], "Completed output and line selection survive restoration of the default recipe");
-  assert.deepEqual(lumbermill.assignedWorkerIds.filter(Boolean), ["worker-1"]);
+  assert.deepEqual(projected.people.list[0].workAllocations.map((row) => row.sourceId), ["lumbermill-instance"]);
   const inn = projected.buildings.list.find(row => row.id === "old-tavern");
   assert.equal(inn.templateId, "inn");
   assert.equal(inn.name, "Старая таверна");

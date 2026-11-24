@@ -3,34 +3,11 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { DEFAULT_BUILDING_TEMPLATES, TEMPLATE_CATALOG_VERSION } from "../data/building-templates.js";
 import { buildingRequiresConstructionCenter } from "../data/building-development-tree.js";
-import { usesTechnicalMaintenance } from "../data/economy/maintenance.js";
+import { normalizeBuilding } from "../data/normalizers/building.js";
 
 const KEYS = ["food", "technology", "culture", "war"];
 const vector = (value = {}) => KEYS.map((key) => value[key] ?? 0).join("/");
 const parseVector = (text) => Object.fromEntries(KEYS.map((key, index) => [key, Number(text.split("/")[index])]));
-
-/** Explicit selective technical maintenance norms (QD per instance per tenday) for the 19 technical buildings. */
-export const TECHNICAL_MAINTENANCE_NORM_QD = Object.freeze(new Map([
-  ["mill", 1],
-  ["grain-elevator", 1],
-  ["irrigation-system", 1],
-  ["lighthouse", 1],
-  ["telegraph-station", 1],
-  ["industrial-icehouse", 1],
-  ["cannery", 1],
-  ["greenhouse-complex", 1],
-  ["mine", 2],
-  ["waterworks", 2],
-  ["sewer-system", 2],
-  ["gasworks", 2],
-  ["railway-depot", 2],
-  ["machine-works", 2],
-  ["chemical-plant", 2],
-  ["steelworks", 3],
-  ["military-factory", 3],
-  ["high-tech-components-plant", 3],
-  ["airship-yard", 3]
-]));
 
 function isTemplateAvailable(row, built, totals) {
   return KEYS.every((key) => totals[key] >= (row.requirements?.[key] ?? 0))
@@ -130,25 +107,15 @@ export function checkBuildingDevelopmentReachability() {
   return { version: TEMPLATE_CATALOG_VERSION, count: rows.length, waves: waves.length, maximumRoute, totals: vector(totals) };
 }
 
-/** Verifies selective technical maintenance norms (v2 QD) across the current runtime catalog. */
+/** Verifies unified catalog templates carry v2 labor contracts and strip legacy maintenance on load. */
 export function checkTechnicalMaintenanceNorms() {
-  assert.equal(TECHNICAL_MAINTENANCE_NORM_QD.size, 19);
-  const byId = new Map(DEFAULT_BUILDING_TEMPLATES.map((row) => [row.id, row]));
-  for (const [id, expectedQd] of TECHNICAL_MAINTENANCE_NORM_QD) {
-    const template = byId.get(id);
-    assert.ok(template, `Missing technical maintenance template: ${id}`);
-    assert.equal(usesTechnicalMaintenance(template), true, `${id}: must use v2 technical maintenance`);
-    assert.equal(template.maintenance?.requiredPoints, expectedQd, `${id}: technical maintenance QD mismatch`);
-  }
-  let nonTechnicalCount = 0;
   for (const template of DEFAULT_BUILDING_TEMPLATES) {
-    if (TECHNICAL_MAINTENANCE_NORM_QD.has(template.id)) continue;
-    assert.equal(template.maintenance?.requiredPoints ?? 0, 0, `${template.id}: ordinary template must have 0 technical QD`);
-    nonTechnicalCount += 1;
+    assert.equal(template.labor?.version, 2, `${template.id}: missing v2 labor`);
+    const loaded = structuredClone(template);
+    normalizeBuilding(loaded);
+    assert.equal(Object.hasOwn(loaded, "maintenance"), false, `${template.id}: normalized buildings must omit maintenance`);
   }
-  assert.equal(byId.get("meeting-house")?.maintenance?.requiredPoints, 0);
-  const totalNormQd = [...TECHNICAL_MAINTENANCE_NORM_QD.values()].reduce((sum, qd) => sum + qd, 0);
-  return { technicalTemplates: TECHNICAL_MAINTENANCE_NORM_QD.size, ordinaryTemplates: nonTechnicalCount, totalNormQd };
+  return { technicalTemplates: 0, ordinaryTemplates: DEFAULT_BUILDING_TEMPLATES.length, totalNormQd: 0 };
 }
 
 /** Formats a human-readable unlock route for one target building (by ID or exact Russian name). */

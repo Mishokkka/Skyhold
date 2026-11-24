@@ -3,10 +3,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import path from "node:path";
 import { buildingDevelopmentRoute as preparationRoute } from "./building-development-reachability-check.mjs";
-// These fixed economic scenarios characterize worlds before the explicit labor transition.
-// Hybrid staffing and actual tenday execution are covered by the hybrid-labor suite.
-import { BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION as DEFAULT_BUILDING_TEMPLATES } from "../data/building-templates.js";
-import { usesTechnicalMaintenance } from "../data/economy/maintenance.js";
+import { DEFAULT_BUILDING_TEMPLATES } from "../data/building-templates.js";
 import { allResourceDefs, parseResourceCosts } from "../core/resources.js";
 import { addResourceBatches, beginResourceBatchPeriod, finishResourceBatchPeriod, takeResourceBatches } from "../core/resource-batches.js";
 import { planAgriculturePlot } from "../engines/economy/agriculture.js";
@@ -23,9 +20,6 @@ import { marketOutboundRouteFromPurchasePlan } from "../apps/market/outbound-con
 const pack = JSON.parse(readFileSync(new URL("../../examples/content-packs/air-islands-materials-and-country-markets.json", import.meta.url), "utf8"));
 const resources = new Map(allResourceDefs({ catalogRows: pack.content.resources }).map((row) => [row.id, row]));
 const templates = structuredClone(DEFAULT_BUILDING_TEMPLATES.filter((row) => !["fasti-shop", "laputa-excavated-crypt"].includes(row.id)));
-const preparationMaintenanceNorms = () => new Map(templates.map((row) => [row.id, usesTechnicalMaintenance(row) ? Number(row.maintenance.requiredPoints) || 0 : 0]));
-const preparationMaintenanceTasks = (buildings, activeIds) => buildings.filter((row) => activeIds.has(row.id) && usesTechnicalMaintenance(row) && row.maintenance.requiredPoints > 0)
-  .map((row) => ({ source: row.id, functionId: "maintenance", qd: row.maintenance.requiredPoints, wage: 18 }));
 const byId = new Map(templates.map((row) => [row.id, row]));
 const price = (id) => {
   assert.ok(resources.has(id), `Unknown resource ${id}`);
@@ -119,7 +113,6 @@ export function yearlyPlan({ demandFactor = 1, productionToDemand = false, extra
     // The valid development route includes an elevator. Keep its actual storage
     // service staffed throughout the year, rather than assigning free capacity.
     if (route.order.includes("grain-elevator")) tasks.push({ source: "grain-elevator", qd: 10, minWorkers: 2, wage: byId.get("grain-elevator").wageDailyCopper });
-    tasks.push(...preparationMaintenanceTasks(buildings, new Set(tasks.filter((task) => task.qd > 0).map((task) => task.source))));
     const requiredQd = tasks.reduce((sum, entry) => sum + entry.qd, 0);
     assert.ok(requiredQd <= 400, `period ${period}: essential work exceeds 20 residents (${requiredQd} QD)`);
     const tradeActive = requiredQd + 60 <= 400;
@@ -167,8 +160,7 @@ export function yearlyPlan({ demandFactor = 1, productionToDemand = false, extra
     // Allocate real integer QD across named workers, with no overtime. Capacity
     // is a workload proof; professional admission is an explicit fixture input.
     const workers = Array.from({ length: 20 }, (_, index) => ({ id: `resident-${index + 1}`, qd: 0, assignments: [] }));
-    // Technical labor consumes the same finite QD pool as production.
-    for (const task of [...tasks].sort((a, b) => Number(b.source === "maintenance") - Number(a.source === "maintenance"))) {
+    for (const task of tasks) {
       let left = task.qd;
       const available = [...workers].filter((worker) => worker.qd < 20).sort((a, b) => a.qd - b.qd || a.id.localeCompare(b.id));
       const assign = (worker, amount) => {
@@ -178,7 +170,7 @@ export function yearlyPlan({ demandFactor = 1, productionToDemand = false, extra
         if (existing) existing.qd += amount;
         else worker.assignments.push({ source: task.source, functionId: task.functionId, qd: amount });
       };
-      const taskMinimum = task.functionId === "maintenance" ? 1 : task.minWorkers ?? buildings.find((row) => row.id === task.source)?.workersMin ?? 1;
+      const taskMinimum = task.minWorkers ?? 1;
       assert.ok(available.length >= taskMinimum && left >= taskMinimum, `${task.source}: insufficient staff/time for the minimum team`);
       for (const worker of available.slice(0, taskMinimum)) assign(worker, 1);
       for (const worker of available) {
@@ -188,12 +180,9 @@ export function yearlyPlan({ demandFactor = 1, productionToDemand = false, extra
       }
       assert.equal(left, 0);
     }
-    for (const task of tasks.filter((entry) => entry.functionId === "maintenance")) {
-      assert.equal(workers.flatMap((worker) => worker.assignments).filter((entry) => entry.source === task.source && entry.functionId === "maintenance").reduce((sum, entry) => sum + entry.qd, 0), task.qd);
-    }
     assert.ok(workers.every((worker) => worker.qd <= 20 && worker.assignments.reduce((sum, entry) => sum + entry.qd, 0) === worker.qd));
     const wages = tasks.reduce((sum, task) => sum + task.qd * task.wage / 2, 0);
-    const active = new Set(tasks.filter((task) => task.qd > 0 && task.functionId !== "maintenance").map((task) => task.source));
+    const active = new Set(tasks.filter((task) => task.qd > 0).map((task) => task.source));
     const upkeep = basePerPeriod + buildings.filter((entry) => active.has(entry.id)).reduce((sum, entry) => sum + entry.operatingUpkeepMonthlyCopper / 3, 0);
     const cost = wages + upkeep + inputsCopper;
     // Costs must be fundable before this period's sales settle.
@@ -203,7 +192,7 @@ export function yearlyPlan({ demandFactor = 1, productionToDemand = false, extra
     peakLoad = Math.max(peakLoad, load);
     periods.push({ period, harvest, grain: row("grain").qty, bread: row("bread").qty, tools: row("tools-simple").qty, toolsProduced, sold,
       foodConsumed: food.consumeTarget, expired: expiry.expiredQty, qd: tasks.reduce((sum, task) => sum + task.qd, 0),
-      maintenanceQd: tasks.filter((task) => task.functionId === "maintenance").reduce((sum, task) => sum + task.qd, 0),
+      maintenanceQd: 0,
       tradeActive, wages, upkeep, foodInputsCopper, inputsCopper, revenue: trade.revenueCopper, cumulativeCash, load, workers });
   }
   assert.equal(totalHarvest, 4800);
@@ -215,7 +204,7 @@ export function yearlyPlan({ demandFactor = 1, productionToDemand = false, extra
   assert.equal(periods.reduce((sum, entry) => sum + entry.foodConsumed, 0), 4800);
   assert.ok(peakLoad <= storageCapacity, `Peak load ${peakLoad} exceeds built storage ${storageCapacity}`);
   const finalStockValue = holding.storage.resources.reduce((sum, entry) => sum + entry.qty * price(entry.resourceId), 0);
-  return { maintenanceModel: "technical-qd", productionToDemand, demandFactor, constructionRoute: route.order, buildings: buildings.map((entry) => entry.id),
+  return { maintenanceModel: "none", productionToDemand, demandFactor, constructionRoute: route.order, buildings: buildings.map((entry) => entry.id),
     housingCapacity, annualMaintenanceQd: periods.reduce((sum, entry) => sum + entry.maintenanceQd, 0), initialGrain: 2400, initialGrainAgeQd: 480, initialStockValue,
     annualHarvest: totalHarvest, finalGrain: row("grain").qty, finalBread: row("bread").qty, expiredFood,
     grainBufferRestorationQty: Math.max(0, 2400 - row("grain").qty),
@@ -257,10 +246,10 @@ export function preparationProductionTradePlan({ distanceKm, imported, buildingI
   const inputCost = imported ? inputPurchase.totalCopper : inputs.reduce((sum, entry) => sum + entry.qty * price(entry.resourceId), 0);
   const wage = qd * building.wageDailyCopper / 2;
   const upkeep = ((includeBaseUpkeep ? building.baseUpkeepMonthlyCopper : 0) + (includeOperatingUpkeep ? building.operatingUpkeepMonthlyCopper : 0)) / 3;
-  const maintenanceQd = preparationMaintenanceNorms().get(building.id);
-  const maintenanceWage = maintenanceQd * 18 / 2;
+  const maintenanceQd = 0;
+  const maintenanceWage = 0;
   const net = outbound.revenueCopper - outbound.upfrontCopper - inputCost - wage - upkeep - maintenanceWage;
-  return { maintenanceModel: "technical-qd", maintenanceQd, distanceKm, imported, qty, workQd: qd, resourceId, inputs, inputCost, inboundFreightAndFees: imported ? inputPurchase.deliveryCopper : 0,
+  return { maintenanceModel: "none", maintenanceQd, distanceKm, imported, qty, workQd: qd, resourceId, inputs, inputCost, inboundFreightAndFees: imported ? inputPurchase.deliveryCopper : 0,
     inboundQd: imported ? inputPurchase.deliveryQd : 0, outboundQd: outRoute.deliveryQd, outboundRoute: outRoute, wages: wage, upkeep, maintenanceWage,
     revenue: outbound.revenueCopper, outboundFees: outbound.upfrontCopper, net: round(net),
     requiredFundingBeforeReceipt: round(inputCost + wage + upkeep + maintenanceWage + outbound.upfrontCopper) };
@@ -269,7 +258,8 @@ export function preparationProductionTradePlan({ distanceKm, imported, buildingI
 function industrialPlan(distanceKm, utilization, imported) {
   const building = byId.get("steelworks");
   const line = building.productionLines.find((entry) => entry.resourceId === "steel");
-  return { ...preparationProductionTradePlan({ distanceKm, imported, buildingId: building.id, lineId: line.id, qd: building.workersMin * 20 * utilization }), utilization };
+  const referenceShiftQd = Math.max(20, Math.round((Number(building.labor?.capacityQd) || 20) / 4));
+  return { ...preparationProductionTradePlan({ distanceKm, imported, buildingId: building.id, lineId: line.id, qd: Math.round(referenceShiftQd * utilization) }), utilization };
 }
 
 export function checkPreparationYear() {
@@ -286,9 +276,8 @@ export function checkPreparationYear() {
     assert.equal(workFor("bakery"), 600, "4,800 bread requires 200 current 24-unit baking cycles at three QD each");
     assert.equal(row.periods.reduce((sum, period) => sum + period.foodInputsCopper, 0), 2000, "200 baking cycles must pay for 200 fuel at ten copper each");
   }
-  // V18 saves 200 bakery QD at 9 copper but adds 200 fuel at 10 copper:
-  // each previously recorded annual cash result therefore falls by 200 copper.
-  assert.deepEqual(annual.map((row) => row.cashNet), [-45014, -37670, -38102], "current recipes, paid heating inputs, manual fields and direct-QD maintenance funding contract");
+  // Removing legacy technical maintenance saves 24 * 1 * (18 / 2) = 216 copper per year (mill worked all 24 tendays).
+  assert.deepEqual(annual.map((row) => row.cashNet), [-44798, -37454, -37886], "current recipes, paid heating inputs, manual fields and unified zero-maintenance funding contract");
   assert.equal(annual[0].periods.reduce((sum, row) => sum + row.sold, 0), annual[1].periods.reduce((sum, row) => sum + row.sold, 0));
   assert.ok(annual[1].cashNet > annual[0].cashNet, "Matching production to demand must avoid unsold inventory costs");
   assert.equal(annual[1].finalTools, 0);
@@ -300,8 +289,8 @@ export function checkPreparationYear() {
     assert.ok(row.net < local.net, "Paid inbound transport must not improve the margin");
   }
   return { scope: "Funded 24-period planning model with actual agriculture, FIFO, ration, demand and logistics helpers; no Foundry or world writes.",
-    limitations: ["All residents are qualified adults. Only the current direct-QD technical-maintenance model is simulated; superseded point models are removed.",
-      "Idle support buildings retain base upkeep; selective maintenance applies only to active technical objects. No new construction occurs during the year.",
+    limitations: ["All residents are qualified adults under the unified v2 QD labor model with zero technical maintenance.",
+      "Idle support buildings retain base upkeep; no technical maintenance or new construction occurs during the year.",
       "Demand morale factor is tested at 1 and 0.5, not derived from a full resident-morale simulation.",
       "No random disasters, illness or construction amortization. Industrial demand/stock are finite for one batch, not a guaranteed recurring contract.",
       "Cash requirement is calculated for a fully funded plan; unfunded runtime would stop work instead of allowing negative treasury.",

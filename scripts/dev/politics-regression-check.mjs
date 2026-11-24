@@ -13,7 +13,6 @@ import { registerSkyholdAppClass, getSkyholdAppClass } from "../apps/registry.js
 import { ResidentDomain } from "../apps/domains/resident-domain.js";
 import { BuildingProductionDomain } from "../apps/domains/building/production-domain.js";
 import { FinanceEconomyDomain } from "../apps/domains/finance/economy-domain.js";
-import { FinanceStaffDomain } from "../apps/domains/finance/staff-domain.js";
 import { settlementControlSummary } from "../engines/settlement/control.js";
 import { holdingMarketAccessLevel } from "../engines/market/logistics.js";
 import { buildTendayOperationPayload, hydrateTendayOperation } from "../engines/tenday/operation-payload.js";
@@ -130,11 +129,15 @@ export async function checkPoliticsRegressions() {
   assert.equal(fed.rationFullySupplied, true);
   assert.equal(finishPoliticsPeriod(food, fed).results[0].gained, 1, "F12: the actual food flag survives to final rewards");
 
-  const services = holding({ buildings: { list: [{ id: "meeting", templateId: "meeting-house", lifecycle: "active", functions: { culture: true },
-    fuelAlternatives: [{ resourceId: "wood", qty: 1 }] }] } });
+  const services = holding({
+    people: { list: [{ id: "worker", workAllocations: [{ sourceId: "meeting", functionId: "culture", normalQd: 20 }] }] },
+    buildings: { list: [{ id: "meeting", templateId: "meeting-house", lifecycle: "active", functions: { culture: true },
+      workersMax: 2, labor: { version: 2, capacityQd: 40 }, activation: { minOperationalQd: 20 },
+      fuelAlternatives: [{ resourceId: "wood", qty: 1 }] }] }
+  });
   const pipelineHolding = clone(services);
   const serviceOwner = { ...owner, _financeFunctionKey: (id, fn) => `${id}:${fn}`, _financeFunctionAllowed: () => true,
-    _activeAssignedBuildingPeople: () => [{ id: "worker" }], _storageCanPay: () => ({ ok: false }) };
+    _activeAssignedBuildingPeople: () => [{ id: "worker" }], _plannedWorkerFunctionQd: () => 20, _storageCanPay: () => ({ ok: false }) };
   assert.equal(politicsDecisionContext(services, serviceOwner).available, true);
   FinanceEconomyDomain._runInstitutionConsumables.call(serviceOwner, services, 40, { skipped: [] }, {},
     { operatingBlockedFunctionKeys: new Set(), periodIdentity: { periodKey: "tenday:1" } });
@@ -146,10 +149,10 @@ export async function checkPoliticsRegressions() {
   let productionEffects = null;
   const phaseOrder = [];
   const noop = () => {};
-  const pipelineOwner = { ...serviceOwner, ...FinanceStaffDomain,
+  const pipelineOwner = { ...serviceOwner,
     _periodLabel: () => "десятник",
     _prepareFinanceForQd: () => ({ operatingBlockedFunctionKeys: new Set(), blockedWorkerIds: new Set(), periodIdentity: { periodKey: "tenday:1" } }),
-    _runMaintenanceForQd: () => ({ ok: true }), _prepareTechnicalServiceRestarts: noop, _economyWorkerContext: () => ({}),
+    _economyWorkerContext: () => ({}),
     _runInstitutionConsumables: FinanceEconomyDomain._runInstitutionConsumables, _runInstitutionResolutions: noop,
     _runAgricultureForQd: () => ({ ok: true }), _nonAgricultureProductionBuildings: (buildings) => buildings,
     _runProductionAndLivestockForQd: FinanceEconomyDomain._runProductionAndLivestockForQd,

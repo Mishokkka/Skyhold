@@ -178,10 +178,13 @@ const strong = { id: "strong", name: "Сильный", attributes: { strength: 5
 const agile = { id: "agile", name: "Ловкий", attributes: { strength: 2, agility: 5, wits: 3, empathy: 3 } };
 const mechanic = { id: "mechanic", name: "Механик", attributes: { strength: 5, agility: 3, wits: 5, empathy: 3 }, background: "шахтер", traitsText: "Крепкий" };
 const mine = structuredClone(DEFAULT_BUILDING_TEMPLATES.find((building) => building.id === "mine"));
-mine.assignedWorkerIds = [mechanic.id];
-const qualification = workerProductionQualification(mine, mechanic);
+const assignedMechanic = {
+  ...mechanic,
+  workAllocations: [{ sourceId: mine.id, functionId: "production:ore", normalQd: 20, overtimeQd: 0 }]
+};
+const qualification = workerProductionQualification(mine, assignedMechanic);
 assert.equal(qualification.workUnits, 17_000, "optimal type, one background and one positive trait must yield exactly 17,000 units");
-const workerSummary = owner._buildingEffectiveWorkers({ people: { list: [mechanic] } }, mine);
+const workerSummary = owner._buildingEffectiveWorkers({ people: { list: [assignedMechanic] } }, mine);
 assert.equal(workerSummary.total, 1, "qualification must not replace one required head with multiple effective workers");
 assert.equal(workerSummary.productionWorkUnitsPerQd, 17_000, "the worker summary must expose integer production work separately");
 assert.equal(workerAdmission(mine, agile).eligible, false, "a weak miner must fail the mine's physical admission");
@@ -194,31 +197,25 @@ assert.equal(workerBackgroundMatches({ background: "мастер" }, ["ТЕХН�
 const legacyBuilding = { id: "mine", templateId: "mine", name: "Шахта", workerPrimaryAttribute: "strength", suitableWorkerTypes: "Все с СИЛ", workerTypeEffects: { "Все с СИЛ": 0.5 }, workersMin: 1, workersMax: 2, assignedWorkerIds: [strong.id] };
 normalizeBuilding(legacyBuilding);
 assert.equal(Object.hasOwn(legacyBuilding, "workerPrimaryAttribute"), false, "normalization must delete legacy primary attributes from saved buildings");
-assert.equal(legacyBuilding.workerAdmissionOverrideIds.includes(strong.id), true, "the migration must preserve an existing dangerous-work assignment as an explicit grandfathered override");
-const eligibleMigration = { id: "mine", templateId: "mine", name: "Шахта", workersMin: 1, workersMax: 1, assignedWorkerIds: [strong.id] };
-normalizeBuilding(eligibleMigration, { people: [strong] });
-assert.equal(eligibleMigration.workerAdmissionOverrideIds.includes(strong.id), false, "an existing worker who passes the new hard gate must not receive a hidden override");
-const invalidMigration = { id: "mine", templateId: "mine", name: "Шахта", workersMin: 1, workersMax: 1, assignedWorkerIds: [agile.id] };
-normalizeBuilding(invalidMigration, { people: [agile] });
-assert.equal(invalidMigration.workerAdmissionOverrideIds.includes(agile.id), true, "only a failing existing worker must receive the explicit grandfathered override");
+assert.equal(Object.hasOwn(legacyBuilding, "assignedWorkerIds"), false, "normalization must delete legacy assignedWorkerIds");
+assert.deepEqual(legacyBuilding.labor, { version: 2, capacityQd: 600 });
 const admissionHolding = {
-  people: { list: [agile] },
-  buildings: { list: [legacyBuilding] },
+  people: { list: [{ ...agile, age: 30, ageGroup: "Вз", workAllocations: [] }] },
+  buildings: { list: [{ ...legacyBuilding, constructionStatus: "built", functions: { production: true },
+    productionLines: [{ id: "ore", active: true, source: "workers", workQd: 1, resourceId: "iron", outputQty: 1 }] }] },
   constructionCrews: [],
   gm: { defense: { squads: [], commanderId: "" } }
 };
-assert.equal(owner._setBuildingSlot(admissionHolding, legacyBuilding.id, 0, agile.id), false, "a hard-admission worker cannot enter through a direct assignment call without an explicit override");
-assert.equal(owner._setBuildingSlot(admissionHolding, legacyBuilding.id, 0, agile.id, { allowAdmissionOverride: true }), true, "an explicit GM override must allow the dangerous assignment");
-assert.equal(legacyBuilding.workerAdmissionOverrideIds.includes(agile.id), true, "the explicit GM override must be persisted on the building");
-assert.equal(owner._setBuildingSlot(admissionHolding, legacyBuilding.id, 0, agile.id), true, "reselecting a grandfathered worker must keep the existing override");
-assert.equal(legacyBuilding.workerAdmissionOverrideIds.includes(agile.id), true, "reselection must not silently erase a persisted admission override");
+owner._clearPersonFromAssignments = () => {};
+assert.equal(owner._assignPersonToBuilding(admissionHolding, agile.id, legacyBuilding.id), false, "a hard-admission worker cannot enter through a direct assignment call without an explicit override");
+assert.equal(owner._assignPersonToBuilding(admissionHolding, agile.id, legacyBuilding.id, { allowAdmissionOverride: true }), true, "an explicit GM override must allow the dangerous assignment");
+assert.equal(admissionHolding.people.list[0].workAllocations[0].sourceId, legacyBuilding.id);
 
 const explicitAdmissionBuilding = structuredClone(mine);
 explicitAdmissionBuilding.id = "explicit-hard-mine";
 explicitAdmissionBuilding.workerAdmissionOverrideIds = [];
 const explicitAgile = {
   ...agile,
-  workAllocationMode: "explicit",
   workAllocations: [{ sourceId: explicitAdmissionBuilding.id, functionId: "production:ore", normalQd: 1, overtimeQd: 0 }]
 };
 const explicitAdmissionHolding = { people: { list: [explicitAgile] }, buildings: { list: [explicitAdmissionBuilding] } };
@@ -233,11 +230,10 @@ const medicalProfile = structuredClone(DEFAULT_BUILDING_TEMPLATES.find((building
 medicalProfile.lifecycle = "active";
 medicalProfile.condition = "intact";
 medicalProfile.constructionStatus = "built";
-medicalProfile.assignedWorkerIds = [strong.id];
-medicalProfile.workersMin = 1;
-assert.equal(buildingServiceEffectFactor({ people: { list: [strong] } }, medicalProfile), 0, "a closed medical function must stop without a medical specialist");
-const medic = { id: "medic", name: "Лекарь", attributes: { strength: 3, agility: 3, wits: 4, empathy: 4 }, background: "лекарь" };
-medicalProfile.assignedWorkerIds = [medic.id];
+const strongLazaret = { ...strong, workAllocations: [{ sourceId: medicalProfile.id, functionId: "medical", normalQd: 20 }] };
+assert.equal(buildingServiceEffectFactor({ people: { list: [strongLazaret] } }, medicalProfile), 0, "a closed medical function must stop without a medical specialist");
+const medic = { id: "medic", name: "Лекарь", attributes: { strength: 3, agility: 3, wits: 4, empathy: 4 }, background: "лекарь",
+  workAllocations: [{ sourceId: medicalProfile.id, functionId: "medical", normalQd: 20 }] };
 assert.equal(buildingServiceEffectFactor({ people: { list: [medic] } }, medicalProfile), 1, "a matching medical specialist must activate the closed service");
 assert.equal(buildingCompositionStatus(medicalProfile, [medic]).met, true);
 
@@ -245,29 +241,25 @@ const scriptorium = structuredClone(runtimeScriptorium);
 scriptorium.lifecycle = "active";
 scriptorium.condition = "intact";
 scriptorium.constructionStatus = "built";
-scriptorium.assignedWorkerIds = [medic.id];
+const scriptoriumMedic = { ...medic, workAllocations: [{ sourceId: scriptorium.id, functionId: "culture", normalQd: 20 }] };
 const libraryDependency = { id: "library-instance", templateId: "library", constructionStatus: "built", lifecycle: "active", condition: "intact" };
 const scriptoriumHolding = (people) => ({ people: { list: people }, buildings: { list: [libraryDependency, scriptorium] } });
-assert.equal(buildingServiceEffectFactor(scriptoriumHolding([medic]), scriptorium), 1, "ordinary Scriptorium research must work without a Wonderworker");
-assert.equal(buildingWonderworkingActive(scriptoriumHolding([medic]), scriptorium), false, "mystical Scriptorium effects must stay inactive without the rare trait");
-const wonderworker = { ...medic, id: "wonder", traitsText: "Чудотворец" };
-scriptorium.assignedWorkerIds = [wonderworker.id];
-assert.equal(buildingWonderworkingActive(scriptoriumHolding([wonderworker]), scriptorium), true, "an assigned Wonderworker must activate the mystical effect");
+assert.equal(buildingServiceEffectFactor(scriptoriumHolding([scriptoriumMedic]), scriptorium), 1, "ordinary Scriptorium research must work without a Wonderworker");
+assert.equal(buildingWonderworkingActive(scriptoriumHolding([scriptoriumMedic]), scriptorium), false, "mystical Scriptorium effects must stay inactive without the rare trait");
 const explicitlyAllocatedWonderworker = {
-  ...wonderworker,
+  ...scriptoriumMedic,
   id: "wonder-plan",
-  workAllocationMode: "explicit",
+  traitsText: "Чудотворец",
   workAllocations: [{ sourceId: scriptorium.id, functionId: "culture", normalQd: 4, overtimeQd: 0 }]
 };
-scriptorium.assignedWorkerIds = [];
-assert.equal(buildingWonderworkingActive(scriptoriumHolding([explicitlyAllocatedWonderworker]), scriptorium), true, "an explicit Scriptorium QD must count without an impossible duplicate legacy slot");
+assert.equal(buildingWonderworkingActive(scriptoriumHolding([scriptoriumMedic, explicitlyAllocatedWonderworker]), scriptorium), true, "an allocated Wonderworker must activate the mystical effect");
 const allocatedElsewhere = {
-  ...wonderworker,
-  workAllocationMode: "explicit",
+  ...scriptoriumMedic,
+  id: "wonder-elsewhere",
+  traitsText: "Чудотворец",
   workAllocations: [{ sourceId: "other", functionId: "culture", normalQd: 1, overtimeQd: 0 }]
 };
-scriptorium.assignedWorkerIds = [medic.id];
-assert.equal(buildingWonderworkingActive(scriptoriumHolding([medic, allocatedElsewhere]), scriptorium), false, "a Wonderworker allocated elsewhere must not activate the Scriptorium's mystical effect");
+assert.equal(buildingWonderworkingActive(scriptoriumHolding([scriptoriumMedic, allocatedElsewhere]), scriptorium), false, "a Wonderworker allocated elsewhere must not activate the Scriptorium's mystical effect");
 
 const ordinaryLeader = { attributes: { strength: 3, agility: 3, wits: 4, empathy: 4 }, traitsText: "Лидер" };
 assert.equal(constructionLeaderQualification(ordinaryLeader).eligible, true, "a capable manager must qualify for the separate construction-leader position");

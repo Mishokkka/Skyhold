@@ -120,15 +120,19 @@ for (const background of ["Бывший офицер", "Сержант гарн�
     { requester: { isGM: true }, logic }).ok, true, "a concluded battle releases the kit for ordinary warehouse operations");
 }
 
-const medical = { people: { list: [{ id: "doctor", injuredDays: 0, shipAssignment: { shipId: "ship", away: true } }] },
-  buildings: { list: [{ id: "hospital", specialKind: "medical", constructionStatus: "built", assignedWorkerIds: ["doctor"] }] } };
+const medical = {
+  people: { list: [{ id: "doctor", injuredDays: 0, shipAssignment: { shipId: "ship", away: true },
+    workAllocations: [{ sourceId: "hospital", functionId: "culture", normalQd: 20 }] }] },
+  buildings: { list: [{ id: "hospital", specialKind: "medical", constructionStatus: "built", labor: { version: 2, capacityQd: 40 } }] }
+};
 assert.equal(medicalSupport(medical).capacity, 0, "absent doctors cannot treat settlement casualties");
 assert.equal(medicalSupport(medical).workers, 0);
 const capacityApp = { ...BuildingRowsDomain, ...BuildingWorkerDomain,
   _safeNumber: (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback };
 for (const unavailable of [{ shipAssignment: { shipId: "ship", away: true } }, { dead: true }, { injuredDays: 2 }]) {
   const unavailableDoctor = structuredClone(medical);
-  unavailableDoctor.people.list = [{ id: "doctor", injuredDays: 0, ...unavailable }];
+  unavailableDoctor.people.list = [{ id: "doctor", injuredDays: 0, ...unavailable,
+    workAllocations: [{ sourceId: "hospital", functionId: "culture", normalQd: 20 }] }];
   const assignments = capacityApp._medicalAssignments(unavailableDoctor);
   for (const provider of [assignments, h => capacityApp._medicalAssignments(h)]) {
     const support = medicalSupport(unavailableDoctor, { medicalAssignments: provider });
@@ -140,8 +144,10 @@ for (const unavailable of [{ shipAssignment: { shipId: "ship", away: true } }, {
   }).capacity, 0, "the capacity callback must apply the same doctor availability rule");
 }
 const mixedDoctors = structuredClone(medical);
-mixedDoctors.people.list.push({ id: "home-doctor", injuredDays: 0 }, { id: "patient", injuredDays: 2 });
-mixedDoctors.buildings.list[0].assignedWorkerIds.push("home-doctor");
+mixedDoctors.people.list.push(
+  { id: "home-doctor", injuredDays: 0, workAllocations: [{ sourceId: "hospital", functionId: "culture", normalQd: 20 }] },
+  { id: "patient", injuredDays: 2 }
+);
 mixedDoctors.buildings.list[0].medical = { patientsPerEfficiency: 9, maxPatients: 13 };
 for (const maxPatients of [13, 7]) {
   mixedDoctors.buildings.list[0].medical.maxPatients = maxPatients;

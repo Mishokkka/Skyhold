@@ -1,20 +1,19 @@
 import assert from "node:assert/strict";
-import { BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION, DEFAULT_BUILDING_TEMPLATES, TEMPLATE_CATALOG_VERSION } from "../data/building-templates.js";
+import { DEFAULT_BUILDING_TEMPLATES, TEMPLATE_CATALOG_VERSION } from "../data/building-templates.js";
 import { normalizeCatalogPartition } from "../data/normalizers.js";
 import { buildingServiceBlockReasons } from "../engines/economy/building-service.js";
 import { settlementControlSummary } from "../engines/settlement/control.js";
 
 export function checkBuildingCatalogTechnical() {
   const before = structuredClone(DEFAULT_BUILDING_TEMPLATES);
-  const rows = BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION;
-  assert.equal(rows.filter((row) => row.maintenance.requiredPoints > 0).length, 19);
-  assert.ok(rows.every((row) => row.maintenance.schemaVersion === 2 && row.templateVersion === TEMPLATE_CATALOG_VERSION));
+  const rows = structuredClone(DEFAULT_BUILDING_TEMPLATES);
+  assert.ok(rows.every((row) => row.templateVersion === TEMPLATE_CATALOG_VERSION));
   assert.equal(rows.filter((row) => row.prerequisiteModes).length, 14);
   for (const id of ["lazaret", "lighthouse"]) assert.equal(rows.find((row) => row.id === id).bonuses.food, 0);
   const normalized = normalizeCatalogPartition({ buildings: rows }).buildings;
   for (const row of rows) {
     const loaded = normalized.find((item) => item.id === row.id);
-    assert.deepEqual(loaded.maintenance, row.maintenance);
+    assert.equal(Object.hasOwn(loaded, "maintenance"), false, `${row.id}: maintenance removed in v2`);
     assert.deepEqual(loaded.prerequisiteModes, row.prerequisiteModes);
   }
   const house = structuredClone(normalized.find((row) => row.id === "meeting-house"));
@@ -23,7 +22,7 @@ export function checkBuildingCatalogTechnical() {
   assert.deepEqual(house.materialCosts.map((row) => [row.resourceId, row.qty]), [["wood", 180], ["stone", 120], ["cloth", 20], ["parchment", 10]]);
   assert.equal(house.wageDailyCopper * 10 + (house.baseUpkeepMonthlyCopper + house.operatingUpkeepMonthlyCopper) / 3, 198);
   Object.assign(house, { constructionStatus: "built", lifecycle: "active", condition: "intact" });
-  const person = { id: "clerk", workAllocationMode: "explicit", workAllocations: [{ sourceId: house.id, functionId: "culture", normalQd: 20 }] };
+  const person = { id: "clerk", workAllocations: [{ sourceId: house.id, functionId: "culture", normalQd: 20 }] };
   const holding = { buildings: { list: [house] }, people: { list: [person] } };
   assert.equal(buildingServiceBlockReasons(holding, house).active, true);
   assert.equal(settlementControlSummary(holding).generalControl, 1);

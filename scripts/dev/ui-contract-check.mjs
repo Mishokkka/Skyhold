@@ -205,7 +205,6 @@ export function checkUiContract({ root = DEFAULT_ROOT, hbsFiles = null } = {}) {
     "person-volunteer-reason",
     "person-custom-role",
     "person-home",
-    "person-maintenance-points",
     "person-background"
   ];
   let previousResidentWorkField = -1;
@@ -214,6 +213,15 @@ export function checkUiContract({ root = DEFAULT_ROOT, hbsFiles = null } = {}) {
     if (index < 0) failures.push(`resident editor must retain the ${className} work-and-housing field`);
     else if (index <= previousResidentWorkField) failures.push("resident work-and-housing fields must retain their keyboard navigation order");
     previousResidentWorkField = Math.max(previousResidentWorkField, index);
+  }
+  const buildingWorkersTemplate = readFileSync(path.join(root, "templates/parts/building-editor/workers.hbs"), "utf8");
+  const gmTabTemplate = readFileSync(path.join(root, "templates/parts/skyhold-tab-gm.hbs"), "utf8");
+  if (!buildingWorkersTemplate.includes('data-building-labor-field="capacityQd"')
+    || !buildingWorkersTemplate.includes('data-building-labor-field="minOperationalQd"')) {
+    failures.push("building editor workers template must expose capacityQd and minOperationalQd controls");
+  }
+  if (!gmTabTemplate.includes(".gm.labor.daysOffPerTenday")) {
+    failures.push("GM tab template must expose daysOffPerTenday holding labor control");
   }
 
   const residentWorkSetRule = residentEditorCss.match(/\.work-set\.compact-resident-work\s*\{([^}]*)\}/s)?.[1] ?? "";

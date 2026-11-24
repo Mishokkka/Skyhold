@@ -54,9 +54,10 @@ export function runCombatSuite() {
   const medicalHolding = () => ({
     people: { list: [
       { id: "soldier", name: "Soldier", workAssignment: "soldier", dead: false, injuredDays: 0 },
-      { id: "doctor", name: "Doctor", role: "Doctor", dead: false, injuredDays: 0 }
+      { id: "doctor", name: "Doctor", role: "Doctor", dead: false, injuredDays: 0,
+        workAllocations: [{ sourceId: "lazaret", functionId: "culture", normalQd: 20 }] }
     ] },
-    buildings: { list: [{ id: "lazaret", specialKind: "medical", constructionStatus: "built", assignedWorkerIds: ["doctor"] }] }
+    buildings: { list: [{ id: "lazaret", specialKind: "medical", constructionStatus: "built", labor: { version: 2, capacityQd: 40 } }] }
   });
   const heavyWithDeathRoll = (deathRoll) => {
     const values = [0.1, 0.6, 0.1, 0.1, (deathRoll - 0.5) / 6];

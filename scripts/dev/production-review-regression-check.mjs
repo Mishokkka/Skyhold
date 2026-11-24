@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-// These existing-world recipe and service regressions keep their pre-transition labor contracts.
-// Hybrid staff/QD behavior is exercised separately by the hybrid-labor suite.
-import { BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION as DEFAULT_BUILDING_TEMPLATES } from "../data/building-templates.js";
+import { DEFAULT_BUILDING_TEMPLATES } from "../data/building-templates.js";
 import { DEFAULT_SKYHOLD_DATA } from "../data/defaults/default-skyhold-data.js";
 import { mergeHoldingDefaults } from "../data/normalizers.js";
 import { SkyholdData } from "../data/store.js";
@@ -26,19 +24,15 @@ const report = () => ({ periodQd: 40, periodLabel: "проверка", produced:
 function fixture(id, lineId) {
   const building = structuredClone(DEFAULT_BUILDING_TEMPLATES.find((row) => row.id === id));
   assert.ok(building, id);
-  Object.assign(building, { templateId: id, id: "building", constructionStatus: "built", buildProgress: building.buildTarget, assignedWorkerIds: [] });
+  Object.assign(building, { templateId: id, id: "building", constructionStatus: "built", buildProgress: building.buildTarget });
   building.productionSelection = { ...building.productionSelection, gmConfirmed: true };
   for (const line of building.productionLines) line.active = line.id === lineId;
   const backgrounds = (building.workerProfile?.composition ?? []).flatMap((row) => Array.from({ length: row.count }, () => workerBackgroundGroupMembers(row.group)[0]));
-  const people = Array.from({ length: Math.max(building.workersMin, backgrounds.length, 1) }, (_, index) => ({
+  const people = Array.from({ length: Math.max(building.workersMin || 0, backgrounds.length, 1) }, (_, index) => ({
     id: `worker-${index}`, name: `Работник ${index}`, age: 30, attributes: { strength: 5, agility: 5, wits: 5, empathy: 5 },
-    background: backgrounds[index] ?? "", traits: ["Храбрец"], workAllocationMode: "explicit",
+    background: backgrounds[index] ?? "", traits: ["Храбрец"],
     workAllocations: [{ id: `work-${index}`, sourceId: "building", functionId: `production:${lineId}`, normalQd: 20, overtimeQd: 0 }]
   }));
-  if (building.maintenance?.requiredPoints > 0) people.push({ id: "mechanic", name: "Механик", age: 30,
-    attributes: { strength: 5, agility: 5, wits: 5, empathy: 5 }, background: workerBackgroundGroupMembers("ТЕХНИКА")[0], workAllocationMode: "explicit",
-    workAllocations: [{ id: "maintenance", sourceId: "building", functionId: "maintenance", normalQd: building.maintenance.requiredPoints, overtimeQd: 0 }] });
-  building.assignedWorkerIds = people.map((person) => person.id);
   const line = building.productionLines.find((row) => row.id === lineId);
   const holding = mergeHoldingDefaults({ id: "production-review", people: { list: people }, buildings: { list: [building] },
     storage: { moneyCopper: 10_000_000, resources: parseResourceCosts(line.expenses).map((cost) => ({
@@ -51,8 +45,6 @@ function fixture(id, lineId) {
 async function run(app, holding, { livestock = false } = {}) {
   const result = report();
   const financeContext = app._prepareFinanceForQd(holding, 40, result, { operationId: "production-review", createdAt: "2026-10-11" });
-  assert.equal(app._runMaintenanceForQd(holding, 40, result, { operationId: "production-review:maintenance", financeContext }).ok, true);
-  app._prepareTechnicalServiceRestarts(holding, financeContext, result);
   const workerContext = app._economyWorkerContext(holding, { financeContext });
   const method = livestock ? "_runProductionAndLivestockForQd" : "_runProductionCycleForQd";
   await app[method](holding, 40, result, { workerContext, financeContext });
@@ -138,13 +130,11 @@ export async function checkProductionReview() {
     finishPerishableStoragePeriod({ holding: stock, elapsedQd: 8 });
 
     const shortShift = fixture("cannery", "line-1-preserved-meat");
-    // Isolate shift composition from the separate delayed-maintenance gate.
-    shortShift.buildings.list[0].maintenance.requiredPoints = 0;
-    const specialists = shortShift.people.list.filter((person) => person.id !== "mechanic" && person.background);
+    const specialists = shortShift.people.list.filter((person) => person.background);
     assert.equal(specialists.length, 2);
     for (const person of specialists) person.workAllocations[0].normalQd = 1;
     const fullShift = structuredClone(shortShift);
-    for (const person of fullShift.people.list.filter((person) => person.id !== "mechanic" && person.background)) person.workAllocations[0].normalQd = 20;
+    for (const person of fullShift.people.list.filter((person) => person.background)) person.workAllocations[0].normalQd = 20;
     await run(app, shortShift);
     SkyholdData.view = () => ({ ...DEFAULT_SKYHOLD_DATA, holdings: [fullShift] });
     await run(app, fullShift);
@@ -154,12 +144,12 @@ export async function checkProductionReview() {
     const chain = fixture("cheesery", "line-1-food-dairy");
     chain.storage.resources = chain.storage.resources.filter((row) => row.resourceId !== "milk");
     const pasture = structuredClone(DEFAULT_BUILDING_TEMPLATES.find((row) => row.id === "pasture"));
-    Object.assign(pasture, { id: "pasture", templateId: "pasture", constructionStatus: "built", buildProgress: pasture.buildTarget, assignedWorkerIds: ["herder"] });
+    Object.assign(pasture, { id: "pasture", templateId: "pasture", constructionStatus: "built", buildProgress: pasture.buildTarget });
     pasture.livestock.state = { ...pasture.livestock.state, adults: 12, breedingMales: 1 };
     pasture.livestock.operations.milk = true;
     chain.buildings.list.push(pasture);
     chain.people.list.push({ id: "herder", name: "Пастух", age: 30, attributes: { strength: 3, agility: 3, wits: 3, empathy: 3 },
-      workAllocationMode: "explicit", workAllocations: [{ id: "care", sourceId: "pasture", functionId: "livestock", normalQd: 10, overtimeQd: 0 }] });
+      workAllocations: [{ id: "care", sourceId: "pasture", functionId: "livestock", normalQd: 10, overtimeQd: 0 }] });
     const normalizedChain = mergeHoldingDefaults(chain);
     normalizedChain.buildings.list.find((row) => row.id === "pasture").lifecycle = "active";
     SkyholdData.view = () => ({ ...DEFAULT_SKYHOLD_DATA, holdings: [normalizedChain] });
@@ -172,20 +162,18 @@ export async function checkProductionReview() {
     assert.ok(normalizedChain.storage.resources.filter((row) => row.resourceId === "milk").every((row) => row.batches.every((batch) => batch.ageQd < 8)));
 
     const inn = fixture("inn", "line-grain-porridge");
-    const innResult = await run(app, inn);
-    app._recordBuildingServiceActivity(inn, innResult.report, innResult.financeContext);
-    inn.gm.calendaria.lastQd = 40;
-    assert.equal(app._buildingMoraleSummary(inn).total, 15, "Kitchen work supplies inn morale without separate culture QD");
+    await run(app, inn);
+    assert.equal(app._buildingMoraleSummary(inn).total, 0, "Kitchen production alone does not supply inn culture morale when anyWorkingFunction is false");
+    inn.people.list.push(
+      { id: "inn-host-1", name: "Трактирщик 1", age: 30, attributes: { strength: 3, agility: 3, wits: 4, empathy: 4 },
+        workAllocations: [{ id: "inn-culture-1", sourceId: "building", functionId: "culture", normalQd: 20, overtimeQd: 0 }] },
+      { id: "inn-host-2", name: "Трактирщик 2", age: 30, attributes: { strength: 3, agility: 3, wits: 4, empathy: 4 },
+        workAllocations: [{ id: "inn-culture-2", sourceId: "building", functionId: "culture", normalQd: 20, overtimeQd: 0 }] }
+    );
+    assert.equal(app._buildingMoraleSummary(inn).total, 15, "40 QD of culture work activates inn morale");
     inn.buildings.list[0].productionLines.forEach((line) => { line.active = false; });
-    assert.equal(app._buildingMoraleSummary(inn).total, 0, "Disabled kitchen cannot retain its previous social activity");
+    assert.equal(app._buildingMoraleSummary(inn).total, 15, "Culture service remains active independently of kitchen lines");
     inn.buildings.list[0].productionLines.find((line) => line.id === "line-grain-porridge").active = true;
-    const activity = inn.buildings.list[0].serviceState;
-    const savedActivity = structuredClone(activity);
-    activity.workedQdByFunction = { production: 20, "production:line-grain-porridge": 20 };
-    delete activity.workedQdByWorkerAndFunction;
-    assert.equal(app._buildingMoraleSummary(inn).total, 0, "Aggregate production and its line aliases must not double 20 QD into 40");
-    inn.buildings.list[0].serviceState = savedActivity;
-    inn.buildings.list[0].assignedWorkerIds = [];
     for (const person of inn.people.list) person.workAllocations = [];
     assert.equal(app._buildingMoraleSummary(inn).total, 0, "Closed inn does not retain morale");
 
@@ -199,8 +187,8 @@ export async function checkProductionReview() {
     const mill = DEFAULT_BUILDING_TEMPLATES.find((row) => row.id === "mill");
     const feed = mill.productionLines.find((row) => row.resourceId === "animal-feed");
     const margin = feed.outputQty * resourceBasePriceCopper("animal-feed") - 6 * resourceBasePriceCopper("grain") - feed.workQd * mill.wageDailyCopper / 2;
-    assert.ok(20 / feed.workQd * margin - (mill.baseUpkeepMonthlyCopper + mill.operatingUpkeepMonthlyCopper) / 3 - mill.maintenance.requiredPoints * 9 > 0,
-      "One ordinary feed worker covers materials, wages, mill overhead and technical work");
+    assert.ok(20 / feed.workQd * margin - (mill.baseUpkeepMonthlyCopper + mill.operatingUpkeepMonthlyCopper) / 3 > 0,
+      "One ordinary feed worker covers materials, wages and mill overhead");
 
     const bakery = DEFAULT_BUILDING_TEMPLATES.find((row) => row.id === "bakery");
     const bread = bakery.productionLines[0];

@@ -2,35 +2,23 @@ import assert from "node:assert/strict";
 import { isResidentInPopulation, isResidentRestingOnShip } from "../data/resident-presence.js";
 import { assignResidentsToFreeHousing } from "../engines/housing/assignment.js";
 import { settlementControlSummary } from "../engines/settlement/control.js";
-import { isCivilianWorkerCandidate } from "../engines/workers/assignment-planner.js";
+import { workforceUnavailable } from "../data/workforce-plan.js";
 import { configureWorldShipEconomy, generateWorldShipOffers, quoteWorldShipReturn } from "../engines/ships/world-market.js";
 import { advanceWorldShipEconomy, refreshWorldShipHomeEconomy, worldShipPresenceDays } from "../engines/ships/world-economy.js";
 import { advanceWorldShips, departWorldShip, resolveWorldShip } from "../engines/ships/world-voyage.js";
 import { embarkShipCrew } from "../engines/ships/crew.js";
 import { worldMarketFixture } from "./world-ship-market-characterization-check.mjs";
 
-const plannerDependencies = {
-  safeNumber: (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback,
-  buildingOperationalState: () => ({ operational: true }),
-  workerEfficiencyForPerson: () => ({ value: 1 }),
-  isSoldierResident: () => false,
-  isMilitaryResidentLike: () => false,
-  setPersonFree: () => {},
-  assignedWorkerSet: () => new Set(),
-  applyPersonSalaryForAssignment: () => {}
-};
-
 function presenceAndSettlementAccounting() {
   const { holding, ship } = worldMarketFixture();
   const sailor = holding.people.list[0];
-  const resident = { id: "resident", name: "Житель", salary: 7 };
+  const resident = { id: "resident", name: "Житель", age: 30, ageGroup: "Вз" };
   holding.people.list.push(resident);
-  const building = { id: "workshop", name: "Мастерская", workersMax: 2 };
 
   assert.equal(isResidentRestingOnShip(sailor, holding), true);
   assert.equal(isResidentInPopulation(sailor, holding), false);
-  assert.equal(isCivilianWorkerCandidate(sailor, building, plannerDependencies, holding), false, "automatic staffing must skip resting crew");
-  assert.equal(isCivilianWorkerCandidate(resident, building, plannerDependencies, holding), true);
+  assert.ok(workforceUnavailable(holding, sailor), "automatic staffing must skip resting crew");
+  assert.equal(workforceUnavailable(holding, resident), "");
 
   holding.buildings.list = [{ id: "house", name: "Дом", housing: { capacity: 2, comfort: 0, quality: 0 } }];
   const housing = assignResidentsToFreeHousing(holding, { isResidentialBuilding: () => true });
@@ -41,7 +29,7 @@ function presenceAndSettlementAccounting() {
 
   sailor.shipAssignment = { shipId: ship.id, away: false, shoreDuty: true };
   assert.equal(isResidentInPopulation(sailor, holding), true);
-  assert.equal(isCivilianWorkerCandidate(sailor, building, plannerDependencies, holding), true, "shore duty restores ordinary work eligibility");
+  assert.equal(workforceUnavailable(holding, sailor), "", "shore duty restores ordinary work eligibility");
   assert.equal(settlementControlSummary(holding).population, 2);
 }
 

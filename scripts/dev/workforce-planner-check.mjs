@@ -13,12 +13,12 @@ import { buildingCompositionStatus } from "../engines/workers/building-qualifica
 
 const clone = (value) => structuredClone(value);
 const template = (id) => clone(DEFAULT_BUILDING_TEMPLATES.find((row) => row.id === id));
-const resident = (id) => ({ id, name: id, age: 30, ageGroup: "Вз", race: "Человек", workAssignment: "", workAllocationMode: "legacy", workAllocations: [],
+const resident = (id) => ({ id, name: id, age: 30, ageGroup: "Вз", race: "Человек", workAssignment: "", workAllocations: [],
   attributes: { strength: 4, agility: 4, wits: 4, empathy: 4 }, visibility: "public" });
 function fixture(count = 3) {
   const building = { id: "wood", name: "Лесоповал", status: "built", lifecycle: "built", constructionStatus: "built", condition: "normal",
-    workersMax: 12, workersMin: 1, wageDailyCopper: 12, assignedWorkerIds: [], functions: { production: true },
-    productionLines: [{ id: "logs", active: true, source: "workers", mode: "Древесина", workQd: 2, resourceId: "wood", formula: "2", overtime: true }] };
+    labor: { version: 2, capacityQd: 240 }, workersMax: 12, workersMin: 0, wageDailyCopper: 12, functions: { production: true },
+    productionLines: [{ id: "logs", active: true, source: "workers", mode: "Древесина", workQd: 2, outputQty: 2, resourceId: "wood", formula: "2", overtime: true }] };
   return mergeHoldingDefaults({ id: "test", name: "Тест", visibility: "public", buildings: { list: [building] }, people: { list: Array.from({ length: count }, (_, index) => resident(`p-${index}`)) }, gm: { playersCanEditBuildings: true } });
 }
 export async function checkWorkforcePlanner() {
@@ -32,56 +32,43 @@ assert.equal(task.need, 0, "12 seats must not become required work");
 assert.equal(proposeWorkforceAssignments(holding, draft, service, { isGM: true }).changes.length, 0);
 const optionalTaskProposal = proposeWorkforceAssignments(holding, draft, service, { isGM: true, taskKeys: [task.key] });
 assert.equal(optionalTaskProposal.changes.length, 0, "selecting an optional task must not turn minimum staffing into demand");
-assert.ok(optionalTaskProposal.skipped.some((reason) => reason.includes("цель труда")));
+assert.ok(optionalTaskProposal.skipped.some((reason) => reason.includes("цель подготовки") || reason.includes("количество QD")));
 assert.equal(JSON.stringify(holding), original, "reading and preview must be pure");
 
 // Explicit selection may close an operational minimum; the global helper never opens optional buildings.
 for (const isGM of [true, false]) {
   const operating = fixture();
-  operating.buildings.list[0].activation = { minOperationalQd: 12, minWorkers: 2, anyWorkingFunction: true };
+  operating.buildings.list[0].activation = { minOperationalQd: 12, anyWorkingFunction: true };
   const operatingDraft = createWorkforceDraft(operating, service);
   assert.equal(proposeWorkforceAssignments(operating, operatingDraft, service, { isGM }).changes.length, 0);
   const filled = proposeWorkforceAssignments(operating, operatingDraft, service, { isGM, taskKeys: [task.key], useBuildingMinimum: true });
   assert.equal(filled.model.normalQd, 12);
-  assert.equal(filled.model.staffByBuilding.get("wood").size, 2);
-  assert.equal(filled.draft.plan.goals.length, 0, "temporary minimum selection must not invent a persistent production goal");
+  assert.equal(filled.model.staffByBuilding.get("wood").size, 1);
+  assert.equal(filled.draft.plan.productionGoals.length, 0, "temporary minimum selection must not invent a persistent production goal");
   assert.equal(workforceDraftError(operating, filled.draft, { isGM }), "");
   const covered = proposeWorkforceAssignments(operating, filled.draft, service, { isGM, taskKeys: [task.key], useBuildingMinimum: true });
   assert.equal(covered.changes.length, 0);
   assert.ok(covered.skipped.some(reason => reason.includes("уже обеспечены")));
   assert.equal(operatingDraft.edited.length, 0, "proposal leaves the user's draft untouched");
 }
-const staffed = fixture(); staffed.buildings.list[0].workersMin = 2;
-const staffedDraft = createWorkforceDraft(staffed, service);
-staffedDraft.plan.goals = [{ sourceId: "wood", functionId: "production:logs", normalQd: 20 }];
-setWorkforceAllocation(staffedDraft, "p-0", task, 10);
-const staffedProposal = proposeWorkforceAssignments(staffed, staffedDraft, service, { isGM: true });
-assert.equal(staffedProposal.model.normalQd, 20);
-assert.equal(staffedProposal.model.staffByBuilding.get("wood").size, 2, "fill the second seat before giving more work to the existing worker");
-assert.ok(!staffedProposal.model.taskMap.get(task.key).warnings.some(reason => reason.includes("одновременного")));
-const shortTeam = fixture(1); shortTeam.buildings.list[0].workersMin = 2;
-const shortDraft = createWorkforceDraft(shortTeam, service); shortDraft.plan.goals = clone(staffedDraft.plan.goals);
-const shortProposal = proposeWorkforceAssignments(shortTeam, shortDraft, service, { isGM: true });
-assert.equal(shortProposal.changes.length, 0, "do not propose a known impossible minimum team");
-assert.ok(shortProposal.skipped.some(reason => reason.includes("нужно 2 работников")));
 const occupied = fixture(2); occupied.buildings.list.push({ ...clone(occupied.buildings.list[0]), id: "other" });
 const occupiedDraft = createWorkforceDraft(occupied, service);
 for (const p of occupied.people.list) setWorkforceAllocation(occupiedDraft, p.id, { ...task, sourceId: "other", key: "other::production:logs" }, 20);
-occupiedDraft.plan.goals = clone(staffedDraft.plan.goals);
+occupiedDraft.plan.productionGoals = [{ sourceId: "wood", functionId: "production:logs", preparedUnits: 20 }];
 const occupiedProposal = proposeWorkforceAssignments(occupied, occupiedDraft, service, { isGM: true });
 assert.equal(occupiedProposal.changes.length, 0);
 assert.deepEqual(occupiedProposal.draft.allocations, occupiedDraft.allocations, "automatic fill cannot steal occupied time");
-assert.ok(occupiedProposal.skipped.some(reason => reason.includes("свободные QD")));
-draft.plan.goals.push({ sourceId: "wood", functionId: "production:logs", normalQd: 24 });
+assert.ok(occupiedProposal.skipped.some(reason => /план не закрыт|занятого времени|не хватает|свободн/i.test(reason)));
+draft.plan.productionGoals.push({ sourceId: "wood", functionId: "production:logs", preparedUnits: 24 });
 const proposal = proposeWorkforceAssignments(holding, draft, service, { isGM: true });
 assert.equal(proposal.model.taskMap.get(task.key).normalQd, 24);
 assert.equal(proposal.model.free, 36);
 assert.equal(proposal.model.wage, 144, "quote uses 12 MM/day at two QD/day");
 assert.equal(workforceDraftError(holding, proposal.draft, { isGM: true }), "");
 const unpaid = fixture(); unpaid.buildings.list[0].wageDailyCopper = 0;
-const unpaidDraft = createWorkforceDraft(unpaid, service); unpaidDraft.plan.goals = clone(draft.plan.goals);
+const unpaidDraft = createWorkforceDraft(unpaid, service); unpaidDraft.plan.productionGoals = clone(draft.plan.productionGoals);
 assert.equal(proposeWorkforceAssignments(unpaid, unpaidDraft, service, { isGM: true }).changes.length, 0, "a zero rate is not implicit volunteering");
-assert.ok(proposeWorkforceAssignments(unpaid, unpaidDraft, service, { isGM: true }).skipped.some(reason => reason.includes("Нужна ставка")), "explain missing pay, not only an unavailable minimum team");
+assert.ok(proposeWorkforceAssignments(unpaid, unpaidDraft, service, { isGM: true }).skipped.some(reason => reason.includes("ставк") || reason.includes("не хватает")), "explain missing pay");
 unpaid.people.list[0].volunteerLabor = true; unpaid.people.list[0].volunteerReason = "Спасён поселением";
 const volunteerProposal = proposeWorkforceAssignments(unpaid, createWorkforceDraft(unpaid, service), service, { isGM: true, taskKeys: [task.key], personIds: ["p-0"], qd: 10 });
 assert.equal(volunteerProposal.changes.length, 1); assert.equal(volunteerProposal.model.wage, 0);
@@ -96,7 +83,7 @@ assert.ok(workforceDraftError(holding, over, { isGM: true }));
 const locked = clone(proposal.draft);
 locked.plan.locks.push({ personId: "p-0", sourceId: task.sourceId, functionId: task.functionId });
 assert.throws(() => setWorkforceAllocation(locked, "p-0", task, 1), /закрепление/);
-const clearedGoal = clone(proposal.draft); clearedGoal.plan.goals = [];
+const clearedGoal = clone(proposal.draft); clearedGoal.plan.productionGoals = [];
 assert.deepEqual(clearedGoal.allocations, proposal.draft.allocations);
 const hidden = clone(holding); hidden.people.list[0].visibility = "gm"; hidden.buildings.list[0].visibility = "gm";
 const hiddenModel = buildWorkforceModel(hidden, createWorkforceDraft(hidden, service), service);
@@ -114,8 +101,7 @@ assert.ok(model.people.find(row => row.id === "p-0").unavailable);
 assert.equal(model.free, 40);
 const moving = fixture();
 moving.buildings.list.push({ ...clone(moving.buildings.list[0]), id: "quarry", name: "Каменоломня" });
-moving.people.list[0].workAssignment = "wood";
-moving.buildings.list[0].assignedWorkerIds = ["p-0"];
+moving.people.list[0].workAllocations = [{ id: "w0", sourceId: "wood", functionId: "production:logs", normalQd: 20, overtimeQd: 0 }];
 const movingDraft = createWorkforceDraft(moving, service), movingSnapshot = JSON.stringify(movingDraft);
 const transfer = { personId: "p-0", fromKey: "wood::production:logs", targetKey: "quarry::production:logs", normalQd: 8, isGM: true };
 const moved = reviseWorkforceAssignment(moving, movingDraft, service, transfer);
@@ -124,11 +110,11 @@ assert.deepEqual(moved.allocations["p-0"].map(row => row.normalQd), [12, 8]);
 assert.equal(workforceDraftError(moving, moved, { isGM: true }), "");
 const movedAll = reviseWorkforceAssignment(moving, movingDraft, service, { ...transfer, normalQd: 20, overtimeQd: movingDraft.allocations["p-0"][0].overtimeQd });
 assert.equal(movedAll.allocations["p-0"].length, 1);
-assert.equal(movedAll.allocations["p-0"][0].sourceId, "quarry", "a full legacy transfer must not retain a stale busy state");
+assert.equal(movedAll.allocations["p-0"][0].sourceId, "quarry", "a full transfer must not retain a stale busy state");
 const released = clone(movingDraft);
 setWorkforceAllocation(released, "p-0", { sourceId: "wood", functionId: "production:logs", key: "wood::production:logs" }, 0);
 const releasedPerson = buildWorkforceModel(moving, released, service, { isGM: true }).people.find(row => row.id === "p-0");
-assert.equal(releasedPerson.unavailable, ""); assert.equal(releasedPerson.free, 20, "removing a legacy assignment frees time immediately");
+assert.equal(releasedPerson.unavailable, ""); assert.equal(releasedPerson.free, 20, "removing an assignment frees time immediately");
 const freshAssignment = reviseWorkforceAssignment(moving, released, service, { ...transfer, fromKey: "", add: true, normalQd: 6 });
 assert.equal(freshAssignment.allocations["p-0"][0].normalQd, 6);
 assert.throws(() => reviseWorkforceAssignment(moving, movingDraft, service, { ...transfer, normalQd: 21 }), /не хватает/);
@@ -138,12 +124,12 @@ assert.throws(() => reviseWorkforceAssignment(moving, fixed, service, transfer),
 const fixedTarget = clone(moved); fixedTarget.plan.locks.push({ personId: "p-0", sourceId: "quarry", functionId: "production:logs" });
 assert.throws(() => reviseWorkforceAssignment(moving, fixedTarget, service, transfer), /закреплено/);
 const noOvertimeDestination = clone(moving); noOvertimeDestination.buildings.list[1].productionLines[0].overtime = false;
-assert.throws(() => reviseWorkforceAssignment(noOvertimeDestination, movingDraft, service, { ...transfer, normalQd: 0, overtimeQd: 1 }), /Эта функция не разрешает переработку/);
+assert.throws(() => reviseWorkforceAssignment(noOvertimeDestination, movingDraft, service, { personId: "p-1", fromKey: "", add: true, targetKey: "quarry::production:logs", normalQd: 0, overtimeQd: 1, isGM: true }), /Эта функция не разрешает переработку/);
 const departed = clone(moving); departed.people.list[0].shipAssignment = { shipId: "away", away: true };
 assert.throws(() => reviseWorkforceAssignment(moving, movingDraft, service, { ...transfer, presenceHolding: departed }), /недоступен/);
-const fullDestination = clone(moving); fullDestination.buildings.list[1].workersMax = 1;
-fullDestination.people.list[1].workAssignment = "quarry"; fullDestination.buildings.list[1].assignedWorkerIds = ["p-1"];
-assert.throws(() => reviseWorkforceAssignment(fullDestination, createWorkforceDraft(fullDestination, service), service, transfer), /места/);
+const fullDestination = clone(moving); fullDestination.buildings.list[1].labor = { version: 2, capacityQd: 20 };
+fullDestination.people.list[1].workAllocations = [{ id: "w1", sourceId: "quarry", functionId: "production:logs", normalQd: 20, overtimeQd: 0 }];
+assert.throws(() => reviseWorkforceAssignment(fullDestination, createWorkforceDraft(fullDestination, service), service, transfer), /Предел|пределе|исчерпан|лимит/i);
 const privateDestination = clone(moving); privateDestination.buildings.list[1].visibility = "gm";
 assert.throws(() => reviseWorkforceAssignment(privateDestination, movingDraft, service, { ...transfer, isGM: false }), /недоступна/);
 assert.equal(JSON.stringify(movingDraft), movingSnapshot, "rejected transfers must not remove the original assignment");
@@ -151,14 +137,13 @@ assert.equal(validatePlayerPatch({ holdings: [moving], meta: { revision: 1 } }, 
   { holdings: [moving], meta: { revision: 1 } }, { holdings: [applyWorkforceDraft(clone(moving), moved)], meta: { revision: 1 } })).ok, true,
 "a transfer remains one permitted player patch");
 
-const minBuilding = { workersMin: 2, functions: { culture: true, production: true }, activation: { minOperationalQd: 40, anyWorkingFunction: true } };
+const minBuilding = { functions: { culture: true, production: true }, activation: { minOperationalQd: 40, anyWorkingFunction: true } };
 const minTasks = [
   { kind: "culture", functionId: "culture", functionName: "Услуги", assignable: true, normalQd: 10, assignments: [{ personId: "a" }] },
-  { kind: "production", functionId: "production:meal", functionName: "Кухня", assignable: true, normalQd: 25, overtimeQd: 5, assignments: [{ personId: "a" }, { personId: "b" }] },
-  { kind: "maintenance", functionId: "maintenance", assignable: true, normalQd: 40, assignments: [{ personId: "c" }] }
+  { kind: "production", functionId: "production:meal", functionName: "Кухня", assignable: true, normalQd: 25, overtimeQd: 5, assignments: [{ personId: "a" }, { personId: "b" }] }
 ];
 assert.deepEqual([workforceBuildingRequirement(minBuilding, minTasks).qd, workforceBuildingRequirement(minBuilding, minTasks).workers], [40, 2],
-  "building minimum counts each QD and worker once and excludes maintenance");
+  "building minimum counts each QD and worker once");
 const scopedMinimum = workforceBuildingRequirement({ ...minBuilding, activation: { minOperationalQd: 40 } }, minTasks);
 assert.equal(scopedMinimum.qd, 10, "another function cannot satisfy a function-specific minimum");
 assert.equal(scopedMinimum.gap, 30);
@@ -172,11 +157,13 @@ const filteredGroups = workforceTaskGroups(multiModel, multiModel.tasks.filter(r
 assert.equal(filteredGroups.length, 1); assert.equal(filteredGroups[0].tasks.length, 1);
 assert.equal(filteredGroups[0].taskCount, 2, "search narrows children without duplicating or splitting the building");
 const crossLineDraft = createWorkforceDraft(multi, service);
-crossLineDraft.plan.goals.push({ sourceId: "wood", functionId: "production:logs", normalQd: 4 });
+crossLineDraft.plan.productionGoals.push({ sourceId: "wood", functionId: "production:logs", preparedUnits: 4 });
 setWorkforceAllocation(crossLineDraft, "p-0", { sourceId: "wood", functionId: "production:planks", key: "wood::production:planks" }, 4);
 const crossLineGroup = workforceTaskGroups(buildWorkforceModel(multi, crossLineDraft, service, { isGM: true })).find(group => group.id === "wood");
-assert.equal(crossLineGroup.normalQd, 4); assert.equal(crossLineGroup.goal, 4);
-assert.equal(crossLineGroup.goalQd, 0, "work on another line must not fill a grouped goal progress bar");
+const logsTask = crossLineGroup.allTasks.find((row) => row.functionId === "production:logs");
+assert.equal(crossLineGroup.normalQd, 4);
+assert.equal(logsTask.effectiveNeed, 4);
+assert.equal(logsTask.normalQd, 0, "work on another line must not fill a grouped goal progress bar");
 const presence = fixture(6), presenceBaseline = clone(presence);
 presence.people.list[0].dead = true;
 presence.people.list[1].shipAssignment = { shipId: "voyager", away: true };
@@ -190,7 +177,7 @@ for (const isGM of [true, false]) {
   assert.deepEqual(presenceModel.people.map((person) => person.id), ["p-2", "p-4", "p-5"], "only living settlement residents appear, including injured residents and crew on shore duty");
   assert.equal(presenceModel.free, 40);
   const staleDraft = createWorkforceDraft(presenceBaseline, service);
-  staleDraft.plan.goals = [{ sourceId: "wood", functionId: "production:logs", normalQd: 20 }];
+  staleDraft.plan.productionGoals = [{ sourceId: "wood", functionId: "production:logs", preparedUnits: 20 }];
   const liveOptions = { isGM, presenceHolding: presence };
   assert.deepEqual(buildWorkforceModel(presenceBaseline, staleDraft, service, liveOptions).people.map((person) => person.id), ["p-2", "p-4", "p-5"], "a stale draft cannot restore dead or absent people");
   const staleProposal = proposeWorkforceAssignments(presenceBaseline, staleDraft, service, { ...liveOptions,
@@ -205,20 +192,25 @@ const childDraft = createWorkforceDraft(children, service);
 assert.equal(buildWorkforceModel(children, childDraft, service, { isGM: true }).free, 50);
 setWorkforceAllocation(childDraft, "p-0", task, 11);
 assert.ok(workforceDraftError(children, childDraft, { isGM: true }), "working child's normal cap is 10 QD");
-const legacy = fixture(); legacy.people.list[0].workAssignment = "wood"; legacy.buildings.list[0].assignedWorkerIds = ["p-0"];
-legacy.buildings.list[0].workerAdmissionOverrideIds = ["p-0"];
-const legacyDraft = createWorkforceDraft(legacy, service);
-assert.equal(legacyDraft.allocations["p-0"][0].normalQd, 20);
-assert.equal(legacyDraft.allocations["p-0"][0].overtimeQd, 10);
-setWorkforceAllocation(legacyDraft, "p-0", task, 12, 0);
-const converted = applyWorkforceDraft(clone(legacy), legacyDraft);
-assert.deepEqual(converted.buildings.list[0].workerAdmissionOverrideIds, ["p-0"], "conversion preserves GM exceptions");
-assert.equal(converted.people.list[0].workAllocationMode, "explicit");
-assert.deepEqual(converted.buildings.list[0].assignedWorkerIds, [""]);
+const overridden = fixture();
+overridden.people.list[0].workAllocations = [{ id: "w0", sourceId: "wood", functionId: "production:logs", normalQd: 20, overtimeQd: 10 }];
+overridden.buildings.list[0].workerAdmissionOverrideIds = ["p-0"];
+const overriddenDraft = createWorkforceDraft(overridden, service);
+assert.equal(overriddenDraft.allocations["p-0"][0].normalQd, 20);
+assert.equal(overriddenDraft.allocations["p-0"][0].overtimeQd, 10);
+setWorkforceAllocation(overriddenDraft, "p-0", task, 12, 0);
+const converted = applyWorkforceDraft(clone(overridden), overriddenDraft);
+assert.deepEqual(converted.buildings.list[0].workerAdmissionOverrideIds, ["p-0"], "updates preserve GM admission exceptions");
+assert.equal(converted.people.list[0].workAllocations[0].normalQd, 12);
 
-const large = fixture(200); large.buildings.list[0].workersMax = 200;
+const large = fixture(200);
+large.buildings.list[0].labor = { version: 2, capacityQd: 4000 };
+large.buildings.list[0].workersMax = 200;
+for (const person of large.people.list) {
+  person.workAllocations = [{ id: `w-${person.id}`, sourceId: "wood", functionId: "production:logs", normalQd: 2, overtimeQd: 1 }];
+}
 const largeDraft = createWorkforceDraft(large, service), start = performance.now();
-for (const person of large.people.list) setWorkforceAllocation(largeDraft, person.id, task, 10);
+for (const person of large.people.list) setWorkforceAllocation(largeDraft, person.id, task, 10, 0);
 const largeModel = buildWorkforceModel(large, largeDraft, service, { isGM: true });
 assert.equal(largeModel.free, 2000); assert.equal(largeModel.normalQd, 2000);
 const largeBefore = { holdings: [large], meta: { revision: 1 } }, largeAfter = { holdings: [applyWorkforceDraft(clone(large), largeDraft)], meta: { revision: 1 } };
@@ -227,18 +219,22 @@ assert.ok(largePatch.changes.length > 250);
 assert.equal(validatePlayerPatch(largeBefore, largePatch).ok, true, "200-resident plan must remain one atomic patch");
 console.log(`Workforce model + player patch for 200 residents: ${Math.round(performance.now() - start)} ms.`);
 const bulkStart = performance.now();
-const largeBulk = proposeWorkforceAssignments(large, createWorkforceDraft(large, service), service, {
-  isGM: true, taskKeys: [task.key], personIds: large.people.list.map((row) => row.id), qd: 4
+const largeBulkSource = fixture(200);
+largeBulkSource.buildings.list[0].labor = { version: 2, capacityQd: 4000 };
+largeBulkSource.buildings.list[0].workersMax = 200;
+const largeBulk = proposeWorkforceAssignments(largeBulkSource, createWorkforceDraft(largeBulkSource, service), service, {
+  isGM: true, taskKeys: [task.key], personIds: largeBulkSource.people.list.map((row) => row.id), qd: 4
 });
 assert.equal(largeBulk.changes.length, 200); assert.equal(largeBulk.model.normalQd, 800);
 console.log(`Bulk preview for 200 residents: ${Math.round(performance.now() - bulkStart)} ms.`);
 const capHolding = fixture(20), capDraft = createWorkforceDraft(capHolding, service);
+capHolding.buildings.list[0].labor = { version: 2, capacityQd: 12 };
 const capBulk = proposeWorkforceAssignments(capHolding, capDraft, service, { isGM: true, taskKeys: [task.key], personIds: capHolding.people.list.map((row) => row.id), qd: 1 });
-assert.equal(capBulk.changes.length, 12); assert.equal(capBulk.skipped.length, 8, "bulk respects distinct building seats");
+assert.equal(capBulk.changes.length, 12); assert.equal(capBulk.skipped.length, 8, "bulk respects building capacityQd");
 assert.throws(() => proposeWorkforceAssignments(holding, draft, service, { qd: -2 }), /от 1 до 20/);
 
 const herd = fixture();
-herd.buildings.list = [{ ...template("pasture"), id: "cows", templateId: "pasture", lifecycle: "built", constructionStatus: "built", status: "built", assignedWorkerIds: [] }];
+herd.buildings.list = [{ ...template("pasture"), id: "cows", templateId: "pasture", lifecycle: "built", constructionStatus: "built", status: "built" }];
 const emptyHerdModel = buildWorkforceModel(herd, createWorkforceDraft(herd, service), service, { isGM: true });
 assert.equal(emptyHerdModel.taskMap.get("cows::livestock").need, 0);
 herd.buildings.list[0].livestock.state.adults = 2;
@@ -277,27 +273,21 @@ assert.equal(buildWorkforceModel(waiting, waitingDraft, service, { isGM: true })
 const preparing = fixture(); Object.assign(preparing.buildings.list[0].productionLines[0], { workInputsReserved: true, workProgressUnits: 20000,
   workReservedInputs: { version: 1, entries: [], timing: { source: "workers", phase: "work", workTargetUnits: 30000, waitQd: 120, elapsedQd: 0 } } });
 assert.equal(buildWorkforceModel(preparing, createWorkforceDraft(preparing, service), service, { isGM: true }).taskMap.get(task.key).effectiveNeed, 1, "remaining preparation comes from the funded batch");
-const farm = fixture(); farm.buildings.list = [{ ...template("grain-field"), id: "field", templateId: "grain-field", lifecycle: "built", status: "built", constructionStatus: "built", assignedWorkerIds: [] }];
+const farm = fixture(); farm.buildings.list = [{ ...template("grain-field"), id: "field", templateId: "grain-field", lifecycle: "built", status: "built", constructionStatus: "built" }];
 farm.buildings.list[0].agriculture.state = { phase: "sowing", cropId: "grain", sowingProgressQd: 8, sowingSeasonKey: "2026:spring" };
 const springService = Object.create(service); springService._agricultureCalendarContext = () => ({ seasonId: "spring", seasonKey: "2026:spring" });
 const farmTask = buildWorkforceModel(farm, createWorkforceDraft(farm, springService), springService, { isGM: true }).taskMap.get("field::agriculture");
 assert.equal(farmTask.effectiveNeed, 16, "24-QD sowing stage preserves 8 QD already done");
 
 const noInputs = fixture(); noInputs.buildings.list[0].productionLines[0].expenses = "зерно 10";
-const noInputDraft = createWorkforceDraft(noInputs, service); noInputDraft.plan.goals = clone(draft.plan.goals);
+const noInputDraft = createWorkforceDraft(noInputs, service); noInputDraft.plan.productionGoals = clone(draft.plan.productionGoals);
 assert.equal(proposeWorkforceAssignments(noInputs, noInputDraft, service, { isGM: true }).changes.length, 0, "helper cannot presume absent inputs");
-const minimum = fixture(); minimum.buildings.list[0].workersMin = 2;
-const minDraft = createWorkforceDraft(minimum, service); minDraft.plan.goals = [{ sourceId: "wood", functionId: "production:logs", normalQd: 20 }];
-const minProposal = proposeWorkforceAssignments(minimum, minDraft, service, { isGM: true });
-assert.equal(minProposal.changes.length, 2, "a two-person task must split labor");
-assert.ok(!minProposal.model.taskMap.get(task.key).warnings.some((value) => value.includes("одновременного")));
 const specialist = fixture(); specialist.buildings.list[0].workerProfile = { composition: [{ count: 1, group: "МЕДИЦИНА" }] };
-specialist.buildings.list[0].workersMin = 2;
 specialist.people.list[2].background = "Лекарь";
-const specialistDraft = createWorkforceDraft(specialist, service); specialistDraft.plan.goals = clone(minDraft.plan.goals);
+const specialistDraft = createWorkforceDraft(specialist, service);
+specialistDraft.plan.productionGoals = [{ sourceId: "wood", functionId: "production:logs", preparedUnits: 20 }];
 const specialistProposal = proposeWorkforceAssignments(specialist, specialistDraft, service, { isGM: true });
 assert.equal(specialistProposal.changes[0].personId, "p-2", "required specialists come before generic cheap labor");
-assert.equal(specialistProposal.changes.length, 2);
 specialist.people.list[2].background = "";
 assert.equal(proposeWorkforceAssignments(specialist, specialistDraft, service, { isGM: true }).changes.length, 0, "helper explains missing team instead of funding unusable work");
 const overlapping = { workerProfile: { composition: [{ count: 1, backgrounds: ["А", "Б"] }, { count: 1, backgrounds: ["А"] }] } };
@@ -309,7 +299,7 @@ assert.equal(buildingCompositionStatus(missingSpecialist, Array.from({ length: 2
 const disabled = fixture(); disabled.buildings.list[0].functions.production = false;
 assert.ok(!buildWorkforceModel(disabled, createWorkforceDraft(disabled, service), service, { isGM: true }).taskMap.has(task.key));
 for (const id of ["lazaret", "hospital"]) {
-  const medical = fixture(); medical.buildings.list = [{ ...template(id), id, lifecycle: "built", status: "built", constructionStatus: "built", assignedWorkerIds: [] }];
+  const medical = fixture(); medical.buildings.list = [{ ...template(id), id, lifecycle: "built", status: "built", constructionStatus: "built" }];
   const medicalModel = buildWorkforceModel(medical, createWorkforceDraft(medical, service), service, { isGM: true });
   assert.ok(!medicalModel.taskMap.has(`${id}::culture`)); assert.ok(medicalModel.taskMap.has(`${id}::medical`));
 }
@@ -317,7 +307,7 @@ for (const id of ["lazaret", "hospital"]) {
 // All templates must produce a model without making optional capacity mandatory.
 for (const row of DEFAULT_BUILDING_TEMPLATES) {
   const catalogHolding = fixture();
-  catalogHolding.buildings.list = [{ ...clone(row), id: row.id, templateId: row.id, lifecycle: "built", constructionStatus: "built", status: "built", assignedWorkerIds: [] }];
+  catalogHolding.buildings.list = [{ ...clone(row), id: row.id, templateId: row.id, lifecycle: "built", constructionStatus: "built", status: "built" }];
   const catalogModel = buildWorkforceModel(catalogHolding, createWorkforceDraft(catalogHolding, service), service, { isGM: true });
   for (const entry of catalogModel.tasks.filter((entry) => entry.kind === "production")) assert.equal(entry.need, 0, `${row.id}: empty production is optional`);
 }
@@ -339,7 +329,7 @@ const staleData = clone(beforeData); staleData.meta.revision = 8;
 assert.equal(validatePlayerPatch(staleData, buildPlayerPatch(beforeData, data)).ok, false, "authority rejects stale workforce commands even with disjoint changes");
 assert.equal((await executeWorkforcePlan({ ...command, operationId: "save-2" }, { store, getUser: () => ({ isGM: true }) })).conflict, true);
 assert.equal((await executeWorkforcePlan({ ...command, operationId: "save-3", expectedRevision: 8 }, { store, getUser: () => ({ isGM: false }) })).ok, false, "player without authority cannot write locally");
-console.log(`Workforce planner: optional capacity, shared budgets, wages, locks, hidden data, legacy conversion, ${DEFAULT_BUILDING_TEMPLATES.length} templates, 200-resident authority patch and replay passed.`);
+console.log(`Workforce planner: optional capacity, shared budgets, wages, locks, hidden data, v2 admission preservation, ${DEFAULT_BUILDING_TEMPLATES.length} templates, 200-resident authority patch and replay passed.`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

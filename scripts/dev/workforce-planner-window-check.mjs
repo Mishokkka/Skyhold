@@ -49,7 +49,7 @@ try {
   const { SkyholdData } = await import("../data/store.js");
   const { mergeHoldingDefaults } = await import("../data/normalizers.js");
   const { buildWorkforceModel } = await import("../apps/domains/workforce-planner.js");
-  const { hybridRuntimeFixture } = await import("./hybrid-labor-runtime-check.mjs");
+  const { unifiedRuntimeFixture } = await import("./unified-labor-check.mjs");
   for (const isGM of [true, false]) {
     game.user.isGM = isGM;
     for (const position of [undefined, { width: 960, height: 620 }]) {
@@ -84,14 +84,14 @@ try {
         people: { list: [{ id: "worker", name: "Работник", age: 30, ageGroup: "Вз", visibility: "public",
           attributes: { strength: 4, agility: 4, wits: 4, empathy: 4 } }] },
         buildings: { list: [{ id: "wood", name: "Лесоповал", status: "built", lifecycle: "built", constructionStatus: "built", condition: "normal",
-          workersMax: 2, workersMin: 1, wageDailyCopper: 12, functions: { production: true },
-          productionLines: [{ id: "logs", active: true, source: "workers", workQd: 2, resourceId: "wood", formula: "2" }] }] } });
+          labor: { version: 2, capacityQd: 40 }, workersMax: 2, workersMin: 0, wageDailyCopper: 12, functions: { production: true },
+          productionLines: [{ id: "logs", active: true, source: "workers", workQd: 2, outputQty: 2, resourceId: "wood", formula: "2" }] }] } });
       const app = new SkyholdWorkforcePlanner({ holdingId: holding.id });
       app.permissions = { isGM, canEditBuildings: true };
       app.planningOptions = { isGM };
       app.requestRender = () => {};
       app._reset(holding, 7);
-      app.draft.plan.goals.push({ sourceId: "wood", functionId: "production:logs", normalQd: 4 });
+      app.draft.plan.productionGoals.push({ sourceId: "wood", functionId: "production:logs", preparedUnits: 4 });
       app._model = buildWorkforceModel(app.base, app.draft, app.service, app.planningOptions);
       const draftBefore = structuredClone(app.draft), holdingBefore = structuredClone(holding), savesBefore = saves;
       const action = (name) => app._action({ preventDefault() {} }, { dataset: { action: `workforce-${name}` } });
@@ -110,27 +110,28 @@ try {
     }
     for (const isGM of [true, false]) {
       game.user.isGM = isGM;
-      const { holding } = hybridRuntimeFixture();
+      const { holding } = unifiedRuntimeFixture();
+      holding.buildings.list[0].productionLines[0].overtime = true;
       const app = new SkyholdWorkforcePlanner({ holdingId: holding.id });
       app.permissions = { isGM, canEditBuildings: true }; app.planningOptions = { isGM };
       app.requestRender = () => {}; app._reset(holding, 8); app.latest = { holding, revision: 8 };
       app._model = buildWorkforceModel(app.base, app.draft, app.service, app.planningOptions);
       await app._onRender({}, {});
-      const field = { dataset: { workforceField: isGM ? "staff-rate" : "staff-ot", personId: "worker-0" },
-        type: "number", value: isGM ? "24" : "2" };
+      const field = { dataset: { workforceField: isGM ? "qd" : "ot", personId: "worker-0", key: "workshop::production:main" },
+        type: "number", value: isGM ? "10" : "2" };
       field.closest = () => field;
       app.handlers.get("change")({ target: field, type: "change" });
       assert.equal(app.dirty, true, "Unapplied GM/player form input must protect the draft from silent replacement or closing");
-      assert.equal(app.draft.staffAppointments["worker-0"].wageDailyCopper, 12);
+      assert.equal(app.draft.allocations["worker-0"][0].normalQd, 20);
       await assert.rejects(app._save(false), /неприменённые значения/, "Global save must not silently persist the old displayed value");
-      const action = (name) => app._action({ preventDefault() {} }, { dataset: { action: `workforce-${name}`, personId: "worker-0" } });
+      const action = (name) => app._action({ preventDefault() {} }, { dataset: { action: `workforce-${name}`, personId: "worker-0", key: "workshop::production:main" } });
       await action("tenday");
       assert.match(app.message, /сохраните план/, "Calculation must explain that the on-screen draft has not been saved");
       await app.close({}); assert.equal(app.preview.closeAfterDiscard, true);
-      await action("cancel-preview"); await action("staff-save");
+      await action("cancel-preview"); await action("assign");
       assert.equal(app.inputValues.size, 0, "Applying the row must remove its pending-input guard");
-      assert.equal(app.draft.staffAppointments["worker-0"].wageDailyCopper, isGM ? 24 : 12);
-      assert.equal(app.draft.staffAppointments["worker-0"].overtimeQd, isGM ? 0 : 2);
+      assert.equal(app.draft.allocations["worker-0"][0].normalQd, isGM ? 10 : 20);
+      assert.equal(app.draft.allocations["worker-0"][0].overtimeQd, isGM ? 0 : 2);
       assert.equal(app.dirty, true);
       await app.close({}); await action("accept-preview");
       assert.equal(app.rendered, false, "Accepting close-time discard must actually close the window");

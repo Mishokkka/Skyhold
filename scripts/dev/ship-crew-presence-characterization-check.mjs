@@ -5,7 +5,7 @@ import { buildingStaffingWorkerIds, explicitWorkerIdsForBuilding, validateHoldin
 import { runFoodConsumption } from "../engines/economy/food-consumption.js";
 import { normalizeFoodRationUnits, resolveFoodRation } from "../engines/economy/food-rations.js";
 import { embarkShipCrew, disembarkShipCrew } from "../engines/ships/crew.js";
-import { isCivilianWorkerCandidate } from "../engines/workers/assignment-planner.js";
+import { workforceUnavailable } from "../data/workforce-plan.js";
 import { ResidentDomain } from "../apps/domains/resident-domain.js";
 
 function clone(value) {
@@ -32,11 +32,10 @@ function fixture() {
           profession: "Плотник",
           status: "resident",
           role: "Плотник",
-          workAssignment: "workshop",
-          workAllocationMode: "explicit",
+          workAssignment: "",
           workAllocations: [{ sourceId: "workshop", functionId: "production", normalQd: 20, overtimeQd: 0 }]
         },
-        { id: "clara", name: "Клара", role: "Свободен", workAssignment: "", workAllocationMode: "legacy", workAllocations: [] }
+        { id: "clara", name: "Клара", role: "Свободен", workAssignment: "", workAllocations: [] }
       ]
     },
     buildings: {
@@ -44,7 +43,7 @@ function fixture() {
         id: "workshop",
         name: "Мастерская",
         workersMax: 3,
-        assignedWorkerIds: ["alice", "", ""],
+        labor: { version: 2, capacityQd: 60 },
         workerAdmissionOverrideIds: ["alice", "clara"]
       }]
     },
@@ -58,17 +57,6 @@ function fixture() {
     }
   };
 }
-
-const plannerDependencies = {
-  safeNumber: (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback,
-  buildingOperationalState: () => ({ operational: true }),
-  workerEfficiencyForPerson: () => ({ value: 1 }),
-  isSoldierResident: () => false,
-  isMilitaryResidentLike: () => false,
-  setPersonFree: () => {},
-  assignedWorkerSet: () => new Set(),
-  applyPersonSalaryForAssignment: () => {}
-};
 
 function foodDependencies() {
   return {
@@ -123,13 +111,12 @@ export function checkShipCrewPresenceCharacterization() {
   assert.equal(alice.shipAssignment.shipId, "magnifique");
   assert.equal(alice.shipAssignment.sinceQd, 40);
   assert.equal(alice.shipAssignment.previousSettlementPlan.workAssignment, "workshop");
-  assert.deepEqual(alice.shipAssignment.previousSettlementPlan.buildings[0].workerSlots, [0]);
+  assert.deepEqual(alice.shipAssignment.previousSettlementPlan.buildings[0].admissionOverride, true);
   assert.equal(alice.profession, "Механик", "embark must preserve intrinsic profession");
   assert.equal(alice.status, "resident", "embark must preserve intrinsic resident status");
   assert.equal(alice.role, "Мастерская", "embark must not overwrite descriptive resident role");
   assert.equal(alice.workAssignment, "");
   assert.deepEqual(boris.workAllocations, []);
-  assert.deepEqual(holding.buildings.list[0].assignedWorkerIds, ["", "", ""]);
   assert.deepEqual(holding.buildings.list[0].workerAdmissionOverrideIds, ["clara"]);
   assert.deepEqual(holding.constructionCrews[0].memberIds, ["clara"]);
   assert.equal(holding.constructionCrews[0].leaderId, "");
@@ -140,7 +127,7 @@ export function checkShipCrewPresenceCharacterization() {
   assert.deepEqual(buildingStaffingWorkerIds(holding, "workshop"), []);
   assert.deepEqual(explicitWorkerIdsForBuilding(holding, "workshop"), []);
   assert.equal(validateHoldingWorkAllocations(holding).ok, true);
-  assert.equal(isCivilianWorkerCandidate(alice, holding.buildings.list[0], plannerDependencies), false);
+  assert.ok(workforceUnavailable(holding, alice));
   assert.equal(ResidentDomain._canResidentWork.call({
     _isResidentInjured: () => false,
     _isChildResident: () => false,
@@ -157,7 +144,7 @@ export function checkShipCrewPresenceCharacterization() {
   assert.equal(isResidentPresent(alice), true);
   assert.equal(alice.shipAssignment.returnedQd, 52);
   assert.equal(alice.workAssignment, "", "return must not restore a possibly occupied job slot");
-  assert.deepEqual(holding.buildings.list[0].assignedWorkerIds, ["", "", ""]);
+  assert.deepEqual(alice.workAllocations, []);
 
   const invalidHolding = fixture();
   const beforeInvalid = clone(invalidHolding);

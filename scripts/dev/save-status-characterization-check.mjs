@@ -358,7 +358,7 @@ try {
   {
     let live = { holdings: ["a", "b"].map(id => ({
       id, people: { list: [{ id: "resident", name: id, workAssignment: `current-${id}` }] },
-      buildings: { list: [{ id: "job", assignedWorkerIds: [], workersMax: 1, name: "Кузня" }] }
+      buildings: { list: [{ id: "job", name: "Кузня", constructionStatus: "built", functions: { culture: true }, labor: { version: 2, capacityQd: 20 } }] }
     })) };
     const approval = deferred();
     const skipped = Symbol("skipped");
@@ -382,10 +382,12 @@ try {
     live.holdings.reverse();
     approval.resolve({ allowed: true });
     await assigning;
-    assert.deepEqual(live.holdings.map(item => item.people.list[0].workAssignment), ["current-b", "job"]);
+    assert.equal(live.holdings[0].people.list[0].workAssignment, "current-b");
+    assert.equal(live.holdings[1].people.list[0].workAllocations?.[0]?.sourceId, "job");
+    assert.equal(live.holdings[1].people.list[0].workAllocations?.[0]?.normalQd, 20);
     changeWork.currentTarget.value = "vanished-job";
     await worker._onWorkAssignmentChange(changeWork);
-    assert.equal(live.holdings[1].people.list[0].workAssignment, "job", "a failed transfer preserves the resident's existing assignment");
+    assert.equal(live.holdings[1].people.list[0].workAllocations?.[0]?.sourceId, "job", "a failed transfer preserves the resident's existing assignment");
 
     const profile = { ...editor, dataset: { holdingId: "a", residentId: "resident" } };
     const proposedName = field.value;
@@ -396,7 +398,7 @@ try {
     assert.equal(await save, true);
     assert.equal(live.holdings[0].people.list[0].name, "b");
     assert.equal(live.holdings[1].people.list[0].name, field.value);
-    assert.equal(live.holdings[1].people.list[0].workAssignment, "job");
+    assert.equal(live.holdings[1].people.list[0].workAllocations?.[0]?.sourceId, "job");
     SkyholdData.skipTransaction = methods.skipTransaction;
   }
 

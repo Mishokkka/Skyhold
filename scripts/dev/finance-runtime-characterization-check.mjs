@@ -28,7 +28,7 @@ function builtMill({ wageDailyCopper = 3, baseUpkeepMonthlyCopper = 0, operating
     constructionStatus: "built",
     status: "Построено",
     functions: { production: true, income: false },
-    assignedWorkerIds: ["worker"],
+    labor: { version: 2, capacityQd: 40 },
     wageDailyCopper,
     baseUpkeepMonthlyCopper,
     productionLines: [{
@@ -63,7 +63,8 @@ function runtimeHolding({
   holding.people.list = [{
     id: "worker",
     name: "Worker",
-    workAssignment: "mill",
+    workAssignment: "",
+    workAllocations: [{ id: "work-1", sourceId: "mill", functionId: "production:grind", normalQd: 20, overtimeQd: 0 }],
     wageDailyOverrideCopper: null,
     volunteerLabor,
     volunteerReason: volunteerLabor ? "characterization fixture" : ""
@@ -108,7 +109,7 @@ function runtimeHarness() {
     _childWorkThreshold: ResidentDomain._childWorkThreshold,
     _canResidentWork: ResidentDomain._canResidentWork,
     _assignedWorkerSet(holding = {}) {
-      return new Set((holding?.buildings?.list ?? []).flatMap((building) => building?.assignedWorkerIds ?? []).map(String));
+      return new Set((holding?.people?.list ?? []).filter((person) => (person?.workAllocations ?? []).some((row) => Number(row?.normalQd ?? row?.qd ?? 0) + Number(row?.overtimeQd ?? 0) > 0)).map((person) => String(person.id)));
     },
     _prepareFinanceForQd(...args) {
       calls.push("finance");
@@ -183,67 +184,6 @@ function carrySeries(monthlyCopper) {
 }
 
 export async function checkFinanceRuntimeCharacterization() {
-  {
-    const { harness } = runtimeHarness();
-    const holding = runtimeHolding({ moneyCopper: 1000, wageDailyCopper: 18 });
-    const building = holding.buildings.list[0];
-    building.functions = { culture: true };
-    building.activation = { minWorkers: 1, minOperationalQd: 20 };
-    building.maintenance = { schemaVersion: 2, requiredPoints: 2 };
-    const slot = (functionId) => ({ sourceId: building.id, functionId, overtime: false });
-    const serviceSlots = new Map(Array.from({ length: 40 }, (_, step) => step).filter((step) => step % 4 < 2).map((step) => [step, slot("culture")]));
-    const context = { periodQd: 40, periodIdentity: { periodKey: "restart-service" }, technicalRestartIds: new Set([building.id]),
-      blockedWorkerIds: new Set(), plannedAssignmentsByWorkerId: new Map(), plannedWorkSlotsByWorkerId: new Map([
-        ["service-worker", serviceSlots], ["technician", new Map([[0, slot("maintenance")], [1, slot("maintenance")]])]
-      ]) };
-    const report = { skipped: [], ledger: [] };
-    harness._prepareTechnicalServiceRestarts(holding, context, report);
-    assert.equal(building.serviceState.workedQd, 18, "The first two simultaneous service slots precede completed inspection and cannot count");
-    assert.equal(building.serviceState.active, false);
-    context.plannedWorkSlotsByWorkerId.set("helper", new Map([[4, slot("culture")], [5, slot("culture")]]));
-    harness._prepareTechnicalServiceRestarts(holding, context, report);
-    assert.equal(building.serviceState.active, true);
-    harness._recordBuildingServiceActivity(holding, report, context);
-    assert.equal(building.serviceState.workedQd, 20, "Final recording retains the post-inspection service workload");
-    assert.ok(!building.serviceState.activeWorkerIds.includes("technician"));
-    context.blockedWorkerIds.add("technician");
-    harness._prepareTechnicalServiceRestarts(holding, context, report);
-    assert.equal(building.serviceState.active, false, "An unpaid technician cannot restart a nonproduction service");
-    assert.equal(building.serviceState.workedQd, 0);
-  }
-  {
-    for (const moneyCopper of [1000, 0]) {
-      const { harness } = runtimeHarness();
-      const holding = runtimeHolding({ moneyCopper, wageDailyCopper: 3 });
-      const building = holding.buildings.list[0];
-      building.workersMax = 1;
-      building.maintenance = { schemaVersion: 2, requiredPoints: 2, backlogTendays: 0 };
-      Object.assign(holding.people.list[0], { workAssignment: "", workAllocationMode: "explicit", workAllocations: [
-        { id: "production", sourceId: "mill", functionId: "production:grind", normalQd: 18, overtimeQd: 0 },
-        { id: "technical", sourceId: "mill", functionId: "maintenance", normalQd: 2, overtimeQd: 0 }
-      ] });
-      const inputs = harness._financePlanInputs(holding, 40, financePeriodIdentity(holding, 40));
-      const technical = inputs.buildings[0].functions.find((row) => row.id === "maintenance");
-      assert.equal(technical.wageDailyCopper, 18);
-      assert.equal(technical.operatingUpkeepMonthlyCopper, 0, "Technical labor must not add a second operating tariff");
-      const report = { treasury: { spent: 0, deficit: 0, lines: [] }, skipped: [], ledger: [] };
-      const context = harness._prepareFinanceForQd(holding, 40, report, { operationId: `technical-finance-${moneyCopper}` });
-      const plan = harness._planMaintenanceForQd(holding, 40, { operationId: `technical-service-${moneyCopper}`, financeContext: context });
-      if (moneyCopper > 0) {
-        assert.equal(holding.storage.moneyCopper, 955, "18 production QD at 3/day plus 2 technical QD at 18/day cost 45");
-        assert.equal(plan.totals.allocatedTechnicalQd, 2);
-        assert.equal(plan.entries[0].stateAfter.backlogTendays, 0);
-        assert.equal(harness._technicalMaintenanceReady(building, context, 0), false);
-        assert.equal(harness._technicalMaintenanceReady(building, context, 1), false);
-        assert.equal(harness._technicalMaintenanceReady(building, context, 2), true, "Restart follows two completed paid QD, never future work");
-        harness._recordBuildingServiceActivity(holding, report, context);
-        assert.equal(building.serviceState.workedQd, 18, "Recorded primary activity excludes technical QD");
-        assert.equal(building.serviceState.workedQdByFunction.maintenance, undefined);
-      } else {
-        assert.equal(plan.totals.allocatedTechnicalQd, 0, "Unpaid assignments cannot service machinery");
-      }
-    }
-  }
   assert.deepEqual(plannedWorkerQd(40), { normalQd: 20, overtimeQd: 0, totalQd: 20 });
   assert.deepEqual(plannedWorkerQd(40, { overtime: true }), { normalQd: 20, overtimeQd: 10, totalQd: 30 });
   assert.deepEqual(plannedWorkerQd(40, { overtime: true, normalQdPerDay: 1, overtimeQdPerDay: 0 }), { normalQd: 10, overtimeQd: 0, totalQd: 10 });
@@ -252,6 +192,7 @@ export async function checkFinanceRuntimeCharacterization() {
     const { harness } = runtimeHarness();
     const holding = runtimeHolding({ moneyCopper: 100, wageDailyCopper: 3 });
     Object.assign(holding.people.list[0], { age: 12, race: "Человек", injuredDays: 0 });
+    holding.people.list[0].workAllocations[0].normalQd = 10;
     holding.buildings.list[0].productionLines[0].overtime = true;
     const inputs = harness._financePlanInputs(holding, 40, financePeriodIdentity(holding, 40));
     assert.equal(inputs.workers.length, 1, "an older working child must enter the immutable finance plan");
@@ -273,17 +214,14 @@ export async function checkFinanceRuntimeCharacterization() {
     const quarry = builtMill({ wageDailyCopper: 18 });
     quarry.id = "quarry";
     quarry.name = "Quarry";
-    quarry.assignedWorkerIds = [];
     quarry.productionLines[0].id = "cut";
     quarry.productionLines[0].resourceId = "stone";
     quarry.productionLines[0].wageDailyCopper = 0;
     quarry.workersMax = 1;
-    holding.buildings.list[0].assignedWorkerIds = [];
     holding.buildings.list[0].workersMax = 1;
     Object.assign(holding.people.list[0], {
       attributes: { strength: 3, agility: 3, wits: 3, empathy: 3 },
       workAssignment: "",
-      workAllocationMode: "explicit",
       workAllocations: [
         { id: "mill-half", sourceId: "mill", functionId: "production:grind", normalQd: 10, overtimeQd: 0 },
         { id: "quarry-half", sourceId: "quarry", functionId: "production:cut", normalQd: 10, overtimeQd: 0 }
@@ -506,6 +444,7 @@ export async function checkFinanceRuntimeCharacterization() {
     const fuelHarness = {
       ...harness,
       _activeAssignedBuildingPeople: () => [{}],
+      _plannedWorkerFunctionQd: () => 20,
       _storageCanPay(target, costs) {
         const cost = costs[0];
         const row = target.storage.resources.find((item) => item.resourceId === cost.resourceId);
@@ -517,12 +456,13 @@ export async function checkFinanceRuntimeCharacterization() {
       }
     };
     fuelHarness._runInstitutionConsumables(holding, 40, report, {}, financeContext);
-    assert.equal(lighthouse.serviceState.active, false, "the Lighthouse must stop when the explicitly selected fuel is missing");
+    assert.equal(lighthouse.serviceState?.fuelBlocked, true);
+    assert.equal(lighthouse.serviceState?.active, false, "the Lighthouse must stop when the explicitly selected fuel is missing");
     assert.equal(holding.storage.resources.find((row) => row.resourceId === "fuel-liquid").qty, 10, "the Lighthouse must never substitute a more abundant fuel automatically");
     holding.storage.resources.find((row) => row.resourceId === "wood").qty = 2;
     financeContext.operatingBlockedFunctionKeys.clear();
     fuelHarness._runInstitutionConsumables(holding, 40, report, {}, financeContext);
-    assert.equal(lighthouse.serviceState.active, true);
+    assert.equal(lighthouse.serviceState, undefined);
     assert.equal(holding.storage.resources.find((row) => row.resourceId === "wood").qty, 0, "the selected two Wood must be charged once per tenday");
   }
 
@@ -530,11 +470,11 @@ export async function checkFinanceRuntimeCharacterization() {
     const { harness } = runtimeHarness();
     const holding = {
       people: { list: [] },
-      buildings: { list: [{ id: "agency-1", templateId: "hiring-agency", name: "Агентство Найма", constructionStatus: "built", workersMin: 1 }] },
+      buildings: { list: [{ id: "agency-1", templateId: "hiring-agency", name: "Агентство Найма", constructionStatus: "built", workersMin: 0, workersMax: 1, labor: { version: 2, capacityQd: 20 }, activation: { minOperationalQd: 10 } }] },
       finance: {},
       log: []
     };
-    const resolutionHarness = { ...harness, _activeAssignedBuildingPeople: () => [{}] };
+    const resolutionHarness = { ...harness, _activeAssignedBuildingPeople: () => [{}], _plannedWorkerFunctionQd: () => 20 };
     const report = { work: [] };
     const financeContext = { mothballedBuildingIds: new Set(), baseBlockedBuildingIds: new Set(), operatingBlockedFunctionKeys: new Set(), periodIdentity: { periodIndex: 3, lastPeriodIndex: 3 } };
     resolutionHarness._runInstitutionResolutions(holding, report, {}, financeContext, { operationId: "agency-period", createdAt: "2026-08-11T10:07:00.000Z" });

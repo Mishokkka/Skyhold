@@ -4,7 +4,8 @@ import path from "node:path";
 import { resolveFoodRation } from "../engines/economy/food-rations.js";
 import { nutritionBalance } from "../engines/economy/nutrition.js";
 import { sellerQualification } from "../engines/workers/seller-qualification.js";
-import { minimumStaffStatus } from "../engines/workers/minimum-staff.js";
+import { buildingServiceEffectFactor } from "../engines/economy/building-service.js";
+import { buildingLaborCapacityQd } from "../data/labor-model.js";
 import { militaryDailyWage } from "../engines/economy/military-wages.js";
 import { calculatePlannedWorkerWage, financeBuildingFunctionBlockState } from "../engines/economy/finance-obligations.js";
 import { prepareFinancePeriod } from "../engines/economy/finance-period.js";
@@ -37,14 +38,18 @@ export function checkApprovedEconomy() {
   assert.equal(nutritionBalance({ effectiveUnits: 5, eaten: 100, foodGroups: { grain: 60, protein: 20, fruit: 20 } }).diversityBonus, 0);
   assert.equal(sellerQualification({ attributes: { wits: 3, empathy: 3 } }).efficiency, 1);
   assert.ok(sellerQualification({ attributes: { wits: 5, empathy: 5 }, traits: ["Бережливый", "Грамотный"] }).efficiency >= 2);
-  assert.equal(minimumStaffStatus({ workersMin: 2 }, [{ id: "one" }, { id: "one" }]).met, false);
-  assert.equal(minimumStaffStatus({ workersMin: 2 }, [{ id: "one" }, { id: "two", dead: true }]).met, false);
-  assert.equal(minimumStaffStatus({ workersMin: 2 }, [{ id: "one" }, { id: "two" }]).met, true);
+  const minBuilding = { id: "clinic", functions: { culture: true }, workersMax: 2, labor: { version: 2, capacityQd: 40 }, activation: { minOperationalQd: 20 } };
+  assert.equal(buildingServiceEffectFactor({ people: { list: [{ id: "one", workAllocations: [{ sourceId: "clinic", functionId: "culture", normalQd: 10 }] }] } }, minBuilding), 0);
+  assert.equal(buildingServiceEffectFactor({ people: { list: [{ id: "two", dead: true, workAllocations: [{ sourceId: "clinic", functionId: "culture", normalQd: 20 }] }] } }, minBuilding), 0);
+  assert.equal(buildingServiceEffectFactor({ people: { list: [{ id: "one", workAllocations: [{ sourceId: "clinic", functionId: "culture", normalQd: 20 }] }] } }, minBuilding), 1);
+  assert.equal(buildingLaborCapacityQd({ workersMax: 2 }), 40);
+  assert.equal(buildingLaborCapacityQd({ labor: { version: 2, capacityQd: 0 } }), 0);
+  assert.equal(buildingLaborCapacityQd({ labor: { version: 2, capacityQd: null } }), null);
 
-  const assignment = normalizeWorkAllocation({ id: "a", sourceId: "workshop", functionId: "production:a", normalQd: 10, volunteer: true, volunteerReason: "Спасение" });
-  assert.equal(assignment.volunteer, true);
+  const assignment = normalizeWorkAllocation({ id: "a", sourceId: "workshop", functionId: "production:a", normalQd: 10 });
+  assert.equal(assignment.normalQd, 10);
   const wage = calculatePlannedWorkerWage({ id: "worker", assignments: [
-    { ...assignment, dailyRateCopper: 0 },
+    { ...assignment, volunteer: true, volunteerReason: "Спасение", dailyRateCopper: 0 },
     { sourceId: "farm", functionId: "agriculture", normalQd: 10, dailyRateCopper: 12 }
   ] });
   assert.equal(wage.ok, true);

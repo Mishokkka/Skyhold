@@ -103,7 +103,7 @@ function checkDataModuleBoundaries(jsFiles) {
 function checkNormalizerBoundaries() {
   const facade = readFileSync(path.join(root, "scripts/data/normalizers.js"), "utf8");
   const owners = new Map([
-    ["building", ["normalizeWorkerTypeSet", "normalizeBuilding", "normalizeUniqueBuildingWorkers"]],
+    ["building", ["normalizeWorkerTypeSet", "normalizeBuilding"]],
     ["combat", ["normalizeDefenseSquad", "normalizeMassCombatState"]],
     ["storage", ["normalizeStorageItemRow", "normalizeStorageLogRow"]],
     ["events", ["normalizeEventHistory"]],
@@ -193,7 +193,7 @@ function checkEconomyEngineBoundaries() {
     // Keep this boundary exact rather than allowing arbitrary runtime/UI imports.
     const expectedImports = {
       "production cycle": [
-        "../../data/utils.js", "../politics/runtime-effects.js", "../workers/minimum-staff.js",
+        "../../data/utils.js", "../politics/runtime-effects.js",
         "./production-batch-life.js", "./production-capacity.js", "./production-goals.js", "./production-timing.js"
       ],
       "construction": ["../politics/runtime-effects.js"],
@@ -205,8 +205,8 @@ function checkEconomyEngineBoundaries() {
   }
   for (const helper of [
     "scripts/engines/politics/runtime-effects.js", "scripts/data/resident-presence.js",
-    "scripts/engines/workers/minimum-staff.js", "scripts/engines/economy/production-timing.js",
-    "scripts/engines/economy/production-goals.js", "scripts/engines/workers/staff-runtime.js",
+    "scripts/engines/economy/production-timing.js",
+    "scripts/engines/economy/production-goals.js",
     "scripts/engines/economy/nutrition.js", "scripts/core/production-expenses.js"
   ]) {
     const source = readFileSync(path.join(root, helper), "utf8");
@@ -587,15 +587,10 @@ function checkMassCombatCalculationBoundaries() {
 }
 
 function checkWorkerPlannerBoundaries() {
-  const engine = readFileSync(path.join(root, "scripts/engines/workers/assignment-planner.js"), "utf8");
   const adapter = readFileSync(path.join(root, "scripts/apps/domains/events/building-events.js"), "utf8");
   const planner = readFileSync(path.join(root, "scripts/apps/workforce-planner-app.js"), "utf8");
   const plannerTemplate = readFileSync(path.join(root, "templates/workforce-planner.hbs"), "utf8");
-  assert.doesNotMatch(engine, /\b(?:ApplicationV2|ChatMessage|document|foundry|game|ui|window)\b/, "worker assignment planner must remain independent from Foundry and DOM globals");
-  for (const helper of ["isBuiltAssignableBuilding", "isCivilianWorkerCandidate", "workerAssignmentScore"]) {
-    assert.match(engine, new RegExp(`export function ${helper}\\b`), `worker assignment must retain its live ${helper} helper`);
-  }
-  assert.match(adapter, /from "\.\.\/\.\.\/\.\.\/engines\/workers\/assignment-planner\.js"/, "building event adapter must consume the worker planner");
+  assert.match(adapter, /from "\.\.\/\.\.\/\.\.\/data\/work-allocations\.js"/, "building event adapter must consume the unified QD allocations contract");
   assert.match(planner, /action === "accept-preview" && this\.preview/, "workforce proposals must require explicit acceptance into the draft");
   assert.match(planner, /async _save\(retry\)[\s\S]{0,200}this\.preview\) throw new Error/, "workforce saving must reject an unaccepted preview");
   assert.match(plannerTemplate, /data-action="workforce-accept-preview"/, "workforce UI must expose proposal acceptance");
@@ -1591,8 +1586,6 @@ export async function runRepositoryContracts() {
   const financeStorageDomain = await import(pathToFileURL(path.join(root, "scripts/apps/domains/finance/storage-domain.js")));
   const financeInternalDemandDomain = await import(pathToFileURL(path.join(root, "scripts/apps/domains/finance/internal-demand-domain.js")));
   const financeLivestockDomain = await import(pathToFileURL(path.join(root, "scripts/apps/domains/finance/livestock-domain.js")));
-  const financeMaintenanceDomain = await import(pathToFileURL(path.join(root, "scripts/apps/domains/finance/maintenance-domain.js")));
-  const financeStaffDomain = await import(pathToFileURL(path.join(root, "scripts/apps/domains/finance/staff-domain.js")));
   const financeEconomyDomain = await import(pathToFileURL(path.join(root, "scripts/apps/domains/finance/economy-domain.js")));
   const holdingDomainModule = await import(pathToFileURL(path.join(root, "scripts/apps/domains/holding-domain.js")));
   const buildingDomain = await import(pathToFileURL(path.join(root, "scripts/apps/domains/building-domain.js")));
@@ -1743,17 +1736,19 @@ export async function runRepositoryContracts() {
   }, residentDomain.ResidentDomain);
   const residentHolding = {
     people: { list: [
-      { id: "resident-full", name: "Занятый", age: 30, workAssignment: "building-full", role: "Рабочий", attributes: {} },
+      { id: "resident-full", name: "Занятый", age: 30, workAssignment: "building-full", role: "Рабочий", attributes: {},
+        workAllocations: [{ sourceId: "building-full", functionId: "culture", normalQd: 20 }] },
       { id: "resident-custom", name: "Особый", age: 30, workAssignment: "other", role: "Стеклодув", attributes: {} },
       { id: "resident-injured", name: "Раненый", age: 30, injuredDays: 2, workAssignment: "building-open", role: "Рабочий", attributes: {} },
-      { id: "resident-drift", name: "Рассинхрон", age: 30, workAssignment: "building-drift-full", role: "Рабочий", attributes: {} }
+      { id: "resident-drift", name: "Рассинхрон", age: 30, workAssignment: "building-drift-full", role: "Рабочий", attributes: {},
+        workAllocations: [{ sourceId: "building-drift-full", functionId: "culture", normalQd: 20 }] }
     ] },
     buildings: { list: [
-      { id: "building-open", name: "Свободная мастерская", status: "built", workersMax: 2, assignedWorkerIds: [], functions: {} },
-      { id: "building-full", name: "Заполненная мастерская", status: "built", workersMax: 1, assignedWorkerIds: ["resident-full"], functions: {} },
-      { id: "building-zero", name: "Без рабочих мест", status: "built", workersMax: 0, assignedWorkerIds: [], functions: {} },
-      { id: "building-planned", name: "Только проект", constructionStatus: "planned", workersMax: 5, assignedWorkerIds: [], functions: {} },
-      { id: "building-drift-full", name: "Занято по жителю", status: "built", workersMax: 1, assignedWorkerIds: [], functions: {} }
+      { id: "building-open", name: "Свободная мастерская", status: "built", workersMax: 2, labor: { version: 2, capacityQd: 40 }, functions: {} },
+      { id: "building-full", name: "Заполненная мастерская", status: "built", workersMax: 1, labor: { version: 2, capacityQd: 20 }, functions: {} },
+      { id: "building-zero", name: "Без рабочих мест", status: "built", workersMax: 0, labor: { version: 2, capacityQd: 0 }, functions: {} },
+      { id: "building-planned", name: "Только проект", constructionStatus: "planned", workersMax: 5, labor: { version: 2, capacityQd: 100 }, functions: {} },
+      { id: "building-drift-full", name: "Занято по жителю", status: "built", workersMax: 1, labor: { version: 2, capacityQd: 20 }, functions: {} }
     ] },
     construction: { crews: [] }
   };
@@ -1786,7 +1781,7 @@ export async function runRepositoryContracts() {
   }
 
   const compactResidentRows = residentSubject._preparePersonRows(residentHolding, true, "living", true, { workOptionsContext: residentWorkContext });
-  const residentEditorOnlyKeys = ["homeOptions", "workOptions", "workAllocationModeOptions", "workAllocations", "cultureOptions", "beliefOptions", "backgroundOptions", "traitOptions"];
+  const residentEditorOnlyKeys = ["homeOptions", "workOptions", "workAllocations", "cultureOptions", "beliefOptions", "backgroundOptions", "traitOptions"];
   for (const key of residentEditorOnlyKeys) {
     assert.equal(compactResidentRows.filter((row) => Object.hasOwn(row, key)).length, 0, `compact resident rows must not materialize editor-only ${key}`);
   }
@@ -1971,8 +1966,6 @@ export async function runRepositoryContracts() {
     financeControlsDomain.FinanceControlsDomain,
     financeLivestockDomain.FinanceLivestockDomain,
     financeInternalDemandDomain.FinanceInternalDemandDomain,
-    financeMaintenanceDomain.FinanceMaintenanceDomain,
-    financeStaffDomain.FinanceStaffDomain,
     financeEconomyDomain.FinanceEconomyDomain
   ];
   assert.equal(
@@ -2500,7 +2493,7 @@ export async function runRepositoryContracts() {
     people: { list: [{ id: "resident-1" }, { id: "resident-2", injuredDays: 3 }] },
     storage: { resources: [{ resourceId: "food", qty: 5 }] },
     buildings: { list: [
-      { id: "farm", name: "Farm", lifecycle: "active", condition: "intact", workersMin: 2, assignedWorkerIds: ["resident-1"] },
+      { id: "farm", name: "Farm", lifecycle: "active", condition: "intact", labor: { version: 2, capacityQd: 40 } },
       { id: "repair", name: "Repair", lifecycle: "active", condition: "damaged", repair: { active: true }, constructionCrewId: "" }
     ] }
   }, { foodProjection: { available: 5 } });
@@ -2508,7 +2501,7 @@ export async function runRepositoryContracts() {
   assert.equal(readiness.foodNeeded, 20, "tenday readiness must reserve ten daily food units per living resident");
   assert.equal(readiness.alerts.some((alert) => alert.key === "food"), true, "tenday readiness must expose food shortages");
   assert.equal(readiness.alerts.some((alert) => alert.key === "projects"), true, "tenday readiness must expose projects without crews");
-  assert.equal(readiness.alerts.some((alert) => alert.key === "workers"), true, "tenday readiness must expose understaffed operational buildings");
+  assert.equal(readiness.alerts.some((alert) => alert.key === "workers"), false, "tenday readiness must emit no removed legacy minimum-worker alert");
   const globalStorageRows = storageSearch.buildStorageSearchRows({
     resources: [
       { id: "resource-iron", resourceId: "iron", name: "Iron", qty: 4, roomId: "forge" },
@@ -2571,7 +2564,7 @@ export async function runRepositoryContracts() {
   const buildingMainTemplateSource = readFileSync(path.join(root, "templates/parts/building-editor/main.hbs"), "utf8");
   const agricultureTemplateSource = readFileSync(path.join(root, "templates/parts/building-editor/agriculture.hbs"), "utf8");
   assert.doesNotMatch(buildingMainTemplateSource, /\.location|>Место</, "the retired building location field must not return to the editor");
-  assert.match(buildingMainTemplateSource, />Пр\. об\.<\//, "maintenance priority must keep its compact label");
+  assert.doesNotMatch(buildingMainTemplateSource, />Пр\. об\.<\/|building\.maintenance\./, "the retired maintenance controls must stay absent from the building editor");
   assert.match(productionTemplateSource, /fbls-choice-toggle/, "production choices must use the shared active/inactive contract");
   assert.match(agricultureTemplateSource, /aria-pressed=/, "agriculture seasons must expose their active state semantically");
   assert.match(agricultureTemplateSource, /включён[\s\S]{0,80}выключен/, "agriculture seasons must name both active and inactive states");
@@ -2650,13 +2643,16 @@ export async function runRepositoryContracts() {
     workersMax: 3,
     assignedWorkerIds: ["resident-a", "resident-b"]
   });
-  fastiInstanceData.holdings[0].people.list.push({ id: "resident-a", name: "A", workAssignment: "fasti-instance", role: "Продавец" });
+  fastiInstanceData.holdings[0].people.list.push({ id: "resident-a", name: "A", workAssignment: "fasti-instance", role: "Продавец",
+    workAllocations: [{ sourceId: "fasti-instance", functionId: "income", normalQd: 20 }] });
   const normalizedFastiInstance = normalizers.normalizeSkyholdData(fastiInstanceData).holdings[0].buildings.list.find((building) => building.id === "fasti-instance");
   assert.equal(normalizedFastiInstance.workersMin, 0, "Fasti shop instances must normalize away minimum staffing");
   assert.equal(normalizedFastiInstance.workersMax, 0, "Fasti shop instances must normalize away worker capacity");
-  assert.deepEqual(normalizedFastiInstance.assignedWorkerIds, [], "Fasti shop instances must release stale worker slots");
+  assert.equal(Object.hasOwn(normalizedFastiInstance, "assignedWorkerIds"), false, "Fasti shop instances must strip legacy worker slots");
+  assert.equal(normalizedFastiInstance.labor?.capacityQd, 0, "Fasti shop instances must normalize to passive capacityQd = 0");
   const releasedFastiWorker = normalizers.normalizeSkyholdData(fastiInstanceData).holdings[0].people.list.find((person) => person.id === "resident-a");
   assert.equal(releasedFastiWorker.workAssignment, "", "Fasti shop normalization must release stale resident work assignments");
+  assert.deepEqual(releasedFastiWorker.workAllocations, [], "Fasti shop normalization must release stale resident QD allocations");
 
   const duplicateCatalogRowsData = clone(canonicalDefault);
   duplicateCatalogRowsData.catalog.buildings.push({
@@ -3299,7 +3295,8 @@ export async function runRepositoryContracts() {
         age: 30,
         workAssignment: "tower",
         role: "Страж",
-        attributes: { strength: 4, agility: 4, wits: 3, empathy: 2 }
+        attributes: { strength: 4, agility: 4, wits: 3, empathy: 2 },
+        workAllocations: [{ sourceId: "tower", functionId: "defense", normalQd: 20 }]
       }]
     },
     buildings: {
@@ -3308,7 +3305,7 @@ export async function runRepositoryContracts() {
         name: "Tower",
         constructionStatus: "built",
         functions: { defense: true },
-        assignedWorkerIds: ["guard"],
+        labor: { version: 2, capacityQd: 20 },
         defense: { base: 1, perStep: 1, workerStep: 1, combatTag: "shooters" }
       }]
     }
@@ -3459,8 +3456,8 @@ export async function runRepositoryContracts() {
   assert.equal(airborneAccessArmy.attackerPool, normalAccessArmy.attackerPool, "a helpful army tag must satisfy special access");
 
   const medicalHolding = {
-    people: { list: [{ id: "healer", name: "Healer", dead: false, injuredDays: 0 }] },
-    buildings: { list: [{ id: "hospital", name: "Лазарет", specialKind: "medical", constructionStatus: "built", assignedWorkerIds: ["healer"] }] }
+    people: { list: [{ id: "healer", name: "Healer", dead: false, injuredDays: 0, workAllocations: [{ sourceId: "hospital", functionId: "medical", normalQd: 20 }] }] },
+    buildings: { list: [{ id: "hospital", name: "Лазарет", specialKind: "medical", constructionStatus: "built", labor: { version: 2, capacityQd: 20 } }] }
   };
   const medicalManager = {
     _medicalAssignments: () => new Map([["hospital", { capacity: 2, patients: [{ id: "patient" }], efficiency: 2.5 }]])
@@ -3469,8 +3466,8 @@ export async function runRepositoryContracts() {
   assert.equal(support.capacity, 1, "mass combat must use free medical capacity rather than a hard-coded per-worker fallback");
   assert.equal(support.workerEfficiency, 2.5, "mass combat must preserve medical worker efficiency");
   const dependencyGarrison = massCombatSources.defenseGarrisonProfile({
-    people: { list: [{ id: "guard", name: "Guard", dead: false, injuredDays: 0 }] },
-    buildings: { list: [{ id: "tower", name: "Tower", constructionStatus: "built", functions: { defense: true }, defense: { workerStep: 4, maxDice: 3 }, assignedWorkerIds: ["guard"] }] }
+    people: { list: [{ id: "guard", name: "Guard", dead: false, injuredDays: 0, workAllocations: [{ sourceId: "tower", functionId: "defense", normalQd: 20 }] }] },
+    buildings: { list: [{ id: "tower", name: "Tower", constructionStatus: "built", functions: { defense: true }, defense: { workerStep: 4, maxDice: 3 }, labor: { version: 2, capacityQd: 20 } }] }
   }, {
     buildingEffectiveWorkers: () => ({ total: 8 })
   });
@@ -3481,13 +3478,17 @@ export async function runRepositoryContracts() {
   });
   assert.equal(dependencyMorale.morale, 2, "battle defender profile must consume explicitly supplied morale");
   const assignedCasualtyHolding = {
-    people: { list: [{ id: "assigned", name: "Assigned", dead: false, injuredDays: 0 }] },
-    buildings: { list: [{ assignedWorkerIds: ["assigned", "other"] }] },
+    people: { list: [
+      { id: "assigned", name: "Assigned", dead: false, injuredDays: 0, workAllocations: [{ sourceId: "workshop", functionId: "production:line", normalQd: 20 }] },
+      { id: "other", name: "Other", dead: false, injuredDays: 0, workAllocations: [{ sourceId: "workshop", functionId: "production:line", normalQd: 20 }] }
+    ] },
+    buildings: { list: [{ id: "workshop", labor: { version: 2, capacityQd: 40 } }] },
     constructionCrews: [{ memberIds: ["assigned", "other"], leaderId: "assigned" }],
     gm: { defense: { commanderId: "assigned", squads: [{ memberIds: ["assigned", "other"], sergeantId: "assigned" }] } }
   };
   massCombatCasualties.applyBattleConditionToPerson(assignedCasualtyHolding, assignedCasualtyHolding.people.list[0], "injured", { days: 2 });
-  assert.deepEqual(assignedCasualtyHolding.buildings.list[0].assignedWorkerIds, ["", "other"], "battle injury must clear building assignments through the data operation");
+  assert.deepEqual(assignedCasualtyHolding.people.list[0].workAllocations, [], "battle injury must clear resident QD allocations through the data operation");
+  assert.equal(assignedCasualtyHolding.people.list[1].workAllocations.length, 1, "battle injury must leave other workers' allocations untouched");
   assert.deepEqual(assignedCasualtyHolding.constructionCrews[0].memberIds, ["other"], "battle injury must clear construction crew membership");
   assert.equal(assignedCasualtyHolding.constructionCrews[0].leaderId, "", "battle injury must clear construction crew leadership");
   assert.deepEqual(assignedCasualtyHolding.gm.defense.squads[0].memberIds, ["", "other"], "battle injury must clear defense squad membership");
@@ -3513,7 +3514,8 @@ export async function runRepositoryContracts() {
   assert.equal(casualtyNoMedical.people.list[0].dead, true, "an untreated heavy casualty can become a death");
   assert.equal(noMedicalResult.records[0]?.condition, "dead", "untreated death roll 3 must kill a heavy casualty");
   const casualtyWithMedical = clone(casualtyBase);
-  casualtyWithMedical.buildings.list.push({ id: "hospital", name: "Лазарет", specialKind: "medical", constructionStatus: "built", assignedWorkerIds: ["healer"] });
+  casualtyWithMedical.people.list[1].workAllocations = [{ sourceId: "hospital", functionId: "medical", normalQd: 20 }];
+  casualtyWithMedical.buildings.list.push({ id: "hospital", name: "Лазарет", specialKind: "medical", constructionStatus: "built", labor: { version: 2, capacityQd: 20 } });
   const casualtyWithMedicalState = { battleId: "battle-medical-check", round: 1 };
   const medicalResult = massCombatCasualties.applyDefenderResidentCasualties(casualtyWithMedical, casualtyWithMedicalState, 1, {}, { random: heavyDeathRandom() });
   assert.equal(casualtyWithMedical.people.list[0].dead, false, "a free medical bed must reduce death chance for a heavy casualty");
@@ -3552,10 +3554,11 @@ export async function runRepositoryContracts() {
       list: [
         { id: "civilian", name: "Civilian", ageGroup: "Adult", dead: false, injuredDays: 0 },
         { id: "soldier", name: "Soldier", ageGroup: "Adult", workAssignment: "soldier", role: "Soldier", attributes: { strength: 3, agility: 3 }, dead: false, injuredDays: 0 },
-        { id: "garrison", name: "Garrison Worker", ageGroup: "Adult", attributes: { strength: 1, agility: 1 }, dead: false, injuredDays: 0 }
+        { id: "garrison", name: "Garrison Worker", ageGroup: "Adult", attributes: { strength: 1, agility: 1 }, dead: false, injuredDays: 0,
+          workAllocations: [{ sourceId: "watchtower", functionId: "defense", normalQd: 20 }] }
       ]
     },
-    buildings: { list: [{ id: "watchtower", name: "Watchtower", constructionStatus: "built", functions: { defense: true }, defense: { workerStep: 20, maxDice: 1 }, assignedWorkerIds: ["garrison"] }] },
+    buildings: { list: [{ id: "watchtower", name: "Watchtower", constructionStatus: "built", functions: { defense: true }, defense: { workerStep: 20, maxDice: 1 }, labor: { version: 2, capacityQd: 20 } }] },
     gm: { defense: {} }
   };
   const garrisonMilitiaCalc = massCombatCalculator.calculateBattle(garrisonMilitiaHolding, partialMilitiaState);
@@ -3579,23 +3582,31 @@ export async function runRepositoryContracts() {
   const duplicateWorkerData = clone(defaultData.DEFAULT_SKYHOLD_DATA);
   const duplicateWorkerHolding = clone(baseSchema.BASE_HOLDING);
   duplicateWorkerHolding.id = "duplicate-workers";
-  duplicateWorkerHolding.people.list = [{ id: "worker", name: "Worker", workAssignment: "workshop", role: "Worker" }];
+  duplicateWorkerHolding.people.list = [{
+    id: "worker",
+    name: "Worker",
+    role: "Смешанная",
+    workAllocations: [
+      { sourceId: "farm", functionId: "agriculture", normalQd: 10 },
+      { sourceId: "workshop", functionId: "production:line", normalQd: 10 }
+    ]
+  }];
   duplicateWorkerHolding.buildings.list = [
-    { id: "farm", name: "Farm", workersMin: 0, workersMax: 1, assignedWorkerIds: ["worker"] },
-    { id: "workshop", name: "Workshop", workersMin: 0, workersMax: 1, assignedWorkerIds: ["worker"] }
+    { id: "farm", name: "Farm", workersMin: 0, workersMax: 1, labor: { version: 2, capacityQd: 20 }, assignedWorkerIds: ["worker"] },
+    { id: "workshop", name: "Workshop", workersMin: 0, workersMax: 1, labor: { version: 2, capacityQd: 20 }, assignedWorkerIds: ["worker"] }
   ];
   duplicateWorkerData.holdings = [duplicateWorkerHolding];
   const normalizedDuplicateWorkers = normalizers.normalizeSkyholdData(duplicateWorkerData);
   const normalizedWorkerBuildings = normalizedDuplicateWorkers.holdings[0].buildings.list;
-  assert.deepEqual(
-    normalizedWorkerBuildings.map((building) => building.assignedWorkerIds[0]),
-    ["", "worker"],
-    "normalization must keep a resident only in the building named by their work assignment"
+  assert.equal(
+    normalizedWorkerBuildings.every((building) => !Object.hasOwn(building, "assignedWorkerIds")),
+    true,
+    "normalization must strip legacy assignedWorkerIds arrays from buildings"
   );
   assert.equal(
-    normalizedWorkerBuildings.flatMap((building) => building.assignedWorkerIds).filter((id) => id === "worker").length,
-    1,
-    "a resident must never occupy worker slots in several buildings simultaneously"
+    normalizedDuplicateWorkers.holdings[0].people.list[0].workAllocations.length,
+    2,
+    "unified v2 QD labor allows a resident to split QD across multiple buildings"
   );
 
   const canonicalMassCombatData = clone(defaultData.DEFAULT_SKYHOLD_DATA);

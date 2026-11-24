@@ -1,25 +1,18 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { AssignmentDomain } from "../apps/domains/assignment-domain.js";
 import { FinanceEconomyDomain } from "../apps/domains/finance/economy-domain.js";
 import { FinanceInternalDemandDomain } from "../apps/domains/finance/internal-demand-domain.js";
-import { FinanceMaintenanceDomain } from "../apps/domains/finance/maintenance-domain.js";
 import { calculatePlannedWorkerWage } from "../engines/economy/finance-obligations.js";
 import { buildPlayerPatch, validatePlayerPatch } from "../data/player-write-guard.js";
 import {
-  buildingStaffingWorkerIds,
   buildPlannedWorkSlots,
-  explicitWorkerIdsForBuilding,
-  explicitWorkAllocationsForBuilding,
-  MAINTENANCE_WORK_FUNCTION_ID,
-  MAINTENANCE_WORK_SOURCE_ID,
+  buildingWorkAllocationsForBuilding,
+  buildingWorkerIds,
   normalizePersonWorkAllocations,
   plannedAssignmentQd,
   validateHoldingWorkAllocations,
-  validateWorkAllocationPlan,
-  WORK_ALLOCATION_MODE_EXPLICIT,
-  WORK_ALLOCATION_MODE_LEGACY
+  validateWorkAllocationPlan
 } from "../data/work-allocations.js";
 
 function clone(value) {
@@ -34,15 +27,17 @@ function holdingFixture() {
   return {
     id: "holding-1",
     visibility: "public",
-    gm: { playersCanEditBuildings: true },
+    gm: { playersCanEditBuildings: true, labor: { daysOffPerTenday: 0 } },
     buildings: {
       list: [{
         id: "workshop",
         name: "Workshop",
         status: "built",
+        constructionStatus: "built",
         workersMax: 2,
-        assignedWorkerIds: ["legacy", "split"],
+        labor: { version: 2, capacityQd: 40 },
         wageDailyCopper: 3,
+        functions: { production: true },
         productionLines: [
           { id: "forge", active: true, source: "workers", mode: "Forge", overtime: true, wageDailyCopper: 3 },
           { id: "carve", active: true, source: "workers", mode: "Carve", overtime: false, wageDailyCopper: 5 }
@@ -53,12 +48,16 @@ function holdingFixture() {
     constructionCrewIds: [],
     people: {
       list: [
-        { id: "legacy", name: "Legacy", workAssignment: "workshop" },
+        {
+          id: "steady",
+          name: "Steady",
+          workAssignment: "",
+          workAllocations: [allocation("steady-forge", "workshop", "production:forge", 12, 0)]
+        },
         {
           id: "split",
           name: "Split",
           workAssignment: "",
-          workAllocationMode: WORK_ALLOCATION_MODE_EXPLICIT,
           workAllocations: [
             allocation("forge-work", "workshop", "production:forge", 12, 4),
             allocation("carve-work", "workshop", "production:carve", 8, 0)
@@ -73,12 +72,12 @@ function holdingFixture() {
 }
 
 export function checkWorkAllocationCharacterization() {
-  const legacy = normalizePersonWorkAllocations({ id: "legacy" });
-  assert.equal(legacy.workAllocationMode, WORK_ALLOCATION_MODE_LEGACY, "old residents must stay on the legacy assignment path");
-  assert.deepEqual(legacy.workAllocations, [], "normalization must add only empty allocation state to old residents");
+  const fresh = normalizePersonWorkAllocations({ id: "fresh", workAllocationMode: "explicit" });
+  assert.equal(Object.hasOwn(fresh, "workAllocationMode"), false, "normalization must strip deprecated workAllocationMode");
+  assert.deepEqual(fresh.workAllocations, [], "normalization must add empty workAllocations to residents without plans");
 
   const manyRows = Array.from({ length: 25 }, (_, index) => allocation(`row-${index}`, "workshop", `fn-${index}`, 0));
-  const preserved = normalizePersonWorkAllocations({ workAllocationMode: WORK_ALLOCATION_MODE_EXPLICIT, workAllocations: manyRows });
+  const preserved = normalizePersonWorkAllocations({ workAllocations: manyRows });
   assert.equal(preserved.workAllocations.length, 25, "safe normalization must not erase excess user rows; validation owns the limit");
   assert.equal(validateWorkAllocationPlan(preserved.workAllocations).issues.some((issue) => issue.code === "allocation-count"), true);
 
@@ -111,19 +110,18 @@ export function checkWorkAllocationCharacterization() {
 
   const holding = holdingFixture();
   const checked = validateHoldingWorkAllocations(holding);
-  assert.equal(checked.ok, true, "an explicit resident already present in assignedWorkerIds must count only once toward building capacity");
-  assert.deepEqual(holding.buildings.list[0].assignedWorkerIds, ["legacy", "split"], "validation must not materialize explicit plans into legacy worker slots");
-  assert.equal(explicitWorkAllocationsForBuilding(holding.people.list[1], "workshop").length, 2, "two functions in one building must remain visible in the resident plan");
-  assert.deepEqual(explicitWorkerIdsForBuilding(holding, "workshop"), ["split"], "two functions in one building must still describe one planned worker");
-  assert.deepEqual(buildingStaffingWorkerIds(holding, "workshop"), ["legacy", "split"], "one resident must occupy only one staffing place per building");
+  assert.equal(checked.ok, true, "steady + split within 40 QD capacity must be valid");
+  assert.equal(buildingWorkAllocationsForBuilding(holding.people.list[1], "workshop").length, 2, "two functions in one building must remain visible in the resident plan");
+  assert.deepEqual(buildingWorkerIds(holding, "workshop"), ["steady", "split"], "two functions in one building must still describe one worker id");
 
   const crossBuilding = holdingFixture();
   crossBuilding.buildings.list.push({
     id: "inn",
     name: "Inn",
     status: "built",
+    constructionStatus: "built",
     workersMax: 1,
-    assignedWorkerIds: [],
+    labor: { version: 2, capacityQd: 20 },
     wageDailyCopper: 4,
     functions: { income: true },
     income: { base: 1 }
@@ -137,45 +135,34 @@ export function checkWorkAllocationCharacterization() {
   assert.equal(crossBuildingChecked.plans.get("split").totals.normalQd, 20);
   assert.equal(crossBuildingChecked.targetMap.has("workshop::production:forge"), true);
   assert.equal(crossBuildingChecked.targetMap.has("inn::income"), true);
-  assert.deepEqual(buildingStaffingWorkerIds(crossBuilding, "workshop"), ["legacy", "split"]);
-  assert.deepEqual(buildingStaffingWorkerIds(crossBuilding, "inn"), ["split"], "a split resident must occupy capacity in every building receiving positive QD");
+  assert.deepEqual(buildingWorkerIds(crossBuilding, "workshop"), ["steady", "split"]);
+  assert.deepEqual(buildingWorkerIds(crossBuilding, "inn"), ["split"], "a split resident must occupy capacity in every building receiving positive QD");
   assert.match(crossBuildingChecked.targetMap.get("workshop::production:forge").label, /3 ММ\/день/, "the allocation picker must disclose the effective function wage");
 
   const overCapacity = clone(crossBuilding);
-  overCapacity.people.list.push({ id: "inn-legacy", name: "Inn Legacy", workAssignment: "inn" });
-  overCapacity.buildings.list.find((building) => building.id === "inn").assignedWorkerIds = ["inn-legacy"];
+  overCapacity.people.list.push({
+    id: "inn-extra",
+    name: "Inn Extra",
+    workAllocations: [allocation("inn-extra-work", "inn", "income", 16, 0)]
+  });
   const overCapacityChecked = validateHoldingWorkAllocations(overCapacity);
-  assert.equal(overCapacityChecked.ok, false, "a legacy slot must not be able to hide on top of an explicit split worker");
-  assert.equal(overCapacityChecked.issues.some((issue) => issue.code === "allocation-capacity" && issue.buildingId === "inn"), true, "combined legacy and explicit staffing must enforce workersMax");
+  assert.equal(overCapacityChecked.ok, false, "combined QD allocations must enforce building capacityQd");
+  assert.equal(overCapacityChecked.issues.some((issue) => issue.code === "building-capacity-exceeded" && issue.buildingId === "inn"), true);
   const renamedAtCapacity = clone(overCapacity);
-  const crowdedInn = renamedAtCapacity.buildings.list.find(building => building.id === "inn");
+  const crowdedInn = renamedAtCapacity.buildings.list.find((building) => building.id === "inn");
   crowdedInn.name = "New Inn Name";
   assert.equal(validateHoldingWorkAllocations(renamedAtCapacity, { previousHolding: overCapacity }).ok, true,
-    "renaming a building preserves an existing staffing issue");
-  crowdedInn.workersMax = 0;
+    "renaming a building preserves an existing capacity issue");
+  crowdedInn.labor = { version: 2, capacityQd: 10 };
   assert.equal(validateHoldingWorkAllocations(renamedAtCapacity, { previousHolding: overCapacity }).ok, false,
-    "lowering the staffing limit of an already overbooked building worsens the issue");
-
-  const assignmentHolding = clone(crossBuilding);
-  assignmentHolding.people.list.push({ id: "slot-candidate", name: "Slot Candidate", workAssignment: "" });
-  const assignmentHarness = {
-    ...AssignmentDomain,
-    _safeNumber(value, fallback = 0) {
-      const number = Number(value);
-      return Number.isFinite(number) ? number : fallback;
-    }
-  };
-  assert.equal(assignmentHarness._setBuildingSlot(assignmentHolding, "inn", 0, "slot-candidate"), false, "a legacy selector must reject a hidden extra head when an explicit split already fills workersMax");
-  assert.deepEqual(assignmentHolding.buildings.list.find((building) => building.id === "inn").assignedWorkerIds, [], "a rejected legacy assignment must not mutate the full building");
+    "lowering the QD limit of an already overbooked building worsens the issue");
 
   const current = { meta: { revision: 4 }, holdings: [holding], catalog: { buildings: [] } };
   const proposed = clone(current);
-  proposed.holdings[0].buildings.list[0].assignedWorkerIds = ["legacy", ""];
-  proposed.holdings[0].people.list[1].workAllocationMode = WORK_ALLOCATION_MODE_EXPLICIT;
   proposed.holdings[0].people.list[1].workAllocations[0].normalQd = 10;
   proposed.holdings[0].people.list[1].workAllocations[1].normalQd = 10;
   const patch = buildPlayerPatch(current, proposed);
-  assert.equal(patch.action, "buildings", "allocation edits and legacy-slot cleanup must share the building permission category");
+  assert.equal(patch.action, "buildings", "allocation edits must use the building permission category");
   assert.equal(validatePlayerPatch(current, patch).ok, true, "the authority GM guard must accept a valid player allocation patch");
   const tampered = clone(proposed);
   tampered.holdings[0].people.list[1].workAllocations[0].normalQd = 20;
@@ -207,7 +194,7 @@ export function checkWorkAllocationCharacterization() {
   assert.equal(weighted.dueCopper, 50, "rates must be weighted per function, overtime paid at a full daily rate, then rounded once per resident");
 
   const financeContext = FinanceEconomyDomain._financeExecutionContext.call({
-    _safeNumber: (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback,
+    _safeNumber: (value, fallback = 0) => (Number.isFinite(Number(value)) ? Number(value) : fallback),
     _financeFunctionKey: (sourceId, functionId) => `${sourceId}::${functionId}`
   }, { blockers: { workers: {}, buildings: {} }, invalidWorkerIds: [] }, {
     plannedWorkers: [{ id: "split", assignments }],
@@ -224,7 +211,7 @@ export function checkWorkAllocationCharacterization() {
     { sourceId: "inn", functionId: "income", normalQd: 8, overtimeQd: 0 }
   ];
   const crossFunctionContext = FinanceEconomyDomain._financeExecutionContext.call({
-    _safeNumber: (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback,
+    _safeNumber: (value, fallback = 0) => (Number.isFinite(Number(value)) ? Number(value) : fallback),
     _financeFunctionKey: (sourceId, functionId) => `${sourceId}::${functionId}`
   }, { blockers: { workers: {}, buildings: {} }, invalidWorkerIds: [] }, {
     plannedWorkers: [{ id: "split", assignments: crossFunctionAssignments }],
@@ -239,7 +226,7 @@ export function checkWorkAllocationCharacterization() {
   };
   const qdHarness = {
     ...FinanceEconomyDomain,
-    _safeNumber: (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback
+    _safeNumber: (value, fallback = 0) => (Number.isFinite(Number(value)) ? Number(value) : fallback)
   };
   const budgets = new Map();
   for (let step = 0; step < 40; step += 1) qdHarness._accrueWorkerBudgets({}, budgets, workerContext, step);
@@ -277,27 +264,9 @@ export function checkWorkAllocationCharacterization() {
   const incomeChannels = incomeHarness._internalDemandChannels({ buildings: { list: [incomeBuilding] } }, incomeWorkerContext.financeContext, 1, incomeWorkerContext);
   assert.equal(incomeChannels.channels[0].throughputUnits, 5, "5 of 20 income QD must provide only one quarter of seller throughput");
   assert.equal(incomeChannels.channels[0].sellerEfficiency, 2, "allocation share must scale throughput without diluting seller skill");
-
-  const maintenancePerson = {
-    id: "maintainer",
-    workAllocationMode: WORK_ALLOCATION_MODE_EXPLICIT,
-    maintenancePointsPerTenday: 4
-  };
-  const maintenanceContext = {
-    blockedWorkerIds: new Set(),
-    plannedAssignmentsByWorkerId: new Map([[maintenancePerson.id, [
-      allocation("maintenance-work", MAINTENANCE_WORK_SOURCE_ID, MAINTENANCE_WORK_FUNCTION_ID, 10)
-    ]]])
-  };
-  const maintenanceDeps = FinanceMaintenanceDomain._maintenancePeriodDependencies.call({
-    _buildingStatus: () => ({ value: "built" })
-  }, maintenanceContext, 40);
-  assert.equal(maintenanceDeps.isWorkerAvailable(maintenancePerson), true);
-  assert.equal(maintenanceDeps.pointsForWorker(maintenancePerson), 2, "maintenance points must scale with the explicit share of normal work QD");
-  assert.equal(maintenanceDeps.pointsForWorker({ ...maintenancePerson, workAllocationMode: WORK_ALLOCATION_MODE_LEGACY, workAssignment: "workshop" }), 4, "legacy workers keep their established maintenance behavior");
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   checkWorkAllocationCharacterization();
-  console.log("FBL Skyhold work allocations: normalization, caps, authority, wages, slots and maintenance passed.");
+  console.log("FBL Skyhold work allocations: v2 normalization, caps, authority, wages and slots passed.");
 }

@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION, DEFAULT_BUILDING_TEMPLATES, TEMPLATE_CATALOG_VERSION } from "../data/building-templates.js";
+import { DEFAULT_BUILDING_TEMPLATES, TEMPLATE_CATALOG_VERSION } from "../data/building-templates.js";
 import { normalizeSkyholdData, SKYHOLD_SCHEMA_VERSION } from "../data/normalizers.js";
 import { clone } from "../data/utils.js";
 import { applyBuildingCatalogMigration, planBuildingCatalogMigration } from "../workflows/buildings/catalog-migration.js";
 
 export function checkBuildingCatalogFullTransition() {
-  const savedTemplates = BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION.filter(row => row.id !== "meeting-house");
+  const savedTemplates = DEFAULT_BUILDING_TEMPLATES.filter(row => row.id !== "meeting-house");
   const source = normalizeSkyholdData({
     meta: { schemaVersion: SKYHOLD_SCHEMA_VERSION, templateCatalogVersion: TEMPLATE_CATALOG_VERSION, sharedMarkets: { enabled: true, version: 1, clockTenday: 0, demand: {}, stock: {} }, revision: 4 },
     catalog: { buildings: clone(savedTemplates) },
@@ -32,28 +32,18 @@ export function checkBuildingCatalogFullTransition() {
   assert.equal(plan.canApply, true);
   assert.deepEqual(source, snapshot, "Full preview must not mutate its source");
   const legacyLabor = clone(source);
-  legacyLabor.holdings[0].buildings.list.find(row => row.templateId === "lumbermill").maintenance.schemaVersion = 1;
-  legacyLabor.holdings[0].people.list[0].workAllocationMode = "explicit";
+  const lumbermillInstance = legacyLabor.holdings[0].buildings.list.find(row => row.templateId === "lumbermill");
+  const lumbermillFunctionId = `production:${lumbermillInstance.productionLines[0].id}`;
+  lumbermillInstance.maintenance = { schemaVersion: 1, requiredPoints: 2 };
   legacyLabor.holdings[0].people.list[0].workAllocations = [
-    { sourceId: "maintenance", functionId: "maintenance", normalQd: 2 },
-    { sourceId: "instance-lumbermill", functionId: "production", normalQd: 4 }
+    { sourceId: "instance-lumbermill", functionId: lumbermillFunctionId, normalQd: 4 }
   ];
   const laborSnapshot = clone(legacyLabor);
   const laborPlan = planBuildingCatalogMigration({ currentData: legacyLabor, operationId: "force-legacy-labor", replaceCatalog: true });
   assert.deepEqual(laborPlan.blockingIssues, []);
-  assert.deepEqual(laborPlan.targetData.holdings[0].people.list[0].workAllocations, [laborSnapshot.holdings[0].people.list[0].workAllocations[1]], "Only obsolete general maintenance is released");
+  assert.equal(Object.hasOwn(laborPlan.targetData.holdings[0].buildings.list.find(row => row.templateId === "lumbermill"), "maintenance"), false, "Catalog refresh strips legacy maintenance");
+  assert.deepEqual(laborPlan.targetData.holdings[0].people.list[0].workAllocations, laborSnapshot.holdings[0].people.list[0].workAllocations);
   assert.deepEqual(legacyLabor, laborSnapshot, "Forced preview still never writes the source");
-  legacyLabor.holdings[0].buildings.list.find(row => row.templateId === "lumbermill").maintenance.schemaVersion = 2;
-  legacyLabor.holdings[0].people.list[0].workAllocations.push({ sourceId: "instance-lumbermill", functionId: "maintenance", normalQd: 3 });
-  const alreadyTechnical = clone(legacyLabor);
-  const allocations = alreadyTechnical.holdings[0].people.list[0].workAllocations;
-  const releaseArgs = { currentData: alreadyTechnical, operationId: "refresh-technical-labor" };
-  const untouched = planBuildingCatalogMigration(releaseArgs);
-  assert.deepEqual(untouched.targetData.holdings[0].people.list[0].workAllocations, allocations);
-  const refreshed = planBuildingCatalogMigration({ ...releaseArgs, replaceCatalog: true });
-  assert.deepEqual(refreshed.blockingIssues, []);
-  assert.deepEqual(refreshed.targetData.holdings[0].people.list[0].workAllocations, allocations.slice(1));
-  assert.match(refreshed.decisions[0].detail, /освобождено 2 QD/);
   const applied = applyBuildingCatalogMigration({ currentData: source, plan, operationId: plan.operationId });
   const loaded = normalizeSkyholdData(applied.data);
   assert.equal(loaded.catalog.buildings.length, 126, "The current catalog is complete");
@@ -91,7 +81,8 @@ export function checkBuildingCatalogFullTransition() {
   unsafe.holdings[0].buildings.list.push({ id: "custom-instance", templateId: "unused-old-template", name: "Неизвестная постройка" });
   assert.equal(planBuildingCatalogMigration({ currentData: unsafe, operationId: "unsafe-force", replaceCatalog: true }).blockingIssues.some((row) => row.code === "custom-instance-unmapped"), true);
   const reserved = clone(source);
-  reserved.holdings[0].buildings.list.find((row) => row.templateId === "lumbermill").productionLines[0].workProgressUnits = 5000;
+  const reservedLine = reserved.holdings[0].buildings.list.find((row) => row.templateId === "lumbermill").productionLines[0];
+  Object.assign(reservedLine, { workQd: 99, workInputsReserved: true, workReservedOutputQty: 2, workProgressUnits: 5000 });
   const reservedPlan = planBuildingCatalogMigration({ currentData: reserved, operationId: "force-reserved", replaceCatalog: true });
   assert.equal(reservedPlan.canApply, false);
   assert.equal(reservedPlan.blockingIssues.some((row) => row.code === "production-in-progress"), true);

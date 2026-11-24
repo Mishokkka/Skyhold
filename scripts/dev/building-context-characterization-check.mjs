@@ -151,7 +151,9 @@ export async function checkBuildingContextCharacterization() {
     const holding = data.holdings[0];
     const source = holding.buildings.list[0];
     source.housing = { capacity: 2, comfort: 1, quality: 1, notes: "" };
-    source.assignedWorkerIds = [holding.people.list[0].id, "", "", ""];
+    source.labor = { version: 2, capacityQd: 80 };
+    source.functions = { ...(source.functions ?? {}), housing: true, culture: true };
+    holding.people.list[0].workAllocations = [{ id: "ctx-work", sourceId: source.id, functionId: "culture", normalQd: 20, overtimeQd: 0 }];
     const app = new SkyholdApp();
     app._contextData = data;
     app._contextHoldingId = holding.id;
@@ -225,11 +227,11 @@ export async function checkBuildingContextCharacterization() {
     const sharedEditor = app._prepareBuildingRow(holding, source, 0, true, rooms, { workerContext });
     assert.equal(counts._storageRooms, storageRoomCallsBeforeSharedEditor, "full editor context must reuse a supplied storage-room collection");
     assert.deepEqual(cardPresentation(rows[0]), cardPresentation(sharedEditor), "card-only preparation must preserve every rendered card value");
-    assert.equal(editor.workerSlots.length, 2, "editable worker roster must contain occupied slots plus one next empty slot");
-    assert.deepEqual(editor.workerSlots.map((slot) => slot.slot), [0, 1], "compact worker roster must preserve actual assignment indexes");
-    assert.ok(editor.workerSlots.every((slot) => Array.isArray(slot.options)), "editor worker slots must retain options");
+    assert.equal(editor.laborCapacityValue, 80, "editor context must expose v2 QD capacity");
+    assert.equal(editor.laborPlannedQd, 20, "editor context must expose planned QD for the building");
+    assert.equal(editor.plannedWorkerRows.length, 1);
     const readOnlyEditor = app._prepareBuildingRow(holding, source, 0, false, rooms, { workerContext });
-    assert.equal(readOnlyEditor.workerSlots.length, 1, "read-only worker roster must omit unused capacity slots");
+    assert.equal(readOnlyEditor.plannedWorkerRows.length, 1);
     assert.ok(Array.isArray(editor.housing.slotRows) && editor.housing.slotRows.length >= source.housing.capacity, "editor must retain all housing slots");
     assert.ok(editor.housing.slotRows.every((slot) => Array.isArray(slot.options)), "editor housing slots must retain options");
     assert.ok(Array.isArray(editor.productionLines) && editor.productionLines.length > 0, "editor must retain production lines");
@@ -300,9 +302,11 @@ export async function checkBuildingContextCharacterization() {
     smallHolding.people.list = Array.from({ length: 150 }, (_, i) => ({ id: `person-${i}`, volunteerLabor: true, injuredDays: 0, attributes: { strength: 3, agility: 3, wits: 3, empathy: 3 } }));
     smallHolding.buildings.list = [
       { ...structuredClone(well), id: "well", templateId: "well", lifecycle: "active", constructionStatus: "built", condition: "intact" },
-      ...["bath-a", "bath-b"].map((id, i) => ({ ...structuredClone(bath), id, templateId: "bathhouse", lifecycle: "active", constructionStatus: "built", condition: "intact", assignedWorkerIds: [`person-${2 * i}`, `person-${2 * i + 1}`] }))
+      ...["bath-a", "bath-b"].map((id) => ({ ...structuredClone(bath), id, templateId: "bathhouse", lifecycle: "active", constructionStatus: "built", condition: "intact" }))
     ];
-    for (const building of smallHolding.buildings.list.slice(1)) confirmSocialWork(smallHolding, building, building.assignedWorkerIds);
+    for (const [i, building] of smallHolding.buildings.list.slice(1).entries()) {
+      confirmSocialWork(smallHolding, building, [`person-${2 * i}`, `person-${2 * i + 1}`]);
+    }
     const pooled = app._prepareBuildingRows(smallHolding, false);
     assert.equal(parts(pooled[1]).morale, 3, "pooled service coverage is shown on the credited source");
     assert.equal(parts(pooled[2]).morale, undefined, "pooled repeats must not advertise another fixed morale bonus");

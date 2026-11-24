@@ -204,11 +204,13 @@ function checkBoundedEditors() {
   }
 }
 
-/** Ensures deletion clears only the removed resident's assignments while preserving other residents and slot positions. */
+/** Ensures deletion clears only the removed resident's assignments while preserving other residents. */
 function checkDeletedResidentReferences() {
   const holding = {
-    people: { list: [] },
-    buildings: { list: [{ assignedWorkerIds: ["removed", "retained"], workerAdmissionOverrideIds: ["removed", "retained"] }] },
+    people: { list: [
+      { id: "retained", name: "Удержан", workAllocations: [{ id: "w1", sourceId: "forge", functionId: "production:iron", normalQd: 10 }] }
+    ] },
+    buildings: { list: [{ id: "forge", workerAdmissionOverrideIds: ["removed", "retained"] }] },
     constructionCrewIds: ["removed", "retained"],
     constructionCrews: [{ leaderId: "removed", distributedLeaderId: "removed", memberIds: ["removed", "retained"], distributedIds: ["removed", "retained"] }],
     workforcePlan: { locks: [{ personId: "removed" }, { personId: "retained" }] },
@@ -220,9 +222,9 @@ function checkDeletedResidentReferences() {
   assert.deepEqual(holding.constructionCrews[0].memberIds, ["retained"]);
   assert.deepEqual(holding.constructionCrews[0].distributedIds, ["retained"]);
   assert.deepEqual(holding.constructionCrewIds, ["retained"]);
-  assert.deepEqual(holding.buildings.list[0].assignedWorkerIds, ["", "retained"], "building slot positions must survive deletion");
   assert.deepEqual(holding.buildings.list[0].workerAdmissionOverrideIds, ["retained"]);
   assert.deepEqual(holding.workforcePlan.locks, [{ personId: "retained" }]);
+  assert.deepEqual(holding.people.list[0].workAllocations.map((row) => [row.sourceId, row.normalQd]), [["forge", 10]]);
   assert.equal(holding.gm.defense.commanderId, "");
   assert.deepEqual(holding.gm.defense.squads, [null, { sergeantId: "", memberIds: ["", "retained"] }]);
 }

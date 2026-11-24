@@ -1,38 +1,15 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { checkHybridLaborData, checkHybridLaborCatalogCompatibility } from "../hybrid-labor-data-check.mjs";
 import { checkBuildingLaborCatalog } from "../building-labor-catalog-check.mjs";
-import { checkHybridLaborPlanner } from "../hybrid-labor-planner-check.mjs";
-import { checkHybridLaborRuntime } from "../hybrid-labor-runtime-check.mjs";
-import { checkHybridLaborPeriodic } from "../hybrid-labor-periodic-check.mjs";
-import { checkHybridService } from "../hybrid-service-check.mjs";
-import { checkHybridStaffSelection } from "../hybrid-staff-selection-check.mjs";
-import { checkHybridLaborReview } from "../hybrid-labor-review-check.mjs";
-import { checkHybridLaborFunctional } from "../hybrid-labor-functional-check.mjs";
-import { checkHybridLaborDeepReview } from "../hybrid-labor-deep-review-check.mjs";
-import { checkHybridLaborReferenceCleanup } from "../hybrid-labor-reference-cleanup-check.mjs";
-import { checkHybridProductionLines } from "../hybrid-production-lines-check.mjs";
-import { checkResidentWorkcycle } from "../resident-workcycle-check.mjs";
+import { checkUnifiedLabor } from "../unified-labor-check.mjs";
 
 export async function runHybridLaborSuite() {
-  await checkHybridLaborData();
-  await checkHybridLaborCatalogCompatibility();
-  await checkHybridLaborReferenceCleanup();
   checkBuildingLaborCatalog();
-  await checkHybridLaborPlanner();
-  checkHybridStaffSelection();
-  await checkHybridLaborRuntime();
-  await checkHybridProductionLines();
-  await checkResidentWorkcycle();
-  await checkHybridLaborReview();
-  await checkHybridLaborFunctional();
-  await checkHybridLaborDeepReview();
-  checkHybridLaborPeriodic();
-  checkHybridService();
+  await checkUnifiedLabor();
   return { suite: "hybrid-labor" };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   await runHybridLaborSuite();
-  console.log("FBL Skyhold suite: hybrid labor passed.");
+  console.log("FBL Skyhold suite: unified labor passed.");
 }
