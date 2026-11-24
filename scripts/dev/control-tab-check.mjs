@@ -35,7 +35,7 @@ function fixture() {
       attributes: { strength: id === "weak" ? 1 : 4, wits: id === "weak" ? 1 : 4, empathy: 4, agility: 3 },
       ...(id === "away" ? { shipAssignment: { shipId: "ship", away: true } } : {})
     })) },
-    buildings: { list: [{ id: "post", templateId: "sheriff-post", name: "Местная охрана", workerRole: "",
+    buildings: { list: [{ id: "post", templateId: "sheriff-post", name: "Местная охрана", workerRole: "", wageDailyCopper: 18,
       lifecycle: "active", condition: "intact", constructionStatus: "built", workersMin: 0, workersMax: 2,
       labor: { version: 2, capacityQd: 40 }, workerAdmissionOverrideIds: [], functions: { defense: true },
       activation: { minWorkers: 0, minOperationalQd: 20 }, control: { generalPerWorker: 1, maximum: 2, ceiling: -10, capacity: 20 } }] }

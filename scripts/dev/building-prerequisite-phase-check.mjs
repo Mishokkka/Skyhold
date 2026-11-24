@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { buildingActiveWorkerSummary, buildingConstructionPrerequisitesMet, buildingServiceBlockReasons } from "../engines/economy/building-service.js";
 
 export function checkBuildingPrerequisitePhases() {
-  const provider = { id: "water", templateId: "waterworks", constructionStatus: "built", functions: { culture: true },
+  const provider = { id: "water", templateId: "waterworks", constructionStatus: "built", functions: { culture: true }, wageDailyCopper: 12,
     workersMax: 1, labor: { version: 2, capacityQd: 20 }, activation: { minOperationalQd: 2 }, workerProfile: { source: "test", composition: [] } };
   const consumer = { id: "sewer", constructionStatus: "built", functions: { culture: true },
     requiredBuildingIds: ["waterworks"], prerequisiteModes: { waterworks: "service" } };

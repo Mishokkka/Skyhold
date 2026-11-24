@@ -38,7 +38,7 @@ export function checkApprovedEconomy() {
   assert.equal(nutritionBalance({ effectiveUnits: 5, eaten: 100, foodGroups: { grain: 60, protein: 20, fruit: 20 } }).diversityBonus, 0);
   assert.equal(sellerQualification({ attributes: { wits: 3, empathy: 3 } }).efficiency, 1);
   assert.ok(sellerQualification({ attributes: { wits: 5, empathy: 5 }, traits: ["Бережливый", "Грамотный"] }).efficiency >= 2);
-  const minBuilding = { id: "clinic", functions: { culture: true }, workersMax: 2, labor: { version: 2, capacityQd: 40 }, activation: { minOperationalQd: 20 } };
+  const minBuilding = { id: "clinic", functions: { culture: true }, wageDailyCopper: 12, workersMax: 2, labor: { version: 2, capacityQd: 40 }, activation: { minOperationalQd: 20 } };
   assert.equal(buildingServiceEffectFactor({ people: { list: [{ id: "one", workAllocations: [{ sourceId: "clinic", functionId: "culture", normalQd: 10 }] }] } }, minBuilding), 0);
   assert.equal(buildingServiceEffectFactor({ people: { list: [{ id: "two", dead: true, workAllocations: [{ sourceId: "clinic", functionId: "culture", normalQd: 20 }] }] } }, minBuilding), 0);
   assert.equal(buildingServiceEffectFactor({ people: { list: [{ id: "one", workAllocations: [{ sourceId: "clinic", functionId: "culture", normalQd: 20 }] }] } }, minBuilding), 1);

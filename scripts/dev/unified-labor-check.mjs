@@ -3,8 +3,17 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { ResidentDomain } from "../apps/domains/resident-domain.js";
 import { AssignmentDomain } from "../apps/domains/assignment-domain.js";
+import { BuildingRowsDomain } from "../apps/domains/building/rows-domain.js";
+import { BuildingWorkerDomain } from "../apps/domains/building/worker-domain.js";
 import { controlResidentAvailable } from "../apps/domains/control-context.js";
-import { applyWorkforceDraft, buildWorkforceModel, createWorkforceDraft, workforceCandidate } from "../apps/domains/workforce-planner.js";
+import {
+  applyWorkforceDraft,
+  buildWorkforceModel,
+  createWorkforceDraft,
+  proposeWorkforceAssignments,
+  workforceCandidate,
+  workforceDraftError
+} from "../apps/domains/workforce-planner.js";
 import { workforceTaskGroups } from "../apps/domains/workforce-planner-view.js";
 import { workforceTaskState } from "../apps/domains/workforce-task-state.js";
 import { applyBattleConditionToPerson } from "../apps/mass-combat/casualties.js";
@@ -12,8 +21,10 @@ import { defenseGarrisonProfile } from "../apps/mass-combat/sources.js";
 import { BuildingMetaDomain } from "../apps/domains/building/meta-domain.js";
 import { EconomyEventDomain } from "../apps/domains/events/economy-events.js";
 import { createEconomyHarness, makeHolding } from "./economy-characterization-check.mjs";
+import { DEFAULT_BUILDING_TEMPLATES } from "../data/building-templates.js";
 import { SkyholdData } from "../data/store.js";
 import {
+  daysOffConflictSummary,
   holdingDaysOffPerTenday,
   normalLaborQdPerTenday,
   residentLaborCapacity
@@ -43,8 +54,11 @@ import {
   buildingServiceEffectFactor
 } from "../engines/economy/building-service.js";
 import { calculatePlannedWorkerWage } from "../engines/economy/finance-obligations.js";
+import { financePeriodIdentity } from "../engines/economy/finance-period.js";
+import { militaryDailyWage } from "../engines/economy/military-wages.js";
 import { gmMoveWorldShip } from "../engines/ships/gm-override.js";
 import { storageProfileEffectFactor } from "../engines/storage/specialization.js";
+import { getSkyholdWorkflowService } from "../workflows/skyhold-workflow-service.js";
 
 const resourceQty = (holding, resourceId) => (holding.storage?.resources ?? [])
   .filter((row) => row.resourceId === resourceId)
@@ -242,6 +256,7 @@ export async function checkUnifiedLabor() {
     constructionStatus: "built",
     labor: { version: 2, capacityQd: 40 },
     activation: { minOperationalQd: 20 },
+    wageDailyCopper: 12,
     functions: { culture: true },
     service: { capacityBase: 10, capacityPerWorker: 4 },
     serviceState: { periodKey: "", workedQd: 0, active: false }
@@ -253,13 +268,20 @@ export async function checkUnifiedLabor() {
     attributes: { strength: 3, agility: 3, wits: 3, empathy: 4 },
     workAllocations: [{ sourceId: "tavern", functionId: "culture", normalQd: 16, overtimeQd: 0 }]
   };
+  const barmaidHelper = {
+    id: "barmaid-2",
+    name: "Помощница",
+    age: 25,
+    attributes: { strength: 3, agility: 3, wits: 3, empathy: 3 },
+    workAllocations: []
+  };
   const serviceHolding = mergeHoldingDefaults({
     gm: { labor: { daysOffPerTenday: 2 } },
     buildings: { list: [tavern] },
-    people: { list: [barmaid] }
+    people: { list: [barmaid, barmaidHelper] }
   });
   assert.equal(buildingServiceEffectFactor(serviceHolding, serviceHolding.buildings.list[0]), 0, "16 QD < 20 minOperationalQd => 0% binary gate");
-  serviceHolding.people.list[0].workAllocations[0].overtimeQd = 4; // 16 + 4 = 20 QD
+  serviceHolding.people.list[1].workAllocations = [{ sourceId: "tavern", functionId: "culture", normalQd: 4, overtimeQd: 0 }]; // 16 + 4 = 20 QD
   const summary = buildingActiveWorkerSummary(serviceHolding, serviceHolding.buildings.list[0]);
   assert.equal(summary.qd, 20);
   assert.equal(summary.fullWorkerQd, 16);
@@ -392,7 +414,9 @@ export async function checkUnifiedLabor() {
   const migratedMiller = legacyWorld.people.list.find((p) => p.id === "legacy-worker");
   const migratedStaff = legacyWorld.people.list.find((p) => p.id === "staff-worker");
   const migratedVolunteer = legacyWorld.people.list.find((p) => p.id === "vol-worker");
-  assert.equal(migratedSoldier.wageDailyOverrideCopper, 15, "military salaryModifier (+3 over 12 MM) must carry into wageDailyOverrideCopper");
+  assert.equal(migratedSoldier.militarySalaryModifier, 3, "military salaryModifier (+3) preserves relative military offset");
+  assert.equal(migratedSoldier.wageDailyOverrideCopper, null, "military salaryModifier must not freeze wageDailyOverrideCopper");
+  assert.equal(militaryDailyWage(legacyWorld, migratedSoldier), 15, "relative military offset +3 over 12 MM line base produces 15 MM");
   assert.equal(Object.hasOwn(migratedStaff, "staffAppointment"), false);
   assert.equal(Object.hasOwn(legacyWorld.buildings.list[0], "assignedWorkerIds"), false);
   assert.deepEqual(migratedMiller.workAllocations.map((r) => ({ sourceId: r.sourceId, functionId: r.functionId, normalQd: r.normalQd })),
@@ -598,7 +622,7 @@ export async function checkUnifiedLabor() {
   assert.equal(staleMorale.totalQd, 0, "stale building ID in workAssignment with empty workAllocations counts 0 QD");
 
   const schoolHolding = mergeHoldingDefaults({
-    buildings: { list: [{ id: "school-1", name: "Школа", constructionStatus: "built", labor: { version: 2, capacityQd: 40 }, functions: { culture: true }, workerProfile: { composition: [{ count: 1, group: "УЧЁНЫЙ", backgrounds: ["Учёный"] }] } }] },
+    buildings: { list: [{ id: "school-1", name: "Школа", constructionStatus: "built", wageDailyCopper: 18, labor: { version: 2, capacityQd: 40 }, functions: { culture: true }, workerProfile: { composition: [{ count: 1, group: "УЧЁНЫЙ", backgrounds: ["Учёный"] }] } }] },
     people: { list: [{ id: "t1", name: "Учитель", age: 30, injuredDays: 1, background: "Учёный", workAllocations: [{ sourceId: "school-1", functionId: "culture", normalQd: 20 }] }] }
   });
   const schoolHarness = {
@@ -609,6 +633,280 @@ export async function checkUnifiedLabor() {
   schoolHarness._advanceResidentRecovery(schoolHolding, 10);
   assert.equal(preRecoverySchool.active, false, "injured teacher before recovery yields inactive period school");
   assert.equal(schoolHarness._schoolEducationContext(schoolHolding).active, true, "post-recovery school becomes active next period");
+
+  // 9. Audit P1/P2 findings #1-#10 regression contracts
+  // 9.1 Legacy staffAppointment (primaryFunctionId/reserveFunctionId/volunteer), away sailor & v1 capacityQd
+  const v1Holding = mergeHoldingDefaults({
+    buildings: {
+      list: [
+        {
+          id: "shop-v1", name: "Цех v1", constructionStatus: "built", workersMax: 1, wageDailyCopper: 12,
+          labor: { version: 1, mode: "staff", capacityQd: null }, functions: { production: true },
+          productionLines: [
+            { id: "lineA", active: true, source: "workers", resourceId: "wood", outputQty: 1, workQd: 1 },
+            { id: "lineB", active: true, source: "workers", resourceId: "stone", outputQty: 1, workQd: 1 },
+            { id: "lineC", active: true, source: "workers", resourceId: "grain", outputQty: 1, workQd: 1 }
+          ]
+        },
+        { id: "shop-v2-null", name: "Безлимит v2", constructionStatus: "built", workersMax: 1, labor: { version: 2, capacityQd: null }, functions: { production: true } }
+      ]
+    },
+    people: {
+      list: [
+        {
+          id: "app-1", name: "ДоброволецШтата", age: 30, volunteerLabor: false, workAssignment: "shop-v1",
+          staffAppointment: {
+            version: 1, buildingId: "shop-v1", primaryFunctionId: "production:lineB", reserveFunctionId: "production:lineC",
+            wageDailyCopper: 0, overtimeQd: 0, volunteer: true, volunteerReason: "Клятва"
+          }
+        },
+        {
+          id: "away-app", name: "УплывшийШтатный", age: 30, shipAssignment: { shipId: "s1", away: true },
+          staffAppointment: {
+            version: 1, buildingId: "shop-v1", primaryFunctionId: "production:lineC", reserveFunctionId: "",
+            wageDailyCopper: 15, overtimeQd: 0, volunteer: false, volunteerReason: ""
+          }
+        }
+      ]
+    }
+  });
+  assert.equal(v1Holding.buildings.list[0].labor.capacityQd, 20, "v1 staff building with capacityQd: null normalizes from workersMax (20 QD)");
+  assert.equal(v1Holding.buildings.list[1].labor.capacityQd, null, "v2 building with capacityQd: null remains unlimited");
+  const migratedApp = v1Holding.people.list.find((p) => p.id === "app-1");
+  const migratedAwayApp = v1Holding.people.list.find((p) => p.id === "away-app");
+  assert.equal(migratedApp.workAllocations.length, 1);
+  assert.equal(migratedApp.workAllocations[0].functionId, "production:lineB");
+  assert.equal(migratedApp.workAllocations[0].volunteer, true);
+  assert.equal(migratedApp.workAllocations[0].volunteerReason, "Клятва");
+  assert.equal(migratedApp.wageDailyOverrideCopper, null);
+  assert.equal(migratedAwayApp.workAllocations.length, 1, "away sailor legacy staffAppointment must migrate without silently deleting assignment");
+  assert.equal(migratedAwayApp.workAllocations[0].functionId, "production:lineC");
+  assert.equal(migratedAwayApp.wageDailyOverrideCopper, 15);
+  assert.equal(Object.hasOwn(migratedAwayApp, "staffAppointment"), false);
+  const v1Reloaded = mergeHoldingDefaults(structuredClone(v1Holding));
+  assert.deepEqual(v1Reloaded.people.list[0].workAllocations, migratedApp.workAllocations, "repeated load stays idempotent");
+
+  // 9.2 Incremental & bulk multi-specialist team assembly (Hospital requires 2 МЕДИЦИНА)
+  const hospitalTpl = DEFAULT_BUILDING_TEMPLATES.find((b) => b.id === "hospital");
+  const hospitalHolding = mergeHoldingDefaults({
+    buildings: {
+      list: [
+        { ...structuredClone(hospitalTpl), id: "hosp-1", constructionStatus: "built", wageDailyCopper: hospitalTpl.wageDailyCopper || 18 },
+        { id: "construction-center", templateId: "construction-center", name: "Центр строительства", constructionStatus: "built", labor: { version: 2, capacityQd: 0 } }
+      ]
+    },
+    people: {
+      list: [
+        { id: "doc-a", name: "Лекарь А", age: 30, attributes: { strength: 3, agility: 3, wits: 4, empathy: 4 }, background: "Лекарь" },
+        { id: "doc-b", name: "Лекарь Б", age: 30, attributes: { strength: 3, agility: 3, wits: 4, empathy: 4 }, background: "Лекарь" }
+      ]
+    }
+  });
+  const hospManualFirst = structuredClone(hospitalHolding);
+  hospManualFirst.people.list[0].workAllocations = [{ sourceId: "hosp-1", functionId: "medical", normalQd: 10, overtimeQd: 0 }];
+  const firstDocValidation = validateBuildingLaborAndGoals(hospManualFirst, { targets: buildWorkAllocationTargets(hospManualFirst) });
+  assert.equal(firstDocValidation.ok, true, "assigning 1st of 2 mandatory specialists must not fail hard validation");
+  assert.ok(firstDocValidation.warnings.some((w) => w.code === "composition-unmet"), "incomplete team emits composition warning");
+  assert.equal(buildingServiceBlockReasons(hospManualFirst, hospManualFirst.buildings.list[0], "medical").active, false, "hospital effect stays off until 2nd specialist joins");
+  const hospProposal = proposeWorkforceAssignments(hospitalHolding, createWorkforceDraft(hospitalHolding), gateHarness, {
+    isGM: true, taskKeys: ["hosp-1::medical"], useBuildingMinimum: true
+  });
+  assert.equal(hospProposal.changes.length, 2, "auto-proposal must assign both required hospital specialists");
+  assert.equal(workforceDraftError(hospitalHolding, hospProposal.draft, { isGM: true }), "");
+  const hospAssembled = applyWorkforceDraft(structuredClone(hospitalHolding), hospProposal.draft);
+  assert.equal(buildingServiceBlockReasons(hospAssembled, hospAssembled.buildings.list[0], "medical").active, true);
+
+  // 9.3 Multi-function minOperationalQd enforcement (Market, Inn, and custom building)
+  const marketTpl = DEFAULT_BUILDING_TEMPLATES.find((b) => b.id === "market");
+  const innTpl = DEFAULT_BUILDING_TEMPLATES.find((b) => b.id === "inn");
+  const runMultiMinCheck = async (bldg, fnId, qd, extras = {}) => {
+    const h = mergeHoldingDefaults({
+      buildings: { list: [{ ...structuredClone(bldg), id: "m-bldg", constructionStatus: "built", wageDailyCopper: 18, ...extras }] },
+      people: { list: [
+        { id: "m-w1", name: "П1", age: 30, volunteerLabor: true, workAllocations: qd > 0 ? [{ sourceId: "m-bldg", functionId: fnId, normalQd: Math.min(20, qd) }] : [] },
+        ...(qd > 20 ? [{ id: "m-w2", name: "П2", age: 30, volunteerLabor: true, workAllocations: [{ sourceId: "m-bldg", functionId: fnId, normalQd: qd - 20 }] }] : [])
+      ] }
+    });
+    const inputs = gateHarness._financePlanInputs(h, 40, financePeriodIdentity(h));
+    const fc = gateHarness._financeExecutionContext({}, { oldBlockers: inputs.oldBlockers, plannedWorkers: inputs.workers, periodQd: 40 });
+    const wc = gateHarness._economyWorkerContext(h, { financeContext: fc });
+    const ch = gateHarness._internalDemandChannels(h, fc, 1, wc).channels.length;
+    return { h, fc, wc, ch };
+  };
+  assert.equal((await runMultiMinCheck(marketTpl, "income", 9)).ch, 0, "Market at 9/10 QD must not open trade");
+  assert.equal((await runMultiMinCheck(marketTpl, "income", 10)).ch, 1, "Market at 10/10 QD opens trade");
+  assert.equal((await runMultiMinCheck(marketTpl, "income", 11)).ch, 1, "Market at 11/10 QD opens trade");
+  assert.equal((await runMultiMinCheck(innTpl, "income", 39)).ch, 0, "Inn at 39/40 QD must not open trade");
+  assert.equal((await runMultiMinCheck(innTpl, "income", 40)).ch, 1, "Inn at 40/40 QD opens trade");
+  const customMulti = mergeHoldingDefaults({
+    buildings: {
+      list: [{
+        id: "cm-1", name: "Универсал", constructionStatus: "built", labor: { version: 2, capacityQd: 40 },
+        activation: { minOperationalQd: 10, anyWorkingFunction: false }, wageDailyCopper: 12,
+        functions: { culture: true, production: true, income: true },
+        income: { base: 100, perWorker: 0 },
+        productionLines: [{ id: "w1", active: true, source: "workers", workQd: 1, resourceId: "wood", outputQty: 1 }]
+      }]
+    },
+    people: {
+      list: [{
+        id: "cm-w", name: "Мастер", age: 30, volunteerLabor: true,
+        workAllocations: [{ sourceId: "cm-1", functionId: "production:w1", normalQd: 1 }, { sourceId: "cm-1", functionId: "income", normalQd: 1 }]
+      }]
+    }
+  });
+  const cmInputs = gateHarness._financePlanInputs(customMulti, 40, financePeriodIdentity(customMulti));
+  const cmFc = gateHarness._financeExecutionContext({}, { oldBlockers: cmInputs.oldBlockers, plannedWorkers: cmInputs.workers, periodQd: 40 });
+  const cmWc = gateHarness._economyWorkerContext(customMulti, { financeContext: cmFc });
+  const cmRep = { produced: [], consumed: [], skipped: [], income: [], formulas: [], work: [], ledger: [] };
+  await gateHarness._runProductionCycleForQd(customMulti, 40, cmRep, { workerContext: cmWc, financeContext: cmFc });
+  await gateHarness._runBuildingIncomeForQd(customMulti, 40, cmRep, { workerContext: cmWc, financeContext: cmFc });
+  assert.equal(resourceQty(customMulti, "wood"), 0, "1/10 QD production blocked on custom multi-function building");
+  assert.equal(customMulti.storage.moneyCopper, 0, "1/10 QD income blocked on custom multi-function building");
+
+  // 9.4 Public medical window hides GM-hidden doctors/patients/overflow/options from players
+  const workflowService = getSkyholdWorkflowService();
+  const medVisHolding = mergeHoldingDefaults({
+    buildings: {
+      list: [
+        {
+          ...structuredClone(hospitalTpl), id: "pub-hosp", name: "Городской лазарет", visibility: "public",
+          constructionStatus: "built", wageDailyCopper: 18, medical: { enabled: true, patientsPerEfficiency: 5, maxPatients: 1 }
+        },
+        { id: "construction-center", templateId: "construction-center", name: "Центр строительства", constructionStatus: "built", labor: { version: 2, capacityQd: 0 } }
+      ]
+    },
+    people: {
+      list: [
+        { id: "vis-doc-gm", name: "ТайныйДок", age: 30, visibility: "gm", background: "Лекарь", attributes: { wits: 4, empathy: 4 }, workAllocations: [{ sourceId: "pub-hosp", functionId: "medical", normalQd: 20 }] },
+        { id: "vis-doc-pub", name: "ПублДок", age: 30, visibility: "public", background: "Лекарь", attributes: { wits: 4, empathy: 4 }, workAllocations: [{ sourceId: "pub-hosp", functionId: "medical", normalQd: 20 }] },
+        { id: "vis-free-gm", name: "ТайныйРезерв", age: 30, visibility: "gm", background: "Лекарь", attributes: { wits: 4, empathy: 4 } },
+        { id: "vis-pat-pub", name: "ПублПац", age: 30, visibility: "public", injuredDays: 2 },
+        { id: "vis-pat-gm", name: "ТайныйПац", age: 30, visibility: "gm", injuredDays: 3 }
+      ]
+    }
+  });
+  const medTplLookup = { byId: new Map([["hospital", hospitalTpl]]), byName: new Map() };
+  const prepMed = (isGM, canEdit) => {
+    const prevContextData = workflowService._contextData;
+    workflowService._contextData = { catalog: { buildings: DEFAULT_BUILDING_TEMPLATES }, holdings: [medVisHolding] };
+    try {
+      return workflowService._prepareBuildingRow(medVisHolding, medVisHolding.buildings.list[0], 0, canEdit, [], {
+        isGM,
+        holdingIndex: 0,
+        templateLookup: medTplLookup,
+        development: { totals: { food: 10, technology: 10, culture: 10, war: 10 } }
+      });
+    } finally {
+      workflowService._contextData = prevContextData;
+    }
+  };
+  const gmMed = prepMed(true, true);
+  assert.equal(gmMed.plannedWorkerRows.length, 2);
+  assert.equal(gmMed.medicalSummary.overflowRows.length, 1);
+  assert.ok(gmMed.medicalDoctorOptions.some((o) => o.id === "vis-free-gm"));
+  for (const canEdit of [false, true]) {
+    const playerMed = prepMed(false, canEdit);
+    const serialized = JSON.stringify({
+      plannedWorkerRows: playerMed.plannedWorkerRows,
+      laborPlannedQd: playerMed.laborPlannedQd,
+      medicalSummary: playerMed.medicalSummary,
+      medicalDoctorOptions: playerMed.medicalDoctorOptions
+    });
+    for (const secretName of ["ТайныйДок", "ТайныйРезерв", "ТайныйПац"]) {
+      assert.equal(serialized.includes(secretName), false, `player view (canEdit=${canEdit}) must not leak ${secretName}`);
+    }
+    assert.equal(playerMed.medicalSummary.doctors, 1);
+    assert.equal(playerMed.laborPlannedQd, 20);
+  }
+
+  // 9.5 & 9.6 Service/medical validation parity (wage = 0, daysOff conflict, 1 QD doctor blocked below minOperationalQd)
+  const medApp = { ...BuildingRowsDomain, ...BuildingWorkerDomain, _safeNumber: (v, f = 0) => Number.isFinite(Number(v)) ? Number(v) : f };
+  const unpaidServiceHolding = mergeHoldingDefaults({
+    buildings: { list: [{ id: "srv-1", name: "Служба", constructionStatus: "built", labor: { version: 2, capacityQd: 40 }, activation: { minOperationalQd: 10 }, functions: { culture: true }, service: { capacity: 10 }, wageDailyCopper: 0 }] },
+    people: { list: [{ id: "u-w", name: "БезСтавки", age: 30, volunteerLabor: false, workAllocations: [{ sourceId: "srv-1", functionId: "culture", normalQd: 20 }] }] }
+  });
+  assert.equal(buildingServiceBlockReasons(unpaidServiceHolding, unpaidServiceHolding.buildings.list[0], "culture").active, false, "unpaid worker without volunteer cannot activate service");
+  unpaidServiceHolding.buildings.list[0].wageDailyCopper = 12;
+  assert.equal(buildingServiceBlockReasons(unpaidServiceHolding, unpaidServiceHolding.buildings.list[0], "culture").active, true);
+  unpaidServiceHolding.gm.labor.daysOffPerTenday = 5;
+  assert.equal(buildingServiceBlockReasons(unpaidServiceHolding, unpaidServiceHolding.buildings.list[0], "culture").active, false, "plan exceeding daysOffPerTenday budget cannot keep service active");
+  assert.equal(daysOffConflictSummary(unpaidServiceHolding, 5).conflicts.length, 1, "daysOff conflict helper flags affected resident without deleting plan");
+
+  const oneQdHosp = structuredClone(hospitalHolding);
+  oneQdHosp.people.list[0].workAllocations = [{ sourceId: "hosp-1", functionId: "medical", normalQd: 1, overtimeQd: 0 }];
+  assert.equal(medApp._medicalCapacityForBuilding(oneQdHosp, oneQdHosp.buildings.list[0]).capacity, 0, "1 QD doctor on hospital (minOperationalQd 20) grants 0 beds");
+  assert.equal(medApp._medicalCapacityForBuilding(hospAssembled, hospAssembled.buildings.list[0]).capacity, 5, "2 doctors reaching 20 QD (1.0 equiv worker) grant 5 beds");
+
+  // 9.7 Multi-day autoCollect: "worker" consumer collection accumulates collectProgressQd
+  const consumerCollectHolding = mergeHoldingDefaults({
+    buildings: {
+      list: [
+        {
+          id: "src-grain", name: "Жатва", constructionStatus: "built", labor: { version: 2, capacityQd: 40 },
+          functions: { production: true }, wageDailyCopper: 12,
+          productionLines: [{ id: "gr", active: true, source: "workers", resourceId: "grain", outputQty: 10, workQd: 1, requiresCollection: true, collectQd: 3, collectProgressQd: 0, pendingQty: 10, autoCollect: "worker", storageRoomId: "outdoors" }]
+        },
+        {
+          id: "cons-mill", name: "Пекарня", constructionStatus: "built", labor: { version: 2, capacityQd: 40 },
+          functions: { production: true }, wageDailyCopper: 12,
+          productionLines: [{ id: "mk", active: true, source: "workers", resourceId: "wood", outputQty: 1, workQd: 1, expenses: "10 Зерно" }]
+        }
+      ]
+    },
+    people: { list: [{ id: "baker", name: "Пекарь", age: 30, volunteerLabor: true, workAllocations: [{ sourceId: "cons-mill", functionId: "production:mk", normalQd: 20 }] }] }
+  });
+  const ccInputs = gateHarness._financePlanInputs(consumerCollectHolding, 40, financePeriodIdentity(consumerCollectHolding));
+  const ccFc = gateHarness._financeExecutionContext({}, { oldBlockers: ccInputs.oldBlockers, plannedWorkers: ccInputs.workers, periodQd: 40 });
+  const ccWc = gateHarness._economyWorkerContext(consumerCollectHolding, { financeContext: ccFc });
+  await gateHarness._runProductionCycleForQd(consumerCollectHolding, 40, { produced: [], consumed: [], skipped: [], income: [], formulas: [], work: [], ledger: [] }, { workerContext: ccWc, financeContext: ccFc });
+  assert.equal(consumerCollectHolding.buildings.list[0].productionLines[0].pendingQty, 0, "multi-day 3 QD consumer collection completes over tenday");
+  assert.equal(consumerCollectHolding.buildings.list[0].productionLines[0].collectProgressQd, 0);
+  assert.equal(resourceQty(consumerCollectHolding, "wood"), 1);
+
+  // 9.8 Row-level volunteer keeps building function and shared operation active for finance
+  const volUpkeepHolding = mergeHoldingDefaults({
+    buildings: {
+      list: [{
+        id: "vol-srv", name: "Храм", constructionStatus: "built", labor: { version: 2, capacityQd: 40 },
+        functions: { culture: true }, wageDailyCopper: 0, operatingUpkeepMonthlyCopper: 30
+      }]
+    },
+    people: {
+      list: [{
+        id: "vol-p", name: "Служитель", age: 30, volunteerLabor: false,
+        workAllocations: [{ sourceId: "vol-srv", functionId: "culture", normalQd: 20, overtimeQd: 0, volunteer: true, volunteerReason: "Обет" }]
+      }]
+    }
+  });
+  const volInputs = gateHarness._financePlanInputs(volUpkeepHolding, 40, financePeriodIdentity(volUpkeepHolding));
+  const volBldgPlan = volInputs.buildings.find((b) => b.id === "vol-srv");
+  assert.equal(volBldgPlan.functions.find((fn) => fn.id === "culture").active, true, "row-level volunteer activates function in finance plan");
+  assert.equal(volBldgPlan.functions.find((fn) => fn.id === "operation").active, true, "row-level volunteer preserves shared building operation");
+  assert.equal(calculatePlannedWorkerWage(volInputs.workers[0]).dueCopper, 0);
+
+  // 9.9 & 9.10 Relative militarySalaryModifier scaling & legacy workforcePlan.goals retirement
+  const commanderHolding = mergeHoldingDefaults({
+    workforcePlan: {
+      version: 1,
+      goals: [{ sourceId: "x", targetQd: 20 }],
+      locks: [{ personId: "cmd", sourceId: "x", functionId: "culture" }],
+      productionGoals: [{ sourceId: "x", functionId: "production:y", preparedUnits: 2 }]
+    },
+    people: {
+      list: [
+        { id: "cmd", name: "Командир", age: 35, workAssignment: "defenseCommander", salaryModifier: 2 },
+        { id: "s1", name: "Боец", age: 25, workAssignment: "soldier" }
+      ]
+    }
+  });
+  const cmd = commanderHolding.people.list.find((p) => p.id === "cmd");
+  assert.equal(militaryDailyWage(commanderHolding, cmd), 28, "commander +2 offset with 1 soldier = 26 + 2 = 28");
+  for (let idx = 2; idx <= 11; idx += 1) commanderHolding.people.list.push({ id: `s${idx}`, name: `Б${idx}`, age: 25, workAssignment: "soldier" });
+  assert.equal(militaryDailyWage(commanderHolding, cmd), 32, "commander +2 offset scales to 30 + 2 = 32 at 11 soldiers");
+  assert.equal(Object.hasOwn(commanderHolding.workforcePlan, "goals"), false, "retired workforcePlan.goals removed by normalizer");
+  assert.equal(commanderHolding.workforcePlan.locks.length, 1);
+  assert.equal(commanderHolding.workforcePlan.productionGoals[0].preparedUnits, 2);
 
   return { ok: true, templatesChecked: true, mixedWorkVerified: true, capacityQd: buildingLaborCapacityQd(strippedBuilding) };
 }

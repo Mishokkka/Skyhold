@@ -237,7 +237,8 @@ function checkSchoolResolutionMilestone() {
         workAllocations: [{ sourceId: "school-1", functionId: "culture", normalQd: 20, overtimeQd: 0 }] }
     ] },
     buildings: { list: [{ id: "school-1", templateId: "school", constructionStatus: "built",
-      labor: { version: 2, capacityQd: 40 }, activation: { minOperationalQd: 20 }, functions: { culture: true } }] },
+      labor: { version: 2, capacityQd: 40 }, activation: { minOperationalQd: 20 }, functions: { culture: true },
+      wageDailyCopper: 18 }] },
     finance: {},
     log: []
   };

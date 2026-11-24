@@ -123,7 +123,8 @@ export function checkReputationCharacterization() {
     workersMax: 2,
     labor: { version: 2, capacityQd: 40 },
     activation: { minOperationalQd: 20 },
-    functions: { culture: true }
+    functions: { culture: true },
+    wageDailyCopper: 12
   });
   const staffedHolding = {
     people: { list: [{

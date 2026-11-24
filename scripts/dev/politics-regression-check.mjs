@@ -133,6 +133,7 @@ export async function checkPoliticsRegressions() {
     people: { list: [{ id: "worker", workAllocations: [{ sourceId: "meeting", functionId: "culture", normalQd: 20 }] }] },
     buildings: { list: [{ id: "meeting", templateId: "meeting-house", lifecycle: "active", functions: { culture: true },
       workersMax: 2, labor: { version: 2, capacityQd: 40 }, activation: { minOperationalQd: 20 },
+      wageDailyCopper: 12,
       fuelAlternatives: [{ resourceId: "wood", qty: 1 }] }] }
   });
   const pipelineHolding = clone(services);

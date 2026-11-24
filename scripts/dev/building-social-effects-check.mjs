@@ -29,6 +29,7 @@ export function checkBuildingSocialEffects() {
     holding.buildings.list.reverse();
     assert.deepEqual(holding, before, "Social calculations are read-only");
   }
+  for (const person of people) person.workAllocations = [];
   holding.buildings.list = [venue("a", "drinking", 15), venue("b", "gathering", 10), venue("c", "games", 20), venue("d", "performance", 30)];
   for (const [i, b] of holding.buildings.list.entries()) confirmSocialWork(holding, b, [people[2 * i].id, people[2 * i + 1].id]);
   assert.equal(app._buildingMoraleSummary(holding).total, 75, "Leisure can exceed the population of 60");
@@ -70,6 +71,7 @@ export function checkBuildingSocialEffects() {
   const inactive = venue("first-but-closed");
   holding.buildings.list = [inactive, building];
   assert.equal(app._buildingMoraleSummary(holding).total, 15, "Inactive venues never occupy repeat ranks");
+  for (const person of people) person.workAllocations = [];
   const industry = { ...venue("factory"), moraleDelta: -2, service: undefined };
   confirmSocialWork(holding, industry, [people[2].id]);
   const industry2 = structuredClone(industry); industry2.id = "factory2";

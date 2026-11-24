@@ -11,7 +11,6 @@ checkBuildingCatalogFullTransition();
 checkAgricultureCatalogRefresh();
 
 import { DEFAULT_BUILDING_TEMPLATES, TEMPLATE_CATALOG_VERSION } from "../data/building-templates.js";
-import { proposedBuildingLaborProfile } from "../data/building-labor-catalog.js";
 import { DEFAULT_SKYHOLD_DATA } from "../data/defaults/default-skyhold-data.js";
 import { normalizeSkyholdData } from "../data/normalizers.js";
 import { LAPUTA_IMPORT } from "../data/presets/laputa.js";
@@ -204,7 +203,7 @@ export function checkBuildingCatalogMigrationCharacterization() {
   for (const building of laputaWorld.holdings[0].buildings.list) {
     assert.deepEqual(
       building.labor,
-      proposedBuildingLaborProfile(building.templateId),
+      template(building.templateId).labor,
       `Laputa preset building ${building.id} (${building.templateId}) must match the catalog labor profile`
     );
   }
