@@ -1,0 +1,142 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: "ru-RU"
+early_access: false
+
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: true
+  auto_review:
+    enabled: true
+    drafts: false
+
+  # Исключаем шум, гигантские справочники данных, сборки и документацию
+  path_filters:
+    - "!dist/**"
+    - "!node_modules/**"
+    - "!.codex-tmp/**"
+    - "!package-lock.json"
+    - "!lang/**"
+    - "!docs/**"
+    - "!examples/content-packs/**"
+    - "!scripts/data/building-template-catalog/**"
+    - "!scripts/data/building-worker-profile-data.js"
+    - "!scripts/data/random-events.js"
+    - "!scripts/dev/fixtures/**"
+    - "!scripts/dev/sources/**"
+
+  path_instructions:
+    - path: "**/*"
+      instructions: |
+        Контекст проекта: клиентский модуль Foundry VTT (fbl-skyhold) для дружеского стола без собственного сервера.
+        Обязательно опирайся на ARCHITECTURE.md и AGENTS.md.
+        ЗАПРЕЩЕНО предлагать:
+        - серверные хранилища, защиту от DevTools/подделки сокетов игроками (вне модели угроз, см. ST-04 в AGENTS.md);
+        - распределённые блокировки в БД, новые журналы автовосстановления, фоновые ретраи и хранение сверки в localStorage/IndexedDB;
+        - добавление runtime npm-зависимостей или socketlib;
+        - косметические переписывания и рефакторинг нетронутого кода.
+        При проверке любых вызовов API Foundry следи за совместимостью Foundry V13 (13.351) и V14 (14.364) через scripts/integrations/foundry-runtime.js.
+        Пиши замечания коротко, по делу, с привязкой к конкретному игровому сбою.
+
+    # === ЗОНА А: КРИТИЧНОЕ ХРАНИЛИЩЕ, СОКЕТЫ И ПРАВА ===
+    - path: "scripts/data/{store,split-storage,storage-commit,commit-preparation,write-queue,storage-format,normalizers,authority,gm-write-authority,socket,ship-socket,politics-socket,socket-auth,holding-permissions,politics-permissions,access-guard,player-write-guard,entity-identity,operations}.js"
+      instructions: |
+        КРИТИЧНАЯ ЛОГИКА (хранилище, сокеты, authority-GM, права). Проверяй строго:
+        1. Целостность разделённого хранилища (skyholdMeta / skyholdHoldings / skyholdCatalog + резерв skyholdData) и локальной очереди write-queue.js.
+        2. Игрок не должен напрямую писать в world settings; сохраняются проверки прав, operationId и expectedRevision.
+        3. Нет случайных утечек GM-only данных (visibility: "gm", gmOnly) в ответах и сообщениях чата игрокам.
+        4. Новые действия игрока не должны добавляться в устаревающий diff-валидатор player-write-guard.js — направляй их в scripts/apps/*-operation-executor.js.
+        5. При сбоях требуй fail-fast, whisper ГМу при подтверждённом частичном сбое и предупреждение в UI при OUTCOME_UNKNOWN — НЕ предлагай распределённые блокировки или автовосстановление в браузерном хранилище.
+
+    - path: "scripts/data/normalizers/**/*.js"
+      instructions: |
+        КРИТИЧНАЯ ЛОГИКА (нормализаторы). Проверяй строго:
+        1. Нормализация на чтении не должна стирать или молча перезаписывать пользовательские настройки/каталоги.
+        2. Не смешивать безопасную нормализацию с миграциями схемы или ручным repair.
+        3. Пропуск граничных случаев (null/undefined/старый формат записей истории) не должен ломать загрузку мира.
+
+    # === ЗОНА А: ТРАНЗАКЦИИ, ОРКЕСТРАЦИЯ, ДВИЖКИ, МАССОВЫЙ БОЙ, ИНТЕГРАЦИИ ===
+    - path: "scripts/apps/*-operation-executor.js"
+      instructions: |
+        КРИТИЧНАЯ ЛОГИКА (исполнители операций). Проверяй строго:
+        1. Риск дублирования или потери предметов, FIFO-партий и серебра при ошибке на середине операции.
+        2. Идемпотентность по operationId, проверка expectedRevision до мутации (fail-fast).
+        3. Явный whisper ГМу через createHoldingChatMessage при подтверждённом частичном сбое и понятное предупреждение в UI при OUTCOME_UNKNOWN.
+        4. Сообщения чата для скрытых владений уходят только ГМу.
+
+    - path: "scripts/apps/storage/item-document-domain.js"
+      instructions: |
+        КРИТИЧНАЯ ЛОГИКА (обмен склад ↔ Actor/Item). Проверяй строго:
+        1. Сохранение идемпотентности через flags["fbl-skyhold"].storageOperationId при createEmbeddedDocuments / deleteEmbeddedDocuments.
+        2. Отсутствие дублей и потери предметов при ошибке записи склада после изменения Actor (или наоборот).
+        3. При подтверждённом частичном сбое — явный whisper ГМу, без создания браузерных журналов автовосстановления.
+
+    - path: "scripts/{core,engines,workflows}/**/*.js"
+      instructions: |
+        КРИТИЧНАЯ ЛОГИКА (ядро, расчётные движки, оркестрация). Проверяй строго:
+        1. Математические инварианты: FIFO-партии еды, валюта, QD (40 QD = 1 десятник), зарплаты, налоги, перевозки transportV2 и общие рынки sharedMarkets.
+        2. Предпросмотр (preview) десятника/миграции не должен мутировать состояние мира.
+        3. Чистота движков: в scripts/core и scripts/engines не должно быть прямых зависимостей от DOM и окон ApplicationV2.
+        4. Стыки фаз: Calendaria ↔ десятник ↔ sharedMarkets ↔ transportV2 ↔ склад.
+
+    - path: "scripts/apps/domains/{events/economy-events,finance/economy-domain}.js"
+      instructions: |
+        КРИТИЧНАЯ ЛОГИКА (экономический домен и события). Проверяй строго:
+        1. Корректность расчётов, казны, перевозок и отсутствия двойного списания/начисления.
+        2. Файл economy-domain.js исторически перегружен: если PR добавляет туда крупную новую расчётную логику, рекомендуй вынести чистую функцию в scripts/engines/.
+
+    - path: "scripts/apps/mass-combat/{calculator,round-resolution,casualties,damage,supplies}.js"
+      instructions: |
+        КРИТИЧНАЯ ЛОГИКА (расчёт массового боя). Проверяй строго:
+        1. Корректность формул урона, потерь, снабжения и перехода раундов.
+        2. Отсутствие NaN, отрицательных остатков отрядов/припасов и рассинхрона состояния раунда.
+
+    - path: "scripts/integrations/**/*.js"
+      instructions: |
+        КРИТИЧНАЯ ЛОГИКА (интеграции V13/V14 и Calendaria). Проверяй строго:
+        1. Совместимость Foundry V13 (13.351) и V14 (14.364) без предположения о существовании глобалов в обеих версиях.
+        2. Мягкая деградация calendaria-bridge.js, когда модуль Calendaria не установлен или отключён (фолбэк на внутренний счётчик gm.calendaria.lastQd).
+
+    # === ЗОНА Б: ОБЫЧНЫЙ UI, ШАБЛОНЫ И СТИЛИ ===
+    - path: "scripts/apps/{skyhold-app,lazy-apps,lazy-styles,template-preload,ui-review-app,ships-view-state,*-app}.js"
+      instructions: |
+        ОБЫЧНЫЙ UI (лёгкий режим). Игнорируй мелкую стилистику и JSDoc.
+        Отмечай только реальные проблемы:
+        1. Сломанные обработчики, утечка скрытых GM-владений/полей в UI игрока, потеря фокуса/скролла при rerender ApplicationV2.
+        2. Нарушение границ ленивой загрузки (импорт тяжёлых окон из lazy-apps.js в стартовый граф).
+        3. Бизнес-расчёты или прямые мутации состояния, вписанные прямо в render/DOM-хендлер вместо engines/workflows/executors.
+
+    - path: "scripts/apps/{editors,common,events,domains}/**/*.js"
+      instructions: |
+        ОБЫЧНЫЙ UI / ДОМЕНЫ (лёгкий режим, кроме economy-events.js и economy-domain.js). Игнорируй мелкие придирки к стилю.
+        Фокусируйся на багах взаимодействия, скрытии GM-only элементов для игроков, утечках слушателей и неразрастании крупных файлов (route-graph-editor, building-editor, resident-domain, rows-domain).
+
+    - path: "templates/**/*.hbs"
+      instructions: |
+        ОБЫЧНЫЙ UI (шаблоны Handlebars). Лёгкий режим: проверяй только сломанные хелперы/теги, утечку GM-only блоков в разметку игрока, корректный type="button" и базовую доступность кнопок (title/aria-label).
+
+    - path: "styles/**/*.css"
+      instructions: |
+        ОБЫЧНЫЙ UI (CSS). Проверяй только нарушения контрактов проекта (npm run css:check):
+        1. Никаких !important.
+        2. Никаких буквальных цветов вне styles/parts/skyhold-variables.css (использовать токены --fbls-*).
+        3. Файлы не должны разрастаться сверх 700 строк; не создавать «заплаточных» файлов fix/patch/final.
+        Эстетические советы по вёрстке не давай.
+
+    # === АВТОТЕСТЫ ===
+    - path: "scripts/dev/**/*.mjs"
+      instructions: |
+        АВТОТЕСТЫ (режим контроля честности). НЕ комментируй стиль, дублирование фикстур и устройство моков.
+        Подсвечивай только:
+        1. Ослабление, пропуск или удаление существующих проверок/ассертов без явной причины.
+        2. Появление зависимости теста от запущенного сервера Foundry или недетерминированности (Math.random / Date.now без фиксации).
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      - "ARCHITECTURE.md"
+      - "AGENTS.md"

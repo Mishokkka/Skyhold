@@ -1,4 +1,5 @@
 # FBL Skyhold Manager: Codex instructions
+See ARCHITECTURE.md for the module's simplicity contract, failure protocol (fail-fast, GM whisper, OUTCOME_UNKNOWN UI warning), and critical vs UI zone boundaries.
 
 ## Runtime and compatibility
 
@@ -32,7 +33,7 @@
 - `scripts/apps/domains/` — application-domain logic kept out of view code.
 - `scripts/engines/` — pure or mostly pure calculations and simulation logic.
 - `scripts/data/` — defaults, schemas, catalogs, normalizers and persistence contracts.
-- `scripts/integrations/` — Foundry, Forbidden Lands, socket, scene and Calendaria bridges.
+- `scripts/integrations/` — Foundry V13/V14 compatibility adapter (`foundry-runtime.js`) and optional Calendaria bridge (`calendaria-bridge.js`).
 - `scripts/workflows/` — multi-step operations and orchestration.
 - `scripts/dev/` — static checks, characterization tests, benchmarks and packaging.
 - `templates/` — Handlebars templates and partials.
