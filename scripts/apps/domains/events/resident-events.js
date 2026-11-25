@@ -10,7 +10,7 @@ import { normalizeBelief } from "../../../generators/resident-rules.js";
 import { createSafeIcon, escapeHtml, fieldValue } from "../../../core/helpers.js";
 import { makeId } from "../../../data/utils.js";
 import { isResidentAway, isResidentRestingOnShip, shipForResident } from "../../../data/resident-presence.js";
-import { parseWorkAllocationTargetKey, validateHoldingWorkAllocations } from "../../../data/work-allocations.js";
+import { MAX_WORK_ALLOCATIONS_PER_PERSON, parseWorkAllocationTargetKey, validateHoldingWorkAllocations } from "../../../data/work-allocations.js";
 import { loadResidentEditorClass } from "../../lazy-apps.js";
 import { rememberApplicationFocusReturn } from "../../common/window-focus-keeper.js";
 import { syncSelectionSummary } from "../../common/selection-summary.js";
@@ -469,9 +469,9 @@ async _onAddWorkAllocation(event) {
     const updated = await SkyholdData.transaction((data) => {
       const { holding, person } = residentScope(data, address);
       if (!person || !holdingPermissionContext(holding).canEditBuildings || residentHasHiddenWork(holding, person)) return SkyholdData.skipTransaction(false);
-      if (String(person.workAssignment ?? "").trim()) {
-        this._clearPersonFromAssignments?.(holding, person.id);
-        person.workAssignment = "";
+      if ((person.workAllocations ?? []).length >= MAX_WORK_ALLOCATIONS_PER_PERSON) {
+        ui.notifications.warn(`Достигнут лимит строк труда (${MAX_WORK_ALLOCATIONS_PER_PERSON}). Удалите лишние строки плана.`);
+        return SkyholdData.skipTransaction(false);
       }
       if (!Array.isArray(person.workAllocations)) person.workAllocations = [];
       person.workAllocations.push({
@@ -1001,9 +1001,8 @@ async _savePersonEditorDraft(event) {
         .filter(Boolean));
       const txAllocationCheck = validateHoldingWorkAllocations(target.holding, { previousHolding: holdingBeforeWorkMutation });
       const txBlockingIssue = txAllocationCheck.issues.find((issue) => (
-        issue?.code !== "admission-denied"
-        && (String(issue?.personId ?? "") === String(target.person?.id ?? "")
-          || committedBuildingIds.has(String(issue?.buildingId ?? "")))
+        String(issue?.personId ?? "") === String(target.person?.id ?? "")
+          || committedBuildingIds.has(String(issue?.buildingId ?? ""))
       ));
       if (txBlockingIssue) {
         return SkyholdData.skipTransaction({ stale: true, message: txBlockingIssue.message });

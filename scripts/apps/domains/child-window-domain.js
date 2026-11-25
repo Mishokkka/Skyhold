@@ -95,6 +95,6 @@ async _onOpenBuildingCatalogMigration(event) {
   if (!game.user?.isGM) return;
   await ensureSkyholdStylesheet("secondary");
   const { SkyholdBuildingCatalogMigration } = await import("../editors/building-catalog-migration.js");
-  new SkyholdBuildingCatalogMigration({ owner: this }).render({ force: true, focus: true });
+  new SkyholdBuildingCatalogMigration({ owner: this, laborOnly: event?.currentTarget?.dataset?.migration === "labor" }).render({ force: true, focus: true });
 }
 };

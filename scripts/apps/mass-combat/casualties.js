@@ -90,7 +90,7 @@ export function defenderCasualtyCandidates(holding, state = {}, calc = {}) {
   }
 
   for (const building of builtBuildings(holding).filter((building) => isDefenseBuilding(building))) {
-    for (const id of buildingWorkerIds(holding, building.id)) add(id);
+    for (const id of buildingWorkerIds(holding, building.id, "defense")) add(id);
   }
 
   for (const person of people) {

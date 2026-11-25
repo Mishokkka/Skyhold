@@ -20,8 +20,7 @@ import {
   syncBuildingAudioTrackPlayback
 } from "../common/building-audio-track.js";
 import { renderFoundryFilePicker } from "../../integrations/foundry-runtime.js";
-import { newLaborIssues, validateBuildingLaborAndGoals } from "../../data/labor-model.js";
-import { buildWorkAllocationTargets } from "../../data/work-allocations.js";
+import { buildWorkAllocationTargets, validateHoldingWorkAllocations } from "../../data/work-allocations.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
@@ -222,14 +221,12 @@ export class SkyholdUniqueBuildingApp extends WindowFrameMixin(RenderSchedulerMi
           const previewHolding = structuredClone(holding);
           const previewBuilding = previewHolding.buildings?.list?.find((item) => String(item?.id ?? "") === String(building.id));
           if (previewBuilding) {
-            const priorIssues = validateBuildingLaborAndGoals(holding, { targets: buildWorkAllocationTargets(holding), skipResidentBudget: true }).issues;
             previewBuilding.labor = { version: 2, capacityQd: value };
             previewBuilding.workersMin = 0;
             if (previewBuilding.workerProfile) previewBuilding.workerProfile.workersMin = 0;
             if (previewBuilding.activation) previewBuilding.activation.minWorkers = 0;
-            const nextIssues = validateBuildingLaborAndGoals(previewHolding, { targets: buildWorkAllocationTargets(previewHolding), skipResidentBudget: true }).issues;
-            const added = newLaborIssues(priorIssues, nextIssues);
-            if (added.length) throw new Error(added[0].message);
+            const check = validateHoldingWorkAllocations(previewHolding, { previousHolding: holding });
+            if (!check.ok) throw new Error(check.issues[0].message);
           }
         }
         building.labor = { version: 2, capacityQd: value };
@@ -263,7 +260,6 @@ export class SkyholdUniqueBuildingApp extends WindowFrameMixin(RenderSchedulerMi
   async _onOpenWorkforcePlanner(event) {
     event.preventDefault();
     const { openWorkforcePlanner } = await import("../lazy-apps.js");
-    const { buildWorkAllocationTargets } = await import("../../data/work-allocations.js");
     const { holding, building } = this._getMutableBuilding();
     const targetKey = holding && building
       ? buildWorkAllocationTargets(holding).find((row) => String(row.sourceId) === String(building.id))?.key

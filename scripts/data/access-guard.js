@@ -4,6 +4,10 @@ export function canReadHolding(holding, user = globalThis.game?.user) {
   return holding.visibility !== "gm";
 }
 
+export function canReadResident(person, user = globalThis.game?.user) {
+  return Boolean(person && (user?.isGM || person.visibility !== "gm"));
+}
+
 export function readableHoldings(data, user = globalThis.game?.user) {
   const holdings = Array.isArray(data?.holdings) ? data.holdings : [];
   return holdings.filter((holding) => canReadHolding(holding, user));

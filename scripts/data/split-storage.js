@@ -7,6 +7,7 @@ import { inspectStorageCommit, makeStorageCommitMeta, recoverStorageCommit, stab
 import { clone, makeId, toNumber } from "./utils.js";
 import { COMMIT_SCOPES, normalizeCommitScope } from "./commit-preparation.js";
 import { COMMAND_ERROR } from "./command-result.js";
+import { hasLegacyLabor, laborMigrationSourceHash } from "./labor-model.js";
 
 // World settings are JSON data. Hash their serializable shape so the legacy
 // hydration fallback still recognizes untouched defaults containing undefined
@@ -75,6 +76,7 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
   let cachedCommitToken = "";
   let cachedForwardToken = "";
   let cachedData = null;
+  let cachedLegacyLabor = false;
   let cachedPartitionHashes = null;
   let persistedPartitionHashes = null;
   let persistedMetaHash = "";
@@ -235,6 +237,7 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
     // Cache the fresh private root directly and clone only the
     // value crossing the storage boundary instead of cloning the same large
     // settlement twice on every cache miss.
+    cachedLegacyLabor = hasLegacyLabor(stored);
     cachedData = freezeDataView(normalized);
     cachedPartitionHashes = {
       holdings: hashPartition("holdings", normalized.holdings),
@@ -264,10 +267,20 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
     normalized = false,
     scope = COMMIT_SCOPES.BOTH,
     withStatus = false,
-    forceRollbackSnapshot = false
+    forceRollbackSnapshot = false,
+    laborMigrationHash = "",
+    restoreLegacyLabor = false
   } = {}) {
     const commitScope = normalizeCommitScope(scope);
     const previous = getDataView();
+    if (cachedLegacyLabor && !laborMigrationHash && !restoreLegacyLabor) {
+      throw Object.assign(new Error("Сначала подтвердите переход на труд в QD во вкладке ГМ. Прежнее сохранение осталось без изменений."),
+        { code: "labor-migration-required" });
+    }
+    const rawPrevious = laborMigrationHash || restoreLegacyLabor ? readPersistedState().data : null;
+    if (laborMigrationHash && (!hasLegacyLabor(rawPrevious) || laborMigrationSourceHash(rawPrevious) !== laborMigrationHash)) {
+      throw Object.assign(new Error("Данные мира изменились после предпросмотра перехода."), { code: "target-holdings-hash" });
+    }
     const proposed = normalized
       ? {
           ...data,
@@ -279,6 +292,11 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
     assertSupportedWorldData(proposed);
     if (!normalized) metrics.normalizations += 1;
     const next = normalized ? proposed : measureSkyholdPerformance("SkyholdData.normalize", () => normalizeSkyholdData(proposed));
+    if (laborMigrationHash && hasLegacyLabor(next)) {
+      throw Object.assign(new Error("В результате перехода остались прежние записи труда."), { code: "labor-migration-incomplete" });
+    }
+    // Verify the restored snapshot can be loaded before writing its original partitions.
+    const restoredView = restoreLegacyLabor ? normalizeSkyholdData(next) : null;
     // The shared view is frozen; the previous root is only
     // hashed or cloned for rollback below. Avoid a full eager clone here.
     if (!persistedPartitionHashes) {
@@ -315,7 +333,7 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
       const result = clone(previous);
       return withStatus ? { changed: false, data: result, scope: commitScope } : result;
     }
-    const needsRollbackSnapshot = Boolean(forceRollbackSnapshot)
+    const needsRollbackSnapshot = Boolean(forceRollbackSnapshot || rawPrevious)
       || (holdingsDirty && catalogDirty)
       || (metaDirty && (holdingsDirty || catalogDirty))
       || !splitMatchesLogicalPrevious;
@@ -325,7 +343,7 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
     // restoring only the previous revision would retain the uncommitted metadata.
     // When both partitions change (or legacy data has not hydrated split settings),
     // preserve the last coherent logical root before starting the commit.
-    if (needsRollbackSnapshot) await writeSetting(SETTING_DATA, clone(previous));
+    if (needsRollbackSnapshot) await writeSetting(SETTING_DATA, clone(rawPrevious ?? previous));
 
     const writeId = makeId("commit");
     const startedAt = new Date().toISOString();
@@ -388,9 +406,22 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
     cachedRevision = Math.max(0, toNumber(next?.meta?.revision, 0));
     cachedCommitToken = completeCommitToken(next.meta);
     cachedForwardToken = forwardToken;
-    cachedData = freezeDataView(next);
-    const result = clone(next);
+    cachedLegacyLabor = hasLegacyLabor(next);
+    cachedData = restoredView ? null : freezeDataView(next);
+    if (restoredView) restoredView.meta = next.meta;
+    const result = clone(restoredView ?? next);
     return withStatus ? { changed: true, data: result, scope: commitScope } : result;
+  }
+
+  async function restoreLegacyLaborSnapshot(expectedDataHash) {
+    assertWriteAuthority();
+    const snapshot = readSetting(SETTING_DATA);
+    if (!hasLegacyLabor(snapshot) || stableDataHash(snapshot) !== expectedDataHash) {
+      throw Object.assign(new Error("Снимок отката изменился."), { code: "hash-mismatch" });
+    }
+    const revision = Math.max(0, toNumber(getDataView().meta?.revision, 0)) + 1;
+    const data = { ...snapshot, meta: { ...snapshot.meta, revision, lastUpdated: new Date().toISOString() } };
+    return persistData(data, { normalized: true, restoreLegacyLabor: true });
   }
 
   function getMetrics() {
@@ -415,6 +446,7 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
     getMetrics,
     persistData,
     readSettings: (providedMeta) => readPersistedState(providedMeta).data,
-    resetMetrics
+    resetMetrics,
+    restoreLegacyLaborSnapshot
   };
 }

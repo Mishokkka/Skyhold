@@ -1,6 +1,6 @@
 import { buildingOperationalState } from "../../core/building-state.js";
 import { isResidentInPopulation } from "../../data/resident-presence.js";
-import { buildingWorkAllocationsForBuilding, buildingWorkerIds } from "../../data/work-allocations.js";
+import { allocatedBuildingQd, buildingWorkerIds } from "../../data/work-allocations.js";
 import { normalLaborQdPerTenday } from "../../data/labor-budget.js";
 import { DEFENSE_SQUAD_MIN_EFFICIENCY, evaluateDefenseSquad, isAvailableDefenseResident } from "../../data/military-resident-rules.js";
 import {
@@ -280,17 +280,16 @@ export function defenseGarrisonProfile(holding, { buildingEffectiveWorkers = nul
   const sources = [];
   let effective = 0;
   for (const building of buildings) {
-    const assigned = buildingWorkerIds(holding, building.id);
+    const assigned = buildingWorkerIds(holding, building.id, "defense");
     const combatants = assigned.map((id) => byId.get(id)).filter(Boolean);
     for (const person of combatants) ids.add(String(person.id));
-    const effSummary = typeof buildingEffectiveWorkers === "function" ? buildingEffectiveWorkers(holding, building) : null;
-    let buildingEffective = Number.isFinite(Number(effSummary?.total)) ? Math.max(0, Number(effSummary.total)) : 0;
-    if (!buildingEffective && combatants.length) {
+    const effSummary = combatants.length && typeof buildingEffectiveWorkers === "function" ? buildingEffectiveWorkers(holding, building, "defense") : null;
+    const hasEstimate = Number.isFinite(Number(effSummary?.total));
+    let buildingEffective = hasEstimate ? Math.max(0, Number(effSummary.total)) : 0;
+    if (!hasEstimate && combatants.length) {
       const fullWorkerQd = Math.max(1, normalLaborQdPerTenday(holding));
       buildingEffective = combatants.reduce((sum, person) => {
-        const allocatedQd = buildingWorkAllocationsForBuilding(person, building.id).reduce((acc, row) => (
-          acc + Math.max(0, Math.floor(Number(row?.normalQd ?? row?.qd ?? 0) || 0)) + Math.max(0, Math.floor(Number(row?.overtimeQd ?? 0) || 0))
-        ), 0);
+        const allocatedQd = allocatedBuildingQd(person.workAllocations, building.id, "defense");
         const share = Math.min(1.5, allocatedQd / fullWorkerQd);
         return sum + (soldierEfficiency(person, "line") || 0.75) * share;
       }, 0);

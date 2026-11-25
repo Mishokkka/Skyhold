@@ -1,9 +1,34 @@
+import { stableDataHash } from "./storage-commit.js";
 import { DEFAULT_NORMAL_LABOR_QD, residentLaborCapacity } from "./labor-budget.js";
 import { buildingCompositionStatus, workerAdmission } from "../engines/workers/building-qualification.js";
 import { isSheriffAppointment } from "./control-appointments.js";
 import { isResidentPresent, residentShipAssignment } from "./resident-presence.js";
 
 export const LABOR_SCHEMA_VERSION = 2;
+
+export function laborMigrationSourceHash(data) {
+  return stableDataHash([data.meta, data.holdings, data.catalog]);
+}
+
+function records(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+export function hasLegacyBuildingLabor(building) {
+  return Boolean(building?.labor?.mode || records(building?.assignedWorkerIds).some(Boolean));
+}
+
+export function hasLegacyResidentLabor(person) {
+  return Boolean(person?.staffAppointment || Number(person?.salaryModifier));
+}
+
+export function hasLegacyLabor(data = {}) {
+  return records(data?.catalog?.buildings).some(hasLegacyBuildingLabor) || records(data?.holdings).some((holding) => (
+    records(holding?.buildings?.list).some(hasLegacyBuildingLabor)
+    || records(holding?.people?.list).some(hasLegacyResidentLabor)
+    || records(holding?.workforcePlan?.goals).length > 0
+  ));
+}
 export const MAX_PRODUCTION_GOAL_UNITS = 1_000_000;
 
 function text(value = "") {
@@ -78,20 +103,24 @@ export function uncollectibleProductionLine(building = {}) {
  * Total planned + overtime QD currently reserved on `buildingId` across living, present residents.
  * Used uniformly by planner capacity labels, quick assignments, and Control picks.
  */
-export function buildingReservedQd(holding = {}, buildingId = "", { excludePersonId = "" } = {}) {
-  const targetId = text(buildingId);
+export function buildingWorkReservations(holding = {}, { excludePersonId = "", presentIds = null } = {}) {
   const excludedId = text(excludePersonId);
-  if (!targetId) return 0;
-  let sum = 0;
+  const totals = new Map();
   for (const person of holding?.people?.list ?? []) {
-    if (!person || person.dead || !isResidentPresent(person)) continue;
-    if (excludedId && text(person.id) === excludedId) continue;
+    if (!person || text(person.id) === excludedId) continue;
+    if (presentIds ? !presentIds.has(text(person.id)) : person.dead || !isResidentPresent(person)) continue;
     for (const row of Array.isArray(person.workAllocations) ? person.workAllocations : []) {
-      if (text(row?.sourceId) !== targetId) continue;
-      sum += nonNegInt(row?.normalQd ?? row?.qd, 0) + nonNegInt(row?.overtimeQd, 0);
+      const buildingId = text(row?.sourceId);
+      if (!buildingId) continue;
+      const qd = nonNegInt(row?.normalQd ?? row?.qd, 0) + nonNegInt(row?.overtimeQd, 0);
+      if (qd) totals.set(buildingId, (totals.get(buildingId) ?? 0) + qd);
     }
   }
-  return sum;
+  return totals;
+}
+
+export function buildingReservedQd(holding = {}, buildingId = "", options = {}) {
+  return buildingWorkReservations(holding, options).get(text(buildingId)) ?? 0;
 }
 
 export function buildingMinOperationalQd(building = {}) {
@@ -107,7 +136,10 @@ export function productionPreparationGoal(holding = {}, sourceId = "", functionI
   const src = text(sourceId);
   const fn = text(functionId);
   if (Array.isArray(goals)) {
-    const match = goals.find((row) => text(row?.sourceId) === src && (!fn || text(row?.functionId) === fn));
+    const forBuilding = goals.filter((row) => text(row?.sourceId) === src);
+    const match = forBuilding.find((row) => text(row?.functionId) === fn)
+      ?? forBuilding.find((row) => !text(row?.functionId))
+      ?? (!fn ? forBuilding[0] : null);
     return Math.min(MAX_PRODUCTION_GOAL_UNITS, nonNegInt(match?.preparedUnits, 0));
   }
   if (!goals || typeof goals !== "object") return 0;
@@ -164,7 +196,7 @@ export function reservedOccupation(holding = {}, person = {}) {
     }
   }
 
-  if (workAssignment.startsWith("construction-leader:") || workAssignment.startsWith("construction:")) {
+  if (workAssignment === "construction" || workAssignment.startsWith("construction-leader:") || workAssignment.startsWith("construction:")) {
     return { kind: "construction", label: "Стройбригада" };
   }
   if (workAssignment === "soldier" || workAssignment === "defenseCommander") {
@@ -229,7 +261,7 @@ export function validateBuildingLaborAndGoals(holding = {}, { targets = null, sk
     const personId = text(person?.id);
     const personName = text(person?.name || personId) || "Житель";
     const allocations = Array.isArray(person?.workAllocations) ? person.workAllocations : [];
-    const positive = allocations.filter((row) => nonNegInt(row?.qd ?? row?.normalQd, 0) + nonNegInt(row?.overtimeQd, 0) > 0);
+    const positive = allocations.filter((row) => nonNegInt(row?.normalQd ?? row?.qd, 0) + nonNegInt(row?.overtimeQd, 0) > 0);
     if (!positive.length) continue;
 
     if (!skipResidentBudget) {

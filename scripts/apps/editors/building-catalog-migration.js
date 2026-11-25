@@ -4,7 +4,8 @@ import { makeId } from "../../data/utils.js";
 import {
   BUILDING_CATALOG_MIGRATION_VERSION,
   applyBuildingCatalogMigration,
-  planBuildingCatalogMigration
+  planBuildingCatalogMigration,
+  planLaborMigration
 } from "../../workflows/buildings/catalog-migration.js";
 import { RenderSchedulerMixin } from "../common/render-scheduler.js";
 import { FloatingTooltipsMixin } from "../common/floating-tooltip.js";
@@ -22,13 +23,15 @@ function errorText(error) {
   return byCode[String(error?.code ?? "")] ?? error?.message ?? String(error);
 }
 
-async function confirmApply() {
-  const message = "Всё дерево шаблонов будет заменено утверждённым каталогом. Связанные постройки получат новые характеристики. Жители, казна, имущество, названия и состояния построек сохранятся. Старое общее обслуживание будет снято, его QD освободятся для назначения конкретным зданиям. Перед записью будет создана rollback-копия. Продолжить?";
+async function confirmApply(laborOnly) {
+  const message = laborOnly
+    ? "Будут применены изменения из предпросмотра труда. Неперенесённые записи останутся в копии для отката. Продолжить?"
+    : "Всё дерево шаблонов будет заменено утверждённым каталогом. Связанные постройки получат новые характеристики. Жители, казна, имущество, названия и состояния построек сохранятся. Старое общее обслуживание будет снято, его QD освободятся для назначения конкретным зданиям. Перед записью будет создана rollback-копия. Продолжить?";
   const DialogV2 = foundry?.applications?.api?.DialogV2;
   if (DialogV2?.confirm) {
     return DialogV2.confirm({
       classes: ["fbl-skyhold"],
-      window: { title: "Обновить каталог зданий" },
+      window: { title: laborOnly ? "Перейти на труд в QD" : "Обновить каталог зданий" },
       content: `<p>${message}</p>`,
       modal: true
     });
@@ -37,9 +40,10 @@ async function confirmApply() {
 }
 
 export class SkyholdBuildingCatalogMigration extends FloatingTooltipsMixin(RenderSchedulerMixin(HandlebarsApplicationMixin(ApplicationV2))) {
-  constructor({ owner = null } = {}, options = {}) {
+  constructor({ owner = null, laborOnly = false } = {}, options = {}) {
     super(options);
     this.owner = owner;
+    this.laborOnly = laborOnly;
     this.plan = null;
     this.error = "";
     this.status = "";
@@ -54,12 +58,11 @@ export class SkyholdBuildingCatalogMigration extends FloatingTooltipsMixin(Rende
   }
 
   _preparePlan({ operationId = this.plan?.operationId || makeId("building-catalog-migration", 20) } = {}) {
-    this.plan = planBuildingCatalogMigration({
-      currentData: SkyholdData.get(),
-      replaceCatalog: true,
-      operationId,
-      createdAt: new Date().toISOString()
-    });
+    this.plan = this.laborOnly
+      ? planLaborMigration(SkyholdData.getLaborMigrationSource())
+      : planBuildingCatalogMigration({
+          currentData: SkyholdData.get(), replaceCatalog: true, operationId, createdAt: new Date().toISOString()
+        });
     this.error = "";
     this._previewDirty = false;
     return this.plan;
@@ -87,9 +90,11 @@ export class SkyholdBuildingCatalogMigration extends FloatingTooltipsMixin(Rende
       label: `${row.buildingName || row.buildingId || "Здание"}: ${row.detail || row.code}`
     }));
     const changedRows = (plan?.rows ?? []).filter((row) => row.changed).slice(0, 80);
+    const decisions = plan?.decisions ?? [];
     return {
       ...context,
       preview,
+      laborOnly: this.laborOnly,
       error: this.error,
       status: this.status,
       canApply: game.user?.isGM === true && plan?.canApply === true,
@@ -97,7 +102,8 @@ export class SkyholdBuildingCatalogMigration extends FloatingTooltipsMixin(Rende
       noChanges: plan?.hasChanges === false,
       hasIssues: issueRows.length > 0,
       issueRows,
-      decisions: plan?.decisions ?? [],
+      decisions: this.laborOnly ? decisions : decisions.slice(0, 80),
+      decisionsTruncated: !this.laborOnly && decisions.length > 80,
       issuesTruncated: (plan?.blockingIssues?.length ?? 0) > issueRows.length,
       changedRows,
       rowsTruncated: (plan?.rows?.filter((row) => row.changed).length ?? 0) > changedRows.length,
@@ -143,9 +149,9 @@ export class SkyholdBuildingCatalogMigration extends FloatingTooltipsMixin(Rende
     // Confirm this exact preview; changes while the dialog is open must fail the
     // transaction's revision/hash checks, never silently apply a newer preview.
     const plan = this.plan;
-    if (!await confirmApply()) return;
+    if (!await confirmApply(this.laborOnly)) return;
     try {
-      const result = await SkyholdData.transaction((data, { skip }) => {
+      const result = this.laborOnly ? await SkyholdData.applyLaborMigration(plan) : await SkyholdData.transaction((data, { skip }) => {
         const applied = applyBuildingCatalogMigration({ currentData: data, plan, operationId: plan.operationId });
         if (!applied.commitRequired) return skip(applied);
         data.meta = applied.data.meta;
@@ -158,7 +164,8 @@ export class SkyholdBuildingCatalogMigration extends FloatingTooltipsMixin(Rende
         forceRollbackSnapshot: true
       });
       if (result?.alreadyApplied) this.status = "Эта операция уже была применена; повторной записи не было.";
-      else this.status = `Обновлено построек: ${result?.preview?.changedInstances ?? 0}. Сохранена копия для отката.`;
+      else this.status = this.laborOnly ? "Труд переведён в QD. Сохранена копия для отката."
+        : `Обновлено построек: ${result?.preview?.changedInstances ?? 0}. Сохранена копия для отката.`;
       ui.notifications.info(this.status);
       this._preparePlan({ operationId: makeId("building-catalog-migration", 20) });
       this.owner?.requestRender?.();

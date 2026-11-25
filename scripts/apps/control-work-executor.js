@@ -7,6 +7,8 @@ import { buildingOperationalState } from "../core/building-state.js";
 import { controlServiceFunctionId } from "../engines/settlement/control.js";
 import { controlResidentAvailable, hasControlEffect } from "./domains/control-context.js";
 import { getSkyholdManager } from "./registry.js";
+import { canReadResident } from "../data/access-guard.js";
+import { buildWorkAllocationTargets, workFunctionMatches } from "../data/work-allocations.js";
 
 /** Uses the ordinary holding transaction; player commits retain the authority-GM patch protocol. */
 export async function executeControlWorkOperation(raw = {}, {
@@ -17,13 +19,14 @@ export async function executeControlWorkOperation(raw = {}, {
   const action = String(raw.action ?? "");
   const buildingId = String(raw.buildingId ?? "");
   const residentId = String(raw.residentId ?? "");
+  const functionId = String(raw.functionId ?? "").trim();
   const expectedRevision = Number(raw.expectedRevision);
   if (!operationId || operationId.length > 100 || !holdingId || holdingId.length > 100
-    || buildingId.length > 100 || residentId.length > 100 || !["sheriff", "add", "remove"].includes(action)
+    || buildingId.length > 100 || residentId.length > 100 || functionId.length > 200 || !["sheriff", "add", "remove"].includes(action)
     || !Number.isSafeInteger(expectedRevision) || expectedRevision < 0) {
     return { ok: false, reason: "Некорректные данные назначения." };
   }
-  const requestSignature = JSON.stringify({ action, buildingId, residentId });
+  const requestSignature = JSON.stringify({ action, buildingId, residentId, ...(functionId ? { functionId } : {}) });
   const result = await store.updateHolding(holdingId, (holding, data) => {
     const user = getUser();
     const manager = getManager();
@@ -43,7 +46,7 @@ export async function executeControlWorkOperation(raw = {}, {
     const gmAdmissions = new Map((holding.buildings?.list ?? []).map((building) =>
       [String(building.id), [...(building.workerAdmissionOverrideIds ?? [])]]));
     const person = (holding.people?.list ?? []).find((row) => String(row.id) === residentId);
-    if (residentId && (!person || !user?.isGM && person.visibility === "gm")) return fail("Житель недоступен.");
+    if (residentId && !canReadResident(person, user)) return fail("Житель недоступен.");
     let cleared = 0;
     let summary;
     if (action === "sheriff") {
@@ -71,21 +74,28 @@ export async function executeControlWorkOperation(raw = {}, {
     } else {
       const building = (holding.buildings?.list ?? []).find((row) => String(row.id) === buildingId);
       if (!person || !building || !hasControlEffect(building) || !user?.isGM && building.visibility === "gm") return fail("Учреждение или житель недоступны.");
+      const controlFunction = controlServiceFunctionId(building);
       if (action === "add") {
         if (!buildingOperationalState(building).operational) return fail("Назначение доступно после постройки и восстановления здания.");
         if (!controlResidentAvailable(holding, person, manager)) return fail("Житель занят или не может работать.");
+        const targets = buildWorkAllocationTargets(holding).filter((target) => target.sourceId === buildingId
+          && target.available && workFunctionMatches(target.functionId, controlFunction));
+        const target = functionId ? targets.find((row) => row.functionId === functionId) : targets.length === 1 ? targets[0] : null;
+        if (!target) return fail("Выберите доступную рабочую функцию учреждения.");
         const out = {};
         const assigned = manager._assignPersonToBuilding(holding, person.id, building.id, {
-          functionId: controlServiceFunctionId(building),
+          functionId: target.functionId,
           allowAdmissionOverride: user?.isGM === true && raw.allowAdmissionOverride === true,
           out
         });
         if (!assigned) return fail(out.reason || "Нет свободных QD, вместимости здания или не выполнен обязательный допуск.");
         summary = `${person.name || "Житель"} назначен: ${building.name || "Учреждение"}.`;
       } else {
-        const removed = manager._removePersonFromBuilding?.(holding, building.id, person.id, {
-          functionId: controlServiceFunctionId(building)
-        });
+        const occupied = new Set((person.workAllocations ?? []).filter((row) => String(row?.sourceId ?? "") === buildingId
+          && workFunctionMatches(row.functionId, controlFunction)).map((row) => row.functionId));
+        const target = functionId || (occupied.size === 1 ? [...occupied][0] : "");
+        if (!target || !occupied.has(target)) return fail("Выберите сохранившееся назначение учреждения.");
+        const removed = manager._removePersonFromBuilding?.(holding, building.id, person.id, { functionId: target });
         if (!removed) return fail("Рабочее назначение уже изменилось.");
         cleared = 1;
         summary = `${person.name || "Житель"} освобождён: ${building.name || "Учреждение"}.`;

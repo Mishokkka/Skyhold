@@ -26,6 +26,34 @@ function whole(value, fallback = 0) {
   return Math.max(0, Math.floor(Number.isFinite(number) ? number : fallback));
 }
 
+function nonnegative(value) {
+  return Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : 0;
+}
+
+export function advanceCollectionWork(line, entries) {
+  const requiredQd = Math.ceil(nonnegative(line.collectQd));
+  let progressQd = Math.min(requiredQd, nonnegative(line.collectProgressQd));
+  for (const entry of new Set(entries)) {
+    if (progressQd >= requiredQd) break;
+    const spent = Math.min(nonnegative(entry.available), requiredQd - progressQd);
+    if (!spent) continue;
+    entry.available -= spent;
+    entry.spent = nonnegative(entry.spent) + spent;
+    progressQd += spent;
+  }
+  line.collectProgressQd = progressQd;
+  return { requiredQd, progressQd, complete: progressQd >= requiredQd };
+}
+
+export function finishProductionCollection(line, placeOutput) {
+  const qty = Math.floor(nonnegative(line.pendingQty));
+  if (!qty) return { qty: 0, placements: [] };
+  const placements = placeOutput(qty);
+  line.pendingQty = 0;
+  line.collectProgressQd = 0;
+  return { qty, placements };
+}
+
 export async function runProductionCycle({
   holding,
   qd = 0,

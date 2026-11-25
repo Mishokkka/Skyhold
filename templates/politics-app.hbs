@@ -40,11 +40,12 @@
             </article>
             {{#if control.hasJobs}}<div class="fbls-control-jobs">
               {{#each control.jobs}}<article class="fbls-control-job fbls-stack">
-                <header class="fbls-card-header"><h4 class="fbls-heading-section">{{name}}</h4><span class="fbls-chip">Штат {{count}} / {{max}}</span></header>
-                <small>{{role}} · минимум {{min}} работников · {{qd}} QD за десятник · {{stateLabel}}{{#if admission}}. Допуск: {{admission}}{{/if}}</small>
-                {{#if hasWorkers}}<ul class="fbls-control-roster">{{#each workers}}<li><span>{{name}}{{#if explicit}} · план QD, изменяется в редакторе жителя{{/if}}</span>{{#if canRemove}}<form data-control-assignment="remove" data-building-id="{{../id}}"><input type="hidden" name="residentId" value="{{id}}"><button type="button" class="fbls-button fbls-button-role" data-control-save title="Освободить {{name}} от работы в учреждении"><i class="fa-solid fa-user-minus" aria-hidden="true"></i><span>Снять</span></button></form>{{/if}}</li>{{/each}}</ul>{{else}}<p>Сотрудники не назначены.</p>{{/if}}
+                <header class="fbls-card-header"><h4 class="fbls-heading-section">{{name}}</h4><span class="fbls-chip">{{count}} · {{allocatedQd}} QD</span></header>
+                <small>{{role}} · порог {{qd}} QD за десятник · {{stateLabel}}{{#if admission}}. Допуск: {{admission}}{{/if}}</small>
+                {{#if hasWorkers}}<ul class="fbls-control-roster">{{#each workers}}<li><span>{{name}}{{#if functionName}} · {{functionName}}{{/if}}</span>{{#if canRemove}}<form data-control-assignment="remove" data-building-id="{{../id}}"><input type="hidden" name="residentId" value="{{id}}"><input type="hidden" name="functionId" value="{{functionId}}"><button type="button" class="fbls-button fbls-button-role" data-control-save title="Освободить {{name}} от работы в учреждении"><i class="fa-solid fa-user-minus" aria-hidden="true"></i><span>Снять</span></button></form>{{/if}}</li>{{/each}}</ul>{{else}}<p>Сотрудники не назначены.</p>{{/if}}
                 {{#if canAdd}}<form data-control-assignment="add" data-building-id="{{id}}" class="fbls-control-assignment-form">
                   <label class="fbls-field">Свободный житель<select class="fbls-control" name="residentId" required aria-label="Назначить сотрудника в {{name}}"><option value="">Выберите жителя</option>{{#each candidates}}<option value="{{id}}">{{name}}</option>{{/each}}</select></label>
+                  {{#if multipleFunctions}}<label class="fbls-field">Функция<select class="fbls-control" name="functionId" required><option value="">Выберите функцию</option>{{#each availableFunctions}}<option value="{{functionId}}">{{functionName}}</option>{{/each}}</select></label>{{else}}<input type="hidden" name="functionId" value="{{firstFunctionId}}">{{/if}}
                   <button type="button" class="primary fbls-button fbls-button-role" data-control-save title="Назначить сотрудника в {{name}}">Назначить</button>
                 </form>{{/if}}
               </article>{{/each}}

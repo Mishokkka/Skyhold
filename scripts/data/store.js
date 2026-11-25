@@ -12,6 +12,7 @@ import { measureSkyholdPerformance } from "./performance-observer.js";
 import { COMMIT_SCOPES, normalizeCommitScope, prepareSkyholdCommit } from "./commit-preparation.js";
 import { MODULE_ID, SETTING_DATA } from "./constants.js";
 import { stableDataHash } from "./storage-commit.js";
+import { hasLegacyLabor, laborMigrationSourceHash } from "./labor-model.js";
 import { assertSupportedWorldData, UNSUPPORTED_WORLD_DATA } from "./storage-format.js";
 import { createGmWriteAuthority } from "./gm-write-authority.js";
 import { COMMAND_ERROR, commandError, commandFailure } from "./command-result.js";
@@ -167,6 +168,34 @@ export class SkyholdData {
     });
   }
 
+  static getLaborMigrationSource() {
+    if (!game.user?.isGM) throw new Error("Предпросмотр перехода доступен только ГМу.");
+    return clone(splitStorage.readSettings());
+  }
+
+  static async applyLaborMigration(plan) {
+    return enqueueSkyholdWrite(async () => {
+      gmWrites.assertAuthority();
+      const source = splitStorage.readSettings();
+      if (!hasLegacyLabor(source)) return { alreadyApplied: true };
+      if (!plan?.canApply || !plan.targetData || plan.sourceHash !== laborMigrationSourceHash(source)) {
+        throw Object.assign(new Error("Данные мира изменились после предпросмотра."), { code: "target-holdings-hash" });
+      }
+      const prepared = prepareSkyholdCommit(plan.targetData, { baseRevision: source.meta?.revision });
+      const saved = await persistSkyholdData(prepared.data, {
+        normalized: true,
+        scope: prepared.scope,
+        withStatus: true,
+        laborMigrationHash: plan.sourceHash
+      });
+      if (saved.changed) {
+        try { notifySkyholdChanged(); }
+        catch (error) { console.warn("FBL Skyhold | Labor migration was saved but windows could not be notified.", error); }
+      }
+      return { alreadyApplied: !saved.changed };
+    });
+  }
+
   static getRollbackSnapshotInfo({ expectedDataHash = "" } = {}) {
     if (!game.user?.isGM) return { ok: false, reason: "gm-only" };
     const snapshot = game.settings.get(MODULE_ID, SETTING_DATA);
@@ -197,6 +226,12 @@ export class SkyholdData {
       const info = this.getRollbackSnapshotInfo({ expectedDataHash });
       if (!info.ok) return info;
       const snapshot = clone(game.settings.get(MODULE_ID, SETTING_DATA));
+      if (hasLegacyLabor(snapshot)) {
+        const saved = await splitStorage.restoreLegacyLaborSnapshot(info.dataHash);
+        try { notifySkyholdChanged(); }
+        catch (error) { console.warn("FBL Skyhold | Legacy labor snapshot was restored but windows could not be notified.", error); }
+        return { ok: true, restored: true, previousRevision: info.revision, data: saved };
+      }
       const current = SkyholdData.view();
       const saved = await commitSkyholdData(snapshot, {
         scope: COMMIT_SCOPES.BOTH,

@@ -3,7 +3,7 @@ import { isMedicalBuilding } from "../core/building-specials.js";
 import { normalizeAgricultureBuilding } from "./agriculture.js";
 import { normalizeLivestockBuilding } from "./livestock.js";
 import { isPlainObject, makeId, toNumber } from "./utils.js";
-import { isResidentPresent } from "./resident-presence.js";
+import { isResidentInPopulation, isResidentPresent } from "./resident-presence.js";
 import { normalLaborQdPerTenday, residentLaborCapacity } from "./labor-budget.js";
 import {
   buildingAcceptsWorkers,
@@ -266,25 +266,42 @@ export function buildWorkAllocationTargets(holding = {}) {
   return targets;
 }
 
-export function buildingWorkAllocationsForBuilding(person = {}, buildingId = "") {
+export function workFunctionMatches(actual, expected = "") {
+  const fn = text(actual);
+  if (!fn) return false;
+  if (!expected || fn === expected) return true;
+  return expected === "production" && (fn.startsWith("production:") || fn === "agriculture" || fn === "livestock");
+}
+
+export function allocatedBuildingQd(rows = [], buildingId = "", functionId = "", allowedFunctions = null) {
+  const id = text(buildingId);
+  return (Array.isArray(rows) ? rows : []).reduce((sum, row) => {
+    const fn = text(row?.functionId);
+    if (text(row?.sourceId) !== id || !workFunctionMatches(fn, functionId) || (allowedFunctions && !allowedFunctions.has(fn))) return sum;
+    return sum + whole(row?.normalQd ?? row?.qd) + whole(row?.overtimeQd);
+  }, 0);
+}
+
+export function buildingWorkAllocationsForBuilding(person = {}, buildingId = "", functionId = "") {
   const id = text(buildingId);
   if (!id || !isResidentPresent(person) || person?.dead) return [];
   return (Array.isArray(person?.workAllocations) ? person.workAllocations : []).filter((row) => (
     text(row?.sourceId) === id
+    && (!functionId || workFunctionMatches(row?.functionId, functionId))
     && whole(row?.normalQd ?? row?.qd) + whole(row?.overtimeQd) > 0
   ));
 }
 
 export const explicitWorkAllocationsForBuilding = buildingWorkAllocationsForBuilding;
 
-export function buildingWorkerIds(holding = {}, buildingOrId = "") {
+export function buildingWorkerIds(holding = {}, buildingOrId = "", functionId = "") {
   const buildingObj = buildingOrId && typeof buildingOrId === "object" ? buildingOrId : null;
   const id = text(buildingObj ? buildingObj.id : buildingOrId);
   if (!id) return [];
   const building = (holding?.buildings?.list ?? []).find((row) => text(row?.id) === id) ?? buildingObj;
   if (!building || !buildingAcceptsWorkers(building)) return [];
   return (holding?.people?.list ?? [])
-    .filter((person) => buildingWorkAllocationsForBuilding(person, id).length > 0)
+    .filter((person) => buildingWorkAllocationsForBuilding(person, id, functionId).length > 0)
     .map((person) => text(person?.id))
     .filter(Boolean);
 }
@@ -292,7 +309,47 @@ export function buildingWorkerIds(holding = {}, buildingOrId = "") {
 export const explicitWorkerIdsForBuilding = buildingWorkerIds;
 export const buildingStaffingWorkerIds = buildingWorkerIds;
 
-export function validateHoldingWorkAllocations(holding = {}, { previousHolding = null } = {}) {
+export function residentWorkUnavailable(holding, person) {
+  if (person?.dead) return "Умер";
+  if (!isResidentInPopulation(person, holding)) return "Вне поселения / отдых экипажа";
+  if (whole(person?.injuredDays) > 0) return "Ранен";
+  if (residentLaborCapacity(person, holding).normalQd === 0) return "Не может работать по возрасту";
+  return reservedOccupation(holding, person)?.label ?? "";
+}
+
+function workAllocationChangeIssues(previousHolding, holding, targetMap, replacedPersonId) {
+  const previousPeople = new Map((previousHolding?.people?.list ?? []).map((person) => [text(person.id), person]));
+  const issues = [];
+  for (const person of holding?.people?.list ?? []) {
+    const personId = text(person.id);
+    const prior = previousPeople.get(personId);
+    if (JSON.stringify(prior?.workAllocations ?? []) === JSON.stringify(person.workAllocations ?? [])) continue;
+    const previousRows = new Map((Array.isArray(prior?.workAllocations) ? prior.workAllocations : []).map((row) => [
+      workAllocationTargetKey(row?.sourceId, row?.functionId), row
+    ]));
+    const unavailable = residentWorkUnavailable(holding, person)
+      || (personId !== replacedPersonId && prior ? reservedOccupation(previousHolding, prior)?.label : "");
+    for (const row of Array.isArray(person.workAllocations) ? person.workAllocations : []) {
+      if (!row) continue;
+      const key = workAllocationTargetKey(row.sourceId, row.functionId);
+      const old = previousRows.get(key);
+      if (whole(row.normalQd ?? row.qd) <= whole(old?.normalQd ?? old?.qd)
+        && whole(row.overtimeQd) <= whole(old?.overtimeQd)) continue;
+      const target = targetMap.get(key);
+      const reason = unavailable || (target?.available === false ? target.blockedReason || "Выбранная работа сейчас недоступна" : "");
+      if (reason) issues.push({
+        code: unavailable ? "resident-unavailable" : "work-target-unavailable",
+        personId,
+        sourceId: text(row.sourceId),
+        functionId: text(row.functionId),
+        message: `${text(person.name) || "Житель"}: ${reason}.`
+      });
+    }
+  }
+  return issues;
+}
+
+export function validateHoldingWorkAllocations(holding = {}, { previousHolding = null, replacedPersonId = "" } = {}) {
   const targets = buildWorkAllocationTargets(holding);
   const targetMap = new Map(targets.map((target) => [target.key, target]));
   const issues = [];
@@ -324,7 +381,10 @@ export function validateHoldingWorkAllocations(holding = {}, { previousHolding =
   }
 
   issues.push(...validateBuildingLaborAndGoals(holding, { targets: targetMap, skipResidentBudget: true }).issues);
-  const blockingIssues = previousHolding ? newLaborIssues(validateHoldingWorkAllocations(previousHolding).issues, issues) : issues;
+  const blockingIssues = previousHolding
+    ? [...workAllocationChangeIssues(previousHolding, holding, targetMap, text(replacedPersonId)),
+      ...newLaborIssues(validateHoldingWorkAllocations(previousHolding).issues, issues)]
+    : issues;
   return { ok: blockingIssues.length === 0, targets, targetMap, plans, issues: blockingIssues };
 }
 

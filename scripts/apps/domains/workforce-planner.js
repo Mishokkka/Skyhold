@@ -1,32 +1,19 @@
-import { buildWorkAllocationTargets, buildPlannedWorkSlots, parseWorkAllocationTargetKey, validateHoldingWorkAllocations } from "../../data/work-allocations.js";
+import { buildWorkAllocationTargets, buildPlannedWorkSlots } from "../../data/work-allocations.js";
+import { canReadResident } from "../../data/access-guard.js";
 import { isResidentInPopulation } from "../../data/resident-presence.js";
 import { DEFAULT_NORMAL_LABOR_QD, residentLaborCapacity } from "../../data/labor-budget.js";
-import { workforcePlan, workforceKey, workforceLockKey, workforceCapacity, workforceUnavailable, workforceChangeError } from "../../data/workforce-plan.js";
+import { normalizeProductionGoals, workforcePlan, workforceKey, workforceLockKey, workforceCapacity, workforceUnavailable, workforceChangeError } from "../../data/workforce-plan.js";
 import { workerAdmission, buildingCompositionStatus } from "../../engines/workers/building-qualification.js";
 import { financePeriodIdentity } from "../../engines/economy/finance-period.js";
 import { calculatePlannedWorkerWage } from "../../engines/economy/finance-obligations.js";
 import { workforceTaskState, workforceOperationalMinimum, workforceProductionGoalState } from "./workforce-task-state.js";
 import { politicsRuntimeEffects } from "../../engines/politics/runtime-effects.js";
-import { buildingLaborCapacityQd, buildingReservedQd, productionPreparationGoal } from "../../data/labor-model.js";
+import { buildingLaborCapacityQd, buildingWorkReservations, productionPreparationGoal } from "../../data/labor-model.js";
 
 const clone = (value) => structuredClone(value);
 const sum = (rows, field) => rows.reduce((total, row) => total + Number(row[field] || 0), 0);
 const shown = (row, isGM) => isGM || row.visibility !== "gm";
 const hasWork = (row) => Number(row?.normalQd ?? 0) > 0 || Number(row?.overtimeQd ?? 0) > 0;
-
-function normalizeProductionGoals(goals) {
-  if (Array.isArray(goals)) return clone(goals);
-  if (!goals || typeof goals !== "object") return [];
-  const rows = [];
-  for (const [key, raw] of Object.entries(goals)) {
-    const parsed = parseWorkAllocationTargetKey(key);
-    const sourceId = parsed.sourceId || String(key ?? "").trim();
-    const functionId = parsed.functionId || "";
-    const preparedUnits = Math.max(0, Math.floor(Number(raw?.preparedUnits ?? raw) || 0));
-    if (sourceId && preparedUnits > 0) rows.push({ sourceId, functionId, preparedUnits });
-  }
-  return rows;
-}
 
 function effectiveLabor(service, holding, task, person) {
   if (!task.building || !["production", "agriculture", "livestock"].includes(task.kind)) return 1;
@@ -75,10 +62,7 @@ export function applyWorkforceDraft(holding, draft) {
 export function workforceDraftError(holding, draft, { isGM = false } = {}) {
   let next;
   try { next = applyWorkforceDraft(clone(holding), draft); } catch (error) { return error.message; }
-  const error = workforceChangeError(holding, next, { isGM });
-  if (error) return error;
-  const validation = validateHoldingWorkAllocations(next, { previousHolding: holding });
-  return validation.ok ? "" : isGM ? validation.issues[0].message : "План конфликтует с назначениями или вместимостью здания. Проверьте выделенные QD; скрытые назначения может проверить ГМ.";
+  return workforceChangeError(holding, next, { isGM });
 }
 
 export function buildWorkforceModel(holding, draft, service, { isGM = false, presenceHolding = holding } = {}) {
@@ -130,12 +114,13 @@ export function buildWorkforceModel(holding, draft, service, { isGM = false, pre
   const taskMap = new Map(tasks.map((row) => [row.key, row]));
   const slotsByPerson = new Map();
   // A retained draft must not bring back residents who have since died or left.
-  const presentIds = new Set((presenceHolding.people?.list ?? []).filter((person) => isResidentInPopulation(person, presenceHolding)).map((person) => String(person.id)));
-  const people = (holding.people?.list ?? []).filter((person) => shown(person, isGM) && presentIds.has(String(person.id))).map((person) => {
+  const presentPeople = new Map((presenceHolding.people?.list ?? []).filter((person) => isResidentInPopulation(person, presenceHolding))
+    .map((person) => [String(person.id), person]));
+  const people = (holding.people?.list ?? []).filter((person) => canReadResident(person, { isGM }) && presentPeople.has(String(person.id))).map((person) => {
     const id = String(person.id);
     const allRows = draft.allocations[id] ?? [];
     const hiddenWork = !isGM && allRows.some((row) => hasWork(row) && !taskMap.has(workforceKey(row)) && buildingMap.get(row.sourceId)?.visibility === "gm");
-    const unavailable = workforceUnavailable(holding, person) || (hiddenWork ? "Есть скрытые назначения; нужен ГМ" : "")
+    const unavailable = workforceUnavailable(presenceHolding, presentPeople.get(id)) || (hiddenWork ? "Есть скрытые назначения; нужен ГМ" : "")
       || (inputs.oldBlockers.workers[id]?.blocked ? "Долг по оплате труда" : "");
     const capacity = workforceCapacity(person, working);
     const rows = hiddenWork ? [] : allRows.map((row) => ({
@@ -235,9 +220,7 @@ export function buildWorkforceModel(holding, draft, service, { isGM = false, pre
     }
     task.attention ||= Boolean(task.warnings.length);
   }
-  const reservedQdByBuilding = new Map(
-    (working.buildings?.list ?? []).map((building) => [String(building.id), buildingReservedQd(working, building.id)])
-  );
+  const reservedQdByBuilding = buildingWorkReservations(working, { presentIds: presentPeople });
   // Pure time/content lines are informational; assigning labor would never advance them.
   for (const building of holding.buildings?.list ?? []) {
     if (!shown(building, isGM)) continue;

@@ -456,9 +456,6 @@ export function normalizeBuilding(building, options = {}) {
   building.activation.minWorkers = 0;
   if (building.workerProfile) building.workerProfile.workersMin = 0;
   building.labor = normalizeBuildingLabor(building.labor, building);
-  if (Array.isArray(options?.people) && Array.isArray(building.assignedWorkerIds) && building.assignedWorkerIds.length) {
-    preserveLegacyBuildingAssignments({ buildings: { list: [building] }, people: { list: options.people } });
-  }
   delete building.assignedWorkerIds;
   if (!Array.isArray(building.workerAdmissionOverrideIds)) building.workerAdmissionOverrideIds = [];
   building.workerAdmissionOverrideIds = [...new Set(building.workerAdmissionOverrideIds.map((id) => String(id ?? "")).filter(Boolean))];

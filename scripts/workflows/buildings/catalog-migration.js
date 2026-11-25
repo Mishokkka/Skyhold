@@ -9,9 +9,9 @@ import { stableDataHash } from "../../data/storage-commit.js";
 import { clone } from "../../data/utils.js";
 import { sourceMaterialState } from "../../engines/economy/construction-stages.js";
 import { validProductionTiming } from "../../engines/economy/production-timing.js";
-import { buildWorkAllocationTargets } from "../../data/work-allocations.js";
-import { normalizeBuildingLabor, validateBuildingLaborAndGoals } from "../../data/labor-model.js";
-import { normalizeCatalogPartition } from "../../data/normalizers.js";
+import { buildWorkAllocationTargets, validateHoldingWorkAllocations } from "../../data/work-allocations.js";
+import { hasLegacyBuildingLabor, hasLegacyLabor, hasLegacyResidentLabor, laborMigrationSourceHash, normalizeBuildingLabor, validateBuildingLaborAndGoals } from "../../data/labor-model.js";
+import { normalizeSkyholdData, normalizeCatalogPartition } from "../../data/normalizers.js";
 import { normalizeBuilding } from "../../data/normalizers/building.js";
 
 export const BUILDING_CATALOG_MIGRATION_NAMESPACE = "fbl-skyhold.buildings.catalog";
@@ -158,7 +158,18 @@ function migrateProductionLines(source = {}, target = {}, issues = [], label = "
     const hasReservedWork = (line.waitingBatches?.length ?? 0) > 0 || whole(line?.workProgressUnits) > 0
       || line?.workInputsReserved === true
       || whole(line?.workReservedOutputQty) > 0;
-    if (!matched || (hasReservedWork && !canCarryProductionWork(line, matchedLines.get(index)))) {
+    const targetLine = matchedLines.get(index);
+    const partialCollection = whole(line.collectProgressQd) > 0 && whole(line.pendingQty) > 0;
+    if (matched && partialCollection && (targetLine.requiresCollection !== true
+      || whole(line.collectQd) !== whole(targetLine.collectQd))) {
+      issues.push({
+        code: "collection-in-progress",
+        buildingId: text(source.id),
+        buildingName: label,
+        detail: `Линия «${text(line.resource || line.resourceId || line.id)}»: условия сбора изменились при прогрессе ${line.collectProgressQd} из ${line.collectQd} QD. Завершите сбор и обновите расчёт.`
+      });
+    }
+    if (!matched || (hasReservedWork && !canCarryProductionWork(line, targetLine))) {
       issues.push({
         code: hasReservedWork ? "production-in-progress" : "unmatched-pending-output",
         buildingId: text(source?.id),
@@ -305,7 +316,7 @@ function preserveTradeSelection(source = {}, target = {}) {
   }
 }
 
-function migrateBuildingInstance(source, targetTemplate, targetId, people, issues = []) {
+function migrateBuildingInstance(source, targetTemplate, targetId, issues = []) {
   const next = clone(targetTemplate);
   next.id = text(source?.id);
   next.templateId = targetId;
@@ -327,7 +338,7 @@ function migrateBuildingInstance(source, targetTemplate, targetId, people, issue
   }
   delete next.serviceState;
   delete next.assignedWorkerIds;
-  normalizeBuilding(next, { mode: "load", preserveTemplateMechanics: true, people });
+  normalizeBuilding(next, { mode: "load", preserveTemplateMechanics: true });
   // Contents are player inventory, not part of the catalog revision.
   if (own(source, "contents")) next.contents = clone(source.contents);
   return next;
@@ -402,7 +413,6 @@ export function planBuildingCatalogMigration({
   targetData.catalog.buildings = targetData.catalog.buildings.map((row) => targetById.get(text(row.id)) ?? row);
   const counts = { ...EMPTY_MIGRATION_COUNTS };
   for (const holding of targetData.holdings ?? []) {
-    const people = holding?.people?.list ?? [];
     for (let index = 0; index < (holding?.buildings?.list ?? []).length; index += 1) {
       const prior = holding.buildings.list[index];
       const templateId = text(prior.templateId);
@@ -435,7 +445,7 @@ export function planBuildingCatalogMigration({
       let updated = prior;
       if (replaceCatalog) {
         const firstIssue = issues.length;
-        updated = migrateBuildingInstance(prior, template, templateId, people, issues);
+        updated = migrateBuildingInstance(prior, template, templateId, issues);
         for (const issue of issues.slice(firstIssue)) Object.assign(issue, { holdingId: text(holding.id), holdingName: text(holding.name) });
       }
       const changed = replaceCatalog && stableDataHash(prior) !== stableDataHash(updated);
@@ -545,5 +555,93 @@ export function applyBuildingCatalogMigration({ currentData = {}, plan = null, o
     data: clone(plan.targetData),
     marker: clone(plan.targetData?.meta?.buildingCatalogMigration ?? null),
     preview: clone(plan.preview)
+  };
+}
+
+export function planLaborMigration(source) {
+  const hasChanges = hasLegacyLabor(source);
+  if (!hasChanges) return { hasChanges, canApply: false, decisions: [] };
+  const targetData = normalizeSkyholdData(source);
+  const decisions = [];
+  let changedInstances = 0;
+  const holdings = Array.isArray(source.holdings) ? source.holdings : [];
+  const nextHoldings = new Map(targetData.holdings.map((holding) => [holding.id, holding]));
+  for (const holding of holdings) {
+    if (!holding) continue;
+    const next = nextHoldings.get(String(holding.id));
+    const name = holding.name || holding.id || "Владение";
+    const people = Array.isArray(holding.people?.list) ? holding.people.list : [];
+    const nextPeople = new Map((next?.people?.list ?? []).map((person) => [person.id, person]));
+    const nextBuildings = new Map((next?.buildings?.list ?? []).map((building) => [building.id, building]));
+    const buildings = Array.isArray(holding.buildings?.list) ? holding.buildings.list : [];
+    const beforeBuildings = new Map(buildings.filter(Boolean).map((building) => [String(building.id), building]));
+    const assignedRows = new Map();
+    for (const building of beforeBuildings.values()) {
+      if (!hasLegacyBuildingLabor(building)) continue;
+      changedInstances += 1;
+      const savedCapacity = nextBuildings.get(String(building.id))?.labor?.capacityQd;
+      const capacity = savedCapacity === null ? "без общего предела" : `${savedCapacity ?? 0} QD`;
+      decisions.push({ detail: `${name} · ${building.name || building.id}: вместимость после переноса — ${capacity}.` });
+      for (const personId of Array.isArray(building.assignedWorkerIds) ? building.assignedWorkerIds : []) {
+        if (!personId) continue;
+        const id = String(personId);
+        if (!assignedRows.has(id)) assignedRows.set(id, []);
+        assignedRows.get(id).push(String(building.id));
+      }
+    }
+
+    for (const person of people) {
+      if (!person) continue;
+      const personId = String(person.id);
+      const assignedIds = assignedRows.get(personId) ?? [];
+      assignedRows.delete(personId);
+      if (!hasLegacyResidentLabor(person) && !assignedIds.length) continue;
+      const oldStaff = person.staffAppointment;
+      const staffBuilding = String(oldStaff?.buildingId || oldStaff?.sourceId || person.workAssignment || "");
+      const buildingIds = new Set([...assignedIds, ...(oldStaff && staffBuilding ? [staffBuilding] : [])]);
+      const saved = nextPeople.get(personId);
+      const label = `${name} · ${person.name || personId}`;
+      for (const buildingId of buildingIds) {
+        const buildingName = beforeBuildings.get(buildingId)?.name || buildingId;
+        const rows = (saved?.workAllocations ?? []).filter((row) => row.sourceId === buildingId && row.normalQd + row.overtimeQd > 0);
+        const work = rows.map((row) => `${row.functionId} (${row.normalQd} QD, сверхурочно ${row.overtimeQd} QD)`).join(", ");
+        decisions.push({ detail: `${label} · ${buildingName}: ${work || "назначение не перенесено"}.` });
+      }
+      if (oldStaff && !staffBuilding) decisions.push({ detail: `${label}: штатное назначение без здания не перенесено.` });
+      if (oldStaff?.reserveFunctionId && oldStaff.reserveFunctionId !== oldStaff.primaryFunctionId) {
+        decisions.push({ detail: `${label}: резервная функция «${oldStaff.reserveFunctionId}» требует отдельного распределения QD.` });
+      }
+      if (oldStaff?.volunteer === true) {
+        const preserved = saved?.workAllocations?.some((row) => row.sourceId === staffBuilding && row.volunteer === true);
+        decisions.push({ detail: `${label}: договор о бесплатной работе ${preserved ? "перенесён" : "не перенесён"}.` });
+      } else if (oldStaff && Number(oldStaff.wageDailyCopper ?? oldStaff.dailyRateCopper) > 0) {
+        const rate = saved?.wageDailyOverrideCopper;
+        decisions.push({ detail: `${label}: дневная ставка после перехода — ${rate ?? "по правилам функции"}.` });
+      }
+      if (Number(person.salaryModifier)) {
+        decisions.push({ detail: `${label}: военная надбавка после перехода — ${saved?.militarySalaryModifier ?? "не перенесена"}.` });
+      }
+    }
+    for (const [personId, buildingIds] of assignedRows) {
+      decisions.push({ detail: `${name}: назначение отсутствующего жителя ${personId} (${buildingIds.join(", ")}) не перенесено.` });
+    }
+    const retiredGoals = Array.isArray(holding.workforcePlan?.goals) ? holding.workforcePlan.goals.length : 0;
+    if (retiredGoals) decisions.push({ detail: `${name}: прежние цели в QD (${retiredGoals}) останутся в резервном снимке.` });
+    if (next) {
+      for (const issue of validateHoldingWorkAllocations(next).issues) {
+        decisions.push({ detail: `${name} · проверьте план труда после перехода: ${issue.message}` });
+      }
+    }
+  }
+  return {
+    hasChanges,
+    canApply: true,
+    sourceHash: laborMigrationSourceHash(source),
+    targetData,
+    decisions,
+    preview: {
+      changedInstances,
+      catalogTemplates: targetData.catalog.buildings.length
+    }
   };
 }
