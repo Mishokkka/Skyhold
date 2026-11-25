@@ -20,11 +20,10 @@ import {
   syncResourceRowBatches,
   takeResourceBatches
 } from "../core/resource-batches.js";
-import { validateHoldingWorkAllocations } from "./work-allocations.js";
 import { protectedSpecialRecordFields, specialMoraleModifier } from "../core/special-effects.js";
 import { isResidentAway, isResidentRestingOnShip } from "./resident-presence.js";
 import { isSheriffAppointment } from "./control-appointments.js";
-import { workforceChangeError, workforceIssueMessage } from "./workforce-plan.js";
+import { workforceChangeError } from "./workforce-plan.js";
 import { hiddenBuildingIds, residentHasHiddenWork } from "./access-guard.js";
 
 const MAX_PLAYER_CHANGE_PATHS = 250;
@@ -417,8 +416,6 @@ function validatePlayerPatchSemantics(current, proposed, action, holdingIndex, p
   if (plannerOperation && plannerOperation.payload.expectedRevision !== Number(current.meta?.revision)) {
     return { ok: false, error: "Общий план устарел: поселение изменилось. Черновик нужно сверить заново." };
   }
-  const workAllocationCheck = validateHoldingWorkAllocations(nextHolding, { previousHolding: holding });
-  if (!workAllocationCheck.ok) return { ok: false, error: workforceIssueMessage(nextHolding, workAllocationCheck.issues[0]) };
 
   if (action === "storage") return validatePlayerStorageSemantics(holding, nextHolding, paths);
   if (action === "special") return validatePlayerSpecialSemantics(holding, nextHolding);

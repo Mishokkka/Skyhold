@@ -5,10 +5,9 @@ import { splitList } from "../../core/helpers.js";
 import { buildingOperationalState } from "../../core/building-state.js";
 import { makeId } from "../../data/utils.js";
 import { clearPersonFromAssignments } from "../../data/resident-assignments.js";
-import { isResidentInPopulation } from "../../data/resident-presence.js";
 import { residentLaborCapacity } from "../../data/labor-budget.js";
 import { buildingAcceptsWorkers, buildingLaborCapacityQd, buildingReservedQd } from "../../data/labor-model.js";
-import { MAX_WORK_ALLOCATIONS_PER_PERSON, buildingWorkerIds, buildWorkAllocationTargets } from "../../data/work-allocations.js";
+import { MAX_WORK_ALLOCATIONS_PER_PERSON, buildingWorkerIds, buildWorkAllocationTargets, validateHoldingWorkAllocations } from "../../data/work-allocations.js";
 import {
   constructionLeaderCoordinationBonus,
   constructionLeaderQualification
@@ -112,10 +111,7 @@ _applyDefenseSalaries(holding) {
 _assignPersonToBuilding(holding, personId, buildingId, options = {}) {
   const person = this._findPerson(holding, personId);
   const building = (holding?.buildings?.list ?? []).find((item) => String(item.id) === String(buildingId));
-  if (!person || person.dead || !isResidentInPopulation(person, holding)
-    || this._safeNumber(person?.injuredDays, 0) > 0
-    || (this._canResidentWork && !this._canResidentWork(person, holding))
-    || !building || !buildingOperationalState(building).operational || !buildingAcceptsWorkers(building)) {
+  if (!person || !building || !buildingOperationalState(building).operational || !buildingAcceptsWorkers(building)) {
     return false;
   }
   const admission = this._buildingWorkerAdmission?.(building, person) ?? { eligible: true, hard: false, overridden: false };
@@ -128,22 +124,6 @@ _assignPersonToBuilding(holding, personId, buildingId, options = {}) {
   if (!target) return false;
 
   const replace = options.replace === true;
-  if (!replace) {
-    const assignment = String(person.workAssignment ?? "").trim();
-    const pid = String(person.id ?? "");
-    const inDefense = ["soldier", "defenseCommander"].includes(assignment)
-      || String(holding?.gm?.defense?.commanderId ?? "") === pid
-      || (holding?.gm?.defense?.squads ?? []).some((s) => String(s?.sergeantId ?? "") === pid || (s?.memberIds ?? []).some((m) => String(m) === pid));
-    const inCrew = assignment.startsWith("construction")
-      || (holding?.constructionCrewIds ?? []).some((m) => String(m) === pid)
-      || (holding?.constructionCrews ?? []).some((c) => String(c?.leaderId ?? "") === pid
-        || String(c?.distributedLeaderId ?? "") === pid
-        || (c?.memberIds ?? []).some((m) => String(m) === pid)
-        || (c?.distributedIds ?? []).some((m) => String(m) === pid));
-    const isSpecial = assignment === "other" || assignment === "sheriff";
-    if (inDefense || inCrew || isSpecial) return false;
-  }
-
   const cap = residentLaborCapacity(person, holding);
   const currentAllocations = Array.isArray(person.workAllocations) ? person.workAllocations : [];
   const existingTarget = currentAllocations.find((row) => String(row?.sourceId ?? "") === String(building.id)
@@ -167,16 +147,19 @@ _assignPersonToBuilding(holding, personId, buildingId, options = {}) {
   const qd = Math.min(requested, remainingNormal, remainingBuilding);
   if (qd <= 0) return false;
 
-  if (replace) this._clearPersonFromAssignments(holding, personId);
-  person.workAssignment = "";
-  if (!Array.isArray(person.workAllocations)) person.workAllocations = [];
-  const existing = person.workAllocations.find((row) => String(row?.sourceId ?? "") === String(building.id)
+  const next = structuredClone(holding);
+  if (replace) clearPersonFromAssignments(next, personId);
+  const nextPerson = next.people.list.find((row) => String(row.id) === String(personId));
+  const nextBuilding = next.buildings.list.find((row) => String(row.id) === String(buildingId));
+  nextPerson.workAssignment = "";
+  nextPerson.workAllocations ??= [];
+  const existing = nextPerson.workAllocations.find((row) => String(row?.sourceId ?? "") === String(building.id)
     && String(row?.functionId ?? "") === target.functionId);
   if (existing) {
     existing.normalQd = Math.max(0, Math.floor(Number(existing.normalQd ?? existing.qd ?? 0) || 0)) + qd;
     delete existing.qd;
   } else {
-    person.workAllocations.push({
+    nextPerson.workAllocations.push({
       schemaVersion: 1,
       id: makeId("work"),
       sourceId: String(building.id),
@@ -189,11 +172,20 @@ _assignPersonToBuilding(holding, personId, buildingId, options = {}) {
   const preserveAdmissionOverride = admission.hard && !admission.eligible
     && (admission.overridden || options.allowAdmissionOverride);
   if (preserveAdmissionOverride) {
-    if (!Array.isArray(building.workerAdmissionOverrideIds)) building.workerAdmissionOverrideIds = [];
-    if (!building.workerAdmissionOverrideIds.some((id) => String(id) === String(personId))) {
-      building.workerAdmissionOverrideIds.push(String(personId));
-    }
+    nextBuilding.workerAdmissionOverrideIds = [...new Set([...(nextBuilding.workerAdmissionOverrideIds ?? []), String(personId)])];
   }
+  const check = validateHoldingWorkAllocations(next, {
+    previousHolding: holding,
+    replacedPersonId: replace ? personId : ""
+  });
+  if (!check.ok) {
+    if (options.out) options.out.reason = check.issues[0]?.message;
+    return false;
+  }
+  if (replace) this._clearPersonFromAssignments(holding, personId);
+  person.workAssignment = "";
+  person.workAllocations = nextPerson.workAllocations;
+  if (preserveAdmissionOverride) building.workerAdmissionOverrideIds = nextBuilding.workerAdmissionOverrideIds;
   return true;
 },
 

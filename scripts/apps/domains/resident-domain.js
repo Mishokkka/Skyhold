@@ -38,7 +38,8 @@ import {
 } from "../../data/military-resident-rules.js";
 import {
   buildingAcceptsWorkers,
-  buildingLaborCapacityQd
+  buildingLaborCapacityQd,
+  buildingWorkReservations
 } from "../../data/labor-model.js";
 import {
   buildWorkAllocationTargets,
@@ -494,31 +495,12 @@ _beliefOptions(current = "") {
 _residentWorkOptionsContext(holding) {
   const hidden = hiddenBuildingIds(holding);
   const allBuildings = (holding?.buildings?.list ?? []).filter((building) => !hidden.has(String(building.id)));
-  const livingPeople = (holding?.people?.list ?? []).filter((person) => !person?.dead);
   const crews = this._constructionCrews(holding);
   const buildingsById = new Map();
   const crewsById = new Map();
   const availableBuildingIds = new Set();
   const buildingRoleNames = new Set();
-  const residentAssignments = new Map();
-  const allocatedQdByBuilding = new Map();
-
-  for (const person of livingPeople) {
-    const personId = String(person?.id ?? "");
-    if (!personId) continue;
-    for (const allocation of person?.workAllocations ?? []) {
-      const targetBuildingId = String(allocation?.sourceId ?? "");
-      const qd = Math.max(0, this._safeNumber(allocation?.normalQd, 0)) + Math.max(0, this._safeNumber(allocation?.overtimeQd, 0));
-      if (!targetBuildingId || qd <= 0) continue;
-      allocatedQdByBuilding.set(targetBuildingId, (allocatedQdByBuilding.get(targetBuildingId) ?? 0) + qd);
-      if (!residentAssignments.has(targetBuildingId)) residentAssignments.set(targetBuildingId, new Set());
-      residentAssignments.get(targetBuildingId).add(personId);
-    }
-    const buildingId = String(person?.workAssignment ?? "");
-    if (!buildingId) continue;
-    if (!residentAssignments.has(buildingId)) residentAssignments.set(buildingId, new Set());
-    residentAssignments.get(buildingId).add(personId);
-  }
+  const allocatedQdByBuilding = buildingWorkReservations(holding);
 
   const targets = buildWorkAllocationTargets(holding);
   const buildingsWithAvailableTarget = new Set(targets.filter((target) => target.available).map((target) => String(target.sourceId)));
@@ -543,15 +525,22 @@ _residentWorkOptionsContext(holding) {
   const targetLabelsByKey = new Map(targets.map((target) => [target.key, target]));
 
   return { holding, allBuildings, buildingsById, crews, crewsById, availableBuildingIds, buildingRoleNames,
-    targetLabelsByKey, hiddenBuildingIds: hidden, buildingOptionsCache: new Map() };
+    targetLabelsByKey, hiddenBuildingIds: hidden, buildingOptionsCache: new Map(),
+    allocatedQdByBuilding, buildingsWithAvailableTarget };
 },
 
-_residentWorkOptionBuildings(context, selected = "") {
-  const key = String(selected ?? "");
+_residentWorkOptionBuildings(context, selected = "", person = null) {
+  const key = JSON.stringify([selected, person?.id]);
   if (context.buildingOptionsCache.has(key)) return context.buildingOptionsCache.get(key);
+  const ownReservations = person ? buildingWorkReservations({ people: { list: [person] } }) : new Map();
   const buildings = context.allBuildings.filter((building) => {
     const id = String(building?.id ?? "");
-    return id && (key === id || context.availableBuildingIds.has(id));
+    if (!id) return false;
+    if (id === selected || context.availableBuildingIds.has(id)) return true;
+    const own = ownReservations.get(id) ?? 0;
+    const capacity = buildingLaborCapacityQd(building);
+    return own > 0 && capacity > 0 && context.buildingsWithAvailableTarget.has(id)
+      && (context.allocatedQdByBuilding.get(id) ?? 0) - own < capacity;
   });
   context.buildingOptionsCache.set(key, buildings);
   return buildings;
@@ -638,7 +627,7 @@ _workOptions(holding, person = {}, workContext = null) {
   const isChild = this._isChildResident(person);
   const canWork = this._canResidentWork(person, holding);
   const freeLabel = isChild ? "Ребенок" : "Свободен";
-  const buildings = canWork ? this._residentWorkOptionBuildings(context, isMixed ? "" : selected) : [];
+  const buildings = canWork ? this._residentWorkOptionBuildings(context, isMixed ? "" : selected, person) : [];
   const crews = canWork ? context.crews : [];
   const leaderCrew = selected.startsWith("construction-leader:")
     ? context.crewsById.get(selected.slice("construction-leader:".length)) : null;

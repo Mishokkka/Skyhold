@@ -2,7 +2,7 @@ import { MODULE_ID } from "../data/constants.js";
 import { SkyholdData } from "../data/store.js";
 import { findReadableHoldingEntry } from "../data/access-guard.js";
 import { holdingPermissionContext } from "../data/holding-permissions.js";
-import { workforceKey, workforceLockKey, workforceCapacity } from "../data/workforce-plan.js";
+import { workforceKey, workforceLockKey, workforceCapacity, workforceProductionGoalKey } from "../data/workforce-plan.js";
 import { makeId } from "../data/utils.js";
 import { buildingAppearance } from "../core/building-appearance.js";
 import { getSkyholdWorkflowService } from "../workflows/skyhold-workflow-service.js";
@@ -361,7 +361,7 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
         before: this._allocationText(fresh.allocations[id], this._model),
         after: this._allocationText(draft.allocations[id], this._model) });
     }
-    for (const [kind, keyFor] of [["locks", workforceLockKey], ["productionGoals", workforceKey]]) {
+    for (const [kind, keyFor] of [["locks", workforceLockKey], ["productionGoals", workforceProductionGoalKey]]) {
       const old = new Map((this.initial.plan[kind] ?? []).map((row) => [keyFor(row), row])), next = new Map((this.draft.plan[kind] ?? []).map((row) => [keyFor(row), row]));
       for (const key of new Set([...old.keys(), ...next.keys()])) {
         if (same(old.get(key), next.get(key))) continue;

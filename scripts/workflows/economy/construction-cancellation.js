@@ -80,8 +80,12 @@ function releaseAssignedWorkers(holding, building, dependencies = {}) {
       touched = true;
     }
     if (text(person.workAssignment) === buildingId) {
-      if (typeof dependencies.setPersonFree === "function") dependencies.setPersonFree(holding, personId);
-      else {
+      if ((person.workAllocations ?? []).some((row) => Number(row?.normalQd ?? row?.qd ?? 0) > 0 || Number(row?.overtimeQd) > 0)) {
+        person.workAssignment = "";
+        person.role = "План QD";
+      } else if (typeof dependencies.setPersonFree === "function") {
+        dependencies.setPersonFree(holding, personId);
+      } else {
         person.workAssignment = "";
         person.role = "Свободен";
       }

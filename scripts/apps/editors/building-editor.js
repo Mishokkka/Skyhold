@@ -7,7 +7,7 @@ import { normalizeAgricultureBuilding } from "../../data/agriculture.js";
 import { normalizeLivestockBuilding } from "../../data/livestock.js";
 import { SkyholdData, requestConstructionOperation } from "../../data/store.js";
 import { makeId } from "../../data/utils.js";
-import { findReadableHoldingEntry } from "../../data/access-guard.js";
+import { canReadResident, findReadableHoldingEntry } from "../../data/access-guard.js";
 import { holdingPermissionContext } from "../../data/holding-permissions.js";
 import { SaveStatus, syncSaveStatus } from "../common/save-status.js";
 import { fieldValue } from "../../core/helpers.js";
@@ -41,19 +41,19 @@ import {
   buildingAcceptsWorkers,
   buildingLaborCapacityQd,
   buildingMinOperationalQd,
+  buildingReservedQd,
   newLaborIssues,
-  reservedOccupation,
   uncollectibleProductionLine,
   validateBuildingLaborAndGoals
 } from "../../data/labor-model.js";
 import {
   buildWorkAllocationTargets,
   buildingWorkAllocationsForBuilding,
+  residentWorkUnavailable,
   validateHoldingWorkAllocations,
   workAllocationTargetKey
 } from "../../data/work-allocations.js";
 import { residentLaborCapacity } from "../../data/labor-budget.js";
-import { isResidentInPopulation } from "../../data/resident-presence.js";
 import { workerTypeFromAttributes } from "../../generators/resident-rules.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
@@ -597,7 +597,7 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(PendingFieldSavesMix
       .map((target) => ({
         key: target.key,
         functionId: target.functionId,
-        label: target.functionLabel || target.label,
+        label: target.functionName || target.label,
         overtimeAllowed: target.overtimeAllowed
       }));
     building.hasMultipleAssignTargets = building.buildingAssignTargets.length > 1;
@@ -605,14 +605,12 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(PendingFieldSavesMix
 
     const manager = getActiveSkyholdManager();
     const assignments = [];
-    let laborPlannedQd = 0;
     for (const person of holding?.people?.list ?? []) {
       const personId = String(person?.id ?? "");
-      if (!personId || person?.dead) continue;
+      if (!personId || !canReadResident(person) || person.dead) continue;
       for (const allocation of buildingWorkAllocationsForBuilding(person, buildingId)) {
         const normalQd = Math.max(0, Math.floor(Number(allocation?.normalQd ?? 0) || 0));
         const overtimeQd = Math.max(0, Math.floor(Number(allocation?.overtimeQd ?? 0) || 0));
-        laborPlannedQd += normalQd + overtimeQd;
         const fnId = String(allocation?.functionId ?? "");
         const target = targetsByKey.get(workAllocationTargetKey(buildingId, fnId));
         assignments.push({
@@ -620,7 +618,7 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(PendingFieldSavesMix
           personName: String(person?.name || "Житель"),
           allocationId: String(allocation?.id ?? ""),
           functionId: fnId,
-          functionLabel: String(target?.functionLabel || target?.label || fnId || "Работа"),
+          functionLabel: String(target?.functionName || target?.label || fnId || "Работа"),
           normalQd,
           overtimeQd,
           qdLine: `${normalQd} QD${overtimeQd ? ` + ${overtimeQd} OT` : ""}`
@@ -628,15 +626,14 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(PendingFieldSavesMix
       }
     }
     building.buildingWorkerAssignments = assignments;
-    building.laborPlannedQd = laborPlannedQd;
+    building.assignedCount = new Set(assignments.map((row) => row.personId)).size;
+    building.laborPlannedQd = buildingReservedQd(holding, buildingId);
 
     const candidates = [];
     for (const person of holding?.people?.list ?? []) {
       const personId = String(person?.id ?? "");
-      if (!personId || person?.dead || !isResidentInPopulation(person, holding)) continue;
-      if ((Number(person?.injuredDays ?? 0) || 0) > 0) continue;
+      if (!personId || !canReadResident(person) || residentWorkUnavailable(holding, person)) continue;
       if (manager?._canResidentWork && !manager._canResidentWork(person, holding)) continue;
-      if (reservedOccupation(holding, person)) continue;
       const cap = residentLaborCapacity(person, holding);
       let usedNormal = 0;
       let usedOvertime = 0;
@@ -664,7 +661,7 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(PendingFieldSavesMix
     }
     building.buildingAssignCandidates = candidates;
     const firstAvailable = candidates.find((c) => !c.disabled)?.freeNormalQd ?? 20;
-    const remainingCap = capacityQd === null ? firstAvailable : Math.max(1, capacityQd - laborPlannedQd);
+    const remainingCap = capacityQd === null ? firstAvailable : Math.max(1, capacityQd - building.laborPlannedQd);
     building.defaultAssignQd = Math.max(1, Math.min(firstAvailable || 20, remainingCap));
   }
 
@@ -730,7 +727,7 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(PendingFieldSavesMix
     const manager = getActiveSkyholdManager({ warn: true });
     const current = this._getMutableBuilding();
     const person = (current.holding?.people?.list ?? []).find((row) => String(row?.id ?? "") === personId);
-    if (!current.holding || !current.building || !person) return;
+    if (!current.holding || !current.building || !canReadResident(person)) return;
     const decision = await confirmBuildingWorkerAdmission({ manager, building: current.building, person });
     if (!decision.allowed) {
       this.requestRender();
@@ -741,7 +738,7 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(PendingFieldSavesMix
       const previewHolding = structuredClone(holding);
       const targetBuilding = previewHolding.buildings?.list?.find((item) => String(item?.id ?? "") === String(building.id));
       const targetPerson = previewHolding.people?.list?.find((row) => String(row?.id ?? "") === personId);
-      if (!targetBuilding || !targetPerson) return SkyholdData.skipTransaction(false);
+      if (!targetBuilding || !canReadResident(targetPerson)) return SkyholdData.skipTransaction(false);
       if (!Array.isArray(targetPerson.workAllocations)) targetPerson.workAllocations = [];
       const existing = targetPerson.workAllocations.find((row) => (
         String(row?.sourceId ?? "") === String(targetBuilding.id)
@@ -800,11 +797,11 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(PendingFieldSavesMix
     if (!personId) return;
     const updated = await this._updateMutableBuilding(({ holding, building }) => {
       const person = (holding?.people?.list ?? []).find((row) => String(row?.id ?? "") === personId);
-      if (!person || !Array.isArray(person.workAllocations)) return SkyholdData.skipTransaction(false);
+      if (!canReadResident(person) || !Array.isArray(person.workAllocations)) return SkyholdData.skipTransaction(false);
       const buildingId = String(building.id ?? "");
       const before = person.workAllocations.length;
       person.workAllocations = person.workAllocations.filter((row) => (
-        allocationId ? String(row?.id ?? "") !== allocationId : String(row?.sourceId ?? "") !== buildingId
+        String(row?.sourceId ?? "") !== buildingId || (allocationId && String(row?.id ?? "") !== allocationId)
       ));
       if (person.workAllocations.length === before) return SkyholdData.skipTransaction(false);
       if (!person.workAllocations.length && !String(person.workAssignment ?? "").trim() && String(person.role ?? "") === "План QD") {

@@ -1,7 +1,9 @@
 import { buildingOperationalState } from "../../core/building-state.js";
 import { isSheriffAppointment } from "../../data/control-appointments.js";
 import { holdingPermissionContext } from "../../data/holding-permissions.js";
-import { buildingAcceptsWorkers, buildingLaborCapacityQd, buildingReservedQd, reservedOccupation } from "../../data/labor-model.js";
+import { buildingAcceptsWorkers, buildingLaborCapacityQd, buildingWorkReservations } from "../../data/labor-model.js";
+import { buildWorkAllocationTargets, residentWorkUnavailable, workFunctionMatches } from "../../data/work-allocations.js";
+import { canReadResident } from "../../data/access-guard.js";
 import { residentLaborCapacity } from "../../data/labor-budget.js";
 import { isResidentPresent } from "../../data/resident-presence.js";
 import { buildingServiceBlockReasons } from "../../engines/economy/building-service.js";
@@ -33,17 +35,16 @@ export function controlEffectText(control = {}) {
 
 /** Only free residents may become sheriff; Control building tasks also accept residents with free normal QD. */
 export function controlResidentAvailable(holding, person, manager, { sheriff = false, assignedIds = null } = {}) {
-  if (!manager?._canResidentWork?.(person, holding)) return false;
+  if (!person) return false;
   if (sheriff) {
+    if (!manager?._canResidentWork?.(person, holding)) return false;
     if ((person?.workAllocations ?? []).some((row) => Number(row?.normalQd ?? row?.qd ?? 0) > 0 || Number(row?.overtimeQd ?? 0) > 0)) return false;
     if ((assignedIds ?? manager?._assignedWorkerSet?.(holding))?.has(String(person.id))) return false;
     if (isSheriffAppointment(person)) return true;
     return !String(person?.workAssignment ?? "")
       && ["", "Свободен", "Без работы", "Ребенок"].includes(String(person?.role ?? ""));
   }
-  if (reservedOccupation(holding, person)) return false;
-  if (String(person?.workAssignment ?? "").trim()) return false;
-  if (!["", "Свободен", "Без работы", "Ребенок", "План QD"].includes(String(person?.role ?? "").trim())) return false;
+  if (residentWorkUnavailable(holding, person)) return false;
   const cap = residentLaborCapacity(person, holding);
   const usedNormal = (person?.workAllocations ?? []).reduce((sum, row) => (
     sum + Math.max(0, Math.floor(Number(row?.normalQd ?? row?.qd ?? 0) || 0))
@@ -56,6 +57,8 @@ export function prepareControlContext(holding, catalog = [], summary = {}, manag
   const canAssign = permission.canEditBuildings && typeof manager?._assignPersonToBuilding === "function";
   const people = holding?.people?.list ?? [];
   const buildings = holding?.buildings?.list ?? [];
+  const targets = buildWorkAllocationTargets(holding);
+  const reservedQd = buildingWorkReservations(holding);
   const sourcesById = new Map((summary.sources ?? []).map((source) => [String(source.id), source]));
   const totals = manager?._developmentSummary?.(holding)?.totals ?? {};
   const templates = new Map(catalog.map((template) => [String(template.id), template]));
@@ -77,36 +80,40 @@ export function prepareControlContext(holding, catalog = [], summary = {}, manag
     .map((building) => {
       const state = buildingOperationalState(building);
       const controlFn = controlServiceFunctionId(building);
+      const buildingId = String(building.id);
+      const functions = targets.filter((target) => target.sourceId === buildingId
+        && workFunctionMatches(target.functionId, controlFn));
+      const availableFunctions = functions.filter((target) => target.available);
+      const namesByFunction = new Map(functions.map((target) => [target.functionId, target.functionName]));
       const workers = [];
       let allocatedQd = 0;
       for (const person of people) {
-        if (!person || person.dead || !isResidentPresent(person)) continue;
-        const qd = (person.workAllocations ?? [])
-          .filter((row) => String(row?.sourceId ?? "") === String(building.id)
-            && (!controlFn || String(row?.functionId ?? "") === controlFn))
-          .reduce((sum, row) => sum + whole(row?.normalQd ?? row?.qd) + whole(row?.overtimeQd), 0);
-        if (qd <= 0) continue;
-        allocatedQd += qd;
-        const pid = String(person.id);
-        workers.push({
-          id: pid,
-          name: visible(person, user) ? person.name || "Житель" : "Скрытый или отсутствующий житель",
-          canRemove: canAssign && visible(person, user)
-        });
+        if (!canReadResident(person, user) || person.dead || !isResidentPresent(person)) continue;
+        for (const row of person.workAllocations ?? []) {
+          const functionId = String(row?.functionId ?? "");
+          if (String(row?.sourceId ?? "") !== buildingId || !workFunctionMatches(functionId, controlFn)) continue;
+          const qd = whole(row?.normalQd ?? row?.qd) + whole(row?.overtimeQd);
+          if (!qd) continue;
+          allocatedQd += qd;
+          workers.push({ id: String(person.id), name: person.name || "Житель", functionId,
+            functionName: namesByFunction.get(functionId) ?? functionId, canRemove: canAssign });
+        }
       }
       const workerIds = workers.map((worker) => worker.id);
       const candidates = freePeople.filter((person) => {
-        if (workerIds.includes(String(person.id))) return false;
+        if (availableFunctions.length === 1 && workerIds.includes(String(person.id))) return false;
         const admission = manager?._buildingWorkerAdmission?.(building, person);
         return user?.isGM || !admission?.hard || admission.eligible || admission.overridden;
       }).map((person) => ({ id: person.id, name: person.name || "Житель" }));
       const capacityQd = buildingLaborCapacityQd(building);
-      const buildingUsedQd = buildingReservedQd(holding, building.id);
+      const buildingUsedQd = reservedQd.get(buildingId) ?? 0;
       return { id: building.id, name: building.name || "Здание", role: building.workerRole || "Сотрудник учреждения",
         workers, hasWorkers: workers.length > 0, capacityQd, allocatedQd,
-        count: workerIds.length, qd: whole(building.activation?.minOperationalQd), admission: building.workerProfile?.admission?.text || "",
-        candidates, canAdd: canAssign && state.operational && (capacityQd === null || buildingUsedQd < capacityQd) && candidates.length > 0,
-        stateLabel: state.label };
+        count: new Set(workerIds).size, qd: whole(building.activation?.minOperationalQd), admission: building.workerProfile?.admission?.text || "",
+        candidates, availableFunctions, multipleFunctions: availableFunctions.length > 1, firstFunctionId: availableFunctions[0]?.functionId,
+        canAdd: canAssign && state.operational && availableFunctions.length > 0
+          && (capacityQd === null || buildingUsedQd < capacityQd) && candidates.length > 0,
+        stateLabel: state.operational && !availableFunctions.length ? "Нет доступной функции" : state.label };
     });
 
   // Keep catalog customizations. Owned buildings remain visible even if their template was removed.

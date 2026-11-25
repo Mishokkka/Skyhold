@@ -12,6 +12,7 @@ import { scaleProductionCosts } from "../../../core/production-expenses.js";
 import { advanceBuildingProject, buildingOperationalState } from "../../../core/building-state.js";
 import { hiddenBuildingIds } from "../../../data/access-guard.js";
 import { isMedicalBuilding } from "../../../core/building-specials.js";
+import { buildingActiveWorkerSummary } from "../../../engines/economy/building-service.js";
 import { evaluateArithmeticExpression, rollInlineDice } from "../../../core/formula.js";
 import {
   normalizeResourceId,
@@ -52,7 +53,7 @@ import {
   normalizeHungerLevel,
   settlementHungerFactor
 } from "../../../engines/economy/hunger.js";
-import { runProductionCycle } from "../../../engines/economy/production-cycle.js";
+import { advanceCollectionWork, finishProductionCollection, runProductionCycle } from "../../../engines/economy/production-cycle.js";
 import { refundProductionInputs } from "../../../engines/economy/production-inputs.js";
 import {
   CONSTRUCTION_LEADER_WAGE_DAILY_COPPER,
@@ -79,6 +80,7 @@ import { politicsDecisionContext } from "../../politics-decision-context.js";
 import { politicsRuntimeEffects } from "../../../engines/politics/runtime-effects.js";
 import { appendHoldingOperation } from "../../../data/operations.js";
 import {
+  allocatedBuildingQd,
   buildingWorkerIds,
   buildPlannedWorkSlots,
   plannedAssignmentQd,
@@ -891,23 +893,16 @@ _lineContentQuantity(building, line) {
 },
 
 _collectProductionLine(holding, building, line, { ignoreWorkTime = false } = {}) {
-  const pending = Math.max(0, Math.floor(this._safeNumber(line?.pendingQty, 0)));
-  if (!pending) return { ok: false, message: "Нечего собирать." };
+  if (!(Number(line?.pendingQty) > 0)) return { ok: false, message: "Нечего собирать." };
   const collectQd = Math.max(0, Math.ceil(this._safeNumber(line?.collectQd, 0)));
   if (collectQd > 0 && !(ignoreWorkTime && globalThis.game?.user?.isGM === true)) {
     return { ok: false, message: `Для сбора нужно ${collectQd} QD. Назначьте сбор в плане работ и проведите десятник.` };
   }
-  if (!ignoreWorkTime && collectQd > 0) {
-    const eff = this._safeNumber(this._buildingEffectiveWorkers(holding, building).total, 0);
-    const available = Math.max(0, Math.floor(eff * this._workQdPerWorker(1)));
-    if (available < collectQd) return { ok: false, message: `Не хватает рабочих QD для сбора (${available}/${collectQd}).` };
-  }
-  const resourceId = normalizeResourceId(line.resourceId, line.resource);
-  const resourceName = resourceId === "custom" ? (String(line.resource ?? "Ресурс") || "Ресурс") : resourceLabel(resourceId);
-  const roomId = this._normalizeStorageRoomId(line.storageRoomId ?? line.roomId);
-  const placements = this._storageAddWithOverflow(holding, { resourceId, name: resourceName, roomId }, pending);
-  line.pendingQty = 0;
-  return { ok: true, message: `${resourceName}: собрано ${pending}; ${this._storagePlacementText(holding, placements)}.`, resourceId, resourceName, qty: pending, roomId, placements, source: building?.name || "Здание" };
+  const { resourceId, name: resourceName, roomId } = this._productionCollectionResource(line);
+  const { qty, placements } = finishProductionCollection(line, (amount) => (
+    this._storageAddWithOverflow(holding, { resourceId, name: resourceName, roomId }, amount)
+  ));
+  return { ok: true, message: `${resourceName}: собрано ${qty}; ${this._storagePlacementText(holding, placements)}.`, resourceId, resourceName, qty, roomId, placements, source: building?.name || "Здание" };
 },
 
 _personBuildingEfficiency(holding, building, person, workerContext = null, options = { purpose: "production" }) {
@@ -1111,27 +1106,19 @@ async _lineOutputForCycle(line, context = {}) {
 },
 
 async _collectLineToStorage(holding, building, line, budgets, report, { by = "building", neededResource = "", workerContext = null } = {}) {
-  const pending = Math.max(0, Math.floor(this._safeNumber(line?.pendingQty, 0)));
-  if (!pending) return 0;
-  const collectQd = Math.max(0, Math.ceil(this._safeNumber(line?.collectQd, 0)));
-  if (collectQd > 0) {
-    const payer = by === "worker" ? building : building;
-    const functionId = this._financeLineFunctionId(line, (building?.productionLines ?? []).indexOf(line));
-    const spent = this._spendBuildingWorkerQd(holding, payer, budgets, collectQd, workerContext, functionId);
-    if (!spent.ok) {
-      report.skipped.push(`${building.name || "Здание"}: не хватает рабочих QD для сбора (${spent.spent}/${collectQd}).`);
-      return 0;
-    }
+  const resource = this._productionCollectionResource(line);
+  if (!(line?.pendingQty > 0) || (neededResource && normalizeResourceId(neededResource) !== resource.resourceId)) return 0;
+  const requiredQd = Math.max(0, Math.ceil(this._safeNumber(line.collectQd, 0)) - this._safeNumber(line.collectProgressQd, 0));
+  const functionId = this._financeLineFunctionId(line, (building.productionLines ?? []).indexOf(line));
+  const spent = this._spendBuildingWorkerQd(holding, building, budgets, requiredQd, workerContext, functionId);
+  if (!spent.ok) {
+    report.skipped.push(`${building.name || "Здание"}: не хватает рабочих QD для сбора (${spent.spent}/${requiredQd}).`);
+    return 0;
   }
-  const resourceId = normalizeResourceId(line.resourceId, line.resource);
-  if (neededResource && normalizeResourceId(neededResource) !== resourceId) return 0;
-  const resourceName = resourceId === "custom" ? (String(line.resource ?? "Ресурс") || "Ресурс") : resourceLabel(resourceId);
-  const roomId = this._normalizeStorageRoomId(line.storageRoomId ?? line.roomId);
-  const placements = this._storageAddWithOverflow(holding, { resourceId, name: resourceName, roomId }, pending);
-  line.pendingQty = 0;
-  line.collectProgressQd = 0;
-  this._pushProductionPlacement(report, holding, building.name || "Здание", resourceName, placements, by === "worker" ? " собрано работником-потребителем" : " собрано", resourceId);
-  return pending;
+  const { qty, placements } = finishProductionCollection(line, (amount) => this._storageAddWithOverflow(holding, resource, amount));
+  this._pushProductionPlacement(report, holding, building.name || "Здание", resource.name, placements,
+    by === "worker" ? " собрано работником-потребителем" : " собрано", resource.resourceId);
+  return qty;
 },
 
 async _autoCollectBuilding(holding, building, budgets, report, workerContext = null, financeContext = null) {
@@ -1144,34 +1131,17 @@ async _autoCollectBuilding(holding, building, budgets, report, workerContext = n
     if (String(line.autoCollect ?? "none") !== "building" && available <= 0) continue;
     if (!this._financeFunctionAllowed(financeContext, building, functionId)) continue;
     const collectionKey = `${building.id}::${functionId}`;
-    const collectQd = Math.max(0, Math.ceil(this._safeNumber(line.collectQd, 0)));
-    if (collectQd > 0) {
-      let progress = Math.max(0, Math.floor(this._safeNumber(line.collectProgressQd, 0)));
-      for (const entry of entries) {
-        if (progress >= collectQd) break;
-        const budget = Math.max(0, this._safeNumber(entry.available, 0));
-        if (budget <= 0) continue;
-        const take = Math.min(budget, collectQd - progress);
-        entry.available = budget - take;
-        entry.spent += take;
-        progress += take;
+    const collection = advanceCollectionWork(line, entries);
+    if (!collection.complete) {
+      if (financeContext) {
+        financeContext.deferredCollections ??= new Map();
+        financeContext.deferredCollections.set(collectionKey, { building, line, collectQd: collection.requiredQd, progressQd: collection.progressQd });
       }
-      line.collectProgressQd = progress;
-      if (progress + 0.0001 < collectQd) {
-        if (financeContext) {
-          financeContext.deferredCollections ??= new Map();
-          financeContext.deferredCollections.set(collectionKey, { building, line, collectQd, progressQd: progress });
-        }
-        continue;
-      }
-      line.collectProgressQd = 0;
+      continue;
     }
-    const resourceId = normalizeResourceId(line.resourceId, line.resource);
-    const resourceName = resourceId === "custom" ? (String(line.resource ?? "Ресурс") || "Ресурс") : resourceLabel(resourceId);
-    const roomId = this._normalizeStorageRoomId(line.storageRoomId ?? line.roomId);
-    const placements = this._storageAddWithOverflow(holding, { resourceId, name: resourceName, roomId }, Math.floor(this._safeNumber(line.pendingQty, 0)));
-    line.pendingQty = 0;
-    this._pushProductionPlacement(report, holding, building.name || "Здание", resourceName, placements, " собрано", resourceId);
+    const resource = this._productionCollectionResource(line);
+    const { placements } = finishProductionCollection(line, (qty) => this._storageAddWithOverflow(holding, resource, qty));
+    this._pushProductionPlacement(report, holding, building.name || "Здание", resource.name, placements, " собрано", resource.resourceId);
     financeContext?.deferredCollections?.delete(collectionKey);
   }
 },
@@ -1200,29 +1170,12 @@ async _tryCollectResourceForConsumer(holding, consumerBuilding, resource, budget
       const output = this._productionCollectionResource(line);
       if (!this._productionInputMatches(output, cost)) continue;
       // В этом режиме рабочий здания-потребителя тратит время, чтобы забрать готовый ресурс из другого здания.
-      const pending = Math.max(0, Math.floor(this._safeNumber(line.pendingQty, 0)));
-      if (!pending) continue;
-      const collectQd = Math.max(0, Math.ceil(this._safeNumber(line.collectQd, 0)));
-      if (collectQd > 0) {
-        let progress = Math.max(0, Math.floor(this._safeNumber(line.collectProgressQd, 0)));
-        const entries = [...new Set(this._assignedBuildingPeople(holding, consumerBuilding, workerContext, consumerFunctionId)
-          .flatMap((person) => this._workerBudgetEntriesForBuilding(person, budgets, consumerBuilding, workerContext, consumerFunctionId)))];
-        for (const entry of entries) {
-          if (progress >= collectQd) break;
-          const budget = Math.max(0, this._safeNumber(entry.available, 0));
-          if (budget <= 0) continue;
-          const take = Math.min(budget, collectQd - progress);
-          entry.available = budget - take;
-          entry.spent += take;
-          progress += take;
-        }
-        line.collectProgressQd = progress;
-        if (progress + 0.0001 < collectQd) continue;
-        line.collectProgressQd = 0;
-      }
-      const placements = this._storageAddWithOverflow(holding, output, pending);
-      line.pendingQty = 0;
-      collected += pending;
+      if (!(line.pendingQty > 0)) continue;
+      const entries = this._assignedBuildingPeople(holding, consumerBuilding, workerContext, consumerFunctionId)
+        .flatMap((person) => this._workerBudgetEntriesForBuilding(person, budgets, consumerBuilding, workerContext, consumerFunctionId));
+      if (!advanceCollectionWork(line, entries).complete) continue;
+      const { qty, placements } = finishProductionCollection(line, (amount) => this._storageAddWithOverflow(holding, output, amount));
+      collected += qty;
       this._pushProductionPlacement(report, holding, consumerBuilding.name || "Здание", output.name, placements,
         ` собрано у ${sourceBuilding.name || "здания"}`, output.resourceId, { note: "Собрано работником-потребителем" });
     }
@@ -1273,7 +1226,7 @@ _productionCycleDependencies({ holding: sourceHolding = null, lineOutputForCycle
     normalizeResourceId,
     resourceLabel,
     lineContentQuantity: (building, line) => this._lineContentQuantity(building, line),
-    buildingEffectiveWorkers: (holding, building, workerContext) => this._buildingEffectiveWorkers(holding, building, workerContext),
+    buildingEffectiveWorkers: (holding, building, workerContext) => this._buildingEffectiveWorkers(holding, building, workerContext, "production"),
     lineOutputForCycle: lineOutputForCycle ?? ((line, context) => this._lineOutputForCycle(line, context)),
     parseResourceCosts: (text) => this._parseResourceCosts(text),
     costsForUnits: (costs, units) => this._costsForUnits(costs, units),
@@ -1321,25 +1274,13 @@ _productionCycleDependencies({ holding: sourceHolding = null, lineOutputForCycle
 _buildingMinimumQdStatus(holding, building, workerContext = null, targetFunction = "production", periodMultiplier = 1) {
   const requiredQd = buildingMinOperationalQd(building) * Math.max(1, Math.floor(this._safeNumber(periodMultiplier, 1)));
   if (requiredQd <= 0) return { met: true, requiredQd: 0, actualQd: 0 };
-  const anyWorking = building?.activation?.anyWorkingFunction === true;
-  const buildingId = String(building?.id ?? "");
-  const matchesFn = (fnId) => {
-    const id = String(fnId ?? "");
-    if (anyWorking) return Boolean(id);
-    if (targetFunction === "production") return id.startsWith("production:") || id === "agriculture" || id === "livestock";
-    return id === targetFunction;
-  };
-  let actualQd = 0;
-  for (const person of this._activeAssignedBuildingPeople(holding, building, workerContext)) {
-    const rows = workerContext?.financeContext
-      ? (workerContext.financeContext.plannedAssignmentsByWorkerId?.get(String(person?.id ?? "")) ?? [])
-      : (person?.workAllocations ?? []);
-    for (const row of rows) {
-      if (String(row?.sourceId ?? "") !== buildingId || !matchesFn(row?.functionId)) continue;
-      actualQd += Math.max(0, this._safeNumber(row?.normalQd ?? row?.qd, 0))
-        + Math.max(0, this._safeNumber(row?.overtimeQd, 0));
-    }
-  }
+  const functionId = building?.activation?.anyWorkingFunction === true ? "" : targetFunction;
+  const finance = workerContext?.financeContext;
+  const actualQd = finance
+    ? this._activeAssignedBuildingPeople(holding, building, workerContext).reduce((sum, person) => (
+      sum + allocatedBuildingQd(finance.plannedAssignmentsByWorkerId?.get(String(person.id)), building.id, functionId)
+    ), 0)
+    : buildingActiveWorkerSummary(holding, building, functionId).qd;
   return { met: actualQd >= requiredQd, requiredQd, actualQd };
 },
 
@@ -1385,6 +1326,23 @@ async _runProductionAndLivestockForQd(holding, qd, report, { operationId = "", b
   }
 },
 
+_buildingIncomeWorkforce(holding, building, workerContext = null, periods = 1) {
+  const paid = Boolean(workerContext?.financeContext);
+  const assigned = paid
+    ? this._activeAssignedBuildingPeople(holding, building, workerContext, "income")
+    : buildingActiveWorkerSummary(holding, building, "income").workers;
+  const minimum = this._buildingMinimumQdStatus(holding, building, workerContext, "income", periods);
+  const compositionMet = buildingCompositionStatus(building, assigned, { excludeGroups: ["ЧУДОТВОРЕЦ"] }).met;
+  const normalCapacityQd = DEFAULT_NORMAL_LABOR_QD * periods;
+  const equivalentWorkers = assigned.reduce((sum, person) => {
+    const qd = paid
+      ? this._plannedWorkerFunctionQd(person, workerContext, building.id, "income")
+      : allocatedBuildingQd(person.workAllocations, building.id, "income");
+    return sum + Math.min(1.5, Math.max(0, this._safeNumber(qd, 0)) / normalCapacityQd);
+  }, 0);
+  return { count: assigned.length, minimum, compositionMet, equivalentWorkers, normalCapacityQd };
+},
+
 /** Settle staffed non-trading building income before food consumption and construction. */
 async _runBuildingIncomeForQd(holding, qd, report, { buildings = holding?.buildings?.list ?? [], workerContext = null, financeContext = null } = {}) {
   // Доходность пока остается старым блоком “за десятник”. Для меньших периодов она
@@ -1404,28 +1362,20 @@ async _runBuildingIncomeForQd(holding, qd, report, { buildings = holding?.buildi
     }
     const incomePeriods = Math.floor(qd / 40);
     if (incomePeriods <= 0) continue;
-    const assignedPeople = this._activeAssignedBuildingPeople(holding, building, workerContext, "income");
-    const assigned = assignedPeople.length;
-    if (!assigned) {
+    const { count, minimum, compositionMet, equivalentWorkers: eff, normalCapacityQd } =
+      this._buildingIncomeWorkforce(holding, building, workerContext, incomePeriods);
+    if (!count) {
       report.skipped.push(`${building.name || "Здание"}: доход не получен — работник не назначен.`);
       continue;
     }
-    const minimumQd = this._buildingMinimumQdStatus(holding, building, workerContext, "income", incomePeriods);
-    if (!minimumQd.met) {
-      report.skipped.push(`${building.name || "Здание"}: доход остановлен — выделено ${minimumQd.actualQd} из ${minimumQd.requiredQd} QD.`);
+    if (!minimum.met) {
+      report.skipped.push(`${building.name || "Здание"}: доход остановлен — выделено ${minimum.actualQd} из ${minimum.requiredQd} QD.`);
       continue;
     }
-    const normalCapacityQd = 20 * incomePeriods;
-    const workerShares = assignedPeople.map((person) => {
-      const plannedQd = workerContext?.financeContext
-        ? this._plannedWorkerFunctionQd(person, workerContext, building?.id, "income")
-        : normalCapacityQd;
-      return Math.min(1.5, Math.max(0, this._safeNumber(plannedQd, 0)) / normalCapacityQd);
-    });
-    const workerEquivalents = workerShares.reduce((sum, share) => sum + share, 0);
-    const eff = assignedPeople.reduce((sum, person, index) => (
-      sum + this._personBuildingEfficiency(holding, building, person, workerContext, { purpose: "service" }) * workerShares[index]
-    ), 0);
+    if (!compositionMet) {
+      report.skipped.push(`${building.name || "Здание"}: доход остановлен — не выполнено требование к составу работников.`);
+      continue;
+    }
     const income = building.income ?? {};
     const base = this._safeNumber(income.base, 0);
     const perWorker = this._safeNumber(income.perWorker, 0);
@@ -1434,7 +1384,7 @@ async _runBuildingIncomeForQd(holding, qd, report, { buildings = holding?.buildi
     if (String(income.formula ?? "").trim()) {
       total = 0;
       for (let i = 0; i < incomePeriods; i += 1) {
-        const rolled = await this._rollFormulaTotal(income.formula, { eff, workers: workerEquivalents, base, cycles: incomePeriods, qd, workqd: workerEquivalents * normalCapacityQd });
+        const rolled = await this._rollFormulaTotal(income.formula, { eff, workers: eff, base, cycles: incomePeriods, qd, workqd: eff * normalCapacityQd });
         total += Math.floor(rolled.total);
         formulaResult = rolled.result;
         report.formulas.push(`${building.name || "Здание"} / Доход ${i + 1}/${incomePeriods}: ${income.formula} → ${rolled.result} = ${rolled.total}`);

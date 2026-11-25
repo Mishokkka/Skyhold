@@ -56,7 +56,7 @@ function chanceText(value) {
 function battleCalculationDependencies(manager = getSkyholdManager()) {
   const dependencies = {};
   if (typeof manager?._buildingEffectiveWorkers === "function") {
-    dependencies.buildingEffectiveWorkers = (holding, building) => manager._buildingEffectiveWorkers(holding, building);
+    dependencies.buildingEffectiveWorkers = (holding, building, functionId) => manager._buildingEffectiveWorkers(holding, building, null, functionId);
   }
   if (typeof manager?._calculateMorale === "function") {
     dependencies.calculateMorale = (holding) => manager._calculateMorale(holding);

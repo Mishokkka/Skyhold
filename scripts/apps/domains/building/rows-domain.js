@@ -233,8 +233,8 @@ _prepareBuildingRow(holding, row, index, canEdit, storageRoomsArg = null, option
   const agricultureView = cardOnly ? null : (this._prepareAgricultureBuildingView?.(holding, row, recordPath, storageRooms) ?? null);
   const livestockView = cardOnly ? null : (this._prepareLivestockBuildingView?.(holding, row, recordPath, storageRooms) ?? null);
   const incomeStorageRooms = Array.isArray(storageRoomsArg) && storageRoomsArg.length === 0 ? null : storageRooms;
-  const incomeSummary = cardOnly ? null : this._buildingIncomeSummary(row, holding, workerContext, workerEfficiency, incomeStorageRooms);
-  const defenseSummary = cardOnly ? null : this._buildingDefenseSummary(row, holding, workerContext, status, workerEfficiency);
+  const incomeSummary = cardOnly ? null : this._buildingIncomeSummary(row, holding, workerContext, incomeStorageRooms);
+  const defenseSummary = cardOnly ? null : this._buildingDefenseSummary(row, holding, workerContext, status);
   const progress = Math.max(0, this._safeNumber(row.buildProgress, 0));
   const target = Math.max(1, this._safeNumber(row.buildTarget, 6));
   const category = this._buildingCategory(row);
@@ -724,7 +724,7 @@ _prepareBuildingRow(holding, row, index, canEdit, storageRoomsArg = null, option
     productionLinesText: this._productionLinesText(row, holding, productionLines),
     pendingProductionRows,
     hasPendingProduction: pendingProductionRows.length > 0,
-    productionSummary: this._buildingProductionSummary(row, assignedCount, holding, workerContext, workerEfficiency),
+    productionSummary: this._buildingProductionSummary(row, assignedCount, holding, workerContext),
     agricultureView,
     livestockView,
     income: incomeSummary,

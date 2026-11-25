@@ -28,6 +28,7 @@ import { savedMarketTransportPlanFields } from "./market/transport-plan.js";
 import { normalizeFinanceObligationsState } from "./finance/obligations.js";
 import { normalizeInternalDemandConfig } from "./economy/internal-demand.js";
 import { normalizeShipsState } from "./ships.js";
+import { normalizeProductionGoals } from "./workforce-plan.js";
 import { ensureTransportState, transportCargoReservations } from "./transport/state.js";
 import { indexStorageRows } from "../engines/storage/row-identity.js";
 
@@ -301,6 +302,11 @@ export function mergeHoldingDefaults(holding) {
 
   if (!Array.isArray(merged.people.list)) merged.people.list = [];
   if (!Array.isArray(merged.buildings.list)) merged.buildings.list = [];
+  if (!isPlainObject(merged.gm)) merged.gm = {};
+  if (!isPlainObject(merged.gm.defense)) merged.gm.defense = {};
+  merged.gm.defense.squads = (Array.isArray(merged.gm.defense.squads) ? merged.gm.defense.squads : [])
+    .map((row) => normalizeDefenseSquad(row)).filter(Boolean);
+  merged.special.ships = normalizeShipsState(merged.special.ships);
   preserveLegacyBuildingAssignments(merged);
   for (const person of merged.people.list) normalizePerson(person, { holding: merged });
   const peopleById = new Map(merged.people.list.map((person) => [String(person?.id ?? ""), person]));
@@ -326,10 +332,9 @@ export function mergeHoldingDefaults(holding) {
   merged.overview.development.culture = toNumber(merged.overview.development.culture, 0);
   merged.overview.development.war = toNumber(merged.overview.development.war, 0);
 
-  for (const building of merged.buildings.list) normalizeBuilding(building, { preserveTemplateMechanics: true, people: merged.people.list });
+  for (const building of merged.buildings.list) normalizeBuilding(building, { preserveTemplateMechanics: true });
   releaseWorkerlessSpecialAssignments(merged);
   if (!Array.isArray(merged.special.list)) merged.special.list = [];
-  merged.special.ships = normalizeShipsState(merged.special.ships);
   if (!isPlainObject(merged.special.market)) merged.special.market = {};
   merged.special.market.preferredRoomId = String(merged.special.market.preferredRoomId ?? "outdoors") || "outdoors";
   merged.special.market.stock = normalizeMarketStockState(merged.special.market.stock);
@@ -525,18 +530,7 @@ export function mergeHoldingDefaults(holding) {
   merged.finance = normalizeFinanceObligationsState(merged.finance);
   merged.politics = normalizePoliticsState(merged.politics);
   if (isPlainObject(merged.workforcePlan)) {
-    const rawGoals = merged.workforcePlan.productionGoals;
-    const productionGoals = Array.isArray(rawGoals)
-      ? rawGoals
-      : (isPlainObject(rawGoals)
-        ? Object.entries(rawGoals).map(([key, raw]) => {
-            const splitAt = key.indexOf("::");
-            const sourceId = splitAt > 0 ? key.slice(0, splitAt).trim() : String(key ?? "").trim();
-            const functionId = splitAt > 0 ? key.slice(splitAt + 2).trim() : "";
-            const preparedUnits = Math.max(0, Math.floor(toNumber(raw?.preparedUnits ?? raw, 0)));
-            return sourceId && preparedUnits > 0 ? { sourceId, functionId, preparedUnits } : null;
-          }).filter(Boolean)
-        : []);
+    const productionGoals = normalizeProductionGoals(merged.workforcePlan.productionGoals);
     merged.workforcePlan = {
       version: 2,
       locks: Array.isArray(merged.workforcePlan.locks) ? merged.workforcePlan.locks : [],
@@ -593,8 +587,6 @@ export function mergeHoldingDefaults(holding) {
   merged.gm.defense.defeatSound = String(merged.gm.defense.defeatSound ?? "");
   merged.gm.defense.drawSound = String(merged.gm.defense.drawSound ?? "");
   merged.gm.defense.notes = String(merged.gm.defense.notes ?? "");
-  if (!Array.isArray(merged.gm.defense.squads)) merged.gm.defense.squads = [];
-  merged.gm.defense.squads = merged.gm.defense.squads.map((row) => normalizeDefenseSquad(row)).filter(Boolean);
   if (!isPlainObject(merged.gm.calendaria)) merged.gm.calendaria = {};
   merged.gm.calendaria.enabled = toBoolean(merged.gm.calendaria.enabled, false);
   merged.gm.calendaria.lastTimestamp = merged.gm.calendaria.lastTimestamp === null || merged.gm.calendaria.lastTimestamp === undefined ? null : toNumber(merged.gm.calendaria.lastTimestamp, null);

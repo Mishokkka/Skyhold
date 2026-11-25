@@ -1,6 +1,7 @@
 import { buildingOperationalState } from "../../core/building-state.js";
 import { isMedicalBuilding } from "../../core/building-specials.js";
-import { isResidentPresent } from "../../data/resident-presence.js";
+import { isResidentInPopulation } from "../../data/resident-presence.js";
+import { allocatedBuildingQd, buildWorkAllocationTargets } from "../../data/work-allocations.js";
 import { normalLaborQdPerTenday, residentLaborCapacity } from "../../data/labor-budget.js";
 import { financeBuildingFunctionBlockState, financeWorkerBlockState } from "./finance-obligations.js";
 import { laborWageRate } from "./labor-wage-rate.js";
@@ -20,32 +21,6 @@ function signedRound(value = 0) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric) || !numeric) return 0;
   return Math.sign(numeric) * Math.round(Math.abs(numeric));
-}
-
-function functionMatches(actual = "", expected = "") {
-  const actualId = text(actual);
-  const expectedId = text(expected);
-  if (!expectedId) return Boolean(actualId);
-  if (actualId === expectedId) return true;
-  return expectedId === "production" && actualId.startsWith("production:");
-}
-
-function enabledFunction(building, functionId = "") {
-  const [kind, lineId] = text(functionId).split(":");
-  if (building?.functions?.[kind] !== true) return false;
-  return kind !== "production" || (building.productionLines ?? []).some((line) => line.active !== false && (!lineId || line.id === lineId));
-}
-
-function workerAllocatedQd(person = {}, building = {}, functionId = "") {
-  const buildingId = text(building?.id);
-  if (!buildingId) return 0;
-  const anyWorking = building?.activation?.anyWorkingFunction === true;
-  return (person?.workAllocations ?? []).reduce((sum, allocation) => {
-    if (text(allocation?.sourceId) !== buildingId) return sum;
-    if (!functionMatches(allocation?.functionId, functionId)) return sum;
-    if (anyWorking && !enabledFunction(building, allocation?.functionId)) return sum;
-    return sum + whole(allocation?.normalQd ?? allocation?.qd) + whole(allocation?.overtimeQd);
-  }, 0);
 }
 
 export function buildingServiceFunctionId(building = {}) {
@@ -156,23 +131,27 @@ export function buildingActiveWorkerSummary(holding = {}, building = {}, functio
   }
 
   const targetBuildingId = text(building?.id);
+  const allowedFunctions = building.activation?.anyWorkingFunction === true
+    ? new Set(buildWorkAllocationTargets({ buildings: { list: [building] } }).filter((target) => target.available)
+      .map((target) => target.functionId))
+    : null;
   const buildingsById = new Map((holding?.buildings?.list ?? []).map((item) => [text(item?.id), item]));
   if (targetBuildingId) buildingsById.set(targetBuildingId, building);
 
   for (const person of holding?.people?.list ?? []) {
     const id = text(person?.id);
-    if (!id || person.dead || !isResidentPresent(person) || whole(person?.injuredDays) > 0) continue;
+    if (!id || !isResidentInPopulation(person, holding) || whole(person?.injuredDays) > 0) continue;
     if (financeWorkerBlockState({ finance: holding?.finance, workerId: id }).blocked) continue;
-    const workerQd = workerAllocatedQd(person, building, functionId);
+    const workerQd = allocatedBuildingQd(person.workAllocations, targetBuildingId, functionId, allowedFunctions);
     if (workerQd <= 0) continue;
     const reserved = reservedOccupation(holding, person);
     if (reserved) {
-      rejectedReasons.push(`${text(person?.name) || "Житель"}: ${reserved.label}`);
+      rejectedReasons.push("работник занят другой службой");
       continue;
     }
     const admission = workerAdmission(building, person);
     if (admission?.hard && !admission.eligible && !admission.overridden) {
-      rejectedReasons.push(`${text(person?.name) || "Житель"}: нет допуска`);
+      rejectedReasons.push("работник без допуска");
       continue;
     }
     const rows = Array.isArray(person?.workAllocations) ? person.workAllocations : [];
@@ -189,7 +168,7 @@ export function buildingActiveWorkerSummary(holding = {}, building = {}, functio
       const rowBuilding = buildingsById.get(text(row?.sourceId));
       if (!rowBuilding) continue;
       if (rowOvertimeQd > 0 && !targetAllowsOvertime(rowBuilding, row?.functionId)) {
-        rejectedReasons.push(`${text(person?.name) || "Житель"}: сверхурочные недоступны`);
+        rejectedReasons.push("назначены недоступные сверхурочные");
         contractValid = false;
         break;
       }
@@ -199,14 +178,14 @@ export function buildingActiveWorkerSummary(holding = {}, building = {}, functio
         dailyRateCopper: functionDailyRate(rowBuilding, row?.functionId)
       });
       if (!wage.ok) {
-        rejectedReasons.push(`${text(person?.name) || "Житель"}: нужна ставка или договор о бесплатном труде`);
+        rejectedReasons.push("нужна ставка или договор о бесплатном труде");
         contractValid = false;
         break;
       }
     }
     if (!contractValid) continue;
     if (totalNormalQd > cap.normalQd || totalOvertimeQd > cap.overtimeQd || totalOvertimeQd > Math.floor(totalNormalQd / 2)) {
-      rejectedReasons.push(`${text(person?.name) || "Житель"}: план (${totalNormalQd}+${totalOvertimeQd} QD) превышает лимит (${cap.normalQd}+${cap.overtimeQd} QD)`);
+      rejectedReasons.push("план превышает лимит труда");
       continue;
     }
     workers.push(person);
@@ -278,7 +257,7 @@ export function buildingServiceBlockReasons(holding = {}, building = {}, functio
     ? (configuredMinQd > 0 ? configuredMinQd : (needsStaffedService ? 1 : 0))
     : 0;
   if (requiredQd > 0 && workforce.qd < requiredQd) {
-    const suffix = workforce.rejectedReasons?.length ? ` (${workforce.rejectedReasons.join("; ")})` : "";
+    const suffix = workforce.rejectedReasons?.length ? ` (${[...new Set(workforce.rejectedReasons)].join("; ")})` : "";
     reasons.push({ code: "qd-missing", text: `нужно QD: ${requiredQd}, выделено: ${workforce.qd}${suffix}` });
   }
   if (acceptsWorkers && workforce.count > 0 && !buildingCompositionStatus(building, workforce.workers, { excludeGroups: ["ЧУДОТВОРЕЦ"] }).met) {
