@@ -357,7 +357,7 @@ try {
 
   {
     let live = { holdings: ["a", "b"].map(id => ({
-      id, people: { list: [{ id: "resident", name: id, workAssignment: `current-${id}` }] },
+      id, people: { list: [{ id: "resident", name: id, workAssignment: `current-${id}`, attributes: { strength: 3, wits: 3 } }] },
       buildings: { list: [{ id: "job", name: "Кузня", constructionStatus: "built", functions: { culture: true }, labor: { version: 2, capacityQd: 20 } }] }
     })) };
     const approval = deferred();

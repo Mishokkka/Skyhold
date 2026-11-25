@@ -223,6 +223,31 @@ export async function checkControlTab() {
     assert.equal(partialStore.commits(), 1);
     assert.deepEqual(partialStore.view().holdings[0].people.list[0].workAllocations.map((row) => row.sourceId), ["farm"]);
 
+    const multi = fixture();
+    const multiHolding = multi.holdings[0];
+    const multiBuilding = multiHolding.buildings.list[0];
+    multiBuilding.functions = { production: true };
+    multiBuilding.productionLines = [
+      { id: "wood", resourceId: "wood", source: "workers", active: true, workQd: 1, outputQty: 1 },
+      { id: "ore", resourceId: "iron-ore", source: "workers", active: true, workQd: 1, outputQty: 1 }
+    ];
+    const alice = multiHolding.people.list[0];
+    alice.role = "По прозвищу Лесоруб";
+    alice.workAllocations = [{ id: "wood-allocation", sourceId: "post", functionId: "production:wood", normalQd: 6 }];
+    const multiStore = memoryStore(multi);
+    const multiOperation = { ...hardOperation, operationId: "workshop-add" };
+    const runMulti = operation => executeControlWorkOperation(operation, { store: multiStore, getManager: () => manager });
+    const multiJob = prepareControlContext(multiHolding, [], {}, manager).jobs[0];
+    assert.deepEqual(multiJob.availableFunctions.map(row => row.functionId), ["production:wood", "production:ore"]);
+    assert.ok(multiJob.candidates.some(row => row.id === alice.id), "a descriptive role does not reserve labor");
+    assert.equal((await runMulti(multiOperation)).ok, false, "multiple functions require an explicit choice");
+    const exact = { ...multiOperation, functionId: "production:ore" };
+    assert.equal((await runMulti(exact)).ok, true);
+    assert.equal((await runMulti(exact)).replay, true);
+    assert.equal((await runMulti({ ...exact, functionId: "production:wood" })).ok, false, "the same id cannot replay a different target");
+    assert.equal((await runMulti({ ...exact, operationId: "workshop-remove", expectedRevision: 2, action: "remove" })).ok, true);
+    assert.deepEqual(multiStore.view().holdings[0].people.list[0].workAllocations.map(row => row.functionId), ["production:wood"]);
+
     const stopped = fixture();
     stopped.holdings[0].buildings.list[0].lifecycle = "disabled";
     const stoppedStore = memoryStore(stopped);

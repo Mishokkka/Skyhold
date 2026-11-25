@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { BuildingWorkerDomain } from "../apps/domains/building/worker-domain.js";
 import { BUILDING_EDITOR_TABS } from "../apps/domains/building-editor-tabs.js";
 
 // ApplicationV2 inserts an intrinsic frame, runs _onRender, then applies the
@@ -34,7 +35,7 @@ class OpeningApplication {
   }
 }
 
-const previous = Object.fromEntries(["foundry", "game", "window", "requestAnimationFrame"].map(key => [key, globalThis[key]]));
+const previous = Object.fromEntries(["foundry", "game", "ui", "window", "requestAnimationFrame"].map(key => [key, globalThis[key]]));
 const frames = [];
 try {
   globalThis.requestAnimationFrame = callback => { frames.push(callback); };
@@ -79,6 +80,53 @@ try {
       }
     }
   }
+  // View and assign through the normal building editor, including an already open editor.
+  const warnings = [];
+  globalThis.ui = { notifications: { warn: message => warnings.push(message) } };
+  const site = {
+    id: "site", name: "Workshop", constructionStatus: "built",
+    labor: { version: 2, capacityQd: 20 }, functions: { production: true },
+    productionLines: [{ id: "line", active: true, source: "workers", workQd: 1, outputQty: 1 }]
+  };
+  const hidden = {
+    id: "hidden", name: "Hidden villager", age: 30, visibility: "gm",
+    workAllocations: [{ id: "assignment", sourceId: site.id, functionId: "production:line", normalQd: 12 }]
+  };
+  const visible = { id: "visible", name: "Visible villager", age: 30, workAllocations: [] };
+  const holding = { buildings: { list: [site] }, people: { list: [hidden, visible] } };
+  const editor = new SkyholdBuildingEditor({ holdingId: "demo", buildingId: site.id });
+  const workers = {
+    ...BuildingWorkerDomain,
+    _safeNumber: value => Number(value ?? 0),
+    _workerEfficiencyForPerson: (_holding, _building, person) => ({ workUnits: 10000, details: [person.name] })
+  };
+  for (const isGM of [true, false]) {
+    game.user.isGM = isGM;
+    editor._prepareBuildingWorkerAssignmentView(site, holding);
+    assert.deepEqual(site.buildingWorkerAssignments.map(row => row.personId), isGM ? ["hidden"] : []);
+    assert.equal(site.buildingAssignCandidates.some(row => row.id === hidden.id), isGM);
+    assert.equal(workers._buildingEffectiveWorkers(holding, site).detail.includes(hidden.name), isGM);
+    assert.equal(site.laborPlannedQd, 12, "hidden assignments still reserve capacity");
+    assert.equal(site.defaultAssignQd, 8);
+  }
+  game.user.isGM = false;
+  site.productionLines[0].active = false;
+  editor._canEditBuilding = () => true;
+  editor._getMutableBuilding = () => ({ holding, building: site });
+  editor._updateMutableBuilding = async update => update({ holding, building: site }).value;
+  const form = {
+    "[data-building-assign-person]": visible.id,
+    "[data-building-assign-function]": "production:line",
+    "[data-building-assign-qd]": 4
+  };
+  await editor._onAssignBuildingWorker({
+    preventDefault() {},
+    currentTarget: { closest: () => ({ querySelector: selector => ({ value: form[selector] }) }) }
+  });
+  assert.deepEqual(visible.workAllocations, [], "a stale editor cannot assign work to a now-paused line");
+  assert.ok(warnings.some(message => message.includes(visible.name)));
+  await editor._onClose({});
+
   // Exercise the real manager lifecycle too: its first _onRender used to
   // capture the intrinsic frame and overwrite the same mutable position.
   for (const isGM of [true, false]) {

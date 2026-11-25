@@ -2,10 +2,12 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { checkBuildingLaborCatalog } from "../building-labor-catalog-check.mjs";
 import { checkUnifiedLabor } from "../unified-labor-check.mjs";
+import { checkLaborIntegration } from "../labor-integration-check.mjs";
 
 export async function runHybridLaborSuite() {
   checkBuildingLaborCatalog();
   await checkUnifiedLabor();
+  await checkLaborIntegration();
   return { suite: "hybrid-labor" };
 }
 
