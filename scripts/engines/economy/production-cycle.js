@@ -1,4 +1,3 @@
-import { minimumStaffStatus } from "../workers/minimum-staff.js";
 import { politicsRuntimeEffects, politicsProductionOutcome, politicsProductionBonus } from "../politics/runtime-effects.js";
 import { productionBatchShelfLifeQd, productionBatchLife, clearProductionBatch } from "./production-batch-life.js";
 import { createProductionTiming, productionTiming, productionTimingText, validProductionTiming, PRODUCTION_WORK_UNITS as WORK_UNITS_PER_QD } from "./production-timing.js";
@@ -25,6 +24,34 @@ function productionDependencies(dependencies = {}) {
 function whole(value, fallback = 0) {
   const number = Number(value);
   return Math.max(0, Math.floor(Number.isFinite(number) ? number : fallback));
+}
+
+function nonnegative(value) {
+  return Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : 0;
+}
+
+export function advanceCollectionWork(line, entries) {
+  const requiredQd = Math.ceil(nonnegative(line.collectQd));
+  let progressQd = Math.min(requiredQd, nonnegative(line.collectProgressQd));
+  for (const entry of new Set(entries)) {
+    if (progressQd >= requiredQd) break;
+    const spent = Math.min(nonnegative(entry.available), requiredQd - progressQd);
+    if (!spent) continue;
+    entry.available -= spent;
+    entry.spent = nonnegative(entry.spent) + spent;
+    progressQd += spent;
+  }
+  line.collectProgressQd = progressQd;
+  return { requiredQd, progressQd, complete: progressQd >= requiredQd };
+}
+
+export function finishProductionCollection(line, placeOutput) {
+  const qty = Math.floor(nonnegative(line.pendingQty));
+  if (!qty) return { qty: 0, placements: [] };
+  const placements = placeOutput(qty);
+  line.pendingQty = 0;
+  line.collectProgressQd = 0;
+  return { qty, placements };
 }
 
 export async function runProductionCycle({
@@ -226,43 +253,6 @@ export async function runProductionCycle({
     if (total) completeOutput(building, line, resourceId, resourceName, total, receipt);
   };
 
-  const staffLineCanWork = async (building, line, assignedPeople, step) => {
-    if (!line || deps.lineFinanceAllowed?.(building, line) === false
-      || !deps.lineSeasonAllowed(line, deps.getSeasonSnapshot(holding, step) ?? null)) return false;
-    if (line.requiresCollection && whole(line.pendingQty) > 0) return deps.staffCanCollectLine?.(building, line, workerContext) ?? true;
-    if (line.active === false) return false;
-    const timing = productionTiming(line);
-    if (timing?.phase === "work") return true;
-    if (timing?.phase === "waiting" || line.source === "time" || line.source === "content") return false;
-    const goalRemaining = preparation.remaining(building, line);
-    const formula = String(line.formula ?? "").trim();
-    if (goalRemaining === 0 || goalRemaining !== null && formula && !/^\d+$/.test(formula)) return false;
-    const capacity = productionCapacity(line);
-    if (waitingProductionBatches(line).length && (!capacity || line.repeat === false)) return false;
-    const free = capacity ? Math.max(0, capacity - productionOccupiedQty(line) - (releasedCapacityThisStep.get(line) ?? 0)) : Infinity;
-    const minimum = Math.max(1, whole(line.batchStartQty, 1));
-    if (capacity && free < minimum) return false;
-    let output = staffOutputQuotes.get(line);
-    if (!output) {
-      output = await deps.lineOutputForCycle(line, {
-        eff: 1, workers: assignedPeople.length, cycles: 1, qd: 1,
-        workqd: Math.max(1, whole(line.workQd ?? line.workerQD ?? line.cycleQd ?? line.cycleQD, 1))
-      });
-      staffOutputQuotes.set(line, output);
-    }
-    const fullQty = whole(output.qty);
-    if (!fullQty || !capacity && goalRemaining !== null && fullQty > goalRemaining) return false;
-    const limit = Math.min(fullQty, free, goalRemaining ?? Infinity);
-    if (capacity && limit < minimum) return false;
-    const variable = deps.parseResourceCosts(line.expenses);
-    const fixed = String(line.fixedExpenses ?? "").trim() ? deps.parseResourceCosts(line.fixedExpenses) : [];
-    const costsFor = (qty) => productionBatchCosts(line, variable, fixed, qty, fullQty);
-    if (capacity && affordableProductionBatch(limit, costsFor, (costs) => deps.storageCanPay(holding, costs)) >= minimum) return true;
-    const costs = costsFor(capacity ? minimum : limit);
-    const payment = deps.storageCanPay(holding, costs);
-    return payment.ok || deps.canCollectProductionInputs?.(holding, building, costs, workerContext, line) === true;
-  };
-
   for (let step = 0; step < periodQd; step += 1) {
     releasedCapacityThisStep.clear();
     deps.beforeStep?.(holding, step, report);
@@ -291,9 +281,6 @@ export async function runProductionCycle({
     }
     if (step % 4 === 0) deps.resetWorkerBudgets(holding, budgets, workerContext, step);
     deps.accrueWorkerBudgets(holding, budgets, workerContext, step);
-    // Snapshot simultaneous staffing before any line spends this step's labor.
-    const stepStaffing = new Map(buildings.map((building) => [building,
-      deps.minimumStaffStatus?.(holding, building, workerContext, budgets, step)]));
 
     // Waiting consumes calendar QD, never worker budgets. Starting raw materials
     // and partial progress survive period boundaries, pauses, and reloads.
@@ -320,6 +307,15 @@ export async function runProductionCycle({
         let timing = productionTiming(line);
         const source = timing?.source ?? line.source;
         if (source === "time" && !line.workInputsReserved) {
+          const minimumQd = deps.buildingMinimumQdStatus?.(holding, building, workerContext, line);
+          if (minimumQd && minimumQd.met === false) {
+            const key = `minqd:${building.id ?? building.name}:${line.id ?? line.resource}`;
+            if (!compositionSkipped.has(key)) {
+              compositionSkipped.add(key);
+              report.skipped.push(`${building.name || "Здание"}: производственная функция остановлена — выделено ${minimumQd.actualQd} из ${minimumQd.requiredQd} QD.`);
+            }
+            continue;
+          }
           const name = deps.resourceLabel(deps.normalizeResourceId(line.resourceId, line.resource));
           // Released places become reusable next QD, so a whole waiting QD
           // cannot simultaneously count as a QD of its replacement batch.
@@ -355,6 +351,15 @@ export async function runProductionCycle({
         const period = ["qd", "day", "tenday"].includes(String(line.period ?? "")) ? String(line.period) : "day";
         const cycleDuration = Math.max(1, Math.ceil(deps.safeNumber(line.workQd ?? line.workerQD ?? line.cycleQd ?? line.cycleQD, 1)));
         if (!deps.periodDueOnStep(period, step, cycleDuration)) continue;
+        const minimumQd = deps.buildingMinimumQdStatus?.(holding, building, workerContext, line);
+        if (minimumQd && minimumQd.met === false) {
+          const key = `minqd:${building.id ?? building.name}:${line.id ?? line.resource}`;
+          if (!compositionSkipped.has(key)) {
+            compositionSkipped.add(key);
+            report.skipped.push(`${building.name || "Здание"}: производственная функция остановлена — выделено ${minimumQd.actualQd} из ${minimumQd.requiredQd} QD.`);
+          }
+          continue;
+        }
 
         const resourceId = deps.normalizeResourceId(line.resourceId, line.resource);
         const resourceName = resourceId === "custom" ? (line.resource || "Ресурс") : deps.resourceLabel(resourceId);
@@ -391,7 +396,6 @@ export async function runProductionCycle({
       }
     }
 
-    await deps.prepareStaffWorkerStep?.(holding, budgets, workerContext, step, { lineCanWork: staffLineCanWork, report });
     for (const building of buildings) {
       if (deps.buildingStatus(building).value === "built") await deps.autoCollectBuilding(holding, building, budgets, report, workerContext);
     }
@@ -411,18 +415,17 @@ export async function runProductionCycle({
         if (whole(line.pendingQty) > 0 && deps.lineCollectionTakesPriority?.(building, line)) continue;
         const assignedPeople = deps.assignedBuildingPeople(holding, building, workerContext, line);
         if (!assignedPeople.length) continue;
-        const staffing = stepStaffing.get(building) ?? minimumStaffStatus(building, assignedPeople);
-        if (!staffing.met) {
-          const key = `staff:${building.id ?? building.name}`;
-          if (staffing.count > 0 && !compositionSkipped.has(key)) {
+        const minimumQd = deps.buildingMinimumQdStatus?.(holding, building, workerContext, line);
+        if (minimumQd && minimumQd.met === false) {
+          const key = `minqd:${building.id ?? building.name}:${line.id ?? line.resource}`;
+          if (!compositionSkipped.has(key)) {
             compositionSkipped.add(key);
-            report.skipped.push(`${building.name || "Здание"}: производство остановлено — ${staffing.text}.`);
+            report.skipped.push(`${building.name || "Здание"}: производственная функция остановлена — выделено ${minimumQd.actualQd} из ${minimumQd.requiredQd} QD.`);
           }
           continue;
         }
-        // Specialists belong to the building's simultaneous shift. One shift
-        // can supervise several lines, but a one-QD visit cannot staff ten days.
-        const composition = deps.buildingCompositionStatus(building, staffing.people ?? assignedPeople, { excludeGroups: ["ЧУДОТВОРЕЦ"] });
+        const buildingPeople = deps.allBuildingPeople?.(holding, building, workerContext) ?? assignedPeople;
+        const composition = deps.buildingCompositionStatus(building, buildingPeople, { excludeGroups: ["ЧУДОТВОРЕЦ"] });
         if (!composition.met) {
           const key = `${building.id ?? building.name}:${line.id ?? line.resource}`;
           if (!compositionSkipped.has(key)) {
@@ -459,7 +462,6 @@ export async function runProductionCycle({
                 entry.available = Math.max(0, deps.safeNumber(entry.available, 0) - 1);
                 entry.spent += 1;
                 lineSummary.qdSpent += 1;
-                deps.recordWorkerWork?.(workerContext, entry, building, line, 1);
               }
               const target = productionTiming(line)?.workTargetUnits ?? workTargetUnits;
               const needed = target - whole(line.workProgressUnits);

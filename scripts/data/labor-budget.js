@@ -1,22 +1,18 @@
-import { MODULE_ID, SETTING_NORMAL_LABOR_QD } from "./constants.js";
 import { ageGroupFromAge, ageThresholdsFor, raceKeyFromResident } from "../generators/resident-rules.js";
 import { allocationNormalQd, allocationTotalQd } from "./labor-primitives.js";
 import { isResidentAbsentForLabor } from "./resident-presence.js";
 
-export const DEFAULT_NORMAL_LABOR_QD = 20;
+export const WORKING_DAYS_PER_TENDAY = 9;
+export const DEFAULT_NORMAL_LABOR_QD = WORKING_DAYS_PER_TENDAY * 2;
 export const DEFAULT_DAYS_OFF_PER_TENDAY = 0;
 export const MAX_DAYS_OFF_PER_TENDAY = 5;
-export const TENDAY_WORKING_DAYS_V2 = 9;
-export const DEFAULT_NORMAL_LABOR_QD_V2 = TENDAY_WORKING_DAYS_V2 * 2;
 
 /** A personal budget, not the length of a tenday or a change to the wage unit. */
-export function normalLaborQdPerTenday() {
-  let value;
-  try { value = globalThis.game?.settings?.get(MODULE_ID, SETTING_NORMAL_LABOR_QD); } catch { /* Offline/unregistered: historical default. */ }
-  return Number.isSafeInteger(value) && value >= 0 && value <= DEFAULT_NORMAL_LABOR_QD ? value : DEFAULT_NORMAL_LABOR_QD;
+export function normalLaborQdPerTenday(holding) {
+  return (WORKING_DAYS_PER_TENDAY - holdingDaysOffPerTenday(holding)) * 2;
 }
 
-export function residentLaborCapacity(person = {}, normalQd = normalLaborQdPerTenday()) {
+export function residentLaborCapacity(person = {}, normalQd = DEFAULT_NORMAL_LABOR_QD) {
   const child = String(person.ageGroup ?? ageGroupFromAge(person.age, person.race, person.subrace)) === "Ре";
   const threshold = Math.min(Math.max(0, Number(ageThresholdsFor(raceKeyFromResident(person))?.young ?? 18) - 1), 12);
   return {
@@ -34,8 +30,9 @@ export function holdingDaysOffPerTenday(holding) {
   return daysOff(holding?.gm?.labor?.daysOffPerTenday ?? holding?.daysOffPerTenday);
 }
 
-export function holdingNormalLaborQd(holding, { workingDays = 10, baseNormalQd = null } = {}) {
-  const calendarQd = 2 * (Number.isSafeInteger(workingDays) && workingDays >= 0 ? workingDays : 10);
+export function holdingNormalLaborQd(holding, { workingDays = WORKING_DAYS_PER_TENDAY, baseNormalQd = null } = {}) {
+  if (workingDays === WORKING_DAYS_PER_TENDAY && baseNormalQd === null) return normalLaborQdPerTenday(holding);
+  const calendarQd = 2 * (Number.isSafeInteger(workingDays) && workingDays >= 0 ? workingDays : WORKING_DAYS_PER_TENDAY);
   const base = Number.isSafeInteger(baseNormalQd) && baseNormalQd >= 0 ? Math.min(baseNormalQd, calendarQd) : calendarQd;
   return Math.max(0, base - 2 * holdingDaysOffPerTenday(holding));
 }

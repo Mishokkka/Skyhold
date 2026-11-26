@@ -1,3 +1,4 @@
+import { applyBuildingLaborWithdrawal, planBuildingLaborWithdrawal } from "../../data/labor-mutations.js";
 import { appendHoldingOperation, findHoldingOperation } from "../../data/operations.js";
 import {
   financeObligationOutstandingCopper,
@@ -190,6 +191,7 @@ export function applyFinanceBuildingMothballControl({
   holding,
   buildingId = "",
   mothballed = true,
+  laborToken = "",
   reason = "",
   operationId = "",
   changedAt = ""
@@ -214,6 +216,14 @@ export function applyFinanceBuildingMothballControl({
   if (!building) return { ok: false, replay: false, code: "building-not-found" };
   const current = Boolean(holding?.finance?.buildingStates?.[id]?.mothballed);
   if (current === desired) return { ok: false, replay: false, code: "unchanged" };
+  if (desired) {
+    const preview = planBuildingLaborWithdrawal(holding, id);
+    if (laborToken !== preview.token && (laborToken || preview.personIds.length || preview.removedLocks.length)) {
+      return { ok: false, replay: false, code: "labor-changed" };
+    }
+    const released = applyBuildingLaborWithdrawal(holding, preview, { confirmed: true });
+    if (!released.ok) return { ok: false, replay: false, code: "labor-changed", message: released.message };
+  }
 
   const changed = setFinanceBuildingMothball({
     finance: holding.finance,

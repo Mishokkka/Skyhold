@@ -462,7 +462,6 @@
   .fbl-skyhold .fbls-work-home-block,
   .fbl-skyhold .fbls-work-background-block { grid-column: 1 / -1; }
   .fbl-skyhold .fbls-work-allocation-toolbar { grid-template-columns: 1fr auto; }
-  .fbl-skyhold .fbls-work-allocation-mode { grid-column: 1 / -1; }
   .fbl-skyhold .fbls-work-allocation-row { grid-template-columns: minmax(0, 1fr) 5.5rem 5.5rem auto; }
   .fbl-skyhold .fbls-resident-midline { grid-template-columns: 1fr; }
   .fbl-skyhold .fbls-resident-midline .traits-set { grid-column: auto; }
@@ -486,8 +485,7 @@
   .fbl-skyhold .fbls-work-source-block .person-volunteer-reason,
   .fbl-skyhold .fbls-work-source-block .person-custom-role,
   .fbl-skyhold .fbls-work-home-block,
-  .fbl-skyhold .fbls-work-background-block,
-  .fbl-skyhold .fbls-work-allocation-mode { grid-column: auto; }
+  .fbl-skyhold .fbls-work-background-block { grid-column: auto; }
   .fbl-skyhold .fbls-work-allocation-row .icon-only { justify-self: end; }
   .fbl-skyhold .fbls-resident-midline .compact-set,
   .fbl-skyhold .fbls-resident-midline .morale-set { grid-template-columns: repeat(2, minmax(0, 1fr)); }

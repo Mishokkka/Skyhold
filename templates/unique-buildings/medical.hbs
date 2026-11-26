@@ -29,7 +29,7 @@
         </header>
 
         <section class="fbls-unique-medical-stats">
-          <span><i class="fa-solid fa-user-doctor"></i><b>{{building.medicalSummary.doctors}}/{{building.workersMax}}</b><em>врачи</em></span>
+          <span><i class="fa-solid fa-user-doctor"></i><b>{{building.medicalSummary.doctors}} ({{building.laborPlannedQd}} QD)</b><em>врачи</em></span>
           <span><i class="fa-solid fa-heart-pulse"></i><b>{{building.medicalSummary.doctorEfficiencyText}}</b><em>эффективность</em></span>
           <span><i class="fa-solid fa-bed-pulse"></i><b>{{building.medicalSummary.used}}/{{building.medicalSummary.capacity}}</b><em>койки</em></span>
           <span class="{{#if building.medicalSummary.hasOverflow}}danger{{/if}}"><i class="fa-solid fa-triangle-exclamation"></i><b>{{building.medicalSummary.overflow}}</b><em>без места</em></span>
@@ -37,26 +37,32 @@
 
         <section class="fbls-unique-medical-grid">
           <section class="fbls-unique-medical-panel doctors">
-            <header><span class="eyebrow">Персонал</span><h3>Врачи</h3></header>
+            <header class="fbls-card-header"><div><span class="eyebrow">Персонал</span><h3>Врачи</h3></div>{{#if canManageEditorTabs}}<button type="button" class="fbls-button compact" data-action="open-unique-workforce-planner" title="Открыть план работ для лазарета"><i class="fa-solid fa-list-check" aria-hidden="true"></i> План работ</button>{{/if}}</header>
             {{#if canManageEditorTabs}}
               <div class="fbls-unique-medical-settings-line">
-                <label><span>Максимум врачей</span><input type="number" min="0" data-type="number" data-field="{{building.basePath}}.workersMax" value="{{building.workersMax}}" /></label>
+                <label><span>Предел труда, QD</span><input type="number" min="0" step="1" data-building-labor-field="capacityQd" value="{{building.laborCapacityValue}}" placeholder="Без предела" /></label>
                 <label><span>Предельное число пациентов</span><input type="number" min="0" data-type="number" data-field="{{building.medicalSummary.maxPatientsPath}}" value="{{building.medicalSummary.maxPatients}}" /></label>
               </div>
             {{/if}}
             <div class="fbls-unique-medical-slots">
-              {{#each building.workerSlots}}
-                <label>
-                  <span>Врач {{slotNo}}</span>
-                  {{#if ../canManageEditorTabs}}
-                    <select data-building-worker-field="{{path}}">
-                      {{#each options}}<option value="{{id}}" {{#if selected}}selected{{/if}} {{#if disabled}}disabled{{/if}}>{{name}}{{#if hint}} · {{hint}}{{/if}}</option>{{/each}}
-                    </select>
-                  {{else}}
-                    <strong>{{label}}</strong>
-                  {{/if}}
+              <div class="fbls-cluster" aria-label="Назначенные врачи">
+                {{#each building.plannedWorkerRows}}
+                  <span class="fbls-chip" data-fbls-tooltip="Выделено в лазарете: {{qdLine}}">
+                    <i class="fa-solid fa-user-doctor" aria-hidden="true"></i> {{name}} · {{qdLine}}
+                    {{#if ../canManageEditorTabs}}<button type="button" class="fbls-chip-remove" data-action="unique-remove-worker" data-person-id="{{id}}" title="Снять врача" aria-label="Снять врача {{name}}">×</button>{{/if}}
+                  </span>
+                {{else}}
+                  <span class="fbls-muted-text">Врачи не назначены.</span>
+                {{/each}}
+              </div>
+              {{#if canManageEditorTabs}}
+                <label class="fbls-field">
+                  <span>Назначить врача</span>
+                  <select class="fbls-control" data-building-worker-field="medical" aria-label="Назначить врача в лазарет">
+                    {{#each building.medicalDoctorOptions}}<option value="{{id}}" {{#if disabled}}disabled{{/if}}>{{name}}{{#if hint}} · {{hint}}{{/if}}</option>{{/each}}
+                  </select>
                 </label>
-              {{/each}}
+              {{/if}}
             </div>
           </section>
 

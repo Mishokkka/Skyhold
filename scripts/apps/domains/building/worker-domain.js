@@ -1,7 +1,10 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import { workerTypeStyleFromAttributes } from "../../../generators/resident-rules.js";
 import { splitList, WORKER_TYPE_OPTIONS } from "../../../core/helpers.js";
+import { canReadResident } from "../../../data/access-guard.js";
 import { isResidentInPopulation } from "../../../data/resident-presence.js";
+import { allocatedBuildingQd, buildingWorkerIds } from "../../../data/work-allocations.js";
+import { DEFAULT_NORMAL_LABOR_QD } from "../../../data/labor-budget.js";
 import {
   buildingCompositionStatus,
   workerAdmission,
@@ -70,7 +73,7 @@ _buildingWorkerProfileSummary(building = {}) {
 },
 
 _buildingCompositionStatus(holding = {}, building = {}, assignedPeople = null, options = {}) {
-  const people = assignedPeople ?? (building?.assignedWorkerIds ?? [])
+  const people = assignedPeople ?? buildingWorkerIds(holding, building)
     .map((id) => (holding?.people?.list ?? []).find((person) => String(person?.id ?? "") === String(id ?? "")))
     .filter(Boolean);
   return buildingCompositionStatus(building, people, options);
@@ -102,37 +105,54 @@ _workerEfficiencyForPerson(_holding, building, person) {
  * Summarize active staffing, excluding unavailable residents without a cached context.
  * A supplied economy context retains its finance-specific blocked-worker selection.
  */
-_buildingEffectiveWorkers(holding, building, workerContext = null) {
-  if (workerContext?.effectiveWorkers?.has(building)) return workerContext.effectiveWorkers.get(building);
-  const cachedWorkers = workerContext?.buildingWorkers?.get(building);
-  const assignedIds = cachedWorkers?.assignedIds ?? (building?.assignedWorkerIds ?? []).filter(Boolean).map(String);
+_buildingEffectiveWorkers(holding, building, workerContext = null, functionId = "") {
+  const cache = functionId ? null : workerContext?.effectiveWorkers;
+  if (cache?.has(building)) return cache.get(building);
+  const cachedWorkers = functionId ? null : workerContext?.buildingWorkers?.get(building);
+  const assignedIds = cachedWorkers?.assignedIds ?? buildingWorkerIds(holding, building, functionId);
   const activeAssignedPeople = (workerContext?.financeContext ? cachedWorkers?.economyAssignedPeople : cachedWorkers?.activeAssignedPeople) ?? null;
   const allPeople = holding?.people?.list ?? [];
   const assignedPeople = activeAssignedPeople ?? assignedIds
     .map((id) => allPeople.find((person) => String(person?.id ?? "") === id))
     .filter((person) => person && isResidentInPopulation(person, holding) && this._safeNumber(person?.injuredDays, 0) <= 0);
   let productionWorkUnitsPerQd = 0;
+  let equivalentWorkers = 0;
   let suitableCount = 0;
+  let visibleCount = 0;
   const details = [];
-  for (const person of assignedPeople) {
+  const finance = workerContext?.financeContext;
+  const activePeople = functionId && finance
+    ? assignedPeople.filter((person) => !finance.blockedWorkerIds?.has(String(person.id))
+      && allocatedBuildingQd(finance.plannedAssignmentsByWorkerId?.get(String(person.id)), building.id, functionId) > 0)
+    : assignedPeople;
+  for (const person of activePeople) {
     const result = this._workerEfficiencyForPerson(holding, building, person);
-    productionWorkUnitsPerQd += result.workUnits;
+    const rows = finance && functionId ? finance.plannedAssignmentsByWorkerId?.get(String(person.id)) : person.workAllocations;
+    const share = functionId
+      ? Math.min(1.5, allocatedBuildingQd(rows, building.id, functionId) / DEFAULT_NORMAL_LABOR_QD)
+      : 1;
+    productionWorkUnitsPerQd += result.workUnits * share;
+    equivalentWorkers += share;
     if (result.suitable) suitableCount += 1;
-    details.push(...result.details);
+    if (canReadResident(person)) {
+      visibleCount += 1;
+      details.push(...result.details);
+    }
   }
-  const composition = buildingCompositionStatus(building, assignedPeople, { excludeGroups: ["ЧУДОТВОРЕЦ"] });
+  const composition = buildingCompositionStatus(building, activePeople, { excludeGroups: ["ЧУДОТВОРЕЦ"] });
   if (!composition.met) details.push(`не выполнен состав: ${composition.text}`);
   const result = {
     assigned: assignedIds.length,
-    total: assignedPeople.length,
+    total: equivalentWorkers,
     productionEquivalent: productionWorkUnitsPerQd / WORK_UNITS_PER_QD,
     productionWorkUnitsPerQd,
     suitableCount,
     leaderBonus: 0,
+    maintenanceFactor: 1,
     composition,
-    detail: [`${assignedPeople.length} раб.`, ...details].join(" · ")
+    detail: [`${visibleCount} раб.`, ...details].join(" · ")
   };
-  if (workerContext?.effectiveWorkers) workerContext.effectiveWorkers.set(building, result);
+  cache?.set(building, result);
   return result;
 }
 };

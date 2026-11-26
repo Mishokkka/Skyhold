@@ -1,3 +1,4 @@
+import { clearResidentLaborAllocations } from "../../data/resident-assignments.js";
 import { residentShipAssignment } from "../../data/resident-presence.js";
 
 function text(value = "") {
@@ -43,14 +44,14 @@ function validateCrewResidents(holding = {}, ship = {}) {
 
 function settlementPlanForResident(holding, residentId, person) {
   const buildings = [];
+  const allocatedIds = new Set((Array.isArray(person?.workAllocations) ? person.workAllocations : [])
+    .filter((row) => Number(row?.normalQd ?? row?.qd ?? 0) > 0 || Number(row?.overtimeQd ?? 0) > 0)
+    .map((row) => text(row?.sourceId))
+    .filter(Boolean));
   for (const building of holding?.buildings?.list ?? []) {
     const buildingId = text(building?.id);
-    const workerSlots = [];
-    for (const [index, value] of (building?.assignedWorkerIds ?? []).entries()) {
-      if (text(value) === residentId) workerSlots.push(index);
-    }
     const admissionOverride = (building?.workerAdmissionOverrideIds ?? []).some((value) => text(value) === residentId);
-    if (workerSlots.length || admissionOverride) buildings.push({ buildingId, workerSlots, admissionOverride });
+    if (allocatedIds.has(buildingId) || admissionOverride) buildings.push({ buildingId, admissionOverride });
   }
 
   const construction = [];
@@ -76,9 +77,10 @@ function settlementPlanForResident(holding, residentId, person) {
   }
 
   return {
+    version: 2,
     workAssignment: text(person?.workAssignment),
-    workAllocationMode: text(person?.workAllocationMode),
     workAllocations: clone(Array.isArray(person?.workAllocations) ? person.workAllocations : []),
+    locks: clone((holding.workforcePlan?.locks ?? []).filter((row) => text(row.personId) === residentId)),
     buildings,
     construction,
     legacyConstructionCrew: (holding?.constructionCrewIds ?? []).some((value) => text(value) === residentId),
@@ -89,21 +91,10 @@ function settlementPlanForResident(holding, residentId, person) {
   };
 }
 
-function clearResidentSettlementAssignments(holding, residentId, person) {
+export function clearResidentSettlementAssignments(holding, residentId, person) {
   let cleared = 0;
-  for (const building of holding?.buildings?.list ?? []) {
-    if (Array.isArray(building?.assignedWorkerIds)) {
-      building.assignedWorkerIds = building.assignedWorkerIds.map((value) => {
-        if (text(value) !== residentId) return value;
-        cleared += 1;
-        return "";
-      });
-    }
-    if (Array.isArray(building?.workerAdmissionOverrideIds)) {
-      const before = building.workerAdmissionOverrideIds.length;
-      building.workerAdmissionOverrideIds = building.workerAdmissionOverrideIds.filter((value) => text(value) !== residentId);
-      cleared += before - building.workerAdmissionOverrideIds.length;
-    }
+  if (Array.isArray(holding.workforcePlan?.locks)) {
+    holding.workforcePlan.locks = holding.workforcePlan.locks.filter((row) => text(row.personId) !== residentId);
   }
 
   for (const crew of holding?.constructionCrews ?? []) {
@@ -147,14 +138,9 @@ function clearResidentSettlementAssignments(holding, residentId, person) {
   }
 
   if (text(person?.workAssignment)) cleared += 1;
-  if (person?.staffAppointment !== undefined) {
-    delete person.staffAppointment;
-    cleared += 1;
-  }
   if (Array.isArray(person?.workAllocations) && person.workAllocations.length) cleared += person.workAllocations.length;
   person.workAssignment = "";
-  person.workAllocationMode = "legacy";
-  person.workAllocations = [];
+  clearResidentLaborAllocations(holding, person);
   if (text(person.home)) cleared += 1;
   person.home = "";
   return cleared;
@@ -177,6 +163,16 @@ export function returnCrewResidentToShip(holding = {}, ship = {}, residentId = "
   return { ok: true, residentId: normalizedResidentId, shipId, shoreDuty: false, clearedAssignments };
 }
 
+export function markCrewResidentAway(holding, person, shipId, clockQd) {
+  const residentId = text(person.id);
+  const existing = residentShipAssignment(person);
+  const shoreDuty = existing?.shoreDuty === true && text(existing.shipId) === shipId;
+  const previousSettlementPlan = settlementPlanForResident(holding, residentId, person);
+  const cleared = shoreDuty ? 0 : clearResidentSettlementAssignments(holding, residentId, person);
+  person.shipAssignment = { shipId, away: true, sinceQd: whole(clockQd), previousSettlementPlan, ...(shoreDuty ? { shoreDuty } : {}) };
+  return cleared;
+}
+
 export function embarkShipCrew(holding = {}, ship = {}, clockQd = 0) {
   if (!holding || typeof holding !== "object") throw new TypeError("FBL Skyhold | Embark requires a holding draft.");
   if (!ship || typeof ship !== "object") throw new TypeError("FBL Skyhold | Embark requires a ship draft.");
@@ -190,14 +186,7 @@ export function embarkShipCrew(holding = {}, ship = {}, clockQd = 0) {
     if (existing?.away === true && text(existing.shipId) === shipId) continue;
     if (person?.dead) issues.push({ code: "dead", residentId, message: `${text(person?.name) || residentId}: погибший житель числится в экипаже.` });
     else if (whole(person?.injuredDays) > 0) issues.push({ code: "injured", residentId, message: `${text(person?.name) || residentId}: житель ранен.` });
-    const previousSettlementPlan = settlementPlanForResident(holding, residentId, person);
-    clearedAssignments += clearResidentSettlementAssignments(holding, residentId, person);
-    person.shipAssignment = {
-      shipId,
-      away: true,
-      sinceQd: whole(clockQd),
-      previousSettlementPlan
-    };
+    clearedAssignments += markCrewResidentAway(holding, person, shipId, clockQd);
     changed += 1;
   }
   return { ok: true, changed, shipId, clockQd: whole(clockQd), residentIds, clearedAssignments, issues };

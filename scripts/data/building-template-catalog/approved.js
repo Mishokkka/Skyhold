@@ -39,7 +39,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 1,
     "workerRole": "Смотритель колодца",
     "functions": {
@@ -97,9 +97,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 0,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Участок с доступным водоносным слоем.",
-    "activationConditionText": "1 фактически работающий сотрудник; 2 QD профильной службы за десятник",
+    "activationConditionText": "2 QD профильной службы за десятник",
     "activation": {
-      "minWorkers": 1,
+      "minWorkers": 0,
       "minOperationalQd": 2,
       "requiresMeaningfulResult": false
     },
@@ -112,7 +112,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "well",
       "name": "Колодец",
       "stage": 0,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 1,
       "admission": {
         "text": "—",
@@ -159,7 +159,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "materialCosts": [],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 8,
     "workerRole": "",
     "functions": {
@@ -283,7 +283,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 0,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Достаточно ровная плодородная земля вне плотной застройки.",
-    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -298,7 +298,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "grain-field",
       "name": "Полевое хозяйство",
       "stage": 0,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 8,
       "admission": {
         "text": "Любой трудоспособный",
@@ -362,7 +362,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "materialCosts": [],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 4,
     "workerRole": "",
     "functions": {
@@ -486,7 +486,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 0,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Плодородная земля и бытовой доступ к воде.",
-    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -501,7 +501,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "garden",
       "name": "Сад",
       "stage": 0,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 4,
       "admission": {
         "text": "Любой трудоспособный",
@@ -564,7 +564,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "materialCosts": [],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 16,
     "workerRole": "",
     "functions": {
@@ -670,7 +670,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 0,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Доступ к возобновляемому лесному массиву.",
-    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -685,7 +685,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "lumbermill",
       "name": "Лесоповал",
       "stage": 0,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 16,
       "admission": {
         "text": "СИЛ≥3",
@@ -756,7 +756,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "materialCosts": [],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 16,
     "workerRole": "",
     "functions": {
@@ -862,7 +862,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 0,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Выход подходящей каменной породы и безопасный подъезд.",
-    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -877,7 +877,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "quarry",
       "name": "Каменоломня",
       "stage": 0,
-      "workersMin": 2,
+      "workersMin": 0,
       "workersMax": 16,
       "admission": {
         "text": "СИЛ≥3",
@@ -1005,7 +1005,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 0,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Построено, не законсервировано и обслужено.",
+    "activationConditionText": "Построено, не законсервировано.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -1067,7 +1067,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "materialCosts": [],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 1,
     "workerRole": "Смотритель кладбища",
     "functions": {
@@ -1125,9 +1125,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 0,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Сухой участок вдали от питьевой воды.",
-    "activationConditionText": "1 фактически работающий сотрудник; 4 QD профильной службы за десятник",
+    "activationConditionText": "4 QD профильной службы за десятник",
     "activation": {
-      "minWorkers": 1,
+      "minWorkers": 0,
       "minOperationalQd": 4,
       "requiresMeaningfulResult": false
     },
@@ -1140,7 +1140,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "cemetery",
       "name": "Кладбище",
       "stage": 0,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 1,
       "admission": {
         "text": "—",
@@ -1252,7 +1252,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 0,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Построено, не законсервировано и обслужено.",
+    "activationConditionText": "Построено, не законсервировано.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -1379,7 +1379,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 0,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Построено, не законсервировано и обслужено.",
+    "activationConditionText": "Построено, не законсервировано.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -1512,7 +1512,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 0,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Построено, не законсервировано и обслужено.",
+    "activationConditionText": "Построено, не законсервировано.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -1645,7 +1645,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 0,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Построено, не законсервировано и обслужено.",
+    "activationConditionText": "Построено, не законсервировано.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -1724,7 +1724,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 2,
     "workerRole": "Стража",
     "functions": {
@@ -1774,10 +1774,10 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 0,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 1 разных оплаченных работников, не менее 20 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 18 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 1,
-      "minOperationalQd": 20,
+      "minWorkers": 0,
+      "minOperationalQd": 18,
       "requiresMeaningfulResult": false
     },
     "blockReasons": [],
@@ -1793,7 +1793,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "watch-post",
       "name": "Сторожевой пост",
       "stage": 0,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 2,
       "admission": {
         "text": "ЛОВ≥3 или РАЗ≥3",
@@ -1865,7 +1865,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 2,
     "workerRole": "",
     "functions": {
@@ -1911,7 +1911,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Сухой огороженный участок с доступом к корму и воде.",
-    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -1956,7 +1956,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "animal-pen",
       "name": "Загон для животных",
       "stage": 1,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 2,
       "admission": {
         "text": "ЭМП≥3 или СИЛ≥3",
@@ -2040,7 +2040,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 2,
     "workerRole": "",
     "functions": {
@@ -2086,7 +2086,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Спокойный участок рядом с цветущими угодьями.",
-    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -2138,7 +2138,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "apiary",
       "name": "Пасека",
       "stage": 1,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 2,
       "admission": {
         "text": "РАЗ≥3 или ЭМП≥3",
@@ -2229,7 +2229,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 8,
     "workerRole": "",
     "functions": {
@@ -2297,7 +2297,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Рыбный водоём и безопасный берег.",
-    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -2315,7 +2315,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "fishing-pier",
       "name": "Рыбацкий причал",
       "stage": 1,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 8,
       "admission": {
         "text": "ЛОВ≥3 или СИЛ≥3",
@@ -2400,7 +2400,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 8,
     "workerRole": "",
     "functions": {
@@ -2446,7 +2446,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Освещённый склон или иной подходящий участок.",
-    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -2498,7 +2498,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "vineyard",
       "name": "Виноградник",
       "stage": 1,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 8,
       "admission": {
         "text": "Любой трудоспособный",
@@ -2575,7 +2575,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 8,
     "workerRole": "",
     "functions": {
@@ -2621,7 +2621,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Плодородный участок с опорами и доступом к воде.",
-    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -2673,7 +2673,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "hop-yard",
       "name": "Хмельник",
       "stage": 1,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 8,
       "admission": {
         "text": "Любой трудоспособный",
@@ -2744,7 +2744,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 2,
     "workerRole": "",
     "functions": {
@@ -2827,7 +2827,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Достаточная площадь выпаса и доступ к воде.",
-    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -2842,7 +2842,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "pasture",
       "name": "Пастбище",
       "stage": 1,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 2,
       "admission": {
         "text": "ЭМП≥3 или СИЛ≥3",
@@ -2931,7 +2931,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 2,
     "workerRole": "",
     "functions": {
@@ -3018,7 +3018,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -3033,7 +3033,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "pigsty",
       "name": "Свинарник",
       "stage": 1,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 2,
       "admission": {
         "text": "ЭМП≥3 или СИЛ≥3",
@@ -3116,7 +3116,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 2,
     "workerRole": "",
     "functions": {
@@ -3206,7 +3206,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -3221,7 +3221,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "sheepfold",
       "name": "Овчарня",
       "stage": 1,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 2,
       "admission": {
         "text": "ЭМП≥3 или СИЛ≥3",
@@ -3316,7 +3316,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 8,
     "workerRole": "",
     "functions": {
@@ -3417,7 +3417,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -3432,7 +3432,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "mill",
       "name": "Мельница",
       "stage": 1,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 8,
       "admission": {
         "text": "СИЛ≥3 или РАЗ≥3",
@@ -3585,7 +3585,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Построено, не законсервировано и обслужено.",
+    "activationConditionText": "Построено, не законсервировано.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -3660,7 +3660,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 8,
     "workerRole": "",
     "functions": {
@@ -3743,7 +3743,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: содержательный результат функции за период; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: содержательный результат функции за период; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -3758,7 +3758,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "tannery",
       "name": "Кожевенная мастерская",
       "stage": 1,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 8,
       "admission": {
         "text": "ЛОВ≥3 и РАЗ≥3",
@@ -3846,7 +3846,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 3,
     "workerRole": "",
     "functions": {
@@ -3904,7 +3904,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -3944,7 +3944,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "stables",
       "name": "Конюшня",
       "stage": 1,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 3,
       "admission": {
         "text": "ЭМП≥3 или ЛОВ≥3",
@@ -4023,7 +4023,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 1,
     "workerRole": "Смотритель пирса",
     "functions": {
@@ -4081,9 +4081,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Судоходный берег с безопасным подходом.",
-    "activationConditionText": "1 фактически работающий сотрудник; 4 QD профильной службы за десятник",
+    "activationConditionText": "4 QD профильной службы за десятник",
     "activation": {
-      "minWorkers": 1,
+      "minWorkers": 0,
       "minOperationalQd": 4,
       "requiresMeaningfulResult": false
     },
@@ -4096,7 +4096,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "pier",
       "name": "Пирс",
       "stage": 1,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 1,
       "admission": {
         "text": "—",
@@ -4156,7 +4156,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 8,
     "workerRole": "",
     "functions": {
@@ -4232,9 +4232,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 1 разных оплаченных работников, не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 1,
+      "minWorkers": 0,
       "minOperationalQd": 10,
       "requiresMeaningfulResult": false
     },
@@ -4252,7 +4252,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "market",
       "name": "Рынок",
       "stage": 1,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 8,
       "admission": {
         "text": "Любой трудоспособный",
@@ -4306,7 +4306,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 1,
     "workerRole": "Служитель эшафота",
     "functions": {
@@ -4364,9 +4364,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "1 фактически работающий сотрудник; 4 QD профильной службы за десятник",
+    "activationConditionText": "4 QD профильной службы за десятник",
     "activation": {
-      "minWorkers": 1,
+      "minWorkers": 0,
       "minOperationalQd": 4,
       "requiresMeaningfulResult": false,
       "harmWhileOperational": true
@@ -4384,7 +4384,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "gallows",
       "name": "Эшафот",
       "stage": 1,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 1,
       "admission": {
         "text": "—",
@@ -4502,7 +4502,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Построено, не законсервировано и обслужено.",
+    "activationConditionText": "Построено, не законсервировано.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -4650,7 +4650,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Построено, не законсервировано и обслужено.",
+    "activationConditionText": "Построено, не законсервировано.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -4783,7 +4783,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Построено, не законсервировано и обслужено.",
+    "activationConditionText": "Построено, не законсервировано.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -4864,7 +4864,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 2,
     "workerRole": "",
     "functions": {
@@ -4928,9 +4928,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 1 разных оплаченных работников, не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 1,
+      "minWorkers": 0,
       "minOperationalQd": 10,
       "requiresMeaningfulResult": false
     },
@@ -4943,7 +4943,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "arsenal",
       "name": "Арсенал",
       "stage": 1,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 2,
       "admission": {
         "text": "РАЗ≥3 или СИЛ≥3",
@@ -5027,7 +5027,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 3,
     "workerRole": "Баррикадная команда",
     "functions": {
@@ -5077,9 +5077,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 1 разных оплаченных работников, не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 1,
+      "minWorkers": 0,
       "minOperationalQd": 10,
       "requiresMeaningfulResult": false
     },
@@ -5096,7 +5096,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "barricade-line",
       "name": "Линия баррикад",
       "stage": 1,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 3,
       "admission": {
         "text": "СИЛ≥3",
@@ -5174,7 +5174,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 3,
     "workerRole": "Дозор",
     "functions": {
@@ -5224,9 +5224,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 1 разных оплаченных работников, не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 1,
+      "minWorkers": 0,
       "minOperationalQd": 10,
       "requiresMeaningfulResult": false
     },
@@ -5239,7 +5239,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "signal-tower",
       "name": "Сигнальная башня",
       "stage": 1,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 3,
       "admission": {
         "text": "РАЗ≥3 или ЛОВ≥3",
@@ -5329,7 +5329,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 3,
     "workerRole": "Учитель",
     "functions": {
@@ -5379,9 +5379,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 1 разных оплаченных работников, не менее 4 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 4 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 1,
+      "minWorkers": 0,
       "minOperationalQd": 4,
       "requiresMeaningfulResult": false
     },
@@ -5399,7 +5399,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "school",
       "name": "Школа",
       "stage": 1,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 3,
       "admission": {
         "text": "РАЗ≥3 или ЭМП≥3",
@@ -5529,7 +5529,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Сухой безопасный участок с бытовым доступом к воде.",
-    "activationConditionText": "Построено, не законсервировано и обслужено.",
+    "activationConditionText": "Построено, не законсервировано.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -5614,7 +5614,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 3,
     "workerRole": "",
     "functions": {
@@ -5660,10 +5660,10 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 1 разных оплаченных работников, не менее 20 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 18 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 1,
-      "minOperationalQd": 20,
+      "minWorkers": 0,
+      "minOperationalQd": 18,
       "requiresMeaningfulResult": false
     },
     "blockReasons": [],
@@ -5691,7 +5691,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "sheriff-post",
       "name": "Пост шерифа",
       "stage": 1,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 3,
       "admission": {
         "text": "РАЗ≥3 или ЭМП≥3",
@@ -5782,7 +5782,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 8,
     "workerRole": "",
     "functions": {
@@ -5862,7 +5862,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: содержательный результат функции за период; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: содержательный результат функции за период; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -5882,7 +5882,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "bakery",
       "name": "Пекарня",
       "stage": 2,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 8,
       "admission": {
         "text": "Любой трудоспособный",
@@ -5966,7 +5966,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 10,
     "workerRole": "",
     "functions": {
@@ -6235,10 +6235,10 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "2 работающих сотрудника и 40 QD работы кухни, торговли или обслуживания за десятник дают поселению +15 довольства.",
+    "activationConditionText": "2 работающих сотрудника и 36 QD работы кухни, торговли или обслуживания за десятник дают поселению +15 довольства.",
     "activation": {
-      "minWorkers": 2,
-      "minOperationalQd": 40,
+      "minWorkers": 0,
+      "minOperationalQd": 36,
       "requiresMeaningfulResult": false,
       "anyWorkingFunction": true
     },
@@ -6251,7 +6251,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "inn",
       "name": "Трактир",
       "stage": 2,
-      "workersMin": 2,
+      "workersMin": 0,
       "workersMax": 10,
       "admission": {
         "text": "Любой трудоспособный",
@@ -6336,7 +6336,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 8,
     "workerRole": "",
     "functions": {
@@ -6425,7 +6425,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -6443,7 +6443,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "oil-press",
       "name": "Маслобойня",
       "stage": 2,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 8,
       "admission": {
         "text": "СИЛ≥3 или РАЗ≥3",
@@ -6540,7 +6540,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 8,
     "workerRole": "",
     "functions": {
@@ -6632,7 +6632,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -6650,7 +6650,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "cheesery",
       "name": "Сыроварня",
       "stage": 2,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 8,
       "admission": {
         "text": "РАЗ≥3 или ЭМП≥3",
@@ -6747,7 +6747,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 8,
     "workerRole": "",
     "functions": {
@@ -6881,7 +6881,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -6899,7 +6899,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "smokehouse",
       "name": "Коптильня",
       "stage": 2,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 8,
       "admission": {
         "text": "СИЛ≥3 или РАЗ≥3",
@@ -7002,7 +7002,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 12,
     "workerRole": "",
     "functions": {
@@ -7097,7 +7097,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -7115,7 +7115,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "brewery",
       "name": "Пивоварня",
       "stage": 2,
-      "workersMin": 2,
+      "workersMin": 0,
       "workersMax": 12,
       "admission": {
         "text": "СИЛ≥3 или РАЗ≥3",
@@ -7218,7 +7218,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 12,
     "workerRole": "",
     "functions": {
@@ -7313,7 +7313,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -7331,7 +7331,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "winery",
       "name": "Винодельня",
       "stage": 2,
-      "workersMin": 2,
+      "workersMin": 0,
       "workersMax": 12,
       "admission": {
         "text": "РАЗ≥3 или ЭМП≥3",
@@ -7441,7 +7441,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 10,
     "workerRole": "",
     "functions": {
@@ -7614,7 +7614,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -7632,7 +7632,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "distillery",
       "name": "Винокурня",
       "stage": 2,
-      "workersMin": 2,
+      "workersMin": 0,
       "workersMax": 10,
       "admission": {
         "text": "РАЗ≥3 и ЛОВ≥3",
@@ -7728,7 +7728,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 16,
     "workerRole": "",
     "functions": {
@@ -7817,7 +7817,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -7835,7 +7835,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "weaving-workshop",
       "name": "Ткацкая мастерская",
       "stage": 2,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 16,
       "admission": {
         "text": "ЛОВ≥3",
@@ -7925,7 +7925,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 10,
     "workerRole": "",
     "functions": {
@@ -8014,7 +8014,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -8032,7 +8032,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "carpentry-workshop",
       "name": "Столярная мастерская",
       "stage": 2,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 10,
       "admission": {
         "text": "СИЛ≥3 или РАЗ≥3",
@@ -8135,7 +8135,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 8,
     "workerRole": "",
     "functions": {
@@ -8224,7 +8224,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -8242,7 +8242,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "soapworks",
       "name": "Мыловарня",
       "stage": 2,
-      "workersMin": 2,
+      "workersMin": 0,
       "workersMax": 8,
       "admission": {
         "text": "РАЗ≥3 и ЛОВ≥3",
@@ -8343,7 +8343,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 8,
     "workerRole": "",
     "functions": {
@@ -8411,7 +8411,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -8429,7 +8429,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "writing-workshop",
       "name": "Письменная мастерская",
       "stage": 2,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 8,
       "admission": {
         "text": "ЛОВ≥3 и РАЗ≥3",
@@ -8529,7 +8529,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 10,
     "workerRole": "",
     "functions": {
@@ -8630,7 +8630,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -8645,7 +8645,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "tailor-shop",
       "name": "Ателье",
       "stage": 2,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 10,
       "admission": {
         "text": "ЛОВ≥3",
@@ -8734,7 +8734,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 4,
     "workerRole": "",
     "functions": {
@@ -8792,9 +8792,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 1 разных оплаченных работников, не менее 4 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 4 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 1,
+      "minWorkers": 0,
       "minOperationalQd": 4,
       "requiresMeaningfulResult": false
     },
@@ -8807,7 +8807,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "hiring-agency",
       "name": "Агентство Найма",
       "stage": 2,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 4,
       "admission": {
         "text": "ЭМП≥3 или РАЗ≥3",
@@ -8880,7 +8880,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 1,
     "workerRole": "Смотритель голубятни",
     "functions": {
@@ -8938,9 +8938,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "1 фактически работающий сотрудник; 4 QD профильной службы за десятник",
+    "activationConditionText": "4 QD профильной службы за десятник",
     "activation": {
-      "minWorkers": 1,
+      "minWorkers": 0,
       "minOperationalQd": 4,
       "requiresMeaningfulResult": false
     },
@@ -8953,7 +8953,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "dovecote",
       "name": "Голубятня",
       "stage": 2,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 1,
       "admission": {
         "text": "—",
@@ -9027,7 +9027,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "well"
     ],
     "requiredAnyBuildingIds": [],
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 2,
     "workerRole": "",
     "functions": {
@@ -9085,10 +9085,10 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 2 разных оплаченных работников, не менее 20 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 18 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 2,
-      "minOperationalQd": 20,
+      "minWorkers": 0,
+      "minOperationalQd": 18,
       "requiresMeaningfulResult": false
     },
     "blockReasons": [],
@@ -9105,7 +9105,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "bathhouse",
       "name": "Баня",
       "stage": 2,
-      "workersMin": 2,
+      "workersMin": 0,
       "workersMax": 2,
       "admission": {
         "text": "Любой трудоспособный",
@@ -9171,7 +9171,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 4,
     "workerRole": "",
     "functions": {
@@ -9229,9 +9229,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 1 разных оплаченных работников, не менее 4 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 4 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 1,
+      "minWorkers": 0,
       "minOperationalQd": 4,
       "requiresMeaningfulResult": false
     },
@@ -9249,7 +9249,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "shrine",
       "name": "Святилище",
       "stage": 2,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 4,
       "admission": {
         "text": "ЭМП≥3",
@@ -9327,7 +9327,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 4,
     "workerRole": "",
     "functions": {
@@ -9385,9 +9385,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 1 разных оплаченных работников, не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 1,
+      "minWorkers": 0,
       "minOperationalQd": 10,
       "requiresMeaningfulResult": false
     },
@@ -9404,7 +9404,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "guard-tower",
       "name": "Охранная башня",
       "stage": 2,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 4,
       "admission": {
         "text": "ЛОВ≥3 или РАЗ≥3",
@@ -9490,7 +9490,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "sheriff-post"
     ],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 2,
     "workerRole": "",
     "functions": {
@@ -9548,9 +9548,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 1 разных оплаченных работников, не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 1,
+      "minWorkers": 0,
       "minOperationalQd": 10,
       "requiresMeaningfulResult": false
     },
@@ -9567,7 +9567,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "dungeon",
       "name": "Темница",
       "stage": 2,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 2,
       "admission": {
         "text": "СИЛ≥3 или ЭМП≥3",
@@ -9654,7 +9654,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 1,
     "workerRole": "Смотритель постоялого дома",
     "functions": {
@@ -9712,9 +9712,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "1 фактически работающий сотрудник; 4 QD профильной службы за десятник",
+    "activationConditionText": "4 QD профильной службы за десятник",
     "activation": {
-      "minWorkers": 1,
+      "minWorkers": 0,
       "minOperationalQd": 4,
       "requiresMeaningfulResult": false
     },
@@ -9727,7 +9727,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "boarding-house",
       "name": "Постоялый дом",
       "stage": 2,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 1,
       "admission": {
         "text": "—",
@@ -9796,7 +9796,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "watch-post",
       "guard-house"
     ],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 2,
     "workerRole": "",
     "functions": {
@@ -9857,9 +9857,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 1 разных оплаченных работников, не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 1,
+      "minWorkers": 0,
       "minOperationalQd": 10,
       "requiresMeaningfulResult": false
     },
@@ -9872,7 +9872,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "guarded-storehouse",
       "name": "Охраняемый склад",
       "stage": 2,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 2,
       "admission": {
         "text": "СИЛ≥3 или РАЗ≥3",
@@ -9966,7 +9966,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 3,
     "workerRole": "Лекарь",
     "functions": {
@@ -10032,10 +10032,10 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 1 разных оплаченных работников, не менее 20 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 18 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 1,
-      "minOperationalQd": 20,
+      "minWorkers": 0,
+      "minOperationalQd": 18,
       "requiresMeaningfulResult": false
     },
     "blockReasons": [],
@@ -10052,7 +10052,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "lazaret",
       "name": "Лазарет",
       "stage": 2,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 3,
       "admission": {
         "text": "РАЗ≥3 или ЭМП≥3",
@@ -10148,7 +10148,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 6,
     "workerRole": "",
     "functions": {
@@ -10259,7 +10259,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -10274,7 +10274,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "apothecary",
       "name": "Аптекарская",
       "stage": 2,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 6,
       "admission": {
         "text": "РАЗ≥4",
@@ -10374,7 +10374,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 2,
     "workerRole": "Смотритель погреба",
     "functions": {
@@ -10432,9 +10432,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 1 разных оплаченных работников, не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 1,
+      "minWorkers": 0,
       "minOperationalQd": 10,
       "requiresMeaningfulResult": false
     },
@@ -10447,7 +10447,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "powder-magazine",
       "name": "Пороховой погреб",
       "stage": 2,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 2,
       "admission": {
         "text": "РАЗ≥3 и СИЛ≥3",
@@ -10529,7 +10529,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 5,
     "workerRole": "Гарнизон редута",
     "functions": {
@@ -10579,9 +10579,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 2 разных оплаченных работников, не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 2,
+      "minWorkers": 0,
       "minOperationalQd": 10,
       "requiresMeaningfulResult": false
     },
@@ -10598,7 +10598,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "field-fort",
       "name": "Полевой редут",
       "stage": 2,
-      "workersMin": 2,
+      "workersMin": 0,
       "workersMax": 5,
       "admission": {
         "text": "СИЛ≥3",
@@ -10729,7 +10729,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Рядом с опасным производством требуется отдельное ролевое решение ГМ.",
-    "activationConditionText": "Эффект действует при условиях: не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 10,
@@ -10830,7 +10830,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "sheriff-post"
     ],
     "requiredAnyBuildingIds": [],
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 6,
     "workerRole": "",
     "functions": {
@@ -10876,10 +10876,10 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 2 разных оплаченных работников, не менее 20 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 18 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 2,
-      "minOperationalQd": 20,
+      "minWorkers": 0,
+      "minOperationalQd": 18,
       "requiresMeaningfulResult": false
     },
     "blockReasons": [],
@@ -10907,7 +10907,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "guard-house",
       "name": "Караульный дом",
       "stage": 2,
-      "workersMin": 2,
+      "workersMin": 0,
       "workersMax": 6,
       "admission": {
         "text": "СИЛ≥3 или РАЗ≥3",
@@ -10998,7 +10998,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 4,
+    "workersMin": 0,
     "workersMax": 24,
     "workerRole": "",
     "functions": {
@@ -11069,7 +11069,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Доступный участок подходящей глины и воды",
-    "activationConditionText": "Эффект действует при условиях: содержательный результат функции за период; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: содержательный результат функции за период; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -11087,7 +11087,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "brickworks",
       "name": "Кирпичный завод",
       "stage": 3,
-      "workersMin": 4,
+      "workersMin": 0,
       "workersMax": 24,
       "admission": {
         "text": "СИЛ≥3",
@@ -11189,7 +11189,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 6,
+    "workersMin": 0,
     "workersMax": 30,
     "workerRole": "",
     "functions": {
@@ -11357,7 +11357,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Подтверждённое ГМ месторождение выбранного профиля.",
-    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -11372,7 +11372,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "mine",
       "name": "Шахта",
       "stage": 3,
-      "workersMin": 6,
+      "workersMin": 0,
       "workersMax": 30,
       "admission": {
         "text": "СИЛ≥3",
@@ -11479,7 +11479,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 3,
+    "workersMin": 0,
     "workersMax": 16,
     "workerRole": "",
     "functions": {
@@ -11547,7 +11547,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Доступный источник стекольного песка и минеральных добавок",
-    "activationConditionText": "Эффект действует при условиях: содержательный результат функции за период; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: содержательный результат функции за период; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -11565,7 +11565,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "glassworks",
       "name": "Стекольная мастерская",
       "stage": 3,
-      "workersMin": 3,
+      "workersMin": 0,
       "workersMax": 16,
       "admission": {
         "text": "ЛОВ≥3 и РАЗ≥3",
@@ -11671,7 +11671,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 16,
     "workerRole": "",
     "functions": {
@@ -11739,7 +11739,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: хотя бы один обеспеченный производственный цикл или сезонная операция; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -11757,7 +11757,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "tool-workshop",
       "name": "Инструментальная мастерская",
       "stage": 3,
-      "workersMin": 2,
+      "workersMin": 0,
       "workersMax": 16,
       "admission": {
         "text": "РАЗ≥3 и СИЛ≥3",
@@ -11934,7 +11934,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Построено, не законсервировано и обслужено.",
+    "activationConditionText": "Построено, не законсервировано.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -12029,7 +12029,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "carpentry-workshop"
     ],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 2,
     "workerRole": "",
     "functions": {
@@ -12087,9 +12087,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 1 разных оплаченных работников, не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 1,
+      "minWorkers": 0,
       "minOperationalQd": 10,
       "requiresMeaningfulResult": false
     },
@@ -12102,7 +12102,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "construction-center",
       "name": "Центр Строительства",
       "stage": 3,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 2,
       "admission": {
         "text": "РАЗ≥3 или СИЛ≥3",
@@ -12195,7 +12195,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 10,
     "workerRole": "",
     "functions": {
@@ -12317,7 +12317,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: содержательный результат функции за период; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: содержательный результат функции за период; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -12332,7 +12332,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "forge",
       "name": "Кузня",
       "stage": 3,
-      "workersMin": 2,
+      "workersMin": 0,
       "workersMax": 10,
       "admission": {
         "text": "СИЛ≥3 и РАЗ≥3",
@@ -12438,7 +12438,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "school"
     ],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 4,
     "workerRole": "",
     "functions": {
@@ -12496,9 +12496,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 1 разных оплаченных работников, не менее 4 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 4 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 1,
+      "minWorkers": 0,
       "minOperationalQd": 4,
       "requiresMeaningfulResult": false
     },
@@ -12516,7 +12516,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "library",
       "name": "Библиотека",
       "stage": 3,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 4,
       "admission": {
         "text": "РАЗ≥3",
@@ -12611,7 +12611,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "pier"
     ],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 3,
     "workerRole": "",
     "functions": {
@@ -12682,10 +12682,10 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Хорошо видимая точка у действующего судоходного подхода.",
-    "activationConditionText": "Эффект действует при условиях: не менее 1 разных оплаченных работников, не менее 20 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 18 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 1,
-      "minOperationalQd": 20,
+      "minWorkers": 0,
+      "minOperationalQd": 18,
       "requiresMeaningfulResult": false
     },
     "blockReasons": [],
@@ -12697,7 +12697,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "lighthouse",
       "name": "Маяк",
       "stage": 3,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 3,
       "admission": {
         "text": "РАЗ≥3 и ЛОВ≥3",
@@ -12785,7 +12785,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 4,
     "workerRole": "",
     "functions": {
@@ -12845,9 +12845,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 1 разных оплаченных работников, не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 1,
+      "minWorkers": 0,
       "minOperationalQd": 10,
       "requiresMeaningfulResult": false
     },
@@ -12860,7 +12860,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "personnel-office",
       "name": "Управление кадров",
       "stage": 3,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 4,
       "admission": {
         "text": "РАЗ≥3 или ЭМП≥3",
@@ -12953,7 +12953,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "library"
     ],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 4,
     "workerRole": "Чудотворец, исследователь",
     "functions": {
@@ -13011,9 +13011,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 1 разных оплаченных работников, не менее 4 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 4 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 1,
+      "minWorkers": 0,
       "minOperationalQd": 4,
       "requiresMeaningfulResult": false
     },
@@ -13031,7 +13031,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "scriptorium",
       "name": "Скрипторий",
       "stage": 3,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 4,
       "admission": {
         "text": "РАЗ≥4",
@@ -13103,7 +13103,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 1,
     "workerRole": "Смотритель зала",
     "functions": {
@@ -13161,9 +13161,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "1 фактически работающий сотрудник; 4 QD профильной службы за десятник",
+    "activationConditionText": "4 QD профильной службы за десятник",
     "activation": {
-      "minWorkers": 1,
+      "minWorkers": 0,
       "minOperationalQd": 4,
       "requiresMeaningfulResult": false
     },
@@ -13176,7 +13176,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "hall-of-fame",
       "name": "Зал славы",
       "stage": 3,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 1,
       "admission": {
         "text": "—",
@@ -13236,7 +13236,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 1,
     "workerRole": "Смотритель шпиля",
     "functions": {
@@ -13294,9 +13294,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "1 фактически работающий сотрудник; 4 QD профильной службы за десятник",
+    "activationConditionText": "4 QD профильной службы за десятник",
     "activation": {
-      "minWorkers": 1,
+      "minWorkers": 0,
       "minOperationalQd": 4,
       "requiresMeaningfulResult": false
     },
@@ -13309,7 +13309,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "spire",
       "name": "Шпиль",
       "stage": 3,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 1,
       "admission": {
         "text": "—",
@@ -13381,7 +13381,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 1,
     "workerRole": "Смотритель укреплений",
     "functions": {
@@ -13439,9 +13439,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "1 фактически работающий сотрудник; 4 QD профильной службы за десятник",
+    "activationConditionText": "4 QD профильной службы за десятник",
     "activation": {
-      "minWorkers": 1,
+      "minWorkers": 0,
       "minOperationalQd": 4,
       "requiresMeaningfulResult": false
     },
@@ -13454,7 +13454,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "ramparts",
       "name": "Крепостной вал",
       "stage": 3,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 1,
       "admission": {
         "text": "—",
@@ -13561,7 +13561,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Построено, не законсервировано и обслужено.",
+    "activationConditionText": "Построено, не законсервировано.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -13701,7 +13701,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 10,
@@ -13875,7 +13875,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 10,
@@ -14037,7 +14037,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Построено, не законсервировано и обслужено.",
+    "activationConditionText": "Построено, не законсервировано.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -14176,7 +14176,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Плотная городская застройка; желателен охват пожарной службы.",
-    "activationConditionText": "Эффект действует при условиях: не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 10,
@@ -14328,7 +14328,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Безопасный участок вне промышленного загрязнения.",
-    "activationConditionText": "Построено, не законсервировано и обслужено.",
+    "activationConditionText": "Построено, не законсервировано.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -14442,7 +14442,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "barn"
     ],
     "requiredAnyBuildingIds": [],
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 8,
     "workerRole": "",
     "functions": {
@@ -14495,9 +14495,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Сухой участок с грузовым подъездом.",
-    "activationConditionText": "Эффект действует при условиях: не менее 2 разных оплаченных работников, не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 2,
+      "minWorkers": 0,
       "minOperationalQd": 10,
       "requiresMeaningfulResult": false
     },
@@ -14513,7 +14513,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "grain-elevator",
       "name": "Элеватор",
       "stage": 3,
-      "workersMin": 2,
+      "workersMin": 0,
       "workersMax": 8,
       "admission": {
         "text": "РАЗ≥3 или СИЛ≥3",
@@ -14621,7 +14621,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "shooting-range",
       "training-camp"
     ],
-    "workersMin": 3,
+    "workersMin": 0,
     "workersMax": 8,
     "workerRole": "",
     "functions": {
@@ -14667,9 +14667,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 3 разных оплаченных работников, не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 3,
+      "minWorkers": 0,
       "minOperationalQd": 10,
       "requiresMeaningfulResult": false
     },
@@ -14690,7 +14690,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "militia-headquarters",
       "name": "Штаб ополчения",
       "stage": 3,
-      "workersMin": 3,
+      "workersMin": 0,
       "workersMax": 8,
       "admission": {
         "text": "СИЛ≥3 или ЭМП≥3",
@@ -14799,7 +14799,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 4,
     "workerRole": "",
     "functions": {
@@ -14849,9 +14849,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 4,
     "requiresConstructionCenter": true,
     "siteRequirementsText": "Сухой защищённый участок с удобным грузовым доступом.",
-    "activationConditionText": "Эффект действует при условиях: не менее 1 разных оплаченных работников, не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 1,
+      "minWorkers": 0,
       "minOperationalQd": 10,
       "requiresMeaningfulResult": false
     },
@@ -14867,7 +14867,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "industrial-icehouse",
       "name": "Промышленный ледник",
       "stage": 4,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 4,
       "admission": {
         "text": "РАЗ≥3 или СИЛ≥3",
@@ -14970,7 +14970,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 6,
     "workerRole": "",
     "functions": {
@@ -15016,10 +15016,10 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 4,
     "requiresConstructionCenter": true,
     "siteRequirementsText": "Подтверждённый источник воды и маршрут городской сети.",
-    "activationConditionText": "Эффект действует при условиях: не менее 2 разных оплаченных работников, не менее 20 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 18 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 2,
-      "minOperationalQd": 20,
+      "minWorkers": 0,
+      "minOperationalQd": 18,
       "requiresMeaningfulResult": false
     },
     "blockReasons": [],
@@ -15039,7 +15039,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "waterworks",
       "name": "Водопроводная станция",
       "stage": 4,
-      "workersMin": 2,
+      "workersMin": 0,
       "workersMax": 6,
       "admission": {
         "text": "РАЗ≥3 или СИЛ≥3",
@@ -15151,7 +15151,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "well",
       "waterworks"
     ],
-    "workersMin": 3,
+    "workersMin": 0,
     "workersMax": 10,
     "workerRole": "",
     "functions": {
@@ -15197,10 +15197,10 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 4,
     "requiresConstructionCenter": true,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 3 разных оплаченных работников, не менее 20 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 18 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 3,
-      "minOperationalQd": 20,
+      "minWorkers": 0,
+      "minOperationalQd": 18,
       "requiresMeaningfulResult": false
     },
     "blockReasons": [],
@@ -15221,7 +15221,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "fire-station",
       "name": "Пожарное депо",
       "stage": 4,
-      "workersMin": 3,
+      "workersMin": 0,
       "workersMax": 10,
       "admission": {
         "text": "СИЛ≥3 или ЛОВ≥3",
@@ -15334,7 +15334,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 4,
     "workerRole": "",
     "functions": {
@@ -15380,10 +15380,10 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 4,
     "requiresConstructionCenter": true,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 1 разных оплаченных работников, не менее 20 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 18 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 1,
-      "minOperationalQd": 20,
+      "minWorkers": 0,
+      "minOperationalQd": 18,
       "requiresMeaningfulResult": false
     },
     "blockReasons": [],
@@ -15403,7 +15403,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "telegraph-station",
       "name": "Телеграфная станция",
       "stage": 4,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 4,
       "admission": {
         "text": "РАЗ≥3 и ЛОВ≥3",
@@ -15506,7 +15506,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "library"
     ],
     "requiredAnyBuildingIds": [],
-    "workersMin": 4,
+    "workersMin": 0,
     "workersMax": 24,
     "workerRole": "",
     "functions": {
@@ -15574,7 +15574,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 4,
     "requiresConstructionCenter": true,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: содержательный результат функции за период; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: содержательный результат функции за период; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -15597,7 +15597,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "printing-house",
       "name": "Типография",
       "stage": 4,
-      "workersMin": 4,
+      "workersMin": 0,
       "workersMax": 24,
       "admission": {
         "text": "ЛОВ≥3 или РАЗ≥3",
@@ -15732,7 +15732,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 6,
+    "workersMin": 0,
     "workersMax": 40,
     "workerRole": "",
     "functions": {
@@ -15863,7 +15863,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 4,
     "requiresConstructionCenter": true,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: содержательный результат функции за период; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: содержательный результат функции за период; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -15881,7 +15881,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "cannery",
       "name": "Консервный завод",
       "stage": 4,
-      "workersMin": 6,
+      "workersMin": 0,
       "workersMax": 40,
       "admission": {
         "text": "СИЛ≥3 или РАЗ≥3",
@@ -16003,7 +16003,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "waterworks"
     ],
     "requiredAnyBuildingIds": [],
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 8,
     "workerRole": "",
     "functions": {
@@ -16049,10 +16049,10 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 4,
     "requiresConstructionCenter": true,
     "siteRequirementsText": "Маршрут отвода ниже источников питьевой воды.",
-    "activationConditionText": "Эффект действует при условиях: не менее 2 разных оплаченных работников, не менее 20 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 18 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 2,
-      "minOperationalQd": 20,
+      "minWorkers": 0,
+      "minOperationalQd": 18,
       "requiresMeaningfulResult": false
     },
     "blockReasons": [],
@@ -16072,7 +16072,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "sewer-system",
       "name": "Канализация",
       "stage": 4,
-      "workersMin": 2,
+      "workersMin": 0,
       "workersMax": 8,
       "admission": {
         "text": "СИЛ≥3 или РАЗ≥3",
@@ -16184,7 +16184,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 10,
+    "workersMin": 0,
     "workersMax": 30,
     "workerRole": "",
     "functions": {
@@ -16230,10 +16230,10 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 4,
     "requiresConstructionCenter": true,
     "siteRequirementsText": "Промышленный участок вдали от плотного жилья.",
-    "activationConditionText": "Эффект действует при условиях: не менее 10 разных оплаченных работников, не менее 20 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 18 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 10,
-      "minOperationalQd": 20,
+      "minWorkers": 0,
+      "minOperationalQd": 18,
       "requiresMeaningfulResult": false
     },
     "blockReasons": [],
@@ -16253,7 +16253,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "gasworks",
       "name": "Газовый завод",
       "stage": 4,
-      "workersMin": 10,
+      "workersMin": 0,
       "workersMax": 30,
       "admission": {
         "text": "РАЗ≥3 и СИЛ≥3",
@@ -16366,7 +16366,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 12,
     "workerRole": "",
     "functions": {
@@ -16412,10 +16412,10 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 4,
     "requiresConstructionCenter": true,
     "siteRequirementsText": "Подтверждённый железнодорожный подход и транзитная площадка.",
-    "activationConditionText": "Эффект действует при условиях: не менее 2 разных оплаченных работников, не менее 20 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 18 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 2,
-      "minOperationalQd": 20,
+      "minWorkers": 0,
+      "minOperationalQd": 18,
       "requiresMeaningfulResult": false
     },
     "blockReasons": [],
@@ -16430,7 +16430,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "railway-depot",
       "name": "Железнодорожное депо",
       "stage": 4,
-      "workersMin": 2,
+      "workersMin": 0,
       "workersMax": 12,
       "admission": {
         "text": "СИЛ≥3 или РАЗ≥3",
@@ -16538,7 +16538,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "personnel-office",
       "town-hall"
     ],
-    "workersMin": 4,
+    "workersMin": 0,
     "workersMax": 12,
     "workerRole": "",
     "functions": {
@@ -16584,10 +16584,10 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 4,
     "requiresConstructionCenter": true,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 4 разных оплаченных работников, не менее 20 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 18 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 4,
-      "minOperationalQd": 20,
+      "minWorkers": 0,
+      "minOperationalQd": 18,
       "requiresMeaningfulResult": false
     },
     "blockReasons": [],
@@ -16613,7 +16613,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "guard-precinct",
       "name": "Участок охраны",
       "stage": 4,
-      "workersMin": 4,
+      "workersMin": 0,
       "workersMax": 12,
       "admission": {
         "text": "РАЗ≥3 или ЭМП≥3",
@@ -16719,7 +16719,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "well",
       "waterworks"
     ],
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 6,
     "workerRole": "",
     "functions": {
@@ -16765,10 +16765,10 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 4,
     "requiresConstructionCenter": true,
     "siteRequirementsText": "Подтверждённый водный маршрут к выбранным хозяйствам.",
-    "activationConditionText": "Эффект действует при условиях: не менее 2 разных оплаченных работников, не менее 20 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 18 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 2,
-      "minOperationalQd": 20,
+      "minWorkers": 0,
+      "minOperationalQd": 18,
       "requiresMeaningfulResult": false
     },
     "blockReasons": [],
@@ -16788,7 +16788,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "irrigation-system",
       "name": "Оросительная система",
       "stage": 4,
-      "workersMin": 2,
+      "workersMin": 0,
       "workersMax": 6,
       "admission": {
         "text": "РАЗ≥3 или СИЛ≥3",
@@ -16896,7 +16896,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "barn",
       "guarded-storehouse"
     ],
-    "workersMin": 4,
+    "workersMin": 0,
     "workersMax": 12,
     "workerRole": "",
     "functions": {
@@ -16942,10 +16942,10 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 4,
     "requiresConstructionCenter": true,
     "siteRequirementsText": "Безопасный транспортный узел рядом с хранилищем.",
-    "activationConditionText": "Эффект действует при условиях: не менее 4 разных оплаченных работников, не менее 20 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 18 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 4,
-      "minOperationalQd": 20,
+      "minWorkers": 0,
+      "minOperationalQd": 18,
       "requiresMeaningfulResult": false
     },
     "blockReasons": [],
@@ -16967,7 +16967,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "food-distribution-center",
       "name": "Продовольственный распределительный центр",
       "stage": 4,
-      "workersMin": 4,
+      "workersMin": 0,
       "workersMax": 12,
       "admission": {
         "text": "Любой трудоспособный",
@@ -17075,7 +17075,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 10,
+    "workersMin": 0,
     "workersMax": 40,
     "workerRole": "",
     "functions": {
@@ -17166,7 +17166,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 5,
     "requiresConstructionCenter": true,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: содержательный результат функции за период; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: содержательный результат функции за период; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -17184,7 +17184,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "machine-works",
       "name": "Машиностроительный цех",
       "stage": 5,
-      "workersMin": 10,
+      "workersMin": 0,
       "workersMax": 40,
       "admission": {
         "text": "РАЗ≥3 и СИЛ≥3",
@@ -17321,7 +17321,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 10,
+    "workersMin": 0,
     "workersMax": 40,
     "workerRole": "",
     "functions": {
@@ -17456,7 +17456,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 5,
     "requiresConstructionCenter": true,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: содержательный результат функции за период; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: содержательный результат функции за период; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -17474,7 +17474,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "chemical-plant",
       "name": "Химический завод",
       "stage": 5,
-      "workersMin": 10,
+      "workersMin": 0,
       "workersMax": 40,
       "admission": {
         "text": "РАЗ≥4 и ЛОВ≥3",
@@ -17605,7 +17605,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 15,
+    "workersMin": 0,
     "workersMax": 60,
     "workerRole": "",
     "functions": {
@@ -17718,7 +17718,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 5,
     "requiresConstructionCenter": true,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: содержательный результат функции за период; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: содержательный результат функции за период; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -17736,7 +17736,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "steelworks",
       "name": "Металлургический завод",
       "stage": 5,
-      "workersMin": 15,
+      "workersMin": 0,
       "workersMax": 60,
       "admission": {
         "text": "СИЛ≥3 и РАЗ≥3",
@@ -17874,7 +17874,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "meeting-house"
     ],
     "requiredAnyBuildingIds": [],
-    "workersMin": 4,
+    "workersMin": 0,
     "workersMax": 12,
     "workerRole": "",
     "functions": {
@@ -17920,10 +17920,10 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 5,
     "requiresConstructionCenter": true,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 4 разных оплаченных работников, не менее 20 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 18 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 4,
-      "minOperationalQd": 20,
+      "minWorkers": 0,
+      "minOperationalQd": 18,
       "requiresMeaningfulResult": false
     },
     "blockReasons": [],
@@ -17948,7 +17948,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "town-hall",
       "name": "Ратуша",
       "stage": 5,
-      "workersMin": 4,
+      "workersMin": 0,
       "workersMax": 12,
       "admission": {
         "text": "РАЗ≥3 или ЭМП≥3",
@@ -18074,7 +18074,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "lazaret"
     ],
     "requiredAnyBuildingIds": [],
-    "workersMin": 6,
+    "workersMin": 0,
     "workersMax": 24,
     "workerRole": "",
     "functions": {
@@ -18120,10 +18120,10 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 5,
     "requiresConstructionCenter": true,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 6 разных оплаченных работников, не менее 20 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 18 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 6,
-      "minOperationalQd": 20,
+      "minWorkers": 0,
+      "minOperationalQd": 18,
       "requiresMeaningfulResult": false
     },
     "blockReasons": [],
@@ -18151,7 +18151,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "hospital",
       "name": "Больница",
       "stage": 5,
-      "workersMin": 6,
+      "workersMin": 0,
       "workersMax": 24,
       "admission": {
         "text": "РАЗ≥3 или ЭМП≥3",
@@ -18283,7 +18283,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "market"
     ],
     "requiredAnyBuildingIds": [],
-    "workersMin": 4,
+    "workersMin": 0,
     "workersMax": 16,
     "workerRole": "",
     "functions": {
@@ -18329,9 +18329,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 5,
     "requiresConstructionCenter": true,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 4 разных оплаченных работников, не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 4,
+      "minWorkers": 0,
       "minOperationalQd": 10,
       "requiresMeaningfulResult": false
     },
@@ -18347,7 +18347,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "bank-exchange",
       "name": "Банк и торговая биржа",
       "stage": 5,
-      "workersMin": 4,
+      "workersMin": 0,
       "workersMax": 16,
       "admission": {
         "text": "РАЗ≥4 или ЭМП≥4",
@@ -18471,7 +18471,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 6,
+    "workersMin": 0,
     "workersMax": 24,
     "workerRole": "",
     "functions": {
@@ -18517,9 +18517,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 5,
     "requiresConstructionCenter": true,
     "siteRequirementsText": "",
-    "activationConditionText": "6 фактически работающих сотрудников; от 24 QD культуры, 120 QD на полную программу за десятник",
+    "activationConditionText": "от 24 QD культуры, 120 QD на полную программу за десятник",
     "activation": {
-      "minWorkers": 6,
+      "minWorkers": 0,
       "minOperationalQd": 24,
       "requiresMeaningfulResult": false
     },
@@ -18547,7 +18547,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "city-theatre",
       "name": "Городской театр",
       "stage": 5,
-      "workersMin": 6,
+      "workersMin": 0,
       "workersMax": 24,
       "admission": {
         "text": "Любой трудоспособный",
@@ -18658,7 +18658,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "library"
     ],
     "requiredAnyBuildingIds": [],
-    "workersMin": 4,
+    "workersMin": 0,
     "workersMax": 16,
     "workerRole": "",
     "functions": {
@@ -18704,9 +18704,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 5,
     "requiresConstructionCenter": true,
     "siteRequirementsText": "",
-    "activationConditionText": "4 фактически работающих сотрудника; от 16 QD культуры, 80 QD на полную программу за десятник",
+    "activationConditionText": "от 16 QD культуры, 80 QD на полную программу за десятник",
     "activation": {
-      "minWorkers": 4,
+      "minWorkers": 0,
       "minOperationalQd": 16,
       "requiresMeaningfulResult": false
     },
@@ -18734,7 +18734,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "museum",
       "name": "Музей",
       "stage": 5,
-      "workersMin": 4,
+      "workersMin": 0,
       "workersMax": 16,
       "admission": {
         "text": "РАЗ≥3 или ЭМП≥3",
@@ -18848,7 +18848,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "comfortable-house"
     ],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 4,
     "workerRole": "",
     "functions": {
@@ -18894,9 +18894,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 5,
     "requiresConstructionCenter": true,
     "siteRequirementsText": "Крупный престижный участок и городской доступ к воде.",
-    "activationConditionText": "Эффект действует при условиях: не менее 1 разных оплаченных работников, не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 1,
+      "minWorkers": 0,
       "minOperationalQd": 10,
       "requiresMeaningfulResult": false
     },
@@ -18912,7 +18912,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "mansion",
       "name": "Особняк",
       "stage": 5,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 4,
       "admission": {
         "text": "Любой трудоспособный",
@@ -19006,7 +19006,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "guard-precinct"
     ],
     "requiredAnyBuildingIds": [],
-    "workersMin": 3,
+    "workersMin": 0,
     "workersMax": 8,
     "workerRole": "",
     "functions": {
@@ -19052,10 +19052,10 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 5,
     "requiresConstructionCenter": true,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 3 разных оплаченных работников, не менее 20 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 18 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 3,
-      "minOperationalQd": 20,
+      "minWorkers": 0,
+      "minOperationalQd": 18,
       "requiresMeaningfulResult": false
     },
     "blockReasons": [],
@@ -19081,7 +19081,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "court",
       "name": "Суд",
       "stage": 5,
-      "workersMin": 3,
+      "workersMin": 0,
       "workersMax": 8,
       "admission": {
         "text": "РАЗ≥4 или ЭМП≥4",
@@ -19193,7 +19193,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "waterworks"
     ],
     "requiredAnyBuildingIds": [],
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 20,
     "workerRole": "",
     "functions": {
@@ -19305,7 +19305,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "siteRequirementsText": "Освещённый незагрязнённый участок с городской водой.",
     "activationConditionText": "Минимум 2 работника. Дорогая зимняя страховка: овощи, фрукты и обычные лекарственные травы круглый год.",
     "activation": {
-      "minWorkers": 2,
+      "minWorkers": 0,
       "minOperationalQd": 0,
       "requiresMeaningfulResult": true
     },
@@ -19326,7 +19326,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "greenhouse-complex",
       "name": "Тепличный комплекс",
       "stage": 5,
-      "workersMin": 2,
+      "workersMin": 0,
       "workersMax": 20,
       "admission": {
         "text": "РАЗ≥3 или ЭМП≥3",
@@ -19455,7 +19455,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "telegraph-station"
     ],
     "requiredAnyBuildingIds": [],
-    "workersMin": 4,
+    "workersMin": 0,
     "workersMax": 12,
     "workerRole": "",
     "functions": {
@@ -19501,10 +19501,10 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 5,
     "requiresConstructionCenter": true,
     "siteRequirementsText": "Защищённый штаб рядом с гарнизоном.",
-    "activationConditionText": "Эффект действует при условиях: не менее 4 разных оплаченных работников, не менее 20 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 18 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 4,
-      "minOperationalQd": 20,
+      "minWorkers": 0,
+      "minOperationalQd": 18,
       "requiresMeaningfulResult": false
     },
     "blockReasons": [],
@@ -19524,7 +19524,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "garrison-administration",
       "name": "Гарнизонное управление",
       "stage": 5,
-      "workersMin": 4,
+      "workersMin": 0,
       "workersMax": 12,
       "admission": {
         "text": "СИЛ≥3 или ЭМП≥3",
@@ -19675,7 +19675,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 15,
+    "workersMin": 0,
     "workersMax": 60,
     "workerRole": "",
     "functions": {
@@ -19744,7 +19744,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 6,
     "requiresConstructionCenter": true,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: содержательный результат функции за период; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: содержательный результат функции за период; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -19762,7 +19762,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "high-tech-components-plant",
       "name": "Завод высокотехнологичных компонентов",
       "stage": 6,
-      "workersMin": 15,
+      "workersMin": 0,
       "workersMax": 60,
       "admission": {
         "text": "РАЗ≥4 и ЛОВ≥3",
@@ -19916,7 +19916,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 20,
+    "workersMin": 0,
     "workersMax": 80,
     "workerRole": "",
     "functions": {
@@ -19962,10 +19962,10 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 6,
     "requiresConstructionCenter": true,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 20 разных оплаченных работников, не менее 40 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 36 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 20,
-      "minOperationalQd": 40,
+      "minWorkers": 0,
+      "minOperationalQd": 36,
       "requiresMeaningfulResult": false
     },
     "blockReasons": [],
@@ -19986,7 +19986,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "airship-yard",
       "name": "Воздушная верфь",
       "stage": 6,
-      "workersMin": 20,
+      "workersMin": 0,
       "workersMax": 80,
       "admission": {
         "text": "СИЛ≥3 или РАЗ≥3",
@@ -20119,7 +20119,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "library"
     ],
     "requiredAnyBuildingIds": [],
-    "workersMin": 8,
+    "workersMin": 0,
     "workersMax": 32,
     "workerRole": "",
     "functions": {
@@ -20165,10 +20165,10 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 6,
     "requiresConstructionCenter": true,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 8 разных оплаченных работников, не менее 40 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 36 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 8,
-      "minOperationalQd": 40,
+      "minWorkers": 0,
+      "minOperationalQd": 36,
       "requiresMeaningfulResult": false
     },
     "blockReasons": [],
@@ -20189,7 +20189,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "university",
       "name": "Университет",
       "stage": 6,
-      "workersMin": 8,
+      "workersMin": 0,
       "workersMax": 32,
       "admission": {
         "text": "РАЗ≥4 или ЭМП≥4",
@@ -20321,7 +20321,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "arsenal"
     ],
     "requiredAnyBuildingIds": [],
-    "workersMin": 20,
+    "workersMin": 0,
     "workersMax": 80,
     "workerRole": "",
     "functions": {
@@ -20434,7 +20434,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 6,
     "requiresConstructionCenter": true,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: содержательный результат функции за период; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: содержательный результат функции за период; здание исправно, функция не заблокирована долгом.",
     "activation": {
       "minWorkers": 0,
       "minOperationalQd": 0,
@@ -20452,7 +20452,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "military-factory",
       "name": "Военный завод",
       "stage": 6,
-      "workersMin": 20,
+      "workersMin": 0,
       "workersMax": 80,
       "admission": {
         "text": "СИЛ≥3 и РАЗ≥3",
@@ -20606,7 +20606,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "shooting-range",
       "training-camp"
     ],
-    "workersMin": 6,
+    "workersMin": 0,
     "workersMax": 24,
     "workerRole": "",
     "functions": {
@@ -20652,10 +20652,10 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 6,
     "requiresConstructionCenter": true,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 6 разных оплаченных работников, не менее 40 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 36 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 6,
-      "minOperationalQd": 40,
+      "minWorkers": 0,
+      "minOperationalQd": 36,
       "requiresMeaningfulResult": false
     },
     "blockReasons": [],
@@ -20680,7 +20680,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "military-academy",
       "name": "Военная академия",
       "stage": 6,
-      "workersMin": 6,
+      "workersMin": 0,
       "workersMax": 24,
       "admission": {
         "text": "РАЗ≥3 или ЭМП≥3",
@@ -20799,7 +20799,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 5,
+    "workersMin": 0,
     "workersMax": 20,
     "workerRole": "",
     "functions": {
@@ -20845,9 +20845,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 6,
     "requiresConstructionCenter": true,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 5 разных оплаченных работников, не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 10 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 5,
+      "minWorkers": 0,
       "minOperationalQd": 10,
       "requiresMeaningfulResult": false
     },
@@ -20872,7 +20872,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "bastion",
       "name": "Бастион",
       "stage": 6,
-      "workersMin": 5,
+      "workersMin": 0,
       "workersMax": 20,
       "admission": {
         "text": "СИЛ≥3",
@@ -20992,7 +20992,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "university",
       "library"
     ],
-    "workersMin": 6,
+    "workersMin": 0,
     "workersMax": 16,
     "workerRole": "",
     "functions": {
@@ -21038,10 +21038,10 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 6,
     "requiresConstructionCenter": true,
     "siteRequirementsText": "Безопасный кампус с опытными участками.",
-    "activationConditionText": "Эффект действует при условиях: не менее 6 разных оплаченных работников, не менее 40 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 36 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 6,
-      "minOperationalQd": 40,
+      "minWorkers": 0,
+      "minOperationalQd": 36,
       "requiresMeaningfulResult": false
     },
     "blockReasons": [],
@@ -21062,7 +21062,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "agronomic-institute",
       "name": "Агрономический институт",
       "stage": 6,
-      "workersMin": 6,
+      "workersMin": 0,
       "workersMax": 16,
       "admission": {
         "text": "РАЗ≥4 или ЭМП≥3",
@@ -21193,7 +21193,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "telegraph-station"
     ],
     "requiredAnyBuildingIds": [],
-    "workersMin": 6,
+    "workersMin": 0,
     "workersMax": 18,
     "workerRole": "",
     "functions": {
@@ -21239,10 +21239,10 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 6,
     "requiresConstructionCenter": true,
     "siteRequirementsText": "Укреплённый узел связи рядом с оборонным командованием.",
-    "activationConditionText": "Эффект действует при условиях: не менее 6 разных оплаченных работников, не менее 20 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 18 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 6,
-      "minOperationalQd": 20,
+      "minWorkers": 0,
+      "minOperationalQd": 18,
       "requiresMeaningfulResult": false
     },
     "blockReasons": [],
@@ -21266,7 +21266,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "main-headquarters",
       "name": "Главный штаб",
       "stage": 6,
-      "workersMin": 6,
+      "workersMin": 0,
       "workersMax": 18,
       "admission": {
         "text": "РАЗ≥4 или ЭМП≥4",
@@ -21397,7 +21397,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 8,
+    "workersMin": 0,
     "workersMax": 32,
     "workerRole": "",
     "functions": {
@@ -21443,10 +21443,10 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 7,
     "requiresConstructionCenter": true,
     "siteRequirementsText": "",
-    "activationConditionText": "Эффект действует при условиях: не менее 8 разных оплаченных работников, не менее 20 фактических QD за десятник; здание исправно, функция не заблокирована долгом и обслуживание не пропущено.",
+    "activationConditionText": "Эффект действует при условиях: не менее 18 фактических QD за десятник; здание исправно, функция не заблокирована долгом.",
     "activation": {
-      "minWorkers": 8,
-      "minOperationalQd": 20,
+      "minWorkers": 0,
+      "minOperationalQd": 18,
       "requiresMeaningfulResult": false
     },
     "blockReasons": [],
@@ -21470,7 +21470,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "citadel",
       "name": "Цитадель",
       "stage": 7,
-      "workersMin": 8,
+      "workersMin": 0,
       "workersMax": 32,
       "admission": {
         "text": "СИЛ≥3 или ЭМП≥3",
@@ -21533,7 +21533,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "sourceRequirement": "8/6/10/0",
     "sourceRawMaterials": "Wood 180; Stone 120; Cloth 20; Письменные материалы 10",
     "siteRequirementsText": "доступное и безопасное место общих собраний, вне опасного промышленного участка; проверка GM",
-    "activationConditionText": "1 фактически работающий оплаченный или добровольный сотрудник; суммарно 20 обычных/сверхурочных QD за десятник; исправное здание без блокировки функции",
+    "activationConditionText": "суммарно 20 обычных/сверхурочных QD за десятник; исправное здание без блокировки функции",
     "effect": "общественные сходы, ведение решений; service.capacity:120, coverageKind:population",
     "notes": "развитие только от первого активного экземпляра; повтор добавляет самостоятельную мощность Контроля и охват, не слоты/Влияние Политики",
     "visibility": "public",
@@ -21568,10 +21568,10 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
         "qty": 10
       }
     ],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 2,
     "workerRole": "Староста, писарь",
-    "assignedWorkerIds": [],
+
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 36,
     "operatingUpkeepMonthlyCopper": 18,
@@ -21584,8 +21584,8 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "culture": true
     },
     "activation": {
-      "minWorkers": 1,
-      "minOperationalQd": 20,
+      "minWorkers": 0,
+      "minOperationalQd": 18,
       "requiresMeaningfulResult": false
     },
     "service": {
@@ -21637,7 +21637,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "meeting-house",
       "name": "Дом собраний",
       "stage": 2,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 2,
       "admission": {
         "text": "Обычная гражданская служба",
@@ -21703,7 +21703,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 1,
     "workerRole": "Работник досуга",
     "functions": {
@@ -21753,9 +21753,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Открытая безопасная площадка, доступная жителям; проверка GM",
-    "activationConditionText": "1 фактически работающих сотрудников; минимум 4 QD, 20 QD на полную мощность досуга за десятник",
+    "activationConditionText": "минимум 4 QD, 18 QD на полную мощность досуга за десятник",
     "activation": {
-      "minWorkers": 1,
+      "minWorkers": 0,
       "minOperationalQd": 4,
       "requiresMeaningfulResult": false
     },
@@ -21780,7 +21780,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "festival-square",
       "name": "Площадь гуляний",
       "stage": 1,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 1,
       "admission": {
         "text": "Любой трудоспособный",
@@ -21846,7 +21846,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 1,
     "workerRole": "Работник досуга",
     "functions": {
@@ -21896,9 +21896,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "1 фактически работающих сотрудников; минимум 4 QD, 20 QD на полную мощность досуга за десятник",
+    "activationConditionText": "минимум 4 QD, 18 QD на полную мощность досуга за десятник",
     "activation": {
-      "minWorkers": 1,
+      "minWorkers": 0,
       "minOperationalQd": 4,
       "requiresMeaningfulResult": false
     },
@@ -21923,7 +21923,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "alehouse",
       "name": "Пивная",
       "stage": 1,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 1,
       "admission": {
         "text": "Любой трудоспособный",
@@ -21995,7 +21995,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 2,
     "workerRole": "Работник досуга",
     "functions": {
@@ -22045,9 +22045,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "2 фактически работающих сотрудников; минимум 8 QD, 40 QD на полную мощность досуга за десятник",
+    "activationConditionText": "минимум 8 QD, 36 QD на полную мощность досуга за десятник",
     "activation": {
-      "minWorkers": 2,
+      "minWorkers": 0,
       "minOperationalQd": 8,
       "requiresMeaningfulResult": false
     },
@@ -22072,7 +22072,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "game-house",
       "name": "Дом игр",
       "stage": 2,
-      "workersMin": 2,
+      "workersMin": 0,
       "workersMax": 2,
       "admission": {
         "text": "Любой трудоспособный",
@@ -22150,7 +22150,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     ],
     "requiredBuildingIds": [],
     "requiredAnyBuildingIds": [],
-    "workersMin": 3,
+    "workersMin": 0,
     "workersMax": 3,
     "workerRole": "Работник досуга",
     "functions": {
@@ -22200,9 +22200,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
-    "activationConditionText": "3 фактически работающих сотрудников; минимум 12 QD, 60 QD на полную мощность досуга за десятник",
+    "activationConditionText": "минимум 12 QD, 60 QD на полную мощность досуга за десятник",
     "activation": {
-      "minWorkers": 3,
+      "minWorkers": 0,
       "minOperationalQd": 12,
       "requiresMeaningfulResult": false
     },
@@ -22227,7 +22227,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "performance-house",
       "name": "Дом представлений",
       "stage": 3,
-      "workersMin": 3,
+      "workersMin": 0,
       "workersMax": 3,
       "admission": {
         "text": "Любой трудоспособный",
@@ -22301,7 +22301,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "well"
     ],
     "requiredAnyBuildingIds": [],
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 1,
     "workerRole": "Работник досуга",
     "functions": {
@@ -22351,9 +22351,9 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Свободный безопасный участок с доступом к воде; проверка GM",
-    "activationConditionText": "1 фактически работающих сотрудников; минимум 4 QD, 20 QD на полную мощность досуга за десятник",
+    "activationConditionText": "минимум 4 QD, 18 QD на полную мощность досуга за десятник",
     "activation": {
-      "minWorkers": 1,
+      "minWorkers": 0,
       "minOperationalQd": 4,
       "requiresMeaningfulResult": false
     },
@@ -22378,7 +22378,7 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "templateId": "promenade-garden",
       "name": "Сад прогулок",
       "stage": 3,
-      "workersMin": 1,
+      "workersMin": 0,
       "workersMax": 1,
       "admission": {
         "text": "Любой трудоспособный",

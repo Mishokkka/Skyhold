@@ -6,8 +6,8 @@ import { normalizeAgricultureBuilding } from "../agriculture.js";
 import { normalizeLivestockBuilding } from "../livestock.js";
 import { normalizeInternalDemandTrade } from "../economy/internal-demand.js";
 import { isPlainObject, makeId, toBoolean, toNumber } from "../utils.js";
-import { normalizeBuildingWorkerProfile, workerAdmission } from "../../engines/workers/building-qualification.js";
-import { buildingLaborMode, normalizeBuildingLabor } from "../hybrid-labor.js";
+import { normalizeBuildingWorkerProfile } from "../../engines/workers/building-qualification.js";
+import { normalizeBuildingLabor } from "../labor-model.js";
 
 function floorNonNegativeQuantity(value, fallback = 0) {
   return Math.max(0, Math.floor(toNumber(value, fallback)));
@@ -71,7 +71,6 @@ function guessConstructionStatus(status) {
 }
 
 export function normalizeBuilding(building, options = {}) {
-  if (building.labor !== undefined) building.labor = normalizeBuildingLabor(building.labor);
   const hadWorkerProfile = isPlainObject(building?.workerProfile);
   building.id = String(building.id || makeId("building"));
   building.templateId = String(building.templateId ?? "");
@@ -391,8 +390,8 @@ export function normalizeBuilding(building, options = {}) {
   building.bonuses.culture = toNumber(building.bonuses.culture, 0);
   building.bonuses.war = toNumber(building.bonuses.war, 0);
 
-  building.workersMin = toNumber(building.workersMin, 0);
-  building.workersMax = Math.max(building.workersMin, toNumber(building.workersMax, toNumber(building.workersAssigned, 0) || 1));
+  building.workersMin = 0;
+  building.workersMax = floorNonNegativeQuantity(building.workersMax, floorNonNegativeQuantity(building.workerProfile?.workersMax));
   const specialKind = inferBuildingSpecialKind(building);
   if (specialKind) {
     if (!isPlainObject(building.special)) building.special = {};
@@ -402,10 +401,7 @@ export function normalizeBuilding(building, options = {}) {
   if (specialKind === "fasti-shop") {
     building.workersMin = 0;
     building.workersMax = 0;
-    // The story shop is deliberately workerless. Clear legacy slots before
-    // worker-profile normalization so stale assignments cannot restore a
-    // capacity that the special-building contract explicitly forbids.
-    building.assignedWorkerIds = [];
+    building.labor = { version: 2, capacityQd: 0 };
     building.workerAdmissionOverrideIds = [];
     const shop = building.special.data;
     shop.unlockCostCopper = Math.max(1, Math.floor(toNumber(shop.unlockCostCopper, 399990)));
@@ -431,56 +427,25 @@ export function normalizeBuilding(building, options = {}) {
       maxPatients: Math.max(0, toNumber(existingMedical.maxPatients ?? existingMedical.capacity, def.defaultMaxPatients) || def.defaultMaxPatients)
     };
 
-    building.workersMin = toNumber(building.workersMin, def.workersMin);
-    building.workersMax = Math.max(building.workersMin, toNumber(building.workersMax, def.workersMax));
+
 
     if (!building.workerRole) building.workerRole = def.workerRole;
     if (!Array.isArray(building.productionLines)) building.productionLines = [];
   }
-  building.workersAssigned = toNumber(building.workersAssigned, 0);
-  if (!Array.isArray(building.assignedWorkerIds)) building.assignedWorkerIds = [];
-  const introducedWorkerProfile = !hadWorkerProfile;
+  delete building.workersAssigned;
+  delete building.assignedWorkerIds;
   // Catalog loading must not discover new admission rules by ID/name. An
   // explicit neutral profile also prevents consumers from falling back to the
   // newer built-in profile later.
   const workerProfile = normalizeBuildingWorkerProfile(
     !hadWorkerProfile && options?.preserveTemplateMechanics ? { source: "legacy" } : building.workerProfile, building
   );
-  if (workerProfile) {
-    building.workerProfile = workerProfile;
-    if (introducedWorkerProfile) building.workersMin = workerProfile.workersMin;
-    const lastOccupiedSlot = building.assignedWorkerIds.reduce((last, id, index) => String(id ?? "") ? index : last, -1) + 1;
-    building.workersMax = Math.max(introducedWorkerProfile ? workerProfile.workersMax : building.workersMax, lastOccupiedSlot);
-  } else {
-    delete building.workerProfile;
-  }
-  if (["staff", "qd", "passive"].includes(buildingLaborMode(building))) {
-    building.workersMin = 0;
-    building.activation.minWorkers = 0;
-    if (building.workerProfile) building.workerProfile.workersMin = 0;
-  }
-  building.assignedWorkerIds = building.assignedWorkerIds.slice(0, Math.max(0, building.workersMax)).map((id) => String(id ?? ""));
-  while (building.assignedWorkerIds.length < building.workersMax) building.assignedWorkerIds.push("");
+  if (workerProfile) building.workerProfile = { ...workerProfile, workersMin: 0 };
+  else delete building.workerProfile;
+  building.activation.minWorkers = 0;
+  building.labor = normalizeBuildingLabor(building.labor, building);
   if (!Array.isArray(building.workerAdmissionOverrideIds)) building.workerAdmissionOverrideIds = [];
   building.workerAdmissionOverrideIds = [...new Set(building.workerAdmissionOverrideIds.map((id) => String(id ?? "")).filter(Boolean))];
-  if (introducedWorkerProfile && workerProfile?.admission?.hard) {
-    // The worker migration is non-destructive: existing assignments remain in
-    // place. When resident data is available, only workers who actually fail
-    // the new hard gate receive a grandfathered GM override.
-    const people = Array.isArray(options?.people) ? options.people : null;
-    const peopleById = people ? new Map(people.map((person) => [String(person?.id ?? ""), person])) : null;
-    const grandfatheredIds = building.assignedWorkerIds.filter((id) => {
-      const workerId = String(id ?? "");
-      if (!workerId) return false;
-      if (!peopleById) return true;
-      const person = peopleById.get(workerId);
-      return !person || !workerAdmission(building, person).eligible;
-    });
-    building.workerAdmissionOverrideIds = [...new Set([
-      ...building.workerAdmissionOverrideIds,
-      ...grandfatheredIds
-    ])];
-  }
   delete building.workerPrimaryAttribute;
   delete building.primaryWorkerAttribute;
   delete building.suitableWorkerTypes;
@@ -500,39 +465,4 @@ export function normalizeBuilding(building, options = {}) {
   building.constructionCrewId = String(building.constructionCrewId ?? building.crewId ?? "");
   normalizeBuildingOperationalState(building);
   building.status = building.constructionStatus === "built" ? "Построено" : building.status;
-}
-
-export function normalizeUniqueBuildingWorkers(holding) {
-  const buildings = Array.isArray(holding?.buildings?.list) ? holding.buildings.list : [];
-  const people = new Map((holding?.people?.list ?? []).map((person) => [String(person?.id ?? ""), person]));
-  const workerlessSpecialAssignments = new Set(buildings
-    .filter((building) => inferBuildingSpecialKind(building) === "fasti-shop")
-    .flatMap((building) => [String(building?.id ?? ""), String(building?.name ?? "")])
-    .filter(Boolean));
-  for (const person of people.values()) {
-    if (!workerlessSpecialAssignments.has(String(person?.workAssignment ?? ""))) continue;
-    person.workAssignment = "";
-    person.role = "Свободен";
-  }
-  const occurrences = new Map();
-  for (const building of buildings) {
-    for (let slot = 0; slot < (building?.assignedWorkerIds ?? []).length; slot += 1) {
-      const id = String(building.assignedWorkerIds[slot] ?? "");
-      if (!id) continue;
-      const rows = occurrences.get(id) ?? [];
-      rows.push({ building, slot });
-      occurrences.set(id, rows);
-    }
-  }
-  for (const [id, rows] of occurrences) {
-    if (rows.length <= 1) continue;
-    const preferredBuildingId = String(people.get(id)?.workAssignment ?? "");
-    const keep = rows.find((row) => String(row.building?.id ?? "") === preferredBuildingId) ?? rows[0];
-    for (const row of rows) {
-      if (row === keep) continue;
-      row.building.assignedWorkerIds[row.slot] = "";
-    }
-    const person = people.get(id);
-    if (person) person.workAssignment = String(keep.building?.id ?? "");
-  }
 }

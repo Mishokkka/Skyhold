@@ -28,7 +28,9 @@ export function assertSupportedWorldData(data) {
   const newer = schema > SKYHOLD_SCHEMA_VERSION || catalog > TEMPLATE_CATALOG_VERSION;
   const guidance = newer
     ? "Установите версию Skyhold, поддерживающую это сохранение."
-    : "Для старого сохранения используйте копию мира и предыдущую версию Skyhold с миграциями (коммит 830a292). Для повреждённого сохранения восстановите рабочую резервную копию.";
+    : schema !== null && schema < 72
+      ? "Для этого сохранения используйте предыдущую версию Skyhold с миграциями (коммит 830a292). Для нового формата создайте новый мир."
+      : "Для старого сохранения используйте совместимую версию Skyhold. Для нового формата создайте новый мир или восстановите совместимую резервную копию.";
   const message = `Skyhold не может открыть сохранение (схема ${schema ?? "не указана"}, каталог ${catalog ?? "не указан"}). Требуются схема ${SKYHOLD_SCHEMA_VERSION} и каталог ${TEMPLATE_CATALOG_VERSION}. ${guidance}`;
   throw Object.assign(new Error(message), { code: UNSUPPORTED_WORLD_DATA });
 }

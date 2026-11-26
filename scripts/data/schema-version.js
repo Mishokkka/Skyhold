@@ -1,1 +1,1 @@
-export const SKYHOLD_SCHEMA_VERSION = 72;
+export const SKYHOLD_SCHEMA_VERSION = 73;

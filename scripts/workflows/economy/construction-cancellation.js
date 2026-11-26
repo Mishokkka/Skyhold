@@ -1,3 +1,4 @@
+import { syncResidentLaborRole } from "../../data/labor-role.js";
 import { appendHoldingOperation, findHoldingOperation } from "../../data/operations.js";
 import {
   applyConstructionCancellation,
@@ -67,26 +68,17 @@ function replayResult(existing, buildingId, operationId) {
   };
 }
 
-function releaseAssignedWorkers(holding, building, dependencies = {}) {
-  const buildingId = text(building?.id);
-  const assignedIds = [...new Set((Array.isArray(building?.assignedWorkerIds) ? building.assignedWorkerIds : [])
-    .map((id) => text(id))
-    .filter(Boolean))];
-  const clearedWorkerIds = [];
-  const people = Array.isArray(holding?.people?.list) ? holding.people.list : [];
-  for (const personId of assignedIds) {
-    const person = people.find((row) => text(row?.id) === personId);
-    if (!person || text(person.workAssignment) !== buildingId) continue;
-    if (typeof dependencies.setPersonFree === "function") dependencies.setPersonFree(holding, personId);
-    else {
-      person.workAssignment = "";
-      person.role = "Свободен";
-      person.salary = 0;
-    }
-    clearedWorkerIds.push(personId);
+function releaseAssignedWorkers(holding, building) {
+  const buildingId = text(building.id);
+  const cleared = [];
+  for (const person of holding.people?.list ?? []) {
+    if (text(person.workAssignment) !== buildingId) continue;
+    person.workAssignment = "";
+    person.role = person.ageGroup === "Ре" ? "Ребенок" : "Свободен";
+    syncResidentLaborRole(person, { isChild: person.ageGroup === "Ре" });
+    cleared.push(text(person.id));
   }
-  building.assignedWorkerIds = [];
-  return clearedWorkerIds;
+  return cleared;
 }
 
 /**
@@ -147,7 +139,7 @@ export function applyConstructionProjectCancellation({
   const applied = applyConstructionCancellation({ holding, building, plan, dependencies });
   if (!applied.ok) return applied;
 
-  const clearedWorkerIds = releaseAssignedWorkers(holding, building, dependencies);
+  const clearedWorkerIds = releaseAssignedWorkers(holding, building);
   const refund = cloneRefund(applied.refund);
   const operation = appendHoldingOperation(holding, {
     id,

@@ -14,7 +14,7 @@ _prepareLegacyTreasuryTotals(holding, workerContext = null) {
 
   const people = (holding.people?.list ?? []).filter((person) => isResidentInPopulation(person, holding));
   const buildings = holding.buildings?.list ?? [];
-  const salary = people.reduce((sum, row) => sum + this._safeNumber(row.salary, 0), 0);
+  const salary = 0;
   const upkeepMonth = buildings.reduce((sum, building) => {
     if (this._buildingStatus(building).value !== "built") return sum;
     return sum + this._safeNumber(building.upkeep, 0);

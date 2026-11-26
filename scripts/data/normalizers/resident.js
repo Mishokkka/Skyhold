@@ -2,7 +2,6 @@ import { ageGroupFromAge, clampAgeForRace, normalizeBelief, normalizeResidentAtt
 import { isPlainObject, makeId, toBoolean, toNumber } from "../utils.js";
 import { normalizePersonWorkAllocations } from "../work-allocations.js";
 import { normalizeWorkerTypeSet } from "./building.js";
-import { normalizeStaffAppointment } from "../hybrid-labor.js";
 import { clearPersonFromAssignments } from "../resident-assignments.js";
 
 /**
@@ -34,12 +33,8 @@ export function clearBuildingReferences(holding, building) {
     }
     const home = String(person?.home ?? "");
     if (home === id || (name && home === name)) person.home = "";
-    if (Array.isArray(person?.workAllocations)) {
-      person.workAllocations = person.workAllocations.filter((row) => String(row?.sourceId ?? "") !== id);
-    }
-    if (person.staffAppointment?.buildingId === id) delete person.staffAppointment;
   }
-  for (const kind of ["goals", "locks", "productionGoals"]) {
+  for (const kind of ["locks", "productionGoals"]) {
     if (Array.isArray(holding?.workforcePlan?.[kind])) {
       holding.workforcePlan[kind] = holding.workforcePlan[kind].filter((row) => String(row?.sourceId ?? "") !== id);
     }
@@ -96,17 +91,15 @@ export function normalizePerson(person) {
     .filter(Boolean)
     .join(", ");
   person.home = String(person.home ?? "");
-  person.salary = toNumber(person.salary, 0);
-  person.salaryModifier = toNumber(person.salaryModifier, 0);
-  person.wageDailyOverrideCopper = person.wageDailyOverrideCopper === null
-    || person.wageDailyOverrideCopper === undefined
-    || person.wageDailyOverrideCopper === ""
-    ? null
-    : Math.max(0, Math.floor(toNumber(person.wageDailyOverrideCopper, 0)));
+  delete person.salary;
+  delete person.salaryModifier;
+  delete person.staffAppointment;
+  person.militarySalaryModifier = Math.trunc(toNumber(person.militarySalaryModifier, 0));
+  const wage = toNumber(person.wageDailyOverrideCopper, null);
+  person.wageDailyOverrideCopper = Number.isSafeInteger(wage) && wage > 0 ? wage : null;
   person.volunteerLabor = toBoolean(person.volunteerLabor, false);
   person.volunteerReason = String(person.volunteerReason ?? "");
   normalizePersonWorkAllocations(person);
-  if (person.staffAppointment !== undefined) person.staffAppointment = normalizeStaffAppointment(person.staffAppointment);
   delete person.maintenancePointsPerTenday;
   if (!isPlainObject(person.attributes)) person.attributes = {};
   for (const key of ["strength", "agility", "wits", "empathy"]) {

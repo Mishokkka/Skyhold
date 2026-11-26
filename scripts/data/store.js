@@ -264,6 +264,7 @@ const gmWrites = createGmWriteAuthority({ getData: () => SkyholdData.view(), enq
   persistData: persistSkyholdData, notifyChanged: notifySkyholdChanged });
 
 const socketApi = createSkyholdSocketApi({
+  workforceStore: SkyholdData,
   executePoliticsOperation: async (operation, context) => {
     const { executePoliticsOperation } = await import("../apps/politics-operation-executor.js");
     return executePoliticsOperation(operation, context);
@@ -327,6 +328,10 @@ export function requestShipOperation(operation) {
 
 export function requestPoliticsOperation(operation) {
   return socketApi.requestPoliticsOperation(operation);
+}
+
+export function requestWorkforceOperation(operation) {
+  return socketApi.requestWorkforceOperation(operation);
 }
 
 export function requestStorageOperation(operation) {

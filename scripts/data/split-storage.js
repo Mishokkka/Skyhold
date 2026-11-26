@@ -21,7 +21,7 @@ function freezeDataView(value) {
 }
 
 function legacyHasRuntimeData(legacy, { holdingsHash, catalogHash } = {}) {
-  if (!legacy || typeof legacy !== "object") return false;
+  if (!Array.isArray(legacy?.holdings) || !legacy?.catalog || typeof legacy.catalog !== "object") return false;
   try {
     return (holdingsHash ?? stableDataHash(legacy?.holdings ?? [])) !== DEFAULT_HOLDINGS_HASH
       || (catalogHash ?? stableDataHash(legacy?.catalog ?? {})) !== DEFAULT_CATALOG_HASH;
@@ -32,6 +32,10 @@ function legacyHasRuntimeData(legacy, { holdingsHash, catalogHash } = {}) {
 
 function isDefaultSplitPayload({ holdingsHash = "", catalogHash = "" } = {}) {
   return holdingsHash === DEFAULT_HOLDINGS_HASH && catalogHash === DEFAULT_CATALOG_HASH;
+}
+
+function isEmptySetting(value) {
+  return value == null || (typeof value === "object" && Object.keys(value).length === 0);
 }
 
 /**
@@ -140,16 +144,25 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
    * @returns {object} Selected persisted root and, for forward recovery, the verified commit token.
    */
   function selectPersistedState(providedMeta) {
+    const rawMeta = providedMeta ?? readSetting(SETTING_META);
+    const rawHoldings = readSetting(SETTING_HOLDINGS);
+    const rawCatalog = readSetting(SETTING_CATALOG);
+    const legacy = readSetting(SETTING_DATA);
+    const emptyPartitions = isEmptySetting(rawHoldings) && isEmptySetting(rawCatalog);
     const split = {
-      meta: clone(providedMeta ?? readSetting(SETTING_META) ?? DEFAULT_SKYHOLD_DATA.meta),
-      holdings: clone(readSetting(SETTING_HOLDINGS) ?? DEFAULT_SKYHOLD_DATA.holdings),
-      catalog: clone(readSetting(SETTING_CATALOG) ?? DEFAULT_SKYHOLD_DATA.catalog)
+      meta: clone(rawMeta ?? {}),
+      holdings: clone(rawHoldings ?? []),
+      catalog: clone(rawCatalog ?? {})
     };
     persistedPartitionHashes = {
       holdings: hashPartition("holdings", split.holdings),
       catalog: hashPartition("catalog", split.catalog)
     };
     persistedMetaHash = logicalMetadataHash(split.meta);
+    if (isEmptySetting(rawMeta) && emptyPartitions) {
+      return { data: isEmptySetting(legacy) ? DEFAULT_SKYHOLD_DATA : legacy };
+    }
+    assertSupportedWorldData(split);
 
     const splitRevision = Math.max(0, toNumber(split?.meta?.revision, 0));
     const commitInspection = inspectStorageCommit(split, {
@@ -167,7 +180,6 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
       const token = completeCommitToken(meta);
       return { data: recovery.data, forwardToken: token ? `${token}:${stableDataHash(meta)}` : "" };
     }
-    const legacy = readSetting(SETTING_DATA);
     const legacyRevision = Math.max(0, toNumber(legacy?.meta?.revision, 0));
 
     if (!commitInspection.ok) {
@@ -175,7 +187,8 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
         if (legacyRevision === recovery.data?.meta?.revision
           // A pristine snapshot also restores prior metadata when its payload
           // matches both rolled-back partitions; unrelated defaults cannot.
-          && (legacyHasRuntimeData(legacy) || legacyMatchesPartitionHashes(legacy, persistedPartitionHashes))) {
+          && (legacyHasRuntimeData(legacy) || legacyMatchesPartitionHashes(legacy, persistedPartitionHashes)
+            || (emptyPartitions && !isEmptySetting(legacy)))) {
           warnCommitProblem(commitInspection, splitRevision, legacyRevision, "legacy-rollback");
           return { data: legacy };
         }
@@ -190,9 +203,9 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
       return { data: split, unverified: true };
     }
 
-    // Worlds that already have skyholdData keep working: the first write after this
-    // version persists them into split settings. Revision wins after the split exists.
-    // The equality fallback protects older saves that never had a revision bump.
+    if (commitInspection.reason === "complete") return { data: split };
+    // A standalone snapshot can still be selected when split settings are untouched.
+    if (!isEmptySetting(legacy)) assertSupportedWorldData(legacy);
     if (legacyRevision > splitRevision) return { data: legacy };
     if (legacyRevision === splitRevision
       && isDefaultSplitPayload({
@@ -210,7 +223,7 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
   }
 
   function resolveData({ cloneResult = true } = {}) {
-    const rawMeta = readSetting(SETTING_META) ?? DEFAULT_SKYHOLD_DATA.meta;
+    const rawMeta = readSetting(SETTING_META);
     const rawRevision = Math.max(0, toNumber(rawMeta?.revision, 0));
     const rawCommitToken = completeCommitToken(rawMeta);
     if (cachedData && !cachedForwardToken && cachedRevision === rawRevision

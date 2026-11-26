@@ -26,6 +26,8 @@ export function buildingCapacityQd(building = {}, options) {
   return normalizeBuildingLabor(building.labor, building, options).capacityQd;
 }
 
+export const buildingLaborCapacityQd = buildingCapacityQd;
+
 export function buildingAcceptsWorkers(building = {}, options) {
   return buildingCapacityQd(building, options) !== 0;
 }
@@ -99,7 +101,7 @@ export function buildingWorkReservations(holding = {}, { excludePersonId = "", r
   const totals = new Map();
   for (const person of holding.people?.list ?? []) {
     const id = text(person?.id);
-    if (!id || id === text(excludePersonId) || person.dead || isResidentAbsentForLabor(holding, person)
+    if (!id || id === text(excludePersonId) || person.dead
       || (presentIds && !presentIds.has(id)) || (canRead && !canRead(person))) continue;
     const perBuilding = new Map();
     for (const row of Array.isArray(person.workAllocations) ? person.workAllocations : []) {
@@ -118,4 +120,28 @@ export function buildingWorkReservations(holding = {}, { excludePersonId = "", r
     else totals.delete(buildingId);
   }
   return totals;
+}
+
+export function newLaborIssues(previous = [], current = []) {
+  const remaining = [...previous];
+  const identity = ({ message: _message, actual: _actual, limit: _limit, personName: _personName, buildingName: _buildingName, ...issue }) =>
+    JSON.stringify(issue);
+  return current.filter((issue) => {
+    const key = identity(issue);
+    const index = remaining.findIndex((prior) => identity(prior) === key
+      && (issue.actual === undefined || prior.actual >= issue.actual && prior.limit <= issue.limit));
+    if (index < 0) return true;
+    remaining.splice(index, 1);
+    return false;
+  });
+}
+
+export function buildingReservedQd(holding, buildingId, options) {
+  return buildingWorkReservations(holding, options).get(text(buildingId)) ?? 0;
+}
+
+export function uncollectibleProductionLine(building) {
+  if (!building || buildingAcceptsWorkers(building) || building.functions?.production === false) return null;
+  return (building.productionLines ?? []).find((line) => line.active !== false && line.requiresCollection
+    && whole(line.collectQd) > 0 && line.autoCollect !== true) ?? null;
 }

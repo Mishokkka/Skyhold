@@ -195,12 +195,16 @@ async _prepareTendayOperation({ holdingId = "", qd = 40, rationUnitsPerResident 
   const readiness = await this._tendayReadinessContext(sourceSnapshot, {
     foodProjection: Number.isFinite(foodAvailable) ? { available: foodAvailable, needed: rawReport?.food?.needed } : null
   });
+  const periodSchool = this._schoolEducationContext(previewHolding);
   const recovery = this._advanceResidentRecovery(previewHolding, Math.floor(periodQd / 4));
   if (recovery.recovered) rawReport.work.push(`Выздоровело жителей: ${recovery.recovered}.`);
   // A game year is 240 days; count boundaries even when time advances by one day.
   const beforeAgeQd = Math.max(0, Number(sourceSnapshot?.gm?.calendaria?.lastQd) || 0);
   const elapsedYears = Math.floor((beforeAgeQd + periodQd) / 960) - Math.floor(beforeAgeQd / 960);
-  const agingOptions = { schoolPeriodKey: financePeriodIdentity(previewHolding, periodQd).periodKey };
+  const agingOptions = {
+    schoolPeriodKey: financePeriodIdentity(previewHolding, periodQd).periodKey,
+    school: periodSchool
+  };
   const localAging = !calendariaGate.snapshot?.available && elapsedYears > 0
     ? this._advanceResidentAges(previewHolding, elapsedYears, agingOptions) : null;
   const calendarAdvance = this._commitCalendariaEconomyAdvance(previewHolding, calendariaGate, agingOptions);
@@ -351,10 +355,10 @@ _advanceResidentRecovery(holding, days = 0) {
   return { recovered };
 },
 
-_advanceResidentAges(holding, years = 1, { schoolPeriodKey = "" } = {}) {
+_advanceResidentAges(holding, years = 1, { schoolPeriodKey = "", school: periodSchool = null } = {}) {
   const count = Math.max(0, Math.floor(this._safeNumber(years, 0)));
   if (!count) return { aged: 0, changed: 0 };
-  const school = this._schoolEducationContext(holding, schoolPeriodKey);
+  const school = periodSchool ?? this._schoolEducationContext(holding, schoolPeriodKey);
   let aged = 0;
   let changed = 0;
   const education = [];
@@ -396,20 +400,17 @@ _advanceResidentAges(holding, years = 1, { schoolPeriodKey = "" } = {}) {
   return { aged, changed, educated: education.length, education };
 },
 
-_schoolEducationContext(holding, periodKey) {
+_schoolEducationContext(holding) {
   const teachers = new Set();
   let publicSchool = false;
   for (const building of holding?.buildings?.list ?? []) {
     const id = `${String(building?.id ?? "")} ${String(building?.templateId ?? "")}`.toLowerCase();
     const name = String(building?.name ?? "").toLowerCase();
     if (building.functions?.culture !== true || !(id.includes("school") || name.includes("школ"))) continue;
-    if (!periodKey || building.serviceState?.periodKey !== periodKey) continue;
     const service = buildingServiceBlockReasons(holding, building, "culture");
-    if (!service.active || !(service.workforce.qd > 0)
-      || !Array.isArray(building.serviceState.activeWorkerIds)) continue;
+    if (!service.active || !(service.workforce.qd > 0)) continue;
     const adults = service.workforce.workers.filter((person) => ageGroupFromAge(person.age, person.race, person.subrace) !== "Ре");
-    const minimum = Math.max(1, Math.floor(this._safeNumber(building.workersMin, 1)));
-    if (adults.length < minimum) continue;
+    if (!adults.length) continue;
     const composition = buildingCompositionStatus(building, adults, { excludeGroups: ["ЧУДОТВОРЕЦ"] });
     if (!composition.met) continue;
     for (const person of adults) {

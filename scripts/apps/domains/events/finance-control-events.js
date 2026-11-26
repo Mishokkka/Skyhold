@@ -2,6 +2,8 @@ import { SkyholdData } from "../../../data/store.js";
 import { makeId } from "../../../data/utils.js";
 import { escapeHtml } from "../../../core/helpers.js";
 import { foundryDialogV2 } from "../../../integrations/foundry-runtime.js";
+import { buildingLaborWithdrawalLines } from "../../../data/building-demolition.js";
+import { planBuildingLaborWithdrawal } from "../../../data/labor-mutations.js";
 import {
   applyFinanceBuildingMothballControl,
   applyFinanceOrphanControl
@@ -28,6 +30,7 @@ function controlErrorMessage(code = "") {
     "recipient-not-found": "Новый получатель больше не существует.",
     "building-not-found": "Здание не найдено.",
     unchanged: "Состояние консервации уже изменилось.",
+    "labor-changed": "Распределение труда изменилось. Заново откройте предпросмотр консервации.",
     "operation-conflict": "Этот operationId уже принадлежит другой финансовой операции."
   })[text(code)] ?? "Не удалось применить финансовое решение.";
 }
@@ -56,11 +59,12 @@ _financeTransferTargets(holding, obligation) {
     }));
 },
 
-async _promptFinanceReason({ title = "Финансовое решение", message = "", exactId = "", submitLabel = "Применить" } = {}) {
+async _promptFinanceReason({ title = "Финансовое решение", message = "", details = [], exactId = "", submitLabel = "Применить" } = {}) {
   const formClass = `fbls-finance-reason-${makeId("form", 8)}`;
   const content = `
     <form class="${formClass} fbls-stack">
       <p>${escapeHtml(message)}</p>
+      ${details.length ? `<ul>${details.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}</ul>` : ""}
       <p class="fbls-muted-text">Точный id: <code>${escapeHtml(exactId)}</code></p>
       <label class="fbls-field fbls-field-wide">
         <span>Причина</span>
@@ -153,6 +157,7 @@ async _executeFinanceBuildingMothball({
   buildingId = "",
   mothballed = true,
   reason = "",
+  laborToken = "",
   operationId = "",
   changedAt = ""
 } = {}) {
@@ -163,6 +168,7 @@ async _executeFinanceBuildingMothball({
       buildingId,
       mothballed,
       reason,
+      laborToken,
       operationId,
       changedAt
     });
@@ -253,12 +259,14 @@ async _onSetFinanceBuildingMothball({ holdingId = "", buildingId = "", mothballe
     return result;
   }
   const desired = Boolean(mothballed);
+  const labor = desired ? planBuildingLaborWithdrawal(holding, buildingId) : null;
   const reason = await this._promptFinanceReason({
     title: desired ? "Законсервировать здание" : "Снять консервацию",
     message: desired
-      ? `Отключить все механические эффекты здания «${text(building.name) || text(building.id)}» и остановить новые начисления содержания? Старые долги сохранятся.`
+      ? `Законсервировать «${text(building.name) || text(building.id)}» и снять рабочие назначения (${labor.personIds.length} жителей)? Новые начисления содержания остановятся. Старые долги сохранятся.`
       : `Вернуть здание «${text(building.name) || text(building.id)}» в экономический цикл? Неоплаченные обязательства продолжат блокировать его функции.`,
     exactId: text(building.id),
+    details: labor ? buildingLaborWithdrawalLines(holding, labor) : [],
     submitLabel: desired ? "Законсервировать" : "Снять консервацию"
   });
   if (!reason) {
@@ -270,6 +278,7 @@ async _onSetFinanceBuildingMothball({ holdingId = "", buildingId = "", mothballe
     holdingId: text(holding.id),
     buildingId: text(building.id),
     mothballed: desired,
+    laborToken: labor?.token,
     reason,
     operationId,
     changedAt: new Date().toISOString()

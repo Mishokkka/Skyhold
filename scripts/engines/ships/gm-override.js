@@ -1,6 +1,6 @@
 import { normalizeEventRegionOptions } from "../../data/random-events.js";
 import { residentShipAssignment } from "../../data/resident-presence.js";
-import { disembarkShipCrew, embarkShipCrew } from "./crew.js";
+import { disembarkShipCrew, embarkShipCrew, markCrewResidentAway } from "./crew.js";
 import { recordFleetFunds } from "./fleet-accounting.js";
 import { recordShipOutingFunds, settleShipOutingByGm } from "./outing-report.js";
 import { configureWorldShipEconomy } from "./world-market.js";
@@ -69,7 +69,7 @@ function syncCrewForForeignPort(holding, ship, clockQd) {
       const assignment = residentShipAssignment(person);
       if (assignment?.away === true && String(assignment.shipId ?? "") !== shipId) continue;
       if (assignment?.away === true && String(assignment.shipId ?? "") === shipId) continue;
-      person.shipAssignment = { shipId, away: true, sinceQd: integer(clockQd, "время", 0, Number.MAX_SAFE_INTEGER) };
+      markCrewResidentAway(holding, person, shipId, integer(clockQd, "время", 0, Number.MAX_SAFE_INTEGER));
       changed += 1;
     }
     return { ok: true, changed, shipId };

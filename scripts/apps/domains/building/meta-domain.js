@@ -4,7 +4,6 @@ import {
   CONSTRUCTION_LEADER_WAGE_DAILY_COPPER,
   CONSTRUCTION_WORKER_WAGE_DAILY_COPPER
 } from "../../../engines/workers/construction-leadership.js";
-import { WORK_ALLOCATION_MODE_EXPLICIT } from "../../../data/work-allocations.js";
 import { RELIGION_OPTIONS } from "./building-constants.js";
 
 function whole(value, fallback = 0) {
@@ -227,25 +226,29 @@ _workMoraleForPeriod(person, holding = null, options = {}) {
     volunteer: row?.volunteer === true
   })) ?? [];
 
-  if (!suppliedAssignments && String(person?.workAllocationMode ?? "") === WORK_ALLOCATION_MODE_EXPLICIT) {
-    assignments = (person?.workAllocations ?? []).map((row) => ({
+  if (!suppliedAssignments) {
+    const allocated = (person?.workAllocations ?? []).map((row) => ({
       sourceId: String(row?.sourceId ?? ""),
       functionId: String(row?.functionId ?? ""),
-      normalQd: whole(row?.normalQd),
+      normalQd: whole(row?.normalQd ?? row?.qd),
       overtimeQd: whole(row?.overtimeQd),
       volunteer: row?.volunteer === true
     }));
-  } else if (!suppliedAssignments) {
-    const selected = String(person?.workAssignment ?? "").trim();
-    const building = buildingById.get(selected);
-    if (selected && !["other", "Свободен", "Без работы", "Ребенок"].includes(selected)) {
-      const overtimeQd = building && this._buildingHasOvertimeProduction?.(building) ? 10 : 0;
-      assignments = [{
-        sourceId: selected,
-        functionId: building ? "production" : selected,
-        normalQd: 20,
-        overtimeQd
-      }];
+    if (allocated.some((row) => row.normalQd + row.overtimeQd > 0)) {
+      assignments = allocated;
+    } else {
+      const selected = String(person?.workAssignment ?? "").trim();
+      const isOutsideQdPost = selected.startsWith("construction")
+        || ["soldier", "defenseCommander", "sheriff"].includes(selected)
+        || selected.startsWith("ship:");
+      if (selected && isOutsideQdPost) {
+        assignments = [{
+          sourceId: selected,
+          functionId: selected,
+          normalQd: 20,
+          overtimeQd: 0
+        }];
+      }
     }
   }
   assignments = assignments.filter((row) => row.sourceId && row.normalQd + row.overtimeQd > 0);

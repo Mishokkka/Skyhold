@@ -47,8 +47,10 @@ function assignmentLabels(holding, residentId, person) {
   if (Array.isArray(person?.workAllocations) && person.workAllocations.length) labels.push(`план работ: ${person.workAllocations.length}`);
 
   for (const building of holding?.buildings?.list ?? []) {
-    const slots = (building?.assignedWorkerIds ?? []).filter((id) => text(id) === residentId).length;
-    if (slots) labels.push(`здание «${text(building?.name || building?.id) || "без названия"}»`);
+    const bId = text(building?.id);
+    const hasQd = (person?.workAllocations ?? []).some((row) => text(row?.sourceId) === bId
+      && (Number(row?.normalQd ?? row?.qd ?? 0) > 0 || Number(row?.overtimeQd ?? 0) > 0));
+    if (hasQd) labels.push(`здание «${text(building?.name || building?.id) || "без названия"}»`);
     if ((building?.workerAdmissionOverrideIds ?? []).some((id) => text(id) === residentId)) {
       labels.push(`допуск: «${text(building?.name || building?.id) || "здание"}»`);
     }

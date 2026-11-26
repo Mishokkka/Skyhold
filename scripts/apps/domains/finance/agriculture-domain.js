@@ -1,5 +1,4 @@
 import { normalizeAgricultureBuilding } from "../../../data/agriculture.js";
-import { buildingLaborMode } from "../../../data/hybrid-labor.js";
 import { planAgriculturePlot } from "../../../engines/economy/agriculture.js";
 import {
   applyAgriculturePeriodPlan,
@@ -113,8 +112,9 @@ _agricultureCalendarContext(holding = {}, offsetQd = 0) {
 
 _agricultureAvailableWorkQd(holding, building, periodQd = 40, workerContext = null) {
   const people = this._activeAssignedBuildingPeople?.(holding, building, workerContext, "agriculture") ?? [];
-  if (this._buildingMinimumStaffStatus?.(holding, building, workerContext)?.met === false) return 0;
   if (!(this._buildingCompositionStatus?.(holding, building, people, { excludeGroups: ["ЧУДОТВОРЕЦ"] })?.met ?? true)) return 0;
+  const minimumQd = this._buildingMinimumQdStatus?.(holding, building, workerContext, "agriculture", 1);
+  if (minimumQd && !minimumQd.met) return 0;
   const workUnits = people.reduce((sum, person) => {
     const realQd = workerContext?.financeContext
       ? (this._plannedWorkerFunctionQd?.(person, workerContext, building?.id, "agriculture") ?? 0)
@@ -150,10 +150,9 @@ _agriculturePeriodDependencies(holding, { workerContext = null, financeContext =
 },
 
 _planAgricultureForQd(holding, qd = 40, { operationId = "", workerContext = null, financeContext = null } = {}) {
-  // Both modern labor modes run on funded calendar slots. Only legacy/passive
-  // plots use an aggregate period; future QD cannot prepay today's sowing.
+  // All plots run step-by-step via `_runScheduledAgricultureStep` when a finance context is active.
   return planAgriculturePeriod({
-    buildings: (holding?.buildings?.list ?? []).filter((building) => !["staff", "qd"].includes(buildingLaborMode(building))),
+    buildings: financeContext ? [] : (holding?.buildings?.list ?? []),
     elapsedQd: qd,
     operationId,
     dependencies: this._agriculturePeriodDependencies(holding, { workerContext, financeContext })
@@ -177,7 +176,7 @@ _scheduledAgricultureStepPlan(holding, building, step, availableWorkQd = 0, oper
 },
 
 _scheduledAgricultureWorkAvailable(holding, building, workerContext = null, step = 0) {
-  if (!["staff", "qd"].includes(buildingLaborMode(building)) || !this._isAgricultureBuilding(building)
+  if (!this._isAgricultureBuilding(building)
     || this._buildingStatus(building).value !== "built"
     || !this._buildingFunctions(building).production
     || !this._financeFunctionAllowed(workerContext?.financeContext, building, "agriculture")) return false;
@@ -193,7 +192,7 @@ _runScheduledAgricultureStep(holding, step, _report = null, {
   financeContext.scheduledAgricultureRuntime ??= new Map();
   let entries = 0;
   for (const building of holding?.buildings?.list ?? []) {
-    if (!["staff", "qd"].includes(buildingLaborMode(building)) || !this._isAgricultureBuilding(building)
+    if (!this._isAgricultureBuilding(building)
       || this._buildingStatus(building).value !== "built" || !this._buildingFunctions(building).production) continue;
     const id = text(building.id);
     let runtime = financeContext.scheduledAgricultureRuntime.get(id);
@@ -216,24 +215,19 @@ _runScheduledAgricultureStep(holding, step, _report = null, {
     if (!needUnits) runtime.units = 0;
     const people = this._activeAssignedBuildingPeople?.(holding, building, workerContext, "agriculture") ?? [];
     const compositionMet = this._buildingCompositionStatus?.(holding, building, people, { excludeGroups: ["ЧУДОТВОРЕЦ"] })?.met !== false;
-    if (ready && compositionMet) {
+    const minimumQd = this._buildingMinimumQdStatus?.(holding, building, workerContext, "agriculture", 1);
+    const minimumQdMet = !minimumQd || minimumQd.met !== false;
+    if (ready && compositionMet && minimumQdMet) {
       for (const person of people) {
         if (runtime.units >= needUnits) break;
-        if (buildingLaborMode(building) === "staff"
-          && financeContext.staffCurrentFunctionByWorkerId?.get(text(person.id)) !== "agriculture") continue;
         const entry = this._workerBudgetEntry(holding, person, budgets, workerContext, building, "agriculture");
         const workUnits = this._agricultureWorkUnitsPerQd(holding, building, person, workerContext);
         if (!entry || workUnits <= 0) continue;
         // A paid quarter is indivisible between tasks. High efficiency may
         // finish the stage early, but does not manufacture a second free QD.
         while (entry.available >= 1 && runtime.units < needUnits) {
-          if (entry.staff) {
-            const consumed = this._consumeStaffWorkerQd(workerContext, entry, "agriculture", 1);
-            if (!consumed.ok || consumed.spent !== 1) break;
-          } else {
-            entry.available -= 1;
-            entry.spent += 1;
-          }
+          entry.available -= 1;
+          entry.spent += 1;
           runtime.units += workUnits;
         }
       }

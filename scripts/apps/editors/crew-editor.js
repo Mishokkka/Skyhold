@@ -416,12 +416,7 @@ export class SkyholdCrewEditor extends FloatingTooltipsMixin(PendingFieldSavesMi
         let placed = false;
         for (const building of holding.buildings?.list ?? []) {
           if (manager._buildingStatus(building).value !== "built") continue;
-          const max = Math.max(0, manager._safeNumber(building.workersMax, 0));
-          if (max <= 0) continue;
-          if (!Array.isArray(building.assignedWorkerIds)) building.assignedWorkerIds = [];
-          while (building.assignedWorkerIds.length < max) building.assignedWorkerIds.push("");
-          const slot = building.assignedWorkerIds.findIndex((value) => !value);
-          if (slot >= 0) { manager._setBuildingSlot(holding, building.id, slot, id); placed = true; break; }
+          if (manager._assignPersonToBuilding?.(holding, id, building.id, { replace: true })) { placed = true; break; }
         }
         if (!placed) manager._setPersonFree(holding, id);
       }

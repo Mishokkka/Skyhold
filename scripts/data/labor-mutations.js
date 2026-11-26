@@ -1,11 +1,11 @@
 import { reservedOccupation, residentLaborUnavailableReason } from "./labor-model.js";
-import { allocationFunctionId, allocationNormalQd, allocationSourceId, allocationTotalQd, residentActiveQd } from "./labor-primitives.js";
+import { allocationFunctionId, allocationNormalQd, allocationSourceId, allocationTotalQd } from "./labor-primitives.js";
 import { syncResidentLaborRole } from "./labor-role.js";
 import { clearPersonFromAssignments, clearResidentLaborAllocations,
   transferResidentBetweenHoldings as transferLegacyResident } from "./resident-assignments.js";
+import { canonicalSignatureV1 } from "./sha256.js";
 import { isPlainObject } from "./utils.js";
-import { normalizeWorkAllocation, validateHoldingWorkAllocations,
-  WORK_ALLOCATION_MODE_EXPLICIT } from "./work-allocations.js";
+import { normalizeWorkAllocation, validateHoldingWorkAllocations } from "./work-allocations.js";
 
 const text = (value) => String(value ?? "").trim();
 const rowsFor = (person) => Array.isArray(person.workAllocations) ? person.workAllocations : [];
@@ -68,18 +68,18 @@ function releaseOccupation(holding, person) {
 }
 
 function prepare(holding, person, nextAllocations, options, replaced) {
-  const occupation = reservedOccupation(holding, person) || Boolean(person.staffAppointment && typeof person.staffAppointment === "object");
+  const occupation = reservedOccupation(holding, person);
   const hadOverrides = (holding.buildings?.list ?? []).filter((building) =>
     (building.workerAdmissionOverrideIds ?? []).some((id) => text(id) === text(person.id))).map((building) => text(building.id));
-  person.workAllocations = nextAllocations.map((row, index) => normalizeWorkAllocation(row, index));
-  const active = residentActiveQd(person) > 0;
-  if (active) person.workAllocationMode = WORK_ALLOCATION_MODE_EXPLICIT;
+  const rows = nextAllocations.map((row, index) => normalizeWorkAllocation(row, index));
+  const active = rows.some((row) => allocationTotalQd(row) > 0);
   const replacing = active && occupation && occupation.kind !== "ship" && options.replaceOccupation === true
     && !residentLaborUnavailableReason(holding, person);
   if (replacing) {
     releaseOccupation(holding, person);
     replaced.push(text(person.id));
   }
+  person.workAllocations = options.keepEmptyRows ? rows : rows.filter((row) => allocationTotalQd(row) > 0);
   const requested = options.admissionOverrideBuildingIds ?? (replacing ? hadOverrides : null);
   cleanAdmissionOverrides(holding, person, requested ? new Set(requested.map(text)) : null);
   if (!occupation || replacing) syncResidentLaborRole(person, { isChild: asChild(person, options), clearServiceRole: Boolean(replacing) });
@@ -87,7 +87,7 @@ function prepare(holding, person, nextAllocations, options, replaced) {
 
 export function mutateResidentBuildingLabor(holding, {
   personId, buildingId, action, functionId, normalQd = 0, overtimeQd = 0, volunteer, volunteerReason,
-  replaceOccupation = false, allowAdmissionOverride = false, ...options
+  replaceOccupation = false, replaceAllocations = false, allowAdmissionOverride = false, ...options
 } = {}) {
   const id = text(personId), source = text(buildingId), fn = text(functionId);
   const removing = action === "remove";
@@ -102,13 +102,14 @@ export function mutateResidentBuildingLabor(holding, {
   if (removing) {
     prepare(draft, person, rows.filter((row) => !matches(row)), { isChild: options.isChild }, replaced);
   } else {
-    const existing = rows.find(matches);
+    const retained = replaceAllocations ? rows.filter(matches) : rows;
+    const existing = retained.find(matches);
     const next = { ...existing, sourceId: source, functionId: fn,
       normalQd: normalQd + (action === "add" ? allocationNormalQd(existing) : 0),
       overtimeQd: overtimeQd + (action === "add" ? overtimeFor(existing) : 0),
       ...(volunteer !== undefined ? { volunteer, volunteerReason } : {}) };
     if (![next.normalQd, next.overtimeQd].every(Number.isSafeInteger)) return fail("Превышен допустимый размер QD.");
-    const nextRows = existing ? rows.map((row) => row === existing ? next : row) : [...rows, next];
+    const nextRows = existing ? retained.map((row) => row === existing ? next : row) : [...retained, next];
     prepare(draft, person, nextRows, { isChild: options.isChild, replaceOccupation }, replaced);
     if (allowAdmissionOverride === true && allocationTotalQd(next) > 0) {
       const building = (draft.buildings?.list ?? []).find((row) => text(row.id) === source);
@@ -129,8 +130,8 @@ export function applyResidentEditorAllocations(holding, personId, options = {}) 
   const person = personFor(draft, text(personId));
   if (!person) return fail("Житель не найден.");
   const replaced = [];
-  prepare(draft, person, nextAllocations, { admissionOverrideBuildingIds, replaceOccupation, isChild }, replaced);
-  return finish(holding, draft, options, replaced, { checkedPersonIds: [person.id] });
+  prepare(draft, person, nextAllocations, { admissionOverrideBuildingIds, replaceOccupation, isChild, keepEmptyRows: true }, replaced);
+  return finish(holding, draft, options, replaced, { checkedPersonIds: [person.id], conserving: options.conserving === true, removing: options.conserving === true });
 }
 
 export function applyWorkforcePlanAllocations(holding, { updates, ...options } = {}) {
@@ -170,8 +171,7 @@ const compareRows = (left, right) => {
   return 0;
 };
 
-export function trimExcessOvertimeForResidents(holding, personIds, { confirmLocked = false, locks, ...options } = {}) {
-  const draft = structuredClone(holding);
+function trimOvertime(draft, personIds, { locks, ...options } = {}) {
   const lockedKeys = new Set([...(draft.workforcePlan?.locks ?? []), ...(Array.isArray(locks) ? locks : [])]
     .map((row) => lockKey(row.personId, row)));
   const trims = [], lockedTrims = [];
@@ -202,12 +202,67 @@ export function trimExcessOvertimeForResidents(holding, personIds, { confirmLock
     cleanAdmissionOverrides(draft, person);
     syncResidentLaborRole(person, { isChild: asChild(person, options) });
   }
-  const requiresConfirmation = lockedTrims.length > 0 && confirmLocked !== true;
-  if (requiresConfirmation || !trims.length) return { ok: !requiresConfirmation, requiresConfirmation, trims, lockedTrims };
   if (Array.isArray(draft.workforcePlan?.locks)) {
     draft.workforcePlan.locks = draft.workforcePlan.locks.filter((row) => !dropped.has(lockKey(row.personId, row)));
   }
-  return { ...finish(holding, draft, options, [], { conserving: true }), requiresConfirmation, trims, lockedTrims };
+  return { trims, lockedTrims };
+}
+
+export function trimExcessOvertimeForResidents(holding, personIds, { confirmLocked = false, ...options } = {}) {
+  const draft = structuredClone(holding);
+  const preview = trimOvertime(draft, personIds, options);
+  const requiresConfirmation = preview.lockedTrims.length > 0 && !confirmLocked;
+  if (requiresConfirmation || !preview.trims.length) return { ok: !requiresConfirmation, requiresConfirmation, ...preview };
+  return { ...finish(holding, draft, options, [], { conserving: true }), requiresConfirmation, ...preview };
+}
+
+function prepareBuildingLaborWithdrawal(holding, buildingId, functionId) {
+  const source = text(buildingId), fn = text(functionId);
+  const targets = (row) => allocationSourceId(row) === source && (!fn || allocationFunctionId(row) === fn);
+  const people = (holding.people?.list ?? []).filter((person) => rowsFor(person).some(targets));
+  const affected = new Set(people.map((person) => text(person.id)));
+  const locks = (holding.workforcePlan?.locks ?? []).filter((row) => targets(row) || affected.has(text(row.personId)));
+  const removedLocks = locks.filter(targets);
+  const draft = structuredClone(holding);
+  for (const person of draft.people?.list ?? []) {
+    if (!affected.has(text(person.id))) continue;
+    if (fn) {
+      person.workAllocations = rowsFor(person).filter((row) => !targets(row));
+      cleanAdmissionOverrides(draft, person);
+      syncResidentLaborRole(person, { isChild: asChild(person, {}) });
+    } else clearResidentBuildingLabor(draft, person, source);
+  }
+  if (draft.workforcePlan) {
+    draft.workforcePlan.locks = (draft.workforcePlan.locks ?? []).filter((row) => !targets(row));
+    draft.workforcePlan.productionGoals = (draft.workforcePlan.productionGoals ?? []).filter((row) => !targets(row));
+  }
+  const { trims, lockedTrims } = trimOvertime(draft, affected, { locks });
+  const preview = {
+    buildingId: source, functionId: fn, personIds: [...affected], trims, lockedTrims, removedLocks,
+    trimsHiddenLock: lockedTrims.some((row) => locks.some((lock) => lock.visibility === "gm" && lockKey(lock.personId, lock) === lockKey(row.personId, row))),
+    token: canonicalSignatureV1([source, fn, people.map((person) => [person.id, person.visibility, rowsFor(person)]), locks, trims])
+  };
+  return { draft, preview };
+}
+
+export function planBuildingLaborWithdrawal(holding, buildingId, functionId = "") {
+  return prepareBuildingLaborWithdrawal(holding, buildingId, functionId).preview;
+}
+
+export function applyBuildingLaborWithdrawal(holding, preview, { confirmed = false } = {}) {
+  const { draft, preview: current } = prepareBuildingLaborWithdrawal(holding, preview.buildingId, preview.functionId);
+  if (preview.token !== current.token) return { ...fail("Распределение труда изменилось. Обновите предпросмотр."), stale: true };
+  if (!confirmed && (current.trims.length || current.removedLocks.length)) {
+    return { ...fail("Уменьшение сверхурочных и снятие закреплений требуют подтверждения."), requiresConfirmation: true };
+  }
+  const check = validateDraft(holding, draft, {}, [], { conserving: true });
+  if (!check.ok) return { ...check, message: check.issues[0]?.message };
+  holding.people = draft.people;
+  for (const [index, building] of (holding.buildings?.list ?? []).entries()) {
+    building.workerAdmissionOverrideIds = draft.buildings.list[index].workerAdmissionOverrideIds;
+  }
+  if (draft.workforcePlan) holding.workforcePlan = draft.workforcePlan;
+  return { ok: true, ...current };
 }
 
 export function transferResidentBetweenHoldings(sourceHolding, targetHolding, personId, options = {}) {
