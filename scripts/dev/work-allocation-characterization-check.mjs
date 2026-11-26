@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import { AssignmentDomain } from "../apps/domains/assignment-domain.js";
 import { FinanceEconomyDomain } from "../apps/domains/finance/economy-domain.js";
 import { FinanceInternalDemandDomain } from "../apps/domains/finance/internal-demand-domain.js";
+import { hiddenBuildingIds, residentHasHiddenWork } from "../data/access-guard.js";
 import { mergeHoldingDefaults } from "../data/normalizers.js";
 import { normalizePerson } from "../data/normalizers/resident.js";
 import { calculatePlannedWorkerWage } from "../engines/economy/finance-obligations.js";
@@ -19,7 +20,8 @@ import {
   validateHoldingWorkAllocations,
   validateWorkAllocationPlan,
   WORK_ALLOCATION_MODE_EXPLICIT,
-  WORK_ALLOCATION_MODE_LEGACY
+  WORK_ALLOCATION_MODE_LEGACY,
+  WORK_ALLOCATION_SCHEMA_VERSION
 } from "../data/work-allocations.js";
 
 function clone(value) {
@@ -79,6 +81,9 @@ export function checkWorkAllocationCharacterization() {
     "Normalization removes obsolete resident maintenance points");
   const holdingWithLegacyBuilding = holdingFixture();
   holdingWithLegacyBuilding.buildings.list[0].maintenance = { schemaVersion: 2, requiredPoints: 2 };
+  const normalizedBuilding = mergeHoldingDefaults(holdingWithLegacyBuilding).buildings.list[0];
+  assert.equal(Object.hasOwn(normalizedBuilding, "maintenance"), false,
+    "Normalization removes obsolete building maintenance data");
   for (const v2 of [false, true]) {
     const targets = buildWorkAllocationTargets(holdingWithLegacyBuilding, { v2 });
     assert.ok(targets.some((row) => row.functionId === "production:forge"));
@@ -88,36 +93,59 @@ export function checkWorkAllocationCharacterization() {
 
   const saved = holdingFixture();
   const shop = saved.buildings.list[0];
-  shop.labor = { version: 1, mode: "staff", capacityQd: null };
-  shop.assignedWorkerIds = ["keep", "promote", "release"];
+  shop.functions = { production: true };
+  const hiddenShop = {
+    ...shop, id: "hidden-shop", name: "Closed workshop", visibility: "gm",
+    labor: { version: 1, mode: "staff", capacityQd: null },
+    workersMax: 3, assignedWorkerIds: ["reserve-only", "with-reserve", "maintenance-only"]
+  };
+  saved.buildings.list.push(hiddenShop);
   const production = { sourceId: shop.id, functionId: "production:forge" };
-  const retired = { sourceId: shop.id, functionId: "maintenance" };
+  const retired = { sourceId: hiddenShop.id, functionId: "maintenance" };
+  const mixedAllocations = [
+    allocation("general-work", "maintenance", "maintenance", 6),
+    allocation("forge-work", production.sourceId, production.functionId, 4, 4)
+  ].map((row) => ({ schemaVersion: WORK_ALLOCATION_SCHEMA_VERSION, ...row }));
   saved.workforcePlan = {
     version: 1,
     goals: [{ ...production, normalQd: 4 }, { ...retired, normalQd: 2 }],
-    locks: [{ ...production, personId: "keep" }, { ...retired, personId: "release" }]
+    locks: [{ ...production, personId: "split" }, { ...retired, personId: "maintenance-only" }]
   };
+  const split = { ...saved.people.list[1], role: "План QD", workAllocations: mixedAllocations };
   saved.people.list = [
-    ["keep", production.functionId, retired.functionId],
-    ["promote", retired.functionId, production.functionId],
-    ["release", retired.functionId, ""]
+    ["reserve-only", production.functionId, retired.functionId],
+    ["with-reserve", retired.functionId, production.functionId],
+    ["maintenance-only", retired.functionId, ""]
   ].map(([id, primaryFunctionId, reserveFunctionId]) => ({
-    id, workAssignment: shop.id, staffAppointment: {
-      version: 1, buildingId: shop.id, primaryFunctionId, reserveFunctionId, wageDailyCopper: 17, overtimeQd: 0
+    id, role: hiddenShop.name, workAssignment: hiddenShop.id, staffAppointment: {
+      version: 1, buildingId: hiddenShop.id, primaryFunctionId, reserveFunctionId,
+      wageDailyCopper: 17, overtimeQd: 0, volunteer: false, volunteerReason: ""
     }
   }));
+  saved.people.list.push(split);
+  const savedSnapshot = clone(saved);
   const loaded = mergeHoldingDefaults(saved);
-  for (const person of loaded.people.list.slice(0, 2)) {
-    assert.equal(person.staffAppointment.primaryFunctionId, production.functionId);
-    assert.equal(person.staffAppointment.reserveFunctionId, "");
-    assert.equal(person.staffAppointment.wageDailyCopper, 17);
+  const hiddenForPlayer = hiddenBuildingIds(loaded, false);
+  for (const [index, original] of savedSnapshot.people.list.entries()) {
+    const person = loaded.people.list[index];
+    assert.deepEqual(person.staffAppointment, original.staffAppointment);
+    assert.equal(person.workAssignment, original.workAssignment);
+    assert.equal(person.role, original.role);
+    if (original.staffAppointment) {
+      assert.equal(residentHasHiddenWork(loaded, person, hiddenForPlayer), true, "The player view must still mask the hidden workplace");
+    }
   }
-  assert.equal(loaded.people.list[2].staffAppointment, undefined, "A contract for only the retired job releases its seat");
-  assert.equal(loaded.people.list[2].workAssignment, "");
-  assert.deepEqual(loaded.buildings.list[0].assignedWorkerIds.filter(Boolean), ["keep", "promote"]);
-  assert.deepEqual(loaded.workforcePlan, {
-    version: 1, goals: [saved.workforcePlan.goals[0]], locks: [saved.workforcePlan.locks[0]]
-  });
+  assert.deepEqual(loaded.buildings.list[1].assignedWorkerIds, hiddenShop.assignedWorkerIds);
+  assert.deepEqual(loaded.people.list.at(-1).workAllocations, mixedAllocations);
+  assert.deepEqual(loaded.workforcePlan, savedSnapshot.workforcePlan);
+  assert.deepEqual(saved, savedSnapshot, "Loading must preserve the input snapshot");
+
+  const normalizedSplit = normalizePersonWorkAllocations(clone(split));
+  assert.deepEqual(normalizedSplit.workAllocations, mixedAllocations, "Normalization must preserve rows for retired targets");
+  const retiredTargetCheck = validateWorkAllocationPlan(normalizedSplit.workAllocations, { targets: buildWorkAllocationTargets(loaded) });
+  assert.deepEqual(retiredTargetCheck.totals, { normalQd: 10, overtimeQd: 4, totalQd: 14 });
+  assert.deepEqual(retiredTargetCheck.issues.map((issue) => [issue.code, issue.targetKey]), [["allocation-unknown", "maintenance::maintenance"]],
+    "Validation rejects the retired target without changing the saved normal and overtime QD");
 
   const legacy = normalizePersonWorkAllocations({ id: "legacy" });
   assert.equal(legacy.workAllocationMode, WORK_ALLOCATION_MODE_LEGACY, "old residents must stay on the legacy assignment path");

@@ -64,7 +64,6 @@ export function normalizePersonWorkAllocations(person = {}) {
   const ids = new Set();
   for (let index = 0; index < source.length; index += 1) {
     const row = normalizeWorkAllocation(source[index], index);
-    if (row.functionId === "maintenance") continue;
     let id = row.id;
     let suffix = 2;
     while (ids.has(id)) id = `${row.id}-${suffix++}`;

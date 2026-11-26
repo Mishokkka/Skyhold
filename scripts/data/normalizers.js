@@ -29,7 +29,6 @@ import { normalizeFinanceObligationsState } from "./finance/obligations.js";
 import { normalizeInternalDemandConfig } from "./economy/internal-demand.js";
 import { normalizeShipsState } from "./ships.js";
 import { ensureTransportState, transportCargoReservations } from "./transport/state.js";
-import { applyStaffAppointment } from "./hybrid-labor.js";
 import { indexStorageRows } from "../engines/storage/row-identity.js";
 
 export { clearBuildingReferences, clearPersonReferences };
@@ -300,22 +299,8 @@ export function mergeHoldingDefaults(holding) {
   merged.constructionCrews = merged.constructionCrews.map((crew, index) => normalizeConstructionCrew(crew, index));
   merged.constructionCrewIds = merged.constructionCrews[0]?.memberIds ?? [];
 
-  if (!Array.isArray(merged.buildings.list)) merged.buildings.list = [];
   if (!Array.isArray(merged.people.list)) merged.people.list = [];
-  for (const person of merged.people.list) {
-    normalizePerson(person);
-    const appointment = person.staffAppointment;
-    if (appointment?.reserveFunctionId === "maintenance") appointment.reserveFunctionId = "";
-    if (appointment?.primaryFunctionId !== "maintenance") continue;
-    if (typeof appointment.reserveFunctionId === "string" && appointment.reserveFunctionId.trim()) {
-      appointment.primaryFunctionId = appointment.reserveFunctionId;
-      appointment.reserveFunctionId = "";
-    } else applyStaffAppointment(merged, person.id, null);
-  }
-  for (const field of ["goals", "locks"]) {
-    const rows = merged.workforcePlan?.[field];
-    if (Array.isArray(rows)) merged.workforcePlan[field] = rows.filter((row) => row?.functionId !== "maintenance");
-  }
+  for (const person of merged.people.list) normalizePerson(person);
   const peopleById = new Map(merged.people.list.map((person) => [String(person?.id ?? ""), person]));
   for (const crew of merged.constructionCrews) {
     const leaderId = String(crew?.leaderId ?? "");
@@ -333,6 +318,7 @@ export function mergeHoldingDefaults(holding) {
       member.role = crew.name || "Стройбригада";
     }
   }
+  if (!Array.isArray(merged.buildings.list)) merged.buildings.list = [];
   if (!isPlainObject(merged.overview.development)) merged.overview.development = {};
   merged.overview.development.food = toNumber(merged.overview.development.food, 0);
   merged.overview.development.technology = toNumber(merged.overview.development.technology, 0);

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { normalizePerson } from "../data/normalizers/resident.js";
 import { buildingActiveWorkerSummary, buildingConstructionPrerequisitesMet, buildingServiceBlockReasons } from "../engines/economy/building-service.js";
 
 export function checkBuildingPrerequisitePhases() {
@@ -28,12 +27,13 @@ export function checkBuildingPrerequisitePhases() {
   consumer.requiredAnyBuildingIds = ["missing", "waterworks"];
   consumer.prerequisiteModes = { missing: "construction", waterworks: "construction" };
   assert.equal(buildingConstructionPrerequisitesMet(holding, consumer), true, "An active alternative satisfies an OR prerequisite");
+  consumer.prerequisiteModes.waterworks = "service";
   holding.people.list[0] = { id: "operator", workAllocationMode: "explicit", workAllocations: [
-    { sourceId: "water", functionId: "maintenance", normalQd: 2 }
+    { sourceId: "water", functionId: "production", normalQd: 2 }
   ] };
-  normalizePerson(holding.people.list[0]);
-  assert.equal(buildingActiveWorkerSummary(holding, provider).count, 0, "Retired assignments do not count as service staff after load");
-  assert.equal(buildingActiveWorkerSummary(holding, provider).qd, 0);
+  const cultureStaff = buildingActiveWorkerSummary(holding, provider, "culture");
+  assert.equal(cultureStaff.count, 0, "Production work cannot staff the culture service");
+  assert.equal(cultureStaff.qd, 0);
   assert.equal(buildingConstructionPrerequisitesMet(holding, consumer), false);
-  return { construction: true, ongoingService: true, legacy: true, cycles: true, retiredAllocationExcluded: true };
+  return { construction: true, ongoingService: true, legacy: true, cycles: true, unrelatedAllocationExcluded: true };
 }

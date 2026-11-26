@@ -35,15 +35,13 @@ export function checkBuildingCatalogFullTransition() {
   const legacyPerson = legacyLabor.holdings[0].people.list[0];
   legacyPerson.workAllocationMode = "explicit";
   legacyPerson.workAllocations = [
-    { id: "general", sourceId: "maintenance", functionId: "maintenance", normalQd: 2 },
-    { id: "technical", sourceId: "instance-lumbermill", functionId: "maintenance", normalQd: 3 },
-    { id: "production", sourceId: "instance-lumbermill", functionId: "production", normalQd: 4 }
+    { schemaVersion: 1, id: "production", sourceId: "instance-lumbermill", functionId: "production", normalQd: 4, overtimeQd: 0 }
   ];
   const rawSnapshot = clone(legacyLabor);
   const normalizedLabor = normalizeSkyholdData(legacyLabor);
   const laborSnapshot = clone(normalizedLabor);
-  assert.deepEqual(normalizedLabor.holdings[0].people.list[0].workAllocations.map((row) => row.id), ["production"],
-    "Loading releases only obsolete work allocations");
+  assert.deepEqual(normalizedLabor.holdings[0].people.list[0].workAllocations, rawSnapshot.holdings[0].people.list[0].workAllocations,
+    "Loading preserves explicit production work");
   assert.deepEqual(legacyLabor, rawSnapshot, "Normalization preserves the original snapshot");
   for (const replaceCatalog of [false, true]) {
     const laborPlan = planBuildingCatalogMigration({ currentData: normalizedLabor, operationId: "legacy-labor", replaceCatalog });
