@@ -1,3 +1,4 @@
+import { allocationSourceId } from "../../data/labor-primitives.js";
 import { syncResidentLaborRole } from "../../data/labor-role.js";
 import { appendHoldingOperation, findHoldingOperation } from "../../data/operations.js";
 import {
@@ -72,11 +73,25 @@ function releaseAssignedWorkers(holding, building) {
   const buildingId = text(building.id);
   const cleared = [];
   for (const person of holding.people?.list ?? []) {
-    if (text(person.workAssignment) !== buildingId) continue;
-    person.workAssignment = "";
-    person.role = person.ageGroup === "Ре" ? "Ребенок" : "Свободен";
-    syncResidentLaborRole(person, { isChild: person.ageGroup === "Ре" });
+    const matchedAssignment = text(person.workAssignment) === buildingId;
+    const rows = Array.isArray(person.workAllocations) ? person.workAllocations : [];
+    const hadProjectAllocations = rows.some((row) => allocationSourceId(row) === buildingId);
+    if (!matchedAssignment && !hadProjectAllocations) continue;
+    if (matchedAssignment) person.workAssignment = "";
+    if (hadProjectAllocations) {
+      person.workAllocations = rows.filter((row) => allocationSourceId(row) !== buildingId);
+    }
+    if (matchedAssignment && !(person.workAllocations ?? []).length) {
+      person.role = person.ageGroup === "Ре" ? "Ребенок" : "Свободен";
+    }
+    syncResidentLaborRole(person, { isChild: person.ageGroup === "Ре", clearServiceRole: matchedAssignment });
     cleared.push(text(person.id));
+  }
+  if (Array.isArray(holding.workforcePlan?.locks)) {
+    holding.workforcePlan.locks = holding.workforcePlan.locks.filter((row) => allocationSourceId(row) !== buildingId);
+  }
+  if (Array.isArray(holding.workforcePlan?.productionGoals)) {
+    holding.workforcePlan.productionGoals = holding.workforcePlan.productionGoals.filter((row) => allocationSourceId(row) !== buildingId);
   }
   return cleared;
 }

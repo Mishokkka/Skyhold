@@ -406,12 +406,12 @@ export class SkyholdCrewEditor extends FloatingTooltipsMixin(PendingFieldSavesMi
     const distributed = await SkyholdData.updateHolding(this.holdingId, (holding) => {
       const crew = holding?.constructionCrews?.find((item) => String(item.id) === crewId);
       if (!holding || !crew) return SkyholdData.skipTransaction(false);
-      const ids = [...new Set([String(crew.leaderId ?? ""), ...(crew.memberIds ?? []).map((id) => String(id ?? ""))].filter(Boolean))];
-      crew.distributedLeaderId = String(crew.leaderId ?? "");
-      crew.distributedIds = ids;
+      const leaderId = String(crew.leaderId ?? "");
+      const ids = [...new Set([leaderId, ...(crew.memberIds ?? []).map((id) => String(id ?? ""))].filter(Boolean))];
       crew.memberIds = [];
       crew.leaderId = "";
-      crew.distributed = true;
+      crew.distributedIds = [];
+      crew.distributedLeaderId = "";
       for (const id of ids) {
         let placed = false;
         for (const building of holding.buildings?.list ?? []) {
@@ -420,6 +420,9 @@ export class SkyholdCrewEditor extends FloatingTooltipsMixin(PendingFieldSavesMi
         }
         if (!placed) manager._setPersonFree(holding, id);
       }
+      crew.distributedLeaderId = leaderId;
+      crew.distributedIds = ids;
+      crew.distributed = true;
       return true;
     }, { fallback: false, reason: "crew-editor:distribute-crew" });
     if (!distributed) return;

@@ -4,8 +4,7 @@ import { buildWorkAllocationTargets } from "../../../data/work-allocations.js";
 import { applyBuildingDemolition, buildingLaborWithdrawalLines, canReadBuildingLaborWithdrawal, planBuildingDemolition } from "../../../data/building-demolition.js";
 import { applyBuildingLaborWithdrawal, planBuildingLaborWithdrawal } from "../../../data/labor-mutations.js";
 import { requestConstructionOperation, requestWorkforceOperation, SkyholdData } from "../../../data/store.js";
-import { buildWorkforceCommand } from "../../../data/workforce-socket.js";
-import { workforcePlan } from "../../../data/workforce-plan.js";
+import { buildBuildingLaborWithdrawalCommand } from "../../../data/workforce-socket.js";
 import { makeId } from "../../../data/utils.js";
 import { traitBadges } from "../../../generators/trait-definitions.js";
 import { loadBuildingEditorClass } from "../../lazy-apps.js";
@@ -297,21 +296,20 @@ async _executeBuildingContextAction(buildingId = "", action = "", holdingId = th
   const lines = buildingLaborWithdrawalLines(holding, preview).map(escapeHtml).join("<br>");
   if (!await this._confirmAction("Освободить работников", `Снять назначения в здании «${escapeHtml(name)}»?${lines ? `<br><br>${lines}` : ""}`)) return;
   if (!game.user?.isGM) {
-    const proposed = structuredClone(holding);
-    const released = applyBuildingLaborWithdrawal(proposed, preview, { confirmed: true });
-    if (!released.ok) return ui.notifications.warn(released.message);
-    const edited = preview.personIds;
-    const form = (source) => ({ edited, plan: workforcePlan(source),
-      allocations: Object.fromEntries(source.people.list.filter((person) => edited.includes(String(person.id)))
-        .map((person) => [String(person.id), person.workAllocations ?? []])) });
+    let result;
     try {
-      await requestWorkforceOperation(buildWorkforceCommand({ operationId: makeId("workforce-clear", 20),
-        holdingId: holding.id, expectedRevision: data.meta.revision, initial: form(holding), draft: form(proposed) }));
+      result = await requestWorkforceOperation(buildBuildingLaborWithdrawalCommand({
+        operationId: makeId("workforce-clear", 20),
+        holdingId: holding.id,
+        expectedRevision: data.meta.revision,
+        buildingId,
+        token: preview.token
+      }));
     } catch (error) {
       return ui.notifications.warn(error.message);
     }
     this.requestRender();
-    return ui.notifications.info(`Освобождено жителей: ${edited.length}.`);
+    return ui.notifications.info(`Освобождено жителей: ${result?.personIds?.length ?? preview.personIds.length}.`);
   }
   const result = await SkyholdData.updateHolding(holding.id, (freshHolding) => {
     const current = planBuildingLaborWithdrawal(freshHolding, buildingId);

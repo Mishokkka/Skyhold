@@ -30,6 +30,16 @@ function legacyHasRuntimeData(legacy, { holdingsHash, catalogHash } = {}) {
   }
 }
 
+function isSupportedLegacySnapshot(legacy) {
+  if (isEmptySetting(legacy)) return false;
+  try {
+    assertSupportedWorldData(legacy);
+    return true;
+  } catch (_error) {
+    return false;
+  }
+}
+
 function isDefaultSplitPayload({ holdingsHash = "", catalogHash = "" } = {}) {
   return holdingsHash === DEFAULT_HOLDINGS_HASH && catalogHash === DEFAULT_CATALOG_HASH;
 }
@@ -185,6 +195,7 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
     if (!commitInspection.ok) {
       if (recovery.ok) {
         if (legacyRevision === recovery.data?.meta?.revision
+          && isSupportedLegacySnapshot(legacy)
           // A pristine snapshot also restores prior metadata when its payload
           // matches both rolled-back partitions; unrelated defaults cannot.
           && (legacyHasRuntimeData(legacy) || legacyMatchesPartitionHashes(legacy, persistedPartitionHashes)
@@ -195,7 +206,7 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
         warnCommitProblem(commitInspection, splitRevision, legacyRevision, recovery.mode);
         return { data: recovery.data };
       }
-      if (legacyHasRuntimeData(legacy)) {
+      if (isSupportedLegacySnapshot(legacy)) {
         warnCommitProblem(commitInspection, splitRevision, legacyRevision, "legacy-fallback");
         return { data: legacy, unverified: true };
       }

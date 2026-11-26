@@ -81,10 +81,13 @@ import { politicsRuntimeEffects } from "../../../engines/politics/runtime-effect
 import { appendHoldingOperation } from "../../../data/operations.js";
 import {
   allocatedBuildingQd, functionDailyRate, remainingCollectionQd, targetAllowsOvertime,
+  buildWorkAllocationTargets,
   buildingWorkerIds,
   buildPlannedWorkSlots,
   plannedAssignmentQd,
-  validateHoldingWorkAllocations
+  validateHoldingWorkAllocations,
+  workFunctionMatches,
+  workFunctionScope
 } from "../../../data/work-allocations.js";
 
 export const FinanceEconomyDomain = {
@@ -1269,8 +1272,17 @@ _productionCycleDependencies({ holding: sourceHolding = null, lineOutputForCycle
       this._financeLineFunctionId(line, (building?.productionLines ?? []).indexOf(line))
     ),
     buildingCompositionStatus: (building, people, options) => buildingCompositionStatus(building, people, options),
-    buildingMinimumQdStatus: (holding, building, workerContext, line) => this._buildingMinimumQdStatus(holding, building, workerContext,
-      this._financeLineFunctionId(line, (building.productionLines ?? []).indexOf(line))),
+    buildingMinimumQdStatus: (holding, building, workerContext, line) => {
+      const source = String(line?.source ?? "workers");
+      if (source === "time" || source === "content") {
+        const scopeFn = building?.activation?.anyWorkingFunction === true ? "" : "production";
+        const hasAssignable = buildWorkAllocationTargets({ buildings: { list: [building] } })
+          .some((target) => target.available && workFunctionMatches(target.functionId, scopeFn));
+        if (!hasAssignable) return { met: true, requiredQd: 0, actualQd: 0 };
+      }
+      return this._buildingMinimumQdStatus(holding, building, workerContext,
+        this._financeLineFunctionId(line, (building.productionLines ?? []).indexOf(line)));
+    },
     storageQuantity: (holding, resource) => this._storageQuantity(holding, resource),
     tryCollectResourceForConsumer: (holding, building, resourceId, budgets, report, workerContext, line, cost) => this._tryCollectResourceForConsumer(
       holding, building, cost ?? resourceId, budgets, report, workerContext, financeContext,
@@ -1282,12 +1294,16 @@ _productionCycleDependencies({ holding: sourceHolding = null, lineOutputForCycle
 _buildingMinimumQdStatus(holding, building, workerContext = null, targetFunction = "production", periodMultiplier = 1) {
   const requiredQd = buildingMinOperationalQd(building) * Math.max(1, Math.floor(this._safeNumber(periodMultiplier, 1)));
   if (requiredQd <= 0) return { met: true, requiredQd: 0, actualQd: 0 };
-  const functionId = building?.activation?.anyWorkingFunction === true ? "" : targetFunction;
+  const functionId = building?.activation?.anyWorkingFunction === true ? "" : workFunctionScope(targetFunction);
   const finance = workerContext?.financeContext;
+  const buildingId = String(building?.id ?? "");
   const actualQd = finance
-    ? this._activeAssignedBuildingPeople(holding, building, workerContext).reduce((sum, person) => (
-      sum + allocatedBuildingQd(finance.plannedAssignmentsByWorkerId?.get(String(person.id)), building.id, functionId)
-    ), 0)
+    ? this._activeAssignedBuildingPeople(holding, building, workerContext).reduce((sum, person) => {
+      const rows = (finance.plannedAssignmentsByWorkerId?.get(String(person.id)) ?? [])
+        .filter((row) => String(row?.sourceId ?? "") === buildingId
+          && this._financeFunctionAllowed(finance, building, row.functionId));
+      return sum + allocatedBuildingQd(rows, buildingId, functionId);
+    }, 0)
     : buildingActiveWorkerSummary(holding, building, functionId).qd;
   return { met: actualQd >= requiredQd, requiredQd, actualQd };
 },

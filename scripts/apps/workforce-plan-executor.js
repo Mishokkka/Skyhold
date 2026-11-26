@@ -1,6 +1,12 @@
 import { canReadHolding, canReadResident, hiddenBuildingIds, residentHasHiddenWork } from "../data/access-guard.js";
+import { canReadBuildingLaborWithdrawal } from "../data/building-demolition.js";
 import { COMMAND_ERROR, commandError, commandFailure } from "../data/command-result.js";
-import { applyWorkforcePlanAllocations } from "../data/labor-mutations.js";
+import {
+  applyBuildingLaborWithdrawal,
+  applyWorkforcePlanAllocations,
+  mutateResidentBuildingLabor,
+  planBuildingLaborWithdrawal
+} from "../data/labor-mutations.js";
 import { canonicalSignatureV1 } from "../data/sha256.js";
 import { workforceCommandProblem } from "../data/workforce-socket.js";
 import { workforceIssueMessage, workforceKey, workforceLockKey, workforcePlan,
@@ -17,14 +23,19 @@ function applyPlanDelta(holding, command) {
   for (const [personId, sourceId, functionId, enabled] of command.locks ?? []) {
     const row = { personId, sourceId, functionId };
     const key = workforceLockKey(row);
-    if (enabled && !locks.has(key)) locks.set(key, row);
+    const existing = locks.get(key);
+    if (enabled && !existing) locks.set(key, row);
     if (!enabled) locks.delete(key);
   }
   for (const [sourceId, functionId, preparedUnits] of command.productionGoals ?? []) {
-    const row = { sourceId, functionId, preparedUnits };
-    const key = workforceProductionGoalKey(row);
-    if (preparedUnits) goals.set(key, row);
-    else goals.delete(key);
+    const baseRow = { sourceId, functionId, preparedUnits };
+    const key = workforceProductionGoalKey(baseRow);
+    const existing = goals.get(key);
+    if (preparedUnits) {
+      goals.set(key, existing?.visibility ? { ...baseRow, visibility: existing.visibility } : baseRow);
+    } else {
+      goals.delete(key);
+    }
   }
   return { version: 2, locks: [...locks.values()], productionGoals: [...goals.values()] };
 }
@@ -33,7 +44,7 @@ export async function executeWorkforcePlan(raw, { senderId, store } = {}) {
   const operationId = raw?.operationId;
   const problem = workforceCommandProblem(raw);
   if (problem) throw failure(operationId, COMMAND_ERROR.INVALID, problem);
-  const { holdingId, expectedRevision, allocationsByPersonId, admissionOverrideBuildingIds } = raw;
+  const { holdingId, expectedRevision } = raw;
   const signature = canonicalSignatureV1(raw);
   const result = await store.updateHolding(holdingId, (holding, data) => {
     const currentRevision = data.meta.revision;
@@ -49,34 +60,63 @@ export async function executeWorkforcePlan(raw, { senderId, store } = {}) {
       fail(COMMAND_ERROR.FORBIDDEN, "Нет права менять общий план работ.");
     }
     const isGM = sender.isGM === true;
-    if (!isGM && admissionOverrideBuildingIds !== undefined) fail(COMMAND_ERROR.FORBIDDEN, "Допусками к работе управляет ГМ.");
-    const plan = applyPlanDelta(holding, raw);
-    const planError = workforcePlanChangeError(holding, plan, { isGM });
-    if (planError) fail(COMMAND_ERROR.FORBIDDEN, planError);
     const people = new Map((holding.people?.list ?? []).map((row) => [String(row.id), row]));
     const buildings = new Map((holding.buildings?.list ?? []).map((row) => [String(row.id), row]));
     const hidden = hiddenBuildingIds(holding, isGM);
-    const updates = Object.entries(allocationsByPersonId).map(([personId, tuples]) => {
-      const person = people.get(personId);
-      if (!canReadResident(person, sender) || residentHasHiddenWork(holding, person, hidden)
-        || tuples.some(([id]) => !buildings.has(id) || hidden.has(id))) {
+    const kind = raw.kind ?? "save-plan";
+    let receipt;
+    if (kind === "withdraw-building-labor") {
+      const building = buildings.get(raw.buildingId);
+      if (!building || hidden.has(raw.buildingId)) fail(COMMAND_ERROR.FORBIDDEN, "Здание недоступно.");
+      const current = planBuildingLaborWithdrawal(holding, raw.buildingId, raw.functionId ?? "");
+      if (!canReadBuildingLaborWithdrawal(holding, current, sender)) fail(COMMAND_ERROR.FORBIDDEN, "Часть назначений доступна только ГМу.");
+      if (current.token !== raw.token) fail(COMMAND_ERROR.CONFLICT, "Распределение труда изменилось. Обновите предпросмотр.");
+      const applied = applyBuildingLaborWithdrawal(holding, current, { confirmed: true });
+      if (!applied.ok) fail(applied.stale ? COMMAND_ERROR.CONFLICT : COMMAND_ERROR.INVALID,
+        workforceIssueMessage(holding, applied.issues?.[0], { isGM }) || applied.message || "Не удалось освободить работников.");
+      receipt = { ok: true, operationId, revision: currentRevision + 1, personIds: applied.personIds,
+        summary: `Освобождено жителей: ${applied.personIds.length}.` };
+    } else if (kind === "remove-resident-allocation") {
+      const person = people.get(raw.personId);
+      const building = buildings.get(raw.buildingId);
+      if (!person || !canReadResident(person, sender) || residentHasHiddenWork(holding, person, hidden)
+        || !building || hidden.has(raw.buildingId)) {
         fail(COMMAND_ERROR.FORBIDDEN, "Назначение недоступно. Обновите окно или обратитесь к ГМу.");
       }
-      const previous = new Map((person.workAllocations ?? []).map((row) => [workforceKey(row), row]));
-      const nextAllocations = tuples.map(([sourceId, functionId, normalQd, overtimeQd]) => {
-        const row = { sourceId, functionId, normalQd, overtimeQd };
-        return { ...previous.get(workforceKey(row)), ...row };
+      const check = mutateResidentBuildingLabor(holding, { personId: raw.personId, buildingId: raw.buildingId,
+        functionId: raw.functionId, action: "remove", isGM });
+      if (!check.ok) fail(check.forbidden ? COMMAND_ERROR.FORBIDDEN : COMMAND_ERROR.INVALID, check.orphanedOvertime
+        ? check.message
+        : (workforceIssueMessage(holding, check.issues?.[0], { isGM }) || check.message || "Не удалось снять назначение."));
+      receipt = { ok: true, operationId, revision: currentRevision + 1, summary: "Назначение снято." };
+    } else {
+      const { allocationsByPersonId, admissionOverrideBuildingIds } = raw;
+      if (!isGM && admissionOverrideBuildingIds !== undefined) fail(COMMAND_ERROR.FORBIDDEN, "Допусками к работе управляет ГМ.");
+      const plan = applyPlanDelta(holding, raw);
+      const planError = workforcePlanChangeError(holding, plan, { isGM });
+      if (planError) fail(COMMAND_ERROR.FORBIDDEN, planError);
+      const updates = Object.entries(allocationsByPersonId).map(([personId, tuples]) => {
+        const person = people.get(personId);
+        if (!canReadResident(person, sender) || residentHasHiddenWork(holding, person, hidden)
+          || tuples.some(([id]) => !buildings.has(id) || hidden.has(id))) {
+          fail(COMMAND_ERROR.FORBIDDEN, "Назначение недоступно. Обновите окно или обратитесь к ГМу.");
+        }
+        const previous = new Map((person.workAllocations ?? []).map((row) => [workforceKey(row), row]));
+        const nextAllocations = tuples.map(([sourceId, functionId, normalQd, overtimeQd]) => {
+          const row = { sourceId, functionId, normalQd, overtimeQd };
+          return { ...previous.get(workforceKey(row)), ...row };
+        });
+        return { personId, nextAllocations, admissionOverrideBuildingIds: admissionOverrideBuildingIds?.[personId] };
       });
-      return { personId, nextAllocations, admissionOverrideBuildingIds: admissionOverrideBuildingIds?.[personId] };
-    });
-    const check = applyWorkforcePlanAllocations(holding, { updates });
-    if (!check.ok) fail(COMMAND_ERROR.INVALID, workforceIssueMessage(holding, check.issues?.[0], { isGM })
-      || check.message || "Общий план отклонён.");
-    holding.workforcePlan = plan;
-    const receipt = { ok: true, operationId, revision: currentRevision + 1, summary: `Общий план сохранён. Изменено жителей: ${updates.length}.` };
+      const check = applyWorkforcePlanAllocations(holding, { updates });
+      if (!check.ok) fail(COMMAND_ERROR.INVALID, workforceIssueMessage(holding, check.issues?.[0], { isGM })
+        || check.message || "Общий план отклонён.");
+      holding.workforcePlan = plan;
+      receipt = { ok: true, operationId, revision: currentRevision + 1, summary: `Общий план сохранён. Изменено жителей: ${updates.length}.` };
+    }
     holding.operations = [...(holding.operations ?? []), { operationId, senderId, holdingId, signature, result: receipt }].slice(-250);
     return receipt;
-  }, { fallback: false, reason: "workforce:save-plan", localAuthority: true });
+  }, { fallback: false, reason: `workforce:${raw?.kind ?? "save-plan"}`, localAuthority: true });
   if (!result) throw failure(operationId, COMMAND_ERROR.FORBIDDEN, "Поселение недоступно.");
   return result;
 }

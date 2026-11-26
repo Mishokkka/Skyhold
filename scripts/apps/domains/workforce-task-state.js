@@ -1,4 +1,4 @@
-import { remainingCollectionQd } from "../../data/work-allocations.js";
+import { remainingCollectionQd, workFunctionMatches, workFunctionScope } from "../../data/work-allocations.js";
 import { normalizeAgricultureBuilding } from "../../data/agriculture.js";
 import { normalizeLivestockBuilding } from "../../data/livestock.js";
 import { livestockHeadcount } from "../../engines/economy/livestock.js";
@@ -40,14 +40,8 @@ export function workforceOperationalMinimum(building, tasks, targetFunctionId = 
   if (!building) return null;
   const anyWorking = building?.activation?.anyWorkingFunction === true;
   const requested = String(targetFunctionId ?? "").trim();
-  const functionId = anyWorking
-    ? ""
-    : (requested
-      ? (requested.startsWith("production:") || requested === "agriculture" || requested === "livestock" ? "production" : requested)
-      : buildingServiceFunctionId(building));
-  const relevant = tasks.filter((task) => task.assignable
-    && (!functionId || task.functionId === functionId
-      || (functionId === "production" && (task.functionId?.startsWith("production:") || task.functionId === "agriculture" || task.functionId === "livestock"))));
+  const functionId = anyWorking ? "" : (requested ? workFunctionScope(requested) : buildingServiceFunctionId(building));
+  const relevant = tasks.filter((task) => task.assignable && workFunctionMatches(task.functionId, functionId));
   const minQd = buildingMinOperationalQd(building);
   const qd = relevant.reduce((sum, task) => sum + Number(task.normalQd || 0) + Number(task.overtimeQd || 0), 0);
   return {

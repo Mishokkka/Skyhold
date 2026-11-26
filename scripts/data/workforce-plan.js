@@ -7,8 +7,23 @@ export const WORKFORCE_PLAN_VERSION = 2;
 export const workforceKey = (row) => workAllocationTargetKey(row?.sourceId, row?.functionId);
 export const workforceLockKey = (row) => JSON.stringify([String(row?.personId), workforceKey(row)]);
 export const workforceProductionGoalKey = workforceKey;
-const visible = (row, isGM) => row && (isGM || row.visibility !== "gm");
 const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
+const lookupRow = (collection, id) => collection instanceof Map
+  ? collection.get(id)
+  : (Array.isArray(collection) ? collection : []).find((entry) => String(entry?.id ?? "") === id);
+
+export function isWorkforcePlanRowVisible(row, { buildings, people, isGM = false } = {}) {
+  if (!row || typeof row !== "object") return false;
+  if (isGM) return true;
+  if (row.visibility === "gm") return false;
+  const building = lookupRow(buildings, String(row.sourceId ?? ""));
+  if (building?.visibility === "gm") return false;
+  if (row.personId !== undefined) {
+    const person = lookupRow(people, String(row.personId ?? ""));
+    if (person?.visibility === "gm") return false;
+  }
+  return true;
+}
 
 export function normalizeProductionGoals(goals) {
   return (Array.isArray(goals) ? goals : []).filter((row) => workforceKey(row)
@@ -55,8 +70,13 @@ export function workforcePlanChangeError(holding, plan, { isGM = false } = {}) {
   ]) {
     const priorRows = new Map(previous[kind].map((row) => [keyFor(row), row]));
     const nextRows = new Map();
-    const canEdit = (row) => visible(buildings.get(row.sourceId), isGM)
-      && (kind !== "locks" || row.visibility !== "gm" && visible(people.get(row.personId), isGM) || isGM);
+    const canEdit = (row) => {
+      if (!row || typeof row !== "object") return false;
+      const building = buildings.get(String(row.sourceId));
+      if (!building) return false;
+      if (kind === "locks" && !people.get(String(row.personId))) return false;
+      return isWorkforcePlanRowVisible(row, { buildings, people, isGM });
+    };
     for (const row of plan[kind]) {
       if (!row || typeof row !== "object") return "Некорректная цель или закрепление.";
       const key = keyFor(row);
@@ -64,7 +84,9 @@ export function workforcePlanChangeError(holding, plan, { isGM = false } = {}) {
       if (nextRows.has(key)) return "Цель или закрепление повторяется.";
       nextRows.set(key, row);
       if (same(prior, row)) continue;
-      if (Object.keys(row).some((field) => !allowed.includes(field))
+      const fieldAllowed = (field) => allowed.includes(field)
+        || (field === "visibility" && isGM && ["public", "gm"].includes(row.visibility));
+      if (Object.keys(row).some((field) => !fieldAllowed(field))
         || !canEdit(row) || prior && !canEdit(prior)) return "Цель или закрепление недоступны.";
       const target = targets.get(workforceKey(row));
       if (!target?.available || kind === "productionGoals" && (target.kind !== "production"

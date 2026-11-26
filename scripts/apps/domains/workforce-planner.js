@@ -2,7 +2,7 @@ import { buildWorkAllocationTargets, buildPlannedWorkSlots, remainingCollectionQ
 import { canReadResident } from "../../data/access-guard.js";
 import { isResidentInPopulation } from "../../data/resident-presence.js";
 import { DEFAULT_NORMAL_LABOR_QD, normalLaborQdPerTenday } from "../../data/labor-budget.js";
-import { normalizeProductionGoals, workforcePlan, workforceKey, workforceLockKey, workforceCapacity, workforceUnavailable, workforceChangeError } from "../../data/workforce-plan.js";
+import { isWorkforcePlanRowVisible, normalizeProductionGoals, workforcePlan, workforceKey, workforceLockKey, workforceCapacity, workforceUnavailable, workforceChangeError } from "../../data/workforce-plan.js";
 import { workerAdmission, buildingCompositionStatus } from "../../engines/workers/building-qualification.js";
 import { financePeriodIdentity } from "../../engines/economy/finance-period.js";
 import { calculatePlannedWorkerWage } from "../../engines/economy/finance-obligations.js";
@@ -71,7 +71,16 @@ export function buildWorkforceModel(holding, draft, service, { isGM = false, pre
   const financeWorkers = new Map(inputs.workers.map((row) => [String(row.id), row]));
   const functionMap = new Map(inputs.buildings.flatMap((building) => building.functions.map((fn) => [`${building.id}::${fn.id}`, fn])));
   const buildingMap = new Map((holding.buildings?.list ?? []).map((row) => [String(row.id), row]));
-  const locks = new Set((draft.plan?.locks ?? []).map(workforceLockKey));
+  const peopleMap = new Map((holding.people?.list ?? []).map((row) => [String(row.id), row]));
+  const locks = new Set((draft.plan?.locks ?? [])
+    .filter((row) => isWorkforcePlanRowVisible(row, { buildings: buildingMap, people: peopleMap, isGM }))
+    .map(workforceLockKey));
+  const visibleGoalsHolding = {
+    workforcePlan: {
+      productionGoals: (working.workforcePlan?.productionGoals ?? [])
+        .filter((row) => isWorkforcePlanRowVisible(row, { buildings: buildingMap, people: peopleMap, isGM }))
+    }
+  };
   const targets = buildWorkAllocationTargets(working).filter((target) => !target.buildingId || shown(buildingMap.get(target.buildingId), isGM));
   const tasks = targets.map((target) => {
     const building = buildingMap.get(target.buildingId);
@@ -81,7 +90,7 @@ export function buildWorkforceModel(holding, draft, service, { isGM = false, pre
     const blocked = debt?.mothballed || debt?.baseDebtCopper > 0 || debt?.operatingByFunction?.operation?.debtCopper > 0
       || debt?.operatingByFunction?.[target.functionId]?.debtCopper > 0;
     const supported = !building || fn?.source === "workers" || fn?.workerCollection || target.kind === "agriculture";
-    const preparedUnits = productionPreparationGoal(working, target.sourceId, target.functionId) ?? 0;
+    const preparedUnits = productionPreparationGoal(visibleGoalsHolding, target.sourceId, target.functionId) ?? 0;
     const preparation = workforceProductionGoalState(building, target.functionId, preparedUnits);
     if (preparation.allowed && preparedUnits) state.effectiveNeed = Math.max(state.effectiveNeed, preparation.effectiveNeed);
     return {
@@ -241,8 +250,13 @@ export function buildWorkforceModel(holding, draft, service, { isGM = false, pre
     warnings: tasks.filter((row) => row.attention).length, invalidWages: people.filter((row) => !row.unavailable && !row.wageValid).length };
 }
 
-export function workforceCandidate(model, person, task, service) {
+export function workforceCandidate(model, person, task, service, { fromKey = "" } = {}) {
   const existing = person.allocations.find((row) => row.key === task.key);
+  const sourceRow = fromKey ? person.allocations.find((row) => row.key === fromKey && !row.locked) : null;
+  const releasedInSameBuilding = sourceRow && String(sourceRow.sourceId) === String(task.buildingId)
+    ? Number(sourceRow.normalQd || 0) + Number(sourceRow.overtimeQd || 0)
+    : 0;
+  const effectiveReservedQd = Math.max(0, (model.reservedQdByBuilding?.get(task.buildingId) ?? 0) - releasedInSameBuilding);
   const admission = task.building ? workerAdmission(task.building, person.person) : null;
   const efficiency = task.building ? service._workerEfficiencyForPerson(model.holding, task.building, person.person).value : 1;
   const rate = calculatePlannedWorkerWage({
@@ -255,7 +269,7 @@ export function workforceCandidate(model, person, task, service) {
     || (!task.assignable ? "На этой линии нельзя назначить труд" : "")
     || (admission?.hard && !admission.eligible && !admission.overridden ? "Нет обязательного допуска" : "")
     || (task.capacityQd !== null && !existing
-      && (model.reservedQdByBuilding?.get(task.buildingId) ?? 0) >= task.capacityQd ? "Предел труда здания исчерпан" : "")
+      && effectiveReservedQd >= task.capacityQd ? "Предел труда здания исчерпан" : "")
     || (!rate.ok ? "Нужна ставка или договорённость о бесплатной работе" : "");
   const productiveLabor = effectiveLabor(service, model.holding, task, person.person);
   return { ...person, reason, efficiency, effectiveLabor: productiveLabor, efficiencyText: `${Math.round(efficiency * 100)}%`,

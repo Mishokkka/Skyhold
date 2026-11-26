@@ -10,7 +10,8 @@ import { withResourceCatalog } from "../../../core/resources.js";
 import { normalizeLastEventRoll } from "../../../data/event-automation.js";
 import { adjustResidentAttributesForAgeTransition, ageGroupFromAge, ageThresholdsFor, raceKeyFromResident } from "../../../generators/resident-rules.js";
 import { isResidentInPopulation } from "../../../data/resident-presence.js";
-import { buildingServiceBlockReasons } from "../../../engines/economy/building-service.js";
+import { buildingMinOperationalQd } from "../../../data/labor-model.js";
+import { buildingServiceBlockReasons, traceFunctionQd, traceFunctionWorkerIds } from "../../../engines/economy/building-service.js";
 import { financePeriodIdentity } from "../../../engines/economy/finance-period.js";
 import { buildingCompositionStatus, workerMatchesCompositionRequirement } from "../../../engines/workers/building-qualification.js";
 import { SCHOOL_MILESTONE_REPORT_PREFIX } from "../../../engines/tenday/operation-payload.js";
@@ -401,14 +402,33 @@ _advanceResidentAges(holding, years = 1, { schoolPeriodKey = "", school: periodS
 _schoolEducationContext(holding, periodKey) {
   const teachers = new Set();
   let publicSchool = false;
+  const peopleById = new Map((holding?.people?.list ?? []).map((person) => [String(person?.id ?? ""), person]));
   for (const building of holding?.buildings?.list ?? []) {
     const id = `${String(building?.id ?? "")} ${String(building?.templateId ?? "")}`.toLowerCase();
     const name = String(building?.name ?? "").toLowerCase();
     if (building.functions?.culture !== true || !(id.includes("school") || name.includes("школ"))) continue;
-    if (!periodKey || building.serviceState?.periodKey !== periodKey) continue;
+    const state = building.serviceState;
+    if (!periodKey || state?.periodKey !== periodKey || state?.fuelBlocked === true) continue;
     const service = buildingServiceBlockReasons(holding, building, "culture");
-    if (!service.active || !(service.workforce.qd > 0) || !Array.isArray(building.serviceState.activeWorkerIds)) continue;
-    const adults = service.workforce.workers.filter((person) => ageGroupFromAge(person.age, person.race, person.subrace) !== "Ре");
+    const nonLaborReasons = (service.reasons ?? []).filter((reason) => !["workers-missing", "qd-missing", "result-missing", "service-stopped", "composition-missing"].includes(reason.code));
+    if (nonLaborReasons.length) continue;
+    const recordedIds = traceFunctionWorkerIds(state, "culture");
+    if (!recordedIds.length) continue;
+    const workerQd = state?.workedQdByWorkerAndFunction;
+    const workedPeople = recordedIds.map((workerId) => peopleById.get(workerId)).filter((person) => {
+      if (!person || person.dead || !isResidentInPopulation(person, holding)) return false;
+      if (this._safeNumber(person.injuredDays, 0) > 0) return false;
+      if (workerQd && typeof workerQd === "object") {
+        return traceFunctionQd({ workedQdByFunction: workerQd[String(person.id)] }, "culture") > 0;
+      }
+      return true;
+    });
+    if (!workedPeople.length) continue;
+    const totalWorkedQd = workerQd && typeof workerQd === "object"
+      ? workedPeople.reduce((sum, person) => sum + traceFunctionQd({ workedQdByFunction: workerQd[String(person.id)] }, "culture"), 0)
+      : workedPeople.length === recordedIds.length ? traceFunctionQd(state, "culture") : 0;
+    if (totalWorkedQd < Math.max(1, buildingMinOperationalQd(building))) continue;
+    const adults = workedPeople.filter((person) => ageGroupFromAge(person.age, person.race, person.subrace) !== "Ре");
     if (!adults.length) continue;
     const composition = buildingCompositionStatus(building, adults, { excludeGroups: ["ЧУДОТВОРЕЦ"] });
     if (!composition.met) continue;

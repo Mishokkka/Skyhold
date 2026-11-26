@@ -64,10 +64,10 @@ export function reservedOccupation(holding = {}, person = {}) {
   if (id) {
     for (const crew of holding.constructionCrews ?? []) {
       const name = text(crew.name || crew.id) || "Стройбригада";
-      if ([crew.leaderId, crew.distributedLeaderId].some((value) => text(value) === id)) {
+      if (text(crew.leaderId) === id) {
         return { kind: "construction", label: `Руководитель стройбригады «${name}»` };
       }
-      if (includes(crew.memberIds, id) || includes(crew.distributedIds, id)) return { kind: "construction", label: `Стройбригада «${name}»` };
+      if (includes(crew.memberIds, id)) return { kind: "construction", label: `Стройбригада «${name}»` };
     }
     if (includes(holding.constructionCrewIds, id)) return { kind: "construction", label: "Строительная бригада" };
 

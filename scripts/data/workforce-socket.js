@@ -36,15 +36,60 @@ export function buildWorkforceCommand({ operationId, holdingId, expectedRevision
     locks: changes("locks", workforceLockKey), productionGoals: changes("productionGoals", workforceProductionGoalKey) };
 }
 
+export function buildBuildingLaborWithdrawalCommand({ operationId, holdingId, expectedRevision, buildingId, functionId = "", token }) {
+  return {
+    kind: "withdraw-building-labor",
+    operationId,
+    holdingId,
+    expectedRevision,
+    buildingId,
+    ...(functionId ? { functionId } : {}),
+    token
+  };
+}
+
+export function buildResidentAllocationRemovalCommand({ operationId, holdingId, expectedRevision, personId, buildingId, functionId }) {
+  return {
+    kind: "remove-resident-allocation",
+    operationId,
+    holdingId,
+    expectedRevision,
+    personId,
+    buildingId,
+    functionId
+  };
+}
+
 export function workforceCommandProblem(raw) {
   if (!isPlainObject(raw) || !identifier(raw.operationId) || raw.operationId.length > 100 || !identifier(raw.holdingId)
-    || !whole(raw.expectedRevision) || !isPlainObject(raw.allocationsByPersonId)
+    || !whole(raw.expectedRevision)) return "Некорректная команда плана работ.";
+  if (JSON.stringify(raw).length > MAX_JSON) {
+    return "Дельта превышает лимит команды (250 жителей, 24 строки на жителя, 240 000 символов).";
+  }
+  const kind = raw.kind ?? "save-plan";
+  if (kind === "withdraw-building-labor") {
+    if (Object.keys(raw).some((field) => !["kind", "operationId", "holdingId", "expectedRevision", "buildingId", "functionId", "token"].includes(field))
+      || !identifier(raw.buildingId)
+      || (raw.functionId !== undefined && raw.functionId !== "" && !identifier(raw.functionId))
+      || !identifier(raw.token)) {
+      return "Некорректная команда освобождения работников.";
+    }
+    return "";
+  }
+  if (kind === "remove-resident-allocation") {
+    if (Object.keys(raw).some((field) => !["kind", "operationId", "holdingId", "expectedRevision", "personId", "buildingId", "functionId"].includes(field))
+      || !identifier(raw.personId) || !identifier(raw.buildingId) || !identifier(raw.functionId)) {
+      return "Некорректная команда снятия назначения.";
+    }
+    return "";
+  }
+  if (kind !== "save-plan" || !isPlainObject(raw.allocationsByPersonId)
     || (raw.locks !== undefined && !Array.isArray(raw.locks))
     || (raw.productionGoals !== undefined && !Array.isArray(raw.productionGoals))
-    || Object.keys(raw).some((field) => !["operationId", "holdingId", "expectedRevision", "allocationsByPersonId",
+    || Object.keys(raw).some((field) => !["kind", "operationId", "holdingId", "expectedRevision", "allocationsByPersonId",
       "locks", "productionGoals", "admissionOverrideBuildingIds"].includes(field))) return "Некорректная команда плана работ.";
   const people = Object.entries(raw.allocationsByPersonId);
-  if (people.length > MAX_PEOPLE || JSON.stringify(raw).length > MAX_JSON
+  if (people.length > MAX_PEOPLE
     || people.some(([, rows]) => Array.isArray(rows) && rows.length > MAX_WORK_ALLOCATIONS_PER_PERSON)) {
     return "Дельта превышает лимит команды (250 жителей, 24 строки на жителя, 240 000 символов).";
   }
@@ -84,7 +129,7 @@ export function createWorkforceSocketApi({ store, writeTimeoutMs = 8000 }) {
     if (!authority) throw failure(id, COMMAND_ERROR.AUTHORITY_OFFLINE, "Нет активного ГМа.", true);
     if (pending.has(id)) throw failure(id, COMMAND_ERROR.CONFLICT, "Запрос уже ожидает ответа.");
     return new Promise((resolve, reject) => {
-      const entry = { resolve, reject, attempts: 0, authorities: new Set(), timeout: null };
+      const entry = { resolve, reject, attempts: 0, authorities: new Set(), currentGmId: "", timeout: null };
       const stop = (error) => { pending.delete(id); clearTimeout(entry.timeout); reject(error); };
       const unknown = () => failure(id, COMMAND_ERROR.OUTCOME_UNKNOWN,
         "Исход сохранения неизвестен. Проверьте общий план перед повторной отправкой того же запроса.", true);
@@ -92,6 +137,7 @@ export function createWorkforceSocketApi({ store, writeTimeoutMs = 8000 }) {
         const gm = activeSkyholdGm();
         if (!gm) return stop(entry.attempts ? unknown() : failure(id, COMMAND_ERROR.AUTHORITY_OFFLINE, "Нет активного ГМа.", true));
         entry.attempts += 1;
+        entry.currentGmId = gm.id;
         entry.authorities.add(gm.id);
         entry.timeout = setTimeout(() => entry.attempts < 2 ? emit() : stop(unknown()), writeTimeoutMs);
         try {
@@ -110,9 +156,10 @@ export function createWorkforceSocketApi({ store, writeTimeoutMs = 8000 }) {
     if (payload.type === RESPONSE) {
       const entry = pending.get(payload.requestId);
       if (!acceptsGmSocketResponse(payload, senderId, entry)) return true;
+      const command = commandResultFromPayload(payload);
+      if (!command.ok && senderId !== entry.currentGmId) return true;
       clearTimeout(entry.timeout);
       pending.delete(payload.requestId);
-      const command = commandResultFromPayload(payload);
       if (command.ok) entry.resolve(payload.result);
       else entry.reject(commandError(command));
       return true;

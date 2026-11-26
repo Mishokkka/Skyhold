@@ -353,6 +353,8 @@ function isPlayerBuildingPath(rest) {
   const text = String(rest ?? "");
   if (text.startsWith("gm.")) return false;
   if (/^people\.list\.\d+\.(workAssignment|role|home)$/.test(text)) return true;
+  if (/^people\.list\.\d+\.workAllocations(\.|$)/.test(text)
+    && !/^people\.list\.\d+\.workAllocations\.\d+\.(volunteer|volunteerReason)$/.test(text)) return true;
   if (/^buildings\.list\.\d+\.(name|visibility|img|image|icon|constructionCrewId)$/.test(text)) return true;
   if (/^buildings\.list\.\d+\.productionLines\.\d+\.(active|storageRoomId)$/.test(text)) return true;
   if (/^buildings\.list\.\d+\.agriculture\.config\.(enabled|activeCropId|outputRoomId|gmPriority|sow|harvest)$/.test(text)) return true;
@@ -400,6 +402,26 @@ function validatePlayerPatchSemantics(current, proposed, action, holdingIndex, p
       if (!prior?.volunteer || ["sourceId", "functionId", "volunteerReason"].some((key) => String(prior[key] ?? "") !== String(allocation[key] ?? ""))) {
         return { ok: false, error: "Договорённость о бесплатной работе назначает ведущий; переносить её на другую работу нельзя." };
       }
+    }
+  }
+  for (const lock of Array.isArray(holding.workforcePlan?.locks) ? holding.workforcePlan.locks : []) {
+    const personId = String(lock?.personId ?? "");
+    const sourceId = String(lock?.sourceId ?? "");
+    const functionId = String(lock?.functionId ?? "");
+    if (!personId || !sourceId || !functionId) continue;
+    const beforePerson = (holding.people?.list ?? []).find((row) => String(row.id) === personId);
+    const afterPerson = (nextHolding.people?.list ?? []).find((row) => String(row.id) === personId);
+    const hasActiveLockTarget = (person) => (person?.workAllocations ?? []).some((row) =>
+      String(row?.sourceId ?? "") === sourceId && String(row?.functionId ?? "") === functionId
+      && Math.max(0, toNumber(row?.normalQd ?? row?.plannedNormalQd ?? row?.qd, 0))
+        + Math.max(0, toNumber(row?.overtimeQd ?? row?.plannedOvertimeQd, 0)) > 0);
+    if (hasActiveLockTarget(beforePerson) && !hasActiveLockTarget(afterPerson)) {
+      return {
+        ok: false,
+        error: lock?.visibility === "gm"
+          ? "Назначение недоступно. Обновите окно или обратитесь к ГМу."
+          : "Сначала снимите закрепление назначения или используйте подтверждённое снятие."
+      };
     }
   }
   const workAllocationCheck = validateHoldingWorkAllocations(nextHolding, { previousHolding: holding });

@@ -267,8 +267,20 @@ export const buildingStaffingWorkerIds = buildingWorkerIds;
 export const explicitWorkerIdsForBuilding = buildingWorkerIds;
 export const explicitWorkAllocationsForBuilding = buildingWorkAllocationsForBuilding;
 
+export function isProductionWorkFunction(functionId = "") {
+  const id = text(functionId);
+  return id === "production" || id.startsWith("production:") || id === "agriculture" || id === "livestock";
+}
+
+export function workFunctionScope(functionId = "") {
+  const id = text(functionId);
+  return isProductionWorkFunction(id) ? "production" : id;
+}
+
 export function workFunctionMatches(actual, expected) {
-  return !expected || actual === expected || (expected === "production" && text(actual).startsWith("production:"));
+  const exp = text(expected);
+  const act = text(actual);
+  return !exp || act === exp || (exp === "production" && isProductionWorkFunction(act));
 }
 
 export function residentWorkUnavailable(holding, person) {
@@ -395,9 +407,7 @@ export function validateHoldingWorkAllocations(holding = {}, options = {}) {
 export function allocatedBuildingQd(rows = [], sourceId = "", functionId = "") {
   return (rows ?? []).reduce((total, row) => {
     if (allocationSourceId(row) !== text(sourceId)) return total;
-    const actual = allocationFunctionId(row);
-    return !functionId || actual === functionId || (functionId === "production" && actual.startsWith("production:"))
-      ? total + allocationTotalQd(row) : total;
+    return workFunctionMatches(allocationFunctionId(row), functionId) ? total + allocationTotalQd(row) : total;
   }, 0);
 }
 

@@ -393,8 +393,10 @@ export class SkyholdPoliticsApp extends WindowFrameMixin(RenderSchedulerMixin(Ha
     if (!context.control.canAssign) return;
     const action = String(form.dataset.controlAssignment ?? "");
     const buildingId = String(form.dataset.buildingId ?? "");
-    const residentId = String(new FormData(form).get("residentId") ?? "");
-    const key = JSON.stringify({ action, buildingId, residentId });
+    const formData = new FormData(form);
+    const residentId = String(formData.get("residentId") ?? "");
+    const functionId = String(formData.get("functionId") ?? "").trim();
+    const key = JSON.stringify({ action, buildingId, residentId, ...(functionId ? { functionId } : {}) });
     this._controlWorkBusy ??= false;
     this._controlWorkRetries ??= new Map();
     if (this._controlWorkBusy) return;
@@ -411,7 +413,8 @@ export class SkyholdPoliticsApp extends WindowFrameMixin(RenderSchedulerMixin(Ha
         ? await confirmBuildingWorkerAdmission({ manager, building, person }) : { allowed: true };
       if (!admission.allowed || this._isPlayerPreview()) return;
       const operation = this._controlWorkRetries.get(key) ?? { operationId: makeId("control-work", 20),
-        holdingId: this.holdingId, expectedRevision: context.revision, action, buildingId, residentId };
+        holdingId: this.holdingId, expectedRevision: context.revision, action, buildingId, residentId,
+        ...(functionId ? { functionId } : {}) };
       this._controlWorkRetries.set(key, operation);
       const result = await executeControlWorkOperation({ ...operation, allowAdmissionOverride: admission.allowAdmissionOverride },
         { getManager: () => manager });

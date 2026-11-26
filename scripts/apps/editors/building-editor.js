@@ -5,7 +5,8 @@ import { MODULE_ID } from "../../data/constants.js";
 import { appendProductionExpense } from "../../core/production-expenses.js";
 import { normalizeAgricultureBuilding } from "../../data/agriculture.js";
 import { normalizeLivestockBuilding } from "../../data/livestock.js";
-import { SkyholdData, requestConstructionOperation } from "../../data/store.js";
+import { SkyholdData, requestConstructionOperation, requestWorkforceOperation } from "../../data/store.js";
+import { buildResidentAllocationRemovalCommand } from "../../data/workforce-socket.js";
 import { makeId } from "../../data/utils.js";
 import { canReadResident, findReadableHoldingEntry, residentHasHiddenWork } from "../../data/access-guard.js";
 import { holdingPermissionContext } from "../../data/holding-permissions.js";
@@ -54,7 +55,7 @@ import {
 import { normalLaborQdPerTenday, residentLaborCapacity } from "../../data/labor-budget.js";
 import { buildingOperationalState } from "../../core/building-state.js";
 import { buildingLaborWithdrawalLines, canReadBuildingLaborWithdrawal } from "../../data/building-demolition.js";
-import { applyBuildingLaborWithdrawal, mutateResidentBuildingLabor, planBuildingLaborWithdrawal } from "../../data/labor-mutations.js";
+import { applyBuildingLaborWithdrawal, droppedLocksForAllocationChange, mutateResidentBuildingLabor, planBuildingLaborWithdrawal } from "../../data/labor-mutations.js";
 import { workforceIssueMessage } from "../../data/workforce-plan.js";
 import { workerTypeFromAttributes } from "../../generators/resident-rules.js";
 
@@ -760,13 +761,61 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(PendingFieldSavesMix
     const personId = String(event.currentTarget?.dataset?.personId ?? "").trim();
     const allocationId = String(event.currentTarget?.dataset?.allocationId ?? "").trim();
     if (!personId) return;
+    const isGM = game.user?.isGM === true;
+    const data = SkyholdData.get();
+    const current = this._getMutableBuilding(data);
+    const currentPerson = (current.holding?.people?.list ?? []).find((row) => String(row?.id ?? "") === personId);
+    if (!current.holding || !current.building || !canReadResident(currentPerson)
+      || residentHasHiddenWork(current.holding, currentPerson)) return;
+    const currentAllocation = (currentPerson.workAllocations ?? []).find((row) =>
+      row.id === allocationId && row.sourceId === current.building.id);
+    if (!currentAllocation) return;
+    const nextAllocations = (currentPerson.workAllocations ?? []).filter((row) => row.id !== allocationId);
+    const dropped = droppedLocksForAllocationChange(current.holding, personId, nextAllocations, [currentAllocation]);
+    if (dropped.length) {
+      if (!isGM && dropped.some((row) => row.visibility === "gm")) {
+        ui.notifications?.warn?.("Назначение недоступно. Обновите окно или обратитесь к ГМу.");
+        return;
+      }
+      const manager = getActiveSkyholdManager({ warn: true });
+      if (!await manager?._confirmAction("Снять закреплённое назначение",
+        "Назначение закреплено в общем плане работ. Удалить его и снять закрепление?")) return;
+    }
+    if (!isGM) {
+      try {
+        await requestWorkforceOperation(buildResidentAllocationRemovalCommand({
+          operationId: makeId("workforce-remove", 20),
+          holdingId: current.holding.id,
+          expectedRevision: data.meta.revision,
+          personId,
+          buildingId: current.building.id,
+          functionId: currentAllocation.functionId
+        }));
+      } catch (error) {
+        globalThis.ui?.notifications?.warn?.(error.message || "Не удалось снять назначение.");
+        return;
+      }
+      this.requestRender();
+      requestSkyholdAppRender();
+      return;
+    }
     const updated = await this._updateMutableBuilding(({ holding, building }) => {
       const person = (holding?.people?.list ?? []).find((row) => String(row?.id ?? "") === personId);
       if (!canReadResident(person) || residentHasHiddenWork(holding, person)) return SkyholdData.skipTransaction(false);
       const allocation = (person.workAllocations ?? []).find((row) => row.id === allocationId && row.sourceId === building.id);
       if (!allocation) return SkyholdData.skipTransaction(false);
-      const check = mutateResidentBuildingLabor(holding, { personId, buildingId: building.id, functionId: allocation.functionId, action: "remove" });
-      if (!check.ok) globalThis.ui?.notifications?.warn?.(workforceIssueMessage(holding, check.issues?.[0], { isGM: game.user?.isGM }) || check.message);
+      const check = mutateResidentBuildingLabor(holding, {
+        personId,
+        buildingId: building.id,
+        functionId: allocation.functionId,
+        action: "remove",
+        isGM: true
+      });
+      if (!check.ok) {
+        globalThis.ui?.notifications?.warn?.(check.orphanedOvertime
+          ? check.message
+          : (workforceIssueMessage(holding, check.issues?.[0], { isGM: true }) || check.message));
+      }
       return check.ok || SkyholdData.skipTransaction(false);
     }, { reason: "building-editor:remove-worker", requireHolding: true, laborValidated: true });
     if (!updated) return;

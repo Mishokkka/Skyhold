@@ -1,5 +1,6 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
-import { SkyholdData, requestShipOperation } from "../../../data/store.js";
+import { SkyholdData, requestShipOperation, requestWorkforceOperation } from "../../../data/store.js";
+import { buildResidentAllocationRemovalCommand } from "../../../data/workforce-socket.js";
 import { findReadableHoldingEntry, hiddenBuildingIds, residentHasHiddenWork } from "../../../data/access-guard.js";
 import { addCollectionRow, deleteCollectionRow } from "../../../data/collection-operations.js";
 import { holdingPermissionContext } from "../../../data/holding-permissions.js";
@@ -17,10 +18,17 @@ import { syncSelectionSummary } from "../../common/selection-summary.js";
 import { residentTraitTooltip } from "../../common/resident-trait-chips.js";
 import { confirmBuildingWorkerAdmission } from "../../common/building-worker-admission.js";
 import { vacatePoliticsRepresentative } from "../../../data/resident-assignments.js";
-import { applyResidentEditorAllocations, transferResidentBetweenHoldings } from "../../../data/labor-mutations.js";
+import { applyResidentEditorAllocations, droppedLocksForAllocationChange, transferResidentBetweenHoldings } from "../../../data/labor-mutations.js";
+import { workforceIssueMessage } from "../../../data/workforce-plan.js";
 import { newLaborIssues, residentLaborUnavailableReason } from "../../../data/labor-model.js";
 import { holdingWorkerAdmissionIssues } from "../../../engines/workers/building-qualification.js";
 import { normalizePerson } from "../../../data/normalizers/resident.js";
+
+function safeWorkforceError(holding, check, fallback = "Некорректный план рабочих QD.") {
+  return check?.orphanedOvertime
+    ? check.message
+    : (workforceIssueMessage(holding, check?.issues?.[0], { isGM: Boolean(game.user?.isGM) }) || check?.message || fallback);
+}
 
 const RESIDENT_CONTEXT_MENU_WIDTH = 230;
 const RESIDENT_CONTEXT_MENU_HEIGHT = 150;
@@ -484,7 +492,7 @@ async _onAddWorkAllocation(event) {
         normalQd: 0,
         overtimeQd: 0
       }] });
-      if (!check.ok) ui.notifications.warn(check.message);
+      if (!check.ok) ui.notifications.warn(safeWorkforceError(holding, check));
       return check.ok || SkyholdData.skipTransaction(false);
     }, { reason: "resident:add-work-allocation", scope: "holdings" });
     if (updated) this.requestRender();
@@ -502,21 +510,61 @@ async _onRemoveWorkAllocation(event) {
   const allocationId = String(event.currentTarget?.dataset?.allocationId ?? "");
   if (!address.personId || !allocationId || !this._canEditBuildings()) return;
   try {
-    if (!await this._savePersonEditorDraft(event)) return;
+    if (!await this._savePersonEditorDraft(event)) return false;
+    const isGM = Boolean(game.user?.isGM);
+    const currentData = SkyholdData.get();
+    const current = residentScope(currentData, address);
+    const removedRow = (current.person?.workAllocations ?? []).find((row) => String(row.id) === allocationId);
+    if (current.person && removedRow) {
+      if (!holdingPermissionContext(current.holding).canEditBuildings
+        || residentHasHiddenWork(current.holding, current.person)) return false;
+      const previewNext = (current.person.workAllocations ?? []).filter((row) => String(row.id) !== allocationId);
+      const dropped = droppedLocksForAllocationChange(current.holding, address.personId, previewNext, [removedRow]);
+      if (dropped.length) {
+        if (!isGM && dropped.some((row) => row.visibility === "gm")) {
+          ui.notifications.warn("Назначение недоступно. Обновите окно или обратитесь к ГМу.");
+          return false;
+        }
+        if (!await this._confirmAction("Снять закреплённое назначение",
+          "Строка закреплена в общем плане работ. Удалить назначение и снять закрепление?")) {
+          return false;
+        }
+      }
+      const rowQd = Math.max(0, Number(removedRow.normalQd ?? 0) || 0) + Math.max(0, Number(removedRow.overtimeQd ?? 0) || 0);
+      if (!isGM && removedRow.sourceId && removedRow.functionId && (rowQd > 0 || dropped.length > 0)) {
+        await requestWorkforceOperation(buildResidentAllocationRemovalCommand({
+          operationId: makeId("workforce-remove", 20),
+          holdingId: current.holding.id,
+          expectedRevision: currentData.meta.revision,
+          personId: address.personId,
+          buildingId: removedRow.sourceId,
+          functionId: removedRow.functionId
+        }));
+        this.requestRender();
+        return true;
+      }
+    }
+    let failureMessage = "";
     const updated = await SkyholdData.transaction((data) => {
       const { holding, person } = residentScope(data, address);
       if (!person || !holdingPermissionContext(holding).canEditBuildings || residentHasHiddenWork(holding, person)) return SkyholdData.skipTransaction(false);
       const nextAllocations = (person.workAllocations ?? []).filter((row) => String(row.id) !== allocationId);
       if (nextAllocations.length === person.workAllocations?.length) return SkyholdData.skipTransaction(false);
-      const check = applyResidentEditorAllocations(holding, person.id, { nextAllocations, conserving: true });
-      if (!check.ok) ui.notifications.warn(check.message);
+      const check = applyResidentEditorAllocations(holding, person.id, {
+        nextAllocations,
+        conserving: true,
+        isGM,
+        confirmedUnlock: Boolean(removedRow)
+      });
+      if (!check.ok) failureMessage = safeWorkforceError(holding, check);
       return check.ok || SkyholdData.skipTransaction(false);
     }, { reason: "resident:remove-work-allocation", scope: "holdings" });
+    if (!updated && failureMessage) ui.notifications.warn(failureMessage);
     if (updated) this.requestRender();
     return Boolean(updated);
   } catch (error) {
     console.error("FBL Skyhold | Failed to remove resident work allocation", error);
-    ui.notifications.error("Не удалось убрать функцию из плана труда. Подробности в консоли.");
+    ui.notifications.warn(error?.message || "Не удалось убрать функцию из плана труда.");
     return false;
   }
 },
@@ -893,9 +941,25 @@ async _savePersonEditorDraft(event) {
       && (String(issue?.personId ?? "") === String(previewPerson.id ?? "")
         || previewExplicitBuildingIds.has(String(issue?.buildingId ?? "")))
     ));
+    const isGM = Boolean(game.user?.isGM);
     if (blockingIssue) {
-      ui.notifications.warn(blockingIssue.message || "Некорректный план рабочих QD.");
+      ui.notifications.warn(workforceIssueMessage(previewHolding, blockingIssue, { isGM }) || "Некорректный план рабочих QD.");
       return false;
+    }
+    const droppedLocks = droppedLocksForAllocationChange(currentHolding, previewPerson.id, previewPerson.workAllocations);
+    if (droppedLocks.length) {
+      if (!isGM) {
+        ui.notifications.warn(droppedLocks.some((row) => row.visibility === "gm")
+          ? "Назначение недоступно. Обновите окно или обратитесь к ГМу."
+          : "Закреплённое назначение нельзя снять через правку поля. Используйте кнопку удаления строки или общий план работ.");
+        this.requestRender?.();
+        return false;
+      }
+      if (!await this._confirmAction("Снять закреплённое назначение",
+        "Изменение удалит закреплённую строку плана работ и снимет её закрепление. Продолжить?")) {
+        this.requestRender?.();
+        return false;
+      }
     }
     const admissionIssues = newLaborIssues(holdingWorkerAdmissionIssues(currentHolding), holdingWorkerAdmissionIssues(previewHolding));
     for (const { buildingId } of admissionIssues.filter((issue) => issue.personId === String(previewPerson.id))) {
@@ -969,13 +1033,18 @@ async _savePersonEditorDraft(event) {
         ...overrideBuildings.map((row) => row.id)
       ])] : undefined;
       const check = applyResidentEditorAllocations(target.holding, address.personId, {
-        nextAllocations: allocationsDraft.workAllocations, admissionOverrideBuildingIds: approved
+        nextAllocations: allocationsDraft.workAllocations,
+        admissionOverrideBuildingIds: approved,
+        isGM: Boolean(game.user?.isGM)
       });
-      if (!check.ok) return SkyholdData.skipTransaction({ stale: true, message: check.message });
+      if (!check.ok) return SkyholdData.skipTransaction({ stale: true, message: safeWorkforceError(target.holding, check) });
     }
     if (holdingBeforeWageMutation) {
       const check = validateHoldingWorkAllocations(target.holding, { previousHolding: holdingBeforeWageMutation });
-      if (!check.ok) return SkyholdData.skipTransaction({ stale: true, message: check.issues[0].message });
+      if (!check.ok) return SkyholdData.skipTransaction({
+        stale: true,
+        message: workforceIssueMessage(target.holding, check.issues[0], { isGM: Boolean(game.user?.isGM) })
+      });
     }
 
     if (workUpdate) {
@@ -1016,22 +1085,32 @@ async _savePersonEditorDraft(event) {
     if (warnNoSlot) return SkyholdData.skipTransaction({ warnNoSlot: true });
     const person = structuredClone(target.holding.people.list.find((row) => String(row.id) === address.personId));
     normalizePerson(person);
-    return { saved: true, person };
+    return { saved: true, person, allocationsSuperseded: Boolean(allocationsDraft && workUpdate) };
   }, { reason: "resident:save-editor-draft", scope: "holdings" });
 
   if (result?.warnNoSlot) ui.notifications.warn("Назначение недоступно. Прежняя работа сохранена.");
   if (result?.stale) ui.notifications.warn(result.message || "Житель, место работы или права изменились. Скопируйте правку, обновите карточку и повторите её.");
   if (result?.saved) {
     const committed = result.person;
-    for (const [field, value] of submitted) baseline.fields.set(field, value);
+    const superseded = result.allocationsSuperseded === true;
+    const isAllocationField = (field) => field?.dataset?.workAllocationTarget !== undefined
+      || String(field?.dataset?.field ?? "").includes(".workAllocations.");
+    for (const [field, value] of submitted) {
+      if (superseded && isAllocationField(field)) continue;
+      baseline.fields.set(field, value);
+    }
     for (const { field, renderedField } of updates) {
       if (field === "workAssignment") {
         baseline.person.workAssignment = committed.workAssignment;
         baseline.person.workAllocations = committed.workAllocations;
-      } else {
+      } else if (!superseded || !String(renderedField ?? "").startsWith("workAllocations.")) {
         const value = residentDraftValue(committed, field);
         foundry.utils.setProperty(baseline.person, renderedField, value);
       }
+    }
+    if (superseded) {
+      ui.notifications.warn("Смена основной должности заменила несохранённые правки строк QD.");
+      this.requestRender?.();
     }
   }
   return result?.saved === true;

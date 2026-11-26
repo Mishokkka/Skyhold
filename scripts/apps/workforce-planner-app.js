@@ -2,7 +2,7 @@ import { MODULE_ID } from "../data/constants.js";
 import { requestWorkforceOperation, SkyholdData } from "../data/store.js";
 import { findReadableHoldingEntry } from "../data/access-guard.js";
 import { holdingPermissionContext } from "../data/holding-permissions.js";
-import { workforceKey, workforceLockKey, workforceCapacity, workforceProductionGoalKey } from "../data/workforce-plan.js";
+import { isWorkforcePlanRowVisible, workforceKey, workforceLockKey, workforceCapacity, workforceProductionGoalKey } from "../data/workforce-plan.js";
 import { makeId } from "../data/utils.js";
 import { buildingAppearance } from "../core/building-appearance.js";
 import { getSkyholdWorkflowService } from "../workflows/skyhold-workflow-service.js";
@@ -99,7 +99,7 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
     const group = groups.find((row) => row.id === this.personBuildingId) ?? groups[0];
     this.personBuildingId = group?.id || "";
     const choices = (group?.allTasks ?? []).filter((task) => task.assignable).map((task) => ({ ...task,
-      reason: task.key === this.personSource ? "Исходная работа" : workforceCandidate(model, person, task, this.service).reason }));
+      reason: task.key === this.personSource ? "Исходная работа" : workforceCandidate(model, person, task, this.service, { fromKey: this.personSource }).reason }));
     const destination = choices.find((row) => row.key === this.personTargetKey)
       ?? choices.find((row) => !row.reason) ?? choices[0];
     this.personTargetKey = destination?.key || "";
@@ -279,6 +279,15 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
       else {
         if (!this.permissions.canEditBuildings || this.pending) return;
         if (action === "production-goal" && task?.hasProductionGoal) this._change((draft) => {
+          const visibilityScope = {
+            buildings: this._model?.holding?.buildings?.list ?? this.base.buildings?.list,
+            people: this._model?.holding?.people?.list ?? this.base.people?.list,
+            isGM: this.permissions.isGM
+          };
+          const existingGoal = (draft.plan.productionGoals ?? []).find((row) => workforceKey(row) === task.key);
+          if (existingGoal && !isWorkforcePlanRowVisible(existingGoal, visibilityScope)) {
+            throw new Error("Цель или закрепление недоступны.");
+          }
           const value = this.inputValues.get(`production-goal:${task.key}`) ?? task.preparedUnits;
           if (!Number.isSafeInteger(value) || value < 0 || value > 1000000) throw new Error("Объём подготовки: целое число от 0 до 1000000 ЕД.; 0 — без ограничения.");
           draft.plan.version = 2;
@@ -306,7 +315,19 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
         else if (action === "lock") this._change((draft) => {
           const row = draft.allocations[id]?.find((entry) => workforceKey(entry) === key); if (!row) return;
           const lock = { personId: id, sourceId: row.sourceId, functionId: row.functionId }, lockId = workforceLockKey(lock);
-          if (draft.plan.locks.some((entry) => workforceLockKey(entry) === lockId)) draft.plan.locks = draft.plan.locks.filter((entry) => workforceLockKey(entry) !== lockId);
+          const visibilityScope = {
+            buildings: this._model?.holding?.buildings?.list ?? this.base.buildings?.list,
+            people: this._model?.holding?.people?.list ?? this.base.people?.list,
+            isGM: this.permissions.isGM
+          };
+          const existingLock = (draft.plan.locks ?? []).find((entry) => workforceLockKey(entry) === lockId);
+          if (existingLock && !isWorkforcePlanRowVisible(existingLock, visibilityScope)) {
+            throw new Error("Цель или закрепление недоступны.");
+          }
+          if (!existingLock && !isWorkforcePlanRowVisible(lock, visibilityScope)) {
+            throw new Error("Цель или закрепление недоступны.");
+          }
+          if (existingLock) draft.plan.locks = draft.plan.locks.filter((entry) => workforceLockKey(entry) !== lockId);
           else draft.plan.locks.push(lock);
         });
         else if (["suggest", "preview-bulk", "fill", "idle"].includes(action)) {
@@ -361,15 +382,25 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
         before: this._allocationText(fresh.allocations[id], this._model),
         after: this._allocationText(draft.allocations[id], this._model) });
     }
+    const visibilityScope = {
+      buildings: this._model?.holding?.buildings?.list ?? holding.buildings?.list,
+      people: this._model?.holding?.people?.list ?? holding.people?.list,
+      isGM: this.permissions.isGM
+    };
     for (const [kind, keyFor] of [["locks", workforceLockKey], ["productionGoals", workforceProductionGoalKey]]) {
-      const old = new Map((this.initial.plan[kind] ?? []).map((row) => [keyFor(row), row])), next = new Map((this.draft.plan[kind] ?? []).map((row) => [keyFor(row), row]));
+      const old = new Map((this.initial.plan[kind] ?? []).map((row) => [keyFor(row), row]));
+      const next = new Map((this.draft.plan[kind] ?? []).map((row) => [keyFor(row), row]));
       for (const key of new Set([...old.keys(), ...next.keys()])) {
-        if (same(old.get(key), next.get(key))) continue;
+        const oldRow = old.get(key);
+        const nextRow = next.get(key);
+        if (same(oldRow, nextRow)) continue;
+        const freshRow = (fresh.plan[kind] ?? []).find((row) => keyFor(row) === key);
+        if ([oldRow, nextRow, freshRow].some((row) => row && !isWorkforcePlanRowVisible(row, visibilityScope))) continue;
         draft.plan.version = 2;
         draft.plan[kind] = (draft.plan[kind] ?? []).filter((row) => keyFor(row) !== key);
-        if (next.has(key)) draft.plan[kind].push(copy(next.get(key)));
+        if (nextRow) draft.plan[kind].push(copy(nextRow));
         changes.push({ name: kind === "productionGoals" ? "Объём подготовки" : "Закрепление", task: key,
-          before: JSON.stringify((fresh.plan[kind] ?? []).find((row) => keyFor(row) === key) ?? "нет"), after: JSON.stringify(next.get(key) ?? "нет") });
+          before: JSON.stringify(freshRow ?? "нет"), after: JSON.stringify(nextRow ?? "нет") });
       }
     }
     const error = workforceDraftError(holding, draft, this.permissions); if (error) throw new Error(error);

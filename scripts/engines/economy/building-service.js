@@ -32,7 +32,7 @@ function traceLastTendayIndex(periodKey = "") {
   return whole(match[2] ?? match[1]);
 }
 
-function traceFunctionQd(serviceState = {}, functionId = "") {
+export function traceFunctionQd(serviceState = {}, functionId = "") {
   const entries = Object.entries(serviceState?.workedQdByFunction ?? {});
   if (!functionId) {
     const hasLines = entries.some(([id]) => id.startsWith("production:"));
@@ -49,7 +49,7 @@ function traceFunctionQd(serviceState = {}, functionId = "") {
     ? whole(serviceState?.workedQd) : 0;
 }
 
-function traceFunctionWorkerIds(serviceState = {}, functionId = "") {
+export function traceFunctionWorkerIds(serviceState = {}, functionId = "") {
   const rows = serviceState?.activeWorkerIdsByFunction;
   if (rows && typeof rows === "object") {
     const matched = Object.entries(rows)

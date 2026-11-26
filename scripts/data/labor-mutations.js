@@ -43,10 +43,69 @@ function finish(holding, draft, options, replaced, context = {}) {
   const check = validateDraft(holding, draft, options, replaced, context);
   if (!check.ok) {
     const orphanedOvertime = context.removing && check.issues.some((issue) => issue.code === "allocation-overtime-days");
-    return { ...check, message: orphanedOvertime ? "Сначала уменьшите сверхурочные (OT) в оставшихся назначениях" : check.issues[0]?.message };
+    return {
+      ...check,
+      orphanedOvertime: Boolean(orphanedOvertime),
+      message: orphanedOvertime ? "Сначала уменьшите сверхурочные (OT) в оставшихся назначениях" : check.issues[0]?.message
+    };
   }
   Object.assign(holding, draft);
   return check;
+}
+
+export function droppedWorkforceLocks(holding = {}, personId = "", nextAllocations = []) {
+  const id = text(personId);
+  if (!id) return [];
+  const activeKeys = new Set((Array.isArray(nextAllocations) ? nextAllocations : [])
+    .filter((row) => allocationTotalQd(row) > 0)
+    .map((row) => lockKey(id, row)));
+  return (holding?.workforcePlan?.locks ?? [])
+    .filter((row) => text(row?.personId) === id && !activeKeys.has(lockKey(row.personId, row)));
+}
+
+export function droppedLocksForAllocationChange(holding = {}, personId = "", nextAllocations = [], removedRows = []) {
+  const id = text(personId);
+  if (!id) return [];
+  const beforePerson = personFor(holding, id);
+  const beforeActive = new Set(rowsFor(beforePerson ?? {}).filter((row) => allocationTotalQd(row) > 0)
+    .map((row) => lockKey(id, row)));
+  const removedKeys = new Set((Array.isArray(removedRows) ? removedRows : [])
+    .filter((row) => allocationSourceId(row) && allocationFunctionId(row))
+    .map((row) => lockKey(id, row)));
+  return droppedWorkforceLocks(holding, id, nextAllocations)
+    .filter((row) => beforeActive.has(lockKey(row.personId, row)) || removedKeys.has(lockKey(row.personId, row)));
+}
+
+function hasHiddenDroppedLock(holding, dropped = []) {
+  if (!dropped.length) return false;
+  const buildings = new Map((holding?.buildings?.list ?? []).map((row) => [text(row?.id), row]));
+  const people = new Map((holding?.people?.list ?? []).map((row) => [text(row?.id), row]));
+  return dropped.some((row) => row?.visibility === "gm"
+    || buildings.get(text(row?.sourceId))?.visibility === "gm"
+    || people.get(text(row?.personId))?.visibility === "gm");
+}
+
+function pruneDroppedLocks(beforeHolding, draft, personId, options = {}) {
+  const id = text(personId);
+  const afterPerson = personFor(draft, id);
+  const dropped = droppedLocksForAllocationChange(
+    { ...beforeHolding, workforcePlan: draft.workforcePlan },
+    id,
+    rowsFor(afterPerson ?? {}),
+    options.removedRows
+  );
+  if (!dropped.length) return { ok: true, dropped: [] };
+  if (options.isGM === false && hasHiddenDroppedLock(draft, dropped)) {
+    return { ok: false, forbidden: true, droppedLocks: dropped, message: "Назначение недоступно. Обновите окно или обратитесь к ГМу." };
+  }
+  if (options.confirmedUnlock === false) {
+    return { ok: false, requiresConfirmation: true, droppedLocks: dropped, message: "Удаление затронет закреплённое назначение." };
+  }
+  const droppedKeys = new Set(dropped.map((row) => lockKey(row.personId, row)));
+  if (Array.isArray(draft.workforcePlan?.locks)) {
+    draft.workforcePlan.locks = draft.workforcePlan.locks.filter((row) => !droppedKeys.has(lockKey(row.personId, row)));
+  }
+  return { ok: true, dropped };
 }
 
 function cleanAdmissionOverrides(holding, person, requested) {
@@ -99,10 +158,16 @@ export function mutateResidentBuildingLabor(holding, {
   const rows = rowsFor(person);
   const matches = (row) => allocationSourceId(row) === source && (!fn || allocationFunctionId(row) === fn);
   const replaced = [];
+  const removedRows = [];
   if (removing) {
+    removedRows.push(...rows.filter(matches));
+    if (source && fn) removedRows.push({ sourceId: source, functionId: fn });
     prepare(draft, person, rows.filter((row) => !matches(row)), { isChild: options.isChild }, replaced);
   } else {
     const retained = replaceAllocations ? rows.filter(matches) : rows;
+    if (replaceAllocations) {
+      removedRows.push(...rows.filter((entry) => !matches(entry)));
+    }
     const existing = retained.find(matches);
     const next = { ...existing, sourceId: source, functionId: fn,
       normalQd: normalQd + (action === "add" ? allocationNormalQd(existing) : 0),
@@ -118,6 +183,8 @@ export function mutateResidentBuildingLabor(holding, {
       }
     }
   }
+  const pruned = pruneDroppedLocks(holding, draft, id, { ...options, removedRows });
+  if (!pruned.ok) return pruned;
   return finish(holding, draft, options, replaced, { removing, conserving: removing, checkedPersonIds: [id] });
 }
 
@@ -129,8 +196,12 @@ export function applyResidentEditorAllocations(holding, personId, options = {}) 
   const draft = structuredClone(holding);
   const person = personFor(draft, text(personId));
   if (!person) return fail("Житель не найден.");
+  const nextIds = new Set(nextAllocations.map((row) => text(row?.id)).filter(Boolean));
+  const removedRows = rowsFor(person).filter((row) => row?.id && !nextIds.has(text(row.id)));
   const replaced = [];
   prepare(draft, person, nextAllocations, { admissionOverrideBuildingIds, replaceOccupation, isChild, keepEmptyRows: true }, replaced);
+  const pruned = pruneDroppedLocks(holding, draft, person.id, { ...options, removedRows });
+  if (!pruned.ok) return pruned;
   return finish(holding, draft, options, replaced, { checkedPersonIds: [person.id], conserving: options.conserving === true, removing: options.conserving === true });
 }
 
