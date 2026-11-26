@@ -8,7 +8,8 @@ import { syncResidentLaborRole } from "../data/labor-role.js";
 import { DEFAULT_NORMAL_LABOR_QD, DEFAULT_NORMAL_LABOR_QD_V2, TENDAY_WORKING_DAYS_V2,
   holdingDaysOffPerTenday, holdingNormalLaborQd, daysOffConflictSummary, normalLaborQdPerTenday, residentLaborCapacity } from "../data/labor-budget.js";
 import { buildingAcceptsWorkers, buildingAvailableCapacityQd, buildingCapacityQd, buildingMinOperationalQd,
-  buildingWorkReservations, normalizeBuildingLabor, productionPreparationGoal, reservedOccupation } from "../data/labor-model.js";
+  buildingWorkReservations, normalizeBuildingLabor, productionPreparationGoal, reservedOccupation,
+  residentLaborUnavailableReason } from "../data/labor-model.js";
 import { buildWorkAllocationTargets, functionDailyRate, targetAllowsOvertime, remainingCollectionQd, validateHoldingWorkAllocations,
   allocationNormalQd as reexportNormal, allocationTotalQd as reexportTotal } from "../data/work-allocations.js";
 import { clearResidentLaborAllocations } from "../data/resident-assignments.js";
@@ -65,6 +66,7 @@ test("labor dependencies stay acyclic and the v2 gateway stays opt-in", () => {
     .matchAll(/(?:\bfrom\s*|\bimport\s*)["']([^"']+)["']/g)].map((match) => match[1]);
   for (const leaf of ["sha256", "labor-primitives"]) assert.deepEqual(imports(leaf), []);
   assert.deepEqual(imports("labor-role"), ["./labor-primitives.js"]);
+  assert.ok(!imports("labor-budget").includes("./labor-model.js"));
   assert.ok(imports("labor-model").every((name) => !/engines\/|work-allocations|resident-assignments|labor-mutations/.test(name)));
   assert.ok(imports("work-allocations").every((name) => !/resident-assignments|labor-mutations/.test(name)));
   assert.ok(imports("resident-assignments").every((name) => !name.includes("labor-mutations")));
@@ -127,6 +129,28 @@ test("days-off preview reports the effective overtime cap when assigned normal Q
   assert.deepEqual(daysOffConflictSummary(home, 1, options), { daysOff: 1, hasConflicts: true, conflicts: [
     { personId: "resident", name: "Тихон", normalQd: 2, overtimeQd: 2, maxNormalQd: 16, maxOvertimeQd: 1, budgetMaxOvertimeQd: 8 }
   ] });
+});
+
+test("days-off preview and labor eligibility agree on ship absence and shore duty", () => {
+  const cases = [
+    [{ away: true, shoreDuty: true }, null, true],
+    [{ away: true, shoreDuty: true, shipId: "  " }, null, true],
+    [{ away: true, shoreDuty: true, shipId: "airship" }, null, false],
+    [undefined, { crewResidentIds: ["resident"], activeVoyage: {} }, true],
+    [undefined, { commanderResidentId: "resident", status: "away" }, true],
+    [undefined, { coCommanderResidentIds: ["resident"], location: { kind: "remote" } }, true],
+    [undefined, { crewResidentIds: ["resident"], status: "docked", location: { kind: "home" } }, false],
+    [{ shoreDuty: true, shipId: "other" }, { crewResidentIds: ["resident"], status: "away" }, true],
+    [{ away: true, shoreDuty: true, shipId: " airship " }, { crewResidentIds: ["resident"], activeVoyage: {} }, false]
+  ];
+  for (const [shipAssignment, ship, absent] of cases) {
+    const person = resident({ shipAssignment, workAllocations: [allocation("mill", 18)] });
+    const home = holding(person);
+    if (ship) home.special = { ships: { list: [{ id: "airship", ...ship }] } };
+    const scenario = JSON.stringify({ shipAssignment, ship });
+    assert.equal(residentLaborUnavailableReason(home, person), absent ? "Житель вне поселения." : "", scenario);
+    assert.equal(daysOffConflictSummary(home, 1, options).hasConflicts, !absent, scenario);
+  }
 });
 
 test("v72 schema, world setting, and military wage calculations remain compatible", () => {
@@ -228,6 +252,16 @@ test("targeted add, set, and remove preserve other rows and synchronize roles", 
   assert.equal(personIn(home).role, "Свободен");
 });
 
+test("targeted mutations match allocations stored by target key", () => {
+  const one = { id: "one", targetKey: "mill::production:one", normalQd: 2 };
+  const two = { id: "two", targetKey: "mill::production:two", normalQd: 2 };
+  for (const [action, expected] of [["add", [["one", 6]]], ["set", [["one", 4]]], ["remove", []]]) {
+    const home = holding(resident({ workAllocations: [one, two] }));
+    assert.equal(add(home, { action }).ok, true, action);
+    assert.deepEqual(personIn(home).workAllocations.map(({ id, normalQd }) => [id, normalQd]), [...expected, ["two", 2]], action);
+  }
+});
+
 test("wages reject unpaid work without volunteering and reject zero or non-integer overrides", () => {
   const unpaid = building("mill", { wageDailyCopper: 0 });
   const home = holding(resident(), [unpaid]);
@@ -321,6 +355,14 @@ test("defense and sheriff replacement release only the explicitly replaced occup
   assert.equal(personIn(sheriff).role, "План QD");
 });
 
+test("an empty staff appointment requires explicit replacement before assigning labor", () => {
+  const home = holding(resident({ staffAppointment: {} }));
+  rejected(home, () => add(home), "reserved-occupation");
+  assert.equal(add(home, { replaceOccupation: true }).ok, true);
+  assert.equal(Object.hasOwn(personIn(home), "staffAppointment"), false);
+  assert.equal(personIn(home).role, "План QD");
+});
+
 test("availability, admission, composition warnings, and capacity are separate checks", () => {
   const disabled = holding(resident(), [building("mill", { lifecycle: "disabled" })]);
   rejected(disabled, () => add(disabled), "work-target-unavailable");
@@ -387,6 +429,16 @@ test("days off and assigned normal QD cap overtime for adults and children", () 
   assert.equal(add(child).ok, true);
 });
 
+test("direct v2 validation uses the holding days-off budget by default", () => {
+  const home = holding(resident({ workAllocations: [allocation("mill", 18)] }));
+  home.gm = { labor: { daysOffPerTenday: 1 } };
+  const v2 = { workingDays: 9, baseNormalQd: 18, strictWageCheck: true };
+  const check = validateHoldingWorkAllocations(home, v2);
+  assert.equal(check.ok, false);
+  assert.deepEqual(check.issues.map(({ code, actual, limit }) => [code, actual, limit]), [["allocation-normal-cap", 18, 16]]);
+  assert.equal(validateHoldingWorkAllocations(home, { ...v2, useDaysOffBudget: false }).ok, true);
+});
+
 test("setting a plan rejects an existing overtime-days violation even when reduced", () => {
   const home = holding(resident({ workAllocations: [allocation("mill", 2, 3)] }));
   rejected(home, () => add(home, { action: "set", normalQd: 2, overtimeQd: 2 }), "allocation-overtime-days");
@@ -406,6 +458,17 @@ test("removal rejects orphaned overtime and explicit clearing remains available 
   assert.equal(trimExcessOvertimeForResidents(home, ["resident"], options).ok, true);
   assert.deepEqual(personIn(home).workAllocations, []);
   assert.equal(personIn(home).role, "Свободен");
+});
+
+test("removal leaves other disabled work alone and still rejects worsened overtime", () => {
+  const buildings = [building("mill", { lifecycle: "disabled" }), building("furnace", { lifecycle: "disabled" })];
+  const home = holding(resident({ workAllocations: [allocation("mill", 4), allocation("furnace", 4)] }), buildings);
+  assert.equal(add(home, { action: "remove" }).ok, true);
+  assert.deepEqual(personIn(home).workAllocations.map((row) => row.sourceId), ["furnace"]);
+
+  const overtime = holding(resident({ workAllocations: [allocation("mill", 4), allocation("furnace", 2, 4)] }), buildings);
+  const removal = rejected(overtime, () => add(overtime, { action: "remove" }), "allocation-overtime-days");
+  assert.deepEqual(removal.issues.map((issue) => issue.code), ["allocation-overtime-days"]);
 });
 
 test("conservation trims unlocked rows canonically, previews locked cuts, and removes obsolete locks", () => {
@@ -438,6 +501,30 @@ test("conservation trims unlocked rows canonically, previews locked cuts, and re
   assert.equal(trimExcessOvertimeForResidents(home, ["resident"], { ...options, confirmLocked: true }).ok, true);
   assert.deepEqual(home.workforcePlan.locks, []);
   assert.equal(personIn(home).role, "Свободен");
+});
+
+test("conservation sorts target-key rows, respects their locks, and preserves live overrides", () => {
+  const rows = [
+    { id: "a", targetKey: "mill::production:two", overtimeQd: 1 },
+    { id: "z", targetKey: "mill::production:one", overtimeQd: 1 },
+    { id: "b", targetKey: "furnace::production:one", overtimeQd: 1 },
+    { id: "locked", targetKey: "forge::production:one", normalQd: 2, overtimeQd: 2 }
+  ];
+  const home = holding(resident({ workAllocations: rows }), [building(), building("furnace"),
+    building("forge", { workerAdmissionOverrideIds: ["resident"] })]);
+  const lock = { personId: "resident", sourceId: "forge", functionId: "production:one" };
+  home.workforcePlan = { locks: [lock] };
+  const trim = (extra) => trimExcessOvertimeForResidents(home, ["resident"], { ...options, ...extra });
+  const preview = rejected(home, () => trim());
+  assert.equal(preview.requiresConfirmation, true);
+  assert.deepEqual(preview.trims.map(({ sourceId, functionId }) => [sourceId, functionId]), [
+    ["furnace", "production:one"], ["mill", "production:one"], ["mill", "production:two"], ["forge", "production:one"]
+  ]);
+  assert.deepEqual(preview.lockedTrims, [preview.trims[3]]);
+  assert.equal(trim({ confirmLocked: true }).ok, true);
+  assert.deepEqual(personIn(home).workAllocations, [{ ...rows[3], overtimeQd: 1 }]);
+  assert.deepEqual(home.workforcePlan.locks, [lock]);
+  assert.deepEqual(home.buildings.list[2].workerAdmissionOverrideIds, ["resident"]);
 });
 
 test("reservations support scoped visibility and releases without overcounting a function transfer", () => {
@@ -506,6 +593,17 @@ test("scoped clear removes only matching assignments and override IDs", () => {
   clearResidentAllBuildingLabor(home, person, { isChild: true });
   assert.equal(person.role, "Ребенок");
   assert.deepEqual(home.buildings.list.map((row) => row.workerAdmissionOverrideIds), [["keep"], []]);
+});
+
+test("scoped clear recognizes target-key rows and cleans the matching admission override", () => {
+  const mill = { targetKey: "mill::production:one", normalQd: 2 };
+  const furnace = { targetKey: "furnace::production:one", normalQd: 2 };
+  const person = resident({ workAllocations: [mill, furnace] });
+  const home = holding(person, [building("mill", { workerAdmissionOverrideIds: ["resident", "keep"] }),
+    building("furnace", { workerAdmissionOverrideIds: ["resident"] })]);
+  clearResidentBuildingLabor(home, person, "mill");
+  assert.deepEqual(person.workAllocations, [furnace]);
+  assert.deepEqual(home.buildings.list.map((row) => row.workerAdmissionOverrideIds), [["keep"], ["resident"]]);
 });
 
 test("clearing a child's last allocation restores the child role without an explicit flag", () => {

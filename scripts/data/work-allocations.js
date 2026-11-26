@@ -7,7 +7,7 @@ import { normalizeBuildingMaintenance, usesTechnicalMaintenance } from "./econom
 import { isResidentPresent } from "./resident-presence.js";
 import { holdingNormalLaborQd, normalLaborQdPerTenday, residentLaborCapacity } from "./labor-budget.js";
 import { buildingLaborMode, staffAppointmentFor, staffWorkerIdsForBuilding, validateHybridLaborHolding, newHybridLaborIssues } from "./hybrid-labor.js";
-import { allocationSourceId, allocationTotalQd, parseWorkAllocationTargetKey, residentActiveQd } from "./labor-primitives.js";
+import { allocationFunctionId, allocationSourceId, allocationTotalQd, residentActiveQd } from "./labor-primitives.js";
 import { buildingAcceptsWorkers, buildingCapacityQd, buildingWorkReservations, reservedOccupation, residentLaborUnavailableReason } from "./labor-model.js";
 import { laborWageRate } from "../engines/economy/labor-wage-rate.js";
 import { buildingCompositionStatus, workerAdmission } from "../engines/workers/building-qualification.js";
@@ -46,7 +46,7 @@ export function workAllocationTargetKey(sourceId = "", functionId = "") {
 export function normalizeWorkAllocation(value = {}, index = 0) {
   const source = isPlainObject(value) ? value : {};
   const sourceId = allocationSourceId(source);
-  const functionId = text(source.functionId || parseWorkAllocationTargetKey(source.targetKey).functionId);
+  const functionId = allocationFunctionId(source);
   return {
     schemaVersion: WORK_ALLOCATION_SCHEMA_VERSION,
     id: text(source.id) || makeId(`work-${index + 1}`),
@@ -450,7 +450,7 @@ export function validateHoldingWorkAllocations(holding = {}, options = {}) {
     return validateLegacyHoldingWorkAllocations(holding, previousHolding);
   }
   const settings = { strictWageCheck, baseNormalQd: baseNormalQd ?? holdingNormalLaborQd(null, { workingDays }),
-    workingDays, allowMedicalOvertime, useDaysOffBudget };
+    workingDays, allowMedicalOvertime, useDaysOffBudget: useDaysOffBudget ?? true };
   const current = v2LaborState(holding, settings, true);
   let issues = current.issues;
   if (previousHolding) {

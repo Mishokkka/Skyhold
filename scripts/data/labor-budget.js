@@ -1,6 +1,7 @@
 import { MODULE_ID, SETTING_NORMAL_LABOR_QD } from "./constants.js";
 import { ageGroupFromAge, ageThresholdsFor, raceKeyFromResident } from "../generators/resident-rules.js";
 import { allocationNormalQd, allocationTotalQd } from "./labor-primitives.js";
+import { isResidentAbsentForLabor } from "./resident-presence.js";
 
 export const DEFAULT_NORMAL_LABOR_QD = 20;
 export const DEFAULT_DAYS_OFF_PER_TENDAY = 0;
@@ -44,8 +45,7 @@ export function daysOffConflictSummary(holding = {}, nextDaysOff = 0, options = 
   const budget = holdingNormalLaborQd({ daysOffPerTenday: next }, options);
   const conflicts = [];
   for (const person of holding?.people?.list ?? []) {
-    if (!person || person.dead || person.absent === true
-      || (person.shipAssignment?.away === true && person.shipAssignment?.shoreDuty !== true)) continue;
+    if (!person || person.dead || isResidentAbsentForLabor(holding, person)) continue;
     let normalQd = 0, overtimeQd = 0;
     for (const row of Array.isArray(person.workAllocations) ? person.workAllocations : []) {
       const normal = allocationNormalQd(row);

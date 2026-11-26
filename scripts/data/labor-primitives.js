@@ -14,6 +14,10 @@ export function allocationSourceId(row) {
   return text(row?.sourceId) || parseWorkAllocationTargetKey(row?.targetKey).sourceId;
 }
 
+export function allocationFunctionId(row) {
+  return text(row?.functionId) || parseWorkAllocationTargetKey(row?.targetKey).functionId;
+}
+
 function whole(value) {
   const number = Number(value);
   return Number.isFinite(number) ? Math.max(0, Math.floor(number)) : 0;

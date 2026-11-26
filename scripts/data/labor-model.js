@@ -1,6 +1,7 @@
 import { isSheriffAppointment } from "./control-appointments.js";
 import { DEFAULT_NORMAL_LABOR_QD, residentLaborCapacity } from "./labor-budget.js";
 import { allocationSourceId, allocationTotalQd } from "./labor-primitives.js";
+import { isResidentAbsentForLabor, isResidentAwayForLabor, residentLaborShips } from "./resident-presence.js";
 
 const text = (value) => String(value ?? "").trim();
 const includes = (ids, id) => (ids ?? []).some((value) => text(value) === id);
@@ -48,28 +49,9 @@ export function productionPreparationGoal(holding = {}, sourceId = "", functionI
   return Math.min(1_000_000, whole(goal?.preparedUnits ?? goal));
 }
 
-function memberShips(holding, person) {
-  const id = text(person.id);
-  const assignment = person.shipAssignment;
-  const shoreDutyShipId = assignment?.shoreDuty === true ? text(assignment.shipId) : "";
-  return id ? (holding.special?.ships?.list ?? []).filter((ship) => {
-    if (shoreDutyShipId && shoreDutyShipId === text(ship.id)) return false;
-    return text(ship.commanderResidentId) === id || includes(ship.crewResidentIds, id) || includes(ship.coCommanderResidentIds, id);
-  }) : [];
-}
-
-function away(person) {
-  return person.shipAssignment?.away === true && person.shipAssignment?.shoreDuty !== true;
-}
-
-function absent(holding, person) {
-  return person.absent === true || away(person) || memberShips(holding, person).some((ship) =>
-    ship.activeVoyage || ship.status === "away" || (ship.location && ship.location.kind !== "home"));
-}
-
 export function residentLaborUnavailableReason(holding, person) {
   if (person.dead) return "Житель умер.";
-  if (absent(holding, person)) return "Житель вне поселения.";
+  if (isResidentAbsentForLabor(holding, person)) return "Житель вне поселения.";
   if (Number(person.injuredDays) > 0) return "Житель ранен.";
   if (!residentLaborCapacity(person, DEFAULT_NORMAL_LABOR_QD).normalQd) return "Житель не может работать по возрасту.";
   return "";
@@ -95,8 +77,8 @@ export function reservedOccupation(holding = {}, person = {}) {
       if (includes(squad?.memberIds, id)) return { kind: "defense", label: `Отряд «${name}»` };
     }
   }
-  if (away(person)) return { kind: "ship", label: "В плавании" };
-  const [ship] = memberShips(holding, person);
+  if (isResidentAwayForLabor(person)) return { kind: "ship", label: "В плавании" };
+  const [ship] = residentLaborShips(holding, person);
   if (ship) return { kind: "ship", label: `Экипаж: ${text(ship.name || ship.id) || "корабль"}` };
   if (assignment.startsWith("construction")) return { kind: "construction", label: "Стройбригада" };
   if (["soldier", "defenseCommander"].includes(assignment)) return { kind: "defense", label: "Военная служба" };
@@ -117,7 +99,7 @@ export function buildingWorkReservations(holding = {}, { excludePersonId = "", r
   const totals = new Map();
   for (const person of holding.people?.list ?? []) {
     const id = text(person?.id);
-    if (!id || id === text(excludePersonId) || person.dead || absent(holding, person)
+    if (!id || id === text(excludePersonId) || person.dead || isResidentAbsentForLabor(holding, person)
       || (presentIds && !presentIds.has(id)) || (canRead && !canRead(person))) continue;
     const perBuilding = new Map();
     for (const row of Array.isArray(person.workAllocations) ? person.workAllocations : []) {

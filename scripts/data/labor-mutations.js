@@ -1,5 +1,5 @@
 import { reservedOccupation, residentLaborUnavailableReason } from "./labor-model.js";
-import { allocationNormalQd, allocationTotalQd, residentActiveQd } from "./labor-primitives.js";
+import { allocationFunctionId, allocationNormalQd, allocationSourceId, allocationTotalQd, residentActiveQd } from "./labor-primitives.js";
 import { syncResidentLaborRole } from "./labor-role.js";
 import { clearPersonFromAssignments, clearResidentLaborAllocations,
   transferResidentBetweenHoldings as transferLegacyResident } from "./resident-assignments.js";
@@ -10,7 +10,7 @@ import { normalizeWorkAllocation, validateHoldingWorkAllocations,
 const text = (value) => String(value ?? "").trim();
 const rowsFor = (person) => Array.isArray(person.workAllocations) ? person.workAllocations : [];
 const personFor = (holding, id) => (holding?.people?.list ?? []).find((person) => text(person.id) === id);
-const lockKey = (personId, row) => JSON.stringify([text(personId), text(row?.sourceId), text(row?.functionId)]);
+const lockKey = (personId, row) => JSON.stringify([text(personId), allocationSourceId(row), allocationFunctionId(row)]);
 const overtimeFor = (row) => allocationTotalQd(row) - allocationNormalQd(row);
 const asChild = (person, options) => options.isChild ?? (person?.ageGroup === "Ре");
 const fail = (message) => ({ ok: false, message });
@@ -51,7 +51,7 @@ function finish(holding, draft, options, replaced, context = {}) {
 
 function cleanAdmissionOverrides(holding, person, requested) {
   const personId = text(person.id);
-  const active = new Set(rowsFor(person).filter((row) => allocationTotalQd(row) > 0).map((row) => text(row.sourceId)));
+  const active = new Set(rowsFor(person).filter((row) => allocationTotalQd(row) > 0).map(allocationSourceId));
   for (const building of holding.buildings?.list ?? []) {
     const id = text(building.id);
     const existing = building.workerAdmissionOverrideIds ?? [];
@@ -68,7 +68,7 @@ function releaseOccupation(holding, person) {
 }
 
 function prepare(holding, person, nextAllocations, options, replaced) {
-  const occupation = reservedOccupation(holding, person) || person.staffAppointment?.buildingId;
+  const occupation = reservedOccupation(holding, person) || Boolean(person.staffAppointment && typeof person.staffAppointment === "object");
   const hadOverrides = (holding.buildings?.list ?? []).filter((building) =>
     (building.workerAdmissionOverrideIds ?? []).some((id) => text(id) === text(person.id))).map((building) => text(building.id));
   person.workAllocations = nextAllocations.map((row, index) => normalizeWorkAllocation(row, index));
@@ -90,15 +90,16 @@ export function mutateResidentBuildingLabor(holding, {
   replaceOccupation = false, allowAdmissionOverride = false, ...options
 } = {}) {
   const id = text(personId), source = text(buildingId), fn = text(functionId);
-  if (!id || !source || !["add", "set", "remove"].includes(action) || (!fn && action !== "remove")) return fail("Не выбрано назначение для изменения.");
-  if (action !== "remove" && ![normalQd, overtimeQd].every(validQd)) return fail(INVALID_QD);
+  const removing = action === "remove";
+  if (!id || !source || !["add", "set", "remove"].includes(action) || (!fn && !removing)) return fail("Не выбрано назначение для изменения.");
+  if (!removing && ![normalQd, overtimeQd].every(validQd)) return fail(INVALID_QD);
   const draft = structuredClone(holding);
   const person = personFor(draft, id);
   if (!person) return fail("Житель не найден.");
   const rows = rowsFor(person);
-  const matches = (row) => text(row?.sourceId) === source && (!fn || text(row?.functionId) === fn);
+  const matches = (row) => allocationSourceId(row) === source && (!fn || allocationFunctionId(row) === fn);
   const replaced = [];
-  if (action === "remove") {
+  if (removing) {
     prepare(draft, person, rows.filter((row) => !matches(row)), { isChild: options.isChild }, replaced);
   } else {
     const existing = rows.find(matches);
@@ -116,7 +117,7 @@ export function mutateResidentBuildingLabor(holding, {
       }
     }
   }
-  return finish(holding, draft, options, replaced, { removing: action === "remove", checkedPersonIds: [id] });
+  return finish(holding, draft, options, replaced, { removing, conserving: removing, checkedPersonIds: [id] });
 }
 
 export function applyResidentEditorAllocations(holding, personId, options = {}) {
@@ -161,9 +162,10 @@ export function clearResidentAllBuildingLabor(holding, person, { isChild } = {})
 }
 
 const compareRows = (left, right) => {
-  for (const field of ["sourceId", "functionId", "id"]) {
-    if (text(left[field]) < text(right[field])) return -1;
-    if (text(left[field]) > text(right[field])) return 1;
+  for (const keyFor of [allocationSourceId, allocationFunctionId, (row) => text(row.id)]) {
+    const leftKey = keyFor(left), rightKey = keyFor(right);
+    if (leftKey < rightKey) return -1;
+    if (leftKey > rightKey) return 1;
   }
   return 0;
 };
@@ -189,7 +191,7 @@ export function trimExcessOvertimeForResidents(holding, personIds, { confirmLock
       remaining -= overtimeBefore - overtimeAfter;
       row.overtimeQd = overtimeAfter;
       const locked = isRowLocked(row);
-      const trim = { personId: id, personName: person.name || "Житель", sourceId: row.sourceId, functionId: row.functionId,
+      const trim = { personId: id, personName: person.name || "Житель", sourceId: allocationSourceId(row), functionId: allocationFunctionId(row),
         overtimeBefore, overtimeAfter, locked };
       trims.push(trim);
       if (locked) lockedTrims.push(trim);
