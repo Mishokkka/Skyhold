@@ -154,11 +154,10 @@ assert.equal(validatePlayerPatch({ holdings: [moving], meta: { revision: 1 } }, 
 const minBuilding = { workersMin: 2, functions: { culture: true, production: true }, activation: { minOperationalQd: 40, anyWorkingFunction: true } };
 const minTasks = [
   { kind: "culture", functionId: "culture", functionName: "Услуги", assignable: true, normalQd: 10, assignments: [{ personId: "a" }] },
-  { kind: "production", functionId: "production:meal", functionName: "Кухня", assignable: true, normalQd: 25, overtimeQd: 5, assignments: [{ personId: "a" }, { personId: "b" }] },
-  { kind: "maintenance", functionId: "maintenance", assignable: true, normalQd: 40, assignments: [{ personId: "c" }] }
+  { kind: "production", functionId: "production:meal", functionName: "Кухня", assignable: true, normalQd: 25, overtimeQd: 5, assignments: [{ personId: "a" }, { personId: "b" }] }
 ];
 assert.deepEqual([workforceBuildingRequirement(minBuilding, minTasks).qd, workforceBuildingRequirement(minBuilding, minTasks).workers], [40, 2],
-  "building minimum counts each QD and worker once and excludes maintenance");
+  "building minimum counts each QD and worker once");
 const scopedMinimum = workforceBuildingRequirement({ ...minBuilding, activation: { minOperationalQd: 40 } }, minTasks);
 assert.equal(scopedMinimum.qd, 10, "another function cannot satisfy a function-specific minimum");
 assert.equal(scopedMinimum.gap, 30);

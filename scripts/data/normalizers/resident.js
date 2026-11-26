@@ -1,6 +1,5 @@
 import { ageGroupFromAge, clampAgeForRace, normalizeBelief, normalizeResidentAttribute, representativeAgeForGroup } from "../../generators/resident-rules.js";
 import { isPlainObject, makeId, toBoolean, toNumber } from "../utils.js";
-import { normalizeMaintenancePointsPerTenday } from "../economy/maintenance.js";
 import { normalizePersonWorkAllocations } from "../work-allocations.js";
 import { normalizeWorkerTypeSet } from "./building.js";
 import { normalizeStaffAppointment } from "../hybrid-labor.js";
@@ -108,7 +107,7 @@ export function normalizePerson(person) {
   person.volunteerReason = String(person.volunteerReason ?? "");
   normalizePersonWorkAllocations(person);
   if (person.staffAppointment !== undefined) person.staffAppointment = normalizeStaffAppointment(person.staffAppointment);
-  person.maintenancePointsPerTenday = normalizeMaintenancePointsPerTenday(person.maintenancePointsPerTenday);
+  delete person.maintenancePointsPerTenday;
   if (!isPlainObject(person.attributes)) person.attributes = {};
   for (const key of ["strength", "agility", "wits", "empathy"]) {
     person.attributes[key] = normalizeResidentAttribute(person.attributes[key], 3);

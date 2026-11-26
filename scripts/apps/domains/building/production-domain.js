@@ -359,8 +359,7 @@ _buildingIncomeSummary(building, holding = null, workerContext = null, workerEff
     text: "1",
     title: "1 = 50% базовой цены, 2 = 100%, 3 = 150%."
   };
-  const maintenanceFactor = this._maintenanceEfficiencyFactor?.(building) ?? (this._safeNumber(building?.maintenance?.backlogTendays, 0) >= 2 ? 0.5 : 1);
-  const total = Math.floor((base + perWorker * eff) * maintenanceFactor);
+  const total = Math.floor(base + perWorker * eff);
   return {
     base,
     perWorker,
@@ -411,15 +410,14 @@ _buildingDefenseSummary(building, holding = null, workerContext = null, statusAr
     ? buildingServiceBlockReasons(holding, building, "defense") : null;
   const effectiveWorkers = defenseStatus ? (defenseStatus.active ? defenseStatus.workforce.equivalentWorkers : 0)
     : Number.isFinite(Number(effSummary?.total)) ? Math.max(0, Number(effSummary.total)) : 0;
-  const maintenanceFactor = Math.max(0, Math.min(1, this._maintenanceEfficiencyFactor?.(building) ?? 1));
-  const structuralBase = Math.max(0, Math.floor(base * maintenanceFactor));
+  const structuralBase = Math.max(0, Math.floor(base));
   const fromWorkers = workerStep > 0 ? Math.floor(effectiveWorkers / workerStep) * perStep : 0;
   const total = Math.max(0, structuralBase + fromWorkers);
   const hasDefense = Boolean(base || perStep || workerStep);
   const effText = this._formatNumber ? this._formatNumber(effectiveWorkers) : String(Math.round(effectiveWorkers * 100) / 100);
   const detail = workerStep > 0
     ? `${structuralBase} структура + ${fromWorkers} за эфф. ${effText}/${workerStep} оплаченных раб. (${effSummary?.detail || "нет деталей"})`
-    : `${structuralBase} структурная защита${maintenanceFactor < 1 ? ` (обслуживание ×${maintenanceFactor})` : ""}`;
+    : `${structuralBase} структурная защита`;
   return { base, structuralBase, perStep, workerStep, assigned, effectiveWorkers, fromWorkers, total, hasDefense, detail };
 },
 
@@ -432,7 +430,7 @@ _reputationSummary(holding, _moraleStateArg = null) {
     const socialStatus = rawValue > 0 ? buildingConfirmedSocialStatus(holding, building) : null;
     if (rawValue > 0 && !socialStatus.active) continue;
     if (rawValue < 0 && !buildingConfirmedHarmActive(holding, building)) continue;
-    const serviceFactor = rawValue > 0 ? socialStatus.maintenanceFactor * (socialStatus.laborFactor ?? 1) : 1;
+    const serviceFactor = rawValue > 0 ? (socialStatus.laborFactor ?? 1) : 1;
     const activeValue = scaleIntegerBuildingEffect(rawValue, serviceFactor);
     if (!activeValue) continue;
     const templateId = String(building?.templateId ?? "").trim().toLowerCase();
@@ -490,7 +488,7 @@ _reputationSummary(holding, _moraleStateArg = null) {
   const signed = (value) => `${value > 0 ? "+" : ""}${value}`;
   const buildingText = buildings.map((item) => {
     if (item.repeated && !item.repeatAllowed) return `${item.name}: ${signed(item.rawValue)} → 0 (повтор шаблона)`;
-    if (item.value !== item.rawValue) return `${item.name}: ${signed(item.rawValue)} → ${signed(item.value)} (активность/обслуживание)`;
+    if (item.value !== item.rawValue) return `${item.name}: ${signed(item.rawValue)} → ${signed(item.value)} (активность)`;
     return `${item.name}: ${signed(item.value)}${item.repeated ? " (повтор разрешён явно)" : ""}`;
   }).join("; ");
   const tooltip = buildings.length
@@ -541,8 +539,7 @@ _buildingProductionSummary(building, assignedCount = 0, holding = null, workerCo
   const flat = this._safeNumber(building?.productionAmount, 0);
   const formula = String(building?.productionFormula ?? "").trim();
   const eff = workerEfficiencyArg ?? this._buildingEffectiveWorkers(holding, building, workerContext);
-  const maintenanceFactor = this._maintenanceEfficiencyFactor?.(building) ?? (this._safeNumber(building?.maintenance?.backlogTendays, 0) >= 2 ? 0.5 : 1);
-  const total = Math.floor((flat + per * eff.total) * maintenanceFactor);
+  const total = Math.floor(flat + per * eff.total);
   return { resource: resource || "—", assignedCount, flat, per, formula, total, effectiveWorkers: eff.total, leaderBonus: eff.leaderBonus, isMoney: this._isMoneyResource(resource) };
 },
 

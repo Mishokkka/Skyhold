@@ -93,7 +93,7 @@ export async function checkProductionTime() {
   assert.equal(lineOf(paused).workReservedInputs.timing.elapsedQd, 1);
   assert.match(productionTimingText(lineOf(paused)), /пауза/);
   lineOf(paused).active = true;
-  for (const key of ["lineSeasonAllowed", "lineFinanceAllowed", "buildingTechnicalReady"]) {
+  for (const key of ["lineSeasonAllowed", "lineFinanceAllowed"]) {
     await advance(paused, 2, { ...dependencies(), [key]: () => false });
     assert.equal(lineOf(paused).workReservedInputs.timing.elapsedQd, 1, key);
   }

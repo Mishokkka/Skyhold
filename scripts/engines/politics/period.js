@@ -30,7 +30,7 @@ export function politicsTributeObligation(holding, { periodKey = "", periodIndex
   });
 }
 
-/** Called on the isolated tenday draft after priority wages and building maintenance. */
+/** Called on the isolated tenday draft after priority wages. */
 export function preparePoliticsPeriod(holding, { context = {}, periodIndex = 1, periods = 1 } = {}) {
   const state = normalizePoliticsState(holding.politics);
   if (state.version > POLITICS_STATE_VERSION) throw new Error("Данные Политики записаны более новой версией модуля.");

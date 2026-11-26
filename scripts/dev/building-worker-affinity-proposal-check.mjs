@@ -161,9 +161,6 @@ const owner = {
   _workerType(person) {
     return workerTypeFromAttributes(person?.attributes ?? {});
   },
-  _maintenanceEfficiencyFactor() {
-    return 1;
-  }
 };
 
 const runtimeProfileCount = DEFAULT_BUILDING_TEMPLATES.filter((building) => building.workerProfile).length;

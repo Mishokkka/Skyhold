@@ -1591,7 +1591,6 @@ export async function runRepositoryContracts() {
   const financeStorageDomain = await import(pathToFileURL(path.join(root, "scripts/apps/domains/finance/storage-domain.js")));
   const financeInternalDemandDomain = await import(pathToFileURL(path.join(root, "scripts/apps/domains/finance/internal-demand-domain.js")));
   const financeLivestockDomain = await import(pathToFileURL(path.join(root, "scripts/apps/domains/finance/livestock-domain.js")));
-  const financeMaintenanceDomain = await import(pathToFileURL(path.join(root, "scripts/apps/domains/finance/maintenance-domain.js")));
   const financeStaffDomain = await import(pathToFileURL(path.join(root, "scripts/apps/domains/finance/staff-domain.js")));
   const financeEconomyDomain = await import(pathToFileURL(path.join(root, "scripts/apps/domains/finance/economy-domain.js")));
   const holdingDomainModule = await import(pathToFileURL(path.join(root, "scripts/apps/domains/holding-domain.js")));
@@ -1971,7 +1970,6 @@ export async function runRepositoryContracts() {
     financeControlsDomain.FinanceControlsDomain,
     financeLivestockDomain.FinanceLivestockDomain,
     financeInternalDemandDomain.FinanceInternalDemandDomain,
-    financeMaintenanceDomain.FinanceMaintenanceDomain,
     financeStaffDomain.FinanceStaffDomain,
     financeEconomyDomain.FinanceEconomyDomain
   ];
@@ -2571,7 +2569,6 @@ export async function runRepositoryContracts() {
   const buildingMainTemplateSource = readFileSync(path.join(root, "templates/parts/building-editor/main.hbs"), "utf8");
   const agricultureTemplateSource = readFileSync(path.join(root, "templates/parts/building-editor/agriculture.hbs"), "utf8");
   assert.doesNotMatch(buildingMainTemplateSource, /\.location|>Место</, "the retired building location field must not return to the editor");
-  assert.match(buildingMainTemplateSource, />Пр\. об\.<\//, "maintenance priority must keep its compact label");
   assert.match(productionTemplateSource, /fbls-choice-toggle/, "production choices must use the shared active/inactive contract");
   assert.match(agricultureTemplateSource, /aria-pressed=/, "agriculture seasons must expose their active state semantically");
   assert.match(agricultureTemplateSource, /включён[\s\S]{0,80}выключен/, "agriculture seasons must name both active and inactive states");
@@ -3824,8 +3821,7 @@ export async function runRepositoryContracts() {
     role: "Свободен",
     wageDailyOverrideCopper: null,
     volunteerLabor: false,
-    volunteerReason: "",
-    maintenancePointsPerTenday: 0
+    volunteerReason: ""
   }];
   const workerAssignmentProposal = clone(current);
   workerAssignmentProposal.holdings[0].people.list[0].workAssignment = "b1";
@@ -3836,8 +3832,7 @@ export async function runRepositoryContracts() {
   for (const [field, value] of [
     ["wageDailyOverrideCopper", 7],
     ["volunteerLabor", true],
-    ["volunteerReason", "Бесплатно"],
-    ["maintenancePointsPerTenday", 2]
+    ["volunteerReason", "Бесплатно"]
   ]) {
     const forgedWorkerTerms = clone(workerAssignmentProposal);
     forgedWorkerTerms.holdings[0].people.list[0][field] = value;
@@ -3964,8 +3959,7 @@ export async function runRepositoryContracts() {
     ["deathDate", "сегодня"],
     ["salary", 9999],
     ["salaryModifier", 9999],
-    ["wageDailyOverrideCopper", 0],
-    ["maintenancePointsPerTenday", 999]
+    ["wageDailyOverrideCopper", 0]
   ]) {
     const residentPatch = {
       baseRevision: current.meta.revision,

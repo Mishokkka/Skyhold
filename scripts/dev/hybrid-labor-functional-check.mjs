@@ -20,7 +20,7 @@ export async function checkHybridLaborFunctional() {
     for (const row of DEFAULT_BUILDING_TEMPLATES) {
       if (!["staff", "qd"].includes(row.labor?.mode)) continue;
       const building = { ...structuredClone(row), constructionStatus: "built", status: "Построено" };
-      assert.ok(buildWorkAllocationTargets({ buildings: { list: [building] } }, { includeMaintenance: false }).length,
+      assert.ok(buildWorkAllocationTargets({ buildings: { list: [building] } }).length,
         `${row.id}: an approved labor mode must expose at least one operational task`);
     }
     for (const sourceKind of ["output", "ingredient"]) for (const helper of ["busy", "primary", "reserve"]) {

@@ -31,7 +31,6 @@ function shortenLabel(label, text) {
   if (control && !control.hasAttribute("aria-label")) control.setAttribute("aria-label", span.textContent.trim());
   span.textContent = text;
 }
-function shorten(root, selector, text) { shortenLabel(root.querySelector(selector), text); }
 const caption = node => node.querySelector(":scope > span")?.textContent?.trim();
 function regroup(parent, title, selector, settings) {
   return group(parent, title, take(parent, selector), settings);
@@ -47,20 +46,15 @@ function main(root) {
   const passport = first.querySelector(".fbls-building-main-identity");
   const template = first.querySelector(".fbls-building-main-template");
   const economy = first.querySelector(".fbls-building-main-economy");
-  const status = first.querySelector(".fbls-building-main-status");
   const functions = first.querySelector(".fbls-function-strip");
   const texts = first.querySelector(".fbls-main-effects-grid");
   const pending = first.querySelector(".fbls-pending-production");
   group(first, "Паспорт", [...children(passport), ...children(template)]);
-  group(first, "Деньги · ММ", children(economy).slice(0, 3));
-  group(first, "Обслуживание", [...children(economy), ...children(status)]);
+  group(first, "Деньги · ММ", children(economy));
   group(first, "Функции", children(functions));
   group(first, "Описание и заметки", children(texts), { collapsed: true });
   if (pending) first.insertBefore(pending, first.querySelector(".fbls-editor-group"));
-  for (const node of [passport, template, economy, status, functions, texts]) node?.remove();
-  shorten(first, "label:has([data-field$='.backlogTendays'])", "Пропуски");
-  const backlog = take(first, "label > span").find(span => span.textContent === "Backlog");
-  if (backlog) shortenLabel(backlog.parentElement, "Пропуски");
+  for (const node of [passport, template, economy, functions, texts]) node?.remove();
   const rules = cards[1];
   if (!rules) return;
   const blocks = children(rules).filter(node => node.tagName !== "LEGEND");

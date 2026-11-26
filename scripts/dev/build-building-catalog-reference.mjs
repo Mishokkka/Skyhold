@@ -168,7 +168,7 @@ function formatLivestock(livestock) {
 
 let text = `# Каталог зданий v${TEMPLATE_CATALOG_VERSION}\n\n`
   + `Автогенерируемый справочник встроенного каталога (${rows.length} шаблонов: 124 дерева и 2 сюжетных). Источник — \`scripts/data/building-templates.js\`. Обновление: \`node scripts/dev/build-building-catalog-reference.mjs\` (сверка: \`--check\`). Маршрут открытия конкретного здания: \`node scripts/dev/building-development-reachability-check.mjs --route <id>\`. Сохранённые миры не меняются автоматически — см. [переходы](migrations.md).\n\n`
-  + `Обозначения: П/Т/К/В — Пища/Технология/Культура/Война; деньги — ММ (содержание за месяц, ставка за день); техобслуживание v2 — прямые QD/десятник (указано, если > 0); нулевые и пустые блоки опущены. Правила: [экономика](economy-contract.md), [труд](labor-contract.md), [службы](building-social-contract.md).\n\n`;
+  + `Обозначения: П/Т/К/В — Пища/Технология/Культура/Война; деньги — ММ (содержание за месяц, ставка за день); нулевые и пустые блоки опущены. Правила: [экономика](economy-contract.md), [труд](labor-contract.md), [службы](building-social-contract.md).\n\n`;
 
 for (const row of rows) {
   const visTag = row.visibility && row.visibility !== "public" ? ` · видимость: ${row.visibility === "gm" ? "только ГМ" : row.visibility}` : "";
@@ -179,8 +179,7 @@ for (const row of rows) {
   text += `- **Стройка:** ${row.buildTarget ?? 0} эт., сл. ${row.buildDifficulty ?? 0}; материалы: ${materials}.\n`;
 
   const laborCap = row.labor?.capacityQd != null ? `, лимит ${row.labor.capacityQd} QD` : "";
-  const maint = row.maintenance?.requiredPoints ? `; ТО ${row.maintenance.requiredPoints} QD` : "";
-  text += `- **Штат и расходы:** ${row.workersMin ?? 0}–${row.workersMax ?? 0} (${row.labor?.mode ?? "legacy"}${laborCap}), ставка ${row.wageDailyCopper ?? 0}; содерж. ${row.baseUpkeepMonthlyCopper ?? 0}/${row.operatingUpkeepMonthlyCopper ?? 0}${maint}.\n`;
+  text += `- **Штат и расходы:** ${row.workersMin ?? 0}–${row.workersMax ?? 0} (${row.labor?.mode ?? "legacy"}${laborCap}), ставка ${row.wageDailyCopper ?? 0}; содерж. ${row.baseUpkeepMonthlyCopper ?? 0}/${row.operatingUpkeepMonthlyCopper ?? 0}.\n`;
 
   const fnList = Object.entries(FUNCTIONS).filter(([key]) => row.functions?.[key]).map(([, label]) => label).join(", ") || "нет";
   const social = [row.reputation ?? 0, row.moraleDelta ?? 0, row.workerMoraleDelta ?? 0];

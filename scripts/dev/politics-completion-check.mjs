@@ -199,7 +199,7 @@ function checkEconomyContext() {
   assert.equal(politicsDecisionContext(holding, null, { data }).rationFullySupplied, false, "production uses the previous actual snapshot, not a new forecast");
   const workerOwner = { ...FinanceAgricultureDomain, ...FinanceLivestockDomain,
     _activeAssignedBuildingPeople: () => [{ id: "worker" }], _buildingCompositionStatus: () => ({ met: true }),
-    _personBuildingEfficiency: () => 1, _maintenanceEfficiencyFactor: () => 1, _personDailyWorkQdLimit: () => 2 };
+    _personBuildingEfficiency: () => 1, _personDailyWorkQdLimit: () => 2 };
   for (const method of ["_agricultureAvailableWorkQd", "_livestockAvailableWorkQd"]) {
     setPoliticsRuntimeEffects(holding, { productionPercent: 5 });
     assert.equal(workerOwner[method](holding, {}, 40), 21);

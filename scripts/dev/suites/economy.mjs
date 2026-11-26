@@ -12,7 +12,6 @@ import { checkFinanceRuntimeCharacterization } from "../finance-runtime-characte
 import { checkFinanceControlsCharacterization } from "../finance-controls-characterization-check.mjs";
 import { checkLivestockCharacterization } from "../livestock-characterization-check.mjs";
 import { checkLivestockRuntimeCharacterization } from "../livestock-runtime-characterization-check.mjs";
-import { checkMaintenanceCharacterization } from "../maintenance-characterization-check.mjs";
 import { checkReputationCharacterization } from "../reputation-characterization-check.mjs";
 import { checkShipContractsCharacterization } from "../ships-contracts-characterization-check.mjs";
 import { checkWorldShipMarketCharacterization } from "../world-ship-market-characterization-check.mjs";
@@ -40,7 +39,7 @@ import { checkProductionWorkerBudgets } from "../production-worker-budget-check.
 import { checkInternalDemandCharacterization } from "../internal-demand-characterization-check.mjs";
 import { checkPreparationYear } from "../economy-preparation-year-check.mjs";
 import { checkPreparationSpecializations } from "../economy-preparation-specialization-check.mjs";
-import { checkBuildingDevelopmentReachability, checkTechnicalMaintenanceNorms } from "../building-development-reachability-check.mjs";
+import { checkBuildingDevelopmentReachability } from "../building-development-reachability-check.mjs";
 import { checkArrivalProposal } from "../newcomer-arrival-proposal-check.mjs";
 
 /** Runs economy, production, market, ship and politics contracts without mutating a live Foundry world. */
@@ -48,7 +47,6 @@ export async function runEconomySuite() {
   checkInternalDemandCharacterization();
   checkPreparationYear();
   checkPreparationSpecializations();
-  checkTechnicalMaintenanceNorms();
   checkBuildingDevelopmentReachability();
   checkArrivalProposal();
   await checkBankCharacterization();
@@ -69,7 +67,6 @@ export async function runEconomySuite() {
   checkFoodBatchCharacterization();
   checkLivestockCharacterization();
   checkLivestockRuntimeCharacterization();
-  await checkMaintenanceCharacterization();
   await checkFinanceRuntimeCharacterization();
   await checkFinanceControlsCharacterization();
   await checkEconomyCharacterization();

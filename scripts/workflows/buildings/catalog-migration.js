@@ -11,7 +11,7 @@ import { clone } from "../../data/utils.js";
 import { workerAdmission } from "../../engines/workers/building-qualification.js";
 import { sourceMaterialState } from "../../engines/economy/construction-stages.js";
 import { validProductionTiming } from "../../engines/economy/production-timing.js";
-import { MAINTENANCE_WORK_SOURCE_ID, MAINTENANCE_WORK_FUNCTION_ID, buildWorkAllocationTargets } from "../../data/work-allocations.js";
+import { buildWorkAllocationTargets } from "../../data/work-allocations.js";
 import { buildingLaborMode, validateHybridLaborHolding } from "../../data/hybrid-labor.js";
 import { normalizeCatalogPartition } from "../../data/normalizers.js";
 import { normalizeBuilding } from "../../data/normalizers/building.js";
@@ -294,18 +294,6 @@ function preserveConstructionState(source = {}, target = {}) {
   }
 }
 
-function preserveMaintenanceState(source = {}, target = {}) {
-  const prior = source?.maintenance && typeof source.maintenance === "object" ? source.maintenance : {};
-  const canonical = target?.maintenance && typeof target.maintenance === "object" ? target.maintenance : {};
-  target.maintenance = {
-    ...clone(canonical),
-    priority: own(prior, "priority") ? prior.priority : canonical.priority,
-    backlogTendays: whole(prior.backlogTendays),
-    needsResolution: prior.needsResolution === true,
-    lastOperationId: text(prior.lastOperationId)
-  };
-}
-
 function preserveSpecialConfiguration(source = {}, target = {}) {
   if (target?.special && typeof target.special === "object") {
     target.special = {
@@ -338,7 +326,6 @@ function migrateBuildingInstance(source, targetTemplate, targetId, people, issue
   preserveLaborConfiguration(source, next, legacyDefaults);
   next.name = text(source?.name) || text(targetTemplate?.name) || "Здание";
   preserveConstructionState(source, next);
-  preserveMaintenanceState(source, next);
   preserveSpecialConfiguration(source, next);
   preserveTradeSelection(source, next);
   next.productionLines = migrateProductionLines(source, next, issues, next.name);
@@ -409,20 +396,6 @@ function invariant(condition, code, message, details = {}) {
   if (!condition) throw migrationError(code, message, details);
 }
 
-function releaseGeneralMaintenanceAssignments(holding, decisions) {
-  for (const person of holding.people?.list ?? []) {
-    if (person.workAllocationMode !== "explicit") continue;
-    const rows = person.workAllocations ?? [];
-    const removed = rows.filter((row) => row.sourceId === MAINTENANCE_WORK_SOURCE_ID && row.functionId === MAINTENANCE_WORK_FUNCTION_ID);
-    if (!removed.length) continue;
-    person.workAllocations = rows.filter((row) => !removed.includes(row));
-    const releasedQd = removed.reduce((sum, row) => sum + whole(row.normalQd) + whole(row.overtimeQd), 0);
-    decisions.push({
-      detail: `${text(person.name) || text(person.id)} (${text(holding.name) || text(holding.id)}). Общее обслуживание снято, освобождено ${releasedQd} QD.`
-    });
-  }
-}
-
 export function planBuildingCatalogMigration({
   currentData = {},
   operationId = "",
@@ -446,7 +419,6 @@ export function planBuildingCatalogMigration({
     ? { ...clone(currentData.catalog ?? {}), buildings: clone(targetTemplates), deletedBuildingTemplateIds: [] }
     : catalogTarget(currentData.catalog, targetById);
   const issues = [];
-  const decisions = [];
   const savedById = new Map((currentData.catalog?.buildings ?? []).map((row) => [text(row.id), row]));
   for (const target of targetData.catalog.buildings) {
     const id = text(target.id);
@@ -512,16 +484,15 @@ export function planBuildingCatalogMigration({
   }
 
   for (const holding of targetData.holdings ?? []) {
-    if (replaceCatalog) releaseGeneralMaintenanceAssignments(holding, decisions);
     for (const issue of validateHybridLaborHolding(holding, { targets: buildWorkAllocationTargets(holding) }).issues) {
       issues.push({ ...issue, holdingId: text(holding.id), holdingName: text(holding.name), detail: issue.message });
     }
   }
-  return completeMigrationPreview({ source, targetData, targetVersion, operationId, createdAt, counts, rows, issues, decisions });
+  return completeMigrationPreview({ source, targetData, targetVersion, operationId, createdAt, counts, rows, issues });
 }
 
 function completeMigrationPreview({ source, targetData, targetVersion, operationId, createdAt, counts,
-  rows = [], issues = [], decisions = [] }) {
+  rows = [], issues = [] }) {
   const targetCatalogHash = stableDataHash(targetData.catalog ?? {});
   const targetHoldingsHash = stableDataHash(targetData.holdings ?? []);
   const catalogChanged = source.catalogHash !== targetCatalogHash;
@@ -554,7 +525,6 @@ function completeMigrationPreview({ source, targetData, targetVersion, operation
     hasChanges,
     canApply: hasChanges && blockingIssues.length === 0,
     blockingIssues,
-    decisions,
     rows,
     counts,
     preview: {

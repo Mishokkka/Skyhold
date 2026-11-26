@@ -22,7 +22,7 @@ function effectiveLabor(service, holding, task, person) {
   if (line && ["time", "content"].includes(line.source)) return 1; // This task is collection, not preparation.
   let units = Math.round(service._personBuildingEfficiency(holding, task.building, person) * 10000);
   if (["agriculture", "livestock"].includes(task.kind)) units = Math.round(units * Math.max(0, 1 + (politicsRuntimeEffects(holding)?.productionPercent ?? 0) / 100));
-  return Math.floor(units * Math.round((service._maintenanceEfficiencyFactor?.(task.building) ?? 1) * 10000) / 10000) / 10000;
+  return units / 10000;
 }
 
 export function createWorkforceDraft(holding, service) {
@@ -85,7 +85,7 @@ export function buildWorkforceModel(holding, draft, service, { isGM = false, pre
   const functionMap = new Map(inputs.buildings.flatMap((building) => building.functions.map((fn) => [`${building.id}::${fn.id}`, fn])));
   const buildingMap = new Map((holding.buildings?.list ?? []).map((row) => [String(row.id), row]));
   const locks = new Set(draft.plan.locks.map(workforceLockKey));
-  const targets = buildWorkAllocationTargets(working).filter((target) => !target.buildingId || shown(buildingMap.get(target.buildingId), isGM));
+  const targets = buildWorkAllocationTargets(working).filter((target) => shown(buildingMap.get(target.buildingId), isGM));
   const tasks = targets.map((target) => {
     const building = buildingMap.get(target.buildingId);
     const fn = functionMap.get(target.key);
@@ -93,17 +93,17 @@ export function buildWorkforceModel(holding, draft, service, { isGM = false, pre
     const debt = inputs.oldBlockers.buildings[target.sourceId];
     const blocked = debt?.mothballed || debt?.baseDebtCopper > 0 || debt?.operatingByFunction?.operation?.debtCopper > 0
       || debt?.operatingByFunction?.[target.functionId]?.debtCopper > 0;
-    const supported = !building || fn?.source === "workers" || fn?.workerCollection || target.kind === "agriculture";
+    const supported = fn?.source === "workers" || fn?.workerCollection || target.kind === "agriculture";
     const goal = draft.plan.goals.find((row) => workforceKey(row) === target.key)?.normalQd ?? 0;
     const laborMode = buildingLaborMode(building);
     const preparedUnits = productionPreparationGoal(working, target.sourceId, target.functionId) ?? 0;
     const preparation = workforceProductionGoalState(building, target.functionId, preparedUnits);
     if (preparation.allowed && preparedUnits) state.effectiveNeed = Math.max(state.effectiveNeed, preparation.effectiveNeed);
-    return { ...target, ...state, building, name: building?.name || "Поселение", functionName: fn?.name || target.label.split(" · ")[1] || "Трудовое обслуживание",
-      laborMode, isStaff: laborMode === "staff" && target.kind !== "maintenance", capacityQd: buildingLaborCapacityQd(building),
+    return { ...target, ...state, building, name: building?.name || "Здание", functionName: fn?.name || target.label.split(" · ")[1] || "Работа",
+      laborMode, isStaff: laborMode === "staff", capacityQd: buildingLaborCapacityQd(building),
       preparedUnits, hasProductionGoal: preparation.allowed, preparationWarning: preparation.warning,
       preparationWorkQd: Math.round(preparation.effectiveNeed * 100) / 100,
-      dailyRateCopper: target.buildingId ? target.dailyRateCopper : 12,
+      dailyRateCopper: target.dailyRateCopper,
       goal, category: (goal || preparedUnits) && state.category === "optional" ? "chosen" : state.category,
       blocked: target.available === false ? target.blockedReason : blocked ? "Работа остановлена финансовыми обязательствами" : !supported ? "Функция отключена в здании" : "",
       assignable: target.available !== false && supported && !blocked, normalQd: 0, overtimeQd: 0, effectiveQd: 0,
@@ -165,7 +165,7 @@ export function buildWorkforceModel(holding, draft, service, { isGM = false, pre
     if (buildingLaborMode(building) === "staff") staffByBuilding.set(building.id, new Set(staffWorkerIdsForBuilding(working, building.id)));
   }
   for (const task of tasks) {
-    if (!task.buildingId || task.kind === "maintenance") continue;
+    if (!task.buildingId) continue;
     const ids = staffByBuilding.get(task.buildingId) ?? new Set();
     task.assignments.forEach((row) => ids.add(row.personId)); staffByBuilding.set(task.buildingId, ids);
   }
@@ -181,7 +181,7 @@ export function buildWorkforceModel(holding, draft, service, { isGM = false, pre
     if (task.blocked) task.warnings.push(task.blocked);
     if (task.preparationWarning) task.warnings.push(task.preparationWarning);
     if (task.inputBlocked && (task.goal || task.assignments.length)) task.warnings.push("Нет сырья для запуска по текущим запасам");
-    if (task.isStaff && task.staff > 0 && task.assignable && !["production", "maintenance"].includes(task.kind)
+    if (task.isStaff && task.staff > 0 && task.assignable && task.kind !== "production"
       && !people.some((person) => !person.unavailable && person.appointment?.buildingId === task.buildingId
         && [person.appointment.primaryFunctionId, person.appointment.reserveFunctionId].includes(task.functionId))) {
       task.warnings.push("Эта служба не назначена никому в штате: ни как основная, ни как резервная работа");
@@ -206,8 +206,8 @@ export function buildWorkforceModel(holding, draft, service, { isGM = false, pre
       if (needed > available) task.warnings.push(`Сбор требует ${needed} QD за один день; доступно не больше ${available}, не хватает ${needed - available} QD. Добавьте сборщиков или разрешённые сверхурочные.`);
       else if (task.isStaff && needed > Math.max(0, ...primaryDaily)) task.warnings.push("Сбор зависит от резервных работников: их основные задачи могут занять всё время. Проверьте фактическую бригаду в прогнозе десятника.");
     }
-    if (task.assignments.length && task.staff < task.minimum && task.kind !== "maintenance") task.warnings.push(`Минимум здания: ${task.staff} / ${task.minimum} жителей`);
-    if (task.assignments.length && task.building && task.kind !== "maintenance") {
+    if (task.assignments.length && task.staff < task.minimum) task.warnings.push(`Минимум здания: ${task.staff} / ${task.minimum} жителей`);
+    if (task.assignments.length && task.building) {
       const assignedPeople = people.filter((person) => staffByBuilding.get(task.buildingId)?.has(person.id)).map((row) => row.person);
       if (!buildingCompositionStatus(task.building, assignedPeople).met) task.warnings.push("Не выполнен обязательный состав специалистов");
     }
@@ -216,7 +216,7 @@ export function buildWorkforceModel(holding, draft, service, { isGM = false, pre
       for (let step = 0; step < 40; step += 1) {
         const scheduled = people.filter((person) => {
           const slot = slotsByPerson.get(person.id)?.get(step);
-          return slot?.sourceId === task.sourceId && slot.functionId !== "maintenance";
+          return slot?.sourceId === task.sourceId;
         });
         const lineSlots = scheduled.filter((person) => slotsByPerson.get(person.id).get(step).functionId === task.functionId).length;
         if (lineSlots && (scheduled.length < task.minimum || !buildingCompositionStatus(task.building, scheduled.map((person) => person.person), { excludeGroups: ["ЧУДОТВОРЕЦ"] }).met)) unsupported += lineSlots;
@@ -234,7 +234,7 @@ export function buildWorkforceModel(holding, draft, service, { isGM = false, pre
         ? ` Условие эффекта здания: не менее ${peopleMinimum}${activation.minOperationalQd} QD${activation.anyWorkingFunction ? " суммарно по рабочим функциям" : " по функции эффекта"}.`
         : ` Для полного эффекта нужно ${activation.minOperationalQd} QD соответствующей службы; неполная работа уменьшает эффект.`;
       if (activation.anyWorkingFunction && task.staff > 0) {
-        const total = tasks.filter((row) => row.buildingId === task.buildingId && row.kind !== "maintenance").reduce((sum, row) => sum + row.normalQd + row.overtimeQd, 0);
+        const total = tasks.filter((row) => row.buildingId === task.buildingId).reduce((sum, row) => sum + row.normalQd + row.overtimeQd, 0);
         if (total < activation.minOperationalQd) task.warnings.push(`Для эффекта здания выделено ${total} из ${activation.minOperationalQd} QD`);
       }
     }
@@ -261,8 +261,8 @@ export function buildWorkforceModel(holding, draft, service, { isGM = false, pre
 
 export function workforceCandidate(model, person, task, service) {
   const existing = person.allocations.find((row) => row.key === task.key);
-  const admission = task.building && task.kind !== "maintenance" ? workerAdmission(task.building, person.person) : null;
-  const efficiency = task.building && task.kind !== "maintenance" ? service._workerEfficiencyForPerson(model.holding, task.building, person.person).value : 1;
+  const admission = task.building ? workerAdmission(task.building, person.person) : null;
+  const efficiency = task.building ? service._workerEfficiencyForPerson(model.holding, task.building, person.person).value : 1;
   const occupies = task.buildingId && model.staffByBuilding.get(task.buildingId)?.has(person.id);
   const rate = calculatePlannedWorkerWage({ id: person.id, volunteer: person.appointment?.volunteer ?? person.person.volunteerLabor,
     wageOverrideCopper: person.appointment?.wageDailyCopper ?? person.person.wageDailyOverrideCopper,
@@ -272,9 +272,9 @@ export function workforceCandidate(model, person, task, service) {
     || (person.isStaff && (!task.isStaff || person.appointment.buildingId !== task.buildingId) ? "Постоянный сотрудник занят весь десятник; сначала снимите его из штата" : "")
     || (task.isStaff && !person.isStaff && person.allocations.some(hasWork) ? "Сначала снимите задания QD: найм занимает весь десятник" : "")
     || (admission?.hard && !admission.eligible && !admission.overridden ? "Нет обязательного допуска" : "")
-    || (task.kind !== "maintenance" && ["legacy", "staff"].includes(task.laborMode) && !occupies && task.staff >= task.workersMax ? "Все места здания заняты" : "")
+    || (["legacy", "staff"].includes(task.laborMode) && !occupies && task.staff >= task.workersMax ? "Все места здания заняты" : "")
     || (task.laborMode === "qd" && task.capacityQd !== null && !existing
-      && model.tasks.filter((row) => row.buildingId === task.buildingId && row.kind !== "maintenance").reduce((sum, row) => sum + row.totalQd, 0) >= task.capacityQd ? "Предел труда здания исчерпан" : "")
+      && model.tasks.filter((row) => row.buildingId === task.buildingId).reduce((sum, row) => sum + row.totalQd, 0) >= task.capacityQd ? "Предел труда здания исчерпан" : "")
     || (!rate.ok ? "Нужна ставка или договорённость о бесплатной работе" : "");
   const productiveLabor = effectiveLabor(service, model.holding, task, person.person);
   return { ...person, reason, efficiency, effectiveLabor: productiveLabor, efficiencyText: `${Math.round(efficiency * 100)}%`,
@@ -359,7 +359,7 @@ export function proposeWorkforceAssignments(holding, draft, service, { isGM = fa
       // promises and unavailable employees cannot substitute for actual staff.
       const existingTeam = model.people.filter((person) => person.isStaff && !person.unavailable && person.wageValid
         && person.appointment.buildingId === task.buildingId
-        && person.allocations.some((row) => hasWork(row) && row.functionId !== "maintenance")).map((row) => row.person);
+        && person.allocations.some(hasWork)).map((row) => row.person);
       const composition = (team) => buildingCompositionStatus(task.building, team,
         { excludeGroups: ["production", "agriculture", "livestock"].includes(task.kind) ? ["ЧУДОТВОРЕЦ"] : [] });
       let core = candidates.filter((person) => !person.reason && person.free > 0);
@@ -412,7 +412,7 @@ export function proposeWorkforceAssignments(holding, draft, service, { isGM = fa
       .map((person) => workforceCandidate(model, person, task, service))
       .sort((a, b) => a.dailyRate - b.dailyRate || b.efficiency - a.efficiency || a.id.localeCompare(b.id));
     let coreIds = new Set();
-    if (qd === null && task.building && task.kind !== "maintenance") {
+    if (qd === null && task.building) {
       const existingTeam = model.people.filter((person) => model.staffByBuilding.get(task.buildingId)?.has(person.id)).map((row) => row.person);
       const composition = (team) => buildingCompositionStatus(task.building, team, { excludeGroups: ["production", "agriculture", "livestock"].includes(task.kind) ? ["ЧУДОТВОРЕЦ"] : [] });
       let core = candidates.filter((person) => !person.reason && person.free > 0 && !existingTeam.some((row) => row.id === person.id));
@@ -441,8 +441,8 @@ export function proposeWorkforceAssignments(holding, draft, service, { isGM = fa
           Math.max(0, workerMinimum - task.staff), coreIds.size);
       if (!needed) continue;
       let add = Math.min(candidate.free, needed);
-      if (task.laborMode === "qd" && task.capacityQd !== null && task.kind !== "maintenance") {
-        const allocated = model.tasks.filter((row) => row.buildingId === task.buildingId && row.kind !== "maintenance").reduce((sum, row) => sum + row.totalQd, 0);
+      if (task.laborMode === "qd" && task.capacityQd !== null) {
+        const allocated = model.tasks.filter((row) => row.buildingId === task.buildingId).reduce((sum, row) => sum + row.totalQd, 0);
         add = Math.min(add, Math.max(0, task.capacityQd - allocated));
       }
       const missingTeam = Math.max(workerMinimum - task.staff, coreIds.size);
@@ -461,8 +461,8 @@ export function proposeWorkforceAssignments(holding, draft, service, { isGM = fa
         if (!bestAdd) continue;
         add = Math.max(bestAdd, Math.min(candidate.free, task.remaining));
       }
-      if (task.laborMode === "qd" && task.capacityQd !== null && task.kind !== "maintenance") {
-        const allocated = model.tasks.filter((row) => row.buildingId === task.buildingId && row.kind !== "maintenance").reduce((sum, row) => sum + row.totalQd, 0);
+      if (task.laborMode === "qd" && task.capacityQd !== null) {
+        const allocated = model.tasks.filter((row) => row.buildingId === task.buildingId).reduce((sum, row) => sum + row.totalQd, 0);
         add = Math.min(add, Math.max(0, task.capacityQd - allocated));
       }
       if (!add) continue;
@@ -477,7 +477,7 @@ export function proposeWorkforceAssignments(holding, draft, service, { isGM = fa
       if (qd !== null && task.laborMode !== "qd") {
         // A bulk edit has independent per-person amounts. Avoid 200 full model
         // rebuilds; keep only the shared seat count up to date until the end.
-        if (task.buildingId && task.kind !== "maintenance") {
+        if (task.buildingId) {
           const ids = model.staffByBuilding.get(task.buildingId) ?? new Set(); ids.add(candidate.id);
           model.staffByBuilding.set(task.buildingId, ids); task.staff = ids.size;
         }

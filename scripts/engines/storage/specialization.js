@@ -1,7 +1,6 @@
 import { resourceDef, resourceShelfLifeQd, storageResourceId } from "../../core/resources.js";
 import { effectiveShelfLifeQd, isPerishableFoodDefinition } from "../../core/perishable-food.js";
 import { buildingOperationalState } from "../../core/building-state.js";
-import { maintenanceEfficiencyFactor } from "../../data/economy/maintenance.js";
 import { financeBuildingFunctionBlockState, financeWorkerBlockState } from "../economy/finance-obligations.js";
 import { buildingLaborMode } from "../../data/hybrid-labor.js";
 import { isResidentPresent } from "../../data/resident-presence.js";
@@ -67,7 +66,7 @@ export function storageProfileEffectFactor(holding = {}, building = {}) {
     }).length;
     if (staffed < Math.max(1, Math.floor(Number(building?.workersMin) || 0))) return 0;
   }
-  return Math.max(0, Math.min(1, maintenanceEfficiencyFactor(building?.maintenance)));
+  return 1;
 }
 
 export function storageProfileLoadMultiplier(room = {}, resource = {}) {

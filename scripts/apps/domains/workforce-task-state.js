@@ -42,7 +42,7 @@ export function workforceOperationalMinimum(building, tasks) {
   const whole = (value) => Math.max(0, Math.floor(Number(value) || 0));
   const activation = building.activation ?? {};
   const functionId = buildingLaborMode(building) === "legacy" && activation.requiresMeaningfulResult ? "" : buildingServiceFunctionId(building);
-  const relevant = tasks.filter((task) => task.kind !== "maintenance" && task.assignable
+  const relevant = tasks.filter((task) => task.assignable
     && (!functionId || task.functionId === functionId || functionId === "production" && task.functionId?.startsWith("production:")));
   const minQd = whole(activation.minOperationalQd ?? building.minOperationalQd);
   const qd = relevant.reduce((sum, task) => sum + Number(task.normalQd || 0) + Number(task.overtimeQd || 0), 0);
@@ -54,10 +54,6 @@ export function workforceOperationalMinimum(building, tasks) {
 export function workforceTaskState(holding, target, building, service, availableFunction) {
   const state = { category: "optional", need: 0, effectiveNeed: 0, dailyNeed: 0, idle: false,
     note: "Работа по желанию. Свободные места не создают потребность в труде.", finite: false };
-  if (target.kind === "maintenance") {
-    state.note = "Обслуживание: объём и покрытие проверяются в расчёте десятника. Цель QD задаётся вручную.";
-    return state;
-  }
   if (target.kind === "agriculture") {
     const agriculture = normalizeAgricultureBuilding(building.agriculture, { building });
     const crop = agriculture.crops.find((row) => row.id === (agriculture.state.cropId || agriculture.activeCropId));

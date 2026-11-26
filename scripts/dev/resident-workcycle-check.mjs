@@ -149,13 +149,12 @@ export async function checkPhysicalAndEffectiveQd() {
   let cases = 0;
   for (const mode of ["staff", "qd"]) for (const normal of [7, 20]) for (const overtime of [0, 3])
     for (const percent of [-50, 0, 100]) for (const hunger of [0, 8])
-      for (const gmBonus of [-0.2, 0.5]) for (const backlog of [0, 2]) {
+      for (const gmBonus of [-0.2, 0.5]) {
         const f = fixture(mode);
         globalThis.game.settings.get = (_module, key) => key === SETTING_NORMAL_LABOR_QD ? normal : undefined;
         f.building.workerProfile = { modifiers: { types: [{ match: "type:Разнорабочий", percent }], backgrounds: [], traits: [] } };
         f.holding.gm.food.hungerLevel = hunger;
         f.holding.gm.efficiencyModifiers = { all: gmBonus / 2, production: gmBonus / 2 };
-        f.building.maintenance = { schemaVersion: 1, requiredPoints: 1, backlogTendays: backlog };
         Object.assign(f.building.productionLines[0], { resourceId: "cloth", outputQty: 6, workQd: 3,
           overtime: true, expenses: "wood 2", fixedExpenses: "money 1" });
         if (mode === "staff") f.person.staffAppointment.overtimeQd = overtime;
@@ -163,14 +162,13 @@ export async function checkPhysicalAndEffectiveQd() {
         f.holding.storage.resources = [{ id: "raw", resourceId: "wood", qty: 1000 }];
         const rawPlan = structuredClone(f.person);
         const spent = observeSpent(f);
-        const label = JSON.stringify({ mode, normal, overtime, percent, hunger, gmBonus, backlog });
+        const label = JSON.stringify({ mode, normal, overtime, percent, hunger, gmBonus });
         const report = await run(f, `efficiency-${cases++}`);
         // Independent arithmetic: percentages are basis points, hours remain integers.
         const qualified = 10000 + percent * 100;
         const hungry = Math.floor(qualified * (10000 - hunger * 500) / 10000);
         const modified = Math.floor(hungry * Math.round((1 + gmBonus) * 10000) / 10000);
-        const perQd = Math.floor(modified * (backlog ? 5000 : 10000) / 10000);
-        const totalUnits = perQd * (normal + overtime);
+        const totalUnits = modified * (normal + overtime);
         const completed = Math.floor(totalUnits / 30000), started = Math.ceil(totalUnits / 30000);
         assert.equal(spent(), normal + overtime, `${label}: modifiers never mint or remove physical QD`);
         assert.equal(f.building.productionLines[0].workProgressUnits, totalUnits % 30000, label);
@@ -257,26 +255,25 @@ export async function checkEffectiveCarePlanning() {
 }
 
 export async function checkRoundedEfficiencyReserve() {
-  for (const backlog of [0, 2]) for (const pending of [false, true]) {
+  for (const zero of [false, true]) for (const pending of [false, true]) {
     const f = fixture("staff"), spent = observeSpent(f);
     f.person.staffAppointment.reserveFunctionId = "income";
     f.building.functions.income = true;
     f.building.income = { base: 100, wageDailyCopper: 12 };
     f.building.workerProfile = { modifiers: { types: [{ match: "type:Разнорабочий", percent: -99 }], backgrounds: [], traits: [] } };
-    f.holding.gm.efficiencyModifiers = { production: -0.99 };
-    f.building.maintenance = { schemaVersion: 1, requiredPoints: 1, backlogTendays: backlog };
+    f.holding.gm.efficiencyModifiers = { production: zero ? -0.999 : -0.99 };
     const line = f.building.productionLines[0];
     if (pending) Object.assign(line, { active: false, requiresCollection: true, pendingQty: 8, collectQd: 2, autoCollect: "none" });
-    const report = await run(f, `rounded-efficiency-${backlog}-${pending}`);
-    assert.equal(f.harness._personBuildingEfficiency(f.holding, f.building, f.person), 0.0001,
-      "Real profile and GM modifiers leave one positive work unit before maintenance");
+    const report = await run(f, `rounded-efficiency-${zero}-${pending}`);
+    assert.equal(f.harness._personBuildingEfficiency(f.holding, f.building, f.person), zero ? 0 : 0.0001,
+      "Real profile and GM modifiers cover both sides of the one-unit rounding boundary");
     const worked = f.building.serviceState.workedQdByFunction;
-    const productionTime = pending ? 2 : backlog ? 0 : 20;
+    const productionTime = pending ? 2 : zero ? 0 : 20;
     assert.equal(worked["production:main"] ?? 0, productionTime,
       "A rounded-zero productive QD cannot select preparation; one surviving unit must still progress");
     assert.equal(worked.income ?? 0, 20 - productionTime,
       "Every physical QD freed from impossible preparation can perform the reserve job");
-    assert.equal(line.workProgressUnits ?? 0, pending || backlog ? 0 : 20);
+    assert.equal(line.workProgressUnits ?? 0, pending || zero ? 0 : 20);
     assert.equal(quantity(f.holding, "wood"), pending ? 8 : 0, "Collection stays available even when preparation rounds to zero");
     assert.equal(spent(), 20, "Preparation, collection and reserve share the same twenty physical QD");
     assert.equal(report.finance.paidCopper, 120, "Reserve work does not create a second wage");
@@ -308,7 +305,7 @@ export async function checkProductionSeasonBoundary() {
 export async function checkAgricultureEfficiency() {
   let cases = 0;
   for (const mode of ["staff", "qd"]) for (const percent of [-75, 0, 150])
-    for (const politics of [-50, 0, 50]) for (const hunger of [0, 6]) for (const backlog of [0, 2]) {
+    for (const politics of [-50, 0, 50]) for (const hunger of [0, 6]) {
       const f = fixture(mode), spent = observeSpent(f);
       f.politics = politics;
       f.building.productionLines = [];
@@ -319,16 +316,14 @@ export async function checkAgricultureEfficiency() {
       f.building.workerProfile = { modifiers: { types: [{ match: "type:Разнорабочий", percent }], backgrounds: [], traits: [] } };
       f.holding.gm.food.hungerLevel = hunger;
       f.holding.gm.efficiencyModifiers = { all: 0.1, production: 0.3 };
-      f.building.maintenance = { schemaVersion: 1, requiredPoints: 1, backlogTendays: backlog };
       if (mode === "staff") f.person.staffAppointment.primaryFunctionId = "agriculture";
       else f.person.workAllocations[0].functionId = "agriculture";
-      const label = JSON.stringify({ mode, percent, politics, hunger, backlog });
+      const label = JSON.stringify({ mode, percent, politics, hunger });
       const report = await run(f, `agriculture-efficiency-${cases++}`);
       const hungry = Math.floor((10000 + percent * 100) * (10000 - hunger * 500) / 10000);
       const modified = Math.floor(hungry * 14000 / 10000);
       const political = Math.round(modified * (100 + politics) / 100);
-      const perQd = Math.floor(political * (backlog ? 5000 : 10000) / 10000);
-      const effective = Math.floor(perQd * 20 / 10000);
+      const effective = Math.floor(political * 20 / 10000);
       assert.equal(spent(), 20, `${label}: sowing/harvesting uses the same twenty physical QD`);
       assert.equal(report.agriculture.workQdUsed, effective, label);
       assert.equal(quantity(f.holding, "grain"), effective, label);
@@ -364,13 +359,12 @@ export async function checkCapacityAndQualificationSources() {
   f.building.workerProfile = { modifiers: { types: [{ match: "type:Разнорабочий", percent: 75 }], backgrounds: [], traits: [] } };
   f.holding.gm.food.hungerLevel = 8;
   f.holding.gm.efficiencyModifiers = { all: 0.1, production: 0.3 };
-  f.building.maintenance = { schemaVersion: 1, requiredPoints: 1, backlogTendays: 2 };
   f.building.functions.culture = true;
   const model = buildWorkforceModel(f.holding, createWorkforceDraft(f.holding, f.harness), f.harness, { isGM: true });
   const candidate = workforceCandidate(model, model.people[0], model.taskMap.get("workshop::production:main"), f.harness);
   assert.equal(candidate.efficiencyText, "175%");
-  assert.equal(candidate.effectiveLabor, 0.735, "Display distinguishes qualification from hunger, GM and equipment effects");
-  assert.equal(candidate.effectiveLaborText, "0,735 эфф. QD / QD");
+  assert.equal(candidate.effectiveLabor, 1.47, "Display distinguishes qualification from hunger and GM modifiers");
+  assert.equal(candidate.effectiveLaborText, "1,47 эфф. QD / QD");
   assert.equal(candidate.capacity.normalQd, 20);
   const serviceCandidate = workforceCandidate(model, model.people[0], model.taskMap.get("workshop::culture"), f.harness);
   assert.equal(serviceCandidate.effectiveLabor, 1, "Production proficiency cannot manufacture institutional service hours");
@@ -379,7 +373,7 @@ export async function checkCapacityAndQualificationSources() {
 export async function checkLivestockEfficiency() {
   let cases = 0;
   for (const mode of ["staff", "qd"]) for (const percent of [-50, 0, 100])
-    for (const politics of [0, 50]) for (const hunger of [0, 8]) for (const backlog of [0, 2]) {
+    for (const politics of [0, 50]) for (const hunger of [0, 8]) {
       const f = fixture(mode), spent = observeSpent(f);
       f.building.productionLines = [];
       f.building.livestock = normalizeLivestockBuilding({
@@ -394,7 +388,6 @@ export async function checkLivestockEfficiency() {
       f.building.workerProfile = { modifiers: { types: [{ match: "type:Разнорабочий", percent }], backgrounds: [], traits: [] } };
       f.holding.gm.food.hungerLevel = hunger;
       f.holding.gm.efficiencyModifiers = { all: 0.1, production: 0.3 };
-      f.building.maintenance = { schemaVersion: 1, requiredPoints: 1, backlogTendays: backlog };
       f.politics = politics;
       f.holding.storage.resources = [{ id: "feed", resourceId: "animal-feed", qty: 1000 }];
       const planned = structuredClone(f.person);
@@ -402,13 +395,12 @@ export async function checkLivestockEfficiency() {
       const hungry = Math.floor((10000 + percent * 100) * (10000 - hunger * 500) / 10000);
       const modified = Math.floor(hungry * 14000 / 10000);
       const political = Math.round(modified * (100 + politics) / 100);
-      const perQd = Math.floor(political * (backlog ? 5000 : 10000) / 10000);
-      const cared = perQd * 2 >= 20000;
+      const cared = political * 2 >= 20000;
       assert.equal(report.livestock.workQdUsed, cared ? 20 : 0, "Care must be covered on each day, using effective work");
       assert.equal(quantity(f.holding, "milk"), cared ? 20 : 0);
       assert.equal(quantity(f.holding, "animal-feed"), 998, "Productivity never multiplies the number of mouths or feed consumed");
       assert.equal(report.finance.paidCopper, 120, "Twenty assigned physical QD have the same wage at every productivity");
-      if (mode === "staff") assert.equal(spent(), Math.min(2, Math.ceil(20000 / perQd)) * 10,
+      if (mode === "staff") assert.equal(spent(), Math.min(2, Math.ceil(20000 / political)) * 10,
         "Staff stop care when the daily effective need is met; extra productivity is not a new time slot");
       assert.deepEqual(f.person, planned);
     }

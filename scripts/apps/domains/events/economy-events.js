@@ -242,7 +242,6 @@ async _prepareTendayOperation({ holdingId = "", qd = 40, rationUnitsPerResident 
   }
   if (this._safeNumber(report?.food?.hungryResidentDays, 0) > 0) warnings.push({ key: "food", severity: "danger", text: `Голод: ${report.food.hungryResidentDays} человеко-дней без пищи.` });
   if (this._safeNumber(report?.treasury?.deficit, 0) > 0) warnings.push({ key: "treasury", severity: "danger", text: `Дефицит казны: ${this._formatCopperCurrency(report.treasury.deficit)}.` });
-  if ((report?.maintenance?.needsResolution ?? []).length) warnings.push({ key: "maintenance", severity: "warning", text: `Требуют решения GM после третьего пропуска обслуживания: ${report.maintenance.needsResolution.length}.` });
   if ((report?.skipped ?? []).length) warnings.push({ key: "skipped", severity: "warning", text: `Не выполнено операций: ${report.skipped.length}.` });
   if (dueEvents.length) warnings.push({ key: "due-events", severity: "warning", text: `Подошёл срок запланированных событий: ${dueEvents.length}.` });
   for (const text of events?.warnings ?? []) warnings.push({ key: "events", severity: "warning", text: String(text) });

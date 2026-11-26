@@ -4,22 +4,24 @@ import { pathToFileURL } from "node:url";
 import { AssignmentDomain } from "../apps/domains/assignment-domain.js";
 import { FinanceEconomyDomain } from "../apps/domains/finance/economy-domain.js";
 import { FinanceInternalDemandDomain } from "../apps/domains/finance/internal-demand-domain.js";
-import { FinanceMaintenanceDomain } from "../apps/domains/finance/maintenance-domain.js";
+import { hiddenBuildingIds, residentHasHiddenWork } from "../data/access-guard.js";
+import { mergeHoldingDefaults } from "../data/normalizers.js";
+import { normalizePerson } from "../data/normalizers/resident.js";
 import { calculatePlannedWorkerWage } from "../engines/economy/finance-obligations.js";
 import { buildPlayerPatch, validatePlayerPatch } from "../data/player-write-guard.js";
 import {
   buildingStaffingWorkerIds,
   buildPlannedWorkSlots,
+  buildWorkAllocationTargets,
   explicitWorkerIdsForBuilding,
   explicitWorkAllocationsForBuilding,
-  MAINTENANCE_WORK_FUNCTION_ID,
-  MAINTENANCE_WORK_SOURCE_ID,
   normalizePersonWorkAllocations,
   plannedAssignmentQd,
   validateHoldingWorkAllocations,
   validateWorkAllocationPlan,
   WORK_ALLOCATION_MODE_EXPLICIT,
-  WORK_ALLOCATION_MODE_LEGACY
+  WORK_ALLOCATION_MODE_LEGACY,
+  WORK_ALLOCATION_SCHEMA_VERSION
 } from "../data/work-allocations.js";
 
 function clone(value) {
@@ -73,6 +75,78 @@ function holdingFixture() {
 }
 
 export function checkWorkAllocationCharacterization() {
+  const legacyPerson = { id: "retired", maintenancePointsPerTenday: 4 };
+  normalizePerson(legacyPerson);
+  assert.equal(Object.hasOwn(legacyPerson, "maintenancePointsPerTenday"), false,
+    "Normalization removes obsolete resident maintenance points");
+  const holdingWithLegacyBuilding = holdingFixture();
+  holdingWithLegacyBuilding.buildings.list[0].maintenance = { schemaVersion: 2, requiredPoints: 2 };
+  const normalizedBuilding = mergeHoldingDefaults(holdingWithLegacyBuilding).buildings.list[0];
+  assert.equal(Object.hasOwn(normalizedBuilding, "maintenance"), false,
+    "Normalization removes obsolete building maintenance data");
+  for (const v2 of [false, true]) {
+    const targets = buildWorkAllocationTargets(holdingWithLegacyBuilding, { v2 });
+    assert.ok(targets.some((row) => row.functionId === "production:forge"));
+    assert.ok(targets.every((row) => row.functionId !== "maintenance"));
+    assert.deepEqual(buildWorkAllocationTargets({}, { v2 }), [], "An empty holding has no general work target");
+  }
+
+  const saved = holdingFixture();
+  const shop = saved.buildings.list[0];
+  shop.functions = { production: true };
+  const hiddenShop = {
+    ...shop, id: "hidden-shop", name: "Closed workshop", visibility: "gm",
+    labor: { version: 1, mode: "staff", capacityQd: null },
+    workersMax: 3, assignedWorkerIds: ["reserve-only", "with-reserve", "maintenance-only"]
+  };
+  saved.buildings.list.push(hiddenShop);
+  const production = { sourceId: shop.id, functionId: "production:forge" };
+  const retired = { sourceId: hiddenShop.id, functionId: "maintenance" };
+  const mixedAllocations = [
+    allocation("general-work", "maintenance", "maintenance", 6),
+    allocation("forge-work", production.sourceId, production.functionId, 4, 4)
+  ].map((row) => ({ schemaVersion: WORK_ALLOCATION_SCHEMA_VERSION, ...row }));
+  saved.workforcePlan = {
+    version: 1,
+    goals: [{ ...production, normalQd: 4 }, { ...retired, normalQd: 2 }],
+    locks: [{ ...production, personId: "split" }, { ...retired, personId: "maintenance-only" }]
+  };
+  const split = { ...saved.people.list[1], role: "План QD", workAllocations: mixedAllocations };
+  saved.people.list = [
+    ["reserve-only", production.functionId, retired.functionId],
+    ["with-reserve", retired.functionId, production.functionId],
+    ["maintenance-only", retired.functionId, ""]
+  ].map(([id, primaryFunctionId, reserveFunctionId]) => ({
+    id, role: hiddenShop.name, workAssignment: hiddenShop.id, staffAppointment: {
+      version: 1, buildingId: hiddenShop.id, primaryFunctionId, reserveFunctionId,
+      wageDailyCopper: 17, overtimeQd: 0, volunteer: false, volunteerReason: ""
+    }
+  }));
+  saved.people.list.push(split);
+  const savedSnapshot = clone(saved);
+  const loaded = mergeHoldingDefaults(saved);
+  const hiddenForPlayer = hiddenBuildingIds(loaded, false);
+  for (const [index, original] of savedSnapshot.people.list.entries()) {
+    const person = loaded.people.list[index];
+    assert.deepEqual(person.staffAppointment, original.staffAppointment);
+    assert.equal(person.workAssignment, original.workAssignment);
+    assert.equal(person.role, original.role);
+    if (original.staffAppointment) {
+      assert.equal(residentHasHiddenWork(loaded, person, hiddenForPlayer), true, "The player view must still mask the hidden workplace");
+    }
+  }
+  assert.deepEqual(loaded.buildings.list[1].assignedWorkerIds, hiddenShop.assignedWorkerIds);
+  assert.deepEqual(loaded.people.list.at(-1).workAllocations, mixedAllocations);
+  assert.deepEqual(loaded.workforcePlan, savedSnapshot.workforcePlan);
+  assert.deepEqual(saved, savedSnapshot, "Loading must preserve the input snapshot");
+
+  const normalizedSplit = normalizePersonWorkAllocations(clone(split));
+  assert.deepEqual(normalizedSplit.workAllocations, mixedAllocations, "Normalization must preserve rows for retired targets");
+  const retiredTargetCheck = validateWorkAllocationPlan(normalizedSplit.workAllocations, { targets: buildWorkAllocationTargets(loaded) });
+  assert.deepEqual(retiredTargetCheck.totals, { normalQd: 10, overtimeQd: 4, totalQd: 14 });
+  assert.deepEqual(retiredTargetCheck.issues.map((issue) => [issue.code, issue.targetKey]), [["allocation-unknown", "maintenance::maintenance"]],
+    "Validation rejects the retired target without changing the saved normal and overtime QD");
+
   const legacy = normalizePersonWorkAllocations({ id: "legacy" });
   assert.equal(legacy.workAllocationMode, WORK_ALLOCATION_MODE_LEGACY, "old residents must stay on the legacy assignment path");
   assert.deepEqual(legacy.workAllocations, [], "normalization must add only empty allocation state to old residents");
@@ -271,33 +345,14 @@ export function checkWorkAllocationCharacterization() {
     _financeFunctionAllowed: () => true,
     _activeAssignedBuildingPeople: () => [incomeWorker],
     _plannedWorkerFunctionQd: FinanceEconomyDomain._plannedWorkerFunctionQd,
-    _personBuildingEfficiency: () => 2,
-    _maintenanceEfficiencyFactor: () => 1
+    _personBuildingEfficiency: () => 2
   };
   const incomeChannels = incomeHarness._internalDemandChannels({ buildings: { list: [incomeBuilding] } }, incomeWorkerContext.financeContext, 1, incomeWorkerContext);
   assert.equal(incomeChannels.channels[0].throughputUnits, 5, "5 of 20 income QD must provide only one quarter of seller throughput");
   assert.equal(incomeChannels.channels[0].sellerEfficiency, 2, "allocation share must scale throughput without diluting seller skill");
-
-  const maintenancePerson = {
-    id: "maintainer",
-    workAllocationMode: WORK_ALLOCATION_MODE_EXPLICIT,
-    maintenancePointsPerTenday: 4
-  };
-  const maintenanceContext = {
-    blockedWorkerIds: new Set(),
-    plannedAssignmentsByWorkerId: new Map([[maintenancePerson.id, [
-      allocation("maintenance-work", MAINTENANCE_WORK_SOURCE_ID, MAINTENANCE_WORK_FUNCTION_ID, 10)
-    ]]])
-  };
-  const maintenanceDeps = FinanceMaintenanceDomain._maintenancePeriodDependencies.call({
-    _buildingStatus: () => ({ value: "built" })
-  }, maintenanceContext, 40);
-  assert.equal(maintenanceDeps.isWorkerAvailable(maintenancePerson), true);
-  assert.equal(maintenanceDeps.pointsForWorker(maintenancePerson), 2, "maintenance points must scale with the explicit share of normal work QD");
-  assert.equal(maintenanceDeps.pointsForWorker({ ...maintenancePerson, workAllocationMode: WORK_ALLOCATION_MODE_LEGACY, workAssignment: "workshop" }), 4, "legacy workers keep their established maintenance behavior");
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   checkWorkAllocationCharacterization();
-  console.log("FBL Skyhold work allocations: normalization, caps, authority, wages, slots and maintenance passed.");
+  console.log("FBL Skyhold work allocations: normalization, caps, authority, wages, slots and retired work passed.");
 }

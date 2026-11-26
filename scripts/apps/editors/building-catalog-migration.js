@@ -23,7 +23,7 @@ function errorText(error) {
 }
 
 async function confirmApply() {
-  const message = "Всё дерево шаблонов будет заменено утверждённым каталогом. Связанные постройки получат новые характеристики. Жители, казна, имущество, названия и состояния построек сохранятся. Старое общее обслуживание будет снято, его QD освободятся для назначения конкретным зданиям. Перед записью будет создана rollback-копия. Продолжить?";
+  const message = "Всё дерево шаблонов будет заменено утверждённым каталогом. Связанные постройки получат новые характеристики. Жители, казна, имущество, названия и состояния построек сохранятся. Перед записью будет создана rollback-копия. Продолжить?";
   const DialogV2 = foundry?.applications?.api?.DialogV2;
   if (DialogV2?.confirm) {
     return DialogV2.confirm({
@@ -97,7 +97,6 @@ export class SkyholdBuildingCatalogMigration extends FloatingTooltipsMixin(Rende
       noChanges: plan?.hasChanges === false,
       hasIssues: issueRows.length > 0,
       issueRows,
-      decisions: plan?.decisions ?? [],
       issuesTruncated: (plan?.blockingIssues?.length ?? 0) > issueRows.length,
       changedRows,
       rowsTruncated: (plan?.rows?.filter((row) => row.changed).length ?? 0) > changedRows.length,

@@ -175,7 +175,7 @@ export async function checkHybridLaborDeepReview() {
       let payments = 0;
       const financeContext = { staffCollectionProbe: true }, workerContext = { financeContext };
       const building = { id: "hall", fuelAlternatives: [{ resourceId: "wood", qty: 2 }] };
-      const host = { ...FinanceStaffDomain, _financeFunctionAllowed: () => true, _technicalMaintenanceReady: () => true,
+      const host = { ...FinanceStaffDomain, _financeFunctionAllowed: () => true,
         _storageCanPay: () => ({ ok: true }), _runInstitutionConsumables: () => { payments += 1; } };
       assert.equal(await host._staffFunctionNeedsWork({}, building, "culture", {}, workerContext, 0), true);
       assert.equal(payments, 0, "A tentative priority choice cannot consume service fuel");

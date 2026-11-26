@@ -209,7 +209,7 @@ export async function checkHybridCatalogRecipes() {
     for (const template of DEFAULT_BUILDING_TEMPLATES) for (const recipe of template.productionLines ?? []) {
       for (const mode of ["staff", "qd"]) {
         // Isolate the shipped recipe from building-specific services and staff
-        // composition, covered by their own catalog/admission/maintenance suites.
+        // composition, covered by their own catalog and admission suites.
         const f = fixture(mode);
         f.building.productionLines = [{ ...structuredClone(recipe), active: true }];
         f.building.wageDailyCopper = 12;

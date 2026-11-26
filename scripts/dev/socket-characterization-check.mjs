@@ -61,8 +61,7 @@ export async function checkSocketCharacterization() {
       salary: 0,
       wageDailyOverrideCopper: null,
       volunteerLabor: false,
-      volunteerReason: "",
-      maintenancePointsPerTenday: 0
+      volunteerReason: ""
     }];
     guardHolding.constructionCrews = [
       { id: "crew-a", name: "Crew A", memberIds: [], leaderId: "" },
@@ -102,7 +101,6 @@ export async function checkSocketCharacterization() {
       ["resident wage override", (draft) => { draft.holdings[0].people.list[0].wageDailyOverrideCopper = 0; }],
       ["resident volunteer flag", (draft) => { draft.holdings[0].people.list[0].volunteerLabor = true; }],
       ["resident volunteer reason", (draft) => { draft.holdings[0].people.list[0].volunteerReason = "free"; }],
-      ["resident maintenance calibration", (draft) => { draft.holdings[0].people.list[0].maintenancePointsPerTenday = 999; }],
       ["construction crew membership", (draft) => { draft.holdings[0].constructionCrews[0].memberIds = ["resident"]; }],
       ["construction crew leadership", (draft) => {
         draft.holdings[0].constructionCrews[0].memberIds = ["resident"];

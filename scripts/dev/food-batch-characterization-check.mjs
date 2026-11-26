@@ -97,7 +97,7 @@ export function checkFoodBatchCharacterization() {
   assert.equal(storageProfileMatches(arsenalProfile, { resourceId: "armament-simple" }), true, "an Arsenal profile must recognize every Armament tier by category");
   assert.equal(storageProfileLoadMultiplier(arsenalProfile, { resourceId: "armament-simple" }), 0.5, "compatible specialized cargo must occupy half capacity");
   assert.equal(storageProfileLoadMultiplier(arsenalProfile, { resourceId: "stone" }), 1, "incompatible cargo remains allowed but occupies full capacity");
-  assert.equal(storageProfileLoadMultiplier({ ...arsenalProfile, profileEffectFactor: 0.5 }, { resourceId: "armament-simple" }), 0.75, "maintenance debt must halve the profile advantage rather than physical capacity");
+  assert.equal(storageProfileLoadMultiplier({ ...arsenalProfile, profileEffectFactor: 0.5 }, { resourceId: "armament-simple" }), 0.75, "a partial profile factor scales the specialization advantage rather than physical capacity");
   assert.equal(normalizeHungerLevel(3.9), 3, "Hunger must persist as a whole level");
   assert.equal(hungerLevelForShortage({ hungryResidentDays: 4, livingCount: 2 }), 2, "shortage severity must be measured as hungry days per living resident");
   assert.equal(hungerLevelForShortage({ hungryResidentDays: 99, livingCount: 2 }), 10, "Hunger must be capped at ten levels");
@@ -352,8 +352,7 @@ export function checkFoodBatchCharacterization() {
     _agricultureWorkUnitsPerQd: FinanceAgricultureDomain._agricultureWorkUnitsPerQd,
     _livestockWorkUnitsPerQd: FinanceLivestockDomain._livestockWorkUnitsPerQd,
     _activeAssignedBuildingPeople: () => [{ id: "worker" }],
-    _personDailyWorkQdLimit: () => 2,
-    _maintenanceEfficiencyFactor: () => 1
+    _personDailyWorkQdLimit: () => 2
   };
   assert.equal(
     FinanceAgricultureDomain._agricultureAvailableWorkQd.call(seasonalOwner, hungerHolding, {}, 40),

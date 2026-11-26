@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { FinanceAgricultureDomain } from "../apps/domains/finance/agriculture-domain.js";
-import { FinanceMaintenanceDomain } from "../apps/domains/finance/maintenance-domain.js";
 import { DEFAULT_BUILDING_TEMPLATES } from "../data/building-templates.js";
 
 function agriculturalFixture({ efficiency = 1, sow = 1, grow = 100, harvest = 2 } = {}) {
@@ -25,12 +24,10 @@ function agriculturalFixture({ efficiency = 1, sow = 1, grow = 100, harvest = 2 
     _buildingStatus: () => ({ value: "built" }),
     _buildingFunctions: () => ({ production: true }),
     _financeFunctionAllowed: () => true,
-    _technicalMaintenanceReady: () => true,
     _agricultureCalendarContext: () => ({ year: "1", seasonId: "spring", seasonKey: "1:spring" }),
     _activeAssignedBuildingPeople: () => [person],
     _buildingCompositionStatus: () => ({ met: true }),
     _personBuildingEfficiency: () => efficiency,
-    _maintenanceEfficiencyFactor: () => 1,
     _workerBudgetEntry: () => entry,
     _consumeStaffWorkerQd: (_context, budget, _functionId, needed) => {
       if (budget.available < needed) return { ok: false, spent: 0 };
@@ -128,48 +125,7 @@ export function checkHybridLaborPeriodic() {
     assert.equal(f.financeContext.spent, 0);
     assert.equal(f.building.agriculture.state.growingElapsedQd, 5, "Debt cannot freeze the biological calendar");
   }
-  {
-    const building = { id: "plant", name: "Завод", labor: { version: 1, mode: "staff", capacityQd: null },
-      maintenance: { schemaVersion: 2, requiredPoints: 2, backlogTendays: 1 } };
-    const person = { id: "technician", workAssignment: "plant", maintenancePointsPerTenday: 3,
-      staffAppointment: { buildingId: "plant", primaryFunctionId: "production:line", reserveFunctionId: "maintenance" } };
-    const holding = { id: "holding", buildings: { list: [building] }, people: { list: [person] }, gm: {} };
-    const slots = new Map([[0, { sourceId: "plant", functionId: "staff", overtime: false }],
-      [1, { sourceId: "plant", functionId: "staff", overtime: false }], [4, { sourceId: "plant", functionId: "staff", overtime: false }]]);
-    const finance = { periodQd: 40, plannedWorkSlotsByWorkerId: new Map([["technician", slots]]),
-      blockedWorkerIds: new Set(), technicalRestartIds: new Set(["plant"]), reserved: 0 };
-    const host = {
-      ...FinanceMaintenanceDomain,
-      _buildingStatus: () => ({ value: "built" }),
-      _financeFunctionAllowed: () => true,
-      _reserveStaffWorkQd: (_holding, _building, functionId, needed, context, options) => {
-        assert.equal(options.normalOnly, true);
-        let spent = 0;
-        for (const [step, slot] of slots) {
-          if (step < options.startStep || step >= options.endStep || slot.functionId !== "staff" || slot.overtime) continue;
-          slot.functionId = functionId;
-          spent++;
-          if (spent >= needed) break;
-        }
-        context.reserved += spent;
-        return { spent, rows: [] };
-      }
-    };
-    const result = host._runMaintenanceForQd(holding, 40, null, { operationId: "period", financeContext: finance });
-    assert.equal(result.ok, true);
-    assert.equal(finance.reserved, 2);
-    assert.equal(slots.get(4).functionId, "staff", "Only required maintenance quarters are reserved");
-    assert.equal(building.maintenance.backlogTendays, 0);
-    assert.equal(result.plan.providers.length, 0, "A fixed employee cannot simultaneously contribute free legacy maintenance points");
-    assert.equal(host._technicalMaintenanceReady(building, finance, 1), false);
-    assert.equal(host._technicalMaintenanceReady(building, finance, 2), true, "Production may restart only after the reserved technical work");
-    assert.equal(host._technicalMaintenanceReady(building, finance, 40), true, "The final report at the period boundary still describes the completed tenday");
-    assert.equal(host._technicalMaintenanceReady(building, { ...finance, periodQd: 80 }, 40), false,
-      "A new tenday inside a longer calculation cannot reuse the previous tenday's technical quarters");
-    host._reserveStaffTechnicalMaintenance(holding, finance, 40, "period");
-    assert.equal(finance.reserved, 2, "A repeated preparation cannot consume maintenance twice");
-  }
-  return { fractionalAgriculture: true, calendarAndReserve: true, sharedTime: true, maintenanceReservation: true };
+  return { fractionalAgriculture: true, calendarAndReserve: true, sharedTime: true };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

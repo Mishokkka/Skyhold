@@ -50,8 +50,8 @@ export function checkBuildingSocialEffects() {
   assert.equal(buildingConfirmedLeisureCapacity(holding, building), 0, "Kitchen work cannot satisfy culture staffing or QD");
   confirmSocialWork(holding, building, [people[0].id], 20);
   people[0].workAllocationMode = "explicit";
-  people[0].workAllocations = [{ sourceId: building.id, functionId: "maintenance", normalQd: 20 }];
-  assert.equal(buildingConfirmedLeisureCapacity(holding, building), 0, "Technical maintenance is not leisure work");
+  people[0].workAllocations = [{ sourceId: building.id, functionId: "production", normalQd: 20 }];
+  assert.equal(buildingConfirmedLeisureCapacity(holding, building), 0, "Switching a current allocation away from culture invalidates its earlier leisure trace");
   people[0].workAllocations = [{ sourceId: building.id, functionId: "culture", normalQd: 20 }];
   assert.equal(buildingConfirmedLeisureCapacity(holding, building), 15);
   building.lifecycle = "disabled";
@@ -76,7 +76,7 @@ export function checkBuildingSocialEffects() {
   // Exercise the production trace writer: per-function staff and per-worker QD
   // must originate in execution, not merely be invented by social fixtures.
   const traceApp = { ...FinanceEconomyDomain, _safeNumber: app._safeNumber,
-    _technicalMaintenanceReady: () => true, _buildingFunctions: (b) => b.functions };
+    _buildingFunctions: (b) => b.functions };
   const mixed = { ...venue("mixed"), functions: { production: true, culture: true } };
   const traceHolding = { buildings: { list: [mixed] } };
   traceApp._recordBuildingServiceActivity(traceHolding, { ledger: [{ sourceId: "mixed", qty: 1 }] }, {

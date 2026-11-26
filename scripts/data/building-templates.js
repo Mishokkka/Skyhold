@@ -10,8 +10,7 @@ export const DEPRECATED_TEMPLATE_IDS = new Set(["campfire", "hut", "storehouse",
 const STORY_TEMPLATE_IDS = Object.freeze(["fasti-shop", "laputa-excavated-crypt"]);
 export const TEMPLATE_ORDER = [...APPROVED_BUILDING_TEMPLATE_IDS, ...STORY_TEMPLATE_IDS];
 const STORY_TEMPLATES = BUILDING_TEMPLATES_UNIQUE
-  .filter((template) => STORY_TEMPLATE_IDS.includes(String(template?.id ?? "")))
-  .map((template) => ({ ...template, maintenance: { schemaVersion: 2, requiredPoints: 0, priority: 0, backlogTendays: 0, needsResolution: false, lastOperationId: "" } }));
+  .filter((template) => STORY_TEMPLATE_IDS.includes(String(template?.id ?? "")));
 function applyCatalogWorkerProfile(template) {
   const workersMin = Number(template?.workersMin ?? 0);
   const workersMax = Number(template?.workersMax ?? 0);

@@ -95,9 +95,7 @@ _internalDemandChannels(holding, financeContext = null, tendayCount = 1, workerC
     const sellerWorkerEfficiency = assignedPeople.reduce((sum, person, index) => (
       sum + Math.max(0, finite(this._personBuildingEfficiency(holding, building, person, workerContext, { purpose: "trade" }), 0)) * workerShares[index]
     ), 0);
-    const maintenanceFactor = this._maintenanceEfficiencyFactor?.(building) ?? 1;
-    const effectiveWorkers = sellerWorkerEfficiency * maintenanceFactor;
-    if (!effectiveWorkers) continue;
+    if (!sellerWorkerEfficiency) continue;
     const sellerEfficiency = staffedWorkers > 0 ? sellerWorkerEfficiency / staffedWorkers : 0;
     const buildingId = text(building.id);
     channels.push({
@@ -108,19 +106,19 @@ _internalDemandChannels(holding, financeContext = null, tendayCount = 1, workerC
       allowedTags: trade.allowedTags,
       allowedKinds: trade.kind === "resources" ? ["resource"] : (trade.kind === "items" ? ["item"] : ["resource", "item", "service"]),
       roomId: trade.roomId,
-      throughputUnits: Math.floor(effectiveWorkers * trade.throughputUnitsPerWorker * tendayCount),
+      throughputUnits: Math.floor(sellerWorkerEfficiency * trade.throughputUnitsPerWorker * tendayCount),
       sellerEfficiency,
       sellerName: assigned === 1 ? text(assignedPeople[0]?.name || "торговец") : `${assigned} торговцев`,
       priority: trade.gmPriority,
       diminishingFactor: 1
     });
-    const demandBudget = Math.floor((trade.demandBudgetBaseCopper + trade.demandBudgetPerWorkerCopper * effectiveWorkers) * tendayCount);
+    const demandBudget = Math.floor((trade.demandBudgetBaseCopper + trade.demandBudgetPerWorkerCopper * sellerWorkerEfficiency) * tendayCount);
     const sourceRow = { id: buildingId, budgetCopper: demandBudget, priority: trade.gmPriority, active: demandBudget > 0 };
     if (trade.demandSource === "inn-visitors") innVisitorSources.push(sourceRow);
     if (trade.demandSource === "market-flow") marketFlowSources.push(sourceRow);
     if (trade.service.enabled && trade.service.categoryTag && trade.service.basePriceCopper > 0 && trade.service.unitsPerWorker > 0) {
       channels[channels.length - 1].service = trade.service;
-      channels[channels.length - 1].serviceQty = Math.floor(effectiveWorkers * trade.service.unitsPerWorker * tendayCount);
+      channels[channels.length - 1].serviceQty = Math.floor(sellerWorkerEfficiency * trade.service.unitsPerWorker * tendayCount);
     }
   }
   return { channels, innVisitorSources, marketFlowSources };

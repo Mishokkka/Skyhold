@@ -200,7 +200,7 @@ _assignPersonToBuilding(holding, personId, buildingId, options = {}) {
     && (admission.overridden || options.allowAdmissionOverride);
   if (laborMode === "staff") {
     const previous = staffAppointmentFor(person);
-    const targets = buildWorkAllocationTargets(holding).filter((row) => row.sourceId === String(building.id) && row.functionId !== "maintenance");
+    const targets = buildWorkAllocationTargets(holding).filter((row) => row.sourceId === String(building.id));
     if (previous?.buildingId !== building.id && targets.length !== 1) {
       globalThis.ui?.notifications?.warn?.("Выберите основную работу этого сотрудника в «Плане работ».");
       return false;

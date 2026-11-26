@@ -17,11 +17,6 @@
         {{#each issueRows}}<article class="fbls-content-pack-row reset"><strong>{{buildingName}}{{#if holdingName}} · {{holdingName}}{{/if}}</strong><p>{{detail}}</p></article>{{/each}}
       </div>{{#if issuesTruncated}}<p>Показаны первые 80 проблем.</p>{{/if}}</article>
     {{/if}}
-    {{#if decisions.length}}
-      <article class="fbls-card"><h3>Назначения обслуживания</h3><p>Старое общее обслуживание снимается. Освободившиеся QD нужно назначить конкретным техническим зданиям перед первым десятником.</p>
-        {{#each decisions}}<p>{{detail}}</p>{{/each}}
-      </article>
-    {{/if}}
     {{#if changedRows.length}}
       <article class="fbls-card"><h3>Обновляемые постройки</h3><div class="fbls-stack">
         {{#each changedRows}}<article class="fbls-content-pack-row update"><strong>{{buildingName}}</strong><span>{{holdingName}} · {{targetTemplateId}}</span></article>{{/each}}

@@ -45,7 +45,7 @@ function controlValue(control = {}, workforce = {}, kind = "general", factor = 1
 
 /**
  * Control is derived state. It is deliberately never persisted as a settlement
- * total: workers, debts, maintenance and population can all change it.
+ * total: workers, debts and population can all change it.
  */
 export function settlementControlSummary(holding = {}, { rawMorale = 0, includePolitics = true } = {}) {
   const population = (holding?.people?.list ?? []).filter((person) => isResidentInPopulation(person, holding)).length;
@@ -75,9 +75,9 @@ export function settlementControlSummary(holding = {}, { rawMorale = 0, includeP
     const factor = buildingServiceEffectFactor(holding, building, status.functionId);
     const workforce = buildingActiveWorkerSummary(holding, building, status.functionId);
     const hybrid = buildingLaborMode(building) !== "legacy";
-    const general = controlValue(control, workforce, "general", hybrid ? status.maintenanceFactor : factor,
+    const general = controlValue(control, workforce, "general", hybrid ? 1 : factor,
       hybrid ? status.laborFactor : 1, hybrid);
-    const unrestOnly = controlValue(control, workforce, "unrestOnly", hybrid ? status.maintenanceFactor : factor,
+    const unrestOnly = controlValue(control, workforce, "unrestOnly", hybrid ? 1 : factor,
       hybrid ? status.laborFactor : 1, hybrid);
     if (!general && !unrestOnly) continue;
     const rawCapacity = whole(control.capacity);

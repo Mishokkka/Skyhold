@@ -149,7 +149,7 @@ export async function checkPoliticsRegressions() {
   const pipelineOwner = { ...serviceOwner, ...FinanceStaffDomain,
     _periodLabel: () => "десятник",
     _prepareFinanceForQd: () => ({ operatingBlockedFunctionKeys: new Set(), blockedWorkerIds: new Set(), periodIdentity: { periodKey: "tenday:1" } }),
-    _runMaintenanceForQd: () => ({ ok: true }), _prepareTechnicalServiceRestarts: noop, _economyWorkerContext: () => ({}),
+    _economyWorkerContext: () => ({}),
     _runInstitutionConsumables: FinanceEconomyDomain._runInstitutionConsumables, _runInstitutionResolutions: noop,
     _runAgricultureForQd: () => ({ ok: true }), _nonAgricultureProductionBuildings: (buildings) => buildings,
     _runProductionAndLivestockForQd: FinanceEconomyDomain._runProductionAndLivestockForQd,

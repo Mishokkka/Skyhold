@@ -189,27 +189,18 @@ export async function checkFinanceRuntimeCharacterization() {
     const building = holding.buildings.list[0];
     building.functions = { culture: true };
     building.activation = { minWorkers: 1, minOperationalQd: 20 };
-    building.maintenance = { schemaVersion: 2, requiredPoints: 2 };
-    const slot = (functionId) => ({ sourceId: building.id, functionId, overtime: false });
-    const serviceSlots = new Map(Array.from({ length: 40 }, (_, step) => step).filter((step) => step % 4 < 2).map((step) => [step, slot("culture")]));
-    const context = { periodQd: 40, periodIdentity: { periodKey: "restart-service" }, technicalRestartIds: new Set([building.id]),
-      blockedWorkerIds: new Set(), plannedAssignmentsByWorkerId: new Map(), plannedWorkSlotsByWorkerId: new Map([
-        ["service-worker", serviceSlots], ["technician", new Map([[0, slot("maintenance")], [1, slot("maintenance")]])]
-      ]) };
+    const context = { periodIdentity: { periodKey: "service" }, plannedAssignmentsByWorkerId: new Map([
+      ["service-worker", [{ sourceId: building.id, functionId: "culture", normalQd: 18 }]]
+    ]) };
     const report = { skipped: [], ledger: [] };
-    harness._prepareTechnicalServiceRestarts(holding, context, report);
-    assert.equal(building.serviceState.workedQd, 18, "The first two simultaneous service slots precede completed inspection and cannot count");
-    assert.equal(building.serviceState.active, false);
-    context.plannedWorkSlotsByWorkerId.set("helper", new Map([[4, slot("culture")], [5, slot("culture")]]));
-    harness._prepareTechnicalServiceRestarts(holding, context, report);
-    assert.equal(building.serviceState.active, true);
     harness._recordBuildingServiceActivity(holding, report, context);
-    assert.equal(building.serviceState.workedQd, 20, "Final recording retains the post-inspection service workload");
-    assert.ok(!building.serviceState.activeWorkerIds.includes("technician"));
-    context.blockedWorkerIds.add("technician");
-    harness._prepareTechnicalServiceRestarts(holding, context, report);
-    assert.equal(building.serviceState.active, false, "An unpaid technician cannot restart a nonproduction service");
-    assert.equal(building.serviceState.workedQd, 0);
+    assert.equal(building.serviceState.workedQd, 18);
+    assert.equal(building.serviceState.active, false, "Below-threshold work cannot activate the service");
+    context.periodIdentity.periodKey = "service-next";
+    context.plannedAssignmentsByWorkerId.set("helper", [{ sourceId: building.id, functionId: "culture", normalQd: 2 }]);
+    harness._recordBuildingServiceActivity(holding, report, context);
+    assert.equal(building.serviceState.workedQd, 20);
+    assert.equal(building.serviceState.active, true, "Paid work activates the service once it meets the threshold");
   }
   {
     for (const moneyCopper of [1000, 0]) {
@@ -217,30 +208,18 @@ export async function checkFinanceRuntimeCharacterization() {
       const holding = runtimeHolding({ moneyCopper, wageDailyCopper: 3 });
       const building = holding.buildings.list[0];
       building.workersMax = 1;
-      building.maintenance = { schemaVersion: 2, requiredPoints: 2, backlogTendays: 0 };
       Object.assign(holding.people.list[0], { workAssignment: "", workAllocationMode: "explicit", workAllocations: [
-        { id: "production", sourceId: "mill", functionId: "production:grind", normalQd: 18, overtimeQd: 0 },
-        { id: "technical", sourceId: "mill", functionId: "maintenance", normalQd: 2, overtimeQd: 0 }
+        { id: "production", sourceId: "mill", functionId: "production:grind", normalQd: 18, overtimeQd: 0 }
       ] });
-      const inputs = harness._financePlanInputs(holding, 40, financePeriodIdentity(holding, 40));
-      const technical = inputs.buildings[0].functions.find((row) => row.id === "maintenance");
-      assert.equal(technical.wageDailyCopper, 18);
-      assert.equal(technical.operatingUpkeepMonthlyCopper, 0, "Technical labor must not add a second operating tariff");
       const report = { treasury: { spent: 0, deficit: 0, lines: [] }, skipped: [], ledger: [] };
-      const context = harness._prepareFinanceForQd(holding, 40, report, { operationId: `technical-finance-${moneyCopper}` });
-      const plan = harness._planMaintenanceForQd(holding, 40, { operationId: `technical-service-${moneyCopper}`, financeContext: context });
+      const context = harness._prepareFinanceForQd(holding, 40, report, { operationId: `production-finance-${moneyCopper}` });
+      harness._recordBuildingServiceActivity(holding, report, context);
       if (moneyCopper > 0) {
-        assert.equal(holding.storage.moneyCopper, 955, "18 production QD at 3/day plus 2 technical QD at 18/day cost 45");
-        assert.equal(plan.totals.allocatedTechnicalQd, 2);
-        assert.equal(plan.entries[0].stateAfter.backlogTendays, 0);
-        assert.equal(harness._technicalMaintenanceReady(building, context, 0), false);
-        assert.equal(harness._technicalMaintenanceReady(building, context, 1), false);
-        assert.equal(harness._technicalMaintenanceReady(building, context, 2), true, "Restart follows two completed paid QD, never future work");
-        harness._recordBuildingServiceActivity(holding, report, context);
-        assert.equal(building.serviceState.workedQd, 18, "Recorded primary activity excludes technical QD");
-        assert.equal(building.serviceState.workedQdByFunction.maintenance, undefined);
+        assert.equal(holding.storage.moneyCopper, 973, "18 production QD at 3/day cost 27 copper");
+        assert.equal(building.serviceState.workedQd, 18, "Recording includes all paid production work");
+        assert.equal(building.serviceState.workedQdByFunction["production:grind"], 18);
       } else {
-        assert.equal(plan.totals.allocatedTechnicalQd, 0, "Unpaid assignments cannot service machinery");
+        assert.equal(building.serviceState.workedQd, 0, "Unpaid assignments do not activate the function");
       }
     }
   }
