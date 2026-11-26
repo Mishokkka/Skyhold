@@ -53,9 +53,10 @@ export function daysOffConflictSummary(holding = {}, nextDaysOff = 0, options = 
       overtimeQd += allocationTotalQd(row) - normal;
     }
     const capacity = residentLaborCapacity(person, budget);
-    if (normalQd > capacity.normalQd || overtimeQd > Math.min(capacity.overtimeQd, Math.floor(normalQd / 2))) {
+    const maxOvertimeQd = Math.min(capacity.overtimeQd, Math.floor(normalQd / 2));
+    if (normalQd > capacity.normalQd || overtimeQd > maxOvertimeQd) {
       conflicts.push({ personId: String(person.id ?? ""), name: String(person.name || person.id || "Житель"),
-        normalQd, overtimeQd, maxNormalQd: capacity.normalQd, maxOvertimeQd: capacity.overtimeQd });
+        normalQd, overtimeQd, maxNormalQd: capacity.normalQd, maxOvertimeQd, budgetMaxOvertimeQd: capacity.overtimeQd });
     }
   }
   return { daysOff: next, conflicts, hasConflicts: conflicts.length > 0 };

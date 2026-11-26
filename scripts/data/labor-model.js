@@ -1,6 +1,6 @@
 import { isSheriffAppointment } from "./control-appointments.js";
 import { DEFAULT_NORMAL_LABOR_QD, residentLaborCapacity } from "./labor-budget.js";
-import { allocationTotalQd } from "./labor-primitives.js";
+import { allocationSourceId, allocationTotalQd } from "./labor-primitives.js";
 
 const text = (value) => String(value ?? "").trim();
 const includes = (ids, id) => (ids ?? []).some((value) => text(value) === id);
@@ -51,8 +51,9 @@ export function productionPreparationGoal(holding = {}, sourceId = "", functionI
 function memberShips(holding, person) {
   const id = text(person.id);
   const assignment = person.shipAssignment;
+  const shoreDutyShipId = assignment?.shoreDuty === true ? text(assignment.shipId) : "";
   return id ? (holding.special?.ships?.list ?? []).filter((ship) => {
-    if (assignment?.shoreDuty === true && (!text(assignment.shipId) || text(assignment.shipId) === text(ship.id))) return false;
+    if (shoreDutyShipId && shoreDutyShipId === text(ship.id)) return false;
     return text(ship.commanderResidentId) === id || includes(ship.crewResidentIds, id) || includes(ship.coCommanderResidentIds, id);
   }) : [];
 }
@@ -99,9 +100,11 @@ export function reservedOccupation(holding = {}, person = {}) {
   if (ship) return { kind: "ship", label: `Экипаж: ${text(ship.name || ship.id) || "корабль"}` };
   if (assignment.startsWith("construction")) return { kind: "construction", label: "Стройбригада" };
   if (["soldier", "defenseCommander"].includes(assignment)) return { kind: "defense", label: "Военная служба" };
-  if (assignment.startsWith("ship:") && (person.shipAssignment?.shoreDuty !== true
-    || (text(person.shipAssignment.shipId) && text(person.shipAssignment.shipId) !== assignment.slice(5)))) {
-    return { kind: "ship", label: "Экипаж корабля" };
+  if (assignment.startsWith("ship:")) {
+    const shoreDutyShipId = person.shipAssignment?.shoreDuty === true ? text(person.shipAssignment.shipId) : "";
+    if (!shoreDutyShipId || shoreDutyShipId !== assignment.slice(5)) {
+      return { kind: "ship", label: "Экипаж корабля" };
+    }
   }
   if (["sheriff", "other"].includes(assignment) || isSheriffAppointment(person)) {
     return { kind: "control", label: text(person.role) || "Особая должность" };
@@ -118,7 +121,7 @@ export function buildingWorkReservations(holding = {}, { excludePersonId = "", r
       || (presentIds && !presentIds.has(id)) || (canRead && !canRead(person))) continue;
     const perBuilding = new Map();
     for (const row of Array.isArray(person.workAllocations) ? person.workAllocations : []) {
-      const buildingId = text(row?.sourceId), qd = allocationTotalQd(row);
+      const buildingId = allocationSourceId(row), qd = allocationTotalQd(row);
       if (buildingId && qd) perBuilding.set(buildingId, (perBuilding.get(buildingId) ?? 0) + qd);
     }
     for (const [buildingId, qd] of perBuilding) {

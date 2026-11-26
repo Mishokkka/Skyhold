@@ -117,9 +117,16 @@ test("ten- and nine-day budgets, children, and a pure days-off conflict preview"
   const before = structuredClone(home);
   assert.equal(daysOffConflictSummary(home, 1).hasConflicts, false);
   assert.deepEqual(daysOffConflictSummary(home, 1, options), { daysOff: 1, hasConflicts: true, conflicts: [
-    { personId: "resident", name: "Тихон", normalQd: 18, overtimeQd: 9, maxNormalQd: 16, maxOvertimeQd: 8 }
+    { personId: "resident", name: "Тихон", normalQd: 18, overtimeQd: 9, maxNormalQd: 16, maxOvertimeQd: 8, budgetMaxOvertimeQd: 8 }
   ] });
   assert.deepEqual(home, before);
+});
+
+test("days-off preview reports the effective overtime cap when assigned normal QD is low", () => {
+  const home = holding(resident({ workAllocations: [allocation("mill", 2, 2)] }));
+  assert.deepEqual(daysOffConflictSummary(home, 1, options), { daysOff: 1, hasConflicts: true, conflicts: [
+    { personId: "resident", name: "Тихон", normalQd: 2, overtimeQd: 2, maxNormalQd: 16, maxOvertimeQd: 1, budgetMaxOvertimeQd: 8 }
+  ] });
 });
 
 test("v72 schema, world setting, and military wage calculations remain compatible", () => {
@@ -146,9 +153,14 @@ test("v72 schema, world setting, and military wage calculations remain compatibl
   const army = holding(soldier);
   army.gm = { defense: { squads: [{ type: "cavalry", sergeantId: soldier.id }] } };
   assert.equal(militaryDailyWage(army, soldier), 27);
-  assert.equal(militaryDailyWage(army, { ...soldier, wageDailyOverrideCopper: 70 }), 70);
+  assert.equal(militaryDailyWage(army, { ...soldier, wageDailyOverrideCopper: 70 }), 27);
+  const wageOptions = { useWageOverride: true };
+  assert.equal(militaryDailyWage(army, { ...soldier, wageDailyOverrideCopper: 70 }, wageOptions), 70);
+  for (const override of [0, -1, 1.5, "70", Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.equal(militaryDailyWage(army, { ...soldier, wageDailyOverrideCopper: override }, wageOptions), 27);
+  }
   assert.equal(militaryDailyWage(army, { ...soldier, militarySalaryModifier: -2 }), 25);
-  assert.equal(militaryDailyWage(army, { ...soldier, militarySalaryModifier: 4, wageDailyOverrideCopper: 32 }), 32);
+  assert.equal(militaryDailyWage(army, { ...soldier, militarySalaryModifier: 4, wageDailyOverrideCopper: 32 }, wageOptions), 32);
   assert.equal(militaryDailyWage(army, { ...soldier, workAssignment: "defenseCommander", militarySalaryModifier: 4 }), 33);
   assert.equal(soldier.salary, 99);
 });
@@ -178,6 +190,24 @@ test("passive v2 buildings expose no labor targets", () => {
   const home = holding(resident(), [building("mill", { labor: { version: 2, capacityQd: 0 } })]);
   assert.deepEqual(buildWorkAllocationTargets(home, { v2: true }), []);
   rejected(home, () => add(home), "allocation-unknown");
+});
+
+test("v2 building targets advertise QD mode rather than legacy worker counts", () => {
+  const buildings = [
+    building(),
+    building("clinic", { medical: { enabled: true } }),
+    building("field", { agriculture: { enabled: true, kind: "field" } }),
+    building("ranch", { livestock: { enabled: true, speciesId: "sheep" }, productionLines: [] }),
+    ...["income", "culture", "defense", "housing", "storage"].map((kind) =>
+      building(kind, { functions: { [kind]: true }, productionLines: [] }))
+  ];
+  const targets = buildWorkAllocationTargets(holding(resident(), buildings), { v2: true });
+  assert.deepEqual([...new Set(targets.map((target) => target.kind))].sort(),
+    ["agriculture", "culture", "defense", "housing", "income", "livestock", "medical", "production", "storage"]);
+  for (const { key, laborMode, workersMax } of targets) {
+    assert.equal(laborMode, "qd", key);
+    assert.equal(workersMax, 0, key);
+  }
 });
 
 test("targeted add, set, and remove preserve other rows and synchronize roles", () => {
@@ -241,6 +271,9 @@ test("ship commander, co-commander, and crew reserve labor except on their shore
     assert.equal(reservedOccupation(home, personIn(home)).kind, "ship");
     rejected(home, () => add(home), "reserved-occupation");
     rejected(home, () => add(home, { replaceOccupation: true }), "reserved-occupation");
+    personIn(home).shipAssignment = { shoreDuty: true };
+    assert.equal(reservedOccupation(home, personIn(home)).kind, "ship");
+    rejected(home, () => add(home), "reserved-occupation");
     personIn(home).shipAssignment = { shipId: "different", shoreDuty: true };
     assert.equal(reservedOccupation(home, personIn(home)).kind, "ship");
     personIn(home).shipAssignment = { shipId: "airship", away: true, shoreDuty: true };
@@ -248,6 +281,17 @@ test("ship commander, co-commander, and crew reserve labor except on their shore
     assert.equal(add(home, { replaceOccupation: true }).ok, true);
     assert.deepEqual(home.special.ships.list[0], { ...ship, id: "airship", status: "docked" });
   }
+});
+
+test("ship assignment fallback requires a non-empty matching shore-duty ship ID", () => {
+  const home = holding(resident({ workAssignment: "ship:airship" }));
+  for (const shipAssignment of [{ shoreDuty: true }, { shoreDuty: true, shipId: "  " }, { shoreDuty: true, shipId: "different" }]) {
+    personIn(home).shipAssignment = shipAssignment;
+    assert.equal(reservedOccupation(home, personIn(home)).kind, "ship");
+    rejected(home, () => add(home), "reserved-occupation");
+  }
+  personIn(home).shipAssignment = { shoreDuty: true, shipId: " airship " };
+  assert.equal(reservedOccupation(home, personIn(home)), null);
 });
 
 test("0-QD editor drafts preserve construction roles; active replacement must be explicit", () => {
@@ -387,6 +431,10 @@ test("conservation trims unlocked rows canonically, previews locked cuts, and re
   assert.deepEqual(home.workforcePlan.locks, [lock]);
   assert.deepEqual(home.buildings.list[0].workerAdmissionOverrideIds, []);
   clearResidentBuildingLabor(home, personIn(home), "normal");
+  const blocked = rejected(home, () => trimExcessOvertimeForResidents(home, ["resident"], { ...options, locks: [] }));
+  assert.equal(blocked.requiresConfirmation, true);
+  assert.deepEqual(blocked.lockedTrims.map(({ sourceId, overtimeAfter }) => [sourceId, overtimeAfter]), [["locked", 0]]);
+  assert.deepEqual(home.workforcePlan.locks, [lock]);
   assert.equal(trimExcessOvertimeForResidents(home, ["resident"], { ...options, confirmLocked: true }).ok, true);
   assert.deepEqual(home.workforcePlan.locks, []);
   assert.equal(personIn(home).role, "Свободен");
@@ -408,6 +456,33 @@ test("reservations support scoped visibility and releases without overcounting a
   const check = applyResidentEditorAllocations(home, "resident", { ...options, nextAllocations: [allocation("mill", 3, 0, "production:two")] });
   assert.equal(check.ok, true);
   assert.equal(buildingWorkReservations(home).get("mill"), 5);
+});
+
+test("target-key-only work of an untouched resident reserves building capacity", () => {
+  const home = holding(resident(), [building("mill", { labor: { version: 2, capacityQd: 4 } })]);
+  home.people.list.push(resident({ id: "untouched", workAllocations: [{ targetKey: "mill::production:one", normalQd: 4 }] }));
+  assert.equal(buildingWorkReservations(home).get("mill"), 4);
+  assert.equal(validateHoldingWorkAllocations(home, strict).ok, true);
+  const result = rejected(home, () => add(home), "allocation-capacity");
+  const { buildingId, actual, limit } = result.issues.find((issue) => issue.code === "allocation-capacity");
+  assert.deepEqual({ buildingId, actual, limit }, { buildingId: "mill", actual: 8, limit: 4 });
+});
+
+test("editor and workforce writes reject malformed raw QD before normalization", () => {
+  const home = holding(resident({ workAllocations: [allocation("mill", 4)] }));
+  home.people.list.push(resident({ id: "second" }));
+  const invalidValues = ["bogus", -1, 1.5, NaN, Infinity, null, Number.MAX_SAFE_INTEGER + 1];
+  const invalidRows = [null, 42, "not a row", [], new Date(0)];
+  for (const field of ["normalQd", "overtimeQd", "plannedNormalQd", "plannedOvertimeQd", "qd"]) {
+    invalidRows.push(...invalidValues.map((value) => ({ ...allocation("mill", 2), [field]: value })));
+  }
+  const expected = { ok: false, message: "QD должны быть целыми неотрицательными числами." };
+  for (const row of invalidRows) {
+    assert.deepEqual(rejected(home, () => applyResidentEditorAllocations(home, "resident", { ...options, nextAllocations: [row] })), expected);
+    assert.deepEqual(rejected(home, () => applyWorkforcePlanAllocations(home, { ...options, updates: [
+      { personId: "resident", nextAllocations: [] }, { personId: "second", workAllocations: [row] }
+    ] })), expected);
+  }
 });
 
 test("whole-workforce swaps validate final capacity atomically and failures leave both residents unchanged", () => {

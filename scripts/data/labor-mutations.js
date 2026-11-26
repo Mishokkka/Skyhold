@@ -3,6 +3,7 @@ import { allocationNormalQd, allocationTotalQd, residentActiveQd } from "./labor
 import { syncResidentLaborRole } from "./labor-role.js";
 import { clearPersonFromAssignments, clearResidentLaborAllocations,
   transferResidentBetweenHoldings as transferLegacyResident } from "./resident-assignments.js";
+import { isPlainObject } from "./utils.js";
 import { normalizeWorkAllocation, validateHoldingWorkAllocations,
   WORK_ALLOCATION_MODE_EXPLICIT } from "./work-allocations.js";
 
@@ -13,6 +14,22 @@ const lockKey = (personId, row) => JSON.stringify([text(personId), text(row?.sou
 const overtimeFor = (row) => allocationTotalQd(row) - allocationNormalQd(row);
 const asChild = (person, options) => options.isChild ?? (person?.ageGroup === "Ре");
 const fail = (message) => ({ ok: false, message });
+const INVALID_QD = "QD должны быть целыми неотрицательными числами.";
+const QD_FIELDS = ["normalQd", "overtimeQd", "plannedNormalQd", "plannedOvertimeQd", "qd"];
+const validQd = (value) => Number.isSafeInteger(value) && value >= 0;
+
+function validAllocationRows(rows) {
+  for (const row of rows) {
+    if (!isPlainObject(row)) return false;
+    const prototype = Object.getPrototypeOf(row);
+    if (prototype !== Object.prototype && prototype !== null) return false;
+    for (const field of QD_FIELDS) {
+      const value = row[field];
+      if (value !== undefined && !validQd(value)) return false;
+    }
+  }
+  return true;
+}
 
 function validateDraft(holding, draft, options, replacedPersonId, { checkedPersonIds, conserving } = {}) {
   return validateHoldingWorkAllocations(draft, {
@@ -74,7 +91,7 @@ export function mutateResidentBuildingLabor(holding, {
 } = {}) {
   const id = text(personId), source = text(buildingId), fn = text(functionId);
   if (!id || !source || !["add", "set", "remove"].includes(action) || (!fn && action !== "remove")) return fail("Не выбрано назначение для изменения.");
-  if (action !== "remove" && ![normalQd, overtimeQd].every((value) => Number.isSafeInteger(value) && value >= 0)) return fail("QD должны быть целыми неотрицательными числами.");
+  if (action !== "remove" && ![normalQd, overtimeQd].every(validQd)) return fail(INVALID_QD);
   const draft = structuredClone(holding);
   const person = personFor(draft, id);
   if (!person) return fail("Житель не найден.");
@@ -105,6 +122,7 @@ export function mutateResidentBuildingLabor(holding, {
 export function applyResidentEditorAllocations(holding, personId, options = {}) {
   const { nextAllocations, admissionOverrideBuildingIds, replaceOccupation = false, isChild } = options;
   if (!Array.isArray(nextAllocations)) return fail("Не задан план QD жителя.");
+  if (!validAllocationRows(nextAllocations)) return fail(INVALID_QD);
   if (admissionOverrideBuildingIds != null && !Array.isArray(admissionOverrideBuildingIds)) return fail("Некорректный список допусков к работе.");
   const draft = structuredClone(holding);
   const person = personFor(draft, text(personId));
@@ -117,14 +135,18 @@ export function applyResidentEditorAllocations(holding, personId, options = {}) 
 export function applyWorkforcePlanAllocations(holding, { updates, ...options } = {}) {
   if (!Array.isArray(updates)) return fail("Не задан общий план QD.");
   const draft = structuredClone(holding);
-  const seen = new Set(), replaced = [];
+  const seen = new Set(), plan = [], replaced = [];
   for (const update of updates) {
     const id = text(update?.personId);
     const allocations = update?.nextAllocations ?? update?.workAllocations;
     const person = id && personFor(draft, id);
     if (!person || !Array.isArray(allocations) || seen.has(id)
       || (update.admissionOverrideBuildingIds != null && !Array.isArray(update.admissionOverrideBuildingIds))) return fail("Некорректная строка общего плана QD.");
+    if (!validAllocationRows(allocations)) return fail(INVALID_QD);
     seen.add(id);
+    plan.push({ person, allocations, update });
+  }
+  for (const { person, allocations, update } of plan) {
     prepare(draft, person, allocations, { ...options, ...update }, replaced);
   }
   return finish(holding, draft, options, replaced, { checkedPersonIds: [...seen] });
@@ -146,9 +168,10 @@ const compareRows = (left, right) => {
   return 0;
 };
 
-export function trimExcessOvertimeForResidents(holding, personIds, { confirmLocked = false, locks = holding.workforcePlan?.locks ?? [], ...options } = {}) {
+export function trimExcessOvertimeForResidents(holding, personIds, { confirmLocked = false, locks, ...options } = {}) {
   const draft = structuredClone(holding);
-  const lockedKeys = new Set(locks.map((row) => lockKey(row.personId, row)));
+  const lockedKeys = new Set([...(draft.workforcePlan?.locks ?? []), ...(Array.isArray(locks) ? locks : [])]
+    .map((row) => lockKey(row.personId, row)));
   const trims = [], lockedTrims = [];
   const dropped = new Set();
   for (const id of [...new Set([...personIds].map(text))].sort()) {

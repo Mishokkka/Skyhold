@@ -2,9 +2,9 @@ export const MILITARY_DAILY_RATES = Object.freeze({
   line: 12, militia: 12, fusiliers: 14, jaegers: 16, grenadiers: 16, sappers: 16, artillery: 18, cavalry: 20
 });
 
-export function militaryDailyWage(holding = {}, person = {}) {
+export function militaryDailyWage(holding = {}, person = {}, { useWageOverride = false } = {}) {
   const override = person.wageDailyOverrideCopper;
-  if (Number.isSafeInteger(override) && override > 0) return override;
+  if (useWageOverride === true && Number.isSafeInteger(override) && override > 0) return override;
   const relative = Number(person.militarySalaryModifier);
   const unifiedWage = person.militarySalaryModifier != null && Number.isFinite(relative);
   const modifier = Math.trunc(Number(person.salaryModifier) || 0) + (unifiedWage ? Math.trunc(relative) : 0);
