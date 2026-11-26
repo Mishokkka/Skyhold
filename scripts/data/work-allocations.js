@@ -8,7 +8,7 @@ import { isResidentPresent } from "./resident-presence.js";
 import { holdingNormalLaborQd, normalLaborQdPerTenday, residentLaborCapacity } from "./labor-budget.js";
 import { buildingLaborMode, staffAppointmentFor, staffWorkerIdsForBuilding, validateHybridLaborHolding, newHybridLaborIssues } from "./hybrid-labor.js";
 import { allocationTotalQd, residentActiveQd } from "./labor-primitives.js";
-import { buildingCapacityQd, buildingWorkReservations, reservedOccupation, residentLaborUnavailableReason } from "./labor-model.js";
+import { buildingAcceptsWorkers, buildingCapacityQd, buildingWorkReservations, reservedOccupation, residentLaborUnavailableReason } from "./labor-model.js";
 import { laborWageRate } from "../engines/economy/labor-wage-rate.js";
 import { buildingCompositionStatus, workerAdmission } from "../engines/workers/building-qualification.js";
 
@@ -199,13 +199,14 @@ function targetRow(building, functionId, label, {
   };
 }
 
-export function buildWorkAllocationTargets(holding = {}, { includeMaintenance = true, v2 = false, allowMedicalOvertime = true } = {}) {
+export function buildWorkAllocationTargets(holding = {}, { v2 = false, includeMaintenance = !v2, allowMedicalOvertime = true, baseNormalQd } = {}) {
   const targets = [];
   for (const building of holding?.buildings?.list ?? []) {
     const state = buildingOperationalState(building);
     const mode = v2 ? "qd" : buildingLaborMode(building);
     const hybrid = ["staff", "qd", "passive"].includes(mode);
     if (!text(building?.id) || !state.operational && !hybrid) continue;
+    if (v2 && !buildingAcceptsWorkers(building, { baseNormalQd })) continue;
     if (includeMaintenance && usesTechnicalMaintenance(building) && normalizeBuildingMaintenance(building.maintenance).requiredPoints > 0) {
       targets.push({ ...targetRow(building, MAINTENANCE_WORK_FUNCTION_ID, "Техобслуживание", { dailyRateCopper: 18, kind: "maintenance" }), workersMax: 0 });
     }
@@ -373,7 +374,7 @@ function validateLegacyHoldingWorkAllocations(holding, previousHolding) {
 
 function v2LaborState(holding, { strictWageCheck, baseNormalQd, workingDays, allowMedicalOvertime, useDaysOffBudget }, collectingWarnings) {
   const budget = useDaysOffBudget ? holdingNormalLaborQd(holding, { workingDays, baseNormalQd }) : baseNormalQd;
-  const targets = buildWorkAllocationTargets(holding, { v2: true, allowMedicalOvertime });
+  const targets = buildWorkAllocationTargets(holding, { v2: true, allowMedicalOvertime, baseNormalQd });
   const targetMap = new Map(targets.map((target) => [target.key, target]));
   const buildings = new Map((holding.buildings?.list ?? []).map((building) => [text(building.id), building]));
   const issues = [], warnings = [];
@@ -407,7 +408,7 @@ function v2LaborState(holding, { strictWageCheck, baseNormalQd, workingDays, all
       const target = targetMap.get(workAllocationTargetKey(buildingId, row.functionId));
       const building = buildings.get(buildingId);
       const fields = { buildingId, functionId: row.functionId, actual, limit: 0 };
-      if (!target || !target.available || (building && buildingCapacityQd(building, { baseNormalQd }) === 0)) {
+      if (!target || !target.available) {
         if (target) add({ code: "work-target-unavailable", ...fields, message: target.blockedReason || "Выбранная работа сейчас недоступна." });
         continue;
       }
@@ -415,7 +416,7 @@ function v2LaborState(holding, { strictWageCheck, baseNormalQd, workingDays, all
         const volunteer = person.volunteerLabor === true || row.volunteer === true;
         const dailyRateCopper = functionDailyRate(building, row.functionId);
         const wage = laborWageRate({ volunteer, wageOverrideCopper: override, dailyRateCopper });
-        if (!wage.ok || (!volunteer && dailyRateCopper === 0)) {
+        if (!wage.ok) {
           add({ code: "work-target-unpaid", ...fields, message: "Для выбранной работы нужна ставка или добровольный труд." });
         }
       }
@@ -439,7 +440,7 @@ function v2LaborState(holding, { strictWageCheck, baseNormalQd, workingDays, all
       issues.push({ code: "allocation-capacity", buildingId, buildingName, actual, limit, message: `${buildingName}: план использует ${actual}/${limit} QD.` });
     }
     if (collectingWarnings && workers.has(buildingId)) {
-      const composition = buildingCompositionStatus(building, [...workers.get(buildingId).values()]);
+      const composition = buildingCompositionStatus(building, [...workers.get(buildingId).values()], { excludeGroups: ["ЧУДОТВОРЕЦ"] });
       if (!composition.met) warnings.push({ code: "composition-unmet", buildingId, buildingName,
         message: `${buildingName}: не выполнен состав работников (${composition.text}).` });
     }
@@ -466,8 +467,7 @@ export function validateHoldingWorkAllocations(holding = {}, options = {}) {
     }).map((person) => text(person.id)));
     const checked = new Set([...checkedPersonIds.map(text), ...changed]);
     const previousIssues = v2LaborState(previousHolding, settings, false).issues;
-    issues = newHybridLaborIssues(previousIssues.filter((issue) => conserving || !checked.has(issue.personId)
-      || issue.code === "allocation-overtime-days"), issues);
+    issues = newHybridLaborIssues(previousIssues.filter((issue) => conserving || !checked.has(issue.personId)), issues);
     for (const personId of changed) {
       const prior = before.get(personId);
       const occupation = prior && reservedOccupation(previousHolding, prior);

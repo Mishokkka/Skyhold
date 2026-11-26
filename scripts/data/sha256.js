@@ -48,5 +48,5 @@ function sortedJson(value) {
 }
 
 export function canonicalSignatureV1(value) {
-  return `v1:${sha256Hex(sortedJson(JSON.parse(JSON.stringify(value))))}`;
+  return `v1:${sha256Hex(sortedJson(JSON.parse(JSON.stringify(value) ?? "null")))}`;
 }

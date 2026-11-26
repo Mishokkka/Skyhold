@@ -11,7 +11,7 @@ const rowsFor = (person) => Array.isArray(person.workAllocations) ? person.workA
 const personFor = (holding, id) => (holding?.people?.list ?? []).find((person) => text(person.id) === id);
 const lockKey = (personId, row) => JSON.stringify([text(personId), text(row?.sourceId), text(row?.functionId)]);
 const overtimeFor = (row) => allocationTotalQd(row) - allocationNormalQd(row);
-const asChild = (person, options) => options.isChild ?? person.ageGroup === "Ре";
+const asChild = (person, options) => options.isChild ?? (person?.ageGroup === "Ре");
 const fail = (message) => ({ ok: false, message });
 
 function validateDraft(holding, draft, options, replacedPersonId, { checkedPersonIds, conserving } = {}) {
@@ -46,16 +46,7 @@ function cleanAdmissionOverrides(holding, person, requested) {
 }
 
 function releaseOccupation(holding, person) {
-  const id = text(person.id);
-  clearPersonFromAssignments(holding, id);
-  for (const ship of holding.special?.ships?.list ?? []) {
-    const assignment = person.shipAssignment;
-    if (assignment?.shoreDuty === true && (!text(assignment.shipId) || text(assignment.shipId) === text(ship.id))) continue;
-    for (const field of ["crewResidentIds", "coCommanderResidentIds"]) {
-      if (ship[field]?.some((value) => text(value) === id)) ship[field] = ship[field].filter((value) => text(value) !== id);
-    }
-    if (text(ship.commanderResidentId) === id) { ship.commanderResidentId = ""; ship.commanderName = ""; }
-  }
+  clearPersonFromAssignments(holding, text(person.id));
   person.workAssignment = "";
 }
 
@@ -66,7 +57,8 @@ function prepare(holding, person, nextAllocations, options, replaced) {
   person.workAllocations = nextAllocations.map((row, index) => normalizeWorkAllocation(row, index));
   const active = residentActiveQd(person) > 0;
   if (active) person.workAllocationMode = WORK_ALLOCATION_MODE_EXPLICIT;
-  const replacing = active && occupation && options.replaceOccupation === true && !residentLaborUnavailableReason(holding, person);
+  const replacing = active && occupation && occupation.kind !== "ship" && options.replaceOccupation === true
+    && !residentLaborUnavailableReason(holding, person);
   if (replacing) {
     releaseOccupation(holding, person);
     replaced.push(text(person.id));
@@ -111,7 +103,7 @@ export function mutateResidentBuildingLabor(holding, {
 }
 
 export function applyResidentEditorAllocations(holding, personId, options = {}) {
-  const { nextAllocations, admissionOverrideBuildingIds, replaceOccupation = false, isChild = false } = options;
+  const { nextAllocations, admissionOverrideBuildingIds, replaceOccupation = false, isChild } = options;
   if (!Array.isArray(nextAllocations)) return fail("Не задан план QD жителя.");
   if (admissionOverrideBuildingIds != null && !Array.isArray(admissionOverrideBuildingIds)) return fail("Некорректный список допусков к работе.");
   const draft = structuredClone(holding);
@@ -138,11 +130,11 @@ export function applyWorkforcePlanAllocations(holding, { updates, ...options } =
   return finish(holding, draft, options, replaced, { checkedPersonIds: [...seen] });
 }
 
-export function clearResidentBuildingLabor(holding, person, buildingId, { isChild = false } = {}) {
+export function clearResidentBuildingLabor(holding, person, buildingId, { isChild } = {}) {
   if (text(buildingId)) clearResidentLaborAllocations(holding, person, { buildingId, isChild });
 }
 
-export function clearResidentAllBuildingLabor(holding, person, { isChild = false } = {}) {
+export function clearResidentAllBuildingLabor(holding, person, { isChild } = {}) {
   clearResidentLaborAllocations(holding, person, { isChild });
 }
 

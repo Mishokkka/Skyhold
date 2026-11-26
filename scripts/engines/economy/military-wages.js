@@ -4,9 +4,9 @@ export const MILITARY_DAILY_RATES = Object.freeze({
 
 export function militaryDailyWage(holding = {}, person = {}) {
   const override = person.wageDailyOverrideCopper;
+  if (Number.isSafeInteger(override) && override > 0) return override;
   const relative = Number(person.militarySalaryModifier);
   const unifiedWage = person.militarySalaryModifier != null && Number.isFinite(relative);
-  if (unifiedWage && Number.isSafeInteger(override) && override > 0) return override;
   const modifier = Math.trunc(Number(person.salaryModifier) || 0) + (unifiedWage ? Math.trunc(relative) : 0);
   const defense = holding.gm?.defense ?? {};
   if (person.workAssignment === "defenseCommander") {

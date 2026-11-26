@@ -3,7 +3,7 @@ import { createDefaultPoliticsState, POLITICS_STATE_VERSION } from "./politics-s
 import { allocationTotalQd } from "./labor-primitives.js";
 import { syncResidentLaborRole } from "./labor-role.js";
 
-export function clearResidentLaborAllocations(holding, person, { buildingId = "", isChild = false } = {}) {
+export function clearResidentLaborAllocations(holding, person, { buildingId = "", isChild } = {}) {
   if (!person) return;
   const id = String(buildingId ?? "").trim();
   const rows = Array.isArray(person.workAllocations) ? person.workAllocations : [];
@@ -15,7 +15,7 @@ export function clearResidentLaborAllocations(holding, person, { buildingId = ""
       building.workerAdmissionOverrideIds = building.workerAdmissionOverrideIds.filter((value) => String(value) !== String(person.id));
     }
   }
-  syncResidentLaborRole(person, { isChild });
+  syncResidentLaborRole(person, { isChild: isChild ?? (person.ageGroup === "Ре") });
 }
 
 /** Explicit office vacancy, independent of ordinary changes of job. */

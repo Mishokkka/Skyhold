@@ -9,7 +9,7 @@ import { DEFAULT_NORMAL_LABOR_QD, DEFAULT_NORMAL_LABOR_QD_V2, TENDAY_WORKING_DAY
   holdingDaysOffPerTenday, holdingNormalLaborQd, daysOffConflictSummary, normalLaborQdPerTenday, residentLaborCapacity } from "../data/labor-budget.js";
 import { buildingAcceptsWorkers, buildingAvailableCapacityQd, buildingCapacityQd, buildingMinOperationalQd,
   buildingWorkReservations, normalizeBuildingLabor, productionPreparationGoal, reservedOccupation } from "../data/labor-model.js";
-import { functionDailyRate, targetAllowsOvertime, remainingCollectionQd, validateHoldingWorkAllocations,
+import { buildWorkAllocationTargets, functionDailyRate, targetAllowsOvertime, remainingCollectionQd, validateHoldingWorkAllocations,
   allocationNormalQd as reexportNormal, allocationTotalQd as reexportTotal } from "../data/work-allocations.js";
 import { clearResidentLaborAllocations } from "../data/resident-assignments.js";
 import { mutateResidentBuildingLabor, applyResidentEditorAllocations, applyWorkforcePlanAllocations, clearResidentBuildingLabor,
@@ -51,6 +51,7 @@ test("SHA-256 vectors, UTF-8, and canonical JSON", () => {
   for (const input of ["Теньдень 🌒", "x".repeat(64), "x".repeat(1000)]) {
     assert.equal(sha256Hex(input), createHash("sha256").update(input).digest("hex"));
   }
+  assert.equal(canonicalSignatureV1(undefined), canonicalSignatureV1(null));
   const signature = canonicalSignatureV1({ 2: "two", 10: "ten", z: [{ b: true, a: null }, 3] });
   assert.equal(signature, `v1:${sha256Hex('{"10":"ten","2":"two","z":[{"a":null,"b":true},3]}')}`);
   assert.equal(signature, canonicalSignatureV1({ z: [{ a: null, b: true }, 3], 10: "ten", 2: "two" }));
@@ -145,7 +146,7 @@ test("v72 schema, world setting, and military wage calculations remain compatibl
   const army = holding(soldier);
   army.gm = { defense: { squads: [{ type: "cavalry", sergeantId: soldier.id }] } };
   assert.equal(militaryDailyWage(army, soldier), 27);
-  assert.equal(militaryDailyWage(army, { ...soldier, wageDailyOverrideCopper: 70 }), 27);
+  assert.equal(militaryDailyWage(army, { ...soldier, wageDailyOverrideCopper: 70 }), 70);
   assert.equal(militaryDailyWage(army, { ...soldier, militarySalaryModifier: -2 }), 25);
   assert.equal(militaryDailyWage(army, { ...soldier, militarySalaryModifier: 4, wageDailyOverrideCopper: 32 }), 32);
   assert.equal(militaryDailyWage(army, { ...soldier, workAssignment: "defenseCommander", militarySalaryModifier: 4 }), 33);
@@ -171,6 +172,12 @@ test("building capacity has explicit zero/unlimited forms; preparation goals res
   assert.equal(productionPreparationGoal(home, "mill", "production:one"), 8);
   assert.equal(productionPreparationGoal(home, "mill", "production:two"), 15);
   assert.equal(productionPreparationGoal(home, "absent", "production:two"), 0);
+});
+
+test("passive v2 buildings expose no labor targets", () => {
+  const home = holding(resident(), [building("mill", { labor: { version: 2, capacityQd: 0 } })]);
+  assert.deepEqual(buildWorkAllocationTargets(home, { v2: true }), []);
+  rejected(home, () => add(home), "allocation-unknown");
 });
 
 test("targeted add, set, and remove preserve other rows and synchronize roles", () => {
@@ -200,12 +207,14 @@ test("wages reject unpaid work without volunteering and reject zero or non-integ
   assert.equal(personIn(home).workAllocations[0].volunteer, true);
   const donated = holding(resident({ volunteerLabor: true }), [unpaid]);
   assert.equal(add(donated).ok, true);
+  const zeroOverride = holding(resident({ wageDailyOverrideCopper: 0 }), [unpaid]);
+  rejected(zeroOverride, () => add(zeroOverride), "invalid-wage-override");
   for (const wageDailyOverrideCopper of [0, -1, 2.5, "12", ""]) {
     const invalid = holding(resident({ wageDailyOverrideCopper, volunteerLabor: true }));
     rejected(invalid, () => add(invalid), "invalid-wage-override");
   }
   const overrideOnly = holding(resident({ wageDailyOverrideCopper: 6 }), [unpaid]);
-  rejected(overrideOnly, () => add(overrideOnly), "work-target-unpaid");
+  assert.equal(add(overrideOnly).ok, true);
   const payable = holding(resident({ wageDailyOverrideCopper: 6 }));
   assert.equal(add(payable).ok, true);
   assert.equal(functionDailyRate(building("mill", { productionLines: [production("one", { wageDailyCopper: 19 })] }), "production:one"), 19);
@@ -226,16 +235,17 @@ test("unavailable residents cannot add labor even with explicit replacement", ()
 });
 
 test("ship commander, co-commander, and crew reserve labor except on their shore-duty ship", () => {
-  for (const ship of [{ commanderResidentId: "resident" }, { coCommanderResidentIds: ["resident"] }, { crewResidentIds: ["resident"] }]) {
+  for (const ship of [{ commanderResidentId: "resident", commanderName: "Тихон" }, { coCommanderResidentIds: ["resident"] }, { crewResidentIds: ["resident"] }]) {
     const home = holding();
     home.special = { ships: { list: [{ ...ship, id: "airship", status: "docked" }] } };
     assert.equal(reservedOccupation(home, personIn(home)).kind, "ship");
     rejected(home, () => add(home), "reserved-occupation");
+    rejected(home, () => add(home, { replaceOccupation: true }), "reserved-occupation");
     personIn(home).shipAssignment = { shipId: "different", shoreDuty: true };
     assert.equal(reservedOccupation(home, personIn(home)).kind, "ship");
     personIn(home).shipAssignment = { shipId: "airship", away: true, shoreDuty: true };
     assert.equal(reservedOccupation(home, personIn(home)), null);
-    assert.equal(add(home).ok, true);
+    assert.equal(add(home, { replaceOccupation: true }).ok, true);
     assert.deepEqual(home.special.ships.list[0], { ...ship, id: "airship", status: "docked" });
   }
 });
@@ -285,6 +295,22 @@ test("availability, admission, composition warnings, and capacity are separate c
   assert.deepEqual(home.buildings.list[0].workerAdmissionOverrideIds, []);
 });
 
+test("v2 composition warnings exclude optional Wonderworker slots", () => {
+  const home = holding(resident(), [building("mill", { workerProfile: { composition: [{ count: 1, group: "ЧУДОТВОРЕЦ" }] } })]);
+  const check = add(home);
+  assert.equal(check.ok, true);
+  assert.deepEqual(check.warnings, []);
+});
+
+test("medical buildings allow overtime by default when enabled", () => {
+  for (const templateId of ["lazaret", "hospital"]) {
+    const home = holding(resident(), [building("clinic", { templateId, medical: { enabled: true } })]);
+    const work = { buildingId: "clinic", functionId: "medical", overtimeQd: 2 };
+    rejected(home, () => add(home, { ...work, allowMedicalOvertime: false }), "allocation-overtime");
+    assert.equal(add(home, { ...work, allowMedicalOvertime: true }).ok, true);
+  }
+});
+
 test("medical overtime and collection work honor their target rules", () => {
   const medical = building("clinic", { medical: { enabled: true, overtimeAllowed: true } });
   const home = holding(resident(), [medical]);
@@ -315,6 +341,12 @@ test("days off and assigned normal QD cap overtime for adults and children", () 
   rejected(child, () => add(child, { normalQd: 5 }), "allocation-normal-cap");
   rejected(child, () => add(child, { normalQd: 4, overtimeQd: 1 }), "allocation-overtime-cap");
   assert.equal(add(child).ok, true);
+});
+
+test("setting a plan rejects an existing overtime-days violation even when reduced", () => {
+  const home = holding(resident({ workAllocations: [allocation("mill", 2, 3)] }));
+  rejected(home, () => add(home, { action: "set", normalQd: 2, overtimeQd: 2 }), "allocation-overtime-days");
+  assert.equal(add(home, { action: "set", normalQd: 2, overtimeQd: 1 }).ok, true);
 });
 
 test("removal rejects orphaned overtime and explicit clearing remains available for demolition", () => {
@@ -399,6 +431,20 @@ test("scoped clear removes only matching assignments and override IDs", () => {
   clearResidentAllBuildingLabor(home, person, { isChild: true });
   assert.equal(person.role, "Ребенок");
   assert.deepEqual(home.buildings.list.map((row) => row.workerAdmissionOverrideIds), [["keep"], []]);
+});
+
+test("clearing a child's last allocation restores the child role without an explicit flag", () => {
+  for (const clear of [
+    clearResidentLaborAllocations,
+    clearResidentAllBuildingLabor,
+    (home, person) => clearResidentBuildingLabor(home, person, "mill"),
+    (home, person) => assert.equal(applyResidentEditorAllocations(home, person.id, { ...options, nextAllocations: [] }).ok, true)
+  ]) {
+    const home = holding(resident({ ageGroup: "Ре", age: 12, role: "План QD", workAllocations: [allocation("mill", 2)] }));
+    clear(home, personIn(home));
+    assert.deepEqual(personIn(home).workAllocations, []);
+    assert.equal(personIn(home).role, "Ребенок");
+  }
 });
 
 test("cross-holding transfer cleans labor, locks, and source links or changes neither side", () => {
