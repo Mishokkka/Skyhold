@@ -424,11 +424,13 @@ export function buildPlannedWorkSlots(assignments = [], periodQd = 40, { normalQ
   const elapsed = whole(periodQd);
   const normalDaily = Math.max(0, Math.min(2, whole(normalQdPerDay, 2)));
   const overtimeDaily = normalDaily >= 2 ? Math.max(0, Math.min(1, whole(overtimeQdPerDay, 1))) : 0;
+  const allNormalSteps = [];
   const normalSteps = [];
   const overtimeSteps = [];
   for (let step = 0; step < elapsed; step += 1) {
-    if (Math.floor(step / 4) % 10 >= workingDays) continue;
     const withinDay = step % 4;
+    if (withinDay < normalDaily) allNormalSteps.push(step);
+    if (Math.floor(step / 4) % 10 >= workingDays) continue;
     if (withinDay < normalDaily) normalSteps.push(step);
     else if (withinDay < normalDaily + overtimeDaily) overtimeSteps.push(step);
   }
@@ -443,9 +445,9 @@ export function buildPlannedWorkSlots(assignments = [], periodQd = 40, { normalQ
   const slots = new Map();
   const queued = normalQueue.slice(0, normalSteps.length);
   if (queued.some((row) => row.functionId === "livestock")) {
-    // Daily care must not be packed into the first five days of a tenday.
-    // Spread each herd's paid QD over the days. Other work fills the remaining slots.
-    const takeFirstFree = () => normalSteps.find((step) => !slots.has(step));
+    // Livestock needs daily care across all 10 days including Shadowday, while keeping
+    // the resident's tenday normal budget capped at normalSteps.length.
+    const takeFirstFree = () => normalSteps.find((step) => !slots.has(step)) ?? allNormalSteps.find((step) => !slots.has(step));
     const herds = new Map();
     for (const row of queued.filter((row) => row.functionId === "livestock")) {
       if (!herds.has(row.sourceId)) herds.set(row.sourceId, []);
@@ -453,10 +455,15 @@ export function buildPlannedWorkSlots(assignments = [], periodQd = 40, { normalQ
     }
     for (const rows of herds.values()) {
       while (rows.length) {
+        let placed = false;
         for (let day = 0; day * 4 < elapsed && rows.length; day += 1) {
-          const step = normalSteps.find((value) => Math.floor(value / 4) === day && !slots.has(value));
-          if (step !== undefined) slots.set(step, rows.shift());
+          const step = allNormalSteps.find((value) => Math.floor(value / 4) === day && !slots.has(value));
+          if (step !== undefined) {
+            slots.set(step, rows.shift());
+            placed = true;
+          }
         }
+        if (!placed) break;
       }
     }
     for (const row of queued.filter((row) => row.functionId !== "livestock")) slots.set(takeFirstFree(), row);

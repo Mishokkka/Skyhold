@@ -22,7 +22,25 @@ function signedRound(value = 0) {
   return Math.sign(numeric) * Math.round(Math.abs(numeric));
 }
 
+const ACTIVE_SETTLED_TENDAY_INDEX = new WeakMap();
+
+export function withSettledTendayIndex(holding, index, fn) {
+  if (!holding || typeof holding !== "object") return fn();
+  const hadPrevious = ACTIVE_SETTLED_TENDAY_INDEX.has(holding);
+  const previous = ACTIVE_SETTLED_TENDAY_INDEX.get(holding);
+  ACTIVE_SETTLED_TENDAY_INDEX.set(holding, whole(index));
+  try {
+    return fn();
+  } finally {
+    if (hadPrevious) ACTIVE_SETTLED_TENDAY_INDEX.set(holding, previous);
+    else ACTIVE_SETTLED_TENDAY_INDEX.delete(holding);
+  }
+}
+
 function completedTendayIndex(holding = {}) {
+  if (holding && typeof holding === "object" && ACTIVE_SETTLED_TENDAY_INDEX.has(holding)) {
+    return ACTIVE_SETTLED_TENDAY_INDEX.get(holding);
+  }
   return Math.max(0, Math.floor(whole(holding?.gm?.calendaria?.lastQd) / 40));
 }
 

@@ -1,4 +1,5 @@
 import { buildWorkAllocationTargets, workAllocationTargetKey, validateHoldingWorkAllocations } from "./work-allocations.js";
+import { allocationFunctionId, allocationNormalQd, allocationSourceId, allocationTotalQd } from "./labor-primitives.js";
 import { isResidentRestingOnShip } from "./resident-presence.js";
 import { normalLaborQdPerTenday, residentLaborCapacity } from "./labor-budget.js";
 import { reservedOccupation, residentLaborUnavailableReason } from "./labor-model.js";
@@ -101,9 +102,49 @@ export function workforcePlanChangeError(holding, plan, { isGM = false } = {}) {
   return "";
 }
 
+function allocationPairFor(holding, personId, sourceId, functionId) {
+  const person = (holding?.people?.list ?? []).find((entry) => String(entry?.id ?? "") === String(personId ?? ""));
+  const key = workAllocationTargetKey(sourceId, functionId);
+  let normal = 0;
+  let overtime = 0;
+  for (const row of person?.workAllocations ?? []) {
+    if (workAllocationTargetKey(allocationSourceId(row), allocationFunctionId(row)) !== key) continue;
+    const n = allocationNormalQd(row);
+    const total = allocationTotalQd(row);
+    normal += n;
+    overtime += Math.max(0, total - n);
+  }
+  return [normal, overtime];
+}
+
+export function lockedAllocationChangeError(beforeHolding, afterHolding, nextPlan = workforcePlan(afterHolding), { isGM = false } = {}) {
+  const beforeLocks = new Map((workforcePlan(beforeHolding).locks ?? []).map((row) => [workforceLockKey(row), row]));
+  const afterLocks = new Map(((nextPlan ?? workforcePlan(afterHolding)).locks ?? []).map((row) => [workforceLockKey(row), row]));
+  const buildings = new Map((beforeHolding?.buildings?.list ?? []).map((row) => [String(row.id), row]));
+  const people = new Map((beforeHolding?.people?.list ?? []).map((row) => [String(row.id), row]));
+  for (const [key, lock] of beforeLocks) {
+    if (!afterLocks.has(key)) continue;
+    const [beforeN, beforeO] = allocationPairFor(beforeHolding, lock.personId, lock.sourceId, lock.functionId);
+    const [afterN, afterO] = allocationPairFor(afterHolding, lock.personId, lock.sourceId, lock.functionId);
+    if (beforeN !== afterN || beforeO !== afterO) {
+      return !isGM && !isWorkforcePlanRowVisible(lock, { buildings, people, isGM })
+        ? "Назначение недоступно. Обновите окно или обратитесь к ГМу."
+        : "Сначала снимите закрепление назначения.";
+    }
+  }
+  for (const [key, lock] of afterLocks) {
+    if (beforeLocks.has(key)) continue;
+    const [afterN, afterO] = allocationPairFor(afterHolding, lock.personId, lock.sourceId, lock.functionId);
+    if (afterN + afterO <= 0) return "Закрепить можно только активное назначение.";
+  }
+  return "";
+}
+
 export function workforceChangeError(before, after, options) {
   const planError = workforcePlanChangeError(before, workforcePlan(after), options);
   if (planError) return planError;
+  const lockError = lockedAllocationChangeError(before, after, workforcePlan(after), options);
+  if (lockError) return lockError;
   const { issues } = validateHoldingWorkAllocations(after, { previousHolding: before });
   return workforceIssueMessage(after, issues[0], options);
 }

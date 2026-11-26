@@ -278,11 +278,16 @@ export function workforceCandidate(model, person, task, service, { fromKey = "" 
     assignmentText: person.allocations.filter(hasWork).map((row) => `${row.label.split(" · ").slice(0, 2).join(" · ")}: ${row.normalQd}+${row.overtimeQd}`).join("; ") };
 }
 
-export function setWorkforceAllocation(draft, personId, task, normalQd, overtimeQd = 0) {
+export function setWorkforceAllocation(draft, personId, task, normalQd, overtimeQd = 0, { isGM = true } = {}) {
   if (![normalQd, overtimeQd].every((value) => Number.isSafeInteger(value) && value >= 0)) throw new Error("Введите целое неотрицательное число QD.");
   const rows = draft.allocations[personId] ?? [];
   const previous = rows.find((row) => workforceKey(row) === task.key);
-  if ((draft.plan?.locks ?? []).some((row) => row.personId === personId && workforceKey(row) === task.key)) throw new Error("Сначала снимите закрепление назначения.");
+  const existingLock = (draft.plan?.locks ?? []).find((row) => String(row.personId) === String(personId) && workforceKey(row) === task.key);
+  if (existingLock) {
+    throw new Error(!isGM && existingLock.visibility === "gm"
+      ? "Назначение недоступно. Обновите окно или обратитесь к ГМу."
+      : "Сначала снимите закрепление назначения.");
+  }
   const row = { ...(previous ?? { schemaVersion: 1, id: `planner-${personId}-${task.key}`, sourceId: task.sourceId, functionId: task.functionId }), normalQd, overtimeQd };
   draft.allocations[personId] = previous ? rows.map((value) => value === previous ? row : value) : [...rows, row];
   draft.allocations[personId] = draft.allocations[personId].filter(hasWork);
@@ -292,6 +297,7 @@ export function setWorkforceAllocation(draft, personId, task, normalQd, overtime
 /** One reversible edit: move only the requested QD, validate the complete result. */
 export function reviseWorkforceAssignment(holding, draft, service, { personId, targetKey, fromKey = "", normalQd, overtimeQd = 0, add = false, ...options }) {
   const next = clone(draft);
+  const isGM = options.isGM === true;
   let model = buildWorkforceModel(holding, next, service, options);
   let person = model.people.find((row) => row.id === personId);
   if (!person) throw new Error("Житель недоступен для распределения.");
@@ -302,7 +308,7 @@ export function reviseWorkforceAssignment(holding, draft, service, { personId, t
     const source = person.allocations.find((row) => row.key === fromKey);
     const releasedQd = normalQd + overtimeQd;
     if (!source || normalQd > source.normalQd || overtimeQd > source.overtimeQd || !releasedQd) throw new Error("Для переноса не хватает QD в исходном назначении.");
-    setWorkforceAllocation(next, personId, source, source.normalQd - normalQd, source.overtimeQd - overtimeQd);
+    setWorkforceAllocation(next, personId, source, source.normalQd - normalQd, source.overtimeQd - overtimeQd, { isGM });
     model = buildWorkforceModel(holding, next, service, options);
     person = model.people.find((row) => row.id === personId);
   }
@@ -312,7 +318,7 @@ export function reviseWorkforceAssignment(holding, draft, service, { personId, t
   if (candidate.reason) throw new Error(candidate.reason);
   setWorkforceAllocation(next, personId, task,
     normalQd + (fromKey || add ? candidate.existingNormal : 0),
-    overtimeQd + (fromKey || add ? candidate.existingOvertime : 0));
+    overtimeQd + (fromKey || add ? candidate.existingOvertime : 0), { isGM });
   const error = workforceDraftError(holding, next, options);
   if (error) throw new Error(error);
   return next;
@@ -369,6 +375,11 @@ export function proposeWorkforceAssignments(holding, draft, service, { isGM = fa
       const livePerson = model.people.find((row) => row.id === person.id);
       const candidate = workforceCandidate(model, livePerson, task, service);
       if (candidate.reason || !candidate.free) { if (personIds) skipped.push(`${candidate.name}: ${candidate.reason || "нет свободных QD"}`); continue; }
+      const hiddenOrLocked = (proposed.plan?.locks ?? []).find((row) => String(row.personId) === String(candidate.id) && workforceKey(row) === task.key);
+      if (hiddenOrLocked) {
+        if (personIds) skipped.push(`${candidate.name}: ${isGM || hiddenOrLocked.visibility !== "gm" ? "назначение закреплено" : "назначение недоступно"}`);
+        continue;
+      }
       const needed = qd === "all" ? candidate.free : qd !== null ? Number(qd)
         : Math.max(task.remaining, effectGap(), task.missedDays * task.dailyNeed, Math.ceil(task.effectiveRemaining / Math.max(0.01, candidate.effectiveLabor)), coreIds.size);
       if (!needed) continue;
@@ -382,7 +393,7 @@ export function proposeWorkforceAssignments(holding, draft, service, { isGM = fa
         let bestGap = task.careGap, bestAdd = 0;
         for (let amount = 1; amount <= candidate.free; amount += 1) {
           const trial = clone(proposed);
-          setWorkforceAllocation(trial, candidate.id, task, candidate.existingNormal + amount, candidate.existingOvertime);
+          setWorkforceAllocation(trial, candidate.id, task, candidate.existingNormal + amount, candidate.existingOvertime, { isGM });
           const gap = buildWorkforceModel(holding, trial, service, { isGM, presenceHolding }).taskMap.get(task.key).careGap;
           if (gap < bestGap) { bestGap = gap; bestAdd = amount; }
           if (!gap) break;
@@ -396,7 +407,7 @@ export function proposeWorkforceAssignments(holding, draft, service, { isGM = fa
       }
       if (!add) continue;
       const attempt = clone(proposed);
-      setWorkforceAllocation(attempt, candidate.id, task, candidate.existingNormal + add, candidate.existingOvertime);
+      setWorkforceAllocation(attempt, candidate.id, task, candidate.existingNormal + add, candidate.existingOvertime, { isGM });
       const error = workforceDraftError(holding, attempt, { isGM });
       if (error) { skipped.push(`${candidate.name}: ${error}`); continue; }
       Object.assign(proposed, attempt);
@@ -419,9 +430,13 @@ export function proposeWorkforceIdleReview(holding, draft, service, { isGM = fal
   const proposed = clone(draft), model = buildWorkforceModel(holding, draft, service, { isGM, presenceHolding }), changes = [], skipped = [];
   for (const task of model.tasks.filter((row) => row.certainIdle)) {
     for (const assignment of task.assignments) {
-      if (assignment.locked) { skipped.push(`${assignment.name}: назначение закреплено`); continue; }
+      const lockRow = (proposed.plan?.locks ?? []).find((row) => String(row.personId) === String(assignment.personId) && workforceKey(row) === task.key);
+      if (assignment.locked || lockRow) {
+        skipped.push(`${assignment.name}: ${assignment.locked ? "назначение закреплено" : "назначение недоступно"}`);
+        continue;
+      }
       const attempt = clone(proposed);
-      setWorkforceAllocation(attempt, assignment.personId, task, 0, 0);
+      setWorkforceAllocation(attempt, assignment.personId, task, 0, 0, { isGM });
       const error = workforceDraftError(holding, attempt, { isGM });
       if (error) { skipped.push(`${assignment.name}: ${error}`); continue; }
       Object.assign(proposed, attempt);

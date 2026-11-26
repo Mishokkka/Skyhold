@@ -48,7 +48,7 @@ export function buildBuildingLaborWithdrawalCommand({ operationId, holdingId, ex
   };
 }
 
-export function buildResidentAllocationRemovalCommand({ operationId, holdingId, expectedRevision, personId, buildingId, functionId }) {
+export function buildResidentAllocationRemovalCommand({ operationId, holdingId, expectedRevision, personId, buildingId, functionId = "" }) {
   return {
     kind: "remove-resident-allocation",
     operationId,
@@ -56,7 +56,32 @@ export function buildResidentAllocationRemovalCommand({ operationId, holdingId, 
     expectedRevision,
     personId,
     buildingId,
-    functionId
+    ...(functionId ? { functionId } : {})
+  };
+}
+
+export function buildResidentAllocationAddCommand({
+  operationId,
+  holdingId,
+  expectedRevision,
+  personId,
+  buildingId,
+  functionId,
+  normalQd,
+  overtimeQd = 0,
+  allowAdmissionOverride = false
+}) {
+  return {
+    kind: "add-resident-allocation",
+    operationId,
+    holdingId,
+    expectedRevision,
+    personId,
+    buildingId,
+    functionId,
+    normalQd,
+    overtimeQd,
+    ...(allowAdmissionOverride ? { allowAdmissionOverride: true } : {})
   };
 }
 
@@ -78,8 +103,19 @@ export function workforceCommandProblem(raw) {
   }
   if (kind === "remove-resident-allocation") {
     if (Object.keys(raw).some((field) => !["kind", "operationId", "holdingId", "expectedRevision", "personId", "buildingId", "functionId"].includes(field))
-      || !identifier(raw.personId) || !identifier(raw.buildingId) || !identifier(raw.functionId)) {
+      || !identifier(raw.personId) || !identifier(raw.buildingId)
+      || (raw.functionId !== undefined && raw.functionId !== "" && !identifier(raw.functionId))) {
       return "Некорректная команда снятия назначения.";
+    }
+    return "";
+  }
+  if (kind === "add-resident-allocation") {
+    if (Object.keys(raw).some((field) => !["kind", "operationId", "holdingId", "expectedRevision",
+      "personId", "buildingId", "functionId", "normalQd", "overtimeQd", "allowAdmissionOverride"].includes(field))
+      || !identifier(raw.personId) || !identifier(raw.buildingId) || !identifier(raw.functionId)
+      || !whole(raw.normalQd) || !whole(raw.overtimeQd) || raw.normalQd + raw.overtimeQd <= 0
+      || (raw.allowAdmissionOverride !== undefined && typeof raw.allowAdmissionOverride !== "boolean")) {
+      return "Некорректная команда добавления назначения.";
     }
     return "";
   }

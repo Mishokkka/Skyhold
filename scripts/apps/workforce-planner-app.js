@@ -292,7 +292,12 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
           if (!Number.isSafeInteger(value) || value < 0 || value > 1000000) throw new Error("Объём подготовки: целое число от 0 до 1000000 ЕД.; 0 — без ограничения.");
           draft.plan.version = 2;
           draft.plan.productionGoals = (draft.plan.productionGoals ?? []).filter((row) => workforceKey(row) !== task.key);
-          if (value) draft.plan.productionGoals.push({ sourceId: task.sourceId, functionId: task.functionId, preparedUnits: value });
+          if (value) draft.plan.productionGoals.push({
+            sourceId: task.sourceId,
+            functionId: task.functionId,
+            preparedUnits: value,
+            ...(existingGoal?.visibility ? { visibility: existingGoal.visibility } : {})
+          });
         });
         else if (["assign", "all-free"].includes(action) && task) this._change((draft) => {
           const person = model.people.find((row) => row.id === id), candidate = workforceCandidate(model, person, task, this.service);
@@ -310,7 +315,7 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
         });
         else if (action === "remove") this._change((draft) => {
           const row = draft.allocations[id]?.find((entry) => workforceKey(entry) === key);
-          if (row) setWorkforceAllocation(draft, id, { ...row, key }, 0, 0);
+          if (row) setWorkforceAllocation(draft, id, { ...row, key }, 0, 0, { isGM: this.permissions.isGM });
         });
         else if (action === "lock") this._change((draft) => {
           const row = draft.allocations[id]?.find((entry) => workforceKey(entry) === key); if (!row) return;

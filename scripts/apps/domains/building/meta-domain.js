@@ -1,5 +1,6 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import { inferBuildingSpecialKind } from "../../../core/building-specials.js";
+import { DEFAULT_NORMAL_LABOR_QD } from "../../../data/labor-budget.js";
 import {
   CONSTRUCTION_LEADER_WAGE_DAILY_COPPER,
   CONSTRUCTION_WORKER_WAGE_DAILY_COPPER
@@ -245,7 +246,7 @@ _workMoraleForPeriod(person, holding = null, options = {}) {
         assignments = [{
           sourceId: selected,
           functionId: selected,
-          normalQd: 20,
+          normalQd: DEFAULT_NORMAL_LABOR_QD,
           overtimeQd: 0
         }];
       }

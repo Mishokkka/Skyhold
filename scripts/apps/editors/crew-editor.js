@@ -5,8 +5,9 @@ import { PendingFieldSavesMixin } from "../common/pending-field-saves.js";
 import { MODULE_ID } from "../../data/constants.js";
 import { SkyholdData } from "../../data/store.js";
 import { makeId } from "../../data/utils.js";
-import { findReadableHoldingEntry } from "../../data/access-guard.js";
+import { findReadableHoldingEntry, hiddenBuildingIds, residentHasHiddenWork } from "../../data/access-guard.js";
 import { holdingPermissionContext } from "../../data/holding-permissions.js";
+import { droppedLocksForAllocationChange } from "../../data/labor-mutations.js";
 import { escapeHtml, fieldValue, joinList, splitList } from "../../core/helpers.js";
 import { bindGlobalInputGuard, bindInputGuards, unbindGlobalInputGuard } from "../../utils/input-guards.js";
 import { getSkyholdManager, requestSkyholdAppRender } from "../registry.js";
@@ -403,30 +404,35 @@ export class SkyholdCrewEditor extends FloatingTooltipsMixin(PendingFieldSavesMi
     const crewId = String(event.currentTarget?.dataset?.crewId ?? "");
     const manager = getActiveSkyholdManager({ warn: true });
     if (!manager) return;
-    const distributed = await SkyholdData.updateHolding(this.holdingId, (holding) => {
-      const crew = holding?.constructionCrews?.find((item) => String(item.id) === crewId);
-      if (!holding || !crew) return SkyholdData.skipTransaction(false);
-      const leaderId = String(crew.leaderId ?? "");
-      const ids = [...new Set([leaderId, ...(crew.memberIds ?? []).map((id) => String(id ?? ""))].filter(Boolean))];
-      crew.memberIds = [];
-      crew.leaderId = "";
-      crew.distributedIds = [];
-      crew.distributedLeaderId = "";
-      for (const id of ids) {
-        let placed = false;
-        for (const building of holding.buildings?.list ?? []) {
-          if (manager._buildingStatus(building).value !== "built") continue;
-          if (manager._assignPersonToBuilding?.(holding, id, building.id, { replace: true })) { placed = true; break; }
+    try {
+      const distributed = await SkyholdData.updateHolding(this.holdingId, (holding) => {
+        const crew = holding?.constructionCrews?.find((item) => String(item.id) === crewId);
+        if (!holding || !crew) return SkyholdData.skipTransaction(false);
+        const leaderId = String(crew.leaderId ?? "");
+        const ids = [...new Set([leaderId, ...(crew.memberIds ?? []).map((id) => String(id ?? ""))].filter(Boolean))];
+        crew.memberIds = [];
+        crew.leaderId = "";
+        crew.distributedIds = [];
+        crew.distributedLeaderId = "";
+        for (const id of ids) {
+          let placed = false;
+          for (const building of holding.buildings?.list ?? []) {
+            if (manager._buildingStatus(building).value !== "built") continue;
+            if (manager._assignPersonToBuilding?.(holding, id, building.id, { replace: true })) { placed = true; break; }
+          }
+          if (!placed) manager._setPersonFree(holding, id);
         }
-        if (!placed) manager._setPersonFree(holding, id);
-      }
-      crew.distributedLeaderId = leaderId;
-      crew.distributedIds = ids;
-      crew.distributed = true;
-      return true;
-    }, { fallback: false, reason: "crew-editor:distribute-crew" });
-    if (!distributed) return;
-    this.requestRender();
+        crew.distributedLeaderId = leaderId;
+        crew.distributedIds = ids;
+        crew.distributed = true;
+        return true;
+      }, { fallback: false, reason: "crew-editor:distribute-crew" });
+      if (!distributed) return;
+      this.requestRender();
+    } catch (error) {
+      ui.notifications?.warn?.(error?.message || "Не удалось распределить бригаду.");
+      this.requestRender();
+    }
   }
 
   async _onReturnCrew(event) {
@@ -435,21 +441,78 @@ export class SkyholdCrewEditor extends FloatingTooltipsMixin(PendingFieldSavesMi
     const crewId = String(event.currentTarget?.dataset?.crewId ?? "");
     const manager = getActiveSkyholdManager({ warn: true });
     if (!manager) return;
-    const returned = await SkyholdData.updateHolding(this.holdingId, (holding) => {
-      const crew = holding?.constructionCrews?.find((item) => String(item.id) === crewId);
-      if (!holding || !crew) return SkyholdData.skipTransaction(false);
-      const ids = [...(crew.distributedIds ?? [])].filter(Boolean);
-      const leaderId = String(crew.distributedLeaderId ?? "");
-      crew.memberIds = [];
-      for (const id of ids) manager._setCrewSlot(holding, crew.id, crew.memberIds.length, id);
-      if (leaderId) manager._setCrewLeader(holding, crew.id, leaderId);
-      crew.distributedIds = [];
-      crew.distributedLeaderId = "";
-      crew.distributed = false;
-      return true;
-    }, { fallback: false, reason: "crew-editor:return-crew" });
-    if (!returned) return;
-    this.requestRender();
+    const isGM = game.user?.isGM === true;
+    const { holding: previewHolding } = findReadableHoldingEntry(SkyholdData.get(), this.holdingId, { fallback: false });
+    const previewCrew = previewHolding?.constructionCrews?.find((item) => String(item.id) === crewId);
+    if (!previewHolding || !previewCrew) return;
+    const previewIds = [...new Set([...(previewCrew.distributedIds ?? []), previewCrew.distributedLeaderId].filter(Boolean))];
+    if (!isGM) {
+      const hidden = hiddenBuildingIds(previewHolding, false);
+      if (previewIds.some((id) => {
+        const person = previewHolding.people?.list?.find((row) => String(row.id) === String(id));
+        return person && residentHasHiddenWork(previewHolding, person, hidden);
+      })) {
+        ui.notifications?.warn?.("Назначение недоступно. Обновите окно или обратитесь к ГМу.");
+        return;
+      }
+    }
+    const dropped = previewIds.flatMap((id) => droppedLocksForAllocationChange(previewHolding, id, []));
+    if (dropped.length) {
+      if (!isGM) {
+        ui.notifications?.warn?.(dropped.some((row) => row.visibility === "gm")
+          ? "Назначение недоступно. Обновите окно или обратитесь к ГМу."
+          : "У части участников бригады есть закреплённые назначения. Сначала снимите закрепления в общем плане работ.");
+        return;
+      }
+      if (!await manager._confirmAction?.("Снять закреплённые назначения",
+        "Возврат бригады снимет закреплённые назначения её участников в общем плане работ. Продолжить?")) return;
+    }
+    let deniedMessage = "";
+    try {
+      const returned = await SkyholdData.updateHolding(this.holdingId, (holding) => {
+        const crew = holding?.constructionCrews?.find((item) => String(item.id) === crewId);
+        if (!holding || !crew) return SkyholdData.skipTransaction(false);
+        const ids = [...(crew.distributedIds ?? [])].filter(Boolean);
+        const leaderId = String(crew.distributedLeaderId ?? "");
+        const returnIds = [...new Set([...ids, leaderId].filter(Boolean))];
+        if (!isGM) {
+          const hidden = hiddenBuildingIds(holding, false);
+          if (returnIds.some((id) => {
+            const person = holding.people?.list?.find((row) => String(row.id) === String(id));
+            return person && residentHasHiddenWork(holding, person, hidden);
+          })) {
+            deniedMessage = "Назначение недоступно. Обновите окно или обратитесь к ГМу.";
+            return SkyholdData.skipTransaction(false);
+          }
+          const innerDropped = returnIds.flatMap((id) => droppedLocksForAllocationChange(holding, id, []));
+          if (innerDropped.length) {
+            deniedMessage = innerDropped.some((row) => row.visibility === "gm")
+              ? "Назначение недоступно. Обновите окно или обратитесь к ГМу."
+              : "У части участников бригады есть закреплённые назначения. Сначала снимите закрепления в общем плане работ.";
+            return SkyholdData.skipTransaction(false);
+          }
+        }
+        crew.memberIds = [];
+        for (const id of ids) manager._setCrewSlot(holding, crew.id, crew.memberIds.length, id);
+        if (leaderId) manager._setCrewLeader(holding, crew.id, leaderId);
+        if (isGM && Array.isArray(holding.workforcePlan?.locks)) {
+          const idSet = new Set(returnIds.map(String));
+          holding.workforcePlan.locks = holding.workforcePlan.locks.filter((row) => !idSet.has(String(row?.personId ?? "")));
+        }
+        crew.distributedIds = [];
+        crew.distributedLeaderId = "";
+        crew.distributed = false;
+        return true;
+      }, { fallback: false, reason: "crew-editor:return-crew" });
+      if (!returned) {
+        if (deniedMessage) ui.notifications?.warn?.(deniedMessage);
+        return;
+      }
+      this.requestRender();
+    } catch (error) {
+      ui.notifications?.warn?.(error?.message || "Не удалось вернуть бригаду.");
+      this.requestRender();
+    }
   }
 
   async _onRollConstructionCrew(event) {

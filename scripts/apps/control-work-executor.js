@@ -1,7 +1,9 @@
 import { SkyholdData } from "../data/store.js";
-import { canReadHolding, canReadResident } from "../data/access-guard.js";
+import { canReadHolding, canReadResident, hiddenBuildingIds, residentHasHiddenWork } from "../data/access-guard.js";
 import { holdingPermissionContext } from "../data/holding-permissions.js";
 import { isSheriffAppointment } from "../data/control-appointments.js";
+import { mutateResidentBuildingLabor } from "../data/labor-mutations.js";
+import { workforceIssueMessage } from "../data/workforce-plan.js";
 import { appendHoldingOperation, findHoldingOperation } from "../data/operations.js";
 import { buildingOperationalState } from "../core/building-state.js";
 import { controlServiceFunctionId } from "../engines/settlement/control.js";
@@ -45,7 +47,9 @@ export async function executeControlWorkOperation(raw = {}, {
     const gmAdmissions = new Map((holding.buildings?.list ?? []).map((building) =>
       [String(building.id), [...(building.workerAdmissionOverrideIds ?? [])]]));
     const person = (holding.people?.list ?? []).find((row) => String(row.id) === residentId);
-    if (residentId && !canReadResident(person, user)) return fail("Житель недоступен.");
+    if (residentId && (!canReadResident(person, user) || (!user?.isGM && residentHasHiddenWork(holding, person, hiddenBuildingIds(holding, false))))) {
+      return fail("Житель недоступен.");
+    }
     let cleared = 0;
     let summary;
     if (action === "sheriff") {
@@ -93,8 +97,19 @@ export async function executeControlWorkOperation(raw = {}, {
           && workFunctionMatches(row.functionId, controlFunction)).map((row) => row.functionId));
         const target = functionId || (occupied.size === 1 ? [...occupied][0] : "");
         if (!target || !occupied.has(target)) return fail("Выберите сохранившееся назначение учреждения.");
-        const removed = manager._removePersonFromBuilding?.(holding, building.id, person.id, { functionId: target });
-        if (!removed) return fail("Рабочее назначение уже изменилось.");
+        const isGM = user?.isGM === true;
+        const check = mutateResidentBuildingLabor(holding, {
+          personId: person.id,
+          buildingId: building.id,
+          functionId: target,
+          action: "remove",
+          isGM
+        });
+        if (!check.ok) {
+          return fail(check.orphanedOvertime
+            ? check.message
+            : (workforceIssueMessage(holding, check.issues?.[0], { isGM }) || check.message || "Рабочее назначение уже изменилось."));
+        }
         cleared = 1;
         summary = `${person.name || "Житель"} освобождён: ${building.name || "Учреждение"}.`;
       }

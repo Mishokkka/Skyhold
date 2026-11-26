@@ -11,7 +11,7 @@ import { normalizeBelief } from "../../../generators/resident-rules.js";
 import { createSafeIcon, escapeHtml, fieldValue } from "../../../core/helpers.js";
 import { makeId } from "../../../data/utils.js";
 import { isResidentAway, isResidentRestingOnShip, shipForResident } from "../../../data/resident-presence.js";
-import { MAX_WORK_ALLOCATIONS_PER_PERSON, parseWorkAllocationTargetKey, validateHoldingWorkAllocations } from "../../../data/work-allocations.js";
+import { buildWorkAllocationTargets, MAX_WORK_ALLOCATIONS_PER_PERSON, parseWorkAllocationTargetKey, validateHoldingWorkAllocations } from "../../../data/work-allocations.js";
 import { loadResidentEditorClass } from "../../lazy-apps.js";
 import { rememberApplicationFocusReturn } from "../../common/window-focus-keeper.js";
 import { syncSelectionSummary } from "../../common/selection-summary.js";
@@ -100,6 +100,29 @@ function keepsCrewLeadership(holding, person, value) {
   if (!value.startsWith("construction-leader:") || String(person.workAssignment ?? "") !== value) return false;
   const crewId = value.slice("construction-leader:".length);
   return (holding.constructionCrews ?? []).some((crew) => String(crew.id) === crewId && String(crew.leaderId ?? "") === String(person.id));
+}
+
+function droppedLocksForWorkAssignmentChange(holding, person, value = "") {
+  if (!holding || !person || keepsCrewLeadership(holding, person, value)) return [];
+  const nextValue = String(value ?? "");
+  const targetBuilding = (holding.buildings?.list ?? []).find((row) => String(row.id) === nextValue);
+  if (targetBuilding) {
+    const target = buildWorkAllocationTargets(holding).find((row) => row.sourceId === nextValue && row.available);
+    return droppedLocksForAllocationChange(holding, person.id, target
+      ? [{ sourceId: nextValue, functionId: target.functionId, normalQd: 1, overtimeQd: 0 }]
+      : []);
+  }
+  return droppedLocksForAllocationChange(holding, person.id, []);
+}
+
+function pruneInactiveResidentLocks(holding, personId) {
+  if (!Array.isArray(holding?.workforcePlan?.locks)) return;
+  const dropped = droppedLocksForAllocationChange(holding, personId,
+    (holding.people?.list ?? []).find((row) => String(row?.id ?? "") === String(personId))?.workAllocations ?? []);
+  if (!dropped.length) return;
+  const droppedSet = new Set(dropped.map((row) => `${row.personId}::${row.sourceId}::${row.functionId}`));
+  holding.workforcePlan.locks = holding.workforcePlan.locks.filter((row) =>
+    !droppedSet.has(`${row.personId}::${row.sourceId}::${row.functionId}`));
 }
 
 function clearRecoveredResidentStatus(person = {}) {
@@ -203,6 +226,22 @@ async _onWorkAssignmentChange(event) {
   const expected = stableDataHash(source.person);
   const building = source.holding.buildings?.list?.find((row) => String(row.id) === value);
   const expectedBuilding = stableDataHash(building);
+  const isGM = Boolean(game.user?.isGM);
+  const droppedLocks = droppedLocksForWorkAssignmentChange(source.holding, source.person, value);
+  if (droppedLocks.length) {
+    if (!isGM) {
+      ui.notifications.warn(droppedLocks.some((row) => row.visibility === "gm")
+        ? "Назначение недоступно. Обновите окно или обратитесь к ГМу."
+        : "Закреплённое назначение нельзя заменить здесь. Сначала снимите закрепление в общем плане работ или удалите строку плана.");
+      this.requestRender();
+      return;
+    }
+    if (!await this._confirmAction("Снять закреплённое назначение",
+      "Смена места работы заменит текущие назначения и снимет их закрепление в общем плане работ. Продолжить?")) {
+      this.requestRender();
+      return;
+    }
+  }
   try {
     const decision = await this._workAssignmentAdmissionDecision(data, path, value);
     if (!decision.allowed) {
@@ -218,12 +257,16 @@ async _onWorkAssignmentChange(event) {
         return SkyholdData.skipTransaction({ stale: true });
       }
       if (keepsCrewLeadership(holding, person, value)) return SkyholdData.skipTransaction(null);
+      if (!game.user?.isGM && droppedLocksForWorkAssignmentChange(holding, person, value).length) {
+        return SkyholdData.skipTransaction({ warnNoSlot: true });
+      }
       if (targetBuilding) {
         const ok = this._assignPersonToBuilding(holding, person.id, value, { ...decision, replace: true });
         return ok ? { warnNoSlot: false } : SkyholdData.skipTransaction({ warnNoSlot: true });
       }
       if (value && residentLaborUnavailableReason(holding, person)) return SkyholdData.skipTransaction({ warnNoSlot: true });
       this._clearPersonFromAssignments(holding, person.id);
+      pruneInactiveResidentLocks(holding, person.id);
       if (!value) {
         person.workAssignment = "";
         this._setPersonFree?.(holding, person.id);
@@ -926,6 +969,25 @@ async _savePersonEditorDraft(event) {
       workUpdate = null;
     }
   }
+  if (workUpdate && currentHolding && (previewPerson || currentPerson)) {
+    const targetPerson = currentPerson ?? previewPerson;
+    const isGM = Boolean(game.user?.isGM);
+    const dropped = droppedLocksForWorkAssignmentChange(currentHolding, targetPerson, workUpdate.value);
+    if (dropped.length) {
+      if (!isGM) {
+        ui.notifications.warn(dropped.some((row) => row.visibility === "gm")
+          ? "Назначение недоступно. Обновите окно или обратитесь к ГМу."
+          : "Закреплённое назначение нельзя заменить здесь. Сначала снимите закрепление в общем плане работ или удалите строку плана.");
+        this.requestRender?.();
+        return false;
+      }
+      if (!await this._confirmAction("Снять закреплённое назначение",
+        "Смена места работы заменит текущие назначения и снимет их закрепление в общем плане работ. Продолжить?")) {
+        this.requestRender?.();
+        return false;
+      }
+    }
+  }
 
   let previewExplicitBuildingIds = new Set();
   if (previewPerson && currentHolding && !hiddenWork && !workUpdate && updatesWorkAllocations) {
@@ -1058,12 +1120,16 @@ async _savePersonEditorDraft(event) {
         // Saving unrelated resident fields must not vacate and requalify an existing foreman.
         const keepLeader = holding && person && keepsCrewLeadership(holding, person, value);
         if (holding && person && !keepLeader && value !== "__mixed__") {
+          if (!game.user?.isGM && droppedLocksForWorkAssignmentChange(holding, person, value).length) {
+            return SkyholdData.skipTransaction({ warnNoSlot: true });
+          }
           if (approvedBuilding) {
             const ok = this._assignPersonToBuilding?.(holding, person.id, value, { ...workDecision, replace: true });
             if (!ok) return SkyholdData.skipTransaction({ warnNoSlot: true });
           } else {
             if (value && residentLaborUnavailableReason(holding, person)) return SkyholdData.skipTransaction({ warnNoSlot: true });
             this._clearPersonFromAssignments?.(holding, person.id);
+            pruneInactiveResidentLocks(holding, person.id);
             if (!value) {
               person.workAssignment = "";
               this._setPersonFree?.(holding, person.id);

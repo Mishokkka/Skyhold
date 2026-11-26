@@ -12,7 +12,7 @@ import { scaleProductionCosts } from "../../../core/production-expenses.js";
 import { advanceBuildingProject, buildingOperationalState } from "../../../core/building-state.js";
 import { hiddenBuildingIds } from "../../../data/access-guard.js";
 import { isMedicalBuilding } from "../../../core/building-specials.js";
-import { buildingActiveWorkerSummary, buildingServiceFunctionId } from "../../../engines/economy/building-service.js";
+import { buildingActiveWorkerSummary, buildingServiceFunctionId, withSettledTendayIndex } from "../../../engines/economy/building-service.js";
 import { evaluateArithmeticExpression, rollInlineDice } from "../../../core/formula.js";
 import {
   normalizeResourceId,
@@ -1389,7 +1389,7 @@ async _runProductionAndLivestockForQd(holding, qd, report, { operationId = "", b
       if ((step + 1) % 4) return;
       const livestockResult = this._runLivestockForQd(holding, 4, report, {
         operationId: operationId ? `${operationId}:livestock:day-${(step + 1) / 4}` : "",
-        workerContext, financeContext, stepOffset: step - 3, cycleQd: 4
+        workerContext, financeContext, budgets, stepOffset: step - 3, cycleQd: 4
       });
       if (!livestockResult.ok) throw new Error(livestockResult.message || "Не удалось рассчитать животноводство.");
     }
@@ -1598,18 +1598,21 @@ async _runEconomyForQd(holding, periodQd = 40, { operationId = "", createdAt = "
     workerContext
   });
   this._recordBuildingServiceActivity(holding, report, financeContext, budgets);
-  // Final political rewards observe the services that actually worked this period.
-  const finalPoliticsContext = politicsDecisionContext(holding, this, { data });
-  delete finalPoliticsContext.networkPaid;
-  report.politics.effects = refreshPoliticsPeriodEffects(holding, politicsPeriod, {
-    context: finalPoliticsContext, rationFullySupplied: fullyFed
+  // Final political rewards and morale observe the services that actually worked this period
+  // without shifting gm.calendaria.lastQd before advanceTendayClock runs.
+  withSettledTendayIndex(holding, financeContext.periodIdentity.lastPeriodIndex, () => {
+    const finalPoliticsContext = politicsDecisionContext(holding, this, { data });
+    delete finalPoliticsContext.networkPaid;
+    report.politics.effects = refreshPoliticsPeriodEffects(holding, politicsPeriod, {
+      context: finalPoliticsContext, rationFullySupplied: fullyFed
+    });
+    const moraleSnapshot = this._recordTendayMoraleSnapshot?.(holding, report, financeContext, { operationId, createdAt });
+    if (moraleSnapshot) {
+      moraleSnapshot.rawMorale = this._calculateMorale?.(holding) ?? 0;
+      moraleSnapshot.control = this._controlSummary?.(holding, moraleSnapshot.rawMorale) ?? null;
+      report.morale = clone(moraleSnapshot);
+    }
   });
-  const moraleSnapshot = this._recordTendayMoraleSnapshot?.(holding, report, financeContext, { operationId, createdAt });
-  if (moraleSnapshot) {
-    moraleSnapshot.rawMorale = this._calculateMorale?.(holding) ?? 0;
-    moraleSnapshot.control = this._controlSummary?.(holding, moraleSnapshot.rawMorale) ?? null;
-    report.morale = clone(moraleSnapshot);
-  }
 
   if (worldShips) {
     worldShips.advanceWorldShipEconomy(holding, periodStartQd + qd, report, appendEconomyLedger);

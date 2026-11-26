@@ -1,13 +1,16 @@
 import { MODULE_ID } from "../data/constants.js";
-import { SkyholdData, requestPoliticsOperation } from "../data/store.js";
+import { SkyholdData, requestPoliticsOperation, requestWorkforceOperation } from "../data/store.js";
 import { findReadableHoldingEntry } from "../data/access-guard.js";
+import { droppedLocksForAllocationChange } from "../data/labor-mutations.js";
+import { workFunctionMatches } from "../data/work-allocations.js";
+import { buildResidentAllocationRemovalCommand } from "../data/workforce-socket.js";
 import { politicsAvailability } from "../data/politics-availability.js";
 import { normalizePoliticsState, POLITICS_SLOTS } from "../data/politics-state.js";
 import { POLITICS_ARCHETYPES, resolvedPoliticsCatalog, resolvedPoliticsCore } from "../data/politics-balance.js";
 import { politicsPeriodIndex, politicsRepresentativeArchetype,
   politicsEffects, politicsRepresentativeStatus, politicsRowUnlocked } from "../engines/politics/rules.js";
 import { makeId } from "../data/utils.js";
-import { settlementControlSummary } from "../engines/settlement/control.js";
+import { controlServiceFunctionId, settlementControlSummary } from "../engines/settlement/control.js";
 import { getSkyholdManager } from "./registry.js";
 import { RenderSchedulerMixin } from "./common/render-scheduler.js";
 import { WindowFrameMixin } from "./common/window-frame.js";
@@ -409,6 +412,27 @@ export class SkyholdPoliticsApp extends WindowFrameMixin(RenderSchedulerMixin(Ha
       const { holding } = findReadableHoldingEntry(data, this.holdingId, { fallback: false });
       const building = holding?.buildings?.list?.find((row) => String(row.id) === buildingId);
       const person = holding?.people?.list?.find((row) => String(row.id) === residentId);
+      const isGM = globalThis.game?.user?.isGM === true;
+      let dropped = [];
+      let targetRemoveFn = functionId;
+      if (action === "remove" && holding && building && person) {
+        const controlFunction = controlServiceFunctionId(building);
+        const occupied = (person.workAllocations ?? []).filter((row) => String(row?.sourceId ?? "") === buildingId
+          && workFunctionMatches(row.functionId, controlFunction));
+        targetRemoveFn = functionId || (occupied.length === 1 ? occupied[0].functionId : "");
+        const removedRows = occupied.filter((row) => !targetRemoveFn || row.functionId === targetRemoveFn);
+        const removedSet = new Set(removedRows);
+        const nextRows = (person.workAllocations ?? []).filter((row) => !removedSet.has(row));
+        dropped = droppedLocksForAllocationChange(holding, residentId, nextRows, removedRows);
+        if (dropped.length) {
+          if (!isGM && dropped.some((row) => row.visibility === "gm")) {
+            globalThis.ui?.notifications?.warn?.("Назначение недоступно. Обновите окно или обратитесь к ГМу.");
+            return;
+          }
+          if (!await manager?._confirmAction?.("Снять закреплённое назначение",
+            "Снятие назначения удалит его закрепление в общем плане работ. Продолжить?")) return;
+        }
+      }
       const admission = action === "add" && building && person
         ? await confirmBuildingWorkerAdmission({ manager, building, person }) : { allowed: true };
       if (!admission.allowed || this._isPlayerPreview()) return;
@@ -416,8 +440,17 @@ export class SkyholdPoliticsApp extends WindowFrameMixin(RenderSchedulerMixin(Ha
         holdingId: this.holdingId, expectedRevision: context.revision, action, buildingId, residentId,
         ...(functionId ? { functionId } : {}) };
       this._controlWorkRetries.set(key, operation);
-      const result = await executeControlWorkOperation({ ...operation, allowAdmissionOverride: admission.allowAdmissionOverride },
-        { getManager: () => manager });
+      const result = action === "remove" && !isGM && dropped.length && targetRemoveFn
+        ? await requestWorkforceOperation(buildResidentAllocationRemovalCommand({
+          operationId: operation.operationId,
+          holdingId: this.holdingId,
+          expectedRevision: context.revision,
+          personId: residentId,
+          buildingId,
+          functionId: targetRemoveFn
+        }))
+        : await executeControlWorkOperation({ ...operation, allowAdmissionOverride: admission.allowAdmissionOverride },
+          { getManager: () => manager });
       this._controlWorkRetries.delete(key);
       if (result.ok) globalThis.ui?.notifications?.info?.(result.summary);
       else globalThis.ui?.notifications?.warn?.(result.reason || "Назначение не сохранено.");

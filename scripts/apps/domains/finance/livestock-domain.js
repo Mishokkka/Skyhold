@@ -239,10 +239,41 @@ _appendLivestockReport(holding, report, plan, applied) {
   return applied;
 },
 
-_runLivestockForQd(holding, qd = 40, report = null, { operationId = "", workerContext = null, financeContext = null, stepOffset = null, cycleQd = 40 } = {}) {
+_runLivestockForQd(holding, qd = 40, report = null, { operationId = "", workerContext = null, financeContext = null, budgets = null, stepOffset = null, cycleQd = 40 } = {}) {
   const plan = this._planLivestockForQd(holding, qd, { operationId, workerContext, financeContext, stepOffset, cycleQd });
   const applied = this._applyLivestockPeriodPlan(holding, plan);
   if (!applied.ok) return { ...applied, plan };
+  if (budgets && workerContext?.financeContext) {
+    const buildingsById = new Map((holding?.buildings?.list ?? []).map((row) => [text(row?.id), row]));
+    for (const entry of plan.entries ?? []) {
+      const needUnits = whole(entry.workQdUsed) * 10_000;
+      if (!needUnits) continue;
+      const building = buildingsById.get(text(entry.buildingId));
+      if (!building) continue;
+      let spentUnits = 0;
+      const people = this._activeAssignedBuildingPeople?.(holding, building, workerContext, "livestock") ?? [];
+      for (const person of people) {
+        if (spentUnits >= needUnits) break;
+        const budgetKey = this._workerBudgetKey?.(person.id, building.id, "livestock");
+        const budgetEntry = budgetKey ? budgets.get(budgetKey) : null;
+        if (!budgetEntry || !(budgetEntry.available >= 1)) continue;
+        const slots = workerContext.financeContext.plannedWorkSlotsByWorkerId?.get(String(person.id)) ?? new Map();
+        const scheduledForCycle = stepOffset !== null
+          ? [...slots].filter(([step, slot]) => step >= stepOffset && step < stepOffset + qd
+            && slot.sourceId === String(building.id) && slot.functionId === "livestock").length
+          : budgetEntry.available;
+        let remaining = stepOffset !== null ? Math.min(budgetEntry.available, scheduledForCycle) : budgetEntry.available;
+        const workUnits = this._livestockWorkUnitsPerQd(holding, building, person, workerContext);
+        if (!(workUnits > 0)) continue;
+        while (remaining >= 1 && spentUnits < needUnits) {
+          budgetEntry.available -= 1;
+          budgetEntry.spent += 1;
+          remaining -= 1;
+          spentUnits += workUnits;
+        }
+      }
+    }
+  }
   this._appendLivestockReport(holding, report, plan, applied);
   return { ok: true, plan, applied };
 }
