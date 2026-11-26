@@ -7,7 +7,6 @@ import { marketOutboundRouteFromPurchasePlan } from "../apps/market/outbound-con
 // This calibrated scenario prices the existing-world staffing assumptions;
 // changing labor modes is covered by the explicit hybrid transition/runtime checks.
 import { BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION as DEFAULT_BUILDING_TEMPLATES } from "../data/building-templates.js";
-import { TECHNICAL_MAINTENANCE_NORM_QD } from "./building-development-reachability-check.mjs";
 import { APPROVED_BUILDING_TEMPLATE_ID_BY_NAME } from "../data/building-template-ids.js";
 import { DEFAULT_INTERNAL_DEMAND_CONFIG, internalDemandTradeDefaults } from "../data/economy/internal-demand.js";
 import { livestockProfileForSpecies } from "../data/livestock.js";
@@ -206,7 +205,6 @@ function financeConfigurationGaps() {
       && (whole(building?.income?.wageDailyCopper) || whole(building.wageDailyCopper)) === 0).map((building) => building.id),
     zeroIncomeOperatingUpkeep: economicTemplates.filter((building) => building?.functions?.income
       && (whole(building?.income?.operatingUpkeepMonthlyCopper) || whole(building.operatingUpkeepMonthlyCopper)) === 0).map((building) => building.id),
-    zeroMaintenanceRequirement: economicTemplates.filter((building) => building?.maintenance?.schemaVersion !== 2 && whole(building?.maintenance?.requiredPoints) === 0).map((building) => building.id),
     livestockWithoutPaidBuildingFunction: economicTemplates.filter((building) => building?.livestock?.enabled
       && (whole(building.wageDailyCopper) === 0 || whole(building.operatingUpkeepMonthlyCopper) === 0)).map((building) => building.id),
     agricultureWithoutPaidBuildingFunction: economicTemplates.filter((building) => building?.agriculture?.enabled
@@ -863,12 +861,11 @@ function exploitFindings({ financeGaps, margins, conflicts, loadStats, survival 
     + financeGaps.zeroIncomeWages.length
     + financeGaps.zeroIncomeOperatingUpkeep.length
     + financeGaps.zeroBaseUpkeepTemplates.length
-    + financeGaps.zeroBuildingWageTemplates.length
-    + financeGaps.zeroMaintenanceRequirement.length;
+    + financeGaps.zeroBuildingWageTemplates.length;
   if (financeGapCount > 0) findings.push({
       severity: "blocker",
       id: "zero-finance-defaults",
-      evidence: `${financeGapCount} zero-cost or zero-maintenance defaults remain across ${financeGaps.economicTemplates} economic templates.`,
+      evidence: `${financeGapCount} zero-cost defaults remain across ${financeGaps.economicTemplates} economic templates.`,
       owner: "scripts/data/building-template-catalog/approved.js",
       recommendation: "Seed positive integer wageDailyCopper, baseUpkeepMonthlyCopper and per-function operatingUpkeepMonthlyCopper before the Laputa cutover."
     });
@@ -1040,8 +1037,6 @@ export function checkEconomyBalanceScenario() {
     assert.ok(whole(building.baseUpkeepMonthlyCopper) > 0 && whole(building.baseUpkeepMonthlyCopper) % 18 === 0, `${building.id}: approved base upkeep must be a positive whole wage-step multiple`);
     assert.ok(whole(building.wageDailyCopper) > 0, `${building.id}: building-level wage must be positive`);
     assert.ok(whole(building.operatingUpkeepMonthlyCopper) > 0, `${building.id}: building-level operating upkeep must be positive`);
-    assert.equal(building.maintenance?.schemaVersion, 2);
-    assert.equal(whole(building.maintenance?.requiredPoints), TECHNICAL_MAINTENANCE_NORM_QD.get(building.id) ?? 0, `${building.id}: labor maintenance must match the selective technical norm`);
     for (const productionLine of building.productionLines ?? []) {
       if (productionLine.active === false) continue;
       assert.ok((whole(productionLine.wageDailyCopper) || whole(building.wageDailyCopper)) > 0, `${building.id}:${productionLine.id}: effective production wage must be positive`);
@@ -1058,7 +1053,7 @@ export function checkEconomyBalanceScenario() {
   assert.deepEqual(
     gapArrays.filter(([, value]) => value.length).map(([key]) => key),
     [],
-    "calibrated economic templates must not retain zero-finance or zero-maintenance gaps"
+    "calibrated economic templates must not retain zero-finance gaps"
   );
   assert.deepEqual(report.runtimeProductionContract.millFeed, {
     outputResourceId: "animal-feed",

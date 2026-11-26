@@ -4,16 +4,16 @@ import { pathToFileURL } from "node:url";
 import { AssignmentDomain } from "../apps/domains/assignment-domain.js";
 import { FinanceEconomyDomain } from "../apps/domains/finance/economy-domain.js";
 import { FinanceInternalDemandDomain } from "../apps/domains/finance/internal-demand-domain.js";
-import { FinanceMaintenanceDomain } from "../apps/domains/finance/maintenance-domain.js";
+import { mergeHoldingDefaults } from "../data/normalizers.js";
+import { normalizePerson } from "../data/normalizers/resident.js";
 import { calculatePlannedWorkerWage } from "../engines/economy/finance-obligations.js";
 import { buildPlayerPatch, validatePlayerPatch } from "../data/player-write-guard.js";
 import {
   buildingStaffingWorkerIds,
   buildPlannedWorkSlots,
+  buildWorkAllocationTargets,
   explicitWorkerIdsForBuilding,
   explicitWorkAllocationsForBuilding,
-  MAINTENANCE_WORK_FUNCTION_ID,
-  MAINTENANCE_WORK_SOURCE_ID,
   normalizePersonWorkAllocations,
   plannedAssignmentQd,
   validateHoldingWorkAllocations,
@@ -73,6 +73,52 @@ function holdingFixture() {
 }
 
 export function checkWorkAllocationCharacterization() {
+  const legacyPerson = { id: "retired", maintenancePointsPerTenday: 4 };
+  normalizePerson(legacyPerson);
+  assert.equal(Object.hasOwn(legacyPerson, "maintenancePointsPerTenday"), false,
+    "Normalization removes obsolete resident maintenance points");
+  const holdingWithLegacyBuilding = holdingFixture();
+  holdingWithLegacyBuilding.buildings.list[0].maintenance = { schemaVersion: 2, requiredPoints: 2 };
+  for (const v2 of [false, true]) {
+    const targets = buildWorkAllocationTargets(holdingWithLegacyBuilding, { v2 });
+    assert.ok(targets.some((row) => row.functionId === "production:forge"));
+    assert.ok(targets.every((row) => row.functionId !== "maintenance"));
+    assert.deepEqual(buildWorkAllocationTargets({}, { v2 }), [], "An empty holding has no general work target");
+  }
+
+  const saved = holdingFixture();
+  const shop = saved.buildings.list[0];
+  shop.labor = { version: 1, mode: "staff", capacityQd: null };
+  shop.assignedWorkerIds = ["keep", "promote", "release"];
+  const production = { sourceId: shop.id, functionId: "production:forge" };
+  const retired = { sourceId: shop.id, functionId: "maintenance" };
+  saved.workforcePlan = {
+    version: 1,
+    goals: [{ ...production, normalQd: 4 }, { ...retired, normalQd: 2 }],
+    locks: [{ ...production, personId: "keep" }, { ...retired, personId: "release" }]
+  };
+  saved.people.list = [
+    ["keep", production.functionId, retired.functionId],
+    ["promote", retired.functionId, production.functionId],
+    ["release", retired.functionId, ""]
+  ].map(([id, primaryFunctionId, reserveFunctionId]) => ({
+    id, workAssignment: shop.id, staffAppointment: {
+      version: 1, buildingId: shop.id, primaryFunctionId, reserveFunctionId, wageDailyCopper: 17, overtimeQd: 0
+    }
+  }));
+  const loaded = mergeHoldingDefaults(saved);
+  for (const person of loaded.people.list.slice(0, 2)) {
+    assert.equal(person.staffAppointment.primaryFunctionId, production.functionId);
+    assert.equal(person.staffAppointment.reserveFunctionId, "");
+    assert.equal(person.staffAppointment.wageDailyCopper, 17);
+  }
+  assert.equal(loaded.people.list[2].staffAppointment, undefined, "A contract for only the retired job releases its seat");
+  assert.equal(loaded.people.list[2].workAssignment, "");
+  assert.deepEqual(loaded.buildings.list[0].assignedWorkerIds.filter(Boolean), ["keep", "promote"]);
+  assert.deepEqual(loaded.workforcePlan, {
+    version: 1, goals: [saved.workforcePlan.goals[0]], locks: [saved.workforcePlan.locks[0]]
+  });
+
   const legacy = normalizePersonWorkAllocations({ id: "legacy" });
   assert.equal(legacy.workAllocationMode, WORK_ALLOCATION_MODE_LEGACY, "old residents must stay on the legacy assignment path");
   assert.deepEqual(legacy.workAllocations, [], "normalization must add only empty allocation state to old residents");
@@ -271,33 +317,14 @@ export function checkWorkAllocationCharacterization() {
     _financeFunctionAllowed: () => true,
     _activeAssignedBuildingPeople: () => [incomeWorker],
     _plannedWorkerFunctionQd: FinanceEconomyDomain._plannedWorkerFunctionQd,
-    _personBuildingEfficiency: () => 2,
-    _maintenanceEfficiencyFactor: () => 1
+    _personBuildingEfficiency: () => 2
   };
   const incomeChannels = incomeHarness._internalDemandChannels({ buildings: { list: [incomeBuilding] } }, incomeWorkerContext.financeContext, 1, incomeWorkerContext);
   assert.equal(incomeChannels.channels[0].throughputUnits, 5, "5 of 20 income QD must provide only one quarter of seller throughput");
   assert.equal(incomeChannels.channels[0].sellerEfficiency, 2, "allocation share must scale throughput without diluting seller skill");
-
-  const maintenancePerson = {
-    id: "maintainer",
-    workAllocationMode: WORK_ALLOCATION_MODE_EXPLICIT,
-    maintenancePointsPerTenday: 4
-  };
-  const maintenanceContext = {
-    blockedWorkerIds: new Set(),
-    plannedAssignmentsByWorkerId: new Map([[maintenancePerson.id, [
-      allocation("maintenance-work", MAINTENANCE_WORK_SOURCE_ID, MAINTENANCE_WORK_FUNCTION_ID, 10)
-    ]]])
-  };
-  const maintenanceDeps = FinanceMaintenanceDomain._maintenancePeriodDependencies.call({
-    _buildingStatus: () => ({ value: "built" })
-  }, maintenanceContext, 40);
-  assert.equal(maintenanceDeps.isWorkerAvailable(maintenancePerson), true);
-  assert.equal(maintenanceDeps.pointsForWorker(maintenancePerson), 2, "maintenance points must scale with the explicit share of normal work QD");
-  assert.equal(maintenanceDeps.pointsForWorker({ ...maintenancePerson, workAllocationMode: WORK_ALLOCATION_MODE_LEGACY, workAssignment: "workshop" }), 4, "legacy workers keep their established maintenance behavior");
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   checkWorkAllocationCharacterization();
-  console.log("FBL Skyhold work allocations: normalization, caps, authority, wages, slots and maintenance passed.");
+  console.log("FBL Skyhold work allocations: normalization, caps, authority, wages, slots and retired work passed.");
 }

@@ -35,9 +35,6 @@ function fixture(id, lineId) {
     background: backgrounds[index] ?? "", traits: ["Храбрец"], workAllocationMode: "explicit",
     workAllocations: [{ id: `work-${index}`, sourceId: "building", functionId: `production:${lineId}`, normalQd: 20, overtimeQd: 0 }]
   }));
-  if (building.maintenance?.requiredPoints > 0) people.push({ id: "mechanic", name: "Механик", age: 30,
-    attributes: { strength: 5, agility: 5, wits: 5, empathy: 5 }, background: workerBackgroundGroupMembers("ТЕХНИКА")[0], workAllocationMode: "explicit",
-    workAllocations: [{ id: "maintenance", sourceId: "building", functionId: "maintenance", normalQd: building.maintenance.requiredPoints, overtimeQd: 0 }] });
   building.assignedWorkerIds = people.map((person) => person.id);
   const line = building.productionLines.find((row) => row.id === lineId);
   const holding = mergeHoldingDefaults({ id: "production-review", people: { list: people }, buildings: { list: [building] },
@@ -51,8 +48,6 @@ function fixture(id, lineId) {
 async function run(app, holding, { livestock = false } = {}) {
   const result = report();
   const financeContext = app._prepareFinanceForQd(holding, 40, result, { operationId: "production-review", createdAt: "2026-10-11" });
-  assert.equal(app._runMaintenanceForQd(holding, 40, result, { operationId: "production-review:maintenance", financeContext }).ok, true);
-  app._prepareTechnicalServiceRestarts(holding, financeContext, result);
   const workerContext = app._economyWorkerContext(holding, { financeContext });
   const method = livestock ? "_runProductionAndLivestockForQd" : "_runProductionCycleForQd";
   await app[method](holding, 40, result, { workerContext, financeContext });
@@ -138,13 +133,11 @@ export async function checkProductionReview() {
     finishPerishableStoragePeriod({ holding: stock, elapsedQd: 8 });
 
     const shortShift = fixture("cannery", "line-1-preserved-meat");
-    // Isolate shift composition from the separate delayed-maintenance gate.
-    shortShift.buildings.list[0].maintenance.requiredPoints = 0;
-    const specialists = shortShift.people.list.filter((person) => person.id !== "mechanic" && person.background);
+    const specialists = shortShift.people.list.filter((person) => person.background);
     assert.equal(specialists.length, 2);
     for (const person of specialists) person.workAllocations[0].normalQd = 1;
     const fullShift = structuredClone(shortShift);
-    for (const person of fullShift.people.list.filter((person) => person.id !== "mechanic" && person.background)) person.workAllocations[0].normalQd = 20;
+    for (const person of fullShift.people.list.filter((person) => person.background)) person.workAllocations[0].normalQd = 20;
     await run(app, shortShift);
     SkyholdData.view = () => ({ ...DEFAULT_SKYHOLD_DATA, holdings: [fullShift] });
     await run(app, fullShift);
@@ -199,8 +192,8 @@ export async function checkProductionReview() {
     const mill = DEFAULT_BUILDING_TEMPLATES.find((row) => row.id === "mill");
     const feed = mill.productionLines.find((row) => row.resourceId === "animal-feed");
     const margin = feed.outputQty * resourceBasePriceCopper("animal-feed") - 6 * resourceBasePriceCopper("grain") - feed.workQd * mill.wageDailyCopper / 2;
-    assert.ok(20 / feed.workQd * margin - (mill.baseUpkeepMonthlyCopper + mill.operatingUpkeepMonthlyCopper) / 3 - mill.maintenance.requiredPoints * 9 > 0,
-      "One ordinary feed worker covers materials, wages, mill overhead and technical work");
+    assert.ok(20 / feed.workQd * margin - (mill.baseUpkeepMonthlyCopper + mill.operatingUpkeepMonthlyCopper) / 3 > 0,
+      "One ordinary feed worker covers materials, wages, and mill overhead");
 
     const bakery = DEFAULT_BUILDING_TEMPLATES.find((row) => row.id === "bakery");
     const bread = bakery.productionLines[0];

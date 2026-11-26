@@ -465,13 +465,7 @@
 }
 
 .fbl-skyhold-building-editor .fbls-building-main-economy {
-  grid-template-columns: repeat(5, minmax(7rem, 1fr));
-}
-
-.fbl-skyhold-building-editor .fbls-building-main-status {
-  grid-template-columns: repeat(3, minmax(8rem, 1fr));
-  padding-bottom: 0;
-  border-bottom: 0;
+  grid-template-columns: repeat(3, minmax(7rem, 1fr));
 }
 
 .fbl-skyhold-building-editor .fbls-building-editor-card.basic-card.compact-basic {
@@ -555,13 +549,11 @@
 }
 
 @container fbls-building-editor (max-width: 920px) {
-  .fbl-skyhold-building-editor .fbls-building-main-identity,
-  .fbl-skyhold-building-editor .fbls-building-main-economy {
+  .fbl-skyhold-building-editor .fbls-building-main-identity {
     grid-template-columns: repeat(2, minmax(9rem, 1fr));
   }
 
-  .fbl-skyhold-building-editor .fbls-building-main-identity > label:first-child,
-  .fbl-skyhold-building-editor .fbls-building-main-economy > label:last-child {
+  .fbl-skyhold-building-editor .fbls-building-main-identity > label:first-child {
     grid-column: 1 / -1;
   }
 
@@ -589,14 +581,12 @@
   .fbl-skyhold-building-editor .fbls-building-main-identity,
   .fbl-skyhold-building-editor .fbls-building-main-template,
   .fbl-skyhold-building-editor .fbls-building-main-economy,
-  .fbl-skyhold-building-editor .fbls-building-main-status,
   .fbl-skyhold-building-editor .fbls-building-editor-card.basic-card.compact-basic,
   .fbl-skyhold-building-editor .fbls-building-editor-card.text-card.compact-text-card {
     grid-template-columns: 1fr;
   }
 
-  .fbl-skyhold-building-editor .fbls-building-main-identity > label:first-child,
-  .fbl-skyhold-building-editor .fbls-building-main-economy > label:last-child {
+  .fbl-skyhold-building-editor .fbls-building-main-identity > label:first-child {
     grid-column: auto;
   }
 }

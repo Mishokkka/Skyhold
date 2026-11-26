@@ -205,7 +205,6 @@ export function checkUiContract({ root = DEFAULT_ROOT, hbsFiles = null } = {}) {
     "person-volunteer-reason",
     "person-custom-role",
     "person-home",
-    "person-maintenance-points",
     "person-background"
   ];
   let previousResidentWorkField = -1;

@@ -200,13 +200,12 @@ export function validateHybridLaborHolding(holding = {}, { targets = null } = {}
     for (const row of person.workAllocations ?? []) {
       if (!active(row)) continue;
       const building = buildings.get(text(row.sourceId)), mode = buildingLaborMode(building);
-      const externalMaintenance = row.functionId === "maintenance";
-      if (["staff", "passive", "invalid"].includes(mode) && !externalMaintenance) {
+      if (["staff", "passive", "invalid"].includes(mode)) {
         add("labor-qd-mode", `${person.name || "Житель"}: это здание не принимает обычные задания по QD.`, {
           personId, buildingId: row.sourceId, functionId: row.functionId, evidence: [mode, row.normalQd, row.overtimeQd]
         });
       }
-      if (mode === "qd" && !externalMaintenance) qdTotals.set(row.sourceId, (qdTotals.get(row.sourceId) ?? 0) + Number(row.normalQd || 0) + Number(row.overtimeQd || 0));
+      if (mode === "qd") qdTotals.set(row.sourceId, (qdTotals.get(row.sourceId) ?? 0) + Number(row.normalQd || 0) + Number(row.overtimeQd || 0));
     }
   }
   for (const [buildingId, building] of buildings) {

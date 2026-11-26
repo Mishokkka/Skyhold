@@ -123,7 +123,6 @@ export function templatePassport(row, rows, productionLines = []) {
     wageText: formatCopperCurrency(row.wageDailyCopper ?? 0),
     baseUpkeepText: formatCopperCurrency(row.baseUpkeepMonthlyCopper ?? 0),
     operatingUpkeepText: formatCopperCurrency(row.operatingUpkeepMonthlyCopper ?? 0),
-    maintenanceText: `${row.maintenance?.requiredPoints ?? 0} QD / десятник`,
     recipes: productionLines.filter((line) => line.active !== false).map((line) => ({
       name: row.productionLines?.find((item) => String(item.id) === line.id)?.name || line.mode || "Производство",
       inputs: line.expenses || "Без материалов",

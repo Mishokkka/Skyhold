@@ -94,14 +94,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 0,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 0,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 0,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Участок с доступным водоносным слоем.",
@@ -288,14 +280,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 12,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 18,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 0,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Достаточно ровная плодородная земля вне плотной застройки.",
@@ -499,14 +483,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 12,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 18,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 0,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Плодородная земля и бытовой доступ к воде.",
@@ -691,14 +667,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 12,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 18,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 0,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Доступ к возобновляемому лесному массиву.",
@@ -891,14 +859,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 12,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 18,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 0,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Выход подходящей каменной породы и безопасный подъезд.",
@@ -1042,14 +1002,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 0,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 0,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 0,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -1170,14 +1122,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 0,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 0,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 0,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Сухой участок вдали от питьевой воды.",
@@ -1305,14 +1249,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 0,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 0,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 0,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -1440,14 +1376,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 0,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 0,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 0,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -1581,14 +1509,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 0,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 0,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 0,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -1722,14 +1642,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 0,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 0,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 0,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -1859,14 +1771,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 18,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 0,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -2017,14 +1921,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 12,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 18,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "livestock": {
       "schemaVersion": 2,
       "enabled": true,
@@ -2200,14 +2096,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 12,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 18,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "agriculture": {
       "schemaVersion": 2,
       "enabled": true,
@@ -2419,14 +2307,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 12,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 18,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "upgradesFromTemplateIds": [],
     "repeatSettlementEffects": false,
     "workerProfile": {
@@ -2576,14 +2456,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 12,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 18,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "agriculture": {
       "schemaVersion": 2,
       "enabled": true,
@@ -2759,14 +2631,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 12,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 18,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "agriculture": {
       "schemaVersion": 2,
       "enabled": true,
@@ -2960,14 +2824,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 12,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 18,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Достаточная площадь выпаса и доступ к воде.",
@@ -3159,14 +3015,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 12,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 18,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -3355,14 +3203,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 12,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 18,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -3574,14 +3414,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 36,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 1,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -3750,14 +3582,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 0,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 0,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -3916,14 +3740,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 36,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -4085,14 +3901,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 12,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 18,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -4270,14 +4078,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 0,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 0,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Судоходный берег с безопасным подходом.",
@@ -4429,14 +4229,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 36,
     "operatingUpkeepMonthlyCopper": 54,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -4569,14 +4361,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 0,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 0,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -4715,14 +4499,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 0,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 0,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -4871,14 +4647,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 0,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 0,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -5012,14 +4780,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 0,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 0,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -5165,14 +4925,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 36,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -5322,14 +5074,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 12,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 18,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -5477,14 +5221,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 36,
     "operatingUpkeepMonthlyCopper": 36,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -5640,14 +5376,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 54,
     "operatingUpkeepMonthlyCopper": 36,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -5811,14 +5539,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 0,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 0,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "upgradesFromTemplateIds": [],
     "repeatSettlementEffects": false,
     "workerProfile": {
@@ -5950,14 +5670,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 36,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "service": {
       "capacity": 30,
       "coverageKind": "population",
@@ -6147,14 +5859,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 36,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -6528,14 +6232,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 54,
     "operatingUpkeepMonthlyCopper": 36,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -6739,14 +6435,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 36,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "upgradesFromTemplateIds": [],
     "repeatSettlementEffects": false,
     "workerProfile": {
@@ -6954,14 +6642,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 36,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "upgradesFromTemplateIds": [],
     "repeatSettlementEffects": false,
     "workerProfile": {
@@ -7211,14 +6891,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 36,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "upgradesFromTemplateIds": [],
     "repeatSettlementEffects": false,
     "workerProfile": {
@@ -7435,14 +7107,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 36,
     "operatingUpkeepMonthlyCopper": 36,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "upgradesFromTemplateIds": [],
     "repeatSettlementEffects": false,
     "workerProfile": {
@@ -7659,14 +7323,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 36,
     "operatingUpkeepMonthlyCopper": 36,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "upgradesFromTemplateIds": [],
     "repeatSettlementEffects": false,
     "workerProfile": {
@@ -7968,14 +7624,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 36,
     "operatingUpkeepMonthlyCopper": 54,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "upgradesFromTemplateIds": [],
     "repeatSettlementEffects": false,
     "workerProfile": {
@@ -8179,14 +7827,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 36,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "upgradesFromTemplateIds": [],
     "repeatSettlementEffects": false,
     "workerProfile": {
@@ -8384,14 +8024,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 36,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "upgradesFromTemplateIds": [],
     "repeatSettlementEffects": false,
     "workerProfile": {
@@ -8602,14 +8234,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 36,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "upgradesFromTemplateIds": [],
     "repeatSettlementEffects": false,
     "workerProfile": {
@@ -8797,14 +8421,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 36,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "upgradesFromTemplateIds": [],
     "repeatSettlementEffects": false,
     "workerProfile": {
@@ -9011,14 +8627,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 36,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -9181,14 +8789,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 36,
     "operatingUpkeepMonthlyCopper": 36,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -9335,14 +8935,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 0,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 0,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -9490,14 +9082,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 36,
     "operatingUpkeepMonthlyCopper": 144,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -9642,14 +9226,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 36,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -9806,14 +9382,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 36,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -9977,14 +9545,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 36,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -10149,14 +9709,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 0,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 0,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -10302,14 +9854,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 36,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -10485,14 +10029,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 36,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -10720,14 +10256,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 36,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -10901,14 +10429,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 36,
     "operatingUpkeepMonthlyCopper": 36,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -11056,14 +10576,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 72,
     "operatingUpkeepMonthlyCopper": 54,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -11227,14 +10739,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 12,
     "baseUpkeepMonthlyCopper": 36,
     "operatingUpkeepMonthlyCopper": 18,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "upgradesFromTemplateIds": [
       "bunkhouse"
     ],
@@ -11382,14 +10886,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 36,
     "operatingUpkeepMonthlyCopper": 54,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "service": {
       "capacity": 60,
       "coverageKind": "population",
@@ -11583,14 +11079,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 36,
     "operatingUpkeepMonthlyCopper": 54,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "upgradesFromTemplateIds": [],
     "repeatSettlementEffects": false,
     "workerProfile": {
@@ -11866,14 +11354,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 36,
     "operatingUpkeepMonthlyCopper": 54,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 2,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Подтверждённое ГМ месторождение выбранного профиля.",
@@ -12077,14 +11557,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 36,
     "operatingUpkeepMonthlyCopper": 54,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "upgradesFromTemplateIds": [],
     "repeatSettlementEffects": false,
     "workerProfile": {
@@ -12277,14 +11749,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 36,
     "operatingUpkeepMonthlyCopper": 54,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "upgradesFromTemplateIds": [],
     "repeatSettlementEffects": false,
     "workerProfile": {
@@ -12467,14 +11931,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 0,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 0,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -12628,14 +12084,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 36,
     "operatingUpkeepMonthlyCopper": 36,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -12866,14 +12314,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 54,
     "operatingUpkeepMonthlyCopper": 54,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -13053,14 +12493,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 36,
     "operatingUpkeepMonthlyCopper": 36,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -13247,14 +12679,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 54,
     "operatingUpkeepMonthlyCopper": 36,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 1,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Хорошо видимая точка у действующего судоходного подхода.",
@@ -13418,14 +12842,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 36,
     "operatingUpkeepMonthlyCopper": 36,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -13592,14 +13008,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 54,
     "operatingUpkeepMonthlyCopper": 36,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -13750,14 +13158,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 0,
     "baseUpkeepMonthlyCopper": 72,
     "operatingUpkeepMonthlyCopper": 0,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -13891,14 +13291,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 0,
     "baseUpkeepMonthlyCopper": 72,
     "operatingUpkeepMonthlyCopper": 0,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -14044,14 +13436,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 0,
     "baseUpkeepMonthlyCopper": 36,
     "operatingUpkeepMonthlyCopper": 0,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -14174,14 +13558,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 0,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 0,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -14322,14 +13698,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 54,
     "operatingUpkeepMonthlyCopper": 36,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -14504,14 +13872,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 90,
     "operatingUpkeepMonthlyCopper": 54,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -14674,14 +14034,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 0,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 0,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -14834,14 +14186,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 12,
     "baseUpkeepMonthlyCopper": 54,
     "operatingUpkeepMonthlyCopper": 18,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "upgradesFromTemplateIds": [],
     "repeatSettlementEffects": false,
     "workerProfile": {
@@ -14994,14 +14338,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 0,
     "baseUpkeepMonthlyCopper": 36,
     "operatingUpkeepMonthlyCopper": 18,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "upgradesFromTemplateIds": [
       "common-house"
     ],
@@ -15169,14 +14505,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 54,
     "operatingUpkeepMonthlyCopper": 54,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 1,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "upgradesFromTemplateIds": [],
     "repeatSettlementEffects": false,
     "workerProfile": {
@@ -15349,14 +14677,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 72,
     "operatingUpkeepMonthlyCopper": 72,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "service": {
       "capacity": 100,
       "coverageKind": "population",
@@ -15539,14 +14859,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 12,
     "baseUpkeepMonthlyCopper": 54,
     "operatingUpkeepMonthlyCopper": 54,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 1,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "upgradesFromTemplateIds": [],
     "repeatSettlementEffects": false,
     "workerProfile": {
@@ -15714,14 +15026,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 90,
     "operatingUpkeepMonthlyCopper": 90,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 2,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "service": {
       "capacity": 100,
       "coverageKind": "population",
@@ -15903,14 +15207,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 54,
     "operatingUpkeepMonthlyCopper": 72,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "service": {
       "capacityPerWorker": 10,
       "maximumCapacity": 100,
@@ -16094,14 +15390,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 24,
     "baseUpkeepMonthlyCopper": 54,
     "operatingUpkeepMonthlyCopper": 72,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 1,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "service": {
       "capacity": 100,
       "coverageKind": "population",
@@ -16296,14 +15584,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 54,
     "operatingUpkeepMonthlyCopper": 72,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "service": {
       "capacity": 100,
       "coverageKind": "population",
@@ -16593,14 +15873,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 72,
     "operatingUpkeepMonthlyCopper": 90,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 1,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "upgradesFromTemplateIds": [],
     "repeatSettlementEffects": false,
     "workerProfile": {
@@ -16787,14 +16059,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 90,
     "operatingUpkeepMonthlyCopper": 90,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 2,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "service": {
       "capacity": 100,
       "coverageKind": "population",
@@ -16976,14 +16240,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 90,
     "operatingUpkeepMonthlyCopper": 120,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 2,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "service": {
       "capacity": 100,
       "coverageKind": "population",
@@ -17166,14 +16422,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 90,
     "operatingUpkeepMonthlyCopper": 120,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 2,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "upgradesFromTemplateIds": [],
     "repeatSettlementEffects": false,
     "workerProfile": {
@@ -17346,14 +16594,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 90,
     "operatingUpkeepMonthlyCopper": 108,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "service": {
       "capacity": 120,
       "coverageKind": "population",
@@ -17535,14 +16775,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 72,
     "operatingUpkeepMonthlyCopper": 108,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 1,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "service": {
       "capacity": 4,
       "coverageKind": "target-buildings",
@@ -17720,14 +16952,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 72,
     "operatingUpkeepMonthlyCopper": 108,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "service": {
       "capacityBase": 60,
       "capacityPerWorker": 15,
@@ -17952,14 +17176,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 24,
     "baseUpkeepMonthlyCopper": 108,
     "operatingUpkeepMonthlyCopper": 144,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 2,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "upgradesFromTemplateIds": [],
     "repeatSettlementEffects": false,
     "workerProfile": {
@@ -18250,14 +17466,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 24,
     "baseUpkeepMonthlyCopper": 108,
     "operatingUpkeepMonthlyCopper": 162,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 2,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "upgradesFromTemplateIds": [],
     "repeatSettlementEffects": false,
     "workerProfile": {
@@ -18520,14 +17728,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 24,
     "baseUpkeepMonthlyCopper": 144,
     "operatingUpkeepMonthlyCopper": 180,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 3,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "upgradesFromTemplateIds": [],
     "repeatSettlementEffects": false,
     "workerProfile": {
@@ -18730,14 +17930,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 108,
     "operatingUpkeepMonthlyCopper": 90,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "service": {
       "capacity": 200,
       "coverageKind": "population",
@@ -18938,14 +18130,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 126,
     "operatingUpkeepMonthlyCopper": 144,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "medical": {
       "enabled": true,
       "patientsPerEfficiency": 5,
@@ -19155,14 +18339,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 90,
     "operatingUpkeepMonthlyCopper": 108,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "upgradesFromTemplateIds": [],
     "repeatSettlementEffects": false,
     "workerProfile": {
@@ -19351,14 +18527,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 90,
     "operatingUpkeepMonthlyCopper": 108,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "service": {
       "capacity": 100,
       "coverageKind": "population",
@@ -19546,14 +18714,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 90,
     "operatingUpkeepMonthlyCopper": 90,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "service": {
       "capacity": 100,
       "coverageKind": "population",
@@ -19744,14 +18904,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 12,
     "baseUpkeepMonthlyCopper": 90,
     "operatingUpkeepMonthlyCopper": 72,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "upgradesFromTemplateIds": [],
     "repeatSettlementEffects": false,
     "workerProfile": {
@@ -19910,14 +19062,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 24,
     "baseUpkeepMonthlyCopper": 108,
     "operatingUpkeepMonthlyCopper": 108,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "service": {
       "capacity": 100,
       "coverageKind": "population",
@@ -20169,14 +19313,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 126,
     "operatingUpkeepMonthlyCopper": 180,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 1,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "service": {
       "capacity": 100,
       "coverageKind": "population",
@@ -20375,14 +19511,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 24,
     "baseUpkeepMonthlyCopper": 108,
     "operatingUpkeepMonthlyCopper": 108,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "service": {
       "capacity": 100,
       "coverageKind": "population",
@@ -20626,14 +19754,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 24,
     "baseUpkeepMonthlyCopper": 144,
     "operatingUpkeepMonthlyCopper": 216,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 3,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "upgradesFromTemplateIds": [],
     "repeatSettlementEffects": false,
     "workerProfile": {
@@ -20852,14 +19972,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 180,
     "operatingUpkeepMonthlyCopper": 216,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 3,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "service": {
       "capacity": 100,
       "coverageKind": "population",
@@ -21063,14 +20175,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 24,
     "baseUpkeepMonthlyCopper": 126,
     "operatingUpkeepMonthlyCopper": 144,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "service": {
       "capacity": 100,
       "coverageKind": "population",
@@ -21340,14 +20444,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 24,
     "baseUpkeepMonthlyCopper": 180,
     "operatingUpkeepMonthlyCopper": 216,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 3,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "upgradesFromTemplateIds": [],
     "repeatSettlementEffects": false,
     "workerProfile": {
@@ -21566,14 +20662,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 126,
     "operatingUpkeepMonthlyCopper": 126,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "service": {
       "capacity": 100,
       "coverageKind": "population",
@@ -21767,14 +20855,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 180,
     "operatingUpkeepMonthlyCopper": 108,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "service": {
       "capacity": 100,
       "coverageKind": "population",
@@ -21968,14 +21048,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 24,
     "baseUpkeepMonthlyCopper": 144,
     "operatingUpkeepMonthlyCopper": 180,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "service": {
       "capacity": 100,
       "coverageKind": "population",
@@ -22177,14 +21249,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 24,
     "baseUpkeepMonthlyCopper": 180,
     "operatingUpkeepMonthlyCopper": 180,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "service": {
       "capacity": 100,
       "coverageKind": "population",
@@ -22389,14 +21453,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 300,
     "operatingUpkeepMonthlyCopper": 216,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "service": {
       "capacity": 100,
       "coverageKind": "population",
@@ -22594,14 +21650,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
       "production": null,
       "reason": "обычная гражданская служба без закрытой специальности; прошлое писаря или управленца полезно для образа, не создаёт производственных процентов"
     },
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "templateVersion": 19
   },
   {
@@ -22702,14 +21750,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 12,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 18,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Открытая безопасная площадка, доступная жителям; проверка GM",
@@ -22853,14 +21893,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 18,
     "operatingUpkeepMonthlyCopper": 54,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 1,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -23010,14 +22042,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 36,
     "operatingUpkeepMonthlyCopper": 54,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 2,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -23173,14 +22197,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 18,
     "baseUpkeepMonthlyCopper": 54,
     "operatingUpkeepMonthlyCopper": 72,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "",
@@ -23332,14 +22348,6 @@ export const APPROVED_BUILDING_TEMPLATE_MANIFEST = Object.freeze([
     "wageDailyCopper": 12,
     "baseUpkeepMonthlyCopper": 36,
     "operatingUpkeepMonthlyCopper": 36,
-    "maintenance": {
-      "schemaVersion": 2,
-      "requiredPoints": 0,
-      "priority": 0,
-      "backlogTendays": 0,
-      "needsResolution": false,
-      "lastOperationId": ""
-    },
     "developmentStage": 3,
     "requiresConstructionCenter": false,
     "siteRequirementsText": "Свободный безопасный участок с доступом к воде; проверка GM",

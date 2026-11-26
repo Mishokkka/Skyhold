@@ -46,7 +46,7 @@ export function workforceChangeError(before, after, { isGM = false } = {}) {
   const targets = buildWorkAllocationTargets(after), byKey = new Map(targets.map((row) => [row.key, row]));
   const buildings = new Map((before.buildings?.list ?? []).map((row) => [String(row.id), row]));
   const people = new Map((before.people?.list ?? []).map((row) => [String(row.id), row]));
-  const targetVisible = (row) => isGM || row.sourceId === "maintenance" || visible(buildings.get(String(row.sourceId)), isGM);
+  const targetVisible = (row) => isGM || visible(buildings.get(String(row.sourceId)), isGM);
   if (!same(oldPlan, plan)) {
     if (![WORKFORCE_PLAN_VERSION, 2].includes(plan.version) || Object.keys(plan).some((key) => !["version", "goals", "locks", ...(plan.version === 2 ? ["productionGoals"] : [])].includes(key))
       || !Array.isArray(plan.goals) || !Array.isArray(plan.locks) || plan.goals.length > 2000 || plan.locks.length > 4800) return "Некорректный формат общего плана работ.";
@@ -90,8 +90,7 @@ export function workforceChangeError(before, after, { isGM = false } = {}) {
         if (!previousFunctions.includes(functionId) && (!target || target.available === false)) return `${person.name || "Житель"}: выбранная работа сейчас недоступна.`;
       }
       const admission = workerAdmission(building, person);
-      if (admission?.hard && !admission.eligible && !admission.overridden
-        && staffAppointmentWorkFunctions(appointment).some((functionId) => functionId !== "maintenance")) return `${person.name || "Житель"}: не выполнен допуск к работе.`;
+      if (admission?.hard && !admission.eligible && !admission.overridden) return `${person.name || "Житель"}: не выполнен допуск к работе.`;
       if (!isGM) {
         const continuing = oldAppointment?.buildingId === appointment.buildingId;
         const expectedRate = continuing ? oldAppointment.wageDailyCopper
@@ -128,7 +127,7 @@ export function workforceChangeError(before, after, { isGM = false } = {}) {
       }
       const building = buildings.get(String(row.sourceId));
       const admission = building && workerAdmission(building, person);
-      if (admission?.hard && !admission.eligible && !admission.overridden && row.functionId !== "maintenance") return `${person.name || "Житель"}: не выполнен допуск к работе.`;
+      if (admission?.hard && !admission.eligible && !admission.overridden) return `${person.name || "Житель"}: не выполнен допуск к работе.`;
       if (!isGM && row.volunteer === true) {
         const old = (prior.workAllocations ?? []).find((value) => value.id === row.id);
         if (!old?.volunteer || workforceKey(old) !== workforceKey(row) || old.volunteerReason !== row.volunteerReason) return "Договорённость о бесплатной работе назначает ГМ.";

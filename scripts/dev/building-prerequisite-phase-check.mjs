@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { normalizePerson } from "../data/normalizers/resident.js";
 import { buildingActiveWorkerSummary, buildingConstructionPrerequisitesMet, buildingServiceBlockReasons } from "../engines/economy/building-service.js";
 
 export function checkBuildingPrerequisitePhases() {
@@ -30,8 +31,9 @@ export function checkBuildingPrerequisitePhases() {
   holding.people.list[0] = { id: "operator", workAllocationMode: "explicit", workAllocations: [
     { sourceId: "water", functionId: "maintenance", normalQd: 2 }
   ] };
-  assert.equal(buildingActiveWorkerSummary(holding, provider).count, 0, "Technical work never counts as primary service staff, including stale legacy assignments");
+  normalizePerson(holding.people.list[0]);
+  assert.equal(buildingActiveWorkerSummary(holding, provider).count, 0, "Retired assignments do not count as service staff after load");
   assert.equal(buildingActiveWorkerSummary(holding, provider).qd, 0);
   assert.equal(buildingConstructionPrerequisitesMet(holding, consumer), false);
-  return { construction: true, ongoingService: true, legacy: true, cycles: true, technicianExcluded: true };
+  return { construction: true, ongoingService: true, legacy: true, cycles: true, retiredAllocationExcluded: true };
 }

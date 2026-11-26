@@ -196,8 +196,6 @@ _staffCanCollectLine(building, line, workerContext) {
 async _staffFunctionNeedsWork(holding, building, functionId, person, workerContext, step, lineCanWork) {
   const finance = workerContext.financeContext;
   if (!this._financeFunctionAllowed(finance, building, functionId)) return false;
-  if (functionId === "maintenance") return false; // The period adapter reserves these slots before equipment starts.
-  if (!this._technicalMaintenanceReady(building, finance, step)) return false;
   if (functionId === "agriculture") {
     return this._agricultureWorkUnitsPerQd(holding, building, person, workerContext) > 0
       && this._scheduledAgricultureWorkAvailable?.(holding, building, workerContext, step) === true;
@@ -209,11 +207,10 @@ async _staffFunctionNeedsWork(holding, building, functionId, person, workerConte
     // Zero productive work cannot hold a worker away from an available reserve.
     // Collection still uses ordinary time and is possible at zero productivity.
     if (line && (line.source ?? "workers") === "workers" && !(line.requiresCollection && number(line.pendingQty) > 0)) {
-      // Match the executor's integer work units after the equipment penalty.
+      // Match the executor's integer work units.
       const efficiency = this._personBuildingEfficiency(holding, building, person, workerContext);
       const qualificationWorkUnits = Math.max(0, Math.round(efficiency * 10_000));
-      const maintenanceBasisPoints = Math.max(0, Math.round((this._maintenanceEfficiencyFactor?.(building) ?? 1) * 10_000));
-      if (Math.floor(qualificationWorkUnits * maintenanceBasisPoints / 10_000) === 0) return false;
+      if (qualificationWorkUnits === 0) return false;
     }
     return Boolean(line && await lineCanWork(building, line, this._assignedBuildingPeople(holding, building, workerContext, functionId), step));
   }

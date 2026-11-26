@@ -151,8 +151,7 @@ export async function runProductionCycle({
       qd: 1,
       workqd: timed ? 0 : Math.max(1, whole(line.workQd ?? line.workerQD ?? line.cycleQd ?? line.cycleQD, 1))
     });
-    const maintenanceFactor = timed ? Math.max(0, Math.min(1, deps.safeNumber(deps.maintenanceEfficiencyFactor?.(building) ?? 1, 1))) : 1;
-    const fullOutputQty = whole(output.qty * maintenanceFactor);
+    const fullOutputQty = whole(output.qty);
     if (!fullOutputQty) return { ok: false, reason: `${resourceName}: рецепт не даёт целого выхода.` };
     let outputQty = capacity ? Math.min(fullOutputQty, free) : fullOutputQty;
     if (remainingGoal !== null) {
@@ -229,7 +228,6 @@ export async function runProductionCycle({
 
   const staffLineCanWork = async (building, line, assignedPeople, step) => {
     if (!line || deps.lineFinanceAllowed?.(building, line) === false
-      || deps.buildingTechnicalReady?.(building, step) === false
       || !deps.lineSeasonAllowed(line, deps.getSeasonSnapshot(holding, step) ?? null)) return false;
     if (line.requiresCollection && whole(line.pendingQty) > 0) return deps.staffCanCollectLine?.(building, line, workerContext) ?? true;
     if (line.active === false) return false;
@@ -304,7 +302,7 @@ export async function runProductionCycle({
     for (const building of buildings) {
       if (deps.buildingStatus(building).value !== "built" || !deps.buildingFunctions(building).production) continue;
       for (const line of building.productionLines ?? []) {
-        if (line?.active === false || deps.lineFinanceAllowed?.(building, line) === false || deps.buildingTechnicalReady?.(building, step) === false || !deps.lineSeasonAllowed(line, productionSeasonSnapshot)) continue;
+        if (line?.active === false || deps.lineFinanceAllowed?.(building, line) === false || !deps.lineSeasonAllowed(line, productionSeasonSnapshot)) continue;
         let releasedQty = 0;
         // Existing queued batches each age once, including while another batch
         // is being prepared. Newly finished labor enters this loop next QD.
@@ -351,7 +349,7 @@ export async function runProductionCycle({
     for (const building of buildings) {
       if (deps.buildingStatus(building).value !== "built" || !deps.buildingFunctions(building).production) continue;
       for (const line of Array.isArray(building.productionLines) ? building.productionLines : []) {
-        if (line?.active === false || deps.lineFinanceAllowed?.(building, line) === false || deps.buildingTechnicalReady?.(building, step) === false || !deps.lineSeasonAllowed(line, productionSeasonSnapshot)) continue;
+        if (line?.active === false || deps.lineFinanceAllowed?.(building, line) === false || !deps.lineSeasonAllowed(line, productionSeasonSnapshot)) continue;
         const source = ["workers", "time", "content"].includes(String(line.source ?? "")) ? String(line.source) : "workers";
         if (source !== "content" || line.workInputsReserved || completedThisStep.has(line)) continue;
         const period = ["qd", "day", "tenday"].includes(String(line.period ?? "")) ? String(line.period) : "day";
@@ -368,8 +366,7 @@ export async function runProductionCycle({
         const workerSummary = deps.buildingEffectiveWorkers(holding, building, workerContext);
         const output = await deps.lineOutputForCycle(line, { eff: workerSummary.total, workers: workerSummary.assigned, cycles: multiplier, qd: 1, workqd: 0 });
         if (output.formula) report.formulas.push(`${building.name || "Здание"} / ${resourceName}: ${output.formula}`);
-        const maintenanceFactor = Math.max(0, Math.min(1, deps.safeNumber(deps.maintenanceEfficiencyFactor?.(building) ?? 1, 1)));
-        const total = whole(output.qty * multiplier * maintenanceFactor);
+        const total = whole(output.qty * multiplier);
         if (!total) continue;
 
         const costsPer = deps.parseResourceCosts(line.expenses);
@@ -404,7 +401,7 @@ export async function runProductionCycle({
     for (const building of buildings) {
       if (deps.buildingStatus(building).value !== "built" || !deps.buildingFunctions(building).production) continue;
       for (const line of Array.isArray(building.productionLines) ? building.productionLines : []) {
-        if (line?.active === false || deps.lineFinanceAllowed?.(building, line) === false || deps.buildingTechnicalReady?.(building, step) === false || !deps.lineSeasonAllowed(line, productionSeasonSnapshot)) continue;
+        if (line?.active === false || deps.lineFinanceAllowed?.(building, line) === false || !deps.lineSeasonAllowed(line, productionSeasonSnapshot)) continue;
         const timing = productionTiming(line);
         const source = timing?.source ?? (["workers", "time", "content"].includes(String(line.source ?? "")) ? String(line.source) : "workers");
         if (source !== "workers") continue;
@@ -444,9 +441,7 @@ export async function runProductionCycle({
         for (const person of assignedPeople) {
           const entry = deps.workerBudgetEntry(holding, person, budgets, workerContext, building, line);
           const efficiency = Math.max(0, deps.personBuildingEfficiency(holding, building, person, workerContext));
-          const maintenanceBasisPoints = Math.max(0, Math.round(deps.safeNumber(deps.maintenanceEfficiencyFactor?.(building) ?? 1, 1) * 10_000));
-          const qualificationWorkUnits = Math.max(0, Math.round(efficiency * WORK_UNITS_PER_QD));
-          const workUnitsPerQd = Math.floor((qualificationWorkUnits * maintenanceBasisPoints) / 10_000);
+          const workUnitsPerQd = Math.max(0, Math.round(efficiency * WORK_UNITS_PER_QD));
           if (!workUnitsPerQd) continue;
 
           while (line.active !== false && productionTiming(line)?.phase !== "waiting" && deps.safeNumber(entry.available, 0) + 0.0001 >= 1) {

@@ -32,28 +32,25 @@ export function checkBuildingCatalogFullTransition() {
   assert.equal(plan.canApply, true);
   assert.deepEqual(source, snapshot, "Full preview must not mutate its source");
   const legacyLabor = clone(source);
-  legacyLabor.holdings[0].buildings.list.find(row => row.templateId === "lumbermill").maintenance.schemaVersion = 1;
-  legacyLabor.holdings[0].people.list[0].workAllocationMode = "explicit";
-  legacyLabor.holdings[0].people.list[0].workAllocations = [
-    { sourceId: "maintenance", functionId: "maintenance", normalQd: 2 },
-    { sourceId: "instance-lumbermill", functionId: "production", normalQd: 4 }
+  const legacyPerson = legacyLabor.holdings[0].people.list[0];
+  legacyPerson.workAllocationMode = "explicit";
+  legacyPerson.workAllocations = [
+    { id: "general", sourceId: "maintenance", functionId: "maintenance", normalQd: 2 },
+    { id: "technical", sourceId: "instance-lumbermill", functionId: "maintenance", normalQd: 3 },
+    { id: "production", sourceId: "instance-lumbermill", functionId: "production", normalQd: 4 }
   ];
-  const laborSnapshot = clone(legacyLabor);
-  const laborPlan = planBuildingCatalogMigration({ currentData: legacyLabor, operationId: "force-legacy-labor", replaceCatalog: true });
-  assert.deepEqual(laborPlan.blockingIssues, []);
-  assert.deepEqual(laborPlan.targetData.holdings[0].people.list[0].workAllocations, [laborSnapshot.holdings[0].people.list[0].workAllocations[1]], "Only obsolete general maintenance is released");
-  assert.deepEqual(legacyLabor, laborSnapshot, "Forced preview still never writes the source");
-  legacyLabor.holdings[0].buildings.list.find(row => row.templateId === "lumbermill").maintenance.schemaVersion = 2;
-  legacyLabor.holdings[0].people.list[0].workAllocations.push({ sourceId: "instance-lumbermill", functionId: "maintenance", normalQd: 3 });
-  const alreadyTechnical = clone(legacyLabor);
-  const allocations = alreadyTechnical.holdings[0].people.list[0].workAllocations;
-  const releaseArgs = { currentData: alreadyTechnical, operationId: "refresh-technical-labor" };
-  const untouched = planBuildingCatalogMigration(releaseArgs);
-  assert.deepEqual(untouched.targetData.holdings[0].people.list[0].workAllocations, allocations);
-  const refreshed = planBuildingCatalogMigration({ ...releaseArgs, replaceCatalog: true });
-  assert.deepEqual(refreshed.blockingIssues, []);
-  assert.deepEqual(refreshed.targetData.holdings[0].people.list[0].workAllocations, allocations.slice(1));
-  assert.match(refreshed.decisions[0].detail, /освобождено 2 QD/);
+  const rawSnapshot = clone(legacyLabor);
+  const normalizedLabor = normalizeSkyholdData(legacyLabor);
+  const laborSnapshot = clone(normalizedLabor);
+  assert.deepEqual(normalizedLabor.holdings[0].people.list[0].workAllocations.map((row) => row.id), ["production"],
+    "Loading releases only obsolete work allocations");
+  assert.deepEqual(legacyLabor, rawSnapshot, "Normalization preserves the original snapshot");
+  for (const replaceCatalog of [false, true]) {
+    const laborPlan = planBuildingCatalogMigration({ currentData: normalizedLabor, operationId: "legacy-labor", replaceCatalog });
+    assert.deepEqual(laborPlan.blockingIssues, []);
+    assert.deepEqual(laborPlan.targetData.holdings[0].people.list[0].workAllocations, laborSnapshot.holdings[0].people.list[0].workAllocations);
+    assert.deepEqual(normalizedLabor, laborSnapshot, "Preview does not write the normalized source");
+  }
   const applied = applyBuildingCatalogMigration({ currentData: source, plan, operationId: plan.operationId });
   const loaded = normalizeSkyholdData(applied.data);
   assert.equal(loaded.catalog.buildings.length, 126, "The current catalog is complete");

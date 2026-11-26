@@ -16,8 +16,7 @@ function fixture({ mode = "qd", functionId = "culture", service = { capacity: 10
     labor: { version: 1, mode, capacityQd: null }, workersMin: 0, workersMax: 10,
     functions: { culture: true, production: true, storage: true, defense: true },
     productionLines: [{ id: "kitchen", active: true, source: "workers" }],
-    activation: { minWorkers: 0, minOperationalQd: threshold }, service,
-    maintenance: { schemaVersion: 2, requiredPoints: 1, backlogTendays: 0 } };
+    activation: { minWorkers: 0, minOperationalQd: threshold }, service };
   const people = times.map((qd, i) => ({ id: `worker${i}`, name: `Работник ${i}`, age: 30,
     workAssignment: building.id, workAllocationMode: "explicit",
     workAllocations: [{ sourceId: building.id, functionId, normalQd: qd, overtimeQd: 0 }],
@@ -48,8 +47,6 @@ export function checkHybridService() {
     assert.equal(buildingServiceEffectFactor(holding, building), 0.05);
     assert.equal(buildingServiceCapacity(holding, building), 5);
     assert.equal(buildingConfirmedServiceCapacity(holding, building), 5, "One QD cannot grant full fixed capacity");
-    building.maintenance.backlogTendays = 2;
-    assert.equal(buildingConfirmedServiceCapacity(holding, building), 2, "Labor and maintenance multiply once each");
   }
   {
     const f = fixture({ times: [10, 10], service: { capacityPerWorker: 10 } });

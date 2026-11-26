@@ -123,15 +123,14 @@ export function checkReputationCharacterization() {
     workersMax: 2,
     activation: { minWorkers: 1 },
     functions: { culture: true },
-    assignedWorkerIds: ["attendant"],
-    maintenance: { backlogTendays: 2 }
+    assignedWorkerIds: ["attendant"]
   });
   const staffedHolding = {
     people: { list: [{ id: "attendant", dead: false, injuredDays: 0 }] },
     buildings: { list: [staffedBuilding] },
     finance: {}
   };
-  assert.equal(buildingServiceEffectFactor(staffedHolding, staffedBuilding), 0.5, "a staffed active service with two missed maintenance tendays must run at half effect");
+  assert.equal(buildingServiceEffectFactor(staffedHolding, staffedBuilding), 1, "A fully staffed active service runs at full effect");
   assert.equal(scaleIntegerBuildingEffect(5, 0.5), 3, "partial positive effects use symmetric whole-number rounding");
   staffedBuilding.assignedWorkerIds = [];
   assert.equal(buildingServiceEffectFactor(staffedHolding, staffedBuilding), 0, "an active institution without its minimum staff must give no settlement effect");
@@ -140,8 +139,7 @@ export function checkReputationCharacterization() {
     workersMax: 0,
     workerProfile: { workersMin: 0, workersMax: 0, composition: [] },
     functions: { culture: true },
-    serviceState: { functionId: "culture", active: false },
-    maintenance: { backlogTendays: 9 }
+    serviceState: { functionId: "culture", active: false }
   });
   assert.equal(buildingServiceEffectFactor(staffedHolding, passiveMonument), 1, "The generic readiness helper preserves passive structural behavior");
   assert.equal(buildingConfirmedSocialStatus(staffedHolding, passiveMonument).active, false, "Positive reputation never inherits passive structural readiness");

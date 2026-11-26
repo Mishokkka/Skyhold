@@ -1,5 +1,4 @@
 import { buildingOperationalState } from "../../core/building-state.js";
-import { maintenanceEfficiencyFactor } from "../../data/economy/maintenance.js";
 import { WORK_ALLOCATION_MODE_EXPLICIT } from "../../data/work-allocations.js";
 import { isResidentPresent } from "../../data/resident-presence.js";
 import { residentLaborCapacity } from "../../data/labor-budget.js";
@@ -25,7 +24,7 @@ function signedRound(value = 0) {
 function functionMatches(actual = "", expected = "") {
   const actualId = text(actual);
   const expectedId = text(expected);
-  if (!expectedId) return actualId !== "maintenance";
+  if (!expectedId) return true;
   if (actualId === expectedId) return true;
   return expectedId === "production" && actualId.startsWith("production:");
 }
@@ -62,7 +61,7 @@ function currentAssignmentMatches(person = {}, building = {}, functionId = "") {
 
 function enabledFunction(building, functionId = "") {
   const [kind, lineId] = text(functionId).split(":");
-  if (kind === "maintenance" || building.functions?.[kind] !== true) return false;
+  if (building.functions?.[kind] !== true) return false;
   return kind !== "production" || (building.productionLines ?? []).some((line) => line.active !== false && (!lineId || line.id === lineId));
 }
 
@@ -70,7 +69,7 @@ function traceFunctionQd(serviceState = {}, functionId = "") {
   const entries = Object.entries(serviceState?.workedQdByFunction ?? {});
   if (!functionId) {
     const hasLines = entries.some(([id]) => id.startsWith("production:"));
-    const unique = entries.filter(([id]) => id !== "maintenance" && !(hasLines && id === "production"));
+    const unique = entries.filter(([id]) => !(hasLines && id === "production"));
     return entries.length ? unique.reduce((sum, [, qd]) => sum + whole(qd), 0) : whole(serviceState.workedQd);
   }
   const exact = entries.find(([recordedFunction]) => text(recordedFunction) === text(functionId));
@@ -125,7 +124,6 @@ function workerAllocatedToFunction(person = {}, buildingId = "", functionId = ""
   if (text(person?.workAllocationMode) !== WORK_ALLOCATION_MODE_EXPLICIT) return true;
   return (person?.workAllocations ?? []).some((allocation) => (
     text(allocation?.sourceId) === buildingId
-    && text(allocation?.functionId) !== "maintenance"
     && functionMatches(allocation?.functionId, functionId)
     && whole(allocation?.normalQd) + whole(allocation?.overtimeQd) > 0
   ));
@@ -138,7 +136,6 @@ function workerAllocatedQd(person = {}, buildingId = "", functionId = "") {
   if (text(person?.workAllocationMode) !== WORK_ALLOCATION_MODE_EXPLICIT) return residentLaborCapacity(person).normalQd;
   return (person?.workAllocations ?? []).reduce((sum, allocation) => {
     if (text(allocation?.sourceId) !== buildingId) return sum;
-    if (text(allocation?.functionId) === "maintenance") return sum;
     if (!functionMatches(allocation?.functionId, functionId)) return sum;
     return sum + whole(allocation?.normalQd) + whole(allocation?.overtimeQd);
   }, 0);
@@ -295,7 +292,6 @@ export function buildingConfirmedSocialStatus(holding = {}, building = {}, funct
     workforce: { workers, count: workers.length, qd, equivalentWorkers: workerQd
       ? workers.reduce((sum, person) => sum + Math.min(1, traceFunctionQd({ workedQdByFunction: workerQd[text(person.id)] }, functionId) / 20), 0)
       : Math.min(workers.length, qd / 20) },
-    maintenanceFactor: base.maintenanceFactor,
     laborFactor: laborMode === "legacy" || minOperationalQd <= 0 ? 1 : Math.min(1, qd / minOperationalQd),
     periodKey: text(state?.periodKey)
   };
@@ -313,7 +309,7 @@ export function buildingConfirmedHarmActive(holding = {}, building = {}, functio
 }
 
 export function buildingServiceBlockReasons(holding = {}, building = {}, functionIdArg = "", visited = new Set()) {
-  if (visited.has(building)) return { active: false, maintenanceFactor: 0, reasons: [{ code: "dependency-cycle", text: "циклическая зависимость услуг" }] };
+  if (visited.has(building)) return { active: false, reasons: [{ code: "dependency-cycle", text: "циклическая зависимость услуг" }] };
   const nextVisited = new Set(visited).add(building);
   const reasons = [];
   const activeServiceContract = hasActiveServiceContract(building);
@@ -354,23 +350,19 @@ export function buildingServiceBlockReasons(holding = {}, building = {}, functio
   if (laborMode !== "passive" && workforce.count > 0 && !buildingCompositionStatus(building, workforce.workers, { excludeGroups: ["ЧУДОТВОРЕЦ"] }).met) {
     reasons.push({ code: "composition-missing", text: "не выполнено обязательное условие состава работников" });
   }
-  const maintenanceFactor = activeServiceContract
-    ? Math.max(0, Math.min(1, maintenanceEfficiencyFactor(building?.maintenance)))
-    : 1;
-  if (maintenanceFactor <= 0) reasons.push({ code: "maintenance-stopped", text: "обслуживание полностью остановило функцию" });
   const laborFactor = laborMode === "legacy" || laborMode === "passive" || minOperationalQd <= 0
     ? 1 : Math.min(1, workforce.qd / minOperationalQd);
-  return { reasons, workforce, functionId, maintenanceFactor, laborFactor, active: reasons.length === 0 };
+  return { reasons, workforce, functionId, laborFactor, active: reasons.length === 0 };
 }
 
 /**
  * Returns the current factor for an active settlement service.
  * Passive monuments and unstaffed structural effects stay at full strength;
- * staffed services require an operational building, paid staff and maintenance.
+ * staffed services require an operational building and paid staff.
  */
 export function buildingServiceEffectFactor(holding = {}, building = {}, functionIdArg = "") {
   const status = buildingServiceBlockReasons(holding, building, functionIdArg);
-  return status.active ? status.maintenanceFactor * status.laborFactor : 0;
+  return status.active ? status.laborFactor : 0;
 }
 
 export function buildingServiceCapacity(holding = {}, building = {}, functionIdArg = "") {
@@ -379,10 +371,10 @@ export function buildingServiceCapacity(holding = {}, building = {}, functionIdA
   if (!service || !status.active) return 0;
   const functionId = text(functionIdArg) || buildingServiceFunctionId(building);
   const workforce = buildingActiveWorkerSummary(holding, building, functionId);
-  return serviceCapacityForWorkforce(service, building, workforce, status.maintenanceFactor, status.laborFactor);
+  return serviceCapacityForWorkforce(service, building, workforce, status.laborFactor);
 }
 
-function serviceCapacityForWorkforce(service = {}, building = {}, workforce = {}, serviceFactor = 1, laborFactor = 1) {
+function serviceCapacityForWorkforce(service = {}, building = {}, workforce = {}, laborFactor = 1) {
   const legacy = buildingLaborMode(building) === "legacy";
   const workers = legacy ? workforce.count : Number(workforce.equivalentWorkers ?? 0);
   let capacity = whole(service.capacity) * laborFactor;
@@ -397,10 +389,8 @@ function serviceCapacityForWorkforce(service = {}, building = {}, workforce = {}
   }
   const maximum = whole(service.maximumCapacity);
   if (maximum > 0) capacity = Math.min(capacity, maximum);
-  // Capacity is a real pool, so partial maintenance reduces the number of
-  // residents/buildings that can actually be served. Unlike a fixed integer
-  // bonus it is rounded down: an incomplete service slot covers nobody.
-  return Math.max(0, Math.floor(capacity * serviceFactor));
+  // An incomplete service slot covers nobody.
+  return Math.max(0, Math.floor(capacity));
 }
 
 export function buildingConfirmedServiceCapacity(holding = {}, building = {}, functionIdArg = "") {
@@ -408,7 +398,7 @@ export function buildingConfirmedServiceCapacity(holding = {}, building = {}, fu
   if (!service) return 0;
   const status = buildingConfirmedSocialStatus(holding, building, functionIdArg);
   if (!status.active) return 0;
-  return serviceCapacityForWorkforce(service, building, status.workforce, status.maintenanceFactor, status.laborFactor ?? 1);
+  return serviceCapacityForWorkforce(service, building, status.workforce, status.laborFactor ?? 1);
 }
 
 export function buildingConfirmedLeisureCapacity(holding = {}, building = {}) {
@@ -420,7 +410,7 @@ export function buildingConfirmedLeisureCapacity(holding = {}, building = {}) {
   const nominalCapacity = whole(leisure.capacity);
   const qdPerCapacity = Math.max(0.01, Number(leisure.qdPerCapacity) || 1);
   const laborCapacity = Math.floor(status.workforce.qd / qdPerCapacity);
-  return Math.max(0, Math.floor(Math.min(nominalCapacity, laborCapacity) * status.maintenanceFactor));
+  return Math.max(0, Math.min(nominalCapacity, laborCapacity));
 }
 
 export function buildingNominalMorale(building = {}) {
@@ -455,8 +445,7 @@ export function scaleIntegerBuildingEffect(value, factor = 1) {
   if (!Number.isFinite(numeric) || !numeric) return 0;
   const activeFactor = Math.max(0, Math.min(1, Number(factor) || 0));
   if (activeFactor <= 0) return 0;
-  // Poor maintenance may reduce a positive service, but it must never turn a
-  // dangerous or unpleasant active building into a smaller penalty.
+  // An active building applies the full penalty.
   if (numeric < 0) return signedRound(numeric);
   return signedRound(numeric * activeFactor);
 }

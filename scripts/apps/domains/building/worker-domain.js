@@ -122,8 +122,6 @@ _buildingEffectiveWorkers(holding, building, workerContext = null) {
   }
   const composition = buildingCompositionStatus(building, assignedPeople, { excludeGroups: ["ЧУДОТВОРЕЦ"] });
   if (!composition.met) details.push(`не выполнен состав: ${composition.text}`);
-  const maintenanceFactor = Math.max(0, Math.min(1, this._maintenanceEfficiencyFactor?.(building)
-    ?? (this._safeNumber(building?.maintenance?.backlogTendays, 0) >= 2 ? 0.5 : 1)));
   const result = {
     assigned: assignedIds.length,
     total: assignedPeople.length,
@@ -131,7 +129,6 @@ _buildingEffectiveWorkers(holding, building, workerContext = null) {
     productionWorkUnitsPerQd,
     suitableCount,
     leaderBonus: 0,
-    maintenanceFactor,
     composition,
     detail: [`${assignedPeople.length} раб.`, ...details].join(" · ")
   };

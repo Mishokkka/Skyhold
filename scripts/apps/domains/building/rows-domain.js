@@ -5,7 +5,6 @@ import { normalizeResourceId, resourceIcon, resourceImage, resourceLabel } from 
 import { inferBuildingSpecialKind, isMedicalBuilding, SPECIAL_BUILDING_KINDS } from "../../../core/building-specials.js";
 import { buildingOperationalState } from "../../../core/building-state.js";
 import { buildingAppearance } from "../../../core/building-appearance.js";
-import { maintenanceEfficiencyFactor, normalizeBuildingMaintenance } from "../../../data/economy/maintenance.js";
 import { buildingRequiresConstructionCenter } from "../../../data/building-development-tree.js";
 import { buildingStaffingWorkerIds, explicitWorkAllocationsForBuilding } from "../../../data/work-allocations.js";
 import { buildingConstructionPrerequisitesMet, buildingHousingComfort, buildingNominalMorale, buildingWonderworkingActive } from "../../../engines/economy/building-service.js";
@@ -423,8 +422,6 @@ _prepareBuildingRow(holding, row, index, canEdit, storageRoomsArg = null, option
   const hasCardBody = Boolean(cardProductionRows.length || showProjectNeeds || showBuildProgress || pendingProductionRows.length);
   const headOnly = !hasCardBody && !showStorageStrip && !showHousingStrip;
   const remainingBuildSuccesses = Math.max(0, target - progress);
-  const maintenanceData = normalizeBuildingMaintenance(row.maintenance);
-  const maintenanceFactor = maintenanceEfficiencyFactor(maintenanceData);
 
   if (cardOnly) {
     return {
@@ -567,15 +564,6 @@ _prepareBuildingRow(holding, row, index, canEdit, storageRoomsArg = null, option
     requirementsText: this._devText(requirements, "Нет"),
     bonusesText: this._devText(bonuses, "Нет"),
     functions,
-    maintenance: {
-      ...maintenanceData,
-      technical: maintenanceData.schemaVersion === 2,
-      efficiencyFactor: maintenanceFactor,
-      efficiencyPercent: Math.round(maintenanceFactor * 100),
-      requiredPointsPath: `${recordPath}.maintenance.requiredPoints`,
-      priorityPath: `${recordPath}.maintenance.priority`,
-      needsResolutionPath: `${recordPath}.maintenance.needsResolution`
-    },
     storage: {
       capacity: storageCapacity,
       security: storageSecurity,

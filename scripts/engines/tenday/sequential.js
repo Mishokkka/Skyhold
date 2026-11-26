@@ -8,7 +8,6 @@ const SUMS = { food: ["needed", "eaten", "hungryResidentDays", "expiredQty"], co
   politics: ["influenceGained"], marketStockRecovery: ["recoveredQty"], marketDemandRecovery: ["recoveredQty"],
   finance: ["planned", "paidCopper", "personnelOfficeCashbackCopper", "personnelOfficeCashbackBaseCopper", "personnelOfficeCostCopper", "personnelOfficeNetSavingCopper"],
   agriculture: ["producedQty", "expiredQty", "workQdUsed"],
-  maintenance: ["availablePoints", "allocatedPoints", "unusedPoints", "allocatedTechnicalQd"],
   livestock: ["born", "matured", "feedConsumed", "eggs", "milk", "wool", "meat", "tallow", "workQdUsed"] };
 
 /** Flow totals accumulate; final snapshots remain those of the final period. */

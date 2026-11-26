@@ -8,7 +8,6 @@ import { mergeHoldingDefaults } from "../data/normalizers.js";
 import { SkyholdData } from "../data/store.js";
 import { SkyholdWorkflowService } from "../workflows/skyhold-workflow-service.js";
 import { beginPerishableStoragePeriod, finishPerishableStoragePeriod } from "../engines/economy/perishable-storage.js";
-import { MAINTENANCE_WORK_FUNCTION_ID } from "../data/work-allocations.js";
 import { preparationProductionTradePlan } from "./economy-preparation-year-check.mjs";
 import { marketDemandKey } from "../data/market/demand-state.js";
 import { planMarketOutboundSale } from "../engines/market/outbound.js";
@@ -111,7 +110,7 @@ export async function settlementScenario({ population = 12, demandFactor = 1, pr
         const p = h.people.list[personIndex++];
         assert.ok(p, "The plan must fit the real population");
         const amount = Math.min(20, qd);
-        if (buildingLaborMode(b) === "staff" && fn !== MAINTENANCE_WORK_FUNCTION_ID) {
+        if (buildingLaborMode(b) === "staff") {
           applyStaffAppointment(h, p.id, { version: 1, buildingId: b.id, primaryFunctionId: fn,
             reserveFunctionId: "", wageDailyCopper: 12, overtimeQd: 0, volunteer: false, volunteerReason: "" });
           // A permanent employee reserves their whole normal budget, including
@@ -130,7 +129,6 @@ export async function settlementScenario({ population = 12, demandFactor = 1, pr
         }
       };
       for (const b of h.buildings.list) {
-        if (b.maintenance.requiredPoints > 0) job(b, MAINTENANCE_WORK_FUNCTION_ID, b.maintenance.requiredPoints);
         // Reserve harvest slots when the crop ripens during this tenday too.
         // Waiting for a ready crop at the next period boundary loses up to nine
         // days of its shelf life; scheduled work cannot be applied retroactively.

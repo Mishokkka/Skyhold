@@ -38,7 +38,6 @@ function specializationYear(base, { distanceKm, salePriceFactor, imported = fals
       const qd = Math.min(Math.floor(Math.min(free, laborReserve) / line.workQd), Math.floor(order.maxPerPeriod / line.outputQty)) * line.workQd;
       if (!qd) continue;
       const batch = preparationProductionTradePlan({ distanceKm, salePriceFactor, imported, buildingId: building.id, lineId: line.id, qd, includeBaseUpkeep: false });
-      assert.equal(batch.maintenanceQd, 0, "This reference portfolio contains no additional technical-service job");
       assert.ok(batch.inboundQd + batch.outboundQd <= 40, "The declared next-period settlement requires a short transport route");
       let left = qd;
       for (const worker of available) {

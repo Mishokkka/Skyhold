@@ -108,7 +108,7 @@ export function prepareControlContext(holding, catalog = [], summary = {}, manag
       return ["active", "disabled"].includes(state.lifecycle) && state.condition !== "destroyed";
     }).length;
     return { id: template.id, name: template.name || "Здание", stage: whole(template.developmentStage),
-      effects: controlEffectText(template.control), activation: template.activationConditionText || "Требуются исправность, обслуживание и работа функции.",
+      effects: controlEffectText(template.control), activation: template.activationConditionText || "Требуются исправность здания и работа функции.",
       minWorkers: whole(template.activation?.minWorkers ?? template.workersMin), maxWorkers: whole(template.workersMax),
       qd: whole(template.activation?.minOperationalQd), prerequisites: [required.length ? `Нужны: ${required.join(", ")}` : "",
         any.length ? `Одно из: ${any.join(", ")}` : ""].filter(Boolean).join(". "), requirements,

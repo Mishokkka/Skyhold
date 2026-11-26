@@ -97,7 +97,6 @@ export class SkyholdBuildingCatalogMigration extends FloatingTooltipsMixin(Rende
       noChanges: plan?.hasChanges === false,
       hasIssues: issueRows.length > 0,
       issueRows,
-      decisions: plan?.decisions ?? [],
       issuesTruncated: (plan?.blockingIssues?.length ?? 0) > issueRows.length,
       changedRows,
       rowsTruncated: (plan?.rows?.filter((row) => row.changed).length ?? 0) > changedRows.length,

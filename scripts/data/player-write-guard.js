@@ -364,7 +364,6 @@ function isPlayerBuildingPath(rest) {
   if (/^buildings\.list\.\d+\.assignedWorkerIds(?:\.\d+)?$/.test(text)) return true;
   if (/^buildings\.list\.\d+\.productionLines\.\d+\.(active|storageRoomId)$/.test(text)) return true;
   if (/^buildings\.list\.\d+\.agriculture\.config\.(enabled|activeCropId|outputRoomId|gmPriority|sow|harvest)$/.test(text)) return true;
-  if (/^buildings\.list\.\d+\.maintenance\.priority$/.test(text)) return true;
   if (/^buildings\.list\.\d+\.housing\.notes$/.test(text)) return true;
   if (/^buildings\.list\.\d+\.religion\.(faith|customFaith|notes)$/.test(text)) return true;
   if (/^constructionCrews\.\d+\.(name|memberIds|leaderId|distributed|distributedIds|distributedLeaderId)(?:\.\d+)?$/.test(text)) return true;

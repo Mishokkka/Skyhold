@@ -98,9 +98,7 @@ _livestockWorkUnitsPerQd(holding, building, person, workerContext = null) {
     ? this._personBuildingEfficiency(holding, building, person, workerContext, { purpose: "production" })
     : settlementHungerFactor(holding);
   const politicalFactor = Math.max(0, 1 + (politicsRuntimeEffects(holding)?.productionPercent ?? 0) / 100);
-  const qualificationWorkUnits = Math.max(0, Math.round(efficiency * politicalFactor * 10_000));
-  const maintenanceBasisPoints = Math.max(0, Math.round((this._maintenanceEfficiencyFactor?.(building) ?? 1) * 10_000));
-  return Math.floor((qualificationWorkUnits * maintenanceBasisPoints) / 10_000);
+  return Math.max(0, Math.round(efficiency * politicalFactor * 10_000));
 },
 
 _livestockPeriodDependencies(holding, { workerContext = null, financeContext = null, stepOffset = null, cycleQd = 40 } = {}) {

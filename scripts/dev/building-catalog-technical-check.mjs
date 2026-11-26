@@ -7,14 +7,15 @@ import { settlementControlSummary } from "../engines/settlement/control.js";
 export function checkBuildingCatalogTechnical() {
   const before = structuredClone(DEFAULT_BUILDING_TEMPLATES);
   const rows = BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION;
-  assert.equal(rows.filter((row) => row.maintenance.requiredPoints > 0).length, 19);
-  assert.ok(rows.every((row) => row.maintenance.schemaVersion === 2 && row.templateVersion === TEMPLATE_CATALOG_VERSION));
+  assert.ok(DEFAULT_BUILDING_TEMPLATES.every((row) => row.maintenance === undefined));
+  assert.ok(rows.every((row) => row.templateVersion === TEMPLATE_CATALOG_VERSION));
   assert.equal(rows.filter((row) => row.prerequisiteModes).length, 14);
   for (const id of ["lazaret", "lighthouse"]) assert.equal(rows.find((row) => row.id === id).bonuses.food, 0);
-  const normalized = normalizeCatalogPartition({ buildings: rows }).buildings;
+  const normalized = normalizeCatalogPartition({ buildings: rows.map((row) => ({ ...row,
+    maintenance: { schemaVersion: 2, requiredPoints: 2, priority: 5 } })) }).buildings;
   for (const row of rows) {
     const loaded = normalized.find((item) => item.id === row.id);
-    assert.deepEqual(loaded.maintenance, row.maintenance);
+    assert.equal(Object.hasOwn(loaded, "maintenance"), false, "Legacy building data is removed during normalization");
     assert.deepEqual(loaded.prerequisiteModes, row.prerequisiteModes);
   }
   const house = structuredClone(normalized.find((row) => row.id === "meeting-house"));

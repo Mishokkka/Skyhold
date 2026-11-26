@@ -129,9 +129,7 @@ _agricultureWorkUnitsPerQd(holding, building, person, workerContext = null) {
     ? this._personBuildingEfficiency(holding, building, person, workerContext, { purpose: "production" })
     : settlementHungerFactor(holding);
   const politicalFactor = Math.max(0, 1 + (politicsRuntimeEffects(holding)?.productionPercent ?? 0) / 100);
-  const qualificationWorkUnits = Math.max(0, Math.round(efficiency * politicalFactor * 10_000));
-  const maintenanceBasisPoints = Math.max(0, Math.round((this._maintenanceEfficiencyFactor?.(building) ?? 1) * 10_000));
-  return Math.floor((qualificationWorkUnits * maintenanceBasisPoints) / 10_000);
+  return Math.max(0, Math.round(efficiency * politicalFactor * 10_000));
 },
 
 _agriculturePeriodDependencies(holding, { workerContext = null, financeContext = null } = {}) {
@@ -182,8 +180,7 @@ _scheduledAgricultureWorkAvailable(holding, building, workerContext = null, step
   if (!["staff", "qd"].includes(buildingLaborMode(building)) || !this._isAgricultureBuilding(building)
     || this._buildingStatus(building).value !== "built"
     || !this._buildingFunctions(building).production
-    || !this._financeFunctionAllowed(workerContext?.financeContext, building, "agriculture")
-    || this._technicalMaintenanceReady?.(building, workerContext?.financeContext, step) === false) return false;
+    || !this._financeFunctionAllowed(workerContext?.financeContext, building, "agriculture")) return false;
   // This is a pure probe of the real operation, including season changes,
   // expiry and annual limits. Its event offsets are not a future schedule.
   return (this._scheduledAgricultureStepPlan(holding, building, step, 1_000_000)?.workQdUsed ?? 0) > 0;

@@ -77,17 +77,12 @@ qd.buildings.list[1].labor.capacityQd = null;
 assert.equal(check(qd).ok, true);
 qd.people.list[0].workAllocations[0].sourceId = "well";
 assert.ok(check(qd).issues.some((issue) => issue.code === "labor-qd-mode"));
-qd.people.list[0].workAllocations[0].functionId = "maintenance";
-assert.equal(check(qd).ok, true, "separate technical maintenance is allowed for a passive object");
-const maintenanceCap = fixture();
-maintenanceCap.buildings.list[1].labor.capacityQd = 10;
-maintenanceCap.people.list[0].workAllocationMode = "explicit";
-maintenanceCap.people.list[0].workAllocations = [allocation("production", 10), { ...allocation("maintenance", 8), functionId: "maintenance" }];
-assert.equal(check(maintenanceCap).ok, true, "external maintenance does not consume the building production QD cap");
-assert.equal(check(maintenanceCap).qdTotals.get("qd"), 10);
-maintenanceCap.buildings.list[1].labor.capacityQd = 0;
-maintenanceCap.people.list[0].workAllocations.shift();
-assert.equal(check(maintenanceCap).ok, true, "a production cap of zero still allows technical maintenance");
+const capacity = fixture();
+capacity.buildings.list[1].labor.capacityQd = 10;
+capacity.people.list[0].workAllocationMode = "explicit";
+capacity.people.list[0].workAllocations = [allocation("production", 10)];
+assert.equal(check(capacity).ok, true, "Work at the exact building QD cap is allowed");
+assert.equal(check(capacity).qdTotals.get("qd"), 10);
 
 for (const isGM of [true, false]) {
   const before = fixture(), after = clone(before);

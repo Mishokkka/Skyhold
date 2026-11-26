@@ -5,7 +5,6 @@ import { BROAD_WORKER_TYPE_MAP, CANONICAL_WORKER_TYPES, LEGACY_WORKER_TYPE_MAP }
 import { normalizeAgricultureBuilding } from "../agriculture.js";
 import { normalizeLivestockBuilding } from "../livestock.js";
 import { normalizeInternalDemandTrade } from "../economy/internal-demand.js";
-import { normalizeBuildingMaintenance } from "../economy/maintenance.js";
 import { isPlainObject, makeId, toBoolean, toNumber } from "../utils.js";
 import { normalizeBuildingWorkerProfile, workerAdmission } from "../../engines/workers/building-qualification.js";
 import { buildingLaborMode, normalizeBuildingLabor } from "../hybrid-labor.js";
@@ -336,14 +335,13 @@ export function normalizeBuilding(building, options = {}) {
       ? String(project.gmDecisionStatus)
       : "none"
   }));
-  // Reasons are derived from current workers, QD, finance, dependencies and
-  // maintenance. Never persist a stale diagnostic snapshot on the building.
+  // Reasons are derived from current workers, QD, finance and dependencies.
   delete building.blockReasons;
   building.upkeep = toNumber(building.upkeep, 0);
   building.wageDailyCopper = floorNonNegativeQuantity(building.wageDailyCopper, 0);
   building.baseUpkeepMonthlyCopper = floorNonNegativeQuantity(building.baseUpkeepMonthlyCopper, 0);
   building.operatingUpkeepMonthlyCopper = floorNonNegativeQuantity(building.operatingUpkeepMonthlyCopper, 0);
-  building.maintenance = normalizeBuildingMaintenance(building.maintenance);
+  delete building.maintenance;
   building.notes = String(building.notes ?? "");
 
   if (!isPlainObject(building.religion)) building.religion = {};

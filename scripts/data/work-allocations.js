@@ -3,7 +3,6 @@ import { isMedicalBuilding } from "../core/building-specials.js";
 import { normalizeAgricultureBuilding } from "./agriculture.js";
 import { normalizeLivestockBuilding } from "./livestock.js";
 import { isPlainObject, makeId, toNumber } from "./utils.js";
-import { normalizeBuildingMaintenance, usesTechnicalMaintenance } from "./economy/maintenance.js";
 import { isResidentPresent } from "./resident-presence.js";
 import { holdingNormalLaborQd, normalLaborQdPerTenday, residentLaborCapacity } from "./labor-budget.js";
 import { buildingLaborMode, staffAppointmentFor, staffWorkerIdsForBuilding, validateHybridLaborHolding, newHybridLaborIssues } from "./hybrid-labor.js";
@@ -20,8 +19,6 @@ export const WORK_ALLOCATION_MODE_EXPLICIT = "explicit";
 export const WORK_ALLOCATION_NORMAL_QD_PER_TENDAY = 20;
 export const WORK_ALLOCATION_OVERTIME_QD_PER_TENDAY = 10;
 export const MAX_WORK_ALLOCATIONS_PER_PERSON = 24;
-export const MAINTENANCE_WORK_SOURCE_ID = "maintenance";
-export const MAINTENANCE_WORK_FUNCTION_ID = "maintenance";
 
 function whole(value, fallback = 0) {
   return Math.max(0, Math.floor(toNumber(value, fallback)));
@@ -67,6 +64,7 @@ export function normalizePersonWorkAllocations(person = {}) {
   const ids = new Set();
   for (let index = 0; index < source.length; index += 1) {
     const row = normalizeWorkAllocation(source[index], index);
+    if (row.functionId === "maintenance") continue;
     let id = row.id;
     let suffix = 2;
     while (ids.has(id)) id = `${row.id}-${suffix++}`;
@@ -142,7 +140,6 @@ function productionLine(building, functionId) {
 }
 
 export function functionDailyRate(building, functionId) {
-  if (functionId === MAINTENANCE_WORK_FUNCTION_ID) return building ? 18 : 0;
   const rate = functionId === "income" ? building?.income?.wageDailyCopper
     : productionLine(building, functionId)?.wageDailyCopper;
   return whole(rate) || whole(building?.wageDailyCopper);
@@ -189,7 +186,7 @@ function targetRow(building, functionId, label, {
   };
 }
 
-export function buildWorkAllocationTargets(holding = {}, { v2 = false, includeMaintenance = !v2, allowMedicalOvertime = true, baseNormalQd } = {}) {
+export function buildWorkAllocationTargets(holding = {}, { v2 = false, allowMedicalOvertime = true, baseNormalQd } = {}) {
   const targets = [];
   for (const building of holding?.buildings?.list ?? []) {
     const state = buildingOperationalState(building);
@@ -197,9 +194,6 @@ export function buildWorkAllocationTargets(holding = {}, { v2 = false, includeMa
     const hybrid = ["staff", "qd", "passive"].includes(mode);
     if (!text(building?.id) || !state.operational && !hybrid) continue;
     if (v2 && !buildingAcceptsWorkers(building, { baseNormalQd })) continue;
-    if (includeMaintenance && usesTechnicalMaintenance(building) && normalizeBuildingMaintenance(building.maintenance).requiredPoints > 0) {
-      targets.push({ ...targetRow(building, MAINTENANCE_WORK_FUNCTION_ID, "Техобслуживание", { dailyRateCopper: 18, laborMode: mode, kind: "maintenance" }), workersMax: 0 });
-    }
     if (["passive", "invalid"].includes(mode)) continue;
     const medical = isMedicalBuilding(building);
     const productionEnabled = !medical && building?.functions?.production !== false;
@@ -263,21 +257,6 @@ export function buildWorkAllocationTargets(holding = {}, { v2 = false, includeMa
       }));
     }
   }
-  if (includeMaintenance) {
-    targets.push({
-      key: workAllocationTargetKey(MAINTENANCE_WORK_SOURCE_ID, MAINTENANCE_WORK_FUNCTION_ID),
-      sourceId: MAINTENANCE_WORK_SOURCE_ID,
-      functionId: MAINTENANCE_WORK_FUNCTION_ID,
-      buildingId: "",
-      workersMax: 0,
-      available: true,
-      blockedReason: "",
-      label: "Поселение · трудовое обслуживание",
-      overtimeAllowed: false,
-      dailyRateCopper: 0,
-      kind: "maintenance"
-    });
-  }
   return targets;
 }
 
@@ -286,7 +265,6 @@ export function explicitWorkAllocationsForBuilding(person = {}, buildingId = "")
   if (!id || !isResidentPresent(person) || text(person?.workAllocationMode) !== WORK_ALLOCATION_MODE_EXPLICIT) return [];
   return (Array.isArray(person?.workAllocations) ? person.workAllocations : []).filter((row) => (
     text(row?.sourceId) === id
-    && text(row?.functionId) !== MAINTENANCE_WORK_FUNCTION_ID
     && whole(row?.normalQd) + whole(row?.overtimeQd) > 0
   ));
 }
@@ -417,7 +395,7 @@ function v2LaborState(holding, { strictWageCheck, baseNormalQd, workingDays, all
       }
       if (!building) continue;
       const admission = workerAdmission(building, person);
-      if (admission.hard && !admission.eligible && !admission.overridden && row.functionId !== MAINTENANCE_WORK_FUNCTION_ID) {
+      if (admission.hard && !admission.eligible && !admission.overridden) {
         add({ code: "admission-denied", ...fields, message: `${personName}: не выполнен допуск к работе (${admission.text}).` });
       }
       if (!unavailable) {
@@ -509,10 +487,8 @@ export function buildPlannedWorkSlots(assignments = [], periodQd = 40, { normalQ
   const queued = normalQueue.slice(0, normalSteps.length);
   if (queued.some((row) => row.functionId === "livestock")) {
     // Daily care must not be packed into the first five days of a tenday.
-    // Keep maintenance first, then spread each herd's paid QD over the days;
-    // other work fills the remaining slots without creating extra labor.
+    // Spread each herd's paid QD over the days. Other work fills the remaining slots.
     const takeFirstFree = () => normalSteps.find((step) => !slots.has(step));
-    for (const row of queued.filter((row) => row.functionId === MAINTENANCE_WORK_FUNCTION_ID)) slots.set(takeFirstFree(), row);
     const herds = new Map();
     for (const row of queued.filter((row) => row.functionId === "livestock")) {
       if (!herds.has(row.sourceId)) herds.set(row.sourceId, []);
@@ -526,7 +502,7 @@ export function buildPlannedWorkSlots(assignments = [], periodQd = 40, { normalQ
         }
       }
     }
-    for (const row of queued.filter((row) => !["livestock", MAINTENANCE_WORK_FUNCTION_ID].includes(row.functionId))) slots.set(takeFirstFree(), row);
+    for (const row of queued.filter((row) => row.functionId !== "livestock")) slots.set(takeFirstFree(), row);
   } else queued.forEach((row, index) => slots.set(normalSteps[index], row));
   overtimeQueue.slice(0, overtimeSteps.length).forEach((row, index) => slots.set(overtimeSteps[index], row));
   return slots;

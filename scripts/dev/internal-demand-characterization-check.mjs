@@ -218,7 +218,6 @@ export function checkInternalDemandCharacterization() {
     _financeFunctionAllowed: () => true,
     _activeAssignedBuildingPeople: (holding) => [holding.people.list[0]],
     _personBuildingEfficiency: () => 2,
-    _maintenanceEfficiencyFactor: () => 1,
     _calculatePersonMorale: () => ({ total: 0 }),
     _addMoney: (holding, amount) => { holding.storage.moneyCopper += amount; },
     _reduceTradeCandidate: () => 0
