@@ -31,6 +31,27 @@ export function shipForResident(person = {}, holding = null) {
     (ship.crewResidentIds ?? []).some((residentId) => text(residentId) === id)) ?? null;
 }
 
+export function residentLaborShips(holding, person) {
+  const id = text(person.id);
+  const assignment = person.shipAssignment;
+  const shoreDutyShipId = assignment?.shoreDuty === true ? text(assignment.shipId) : "";
+  const contains = (ids) => (ids ?? []).some((value) => text(value) === id);
+  return id ? (holding.special?.ships?.list ?? []).filter((ship) => {
+    if (shoreDutyShipId && shoreDutyShipId === text(ship.id)) return false;
+    return text(ship.commanderResidentId) === id || contains(ship.crewResidentIds) || contains(ship.coCommanderResidentIds);
+  }) : [];
+}
+
+export function isResidentAwayForLabor(person) {
+  const assignment = person.shipAssignment;
+  return assignment?.away === true && !(assignment.shoreDuty === true && text(assignment.shipId));
+}
+
+export function isResidentAbsentForLabor(holding, person) {
+  return person.absent === true || isResidentAwayForLabor(person) || residentLaborShips(holding, person).some((ship) =>
+    ship.activeVoyage || ship.status === "away" || (ship.location && ship.location.kind !== "home"));
+}
+
 export function hasResidentSettlementWork(person = {}, holding = null) {
   if (person.staffAppointment?.buildingId) return true;
   if (text(person.workAssignment) || (person.workAllocations ?? []).some((row) => Number(row.normalQd ?? row.qd) > 0 || Number(row.overtimeQd) > 0)) return true;

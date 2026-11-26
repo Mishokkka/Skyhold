@@ -1,5 +1,22 @@
 import { isResidentAway } from "./resident-presence.js";
 import { createDefaultPoliticsState, POLITICS_STATE_VERSION } from "./politics-state.js";
+import { allocationSourceId, allocationTotalQd } from "./labor-primitives.js";
+import { syncResidentLaborRole } from "./labor-role.js";
+
+export function clearResidentLaborAllocations(holding, person, { buildingId = "", isChild } = {}) {
+  if (!person) return;
+  const id = String(buildingId ?? "").trim();
+  const rows = Array.isArray(person.workAllocations) ? person.workAllocations : [];
+  person.workAllocations = id ? rows.filter((row) => allocationSourceId(row) !== id) : [];
+  const staffed = new Set(person.workAllocations.filter((row) => allocationTotalQd(row) > 0).map(allocationSourceId));
+  for (const building of holding?.buildings?.list ?? []) {
+    const source = String(building.id).trim();
+    if ((!id || source === id) && !staffed.has(source) && Array.isArray(building.workerAdmissionOverrideIds)) {
+      building.workerAdmissionOverrideIds = building.workerAdmissionOverrideIds.filter((value) => String(value) !== String(person.id));
+    }
+  }
+  syncResidentLaborRole(person, { isChild: isChild ?? (person.ageGroup === "Ре") });
+}
 
 /** Explicit office vacancy, independent of ordinary changes of job. */
 export function vacatePoliticsRepresentative(holding, residentId, reason) {
