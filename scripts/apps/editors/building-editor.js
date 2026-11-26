@@ -798,7 +798,11 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(PendingFieldSavesMix
     if (!this.templateId && path.endsWith(".lifecycle") && ["disabled", "abandoned"].includes(value)) {
       const { holding, building } = this._getMutableBuilding(SkyholdData.view());
       if (building && buildingOperationalState(building).lifecycle === "active") {
-        if (!game.user?.isGM) return;
+        if (!game.user?.isGM) {
+          ui.notifications.warn("Отключать действующее здание может только ГМ.");
+          this.requestRender();
+          return;
+        }
         withdrawal = planBuildingLaborWithdrawal(holding, building.id);
         const lines = buildingLaborWithdrawalLines(holding, withdrawal).map(escapeHtml).join("<br>");
         const manager = getActiveSkyholdManager({ warn: true });

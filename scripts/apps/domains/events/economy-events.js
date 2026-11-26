@@ -195,16 +195,14 @@ async _prepareTendayOperation({ holdingId = "", qd = 40, rationUnitsPerResident 
   const readiness = await this._tendayReadinessContext(sourceSnapshot, {
     foodProjection: Number.isFinite(foodAvailable) ? { available: foodAvailable, needed: rawReport?.food?.needed } : null
   });
-  const periodSchool = this._schoolEducationContext(previewHolding);
+  const schoolPeriodKey = financePeriodIdentity(previewHolding, periodQd).periodKey;
+  const periodSchool = this._schoolEducationContext(previewHolding, schoolPeriodKey);
   const recovery = this._advanceResidentRecovery(previewHolding, Math.floor(periodQd / 4));
   if (recovery.recovered) rawReport.work.push(`Выздоровело жителей: ${recovery.recovered}.`);
   // A game year is 240 days; count boundaries even when time advances by one day.
   const beforeAgeQd = Math.max(0, Number(sourceSnapshot?.gm?.calendaria?.lastQd) || 0);
   const elapsedYears = Math.floor((beforeAgeQd + periodQd) / 960) - Math.floor(beforeAgeQd / 960);
-  const agingOptions = {
-    schoolPeriodKey: financePeriodIdentity(previewHolding, periodQd).periodKey,
-    school: periodSchool
-  };
+  const agingOptions = { schoolPeriodKey, school: periodSchool };
   const localAging = !calendariaGate.snapshot?.available && elapsedYears > 0
     ? this._advanceResidentAges(previewHolding, elapsedYears, agingOptions) : null;
   const calendarAdvance = this._commitCalendariaEconomyAdvance(previewHolding, calendariaGate, agingOptions);
@@ -400,15 +398,16 @@ _advanceResidentAges(holding, years = 1, { schoolPeriodKey = "", school: periodS
   return { aged, changed, educated: education.length, education };
 },
 
-_schoolEducationContext(holding) {
+_schoolEducationContext(holding, periodKey) {
   const teachers = new Set();
   let publicSchool = false;
   for (const building of holding?.buildings?.list ?? []) {
     const id = `${String(building?.id ?? "")} ${String(building?.templateId ?? "")}`.toLowerCase();
     const name = String(building?.name ?? "").toLowerCase();
     if (building.functions?.culture !== true || !(id.includes("school") || name.includes("школ"))) continue;
+    if (!periodKey || building.serviceState?.periodKey !== periodKey) continue;
     const service = buildingServiceBlockReasons(holding, building, "culture");
-    if (!service.active || !(service.workforce.qd > 0)) continue;
+    if (!service.active || !(service.workforce.qd > 0) || !Array.isArray(building.serviceState.activeWorkerIds)) continue;
     const adults = service.workforce.workers.filter((person) => ageGroupFromAge(person.age, person.race, person.subrace) !== "Ре");
     if (!adults.length) continue;
     const composition = buildingCompositionStatus(building, adults, { excludeGroups: ["ЧУДОТВОРЕЦ"] });

@@ -523,6 +523,7 @@ export function mergeHoldingDefaults(holding) {
   merged.finance = normalizeFinanceObligationsState(merged.finance);
   merged.politics = normalizePoliticsState(merged.politics);
   merged.workforcePlan = normalizeWorkforcePlan(merged.workforcePlan);
+  if (!Array.isArray(merged.operations)) merged.operations = [];
   if (!isPlainObject(merged.gm)) merged.gm = {};
   merged.gm.labor = { daysOffPerTenday: holdingDaysOffPerTenday(merged) };
   if (!isPlainObject(merged.gm.economy)) merged.gm.economy = {};
