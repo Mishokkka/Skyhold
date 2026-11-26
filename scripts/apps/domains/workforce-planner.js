@@ -343,7 +343,7 @@ export function proposeWorkforceAssignments(holding, draft, service, { isGM = fa
   if (!chosen.length) skipped.push("Нет обязательного ухода или задач подготовки. Выберите работу и задайте её объём.");
   for (const initial of chosen) {
     let task = model.taskMap.get(initial.key);
-    const readMinimum = () => workforceOperationalMinimum(task.building, model.tasks.filter((row) => row.buildingId === task.buildingId), task.functionId);
+    const readMinimum = () => workforceOperationalMinimum(task.building, model.tasks.filter((row) => row.buildingId === task.buildingId));
     const minimum = useBuildingMinimum && taskKeys ? readMinimum() : null;
     const effectMinimum = minimum?.minQd > 0 && minimum.relevant.some((row) => row.key === task.key) ? minimum : null;
     const effectGap = () => effectMinimum ? readMinimum().gap : 0;

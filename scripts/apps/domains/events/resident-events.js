@@ -115,6 +115,9 @@ function droppedLocksForWorkAssignmentChange(holding, person, value = "") {
   return droppedLocksForAllocationChange(holding, person.id, []);
 }
 
+const lockKeyOf = (row) => `${row?.personId ?? ""}::${row?.sourceId ?? ""}::${row?.functionId ?? ""}`;
+const hasUnconfirmedLocks = (dropped, confirmedKeys) => dropped.some((row) => !confirmedKeys.has(lockKeyOf(row)));
+
 function pruneInactiveResidentLocks(holding, personId) {
   if (!Array.isArray(holding?.workforcePlan?.locks)) return;
   const dropped = droppedLocksForAllocationChange(holding, personId,
@@ -228,6 +231,7 @@ async _onWorkAssignmentChange(event) {
   const expectedBuilding = stableDataHash(building);
   const isGM = Boolean(game.user?.isGM);
   const droppedLocks = droppedLocksForWorkAssignmentChange(source.holding, source.person, value);
+  const confirmedLockKeys = new Set(droppedLocks.map(lockKeyOf));
   if (droppedLocks.length) {
     if (!isGM) {
       ui.notifications.warn(droppedLocks.some((row) => row.visibility === "gm")
@@ -257,8 +261,12 @@ async _onWorkAssignmentChange(event) {
         return SkyholdData.skipTransaction({ stale: true });
       }
       if (keepsCrewLeadership(holding, person, value)) return SkyholdData.skipTransaction(null);
-      if (!game.user?.isGM && droppedLocksForWorkAssignmentChange(holding, person, value).length) {
+      const innerDropped = droppedLocksForWorkAssignmentChange(holding, person, value);
+      if (!game.user?.isGM && innerDropped.length) {
         return SkyholdData.skipTransaction({ warnNoSlot: true });
+      }
+      if (game.user?.isGM && hasUnconfirmedLocks(innerDropped, confirmedLockKeys)) {
+        return SkyholdData.skipTransaction({ stale: true });
       }
       if (targetBuilding) {
         const ok = this._assignPersonToBuilding(holding, person.id, value, { ...decision, replace: true });
@@ -558,6 +566,7 @@ async _onRemoveWorkAllocation(event) {
     const currentData = SkyholdData.get();
     const current = residentScope(currentData, address);
     const removedRow = (current.person?.workAllocations ?? []).find((row) => String(row.id) === allocationId);
+    let confirmedLockKeys = new Set();
     if (current.person && removedRow) {
       if (!holdingPermissionContext(current.holding).canEditBuildings
         || residentHasHiddenWork(current.holding, current.person)) return false;
@@ -572,6 +581,7 @@ async _onRemoveWorkAllocation(event) {
           "Строка закреплена в общем плане работ. Удалить назначение и снять закрепление?")) {
           return false;
         }
+        confirmedLockKeys = new Set(dropped.map(lockKeyOf));
       }
       const rowQd = Math.max(0, Number(removedRow.normalQd ?? 0) || 0) + Math.max(0, Number(removedRow.overtimeQd ?? 0) || 0);
       if (!isGM && removedRow.sourceId && removedRow.functionId && (rowQd > 0 || dropped.length > 0)) {
@@ -591,13 +601,19 @@ async _onRemoveWorkAllocation(event) {
     const updated = await SkyholdData.transaction((data) => {
       const { holding, person } = residentScope(data, address);
       if (!person || !holdingPermissionContext(holding).canEditBuildings || residentHasHiddenWork(holding, person)) return SkyholdData.skipTransaction(false);
+      const innerRemoved = (person.workAllocations ?? []).find((row) => String(row.id) === allocationId);
       const nextAllocations = (person.workAllocations ?? []).filter((row) => String(row.id) !== allocationId);
       if (nextAllocations.length === person.workAllocations?.length) return SkyholdData.skipTransaction(false);
+      const innerDropped = droppedLocksForAllocationChange(holding, person.id, nextAllocations, innerRemoved ? [innerRemoved] : []);
+      if (hasUnconfirmedLocks(innerDropped, confirmedLockKeys)) {
+        failureMessage = "Список закреплений изменился. Повторите удаление строки.";
+        return SkyholdData.skipTransaction(false);
+      }
       const check = applyResidentEditorAllocations(holding, person.id, {
         nextAllocations,
         conserving: true,
         isGM,
-        confirmedUnlock: Boolean(removedRow)
+        confirmedUnlock: true
       });
       if (!check.ok) failureMessage = safeWorkforceError(holding, check);
       return check.ok || SkyholdData.skipTransaction(false);
@@ -969,6 +985,7 @@ async _savePersonEditorDraft(event) {
       workUpdate = null;
     }
   }
+  let confirmedWorkLockKeys = new Set();
   if (workUpdate && currentHolding && (previewPerson || currentPerson)) {
     const targetPerson = currentPerson ?? previewPerson;
     const isGM = Boolean(game.user?.isGM);
@@ -986,10 +1003,12 @@ async _savePersonEditorDraft(event) {
         this.requestRender?.();
         return false;
       }
+      confirmedWorkLockKeys = new Set(dropped.map(lockKeyOf));
     }
   }
 
   let previewExplicitBuildingIds = new Set();
+  let confirmedAllocationLockKeys = new Set();
   if (previewPerson && currentHolding && !hiddenWork && !workUpdate && updatesWorkAllocations) {
     previewExplicitBuildingIds = new Set((previewPerson.workAllocations ?? [])
       .filter((allocation) => Math.max(0, Number(allocation?.normalQd ?? 0) || 0) + Math.max(0, Number(allocation?.overtimeQd ?? 0) || 0) > 0)
@@ -1022,6 +1041,7 @@ async _savePersonEditorDraft(event) {
         this.requestRender?.();
         return false;
       }
+      confirmedAllocationLockKeys = new Set(droppedLocks.map(lockKeyOf));
     }
     const admissionIssues = newLaborIssues(holdingWorkerAdmissionIssues(currentHolding), holdingWorkerAdmissionIssues(previewHolding));
     for (const { buildingId } of admissionIssues.filter((issue) => issue.personId === String(previewPerson.id))) {
@@ -1090,6 +1110,10 @@ async _savePersonEditorDraft(event) {
     }
 
     if (allocationsDraft && !workUpdate) {
+      const innerDropped = droppedLocksForAllocationChange(target.holding, address.personId, allocationsDraft.workAllocations);
+      if (hasUnconfirmedLocks(innerDropped, confirmedAllocationLockKeys)) {
+        return SkyholdData.skipTransaction({ stale: true, message: "Список закреплений изменился. Обновите карточку и повторите сохранение." });
+      }
       const approved = overrideBuildings.length ? [...new Set([
         ...targetBuildings.filter((row) => row.workerAdmissionOverrideIds?.includes(address.personId)).map((row) => row.id),
         ...overrideBuildings.map((row) => row.id)
@@ -1097,7 +1121,8 @@ async _savePersonEditorDraft(event) {
       const check = applyResidentEditorAllocations(target.holding, address.personId, {
         nextAllocations: allocationsDraft.workAllocations,
         admissionOverrideBuildingIds: approved,
-        isGM: Boolean(game.user?.isGM)
+        isGM: Boolean(game.user?.isGM),
+        confirmedUnlock: true
       });
       if (!check.ok) return SkyholdData.skipTransaction({ stale: true, message: safeWorkforceError(target.holding, check) });
     }
@@ -1120,8 +1145,12 @@ async _savePersonEditorDraft(event) {
         // Saving unrelated resident fields must not vacate and requalify an existing foreman.
         const keepLeader = holding && person && keepsCrewLeadership(holding, person, value);
         if (holding && person && !keepLeader && value !== "__mixed__") {
-          if (!game.user?.isGM && droppedLocksForWorkAssignmentChange(holding, person, value).length) {
+          const innerDropped = droppedLocksForWorkAssignmentChange(holding, person, value);
+          if (!game.user?.isGM && innerDropped.length) {
             return SkyholdData.skipTransaction({ warnNoSlot: true });
+          }
+          if (game.user?.isGM && hasUnconfirmedLocks(innerDropped, confirmedWorkLockKeys)) {
+            return SkyholdData.skipTransaction({ stale: true, message: "Список закреплений изменился. Обновите карточку и повторите смену работы." });
           }
           if (approvedBuilding) {
             const ok = this._assignPersonToBuilding?.(holding, person.id, value, { ...workDecision, replace: true });

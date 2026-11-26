@@ -86,7 +86,10 @@ export function workforcePlanChangeError(holding, plan, { isGM = false } = {}) {
       nextRows.set(key, row);
       if (same(prior, row)) continue;
       const fieldAllowed = (field) => allowed.includes(field)
-        || (field === "visibility" && isGM && ["public", "gm"].includes(row.visibility));
+        || (field === "visibility" && (
+          (isGM && ["public", "gm"].includes(row.visibility))
+          || (!isGM && prior?.visibility === "public" && row.visibility === "public")
+        ));
       if (Object.keys(row).some((field) => !fieldAllowed(field))
         || !canEdit(row) || prior && !canEdit(prior)) return "Цель или закрепление недоступны.";
       const target = targets.get(workforceKey(row));

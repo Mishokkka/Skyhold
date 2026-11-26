@@ -323,12 +323,14 @@ _financePlanInputs(holding, periodQd, identity) {
     && (!this._canResidentWork || this._canResidentWork(person, holding))
   ));
   const peopleById = new Map(people.map((person) => [String(person.id ?? ""), person]));
+  const buildingsById = new Map();
   const buildingsByAssignment = new Map();
   const buildingPlans = [];
 
   for (const building of holding?.buildings?.list ?? []) {
     const buildingId = String(building?.id ?? "");
     if (!buildingId || this._buildingStatus(building).value !== "built") continue;
+    buildingsById.set(buildingId, building);
     buildingsByAssignment.set(buildingId, building);
     if (building?.name) buildingsByAssignment.set(String(building.name), building);
     const rawFunctions = this._buildingFunctions(building);
@@ -463,7 +465,7 @@ _financePlanInputs(holding, periodQd, identity) {
         const sourceId = String(allocation?.sourceId ?? "");
         const functionId = String(allocation?.functionId ?? "");
         const buildingPlan = buildingPlanById.get(sourceId);
-        const building = buildingsByAssignment.get(sourceId);
+        const building = buildingsById.get(sourceId);
         const fn = buildingPlan?.functions?.find((row) => String(row?.id ?? "") === functionId && (row?.source === "workers" || row.workerCollection));
         if (!buildingPlan || !building || !fn) continue;
         const blocker = oldBlockers.buildings[sourceId] ?? {};

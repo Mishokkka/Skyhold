@@ -165,11 +165,9 @@ export function returnCrewResidentToShip(holding = {}, ship = {}, residentId = "
 
 export function markCrewResidentAway(holding, person, shipId, clockQd) {
   const residentId = text(person.id);
-  const existing = residentShipAssignment(person);
-  const shoreDuty = existing?.shoreDuty === true && text(existing.shipId) === shipId;
   const previousSettlementPlan = settlementPlanForResident(holding, residentId, person);
-  const cleared = shoreDuty ? 0 : clearResidentSettlementAssignments(holding, residentId, person);
-  person.shipAssignment = { shipId, away: true, sinceQd: whole(clockQd), previousSettlementPlan, ...(shoreDuty ? { shoreDuty } : {}) };
+  const cleared = clearResidentSettlementAssignments(holding, residentId, person);
+  person.shipAssignment = { shipId, away: true, sinceQd: whole(clockQd), previousSettlementPlan };
   return cleared;
 }
 

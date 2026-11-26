@@ -821,6 +821,7 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(PendingFieldSavesMix
     if (!currentAllocation) return;
     const nextAllocations = (currentPerson.workAllocations ?? []).filter((row) => row.id !== allocationId);
     const dropped = droppedLocksForAllocationChange(current.holding, personId, nextAllocations, [currentAllocation]);
+    const confirmedLockKeys = new Set(dropped.map((row) => `${row.personId}::${row.sourceId}::${row.functionId}`));
     if (dropped.length) {
       if (!isGM && dropped.some((row) => row.visibility === "gm")) {
         ui.notifications?.warn?.("Назначение недоступно. Обновите окно или обратитесь к ГМу.");
@@ -848,11 +849,18 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(PendingFieldSavesMix
       requestSkyholdAppRender();
       return;
     }
+    let staleLockMessage = "";
     const updated = await this._updateMutableBuilding(({ holding, building }) => {
       const person = (holding?.people?.list ?? []).find((row) => String(row?.id ?? "") === personId);
       if (!canReadResident(person) || residentHasHiddenWork(holding, person)) return SkyholdData.skipTransaction(false);
       const allocation = (person.workAllocations ?? []).find((row) => row.id === allocationId && row.sourceId === building.id);
       if (!allocation) return SkyholdData.skipTransaction(false);
+      const innerNext = (person.workAllocations ?? []).filter((row) => row.id !== allocationId);
+      const innerDropped = droppedLocksForAllocationChange(holding, personId, innerNext, [allocation]);
+      if (innerDropped.some((row) => !confirmedLockKeys.has(`${row.personId}::${row.sourceId}::${row.functionId}`))) {
+        staleLockMessage = "Список закреплений изменился. Обновите окно и повторите снятие назначения.";
+        return SkyholdData.skipTransaction(false);
+      }
       const check = mutateResidentBuildingLabor(holding, {
         personId,
         buildingId: building.id,
@@ -867,7 +875,13 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(PendingFieldSavesMix
       }
       return check.ok || SkyholdData.skipTransaction(false);
     }, { reason: "building-editor:remove-worker", requireHolding: true, laborValidated: true });
-    if (!updated) return;
+    if (!updated) {
+      if (staleLockMessage) {
+        ui.notifications?.warn?.(staleLockMessage);
+        this.requestRender();
+      }
+      return;
+    }
     this.requestRender();
     requestSkyholdAppRender();
   }

@@ -407,7 +407,7 @@ export class SkyholdCrewEditor extends FloatingTooltipsMixin(PendingFieldSavesMi
     try {
       const distributed = await SkyholdData.updateHolding(this.holdingId, (holding) => {
         const crew = holding?.constructionCrews?.find((item) => String(item.id) === crewId);
-        if (!holding || !crew) return SkyholdData.skipTransaction(false);
+        if (!holding || !crew || crew.distributed) return SkyholdData.skipTransaction(false);
         const leaderId = String(crew.leaderId ?? "");
         const ids = [...new Set([leaderId, ...(crew.memberIds ?? []).map((id) => String(id ?? ""))].filter(Boolean))];
         crew.memberIds = [];
@@ -422,9 +422,11 @@ export class SkyholdCrewEditor extends FloatingTooltipsMixin(PendingFieldSavesMi
           }
           if (!placed) manager._setPersonFree(holding, id);
         }
-        crew.distributedLeaderId = leaderId;
-        crew.distributedIds = ids;
-        crew.distributed = true;
+        const currentCrew = holding.constructionCrews?.find((item) => String(item.id) === crewId);
+        if (!currentCrew) return SkyholdData.skipTransaction(false);
+        currentCrew.distributedLeaderId = leaderId;
+        currentCrew.distributedIds = ids;
+        currentCrew.distributed = true;
         return true;
       }, { fallback: false, reason: "crew-editor:distribute-crew" });
       if (!distributed) return;
@@ -493,8 +495,16 @@ export class SkyholdCrewEditor extends FloatingTooltipsMixin(PendingFieldSavesMi
           }
         }
         crew.memberIds = [];
-        for (const id of ids) manager._setCrewSlot(holding, crew.id, crew.memberIds.length, id);
-        if (leaderId) manager._setCrewLeader(holding, crew.id, leaderId);
+        for (const id of ids) {
+          if (!manager._setCrewSlot(holding, crew.id, crew.memberIds.length, id)) {
+            deniedMessage = "Не удалось вернуть участника в бригаду. Обновите окно или обратитесь к ГМу.";
+            return SkyholdData.skipTransaction(false);
+          }
+        }
+        if (leaderId && !manager._setCrewLeader(holding, crew.id, leaderId)) {
+          deniedMessage = "Не удалось вернуть руководителя в бригаду. Обновите окно или обратитесь к ГМу.";
+          return SkyholdData.skipTransaction(false);
+        }
         if (isGM && Array.isArray(holding.workforcePlan?.locks)) {
           const idSet = new Set(returnIds.map(String));
           holding.workforcePlan.locks = holding.workforcePlan.locks.filter((row) => !idSet.has(String(row?.personId ?? "")));

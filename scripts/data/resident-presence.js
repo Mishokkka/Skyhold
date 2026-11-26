@@ -20,7 +20,7 @@ export function isResidentAway(person = {}) {
 }
 
 export function isResidentPresent(person = {}) {
-  return !isResidentAwayForLabor(person);
+  return !isResidentAway(person);
 }
 
 /** Membership is current; shipAssignment alone may describe a previous voyage. */
@@ -34,17 +34,17 @@ export function shipForResident(person = {}, holding = null) {
 export function residentLaborShips(holding, person) {
   const id = text(person.id);
   const assignment = person.shipAssignment;
-  const shoreDutyShipId = assignment?.shoreDuty === true ? text(assignment.shipId) : "";
+  const shoreDutyShipId = assignment?.shoreDuty === true && assignment?.away !== true ? text(assignment.shipId) : "";
   const contains = (ids) => (ids ?? []).some((value) => text(value) === id);
   return id ? (holding.special?.ships?.list ?? []).filter((ship) => {
-    if (shoreDutyShipId && shoreDutyShipId === text(ship.id)) return false;
+    if (shoreDutyShipId && shoreDutyShipId === text(ship.id) && !ship.activeVoyage && ship.status !== "away"
+      && (!ship.location || ship.location.kind === "home")) return false;
     return text(ship.commanderResidentId) === id || contains(ship.crewResidentIds) || contains(ship.coCommanderResidentIds);
   }) : [];
 }
 
 export function isResidentAwayForLabor(person) {
-  const assignment = person.shipAssignment;
-  return assignment?.away === true && !(assignment.shoreDuty === true && text(assignment.shipId));
+  return isResidentAway(person);
 }
 
 export function isResidentAbsentForLabor(holding, person) {

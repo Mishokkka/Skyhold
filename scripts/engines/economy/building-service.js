@@ -147,7 +147,7 @@ function hasActiveServiceContract(building = {}) {
 export function buildingActiveWorkerSummary(holding = {}, building = {}, functionId = "") {
   const buildingId = text(building.id);
   const targets = new Map(buildWorkAllocationTargets({ buildings: { list: [building] } }).map((row) => [row.key, row]));
-  const summary = { workers: [], count: 0, qd: 0, equivalentWorkers: 0, blocked: [] };
+  const summary = { workers: [], count: 0, qd: 0, equivalentWorkers: 0, blocked: [], activeFunctionsByWorkerId: new Map() };
   const budget = normalLaborQdPerTenday(holding);
   for (const person of holding.people?.list ?? []) {
     const rows = (person.workAllocations ?? []).filter((row) => text(row.sourceId) === buildingId
@@ -162,6 +162,7 @@ export function buildingActiveWorkerSummary(holding = {}, building = {}, functio
       || (financeWorkerBlockState({ finance: holding?.finance, workerId: text(person.id) }).blocked ? "долг по оплате труда" : "");
     if (unavailable) { summary.blocked.push({ code: "worker-unavailable", text: unavailable }); continue; }
     let qd = 0;
+    const eligibleFunctions = new Set();
     for (const row of rows) {
       const target = targets.get(workAllocationTargetKey(buildingId, row.functionId));
       const wage = laborWageRate({ dailyRateCopper: functionDailyRate(building, row.functionId),
@@ -170,11 +171,13 @@ export function buildingActiveWorkerSummary(holding = {}, building = {}, functio
       if (!target?.available || row.overtimeQd > 0 && !target.overtimeAllowed
         || financeBuildingFunctionBlockState({ finance: holding.finance, buildingId, functionId: row.functionId }).blocked) continue;
       qd += allocationTotalQd(row);
+      eligibleFunctions.add(text(row.functionId));
     }
     if (!qd) continue;
     summary.workers.push(person);
     summary.qd += qd;
     summary.equivalentWorkers += qd / DEFAULT_NORMAL_LABOR_QD;
+    summary.activeFunctionsByWorkerId.set(text(person.id), eligibleFunctions);
   }
   summary.count = summary.workers.length;
   return summary;
@@ -199,13 +202,35 @@ export function buildingConfirmedSocialStatus(holding = {}, building = {}, funct
     reasons.push({ code: "activity-unconfirmed", text: "нет подтверждённой работы за последний завершённый десятник" });
   }
 
-  const people = new Map(buildingActiveWorkerSummary(holding, building, functionId).workers.map((person) => [text(person.id), person]));
+  const activeSummary = buildingActiveWorkerSummary(holding, building, functionId);
+  const people = new Map(activeSummary.workers.map((person) => [text(person.id), person]));
+  const activeFunctionsByWorkerId = activeSummary.activeFunctionsByWorkerId;
   const recordedIds = traceFunctionWorkerIds(state, functionId);
-  const workers = recordedIds.map((id) => people.get(id)).filter(Boolean);
+  const candidateWorkers = recordedIds.map((id) => people.get(id)).filter(Boolean);
   const workerQd = state?.workedQdByWorkerAndFunction;
-  const qd = workerQd && typeof workerQd === "object"
-    ? workers.reduce((sum, person) => sum + traceFunctionQd({ workedQdByFunction: workerQd[text(person.id)] }, functionId), 0)
-    : workers.length === recordedIds.length ? traceFunctionQd(state, functionId) : 0;
+  let workers = candidateWorkers;
+  let qd = 0;
+  if (workerQd && typeof workerQd === "object") {
+    workers = [];
+    for (const person of candidateWorkers) {
+      const id = text(person.id);
+      const eligible = activeFunctionsByWorkerId?.get(id);
+      const recordedByFn = workerQd[id];
+      if (!recordedByFn || typeof recordedByFn !== "object" || !eligible?.size) continue;
+      const allowedEntries = Object.entries(recordedByFn).filter(([recordedFn]) =>
+        workFunctionMatches(recordedFn, functionId)
+        && [...eligible].some((activeFn) => text(activeFn) === text(recordedFn)
+          || (text(recordedFn) === "production" && workFunctionMatches(activeFn, "production"))));
+      if (!allowedEntries.length) continue;
+      const personQd = traceFunctionQd({ workedQdByFunction: Object.fromEntries(allowedEntries) }, functionId);
+      if (personQd > 0) {
+        workers.push(person);
+        qd += personQd;
+      }
+    }
+  } else {
+    qd = candidateWorkers.length === recordedIds.length ? traceFunctionQd(state, functionId) : 0;
+  }
   const minOperationalQd = buildingMinOperationalQd(building);
   if (qd < Math.max(1, minOperationalQd)) {
     reasons.push({ code: "qd-missing", text: `нужно фактических QD: ${Math.max(1, minOperationalQd)}, подтверждено: ${qd}` });
@@ -345,7 +370,7 @@ export function buildingNominalMorale(building = {}) {
 
 export function buildingWonderworkingActive(holding = {}, building = {}) {
   const profile = building?.workerProfile;
-  if (!(profile?.composition ?? []).some((row) => String(row?.group ?? "").toUpperCase() === "ЧУДОТВОРЕЦ")) return false;
+  if (!(profile?.composition ?? []).some((row) => Number(row?.count ?? 0) > 0 && String(row?.group ?? "").toUpperCase() === "ЧУДОТВОРЕЦ")) return false;
   const functionId = buildingServiceFunctionId(building);
   if (buildingServiceEffectFactor(holding, building, functionId) <= 0) return false;
   return buildingCompositionStatus(building, buildingActiveWorkerSummary(holding, building, functionId).workers).met;
