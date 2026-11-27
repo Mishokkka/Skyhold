@@ -270,18 +270,19 @@ function buildingCombatTag(building) {
   return requested !== "militia" && tags[requested] ? requested : "garrison";
 }
 
-export function defenseGarrisonProfile(holding, { buildingEffectiveWorkers = null } = {}) {
-  const people = (holding?.people?.list ?? []).filter((person) => isResidentInPopulation(person, holding) && !isInjuredResident(person));
+export function defenseGarrisonProfile(holding, { buildingEffectiveWorkers = null, publicOnly = false } = {}) {
+  const people = (holding?.people?.list ?? []).filter((person) => (!publicOnly || person?.visibility !== "gm")
+    && isResidentInPopulation(person, holding) && !isInjuredResident(person));
   const garrisonHolding = { ...holding, people: { ...holding?.people, list: people } };
   const byId = new Map(people.map((person) => [String(person.id), person]));
-  const buildings = builtBuildings(holding).filter((building) => isDefenseBuilding(building));
+  const buildings = builtBuildings(holding).filter((building) => (!publicOnly || building?.visibility !== "gm") && isDefenseBuilding(building));
   const ids = new Set();
   const details = [];
   const buildingsHeld = [];
   const sources = [];
   let effective = 0;
   for (const building of buildings) {
-    const assigned = buildingWorkerIds(holding, building.id, "defense");
+    const assigned = buildingWorkerIds(garrisonHolding, building.id, "defense");
     const combatants = assigned.map((id) => byId.get(id)).filter(Boolean);
     for (const person of combatants) ids.add(String(person.id));
     const effSummary = combatants.length && typeof buildingEffectiveWorkers === "function"

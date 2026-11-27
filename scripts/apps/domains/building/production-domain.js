@@ -513,11 +513,19 @@ _reputationSummary(holding, _moraleStateArg = null) {
   return { base: 0, bonus: adjusted, total: adjusted, rawTotal: total, undiminishedTotal, gmMod, politicsMod, moraleMod, buildings, bonusText: "", tooltip: `${tooltip}${politicsMod ? ` Политика ${signed(politicsMod)}.` : ""}` };
 },
 
-_defenseSummary(holding, moraleStateArg = null, workerContext = null) {
+_defenseSummary(holding, moraleStateArg = null, workerContext = null, options = {}) {
+  const publicOnly = Boolean(options?.publicOnly ?? (typeof game !== "undefined" ? game?.user?.isGM !== true : false));
+  const scopedHolding = publicOnly && holding
+    ? {
+      ...holding,
+      buildings: { ...(holding.buildings ?? {}), list: (holding.buildings?.list ?? []).filter((building) => building?.visibility !== "gm") },
+      people: { ...(holding.people ?? {}), list: (holding.people?.list ?? []).filter((person) => person?.visibility !== "gm") }
+    }
+    : holding;
   let total = 0;
   const buildings = [];
-  for (const building of holding?.buildings?.list ?? []) {
-    const summary = this._buildingDefenseSummary(building, holding, workerContext);
+  for (const building of scopedHolding?.buildings?.list ?? []) {
+    const summary = this._buildingDefenseSummary(building, scopedHolding, publicOnly ? null : workerContext, null, { publicOnly });
     if (!summary.total) continue;
     total += summary.total;
     buildings.push({ name: building.name || "Здание", value: summary.total, detail: summary.detail });

@@ -1,3 +1,4 @@
+import { COMMAND_ERROR } from "../../data/command-result.js";
 import { SkyholdData, requestWorkforceOperation } from "../../data/store.js";
 import { makeId } from "../../data/utils.js";
 import { canReadResident, findReadableHoldingEntry } from "../../data/access-guard.js";
@@ -32,6 +33,8 @@ const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const BASE_ACTIONS = {
   "unique-building-tab": "_onUniqueBuildingTab",
   "unique-remove-worker": "_onRemoveUniqueBuildingWorker",
+  "unique-retry-worker": "_onRetryPendingUniqueWorker",
+  "unique-clear-pending-worker": "_onClearPendingUniqueWorker",
   "open-unique-workforce-planner": "_onOpenWorkforcePlanner",
   "pick-unique-building-image": "_onPickBuildingImage",
   "clear-unique-building-image": "_onClearBuildingImage",
@@ -59,6 +62,8 @@ export class SkyholdUniqueBuildingApp extends WindowFrameMixin(RenderSchedulerMi
     this.holdingId = String(holdingId ?? "");
     this.buildingId = String(buildingId ?? "");
     this.activeUniqueBuildingTab = "unique";
+    this._pendingWorkforceCommand = null;
+    this._pendingWorkforceBusy = false;
     SkyholdUniqueBuildingApp.instances.add(this);
   }
 
@@ -84,6 +89,8 @@ export class SkyholdUniqueBuildingApp extends WindowFrameMixin(RenderSchedulerMi
       hasBuilding: Boolean(building),
       canEdit,
       canManageEditorTabs,
+      pendingWorkforceCommand: this._matchingPendingWorkforceCommand(holding, building),
+      pendingWorkforceBusy: Boolean(this._pendingWorkforceBusy),
       constructionCrew: manager?._constructionCrew?.(holding) ?? { count: 0, dice: 0, names: "" }
     };
   }
@@ -286,6 +293,10 @@ export class SkyholdUniqueBuildingApp extends WindowFrameMixin(RenderSchedulerMi
         "Назначение закреплено в общем плане работ. Удалить его и снять закрепление?")) return;
     }
     if (!isGM) {
+      if (this._pendingWorkforceBusy || this._matchingPendingWorkforceCommand(current.holding, current.building)) {
+        ui.notifications?.warn?.("Есть неподтверждённое назначение. Сначала повторите тот же запрос или сбросьте ожидание после сверки.");
+        return;
+      }
       try {
         await requestWorkforceOperation(buildResidentAllocationRemovalCommand({
           operationId: makeId("workforce-remove", 20),
@@ -357,6 +368,63 @@ export class SkyholdUniqueBuildingApp extends WindowFrameMixin(RenderSchedulerMi
     return openWorkforcePlanner({ holdingId: this.holdingId, targetKey });
   }
 
+  _matchingPendingWorkforceCommand(holding, building) {
+    const pending = this._pendingWorkforceCommand;
+    if (!pending) return null;
+    if (pending.holdingId !== String(holding?.id ?? "") || pending.buildingId !== String(building?.id ?? "")) return null;
+    return pending;
+  }
+
+  async _executePlayerWorkforceCommand(command, { key, summary, fallbackError = "Не удалось назначить жителя на работу." } = {}) {
+    if (this._pendingWorkforceBusy) return false;
+    this._pendingWorkforceCommand = {
+      key: String(key ?? ""),
+      holdingId: String(command?.holdingId ?? ""),
+      buildingId: String(command?.buildingId ?? ""),
+      summary: String(summary ?? ""),
+      command
+    };
+    this._pendingWorkforceBusy = true;
+    try {
+      const result = await requestWorkforceOperation(command);
+      if (result && result.ok === false) {
+        this._pendingWorkforceCommand = null;
+        ui.notifications?.warn?.(result.reason || fallbackError);
+        return false;
+      }
+      this._pendingWorkforceCommand = null;
+      return true;
+    } catch (error) {
+      const keepPending = [COMMAND_ERROR.OUTCOME_UNKNOWN, COMMAND_ERROR.TIMEOUT].includes(error?.code);
+      if (!keepPending) this._pendingWorkforceCommand = null;
+      ui.notifications?.warn?.(keepPending
+        ? (error?.message || "Статус назначения не подтверждён. Повторите тот же запрос после проверки.")
+        : (error?.message || fallbackError));
+      return false;
+    } finally {
+      this._pendingWorkforceBusy = false;
+    }
+  }
+
+  async _onRetryPendingUniqueWorker(event) {
+    event.preventDefault();
+    if (!this._canEditBuilding()) return;
+    const data = SkyholdData.get();
+    const current = this._getMutableBuilding(data);
+    const pending = this._matchingPendingWorkforceCommand(current.holding, current.building);
+    if (!pending || game.user?.isGM === true) return;
+    const ok = await this._executePlayerWorkforceCommand(pending.command, pending);
+    this.requestRender();
+    if (ok) requestSkyholdAppRender();
+  }
+
+  _onClearPendingUniqueWorker(event) {
+    event.preventDefault();
+    if (this._pendingWorkforceBusy) return;
+    this._pendingWorkforceCommand = null;
+    this.requestRender();
+  }
+
   async _onBuildingWorkerChange(event) {
     event.preventDefault();
     if (!this._canEditBuilding()) return;
@@ -381,6 +449,22 @@ export class SkyholdUniqueBuildingApp extends WindowFrameMixin(RenderSchedulerMi
       this.requestRender();
       return;
     }
+    if (!isGM) {
+      if (this._pendingWorkforceBusy) return;
+      const pending = this._matchingPendingWorkforceCommand(current.holding, current.building);
+      const key = `${current.holding.id}::${current.building.id}::${personId}::${target.functionId}`;
+      if (pending) {
+        if (pending.key !== key) {
+          ui.notifications?.warn?.("Есть неподтверждённое назначение. Повторите тот же запрос или сбросьте ожидание после сверки.");
+          this.requestRender();
+          return;
+        }
+        const ok = await this._executePlayerWorkforceCommand(pending.command, pending);
+        this.requestRender();
+        if (ok) requestSkyholdAppRender();
+        return;
+      }
+    }
     const targetKey = workAllocationTargetKey(current.building.id, target.functionId);
     const existingLock = (current.holding.workforcePlan?.locks ?? []).find((row) =>
       String(row?.personId ?? "") === personId && workforceKey(row) === targetKey);
@@ -404,24 +488,23 @@ export class SkyholdUniqueBuildingApp extends WindowFrameMixin(RenderSchedulerMi
         this.requestRender();
         return;
       }
-      try {
-        await requestWorkforceOperation(buildResidentAllocationAddCommand({
-          operationId: makeId("workforce-assign", 20),
-          holdingId: current.holding.id,
-          expectedRevision: data.meta.revision,
-          personId,
-          buildingId: current.building.id,
-          functionId: target.functionId,
-          normalQd,
-          overtimeQd: 0
-        }));
-      } catch (error) {
-        ui.notifications?.warn?.(error?.message || "Не удалось назначить жителя на работу.");
-        this.requestRender();
-        return;
-      }
+      const command = buildResidentAllocationAddCommand({
+        operationId: makeId("workforce-assign", 20),
+        holdingId: current.holding.id,
+        expectedRevision: data.meta.revision,
+        personId,
+        buildingId: current.building.id,
+        functionId: target.functionId,
+        normalQd,
+        overtimeQd: 0
+      });
+      const key = `${current.holding.id}::${current.building.id}::${personId}::${target.functionId}`;
+      const ok = await this._executePlayerWorkforceCommand(command, {
+        key,
+        summary: `${person.name || "Житель"} · ${normalQd} QD`
+      });
       this.requestRender();
-      requestSkyholdAppRender();
+      if (ok) requestSkyholdAppRender();
       return;
     }
     const out = {};

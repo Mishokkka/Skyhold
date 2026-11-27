@@ -198,7 +198,7 @@ export function buildWorkAllocationTargets(holding = {}, { allowMedicalOvertime 
       });
       const paused = line?.active === false;
       const collectionAvailable = state.operational && line?.requiresCollection === true && collectionWork && Number(line?.pendingQty) > 0;
-      const collectionEligible = collectionAvailable || (includeIdleCollection && line?.requiresCollection === true && collectionWork);
+      const collectionEligible = collectionAvailable || (includeIdleCollection && !paused && line?.requiresCollection === true && collectionWork);
       targets.push({ ...target, paused, collectionAvailable,
         available: target.available && ((!paused && text(line?.source || "workers") === "workers") || collectionEligible),
         blockedReason: target.blockedReason || (paused && !collectionAvailable ? "Линия приостановлена" : "") });
@@ -288,9 +288,9 @@ export function residentWorkUnavailable(holding, person) {
   return residentLaborUnavailableReason(holding, person) || reservedOccupation(holding, person)?.label || "";
 }
 
-function v2LaborState(holding, { strictWageCheck, baseNormalQd, workingDays, allowMedicalOvertime, useDaysOffBudget }, collectingWarnings) {
+function v2LaborState(holding, { strictWageCheck, baseNormalQd, workingDays, allowMedicalOvertime, useDaysOffBudget, includeIdleCollection = false }, collectingWarnings) {
   const budget = useDaysOffBudget ? holdingNormalLaborQd(holding, { workingDays, baseNormalQd }) : baseNormalQd;
-  const targets = buildWorkAllocationTargets(holding, { allowMedicalOvertime, baseNormalQd });
+  const targets = buildWorkAllocationTargets(holding, { allowMedicalOvertime, baseNormalQd, includeIdleCollection });
   const targetMap = new Map(targets.map((target) => [target.key, target]));
   const buildings = new Map((holding.buildings?.list ?? []).map((building) => [text(building.id), building]));
   const issues = [], warnings = [];
@@ -366,9 +366,9 @@ function v2LaborState(holding, { strictWageCheck, baseNormalQd, workingDays, all
 
 export function validateHoldingWorkAllocations(holding = {}, options = {}) {
   const { previousHolding = null, replacedPersonId, strictWageCheck = true, baseNormalQd, workingDays, allowMedicalOvertime, useDaysOffBudget,
-    checkedPersonIds = [], conserving = false } = options;
+    checkedPersonIds = [], conserving = false, includeIdleCollection = false } = options;
   const settings = { strictWageCheck, baseNormalQd: baseNormalQd ?? holdingNormalLaborQd(null, { workingDays }),
-    workingDays, allowMedicalOvertime, useDaysOffBudget: useDaysOffBudget ?? true };
+    workingDays, allowMedicalOvertime, useDaysOffBudget: useDaysOffBudget ?? true, includeIdleCollection: Boolean(includeIdleCollection) };
   const current = v2LaborState(holding, settings, true);
   let issues = current.issues;
   if (previousHolding) {

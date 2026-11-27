@@ -8,6 +8,37 @@ import { calculatePlannedWorkerWage, financeObligationOutstandingCopper } from "
 import { financePeriodIdentity, prepareFinancePeriod } from "../../../engines/economy/finance-period.js";
 import { isResidentInPopulation } from "../../../data/resident-presence.js";
 
+function publicTreasuryHolding(holding) {
+  if (!holding || typeof holding !== "object") return holding;
+  const hiddenBuildings = new Set((holding.buildings?.list ?? [])
+    .filter((building) => building?.visibility === "gm")
+    .map((building) => String(building?.id ?? ""))
+    .filter(Boolean));
+  const hiddenPeople = new Set((holding.people?.list ?? [])
+    .filter((person) => person?.visibility === "gm")
+    .map((person) => String(person?.id ?? ""))
+    .filter(Boolean));
+  const buildings = (holding.buildings?.list ?? []).filter((building) => building?.visibility !== "gm");
+  const people = (holding.people?.list ?? []).filter((person) => person?.visibility !== "gm");
+  const obligations = Array.isArray(holding.finance?.obligations)
+    ? holding.finance.obligations.filter((row) => {
+      const recipientKind = String(row?.recipientKind ?? "");
+      const recipientId = String(row?.recipientId ?? "");
+      const sourceId = String(row?.sourceId ?? "");
+      if (recipientKind === "resident" && hiddenPeople.has(recipientId)) return false;
+      if (recipientKind === "building" && hiddenBuildings.has(recipientId)) return false;
+      if (sourceId && hiddenBuildings.has(sourceId)) return false;
+      return true;
+    })
+    : holding.finance?.obligations;
+  return {
+    ...holding,
+    buildings: holding.buildings ? { ...holding.buildings, list: buildings } : holding.buildings,
+    people: holding.people ? { ...holding.people, list: people } : holding.people,
+    finance: holding.finance ? { ...holding.finance, obligations } : holding.finance
+  };
+}
+
 export const FinanceTreasuryDomain = {
 _prepareLegacyTreasuryTotals(holding, workerContext = null) {
   if (!holding) return { salary: 0, salaryTenDay: 0, salaryMonth: 0, upkeepMonth: 0, incomeTenDay: 0, projectedBalanceMonth: 0, population: 0, peopleRows: 0, buildingsRows: 0, specialRows: 0, storageRows: 0 };
@@ -97,11 +128,13 @@ _canonicalFinanceProjection(holding) {
   };
 },
 
-_prepareTotals(holding) {
+_prepareTotals(holding, _workerContext = null, options = {}) {
   if (!holding) return { salary: 0, salaryTenDay: 0, salaryMonth: 0, upkeepMonth: 0, incomeTenDay: 0, projectedBalanceMonth: 0, population: 0, peopleRows: 0, buildingsRows: 0, specialRows: 0, storageRows: 0 };
-  const people = (holding.people?.list ?? []).filter((person) => isResidentInPopulation(person, holding));
-  const buildings = holding.buildings?.list ?? [];
-  const projection = this._canonicalFinanceProjection(holding) ?? {
+  const publicOnly = Boolean(options?.publicOnly ?? (typeof game !== "undefined" ? game?.user?.isGM !== true : false));
+  const scopedHolding = publicOnly ? publicTreasuryHolding(holding) : holding;
+  const people = (scopedHolding.people?.list ?? []).filter((person) => isResidentInPopulation(person, scopedHolding));
+  const buildings = scopedHolding.buildings?.list ?? [];
+  const projection = this._canonicalFinanceProjection(scopedHolding) ?? {
     salaryTenDayCopper: 0,
     salaryMonthCopper: 0,
     upkeepMonthCopper: 0,
@@ -112,7 +145,7 @@ _prepareTotals(holding) {
     currentDueCopper: 0,
     currentOutstandingCopper: 0,
     projectedPaidCopper: 0,
-    projectedTreasuryCopper: this._moneyCopper(holding),
+    projectedTreasuryCopper: this._moneyCopper(scopedHolding),
     blockedWorkerIds: []
   };
   const salaryTenDay = Math.max(0, this._safeNumber(projection.salaryTenDayCopper, 0));
@@ -129,18 +162,21 @@ _prepareTotals(holding) {
     population: people.length,
     peopleRows: people.length,
     buildingsRows: buildings.length,
-    specialRows: holding.special?.list?.length ?? 0,
-    storageRows: holding.storage?.resources?.length ?? 0,
+    specialRows: scopedHolding.special?.list?.length ?? 0,
+    storageRows: scopedHolding.storage?.resources?.length ?? 0,
     paidPeopleCount: projection.paidWorkerIds.length,
     unpaidPeopleCount: Math.max(0, people.length - projection.paidWorkerIds.length),
     financeProjection: projection
   };
 },
 
-_financeSummary(holding, totalsArg = null, workerContext = null) {
-  const totals = totalsArg ?? this._prepareTotals(holding, workerContext);
-  const moneyBuildings = (holding?.buildings?.list ?? [])
-    .map((building) => ({ building, income: this._buildingMoneyIncome(building, holding, workerContext) }))
+_financeSummary(holding, totalsArg = null, workerContext = null, options = {}) {
+  const publicOnly = Boolean(options?.publicOnly ?? (typeof game !== "undefined" ? game?.user?.isGM !== true : false));
+  const scopedHolding = publicOnly ? publicTreasuryHolding(holding) : holding;
+  const scopedContext = publicOnly ? null : workerContext;
+  const totals = totalsArg ?? this._prepareTotals(scopedHolding, scopedContext, { publicOnly });
+  const moneyBuildings = (scopedHolding?.buildings?.list ?? [])
+    .map((building) => ({ building, income: this._buildingMoneyIncome(building, scopedHolding, scopedContext) }))
     .filter((item) => item.income);
 
   const treasury = this._moneyContext(holding);
@@ -174,7 +210,7 @@ _financeSummary(holding, totalsArg = null, workerContext = null) {
   const monthlyNetCopper = incomeMonthCopper - salaryMonthCopper - upkeepMonthCopper;
   const dailyBurn = (salaryMonthCopper + upkeepMonthCopper - incomeMonthCopper) / 30;
   const runwayDays = dailyBurn > 0 ? Math.floor(treasury.totalCopper / dailyBurn) : Infinity;
-  const people = (holding?.people?.list ?? []).filter((person) => isResidentInPopulation(person, holding));
+  const people = (scopedHolding?.people?.list ?? []).filter((person) => isResidentInPopulation(person, scopedHolding));
   const paidPeopleCount = Math.max(0, Math.floor(this._safeNumber(totals.paidPeopleCount, 0)));
   const unpaidPeopleCount = Math.max(0, Math.floor(this._safeNumber(totals.unpaidPeopleCount, people.length - paidPeopleCount)));
   const ledgerRows = [
@@ -208,7 +244,7 @@ _financeSummary(holding, totalsArg = null, workerContext = null) {
     ledgerRows,
     hasLedgerRows: ledgerRows.length > 0,
     moneyBuildings: moneyBuildings.map(({ building, income }) => ({ name: building.name || "Без названия", income })),
-    controls: this._financeControlsContext?.(holding) ?? { canManage: false, rows: [], count: 0, hasRows: false },
+    controls: this._financeControlsContext?.(scopedHolding) ?? { canManage: false, rows: [], count: 0, hasRows: false },
     productionPreview: []
   };
 },

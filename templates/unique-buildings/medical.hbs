@@ -63,6 +63,13 @@
                   </select>
                 </label>
               {{/if}}
+              {{#if pendingWorkforceCommand}}
+                <div class="fbls-toolbar" role="status">
+                  <span>Ожидается подтверждение назначения: {{pendingWorkforceCommand.summary}}.</span>
+                  <button type="button" class="fbls-button compact primary" data-action="unique-retry-worker" {{#if pendingWorkforceBusy}}disabled{{/if}}>Повторить тот же запрос</button>
+                  <button type="button" class="fbls-button compact" data-action="unique-clear-pending-worker" {{#if pendingWorkforceBusy}}disabled{{/if}}>Сбросить после сверки</button>
+                </div>
+              {{/if}}
             </div>
           </section>
 

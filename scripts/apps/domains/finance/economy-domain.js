@@ -424,7 +424,7 @@ _financePlanInputs(holding, periodQd, identity) {
     })
     .map((building) => String(building?.constructionCrewId ?? ""))
     .filter(Boolean));
-  const workAllocationCheck = validateHoldingWorkAllocations(holding);
+  const workAllocationCheck = validateHoldingWorkAllocations(holding, { includeIdleCollection: true });
   const buildingPlanById = new Map(buildingPlans.map((building) => [String(building.id), building]));
   const workers = [];
   for (const person of people) {
@@ -952,28 +952,37 @@ _personBuildingEfficiency(holding, building, person, workerContext = null, optio
 },
 
 _assignedBuildingPeople(holding, building, workerContext = null, functionId = "") {
+  const selectedFunctionId = String(functionId ?? "");
+  const buildingId = String(building?.id ?? "");
   if (workerContext?.financeContext) {
     const people = workerContext?.buildingWorkers?.get(building)?.economyAssignedPeople ?? [];
-    const selectedFunctionId = String(functionId ?? "");
     if (!selectedFunctionId) return people;
-    const buildingId = String(building?.id ?? "");
     return people.filter((person) => {
       const id = String(person?.id ?? "");
       return (workerContext.financeContext.plannedAssignmentsByWorkerId?.get(id) ?? [])
-        .some((assignment) => assignment.sourceId === buildingId && assignment.functionId === selectedFunctionId);
+        .some((assignment) => assignment.sourceId === buildingId && workFunctionMatches(assignment.functionId, selectedFunctionId));
     });
   }
   const cached = workerContext?.buildingWorkers?.get(building)?.assignedPeople;
-  if (cached) return cached.filter((person) => isResidentInPopulation(person, holding));
-  const ids = new Set(buildingWorkerIds(holding, String(building?.id ?? "")));
+  if (cached) {
+    return cached.filter((person) => isResidentInPopulation(person, holding)
+      && (!selectedFunctionId || allocatedBuildingQd(person?.workAllocations, buildingId, selectedFunctionId) > 0));
+  }
+  const ids = new Set(buildingWorkerIds(holding, buildingId, selectedFunctionId));
   return (holding?.people?.list ?? []).filter((person) => ids.has(String(person?.id ?? "")) && isResidentInPopulation(person, holding));
 },
 
 _activeAssignedBuildingPeople(holding, building, workerContext = null, functionId = "") {
   if (workerContext?.financeContext) return this._assignedBuildingPeople(holding, building, workerContext, functionId);
+  const selectedFunctionId = String(functionId ?? "");
+  const buildingId = String(building?.id ?? "");
   const cached = workerContext?.buildingWorkers?.get(building)?.activeAssignedPeople;
-  if (cached) return cached;
-  return this._assignedBuildingPeople(holding, building, workerContext)
+  if (cached) {
+    return selectedFunctionId
+      ? cached.filter((person) => allocatedBuildingQd(person?.workAllocations, buildingId, selectedFunctionId) > 0)
+      : cached;
+  }
+  return this._assignedBuildingPeople(holding, building, workerContext, selectedFunctionId)
     .filter((person) => isResidentInPopulation(person, holding) && this._safeNumber(person?.injuredDays, 0) <= 0);
 },
 

@@ -88,7 +88,15 @@
             {{else}}
             <p class="fbls-muted-text">Работники на функции этого здания ещё не назначены.</p>
             {{/if}}
-            {{#if canEdit}}{{#if building.buildingAssignTargets.length}}
+            {{#if canEdit}}
+            {{#if building.pendingWorkforceCommand}}
+            <div class="fbls-toolbar" role="status">
+              <span>Ожидается подтверждение назначения: {{building.pendingWorkforceCommand.summary}}.</span>
+              <button type="button" class="fbls-button compact primary" data-action="building-retry-worker" {{#if building.pendingWorkforceBusy}}disabled{{/if}}>Повторить тот же запрос</button>
+              <button type="button" class="fbls-button compact" data-action="building-clear-pending-worker" {{#if building.pendingWorkforceBusy}}disabled{{/if}}>Сбросить после сверки</button>
+            </div>
+            {{/if}}
+            {{#if building.buildingAssignTargets.length}}
             <div class="fbls-toolbar fbls-building-assign-bar">
               <select class="fbls-control" data-building-assign-person aria-label="Выбрать жителя для назначения">
                 <option value="">— Выберите жителя —</option>
