@@ -362,14 +362,17 @@ _prepareBuildingRow(holding, row, index, canEdit, storageRoomsArg = null, option
   const fuelChoice = String(row?.fuelChoice ?? fuelAlternatives[0]?.resourceId ?? "");
   const productionSelection = row?.productionSelection && typeof row.productionSelection === "object" ? row.productionSelection : {};
 
-  const cleanWorkerEfficiencyTotal = cardOnly ? 0 : Math.max(0, this._safeNumber(workerEfficiency.total, 0));
+  const displayTotal = cardOnly ? 0 : Math.max(0, this._safeNumber(isGM ? workerEfficiency.total : workerEfficiency.publicTotal, 0));
+  const displayProductionEquivalent = cardOnly ? 0 : this._safeNumber(isGM ? workerEfficiency.productionEquivalent : workerEfficiency.publicProductionEquivalent, 0);
   const preparedWorkerEfficiency = cardOnly ? null : {
     ...workerEfficiency,
-    totalRaw: cleanWorkerEfficiencyTotal,
-    total: this._formatNumber ? this._formatNumber(cleanWorkerEfficiencyTotal) : String(Math.round(cleanWorkerEfficiencyTotal * 100) / 100),
+    totalRaw: displayTotal,
+    total: this._formatNumber ? this._formatNumber(displayTotal) : String(Math.round(displayTotal * 100) / 100),
+    productionEquivalent: displayProductionEquivalent,
     productionEquivalentText: this._formatNumber
-      ? this._formatNumber(this._safeNumber(workerEfficiency.productionEquivalent, 0))
-      : String(Math.round(this._safeNumber(workerEfficiency.productionEquivalent, 0) * 100) / 100)
+      ? this._formatNumber(displayProductionEquivalent)
+      : String(Math.round(displayProductionEquivalent * 100) / 100),
+    detail: isGM ? workerEfficiency.detail : (workerEfficiency.publicDetail ?? workerEfficiency.detail)
   };
   const formatSigned = (value) => `${value > 0 ? "+" : ""}${this._formatNumber ? this._formatNumber(value) : String(value)}`;
   const activeBonuses = isTemplate || (buildingOperationalState(row).operational && !developmentDuplicate) ? bonuses : {};

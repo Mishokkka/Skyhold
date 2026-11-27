@@ -427,10 +427,11 @@ export class SkyholdCrewEditor extends FloatingTooltipsMixin(PendingFieldSavesMi
         crew.leaderId = "";
         crew.distributedIds = [];
         crew.distributedLeaderId = "";
+        const hidden = hiddenBuildingIds(holding, game.user?.isGM === true);
         for (const id of ids) {
           let placed = false;
           for (const building of holding.buildings?.list ?? []) {
-            if (manager._buildingStatus(building).value !== "built") continue;
+            if (hidden.has(String(building.id)) || manager._buildingStatus(building).value !== "built") continue;
             if (manager._assignPersonToBuilding?.(holding, id, building.id, { replace: true })) { placed = true; break; }
           }
           if (!placed) manager._setPersonFree(holding, id);

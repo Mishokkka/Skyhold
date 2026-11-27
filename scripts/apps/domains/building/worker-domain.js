@@ -117,9 +117,14 @@ _buildingEffectiveWorkers(holding, building, workerContext = null, functionId = 
     .filter((person) => person && isResidentInPopulation(person, holding) && this._safeNumber(person?.injuredDays, 0) <= 0);
   let productionWorkUnitsPerQd = 0;
   let equivalentWorkers = 0;
+  let publicProductionWorkUnitsPerQd = 0;
+  let publicEquivalentWorkers = 0;
   let suitableCount = 0;
   let visibleCount = 0;
+  let publicCount = 0;
   const details = [];
+  const publicDetails = [];
+  const publicPeople = [];
   const finance = workerContext?.financeContext;
   const activePeople = functionId && finance
     ? assignedPeople.filter((person) => !finance.blockedWorkerIds?.has(String(person.id))
@@ -134,6 +139,13 @@ _buildingEffectiveWorkers(holding, building, workerContext = null, functionId = 
     productionWorkUnitsPerQd += result.workUnits * share;
     equivalentWorkers += share;
     if (result.suitable) suitableCount += 1;
+    if (person?.visibility !== "gm") {
+      publicProductionWorkUnitsPerQd += result.workUnits * share;
+      publicEquivalentWorkers += share;
+      publicCount += 1;
+      publicDetails.push(...result.details);
+      publicPeople.push(person);
+    }
     if (canReadResident(person)) {
       visibleCount += 1;
       details.push(...result.details);
@@ -141,11 +153,16 @@ _buildingEffectiveWorkers(holding, building, workerContext = null, functionId = 
   }
   const composition = buildingCompositionStatus(building, activePeople, { excludeGroups: ["ЧУДОТВОРЕЦ"] });
   if (!composition.met) details.push(`не выполнен состав: ${composition.text}`);
+  const publicComposition = buildingCompositionStatus(building, publicPeople, { excludeGroups: ["ЧУДОТВОРЕЦ"] });
+  if (!publicComposition.met) publicDetails.push(`не выполнен состав: ${publicComposition.text}`);
   const result = {
     assigned: assignedIds.length,
     total: equivalentWorkers,
     productionEquivalent: productionWorkUnitsPerQd / WORK_UNITS_PER_QD,
     productionWorkUnitsPerQd,
+    publicTotal: publicEquivalentWorkers,
+    publicProductionEquivalent: publicProductionWorkUnitsPerQd / WORK_UNITS_PER_QD,
+    publicDetail: [`${publicCount} раб.`, ...publicDetails].join(" · "),
     suitableCount,
     leaderBonus: 0,
     maintenanceFactor: 1,

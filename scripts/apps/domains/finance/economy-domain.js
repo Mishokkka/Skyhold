@@ -1393,6 +1393,15 @@ _recordBuildingServiceActivity(holding, report, financeContext, budgets) {
 },
 
 async _runProductionAndLivestockForQd(holding, qd, report, { operationId = "", buildings = holding?.buildings?.list ?? [], budgets = new Map(), workerContext = null, financeContext = null, lineOutputForCycle = null } = {}) {
+  const recordRecentDomainResults = (beforeCount) => {
+    const total = Number(report?.ledgerCount ?? report?.ledger?.length ?? 0);
+    const added = Math.max(0, total - beforeCount);
+    if (!added || !Array.isArray(report?.ledger) || !report.ledger.length) return;
+    for (const row of report.ledger.slice(-Math.min(added, report.ledger.length))) {
+      if (!(Number(row?.qty) > 0) || !["agriculture", "livestock"].includes(row?.domain) || !row?.sourceId) continue;
+      this._recordMeaningfulResult(report, { id: row.sourceId }, row.domain);
+    }
+  };
   await this._runProductionCycleForQd(holding, qd, report, {
     buildings: this._nonAgricultureProductionBuildings(buildings),
     budgets,
@@ -1402,19 +1411,25 @@ async _runProductionAndLivestockForQd(holding, qd, report, { operationId = "", b
     // The day's feed can be milled before the herd is fed. Milk and eggs are
     // delivered at day end and available to the next day's processing shift.
     afterStep: (step) => {
+      const beforeAgri = Number(report?.ledgerCount ?? report?.ledger?.length ?? 0);
       const agriculture = this._runScheduledAgricultureStep?.(holding, step, report, { operationId, workerContext, financeContext, budgets });
       if (agriculture && !agriculture.ok) {
         throw new Error(agriculture.message || "Не удалось рассчитать сельскохозяйственные работы по плану.");
       }
+      recordRecentDomainResults(beforeAgri);
       if ((step + 1) % 4) return;
+      const beforeLivestock = Number(report?.ledgerCount ?? report?.ledger?.length ?? 0);
       const livestockResult = this._runLivestockForQd(holding, 4, report, {
         operationId: operationId ? `${operationId}:livestock:day-${(step + 1) / 4}` : "",
         workerContext, financeContext, budgets, stepOffset: step - 3, cycleQd: 4
       });
       if (!livestockResult.ok) throw new Error(livestockResult.message || "Не удалось рассчитать животноводство.");
+      recordRecentDomainResults(beforeLivestock);
     }
   });
+  const beforeFlush = Number(report?.ledgerCount ?? report?.ledger?.length ?? 0);
   this._flushScheduledAgricultureReport?.(holding, report, financeContext);
+  recordRecentDomainResults(beforeFlush);
   for (const [, { building, line, collectQd, progressQd = 0 }] of financeContext?.deferredCollections ?? []) {
     if (!(line.pendingQty > 0)) continue;
     report.skipped.push(`${building.name || "Здание"} · ${resourceLabel(normalizeResourceId(line.resourceId, line.resource))}: сбор не завершён (${progressQd}/${collectQd} QD); осталось ${line.pendingQty} ЕД.`);

@@ -4,7 +4,7 @@ import { canReadResident, findReadableHoldingEntry } from "../../data/access-gua
 import { holdingPermissionContext } from "../../data/holding-permissions.js";
 import { droppedLocksForAllocationChange, mutateResidentBuildingLabor } from "../../data/labor-mutations.js";
 import { normalLaborQdPerTenday, residentLaborCapacity } from "../../data/labor-budget.js";
-import { buildingLaborCapacityQd, buildingReservedQd } from "../../data/labor-model.js";
+import { buildingLaborCapacityQd, buildingReservedQd, uncollectibleProductionLine } from "../../data/labor-model.js";
 import { workforceIssueMessage, workforceKey, workforceLockKey } from "../../data/workforce-plan.js";
 import { buildResidentAllocationAddCommand, buildResidentAllocationRemovalCommand } from "../../data/workforce-socket.js";
 import { fieldValue } from "../../core/helpers.js";
@@ -222,6 +222,15 @@ export class SkyholdUniqueBuildingApp extends WindowFrameMixin(RenderSchedulerMi
         throw new Error("Предел QD должен быть целым неотрицательным числом; пустое поле означает отсутствие предела.");
       }
       await this._updateMutableBuilding(({ holding, building }) => {
+        const applyZeroLaborGuards = (target) => {
+          if (value !== 0) return;
+          target.activation = { ...target.activation, minOperationalQd: 0, requiresMeaningfulResult: false };
+          target.minOperationalQd = 0;
+          const blockedLine = uncollectibleProductionLine(target);
+          if (blockedLine) {
+            throw new Error(`Нельзя задать 0 QD: линия «${blockedLine.resource || blockedLine.mode || "выпуск"}» требует сбора (${blockedLine.collectQd} QD) без сбора потребителем.`);
+          }
+        };
         if (holding) {
           const previewHolding = structuredClone(holding);
           const previewBuilding = previewHolding.buildings?.list?.find((item) => String(item?.id ?? "") === String(building.id));
@@ -230,6 +239,7 @@ export class SkyholdUniqueBuildingApp extends WindowFrameMixin(RenderSchedulerMi
             previewBuilding.workersMin = 0;
             if (previewBuilding.workerProfile) previewBuilding.workerProfile.workersMin = 0;
             if (previewBuilding.activation) previewBuilding.activation.minWorkers = 0;
+            applyZeroLaborGuards(previewBuilding);
             const check = validateHoldingWorkAllocations(previewHolding, { previousHolding: holding });
             if (!check.ok) throw new Error(check.issues[0].message);
           }
@@ -238,6 +248,7 @@ export class SkyholdUniqueBuildingApp extends WindowFrameMixin(RenderSchedulerMi
         building.workersMin = 0;
         if (building.workerProfile) building.workerProfile.workersMin = 0;
         if (building.activation) building.activation.minWorkers = 0;
+        applyZeroLaborGuards(building);
         return true;
       }, { reason: "unique-building:labor" });
       this.requestRender();

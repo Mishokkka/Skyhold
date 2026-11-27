@@ -3,7 +3,7 @@ import { requestWorkforceOperation, SkyholdData } from "../data/store.js";
 import { findReadableHoldingEntry, hiddenBuildingIds } from "../data/access-guard.js";
 import { allocationSourceId } from "../data/labor-primitives.js";
 import { holdingPermissionContext } from "../data/holding-permissions.js";
-import { isWorkforcePlanRowVisible, mergePublicWorkAllocations, workforceKey, workforceLockKey, workforceCapacity, workforceProductionGoalKey } from "../data/workforce-plan.js";
+import { isWorkforcePlanRowVisible, workforceKey, workforceLockKey, workforceCapacity, workforceProductionGoalKey } from "../data/workforce-plan.js";
 import { makeId } from "../data/utils.js";
 import { buildingAppearance } from "../core/building-appearance.js";
 import { getSkyholdWorkflowService } from "../workflows/skyhold-workflow-service.js";
@@ -381,14 +381,45 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
   _previewRefresh() {
     const { holding, revision } = this.latest, fresh = createWorkforceDraft(holding, this.service), draft = copy(fresh), changes = [];
     const hidden = hiddenBuildingIds(holding, this.permissions.isGM);
+    const isPublicActive = (row) => !hidden.has(allocationSourceId(row)) && (Number(row?.normalQd || 0) > 0 || Number(row?.overtimeQd || 0) > 0);
+    const publicMap = (rows) => new Map((rows ?? []).filter(isPublicActive).map((row) => [workforceKey(row), row]));
+    const rowSig = (row) => row
+      ? JSON.stringify([allocationSourceId(row), String(row.functionId ?? ""), Number(row.normalQd || 0), Number(row.overtimeQd || 0)])
+      : "";
     for (const id of this.draft.edited) {
       const person = this._model.people.find((row) => row.id === id);
       if (!person || !fresh.allocations[id]) throw new Error("Часть изменённых жителей недоступна. Сохраните сведения из черновика и сбросьте его.");
-      draft.allocations[id] = copy(mergePublicWorkAllocations(fresh.allocations[id], this.draft.allocations[id] ?? [], hidden));
-      draft.edited.push(id);
-      changes.push({ name: person.name, task: "Актуальные назначения → ваш черновик",
-        before: this._allocationText(fresh.allocations[id], this._model, holding),
-        after: this._allocationText(draft.allocations[id], this._model, holding) });
+      const initialPublic = publicMap(this.initial.allocations[id]);
+      const draftPublic = publicMap(this.draft.allocations[id]);
+      const freshRows = fresh.allocations[id] ?? [];
+      const freshPublic = publicMap(freshRows);
+      const hiddenRows = freshRows.filter((row) => hidden.has(allocationSourceId(row)));
+      const mergedPublic = new Map(freshPublic);
+      let conflicts = 0;
+      for (const key of new Set([...initialPublic.keys(), ...draftPublic.keys()])) {
+        const initRow = initialPublic.get(key);
+        const draftRow = draftPublic.get(key);
+        if (rowSig(initRow) === rowSig(draftRow)) continue;
+        const freshRow = freshPublic.get(key);
+        if (rowSig(freshRow) !== rowSig(initRow) && rowSig(freshRow) !== rowSig(draftRow)) conflicts += 1;
+        if (draftRow) mergedPublic.set(key, freshRow ? { ...copy(freshRow), ...copy(draftRow) } : copy(draftRow));
+        else mergedPublic.delete(key);
+      }
+      const nextRows = [...copy(hiddenRows), ...mergedPublic.values()];
+      draft.allocations[id] = nextRows;
+      const mergedPublicRows = [...mergedPublic.values()];
+      const freshPublicRows = [...freshPublic.values()];
+      const changed = mergedPublicRows.length !== freshPublicRows.length
+        || mergedPublicRows.some((row) => rowSig(row) !== rowSig(freshPublic.get(workforceKey(row))));
+      if (changed || conflicts) {
+        draft.edited.push(id);
+        changes.push({
+          name: person.name,
+          task: conflicts ? `Конфликт по ${conflicts} назн. — ваш черновик вместо актуальных` : "Актуальные назначения → ваш черновик",
+          before: this._allocationText(freshRows, this._model, holding),
+          after: this._allocationText(nextRows, this._model, holding)
+        });
+      }
     }
     const visibilityScope = {
       buildings: this._model?.holding?.buildings?.list ?? holding.buildings?.list,

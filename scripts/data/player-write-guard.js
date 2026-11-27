@@ -27,7 +27,7 @@ import { protectedSpecialRecordFields, specialMoraleModifier } from "../core/spe
 import { isResidentAway, isResidentRestingOnShip } from "./resident-presence.js";
 import { isSheriffAppointment } from "./control-appointments.js";
 import { lockedAllocationChangeError, workforceIssueMessage } from "./workforce-plan.js";
-import { newLaborIssues } from "./labor-model.js";
+import { newLaborIssues, reservedOccupation } from "./labor-model.js";
 import { hiddenBuildingIds, residentHasHiddenWork } from "./access-guard.js";
 
 const MAX_PLAYER_CHANGE_PATHS = 250;
@@ -406,7 +406,13 @@ function validatePlayerPatchSemantics(current, proposed, action, holdingIndex, p
   }
   const lockError = lockedAllocationChangeError(holding, nextHolding, holding.workforcePlan, { isGM: false });
   if (lockError) return { ok: false, error: lockError };
-  const workAllocationCheck = validateHoldingWorkAllocations(nextHolding, { previousHolding: holding });
+  const priorPeople = new Map((holding.people?.list ?? []).map((person) => [String(person.id ?? ""), person]));
+  const replacedPersonId = (nextHolding.people?.list ?? []).filter((person) => {
+    const prior = priorPeople.get(String(person.id ?? ""));
+    const priorOccupation = prior && reservedOccupation(holding, prior);
+    return priorOccupation && priorOccupation.kind !== "ship" && !reservedOccupation(nextHolding, person);
+  }).map((person) => String(person.id ?? ""));
+  const workAllocationCheck = validateHoldingWorkAllocations(nextHolding, { previousHolding: holding, replacedPersonId });
   if (!workAllocationCheck.ok) return { ok: false, error: workforceIssueMessage(nextHolding, workAllocationCheck.issues[0]) };
   const admissionIssues = newLaborIssues(holdingWorkerAdmissionIssues(holding), holdingWorkerAdmissionIssues(nextHolding));
   if (admissionIssues.length) return { ok: false, error: workforceIssueMessage(nextHolding, admissionIssues[0]) };

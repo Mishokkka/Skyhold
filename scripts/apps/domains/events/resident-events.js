@@ -944,9 +944,11 @@ async _savePersonEditorDraft(event) {
 
   const resolve = (update) => resolveResidentDraftUpdate(update, baseline.person, source.person);
   const changedWork = Boolean(workUpdate);
+  const allocationsChangedConcurrently = changedWork
+    && stableDataHash(baseline.person?.workAllocations ?? []) !== stableDataHash(source.person?.workAllocations ?? []);
   regularUpdates = regularUpdates.map(resolve);
   if (workUpdate) workUpdate = resolve(workUpdate);
-  if ((changedWork && !workUpdate) || regularUpdates.includes(null)) {
+  if ((changedWork && !workUpdate) || allocationsChangedConcurrently || regularUpdates.includes(null)) {
     ui.notifications.warn("Поле или строка плана изменились в другой сессии. Скопируйте свою правку и нажмите «Обновить карточку».");
     return false;
   }

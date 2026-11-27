@@ -51,19 +51,22 @@ function traceLastTendayIndex(periodKey = "") {
 }
 
 export function traceFunctionQd(serviceState = {}, functionId = "") {
-  const entries = Object.entries(serviceState?.workedQdByFunction ?? {});
+  const byFunction = serviceState?.workedQdByFunction;
+  const hasBreakdown = Boolean(byFunction && typeof byFunction === "object");
+  const entries = Object.entries(hasBreakdown ? byFunction : {});
   if (!functionId) {
     const hasLines = entries.some(([id]) => id.startsWith("production:"));
     const unique = entries.filter(([id]) => !(hasLines && id === "production"));
-    return entries.length ? unique.reduce((sum, [, qd]) => sum + whole(qd), 0) : whole(serviceState.workedQd);
+    return entries.length ? unique.reduce((sum, [, qd]) => sum + whole(qd), 0) : whole(serviceState?.workedQd);
   }
   const exact = entries.find(([recordedFunction]) => text(recordedFunction) === text(functionId));
   if (exact) return whole(exact[1]);
   const matched = entries.filter(([recordedFunction]) => workFunctionMatches(recordedFunction, functionId));
   if (matched.length) return matched.reduce((sum, [, qd]) => sum + whole(qd), 0);
+  if (hasBreakdown) return 0;
   // Never lend another function's work to this service. Old unscoped traces
   // only prove the one function they explicitly identify.
-  return !functionId || workFunctionMatches(serviceState?.functionId, functionId)
+  return workFunctionMatches(serviceState?.functionId, functionId)
     ? whole(serviceState?.workedQd) : 0;
 }
 
@@ -194,7 +197,7 @@ export function buildingConfirmedSocialStatus(holding = {}, building = {}, funct
   const functionId = text(functionIdArg) || buildingServiceFunctionId(building);
   const base = buildingServiceBlockReasons(holding, building, functionId);
   if (!hasActiveServiceContract(building)) return { ...base, periodKey: text(building?.serviceState?.periodKey) };
-  const reasons = base.reasons.filter((reason) => !["workers-missing", "qd-missing", "result-missing", "service-stopped", "composition-missing"].includes(reason.code));
+  const reasons = base.reasons.filter((reason) => !["workers-missing", "qd-missing", "result-missing", "composition-missing"].includes(reason.code));
   const state = building?.serviceState ?? {};
   const completedIndex = completedTendayIndex(holding);
   const traceIndex = traceLastTendayIndex(state?.periodKey);
@@ -281,7 +284,7 @@ export function buildingServiceBlockReasons(holding = {}, building = {}, functio
   // saves can contain a stopped trace on passive monuments; only buildings
   // with an actual staffed/service activation contract may be blocked by it.
   if (activeServiceContract
-    && building?.serviceState?.functionId === functionId
+    && (!building?.serviceState?.functionId || building?.serviceState?.functionId === functionId)
     && building?.serviceState?.fuelBlocked === true) {
     reasons.push({ code: "service-stopped", text: text(building?.serviceState?.reason) || "функция остановлена" });
   }
@@ -293,12 +296,15 @@ export function buildingServiceBlockReasons(holding = {}, building = {}, functio
       : `не работают зависимости: ${dependencies.missing.join(", ")}`
   });
   const workforce = buildingActiveWorkerSummary(holding, building, functionId);
+  const activationWorkforce = building?.activation?.anyWorkingFunction === true && functionId
+    ? buildingActiveWorkerSummary(holding, building, "")
+    : workforce;
   const minOperationalQd = hasActiveServiceContract(building) ? Math.max(1, buildingMinOperationalQd(building)) : 0;
-  if (workforce.qd < minOperationalQd) {
-    reasons.push({ code: "qd-missing", text: `нужно QD: ${minOperationalQd}, выделено: ${workforce.qd}` });
-    reasons.push(...new Map(workforce.blocked.map((row) => [row.code + row.text, row])).values());
+  if (activationWorkforce.qd < minOperationalQd) {
+    reasons.push({ code: "qd-missing", text: `нужно QD: ${minOperationalQd}, выделено: ${activationWorkforce.qd}` });
+    reasons.push(...new Map(activationWorkforce.blocked.map((row) => [row.code + row.text, row])).values());
   }
-  if (buildingAcceptsWorkers(building) && !buildingCompositionStatus(building, workforce.workers, { excludeGroups: ["ЧУДОТВОРЕЦ"] }).met) {
+  if (buildingAcceptsWorkers(building) && !buildingCompositionStatus(building, activationWorkforce.workers, { excludeGroups: ["ЧУДОТВОРЕЦ"] }).met) {
     reasons.push({ code: "composition-missing", text: "не выполнено обязательное условие состава работников" });
   }
   const active = reasons.length === 0;
