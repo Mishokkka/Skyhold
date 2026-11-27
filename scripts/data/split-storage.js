@@ -212,7 +212,7 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
         return { data: legacy, unverified: true };
       }
       warnCommitProblem(commitInspection, splitRevision, legacyRevision, "unrecoverable-split");
-      return { data: split, unverified: true };
+      throw new Error("FBL Skyhold | Данные разделённого хранилища повреждены и не имеют совместимого резерва.");
     }
 
     // A standalone snapshot can still be selected when split settings are untouched.

@@ -602,8 +602,13 @@ async _onRemoveWorkAllocation(event) {
       const { holding, person } = residentScope(data, address);
       if (!person || !holdingPermissionContext(holding).canEditBuildings || residentHasHiddenWork(holding, person)) return SkyholdData.skipTransaction(false);
       const innerRemoved = (person.workAllocations ?? []).find((row) => String(row.id) === allocationId);
+      if (!innerRemoved) return SkyholdData.skipTransaction(false);
+      if (removedRow && (String(innerRemoved.sourceId ?? "") !== String(removedRow.sourceId ?? "")
+        || String(innerRemoved.functionId ?? "") !== String(removedRow.functionId ?? ""))) {
+        failureMessage = "Назначение изменилось в другой сессии. Обновите карточку и повторите удаление.";
+        return SkyholdData.skipTransaction(false);
+      }
       const nextAllocations = (person.workAllocations ?? []).filter((row) => String(row.id) !== allocationId);
-      if (nextAllocations.length === person.workAllocations?.length) return SkyholdData.skipTransaction(false);
       const innerDropped = droppedLocksForAllocationChange(holding, person.id, nextAllocations, innerRemoved ? [innerRemoved] : []);
       if (hasUnconfirmedLocks(innerDropped, confirmedLockKeys)) {
         failureMessage = "Список закреплений изменился. Повторите удаление строки.";

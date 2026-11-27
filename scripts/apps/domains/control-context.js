@@ -58,7 +58,7 @@ export function prepareControlContext(holding, catalog = [], summary = {}, manag
   const people = holding?.people?.list ?? [];
   const buildings = holding?.buildings?.list ?? [];
   const targets = buildWorkAllocationTargets(holding);
-  const reservedQd = buildingWorkReservations(holding);
+  const reservedQd = buildingWorkReservations(holding, { canRead: (person) => canReadResident(person, user) });
   const sourcesById = new Map((summary.sources ?? []).map((source) => [String(source.id), source]));
   const totals = manager?._developmentSummary?.(holding)?.totals ?? {};
   const templates = new Map(catalog.map((template) => [String(template.id), template]));

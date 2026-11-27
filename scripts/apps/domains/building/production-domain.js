@@ -407,17 +407,21 @@ _buildingIncomeSummary(building, holding = null, workerContext = null, storageRo
   };
 },
 
-_buildingDefenseSummary(building, holding = null, workerContext = null, statusArg = null) {
+_buildingDefenseSummary(building, holding = null, workerContext = null, statusArg = null, { publicOnly = false } = {}) {
   const status = statusArg ?? this._buildingStatus(building);
   if (status.value !== "built") return { base: 0, perStep: 0, workerStep: 0, assigned: 0, effectiveWorkers: 0, fromWorkers: 0, total: 0, hasDefense: false, detail: "не построено" };
   const defense = building?.defense && typeof building.defense === "object" ? building.defense : {};
   const base = this._safeNumber(defense.base, 0);
   const perStep = this._safeNumber(defense.perStep, 0);
   const workerStep = Math.max(0, this._safeNumber(defense.workerStep, 0));
-  const assigned = holding ? buildingWorkerIds(holding, building?.id, "defense").length : 0;
-  const defenseStatus = holding && workerStep > 0 ? buildingServiceBlockReasons(holding, building, "defense") : null;
+  const scopedHolding = publicOnly && holding
+    ? { ...holding, people: { ...(holding.people ?? {}), list: (holding.people?.list ?? []).filter((person) => person?.visibility !== "gm") } }
+    : holding;
+  const assigned = scopedHolding ? buildingWorkerIds(scopedHolding, building?.id, "defense").length : 0;
+  const defenseStatus = scopedHolding && workerStep > 0 ? buildingServiceBlockReasons(scopedHolding, building, "defense") : null;
   const effectiveWorkers = defenseStatus?.active ? defenseStatus.workforce.equivalentWorkers : 0;
-  const workerDetail = assigned ? this._buildingEffectiveWorkers?.(holding, building, workerContext, "defense")?.detail : "";
+  const workerEff = assigned ? this._buildingEffectiveWorkers?.(scopedHolding, building, publicOnly ? null : workerContext, "defense") : null;
+  const workerDetail = workerEff ? (publicOnly ? (workerEff.publicDetail ?? workerEff.detail) : workerEff.detail) : "";
   const structuralBase = Math.max(0, Math.floor(base));
   const fromWorkers = workerStep > 0 ? Math.floor(effectiveWorkers / workerStep) * perStep : 0;
   const total = Math.max(0, structuralBase + fromWorkers);

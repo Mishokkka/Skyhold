@@ -402,7 +402,7 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
         if (rowSig(initRow) === rowSig(draftRow)) continue;
         const freshRow = freshPublic.get(key);
         if (rowSig(freshRow) !== rowSig(initRow) && rowSig(freshRow) !== rowSig(draftRow)) conflicts += 1;
-        if (draftRow) mergedPublic.set(key, freshRow ? { ...copy(freshRow), ...copy(draftRow) } : copy(draftRow));
+        if (draftRow) mergedPublic.set(key, freshRow ? { ...copy(freshRow), normalQd: draftRow.normalQd, overtimeQd: draftRow.overtimeQd } : copy(draftRow));
         else mergedPublic.delete(key);
       }
       const nextRows = [...copy(hiddenRows), ...mergedPublic.values()];

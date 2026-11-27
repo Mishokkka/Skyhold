@@ -74,7 +74,17 @@ _medicalCapacityForBuilding(holding, building, _workerContext = null) {
   const maxPatients = Math.max(0, this._safeNumber(building?.medical?.maxPatients ?? building?.medical?.capacity, def.defaultMaxPatients) || def.defaultMaxPatients);
   const rawCapacity = built && status.active && assigned > 0 ? Math.floor(total * perEfficiency) : 0;
   const capacity = Math.min(maxPatients, rawCapacity);
-  return { assigned, visibleAssigned, efficiency: total, perEfficiency, maxPatients, rawCapacity, capacity, built, active: status.active, blockReasons: status.reasons ?? [] };
+  const publicHolding = holding
+    ? { ...holding, people: { ...(holding.people ?? {}), list: (holding.people?.list ?? []).filter((person) => person?.visibility !== "gm") } }
+    : holding;
+  const publicStatus = visibleAssigned === assigned ? status : buildingServiceBlockReasons(publicHolding, building, "medical");
+  const publicEfficiency = publicStatus.active ? Math.max(0, this._safeNumber(publicStatus.workforce?.equivalentWorkers, 0)) : 0;
+  const publicRawCapacity = built && publicStatus.active && visibleAssigned > 0 ? Math.floor(publicEfficiency * perEfficiency) : 0;
+  const publicCapacity = Math.min(maxPatients, publicRawCapacity);
+  return {
+    assigned, visibleAssigned, efficiency: total, publicEfficiency, perEfficiency, maxPatients,
+    rawCapacity, publicRawCapacity, capacity, publicCapacity, built, active: status.active, blockReasons: status.reasons ?? []
+  };
 },
 
 _medicalAssignments(holding, workerContext = null) {
@@ -101,12 +111,17 @@ _medicalBuildingSummary(holding, building, _workerEfficiency = null, assignments
   const isGM = Boolean(options?.isGM ?? (typeof game !== "undefined" ? game?.user?.isGM : false));
   const assignments = assignmentsArg instanceof Map ? assignmentsArg : this._medicalAssignments(holding);
   const own = assignments.get(String(building?.id ?? "")) ?? { patients: [], overflow: [], totalPatients: 0, capacity: 0, assigned: 0, visibleAssigned: 0, efficiency: 0, perEfficiency: 5, built: false, blockReasons: [] };
-  const efficiency = Math.max(0, this._safeNumber(own.efficiency, 0));
+  const efficiency = Math.max(0, this._safeNumber(isGM ? own.efficiency : (own.publicEfficiency ?? own.efficiency), 0));
   const assigned = Math.max(0, this._safeNumber(isGM ? own.assigned : (own.visibleAssigned ?? own.assigned), 0));
-  const capacity = own.capacity;
+  const capacity = isGM ? own.capacity : (own.publicCapacity ?? own.capacity);
+  const rawCapacity = isGM ? (own.rawCapacity ?? capacity) : (own.publicRawCapacity ?? capacity);
   const visiblePatients = (own.patients ?? []).filter((person) => isGM || person?.visibility !== "gm");
-  const visibleOverflow = (own.overflow ?? []).filter((person) => isGM || person?.visibility !== "gm");
-  const patientRows = visiblePatients.map((person) => ({
+  const shownPatients = isGM ? visiblePatients : visiblePatients.slice(0, capacity);
+  const hiddenOverflowPatients = isGM ? [] : visiblePatients.slice(capacity);
+  const visibleOverflow = isGM
+    ? (own.overflow ?? [])
+    : [...hiddenOverflowPatients, ...(own.overflow ?? []).filter((person) => person?.visibility !== "gm")];
+  const patientRows = shownPatients.map((person) => ({
     id: person.id,
     name: person.name || "Без имени",
     label: this._medicalPatientLabel(person),
@@ -128,7 +143,7 @@ _medicalBuildingSummary(holding, building, _workerEfficiency = null, assignments
     doctorEfficiencyText: this._formatNumber ? this._formatNumber(efficiency) : String(Math.round(efficiency * 100) / 100),
     perEfficiency: own.perEfficiency,
     maxPatients: own.maxPatients ?? SPECIAL_BUILDING_KINDS.medical.defaultMaxPatients,
-    rawCapacity: own.rawCapacity ?? capacity,
+    rawCapacity,
     maxPatientsPath: `${String(building?.basePath ?? "")}.medical.maxPatients`,
     capacity,
     used,
@@ -234,7 +249,7 @@ _prepareBuildingRow(holding, row, index, canEdit, storageRoomsArg = null, option
   const livestockView = cardOnly ? null : (this._prepareLivestockBuildingView?.(holding, row, recordPath, storageRooms) ?? null);
   const incomeStorageRooms = Array.isArray(storageRoomsArg) && storageRoomsArg.length === 0 ? null : storageRooms;
   const incomeSummary = cardOnly ? null : this._buildingIncomeSummary(row, holding, workerContext, incomeStorageRooms);
-  const defenseSummary = cardOnly ? null : this._buildingDefenseSummary(row, holding, workerContext, status);
+  const defenseSummary = cardOnly ? null : this._buildingDefenseSummary(row, holding, workerContext, status, { publicOnly: !isGM });
   const progress = Math.max(0, this._safeNumber(row.buildProgress, 0));
   const target = Math.max(1, this._safeNumber(row.buildTarget, 6));
   const category = this._buildingCategory(row);
