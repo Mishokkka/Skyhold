@@ -14,7 +14,7 @@ import { normalizePoliticsState } from "./politics-state.js";
 import { eventRegionOptionValue, normalizeEventRegionOptions, normalizeEventTagThresholds, normalizeRandomEventTables } from "./random-events.js";
 import { normalizeDefenseSquad, normalizeMassCombatState } from "./normalizers/combat.js";
 import { normalizeStorageItemRow, normalizeStorageLogRow } from "./normalizers/storage.js";
-import { normalizeBuilding, normalizeUniqueBuildingWorkers } from "./normalizers/building.js";
+import { normalizeBuilding } from "./normalizers/building.js";
 import { normalizeEventArchive, normalizeEventHistory, normalizeEventSchedule, normalizeHoldingOperationLog, normalizeLastEventRoll } from "./normalizers/events.js";
 import { clearBuildingReferences, clearPersonReferences, normalizeConstructionCrew, normalizePerson } from "./normalizers/resident.js";
 import { normalizeContentDoctrines } from "./content-packs.js";
@@ -27,6 +27,8 @@ import { normalizeMarketOutboundState } from "./market/outbound-state.js";
 import { savedMarketTransportPlanFields } from "./market/transport-plan.js";
 import { normalizeFinanceObligationsState } from "./finance/obligations.js";
 import { normalizeInternalDemandConfig } from "./economy/internal-demand.js";
+import { holdingDaysOffPerTenday } from "./labor-budget.js";
+import { normalizeWorkforcePlan } from "./workforce-plan.js";
 import { normalizeShipsState } from "./ships.js";
 import { ensureTransportState, transportCargoReservations } from "./transport/state.js";
 import { indexStorageRows } from "../engines/storage/row-identity.js";
@@ -307,14 +309,12 @@ export function mergeHoldingDefaults(holding) {
     const leader = peopleById.get(leaderId);
     if (leader) {
       leader.workAssignment = `construction-leader:${crew.id}`;
-      leader.workAllocationMode = "legacy";
       leader.role = `Руководитель: ${crew.name || "Стройбригада"}`;
     }
     for (const memberId of crew?.memberIds ?? []) {
       const member = peopleById.get(String(memberId ?? ""));
       if (!member) continue;
       member.workAssignment = `construction:${crew.id}`;
-      member.workAllocationMode = "legacy";
       member.role = crew.name || "Стройбригада";
     }
   }
@@ -326,7 +326,6 @@ export function mergeHoldingDefaults(holding) {
   merged.overview.development.war = toNumber(merged.overview.development.war, 0);
 
   for (const building of merged.buildings.list) normalizeBuilding(building, { preserveTemplateMechanics: true, people: merged.people.list });
-  normalizeUniqueBuildingWorkers(merged);
   if (!Array.isArray(merged.special.list)) merged.special.list = [];
   merged.special.ships = normalizeShipsState(merged.special.ships);
   if (!isPlainObject(merged.special.market)) merged.special.market = {};
@@ -523,7 +522,10 @@ export function mergeHoldingDefaults(holding) {
   merged.log = normalizeHoldingOperationLog(merged.log);
   merged.finance = normalizeFinanceObligationsState(merged.finance);
   merged.politics = normalizePoliticsState(merged.politics);
+  merged.workforcePlan = normalizeWorkforcePlan(merged.workforcePlan);
+  if (!Array.isArray(merged.operations)) merged.operations = [];
   if (!isPlainObject(merged.gm)) merged.gm = {};
+  merged.gm.labor = { daysOffPerTenday: holdingDaysOffPerTenday(merged) };
   if (!isPlainObject(merged.gm.economy)) merged.gm.economy = {};
   merged.gm.economy.internalDemand = normalizeInternalDemandConfig(merged.gm.economy.internalDemand);
   if (!isPlainObject(merged.gm.food)) merged.gm.food = {};

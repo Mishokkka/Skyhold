@@ -1,5 +1,6 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import { SkyholdData } from "../../data/store.js";
+import { DEFAULT_NORMAL_LABOR_QD } from "../../data/labor-budget.js";
 import { buildingConstructionPrerequisitesMet } from "../../engines/economy/building-service.js";
 import { makeId } from "../../data/utils.js";
 import { generatorOptionSets } from "../../generators/resident-generator.js";
@@ -122,15 +123,23 @@ async _updateActiveHolding(updater, { reason = "active-holding:update" } = {}) {
   return SkyholdData.updateHolding(holdingId, updater, { fallback: false, reason });
 },
 
-async _updateActiveHoldingPath(path, value, { reason = "active-holding:path" } = {}) {
-  const holdingId = this._activeWritableHoldingId();
+async _updateActiveHoldingPath(path, value, {
+  reason = "active-holding:path", holdingId = this._activeWritableHoldingId(), expectedRevision
+} = {}) {
   if (!holdingId) { this._warnNoActiveHolding(); return false; }
   const updated = await SkyholdData.transaction((data) => {
+    if (expectedRevision !== undefined && expectedRevision !== data.meta?.revision) {
+      return SkyholdData.skipTransaction("revision-changed");
+    }
     const scopedPath = this._resolveActiveHoldingScopedPath(data, path, holdingId);
     if (!scopedPath) return SkyholdData.skipTransaction(false);
     foundry.utils.setProperty(data, scopedPath, value);
     return true;
   }, { reason, scope: "holdings" });
+  if (updated === "revision-changed") {
+    ui.notifications.warn("Данные владения изменились. Повторите действие после обновления.");
+    return false;
+  }
   if (!updated) this._warnNoActiveHolding();
   return updated;
 },
@@ -441,8 +450,10 @@ _emptyRowFor(collection, data = null) {
       background: "",
       race: "Человек",
       subrace: "Гвирл",
-      salary: 0,
-      salaryModifier: 0,
+      militarySalaryModifier: 0,
+      wageDailyOverrideCopper: null,
+      volunteerLabor: false,
+      volunteerReason: "",
       moraleBase: -1,
       moraleWork: 0,
       moraleHome: 0,
@@ -473,9 +484,9 @@ _emptyRowFor(collection, data = null) {
       constructionCrewId: "",
       requirements: { food: 0, technology: 0, culture: 0, war: 0 },
       bonuses: { food: 0, technology: 0, culture: 0, war: 0 },
-      workersMin: 1,
+      workersMin: 0,
       workersMax: 2,
-      assignedWorkerIds: ["", ""],
+      labor: { version: 2, capacityQd: 2 * DEFAULT_NORMAL_LABOR_QD },
       workerProfile: null,
       effect: "",
       production: "",

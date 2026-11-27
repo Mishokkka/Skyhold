@@ -17,12 +17,16 @@ export function hiddenBuildingIds(holding, isGM = Boolean(globalThis.game?.user?
 
 export const hiddenStorageRoomIds = hiddenBuildingIds;
 
+export function canReadResident(person, user = globalThis.game?.user) {
+  return Boolean(person && (user?.isGM || person.visibility !== "gm"));
+}
+
 export function residentHasHiddenWork(holding, person, hidden = hiddenBuildingIds(holding)) {
   if (!person || !hidden.size) return false;
-  if ([person.workAssignment, person.staffAppointment?.buildingId, ...(person.workAllocations ?? []).map((row) => row?.sourceId)]
+  if ([person.workAssignment, ...(person.workAllocations ?? []).map((row) => row?.sourceId)]
     .some((id) => hidden.has(String(id ?? "")))) return true;
-  return (holding?.buildings?.list ?? []).some((building) => hidden.has(String(building.id))
-    && (building.assignedWorkerIds ?? []).some((id) => String(id) === String(person.id)));
+  return Boolean(person.workAssignment) && (holding?.buildings?.list ?? []).some((building) => hidden.has(String(building.id))
+    && person.workAssignment === building.name);
 }
 
 export function findHoldingIndex(data, holdingId, { fallback = false } = {}) {

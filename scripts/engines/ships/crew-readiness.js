@@ -40,15 +40,22 @@ function residentAgeGroup(person) {
   return text(person?.ageGroup) || ageGroupFromAge(person?.age, person?.race, person?.subrace);
 }
 
-function assignmentLabels(holding, residentId, person) {
+const activeAllocation = (row) => Number(row?.normalQd ?? row?.qd ?? 0) > 0 || Number(row?.overtimeQd ?? 0) > 0;
+
+function assignmentLabels(holding, residentId, person, isGM, hiddenIds, hiddenNames) {
   const labels = [];
   const work = text(person?.workAssignment);
-  if (work && !["Свободен", "Без работы", "Ребенок"].includes(work)) labels.push(`работа: ${work}`);
-  if (Array.isArray(person?.workAllocations) && person.workAllocations.length) labels.push(`план работ: ${person.workAllocations.length}`);
+  if (work && !hiddenIds.has(work) && !hiddenNames.has(work)
+    && !["Свободен", "Без работы", "Ребенок"].includes(work)) labels.push(`работа: ${work}`);
+  const rows = Array.isArray(person?.workAllocations) ? person.workAllocations : [];
+  const allocationCount = isGM ? rows.length : rows.filter((row) => activeAllocation(row) && !hiddenIds.has(text(row?.sourceId))).length;
+  if (allocationCount) labels.push(`план работ: ${allocationCount}`);
 
   for (const building of holding?.buildings?.list ?? []) {
-    const slots = (building?.assignedWorkerIds ?? []).filter((id) => text(id) === residentId).length;
-    if (slots) labels.push(`здание «${text(building?.name || building?.id) || "без названия"}»`);
+    if (!isGM && building?.visibility === "gm") continue;
+    const bId = text(building?.id);
+    const hasQd = rows.some((row) => text(row?.sourceId) === bId && activeAllocation(row));
+    if (hasQd) labels.push(`здание «${text(building?.name || building?.id) || "без названия"}»`);
     if ((building?.workerAdmissionOverrideIds ?? []).some((id) => text(id) === residentId)) {
       labels.push(`допуск: «${text(building?.name || building?.id) || "здание"}»`);
     }
@@ -169,16 +176,23 @@ export function shipCrewComposition(holding = {}, ship = {}, { catalog } = {}) {
   };
 }
 
-export function shipCrewReadiness(holding = {}, ship = {}, { catalog } = {}) {
+function departingAssignmentsForEntries(holding, entries, isGM) {
+  const hidden = isGM ? [] : (holding?.buildings?.list ?? []).filter((building) => building?.visibility === "gm");
+  const hiddenIds = new Set(hidden.map((building) => text(building.id)));
+  const hiddenNames = new Set(hidden.map((building) => text(building.name)));
+  return entries.flatMap(({ fit, residentId, person }) => {
+    if (!fit || !person || (!isGM && person.visibility === "gm")) return [];
+    const assignments = assignmentLabels(holding, residentId, person, isGM, hiddenIds, hiddenNames);
+    return assignments.length ? [{ residentId, name: text(person.name) || residentId, label: assignments.join("; ") }] : [];
+  });
+}
+
+export function shipDepartingAssignments(holding = {}, ship = {}, { catalog, isGM = true } = {}) {
+  return departingAssignmentsForEntries(holding, shipCrewComposition(holding, ship, { catalog }).entries, isGM);
+}
+
+export function shipCrewReadiness(holding = {}, ship = {}, { catalog, isGM = true } = {}) {
   const composition = shipCrewComposition(holding, ship, { catalog });
-  const departingAssignments = composition.entries
-    .map((entry) => ({ ...entry, assignments: entry.person ? assignmentLabels(holding, entry.residentId, entry.person) : [] }))
-    .filter((entry) => entry.fit && entry.assignments.length)
-    .map((entry) => ({
-      residentId: entry.residentId,
-      name: text(entry.person?.name) || entry.residentId,
-      label: entry.assignments.join("; ")
-    }));
   return {
     ready: composition.issues.length === 0 && composition.readyCount >= composition.requiredCount,
     issues: composition.issues,
@@ -188,6 +202,6 @@ export function shipCrewReadiness(holding = {}, ship = {}, { catalog } = {}) {
     abstractCount: composition.abstractCount,
     requiredCount: composition.requiredCount,
     totalCount: composition.totalCount,
-    departingAssignments
+    departingAssignments: departingAssignmentsForEntries(holding, composition.entries, isGM)
   };
 }

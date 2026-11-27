@@ -170,7 +170,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "grain-field",
     "name": "Полевое хозяйство",
     "stage": 0,
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 8,
     "admission": {
       "text": "Любой трудоспособный",
@@ -205,7 +205,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "garden",
     "name": "Сад",
     "stage": 0,
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 4,
     "admission": {
       "text": "Любой трудоспособный",
@@ -239,7 +239,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "lumbermill",
     "name": "Лесоповал",
     "stage": 0,
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 16,
     "admission": {
       "text": "СИЛ≥3",
@@ -281,7 +281,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "quarry",
     "name": "Каменоломня",
     "stage": 0,
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 16,
     "admission": {
       "text": "СИЛ≥3",
@@ -430,7 +430,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "watch-post",
     "name": "Сторожевой пост",
     "stage": 0,
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 2,
     "admission": {
       "text": "ЛОВ≥3 или РАЗ≥3",
@@ -466,7 +466,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "animal-pen",
     "name": "Загон для животных",
     "stage": 1,
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 2,
     "admission": {
       "text": "ЭМП≥3 или СИЛ≥3",
@@ -513,7 +513,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "apiary",
     "name": "Пасека",
     "stage": 1,
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 2,
     "admission": {
       "text": "РАЗ≥3 или ЭМП≥3",
@@ -561,7 +561,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "fishing-pier",
     "name": "Рыбацкий причал",
     "stage": 1,
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 8,
     "admission": {
       "text": "ЛОВ≥3 или СИЛ≥3",
@@ -609,7 +609,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "vineyard",
     "name": "Виноградник",
     "stage": 1,
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 8,
     "admission": {
       "text": "Любой трудоспособный",
@@ -643,7 +643,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "hop-yard",
     "name": "Хмельник",
     "stage": 1,
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 8,
     "admission": {
       "text": "Любой трудоспособный",
@@ -677,7 +677,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "pasture",
     "name": "Пастбище",
     "stage": 1,
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 2,
     "admission": {
       "text": "ЭМП≥3 или СИЛ≥3",
@@ -724,7 +724,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "pigsty",
     "name": "Свинарник",
     "stage": 1,
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 2,
     "admission": {
       "text": "ЭМП≥3 или СИЛ≥3",
@@ -771,7 +771,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "sheepfold",
     "name": "Овчарня",
     "stage": 1,
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 2,
     "admission": {
       "text": "ЭМП≥3 или СИЛ≥3",
@@ -818,7 +818,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "mill",
     "name": "Мельница",
     "stage": 1,
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 8,
     "admission": {
       "text": "СИЛ≥3 или РАЗ≥3",
@@ -884,7 +884,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "tannery",
     "name": "Кожевенная мастерская",
     "stage": 1,
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 8,
     "admission": {
       "text": "ЛОВ≥3 и РАЗ≥3",
@@ -930,7 +930,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "stables",
     "name": "Конюшня",
     "stage": 1,
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 3,
     "admission": {
       "text": "ЭМП≥3 или ЛОВ≥3",
@@ -979,7 +979,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "market",
     "name": "Рынок",
     "stage": 1,
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 8,
     "admission": {
       "text": "Любой трудоспособный",
@@ -1069,7 +1069,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "arsenal",
     "name": "Арсенал",
     "stage": 1,
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 2,
     "admission": {
       "text": "РАЗ≥3 или СИЛ≥3",
@@ -1105,7 +1105,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "barricade-line",
     "name": "Линия баррикад",
     "stage": 1,
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 3,
     "admission": {
       "text": "СИЛ≥3",
@@ -1135,7 +1135,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "signal-tower",
     "name": "Сигнальная башня",
     "stage": 1,
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 3,
     "admission": {
       "text": "РАЗ≥3 или ЛОВ≥3",
@@ -1171,7 +1171,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "school",
     "name": "Школа",
     "stage": 1,
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 3,
     "admission": {
       "text": "РАЗ≥3 или ЭМП≥3",
@@ -1225,7 +1225,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "sheriff-post",
     "name": "Пост шерифа",
     "stage": 1,
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 3,
     "admission": {
       "text": "РАЗ≥3 или ЭМП≥3",
@@ -1261,7 +1261,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "bakery",
     "name": "Пекарня",
     "stage": 2,
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 8,
     "admission": {
       "text": "Любой трудоспособный",
@@ -1297,7 +1297,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "inn",
     "name": "Трактир",
     "stage": 2,
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 10,
     "admission": {
       "text": "Любой трудоспособный",
@@ -1334,7 +1334,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "oil-press",
     "name": "Маслобойня",
     "stage": 2,
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 8,
     "admission": {
       "text": "СИЛ≥3 или РАЗ≥3",
@@ -1382,7 +1382,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "cheesery",
     "name": "Сыроварня",
     "stage": 2,
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 8,
     "admission": {
       "text": "РАЗ≥3 или ЭМП≥3",
@@ -1430,7 +1430,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "smokehouse",
     "name": "Коптильня",
     "stage": 2,
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 8,
     "admission": {
       "text": "СИЛ≥3 или РАЗ≥3",
@@ -1478,7 +1478,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "brewery",
     "name": "Пивоварня",
     "stage": 2,
-    "workersMin": 3,
+    "workersMin": 0,
     "workersMax": 12,
     "admission": {
       "text": "СИЛ≥3 или РАЗ≥3",
@@ -1526,7 +1526,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "winery",
     "name": "Винодельня",
     "stage": 2,
-    "workersMin": 3,
+    "workersMin": 0,
     "workersMax": 12,
     "admission": {
       "text": "РАЗ≥3 или ЭМП≥3",
@@ -1575,7 +1575,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "distillery",
     "name": "Винокурня",
     "stage": 2,
-    "workersMin": 3,
+    "workersMin": 0,
     "workersMax": 10,
     "admission": {
       "text": "РАЗ≥3 и ЛОВ≥3",
@@ -1622,7 +1622,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "weaving-workshop",
     "name": "Ткацкая мастерская",
     "stage": 2,
-    "workersMin": 4,
+    "workersMin": 0,
     "workersMax": 16,
     "admission": {
       "text": "ЛОВ≥3",
@@ -1663,7 +1663,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "carpentry-workshop",
     "name": "Столярная мастерская",
     "stage": 2,
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 10,
     "admission": {
       "text": "СИЛ≥3 или РАЗ≥3",
@@ -1711,7 +1711,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "soapworks",
     "name": "Мыловарня",
     "stage": 2,
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 8,
     "admission": {
       "text": "РАЗ≥3 и ЛОВ≥3",
@@ -1757,7 +1757,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "writing-workshop",
     "name": "Письменная мастерская",
     "stage": 2,
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 8,
     "admission": {
       "text": "ЛОВ≥3 и РАЗ≥3",
@@ -1808,7 +1808,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "tailor-shop",
     "name": "Ателье",
     "stage": 2,
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 10,
     "admission": {
       "text": "ЛОВ≥3",
@@ -1849,7 +1849,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "hiring-agency",
     "name": "Агентство Найма",
     "stage": 2,
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 4,
     "admission": {
       "text": "ЭМП≥3 или РАЗ≥3",
@@ -1898,7 +1898,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "bathhouse",
     "name": "Баня",
     "stage": 2,
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 2,
     "admission": {
       "text": "Любой трудоспособный",
@@ -1916,7 +1916,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "shrine",
     "name": "Святилище",
     "stage": 2,
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 4,
     "admission": {
       "text": "ЭМП≥3",
@@ -1946,7 +1946,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "guard-tower",
     "name": "Охранная башня",
     "stage": 2,
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 4,
     "admission": {
       "text": "ЛОВ≥3 или РАЗ≥3",
@@ -1982,7 +1982,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "dungeon",
     "name": "Темница",
     "stage": 2,
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 2,
     "admission": {
       "text": "СИЛ≥3 или ЭМП≥3",
@@ -2036,7 +2036,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "guarded-storehouse",
     "name": "Охраняемый склад",
     "stage": 2,
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 2,
     "admission": {
       "text": "СИЛ≥3 или РАЗ≥3",
@@ -2072,7 +2072,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "lazaret",
     "name": "Лазарет",
     "stage": 2,
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 3,
     "admission": {
       "text": "РАЗ≥3 или ЭМП≥3",
@@ -2108,7 +2108,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "apothecary",
     "name": "Аптекарская",
     "stage": 2,
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 6,
     "admission": {
       "text": "РАЗ≥4",
@@ -2154,7 +2154,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "powder-magazine",
     "name": "Пороховой погреб",
     "stage": 2,
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 2,
     "admission": {
       "text": "РАЗ≥3 и СИЛ≥3",
@@ -2188,7 +2188,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "field-fort",
     "name": "Полевой редут",
     "stage": 2,
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 5,
     "admission": {
       "text": "СИЛ≥3",
@@ -2236,7 +2236,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "guard-house",
     "name": "Караульный дом",
     "stage": 2,
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 6,
     "admission": {
       "text": "СИЛ≥3 или РАЗ≥3",
@@ -2272,7 +2272,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "brickworks",
     "name": "Кирпичный завод",
     "stage": 3,
-    "workersMin": 8,
+    "workersMin": 0,
     "workersMax": 24,
     "admission": {
       "text": "СИЛ≥3",
@@ -2319,7 +2319,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "mine",
     "name": "Шахта",
     "stage": 3,
-    "workersMin": 6,
+    "workersMin": 0,
     "workersMax": 30,
     "admission": {
       "text": "СИЛ≥3",
@@ -2366,7 +2366,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "glassworks",
     "name": "Стекольная мастерская",
     "stage": 3,
-    "workersMin": 4,
+    "workersMin": 0,
     "workersMax": 16,
     "admission": {
       "text": "ЛОВ≥3 и РАЗ≥3",
@@ -2417,7 +2417,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "tool-workshop",
     "name": "Инструментальная мастерская",
     "stage": 3,
-    "workersMin": 4,
+    "workersMin": 0,
     "workersMax": 16,
     "admission": {
       "text": "РАЗ≥3 и СИЛ≥3",
@@ -2486,7 +2486,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "construction-center",
     "name": "Центр Строительства",
     "stage": 3,
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 2,
     "admission": {
       "text": "РАЗ≥3 или СИЛ≥3",
@@ -2522,7 +2522,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "forge",
     "name": "Кузня",
     "stage": 3,
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 10,
     "admission": {
       "text": "СИЛ≥3 и РАЗ≥3",
@@ -2572,7 +2572,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "library",
     "name": "Библиотека",
     "stage": 3,
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 4,
     "admission": {
       "text": "РАЗ≥3",
@@ -2602,7 +2602,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "lighthouse",
     "name": "Маяк",
     "stage": 3,
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 3,
     "admission": {
       "text": "РАЗ≥3 и ЛОВ≥3",
@@ -2636,7 +2636,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "personnel-office",
     "name": "Управление кадров",
     "stage": 3,
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 4,
     "admission": {
       "text": "РАЗ≥3 или ЭМП≥3",
@@ -2667,7 +2667,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "scriptorium",
     "name": "Скрипторий",
     "stage": 3,
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 4,
     "admission": {
       "text": "РАЗ≥4",
@@ -2893,7 +2893,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "grain-elevator",
     "name": "Элеватор",
     "stage": 3,
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 8,
     "admission": {
       "text": "РАЗ≥3 или СИЛ≥3",
@@ -2929,7 +2929,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "militia-headquarters",
     "name": "Штаб ополчения",
     "stage": 3,
-    "workersMin": 3,
+    "workersMin": 0,
     "workersMax": 8,
     "admission": {
       "text": "СИЛ≥3 или ЭМП≥3",
@@ -2965,7 +2965,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "industrial-icehouse",
     "name": "Промышленный ледник",
     "stage": 4,
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 4,
     "admission": {
       "text": "РАЗ≥3 или СИЛ≥3",
@@ -3001,7 +3001,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "waterworks",
     "name": "Водопроводная станция",
     "stage": 4,
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 6,
     "admission": {
       "text": "РАЗ≥3 или СИЛ≥3",
@@ -3037,7 +3037,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "fire-station",
     "name": "Пожарное депо",
     "stage": 4,
-    "workersMin": 3,
+    "workersMin": 0,
     "workersMax": 10,
     "admission": {
       "text": "СИЛ≥3 или ЛОВ≥3",
@@ -3073,7 +3073,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "telegraph-station",
     "name": "Телеграфная станция",
     "stage": 4,
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 4,
     "admission": {
       "text": "РАЗ≥3 и ЛОВ≥3",
@@ -3107,7 +3107,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "printing-house",
     "name": "Типография",
     "stage": 4,
-    "workersMin": 6,
+    "workersMin": 0,
     "workersMax": 24,
     "admission": {
       "text": "ЛОВ≥3 или РАЗ≥3",
@@ -3160,7 +3160,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "cannery",
     "name": "Консервный завод",
     "stage": 4,
-    "workersMin": 10,
+    "workersMin": 0,
     "workersMax": 40,
     "admission": {
       "text": "СИЛ≥3 или РАЗ≥3",
@@ -3213,7 +3213,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "sewer-system",
     "name": "Канализация",
     "stage": 4,
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 8,
     "admission": {
       "text": "СИЛ≥3 или РАЗ≥3",
@@ -3249,7 +3249,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "gasworks",
     "name": "Газовый завод",
     "stage": 4,
-    "workersMin": 10,
+    "workersMin": 0,
     "workersMax": 30,
     "admission": {
       "text": "РАЗ≥3 и СИЛ≥3",
@@ -3283,7 +3283,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "railway-depot",
     "name": "Железнодорожное депо",
     "stage": 4,
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 12,
     "admission": {
       "text": "СИЛ≥3 или РАЗ≥3",
@@ -3319,7 +3319,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "guard-precinct",
     "name": "Участок охраны",
     "stage": 4,
-    "workersMin": 4,
+    "workersMin": 0,
     "workersMax": 12,
     "admission": {
       "text": "РАЗ≥3 или ЭМП≥3",
@@ -3355,7 +3355,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "irrigation-system",
     "name": "Оросительная система",
     "stage": 4,
-    "workersMin": 2,
+    "workersMin": 0,
     "workersMax": 6,
     "admission": {
       "text": "РАЗ≥3 или СИЛ≥3",
@@ -3391,7 +3391,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "food-distribution-center",
     "name": "Продовольственный распределительный центр",
     "stage": 4,
-    "workersMin": 4,
+    "workersMin": 0,
     "workersMax": 12,
     "admission": {
       "text": "Любой трудоспособный",
@@ -3414,7 +3414,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "machine-works",
     "name": "Машиностроительный цех",
     "stage": 5,
-    "workersMin": 10,
+    "workersMin": 0,
     "workersMax": 40,
     "admission": {
       "text": "РАЗ≥3 и СИЛ≥3",
@@ -3466,7 +3466,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "chemical-plant",
     "name": "Химический завод",
     "stage": 5,
-    "workersMin": 10,
+    "workersMin": 0,
     "workersMax": 40,
     "admission": {
       "text": "РАЗ≥4 и ЛОВ≥3",
@@ -3518,7 +3518,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "steelworks",
     "name": "Металлургический завод",
     "stage": 5,
-    "workersMin": 15,
+    "workersMin": 0,
     "workersMax": 60,
     "admission": {
       "text": "СИЛ≥3 и РАЗ≥3",
@@ -3569,7 +3569,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "town-hall",
     "name": "Ратуша",
     "stage": 5,
-    "workersMin": 4,
+    "workersMin": 0,
     "workersMax": 12,
     "admission": {
       "text": "РАЗ≥3 или ЭМП≥3",
@@ -3605,7 +3605,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "hospital",
     "name": "Больница",
     "stage": 5,
-    "workersMin": 6,
+    "workersMin": 0,
     "workersMax": 24,
     "admission": {
       "text": "РАЗ≥3 или ЭМП≥3",
@@ -3641,7 +3641,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "bank-exchange",
     "name": "Банк и торговая биржа",
     "stage": 5,
-    "workersMin": 4,
+    "workersMin": 0,
     "workersMax": 16,
     "admission": {
       "text": "РАЗ≥4 или ЭМП≥4",
@@ -3677,7 +3677,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "city-theatre",
     "name": "Городской театр",
     "stage": 5,
-    "workersMin": 6,
+    "workersMin": 0,
     "workersMax": 24,
     "admission": {
       "text": "Любой трудоспособный",
@@ -3695,7 +3695,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "museum",
     "name": "Музей",
     "stage": 5,
-    "workersMin": 4,
+    "workersMin": 0,
     "workersMax": 16,
     "admission": {
       "text": "РАЗ≥3 или ЭМП≥3",
@@ -3731,7 +3731,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "mansion",
     "name": "Особняк",
     "stage": 5,
-    "workersMin": 1,
+    "workersMin": 0,
     "workersMax": 4,
     "admission": {
       "text": "Любой трудоспособный",
@@ -3749,7 +3749,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "court",
     "name": "Суд",
     "stage": 5,
-    "workersMin": 3,
+    "workersMin": 0,
     "workersMax": 8,
     "admission": {
       "text": "РАЗ≥4 или ЭМП≥4",
@@ -3785,7 +3785,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "greenhouse-complex",
     "name": "Тепличный комплекс",
     "stage": 5,
-    "workersMin": 6,
+    "workersMin": 0,
     "workersMax": 20,
     "admission": {
       "text": "РАЗ≥3 или ЭМП≥3",
@@ -3838,7 +3838,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "garrison-administration",
     "name": "Гарнизонное управление",
     "stage": 5,
-    "workersMin": 4,
+    "workersMin": 0,
     "workersMax": 12,
     "admission": {
       "text": "СИЛ≥3 или ЭМП≥3",
@@ -3874,7 +3874,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "high-tech-components-plant",
     "name": "Завод высокотехнологичных компонентов",
     "stage": 6,
-    "workersMin": 15,
+    "workersMin": 0,
     "workersMax": 60,
     "admission": {
       "text": "РАЗ≥4 и ЛОВ≥3",
@@ -3925,7 +3925,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "airship-yard",
     "name": "Воздушная верфь",
     "stage": 6,
-    "workersMin": 20,
+    "workersMin": 0,
     "workersMax": 80,
     "admission": {
       "text": "СИЛ≥3 или РАЗ≥3",
@@ -3965,7 +3965,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "university",
     "name": "Университет",
     "stage": 6,
-    "workersMin": 8,
+    "workersMin": 0,
     "workersMax": 32,
     "admission": {
       "text": "РАЗ≥4 или ЭМП≥4",
@@ -4001,7 +4001,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "military-factory",
     "name": "Военный завод",
     "stage": 6,
-    "workersMin": 20,
+    "workersMin": 0,
     "workersMax": 80,
     "admission": {
       "text": "СИЛ≥3 и РАЗ≥3",
@@ -4058,7 +4058,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "military-academy",
     "name": "Военная академия",
     "stage": 6,
-    "workersMin": 6,
+    "workersMin": 0,
     "workersMax": 24,
     "admission": {
       "text": "РАЗ≥3 или ЭМП≥3",
@@ -4094,7 +4094,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "bastion",
     "name": "Бастион",
     "stage": 6,
-    "workersMin": 5,
+    "workersMin": 0,
     "workersMax": 20,
     "admission": {
       "text": "СИЛ≥3",
@@ -4124,7 +4124,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "agronomic-institute",
     "name": "Агрономический институт",
     "stage": 6,
-    "workersMin": 6,
+    "workersMin": 0,
     "workersMax": 16,
     "admission": {
       "text": "РАЗ≥4 или ЭМП≥3",
@@ -4160,7 +4160,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "main-headquarters",
     "name": "Главный штаб",
     "stage": 6,
-    "workersMin": 6,
+    "workersMin": 0,
     "workersMax": 18,
     "admission": {
       "text": "РАЗ≥4 или ЭМП≥4",
@@ -4200,7 +4200,7 @@ export const APPROVED_BUILDING_WORKER_PROFILES = Object.freeze([
     "templateId": "citadel",
     "name": "Цитадель",
     "stage": 7,
-    "workersMin": 8,
+    "workersMin": 0,
     "workersMax": 32,
     "admission": {
       "text": "СИЛ≥3 или ЭМП≥3",

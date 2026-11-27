@@ -1,3 +1,4 @@
+import { DEFAULT_NORMAL_LABOR_QD } from "../../../data/labor-budget.js";
 import {
   availableResourceBatchInventory,
   internalDemandBatchClockQd,
@@ -84,7 +85,9 @@ _internalDemandChannels(holding, financeContext = null, tendayCount = 1, workerC
     const assignedPeople = this._activeAssignedBuildingPeople(holding, building, workerContext, "income");
     const assigned = assignedPeople.length;
     if (!assigned) continue;
-    const normalCapacityQd = 20 * Math.max(1, tendayCount);
+    const minimum = this._buildingMinimumQdStatus?.(holding, building, workerContext, "income");
+    if (minimum?.met === false) continue;
+    const normalCapacityQd = DEFAULT_NORMAL_LABOR_QD * Math.max(1, tendayCount);
     const workerShares = assignedPeople.map((person) => {
       const plannedQd = workerContext?.financeContext
         ? Math.max(0, finite(this._plannedWorkerFunctionQd(person, workerContext, building?.id, "income"), 0))

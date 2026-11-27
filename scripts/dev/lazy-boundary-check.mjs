@@ -79,6 +79,11 @@ const runtimeJs = walk(path.join(root, "scripts"), (file) => file.endsWith(".js"
 for (const file of runtimeJs) {
   assert.ok(allJsImports(file).every(imported => !normalize(imported).startsWith("scripts/dev/")),
     `${normalize(file)} must not import historical development fixtures`);
+  const relative = normalize(file);
+  if (relative.startsWith("scripts/data/") && relative !== "scripts/data/politics-availability.js") {
+    assert.ok(allJsImports(file).every(imported => normalize(imported) !== "scripts/engines/economy/building-service.js"),
+      `${relative} must not import the building service engine`);
+  }
 }
 const transportRuntime = reachable([path.join(root, "scripts/engines/transport/runtime.js")], allJsImports);
 assert.ok(![...transportRuntime].some(file => normalize(file) === "scripts/engines/market/shipment.js"),
@@ -89,6 +94,8 @@ const lazyModules = [
   "scripts/apps/market-app.js",
   "scripts/apps/politics-app.js",
   "scripts/apps/tenday-app.js",
+  "scripts/apps/workforce-planner-app.js",
+  "scripts/apps/workforce-plan-executor.js",
   "scripts/apps/editors/building-editor.js",
   "scripts/apps/editors/random-event-editor.js",
   "scripts/apps/editors/route-graph-editor.js",

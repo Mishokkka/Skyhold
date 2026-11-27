@@ -103,7 +103,7 @@ export function normalizeBuildingWorkerProfile(value = null, building = {}) {
     optimalSelectors: (Array.isArray(source.optimalSelectors) ? source.optimalSelectors : []).map(String).filter(Boolean),
     staffingClass: String(source.staffingClass ?? ""),
     composition: (Array.isArray(source.composition) ? source.composition : []).map((row) => ({
-      count: Math.max(1, finiteInteger(row?.count, 1)),
+      count: Math.max(0, finiteInteger(row?.count, 1)),
       ...(Array.isArray(row?.backgrounds) ? { backgrounds: [...new Set(row.backgrounds.map((name) => String(name).trim()).filter(Boolean))] } : { group: String(row?.group ?? "") })
     })).filter((row) => row.group || Array.isArray(row.backgrounds)),
     production: source.production && typeof source.production === "object" ? {
@@ -151,7 +151,6 @@ export function holdingWorkerAdmissionIssues(holding = {}) {
     .filter(([id]) => Boolean(id)));
   const issues = [];
   for (const person of holding?.people?.list ?? []) {
-    if (String(person?.workAllocationMode ?? "") !== "explicit") continue;
     const plannedQd = new Map();
     for (const row of person.workAllocations ?? []) {
       const buildingId = String(row?.sourceId ?? "");
@@ -310,7 +309,7 @@ function matchCompositionSlots(slots, people) {
 export function buildingCompositionStatus(building = {}, assignedPeople = [], { excludeGroups = [] } = {}) {
   const profile = normalizeBuildingWorkerProfile(building?.workerProfile, building);
   const excluded = new Set(excludeGroups.map((value) => String(value).toUpperCase()));
-  const requirements = (profile?.composition ?? []).filter((row) => !excluded.has(String(row.group).toUpperCase()));
+  const requirements = (profile?.composition ?? []).filter((row) => row.count > 0 && !excluded.has(String(row.group).toUpperCase()));
   const people = assignedPeople.filter((person) => person && !person.dead && Number(person.injuredDays ?? 0) <= 0);
   const slots = requirements.flatMap((row) => Array.from({ length: row.count }, () => row));
   const met = matchCompositionSlots(slots, people);

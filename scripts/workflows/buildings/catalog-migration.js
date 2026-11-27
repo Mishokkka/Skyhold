@@ -1,6 +1,5 @@
 import {
   DEFAULT_BUILDING_TEMPLATES,
-  BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION,
   DEPRECATED_TEMPLATE_IDS,
   TEMPLATE_CATALOG_VERSION
 } from "../../data/building-templates.js";
@@ -8,11 +7,9 @@ import { normalizeAgricultureBuilding } from "../../data/agriculture.js";
 import { normalizeLivestockBuilding } from "../../data/livestock.js";
 import { stableDataHash } from "../../data/storage-commit.js";
 import { clone } from "../../data/utils.js";
-import { workerAdmission } from "../../engines/workers/building-qualification.js";
 import { sourceMaterialState } from "../../engines/economy/construction-stages.js";
 import { validProductionTiming } from "../../engines/economy/production-timing.js";
-import { buildWorkAllocationTargets } from "../../data/work-allocations.js";
-import { buildingLaborMode, validateHybridLaborHolding } from "../../data/hybrid-labor.js";
+import { validateHoldingWorkAllocations } from "../../data/work-allocations.js";
 import { normalizeCatalogPartition } from "../../data/normalizers.js";
 import { normalizeBuilding } from "../../data/normalizers/building.js";
 
@@ -21,7 +18,7 @@ export const BUILDING_CATALOG_MIGRATION_VERSION = TEMPLATE_CATALOG_VERSION;
 const EMPTY_MIGRATION_COUNTS = Object.freeze({ direct: 0, custom: 0, deprecatedUnmapped: 0, changed: 0, unchanged: 0 });
 
 export const PRODUCTION_STATE_FIELDS = Object.freeze([
-  "active", "autoCollect", "storageRoomId", "pendingQty", "workProgressUnits",
+  "active", "autoCollect", "storageRoomId", "pendingQty", "collectProgressQd", "workProgressUnits",
   "workInputsReserved", "workReservedOutputQty", "workReservedFormula", "workReservedInputs", "productionBonusRemainder", "waitingBatches"
 ]);
 
@@ -38,7 +35,6 @@ const USER_INSTANCE_FIELDS = Object.freeze([
   "workerAdmissionOverrideIds",
   "serviceProjects"
 ]);
-const LABOR_DEPENDENT_FIELDS = ["workersMin", "workersMax", "workerProfile", "activation", "minOperationalQd", "activationConditionText", "workerRole"];
 const LIFECYCLE_FIELDS = Object.freeze([
   "status",
   "constructionStatus",
@@ -70,20 +66,8 @@ function copyOwn(target, source, fields) {
   for (const field of fields) if (own(source, field)) target[field] = clone(source[field]);
 }
 
-function preserveLaborConfiguration(source, target, legacyDefaults) {
-  const sourceMode = buildingLaborMode(source);
-  if (sourceMode !== buildingLaborMode(target)) {
-    const laborFields = sourceMode === "legacy" ? legacyDefaults : source;
-    if (laborFields) {
-      for (const field of LABOR_DEPENDENT_FIELDS) {
-        if (own(laborFields, field)) target[field] = clone(laborFields[field]);
-        else delete target[field];
-      }
-    }
-  }
-  // Recipe refresh and employment changes have separate previews.
+function preserveLaborConfiguration(source, target) {
   if (own(source, "labor")) target.labor = clone(source.labor);
-  else delete target.labor;
 }
 
 function rootDependency(data = {}) {
@@ -165,7 +149,15 @@ function migrateProductionLines(source = {}, target = {}, issues = [], label = "
     const prior = sourceLines[index];
     for (const field of PRODUCTION_STATE_FIELDS) if (own(prior, field)) line[field] = clone(prior[field]);
   }
+  for (const line of targetLines) if (!whole(line.pendingQty)) line.collectProgressQd = 0;
   for (const [index, line] of sourceLines.entries()) {
+    const matchedLine = matchedLines.get(index);
+    if (whole(line.pendingQty) > 0 && whole(line.collectProgressQd) > 0 && matchedLine
+      && (matchedLine.requiresCollection !== true || whole(matchedLine.collectQd) !== whole(line.collectQd))) {
+      issues.push({ code: "collection-in-progress", buildingId: text(source.id), buildingName: label,
+        detail: "Труд на сбор уже затрачен. Соберите готовый выпуск перед изменением условий сбора." });
+      continue;
+    }
     if (!productionLineStateful(line)) continue;
     const matched = consumed.has(index);
     const hasReservedWork = (line.waitingBatches?.length ?? 0) > 0 || whole(line?.workProgressUnits) > 0
@@ -318,12 +310,12 @@ function preserveTradeSelection(source = {}, target = {}) {
   }
 }
 
-function migrateBuildingInstance(source, targetTemplate, targetId, people, issues, legacyDefaults) {
+function migrateBuildingInstance(source, targetTemplate, targetId, issues) {
   const next = clone(targetTemplate);
   next.id = text(source?.id);
   next.templateId = targetId;
   copyOwn(next, source, USER_INSTANCE_FIELDS);
-  preserveLaborConfiguration(source, next, legacyDefaults);
+  preserveLaborConfiguration(source, next);
   next.name = text(source?.name) || text(targetTemplate?.name) || "Здание";
   preserveConstructionState(source, next);
   preserveSpecialConfiguration(source, next);
@@ -339,26 +331,7 @@ function migrateBuildingInstance(source, targetTemplate, targetId, people, issue
   }
   delete next.serviceState;
 
-  const assigned = Array.isArray(source?.assignedWorkerIds) ? source.assignedWorkerIds.map((id) => text(id)) : [];
-  const occupiedPastMaximum = assigned.slice(Math.max(0, whole(next.workersMax))).filter(Boolean);
-  if (occupiedPastMaximum.length) {
-    issues.push({
-      code: "worker-capacity",
-      buildingId: next.id,
-      buildingName: next.name,
-      detail: `назначено ${assigned.filter(Boolean).length} работников при новом максимуме ${whole(next.workersMax)}`
-    });
-  }
-  next.assignedWorkerIds = assigned.slice(0, Math.max(0, whole(next.workersMax)));
-  while (next.assignedWorkerIds.length < whole(next.workersMax)) next.assignedWorkerIds.push("");
-  const peopleById = new Map((people ?? []).map((person) => [text(person?.id), person]));
-  const overrides = new Set((next.workerAdmissionOverrideIds ?? []).map(text).filter(Boolean));
-  for (const workerId of next.assignedWorkerIds.filter(Boolean)) {
-    const person = peopleById.get(workerId);
-    if (!person || !workerAdmission(next, person).eligible) overrides.add(workerId);
-  }
-  next.workerAdmissionOverrideIds = [...overrides];
-  normalizeBuilding(next, { mode: "load", preserveTemplateMechanics: true, people });
+  normalizeBuilding(next, { mode: "load", preserveTemplateMechanics: true });
   // Contents are player inventory, not part of the catalog revision.
   if (own(source, "contents")) next.contents = clone(source.contents);
   return next;
@@ -410,7 +383,6 @@ export function planBuildingCatalogMigration({
   invariant(source.templateCatalogVersion === targetVersion, "source-version-older",
     `Для каталога v${source.templateCatalogVersion} откройте мир в прежней версии Skyhold с поддержкой перехода на v${targetVersion}.`);
   const targetTemplates = DEFAULT_BUILDING_TEMPLATES;
-  const legacyTargets = new Map(BUILDING_TEMPLATES_BEFORE_LABOR_TRANSITION.map((row) => [row.id, row]));
   const targetById = new Map(targetTemplates.map((template) => [text(template?.id), template]));
   invariant(targetById.size === targetTemplates.length, "target-catalog", "Целевой каталог содержит пустые или повторные ID.");
 
@@ -424,7 +396,7 @@ export function planBuildingCatalogMigration({
     const id = text(target.id);
     if (!targetById.has(id)) continue;
     const saved = savedById.get(id);
-    if (replaceCatalog && saved) preserveLaborConfiguration(saved, target, legacyTargets.get(id));
+    if (replaceCatalog && saved) preserveLaborConfiguration(saved, target);
     targetById.set(id, target);
   }
   const rows = [];
@@ -433,7 +405,6 @@ export function planBuildingCatalogMigration({
   targetData.catalog.buildings = targetData.catalog.buildings.map((row) => targetById.get(text(row.id)) ?? row);
   const counts = { ...EMPTY_MIGRATION_COUNTS };
   for (const holding of targetData.holdings ?? []) {
-    const people = holding?.people?.list ?? [];
     for (let index = 0; index < (holding?.buildings?.list ?? []).length; index += 1) {
       const prior = holding.buildings.list[index];
       const templateId = text(prior.templateId);
@@ -466,7 +437,7 @@ export function planBuildingCatalogMigration({
       let updated = prior;
       if (replaceCatalog) {
         const firstIssue = issues.length;
-        updated = migrateBuildingInstance(prior, template, templateId, people, issues, legacyTargets.get(templateId));
+        updated = migrateBuildingInstance(prior, template, templateId, issues);
         for (const issue of issues.slice(firstIssue)) Object.assign(issue, { holdingId: text(holding.id), holdingName: text(holding.name) });
       }
       const changed = replaceCatalog && stableDataHash(prior) !== stableDataHash(updated);
@@ -484,7 +455,7 @@ export function planBuildingCatalogMigration({
   }
 
   for (const holding of targetData.holdings ?? []) {
-    for (const issue of validateHybridLaborHolding(holding, { targets: buildWorkAllocationTargets(holding) }).issues) {
+    for (const issue of validateHoldingWorkAllocations(holding, { previousHolding: currentData.holdings.find((row) => row.id === holding.id) }).issues) {
       issues.push({ ...issue, holdingId: text(holding.id), holdingName: text(holding.name), detail: issue.message });
     }
   }

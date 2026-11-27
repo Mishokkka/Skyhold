@@ -1,9 +1,10 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import { MODULE_ID } from "../../../data/constants.js";
-import { applyStaffAppointment, buildingLaborMode } from "../../../data/hybrid-labor.js";
 import { buildWorkAllocationTargets } from "../../../data/work-allocations.js";
-import { applyBuildingDemolition, planBuildingDemolition } from "../../../data/building-demolition.js";
-import { requestConstructionOperation, SkyholdData } from "../../../data/store.js";
+import { applyBuildingDemolition, buildingLaborWithdrawalLines, canReadBuildingLaborWithdrawal, planBuildingDemolition } from "../../../data/building-demolition.js";
+import { applyBuildingLaborWithdrawal, planBuildingLaborWithdrawal } from "../../../data/labor-mutations.js";
+import { requestConstructionOperation, requestWorkforceOperation, SkyholdData } from "../../../data/store.js";
+import { buildBuildingLaborWithdrawalCommand } from "../../../data/workforce-socket.js";
 import { makeId } from "../../../data/utils.js";
 import { traitBadges } from "../../../generators/trait-definitions.js";
 import { loadBuildingEditorClass } from "../../lazy-apps.js";
@@ -17,13 +18,7 @@ import {
 } from "../../../workflows/economy/construction-cancellation.js";
 import { assignResidentsToFreeHousing } from "../../../engines/housing/assignment.js";
 import { rememberApplicationFocusReturn } from "../../common/window-focus-keeper.js";
-import { confirmBuildingWorkerAdmission } from "../../common/building-worker-admission.js";
 import { createHoldingChatMessage, foundryChatSpeaker } from "../../../integrations/foundry-runtime.js";
-import {
-  isBuiltAssignableBuilding,
-  isCivilianWorkerCandidate,
-  workerAssignmentScore
-} from "../../../engines/workers/assignment-planner.js";
 
 const BUILDING_CONTEXT_MENU_WIDTH = 280;
 const BUILDING_CONTEXT_MENU_HEIGHT = 260;
@@ -136,18 +131,6 @@ _workerPlannerDependencies() {
   };
 },
 
-_isBuiltAssignableBuilding(building = {}) {
-  return isBuiltAssignableBuilding(building, this._workerPlannerDependencies());
-},
-
-_isCivilianWorkerCandidate(person = {}, building = null, holding = null) {
-  return isCivilianWorkerCandidate(person, building, this._workerPlannerDependencies(), holding);
-},
-
-_buildingAssignmentScore(holding, building, person) {
-  return workerAssignmentScore(holding, building, person, this._workerPlannerDependencies());
-},
-
 _autoAssignResidentsToHousing(holding) {
   return assignResidentsToFreeHousing(holding, {
     isResidentialBuilding: (building) => this._isResidentialBuilding(building)
@@ -183,7 +166,7 @@ async _onCollectBuildingProduction(event) {
     const building = (holding?.buildings?.list ?? []).find((item) => String(item.id ?? "") === buildingId);
     const line = building?.productionLines?.[lineIndex];
     if (!holding || !building || !line) return SkyholdData.skipTransaction(null);
-    const collected = this._collectProductionLine(holding, building, line, { ignoreWorkTime: buildingLaborMode(building) === "legacy" });
+    const collected = this._collectProductionLine(holding, building, line);
     if (!collected?.ok) return SkyholdData.skipTransaction(collected);
     const entries = Array.isArray(collected.placements) && collected.placements.length
       ? collected.placements.map((item) => ({ kind: "collect", resourceId: collected.resourceId, name: collected.resourceName, qty: item.qty, roomId: item.roomId, source: collected.source, note: item.overflowFrom ? `Ручной сбор, переполнение: ${this._storageRoomLabel(holding, item.overflowFrom)}` : "Ручной сбор" }))
@@ -207,80 +190,6 @@ _buildingProtectedAssignmentIds(holding) {
     for (const id of (squad?.memberIds ?? []).slice(0, 4)) if (id) ids.add(String(id));
   }
   return ids;
-},
-
-_clearBuildingWorkers(holding, buildingId) {
-  const building = (holding?.buildings?.list ?? []).find((item) => String(item.id ?? "") === String(buildingId ?? ""));
-  if (!building) return { cleared: 0, message: "Здание не найдено." };
-  if (buildingLaborMode(building) !== "legacy") {
-    let cleared = 0, locked = 0;
-    const id = String(building.id);
-    for (const person of holding.people?.list ?? []) {
-      const locks = (holding.workforcePlan?.locks ?? []).filter((row) => row.personId === String(person.id) && row.sourceId === id);
-      if (person.staffAppointment?.buildingId === id) {
-        if (locks.length) { locked += 1; continue; }
-        applyStaffAppointment(holding, person.id, null);
-        person.role = "Свободен"; cleared += 1;
-      } else if (person.workAllocationMode === "explicit") {
-        const before = person.workAllocations ?? [];
-        person.workAllocations = before.filter((row) => {
-          if (String(row.sourceId) !== id) return true;
-          if (locks.some((lock) => lock.functionId === row.functionId)) { locked += 1; return true; }
-          return false;
-        });
-        if (before.length !== person.workAllocations.length) {
-          cleared += 1;
-          if (!person.workAllocations.length) person.role = "Свободен";
-        }
-      }
-    }
-    return { cleared, message: `Освобождено жителей: ${cleared}.${locked ? ` Сохранены закрепления: ${locked}; снимите их в «Плане работ».` : ""}` };
-  }
-  const max = Math.max(0, this._safeNumber(building.workersMax, 0));
-  const oldIds = (Array.isArray(building.assignedWorkerIds) ? building.assignedWorkerIds : []).map((id) => String(id ?? "")).filter(Boolean);
-  for (const id of oldIds) this._setPersonFree(holding, id);
-  building.assignedWorkerIds = Array.from({ length: max }, () => "");
-  return { cleared: oldIds.length, message: oldIds.length ? `Слоты здания очищены: ${oldIds.length}.` : "В здании не было назначенных жителей." };
-},
-
-_fillBuildingWorkers(holding, buildingId, { mode = "free" } = {}) {
-  const building = (holding?.buildings?.list ?? []).find((item) => String(item.id ?? "") === String(buildingId ?? ""));
-  if (!building) return { assigned: 0, message: "Здание не найдено." };
-  if (!this._isBuiltAssignableBuilding(building)) return { assigned: 0, message: "В это здание сейчас нельзя назначать работников." };
-  if (buildingLaborMode(building) !== "legacy") return { assigned: 0, message: "Распределите людей и их основные работы через «План работ»." };
-  const max = Math.max(0, this._safeNumber(building.workersMax, 0));
-  if (!Array.isArray(building.assignedWorkerIds)) building.assignedWorkerIds = [];
-  while (building.assignedWorkerIds.length < max) building.assignedWorkerIds.push("");
-  if (mode === "all") {
-    const oldIds = building.assignedWorkerIds.map((id) => String(id ?? "")).filter(Boolean);
-    for (const id of oldIds) this._setPersonFree(holding, id);
-    building.assignedWorkerIds = Array.from({ length: max }, () => "");
-  }
-  const protectedIds = this._buildingProtectedAssignmentIds(holding);
-  const picked = new Set((building.assignedWorkerIds ?? []).map((id) => String(id ?? "")).filter(Boolean));
-  const people = (holding?.people?.list ?? []).filter((person) => !person?.dead && this._safeNumber(person?.injuredDays, 0) <= 0);
-  const candidateRows = people
-    .filter((person) => !protectedIds.has(String(person.id)))
-    .filter((person) => mode === "all" || ["", "Свободен", "Без работы", "Ребенок"].includes(String(person?.workAssignment || person?.role || "")))
-    .filter((person) => this._isCivilianWorkerCandidate(person, building, holding))
-    .map((person) => ({ person, score: this._buildingAssignmentScore(holding, building, person) }))
-    .filter((row) => row.score > 0)
-    .sort((a, b) => b.score - a.score || String(a.person.name ?? "").localeCompare(String(b.person.name ?? ""), "ru"));
-  let assigned = 0;
-  for (let slot = 0; slot < max; slot += 1) {
-    if (building.assignedWorkerIds[slot]) continue;
-    const pick = candidateRows.find((row) => !picked.has(String(row.person.id)))?.person;
-    if (!pick) continue;
-    this._clearPersonFromAssignments(holding, pick.id);
-    building.assignedWorkerIds[slot] = String(pick.id);
-    pick.workAllocationMode = "legacy";
-    pick.workAssignment = String(building.id);
-    pick.role = building.workerRole || building.name || "Работает в здании";
-    this._applyPersonSalaryForAssignment?.(holding, pick, building);
-    picked.add(String(pick.id));
-    assigned += 1;
-  }
-  return { assigned, message: assigned ? `Назначено жителей: ${assigned}.` : "Подходящих жителей не найдено." };
 },
 
 _closeBuildingContextMenu() {
@@ -365,28 +274,52 @@ async _executeBuildingContextAction(buildingId = "", action = "", holdingId = th
     const hasStock = [...plan.resources, ...plan.items].some(row => row.qty > 0);
     const relocation = hasStock ? " Пригодные запасы и предметы переместятся под открытое небо." : "";
     const spoilage = plan.spoiledQty ? ` Из запаса будет списано ${plan.spoiledQty} ед. порчи по уличному сроку годности.` : "";
+    const labor = buildingLaborWithdrawalLines(holding, plan.labor).map(escapeHtml).join("<br>");
     const confirmed = await this._confirmAction?.("Удалить здание",
-      `Удалить построенное здание «${escapeHtml(name)}»? Строительные материалы не возвращаются.${relocation}${spoilage}`);
+      `Удалить построенное здание «${escapeHtml(name)}»? Строительные материалы не возвращаются.${relocation}${spoilage}${labor ? `<br><br>${labor}` : ""}`);
     if (!confirmed) return;
     const deleted = await SkyholdData.updateHolding(holding.id, (freshHolding, freshData) => {
       const current = planBuildingDemolition(freshHolding, buildingId, freshData?.meta?.transportV2);
       if (current?.token !== plan.token) return SkyholdData.skipTransaction(false);
-      applyBuildingDemolition(freshHolding, current);
-      return true;
+      const result = applyBuildingDemolition(freshHolding, current, { confirmed: true });
+      return result.ok ? result : SkyholdData.skipTransaction(result);
     }, { reason: "building:context-delete" });
-    if (!deleted) return ui.notifications.warn("Здание или его запасы изменились. Заново откройте подтверждение.");
+    if (!deleted?.ok) return ui.notifications.warn(deleted?.message || "Здание, запасы или труд изменились. Заново откройте подтверждение.");
     this.requestRender();
     ui.notifications.info(`Здание «${name}» удалено.`);
     return;
   }
+  if (action !== "clear") return;
+  const preview = planBuildingLaborWithdrawal(holding, buildingId);
+  if (!preview.personIds.length && !preview.removedLocks.length) return ui.notifications.info("У здания нет назначений.");
+  if (!canReadBuildingLaborWithdrawal(holding, preview)) return ui.notifications.warn("Часть назначений доступна только ГМу.");
+  const lines = buildingLaborWithdrawalLines(holding, preview).map(escapeHtml).join("<br>");
+  if (!await this._confirmAction("Освободить работников", `Снять назначения в здании «${escapeHtml(name)}»?${lines ? `<br><br>${lines}` : ""}`)) return;
+  if (!game.user?.isGM) {
+    let result;
+    try {
+      result = await requestWorkforceOperation(buildBuildingLaborWithdrawalCommand({
+        operationId: makeId("workforce-clear", 20),
+        holdingId: holding.id,
+        expectedRevision: data.meta.revision,
+        buildingId,
+        token: preview.token
+      }));
+    } catch (error) {
+      return ui.notifications.warn(error.message);
+    }
+    this.requestRender();
+    return ui.notifications.info(`Освобождено жителей: ${result?.personIds?.length ?? preview.personIds.length}.`);
+  }
   const result = await SkyholdData.updateHolding(holding.id, (freshHolding) => {
-    return action === "clear"
-      ? this._clearBuildingWorkers(freshHolding, buildingId)
-      : this._fillBuildingWorkers(freshHolding, buildingId, { mode: action === "fill-max" ? "all" : "free" });
+    const current = planBuildingLaborWithdrawal(freshHolding, buildingId);
+    if (!canReadBuildingLaborWithdrawal(freshHolding, current)) return SkyholdData.skipTransaction(null);
+    const applied = applyBuildingLaborWithdrawal(freshHolding, preview, { confirmed: true });
+    return applied.ok ? applied : SkyholdData.skipTransaction(applied);
   }, { reason: "building:context-workers" });
-  if (!result) return;
+  if (!result?.ok) return ui.notifications.warn(result?.message || "Распределение труда изменилось.");
   this.requestRender();
-  ui.notifications.info(result?.message || "Готово.");
+  ui.notifications.info(`Освобождено жителей: ${result.personIds.length}.`);
 },
 
 async _showBuildingActionMenu(buildingId = "", position = null) {
@@ -397,13 +330,9 @@ async _showBuildingActionMenu(buildingId = "", position = null) {
   if (!holding || !building) return;
   const cancellableProject = isCancellableConstructionProject(building);
   const mothballed = this._financeBuildingMothballed?.(holding, buildingId) === true;
-  const legacyLabor = buildingLaborMode(building) === "legacy";
   const items = [
-    { action: "clear", icon: "fa-solid fa-user-minus", label: legacyLabor ? "Убрать всех жителей" : "Убрать незакреплённых работников" },
-    ...(legacyLabor ? [
-      { action: "fill-free", icon: "fa-solid fa-user-plus", label: "Распределить сюда свободных жителей" },
-      { action: "fill-max", icon: "fa-solid fa-people-group", label: "Распределить сюда максимум жителей" }
-    ] : [{ action: "plan-work", icon: "fa-solid fa-list-check", label: "Открыть план работ" }]),
+    { action: "clear", icon: "fa-solid fa-user-minus", label: "Освободить работников" },
+    { action: "plan-work", icon: "fa-solid fa-list-check", label: "Открыть план работ" },
     game.user?.isGM && !cancellableProject
       ? mothballed
         ? { action: "unmothball", icon: "fa-solid fa-power-off", label: "Снять консервацию" }
@@ -535,31 +464,9 @@ async _onBuildingWorkerChange(event) {
   const field = event.currentTarget;
   const path = field.dataset.buildingWorkerField;
   if (!path) return;
-  const parts = path.match(/holdings\.(\d+)\.buildings\.list\.(\d+)\.assignedWorkerIds\.(\d+)$/);
   try {
-    if (parts) {
-      const currentData = SkyholdData.get();
-      const currentPath = this._resolveActiveHoldingScopedPath(currentData, path);
-      const currentParts = currentPath.match(/holdings\.(\d+)\.buildings\.list\.(\d+)\.assignedWorkerIds\.(\d+)$/);
-      const currentHolding = currentParts ? currentData.holdings?.[Number(currentParts[1])] : null;
-      const currentBuilding = currentParts ? currentHolding?.buildings?.list?.[Number(currentParts[2])] : null;
-      const person = (currentHolding?.people?.list ?? []).find((row) => String(row?.id ?? "") === String(field.value ?? ""));
-      const decision = await confirmBuildingWorkerAdmission({ manager: this, building: currentBuilding, person });
-      if (!decision.allowed) { this.requestRender(); return; }
-      await SkyholdData.transaction((data) => {
-        const scopedPath = this._resolveActiveHoldingScopedPath(data, path);
-        const scopedParts = scopedPath.match(/holdings\.(\d+)\.buildings\.list\.(\d+)\.assignedWorkerIds\.(\d+)$/);
-        if (!scopedParts) return SkyholdData.skipTransaction(null);
-        const holding = data.holdings[Number(scopedParts[1])];
-        const building = holding?.buildings?.list?.[Number(scopedParts[2])];
-        if (!holding || !building) return SkyholdData.skipTransaction(null);
-        return this._setBuildingSlot(holding, building.id, Number(scopedParts[3]), field.value || "", decision)
-          || SkyholdData.skipTransaction(false);
-      }, { reason: "building:worker-change", scope: "holdings" });
-    } else {
-      const updated = await this._updateActiveHoldingPath(path, field.value || "", { reason: "building:worker-change" });
-      if (!updated) return;
-    }
+    const updated = await this._updateActiveHoldingPath(path, field.value || "", { reason: "building:worker-change" });
+    if (!updated) return;
     this.requestRender();
   } catch (error) {
     console.error("FBL Skyhold | Failed to assign building worker", error);
@@ -606,7 +513,6 @@ _buildingFromTemplate(template = {}, id = "") {
   delete templateCopy.locked;
   delete templateCopy.css;
   delete templateCopy.reasonText;
-  const workersMax = Math.max(0, Number(templateCopy.workersMax ?? 0) || 0);
   return {
     ...templateCopy,
     id: id || makeId("b", 12),
@@ -616,7 +522,6 @@ _buildingFromTemplate(template = {}, id = "") {
     constructionStatus: "planned",
     constructionCrewId: "",
     buildProgress: 0,
-    assignedWorkerIds: Array.from({ length: workersMax }, () => ""),
     workerAdmissionOverrideIds: [],
     audio: audioConfigFromTemplate(templateCopy),
     serviceProjects: Array.isArray(templateCopy.serviceProjects) ? templateCopy.serviceProjects : []

@@ -1,8 +1,13 @@
 import { buildingOperationalState } from "../../core/building-state.js";
 import { isSheriffAppointment } from "../../data/control-appointments.js";
 import { holdingPermissionContext } from "../../data/holding-permissions.js";
-import { buildingStaffingWorkerIds, WORK_ALLOCATION_MODE_EXPLICIT } from "../../data/work-allocations.js";
+import { buildingAcceptsWorkers, buildingLaborCapacityQd, buildingWorkReservations } from "../../data/labor-model.js";
+import { buildWorkAllocationTargets, residentWorkUnavailable, workFunctionMatches } from "../../data/work-allocations.js";
+import { canReadResident } from "../../data/access-guard.js";
+import { normalLaborQdPerTenday, residentLaborCapacity } from "../../data/labor-budget.js";
+import { isResidentPresent } from "../../data/resident-presence.js";
 import { buildingServiceBlockReasons } from "../../engines/economy/building-service.js";
+import { controlServiceFunctionId } from "../../engines/settlement/control.js";
 
 const CHAIN_IDS = ["sheriff-post", "guard-house", "guard-precinct", "court"];
 const DEVELOPMENT_LABELS = { food: "Пища", technology: "Технологии", culture: "Культура", war: "Война" };
@@ -28,22 +33,32 @@ export function controlEffectText(control = {}) {
   return parts.join(" · ") || "Числовой эффект Контроля не задан";
 }
 
-/** Only free residents enter the picker: assigning here never silently replaces another job or QD plan. */
+/** Only free residents may become sheriff; Control building tasks also accept residents with free normal QD. */
 export function controlResidentAvailable(holding, person, manager, { sheriff = false, assignedIds = null } = {}) {
-  if (!manager?._canResidentWork?.(person, holding)) return false;
-  if (String(person?.workAllocationMode ?? "") === WORK_ALLOCATION_MODE_EXPLICIT) return false;
-  if ((assignedIds ?? manager?._assignedWorkerSet?.(holding))?.has(String(person.id))) return false;
-  if (sheriff && isSheriffAppointment(person)) return true;
-  return !String(person?.workAssignment ?? "")
-    && ["", "Свободен", "Без работы", "Ребенок"].includes(String(person?.role ?? ""));
+  if (!person) return false;
+  if (sheriff) {
+    if (!manager?._canResidentWork?.(person, holding)) return false;
+    if ((person?.workAllocations ?? []).some((row) => Number(row?.normalQd ?? row?.qd ?? 0) > 0 || Number(row?.overtimeQd ?? 0) > 0)) return false;
+    if ((assignedIds ?? manager?._assignedWorkerSet?.(holding))?.has(String(person.id))) return false;
+    if (isSheriffAppointment(person)) return true;
+    return !String(person?.workAssignment ?? "")
+      && ["", "Свободен", "Без работы", "Ребенок"].includes(String(person?.role ?? ""));
+  }
+  if (residentWorkUnavailable(holding, person)) return false;
+  const cap = residentLaborCapacity(person, normalLaborQdPerTenday(holding));
+  const usedNormal = (person?.workAllocations ?? []).reduce((sum, row) => (
+    sum + Math.max(0, Math.floor(Number(row?.normalQd ?? row?.qd ?? 0) || 0))
+  ), 0);
+  return cap.normalQd - usedNormal > 0;
 }
 
 export function prepareControlContext(holding, catalog = [], summary = {}, manager, { user = globalThis.game?.user } = {}) {
   const permission = holdingPermissionContext(holding, { user });
   const canAssign = permission.canEditBuildings && typeof manager?._assignPersonToBuilding === "function";
   const people = holding?.people?.list ?? [];
-  const peopleById = new Map(people.map((person) => [String(person.id), person]));
   const buildings = holding?.buildings?.list ?? [];
+  const targets = buildWorkAllocationTargets(holding);
+  const reservedQd = buildingWorkReservations(holding, { canRead: (person) => canReadResident(person, user) });
   const sourcesById = new Map((summary.sources ?? []).map((source) => [String(source.id), source]));
   const totals = manager?._developmentSummary?.(holding)?.totals ?? {};
   const templates = new Map(catalog.map((template) => [String(template.id), template]));
@@ -61,25 +76,44 @@ export function prepareControlContext(holding, catalog = [], summary = {}, manag
     .map((person) => ({ id: person.id, name: person.name || "Житель", selected: String(person.id) === selectedSheriffId,
       disabled: String(person.id) !== selectedSheriffId && !controlResidentAvailable(holding, person, manager, { sheriff: true, assignedIds }) }));
 
-  const jobs = buildings.filter((building) => hasControlEffect(building) && visible(building, user) && whole(building.workersMax) > 0)
+  const jobs = buildings.filter((building) => hasControlEffect(building) && visible(building, user) && buildingAcceptsWorkers(building))
     .map((building) => {
       const state = buildingOperationalState(building);
-      const workerIds = buildingStaffingWorkerIds(holding, building.id);
-      const workers = workerIds.map((id) => {
-        const person = peopleById.get(String(id));
-        const explicit = person?.workAllocationMode === WORK_ALLOCATION_MODE_EXPLICIT;
-        return { id, name: person && visible(person, user) ? person.name || "Житель" : "Скрытый или отсутствующий житель",
-          explicit, canRemove: canAssign && !explicit && Boolean(person && visible(person, user)) };
-      });
+      const controlFn = controlServiceFunctionId(building);
+      const buildingId = String(building.id);
+      const functions = targets.filter((target) => target.sourceId === buildingId
+        && workFunctionMatches(target.functionId, controlFn));
+      const availableFunctions = functions.filter((target) => target.available);
+      const namesByFunction = new Map(functions.map((target) => [target.functionId, target.functionName]));
+      const workers = [];
+      let allocatedQd = 0;
+      for (const person of people) {
+        if (!canReadResident(person, user) || person.dead || !isResidentPresent(person)) continue;
+        for (const row of person.workAllocations ?? []) {
+          const functionId = String(row?.functionId ?? "");
+          if (String(row?.sourceId ?? "") !== buildingId || !workFunctionMatches(functionId, controlFn)) continue;
+          const qd = whole(row?.normalQd ?? row?.qd) + whole(row?.overtimeQd);
+          if (!qd) continue;
+          allocatedQd += qd;
+          workers.push({ id: String(person.id), name: person.name || "Житель", functionId,
+            functionName: namesByFunction.get(functionId) ?? functionId, canRemove: canAssign });
+        }
+      }
+      const workerIds = workers.map((worker) => worker.id);
       const candidates = freePeople.filter((person) => {
+        if (availableFunctions.length === 1 && workerIds.includes(String(person.id))) return false;
         const admission = manager?._buildingWorkerAdmission?.(building, person);
         return user?.isGM || !admission?.hard || admission.eligible || admission.overridden;
       }).map((person) => ({ id: person.id, name: person.name || "Житель" }));
+      const capacityQd = buildingLaborCapacityQd(building);
+      const buildingUsedQd = reservedQd.get(buildingId) ?? 0;
       return { id: building.id, name: building.name || "Здание", role: building.workerRole || "Сотрудник учреждения",
-        workers, hasWorkers: workers.length > 0, max: whole(building.workersMax), min: whole(building.activation?.minWorkers ?? building.workersMin),
-        count: workerIds.length, qd: whole(building.activation?.minOperationalQd), admission: building.workerProfile?.admission?.text || "",
-        candidates, canAdd: canAssign && state.operational && workerIds.length < whole(building.workersMax) && candidates.length > 0,
-        stateLabel: state.label };
+        workers, hasWorkers: workers.length > 0, capacityQd, allocatedQd,
+        count: new Set(workerIds).size, qd: whole(building.activation?.minOperationalQd), admission: building.workerProfile?.admission?.text || "",
+        candidates, availableFunctions, multipleFunctions: availableFunctions.length > 1, firstFunctionId: availableFunctions[0]?.functionId,
+        canAdd: canAssign && state.operational && availableFunctions.length > 0
+          && (capacityQd === null || buildingUsedQd < capacityQd) && candidates.length > 0,
+        stateLabel: state.operational && !availableFunctions.length ? "Нет доступной функции" : state.label };
     });
 
   // Keep catalog customizations. Owned buildings remain visible even if their template was removed.
@@ -92,7 +126,7 @@ export function prepareControlContext(holding, catalog = [], summary = {}, manag
     const owned = buildings.filter((building) => String(building.templateId || building.id) === String(template.id) && visible(building, user));
     const instances = owned.map((building) => {
       const state = buildingOperationalState(building);
-      const status = buildingServiceBlockReasons(holding, building);
+      const status = buildingServiceBlockReasons(holding, building, controlServiceFunctionId(building));
       const source = sourcesById.get(String(building.id));
       return { id: building.id, name: building.name || template.name, stateLabel: state.label, active: Boolean(source),
         actualEffects: source ? `Общий ${source.general} · беспорядки +${source.unrestOnly} · охват ${source.capacity}${source.ceiling === null ? "" : ` · предел ${source.ceiling}`}` : "Сейчас Контроль не даёт",
@@ -108,7 +142,7 @@ export function prepareControlContext(holding, catalog = [], summary = {}, manag
       return ["active", "disabled"].includes(state.lifecycle) && state.condition !== "destroyed";
     }).length;
     return { id: template.id, name: template.name || "Здание", stage: whole(template.developmentStage),
-      effects: controlEffectText(template.control), activation: template.activationConditionText || "Требуются исправность здания и работа функции.",
+      effects: controlEffectText(template.control), activation: template.activationConditionText || "Требуются исправность, обслуживание и работа функции.",
       minWorkers: whole(template.activation?.minWorkers ?? template.workersMin), maxWorkers: whole(template.workersMax),
       qd: whole(template.activation?.minOperationalQd), prerequisites: [required.length ? `Нужны: ${required.join(", ")}` : "",
         any.length ? `Одно из: ${any.join(", ")}` : ""].filter(Boolean).join(". "), requirements,

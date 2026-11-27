@@ -1,11 +1,6 @@
-/**
- * Reviewed defaults for new standard buildings. This module never reads world
- * data or changes an existing building in place. Existing buildings transition
- * only through the explicit labor-migration preview/apply workflow.
- *
- * QD limits describe work or equipment, not workersMax * personal labor norm.
- * Keeping steady production as staff avoids silently inventing new throughput.
- */
+import { DEFAULT_NORMAL_LABOR_QD } from "./labor-budget.js";
+
+/** Reviewed labor capacity defaults for new standard buildings. */
 const GROUPS = [
   {
     mode: "passive", capacityQd: 0, limitKind: "passive",
@@ -34,7 +29,7 @@ const GROUPS = [
     reason: "Все производственные линии ограничены вместимостью партий и календарной выдержкой."
   },
   {
-    mode: "qd", capacityQd: 20, limitKind: "leisure-capacity",
+    mode: "qd", capacityQd: DEFAULT_NORMAL_LABOR_QD, limitKind: "leisure-capacity",
     ids: ["festival-square", "promenade-garden"],
     reason: "Полный объём услуги: вместимость досуга × установленный труд на одного посетителя."
   },
@@ -111,10 +106,9 @@ export function proposedBuildingLaborProfile(templateId) {
  * preparing a migration target. Not a normalizer for saved/customized buildings.
  */
 export function applyApprovedBuildingLaborProfile(template) {
-  const labor = proposedBuildingLaborProfile(template?.templateId || template?.id);
-  if (!labor) return { ...template };
-  const passive = labor.mode === "passive";
-  const workersMax = passive ? 0 : template.workersMax;
+  const profile = proposedBuildingLaborProfile(template?.templateId || template?.id);
+  const passive = profile?.mode === "passive";
+  const workersMax = passive ? 0 : Number(template.workersMax ?? 0);
   const activation = {
     ...template.activation,
     minWorkers: 0,
@@ -122,21 +116,17 @@ export function applyApprovedBuildingLaborProfile(template) {
       ? { anyWorkingFunction: false } : {}),
     ...(passive ? { minOperationalQd: 0, requiresMeaningfulResult: false } : {})
   };
-  const activationConditionText = passive
-    ? "Пассивный объект: постоянные работники и регулярные QD не требуются. Состояние сооружения и специальные условия сохраняются."
-    : labor.mode === "staff"
-      ? "Работы выполняет постоянный штат. Общего минимума людей нет; допуски, требуемая работа и условия каждой услуги сохраняются."
-      : "Работы выполняются по выделенным QD. Число разных исполнителей не ограничено прежними штатными местами; учитываются труд задачи, квалификация и вместимость оборудования.";
+  const capacityQd = profile && profile.mode !== "staff" ? profile.capacityQd
+    : Math.max(workersMax * DEFAULT_NORMAL_LABOR_QD, Number(activation.minOperationalQd ?? 0));
   return {
     ...template,
-    labor,
+    labor: { version: 2, capacityQd },
     workersMin: 0,
     workersMax,
     ...(passive ? { workerRole: "" } : {}),
     ...(template.workerProfile ? {
       workerProfile: { ...template.workerProfile, workersMin: 0, workersMax }
     } : {}),
-    activation,
-    activationConditionText
+    activation
   };
 }

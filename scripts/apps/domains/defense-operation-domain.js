@@ -1,3 +1,4 @@
+import { allocationTotalQd } from "../../data/labor-primitives.js";
 import { resourceLabel } from "../../core/resources.js";
 import { hiddenBuildingIds, hiddenStorageRoomIds, residentHasHiddenWork } from "../../data/access-guard.js";
 import { evaluateDefenseSquad, isAvailableDefenseResident, MANAGER_SQUAD_TYPE_PROFILES, militarySupplyResourceForArmament } from "../../data/military-resident-rules.js";
@@ -73,8 +74,8 @@ function fillDefenseSquad(holding, squad, logic, hiddenBuildings) {
     .filter(([id, person]) => !taken.has(id) && canEnrollDefenseResident(holding, person, hiddenBuildings))
     .map(([id, resident]) => {
       const efficiency = logic._soldierEfficiency(resident, squadType);
-      const free = logic._hasSoldierProfession(resident) || (!resident.workAssignment && !resident.staffAppointment
-        && !(resident.workAllocationMode === "explicit" && resident.workAllocations?.some((work) => work.normalQd || work.overtimeQd)));
+      const free = logic._hasSoldierProfession(resident) || (!resident.workAssignment
+        && !(resident.workAllocations?.some((work) => allocationTotalQd(work) > 0)));
       return { id, efficiency, kept: Number(existing.has(id)), free: Number(free) };
     })
     .filter((entry) => entry.efficiency > 0)

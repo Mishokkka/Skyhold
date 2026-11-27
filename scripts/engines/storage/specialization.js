@@ -1,10 +1,8 @@
 import { resourceDef, resourceShelfLifeQd, storageResourceId } from "../../core/resources.js";
 import { effectiveShelfLifeQd, isPerishableFoodDefinition } from "../../core/perishable-food.js";
 import { buildingOperationalState } from "../../core/building-state.js";
-import { financeBuildingFunctionBlockState, financeWorkerBlockState } from "../economy/finance-obligations.js";
-import { buildingLaborMode } from "../../data/hybrid-labor.js";
-import { isResidentPresent } from "../../data/resident-presence.js";
-import { buildingServiceEffectFactor } from "../economy/building-service.js";
+import { financeBuildingFunctionBlockState } from "../economy/finance-obligations.js";
+import { buildingServiceBlockReasons } from "../economy/building-service.js";
 
 function normalizedList(value) {
   return (Array.isArray(value) ? value : String(value ?? "").split(/[,;\n]/))
@@ -52,19 +50,8 @@ export function storageProfileEffectFactor(holding = {}, building = {}) {
 
   const storage = building?.storage ?? {};
   if (storage.profileRequiresStaff === true) {
-    if (buildingLaborMode(building) !== "legacy") return buildingServiceEffectFactor(holding, building, "storage");
-    const people = new Map((holding?.people?.list ?? []).map((person) => [String(person?.id ?? ""), person]));
-    const staffed = (building?.assignedWorkerIds ?? []).filter((workerId) => {
-      const id = String(workerId ?? "");
-      const person = people.get(id);
-      return id
-        && person
-        && !person.dead
-        && isResidentPresent(person)
-        && Math.max(0, Number(person?.injuredDays) || 0) <= 0
-        && !financeWorkerBlockState({ finance: holding?.finance, workerId: id }).blocked;
-    }).length;
-    if (staffed < Math.max(1, Math.floor(Number(building?.workersMin) || 0))) return 0;
+    const status = buildingServiceBlockReasons(holding, building, "storage");
+    return status.active && (status.workforce?.qd ?? 0) > 0 ? status.laborFactor : 0;
   }
   return 1;
 }

@@ -1,6 +1,8 @@
 import { appendHoldingOperation, findHoldingOperation } from "../data/operations.js";
 import { COMMAND_ERROR } from "../data/command-result.js";
 import { cancelProductionBatch } from "../engines/economy/production-cancellation.js";
+import { applyBuildingLaborWithdrawal, planBuildingLaborWithdrawal } from "../data/labor-mutations.js";
+import { canReadBuildingLaborWithdrawal } from "../data/building-demolition.js";
 
 const TYPES = new Set(["cancelProductionBatch", "deleteProductionLine"]);
 function fail(message, code = COMMAND_ERROR.INVALID) { throw Object.assign(new Error(message), { code }); }
@@ -10,6 +12,10 @@ export async function executeProductionOperation(raw, { userId, remote }, { upda
   if (!globalThis.game?.user?.isGM) fail("Производственные операции сохраняет authority-ГМ.", COMMAND_ERROR.FORBIDDEN);
   const operation = Object.fromEntries(["type", "operationId", "holdingId", "buildingId", "lineId"].map((key) => [key, String(raw[key] ?? "").trim()]));
   operation.expectedRevision = Number(raw.expectedRevision);
+  if (raw.laborToken !== undefined) {
+    if (raw.type !== "deleteProductionLine" || !/^v1:[a-f0-9]{64}$/.test(raw.laborToken)) fail("Некорректный предпросмотр рабочих назначений.");
+    operation.laborToken = raw.laborToken;
+  }
   if (raw.batchId !== undefined) {
     if (typeof raw.batchId !== "string" || !raw.batchId.trim() || raw.batchId.length > 128 || raw.type !== "cancelProductionBatch") fail("Некорректный ID производственной партии.");
     operation.batchId = raw.batchId.trim();
@@ -33,7 +39,16 @@ export async function executeProductionOperation(raw, { userId, remote }, { upda
     const index = building.productionLines?.findIndex((row) => row.id === operation.lineId) ?? -1;
     if (index < 0) fail("Производственная линия не найдена.");
     const line = building.productionLines[index];
-    if (operation.type === "deleteProductionLine" && Number(line.pendingQty) > 0) fail("Перед удалением линии соберите готовую продукцию.");
+    if (operation.type === "deleteProductionLine") {
+      if (Number(line.pendingQty) > 0) fail("Перед удалением линии соберите готовую продукцию.");
+      const preview = planBuildingLaborWithdrawal(holding, building.id, `production:${line.id}`);
+      if (!canReadBuildingLaborWithdrawal(holding, preview, user)) fail("Часть назначений линии доступна только ГМу.", COMMAND_ERROR.FORBIDDEN);
+      if (operation.laborToken !== preview.token && (operation.laborToken || preview.personIds.length || preview.removedLocks.length)) {
+        fail("Распределение труда изменилось. Заново откройте предпросмотр удаления линии.", COMMAND_ERROR.CONFLICT);
+      }
+      const released = applyBuildingLaborWithdrawal(holding, preview, { confirmed: true });
+      if (!released.ok) fail(released.message);
+    }
     const cancelled = cancelProductionBatch(holding, line, {
       batchId: operation.batchId,
       addMoney: (draft, amount) => logic._addMoney(draft, amount),

@@ -1,145 +1,164 @@
-import { buildWorkAllocationTargets, workAllocationTargetKey, validateWorkAllocationPlan } from "./work-allocations.js";
-import { isResidentInPopulation } from "./resident-presence.js";
-import { DEFAULT_NORMAL_LABOR_QD, residentLaborCapacity } from "./labor-budget.js";
-import { workerAdmission } from "../engines/workers/building-qualification.js";
-import { staffAppointmentFor, staffAppointmentWorkFunctions, validateHybridLaborHolding, newHybridLaborIssues } from "./hybrid-labor.js";
+import { buildWorkAllocationTargets, workAllocationTargetKey, validateHoldingWorkAllocations } from "./work-allocations.js";
+import { allocationFunctionId, allocationNormalQd, allocationSourceId, allocationTotalQd } from "./labor-primitives.js";
+import { isResidentRestingOnShip } from "./resident-presence.js";
+import { normalLaborQdPerTenday, residentLaborCapacity } from "./labor-budget.js";
+import { reservedOccupation, residentLaborUnavailableReason } from "./labor-model.js";
+import { hiddenBuildingIds } from "./access-guard.js";
 
-export const WORKFORCE_PLAN_VERSION = 1;
+export const WORKFORCE_PLAN_VERSION = 2;
 export const workforceKey = (row) => workAllocationTargetKey(row?.sourceId, row?.functionId);
 export const workforceLockKey = (row) => JSON.stringify([String(row?.personId), workforceKey(row)]);
-export const workforcePlan = (holding) => holding?.workforcePlan ?? { version: WORKFORCE_PLAN_VERSION, goals: [], locks: [] };
-const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-const visible = (row, isGM) => row && (isGM || row.visibility !== "gm");
+export const workforceProductionGoalKey = workforceKey;
+const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
+const lookupRow = (collection, id) => collection instanceof Map
+  ? collection.get(id)
+  : (Array.isArray(collection) ? collection : []).find((entry) => String(entry?.id ?? "") === id);
+
+export function isWorkforcePlanRowVisible(row, { buildings, people, isGM = false } = {}) {
+  if (!row || typeof row !== "object") return false;
+  if (isGM) return true;
+  if (row.visibility === "gm") return false;
+  const building = lookupRow(buildings, String(row.sourceId ?? ""));
+  if (building?.visibility === "gm") return false;
+  if (row.personId !== undefined) {
+    const person = lookupRow(people, String(row.personId ?? ""));
+    if (person?.visibility === "gm") return false;
+  }
+  return true;
+}
+
+export function normalizeProductionGoals(goals) {
+  return (Array.isArray(goals) ? goals : []).filter((row) => workforceKey(row)
+    && Number.isSafeInteger(row.preparedUnits) && row.preparedUnits > 0 && row.preparedUnits <= 1_000_000);
+}
+
+export function normalizeWorkforcePlan(plan) {
+  return { version: WORKFORCE_PLAN_VERSION, locks: Array.isArray(plan?.locks) ? plan.locks : [],
+    productionGoals: normalizeProductionGoals(plan?.productionGoals) };
+}
+
+export const workforcePlan = (holding) => holding?.workforcePlan ?? normalizeWorkforcePlan();
+
+export function mergePublicWorkAllocations(previous, next, hidden) {
+  if (!hidden.size) return next;
+  return [...previous.filter((row) => hidden.has(allocationSourceId(row))),
+    ...next.filter((row) => !hidden.has(allocationSourceId(row)))];
+}
 
 export function workforceIssueMessage(holding, issue, { isGM = false } = {}) {
-  if (!issue) return "";
-  const hidden = !isGM && ((holding.buildings?.list ?? []).some((row) => row.visibility === "gm" && String(row.id) === issue.buildingId)
-    || (holding.people?.list ?? []).some((row) => row.visibility === "gm" && String(row.id) === issue.personId));
-  return hidden ? "План конфликтует с недоступным назначением. Его может проверить ГМ." : issue.message;
+  if (!issue || isGM) return issue?.message ?? "";
+  const hiddenIds = hiddenBuildingIds(holding, false);
+  const people = holding.people?.list ?? [];
+  const person = people.find((row) => String(row.id) === issue.personId);
+  const hidden = hiddenIds.has(issue.buildingId) || person?.visibility === "gm";
+  const privateCapacity = issue.code === "allocation-capacity" && people.some((person) =>
+    person.visibility === "gm" && (person.workAllocations ?? []).some((row) => allocationSourceId(row) === issue.buildingId));
+  if (privateCapacity) return "Свободных QD для назначения в здании недостаточно.";
+  const privateBudget = /^allocation-(?:normal|overtime|total|count)(?:-|$)/.test(issue.code)
+    && (person?.workAllocations ?? []).some((row) => hiddenIds.has(allocationSourceId(row)));
+  return hidden || privateBudget ? "План конфликтует с недоступным назначением. Его может проверить ГМ." : issue.message;
 }
 
-export function workforceCapacity(person = {}) {
-  return residentLaborCapacity(person);
+export function workforceCapacity(person = {}, holding) {
+  return residentLaborCapacity(person, normalLaborQdPerTenday(holding));
 }
 
-/** Reserved occupations remain owned by their respective editors, even when temporarily idle. */
 export function workforceUnavailable(holding, person) {
-  if (person.dead) return "Умер";
-  if (!isResidentInPopulation(person, holding)) return "Вне поселения / отдых экипажа";
-  if (Number(person.injuredDays) > 0) return "Ранен";
-  if (!residentLaborCapacity(person, DEFAULT_NORMAL_LABOR_QD).normalQd) return "Не может работать по возрасту";
-  const id = String(person.id), assignment = String(person.workAssignment ?? "");
-  const includes = (ids) => (ids ?? []).some((value) => String(value) === id);
-  if (assignment.startsWith("construction") || includes(holding.constructionCrewIds)
-    || (holding.constructionCrews ?? []).some((crew) => includes(crew.memberIds) || includes(crew.distributedIds)
-      || [crew.leaderId, crew.distributedLeaderId].some((value) => String(value) === id))) return "Строительная бригада";
-  const defense = holding.gm?.defense;
-  if (["soldier", "defenseCommander"].includes(assignment) || String(defense?.commanderId) === id
-    || (defense?.squads ?? []).some((squad) => includes(squad.memberIds) || String(squad.sergeantId) === id)) return "Постоянная военная служба";
-  if (assignment === "other") return "Особая должность";
+  return residentLaborUnavailableReason(holding, person) || reservedOccupation(holding, person)?.label
+    || (isResidentRestingOnShip(person, holding) ? "Отдых экипажа" : "");
+}
+
+export function workforcePlanChangeError(holding, plan, { isGM = false } = {}) {
+  if (!plan || plan.version !== WORKFORCE_PLAN_VERSION
+    || Object.keys(plan).some((key) => !["version", "locks", "productionGoals"].includes(key))
+    || !Array.isArray(plan.locks) || !Array.isArray(plan.productionGoals)) return "Некорректный формат общего плана работ.";
+  const previous = workforcePlan(holding);
+  const targets = new Map(buildWorkAllocationTargets(holding).map((row) => [row.key, row]));
+  const buildings = new Map((holding.buildings?.list ?? []).map((row) => [String(row.id), row]));
+  const people = new Map((holding.people?.list ?? []).map((row) => [String(row.id), row]));
+  for (const [kind, keyFor, allowed] of [
+    ["locks", workforceLockKey, ["personId", "sourceId", "functionId"]],
+    ["productionGoals", workforceProductionGoalKey, ["sourceId", "functionId", "preparedUnits"]]
+  ]) {
+    const priorRows = new Map(previous[kind].map((row) => [keyFor(row), row]));
+    const nextRows = new Map();
+    const canEdit = (row) => {
+      if (!row || typeof row !== "object") return false;
+      const building = buildings.get(String(row.sourceId));
+      if (!building) return false;
+      if (kind === "locks" && !people.get(String(row.personId))) return false;
+      return isWorkforcePlanRowVisible(row, { buildings, people, isGM });
+    };
+    for (const row of plan[kind]) {
+      if (!row || typeof row !== "object") return "Некорректная цель или закрепление.";
+      const key = keyFor(row);
+      const prior = priorRows.get(key);
+      if (nextRows.has(key)) return "Цель или закрепление повторяется.";
+      nextRows.set(key, row);
+      if (same(prior, row)) continue;
+      const fieldAllowed = (field) => allowed.includes(field)
+        || (field === "visibility" && (
+          (isGM && ["public", "gm"].includes(row.visibility))
+          || (!isGM && prior?.visibility === "public" && row.visibility === "public")
+        ));
+      if (Object.keys(row).some((field) => !fieldAllowed(field))
+        || !canEdit(row) || prior && !canEdit(prior)) return "Цель или закрепление недоступны.";
+      const target = targets.get(workforceKey(row));
+      if (!target?.available || kind === "productionGoals" && (target.kind !== "production"
+        || !Number.isSafeInteger(row.preparedUnits) || row.preparedUnits < 1 || row.preparedUnits > 1_000_000)) {
+        return "Некорректная цель или закрепление для выбранной работы.";
+      }
+    }
+    for (const [key, row] of priorRows) {
+      if (!nextRows.has(key) && !canEdit(row)) return "Нельзя менять скрытую часть общего плана.";
+    }
+  }
   return "";
 }
 
-/** Validate only changed planning fields: unrelated legacy/custom data is not repaired on load. */
-export function workforceChangeError(before, after, { isGM = false } = {}) {
-  const oldPlan = workforcePlan(before), plan = workforcePlan(after);
-  const targets = buildWorkAllocationTargets(after), byKey = new Map(targets.map((row) => [row.key, row]));
-  const buildings = new Map((before.buildings?.list ?? []).map((row) => [String(row.id), row]));
-  const people = new Map((before.people?.list ?? []).map((row) => [String(row.id), row]));
-  const targetVisible = (row) => isGM || visible(buildings.get(String(row.sourceId)), isGM);
-  if (!same(oldPlan, plan)) {
-    if (![WORKFORCE_PLAN_VERSION, 2].includes(plan.version) || Object.keys(plan).some((key) => !["version", "goals", "locks", ...(plan.version === 2 ? ["productionGoals"] : [])].includes(key))
-      || !Array.isArray(plan.goals) || !Array.isArray(plan.locks) || plan.goals.length > 2000 || plan.locks.length > 4800) return "Некорректный формат общего плана работ.";
-    if (plan.productionGoals !== undefined && !Array.isArray(plan.productionGoals)) return "Некорректные цели подготовки.";
-    for (const [kind, keyFor, allowed] of [["goals", workforceKey, ["sourceId", "functionId", "normalQd"]], ["locks", workforceLockKey, ["personId", "sourceId", "functionId"]],
-      ["productionGoals", workforceKey, ["sourceId", "functionId", "preparedUnits"]]]) {
-      const keys = new Set();
-      for (const row of plan[kind] ?? []) {
-        if (!row || typeof row !== "object" || Object.keys(row).some((key) => !allowed.includes(key))
-          || allowed.filter((key) => !["normalQd", "preparedUnits"].includes(key)).some((key) => typeof row[key] !== "string" || !row[key] || row[key].length > 200)) return "Некорректная цель или закрепление.";
-        const key = keyFor(row);
-        if (keys.has(key)) return "Цель или закрепление повторяется.";
-        keys.add(key);
-        if (kind === "goals" && (!Number.isSafeInteger(row.normalQd) || row.normalQd < 1 || row.normalQd > 10000)) return "Цель должна быть целым числом от 1 до 10000 QD.";
-        const prior = oldPlan[kind]?.find((value) => keyFor(value) === key);
-        if (!same(prior, row) && (!byKey.has(workforceKey(row)) || byKey.get(workforceKey(row))?.available === false || !targetVisible(row)
-          || kind === "locks" && !visible(people.get(row.personId), isGM))) return "Цель или закрепление относится к недоступной работе / жителю.";
-      }
-      for (const prior of oldPlan[kind] ?? []) {
-        if (!same(prior, (plan[kind] ?? []).find((row) => keyFor(row) === keyFor(prior)))
-          && (!targetVisible(prior) || kind === "locks" && !visible(people.get(prior.personId), isGM))) return "Нельзя менять скрытую часть общего плана.";
-      }
+function allocationPairFor(holding, personId, sourceId, functionId) {
+  const person = (holding?.people?.list ?? []).find((entry) => String(entry?.id ?? "") === String(personId ?? ""));
+  const key = workAllocationTargetKey(sourceId, functionId);
+  let normal = 0;
+  let overtime = 0;
+  for (const row of person?.workAllocations ?? []) {
+    if (workAllocationTargetKey(allocationSourceId(row), allocationFunctionId(row)) !== key) continue;
+    const n = allocationNormalQd(row);
+    const total = allocationTotalQd(row);
+    normal += n;
+    overtime += Math.max(0, total - n);
+  }
+  return [normal, overtime];
+}
+
+export function lockedAllocationChangeError(beforeHolding, afterHolding, nextPlan = workforcePlan(afterHolding), { isGM = false } = {}) {
+  const beforeLocks = new Map((workforcePlan(beforeHolding).locks ?? []).map((row) => [workforceLockKey(row), row]));
+  const afterLocks = new Map(((nextPlan ?? workforcePlan(afterHolding)).locks ?? []).map((row) => [workforceLockKey(row), row]));
+  const buildings = new Map((beforeHolding?.buildings?.list ?? []).map((row) => [String(row.id), row]));
+  const people = new Map((beforeHolding?.people?.list ?? []).map((row) => [String(row.id), row]));
+  for (const [key, lock] of beforeLocks) {
+    if (!afterLocks.has(key)) continue;
+    const [beforeN, beforeO] = allocationPairFor(beforeHolding, lock.personId, lock.sourceId, lock.functionId);
+    const [afterN, afterO] = allocationPairFor(afterHolding, lock.personId, lock.sourceId, lock.functionId);
+    if (beforeN !== afterN || beforeO !== afterO) {
+      return !isGM && !isWorkforcePlanRowVisible(lock, { buildings, people, isGM })
+        ? "Назначение недоступно. Обновите окно или обратитесь к ГМу."
+        : "Сначала снимите закрепление назначения.";
     }
   }
-  for (const person of after.people?.list ?? []) {
-    const prior = people.get(String(person.id));
-    if (!prior || same([prior.workAllocationMode, prior.workAllocations, prior.staffAppointment], [person.workAllocationMode, person.workAllocations, person.staffAppointment])) continue;
-    if (!visible(prior, isGM)) return "Нельзя менять план скрытого жителя.";
-    const oldAppointment = staffAppointmentFor(prior), appointment = staffAppointmentFor(person);
-    if (!isGM && oldAppointment && !visible(buildings.get(oldAppointment.buildingId), isGM)) return "Назначения жителя содержат скрытую работу; их меняет ГМ.";
-    if (appointment) {
-      const building = buildings.get(appointment.buildingId);
-      if (!visible(building, isGM)) return "Нельзя назначать в скрытое или отсутствующее здание.";
-      const unavailable = workforceUnavailable(before, prior);
-      const reducingExistingAppointment = oldAppointment && same({ ...oldAppointment, overtimeQd: appointment.overtimeQd }, appointment)
-        && appointment.overtimeQd <= oldAppointment.overtimeQd;
-      if (unavailable && !reducingExistingAppointment) return `${prior.name || "Житель"}: ${unavailable}.`;
-      const previousFunctions = oldAppointment?.buildingId === appointment.buildingId ? staffAppointmentWorkFunctions(oldAppointment) : [];
-      for (const functionId of staffAppointmentWorkFunctions(appointment)) {
-        const target = byKey.get(workAllocationTargetKey(appointment.buildingId, functionId));
-        if (!previousFunctions.includes(functionId) && (!target || target.available === false)) return `${person.name || "Житель"}: выбранная работа сейчас недоступна.`;
-      }
-      const admission = workerAdmission(building, person);
-      if (admission?.hard && !admission.eligible && !admission.overridden) return `${person.name || "Житель"}: не выполнен допуск к работе.`;
-      if (!isGM) {
-        const continuing = oldAppointment?.buildingId === appointment.buildingId;
-        const expectedRate = continuing ? oldAppointment.wageDailyCopper
-          : prior.wageDailyOverrideCopper ?? building.wageDailyCopper;
-        if (appointment.wageDailyCopper !== Math.max(0, Number(expectedRate) || 0)) return "Согласованную ставку постоянного сотрудника меняет ГМ.";
-        const authorizedVolunteer = continuing ? oldAppointment.volunteer === true : prior.volunteerLabor === true;
-        const authorizedReason = continuing ? oldAppointment.volunteerReason : prior.volunteerReason;
-        if (appointment.volunteer !== authorizedVolunteer || appointment.volunteer && appointment.volunteerReason !== authorizedReason) {
-          return "Договорённость о бесплатной постоянной работе назначает ГМ.";
-        }
-      }
-    }
-    if (person.workAllocationMode !== "explicit") continue;
-    if (!Array.isArray(person.workAllocations)) return "Некорректные назначения.";
-    const unavailable = workforceUnavailable(before, prior);
-    const priorRows = prior.workAllocationMode === "explicit" && !oldAppointment ? prior.workAllocations ?? [] : [];
-    const increasesWork = person.workAllocations.some((row) => {
-      if (!row || !row.normalQd && !row.overtimeQd) return false;
-      const old = priorRows.find((value) => workforceKey(value) === workforceKey(row));
-      return !old || row.normalQd > old.normalQd || row.overtimeQd > old.overtimeQd;
-    });
-    if (unavailable && increasesWork) return `${prior.name || "Житель"}: ${unavailable}.`;
-    const capacity = workforceCapacity(person);
-    const check = validateWorkAllocationPlan(person.workAllocations, { targets, maximumNormalQd: capacity.normalQd, maximumOvertimeQd: capacity.overtimeQd });
-    if (!check.ok) return check.issues[0]?.message || "Превышен бюджет QD.";
-    for (const row of person.workAllocations) {
-      if (![row.normalQd, row.overtimeQd].every((value) => Number.isSafeInteger(value) && value >= 0)) return "QD должны быть целыми неотрицательными числами.";
-      if (!row.normalQd && !row.overtimeQd) continue;
-      if (!targetVisible(row)) return "Нельзя назначать на скрытую работу.";
-      const target = byKey.get(workforceKey(row));
-      const oldRow = (prior.workAllocations ?? []).find((value) => workforceKey(value) === workforceKey(row));
-      if (target?.available === false && (!oldRow || row.normalQd > oldRow.normalQd || row.overtimeQd > oldRow.overtimeQd)) {
-        return `${person.name || "Житель"}: ${target.blockedReason || "выбранная работа сейчас недоступна"}.`;
-      }
-      const building = buildings.get(String(row.sourceId));
-      const admission = building && workerAdmission(building, person);
-      if (admission?.hard && !admission.eligible && !admission.overridden) return `${person.name || "Житель"}: не выполнен допуск к работе.`;
-      if (!isGM && row.volunteer === true) {
-        const old = (prior.workAllocations ?? []).find((value) => value.id === row.id);
-        if (!old?.volunteer || workforceKey(old) !== workforceKey(row) || old.volunteerReason !== row.volunteerReason) return "Договорённость о бесплатной работе назначает ГМ.";
-      }
-    }
-    if (!isGM && (prior.workAllocations ?? []).some((row) => !targetVisible(row))
-      || !isGM && (before.buildings?.list ?? []).some((building) => building.visibility === "gm"
-        && ((building.assignedWorkerIds ?? []).includes(prior.id) || [building.id, building.name].includes(prior.workAssignment)))) return "Назначения жителя содержат скрытую работу; их меняет ГМ.";
+  for (const [key, lock] of afterLocks) {
+    if (beforeLocks.has(key)) continue;
+    const [afterN, afterO] = allocationPairFor(afterHolding, lock.personId, lock.sourceId, lock.functionId);
+    if (afterN + afterO <= 0) return "Закрепить можно только активное назначение.";
   }
-  const issues = newHybridLaborIssues(
-    validateHybridLaborHolding(before, { targets: buildWorkAllocationTargets(before) }).issues,
-    validateHybridLaborHolding(after, { targets: byKey }).issues
-  );
-  return workforceIssueMessage(after, issues[0], { isGM });
+  return "";
+}
+
+export function workforceChangeError(before, after, options) {
+  const planError = workforcePlanChangeError(before, workforcePlan(after), options);
+  if (planError) return planError;
+  const lockError = lockedAllocationChangeError(before, after, workforcePlan(after), options);
+  if (lockError) return lockError;
+  const { issues } = validateHoldingWorkAllocations(after, { previousHolding: before });
+  return workforceIssueMessage(after, issues[0], options);
 }

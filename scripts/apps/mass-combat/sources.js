@@ -1,5 +1,7 @@
 import { buildingOperationalState } from "../../core/building-state.js";
 import { isResidentInPopulation } from "../../data/resident-presence.js";
+import { allocatedBuildingQd, buildingWorkerIds } from "../../data/work-allocations.js";
+import { normalLaborQdPerTenday } from "../../data/labor-budget.js";
 import { DEFENSE_SQUAD_MIN_EFFICIENCY, evaluateDefenseSquad, isAvailableDefenseResident } from "../../data/military-resident-rules.js";
 import {
   ATTACK_METHODS,
@@ -268,22 +270,33 @@ function buildingCombatTag(building) {
   return requested !== "militia" && tags[requested] ? requested : "garrison";
 }
 
-export function defenseGarrisonProfile(holding, { buildingEffectiveWorkers = null } = {}) {
-  const people = (holding?.people?.list ?? []).filter((person) => isResidentInPopulation(person, holding) && !isInjuredResident(person));
+export function defenseGarrisonProfile(holding, { buildingEffectiveWorkers = null, publicOnly = false } = {}) {
+  const people = (holding?.people?.list ?? []).filter((person) => (!publicOnly || person?.visibility !== "gm")
+    && isResidentInPopulation(person, holding) && !isInjuredResident(person));
+  const garrisonHolding = { ...holding, people: { ...holding?.people, list: people } };
   const byId = new Map(people.map((person) => [String(person.id), person]));
-  const buildings = builtBuildings(holding).filter((building) => isDefenseBuilding(building));
+  const buildings = builtBuildings(holding).filter((building) => (!publicOnly || building?.visibility !== "gm") && isDefenseBuilding(building));
   const ids = new Set();
   const details = [];
   const buildingsHeld = [];
   const sources = [];
   let effective = 0;
   for (const building of buildings) {
-    const assigned = (Array.isArray(building?.assignedWorkerIds) ? building.assignedWorkerIds : []).map((id) => String(id ?? "")).filter(Boolean);
+    const assigned = buildingWorkerIds(garrisonHolding, building.id, "defense");
     const combatants = assigned.map((id) => byId.get(id)).filter(Boolean);
     for (const person of combatants) ids.add(String(person.id));
-    const effSummary = typeof buildingEffectiveWorkers === "function" ? buildingEffectiveWorkers(holding, building) : null;
-    let buildingEffective = Number.isFinite(Number(effSummary?.total)) ? Math.max(0, Number(effSummary.total)) : 0;
-    if (!buildingEffective && combatants.length) buildingEffective = combatants.reduce((sum, person) => sum + (soldierEfficiency(person, "line") || 0.75), 0);
+    const effSummary = combatants.length && typeof buildingEffectiveWorkers === "function"
+      ? buildingEffectiveWorkers(garrisonHolding, building, "defense") : null;
+    const hasEstimate = Number.isFinite(Number(effSummary?.total));
+    let buildingEffective = hasEstimate ? Math.max(0, Number(effSummary.total)) : 0;
+    if (!hasEstimate && combatants.length) {
+      const fullWorkerQd = Math.max(1, normalLaborQdPerTenday(holding));
+      buildingEffective = combatants.reduce((sum, person) => {
+        const allocatedQd = allocatedBuildingQd(person.workAllocations, building.id, "defense");
+        const share = Math.min(1.5, allocatedQd / fullWorkerQd);
+        return sum + (soldierEfficiency(person, "line") || 0.75) * share;
+      }, 0);
+    }
     buildingEffective = round2(buildingEffective);
     effective += buildingEffective;
     const defense = building?.defense && typeof building.defense === "object" ? building.defense : {};

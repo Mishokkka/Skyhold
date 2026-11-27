@@ -25,7 +25,10 @@ export function deleteCollectionRow(data, collectionPath, rowId) {
   const holding = holdingMatch ? data.holdings[Number(holdingMatch[1])] : null;
   if (holding && holdingMatch?.[2] === "buildings.list") {
     const plan = planBuildingDemolition(holding, rowId, data.meta?.transportV2);
-    if (plan) applyBuildingDemolition(holding, plan);
+    if (plan) {
+      const result = applyBuildingDemolition(holding, plan);
+      if (!result.ok) throw new Error(result.message);
+    }
     return;
   }
   const removedRow = collection.find((row) => String(row?.id) === String(rowId));

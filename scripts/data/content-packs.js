@@ -26,6 +26,13 @@ function contentMetadata(row = {}, source = "", fallbackVersion = 1) {
 function normalizeBuildingEntry(row = {}, source = "", version = 1) {
   const id = String(row?.id ?? row?.templateId ?? "").trim();
   if (!id) return null;
+  const labor = row.labor;
+  if (labor?.version !== 2 || Object.keys(labor).some((key) => !["version", "capacityQd"].includes(key))
+    || !(labor.capacityQd === null || Number.isSafeInteger(labor.capacityQd) && labor.capacityQd >= 0)
+    || Object.hasOwn(row, "assignedWorkerIds") || (row.workersMin ?? 0) !== 0
+    || (row.activation?.minWorkers ?? 0) !== 0 || (row.workerProfile?.workersMin ?? 0) !== 0) {
+    throw new Error(`FBL Skyhold | Building ${id} requires labor v2 (capacityQd: nonnegative integer or null).`);
+  }
   return { ...clone(row), id, ...contentMetadata(row, source, version) };
 }
 

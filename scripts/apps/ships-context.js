@@ -241,7 +241,7 @@ function overviewShipRow(holding, ship, index, { permissions, period, data, visi
   const inTransit = Boolean(ship.activeVoyage || shipTransportState(holding, ship).inTransit);
   const awaitingOutcome = inTransit && ship.activeVoyage?.awaitingOutcome === true;
   const atHome = isWorld && ship.location?.kind === "home" && !inTransit;
-  const readiness = isWorld ? shipCrewReadiness(holding, ship, { catalog: data?.catalog }) : null;
+  const readiness = isWorld ? shipCrewReadiness(holding, ship, { catalog: data?.catalog, isGM: permissions.isGM }) : null;
   let profile = null;
   try { profile = isWorld ? getShipProfile(ship.profileId) : null; } catch (_error) { profile = null; }
   const shipQd = isWorld ? shipPresentationTimelineQd(holding, ship) : Number(holding.gm?.calendaria?.lastQd ?? 0);
@@ -372,7 +372,7 @@ export function prepareShipWindowContext(holding, { revision = 0, data = null, s
     const ownSale = (holding.special?.market?.outbound?.orders ?? []).find((order) => order.ownShipId === ship.id
       && !["delivered", "lost", "cancelled"].includes(order.status)) ?? null;
     const atForeignPort = isWorld && ship.location?.kind === "market" && !inTransit && !ship.orderBundle && !ownSale && !transport.busy;
-    const readiness = isWorld ? shipCrewReadiness(holding, ship, { catalog: data?.catalog }) : null;
+    const readiness = isWorld ? shipCrewReadiness(holding, ship, { catalog: data?.catalog, isGM: permissions.isGM }) : null;
     let profile = null;
     try { profile = isWorld ? getShipProfile(ship.profileId) : null; } catch (_error) { profile = null; }
     let returnOffer = null;

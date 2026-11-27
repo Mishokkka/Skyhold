@@ -14,7 +14,12 @@
         "type": "Инфраструктура",
         "status": "planned",
         "marketAccessLevel": 2,
-        "description": "Устойчивые связи с соседними регионами."
+        "description": "Устойчивые связи с соседними регионами.",
+        "workersMin": 0,
+        "labor": {
+          "version": 2,
+          "capacityQd": 0
+        }
       },
       {
         "id": "merchant-guildhall",
@@ -22,7 +27,12 @@
         "type": "Инфраструктура",
         "status": "planned",
         "marketAccessLevel": 3,
-        "description": "Контракты и склады для дальних маршрутов."
+        "description": "Контракты и склады для дальних маршрутов.",
+        "workersMin": 0,
+        "labor": {
+          "version": 2,
+          "capacityQd": 0
+        }
       },
       {
         "id": "sky-dock",
@@ -33,7 +43,12 @@
         "functions": {
           "storage": true
         },
-        "description": "Межконтинентальные поставки и обслуживание грузовых кораблей."
+        "description": "Межконтинентальные поставки и обслуживание грузовых кораблей.",
+        "workersMin": 0,
+        "labor": {
+          "version": 2,
+          "capacityQd": 18
+        }
       }
     ],
     "events": {

@@ -53,16 +53,25 @@ function chanceText(value) {
   return `${chance}/6 (${Math.round((chance / 6) * 100)}%)`;
 }
 
-function battleCalculationDependencies(manager = getSkyholdManager()) {
+function publicBattleHolding(holding) {
+  if (!holding || typeof holding !== "object") return holding;
+  return {
+    ...holding,
+    buildings: holding.buildings ? { ...holding.buildings, list: (holding.buildings.list ?? []).filter((building) => building?.visibility !== "gm") } : holding.buildings,
+    people: holding.people ? { ...holding.people, list: (holding.people.list ?? []).filter((person) => person?.visibility !== "gm") } : holding.people
+  };
+}
+
+function battleCalculationDependencies(manager = getSkyholdManager(), { publicOnly = false } = {}) {
   const dependencies = {};
   if (typeof manager?._buildingEffectiveWorkers === "function") {
-    dependencies.buildingEffectiveWorkers = (holding, building) => manager._buildingEffectiveWorkers(holding, building);
+    dependencies.buildingEffectiveWorkers = (holding, building, functionId = "") => manager._buildingEffectiveWorkers(holding, building, null, functionId);
   }
   if (typeof manager?._calculateMorale === "function") {
     dependencies.calculateMorale = (holding) => manager._calculateMorale(holding);
   }
   if (typeof manager?._medicalAssignments === "function") {
-    dependencies.medicalAssignments = (holding) => manager._medicalAssignments(holding);
+    dependencies.medicalAssignments = (holding) => manager._medicalAssignments(holding, null, { publicOnly });
   }
   if (typeof manager?._medicalCapacityForBuilding === "function") {
     dependencies.medicalCapacityForBuilding = (holding, building) => manager._medicalCapacityForBuilding(holding, building);
@@ -156,16 +165,18 @@ export class SkyholdMassCombatApp extends RenderSchedulerMixin(HandlebarsApplica
     const context = await super._prepareContext(options);
     const { holding } = HoldingService.getReadableHoldingEntry(this.holdingId, { fallback: false });
     const manager = getSkyholdManager();
-    const calculationDependencies = battleCalculationDependencies(manager);
     const state = holding?.gm?.massCombat ?? {};
     const pendingRound = pendingBattleRoundContext(state.pendingRound);
     const permissions = holdingPermissionContext(holding);
+    const publicOnly = !permissions.isGM;
+    const viewHolding = publicOnly ? publicBattleHolding(holding) : holding;
+    const calculationDependencies = battleCalculationDependencies(manager, { publicOnly });
     const canResolveBattle = permissions.canResolveBattle;
     const canEdit = canResolveBattle && !pendingRound;
     const canEditDefender = permissions.canEditBattleSetup && !pendingRound;
-    const defense = manager?._defenseSummary?.(holding) ?? { total: asNumber(holding?.overview?.defense, 0), tooltip: "" };
-    const calc = calculateBattle(holding, state, { defenseTotal: defense.total, ...calculationDependencies });
-    calc.mortalityHelp = buildMortalityHelp(holding, { state, calculationDependencies });
+    const defense = manager?._defenseSummary?.(viewHolding, null, null, { publicOnly }) ?? { total: asNumber(viewHolding?.overview?.defense, 0), tooltip: "" };
+    const calc = calculateBattle(viewHolding, state, { defenseTotal: defense.total, ...calculationDependencies });
+    calc.mortalityHelp = buildMortalityHelp(viewHolding, { state, calculationDependencies });
     const terminal = battleTerminalState(state, calc);
 
     return {
@@ -377,7 +388,9 @@ export class SkyholdMassCombatApp extends RenderSchedulerMixin(HandlebarsApplica
       return null;
     }
     const state = data?.holding?.gm?.massCombat ?? {};
-    const calc = calculateBattle(data?.holding, state, { defenseTotal: 0, ...battleCalculationDependencies() });
+    const publicOnly = game.user?.isGM !== true;
+    const viewHolding = publicOnly ? publicBattleHolding(data?.holding) : data?.holding;
+    const calc = calculateBattle(viewHolding, state, { defenseTotal: 0, ...battleCalculationDependencies(getSkyholdManager(), { publicOnly }) });
     return SkyholdWeatherReferenceApp.open({
       catalog: calc?.weather?.catalog ?? [],
       currentKey: calc?.weather?.key ?? ""
@@ -879,9 +892,11 @@ export class SkyholdMassCombatApp extends RenderSchedulerMixin(HandlebarsApplica
     }
     const state = holding.gm?.massCombat ?? {};
     const manager = getSkyholdManager();
-    const calculationDependencies = battleCalculationDependencies(manager);
-    const defenseTotal = manager?._defenseSummary?.(holding)?.total ?? asNumber(holding?.overview?.defense, 0);
-    const calc = calculateBattle(holding, state, { defenseTotal, ...calculationDependencies });
+    const publicOnly = game.user?.isGM !== true;
+    const viewHolding = publicOnly ? publicBattleHolding(holding) : holding;
+    const calculationDependencies = battleCalculationDependencies(manager, { publicOnly });
+    const defenseTotal = manager?._defenseSummary?.(viewHolding, null, null, { publicOnly })?.total ?? asNumber(viewHolding?.overview?.defense, 0);
+    const calc = calculateBattle(viewHolding, state, { defenseTotal, ...calculationDependencies });
     await createHoldingChatMessage(holding, {
       speaker: foundryChatSpeaker({ alias: holding.name || "Владение" }),
       content: `

@@ -544,6 +544,7 @@ const retire = [
 ];
 
 const marketSettings = createDefaultMarketEconomy([]).settings;
+marketSettings.handlingLoadCopper = library.content.marketEconomy?.settings?.handlingLoadCopper ?? marketSettings.handlingLoadCopper;
 const withSharedMetadata = (row) => ({ ...row, contentSource: LIBRARY_SOURCE, contentVersion: CONTENT_VERSION });
 const sharedConditions = [
   ...DEFAULT_MARKET_CONDITIONS.filter((row) => !conditions.some((condition) => condition.id === row.id)),
@@ -580,6 +581,9 @@ const network = {
   install: { replaceMarket: true, replaceResources: true, overwriteResources: true },
   content: {
     ...previousNetwork.content,
+    buildings: previousNetwork.content.buildings.map((building) => ({
+      ...building, workersMin: 0, labor: { version: 2, capacityQd: building.id === "sky-dock" ? 18 : 0 }
+    })),
     resources: library.content.resources,
     regions,
     marketRouteMap: routeMap,
@@ -596,6 +600,9 @@ const network = {
   }
 };
 
-writeFileSync(libraryPath, `${JSON.stringify(library, null, 2)}\n`, "utf8");
+const updatedLibrary = `${JSON.stringify(library, null, 2)}\n`;
+if (JSON.stringify(library) !== JSON.stringify(JSON.parse(readFileSync(libraryPath, "utf8")))) {
+  writeFileSync(libraryPath, updatedLibrary, "utf8");
+}
 writeFileSync(networkPath, `${JSON.stringify(network, null, 2)}\n`, "utf8");
 console.log(`Built ${library.content.resources.length} resources, ${preparedBaseOffers.length} base offers, ${countries.length} countries, ${regions.length} unlinked locations, ${sharedSpecialties.length} specialties and ${organizations.length} organizations.`);

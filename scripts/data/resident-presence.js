@@ -34,17 +34,17 @@ export function shipForResident(person = {}, holding = null) {
 export function residentLaborShips(holding, person) {
   const id = text(person.id);
   const assignment = person.shipAssignment;
-  const shoreDutyShipId = assignment?.shoreDuty === true ? text(assignment.shipId) : "";
+  const shoreDutyShipId = assignment?.shoreDuty === true && assignment?.away !== true ? text(assignment.shipId) : "";
   const contains = (ids) => (ids ?? []).some((value) => text(value) === id);
   return id ? (holding.special?.ships?.list ?? []).filter((ship) => {
-    if (shoreDutyShipId && shoreDutyShipId === text(ship.id)) return false;
+    if (shoreDutyShipId && shoreDutyShipId === text(ship.id) && !ship.activeVoyage && ship.status !== "away"
+      && (!ship.location || ship.location.kind === "home")) return false;
     return text(ship.commanderResidentId) === id || contains(ship.crewResidentIds) || contains(ship.coCommanderResidentIds);
   }) : [];
 }
 
 export function isResidentAwayForLabor(person) {
-  const assignment = person.shipAssignment;
-  return assignment?.away === true && !(assignment.shoreDuty === true && text(assignment.shipId));
+  return isResidentAway(person);
 }
 
 export function isResidentAbsentForLabor(holding, person) {
@@ -53,13 +53,11 @@ export function isResidentAbsentForLabor(holding, person) {
 }
 
 export function hasResidentSettlementWork(person = {}, holding = null) {
-  if (person.staffAppointment?.buildingId) return true;
   if (text(person.workAssignment) || (person.workAllocations ?? []).some((row) => Number(row.normalQd ?? row.qd) > 0 || Number(row.overtimeQd) > 0)) return true;
   if (!holding) return false;
   const id = text(person.id);
   if (!id) return false;
   const contains = (ids) => (ids ?? []).some((value) => text(value) === id);
-  if ((holding.buildings?.list ?? []).some((row) => contains(row.assignedWorkerIds))) return true;
   if (contains(holding.constructionCrewIds) || (holding.constructionCrews ?? []).some((row) =>
     contains(row.memberIds) || contains(row.distributedIds) || text(row.leaderId) === id || text(row.distributedLeaderId) === id)) return true;
   const defense = holding.gm?.defense;

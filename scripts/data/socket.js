@@ -6,6 +6,7 @@ import { applyPlayerPatch, buildPlayerPatch, validatePlayerPatch } from "./playe
 import { makeId, toNumber } from "./utils.js";
 import { createShipSocketApi } from "./ship-socket.js";
 import { createPoliticsSocketApi } from "./politics-socket.js";
+import { createWorkforceSocketApi } from "./workforce-socket.js";
 import { acceptsGmSocketResponse, acceptsPlayerSocketRequest, acceptsStorageSocketRequest } from "./socket-auth.js";
 import { appendHoldingOperation, findHoldingOperation } from "./operations.js";
 
@@ -42,6 +43,7 @@ export function createSkyholdSocketApi({
   executeConstructionOperation,
   executeShipOperation,
   executePoliticsOperation,
+  workforceStore,
   writeTimeoutMs = GM_WRITE_TIMEOUT_MS
 } = {}) {
   const completedPlayerOperations = new Map();
@@ -54,6 +56,7 @@ export function createSkyholdSocketApi({
   };
   const ships = createShipSocketApi({ executeShipOperation, getData, writeTimeoutMs });
   const politics = createPoliticsSocketApi({ executePoliticsOperation, getData, writeTimeoutMs });
+  const workforce = createWorkforceSocketApi({ store: workforceStore, writeTimeoutMs });
 
   /**
    * Emit one pending request, rejecting its caller and releasing its ID on transport failure.
@@ -341,6 +344,7 @@ export function createSkyholdSocketApi({
     if (!payload || typeof payload !== "object") return false;
     if (await ships.handleShipPayload(payload, senderId)) return true;
     if (await politics.handlePoliticsPayload(payload, senderId)) return true;
+    if (await workforce.handleWorkforcePayload(payload, senderId)) return true;
     if (payload.type === "playerStorageOperationRequest" && !acceptsStorageSocketRequest(payload, senderId)) return true;
     if (["playerMarketOperationRequest", "playerConstructionOperationRequest", "playerDataPatchRequest"].includes(payload.type)
       && !acceptsPlayerSocketRequest(payload, senderId)) return true;
@@ -670,6 +674,7 @@ export function createSkyholdSocketApi({
     requestMarketOperation,
     requestShipOperation: ships.requestShipOperation,
     requestPoliticsOperation: politics.requestPoliticsOperation,
+    requestWorkforceOperation: workforce.requestWorkforceOperation,
     requestStorageOperation
   };
 }

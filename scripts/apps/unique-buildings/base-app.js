@@ -1,7 +1,13 @@
-import { SkyholdData } from "../../data/store.js";
+import { COMMAND_ERROR } from "../../data/command-result.js";
+import { SkyholdData, requestWorkforceOperation } from "../../data/store.js";
 import { makeId } from "../../data/utils.js";
-import { findReadableHoldingEntry } from "../../data/access-guard.js";
+import { canReadResident, findReadableHoldingEntry } from "../../data/access-guard.js";
 import { holdingPermissionContext } from "../../data/holding-permissions.js";
+import { droppedLocksForAllocationChange, mutateResidentBuildingLabor } from "../../data/labor-mutations.js";
+import { normalLaborQdPerTenday, residentLaborCapacity } from "../../data/labor-budget.js";
+import { buildingLaborCapacityQd, buildingReservedQd, uncollectibleProductionLine } from "../../data/labor-model.js";
+import { workforceIssueMessage, workforceKey, workforceLockKey } from "../../data/workforce-plan.js";
+import { buildResidentAllocationAddCommand, buildResidentAllocationRemovalCommand } from "../../data/workforce-socket.js";
 import { fieldValue } from "../../core/helpers.js";
 import { bindGlobalInputGuard, bindInputGuards, replaceTabs, unbindGlobalInputGuard } from "../../utils/input-guards.js";
 import { getSkyholdManager, requestSkyholdAppRender } from "../registry.js";
@@ -20,11 +26,16 @@ import {
   syncBuildingAudioTrackPlayback
 } from "../common/building-audio-track.js";
 import { renderFoundryFilePicker } from "../../integrations/foundry-runtime.js";
+import { buildWorkAllocationTargets, validateHoldingWorkAllocations, workAllocationTargetKey, workAllocationTotals, workFunctionMatches } from "../../data/work-allocations.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
 const BASE_ACTIONS = {
   "unique-building-tab": "_onUniqueBuildingTab",
+  "unique-remove-worker": "_onRemoveUniqueBuildingWorker",
+  "unique-retry-worker": "_onRetryPendingUniqueWorker",
+  "unique-clear-pending-worker": "_onClearPendingUniqueWorker",
+  "open-unique-workforce-planner": "_onOpenWorkforcePlanner",
   "pick-unique-building-image": "_onPickBuildingImage",
   "clear-unique-building-image": "_onClearBuildingImage",
   "roll-construction": "_onRollConstruction",
@@ -51,6 +62,8 @@ export class SkyholdUniqueBuildingApp extends WindowFrameMixin(RenderSchedulerMi
     this.holdingId = String(holdingId ?? "");
     this.buildingId = String(buildingId ?? "");
     this.activeUniqueBuildingTab = "unique";
+    this._pendingWorkforceCommand = null;
+    this._pendingWorkforceBusy = false;
     SkyholdUniqueBuildingApp.instances.add(this);
   }
 
@@ -65,7 +78,7 @@ export class SkyholdUniqueBuildingApp extends WindowFrameMixin(RenderSchedulerMi
     const permissions = holdingPermissionContext(holding);
     const canManageEditorTabs = permissions.isGM;
     const canEdit = permissions.canEditBuildings;
-    const prepared = building && manager ? manager._prepareBuildingRow(holding, building, buildingIndex, canEdit) : building;
+    const prepared = building && manager ? manager._prepareBuildingRow(holding, building, buildingIndex, canEdit, null, { isGM: permissions.isGM }) : building;
     if (prepared) this._prepareUniqueBuildingTabs(prepared, { canManageEditorTabs });
     return {
       ...context,
@@ -76,6 +89,8 @@ export class SkyholdUniqueBuildingApp extends WindowFrameMixin(RenderSchedulerMi
       hasBuilding: Boolean(building),
       canEdit,
       canManageEditorTabs,
+      pendingWorkforceCommand: this._matchingPendingWorkforceCommand(holding, building),
+      pendingWorkforceBusy: Boolean(this._pendingWorkforceBusy),
       constructionCrew: manager?._constructionCrew?.(holding) ?? { count: 0, dice: 0, names: "" }
     };
   }
@@ -101,6 +116,9 @@ export class SkyholdUniqueBuildingApp extends WindowFrameMixin(RenderSchedulerMi
     });
     root.querySelectorAll("[data-building-worker-field]").forEach((field) => {
       field.addEventListener("change", (event) => this._onBuildingWorkerChange(event));
+    });
+    root.querySelectorAll("[data-building-labor-field]").forEach((field) => {
+      field.addEventListener("change", (event) => this._onLaborFieldChange(event));
     });
   }
 
@@ -199,25 +217,320 @@ export class SkyholdUniqueBuildingApp extends WindowFrameMixin(RenderSchedulerMi
     requestSkyholdAppRender();
   }
 
+  async _onLaborFieldChange(event) {
+    event.preventDefault();
+    if (!game.user?.isGM) return;
+    const field = event.currentTarget;
+    if (field.dataset.buildingLaborField !== "capacityQd") return;
+    try {
+      const raw = field.value.trim();
+      const value = raw === "" ? null : Number(raw);
+      if (value !== null && (!Number.isSafeInteger(value) || value < 0)) {
+        throw new Error("Предел QD должен быть целым неотрицательным числом; пустое поле означает отсутствие предела.");
+      }
+      await this._updateMutableBuilding(({ holding, building }) => {
+        const applyZeroLaborGuards = (target) => {
+          if (value !== 0) return;
+          target.activation = { ...target.activation, minOperationalQd: 0, requiresMeaningfulResult: false };
+          target.minOperationalQd = 0;
+          const blockedLine = uncollectibleProductionLine(target);
+          if (blockedLine) {
+            throw new Error(`Нельзя задать 0 QD: линия «${blockedLine.resource || blockedLine.mode || "выпуск"}» требует сбора (${blockedLine.collectQd} QD) без сбора потребителем.`);
+          }
+        };
+        if (holding) {
+          const previewHolding = structuredClone(holding);
+          const previewBuilding = previewHolding.buildings?.list?.find((item) => String(item?.id ?? "") === String(building.id));
+          if (previewBuilding) {
+            previewBuilding.labor = { version: 2, capacityQd: value };
+            previewBuilding.workersMin = 0;
+            if (previewBuilding.workerProfile) previewBuilding.workerProfile.workersMin = 0;
+            if (previewBuilding.activation) previewBuilding.activation.minWorkers = 0;
+            applyZeroLaborGuards(previewBuilding);
+            const check = validateHoldingWorkAllocations(previewHolding, { previousHolding: holding });
+            if (!check.ok) throw new Error(check.issues[0].message);
+          }
+        }
+        building.labor = { version: 2, capacityQd: value };
+        building.workersMin = 0;
+        if (building.workerProfile) building.workerProfile.workersMin = 0;
+        if (building.activation) building.activation.minWorkers = 0;
+        applyZeroLaborGuards(building);
+        return true;
+      }, { reason: "unique-building:labor" });
+      this.requestRender();
+      requestSkyholdAppRender();
+    } catch (error) {
+      ui.notifications.warn(error?.message || "Не удалось изменить параметры труда.");
+      this.requestRender();
+    }
+  }
+
+  async _onRemoveUniqueBuildingWorker(event) {
+    event.preventDefault();
+    if (!this._canEditBuilding()) return;
+    const personId = String(event.currentTarget?.dataset?.personId ?? "").trim();
+    const manager = getSkyholdManager();
+    if (!manager || !personId) return;
+    const isGM = game.user?.isGM === true;
+    const data = SkyholdData.get();
+    const current = this._getMutableBuilding(data);
+    const currentPerson = (current.holding?.people?.list ?? []).find((row) => String(row?.id ?? "") === personId);
+    if (!current.holding || !current.building || !canReadResident(currentPerson)) return;
+    const removedRows = (currentPerson.workAllocations ?? [])
+      .filter((row) => String(row?.sourceId ?? "") === String(current.building.id));
+    const expectedRows = new Map(removedRows.map((row) => [String(row.id), String(row.functionId ?? "")]));
+    const nextAllocations = (currentPerson.workAllocations ?? [])
+      .filter((row) => String(row?.sourceId ?? "") !== String(current.building.id));
+    const dropped = droppedLocksForAllocationChange(current.holding, personId, nextAllocations, removedRows);
+    const confirmedLockKeys = new Set(dropped.map(workforceLockKey));
+    if (dropped.length) {
+      if (!isGM && dropped.some((row) => row.visibility === "gm")) {
+        ui.notifications?.warn?.("Назначение недоступно. Обновите окно или обратитесь к ГМу.");
+        return;
+      }
+      if (!await manager._confirmAction?.("Снять закреплённое назначение",
+        "Назначение закреплено в общем плане работ. Удалить его и снять закрепление?")) return;
+    }
+    if (!isGM) {
+      if (this._pendingWorkforceBusy || this._matchingPendingWorkforceCommand(current.holding, current.building)) {
+        ui.notifications?.warn?.("Есть неподтверждённое назначение. Сначала повторите тот же запрос или сбросьте ожидание после сверки.");
+        return;
+      }
+      try {
+        await requestWorkforceOperation(buildResidentAllocationRemovalCommand({
+          operationId: makeId("workforce-remove", 20),
+          holdingId: current.holding.id,
+          expectedRevision: data.meta.revision,
+          personId,
+          buildingId: current.building.id,
+          functionId: ""
+        }));
+      } catch (error) {
+        ui.notifications?.warn?.(error?.message || "Не удалось снять назначение.");
+        return;
+      }
+      this.requestRender();
+      requestSkyholdAppRender();
+      return;
+    }
+    let failureMessage = "";
+    try {
+      const updated = await this._updateMutableBuilding(({ holding, building }) => {
+        const person = (holding.people?.list ?? []).find((row) => String(row?.id ?? "") === personId);
+        if (!canReadResident(person)) return SkyholdData.skipTransaction(false);
+        const rows = person.workAllocations ?? [];
+        const targetsBuilding = (row) => String(row?.sourceId ?? "") === String(building.id);
+        const innerRemoved = rows.filter(targetsBuilding);
+        if (innerRemoved.length !== expectedRows.size || innerRemoved.some((row) =>
+          expectedRows.get(String(row.id)) !== String(row.functionId ?? ""))) {
+          failureMessage = "Назначения изменились. Обновите окно и повторите снятие назначений.";
+          return SkyholdData.skipTransaction(false);
+        }
+        const innerDropped = droppedLocksForAllocationChange(holding, personId,
+          rows.filter((row) => !targetsBuilding(row)), innerRemoved);
+        if (innerDropped.some((row) => !confirmedLockKeys.has(workforceLockKey(row)))) {
+          failureMessage = "Закрепления изменились. Обновите окно и подтвердите снятие ещё раз.";
+          return SkyholdData.skipTransaction(false);
+        }
+        const check = mutateResidentBuildingLabor(holding, {
+          personId,
+          buildingId: building.id,
+          functionId: "",
+          action: "remove",
+          isGM: true
+        });
+        if (!check.ok) {
+          failureMessage = check.orphanedOvertime
+            ? check.message
+            : (workforceIssueMessage(holding, check.issues?.[0], { isGM: true }) || check.message);
+        }
+        return check.ok || SkyholdData.skipTransaction(false);
+      }, { reason: "unique-building:remove-worker", requireHolding: true, laborValidated: true });
+      if (!updated) {
+        if (failureMessage) ui.notifications?.warn?.(failureMessage);
+        return;
+      }
+      this.requestRender();
+      requestSkyholdAppRender();
+    } catch (error) {
+      ui.notifications?.warn?.(error?.message || "Не удалось снять назначение.");
+    }
+  }
+
+  async _onOpenWorkforcePlanner(event) {
+    event.preventDefault();
+    const { openWorkforcePlanner } = await import("../lazy-apps.js");
+    const { holding, building } = this._getMutableBuilding();
+    const targetKey = holding && building
+      ? buildWorkAllocationTargets(holding).find((row) => String(row.sourceId) === String(building.id))?.key
+      : "";
+    return openWorkforcePlanner({ holdingId: this.holdingId, targetKey });
+  }
+
+  _matchingPendingWorkforceCommand(holding, building) {
+    const pending = this._pendingWorkforceCommand;
+    if (!pending) return null;
+    if (pending.holdingId !== String(holding?.id ?? "") || pending.buildingId !== String(building?.id ?? "")) return null;
+    return pending;
+  }
+
+  async _executePlayerWorkforceCommand(command, { key, summary, fallbackError = "Не удалось назначить жителя на работу." } = {}) {
+    if (this._pendingWorkforceBusy) return false;
+    this._pendingWorkforceCommand = {
+      key: String(key ?? ""),
+      holdingId: String(command?.holdingId ?? ""),
+      buildingId: String(command?.buildingId ?? ""),
+      summary: String(summary ?? ""),
+      command
+    };
+    this._pendingWorkforceBusy = true;
+    try {
+      const result = await requestWorkforceOperation(command);
+      if (result && result.ok === false) {
+        this._pendingWorkforceCommand = null;
+        ui.notifications?.warn?.(result.reason || fallbackError);
+        return false;
+      }
+      this._pendingWorkforceCommand = null;
+      return true;
+    } catch (error) {
+      const keepPending = [COMMAND_ERROR.OUTCOME_UNKNOWN, COMMAND_ERROR.TIMEOUT].includes(error?.code);
+      if (!keepPending) this._pendingWorkforceCommand = null;
+      ui.notifications?.warn?.(keepPending
+        ? (error?.message || "Статус назначения не подтверждён. Повторите тот же запрос после проверки.")
+        : (error?.message || fallbackError));
+      return false;
+    } finally {
+      this._pendingWorkforceBusy = false;
+    }
+  }
+
+  async _onRetryPendingUniqueWorker(event) {
+    event.preventDefault();
+    if (!this._canEditBuilding()) return;
+    const data = SkyholdData.get();
+    const current = this._getMutableBuilding(data);
+    const pending = this._matchingPendingWorkforceCommand(current.holding, current.building);
+    if (!pending || game.user?.isGM === true) return;
+    const ok = await this._executePlayerWorkforceCommand(pending.command, pending);
+    this.requestRender();
+    if (ok) requestSkyholdAppRender();
+  }
+
+  _onClearPendingUniqueWorker(event) {
+    event.preventDefault();
+    if (this._pendingWorkforceBusy) return;
+    this._pendingWorkforceCommand = null;
+    this.requestRender();
+  }
+
   async _onBuildingWorkerChange(event) {
     event.preventDefault();
     if (!this._canEditBuilding()) return;
     const field = event.currentTarget;
-    const slotMatch = String(field?.dataset?.buildingWorkerField ?? "").match(/\.assignedWorkerIds\.(\d+)$/);
-    if (!slotMatch) return;
+    const personId = String(field?.value ?? "").trim();
+    if (!personId) return;
+    const functionId = field.dataset.buildingWorkerField === "medical" ? "medical" : undefined;
     const manager = getSkyholdManager();
     if (!manager) return;
-    const current = this._getMutableBuilding();
-    const person = (current.holding?.people?.list ?? []).find((row) => String(row?.id ?? "") === String(field.value ?? ""));
+    const isGM = game.user?.isGM === true;
+    const data = SkyholdData.get();
+    const current = this._getMutableBuilding(data);
+    const person = (current.holding?.people?.list ?? []).find((row) => String(row?.id ?? "") === personId);
+    if (!current.holding || !current.building || !canReadResident(person)) return;
+    const allTargets = buildWorkAllocationTargets(current.holding)
+      .filter((row) => row.sourceId === String(current.building.id) && row.available);
+    const target = functionId
+      ? allTargets.find((row) => row.functionId === functionId || workFunctionMatches(row.functionId, functionId))
+      : allTargets[0];
+    if (!target) {
+      ui.notifications?.warn?.("В здании нет доступной рабочей функции.");
+      this.requestRender();
+      return;
+    }
+    if (!isGM) {
+      if (this._pendingWorkforceBusy) return;
+      const pending = this._matchingPendingWorkforceCommand(current.holding, current.building);
+      const key = `${current.holding.id}::${current.building.id}::${personId}::${target.functionId}`;
+      if (pending) {
+        if (pending.key !== key) {
+          ui.notifications?.warn?.("Есть неподтверждённое назначение. Повторите тот же запрос или сбросьте ожидание после сверки.");
+          this.requestRender();
+          return;
+        }
+        const ok = await this._executePlayerWorkforceCommand(pending.command, pending);
+        this.requestRender();
+        if (ok) requestSkyholdAppRender();
+        return;
+      }
+    }
+    const targetKey = workAllocationTargetKey(current.building.id, target.functionId);
+    const existingLock = (current.holding.workforcePlan?.locks ?? []).find((row) =>
+      String(row?.personId ?? "") === personId && workforceKey(row) === targetKey);
+    if (existingLock) {
+      ui.notifications?.warn?.(!isGM && existingLock.visibility === "gm"
+        ? "Назначение недоступно. Обновите окно или обратитесь к ГМу."
+        : "Сначала снимите закрепление назначения.");
+      this.requestRender();
+      return;
+    }
     const decision = await confirmBuildingWorkerAdmission({ manager, building: current.building, person });
     if (!decision.allowed) { this.requestRender(); return; }
-    const updated = await this._updateMutableBuilding(({ holding, building }) => {
-      return manager._setBuildingSlot(holding, building.id, Number(slotMatch[1]), field.value || "", decision)
-        || SkyholdData.skipTransaction(false);
-    }, { reason: "unique-building:worker-change", requireHolding: true });
-    if (!updated) return;
-    this.requestRender();
-    requestSkyholdAppRender();
+    if (!isGM) {
+      const freeNormal = Math.max(0, residentLaborCapacity(person, normalLaborQdPerTenday(current.holding)).normalQd
+        - workAllocationTotals(person.workAllocations).normalQd);
+      const cap = buildingLaborCapacityQd(current.building);
+      const remaining = cap === null ? freeNormal : Math.max(0, cap - buildingReservedQd(current.holding, current.building.id));
+      const normalQd = Math.min(freeNormal, remaining);
+      if (normalQd <= 0) {
+        ui.notifications?.warn?.("Нет свободных QD или вместимости здания.");
+        this.requestRender();
+        return;
+      }
+      const command = buildResidentAllocationAddCommand({
+        operationId: makeId("workforce-assign", 20),
+        holdingId: current.holding.id,
+        expectedRevision: data.meta.revision,
+        personId,
+        buildingId: current.building.id,
+        functionId: target.functionId,
+        normalQd,
+        overtimeQd: 0
+      });
+      const key = `${current.holding.id}::${current.building.id}::${personId}::${target.functionId}`;
+      const ok = await this._executePlayerWorkforceCommand(command, {
+        key,
+        summary: `${person.name || "Житель"} · ${normalQd} QD`
+      });
+      this.requestRender();
+      if (ok) requestSkyholdAppRender();
+      return;
+    }
+    const out = {};
+    try {
+      const updated = await this._updateMutableBuilding(({ holding, building }) => {
+        const currentPerson = (holding.people?.list ?? []).find((row) => String(row?.id ?? "") === personId);
+        if (!canReadResident(currentPerson)) return SkyholdData.skipTransaction(false);
+        const lockKey = workAllocationTargetKey(building.id, target.functionId);
+        if ((holding.workforcePlan?.locks ?? []).some((row) => String(row?.personId ?? "") === personId && workforceKey(row) === lockKey)) {
+          out.reason = "Сначала снимите закрепление назначения.";
+          return SkyholdData.skipTransaction(false);
+        }
+        return manager._assignPersonToBuilding(holding, personId, building.id, { ...decision, functionId: target.functionId, out })
+          || SkyholdData.skipTransaction(false);
+      }, { reason: "unique-building:worker-change", requireHolding: true });
+      if (!updated) {
+        if (out.reason) ui.notifications?.warn?.(out.reason);
+        this.requestRender();
+        return;
+      }
+      this.requestRender();
+      requestSkyholdAppRender();
+    } catch (error) {
+      ui.notifications?.warn?.(error?.message || "Не удалось назначить жителя на работу.");
+      this.requestRender();
+    }
   }
 
   async _onPickBuildingImage(event) {

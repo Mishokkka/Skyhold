@@ -13,7 +13,12 @@
         "name": "Ветровая обсерватория",
         "type": "Инфраструктура",
         "status": "planned",
+        "workersMin": 0,
         "workersMax": 2,
+        "labor": {
+          "version": 2,
+          "capacityQd": 36
+        },
         "description": "Наблюдает за потоками ветра вокруг летающего острова."
       }
     ],

@@ -10,7 +10,8 @@ import { withResourceCatalog } from "../../../core/resources.js";
 import { normalizeLastEventRoll } from "../../../data/event-automation.js";
 import { adjustResidentAttributesForAgeTransition, ageGroupFromAge, ageThresholdsFor, raceKeyFromResident } from "../../../generators/resident-rules.js";
 import { isResidentInPopulation } from "../../../data/resident-presence.js";
-import { buildingServiceBlockReasons } from "../../../engines/economy/building-service.js";
+import { buildingMinOperationalQd } from "../../../data/labor-model.js";
+import { buildingServiceBlockReasons, traceFunctionQd, traceFunctionWorkerIds } from "../../../engines/economy/building-service.js";
 import { financePeriodIdentity } from "../../../engines/economy/finance-period.js";
 import { buildingCompositionStatus, workerMatchesCompositionRequirement } from "../../../engines/workers/building-qualification.js";
 import { SCHOOL_MILESTONE_REPORT_PREFIX } from "../../../engines/tenday/operation-payload.js";
@@ -195,12 +196,14 @@ async _prepareTendayOperation({ holdingId = "", qd = 40, rationUnitsPerResident 
   const readiness = await this._tendayReadinessContext(sourceSnapshot, {
     foodProjection: Number.isFinite(foodAvailable) ? { available: foodAvailable, needed: rawReport?.food?.needed } : null
   });
+  const schoolPeriodKey = financePeriodIdentity(previewHolding, periodQd).periodKey;
+  const periodSchool = this._schoolEducationContext(previewHolding, schoolPeriodKey);
   const recovery = this._advanceResidentRecovery(previewHolding, Math.floor(periodQd / 4));
   if (recovery.recovered) rawReport.work.push(`Выздоровело жителей: ${recovery.recovered}.`);
   // A game year is 240 days; count boundaries even when time advances by one day.
   const beforeAgeQd = Math.max(0, Number(sourceSnapshot?.gm?.calendaria?.lastQd) || 0);
   const elapsedYears = Math.floor((beforeAgeQd + periodQd) / 960) - Math.floor(beforeAgeQd / 960);
-  const agingOptions = { schoolPeriodKey: financePeriodIdentity(previewHolding, periodQd).periodKey };
+  const agingOptions = { schoolPeriodKey, school: periodSchool };
   const localAging = !calendariaGate.snapshot?.available && elapsedYears > 0
     ? this._advanceResidentAges(previewHolding, elapsedYears, agingOptions) : null;
   const calendarAdvance = this._commitCalendariaEconomyAdvance(previewHolding, calendariaGate, agingOptions);
@@ -351,10 +354,10 @@ _advanceResidentRecovery(holding, days = 0) {
   return { recovered };
 },
 
-_advanceResidentAges(holding, years = 1, { schoolPeriodKey = "" } = {}) {
+_advanceResidentAges(holding, years = 1, { schoolPeriodKey = "", school: periodSchool = null } = {}) {
   const count = Math.max(0, Math.floor(this._safeNumber(years, 0)));
   if (!count) return { aged: 0, changed: 0 };
-  const school = this._schoolEducationContext(holding, schoolPeriodKey);
+  const school = periodSchool ?? this._schoolEducationContext(holding, schoolPeriodKey);
   let aged = 0;
   let changed = 0;
   const education = [];
@@ -399,17 +402,34 @@ _advanceResidentAges(holding, years = 1, { schoolPeriodKey = "" } = {}) {
 _schoolEducationContext(holding, periodKey) {
   const teachers = new Set();
   let publicSchool = false;
+  const peopleById = new Map((holding?.people?.list ?? []).map((person) => [String(person?.id ?? ""), person]));
   for (const building of holding?.buildings?.list ?? []) {
     const id = `${String(building?.id ?? "")} ${String(building?.templateId ?? "")}`.toLowerCase();
     const name = String(building?.name ?? "").toLowerCase();
     if (building.functions?.culture !== true || !(id.includes("school") || name.includes("школ"))) continue;
-    if (!periodKey || building.serviceState?.periodKey !== periodKey) continue;
+    const state = building.serviceState;
+    if (!periodKey || state?.periodKey !== periodKey || state?.fuelBlocked === true) continue;
     const service = buildingServiceBlockReasons(holding, building, "culture");
-    if (!service.active || !(service.workforce.qd > 0)
-      || !Array.isArray(building.serviceState.activeWorkerIds)) continue;
-    const adults = service.workforce.workers.filter((person) => ageGroupFromAge(person.age, person.race, person.subrace) !== "Ре");
-    const minimum = Math.max(1, Math.floor(this._safeNumber(building.workersMin, 1)));
-    if (adults.length < minimum) continue;
+    const nonLaborReasons = (service.reasons ?? []).filter((reason) => !["workers-missing", "qd-missing", "result-missing", "service-stopped", "composition-missing"].includes(reason.code));
+    if (nonLaborReasons.length) continue;
+    const recordedIds = traceFunctionWorkerIds(state, "culture");
+    if (!recordedIds.length) continue;
+    const workerQd = state?.workedQdByWorkerAndFunction;
+    const workedPeople = recordedIds.map((workerId) => peopleById.get(workerId)).filter((person) => {
+      if (!person || person.dead || !isResidentInPopulation(person, holding)) return false;
+      if (this._safeNumber(person.injuredDays, 0) > 0) return false;
+      if (workerQd && typeof workerQd === "object") {
+        return traceFunctionQd({ workedQdByFunction: workerQd[String(person.id)] }, "culture") > 0;
+      }
+      return true;
+    });
+    if (!workedPeople.length) continue;
+    const totalWorkedQd = workerQd && typeof workerQd === "object"
+      ? workedPeople.reduce((sum, person) => sum + traceFunctionQd({ workedQdByFunction: workerQd[String(person.id)] }, "culture"), 0)
+      : workedPeople.length === recordedIds.length ? traceFunctionQd(state, "culture") : 0;
+    if (totalWorkedQd < Math.max(1, buildingMinOperationalQd(building))) continue;
+    const adults = workedPeople.filter((person) => ageGroupFromAge(person.age, person.race, person.subrace) !== "Ре");
+    if (!adults.length) continue;
     const composition = buildingCompositionStatus(building, adults, { excludeGroups: ["ЧУДОТВОРЕЦ"] });
     if (!composition.met) continue;
     for (const person of adults) {

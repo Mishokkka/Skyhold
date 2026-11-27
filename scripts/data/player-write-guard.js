@@ -12,7 +12,7 @@ import {
 } from "../engines/economy/construction-stages.js";
 import { normalizeStorageRoomId } from "../engines/storage/capacity.js";
 import { constructionLeaderQualification } from "../engines/workers/construction-leadership.js";
-import { holdingWorkerAdmissionIssues, workerAdmission } from "../engines/workers/building-qualification.js";
+import { holdingWorkerAdmissionIssues } from "../engines/workers/building-qualification.js";
 import {
   MAX_RESOURCE_BATCHES,
   protectedResourceBatchIds,
@@ -21,12 +21,13 @@ import {
   syncResourceRowBatches,
   takeResourceBatches
 } from "../core/resource-batches.js";
+import { residentActiveQd } from "./labor-primitives.js";
 import { validateHoldingWorkAllocations } from "./work-allocations.js";
 import { protectedSpecialRecordFields, specialMoraleModifier } from "../core/special-effects.js";
 import { isResidentAway, isResidentRestingOnShip } from "./resident-presence.js";
 import { isSheriffAppointment } from "./control-appointments.js";
-import { workforceChangeError, workforceIssueMessage } from "./workforce-plan.js";
-import { newHybridLaborIssues } from "./hybrid-labor.js";
+import { lockedAllocationChangeError, workforceIssueMessage } from "./workforce-plan.js";
+import { newLaborIssues, reservedOccupation } from "./labor-model.js";
 import { hiddenBuildingIds, residentHasHiddenWork } from "./access-guard.js";
 
 const MAX_PLAYER_CHANGE_PATHS = 250;
@@ -61,10 +62,7 @@ export function validatePlayerPatch(current, patch, _userId = null) {
   }
   const changes = Array.isArray(patch.changes) ? patch.changes : [];
   if (!changes.length) return { ok: true, changes: [] };
-  // A 200-resident plan is one atomic action. Keep the ordinary patch bound;
-  // the larger bound applies only to the tightly validated workforce fields.
-  const workforcePaths = changes.every((change) => /^holdings\.\d+\.(?:workforcePlan(?:\.|$)|people\.list\.\d+\.(?:workAllocationMode|workAllocations|workAssignment|staffAppointment)(?:\.|$)|buildings\.list\.\d+\.assignedWorkerIds(?:\.|$)|log(?:\.|$))/.test(change?.path ?? ""));
-  if (changes.length > (workforcePaths ? 4000 : MAX_PLAYER_CHANGE_PATHS)) return { ok: false, error: "Слишком много изменений за один запрос игрока." };
+  if (changes.length > MAX_PLAYER_CHANGE_PATHS) return { ok: false, error: "Слишком много изменений за один запрос игрока." };
 
   const badChange = changes.find((change) => !change || typeof change !== "object" || !change.path || typeof change.path !== "string");
   if (badChange) return { ok: false, error: "Некорректный путь изменения в patch-запросе игрока." };
@@ -246,7 +244,6 @@ function normalizePatchAction(value = "") {
 
 function patchActionForPath(path = "") {
   const rest = String(path ?? "").replace(/^holdings\.\d+\./, "");
-  if (/^workforcePlan(?:\.|$)/.test(rest)) return "buildings";
   if (isPlayerOverviewPath(rest)) return "overview";
   if (/^gm\.massCombat(\.|$)/.test(rest)) return "battle";
   if (/^gm\.defense(\.|$)/.test(rest)) return "defense";
@@ -254,7 +251,7 @@ function patchActionForPath(path = "") {
   if (/^special\./.test(rest) && isPlayerSpecialPath(rest)) return "special";
   if (/^buildings\.|^constructionCrews|^constructionCrewIds(\.\d+)?$/.test(rest) && isPlayerBuildingPath(rest)) return "buildings";
   if (/^people\.list\.\d+\.(workAssignment|role|home)$/.test(rest)) return "buildings";
-  if (/^people\.list\.\d+\.(workAllocationMode|workAllocations|staffAppointment)(\.|$)/.test(rest)) return "buildings";
+  if (/^people\.list\.\d+\.workAllocations(\.|$)/.test(rest)) return "buildings";
   if (/^people\./.test(rest) && isPlayerResidentPath(rest)) return "residents";
   return "";
 }
@@ -263,14 +260,13 @@ function isPlayerActionSideEffect(action = "", path = "") {
   const rest = String(path ?? "").replace(/^holdings\.\d+\./, "");
   if (action === "defense") {
     return /^people\.list\.\d+\.(workAssignment|role|home)$/.test(rest)
-      || /^people\.list\.\d+\.staffAppointment(?:\.|$)/.test(rest)
-      || /^buildings\.list\.\d+\.assignedWorkerIds(\.\d+)?$/.test(rest)
+      || /^people\.list\.\d+\.workAllocations(?:\.|$)/.test(rest)
       || /^constructionCrews(\.\d+)?\.(memberIds|leaderId)(\.\d+)?$/.test(rest)
       || /^constructionCrewIds(\.\d+)?$/.test(rest);
   }
   if (action === "buildings") {
     return /^people\.list\.\d+\.(workAssignment|role|home)$/.test(rest)
-      || /^people\.list\.\d+\.(workAllocationMode|workAllocations|staffAppointment)(\.|$)/.test(rest)
+      || /^people\.list\.\d+\.workAllocations(\.|$)/.test(rest)
       || /^log(?:\.\d+)?(?:\.|$)/.test(rest);
   }
   if (action === "construction") return isPlayerConstructionRestPath(rest);
@@ -308,9 +304,8 @@ function isPlayerDefensePath(rest) {
   const text = String(rest ?? "");
   if (/^gm\.defense\.(commanderId|notes)$/.test(text)) return true;
   if (/^gm\.defense\.squads(\.\d+)?(\.|$)/.test(text)) return true;
+  if (/^people\.list\.\d+\.workAllocations(?:\.|$)/.test(text)) return true;
   if (/^people\.list\.\d+\.(workAssignment|role|home)$/.test(text)) return true;
-  if (/^people\.list\.\d+\.staffAppointment(?:\.|$)/.test(text)) return true;
-  if (/^buildings\.list\.\d+\.assignedWorkerIds(\.\d+)?$/.test(text)) return true;
   if (/^constructionCrews\.\d+\.(memberIds|leaderId)(?:\.\d+)?$/.test(text)) return true;
   if (/^constructionCrewIds(\.\d+)?$/.test(text)) return true;
   return false;
@@ -356,12 +351,11 @@ function isIgnorablePlayerDiff(path) {
 
 function isPlayerBuildingPath(rest) {
   const text = String(rest ?? "");
-  if (/^workforcePlan(?:\.|$)/.test(text)) return true;
   if (text.startsWith("gm.")) return false;
   if (/^people\.list\.\d+\.(workAssignment|role|home)$/.test(text)) return true;
-  if (/^people\.list\.\d+\.(workAllocationMode|workAllocations|staffAppointment)(\.|$)/.test(text)) return true;
+  if (/^people\.list\.\d+\.workAllocations(\.|$)/.test(text)
+    && !/^people\.list\.\d+\.workAllocations\.\d+\.(volunteer|volunteerReason)$/.test(text)) return true;
   if (/^buildings\.list\.\d+\.(name|visibility|img|image|icon|constructionCrewId)$/.test(text)) return true;
-  if (/^buildings\.list\.\d+\.assignedWorkerIds(?:\.\d+)?$/.test(text)) return true;
   if (/^buildings\.list\.\d+\.productionLines\.\d+\.(active|storageRoomId)$/.test(text)) return true;
   if (/^buildings\.list\.\d+\.agriculture\.config\.(enabled|activeCropId|outputRoomId|gmPriority|sow|harvest)$/.test(text)) return true;
   if (/^buildings\.list\.\d+\.housing\.notes$/.test(text)) return true;
@@ -394,33 +388,11 @@ function validatePlayerPatchSemantics(current, proposed, action, holdingIndex, p
   if (duplicateIdError) return { ok: false, error: duplicateIdError };
   const identityError = validateRowIdentityChanges(holding, nextHolding);
   if (identityError) return { ok: false, error: identityError };
-  if (action === "buildings") {
+  if (["buildings", "defense"].includes(action)) {
     const hidden = hiddenBuildingIds(holding, false);
-    if (hidden.size && paths.some((path) => changesHiddenResidentAssignment(path, holding, nextHolding, hidden))) {
+    if (paths.some((path) => changesHiddenResidentAssignment(path, holding, nextHolding, hidden))) {
       return { ok: false, error: "Назначение недоступно. Обновите окно." };
     }
-  }
-  if (action === "defense") {
-    const priorPeople = new Map((holding.people?.list ?? []).map((person) => [String(person.id), person]));
-    const defense = nextHolding.gm?.defense ?? {};
-    const enlistedIds = new Set([defense.commanderId, ...(defense.squads ?? [])
-      .flatMap((squad) => [squad.sergeantId, ...(squad.memberIds ?? [])])].filter(Boolean).map(String));
-    for (const person of nextHolding.people?.list ?? []) {
-      const previous = priorPeople.get(String(person.id))?.staffAppointment ?? null;
-      const next = person.staffAppointment ?? null;
-      if (sameJson(previous, next)) continue;
-      // Defense may release a civilian contract only as part of enlisting its owner.
-      if (next || !enlistedIds.has(String(person.id))) {
-        return { ok: false, error: "Постоянное назначение в здание меняется через право на здания; оборона позволяет только снять его при переводе в отряд." };
-      }
-    }
-  }
-  const workforceError = workforceChangeError(holding, nextHolding);
-  if (workforceError) return { ok: false, error: workforceError };
-  const oldOperationIds = new Set((holding.log ?? []).map((row) => row.operationId));
-  const plannerOperation = (nextHolding.log ?? []).find((row) => row.payload?.workforcePlanner && !oldOperationIds.has(row.operationId));
-  if (plannerOperation && plannerOperation.payload.expectedRevision !== Number(current.meta?.revision)) {
-    return { ok: false, error: "Общий план устарел: поселение изменилось. Черновик нужно сверить заново." };
   }
   for (const person of nextHolding.people?.list ?? []) {
     const original = (holding.people?.list ?? []).find((row) => String(row.id) === String(person.id));
@@ -432,9 +404,17 @@ function validatePlayerPatchSemantics(current, proposed, action, holdingIndex, p
       }
     }
   }
-  const workAllocationCheck = validateHoldingWorkAllocations(nextHolding, { previousHolding: holding });
+  const lockError = lockedAllocationChangeError(holding, nextHolding, holding.workforcePlan, { isGM: false });
+  if (lockError) return { ok: false, error: lockError };
+  const priorPeople = new Map((holding.people?.list ?? []).map((person) => [String(person.id ?? ""), person]));
+  const replacedPersonId = (nextHolding.people?.list ?? []).filter((person) => {
+    const prior = priorPeople.get(String(person.id ?? ""));
+    const priorOccupation = prior && reservedOccupation(holding, prior);
+    return priorOccupation && priorOccupation.kind !== "ship" && !reservedOccupation(nextHolding, person);
+  }).map((person) => String(person.id ?? ""));
+  const workAllocationCheck = validateHoldingWorkAllocations(nextHolding, { previousHolding: holding, replacedPersonId });
   if (!workAllocationCheck.ok) return { ok: false, error: workforceIssueMessage(nextHolding, workAllocationCheck.issues[0]) };
-  const admissionIssues = newHybridLaborIssues(holdingWorkerAdmissionIssues(holding), holdingWorkerAdmissionIssues(nextHolding));
+  const admissionIssues = newLaborIssues(holdingWorkerAdmissionIssues(holding), holdingWorkerAdmissionIssues(nextHolding));
   if (admissionIssues.length) return { ok: false, error: workforceIssueMessage(nextHolding, admissionIssues[0]) };
 
   if (action === "storage") return validatePlayerStorageSemantics(holding, nextHolding, paths);
@@ -451,7 +431,7 @@ function validatePlayerPatchSemantics(current, proposed, action, holdingIndex, p
 }
 
 function changesHiddenResidentAssignment(path, holding, nextHolding, hidden) {
-  const match = path.match(/^holdings\.\d+\.people\.list\.(\d+)\.(workAssignment|workAllocationMode|workAllocations|staffAppointment|role|home)(?:\.|$)/);
+  const match = path.match(/^holdings\.\d+\.people\.list\.(\d+)\.(workAssignment|workAllocations|role|home)(?:\.|$)/);
   if (!match) return false;
   const before = holding.people?.list?.[Number(match[1])];
   const after = nextHolding.people?.list?.[Number(match[1])];
@@ -1107,10 +1087,7 @@ function validatePlayerBuildingSemantics(_current = {}, holding = {}, nextHoldin
   const residentsById = new Map(residents.map((row) => [String(row?.id ?? ""), row]).filter(([id]) => Boolean(id)));
   const priorAssignments = new Map((holding?.people?.list ?? []).map((row) => [String(row.id ?? ""), String(row.workAssignment ?? "")]));
   const residentIds = new Set(residentsById.keys());
-  const explicitResidentIds = new Set(residents
-    .filter((row) => String(row?.workAllocationMode ?? "") === "explicit")
-    .map((row) => String(row?.id ?? ""))
-    .filter(Boolean));
+  const explicitResidentIds = new Set(residents.filter((row) => residentActiveQd(row) > 0).map((row) => String(row.id)));
   const crewRows = Array.isArray(nextHolding?.constructionCrews) ? nextHolding.constructionCrews : [];
   const crewIds = new Set(crewRows.map((row) => String(row?.id ?? "")).filter(Boolean));
   const defense = nextHolding?.gm?.defense ?? {};
@@ -1174,32 +1151,6 @@ function validatePlayerBuildingSemantics(_current = {}, holding = {}, nextHoldin
       return buildingError(`Игрок не может менять templateId существующей постройки: ${row?.name ?? id}`);
     }
 
-    const workers = Array.isArray(row?.assignedWorkerIds) ? row.assignedWorkerIds.map((value) => String(value ?? "")).filter(Boolean) : [];
-    const workerLimit = Math.max(0, Math.floor(toNumber(old?.workersMax, 0)));
-    if (workers.length > workerLimit || workers.length !== new Set(workers).size || workers.some((workerId) => !residentIds.has(workerId))) {
-      return buildingError(`Некорректное назначение работников в постройке: ${row?.name ?? id}`);
-    }
-    const priorWorkers = new Set((old.assignedWorkerIds ?? []).map(String));
-    for (const workerId of workers) {
-      const resident = residentsById.get(workerId);
-      const continuing = priorWorkers.has(workerId) && priorAssignments.get(workerId) === id;
-      // The generic patch cannot change the admission rules or qualifying attributes.
-      if (!continuing) {
-        const admission = workerAdmission(row, resident);
-        if (admission.hard && !admission.eligible && !admission.overridden) {
-          return buildingError(`Работник '${resident?.name ?? workerId}' не проходит обязательный допуск постройки '${row?.name ?? id}': ${admission.text}.`);
-        }
-      }
-      if (explicitResidentIds.has(workerId)) {
-        return { ok: false, error: "Житель с явным планом QD не может одновременно занимать legacy-слот постройки." };
-      }
-      const owner = `building:${id}`;
-      const claimError = claimAssignment(workerId, owner, row?.name ?? id, continuing);
-      if (claimError) return buildingError(claimError);
-      if (String(residentsById.get(workerId)?.workAssignment ?? "") !== id) {
-        return buildingError(`Рабочий '${residentsById.get(workerId)?.name ?? workerId}' не подтверждает назначение в постройку '${row?.name ?? id}'.`);
-      }
-    }
     const crewId = String(row?.constructionCrewId ?? "");
     if (crewId && !crewIds.has(crewId)) {
       return buildingError(`Назначенная стройбригада не найдена: ${row?.name ?? id}`);

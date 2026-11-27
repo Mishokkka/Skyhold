@@ -2,7 +2,7 @@ import { MODULE_ID } from "../../data/constants.js";
 import { DisclosureState } from "../common/disclosure-state.js";
 import { SkyholdData } from "../../data/store.js";
 import { SaveStatus, syncSaveStatus } from "../common/save-status.js";
-import { findReadableHoldingEntry } from "../../data/access-guard.js";
+import { canReadResident, findReadableHoldingEntry } from "../../data/access-guard.js";
 import { holdingPermissionContext } from "../../data/holding-permissions.js";
 import { bindGlobalInputGuard, bindInputGuards, unbindGlobalInputGuard } from "../../utils/input-guards.js";
 import { getSkyholdManager, requestSkyholdAppRender } from "../registry.js";
@@ -82,7 +82,7 @@ export class SkyholdResidentEditor extends WindowFrameMixin(RenderSchedulerMixin
     const { holding, index: holdingIndex } = findReadableHoldingEntry(data, this.holdingId, { fallback: false });
     const manager = this._manager();
     const people = holding?.people?.list ?? [];
-    const matching = people.filter((row) => String(row?.id ?? "") === this.personId);
+    const matching = people.filter((row) => canReadResident(row) && String(row?.id ?? "") === this.personId);
     const person = matching.length === 1 ? matching[0] : null;
     const permissions = holdingPermissionContext(holding);
     const canEdit = Boolean(person && manager && permissions.canEditResidents);
@@ -137,15 +137,23 @@ export class SkyholdResidentEditor extends WindowFrameMixin(RenderSchedulerMixin
     this._selectionDisclosures.bind(root);
     const editor = root.querySelector(".fbls-person-editor.v2");
     if (editor && context.canWriteField) {
-      const allocationMode = editor.querySelector("[data-field$='.workAllocationMode']")?.dataset.field;
+      const personPath = editor.querySelector("[data-field]")?.dataset?.field?.match(/^(holdings\.\d+\.people\.list\.\d+)\./)?.[1] ?? "";
+      const workAllocationsPath = personPath ? `${personPath}.workAllocations` : "";
       for (const field of editor.querySelectorAll("[data-field], [data-work-assignment-field], [data-work-allocation-target], [data-trait-add-field], [data-traits-field]")) {
         const { field: path, workAssignmentField, workAllocationTarget, traitAddField, traitsField } = field.dataset;
-        const allocationPath = workAllocationTarget === undefined ? "" : allocationMode;
+        const allocationPath = workAllocationTarget === undefined ? "" : workAllocationsPath;
         if (!context.canWriteField(path || workAssignmentField || allocationPath || traitAddField || traitsField)) field.disabled = true;
       }
       captureResidentEditorDraft(editor, context.draftPerson);
     }
     this._bindEditorEvents(root);
+    const selector = this._fieldFocusSelector;
+    this._fieldFocusSelector = "";
+    if (selector && (!document.activeElement || document.activeElement === document.body)) {
+      const field = root.querySelector(selector) ?? (selector.startsWith("[data-work-allocation-target]")
+        ? root.querySelector('[data-action="add-work-allocation"]:not(:disabled), .person-name input:not(:disabled)') : null);
+      field?.focus({ preventScroll: true });
+    }
     focusApplicationContent(this, { root, options, preferredSelector: ".person-name input" });
   }
 
@@ -159,7 +167,7 @@ export class SkyholdResidentEditor extends WindowFrameMixin(RenderSchedulerMixin
     }, listener);
 
     root.querySelectorAll("[data-field]").forEach((field) => field.addEventListener("change", () => {
-      return this._saveDraft(field, { render: String(field.dataset.field ?? "").endsWith(".workAllocationMode") });
+      return this._saveDraft(field, { render: String(field.dataset.field ?? "").includes(".workAllocations.") });
     }, listener));
     root.querySelectorAll("[data-work-allocation-target]").forEach((field) => field.addEventListener("change", () => {
       return this._saveDraft(field, { render: true });
@@ -227,6 +235,13 @@ export class SkyholdResidentEditor extends WindowFrameMixin(RenderSchedulerMixin
   }
 
   _saveDraft(element = this.element, options = {}) {
+    if (options.render && globalThis.document?.activeElement === element) {
+      const field = element.getAttribute("data-field");
+      if (field) this._fieldFocusSelector = `[data-field="${globalThis.CSS.escape(field)}"]`;
+      else if (element.hasAttribute("data-work-allocation-target") && element.dataset.allocationId) {
+        this._fieldFocusSelector = `[data-work-allocation-target][data-allocation-id="${globalThis.CSS.escape(element.dataset.allocationId)}"]`;
+      }
+    }
     const target = element?.querySelector?.(".fbls-person-editor.v2") ?? element;
     return this._queueDraftSave((manager) => manager._savePersonEditorDraft({ currentTarget: target }), options);
   }

@@ -1,6 +1,6 @@
 import { isPublicSpecialNote, specialMoraleModifier } from "../../core/special-effects.js";
-import { residentLaborCapacity } from "../../data/labor-budget.js";
-import { hiddenBuildingIds, residentHasHiddenWork } from "../../data/access-guard.js";
+import { normalLaborQdPerTenday, residentLaborCapacity } from "../../data/labor-budget.js";
+import { canReadResident, hiddenBuildingIds, residentHasHiddenWork } from "../../data/access-guard.js";
 import { selectionSummary } from "../common/selection-summary.js";
 import { residentTraitTooltip } from "../common/resident-trait-chips.js";
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
@@ -37,9 +37,13 @@ import {
   residentSuitableForSquadType
 } from "../../data/military-resident-rules.js";
 import {
+  buildingAcceptsWorkers,
+  buildingLaborCapacityQd,
+  buildingWorkReservations
+} from "../../data/labor-model.js";
+import {
   buildWorkAllocationTargets,
   validateWorkAllocationPlan,
-  WORK_ALLOCATION_MODE_EXPLICIT,
   workAllocationTargetKey
 } from "../../data/work-allocations.js";
 
@@ -84,16 +88,17 @@ _preparePersonRows(holding, canEdit = false, mode = "living", applyFilters = tru
   const canEditInlineWork = options.canEditInlineWork ?? canEdit;
   const housingIndex = this._residentHousingIndex(holding);
   const workOptionsContext = options?.workOptionsContext ?? this._residentWorkOptionsContext(holding);
-  const workAssignments = this._peopleWorkAssignments(holding, workOptionsContext);
+  const workDetails = this._peopleWorkDetails?.(holding, workOptionsContext);
   const medicalIds = new Set();
   try {
-    const assignments = this._medicalAssignments?.(holding);
+    const assignments = this._medicalAssignments?.(holding, null, { publicOnly: !globalThis.game?.user?.isGM });
     for (const entry of assignments?.values?.() ?? []) {
       for (const patient of entry?.patients ?? []) medicalIds.add(String(patient?.id ?? ""));
     }
   } catch (_error) {}
   const sourceRows = (holding?.people?.list ?? [])
     .map((row, index) => ({ row, index }))
+    .filter(({ row }) => canReadResident(row))
     .filter(({ row }) => mode === "cemetery" ? Boolean(row?.dead) : !row?.dead)
     .filter(({ row }) => mode === "ship-crew" ? isResidentRestingOnShip(row, holding)
       : mode === "residents" ? !isResidentRestingOnShip(row, holding) : true);
@@ -109,16 +114,20 @@ _preparePersonRows(holding, canEdit = false, mode = "living", applyFilters = tru
     const isChild = this._isChildResident(row);
     const canWork = this._canResidentWork(row, holding);
     const shipAssignment = residentShipAssignment(row);
-    const awayOnShip = isResidentAway(row);
+    const awayOnShip = isResidentAway(row) && shipAssignment?.shoreDuty !== true;
     const assignedShip = shipForResident(row, holding) ?? (awayOnShip ? shipsById.get(String(shipAssignment?.shipId ?? "")) : null);
     const restingOnShip = isResidentRestingOnShip(row, holding);
     const shipPresenceLabel = awayOnShip
       ? `На корабле «${String(assignedShip?.name || shipAssignment?.shipId || "неизвестный корабль")}»`
       : restingOnShip ? `Отдых на корабле «${assignedShip?.name || "корабль"}»` : "";
     const workHidden = residentHasHiddenWork(holding, row, workOptionsContext.hiddenBuildingIds);
-    const rawWorkLabel = workHidden ? "Назначение скрыто" : workAssignments.get(String(row.id)) || row.role || "";
+    const workDetail = workDetails?.get(String(row.id)) ?? null;
+    const rawWorkLabel = workHidden ? "Назначение скрыто" : (workDetail?.label ?? (String(row.role ?? "") === "План QD" ? "" : row.role) ?? "");
     const settlementWorkLabel = rawWorkLabel && !["Свободен", "Без работы"].includes(String(rawWorkLabel)) ? rawWorkLabel : (isChild ? "Ребенок" : (rawWorkLabel || "Без работы"));
     const workLabel = shipPresenceLabel || settlementWorkLabel;
+    const workTooltip = workHidden
+      ? "Назначение скрыто"
+      : (shipPresenceLabel || workDetail?.tooltip || settlementWorkLabel);
     const homeHidden = Boolean(workOptionsContext.hiddenBuildingIds?.size
       && workOptionsContext.hiddenBuildingIds.has(String(this._findHomeBuilding(holding, row.home, housingIndex)?.id)));
     const homeLabel = homeHidden ? "Жильё скрыто" : this._homeLabel(row, holding, housingIndex);
@@ -145,13 +154,22 @@ _preparePersonRows(holding, canEdit = false, mode = "living", applyFilters = tru
       ? String(options.editorPersonId ?? "")
       : String(this.editingPersonId ?? "");
     const editing = canEdit && String(row.id ?? "") === editorPersonId;
+    const displayBase = { ...row };
+    if (workHidden) {
+      delete displayBase.workAllocations;
+      delete displayBase.workAssignment;
+      delete displayBase.role;
+    }
+    if (homeHidden) delete displayBase.home;
     const prepared = {
-      ...row,
+      ...displayBase,
       _index: index,
       ageGroup: this._ageGroup(row),
       ageLine: this._ageLine(row),
       raceLine,
       workLabel,
+      workTooltip,
+      mixedWork: !workHidden && !shipPresenceLabel && Boolean(workDetail?.mixed),
       workHidden,
       homeHidden,
       awayOnShip,
@@ -185,6 +203,7 @@ _preparePersonRows(holding, canEdit = false, mode = "living", applyFilters = tru
         .join(" "),
       editing
     };
+    if (!editing) delete prepared.workAllocations;
 
     if (canEditInlineWork && !workHidden) {
       const inlineWork = this._residentInlineWorkOption(row, workLabel, workOptionsContext);
@@ -200,10 +219,11 @@ _preparePersonRows(holding, canEdit = false, mode = "living", applyFilters = tru
       workAllocationTargets ??= buildWorkAllocationTargets(holding)
         .filter((target) => !workOptionsContext.hiddenBuildingIds?.has(String(target.sourceId)));
       workAllocationTargetMap ??= new Map(workAllocationTargets.map((target) => [target.key, target]));
-      const laborCapacity = residentLaborCapacity(row);
+      const laborCapacity = residentLaborCapacity(row, normalLaborQdPerTenday(holding));
       const normalWorkCap = canWork ? laborCapacity.normalQd : 0;
       const overtimeWorkCap = canWork ? laborCapacity.overtimeQd : 0;
-      const workAllocationValidation = validateWorkAllocationPlan(row?.workAllocations, {
+      const workAllocationValidation = validateWorkAllocationPlan(displayBase.workAllocations, {
+        holding,
         targets: workAllocationTargetMap,
         maximumNormalQd: normalWorkCap,
         maximumOvertimeQd: overtimeWorkCap
@@ -231,11 +251,7 @@ _preparePersonRows(holding, canEdit = false, mode = "living", applyFilters = tru
       Object.assign(prepared, {
         homeOptions: homeHidden ? [] : this._homeOptions(holding, row.home, housingIndex, workOptionsContext.hiddenBuildingIds),
         workOptions: workHidden ? [] : this._workOptions(holding, row, workOptionsContext),
-        workAllocationExplicit: String(row?.workAllocationMode ?? "") === WORK_ALLOCATION_MODE_EXPLICIT,
-        workAllocationModeOptions: [
-          { value: "legacy", label: "Одно основное назначение", selected: String(row?.workAllocationMode ?? "legacy") !== WORK_ALLOCATION_MODE_EXPLICIT },
-          { value: WORK_ALLOCATION_MODE_EXPLICIT, label: "Явный план QD", selected: String(row?.workAllocationMode ?? "") === WORK_ALLOCATION_MODE_EXPLICIT }
-        ],
+        workAllocationExplicit: Array.isArray(row?.workAllocations) && row.workAllocations.length > 0,
         workAllocations,
         workAllocationNormalQd: workAllocationValidation.totals.normalQd,
         workAllocationOvertimeQd: workAllocationValidation.totals.overtimeQd,
@@ -487,50 +503,52 @@ _beliefOptions(current = "") {
 _residentWorkOptionsContext(holding) {
   const hidden = hiddenBuildingIds(holding);
   const allBuildings = (holding?.buildings?.list ?? []).filter((building) => !hidden.has(String(building.id)));
-  const livingPeople = (holding?.people?.list ?? []).filter((person) => !person?.dead);
   const crews = this._constructionCrews(holding);
   const buildingsById = new Map();
   const crewsById = new Map();
   const availableBuildingIds = new Set();
   const buildingRoleNames = new Set();
-  const residentAssignments = new Map();
+  const allocatedQdByBuilding = buildingWorkReservations(holding);
 
-  for (const person of livingPeople) {
-    const buildingId = String(person?.workAssignment ?? "");
-    const personId = String(person?.id ?? "");
-    if (!buildingId || !personId) continue;
-    if (!residentAssignments.has(buildingId)) residentAssignments.set(buildingId, new Set());
-    residentAssignments.get(buildingId).add(personId);
-  }
+  const targets = buildWorkAllocationTargets(holding);
+  const buildingsWithAvailableTarget = new Set(targets.filter((target) => target.available).map((target) => String(target.sourceId)));
 
   for (const building of allBuildings) {
     const id = String(building?.id ?? "");
     const name = String(building?.name ?? "").trim();
     if (id) buildingsById.set(id, building);
     if (name) buildingRoleNames.add(name);
-    const max = Math.max(0, this._safeNumber(building?.workersMax, 0));
-    const occupiedIds = new Set([
-      ...(Array.isArray(building?.assignedWorkerIds) ? building.assignedWorkerIds : []),
-      ...(residentAssignments.get(id) ?? [])
-    ].map((value) => String(value ?? "")).filter(Boolean));
+    const cap = buildingLaborCapacityQd(building);
+    const usedQd = allocatedQdByBuilding.get(id) ?? 0;
     const operational = buildingOperationalState(building).operational;
-    if (id && operational && max > 0 && occupiedIds.size < max) availableBuildingIds.add(id);
+    if (id && operational && buildingAcceptsWorkers(building) && buildingsWithAvailableTarget.has(id) && (cap === null || usedQd < cap)) {
+      availableBuildingIds.add(id);
+    }
   }
   for (const crew of crews) {
     const id = String(crew?.id ?? "");
     if (id) crewsById.set(id, crew);
   }
 
+  const targetLabelsByKey = new Map(targets.map((target) => [target.key, target]));
+
   return { holding, allBuildings, buildingsById, crews, crewsById, availableBuildingIds, buildingRoleNames,
-    hiddenBuildingIds: hidden, buildingOptionsCache: new Map() };
+    targetLabelsByKey, hiddenBuildingIds: hidden, buildingOptionsCache: new Map(),
+    allocatedQdByBuilding, buildingsWithAvailableTarget };
 },
 
-_residentWorkOptionBuildings(context, selected = "") {
-  const key = String(selected ?? "");
+_residentWorkOptionBuildings(context, selected = "", person = null) {
+  const key = JSON.stringify([selected, person?.id]);
   if (context.buildingOptionsCache.has(key)) return context.buildingOptionsCache.get(key);
+  const ownReservations = person ? buildingWorkReservations({ people: { list: [person] } }) : new Map();
   const buildings = context.allBuildings.filter((building) => {
     const id = String(building?.id ?? "");
-    return id && (key === id || context.availableBuildingIds.has(id));
+    if (!id) return false;
+    if (id === selected || context.availableBuildingIds.has(id)) return true;
+    const own = ownReservations.get(id) ?? 0;
+    const capacity = buildingLaborCapacityQd(building);
+    return own > 0 && capacity > 0 && context.buildingsWithAvailableTarget.has(id)
+      && (context.allocatedQdByBuilding.get(id) ?? 0) - own < capacity;
   });
   context.buildingOptionsCache.set(key, buildings);
   return buildings;
@@ -552,6 +570,11 @@ _residentWorkOptionCatalog(context) {
     { value: "soldier", label: "Солдат", kind: "soldier" },
     { value: "other", label: "Другое", kind: "other" }
   ];
+},
+
+_residentActiveWorkAllocations(person = {}) {
+  return (person?.workAllocations ?? []).filter((row) => String(row?.sourceId ?? "").trim()
+    && (Math.max(0, this._safeNumber(row?.normalQd, 0)) + Math.max(0, this._safeNumber(row?.overtimeQd, 0)) > 0));
 },
 
 _residentInlineWorkOption(person = {}, workLabel = "", workContext = null) {
@@ -582,31 +605,43 @@ _residentInlineWorkOption(person = {}, workLabel = "", workContext = null) {
     if (crew) return { value: selected, label: crew.name || "Стройбригада", freeLabel, canWork };
     return free;
   }
-  const building = context.buildingsById.get(selected);
-  if (building) return { value: selected, label: building.name || workLabel || "Без названия", freeLabel, canWork };
   if (selected === "soldier") return { value: "soldier", label: "Солдат", freeLabel, canWork };
   if (selected === "other") return { value: "other", label: "Другое", freeLabel, canWork };
+
+  const activeAllocations = this._residentActiveWorkAllocations(person);
+  const uniqueSources = [...new Set(activeAllocations.map((row) => String(row.sourceId)))];
+  if (uniqueSources.length >= 2) {
+    return { value: "__mixed__", label: "Смешанная", freeLabel, canWork };
+  }
+  const effectiveBuildingId = uniqueSources.length === 1 ? uniqueSources[0] : selected;
+  const building = context.buildingsById.get(effectiveBuildingId);
+  if (building) return { value: effectiveBuildingId, label: building.name || workLabel || "Без названия", freeLabel, canWork };
   if (selected) return free;
   if (/^солдат$/i.test(role)) return { value: "soldier", label: "Солдат", freeLabel, canWork };
-  if (role && !["Свободен", "Без работы", "Ребенок"].includes(role) && !context.buildingRoleNames.has(role)) {
+  if (role && !["Свободен", "Без работы", "Ребенок", "План QD"].includes(role) && !context.buildingRoleNames.has(role)) {
     return { value: "other", label: "Другое", freeLabel, canWork };
   }
   return free;
 },
 
 _workOptions(holding, person = {}, workContext = null) {
-  const selected = String(person?.workAssignment ?? "");
+  const rawSelected = String(person?.workAssignment ?? "");
+  const activeAllocations = rawSelected ? [] : this._residentActiveWorkAllocations(person);
+  const uniqueSources = [...new Set(activeAllocations.map((row) => String(row.sourceId)))];
+  const isMixed = uniqueSources.length >= 2;
+  const selected = isMixed ? "__mixed__" : (uniqueSources.length === 1 ? uniqueSources[0] : rawSelected);
   const role = String(person?.role ?? "").trim();
   const context = workContext ?? this._residentWorkOptionsContext(holding);
   const isChild = this._isChildResident(person);
   const canWork = this._canResidentWork(person, holding);
   const freeLabel = isChild ? "Ребенок" : "Свободен";
-  const buildings = canWork ? this._residentWorkOptionBuildings(context, selected) : [];
+  const buildings = canWork ? this._residentWorkOptionBuildings(context, isMixed ? "" : selected, person) : [];
   const crews = canWork ? context.crews : [];
   const leaderCrew = selected.startsWith("construction-leader:")
     ? context.crewsById.get(selected.slice("construction-leader:".length)) : null;
   const options = [
-    { value: "", label: freeLabel, selected: !selected && (!role || role === "Свободен" || role === "Без работы" || role === "Ребенок") },
+    ...(isMixed ? [{ value: "__mixed__", label: "Смешанная", selected: true }] : []),
+    { value: "", label: freeLabel, selected: !selected && (!role || role === "Свободен" || role === "Без работы" || role === "Ребенок" || role === "План QD") },
     // Leadership is appointed in the crew editor; retain the current position here.
     ...(leaderCrew ? [{ value: selected, label: `Руководитель: ${leaderCrew.name || "Стройбригада"}`, selected: true }] : []),
     ...crews.map((crew) => ({
@@ -621,7 +656,7 @@ _workOptions(holding, person = {}, workContext = null) {
     }))
   ];
   if (canWork) options.push({ value: "soldier", label: "Солдат", selected: selected === "soldier" || (!selected && /^солдат$/i.test(role)) });
-  if (canWork || selected === "other") options.push({ value: "other", label: "Другое", selected: selected === "other" || (!selected && role && !["Свободен", "Без работы", "Ребенок"].includes(role) && !/^солдат$/i.test(role) && !context.buildingRoleNames.has(role)) });
+  if (canWork || selected === "other") options.push({ value: "other", label: "Другое", selected: selected === "other" || (!selected && role && !["Свободен", "Без работы", "Ребенок", "План QD"].includes(role) && !/^солдат$/i.test(role) && !context.buildingRoleNames.has(role)) });
   return options;
 },
 
@@ -629,8 +664,9 @@ _isCustomWork(person = {}, holding = null, workContext = null) {
   const selected = String(person?.workAssignment ?? "");
   if (selected === "other") return true;
   if (selected) return false;
+  if (this._residentActiveWorkAllocations(person).length) return false;
   const role = String(person?.role ?? "").trim();
-  if (!role || role === "Свободен" || role === "Без работы" || role === "Ребенок") return false;
+  if (!role || role === "Свободен" || role === "Без работы" || role === "Ребенок" || role === "План QD") return false;
   const context = workContext ?? this._residentWorkOptionsContext(holding);
   return !context.buildingRoleNames.has(role);
 },
@@ -681,42 +717,77 @@ _residentFilterOptions(holding) {
   };
 },
 
-_peopleWorkAssignments(holding, workContext = null) {
-  const map = new Map();
+_peopleWorkDetails(holding, workContext = null) {
+  const details = new Map();
   const buildings = workContext?.allBuildings ?? (holding?.buildings?.list ?? []);
   const buildingsById = workContext?.buildingsById ?? new Map(buildings.map((building) => [String(building.id), building]));
   const crews = workContext?.crews ?? this._constructionCrews(holding);
   const crewsById = workContext?.crewsById ?? new Map(crews.map((crew) => [String(crew.id), crew]));
+  const targetLabelsByKey = workContext?.targetLabelsByKey ?? new Map(buildWorkAllocationTargets(holding).map((target) => [target.key, target]));
   for (const person of holding?.people?.list ?? []) {
     if (person?.dead) continue;
     const id = String(person?.id ?? "");
     const selected = String(person?.workAssignment ?? "");
     if (!id) continue;
-    if (selected === "construction") map.set(id, crews[0]?.name || "Стройбригада");
-    else if (selected.startsWith("construction-leader:")) {
+    if (selected === "construction") {
+      const label = crews[0]?.name || "Стройбригада";
+      details.set(id, { label, tooltip: label, mixed: false });
+    } else if (selected.startsWith("construction-leader:")) {
       const crew = crewsById.get(selected.slice("construction-leader:".length));
-      map.set(id, `Руководитель: ${crew?.name || "Стройбригада"}`);
-    }
-    else if (selected.startsWith("construction:")) {
+      const label = `Руководитель: ${crew?.name || "Стройбригада"}`;
+      details.set(id, { label, tooltip: label, mixed: false });
+    } else if (selected.startsWith("construction:")) {
       const crewId = selected.split(":")[1] || "";
-      map.set(id, crewsById.get(crewId)?.name || "Стройбригада");
+      const label = crewsById.get(crewId)?.name || "Стройбригада";
+      details.set(id, { label, tooltip: label, mixed: false });
+    } else if (selected === "soldier") {
+      const label = String(person?.role ?? "").trim() || "Солдат";
+      details.set(id, { label, tooltip: label, mixed: false });
+    } else if (selected === "defenseCommander") {
+      const label = String(person?.role ?? "").trim() || "Командир обороны";
+      details.set(id, { label, tooltip: label, mixed: false });
+    } else if (selected === "other") {
+      const label = String(person?.role ?? "").trim() || "Другое";
+      details.set(id, { label, tooltip: label, mixed: false });
+    } else {
+      const activeAllocations = this._residentActiveWorkAllocations(person);
+      if (activeAllocations.length) {
+        const lines = activeAllocations.map((allocation) => {
+          const bName = buildingsById.get(String(allocation.sourceId))?.name || "Здание";
+          const target = targetLabelsByKey.get(workAllocationTargetKey(allocation.sourceId, allocation.functionId));
+          const fnName = target?.functionLabel || (allocation.functionId === "service" ? "Обслуживание" : String(allocation.functionId || ""));
+          const qd = Math.max(0, this._safeNumber(allocation.normalQd, 0));
+          const ot = Math.max(0, this._safeNumber(allocation.overtimeQd, 0));
+          const qdText = `${qd} QD${ot ? ` + ${ot} OT` : ""}`;
+          return fnName ? `${bName} (${fnName}): ${qdText}` : `${bName}: ${qdText}`;
+        });
+        const uniqueAllocationSources = [...new Set(activeAllocations.map((row) => String(row.sourceId)))];
+        if (uniqueAllocationSources.length >= 2) {
+          details.set(id, { label: "Смешанная", tooltip: lines.join("\n"), mixed: true });
+        } else {
+          const label = buildingsById.get(uniqueAllocationSources[0])?.name || "Здание";
+          details.set(id, { label, tooltip: lines.join("\n"), mixed: false });
+        }
+      } else if (person?.role && String(person.role) !== "План QD") {
+        const label = String(person.role);
+        details.set(id, { label, tooltip: label, mixed: false });
+      }
     }
-    else if (selected === "other") map.set(id, String(person?.role ?? "").trim() || "Другое");
-    else if (selected && buildingsById.has(selected)) map.set(id, buildingsById.get(selected)?.name || "Здание");
-    else if (person?.role) map.set(id, String(person.role));
   }
   for (const crew of crews) {
     const name = String(crew?.name ?? "Стройбригада").trim() || "Стройбригада";
-    for (const id of crew?.memberIds ?? []) if (id) map.set(String(id), name);
-    if (crew?.leaderId) map.set(String(crew.leaderId), `Руководитель: ${name}`);
-  }
-  for (const building of buildings) {
-    const name = String(building?.name ?? "").trim();
-    if (!name) continue;
-    for (const id of building?.assignedWorkerIds ?? []) {
-      if (id) map.set(String(id), name);
+    for (const id of crew?.memberIds ?? []) if (id) details.set(String(id), { label: name, tooltip: name, mixed: false });
+    if (crew?.leaderId) {
+      const label = `Руководитель: ${name}`;
+      details.set(String(crew.leaderId), { label, tooltip: label, mixed: false });
     }
   }
+  return details;
+},
+
+_peopleWorkAssignments(holding, workContext = null) {
+  const map = new Map();
+  for (const [id, info] of this._peopleWorkDetails(holding, workContext)) map.set(id, info.label);
   return map;
 },
 

@@ -1,6 +1,7 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import { createHolding } from "../../../data/holding-factory.js";
 import { SkyholdData } from "../../../data/store.js";
+import { daysOffConflictSummary } from "../../../data/labor-budget.js";
 import { isResidentInPopulation } from "../../../data/resident-presence.js";
 import { findReadableHoldingEntry } from "../../../data/access-guard.js";
 import { normalizeBelief } from "../../../generators/resident-rules.js";
@@ -360,17 +361,22 @@ async _onFieldChange(event) {
       }, { reason: `resource-catalog:field:${path}`, scope: "catalog" });
     } else if (defenseField) {
       await this._onDefenseFieldChange(field, value);
-    } else if (/^holdings\.\d+\.people\.list\.\d+\.salaryModifier$/.test(path) && this._applyPersonSalaryForAssignment) {
-      await SkyholdData.transaction((data) => {
-        const scopedPath = this._resolveActiveHoldingScopedPath(data, path);
-        if (!scopedPath) return SkyholdData.skipTransaction(false);
-        foundry.utils.setProperty(data, scopedPath, value);
-        const match = scopedPath.match(/^holdings\.(\d+)\.people\.list\.(\d+)\.salaryModifier$/);
-        const holding = data.holdings?.[Number(match?.[1] ?? -1)];
-        const person = holding?.people?.list?.[Number(match?.[2] ?? -1)];
-        const building = (holding?.buildings?.list ?? []).find((item) => String(item.id) === String(person?.workAssignment));
-        if (holding && person) this._applyPersonSalaryForAssignment(holding, person, building ?? null);
-      }, { reason: `field:${path}`, scope: "holdings" });
+    } else if (path.endsWith(".gm.labor.daysOffPerTenday")) {
+      if (!game.user?.isGM) return;
+      const snapshot = SkyholdData.view();
+      const holdingId = this._activeWritableHoldingId(snapshot);
+      const holding = snapshot.holdings.find((row) => String(row.id) === holdingId);
+      if (!holding) return;
+      const expectedRevision = snapshot.meta.revision;
+      const summary = daysOffConflictSummary(holding, value);
+      if (summary.hasConflicts) {
+        const details = summary.conflicts.map((row) => `${escapeHtml(row.name)} · ${row.normalQd}+${row.overtimeQd} QD (лимит ${row.maxNormalQd}+${row.maxOvertimeQd})`);
+        const confirmed = await this._confirmAction("Выходные за десятник",
+          `Сохранить число выходных (${summary.daysOff})? Планы сверх бюджета сохранятся и остановятся до исправления.<br><br>${details.join("<br>")}`);
+        if (!confirmed) { this.requestRender(); return; }
+      }
+      const updated = await this._updateActiveHoldingPath(path, summary.daysOff, { reason: `field:${path}`, holdingId, expectedRevision });
+      if (!updated) this.requestRender();
     } else {
       const updated = await this._updateActiveHoldingPath(path, value, { reason: `field:${path}` });
       if (!updated) return;

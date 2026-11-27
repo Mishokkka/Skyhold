@@ -280,6 +280,13 @@ export function createShipOperationExecutor({
             }
           }
           ship.crewResidentIds = [...operation.crewResidentIds];
+          if (ship.commanderResidentId && !nextIds.has(String(ship.commanderResidentId))) {
+            ship.commanderResidentId = "";
+            ship.commanderName = "";
+          }
+          if (Array.isArray(ship.coCommanderResidentIds)) {
+            ship.coCommanderResidentIds = ship.coCommanderResidentIds.filter((id) => nextIds.has(String(id)));
+          }
           payload = { crewResidentIds: [...operation.crewResidentIds], crewCount: operation.crewResidentIds.length };
           configureWorldShipEconomy(data, holding, ship);
         } else if (operation.type === "install-magnifique-crew") {

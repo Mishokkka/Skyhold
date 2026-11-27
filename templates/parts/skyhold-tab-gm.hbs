@@ -65,6 +65,7 @@
             <div class="fbls-action-group">
               <button type="button" class="fbls-button compact" data-action="open-content-pack-importer"><i class="fa-solid fa-box-open"></i> Content packs</button>
               <button type="button" class="fbls-button compact" data-action="open-building-catalog-migration"><i class="fa-solid fa-building-circle-check"></i> Обновить каталог зданий</button>
+              <button type="button" class="fbls-button compact" data-action="open-building-catalog-migration" data-migration="labor"><i class="fa-solid fa-list-check" aria-hidden="true"></i> Переход на труд в QD</button>
             </div>
         <article class="fbls-card danger-zone compact-danger">
           <h2><i class="fa-solid fa-triangle-exclamation"></i> Опасная зона</h2>
@@ -149,6 +150,12 @@
               <label><span data-fbls-tooltip="Автоматически пересчитывается после питания. GM может исправить уровень вручную для сюжетной ситуации.">Голод</span><input type="number" min="0" max="10" step="1" data-type="number" data-field="holdings.{{holdingIndex}}.gm.food.hungerLevel" value="{{holding.gm.food.hungerLevel}}" /></label>
             </div>
             <p class="fbls-muted-text compact">Каждый уровень голода снижает производительность и довольство на 5%, но не ниже 50%. Полный скудный рацион сразу сбрасывает голод.</p>
+          </article>
+
+          <article class="fbls-card fbls-gm-card fbls-gm-mod-card">
+            <h2><i class="fa-solid fa-calendar-days"></i> Труд и выходные</h2>
+            <label class="fbls-field"><span>Выходных за десятник (0–5)</span><input type="number" min="0" max="5" step="1" data-type="number" data-field="holdings.{{holdingIndex}}.gm.labor.daysOffPerTenday" value="{{holding.gm.labor.daysOffPerTenday}}" /></label>
+            <p class="fbls-muted-text compact">Норма взрослого: (9 − выходные) × 2 QD, сверхурочно: 50% от нормы.</p>
           </article>
 
           <article class="fbls-card fbls-gm-card fbls-gm-mod-card">
@@ -259,7 +266,7 @@
                       <label><span>РАЗ</span><input type="number" min="1" max="6" step="1" data-type="number" data-generator-person-index="{{_index}}" data-generator-person-field="attributes.wits" value="{{attributes.wits}}" /></label>
                       <label><span>ЭМП</span><input type="number" min="1" max="6" step="1" data-type="number" data-generator-person-index="{{_index}}" data-generator-person-field="attributes.empathy" value="{{attributes.empathy}}" /></label>
                       <label><span>Дов. база</span><input type="number" data-type="number" data-generator-person-index="{{_index}}" data-generator-person-field="moraleBase" value="{{moraleBase}}" /></label>
-                      <label><span>Оплата</span><input type="number" data-type="number" data-generator-person-index="{{_index}}" data-generator-person-field="salary" value="{{salary}}" /></label>
+                      <label><span>Своя ставка</span><input type="number" min="1" step="1" data-type="nullable-number" data-generator-person-index="{{_index}}" data-generator-person-field="wageDailyOverrideCopper" value="{{wageDailyOverrideCopper}}" placeholder="по месту" /></label>
                       <label class="traits"><span>Черты</span><input type="text" data-generator-person-index="{{_index}}" data-generator-person-field="traitsText" value="{{traitsText}}" /></label>
                       <label class="appearance"><span>Внешность</span><textarea rows="2" data-generator-person-index="{{_index}}" data-generator-person-field="appearance">{{appearance}}</textarea></label>
                     </div>

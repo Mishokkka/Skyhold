@@ -1,18 +1,18 @@
 // Extracted SkyholdApp domain methods. These functions are mixed into SkyholdApp.prototype.
 import { constructionContributionDetail, normalizeConstructionDiceRules } from "../../engines/workers/construction-dice.js";
-import { militaryDailyWage } from "../../engines/economy/military-wages.js";
 import { hasSergeantTraining } from "../../data/military-resident-rules.js";
 import { splitList } from "../../core/helpers.js";
 import { buildingOperationalState } from "../../core/building-state.js";
+import { residentLaborUnavailableReason } from "../../data/labor-model.js";
 import { makeId } from "../../data/utils.js";
+import { clearResidentAllBuildingLabor, mutateResidentBuildingLabor } from "../../data/labor-mutations.js";
 import { clearPersonFromAssignments } from "../../data/resident-assignments.js";
-import { buildingStaffingWorkerIds, buildWorkAllocationTargets, WORK_ALLOCATION_MODE_EXPLICIT } from "../../data/work-allocations.js";
-import { applyStaffAppointment, buildingLaborMode, staffAppointmentFor } from "../../data/hybrid-labor.js";
+import { normalLaborQdPerTenday, residentLaborCapacity } from "../../data/labor-budget.js";
+import { buildingAcceptsWorkers, buildingLaborCapacityQd, buildingReservedQd } from "../../data/labor-model.js";
+import { buildingWorkerIds, buildWorkAllocationTargets } from "../../data/work-allocations.js";
 import {
   constructionLeaderCoordinationBonus,
-  constructionLeaderQualification,
-  CONSTRUCTION_LEADER_WAGE_DAILY_COPPER,
-  CONSTRUCTION_WORKER_WAGE_DAILY_COPPER
+  constructionLeaderQualification
 } from "../../engines/workers/construction-leadership.js";
 
 export const AssignmentDomain = {
@@ -20,15 +20,13 @@ _assignedWorkerSet(holding, exceptBuildingId = null) {
   const set = new Set();
   for (const building of holding?.buildings?.list ?? []) {
     if (exceptBuildingId && building.id === exceptBuildingId) continue;
-    for (const id of buildingStaffingWorkerIds(holding, building?.id)) set.add(String(id));
+    for (const id of buildingWorkerIds(holding, building?.id)) set.add(String(id));
   }
-  // An explicit plan is a real assignment even though it is not materialized
-  // into one legacy select slot. Keep such residents out of every legacy slot
-  // picker until the plan is deliberately replaced.
-  for (const person of holding?.people?.list ?? []) {
-    if (String(person?.workAllocationMode ?? "") !== WORK_ALLOCATION_MODE_EXPLICIT) continue;
-    if (!(person?.workAllocations ?? []).some((row) => Math.max(0, Number(row?.normalQd ?? 0) || 0) + Math.max(0, Number(row?.overtimeQd ?? 0) || 0) > 0)) continue;
-    if (person?.id) set.add(String(person.id));
+  if (!exceptBuildingId) {
+    for (const person of holding?.people?.list ?? []) {
+      if (!(person?.workAllocations ?? []).some((row) => Math.max(0, Number(row?.normalQd ?? row?.qd ?? 0) || 0) + Math.max(0, Number(row?.overtimeQd ?? 0) || 0) > 0)) continue;
+      if (person?.id) set.add(String(person.id));
+    }
   }
   for (const crew of this._constructionCrews(holding)) {
     if (crew?.leaderId) set.add(String(crew.leaderId));
@@ -54,11 +52,9 @@ _clearPersonFromAssignments(holding, personId) {
 _setPersonFree(holding, personId) {
   const person = this._findPerson(holding, personId);
   if (!person) return;
-  if (staffAppointmentFor(person)) applyStaffAppointment(holding, personId, null);
   person.workAssignment = "";
-  person.workAllocationMode = "legacy";
+  clearResidentAllBuildingLabor(holding, person);
   person.role = this._isChildResident?.(person) ? "Ребенок" : "Свободен";
-  if (globalThis.game?.user?.isGM !== false) person.salary = 0;
 },
 
 _applyDefenseSalaries(holding) {
@@ -91,9 +87,8 @@ _applyDefenseSalaries(holding) {
       if (!person) continue;
       const isSergeant = String(squad?.sergeantId ?? "") === id && hasSergeantTraining(person);
       person.workAssignment = "soldier";
-      person.workAllocationMode = "legacy";
+      clearResidentAllBuildingLabor(holding, person);
       person.role = `${isSergeant ? "Сержант" : "Солдат"}: ${squadName} (${typeLabel})`;
-      person.salary = militaryDailyWage(holding, person);
       assigned += 1;
     }
   }
@@ -107,144 +102,63 @@ _applyDefenseSalaries(holding) {
         return currentIds.has(id) || String(row?.workAssignment ?? "") === "soldier" || /солдат|сержант|страж|охран|guard|soldier/i.test(role);
       }).length;
       commander.workAssignment = "defenseCommander";
-      commander.workAllocationMode = "legacy";
+      clearResidentAllBuildingLabor(holding, commander);
       commander.role = `Командир обороны: ${soldierCount} солд.`;
-      commander.salary = militaryDailyWage(holding, commander);
       assigned += 1;
     }
   }
   return assigned;
 },
 
-_hirelingSalaryTable() {
-  return [
-    { key: "master-builder", label: "Master Builder", copper: 20, re: /мастер[- ]?стро|главн.*стро|прораб|архитектор|master builder/i },
-    { key: "innkeeper", label: "Innkeeper", copper: 12, re: /трактир|таверн|постоял|гостиниц|inn|tavern/i },
-    { key: "guard", label: "Guard", copper: 10, re: /страж|караул|охран|дозор|гарнизон|солдат|воен|башн|ворот|тюрьм|темниц|guard|soldier/i },
-    { key: "smith", label: "Smith", copper: 10, re: /кузн|оружейн|бронник|forge|smith/i },
-    { key: "bowyer", label: "Bowyer", copper: 10, re: /лучник|лук|арбалет|bowyer|fletcher/i },
-    { key: "executioner", label: "Executioner", copper: 10, re: /палач|executioner/i },
-    { key: "tailor", label: "Tailor", copper: 8, re: /портн|ткач|одежд|текстил|tailor/i },
-    { key: "miller", label: "Miller", copper: 8, re: /мельниц|мельник|мукомол|miller/i },
-    { key: "jailer", label: "Jailer", copper: 8, re: /тюрем|темниц|jailer/i },
-    { key: "carpenter", label: "Carpenter", copper: 7, re: /плотник|столяр|лесопил|древес|carpenter/i },
-    { key: "baker", label: "Baker", copper: 6, re: /пекар|хлеб|baker/i },
-    { key: "hunter", label: "Hunter", copper: 6, re: /охот|ловч|зверолов|следопыт|hunter/i },
-    { key: "tanner", label: "Tanner", copper: 6, re: /кожев|дубиль|шкур|tanner/i },
-    { key: "farmer", label: "Farmer", copper: 5, re: /ферм|поле|зерн|сад|пастб|рыб|скот|farmer/i },
-    { key: "lumberjack", label: "Lumberjack", copper: 4, re: /лесоруб|лесоповал|lumber/i },
-    { key: "miner", label: "Miner", copper: 4, re: /шахт|рудник|карьер|камень|рудокоп|miner/i },
-    { key: "handyman", label: "Handyman", copper: 3, re: /разнораб|слуга|убор|носиль|handyman/i }
-  ];
-},
-
-_salaryModifier(person = {}) {
-  const value = this._safeNumber?.(person?.salaryModifier, 0) ?? Number(person?.salaryModifier ?? 0);
-  return Number.isFinite(value) ? value : 0;
-},
-
-_baseSalaryForAssignment(holding, person = {}, building = null) {
-  if (!person || person.dead) return 0;
-  if (building) {
-    const haystack = [building.workerRole, building.name, building.type, building.effect, building.notes, building.production, building.primaryDev]
-      .map((value) => String(value ?? "").toLowerCase()).join(" ");
-    for (const row of this._hirelingSalaryTable()) {
-      if (row.re.test(haystack)) return row.copper;
-    }
-    const functions = building.functions && typeof building.functions === "object" ? building.functions : {};
-    if (functions.defense || building?.defense?.base || building?.defense?.perStep || building?.defense?.workerStep) return 10;
-    if (functions.income) return 8;
-    if (functions.culture) return 6;
-    if (functions.production) return 5;
-    if (functions.storage) return 3;
-    return 3;
-  }
-  const assignment = String(person?.workAssignment ?? "");
-  const roleText = `${person?.role ?? ""} ${person?.background ?? ""} ${person?.traitsText ?? person?.traits ?? ""}`.toLowerCase();
-  if (assignment === "defenseCommander") {
-    const soldierCount = (holding?.people?.list ?? []).filter((row) => String(row?.workAssignment ?? "") === "soldier").length;
-    return Math.max(0, 10 * soldierCount);
-  }
-  if (assignment === "soldier" || /солдат|страж|охран|guard|soldier/i.test(roleText)) return 10;
-  if (assignment.startsWith("construction-leader:")) return CONSTRUCTION_LEADER_WAGE_DAILY_COPPER;
-  if (assignment.startsWith("construction") || /строй|строител|плотник|каменщик|мастер/i.test(roleText)) return CONSTRUCTION_WORKER_WAGE_DAILY_COPPER;
-  return 0;
-},
-
-_applyPersonSalaryForAssignment(holding, person = {}, building = null) {
-  if (!person) return 0;
-  if (globalThis.game?.user?.isGM === false) return Math.max(0, Number(person.salary) || 0);
-  const base = this._baseSalaryForAssignment(holding, person, building);
-  const mod = this._salaryModifier(person);
-  const total = Math.max(0, Math.round((base + mod) * 100) / 100);
-  person.salary = Number.isFinite(total) ? total : 0;
-  return person.salary;
-},
-
 _assignPersonToBuilding(holding, personId, buildingId, options = {}) {
   const person = this._findPerson(holding, personId);
   const building = (holding?.buildings?.list ?? []).find((item) => String(item.id) === String(buildingId));
-  if (!person || person.dead || this._safeNumber(person?.injuredDays, 0) > 0 || (this._canResidentWork && !this._canResidentWork(person, holding)) || !building) return false;
-  const laborMode = buildingLaborMode(building);
-  if (["qd", "passive", "invalid"].includes(laborMode)) {
-    globalThis.ui?.notifications?.warn?.("Для этого здания используйте задания в «Плане работ»; постоянные места не применяются.");
+  if (!person || !building || !buildingOperationalState(building).operational || !buildingAcceptsWorkers(building)) {
     return false;
   }
-  const max = Math.max(0, this._safeNumber(building.workersMax, 0));
-  if (max <= 0) return false;
   const admission = this._buildingWorkerAdmission?.(building, person) ?? { eligible: true, hard: false, overridden: false };
   if (admission.hard && !admission.eligible && !admission.overridden && !options.allowAdmissionOverride) return false;
-  const staffingIds = new Set(buildingStaffingWorkerIds(holding, building.id));
-  if (!staffingIds.has(String(personId)) && staffingIds.size >= max) return false;
-  const preserveAdmissionOverride = admission.hard && !admission.eligible
-    && (admission.overridden || options.allowAdmissionOverride);
-  if (laborMode === "staff") {
-    const previous = staffAppointmentFor(person);
-    const targets = buildWorkAllocationTargets(holding).filter((row) => row.sourceId === String(building.id));
-    if (previous?.buildingId !== building.id && targets.length !== 1) {
-      globalThis.ui?.notifications?.warn?.("Выберите основную работу этого сотрудника в «Плане работ».");
-      return false;
-    }
-    if (previous?.buildingId !== building.id && targets[0].available === false) {
-      globalThis.ui?.notifications?.warn?.(targets[0].blockedReason || "Выбранная работа сейчас недоступна.");
-      return false;
-    }
-    const appointment = previous?.buildingId === building.id ? structuredClone(previous) : {
-      version: 1, buildingId: String(building.id), primaryFunctionId: targets[0].functionId, reserveFunctionId: "",
-      wageDailyCopper: Math.max(0, Number(person.wageDailyOverrideCopper ?? building.wageDailyCopper) || 0),
-      overtimeQd: 0, volunteer: person.volunteerLabor === true, volunteerReason: String(person.volunteerReason ?? "")
-    };
-    if (!Number.isSafeInteger(appointment.wageDailyCopper) || appointment.wageDailyCopper < 0
-      || appointment.wageDailyCopper === 0 && !appointment.volunteer
-      || appointment.volunteer && !String(appointment.volunteerReason).trim()) {
-      globalThis.ui?.notifications?.warn?.("Укажите ставку или согласуйте с ГМом причину бесплатной работы в «Плане работ».");
-      return false;
-    }
-    this._clearPersonFromAssignments(holding, personId);
-    person.workAssignment = "";
-    applyStaffAppointment(holding, personId, appointment);
-    if (preserveAdmissionOverride) building.workerAdmissionOverrideIds = [...new Set([...(building.workerAdmissionOverrideIds ?? []), String(personId)])];
-    return true;
+
+  const targets = buildWorkAllocationTargets(holding).filter((row) => row.sourceId === String(building.id) && row.available);
+  if (!options.functionId && targets.length > 1 && options.allowFirstTarget !== true) {
+    if (options.out) options.out.reason = "Выберите рабочую функцию здания в общем плане работ.";
+    return false;
   }
-  this._clearPersonFromAssignments(holding, personId);
-  if (!Array.isArray(building.assignedWorkerIds)) building.assignedWorkerIds = [];
-  while (building.assignedWorkerIds.length < max) building.assignedWorkerIds.push("");
-  let slot = building.assignedWorkerIds.findIndex((id) => !id);
-  if (slot < 0) return false;
-  building.assignedWorkerIds[slot] = String(personId);
-  if (!Array.isArray(building.workerAdmissionOverrideIds)) building.workerAdmissionOverrideIds = [];
-  building.workerAdmissionOverrideIds = building.workerAdmissionOverrideIds.filter((id) => String(id) !== String(personId));
-  if (preserveAdmissionOverride) building.workerAdmissionOverrideIds.push(String(personId));
-  person.workAllocationMode = "legacy";
-  person.workAssignment = String(building.id);
-  person.role = building.workerRole || building.name || "Работает в здании";
-  this._applyPersonSalaryForAssignment?.(holding, person, building);
-  return true;
+  const target = options.functionId
+    ? targets.find((row) => row.functionId === String(options.functionId))
+    : targets[0];
+  if (!target) return false;
+
+  const replace = options.replace === true;
+  const cap = residentLaborCapacity(person, normalLaborQdPerTenday(holding));
+  const currentAllocations = Array.isArray(person.workAllocations) ? person.workAllocations : [];
+  const usedNormal = replace ? 0 : currentAllocations.reduce((sum, row) => sum + Math.max(0, Math.floor(Number(row?.normalQd ?? row?.qd ?? 0) || 0)), 0);
+  const remainingNormal = Math.max(0, cap.normalQd - usedNormal);
+  if (remainingNormal <= 0) return false;
+
+  const capacityQd = buildingLaborCapacityQd(building);
+  const buildingUsedQd = capacityQd === null
+    ? 0
+    : buildingReservedQd(holding, building.id, { excludePersonId: replace ? personId : "" });
+  const remainingBuilding = capacityQd === null ? remainingNormal : Math.max(0, capacityQd - buildingUsedQd);
+  const requested = options.qd !== undefined ? Math.max(0, Math.floor(Number(options.qd) || 0)) : remainingNormal;
+  const qd = Math.min(requested, remainingNormal, remainingBuilding);
+  if (qd <= 0) return false;
+
+  const check = mutateResidentBuildingLabor(holding, { personId, buildingId, functionId: target.functionId,
+    action: replace ? "set" : "add", normalQd: qd, replaceOccupation: replace, replaceAllocations: replace,
+    isGM: options.isGM, allowAdmissionOverride: Boolean(admission.overridden || options.allowAdmissionOverride) });
+  if (!check.ok && options.out) options.out.reason = check.message;
+  return check.ok;
+},
+
+_removePersonFromBuilding(holding, buildingId, personId, { functionId = "" } = {}) {
+  return mutateResidentBuildingLabor(holding, { personId, buildingId, functionId, action: "remove" }).ok;
 },
 
 _assignPersonToCrew(holding, personId, crewId = null) {
   const person = this._findPerson(holding, personId);
-  if (!person || person.dead || this._safeNumber(person?.injuredDays, 0) > 0 || (this._canResidentWork && !this._canResidentWork(person, holding))) return false;
+  if (!person || residentLaborUnavailableReason(holding, person) || (this._canResidentWork && !this._canResidentWork(person, holding))) return false;
   if (!Array.isArray(holding.constructionCrews)) holding.constructionCrews = [];
   if (!holding.constructionCrews.length) holding.constructionCrews.push({ id: makeId("crew"), name: "Стройбригада", memberIds: [], leaderId: "", suitableWorkerTypes: "Строитель, Силач, Умелец" });
   const crew = crewId ? holding.constructionCrews.find((item) => String(item.id) === String(crewId)) : holding.constructionCrews[0];
@@ -253,64 +167,7 @@ _assignPersonToCrew(holding, personId, crewId = null) {
   if (!Array.isArray(crew.memberIds)) crew.memberIds = [];
   if (!crew.memberIds.some((id) => String(id) === String(personId))) crew.memberIds.push(String(personId));
   person.workAssignment = `construction:${crew.id}`;
-  person.workAllocationMode = "legacy";
   person.role = crew.name || "Стройбригада";
-  this._applyPersonSalaryForAssignment?.(holding, person, null);
-  return true;
-},
-
-_setBuildingSlot(holding, buildingId, slot, personId, options = {}) {
-  const building = (holding?.buildings?.list ?? []).find((item) => String(item.id) === String(buildingId));
-  if (!building) return false;
-  if (buildingLaborMode(building) !== "legacy") {
-    if (buildingLaborMode(building) !== "staff") return false;
-    const oldId = String(building.assignedWorkerIds?.[slot] ?? "");
-    if (!personId) {
-      if (oldId) this._setPersonFree(holding, oldId);
-      return true;
-    }
-    if (oldId && oldId !== String(personId)) {
-      globalThis.ui?.notifications?.warn?.("Сначала снимите прежнего сотрудника или замените его в «Плане работ».");
-      return false;
-    }
-    return this._assignPersonToBuilding(holding, personId, buildingId, options);
-  }
-  const max = Math.max(0, this._safeNumber(building.workersMax, 0));
-  if (max <= 0 || slot >= max) return false;
-  const currentAssignedWorkerIds = Array.isArray(building.assignedWorkerIds) ? building.assignedWorkerIds : [];
-  const oldId = String(currentAssignedWorkerIds[slot] ?? "");
-  if (personId) {
-    const person = this._findPerson(holding, personId);
-    if (!person || person.dead || this._safeNumber(person?.injuredDays, 0) > 0 || (this._canResidentWork && !this._canResidentWork(person, holding))) return false;
-    const admission = this._buildingWorkerAdmission?.(building, person) ?? { eligible: true, hard: false, overridden: false };
-    if (admission.hard && !admission.eligible && !admission.overridden && !options.allowAdmissionOverride) return false;
-  }
-  const nextId = String(personId ?? "");
-  const staffingIds = new Set(buildingStaffingWorkerIds(holding, building.id));
-  if (oldId && oldId !== nextId) staffingIds.delete(oldId);
-  if (nextId) staffingIds.add(nextId);
-  if (staffingIds.size > max) return false;
-  if (!Array.isArray(building.assignedWorkerIds)) building.assignedWorkerIds = [];
-  while (building.assignedWorkerIds.length <= slot) building.assignedWorkerIds.push("");
-  if (oldId && oldId !== String(personId)) this._setPersonFree(holding, oldId);
-  if (!Array.isArray(building.workerAdmissionOverrideIds)) building.workerAdmissionOverrideIds = [];
-  if (oldId && oldId !== String(personId)) building.workerAdmissionOverrideIds = building.workerAdmissionOverrideIds.filter((id) => String(id) !== oldId);
-  building.assignedWorkerIds[slot] = "";
-  if (!personId) return true;
-  const person = this._findPerson(holding, personId);
-  const admission = this._buildingWorkerAdmission?.(building, person) ?? { eligible: true, hard: false, overridden: false };
-  const preserveAdmissionOverride = admission.hard && !admission.eligible
-    && (admission.overridden || options.allowAdmissionOverride);
-  this._clearPersonFromAssignments(holding, personId);
-  building.assignedWorkerIds[slot] = String(personId);
-  building.workerAdmissionOverrideIds = building.workerAdmissionOverrideIds.filter((id) => String(id) !== String(personId));
-  if (preserveAdmissionOverride) building.workerAdmissionOverrideIds.push(String(personId));
-  if (person) {
-    person.workAllocationMode = "legacy";
-    person.workAssignment = String(building.id);
-    person.role = building.workerRole || building.name || "Работает в здании";
-    this._applyPersonSalaryForAssignment?.(holding, person, building);
-  }
   return true;
 },
 
@@ -329,7 +186,6 @@ _setHousingSlot(holding, buildingId, slot, personId) {
   return true;
 },
 
-
 _setCrewSlot(holding, crewId, slot, personId) {
   const crew = (holding?.constructionCrews ?? []).find((item) => String(item.id) === String(crewId));
   if (!crew) return false;
@@ -338,7 +194,7 @@ _setCrewSlot(holding, crewId, slot, personId) {
   const oldId = String(crew.memberIds[slot] ?? "");
   if (personId) {
     const person = this._findPerson(holding, personId);
-    if (!person || person.dead || this._safeNumber(person?.injuredDays, 0) > 0 || (this._canResidentWork && !this._canResidentWork(person, holding))) return false;
+    if (!person || residentLaborUnavailableReason(holding, person) || (this._canResidentWork && !this._canResidentWork(person, holding))) return false;
   }
   if (oldId && oldId !== String(personId)) this._setPersonFree(holding, oldId);
   crew.memberIds[slot] = "";
@@ -350,10 +206,8 @@ _setCrewSlot(holding, crewId, slot, personId) {
   this._clearPersonFromAssignments(holding, personId);
   crew.memberIds[slot] = String(personId);
   if (person) {
-    person.workAllocationMode = "legacy";
     person.workAssignment = `construction:${crew.id}`;
     person.role = crew.name || "Стройбригада";
-    this._applyPersonSalaryForAssignment?.(holding, person, null);
   }
   while (crew.memberIds.length && !crew.memberIds[crew.memberIds.length - 1]) crew.memberIds.pop();
   return true;
@@ -377,9 +231,7 @@ _setCrewLeader(holding, crewId, personId) {
   crew.memberIds = crew.memberIds.filter((id) => String(id) !== nextId);
   crew.leaderId = nextId;
   person.workAssignment = `construction-leader:${crew.id}`;
-  person.workAllocationMode = "legacy";
   person.role = `Руководитель: ${crew.name || "Стройбригада"}`;
-  this._applyPersonSalaryForAssignment?.(holding, person, null);
   return true;
 },
 

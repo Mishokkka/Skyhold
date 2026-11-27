@@ -6,6 +6,32 @@ import { confirmedOutboundCargo, expireTransportReservation } from "./transport/
 import { stableDataHash } from "./storage-commit.js";
 import { appendStorageLogEntries, BUILDING_DEMOLITION_LOG_SOURCE } from "./storage-log.js";
 import { makeId } from "./utils.js";
+import { applyBuildingLaborWithdrawal, planBuildingLaborWithdrawal } from "./labor-mutations.js";
+import { buildWorkAllocationTargets, workAllocationTargetKey } from "./work-allocations.js";
+
+export function buildingLaborWithdrawalLines(holding, plan) {
+  const people = new Map((holding.people?.list ?? []).map((row) => [String(row.id), row]));
+  const buildings = new Map((holding.buildings?.list ?? []).map((row) => [String(row.id), row]));
+  const targets = new Map(buildWorkAllocationTargets(holding).map((row) => [row.key, row]));
+  const describe = (row) => {
+    const building = buildings.get(row.sourceId);
+    return `${people.get(row.personId)?.name || "Житель"} · ${targets.get(workAllocationTargetKey(row.sourceId, row.functionId))?.label
+      || `${building?.name || row.sourceId} · ${row.functionId}`}`;
+  };
+  return [
+    ...plan.trims.map((row) => `${describe(row)} · OT ${row.overtimeBefore} → ${row.overtimeAfter} · ${row.locked ? "закреплено" : "без закрепления"}`),
+    ...plan.removedLocks.map((row) => `${describe(row)} · закрепление будет снято`)
+  ];
+}
+
+export function canReadBuildingLaborWithdrawal(holding, plan, user = globalThis.game?.user) {
+  if (user?.isGM) return true;
+  const people = new Set([...plan.personIds, ...plan.removedLocks.map((row) => row.personId)]);
+  const buildings = new Set([plan.buildingId, ...plan.trims.map((row) => row.sourceId)]);
+  return !plan.trimsHiddenLock && !plan.removedLocks.some((row) => row.visibility === "gm")
+    && !(holding.people?.list ?? []).some((row) => row.visibility === "gm" && people.has(String(row.id)))
+    && !(holding.buildings?.list ?? []).some((row) => row.visibility === "gm" && buildings.has(String(row.id)));
+}
 
 export function planBuildingDemolition(holding, buildingId, transportState) {
   const matches = (holding?.buildings?.list ?? []).filter(row => String(row.id) === String(buildingId));
@@ -22,14 +48,18 @@ export function planBuildingDemolition(holding, buildingId, transportState) {
       return { row, batch, qty: Math.max(0, batch.qty - loaded) };
     });
   });
+  const labor = planBuildingLaborWithdrawal(holding, buildingId);
   return {
     building, resources, items, confirmed, expired, spoiledQty: resourceBatchTotal(expired),
-    token: stableDataHash([building, resources, items, expired.map(({ row, batch, qty }) => [row.id, batch.id, qty])])
+    labor, laborTrims: labor.trims, locks: labor.removedLocks,
+    token: stableDataHash([building, resources, items, expired.map(({ row, batch, qty }) => [row.id, batch.id, qty]), labor.token])
   };
 }
 
-export function applyBuildingDemolition(holding, plan) {
-  const { building, resources, items, confirmed, expired } = plan;
+export function applyBuildingDemolition(holding, plan, { confirmed = false } = {}) {
+  const labor = applyBuildingLaborWithdrawal(holding, plan.labor, { confirmed });
+  if (!labor.ok) return labor;
+  const { building, resources, items, confirmed: confirmedCargo, expired } = plan;
   const roomId = String(building.id);
   const operationId = makeId("building-demolition", 20), entries = [];
   const source = BUILDING_DEMOLITION_LOG_SOURCE;
@@ -43,7 +73,7 @@ export function applyBuildingDemolition(holding, plan) {
   };
   const spoilage = new Map();
   for (const { row, batch } of expired) {
-    const qty = expireResourceBatch(holding, row, batch, confirmed);
+    const qty = expireResourceBatch(holding, row, batch, confirmedCargo);
     spoilage.set(row, (spoilage.get(row) ?? 0) + qty);
   }
   for (const row of resources) {
@@ -64,4 +94,5 @@ export function applyBuildingDemolition(holding, plan) {
   if (entries.length) appendStorageLogEntries(holding, entries);
   clearBuildingReferences(holding, building);
   holding.buildings.list = holding.buildings.list.filter(row => row !== building);
+  return { ok: true };
 }

@@ -5,8 +5,9 @@ import { PendingFieldSavesMixin } from "../common/pending-field-saves.js";
 import { MODULE_ID } from "../../data/constants.js";
 import { SkyholdData } from "../../data/store.js";
 import { makeId } from "../../data/utils.js";
-import { findReadableHoldingEntry } from "../../data/access-guard.js";
+import { canReadResident, findReadableHoldingEntry, hiddenBuildingIds, residentHasHiddenWork } from "../../data/access-guard.js";
 import { holdingPermissionContext } from "../../data/holding-permissions.js";
+import { droppedLocksForAllocationChange } from "../../data/labor-mutations.js";
 import { escapeHtml, fieldValue, joinList, splitList } from "../../core/helpers.js";
 import { bindGlobalInputGuard, bindInputGuards, unbindGlobalInputGuard } from "../../utils/input-guards.js";
 import { getSkyholdManager, requestSkyholdAppRender } from "../registry.js";
@@ -19,6 +20,18 @@ import { traitOptions } from "../../generators/trait-definitions.js";
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 const CREW_EDITOR_NO_HOLDING_MESSAGE = "Владение не найдено или недоступно.";
+const lockKeyOf = (row) => `${row.personId}::${row.sourceId}::${row.functionId}`;
+const crewReturnIds = (crew) => new Set([...(crew.distributedIds ?? []), crew.distributedLeaderId].map((id) => String(id ?? "")).filter(Boolean));
+const privateCrewAssignments = (holding, ids) => {
+  const hidden = hiddenBuildingIds(holding, false);
+  return [...ids].some((id) => {
+    const person = holding.people?.list?.find((row) => String(row.id) === id);
+    return person && (!canReadResident(person, { isGM: false }) || residentHasHiddenWork(holding, person, hidden));
+  });
+};
+const crewLockDenial = (locks) => locks.some((row) => row.visibility === "gm")
+  ? "Назначение недоступно. Обновите окно или обратитесь к ГМу."
+  : "У части участников бригады есть закреплённые назначения. Сначала снимите закрепления в общем плане работ.";
 const CREW_EDITOR_ACTIONS = {
   "remove-construction-trait": "_onRemoveConstructionTrait",
   "reset-construction-rules": "_onResetConstructionRules",
@@ -399,59 +412,130 @@ export class SkyholdCrewEditor extends FloatingTooltipsMixin(PendingFieldSavesMi
 
   async _onDistributeCrew(event) {
     event.preventDefault();
-    if (!this._canEditCrew()) return;
+    if (this._crewMoveBusy || !this._canEditCrew()) return;
     const crewId = String(event.currentTarget?.dataset?.crewId ?? "");
     const manager = getActiveSkyholdManager({ warn: true });
     if (!manager) return;
-    const distributed = await SkyholdData.updateHolding(this.holdingId, (holding) => {
-      const crew = holding?.constructionCrews?.find((item) => String(item.id) === crewId);
-      if (!holding || !crew) return SkyholdData.skipTransaction(false);
-      const ids = [...new Set([String(crew.leaderId ?? ""), ...(crew.memberIds ?? []).map((id) => String(id ?? ""))].filter(Boolean))];
-      crew.distributedLeaderId = String(crew.leaderId ?? "");
-      crew.distributedIds = ids;
-      crew.memberIds = [];
-      crew.leaderId = "";
-      crew.distributed = true;
-      for (const id of ids) {
-        let placed = false;
-        for (const building of holding.buildings?.list ?? []) {
-          if (manager._buildingStatus(building).value !== "built") continue;
-          const max = Math.max(0, manager._safeNumber(building.workersMax, 0));
-          if (max <= 0) continue;
-          if (!Array.isArray(building.assignedWorkerIds)) building.assignedWorkerIds = [];
-          while (building.assignedWorkerIds.length < max) building.assignedWorkerIds.push("");
-          const slot = building.assignedWorkerIds.findIndex((value) => !value);
-          if (slot >= 0) { manager._setBuildingSlot(holding, building.id, slot, id); placed = true; break; }
+    this._crewMoveBusy = true;
+    try {
+      const distributed = await SkyholdData.updateHolding(this.holdingId, (holding) => {
+        const crew = holding?.constructionCrews?.find((item) => String(item.id) === crewId);
+        if (!holding || !crew || crew.distributed) return SkyholdData.skipTransaction(false);
+        const leaderId = String(crew.leaderId ?? "");
+        const ids = [...new Set([leaderId, ...(crew.memberIds ?? []).map((id) => String(id ?? ""))].filter(Boolean))];
+        crew.memberIds = [];
+        crew.leaderId = "";
+        crew.distributedIds = [];
+        crew.distributedLeaderId = "";
+        const hidden = hiddenBuildingIds(holding, game.user?.isGM === true);
+        for (const id of ids) {
+          let placed = false;
+          for (const building of holding.buildings?.list ?? []) {
+            if (hidden.has(String(building.id)) || manager._buildingStatus(building).value !== "built") continue;
+            if (manager._assignPersonToBuilding?.(holding, id, building.id, { replace: true, allowFirstTarget: true })) { placed = true; break; }
+          }
+          if (!placed) manager._setPersonFree(holding, id);
         }
-        if (!placed) manager._setPersonFree(holding, id);
-      }
-      return true;
-    }, { fallback: false, reason: "crew-editor:distribute-crew" });
-    if (!distributed) return;
-    this.requestRender();
+        const currentCrew = holding.constructionCrews?.find((item) => String(item.id) === crewId);
+        if (!currentCrew) return SkyholdData.skipTransaction(false);
+        currentCrew.distributedLeaderId = leaderId;
+        currentCrew.distributedIds = ids;
+        currentCrew.distributed = true;
+        return true;
+      }, { fallback: false, reason: "crew-editor:distribute-crew" });
+      if (!distributed) return;
+      this.requestRender();
+    } catch (error) {
+      ui.notifications?.warn?.(error?.message || "Не удалось распределить бригаду.");
+      this.requestRender();
+    } finally {
+      this._crewMoveBusy = false;
+    }
   }
 
   async _onReturnCrew(event) {
     event.preventDefault();
-    if (!this._canEditCrew()) return;
+    if (this._crewMoveBusy || !this._canEditCrew()) return;
     const crewId = String(event.currentTarget?.dataset?.crewId ?? "");
     const manager = getActiveSkyholdManager({ warn: true });
     if (!manager) return;
-    const returned = await SkyholdData.updateHolding(this.holdingId, (holding) => {
-      const crew = holding?.constructionCrews?.find((item) => String(item.id) === crewId);
-      if (!holding || !crew) return SkyholdData.skipTransaction(false);
-      const ids = [...(crew.distributedIds ?? [])].filter(Boolean);
-      const leaderId = String(crew.distributedLeaderId ?? "");
-      crew.memberIds = [];
-      for (const id of ids) manager._setCrewSlot(holding, crew.id, crew.memberIds.length, id);
-      if (leaderId) manager._setCrewLeader(holding, crew.id, leaderId);
-      crew.distributedIds = [];
-      crew.distributedLeaderId = "";
-      crew.distributed = false;
-      return true;
-    }, { fallback: false, reason: "crew-editor:return-crew" });
-    if (!returned) return;
-    this.requestRender();
+    this._crewMoveBusy = true;
+    try {
+      const isGM = game.user?.isGM === true;
+      const { holding: previewHolding } = findReadableHoldingEntry(SkyholdData.get(), this.holdingId, { fallback: false });
+      const previewCrew = previewHolding?.constructionCrews?.find((item) => String(item.id) === crewId);
+      if (previewCrew?.distributed !== true) return;
+      const previewIds = crewReturnIds(previewCrew);
+      if (!isGM && privateCrewAssignments(previewHolding, previewIds)) {
+        ui.notifications?.warn?.("Назначение недоступно. Обновите окно или обратитесь к ГМу.");
+        return;
+      }
+      const dropped = [...previewIds].flatMap((id) => droppedLocksForAllocationChange(previewHolding, id, []));
+      if (dropped.length) {
+        if (!isGM) {
+          ui.notifications?.warn?.(crewLockDenial(dropped));
+          return;
+        }
+        if (!await manager._confirmAction?.("Снять закреплённые назначения",
+          "Возврат бригады снимет закреплённые назначения её участников в общем плане работ. Продолжить?")) return;
+      }
+      const confirmedLockKeys = new Set(dropped.map(lockKeyOf));
+      let deniedMessage = "";
+      const returned = await SkyholdData.updateHolding(this.holdingId, (holding) => {
+        const getCrew = () => holding?.constructionCrews?.find((item) => String(item.id) === crewId);
+        const crew = getCrew();
+        if (crew?.distributed !== true) return SkyholdData.skipTransaction(false);
+        const ids = [...new Set((crew.distributedIds ?? []).map((id) => String(id ?? "")).filter(Boolean))];
+        const leaderId = String(crew.distributedLeaderId ?? "");
+        const returnIds = crewReturnIds(crew);
+        if (returnIds.size !== previewIds.size || [...returnIds].some((id) => !previewIds.has(id))) {
+          deniedMessage = "Состав бригады изменился. Обновите окно и повторите возврат.";
+          return SkyholdData.skipTransaction(false);
+        }
+        if (!isGM && privateCrewAssignments(holding, returnIds)) {
+          deniedMessage = "Назначение недоступно. Обновите окно или обратитесь к ГМу.";
+          return SkyholdData.skipTransaction(false);
+        }
+        const innerDropped = [...returnIds].flatMap((id) => droppedLocksForAllocationChange(holding, id, []));
+        if (innerDropped.some((row) => !confirmedLockKeys.has(lockKeyOf(row)))) {
+          deniedMessage = isGM ? "Закрепления изменились. Обновите окно и подтвердите возврат ещё раз." : crewLockDenial(innerDropped);
+          return SkyholdData.skipTransaction(false);
+        }
+        crew.memberIds = [];
+        for (const id of ids) {
+          const currentCrew = getCrew();
+          if (!currentCrew || !manager._setCrewSlot(holding, crewId, currentCrew.memberIds.length, id)) {
+            deniedMessage = "Не удалось вернуть участника в бригаду. Обновите окно или обратитесь к ГМу.";
+            return SkyholdData.skipTransaction(false);
+          }
+        }
+        if (leaderId && !manager._setCrewLeader(holding, crewId, leaderId)) {
+          deniedMessage = "Не удалось вернуть руководителя в бригаду. Обновите окно или обратитесь к ГМу.";
+          return SkyholdData.skipTransaction(false);
+        }
+        const currentCrew = getCrew();
+        if (!currentCrew) return SkyholdData.skipTransaction(false);
+        const locks = holding.workforcePlan?.locks;
+        if (Array.isArray(locks)) {
+          const droppedKeys = new Set(innerDropped.map(lockKeyOf));
+          holding.workforcePlan.locks = locks.filter((row) => !droppedKeys.has(lockKeyOf(row)));
+        }
+        currentCrew.distributedIds = [];
+        currentCrew.distributedLeaderId = "";
+        currentCrew.distributed = false;
+        return true;
+      }, { fallback: false, reason: "crew-editor:return-crew" });
+      if (!returned) {
+        if (deniedMessage) ui.notifications?.warn?.(deniedMessage);
+        return;
+      }
+      this.requestRender();
+    } catch (error) {
+      ui.notifications?.warn?.(error?.message || "Не удалось вернуть бригаду.");
+      this.requestRender();
+    } finally {
+      this._crewMoveBusy = false;
+    }
   }
 
   async _onRollConstructionCrew(event) {

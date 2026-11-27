@@ -126,8 +126,10 @@ function generateResident({ culture, arrival, ageMode, traitMode }) {
     background,
     race: raceData.label,
     subrace: raceData.subrace,
-    salary: defaultSalary(arrival, ageGroup),
-    salaryModifier: 0,
+    militarySalaryModifier: 0,
+    wageDailyOverrideCopper: null,
+    volunteerLabor: false,
+    volunteerReason: "",
     moraleBase: -1,
     moraleWork: 0,
     moraleHome: 0,
@@ -262,14 +264,6 @@ function rollBelief(profile, race) {
   if (race === "dwarf" && chance(70)) return "Рамбар";
   if (race === "elf" && chance(65)) return "Тримунэлия";
   return weightedPick(profile.beliefs ?? { "Ржавый": 60, "Народные святыни": 20, "Скепсис": 20 });
-}
-
-function defaultSalary(arrival, ageGroup) {
-  if (ageGroup === "Ре") return 0;
-  if (arrival === "specialists") return 10;
-  if (arrival === "crew") return 5;
-  if (arrival === "workers") return 5;
-  return 0;
 }
 
 function buildAppearance(raceData, ageGroup) {
