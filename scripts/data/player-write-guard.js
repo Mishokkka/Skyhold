@@ -26,7 +26,7 @@ import { validateHoldingWorkAllocations } from "./work-allocations.js";
 import { protectedSpecialRecordFields, specialMoraleModifier } from "../core/special-effects.js";
 import { isResidentAway, isResidentRestingOnShip } from "./resident-presence.js";
 import { isSheriffAppointment } from "./control-appointments.js";
-import { workforceIssueMessage } from "./workforce-plan.js";
+import { lockedAllocationChangeError, workforceIssueMessage } from "./workforce-plan.js";
 import { newLaborIssues } from "./labor-model.js";
 import { hiddenBuildingIds, residentHasHiddenWork } from "./access-guard.js";
 
@@ -404,26 +404,8 @@ function validatePlayerPatchSemantics(current, proposed, action, holdingIndex, p
       }
     }
   }
-  for (const lock of Array.isArray(holding.workforcePlan?.locks) ? holding.workforcePlan.locks : []) {
-    const personId = String(lock?.personId ?? "");
-    const sourceId = String(lock?.sourceId ?? "");
-    const functionId = String(lock?.functionId ?? "");
-    if (!personId || !sourceId || !functionId) continue;
-    const beforePerson = (holding.people?.list ?? []).find((row) => String(row.id) === personId);
-    const afterPerson = (nextHolding.people?.list ?? []).find((row) => String(row.id) === personId);
-    const hasActiveLockTarget = (person) => (person?.workAllocations ?? []).some((row) =>
-      String(row?.sourceId ?? "") === sourceId && String(row?.functionId ?? "") === functionId
-      && Math.max(0, toNumber(row?.normalQd ?? row?.plannedNormalQd ?? row?.qd, 0))
-        + Math.max(0, toNumber(row?.overtimeQd ?? row?.plannedOvertimeQd, 0)) > 0);
-    if (hasActiveLockTarget(beforePerson) && !hasActiveLockTarget(afterPerson)) {
-      return {
-        ok: false,
-        error: lock?.visibility === "gm"
-          ? "Назначение недоступно. Обновите окно или обратитесь к ГМу."
-          : "Сначала снимите закрепление назначения или используйте подтверждённое снятие."
-      };
-    }
-  }
+  const lockError = lockedAllocationChangeError(holding, nextHolding, holding.workforcePlan, { isGM: false });
+  if (lockError) return { ok: false, error: lockError };
   const workAllocationCheck = validateHoldingWorkAllocations(nextHolding, { previousHolding: holding });
   if (!workAllocationCheck.ok) return { ok: false, error: workforceIssueMessage(nextHolding, workAllocationCheck.issues[0]) };
   const admissionIssues = newLaborIssues(holdingWorkerAdmissionIssues(holding), holdingWorkerAdmissionIssues(nextHolding));

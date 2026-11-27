@@ -1,4 +1,4 @@
-import { canReadHolding, canReadResident, hiddenBuildingIds, residentHasHiddenWork } from "../data/access-guard.js";
+import { canReadHolding, canReadResident, hiddenBuildingIds } from "../data/access-guard.js";
 import { canReadBuildingLaborWithdrawal } from "../data/building-demolition.js";
 import { COMMAND_ERROR, commandError, commandFailure } from "../data/command-result.js";
 import {
@@ -9,7 +9,7 @@ import {
 } from "../data/labor-mutations.js";
 import { canonicalSignatureV1 } from "../data/sha256.js";
 import { workforceCommandProblem } from "../data/workforce-socket.js";
-import { isWorkforcePlanRowVisible, lockedAllocationChangeError, workforceIssueMessage,
+import { isWorkforcePlanRowVisible, lockedAllocationChangeError, mergePublicWorkAllocations, workforceIssueMessage,
   workforceKey, workforceLockKey, workforcePlan, workforcePlanChangeError, workforceProductionGoalKey } from "../data/workforce-plan.js";
 
 function failure(operationId, code, message, revision) {
@@ -79,22 +79,23 @@ export async function executeWorkforcePlan(raw, { senderId, store } = {}) {
     } else if (kind === "remove-resident-allocation") {
       const person = people.get(raw.personId);
       const building = buildings.get(raw.buildingId);
-      if (!person || !canReadResident(person, sender) || residentHasHiddenWork(holding, person, hidden)
-        || !building || hidden.has(raw.buildingId)) {
+      if (!canReadResident(person, sender) || !building || hidden.has(raw.buildingId)) {
         fail(COMMAND_ERROR.FORBIDDEN, "Назначение недоступно. Обновите окно или обратитесь к ГМу.");
       }
       const check = mutateResidentBuildingLabor(holding, { personId: raw.personId, buildingId: raw.buildingId,
-        functionId: raw.functionId ?? "", action: "remove", isGM });
-      if (!check.ok) fail(check.forbidden ? COMMAND_ERROR.FORBIDDEN : COMMAND_ERROR.INVALID, check.orphanedOvertime
-        ? check.message
-        : (workforceIssueMessage(holding, check.issues?.[0], { isGM }) || check.message || "Не удалось снять назначение."));
+        functionId: raw.functionId ?? "", action: "remove", isGM, preserveAllocationSourceIds: hidden });
+      if (!check.ok) {
+        const issue = check.orphanedOvertime ? check.issues.find((row) => row.code === "allocation-overtime-days") : check.issues?.[0];
+        fail(check.forbidden ? COMMAND_ERROR.FORBIDDEN : COMMAND_ERROR.INVALID, isGM && check.orphanedOvertime
+          ? check.message
+          : (workforceIssueMessage(holding, issue, { isGM }) || check.message || "Не удалось снять назначение."));
+      }
       receipt = { ok: true, operationId, revision: currentRevision + 1, summary: "Назначение снято." };
     } else if (kind === "add-resident-allocation") {
       if (!isGM && raw.allowAdmissionOverride !== undefined) fail(COMMAND_ERROR.FORBIDDEN, "Допусками к работе управляет ГМ.");
       const person = people.get(raw.personId);
       const building = buildings.get(raw.buildingId);
-      if (!person || !canReadResident(person, sender) || residentHasHiddenWork(holding, person, hidden)
-        || !building || hidden.has(raw.buildingId)) {
+      if (!canReadResident(person, sender) || !building || hidden.has(raw.buildingId)) {
         fail(COMMAND_ERROR.FORBIDDEN, "Назначение недоступно. Обновите окно или обратитесь к ГМу.");
       }
       const targetLockKey = workforceLockKey({ personId: raw.personId, sourceId: raw.buildingId, functionId: raw.functionId });
@@ -112,6 +113,7 @@ export async function executeWorkforcePlan(raw, { senderId, store } = {}) {
         normalQd: raw.normalQd,
         overtimeQd: raw.overtimeQd,
         allowAdmissionOverride: isGM && raw.allowAdmissionOverride === true,
+        preserveAllocationSourceIds: hidden,
         isGM
       });
       if (!check.ok) {
@@ -127,8 +129,7 @@ export async function executeWorkforcePlan(raw, { senderId, store } = {}) {
       if (planError) fail(COMMAND_ERROR.FORBIDDEN, planError);
       const updates = Object.entries(allocationsByPersonId).map(([personId, tuples]) => {
         const person = people.get(personId);
-        if (!canReadResident(person, sender) || residentHasHiddenWork(holding, person, hidden)
-          || tuples.some(([id]) => !buildings.has(id) || hidden.has(id))) {
+        if (!canReadResident(person, sender) || tuples.some(([id]) => !buildings.has(id) || hidden.has(id))) {
           fail(COMMAND_ERROR.FORBIDDEN, "Назначение недоступно. Обновите окно или обратитесь к ГМу.");
         }
         const previous = new Map((person.workAllocations ?? []).map((row) => [workforceKey(row), row]));
@@ -136,7 +137,8 @@ export async function executeWorkforcePlan(raw, { senderId, store } = {}) {
           const row = { sourceId, functionId, normalQd, overtimeQd };
           return { ...previous.get(workforceKey(row)), ...row };
         });
-        return { personId, nextAllocations, admissionOverrideBuildingIds: admissionOverrideBuildingIds?.[personId] };
+        return { personId, nextAllocations: mergePublicWorkAllocations(person.workAllocations ?? [], nextAllocations, hidden),
+          admissionOverrideBuildingIds: admissionOverrideBuildingIds?.[personId] };
       });
       const updatesById = new Map(updates.map((row) => [String(row.personId), row.nextAllocations]));
       const afterPreview = {
@@ -151,7 +153,7 @@ export async function executeWorkforcePlan(raw, { senderId, store } = {}) {
       };
       const lockError = lockedAllocationChangeError(holding, afterPreview, plan, { isGM });
       if (lockError) fail(COMMAND_ERROR.FORBIDDEN, lockError);
-      const check = applyWorkforcePlanAllocations(holding, { updates });
+      const check = applyWorkforcePlanAllocations(holding, { updates, preserveAllocationSourceIds: hidden });
       if (!check.ok) fail(COMMAND_ERROR.INVALID, workforceIssueMessage(holding, check.issues?.[0], { isGM })
         || check.message || "Общий план отклонён.");
       holding.workforcePlan = plan;

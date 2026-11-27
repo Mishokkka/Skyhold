@@ -3,6 +3,7 @@ import { allocationFunctionId, allocationNormalQd, allocationSourceId, allocatio
 import { isResidentRestingOnShip } from "./resident-presence.js";
 import { normalLaborQdPerTenday, residentLaborCapacity } from "./labor-budget.js";
 import { reservedOccupation, residentLaborUnavailableReason } from "./labor-model.js";
+import { hiddenBuildingIds } from "./access-guard.js";
 
 export const WORKFORCE_PLAN_VERSION = 2;
 export const workforceKey = (row) => workAllocationTargetKey(row?.sourceId, row?.functionId);
@@ -38,14 +39,24 @@ export function normalizeWorkforcePlan(plan) {
 
 export const workforcePlan = (holding) => holding?.workforcePlan ?? normalizeWorkforcePlan();
 
+export function mergePublicWorkAllocations(previous, next, hidden) {
+  if (!hidden.size) return next;
+  return [...previous.filter((row) => hidden.has(allocationSourceId(row))),
+    ...next.filter((row) => !hidden.has(allocationSourceId(row)))];
+}
+
 export function workforceIssueMessage(holding, issue, { isGM = false } = {}) {
-  if (!issue) return "";
-  const hidden = !isGM && ((holding.buildings?.list ?? []).some((row) => row.visibility === "gm" && String(row.id) === issue.buildingId)
-    || (holding.people?.list ?? []).some((row) => row.visibility === "gm" && String(row.id) === issue.personId));
-  const privateCapacity = !isGM && issue.code === "allocation-capacity" && (holding.people?.list ?? []).some((person) =>
-    person.visibility === "gm" && (person.workAllocations ?? []).some((row) => row.sourceId === issue.buildingId));
+  if (!issue || isGM) return issue?.message ?? "";
+  const hiddenIds = hiddenBuildingIds(holding, false);
+  const people = holding.people?.list ?? [];
+  const person = people.find((row) => String(row.id) === issue.personId);
+  const hidden = hiddenIds.has(issue.buildingId) || person?.visibility === "gm";
+  const privateCapacity = issue.code === "allocation-capacity" && people.some((person) =>
+    person.visibility === "gm" && (person.workAllocations ?? []).some((row) => allocationSourceId(row) === issue.buildingId));
   if (privateCapacity) return "Свободных QD для назначения в здании недостаточно.";
-  return hidden ? "План конфликтует с недоступным назначением. Его может проверить ГМ." : issue.message;
+  const privateBudget = /^allocation-(?:normal|overtime|total|count)(?:-|$)/.test(issue.code)
+    && (person?.workAllocations ?? []).some((row) => hiddenIds.has(allocationSourceId(row)));
+  return hidden || privateBudget ? "План конфликтует с недоступным назначением. Его может проверить ГМ." : issue.message;
 }
 
 export function workforceCapacity(person = {}, holding) {

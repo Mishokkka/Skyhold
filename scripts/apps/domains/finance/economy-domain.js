@@ -214,7 +214,7 @@ async _runTradeForQd(holding, qd = 0, report = null, workerContext = null, { ran
   });
 },
 
-_pushProductionPlacement(report, holding, sourceName, resourceName, placements = [], extra = "", resourceId = "", { note = extra } = {}) {
+_pushProductionPlacement(report, holding, sourceName, resourceName, placements = [], extra = "", resourceId = "", { note = extra, sourceId } = {}) {
   const normalizedResourceId = normalizeResourceId(resourceId, resourceName);
   for (const item of placements) {
     const room = item.roomId ? this._storageRoomLabel(holding, item.roomId) : "Счетчик денег";
@@ -227,10 +227,16 @@ _pushProductionPlacement(report, holding, sourceName, resourceName, placements =
       name: resourceName,
       qty: item.qty,
       roomId: item.roomId,
+      sourceId,
       source: sourceName,
       note: [note.trim(), item.overflowFrom ? `переполнение: ${this._storageRoomLabel(holding, item.overflowFrom)}` : ""].filter(Boolean).join("; ")
     });
   }
+},
+
+_recordMeaningfulResult(report, building, functionId) {
+  const results = report.meaningfulResultsBySource ??= Object.create(null);
+  (results[String(building.id)] ??= {})[functionId] = true;
 },
 
 async _rollFormulaTotal(formula = "", data = {}) {
@@ -1127,8 +1133,9 @@ async _collectLineToStorage(holding, building, line, budgets, report, { by = "bu
     return 0;
   }
   const { qty, placements } = finishProductionCollection(line, (amount) => this._storageAddWithOverflow(holding, resource, amount));
+  if (qty > 0) this._recordMeaningfulResult(report, building, functionId);
   this._pushProductionPlacement(report, holding, building.name || "Здание", resource.name, placements,
-    by === "worker" ? " собрано работником-потребителем" : " собрано", resource.resourceId);
+    by === "worker" ? " собрано работником-потребителем" : " собрано", resource.resourceId, { sourceId: building.id });
   return qty;
 },
 
@@ -1152,8 +1159,9 @@ async _autoCollectBuilding(holding, building, budgets, report, workerContext = n
       continue;
     }
     const resource = this._productionCollectionResource(line);
-    const { placements } = finishProductionCollection(line, (qty) => this._storageAddWithOverflow(holding, resource, qty));
-    this._pushProductionPlacement(report, holding, building.name || "Здание", resource.name, placements, " собрано", resource.resourceId);
+    const { qty, placements } = finishProductionCollection(line, (qty) => this._storageAddWithOverflow(holding, resource, qty));
+    if (qty > 0) this._recordMeaningfulResult(report, building, functionId);
+    this._pushProductionPlacement(report, holding, building.name || "Здание", resource.name, placements, " собрано", resource.resourceId, { sourceId: building.id });
     financeContext?.deferredCollections?.delete(collectionKey);
   }
 },
@@ -1178,7 +1186,8 @@ async _tryCollectResourceForConsumer(holding, consumerBuilding, resource, budget
     for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
       const line = lines[lineIndex];
       if (!line?.requiresCollection || String(line.autoCollect ?? "none") !== "worker") continue;
-      if (!this._financeFunctionAllowed(financeContext, sourceBuilding, this._financeLineFunctionId(line, lineIndex))) continue;
+      const functionId = this._financeLineFunctionId(line, lineIndex);
+      if (!this._financeFunctionAllowed(financeContext, sourceBuilding, functionId)) continue;
       const output = this._productionCollectionResource(line);
       if (!this._productionInputMatches(output, cost)) continue;
       // В этом режиме рабочий здания-потребителя тратит время, чтобы забрать готовый ресурс из другого здания.
@@ -1188,8 +1197,10 @@ async _tryCollectResourceForConsumer(holding, consumerBuilding, resource, budget
       if (!advanceCollectionWork(line, entries).complete) continue;
       const { qty, placements } = finishProductionCollection(line, (amount) => this._storageAddWithOverflow(holding, output, amount));
       collected += qty;
+      if (qty > 0) this._recordMeaningfulResult(report, sourceBuilding, functionId);
       this._pushProductionPlacement(report, holding, consumerBuilding.name || "Здание", output.name, placements,
-        ` собрано у ${sourceBuilding.name || "здания"}`, output.resourceId, { note: "Собрано работником-потребителем" });
+        ` собрано у ${sourceBuilding.name || "здания"}`, output.resourceId,
+        { note: "Собрано работником-потребителем", sourceId: sourceBuilding.id });
     }
   }
   return collected;
@@ -1251,7 +1262,9 @@ _productionCycleDependencies({ holding: sourceHolding = null, lineOutputForCycle
     }),
     normalizeStorageRoomId: (roomId) => this._normalizeStorageRoomId(roomId),
     storageAddWithOverflow: (holding, resource, qty) => this._storageAddWithOverflow(holding, resource, qty),
-    pushProductionPlacement: (report, holding, source, resource, placements, extra, resourceId) => this._pushProductionPlacement(report, holding, source, resource, placements, extra, resourceId),
+    pushProductionPlacement: (...args) => this._pushProductionPlacement(...args),
+    recordMeaningfulResult: (report, building, line) => this._recordMeaningfulResult(report, building,
+      this._financeLineFunctionId(line, (building.productionLines ?? []).indexOf(line))),
     appendLedger: (report, entries) => appendEconomyLedger(report, entries),
     autoCollectBuilding: (holding, building, budgets, report, workerContext) => this._autoCollectBuilding(holding, building, budgets, report, workerContext, financeContext),
     lineCollectionTakesPriority: (building, line) => Boolean(line?.requiresCollection && this._safeNumber(line?.collectQd, 0) > 0),
@@ -1341,8 +1354,13 @@ _recordBuildingServiceActivity(holding, report, financeContext, budgets) {
       allocations.get(row.sourceId).push({ ...row, workerId });
     }
   }
-  const produced = new Set(report.positiveLedgerSourceIds ?? (report.ledger ?? [])
-    .filter((row) => Number(row.qty) > 0).map((row) => String(row.sourceId)));
+  const ledgersBySource = new Map();
+  for (const row of report.ledger ?? []) {
+    if (!(Number(row.qty) > 0) || !["agriculture", "livestock"].includes(row.domain)) continue;
+    const sourceId = String(row.sourceId);
+    if (!ledgersBySource.has(sourceId)) ledgersBySource.set(sourceId, {});
+    ledgersBySource.get(sourceId)[row.domain] = true;
+  }
   for (const [id, building] of byBuilding) {
     const previous = building.serviceState;
     const fuelBlocked = previous?.periodKey === periodKey && previous.fuelBlocked === true;
@@ -1364,8 +1382,8 @@ _recordBuildingServiceActivity(holding, report, financeContext, budgets) {
     const activeWorkerIds = Object.keys(workedQdByWorkerAndFunction);
     const activeWorkerIdsByFunction = Object.fromEntries(Object.entries(workersByFunction)
       .map(([fn, ids]) => [fn, [...ids]]));
-    const meaningfulResult = produced.has(id);
-    const meaningfulResultByFunction = meaningfulResult && this._buildingFunctions(building).production ? { production: true } : {};
+    const meaningfulResultByFunction = { ...report.meaningfulResultsBySource?.[id], ...ledgersBySource.get(id) };
+    const meaningfulResult = Object.values(meaningfulResultByFunction).some((value) => value === true);
     building.serviceState = {
       active: !fuelBlocked && workedQd > 0, functionId, periodKey, workedQd, workedQdByFunction, workedQdByWorkerAndFunction,
       activeWorkerIds, activeWorkerIdsByFunction, meaningfulResult, meaningfulResultByFunction, fuelBlocked,
@@ -1470,6 +1488,7 @@ async _runBuildingIncomeForQd(holding, qd, report, { buildings = holding?.buildi
     total = Math.max(0, Math.floor(total));
     if (total) {
       this._addMoney(holding, total);
+      this._recordMeaningfulResult(report, building, "income");
       report.income.push(`${building.name || "Здание"}: Деньги +${total}${formulaResult ? ` (${formulaResult})` : ""}`);
       appendEconomyLedger(report, {
         domain: "income",

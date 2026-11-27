@@ -19,7 +19,7 @@ import { residentTraitTooltip } from "../../common/resident-trait-chips.js";
 import { confirmBuildingWorkerAdmission } from "../../common/building-worker-admission.js";
 import { vacatePoliticsRepresentative } from "../../../data/resident-assignments.js";
 import { applyResidentEditorAllocations, droppedLocksForAllocationChange, transferResidentBetweenHoldings } from "../../../data/labor-mutations.js";
-import { workforceIssueMessage } from "../../../data/workforce-plan.js";
+import { lockedAllocationChangeError, workforceIssueMessage, workforcePlan } from "../../../data/workforce-plan.js";
 import { newLaborIssues, residentLaborUnavailableReason } from "../../../data/labor-model.js";
 import { holdingWorkerAdmissionIssues } from "../../../engines/workers/building-qualification.js";
 import { normalizePerson } from "../../../data/normalizers/resident.js";
@@ -1028,6 +1028,14 @@ async _savePersonEditorDraft(event) {
       return false;
     }
     const droppedLocks = droppedLocksForAllocationChange(currentHolding, previewPerson.id, previewPerson.workAllocations);
+    const droppedKeys = new Set(droppedLocks.map(lockKeyOf));
+    const plan = workforcePlan(currentHolding);
+    const lockError = lockedAllocationChangeError(currentHolding, previewHolding,
+      { ...plan, locks: (plan.locks ?? []).filter((row) => !droppedKeys.has(lockKeyOf(row))) }, { isGM });
+    if (lockError) {
+      ui.notifications.warn(lockError);
+      return false;
+    }
     if (droppedLocks.length) {
       if (!isGM) {
         ui.notifications.warn(droppedLocks.some((row) => row.visibility === "gm")
@@ -1041,7 +1049,7 @@ async _savePersonEditorDraft(event) {
         this.requestRender?.();
         return false;
       }
-      confirmedAllocationLockKeys = new Set(droppedLocks.map(lockKeyOf));
+      confirmedAllocationLockKeys = droppedKeys;
     }
     const admissionIssues = newLaborIssues(holdingWorkerAdmissionIssues(currentHolding), holdingWorkerAdmissionIssues(previewHolding));
     for (const { buildingId } of admissionIssues.filter((issue) => issue.personId === String(previewPerson.id))) {

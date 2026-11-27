@@ -3,6 +3,7 @@ import { findReadableHoldingEntry } from "../data/access-guard.js";
 import { holdingPermissionContext } from "../data/holding-permissions.js";
 import { parseShipGoldInput, shipGoldInput } from "../core/ship-gold.js";
 import { previewShipOrders, withShipOrderBudget } from "../engines/ships/order-preview.js";
+import { shipDepartingAssignments } from "../engines/ships/crew-readiness.js";
 import { shipRouteMapContext, bindRouteMapView } from "./common/route-map-view.js";
 import { buildShipWorldContext } from "../engines/ships/world-market.js";
 
@@ -129,7 +130,11 @@ export class ShipOrderPlanner {
     const resolvedParameters = { ...parameters, budgetCopper: resolvedBudgetCopper };
     const key = JSON.stringify([data.meta?.revision, resolvedParameters]);
     const permissions = holdingPermissionContext(holding);
-    return { ...this.cache, key, plan: withShipOrderBudget(this.cache.basePlan, resolvedBudgetCopper),
+    let plan = withShipOrderBudget(this.cache.basePlan, resolvedBudgetCopper);
+    if (!permissions.isGM && plan.atHome) {
+      plan = { ...plan, departingAssignments: shipDepartingAssignments(holding, ship, { catalog: data.catalog, isGM: false }) };
+    }
+    return { ...this.cache, key, plan,
       permissions, parameters: resolvedParameters, revision: Number(data.meta?.revision ?? 0) };
   }
 

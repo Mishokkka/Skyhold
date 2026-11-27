@@ -1,4 +1,6 @@
 import { activeSkyholdGm } from "./authority.js";
+import { hiddenBuildingIds } from "./access-guard.js";
+import { allocationSourceId } from "./labor-primitives.js";
 import { COMMAND_ERROR, commandError, commandFailure, commandResultFromPayload, commandSuccess } from "./command-result.js";
 import { MODULE_ID } from "./constants.js";
 import { acceptsGmSocketResponse, acceptsStorageSocketRequest } from "./socket-auth.js";
@@ -15,11 +17,13 @@ const identifier = (value) => typeof value === "string" && value.length > 0 && v
 const whole = (value) => Number.isSafeInteger(value) && value >= 0;
 const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 
-export function buildWorkforceCommand({ operationId, holdingId, expectedRevision, draft, initial }) {
+export function buildWorkforceCommand({ operationId, holdingId, expectedRevision, draft, initial, holding, isGM = true }) {
+  const hidden = hiddenBuildingIds(holding, isGM);
+  const include = (row) => !hidden.has(allocationSourceId(row)) && (row.normalQd || row.overtimeQd);
   const tuple = ({ sourceId, functionId, normalQd, overtimeQd }) => [sourceId, functionId, normalQd, overtimeQd];
   const allocationsByPersonId = Object.fromEntries(draft.edited.flatMap((personId) => {
-    const before = (initial.allocations[personId] ?? []).filter((row) => row.normalQd || row.overtimeQd).map(tuple);
-    const after = (draft.allocations[personId] ?? []).filter((row) => row.normalQd || row.overtimeQd).map(tuple);
+    const before = (initial.allocations[personId] ?? []).filter(include).map(tuple);
+    const after = (draft.allocations[personId] ?? []).filter(include).map(tuple);
     return same(before, after) ? [] : [[personId, after]];
   }));
   const changes = (kind, keyFor) => {

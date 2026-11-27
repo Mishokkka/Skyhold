@@ -6,6 +6,7 @@ import { clearPersonFromAssignments, clearResidentLaborAllocations,
 import { canonicalSignatureV1 } from "./sha256.js";
 import { isPlainObject } from "./utils.js";
 import { normalizeWorkAllocation, validateHoldingWorkAllocations } from "./work-allocations.js";
+import { lockedAllocationChangeError } from "./workforce-plan.js";
 
 const text = (value) => String(value ?? "").trim();
 const rowsFor = (person) => Array.isArray(person.workAllocations) ? person.workAllocations : [];
@@ -108,11 +109,12 @@ function pruneDroppedLocks(beforeHolding, draft, personId, options = {}) {
   return { ok: true, dropped };
 }
 
-function cleanAdmissionOverrides(holding, person, requested) {
+function cleanAdmissionOverrides(holding, person, requested, preservedSources) {
   const personId = text(person.id);
   const active = new Set(rowsFor(person).filter((row) => allocationTotalQd(row) > 0).map(allocationSourceId));
   for (const building of holding.buildings?.list ?? []) {
     const id = text(building.id);
+    if (preservedSources?.has(id)) continue;
     const existing = building.workerAdmissionOverrideIds ?? [];
     const has = existing.some((value) => text(value) === personId);
     const keep = active.has(id) && (requested ? requested.has(id) : has);
@@ -130,7 +132,9 @@ function prepare(holding, person, nextAllocations, options, replaced) {
   const occupation = reservedOccupation(holding, person);
   const hadOverrides = (holding.buildings?.list ?? []).filter((building) =>
     (building.workerAdmissionOverrideIds ?? []).some((id) => text(id) === text(person.id))).map((building) => text(building.id));
-  const rows = nextAllocations.map((row, index) => normalizeWorkAllocation(row, index));
+  const preservedSources = options.preserveAllocationSourceIds;
+  const preserve = (row) => preservedSources?.has(allocationSourceId(row));
+  const rows = nextAllocations.map((row, index) => preserve(row) ? structuredClone(row) : normalizeWorkAllocation(row, index));
   const active = rows.some((row) => allocationTotalQd(row) > 0);
   const replacing = active && occupation && occupation.kind !== "ship" && options.replaceOccupation === true
     && !residentLaborUnavailableReason(holding, person);
@@ -138,9 +142,9 @@ function prepare(holding, person, nextAllocations, options, replaced) {
     releaseOccupation(holding, person);
     replaced.push(text(person.id));
   }
-  person.workAllocations = options.keepEmptyRows ? rows : rows.filter((row) => allocationTotalQd(row) > 0);
+  person.workAllocations = options.keepEmptyRows ? rows : rows.filter((row) => preserve(row) || allocationTotalQd(row) > 0);
   const requested = options.admissionOverrideBuildingIds ?? (replacing ? hadOverrides : null);
-  cleanAdmissionOverrides(holding, person, requested ? new Set(requested.map(text)) : null);
+  cleanAdmissionOverrides(holding, person, requested ? new Set(requested.map(text)) : null, preservedSources);
   if (!occupation || replacing) syncResidentLaborRole(person, { isChild: asChild(person, options), clearServiceRole: Boolean(replacing) });
 }
 
@@ -159,10 +163,11 @@ export function mutateResidentBuildingLabor(holding, {
   const matches = (row) => allocationSourceId(row) === source && (!fn || allocationFunctionId(row) === fn);
   const replaced = [];
   const removedRows = [];
+  const prepareOptions = { isChild: options.isChild, preserveAllocationSourceIds: options.preserveAllocationSourceIds };
   if (removing) {
     removedRows.push(...rows.filter(matches));
     if (source && fn) removedRows.push({ sourceId: source, functionId: fn });
-    prepare(draft, person, rows.filter((row) => !matches(row)), { isChild: options.isChild }, replaced);
+    prepare(draft, person, rows.filter((row) => !matches(row)), prepareOptions, replaced);
   } else {
     const retained = replaceAllocations ? rows.filter(matches) : rows;
     if (replaceAllocations) {
@@ -175,7 +180,7 @@ export function mutateResidentBuildingLabor(holding, {
       ...(volunteer !== undefined ? { volunteer, volunteerReason } : {}) };
     if (![next.normalQd, next.overtimeQd].every(Number.isSafeInteger)) return fail("Превышен допустимый размер QD.");
     const nextRows = existing ? retained.map((row) => row === existing ? next : row) : [...retained, next];
-    prepare(draft, person, nextRows, { isChild: options.isChild, replaceOccupation }, replaced);
+    prepare(draft, person, nextRows, { ...prepareOptions, replaceOccupation }, replaced);
     if (allowAdmissionOverride === true && allocationTotalQd(next) > 0) {
       const building = (draft.buildings?.list ?? []).find((row) => text(row.id) === source);
       if (building && !(building.workerAdmissionOverrideIds ?? []).some((value) => text(value) === id)) {
@@ -185,6 +190,8 @@ export function mutateResidentBuildingLabor(holding, {
   }
   const pruned = pruneDroppedLocks(holding, draft, id, { ...options, removedRows });
   if (!pruned.ok) return pruned;
+  const lockError = lockedAllocationChangeError(holding, draft, draft.workforcePlan, { isGM: options.isGM !== false });
+  if (lockError) return { ok: false, forbidden: true, message: lockError };
   return finish(holding, draft, options, replaced, { removing, conserving: removing, checkedPersonIds: [id] });
 }
 
@@ -202,6 +209,8 @@ export function applyResidentEditorAllocations(holding, personId, options = {}) 
   prepare(draft, person, nextAllocations, { admissionOverrideBuildingIds, replaceOccupation, isChild, keepEmptyRows: true }, replaced);
   const pruned = pruneDroppedLocks(holding, draft, person.id, { ...options, removedRows });
   if (!pruned.ok) return pruned;
+  const lockError = lockedAllocationChangeError(holding, draft, draft.workforcePlan, { isGM: options.isGM !== false });
+  if (lockError) return { ok: false, forbidden: true, message: lockError };
   return finish(holding, draft, options, replaced, { checkedPersonIds: [person.id], conserving: options.conserving === true, removing: options.conserving === true });
 }
 

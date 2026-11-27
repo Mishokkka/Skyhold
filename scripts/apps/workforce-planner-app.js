@@ -1,8 +1,9 @@
 import { MODULE_ID } from "../data/constants.js";
 import { requestWorkforceOperation, SkyholdData } from "../data/store.js";
-import { findReadableHoldingEntry } from "../data/access-guard.js";
+import { findReadableHoldingEntry, hiddenBuildingIds } from "../data/access-guard.js";
+import { allocationSourceId } from "../data/labor-primitives.js";
 import { holdingPermissionContext } from "../data/holding-permissions.js";
-import { isWorkforcePlanRowVisible, workforceKey, workforceLockKey, workforceCapacity, workforceProductionGoalKey } from "../data/workforce-plan.js";
+import { isWorkforcePlanRowVisible, mergePublicWorkAllocations, workforceKey, workforceLockKey, workforceCapacity, workforceProductionGoalKey } from "../data/workforce-plan.js";
 import { makeId } from "../data/utils.js";
 import { buildingAppearance } from "../core/building-appearance.js";
 import { getSkyholdWorkflowService } from "../workflows/skyhold-workflow-service.js";
@@ -200,8 +201,9 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
         before: this._allocationText(this.initial.allocations[id], model),
         after: this._allocationText(this.draft.allocations[id], model) })) };
   }
-  _allocationText(rows, model) {
-    return (rows ?? []).filter((row) => row.normalQd || row.overtimeQd).map((row) => {
+  _allocationText(rows, model, holding = model.holding) {
+    const hidden = hiddenBuildingIds(holding, this.permissions.isGM);
+    return (rows ?? []).filter((row) => !hidden.has(allocationSourceId(row)) && (row.normalQd || row.overtimeQd)).map((row) => {
       const task = model.taskMap.get(workforceKey(row));
       return `${task ? `${task.name} · ${task.functionName}` : "Недоступное назначение"}: ${row.normalQd} + ${row.overtimeQd} QD`;
     }).join("; ") || "Нет назначений";
@@ -378,14 +380,15 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
   }
   _previewRefresh() {
     const { holding, revision } = this.latest, fresh = createWorkforceDraft(holding, this.service), draft = copy(fresh), changes = [];
+    const hidden = hiddenBuildingIds(holding, this.permissions.isGM);
     for (const id of this.draft.edited) {
       const person = this._model.people.find((row) => row.id === id);
       if (!person || !fresh.allocations[id]) throw new Error("Часть изменённых жителей недоступна. Сохраните сведения из черновика и сбросьте его.");
-      draft.allocations[id] = copy(this.draft.allocations[id]);
+      draft.allocations[id] = copy(mergePublicWorkAllocations(fresh.allocations[id], this.draft.allocations[id] ?? [], hidden));
       draft.edited.push(id);
       changes.push({ name: person.name, task: "Актуальные назначения → ваш черновик",
-        before: this._allocationText(fresh.allocations[id], this._model),
-        after: this._allocationText(draft.allocations[id], this._model) });
+        before: this._allocationText(fresh.allocations[id], this._model, holding),
+        after: this._allocationText(draft.allocations[id], this._model, holding) });
     }
     const visibilityScope = {
       buildings: this._model?.holding?.buildings?.list ?? holding.buildings?.list,
@@ -418,7 +421,7 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
       if (this.unapplied) throw new Error("Есть неприменённые значения. Нажмите «Обновить назначение» или кнопку применения рядом с изменёнными QD и целями.");
       const error = workforceDraftError(this.base, this.draft, this.permissions); if (error) throw new Error(error);
       const command = buildWorkforceCommand({ holdingId: this.holdingId, operationId: makeId("workforce", 20),
-        expectedRevision: this.revision, draft: this.draft, initial: this.initial });
+        expectedRevision: this.revision, draft: this.draft, initial: this.initial, holding: this.base, isGM: this.permissions.isGM });
       const problem = workforceCommandProblem(command);
       if (problem) throw new Error(problem);
       this.pending = command;

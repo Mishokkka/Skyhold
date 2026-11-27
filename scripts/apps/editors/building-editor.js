@@ -8,7 +8,7 @@ import { normalizeLivestockBuilding } from "../../data/livestock.js";
 import { SkyholdData, requestConstructionOperation, requestWorkforceOperation } from "../../data/store.js";
 import { buildResidentAllocationAddCommand, buildResidentAllocationRemovalCommand } from "../../data/workforce-socket.js";
 import { makeId } from "../../data/utils.js";
-import { canReadResident, findReadableHoldingEntry, residentHasHiddenWork } from "../../data/access-guard.js";
+import { canReadResident, findReadableHoldingEntry } from "../../data/access-guard.js";
 import { holdingPermissionContext } from "../../data/holding-permissions.js";
 import { SaveStatus, syncSaveStatus } from "../common/save-status.js";
 import { escapeHtml, fieldValue } from "../../core/helpers.js";
@@ -734,11 +734,6 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(PendingFieldSavesMix
     const current = this._getMutableBuilding(data);
     const person = (current.holding?.people?.list ?? []).find((row) => String(row?.id ?? "") === personId);
     if (!current.holding || !current.building || !canReadResident(person)) return;
-    if (residentHasHiddenWork(current.holding, person)) {
-      ui.notifications?.warn?.("Назначение недоступно.");
-      this.requestRender();
-      return;
-    }
     const isGM = game.user?.isGM === true;
     const targetKey = workAllocationTargetKey(current.building.id, functionId);
     const existingLock = (current.holding.workforcePlan?.locks ?? []).find((row) =>
@@ -780,7 +775,7 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(PendingFieldSavesMix
     try {
       const updated = await this._updateMutableBuilding(({ holding, building }) => {
         const currentPerson = holding.people?.list?.find((row) => String(row.id) === personId);
-        if (!canReadResident(currentPerson) || residentHasHiddenWork(holding, currentPerson)) return SkyholdData.skipTransaction(false);
+        if (!canReadResident(currentPerson)) return SkyholdData.skipTransaction(false);
         const lockKey = workAllocationTargetKey(building.id, functionId);
         if ((holding.workforcePlan?.locks ?? []).some((row) => String(row?.personId ?? "") === personId && workforceKey(row) === lockKey)) {
           rejectionMessage = "Сначала снимите закрепление назначения.";
@@ -814,8 +809,7 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(PendingFieldSavesMix
     const data = SkyholdData.get();
     const current = this._getMutableBuilding(data);
     const currentPerson = (current.holding?.people?.list ?? []).find((row) => String(row?.id ?? "") === personId);
-    if (!current.holding || !current.building || !canReadResident(currentPerson)
-      || residentHasHiddenWork(current.holding, currentPerson)) return;
+    if (!current.holding || !current.building || !canReadResident(currentPerson)) return;
     const currentAllocation = (currentPerson.workAllocations ?? []).find((row) =>
       row.id === allocationId && row.sourceId === current.building.id);
     if (!currentAllocation) return;
@@ -852,7 +846,7 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(PendingFieldSavesMix
     let staleLockMessage = "";
     const updated = await this._updateMutableBuilding(({ holding, building }) => {
       const person = (holding?.people?.list ?? []).find((row) => String(row?.id ?? "") === personId);
-      if (!canReadResident(person) || residentHasHiddenWork(holding, person)) return SkyholdData.skipTransaction(false);
+      if (!canReadResident(person)) return SkyholdData.skipTransaction(false);
       const allocation = (person.workAllocations ?? []).find((row) => row.id === allocationId && row.sourceId === building.id);
       if (!allocation) return SkyholdData.skipTransaction(false);
       const innerNext = (person.workAllocations ?? []).filter((row) => row.id !== allocationId);

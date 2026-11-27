@@ -157,7 +157,8 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
     const rawMeta = providedMeta ?? readSetting(SETTING_META);
     const rawHoldings = readSetting(SETTING_HOLDINGS);
     const rawCatalog = readSetting(SETTING_CATALOG);
-    const legacy = readSetting(SETTING_DATA);
+    let legacyRead;
+    const getLegacy = () => (legacyRead ??= { value: readSetting(SETTING_DATA) }).value;
     const emptyPartitions = isEmptySetting(rawHoldings) && isEmptySetting(rawCatalog);
     const split = {
       meta: clone(rawMeta ?? {}),
@@ -170,9 +171,9 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
     };
     persistedMetaHash = logicalMetadataHash(split.meta);
     if (isEmptySetting(rawMeta) && emptyPartitions) {
+      const legacy = getLegacy();
       return { data: isEmptySetting(legacy) ? DEFAULT_SKYHOLD_DATA : legacy };
     }
-    assertSupportedWorldData(split);
 
     const splitRevision = Math.max(0, toNumber(split?.meta?.revision, 0));
     const commitInspection = inspectStorageCommit(split, {
@@ -190,9 +191,9 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
       const token = completeCommitToken(meta);
       return { data: recovery.data, forwardToken: token ? `${token}:${stableDataHash(meta)}` : "" };
     }
-    const legacyRevision = Math.max(0, toNumber(legacy?.meta?.revision, 0));
-
     if (!commitInspection.ok) {
+      const legacy = getLegacy();
+      const legacyRevision = Math.max(0, toNumber(legacy?.meta?.revision, 0));
       if (recovery.ok) {
         if (legacyRevision === recovery.data?.meta?.revision
           && isSupportedLegacySnapshot(legacy)
@@ -214,16 +215,21 @@ export function createSkyholdSplitStorage({ settings = null, assertWriteAuthorit
       return { data: split, unverified: true };
     }
 
-    if (commitInspection.reason === "complete") return { data: split };
     // A standalone snapshot can still be selected when split settings are untouched.
-    if (!isEmptySetting(legacy)) assertSupportedWorldData(legacy);
-    if (legacyRevision > splitRevision) return { data: legacy };
-    if (legacyRevision === splitRevision
-      && isDefaultSplitPayload({
-        holdingsHash: persistedPartitionHashes.holdings,
-        catalogHash: persistedPartitionHashes.catalog
-      })
-      && legacyHasRuntimeData(legacy)) return { data: legacy };
+    assertSupportedWorldData(split);
+    const legacy = getLegacy();
+    const legacyRevision = Math.max(0, toNumber(legacy?.meta?.revision, 0));
+    const defaultSplitPayload = isDefaultSplitPayload({
+      holdingsHash: persistedPartitionHashes.holdings,
+      catalogHash: persistedPartitionHashes.catalog
+    });
+    const untouchedDefaultSplit = splitRevision === 0 && defaultSplitPayload;
+    if (isSupportedLegacySnapshot(legacy)) {
+      if (legacyRevision > splitRevision) return { data: legacy };
+      if (legacyRevision === splitRevision && defaultSplitPayload && legacyHasRuntimeData(legacy)) return { data: legacy };
+    } else if (commitInspection.reason !== "complete" || untouchedDefaultSplit) {
+      if (!isEmptySetting(legacy)) assertSupportedWorldData(legacy);
+    }
     return { data: split };
   }
 

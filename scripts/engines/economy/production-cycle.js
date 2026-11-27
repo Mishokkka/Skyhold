@@ -103,9 +103,10 @@ export async function runProductionCycle({
   }));
 
   const placeOutput = (building, line, resourceId, resourceName, total, extra = "") => {
-    if (!total) return;
+    if (!(total > 0)) return;
     if (line.requiresCollection) {
       line.pendingQty = whole(line.pendingQty) + total;
+      deps.recordMeaningfulResult?.(report, building, line);
       report.produced.push(`${building.name || "Здание"}: ${resourceName} +${total} готово к сбору.`);
       deps.appendLedger?.(report, {
         domain: "production", kind: "progress", resourceId, name: resourceName, qty: total,
@@ -116,7 +117,8 @@ export async function runProductionCycle({
     }
     const roomId = deps.normalizeStorageRoomId(line.storageRoomId ?? line.roomId);
     const placements = deps.storageAddWithOverflow(holding, { resourceId, name: resourceName, roomId }, total);
-    deps.pushProductionPlacement(report, holding, building.name || "Здание", resourceName, placements, extra, resourceId);
+    if (placements.some((row) => row.qty > 0)) deps.recordMeaningfulResult?.(report, building, line);
+    deps.pushProductionPlacement(report, holding, building.name || "Здание", resourceName, placements, extra, resourceId, { sourceId: building.id });
   };
 
   const completeOutput = (building, line, resourceId, resourceName, base, receipt) => {
