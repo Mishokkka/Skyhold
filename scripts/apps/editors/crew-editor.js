@@ -432,7 +432,7 @@ export class SkyholdCrewEditor extends FloatingTooltipsMixin(PendingFieldSavesMi
           let placed = false;
           for (const building of holding.buildings?.list ?? []) {
             if (hidden.has(String(building.id)) || manager._buildingStatus(building).value !== "built") continue;
-            if (manager._assignPersonToBuilding?.(holding, id, building.id, { replace: true })) { placed = true; break; }
+            if (manager._assignPersonToBuilding?.(holding, id, building.id, { replace: true, allowFirstTarget: true })) { placed = true; break; }
           }
           if (!placed) manager._setPersonFree(holding, id);
         }

@@ -120,6 +120,10 @@ _assignPersonToBuilding(holding, personId, buildingId, options = {}) {
   if (admission.hard && !admission.eligible && !admission.overridden && !options.allowAdmissionOverride) return false;
 
   const targets = buildWorkAllocationTargets(holding).filter((row) => row.sourceId === String(building.id) && row.available);
+  if (!options.functionId && targets.length > 1 && options.allowFirstTarget !== true) {
+    if (options.out) options.out.reason = "Выберите рабочую функцию здания в общем плане работ.";
+    return false;
+  }
   const target = options.functionId
     ? targets.find((row) => row.functionId === String(options.functionId))
     : targets[0];
@@ -143,7 +147,7 @@ _assignPersonToBuilding(holding, personId, buildingId, options = {}) {
 
   const check = mutateResidentBuildingLabor(holding, { personId, buildingId, functionId: target.functionId,
     action: replace ? "set" : "add", normalQd: qd, replaceOccupation: replace, replaceAllocations: replace,
-    allowAdmissionOverride: Boolean(admission.overridden || options.allowAdmissionOverride) });
+    isGM: options.isGM, allowAdmissionOverride: Boolean(admission.overridden || options.allowAdmissionOverride) });
   if (!check.ok && options.out) options.out.reason = check.message;
   return check.ok;
 },

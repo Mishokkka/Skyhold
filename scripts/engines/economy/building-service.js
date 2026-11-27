@@ -147,9 +147,9 @@ function hasActiveServiceContract(building = {}) {
     || building.storage?.profileRequiresStaff);
 }
 
-export function buildingActiveWorkerSummary(holding = {}, building = {}, functionId = "") {
+export function buildingActiveWorkerSummary(holding = {}, building = {}, functionId = "", { includeIdleCollection = false } = {}) {
   const buildingId = text(building.id);
-  const targets = new Map(buildWorkAllocationTargets({ buildings: { list: [building] } }).map((row) => [row.key, row]));
+  const targets = new Map(buildWorkAllocationTargets({ buildings: { list: [building] } }, { includeIdleCollection }).map((row) => [row.key, row]));
   const summary = { workers: [], count: 0, qd: 0, equivalentWorkers: 0, blocked: [], activeFunctionsByWorkerId: new Map() };
   const budget = normalLaborQdPerTenday(holding);
   for (const person of holding.people?.list ?? []) {
@@ -205,7 +205,7 @@ export function buildingConfirmedSocialStatus(holding = {}, building = {}, funct
     reasons.push({ code: "activity-unconfirmed", text: "нет подтверждённой работы за последний завершённый десятник" });
   }
 
-  const activeSummary = buildingActiveWorkerSummary(holding, building, functionId);
+  const activeSummary = buildingActiveWorkerSummary(holding, building, functionId, { includeIdleCollection: true });
   const people = new Map(activeSummary.workers.map((person) => [text(person.id), person]));
   const activeFunctionsByWorkerId = activeSummary.activeFunctionsByWorkerId;
   const recordedIds = traceFunctionWorkerIds(state, functionId);

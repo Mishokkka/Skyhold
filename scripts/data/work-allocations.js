@@ -174,7 +174,7 @@ function targetRow(building, functionId, label, {
   };
 }
 
-export function buildWorkAllocationTargets(holding = {}, { allowMedicalOvertime = true, baseNormalQd } = {}) {
+export function buildWorkAllocationTargets(holding = {}, { allowMedicalOvertime = true, baseNormalQd, includeIdleCollection = false } = {}) {
   const targets = [];
   for (const building of holding?.buildings?.list ?? []) {
     const state = buildingOperationalState(building);
@@ -198,8 +198,9 @@ export function buildWorkAllocationTargets(holding = {}, { allowMedicalOvertime 
       });
       const paused = line?.active === false;
       const collectionAvailable = state.operational && line?.requiresCollection === true && collectionWork && Number(line?.pendingQty) > 0;
+      const collectionEligible = collectionAvailable || (includeIdleCollection && line?.requiresCollection === true && collectionWork);
       targets.push({ ...target, paused, collectionAvailable,
-        available: target.available && (!paused || collectionAvailable) && (text(line?.source || "workers") === "workers" || collectionAvailable),
+        available: target.available && ((!paused && text(line?.source || "workers") === "workers") || collectionEligible),
         blockedReason: target.blockedReason || (paused && !collectionAvailable ? "Линия приостановлена" : "") });
     }
     if (productionEnabled && agriculture?.enabled) {

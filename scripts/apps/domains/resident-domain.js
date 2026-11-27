@@ -91,7 +91,7 @@ _preparePersonRows(holding, canEdit = false, mode = "living", applyFilters = tru
   const workDetails = this._peopleWorkDetails?.(holding, workOptionsContext);
   const medicalIds = new Set();
   try {
-    const assignments = this._medicalAssignments?.(holding);
+    const assignments = this._medicalAssignments?.(holding, null, { publicOnly: !globalThis.game?.user?.isGM });
     for (const entry of assignments?.values?.() ?? []) {
       for (const patient of entry?.patients ?? []) medicalIds.add(String(patient?.id ?? ""));
     }

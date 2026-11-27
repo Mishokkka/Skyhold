@@ -87,6 +87,7 @@ export async function executeControlWorkOperation(raw = {}, {
         const out = {};
         const assigned = manager._assignPersonToBuilding(holding, person.id, building.id, {
           functionId: target.functionId,
+          isGM: user?.isGM === true,
           allowAdmissionOverride: user?.isGM === true && raw.allowAdmissionOverride === true,
           out
         });

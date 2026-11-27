@@ -182,7 +182,7 @@ export function createWorkforceSocketApi({ store, writeTimeoutMs = 8000 }) {
         entry.timeout = setTimeout(() => entry.attempts < 2 ? emit() : stop(unknown()), writeTimeoutMs);
         try {
           game.socket.emit(CHANNEL, { type: REQUEST, requestId: id, operationId: id,
-            expectedRevision: operation.expectedRevision, targetGmId: gm.id, userId, operation });
+            expectedRevision: operation.expectedRevision, targetGmId: gm.id, userId, attempt: entry.attempts, operation });
         } catch (error) {
           stop(entry.attempts > 1 ? unknown() : failure(id, COMMAND_ERROR.SOCKET_UNAVAILABLE, error.message, true));
         }
@@ -197,7 +197,7 @@ export function createWorkforceSocketApi({ store, writeTimeoutMs = 8000 }) {
       const entry = pending.get(payload.requestId);
       if (!acceptsGmSocketResponse(payload, senderId, entry)) return true;
       const command = commandResultFromPayload(payload);
-      if (!command.ok && senderId !== entry.currentGmId) return true;
+      if (!command.ok && (senderId !== entry.currentGmId || (payload.attempt != null && payload.attempt < entry.attempts))) return true;
       clearTimeout(entry.timeout);
       pending.delete(payload.requestId);
       if (command.ok) entry.resolve(payload.result);
@@ -220,7 +220,7 @@ export function createWorkforceSocketApi({ store, writeTimeoutMs = 8000 }) {
         revision: error.revision, retryable: error.retryable });
     }
     game.socket?.emit?.(CHANNEL, { type: RESPONSE, requestId: payload.requestId,
-      operationId: payload.operationId, userId: senderId, gmId: game.user.id, command, result });
+      operationId: payload.operationId, userId: senderId, gmId: game.user.id, attempt: payload.attempt, command, result });
     return true;
   }
   return { requestWorkforceOperation, handleWorkforcePayload };

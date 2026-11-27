@@ -1272,7 +1272,15 @@ _productionCycleDependencies({ holding: sourceHolding = null, lineOutputForCycle
       const functionId = this._financeLineFunctionId(line, (building?.productionLines ?? []).indexOf(line));
       return this._activeAssignedBuildingPeople(holding, building, workerContext, functionId);
     },
-    allBuildingPeople: (holding, building, workerContext) => this._activeAssignedBuildingPeople(holding, building, workerContext),
+    allBuildingPeople: (holding, building, workerContext) => {
+      const people = this._activeAssignedBuildingPeople(holding, building, workerContext);
+      const finance = financeContext ?? workerContext?.financeContext;
+      if (!finance) return people;
+      const buildingId = String(building?.id ?? "");
+      return people.filter((person) => (finance.plannedAssignmentsByWorkerId?.get(String(person.id)) ?? [])
+        .some((assignment) => assignment.sourceId === buildingId
+          && this._financeFunctionAllowed(finance, building, assignment.functionId)));
+    },
     workerBudgetEntry: (holding, person, budgets, workerContext, building, line) => this._workerBudgetEntry(
       holding,
       person,

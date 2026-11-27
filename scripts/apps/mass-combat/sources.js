@@ -272,6 +272,7 @@ function buildingCombatTag(building) {
 
 export function defenseGarrisonProfile(holding, { buildingEffectiveWorkers = null } = {}) {
   const people = (holding?.people?.list ?? []).filter((person) => isResidentInPopulation(person, holding) && !isInjuredResident(person));
+  const garrisonHolding = { ...holding, people: { ...holding?.people, list: people } };
   const byId = new Map(people.map((person) => [String(person.id), person]));
   const buildings = builtBuildings(holding).filter((building) => isDefenseBuilding(building));
   const ids = new Set();
@@ -283,7 +284,8 @@ export function defenseGarrisonProfile(holding, { buildingEffectiveWorkers = nul
     const assigned = buildingWorkerIds(holding, building.id, "defense");
     const combatants = assigned.map((id) => byId.get(id)).filter(Boolean);
     for (const person of combatants) ids.add(String(person.id));
-    const effSummary = combatants.length && typeof buildingEffectiveWorkers === "function" ? buildingEffectiveWorkers(holding, building, "defense") : null;
+    const effSummary = combatants.length && typeof buildingEffectiveWorkers === "function"
+      ? buildingEffectiveWorkers(garrisonHolding, building, "defense") : null;
     const hasEstimate = Number.isFinite(Number(effSummary?.total));
     let buildingEffective = hasEstimate ? Math.max(0, Number(effSummary.total)) : 0;
     if (!hasEstimate && combatants.length) {

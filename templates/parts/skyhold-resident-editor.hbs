@@ -141,7 +141,7 @@
           <div class="fbls-work-allocation-row">
             <label class="fbls-field fbls-work-allocation-target">
               <span>Здание и функция</span>
-              <select data-work-allocation-target data-allocation-index="{{_index}}" aria-label="Рабочая функция">
+              <select data-work-allocation-target data-allocation-id="{{id}}" data-allocation-index="{{_index}}" aria-label="Рабочая функция">
                 {{#each targetOptions}}<option value="{{value}}" {{#if selected}}selected{{/if}}>{{label}}</option>{{/each}}
               </select>
             </label>

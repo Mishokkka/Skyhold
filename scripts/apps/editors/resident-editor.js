@@ -150,7 +150,9 @@ export class SkyholdResidentEditor extends WindowFrameMixin(RenderSchedulerMixin
     const selector = this._fieldFocusSelector;
     this._fieldFocusSelector = "";
     if (selector && (!document.activeElement || document.activeElement === document.body)) {
-      root.querySelector(selector)?.focus({ preventScroll: true });
+      const field = root.querySelector(selector) ?? (selector.startsWith("[data-work-allocation-target]")
+        ? root.querySelector('[data-action="add-work-allocation"]:not(:disabled), .person-name input:not(:disabled)') : null);
+      field?.focus({ preventScroll: true });
     }
     focusApplicationContent(this, { root, options, preferredSelector: ".person-name input" });
   }
@@ -236,8 +238,8 @@ export class SkyholdResidentEditor extends WindowFrameMixin(RenderSchedulerMixin
     if (options.render && globalThis.document?.activeElement === element) {
       const field = element.getAttribute("data-field");
       if (field) this._fieldFocusSelector = `[data-field="${globalThis.CSS.escape(field)}"]`;
-      else if (element.hasAttribute("data-work-allocation-target")) {
-        this._fieldFocusSelector = `[data-work-allocation-target][data-allocation-index="${globalThis.CSS.escape(element.dataset.allocationIndex)}"]`;
+      else if (element.hasAttribute("data-work-allocation-target") && element.dataset.allocationId) {
+        this._fieldFocusSelector = `[data-work-allocation-target][data-allocation-id="${globalThis.CSS.escape(element.dataset.allocationId)}"]`;
       }
     }
     const target = element?.querySelector?.(".fbls-person-editor.v2") ?? element;

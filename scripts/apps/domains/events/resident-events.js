@@ -269,8 +269,9 @@ async _onWorkAssignmentChange(event) {
         return SkyholdData.skipTransaction({ stale: true });
       }
       if (targetBuilding) {
-        const ok = this._assignPersonToBuilding(holding, person.id, value, { ...decision, replace: true });
-        return ok ? { warnNoSlot: false } : SkyholdData.skipTransaction({ warnNoSlot: true });
+        const out = {};
+        const ok = this._assignPersonToBuilding(holding, person.id, value, { ...decision, replace: true, isGM: game.user?.isGM === true, out });
+        return ok ? { warnNoSlot: false } : SkyholdData.skipTransaction({ warnNoSlot: true, message: out.reason });
       }
       if (value && residentLaborUnavailableReason(holding, person)) return SkyholdData.skipTransaction({ warnNoSlot: true });
       this._clearPersonFromAssignments(holding, person.id);
@@ -292,7 +293,7 @@ async _onWorkAssignmentChange(event) {
     }, { reason: "resident:work-assignment", scope: "holdings" });
     if (!result) return;
     if (result.stale) ui.notifications.warn("Житель или место работы изменились. Обновите окно и повторите назначение.");
-    if (result.warnNoSlot) ui.notifications.warn("Назначение недоступно. Прежняя работа сохранена.");
+    if (result.warnNoSlot) ui.notifications.warn(result.message || "Назначение недоступно. Прежняя работа сохранена.");
     this.requestRender();
   } catch (error) {
     console.error("FBL Skyhold | Failed to update work assignment", error);
@@ -1168,8 +1169,9 @@ async _savePersonEditorDraft(event) {
             return SkyholdData.skipTransaction({ stale: true, message: "Список закреплений изменился. Обновите карточку и повторите смену работы." });
           }
           if (approvedBuilding) {
-            const ok = this._assignPersonToBuilding?.(holding, person.id, value, { ...workDecision, replace: true });
-            if (!ok) return SkyholdData.skipTransaction({ warnNoSlot: true });
+            const out = {};
+            const ok = this._assignPersonToBuilding?.(holding, person.id, value, { ...workDecision, replace: true, isGM: game.user?.isGM === true, out });
+            if (!ok) return SkyholdData.skipTransaction({ warnNoSlot: true, message: out.reason });
           } else {
             if (value && residentLaborUnavailableReason(holding, person)) return SkyholdData.skipTransaction({ warnNoSlot: true });
             this._clearPersonFromAssignments?.(holding, person.id);
@@ -1198,7 +1200,7 @@ async _savePersonEditorDraft(event) {
     return { saved: true, person, allocationsSuperseded: Boolean(allocationsDraft && workUpdate) };
   }, { reason: "resident:save-editor-draft", scope: "holdings" });
 
-  if (result?.warnNoSlot) ui.notifications.warn("Назначение недоступно. Прежняя работа сохранена.");
+  if (result?.warnNoSlot) ui.notifications.warn(result.message || "Назначение недоступно. Прежняя работа сохранена.");
   if (result?.stale) ui.notifications.warn(result.message || "Житель, место работы или права изменились. Скопируйте правку, обновите карточку и повторите её.");
   if (result?.saved) {
     const committed = result.person;

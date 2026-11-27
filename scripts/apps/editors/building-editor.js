@@ -813,6 +813,7 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(PendingFieldSavesMix
     const currentAllocation = (currentPerson.workAllocations ?? []).find((row) =>
       row.id === allocationId && row.sourceId === current.building.id);
     if (!currentAllocation) return;
+    const expectedFunctionId = String(currentAllocation.functionId ?? "");
     const nextAllocations = (currentPerson.workAllocations ?? []).filter((row) => row.id !== allocationId);
     const dropped = droppedLocksForAllocationChange(current.holding, personId, nextAllocations, [currentAllocation]);
     const confirmedLockKeys = new Set(dropped.map((row) => `${row.personId}::${row.sourceId}::${row.functionId}`));
@@ -833,7 +834,7 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(PendingFieldSavesMix
           expectedRevision: data.meta.revision,
           personId,
           buildingId: current.building.id,
-          functionId: currentAllocation.functionId
+          functionId: expectedFunctionId
         }));
       } catch (error) {
         globalThis.ui?.notifications?.warn?.(error.message || "Не удалось снять назначение.");
@@ -848,7 +849,10 @@ export class SkyholdBuildingEditor extends WindowFrameMixin(PendingFieldSavesMix
       const person = (holding?.people?.list ?? []).find((row) => String(row?.id ?? "") === personId);
       if (!canReadResident(person)) return SkyholdData.skipTransaction(false);
       const allocation = (person.workAllocations ?? []).find((row) => row.id === allocationId && row.sourceId === building.id);
-      if (!allocation) return SkyholdData.skipTransaction(false);
+      if (!allocation || String(allocation.functionId ?? "") !== expectedFunctionId) {
+        staleLockMessage = "Назначение изменилось. Обновите окно и повторите снятие назначения.";
+        return SkyholdData.skipTransaction(false);
+      }
       const innerNext = (person.workAllocations ?? []).filter((row) => row.id !== allocationId);
       const innerDropped = droppedLocksForAllocationChange(holding, personId, innerNext, [allocation]);
       if (innerDropped.some((row) => !confirmedLockKeys.has(`${row.personId}::${row.sourceId}::${row.functionId}`))) {

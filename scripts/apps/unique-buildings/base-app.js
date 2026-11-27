@@ -272,6 +272,7 @@ export class SkyholdUniqueBuildingApp extends WindowFrameMixin(RenderSchedulerMi
     if (!current.holding || !current.building || !canReadResident(currentPerson)) return;
     const removedRows = (currentPerson.workAllocations ?? [])
       .filter((row) => String(row?.sourceId ?? "") === String(current.building.id));
+    const expectedRows = new Map(removedRows.map((row) => [String(row.id), String(row.functionId ?? "")]));
     const nextAllocations = (currentPerson.workAllocations ?? [])
       .filter((row) => String(row?.sourceId ?? "") !== String(current.building.id));
     const dropped = droppedLocksForAllocationChange(current.holding, personId, nextAllocations, removedRows);
@@ -309,8 +310,14 @@ export class SkyholdUniqueBuildingApp extends WindowFrameMixin(RenderSchedulerMi
         if (!canReadResident(person)) return SkyholdData.skipTransaction(false);
         const rows = person.workAllocations ?? [];
         const targetsBuilding = (row) => String(row?.sourceId ?? "") === String(building.id);
+        const innerRemoved = rows.filter(targetsBuilding);
+        if (innerRemoved.length !== expectedRows.size || innerRemoved.some((row) =>
+          expectedRows.get(String(row.id)) !== String(row.functionId ?? ""))) {
+          failureMessage = "Назначения изменились. Обновите окно и повторите снятие назначений.";
+          return SkyholdData.skipTransaction(false);
+        }
         const innerDropped = droppedLocksForAllocationChange(holding, personId,
-          rows.filter((row) => !targetsBuilding(row)), rows.filter(targetsBuilding));
+          rows.filter((row) => !targetsBuilding(row)), innerRemoved);
         if (innerDropped.some((row) => !confirmedLockKeys.has(workforceLockKey(row)))) {
           failureMessage = "Закрепления изменились. Обновите окно и подтвердите снятие ещё раз.";
           return SkyholdData.skipTransaction(false);

@@ -265,20 +265,22 @@ function trimOvertime(draft, personIds, { locks, ...options } = {}) {
     if (remaining <= 0) continue;
     const ordered = rows.filter((row) => overtimeFor(row) > 0).sort(compareRows);
     const isRowLocked = (row) => lockedKeys.has(lockKey(id, row));
+    const zeroed = new Set();
     for (const row of [...ordered.filter((row) => !isRowLocked(row)), ...ordered.filter(isRowLocked)]) {
       if (!remaining) break;
       const overtimeBefore = overtimeFor(row), overtimeAfter = Math.max(0, overtimeBefore - remaining);
       remaining -= overtimeBefore - overtimeAfter;
       row.overtimeQd = overtimeAfter;
+      if (allocationTotalQd(row) === 0) zeroed.add(row);
       const locked = isRowLocked(row);
       const trim = { personId: id, personName: person.name || "Житель", sourceId: allocationSourceId(row), functionId: allocationFunctionId(row),
         overtimeBefore, overtimeAfter, locked };
       trims.push(trim);
       if (locked) lockedTrims.push(trim);
     }
-    person.workAllocations = rows.filter((row) => allocationTotalQd(row) > 0);
+    person.workAllocations = rows.filter((row) => !zeroed.has(row));
     const remainingKeys = new Set(person.workAllocations.map((row) => lockKey(id, row)));
-    for (const row of rows) if (!remainingKeys.has(lockKey(id, row))) dropped.add(lockKey(id, row));
+    for (const row of zeroed) if (!remainingKeys.has(lockKey(id, row))) dropped.add(lockKey(id, row));
     cleanAdmissionOverrides(draft, person);
     syncResidentLaborRole(person, { isChild: asChild(person, options) });
   }

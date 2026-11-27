@@ -196,6 +196,7 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
       productionGoalValue: task ? this.inputValues.get(`production-goal:${task.key}`) ?? task.preparedUnits ?? 0 : 0,
       preview: this.preview, canAcceptPreview: canEdit && this.preview && (this.preview.base || this.preview.discard || !same(this.preview.draft, this.draft)), dirty: this.dirty, pending: Boolean(this.pending), busy: this._busy, stale: this.stale,
       unapplied: this.unapplied, canSave: canEdit && this.dirty && !this.unapplied && !error && !this.stale && !this.preview,
+      canPropose: canEdit && !this.stale,
       canUndo: canEdit && this.history.length > 0, error, message: this.message,
       changes: this.draft.edited.filter((id) => visibleIds.has(id)).map((id) => ({ name: model.people.find((row) => row.id === id).name,
         before: this._allocationText(this.initial.allocations[id], model),
@@ -338,6 +339,7 @@ export class SkyholdWorkforcePlanner extends WindowFrameMixin(RenderSchedulerMix
           else draft.plan.locks.push(lock);
         });
         else if (["suggest", "preview-bulk", "fill", "idle"].includes(action)) {
+          if (this.stale) throw new Error("Общий план изменился. Сначала сверьте черновик с новыми данными.");
           if (action === "preview-bulk" && (!task?.assignable || !this.selected.size)) throw new Error("Выберите работу и жителей для распределения.");
           const proposalDraft = copy(this.draft);
           const proposal = action === "idle" ? proposeWorkforceIdleReview(this.base, proposalDraft, this.service, this.planningOptions)

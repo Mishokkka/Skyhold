@@ -335,8 +335,12 @@ _pendingProductionRows(building, holding = null, buildingIndex = 0, linesArg = n
     }));
 },
 
-_buildingIncomeSummary(building, holding = null, workerContext = null, storageRoomsArg = null) {
-  const workforce = this._buildingIncomeWorkforce(holding, building, workerContext);
+_buildingIncomeSummary(building, holding = null, workerContext = null, storageRoomsArg = null, { publicOnly = false } = {}) {
+  const scopedHolding = holding && publicOnly
+    ? { ...holding, people: { ...holding.people, list: (holding.people?.list ?? []).filter((person) => person?.visibility !== "gm") } }
+    : holding;
+  const scopedContext = publicOnly ? null : workerContext;
+  const workforce = this._buildingIncomeWorkforce(scopedHolding ?? {}, building, scopedContext);
   const financeBlocked = workerContext?.financeContext
     ? !this._financeFunctionAllowed(workerContext.financeContext, building, "income")
     : financeBuildingFunctionBlockState({ finance: holding?.finance, buildingId: building?.id, functionId: "income" }).blocked;
@@ -364,7 +368,7 @@ _buildingIncomeSummary(building, holding = null, workerContext = null, storageRo
   if (Array.isArray(storageRoomsArg) && selectedTradeRoomId !== "all" && !tradeRoomOptions.some((option) => option.value === selectedTradeRoomId)) {
     tradeRoomOptions.push({ value: selectedTradeRoomId, label: `${selectedTradeRoomId} (нет в списке)`, selected: true });
   }
-  const tradeEfficiency = this._tradeEfficiencySummary?.(holding, building, workerContext) ?? {
+  const tradeEfficiency = this._tradeEfficiencySummary?.(scopedHolding, building, scopedContext) ?? {
     value: 1,
     text: "1",
     title: "1 = 50% базовой цены, 2 = 100%, 3 = 150%."
